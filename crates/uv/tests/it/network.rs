@@ -44,7 +44,10 @@ fn start_connect_tunnel_proxy() -> std::net::SocketAddr {
                         Ok(n) => n,
                     };
                     total_read += n;
-                    if buf[..total_read].windows(4).any(|w| w == b"\r\n\r\n") {
+                    if buf[..total_read]
+                        .array_windows()
+                        .any(|window| window == b"\r\n\r\n")
+                    {
                         break;
                     }
                 }
@@ -233,6 +236,52 @@ fn read_timeout_server() -> (String, impl Drop) {
     (server, shutdown_tx)
 }
 
+/// Invalid explicit certificate files disable the default trust roots rather than being ignored.
+#[tokio::test]
+async fn invalid_ssl_cert_file_warns_default_roots_are_disabled() {
+    let context = uv_test::test_context!("3.12");
+    let (_server_drop_guard, mock_server_uri) = http_error_server().await;
+
+    uv_snapshot!(context.filters(), context
+        .pip_install()
+        .arg("tqdm")
+        .arg("--index-url")
+        .arg(&mock_server_uri)
+        .env(EnvVars::SSL_CERT_FILE, context.temp_dir.join("missing.pem"))
+        .env_remove(EnvVars::SSL_CERT_DIR)
+        .env(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY, "true"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    warning: Invalid `SSL_CERT_FILE`. Path does not exist: [TEMP_DIR]/missing.pem. No default certificates will be trusted.
+    error: Request failed after 3 retries in [TIME]
+      Caused by: Failed to fetch: `http://[LOCALHOST]/tqdm/`
+      Caused by: HTTP status server error (500 Internal Server Error) for url (http://[LOCALHOST]/tqdm/)
+    ");
+}
+
+/// Invalid explicit certificate directories disable the default trust roots rather than being ignored.
+#[tokio::test]
+async fn invalid_ssl_cert_dir_warns_default_roots_are_disabled() {
+    let context = uv_test::test_context!("3.12");
+    let (_server_drop_guard, mock_server_uri) = http_error_server().await;
+
+    uv_snapshot!(context.filters(), context
+        .pip_install()
+        .arg("tqdm")
+        .arg("--index-url")
+        .arg(&mock_server_uri)
+        .env_remove(EnvVars::SSL_CERT_FILE)
+        .env(EnvVars::SSL_CERT_DIR, context.temp_dir.join("missing-certs"))
+        .env(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY, "true"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    warning: Invalid `SSL_CERT_DIR`. The directory does not exist: [TEMP_DIR]/missing-certs. No default certificates will be trusted.
+    error: Request failed after 3 retries in [TIME]
+      Caused by: Failed to fetch: `http://[LOCALHOST]/tqdm/`
+      Caused by: HTTP status server error (500 Internal Server Error) for url (http://[LOCALHOST]/tqdm/)
+    ");
+}
+
 /// Check the simple index error message when the server returns HTTP status 500, a retryable error.
 #[tokio::test]
 async fn simple_http_500() {
@@ -246,10 +295,7 @@ async fn simple_http_500() {
         .arg("--index-url")
         .arg(&mock_server_uri)
         .env(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY, "true"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: Request failed after 3 retries in [TIME]
       Caused by: Failed to fetch: `http://[LOCALHOST]/tqdm/`
@@ -270,10 +316,7 @@ async fn simple_io_err() {
         .arg("--index-url")
         .arg(&mock_server_uri)
         .env(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY, "true"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: Request failed after 3 retries in [TIME]
       Caused by: Failed to fetch: `http://[LOCALHOST]/tqdm/`
@@ -297,10 +340,7 @@ async fn find_links_http_500() {
         .arg("--find-links")
         .arg(&mock_server_uri)
         .env(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY, "true"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: Failed to read `--find-links` URL: http://[LOCALHOST]/
       Caused by: Request failed after 3 retries in [TIME]
@@ -323,10 +363,7 @@ async fn find_links_io_error() {
         .arg("--find-links")
         .arg(&mock_server_uri)
         .env(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY, "true"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: Failed to read `--find-links` URL: http://[LOCALHOST]/
       Caused by: Request failed after 3 retries in [TIME]
@@ -352,10 +389,7 @@ async fn find_links_mixed_error() {
         .arg("--find-links")
         .arg(&mock_server_uri)
         .env(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY, "true"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: Failed to read `--find-links` URL: http://[LOCALHOST]/
       Caused by: Request failed after 3 retries in [TIME]
@@ -379,10 +413,7 @@ async fn direct_url_http_500() {
         .pip_install()
         .arg(format!("tqdm @ {tqdm_url}"))
         .env(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY, "true"), @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
       × Failed to download `tqdm @ http://[LOCALHOST]/packages/d0/30/dc54f88dd4a2b5dc8a0279bdd7270e735851848b762aeb1c1184ed1f6b14/tqdm-4.67.1-py3-none-any.whl`
       ├─▶ Request failed after 3 retries in [TIME]
@@ -405,10 +436,7 @@ async fn direct_url_io_error() {
         .pip_install()
         .arg(format!("tqdm @ {tqdm_url}"))
         .env(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY, "true"), @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
       × Failed to download `tqdm @ http://[LOCALHOST]/packages/d0/30/dc54f88dd4a2b5dc8a0279bdd7270e735851848b762aeb1c1184ed1f6b14/tqdm-4.67.1-py3-none-any.whl`
       ├─▶ Request failed after 3 retries in [TIME]
@@ -434,10 +462,7 @@ async fn direct_url_mixed_error() {
         .pip_install()
         .arg(format!("tqdm @ {tqdm_url}"))
         .env(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY, "true"), @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
       × Failed to download `tqdm @ http://[LOCALHOST]/packages/d0/30/dc54f88dd4a2b5dc8a0279bdd7270e735851848b762aeb1c1184ed1f6b14/tqdm-4.67.1-py3-none-any.whl`
       ├─▶ Request failed after 3 retries in [TIME]
@@ -491,10 +516,7 @@ async fn python_install_http_500() {
         .arg("--python-downloads-json-url")
         .arg(python_downloads_json.path())
         .env(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY, "true"), @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
     error: Failed to install cpython-3.10.0-[PLATFORM]
       Caused by: Request failed after 3 retries in [TIME]
@@ -521,10 +543,7 @@ async fn python_install_io_error() {
         .arg("--python-downloads-json-url")
         .arg(python_downloads_json.path())
         .env(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY, "true"), @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
     error: Failed to install cpython-3.10.0-[PLATFORM]
       Caused by: Request failed after 3 retries in [TIME]
@@ -553,10 +572,7 @@ async fn install_http_retries() {
         .arg("--index")
         .arg(server.uri())
         .env(EnvVars::UV_HTTP_RETRIES, "foo"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: Failed to parse environment variable `UV_HTTP_RETRIES` with invalid value `foo`: invalid digit found in string
     "
@@ -567,10 +583,7 @@ async fn install_http_retries() {
         .arg("--index")
         .arg(server.uri())
         .env(EnvVars::UV_HTTP_RETRIES, "-1"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: Failed to parse environment variable `UV_HTTP_RETRIES` with invalid value `-1`: invalid digit found in string
     "
@@ -581,10 +594,7 @@ async fn install_http_retries() {
         .arg("--index")
         .arg(server.uri())
         .env(EnvVars::UV_HTTP_RETRIES, "999999999999"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: Failed to parse environment variable `UV_HTTP_RETRIES` with invalid value `999999999999`: number too large to fit in target type
     "
@@ -596,10 +606,7 @@ async fn install_http_retries() {
         .arg(server.uri())
         .env(EnvVars::UV_HTTP_RETRIES, "5")
         .env(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY, "true"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: Request failed after 5 retries in [TIME]
       Caused by: Failed to fetch: `http://[LOCALHOST]/anyio/`
@@ -628,10 +635,7 @@ async fn install_http_retry_low_level() {
         .arg(server.uri())
         .env(EnvVars::UV_HTTP_RETRIES, "1")
         .env(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY, "true"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: Request failed after 1 retry in [TIME]
       Caused by: Failed to fetch: `http://[LOCALHOST]/anyio/`
@@ -677,10 +681,7 @@ async fn rfc9457_problem_details_license_violation() {
     uv_snapshot!(context.filters(), context
         .pip_install()
         .arg(format!("tqdm @ {tqdm_url}")), @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
       × Failed to download `tqdm @ http://[LOCALHOST]/packages/tqdm-4.67.1-py3-none-any.whl`
       ├─▶ Failed to fetch: `http://[LOCALHOST]/packages/tqdm-4.67.1-py3-none-any.whl`
@@ -706,17 +707,14 @@ async fn proxy_invalid_url_in_uv_toml() {
         .arg("iniconfig")
         .env_remove(EnvVars::HTTP_PROXY)
         .env_remove(EnvVars::HTTPS_PROXY), @r#"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: Failed to parse: `uv.toml`
       Caused by: TOML parse error at line 1, column 14
-      |
-    1 | http-proxy = "ftp://proxy.example.com:8080"
-      |              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-    invalid proxy URL scheme `ftp` in `ftp://proxy.example.com:8080/`: expected http, https, socks5, or socks5h
+          |
+        1 | http-proxy = "ftp://proxy.example.com:8080"
+          |              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        invalid proxy URL scheme `ftp` in `ftp://proxy.example.com:8080/`: expected http, https, socks5, or socks5h
     "#);
 }
 
@@ -737,17 +735,14 @@ async fn proxy_invalid_url_not_a_url_in_uv_toml() {
         .arg("iniconfig")
         .env_remove(EnvVars::HTTP_PROXY)
         .env_remove(EnvVars::HTTPS_PROXY), @r#"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: Failed to parse: `uv.toml`
       Caused by: TOML parse error at line 1, column 14
-      |
-    1 | http-proxy = "not a valid url"
-      |              ^^^^^^^^^^^^^^^^^
-    invalid proxy URL: invalid international domain name
+          |
+        1 | http-proxy = "not a valid url"
+          |              ^^^^^^^^^^^^^^^^^
+        invalid proxy URL: invalid international domain name
     "#);
 }
 
@@ -789,10 +784,7 @@ async fn proxy_valid_url_in_uv_toml() {
         .env_remove(EnvVars::HTTPS_PROXY)
         .env_remove(EnvVars::ALL_PROXY)
         .env_remove(EnvVars::NO_PROXY), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -835,10 +827,7 @@ fn proxy_https_proxy_in_uv_toml() {
         .env_remove(EnvVars::HTTPS_PROXY)
         .env_remove(EnvVars::ALL_PROXY)
         .env_remove(EnvVars::NO_PROXY), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -894,10 +883,7 @@ no-proxy = ["{target_host}"]
         .env_remove(EnvVars::HTTPS_PROXY)
         .env_remove(EnvVars::ALL_PROXY)
         .env_remove(EnvVars::NO_PROXY), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -959,10 +945,7 @@ async fn proxy_schemeless_url_in_uv_toml() {
         .env_remove(EnvVars::HTTPS_PROXY)
         .env_remove(EnvVars::ALL_PROXY)
         .env_remove(EnvVars::NO_PROXY), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -996,10 +979,7 @@ fn connect_timeout_index() {
         .arg(format!("https://{server}"))
         .env(EnvVars::UV_HTTP_CONNECT_TIMEOUT, "1")
         .env(EnvVars::UV_HTTP_RETRIES, "0"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: Failed to fetch: `https://[LOCALHOST]/tqdm/`
       Caused by: error sending request for url (https://[LOCALHOST]/tqdm/)
@@ -1029,10 +1009,7 @@ fn connect_timeout_stream() {
         .arg(format!("https://{server}/tqdm-0.1-py3-none-any.whl"))
         .env(EnvVars::UV_HTTP_CONNECT_TIMEOUT, "1")
         .env(EnvVars::UV_HTTP_RETRIES, "0"), @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
       × Failed to download `tqdm @ https://[LOCALHOST]/tqdm-0.1-py3-none-any.whl`
       ├─▶ Failed to fetch: `https://[LOCALHOST]/tqdm-0.1-py3-none-any.whl`
@@ -1063,14 +1040,36 @@ async fn retry_read_timeout_index() {
         // Speed the test up with the minimum testable values
         .env(EnvVars::UV_HTTP_TIMEOUT, "1")
         .env(EnvVars::UV_HTTP_RETRIES, "1"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: Request failed after 1 retry in [TIME]
       Caused by: Failed to fetch: `http://[LOCALHOST]/tqdm/`
-      Caused by: error decoding response body
+      Caused by: error decoding response body for url (http://[LOCALHOST]/tqdm/)
+      Caused by: request or response body error
+      Caused by: operation timed out
+    ");
+}
+
+#[tokio::test]
+async fn retry_read_timeout_python_downloads_json() {
+    let context = uv_test::test_context!("3.12");
+
+    let (server, _guard) = read_timeout_server();
+
+    uv_snapshot!(context.filters(), context
+        .python_list()
+        .env_remove(EnvVars::UV_PYTHON_DOWNLOADS)
+        .arg("--python-downloads-json-url")
+        .arg(&server)
+        // Speed the test up with the minimum testable values
+        .env(EnvVars::UV_HTTP_TIMEOUT, "1")
+        .env(EnvVars::UV_HTTP_RETRIES, "1"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Error while fetching remote python downloads json from 'http://[LOCALHOST]/'
+      Caused by: Request failed after 1 retry in [TIME]
+      Caused by: Failed to download http://[LOCALHOST]/
+      Caused by: error decoding response body for url (http://[LOCALHOST]/)
       Caused by: request or response body error
       Caused by: operation timed out
     ");
@@ -1088,10 +1087,7 @@ async fn retry_read_timeout_stream() {
         // Speed the test up with the minimum testable values
         .env(EnvVars::UV_HTTP_TIMEOUT, "1")
         .env(EnvVars::UV_HTTP_RETRIES, "1"), @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
       × Failed to download `tqdm @ http://[LOCALHOST]/tqdm-0.1-py3-none-any.whl`
       ├─▶ Request failed after 1 retry in [TIME]

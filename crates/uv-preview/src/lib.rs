@@ -1,12 +1,15 @@
+use std::borrow::Cow;
+#[cfg(any(test, feature = "testing"))]
+use std::ops::BitOr;
 use std::sync::{Mutex, OnceLock};
 use std::{
     fmt::{Debug, Display, Formatter},
-    ops::BitOr,
     str::FromStr,
 };
 
 use enumflags2::{BitFlags, bitflags};
 use thiserror::Error;
+use uv_macros::PreviewMetadata;
 use uv_warnings::warn_user_once;
 
 /// Indicates if the preview state has been finalized yet or not.
@@ -88,18 +91,13 @@ pub fn finalize() -> Result<(), PreviewError> {
     }
 }
 
-/// Error returned when [`finalize`] is called on an uninitialized state.
-#[derive(Debug, Error)]
-#[error("The preview configuration has already been finalized")]
-pub struct SetError;
-
 /// Get the current global preview configuration.
 ///
 /// # Panics
 ///
 /// When called before [`init`] or (with the `testing` feature) when the
 /// current thread does not hold a [`test::with_features`] guard.
-pub fn get() -> Preview {
+fn get() -> Preview {
     match PREVIEW.get() {
         Some(PreviewMode::Normal(mutex)) => match *mutex.lock().unwrap() {
             PreviewState::Provisional(preview) => preview,
@@ -224,75 +222,113 @@ pub mod test {
 }
 
 #[bitflags]
-#[repr(u32)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[expect(
+    clippy::use_self,
+    reason = "enumflags2 refers to the enum by name when inferring bits"
+)]
+#[repr(u64)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PreviewMetadata)]
 pub enum PreviewFeature {
-    PythonInstallDefault = 1 << 0,
-    PythonUpgrade = 1 << 1,
-    JsonOutput = 1 << 2,
-    Pylock = 1 << 3,
-    AddBounds = 1 << 4,
-    PackageConflicts = 1 << 5,
-    ExtraBuildDependencies = 1 << 6,
-    DetectModuleConflicts = 1 << 7,
-    Format = 1 << 8,
-    NativeAuth = 1 << 9,
-    S3Endpoint = 1 << 10,
-    CacheSize = 1 << 11,
-    InitProjectFlag = 1 << 12,
-    WorkspaceMetadata = 1 << 13,
-    WorkspaceDir = 1 << 14,
-    WorkspaceList = 1 << 15,
-    SbomExport = 1 << 16,
-    AuthHelper = 1 << 17,
-    DirectPublish = 1 << 18,
-    TargetWorkspaceDiscovery = 1 << 19,
-    MetadataJson = 1 << 20,
-    GcsEndpoint = 1 << 21,
-    AdjustUlimit = 1 << 22,
-    SpecialCondaEnvNames = 1 << 23,
-    RelocatableEnvsDefault = 1 << 24,
-    PublishRequireNormalized = 1 << 25,
-    Audit = 1 << 26,
-    ProjectDirectoryMustExist = 1 << 27,
-    IndexExcludeNewer = 1 << 28,
-}
-
-impl PreviewFeature {
-    /// Returns the string representation of a single preview feature flag.
-    fn as_str(self) -> &'static str {
-        match self {
-            Self::PythonInstallDefault => "python-install-default",
-            Self::PythonUpgrade => "python-upgrade",
-            Self::JsonOutput => "json-output",
-            Self::Pylock => "pylock",
-            Self::AddBounds => "add-bounds",
-            Self::PackageConflicts => "package-conflicts",
-            Self::ExtraBuildDependencies => "extra-build-dependencies",
-            Self::DetectModuleConflicts => "detect-module-conflicts",
-            Self::Format => "format",
-            Self::NativeAuth => "native-auth",
-            Self::S3Endpoint => "s3-endpoint",
-            Self::CacheSize => "cache-size",
-            Self::InitProjectFlag => "init-project-flag",
-            Self::WorkspaceMetadata => "workspace-metadata",
-            Self::WorkspaceDir => "workspace-dir",
-            Self::WorkspaceList => "workspace-list",
-            Self::SbomExport => "sbom-export",
-            Self::AuthHelper => "auth-helper",
-            Self::DirectPublish => "direct-publish",
-            Self::TargetWorkspaceDiscovery => "target-workspace-discovery",
-            Self::MetadataJson => "metadata-json",
-            Self::GcsEndpoint => "gcs-endpoint",
-            Self::AdjustUlimit => "adjust-ulimit",
-            Self::SpecialCondaEnvNames => "special-conda-env-names",
-            Self::RelocatableEnvsDefault => "relocatable-envs-default",
-            Self::PublishRequireNormalized => "publish-require-normalized",
-            Self::Audit => "audit",
-            Self::ProjectDirectoryMustExist => "project-directory-must-exist",
-            Self::IndexExcludeNewer => "index-exclude-newer",
-        }
-    }
+    /// Allows [installing `python` and `python3` executables](./python-versions.md#installing-python-executables).
+    PythonInstallDefault,
+    /// Allows `--output-format json` for various uv commands.
+    JsonOutput,
+    /// Allows installing from `pylock.toml` files.
+    Pylock,
+    /// Allows configuring the [default bounds for `uv add`](../reference/settings.md#add-bounds) invocations.
+    AddBounds,
+    /// Allows defining workspace conflicts at the package level.
+    PackageConflicts,
+    /// Allows specifying additional dependencies for package builds.
+    ExtraBuildDependencies,
+    /// Warns when multiple packages would install conflicting Python modules into the same
+    /// environment.
+    DetectModuleConflicts,
+    /// Allows using `uv format`.
+    #[preview(alias = "format")]
+    FormatCommand,
+    /// Enables storage of credentials in a [system-native location](../concepts/authentication/http.md#the-uv-credentials-store).
+    NativeAuth,
+    /// Allows signing requests to configured S3-compatible endpoints.
+    S3Endpoint,
+    /// Allows using `uv cache size`.
+    CacheSize,
+    /// Reports the physical disk space reclaimed by cache cleanup, accounting for hardlinks and copy-on-write clones.
+    CachePhysicalSpace,
+    /// Rejects the deprecated `--project` option in `uv init`.
+    InitProjectFlag,
+    /// Allows using `uv workspace metadata`.
+    WorkspaceMetadata,
+    /// Allows using `uv workspace dir`.
+    WorkspaceDir,
+    /// Allows using `uv workspace list`.
+    WorkspaceList,
+    /// Allows using `uv export --format=cyclonedx1.5`.
+    SbomExport,
+    /// Allows using `uv auth helper` as a credential helper for external tools.
+    AuthHelper,
+    /// Allows publishing directly to a package index.
+    DirectPublish,
+    /// Uses the directory containing a local `uv run` target, rather than the current working
+    /// directory, as the starting point for project and workspace discovery. This feature takes
+    /// effect before configuration is loaded.
+    TargetWorkspaceDiscovery,
+    /// Includes JSON metadata files in built wheels.
+    MetadataJson,
+    /// Allows signing requests to configured Google Cloud Storage endpoints.
+    GcsEndpoint,
+    /// On Unix, raises the process's soft open-file limit at startup, up to the hard limit.
+    AdjustUlimit,
+    /// Stops treating Conda environments named `base` or `root` as special.
+    SpecialCondaEnvNames,
+    /// Creates relocatable virtual environments by default.
+    RelocatableEnvsDefault,
+    /// Requires normalized distribution filenames when publishing, skipping files whose names are
+    /// not normalized.
+    PublishRequireNormalized,
+    /// Allows using `uv audit` and `uv tool audit`.
+    #[preview(alias = "audit")]
+    AuditCommand,
+    /// Rejects an invalid `--project` path instead of warning and continuing. Except for `uv init`,
+    /// the path must already exist as a directory or point to a `pyproject.toml` file. This feature
+    /// takes effect before configuration is loaded.
+    ProjectDirectoryMustExist,
+    /// Allows setting `exclude-newer` on configured package indexes.
+    IndexExcludeNewer,
+    /// Allows signing requests to Azure Blob Storage endpoints with Azure credentials.
+    AzureEndpoint,
+    /// Rewrites `pyproject.toml` as TOML 1.0 when building source distributions, preserving the
+    /// original as `pyproject.toml.orig` to ensure compatibility with older build tools.
+    TomlBackwardsCompatibility,
+    /// Allows `uv sync` and other commands to check for malware using [OSV](https://osv.dev) before
+    /// installing packages.
+    MalwareCheck,
+    /// Prevents `uv venv --clear` from clearing a directory that does not contain a `pyvenv.cfg` file
+    /// unless `--force` is provided.
+    VenvSafeClear,
+    /// Allows using `uv check`.
+    #[preview(alias = "check")]
+    CheckCommand,
+    /// Makes `uv init` create a packaged application with a `src/` layout, build system, and script
+    /// entry point by default.
+    PackagedInit,
+    /// Stores [project virtual environments](./projects/layout.md#centralized-project-environments)
+    /// in the uv cache.
+    CentralizedProjectEnvs,
+    /// Stores a `uv.lock` alongside each installed tool and reuses it for reproducible installations,
+    /// upgrades, and audits.
+    ToolInstallLocks,
+    /// Allows using `uv workspace list --scripts`.
+    WorkspaceListScripts,
+    /// Stops installing the `_virtualenv.py` / `_virtualenv.pth` distutils configuration monkeypatch
+    /// in virtual environments for Python 3.10 and later.
+    NoDistutilsPatch,
+    /// Allows requiring a hash algorithm for configured package indexes.
+    IndexHashAlgorithm,
+    /// Rejects non-canonical lockfile formatting when using `--locked` or `--check`.
+    LockfileFormatCheck,
+    /// Omit `package.metadata` from `uv.lock`.
+    LockWithoutMetadata,
 }
 
 impl Display for PreviewFeature {
@@ -309,37 +345,74 @@ impl FromStr for PreviewFeature {
     type Err = PreviewFeatureParseError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Ok(match s {
-            "python-install-default" => Self::PythonInstallDefault,
-            "python-upgrade" => Self::PythonUpgrade,
-            "json-output" => Self::JsonOutput,
-            "pylock" => Self::Pylock,
-            "add-bounds" => Self::AddBounds,
-            "package-conflicts" => Self::PackageConflicts,
-            "extra-build-dependencies" => Self::ExtraBuildDependencies,
-            "detect-module-conflicts" => Self::DetectModuleConflicts,
-            "format" => Self::Format,
-            "native-auth" => Self::NativeAuth,
-            "s3-endpoint" => Self::S3Endpoint,
-            "gcs-endpoint" => Self::GcsEndpoint,
-            "cache-size" => Self::CacheSize,
-            "init-project-flag" => Self::InitProjectFlag,
-            "workspace-metadata" => Self::WorkspaceMetadata,
-            "workspace-dir" => Self::WorkspaceDir,
-            "workspace-list" => Self::WorkspaceList,
-            "sbom-export" => Self::SbomExport,
-            "auth-helper" => Self::AuthHelper,
-            "direct-publish" => Self::DirectPublish,
-            "target-workspace-discovery" => Self::TargetWorkspaceDiscovery,
-            "metadata-json" => Self::MetadataJson,
-            "adjust-ulimit" => Self::AdjustUlimit,
-            "special-conda-env-names" => Self::SpecialCondaEnvNames,
-            "relocatable-envs-default" => Self::RelocatableEnvsDefault,
-            "publish-require-normalized" => Self::PublishRequireNormalized,
-            "audit" => Self::Audit,
-            "project-directory-must-exist" => Self::ProjectDirectoryMustExist,
-            "index-exclude-newer" => Self::IndexExcludeNewer,
-            _ => return Err(PreviewFeatureParseError),
+        Self::metadata()
+            .iter()
+            .find(|(feature, _, aliases)| feature.as_str() == s || aliases.contains(&s))
+            .map(|(feature, _, _)| *feature)
+            .ok_or(PreviewFeatureParseError)
+    }
+}
+
+#[derive(Debug, Error, Clone, Copy, PartialEq, Eq)]
+#[error("preview feature name cannot be empty")]
+pub struct EmptyPreviewFeatureNameError;
+
+/// A user-provided preview feature name, which may refer to an unknown feature.
+#[derive(Debug, Clone)]
+pub enum MaybePreviewFeature {
+    Known(PreviewFeature),
+    Unknown(String),
+}
+
+impl FromStr for MaybePreviewFeature {
+    type Err = EmptyPreviewFeatureNameError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let s = s.trim();
+        if s.is_empty() {
+            return Err(EmptyPreviewFeatureNameError);
+        }
+
+        Ok(match PreviewFeature::from_str(s) {
+            Ok(feature) => Self::Known(feature),
+            Err(_) => Self::Unknown(s.to_string()),
+        })
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for MaybePreviewFeature {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let name: Cow<'de, str> = serde::Deserialize::deserialize(deserializer)?;
+        Self::from_str(&name).map_err(serde::de::Error::custom)
+    }
+}
+
+#[cfg(feature = "schemars")]
+impl schemars::JsonSchema for MaybePreviewFeature {
+    fn schema_name() -> Cow<'static, str> {
+        Cow::Borrowed("PreviewFeature")
+    }
+
+    fn json_schema(_generator: &mut schemars::SchemaGenerator) -> schemars::Schema {
+        // Advertise canonical names for editor completions, while accepting any nonempty name to
+        // match the forwards-compatible runtime parsing behavior.
+        let choices: Vec<&str> = BitFlags::<PreviewFeature>::all()
+            .iter()
+            .map(PreviewFeature::as_str)
+            .collect();
+        schemars::json_schema!({
+            "type": "string",
+            "anyOf": [
+                {
+                    "enum": choices,
+                },
+                {
+                    "pattern": "\\S",
+                },
+            ],
         })
     }
 }
@@ -357,7 +430,8 @@ impl Debug for Preview {
 }
 
 impl Preview {
-    pub fn new(flags: &[PreviewFeature]) -> Self {
+    #[cfg(any(test, feature = "testing"))]
+    fn new(flags: &[PreviewFeature]) -> Self {
         Self {
             flags: flags.iter().copied().fold(BitFlags::empty(), BitOr::bitor),
         }
@@ -367,18 +441,6 @@ impl Preview {
         Self {
             flags: BitFlags::all(),
         }
-    }
-
-    pub fn from_args(preview: bool, no_preview: bool, preview_features: &[PreviewFeature]) -> Self {
-        if no_preview {
-            return Self::default();
-        }
-
-        if preview {
-            return Self::all();
-        }
-
-        Self::new(preview_features)
     }
 
     /// Check if a single feature is enabled.
@@ -394,6 +456,24 @@ impl Preview {
     /// Check if any preview feature is enabled.
     pub fn any_enabled(&self) -> bool {
         !self.flags.is_empty()
+    }
+
+    /// Resolve preview feature names, warning and ignoring unknown names.
+    pub fn from_feature_names<'a>(
+        feature_names: impl IntoIterator<Item = &'a MaybePreviewFeature>,
+    ) -> Self {
+        let mut flags = BitFlags::empty();
+
+        for feature_name in feature_names {
+            match feature_name {
+                MaybePreviewFeature::Known(feature) => flags |= *feature,
+                MaybePreviewFeature::Unknown(feature_name) => {
+                    warn_user_once!("Unknown preview feature: `{feature_name}`");
+                }
+            }
+        }
+
+        Self { flags }
     }
 }
 
@@ -413,35 +493,16 @@ impl Display for Preview {
     }
 }
 
-#[derive(Debug, Error, Clone)]
-pub enum PreviewParseError {
-    #[error("Empty string in preview features: {0}")]
-    Empty(String),
-}
-
 impl FromStr for Preview {
-    type Err = PreviewParseError;
+    type Err = EmptyPreviewFeatureNameError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let mut flags = BitFlags::empty();
+        let feature_names = s
+            .split(',')
+            .map(MaybePreviewFeature::from_str)
+            .collect::<Result<Vec<_>, _>>()?;
 
-        for part in s.split(',') {
-            let part = part.trim();
-            if part.is_empty() {
-                return Err(PreviewParseError::Empty(
-                    "Empty string in preview features".to_string(),
-                ));
-            }
-
-            match PreviewFeature::from_str(part) {
-                Ok(flag) => flags |= flag,
-                Err(_) => {
-                    warn_user_once!("Unknown preview feature: `{part}`");
-                }
-            }
-        }
-
-        Ok(Self { flags })
+        Ok(Self::from_feature_names(&feature_names))
     }
 }
 
@@ -451,8 +512,13 @@ mod tests {
 
     #[test]
     fn test_preview_feature_from_str() {
-        let features = PreviewFeature::from_str("python-install-default").unwrap();
-        assert_eq!(features, PreviewFeature::PythonInstallDefault);
+        for &(feature, _, aliases) in PreviewFeature::metadata() {
+            assert_eq!(PreviewFeature::from_str(feature.as_str()).unwrap(), feature);
+
+            for &alias in aliases {
+                assert_eq!(PreviewFeature::from_str(alias).unwrap(), feature);
+            }
+        }
     }
 
     #[test]
@@ -462,10 +528,13 @@ mod tests {
         assert_eq!(preview.flags, PreviewFeature::PythonInstallDefault);
 
         // Test multiple features
-        let preview = Preview::from_str("python-upgrade,json-output").unwrap();
-        assert!(preview.is_enabled(PreviewFeature::PythonUpgrade));
+        let preview = Preview::from_str("json-output,pylock").unwrap();
         assert!(preview.is_enabled(PreviewFeature::JsonOutput));
+        assert!(preview.is_enabled(PreviewFeature::Pylock));
         assert_eq!(preview.flags.bits().count_ones(), 2);
+
+        let preview = Preview::from_str("tool-install-locks").unwrap();
+        assert!(preview.is_enabled(PreviewFeature::ToolInstallLocks));
 
         // Test with whitespace
         let preview = Preview::from_str("pylock , add-bounds").unwrap();
@@ -473,7 +542,7 @@ mod tests {
         assert!(preview.is_enabled(PreviewFeature::AddBounds));
 
         // Test empty string error
-        assert!(Preview::from_str("").is_err());
+        assert_eq!(Preview::from_str(""), Err(EmptyPreviewFeatureNameError));
         assert!(Preview::from_str("pylock,").is_err());
         assert!(Preview::from_str(",pylock").is_err());
 
@@ -500,98 +569,8 @@ mod tests {
         assert_eq!(preview.to_string(), "python-install-default");
 
         // Test multiple features
-        let preview = Preview::new(&[PreviewFeature::PythonUpgrade, PreviewFeature::Pylock]);
-        assert_eq!(preview.to_string(), "python-upgrade,pylock");
-    }
-
-    #[test]
-    fn test_preview_from_args() {
-        // Test no preview and no no_preview, and no features
-        let preview = Preview::from_args(false, false, &[]);
-        assert_eq!(preview.to_string(), "disabled");
-
-        // Test no_preview
-        let preview = Preview::from_args(true, true, &[]);
-        assert_eq!(preview.to_string(), "disabled");
-
-        // Test preview (all features)
-        let preview = Preview::from_args(true, false, &[]);
-        assert_eq!(preview.to_string(), "enabled");
-
-        // Test specific features
-        let features = vec![PreviewFeature::PythonUpgrade, PreviewFeature::JsonOutput];
-        let preview = Preview::from_args(false, false, &features);
-        assert!(preview.is_enabled(PreviewFeature::PythonUpgrade));
-        assert!(preview.is_enabled(PreviewFeature::JsonOutput));
-        assert!(!preview.is_enabled(PreviewFeature::Pylock));
-    }
-
-    #[test]
-    fn test_preview_feature_as_str() {
-        assert_eq!(
-            PreviewFeature::PythonInstallDefault.as_str(),
-            "python-install-default"
-        );
-        assert_eq!(PreviewFeature::PythonUpgrade.as_str(), "python-upgrade");
-        assert_eq!(PreviewFeature::JsonOutput.as_str(), "json-output");
-        assert_eq!(PreviewFeature::Pylock.as_str(), "pylock");
-        assert_eq!(PreviewFeature::AddBounds.as_str(), "add-bounds");
-        assert_eq!(
-            PreviewFeature::PackageConflicts.as_str(),
-            "package-conflicts"
-        );
-        assert_eq!(
-            PreviewFeature::ExtraBuildDependencies.as_str(),
-            "extra-build-dependencies"
-        );
-        assert_eq!(
-            PreviewFeature::DetectModuleConflicts.as_str(),
-            "detect-module-conflicts"
-        );
-        assert_eq!(PreviewFeature::Format.as_str(), "format");
-        assert_eq!(PreviewFeature::NativeAuth.as_str(), "native-auth");
-        assert_eq!(PreviewFeature::S3Endpoint.as_str(), "s3-endpoint");
-        assert_eq!(PreviewFeature::CacheSize.as_str(), "cache-size");
-        assert_eq!(
-            PreviewFeature::InitProjectFlag.as_str(),
-            "init-project-flag"
-        );
-        assert_eq!(
-            PreviewFeature::WorkspaceMetadata.as_str(),
-            "workspace-metadata"
-        );
-        assert_eq!(PreviewFeature::WorkspaceDir.as_str(), "workspace-dir");
-        assert_eq!(PreviewFeature::WorkspaceList.as_str(), "workspace-list");
-        assert_eq!(PreviewFeature::SbomExport.as_str(), "sbom-export");
-        assert_eq!(PreviewFeature::AuthHelper.as_str(), "auth-helper");
-        assert_eq!(PreviewFeature::DirectPublish.as_str(), "direct-publish");
-        assert_eq!(
-            PreviewFeature::TargetWorkspaceDiscovery.as_str(),
-            "target-workspace-discovery"
-        );
-        assert_eq!(PreviewFeature::MetadataJson.as_str(), "metadata-json");
-        assert_eq!(PreviewFeature::GcsEndpoint.as_str(), "gcs-endpoint");
-        assert_eq!(PreviewFeature::AdjustUlimit.as_str(), "adjust-ulimit");
-        assert_eq!(
-            PreviewFeature::SpecialCondaEnvNames.as_str(),
-            "special-conda-env-names"
-        );
-        assert_eq!(
-            PreviewFeature::RelocatableEnvsDefault.as_str(),
-            "relocatable-envs-default"
-        );
-        assert_eq!(
-            PreviewFeature::PublishRequireNormalized.as_str(),
-            "publish-require-normalized"
-        );
-        assert_eq!(
-            PreviewFeature::ProjectDirectoryMustExist.as_str(),
-            "project-directory-must-exist"
-        );
-        assert_eq!(
-            PreviewFeature::IndexExcludeNewer.as_str(),
-            "index-exclude-newer"
-        );
+        let preview = Preview::new(&[PreviewFeature::JsonOutput, PreviewFeature::Pylock]);
+        assert_eq!(preview.to_string(), "json-output,pylock");
     }
 
     #[test]

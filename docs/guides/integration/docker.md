@@ -31,13 +31,14 @@ $ docker run --rm -it ghcr.io/astral-sh/uv:debian uv --help
 The following distroless images are available:
 
 - `ghcr.io/astral-sh/uv:latest`
-- `ghcr.io/astral-sh/uv:{major}.{minor}.{patch}`, e.g., `ghcr.io/astral-sh/uv:0.11.8`
-- `ghcr.io/astral-sh/uv:{major}.{minor}`, e.g., `ghcr.io/astral-sh/uv:0.8` (the latest patch
+- `ghcr.io/astral-sh/uv:{major}.{minor}.{patch}`, e.g., `ghcr.io/astral-sh/uv:0.12.3`
+- `ghcr.io/astral-sh/uv:{major}.{minor}`, e.g., `ghcr.io/astral-sh/uv:0.12` (the latest patch
   version)
 
 And the following derived images are available:
 
-<!-- prettier-ignore -->
+<!-- prettier-ignore-start -->
+
 - Based on `alpine:3.23`:
     - `ghcr.io/astral-sh/uv:alpine`
     - `ghcr.io/astral-sh/uv:alpine3.23`
@@ -88,11 +89,12 @@ And the following derived images are available:
     - `ghcr.io/astral-sh/uv:python3.11-trixie-slim`
     - `ghcr.io/astral-sh/uv:python3.10-trixie-slim`
     - `ghcr.io/astral-sh/uv:python3.9-trixie-slim`
+
 <!-- prettier-ignore-end -->
 
 As with the distroless image, each derived image is published with uv version tags as
 `ghcr.io/astral-sh/uv:{major}.{minor}.{patch}-{base}` and
-`ghcr.io/astral-sh/uv:{major}.{minor}-{base}`, e.g., `ghcr.io/astral-sh/uv:0.11.8-alpine`.
+`ghcr.io/astral-sh/uv:{major}.{minor}-{base}`, e.g., `ghcr.io/astral-sh/uv:0.12.3-alpine`.
 
 In addition, starting with `0.8` each derived image also sets `UV_TOOL_BIN_DIR` to `/usr/local/bin`
 to allow `uv tool install` to work as expected with the default user.
@@ -133,7 +135,7 @@ Note this requires `curl` to be available.
 In either case, it is best practice to pin to a specific uv version, e.g., with:
 
 ```dockerfile
-COPY --from=ghcr.io/astral-sh/uv:0.11.8 /uv /uvx /bin/
+COPY --from=ghcr.io/astral-sh/uv:0.12.3 /uv /uvx /bin/
 ```
 
 !!! tip
@@ -151,7 +153,7 @@ COPY --from=ghcr.io/astral-sh/uv:0.11.8 /uv /uvx /bin/
 Or, with the installer:
 
 ```dockerfile
-ADD https://astral.sh/uv/0.11.8/install.sh /uv-installer.sh
+ADD https://astral.sh/uv/0.12.3/install.sh /uv-installer.sh
 ```
 
 ### Installing a project
@@ -429,7 +431,7 @@ _contents_ are not copied into the image until the final `uv sync` command.
 If you're using a [workspace](../../concepts/projects/workspaces.md), then a couple changes are
 needed:
 
-- Use `--frozen` instead of `--locked` during the initially sync.
+- Use `--frozen` instead of `--locked` during the initial sync.
 - Use the `--no-install-workspace` flag which excludes the project _and_ any workspace members.
 
 ```dockerfile title="Dockerfile"
@@ -515,7 +517,7 @@ RUN --mount=from=ghcr.io/astral-sh/uv,source=/uv,target=/bin/uv \
 
 ### Installing a package
 
-The system Python environment is safe to use this context, since a container is already isolated.
+The system Python environment is safe to use in this context, since a container is already isolated.
 The `--system` flag can be used to install in the system environment:
 
 ```dockerfile title="Dockerfile"
@@ -619,5 +621,5 @@ Verified OK
 !!! tip
 
     These examples use `latest`, but best practice is to verify the attestation for a specific
-    version tag, e.g., `ghcr.io/astral-sh/uv:0.11.8`, or (even better) the specific image digest,
+    version tag, e.g., `ghcr.io/astral-sh/uv:0.12.3`, or (even better) the specific image digest,
     such as `ghcr.io/astral-sh/uv:0.5.27@sha256:5adf09a5a526f380237408032a9308000d14d5947eafa687ad6c6a2476787b4f`.

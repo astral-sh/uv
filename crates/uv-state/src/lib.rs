@@ -1,10 +1,5 @@
-use std::{
-    io::{self, Write},
-    path::{Path, PathBuf},
-    sync::Arc,
-};
+use std::{io, path::PathBuf, sync::Arc};
 
-use fs_err as fs;
 use tempfile::{TempDir, tempdir};
 
 /// The main state storage abstraction.
@@ -24,11 +19,11 @@ pub struct StateStore {
 
 impl StateStore {
     /// A persistent state store at `root`.
-    pub fn from_path(root: impl Into<PathBuf>) -> Result<Self, io::Error> {
-        Ok(Self {
+    fn from_path(root: impl Into<PathBuf>) -> Self {
+        Self {
             root: root.into(),
             _temp_dir_drop: None,
-        })
+        }
     }
 
     /// Create a temporary state store.
@@ -37,35 +32,6 @@ impl StateStore {
         Ok(Self {
             root: temp_dir.path().to_path_buf(),
             _temp_dir_drop: Some(Arc::new(temp_dir)),
-        })
-    }
-
-    /// Return the root of the state store.
-    pub fn root(&self) -> &Path {
-        &self.root
-    }
-
-    /// Initialize the state store.
-    pub fn init(self) -> Result<Self, io::Error> {
-        let root = &self.root;
-
-        // Create the state store directory, if it doesn't exist.
-        fs::create_dir_all(root)?;
-
-        // Add a .gitignore.
-        match fs::OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            .open(root.join(".gitignore"))
-        {
-            Ok(mut file) => file.write_all(b"*")?,
-            Err(err) if err.kind() == io::ErrorKind::AlreadyExists => (),
-            Err(err) => return Err(err),
-        }
-
-        Ok(Self {
-            root: fs::canonicalize(root)?,
-            ..self
         })
     }
 
@@ -83,16 +49,16 @@ impl StateStore {
     /// Returns an absolute cache dir.
     pub fn from_settings(state_dir: Option<PathBuf>) -> Result<Self, io::Error> {
         if let Some(state_dir) = state_dir {
-            Self::from_path(state_dir)
+            Ok(Self::from_path(state_dir))
         } else if let Some(data_dir) = uv_dirs::legacy_user_state_dir().filter(|dir| dir.exists()) {
             // If the user has an existing directory at (e.g.) `/Users/user/Library/Application Support/uv`,
             // respect it for backwards compatibility. Otherwise, prefer the XDG strategy, even on
             // macOS.
-            Self::from_path(data_dir)
+            Ok(Self::from_path(data_dir))
         } else if let Some(data_dir) = uv_dirs::user_state_dir() {
-            Self::from_path(data_dir)
+            Ok(Self::from_path(data_dir))
         } else {
-            Self::from_path(".uv")
+            Ok(Self::from_path(".uv"))
         }
     }
 }

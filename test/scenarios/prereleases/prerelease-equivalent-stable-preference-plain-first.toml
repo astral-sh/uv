@@ -1,0 +1,16 @@
+name = "prerelease-equivalent-stable-preference-plain-first"
+description = "Equivalent requirements retain the stable preference when the plain requirement appears first."
+
+[root]
+requires = ["c>=1.0", "c>=1.0,>0.5a1"]
+
+[expected]
+satisfiable = true
+explanation = "Equivalent requirement ranges retain the stable preference even when one names a pre-release."
+
+[expected.packages]
+c = "1.0.0"
+
+[packages.c.versions."1.0.0"]
+
+[packages.c.versions."2.0.0a1"]

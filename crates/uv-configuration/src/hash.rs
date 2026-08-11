@@ -32,6 +32,15 @@ impl HashCheckingMode {
         }
     }
 
+    /// Apply the `--require-hashes` setting from a requirements file.
+    pub fn from_requirements_txt(mode: Option<Self>, require_hashes: bool) -> Option<Self> {
+        if require_hashes {
+            Some(Self::Require)
+        } else {
+            mode
+        }
+    }
+
     /// Returns `true` if the hash checking mode is `Require`.
     pub fn is_require(&self) -> bool {
         matches!(self, Self::Require)

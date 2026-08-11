@@ -347,10 +347,14 @@ mod tests {
         }
         "#);
 
-        // Cross-compiles use GNU
+        // Cross-compiles may embed historical compiler paths.
         let sysconfigdata = [
+            ("BLDSHARED", "/usr/bin/aarch64-linux-gnu-gcc"),
             ("CC", "/usr/bin/riscv64-linux-gnu-gcc"),
-            ("CXX", "/usr/bin/x86_64-linux-gnu-g++"),
+            ("CXX", "/usr/bin/riscv64-linux-gnu-g++"),
+            ("LDCXXSHARED", "/usr/bin/aarch64-linux-gnu-g++"),
+            ("LDSHARED", "/usr/bin/aarch64-linux-gnu-gcc"),
+            ("LINKCC", "/usr/bin/riscv64-linux-gnu-gcc"),
         ]
         .into_iter()
         .map(|(k, v)| (k.to_string(), Value::String(v.to_string())))
@@ -362,8 +366,12 @@ mod tests {
         insta::assert_snapshot!(data.to_string_pretty()?, @r#"
         # system configuration generated and used by the sysconfig module
         build_time_vars = {
+            "BLDSHARED": "cc",
             "CC": "cc",
             "CXX": "c++",
+            "LDCXXSHARED": "c++",
+            "LDSHARED": "cc",
+            "LINKCC": "cc",
             "PYTHON_BUILD_STANDALONE": 1
         }
         "#);

@@ -179,7 +179,7 @@ struct CacheConfig {
 /// construct a `CachePolicy`. That is, you start with an HTTP request, then
 /// you get a response and finally a new `CachePolicy`.
 #[derive(Debug)]
-pub struct CachePolicyBuilder {
+pub(crate) struct CachePolicyBuilder {
     /// The configuration controlling the behavior of the cache.
     config: CacheConfig,
     /// A subset of information from the HTTP request that we will store. This
@@ -203,7 +203,7 @@ pub struct CachePolicyBuilder {
 
 impl CachePolicyBuilder {
     /// Create a new builder of a cache policy, starting with the request.
-    pub fn new(request: &reqwest::Request) -> Self {
+    pub(crate) fn new(request: &reqwest::Request) -> Self {
         let config = CacheConfig::default();
         let request_headers = request.headers().clone();
         let request = Request::from(request);
@@ -216,7 +216,7 @@ impl CachePolicyBuilder {
 
     /// Return a new policy given the response to the request that this builder
     /// was created with.
-    pub fn build(self, response: &reqwest::Response) -> CachePolicy {
+    pub(crate) fn build(self, response: &reqwest::Response) -> CachePolicy {
         let vary = Vary::from_request_response_headers(&self.request_headers, response.headers());
         CachePolicy {
             config: self.config,
@@ -240,7 +240,7 @@ impl CachePolicyBuilder {
 /// about it) are proxy cache semantics.
 #[derive(Debug, rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)]
 #[rkyv(derive(Debug))]
-pub struct CachePolicy {
+pub(crate) struct CachePolicy {
     /// The configuration controlling the behavior of the cache.
     config: CacheConfig,
     /// A subset of information from the HTTP request that we will store. This
@@ -269,13 +269,24 @@ impl CachePolicy {
     /// you're actually performing an HTTP request. In that case, the extra
     /// cost that is done here to convert a `CachePolicy` to its archived form
     /// should be marginal.
-    pub fn to_archived(&self) -> OwnedArchive<Self> {
+    pub(crate) fn to_archived(&self) -> OwnedArchive<Self> {
         // There's no way (other than OOM) for serializing this type to fail.
         OwnedArchive::from_unarchived(self).expect("all possible values can be archived")
     }
 }
 
 impl ArchivedCachePolicy {
+    /// Returns whether this cached response matches a request that permits stale data.
+    ///
+    /// This applies only the conditions from [`Self::before_request`] that produce
+    /// [`BeforeRequest::NoMatch`]. It intentionally skips freshness, `Vary`, and `no-cache`
+    /// checks because those produce [`BeforeRequest::Stale`], which an allow-stale caller accepts.
+    pub(crate) fn matches_stale_request(&self, request: &reqwest::Request) -> bool {
+        self.is_storable()
+            && self.request.uri == request.url().as_str()
+            && (request.method() == http::Method::GET || request.method() == http::Method::HEAD)
+    }
+
     /// Determines what caching behavior is correct given an existing
     /// `CachePolicy` and a new HTTP request for the resource managed by this
     /// cache policy. This is done as per [RFC 9111 S4].
@@ -301,7 +312,7 @@ impl ArchivedCachePolicy {
     /// it is suitable as a revalidation request.
     ///
     /// [RFC 9111 S4]: https://www.rfc-editor.org/rfc/rfc9111.html#section-4
-    pub fn before_request(&self, request: &mut reqwest::Request) -> BeforeRequest {
+    pub(crate) fn before_request(&self, request: &mut reqwest::Request) -> BeforeRequest {
         let now = SystemTime::now();
         // If the response was never storable, then we just bail out
         // completely.
@@ -390,7 +401,7 @@ impl ArchivedCachePolicy {
     ///
     /// [RFC 9111 S4.3.3]: https://www.rfc-editor.org/rfc/rfc9111.html#section-4.3.3
     /// [RFC 9111 S4.3.4]: https://www.rfc-editor.org/rfc/rfc9111.html#section-4.3.4
-    pub fn after_response(
+    pub(crate) fn after_response(
         &self,
         cache_policy_builder: CachePolicyBuilder,
         response: &reqwest::Response,
@@ -543,7 +554,7 @@ impl ArchivedCachePolicy {
     /// [RFC 9111 S3].
     ///
     /// [RFC 9111 S3]: https://www.rfc-editor.org/rfc/rfc9111.html#section-3
-    pub fn is_storable(&self) -> bool {
+    pub(crate) fn is_storable(&self) -> bool {
         // In the absence of other signals, we are limited to caching responses
         // with a code that is heuristically cacheable as per [RFC 9110 S15.1].
         //
@@ -814,14 +825,18 @@ impl ArchivedCachePolicy {
                 }
             }
         }
-        if age > freshness_lifetime {
+        // RFC 9111 S4.2 defines freshness as
+        // `freshness_lifetime > current_age`, so equality is stale.
+        //
+        // [RFC 9111 S4.2]: https://www.rfc-editor.org/rfc/rfc9111.html#section-4.2
+        if age >= freshness_lifetime {
             let allows_stale = self.allows_stale(now);
             if !allows_stale {
                 tracing::trace!(
                     "Request to {} does not have a fresh cache entry because \
-                     its age is {} seconds, it is greater than the freshness \
-                     lifetime of {} seconds and stale cached responses are not \
-                     allowed",
+                     its age is {} seconds, it is greater than or equal to the \
+                     freshness lifetime of {} seconds and stale cached responses \
+                     are not allowed",
                     request.url(),
                     age,
                     freshness_lifetime,
@@ -908,7 +923,7 @@ impl ArchivedCachePolicy {
         let corrected_age_value = self.response.header_age().saturating_add(response_delay);
         let corrected_initial_age = apparent_age.max(corrected_age_value);
         let resident_age = unix_timestamp(now).saturating_sub(self.response.unix_timestamp.into());
-        let current_age = corrected_initial_age + resident_age;
+        let current_age = corrected_initial_age.saturating_add(resident_age);
         Duration::from_secs(current_age)
     }
 
@@ -993,7 +1008,7 @@ impl ArchivedCachePolicy {
 /// cached response is stale or not.
 #[derive(Debug)]
 #[expect(clippy::large_enum_variant)]
-pub enum BeforeRequest {
+pub(crate) enum BeforeRequest {
     /// The cached response is still fresh, and the caller may return the
     /// cached response without issuing an HTTP requests.
     Fresh,
@@ -1015,7 +1030,7 @@ pub enum BeforeRequest {
 /// the server determined the cached response was truly stale and in need of
 /// updated.
 #[derive(Debug)]
-pub enum AfterResponse {
+pub(crate) enum AfterResponse {
     /// The cached response is still fresh.
     NotModified(CachePolicy),
     /// The cached response has been invalidated and needs to be updated with
@@ -1397,4 +1412,108 @@ fn parse_seconds(value: &[u8]) -> Option<u64> {
         return None;
     }
     std::str::from_utf8(value).ok()?.parse().ok()
+}
+
+#[cfg(test)]
+mod tests {
+    use std::time::Duration;
+
+    use super::*;
+
+    fn http_request(method: http::Method, uri: &str) -> reqwest::Request {
+        reqwest::Request::new(method, uri.parse().unwrap())
+    }
+
+    fn archived_cache_policy(
+        request: &reqwest::Request,
+        response: http::response::Builder,
+    ) -> OwnedArchive<CachePolicy> {
+        let response = reqwest::Response::from(response.body(Vec::new()).unwrap());
+        CachePolicyBuilder::new(request)
+            .build(&response)
+            .to_archived()
+    }
+
+    /// A server or proxy is free to send an arbitrarily large `Age` header, up
+    /// to `u64::MAX`. Combined with the resident age of a cached response, the
+    /// RFC 9111 S4.2.3 age computation must not overflow. Every term uses
+    /// saturating arithmetic, so the age saturates to `Duration::from_secs`
+    /// `(u64::MAX)` and the response is treated as stale rather than panicking
+    /// (debug) or wrapping around to a bogus "fresh" age (release). This must
+    /// remain stale even if the response's freshness lifetime also reaches
+    /// `u64::MAX`.
+    #[test]
+    fn age_saturates_on_huge_age_header() {
+        let request =
+            reqwest::Request::new(http::Method::GET, "https://example.com/".parse().unwrap());
+        let http_response = http::Response::builder()
+            .status(http::StatusCode::OK)
+            .header(http::header::AGE, u64::MAX.to_string())
+            .header(http::header::CACHE_CONTROL, format!("max-age={}", u64::MAX))
+            .body(Vec::new())
+            .unwrap();
+        let response = reqwest::Response::from(http_response);
+
+        let policy = CachePolicyBuilder::new(&request).build(&response);
+        let archived = policy.to_archived();
+
+        // `now` must be strictly after the response timestamp so that
+        // `resident_age` is non-zero, which is the term that triggers the
+        // overflow when added to a `u64::MAX`-derived initial age.
+        let now = SystemTime::now() + Duration::from_secs(5);
+        assert_eq!(archived.age(now), Duration::from_secs(u64::MAX));
+        assert!(!archived.is_fresh(now, &request));
+    }
+
+    #[test]
+    fn stale_request_ignores_freshness_and_vary() {
+        let mut original = http_request(http::Method::GET, "https://example.com/");
+        original
+            .headers_mut()
+            .insert(http::header::ACCEPT, "application/json".parse().unwrap());
+        let archived = archived_cache_policy(
+            &original,
+            http::Response::builder()
+                .status(http::StatusCode::OK)
+                .header(http::header::CACHE_CONTROL, "no-cache")
+                .header(http::header::VARY, "accept"),
+        );
+
+        let mut request = http_request(http::Method::GET, "https://example.com/");
+        request
+            .headers_mut()
+            .insert(http::header::ACCEPT, "text/html".parse().unwrap());
+
+        assert!(archived.matches_stale_request(&request));
+        assert!(matches!(
+            archived.before_request(&mut request),
+            BeforeRequest::Stale(_)
+        ));
+
+        let request = http_request(http::Method::HEAD, "https://example.com/");
+        assert!(archived.matches_stale_request(&request));
+    }
+
+    #[test]
+    fn stale_request_rejects_non_matching_cache_entries() {
+        let original = http_request(http::Method::GET, "https://example.com/");
+        let archived = archived_cache_policy(
+            &original,
+            http::Response::builder().status(http::StatusCode::OK),
+        );
+
+        let different_uri = http_request(http::Method::GET, "https://example.com/other");
+        assert!(!archived.matches_stale_request(&different_uri));
+
+        let unsupported_method = http_request(http::Method::POST, "https://example.com/");
+        assert!(!archived.matches_stale_request(&unsupported_method));
+
+        let unstorable = archived_cache_policy(
+            &original,
+            http::Response::builder()
+                .status(http::StatusCode::OK)
+                .header(http::header::CACHE_CONTROL, "no-store"),
+        );
+        assert!(!unstorable.matches_stale_request(&original));
+    }
 }

@@ -60,6 +60,8 @@ import tempfile
 
 from benchmark import Command, Hyperfine
 
+logger = logging.getLogger(__name__)
+
 
 class Benchmark(enum.Enum):
     """Enumeration of the benchmarks to run."""
@@ -1289,7 +1291,6 @@ def main():
         "--min-runs",
         type=int,
         help="The minimum number of runs to perform.",
-        default=10,
     )
     parser.add_argument(
         "--runs",
@@ -1373,7 +1374,7 @@ def main():
 
     args = parser.parse_args()
     logging.basicConfig(
-        level=logging.INFO if args.verbose else logging.WARN,
+        level=logging.INFO if args.verbose else logging.WARNING,
         format="%(asctime)s %(levelname)s %(message)s",
         datefmt="%Y-%m-%d %H:%M:%S",
     )
@@ -1382,8 +1383,11 @@ def main():
     json = args.json
     python = args.python
     warmup = args.warmup
-    min_runs = args.min_runs
     runs = args.runs
+    min_runs = args.min_runs
+    # --min-runs and --runs conflict
+    if runs is None and min_runs is None:
+        min_runs = 10
 
     requirements_file = os.path.abspath(args.file)
     if not os.path.exists(requirements_file):
@@ -1439,12 +1443,12 @@ def main():
         else list(Benchmark)
     )
 
-    logging.info(f"Reading requirements from: {requirements_file}")
-    logging.info("```")
+    logger.info(f"Reading requirements from: {requirements_file}")
+    logger.info("```")
     with open(args.file) as f:
         for line in f:
-            logging.info(line.rstrip())
-    logging.info("```")
+            logger.info(line.rstrip())
+    logger.info("```")
 
     with tempfile.TemporaryDirectory() as cwd:
         for benchmark in benchmarks:

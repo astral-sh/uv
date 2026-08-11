@@ -1,19 +1,27 @@
-use itertools::Either;
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
+
+use itertools::Either;
+use rustc_hash::FxHashSet;
+use toml_parser::Source;
+use toml_parser::lexer::TokenKind;
 use tracing::info_span;
 
 use uv_auth::CredentialsCache;
-use uv_configuration::{DependencyGroupsWithDefaults, NoSources};
+use uv_cache::Cache;
+use uv_configuration::{DependencyGroupsWithDefaults, ExcludeDependency, NoSources, Upgrade};
 use uv_distribution::LoweredRequirement;
 use uv_distribution_types::{Index, IndexLocations, Requirement, RequiresPython};
 use uv_normalize::{GroupName, PackageName};
 use uv_pep508::RequirementOrigin;
 use uv_pypi_types::{Conflicts, SupportedEnvironments, VerbatimParsedUrl};
-use uv_resolver::{Lock, LockVersion, VERSION};
+use uv_resolver::Lock;
 use uv_scripts::Pep723Script;
-use uv_workspace::dependency_groups::{DependencyGroupError, FlatDependencyGroup};
-use uv_workspace::{Editability, Workspace, WorkspaceMember};
+use uv_workspace::dependency_groups::{
+    DependencyGroupError, FlatDependencyGroup, FlatDependencyGroups,
+};
+use uv_workspace::pyproject::OverrideDependency;
+use uv_workspace::{Editability, Workspace, WorkspaceCache, WorkspaceMember};
 
 use crate::commands::project::{ProjectError, find_requires_python};
 
@@ -47,7 +55,7 @@ impl<'lock> LockTarget<'lock> {
     }
 
     /// Returns the set of overrides for the [`LockTarget`].
-    pub(crate) fn overrides(self) -> Vec<uv_pep508::Requirement<VerbatimParsedUrl>> {
+    pub(crate) fn overrides(self) -> Vec<OverrideDependency> {
         match self {
             Self::Workspace(workspace) => workspace.overrides(),
             Self::Script(script) => script
@@ -64,7 +72,7 @@ impl<'lock> LockTarget<'lock> {
     }
 
     /// Returns the set of dependency exclusions for the [`LockTarget`].
-    pub(crate) fn exclude_dependencies(self) -> Vec<uv_normalize::PackageName> {
+    pub(crate) fn exclude_dependencies(self) -> Vec<ExcludeDependency> {
         match self {
             Self::Workspace(workspace) => workspace.exclude_dependencies(),
             Self::Script(script) => script
@@ -123,6 +131,47 @@ impl<'lock> LockTarget<'lock> {
             Self::Workspace(workspace) => workspace.workspace_dependency_groups(),
             Self::Script(_) => Ok(BTreeMap::new()),
         }
+    }
+
+    /// Validate the dependency groups requested by `--upgrade-group`.
+    pub(crate) fn validate_upgrade_groups(self, upgrade: &Upgrade) -> Result<(), ProjectError> {
+        let Some(groups) = upgrade.groups() else {
+            return Ok(());
+        };
+
+        match self {
+            Self::Workspace(workspace) => {
+                let mut known_groups = FxHashSet::default();
+                for member in workspace.packages().values() {
+                    known_groups.extend(
+                        FlatDependencyGroups::from_pyproject_toml(
+                            member.root(),
+                            member.pyproject_toml(),
+                        )?
+                        .into_iter()
+                        .map(|(group, _)| group),
+                    );
+                }
+                known_groups.extend(workspace.workspace_dependency_groups()?.into_keys());
+
+                for group in groups {
+                    if !known_groups.contains(group) {
+                        return if workspace.packages().len() == 1 && !workspace.is_non_project() {
+                            Err(ProjectError::MissingGroupProject(group.clone()))
+                        } else {
+                            Err(ProjectError::MissingGroupProjects(group.clone()))
+                        };
+                    }
+                }
+            }
+            Self::Script(_) => {
+                if let Some(group) = groups.iter().next() {
+                    return Err(ProjectError::MissingGroupScript(group.clone()));
+                }
+            }
+        }
+
+        Ok(())
     }
 
     /// Returns the set of all members within the target.
@@ -254,7 +303,7 @@ impl<'lock> LockTarget<'lock> {
                 .metadata
                 .requires_python
                 .as_ref()
-                .map(RequiresPython::from_specifiers)),
+                .map(|specifiers| RequiresPython::from_specifiers(specifiers.clone()))),
         }
     }
 
@@ -292,37 +341,22 @@ impl<'lock> LockTarget<'lock> {
     ///
     /// Returns `Ok(None)` if the lockfile does not exist.
     pub(crate) async fn read(self) -> Result<Option<Lock>, ProjectError> {
+        Ok(self
+            .read_with_contents()
+            .await?
+            .map(|(lock, _contents)| lock))
+    }
+
+    /// Read the lockfile and return the exact contents that were parsed.
+    ///
+    /// Returns `Ok(None)` if the lockfile does not exist.
+    pub(crate) async fn read_with_contents(self) -> Result<Option<(Lock, String)>, ProjectError> {
         let lock_path = self.lock_path();
         match fs_err::tokio::read_to_string(&lock_path).await {
             Ok(encoded) => {
-                let result = info_span!("toml::from_str lock", path = %lock_path.display())
-                    .in_scope(|| toml::from_str::<Lock>(&encoded));
-                match result {
-                    Ok(lock) => {
-                        // If the lockfile uses an unsupported version, raise an error.
-                        if lock.version() != VERSION {
-                            return Err(ProjectError::UnsupportedLockVersion(
-                                VERSION,
-                                lock.version(),
-                            ));
-                        }
-                        Ok(Some(lock))
-                    }
-                    Err(err) => {
-                        // If we failed to parse the lockfile, determine whether it's a supported
-                        // version.
-                        if let Ok(lock) = toml::from_str::<LockVersion>(&encoded) {
-                            if lock.version() != VERSION {
-                                return Err(ProjectError::UnparsableLockVersion(
-                                    VERSION,
-                                    lock.version(),
-                                    err,
-                                ));
-                            }
-                        }
-                        Err(ProjectError::UvLockParse(err))
-                    }
-                }
+                let lock = info_span!("parse uv lock", path = %lock_path.display())
+                    .in_scope(|| Lock::from_toml(&encoded))?;
+                Ok(Some((lock, encoded)))
             }
             Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(None),
             Err(err) => Err(err.into()),
@@ -346,11 +380,13 @@ impl<'lock> LockTarget<'lock> {
     }
 
     /// Lower the requirements for the [`LockTarget`], relative to the target root.
-    pub(crate) fn lower(
+    pub(crate) async fn lower(
         self,
         requirements: Vec<uv_pep508::Requirement<VerbatimParsedUrl>>,
         locations: &IndexLocations,
         sources: &NoSources,
+        cache: &Cache,
+        workspace_cache: &WorkspaceCache,
         credentials_cache: &CredentialsCache,
     ) -> Result<Vec<Requirement>, uv_distribution::MetadataError> {
         match self {
@@ -371,8 +407,11 @@ impl<'lock> LockTarget<'lock> {
                     workspace,
                     locations,
                     sources,
+                    cache,
+                    workspace_cache,
                     credentials_cache,
-                )?;
+                )
+                .await?;
 
                 Ok(metadata
                     .requires_dist
@@ -401,35 +440,224 @@ impl<'lock> LockTarget<'lock> {
                     .and_then(|uv| uv.sources.as_ref())
                     .unwrap_or(&empty);
 
-                Ok(requirements
-                    .into_iter()
-                    .flat_map(|requirement| {
-                        // Check if sources should be disabled for this specific package
-                        if sources.for_package(&requirement.name) {
-                            vec![Ok(Requirement::from(requirement))].into_iter()
-                        } else {
-                            let requirement_name = requirement.name.clone();
-                            LoweredRequirement::from_non_workspace_requirement(
-                                requirement,
-                                script.path.parent().unwrap(),
-                                sources_map,
-                                indexes,
-                                locations,
-                                credentials_cache,
-                            )
-                            .map(move |requirement| match requirement {
-                                Ok(requirement) => Ok(requirement.into_inner()),
-                                Err(err) => Err(uv_distribution::MetadataError::LoweringError(
-                                    requirement_name.clone(),
-                                    Box::new(err),
-                                )),
-                            })
-                            .collect::<Vec<_>>()
-                            .into_iter()
-                        }
-                    })
-                    .collect::<Result<_, _>>()?)
+                let mut lowered = Vec::new();
+                for requirement in requirements {
+                    if sources.for_package(&requirement.name) {
+                        lowered.push(Requirement::from(requirement));
+                        continue;
+                    }
+
+                    let requirement_name = requirement.name.clone();
+                    lowered.extend(
+                        LoweredRequirement::from_non_workspace_requirement(
+                            requirement,
+                            script.path.parent().unwrap(),
+                            sources_map,
+                            indexes,
+                            locations,
+                            cache,
+                            workspace_cache,
+                            credentials_cache,
+                        )
+                        .await
+                        .map(|requirement| {
+                            requirement
+                                .map(LoweredRequirement::into_inner)
+                                .map_err(|err| {
+                                    uv_distribution::MetadataError::LoweringError(
+                                        requirement_name.clone(),
+                                        Box::new(err),
+                                    )
+                                })
+                        })
+                        .collect::<Result<Vec<_>, _>>()?,
+                    );
+                }
+                Ok(lowered)
             }
         }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Bracket {
+    Header,
+    Array { multiline: bool },
+}
+
+/// Return the first line that does not match the whitespace emitted by the lock writer.
+///
+/// This only checks the serialization shape. TOML validity and lockfile semantics are checked by
+/// the regular lockfile deserializer.
+pub(crate) fn find_lock_format_error(source: &str) -> Option<usize> {
+    let bytes = source.as_bytes();
+    let mut brackets = Vec::with_capacity(4);
+    let mut previous = None;
+    let mut line_start = true;
+    let mut indented = false;
+    let mut line = 1;
+
+    for token in Source::new(source).lex() {
+        let kind = token.kind();
+        let start = token.span().start();
+        let end = token.span().end();
+
+        if kind == TokenKind::Eof {
+            return (!source.ends_with('\n')).then_some(line);
+        }
+
+        if kind == TokenKind::Whitespace {
+            if line_start {
+                if &bytes[start..end] != b"    " {
+                    return Some(line);
+                }
+                indented = true;
+            } else if &bytes[start..end] != b" " {
+                return Some(line);
+            }
+            previous = Some(kind);
+            continue;
+        }
+
+        if kind == TokenKind::Newline {
+            if end - start != 1 || start > 0 && matches!(bytes[start - 1], b' ' | b'\t') {
+                return Some(line);
+            }
+            line_start = true;
+            indented = false;
+            previous = Some(kind);
+            line += 1;
+            continue;
+        }
+
+        let at_line_start = line_start;
+        if line_start {
+            let multiline_array = brackets
+                .iter()
+                .any(|bracket| matches!(bracket, Bracket::Array { multiline: true }));
+            if multiline_array && kind != TokenKind::RightSquareBracket && !indented
+                || (!multiline_array || kind == TokenKind::RightSquareBracket) && indented
+            {
+                return Some(line);
+            }
+            line_start = false;
+        }
+
+        match kind {
+            TokenKind::Equals => {
+                if start == 0
+                    || end >= bytes.len()
+                    || bytes[start - 1] != b' '
+                    || bytes[end] != b' '
+                {
+                    return Some(line);
+                }
+            }
+            TokenKind::Comma => {
+                if start > 0 && matches!(bytes[start - 1], b' ' | b'\t')
+                    || end < bytes.len() && !matches!(bytes[end], b' ' | b'\n')
+                {
+                    return Some(line);
+                }
+            }
+            TokenKind::LeftCurlyBracket => {
+                if end < bytes.len() && !matches!(bytes[end], b' ' | b'}') {
+                    return Some(line);
+                }
+            }
+            TokenKind::RightCurlyBracket => {
+                if start > 0 && !matches!(bytes[start - 1], b' ' | b'{') {
+                    return Some(line);
+                }
+            }
+            TokenKind::LeftSquareBracket => {
+                if end < bytes.len() && matches!(bytes[end], b' ' | b'\t') {
+                    return Some(line);
+                }
+                let header = at_line_start
+                    || previous == Some(TokenKind::LeftSquareBracket)
+                        && brackets.last() == Some(&Bracket::Header);
+                brackets.push(if header {
+                    Bracket::Header
+                } else {
+                    Bracket::Array {
+                        multiline: bytes.get(end) == Some(&b'\n'),
+                    }
+                });
+            }
+            TokenKind::RightSquareBracket => {
+                if start > 0 && matches!(bytes[start - 1], b' ' | b'\t') || brackets.pop().is_none()
+                {
+                    return Some(line);
+                }
+            }
+            TokenKind::LiteralString | TokenKind::MlLiteralString | TokenKind::MlBasicString => {
+                return Some(line);
+            }
+            _ => {}
+        }
+
+        previous = Some(kind);
+    }
+
+    Some(line)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::find_lock_format_error;
+
+    const FORMATTED: &str = r#"version = 1
+revision = 3
+requires-python = ">=3.12"
+resolution-markers = [
+    "sys_platform == 'darwin'",
+    "sys_platform != 'darwin'",
+]
+conflicts = [[
+    { package = "project", extra = "cpu" },
+    { package = "project", extra = "gpu" },
+], [
+    { package = "project", group = "test" },
+    { package = "project", group = "lint" },
+]]
+
+[options]
+exclude-newer = "2024-03-25T00:00:00Z" # Generated comment
+
+[[package]]
+name = "project"
+version = "0.1.0"
+source = { virtual = "." }
+dependencies = [
+    { name = "sniffio", marker = "python_full_version < '3.13'" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "sniffio" }]
+"#;
+
+    #[test]
+    fn accepts_lock_format() {
+        assert_eq!(find_lock_format_error(FORMATTED), None);
+    }
+
+    #[test]
+    fn rejects_lock_format_changes() {
+        for unformatted in [
+            FORMATTED.replacen("\n    {", "\n{", 1),
+            FORMATTED.replacen("\n    \"", "\n\"", 1),
+            FORMATTED.replacen(" = ", "  = ", 1),
+            FORMATTED.replacen(" = ", "=", 1),
+            FORMATTED.replacen(", ", ",  ", 1),
+            FORMATTED.replacen("{ ", "{", 1),
+            FORMATTED.replacen(" }", "}", 1),
+            FORMATTED.replacen('\n', "\r\n", 1),
+            FORMATTED.replacen('\n', " \n", 1),
+        ] {
+            assert!(find_lock_format_error(&unformatted).is_some());
+        }
+
+        assert!(find_lock_format_error(FORMATTED.trim_end_matches('\n')).is_some());
     }
 }

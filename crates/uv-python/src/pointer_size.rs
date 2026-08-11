@@ -11,10 +11,6 @@ pub enum PointerSize {
 }
 
 impl PointerSize {
-    pub const fn is_32(self) -> bool {
-        matches!(self, Self::_32)
-    }
-
     pub const fn is_64(self) -> bool {
         matches!(self, Self::_64)
     }

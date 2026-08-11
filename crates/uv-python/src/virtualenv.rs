@@ -8,7 +8,6 @@ use std::{
 use fs_err as fs;
 use thiserror::Error;
 
-use uv_preview::{Preview, PreviewFeature};
 use uv_pypi_types::Scheme;
 use uv_static::EnvVars;
 
@@ -35,19 +34,19 @@ pub struct VirtualEnvironment {
 #[derive(Debug, Clone)]
 pub struct PyVenvConfiguration {
     /// The `PYTHONHOME` directory containing the base Python executable.
-    pub(crate) home: Option<PathBuf>,
+    pub(super) home: Option<PathBuf>,
     /// Was the virtual environment created with the `virtualenv` package?
-    pub(crate) virtualenv: bool,
+    pub(super) virtualenv: bool,
     /// Was the virtual environment created with the `uv` package?
-    pub(crate) uv: bool,
+    pub(super) uv: bool,
     /// Is the virtual environment relocatable?
-    pub(crate) relocatable: bool,
+    pub(super) relocatable: bool,
     /// Was the virtual environment populated with seed packages?
-    pub(crate) seed: bool,
+    pub(super) seed: bool,
     /// Should the virtual environment include system site packages?
-    pub(crate) include_system_site_packages: bool,
+    pub(super) include_system_site_packages: bool,
     /// The Python version the virtual environment was created with
-    pub(crate) version: Option<PythonVersion>,
+    pub(super) version: Option<PythonVersion>,
 }
 
 #[derive(Debug, Error)]
@@ -88,7 +87,7 @@ impl CondaEnvironmentKind {
     /// name, e.g., `base`, which does not match the `CONDA_PREFIX`, e.g., `/usr/local` instead of
     /// `/usr/local/conda/envs/<name>`. Note the name `CONDA_DEFAULT_ENV` is misleading, it's the
     /// active environment name, not a constant base environment name.
-    fn from_prefix_path(path: &Path, preview: Preview) -> Self {
+    fn from_prefix_path(path: &Path) -> Self {
         // Pixi never creates true "base" envs and names project envs "default", confusing our
         // heuristics, so treat Pixi prefixes as child envs outright.
         if is_pixi_environment(path) {
@@ -113,17 +112,7 @@ impl CondaEnvironmentKind {
             return Self::Child;
         }
 
-        // If the environment name is "base" or "root", treat it as a base environment
-        //
-        // These are the expected names for the base environment; and is retained for backwards
-        // compatibility, but can be removed with the `special-conda-env-names` preview feature.
-        if !preview.is_enabled(PreviewFeature::SpecialCondaEnvNames)
-            && (current_env == "base" || current_env == "root")
-        {
-            return Self::Base;
-        }
-
-        // For other environment names, use the path-based logic
+        // Use path-based logic for environment names, including `base` and `root`.
         let Some(name) = path.file_name() else {
             return Self::Child;
         };
@@ -147,14 +136,11 @@ fn is_pixi_environment(path: &Path) -> bool {
 ///
 /// If `base` is true, the active environment must be the base environment or `None` is returned,
 /// and vice-versa.
-pub(crate) fn conda_environment_from_env(
-    kind: CondaEnvironmentKind,
-    preview: Preview,
-) -> Option<PathBuf> {
+pub(crate) fn conda_environment_from_env(kind: CondaEnvironmentKind) -> Option<PathBuf> {
     let dir = env::var_os(EnvVars::CONDA_PREFIX).filter(|value| !value.is_empty())?;
     let path = PathBuf::from(dir);
 
-    if kind != CondaEnvironmentKind::from_prefix_path(&path, preview) {
+    if kind != CondaEnvironmentKind::from_prefix_path(&path) {
         return None;
     }
 
@@ -163,9 +149,9 @@ pub(crate) fn conda_environment_from_env(
 
 /// Locate a virtual environment by searching the file system.
 ///
-/// Searches for a `.venv` directory in the current or any parent directory. If the current
-/// directory is itself a virtual environment (or a subdirectory of a virtual environment), the
-/// containing virtual environment is returned.
+/// Searches for a `.venv` directory or symlink in the current or any parent directory. If the
+/// current directory is itself a virtual environment (or a subdirectory of a virtual environment),
+/// the containing virtual environment is returned.
 pub(crate) fn virtualenv_from_working_dir() -> Result<Option<PathBuf>, Error> {
     let current_dir = crate::current_dir()?;
 
@@ -177,7 +163,12 @@ pub(crate) fn virtualenv_from_working_dir() -> Result<Option<PathBuf>, Error> {
 
         // Otherwise, search for a `.venv` directory.
         let dot_venv = dir.join(".venv");
-        if dot_venv.is_dir() {
+        let metadata = match fs::symlink_metadata(&dot_venv) {
+            Ok(metadata) => metadata,
+            Err(err) if err.kind() == io::ErrorKind::NotFound => continue,
+            Err(err) => return Err(err.into()),
+        };
+        if metadata.is_dir() || metadata.file_type().is_symlink() {
             if !uv_fs::is_virtualenv_base(&dot_venv) {
                 return Err(Error::MissingPyVenvCfg(dot_venv));
             }
@@ -301,7 +292,7 @@ impl PyVenvConfiguration {
     }
 
     /// Returns true if the virtual environment is relocatable.
-    pub fn is_relocatable(&self) -> bool {
+    pub(crate) fn is_relocatable(&self) -> bool {
         self.relocatable
     }
 
@@ -320,12 +311,12 @@ impl PyVenvConfiguration {
         let mut lines = content.lines().map(Cow::Borrowed).collect::<Vec<_>>();
         let mut found = false;
         for line in &mut lines {
-            if let Some((lhs, _)) = line.split_once('=') {
-                if lhs.trim() == key {
-                    *line = Cow::Owned(format!("{key} = {value}"));
-                    found = true;
-                    break;
-                }
+            if let Some((lhs, _)) = line.split_once('=')
+                && lhs.trim() == key
+            {
+                *line = Cow::Owned(format!("{key} = {value}"));
+                found = true;
+                break;
             }
         }
         if !found {
@@ -366,7 +357,7 @@ mod tests {
 
         with_vars(vars, || {
             assert_eq!(
-                CondaEnvironmentKind::from_prefix_path(prefix, Preview::default()),
+                CondaEnvironmentKind::from_prefix_path(prefix),
                 CondaEnvironmentKind::Child
             );
         });

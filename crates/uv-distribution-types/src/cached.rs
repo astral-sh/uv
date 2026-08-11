@@ -60,7 +60,7 @@ impl CachedDist {
             Dist::Built(BuiltDist::DirectUrl(dist)) => Self::Url(CachedDirectUrlDist {
                 filename,
                 url: VerbatimParsedUrl {
-                    parsed_url: dist.parsed_url(),
+                    parsed_url: dist.to_parsed_url(),
                     verbatim: dist.url,
                 },
                 hashes,
@@ -71,7 +71,18 @@ impl CachedDist {
             Dist::Built(BuiltDist::Path(dist)) => Self::Url(CachedDirectUrlDist {
                 filename,
                 url: VerbatimParsedUrl {
-                    parsed_url: dist.parsed_url(),
+                    parsed_url: dist.to_parsed_url(),
+                    verbatim: dist.url,
+                },
+                hashes,
+                cache_info,
+                build_info,
+                path,
+            }),
+            Dist::Built(BuiltDist::GitPath(dist)) => Self::Url(CachedDirectUrlDist {
+                filename,
+                url: VerbatimParsedUrl {
+                    parsed_url: dist.to_parsed_url(),
                     verbatim: dist.url,
                 },
                 hashes,
@@ -89,7 +100,7 @@ impl CachedDist {
             Dist::Source(SourceDist::DirectUrl(dist)) => Self::Url(CachedDirectUrlDist {
                 filename,
                 url: VerbatimParsedUrl {
-                    parsed_url: dist.parsed_url(),
+                    parsed_url: dist.to_parsed_url(),
                     verbatim: dist.url,
                 },
                 hashes,
@@ -97,10 +108,21 @@ impl CachedDist {
                 build_info,
                 path,
             }),
-            Dist::Source(SourceDist::Git(dist)) => Self::Url(CachedDirectUrlDist {
+            Dist::Source(SourceDist::GitDirectory(dist)) => Self::Url(CachedDirectUrlDist {
                 filename,
                 url: VerbatimParsedUrl {
-                    parsed_url: dist.parsed_url(),
+                    parsed_url: dist.to_parsed_url(),
+                    verbatim: dist.url,
+                },
+                hashes,
+                cache_info,
+                build_info,
+                path,
+            }),
+            Dist::Source(SourceDist::GitPath(dist)) => Self::Url(CachedDirectUrlDist {
+                filename,
+                url: VerbatimParsedUrl {
+                    parsed_url: dist.to_parsed_url(),
                     verbatim: dist.url,
                 },
                 hashes,
@@ -111,7 +133,7 @@ impl CachedDist {
             Dist::Source(SourceDist::Path(dist)) => Self::Url(CachedDirectUrlDist {
                 filename,
                 url: VerbatimParsedUrl {
-                    parsed_url: dist.parsed_url(),
+                    parsed_url: dist.to_parsed_url(),
                     verbatim: dist.url,
                 },
                 hashes,
@@ -122,7 +144,7 @@ impl CachedDist {
             Dist::Source(SourceDist::Directory(dist)) => Self::Url(CachedDirectUrlDist {
                 filename,
                 url: VerbatimParsedUrl {
-                    parsed_url: dist.parsed_url(),
+                    parsed_url: dist.to_parsed_url(),
                     verbatim: dist.url,
                 },
                 hashes,
@@ -213,7 +235,7 @@ impl DistributionMetadata for CachedDirectUrlDist {
     }
 
     fn version_id(&self) -> VersionId {
-        VersionId::from_parsed_url(&self.url.parsed_url)
+        VersionId::from_parsed_url(self.url.parsed_url.clone())
     }
 }
 

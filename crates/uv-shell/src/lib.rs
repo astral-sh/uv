@@ -1,9 +1,14 @@
-pub mod runnable;
+mod runnable;
 mod shlex;
-pub mod windows;
+#[cfg(windows)]
+mod windows;
 
+pub use runnable::WindowsRunnable;
 pub use shlex::{escape_posix_for_single_quotes, shlex_posix, shlex_windows};
+#[cfg(windows)]
+pub use windows::prepend_path;
 
+use std::borrow::Cow;
 use std::env::home_dir;
 use std::path::{Path, PathBuf};
 
@@ -132,7 +137,7 @@ impl Shell {
     /// assert_eq!(Shell::from_shell_path("/usr/bin/zsh"), Some(Shell::Zsh));
     /// assert_eq!(Shell::from_shell_path("/opt/my_custom_shell"), None);
     /// ```
-    pub fn from_shell_path(path: impl AsRef<Path>) -> Option<Self> {
+    fn from_shell_path(path: impl AsRef<Path>) -> Option<Self> {
         parse_shell_from_path(path.as_ref())
     }
 
@@ -316,7 +321,11 @@ fn parse_shell_from_path(path: &Path) -> Option<Shell> {
 }
 
 /// Escape a string for use in a shell command by inserting backslashes.
-fn backslash_escape(s: &str) -> String {
+fn backslash_escape(s: &str) -> Cow<'_, str> {
+    if !s.chars().any(|c| matches!(c, '\\' | '"')) {
+        return Cow::Borrowed(s);
+    }
+
     let mut escaped = String::with_capacity(s.len());
     for c in s.chars() {
         match c {
@@ -325,11 +334,18 @@ fn backslash_escape(s: &str) -> String {
         }
         escaped.push(c);
     }
-    escaped
+    Cow::Owned(escaped)
 }
 
 /// Escape a string for use in a `PowerShell` command by inserting backticks.
-fn backtick_escape(s: &str) -> String {
+fn backtick_escape(s: &str) -> Cow<'_, str> {
+    if !s
+        .chars()
+        .any(|c| matches!(c, '"' | '`' | '\u{201C}' | '\u{201D}' | '\u{201E}' | '$'))
+    {
+        return Cow::Borrowed(s);
+    }
+
     let mut escaped = String::with_capacity(s.len());
     for c in s.chars() {
         match c {
@@ -340,7 +356,7 @@ fn backtick_escape(s: &str) -> String {
         }
         escaped.push(c);
     }
-    escaped
+    Cow::Owned(escaped)
 }
 
 #[cfg(test)]

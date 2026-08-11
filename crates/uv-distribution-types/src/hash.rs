@@ -79,7 +79,7 @@ impl HashPolicy<'_> {
     }
 
     /// Returns `true` if the given hashes include the algorithms required by the policy.
-    pub fn has_required_algorithms(&self, hashes: &[HashDigest]) -> bool {
+    fn has_required_algorithms(&self, hashes: &[HashDigest]) -> bool {
         match self {
             Self::None => true,
             Self::Generate(_) => hashes
@@ -125,6 +125,18 @@ pub trait Hashed {
     /// Returns `true` if the archive includes the algorithms required by the given hash policy.
     fn has_digests(&self, hashes: HashPolicy) -> bool {
         hashes.has_required_algorithms(self.hashes())
+    }
+}
+
+impl Hashed for Vec<HashDigest> {
+    fn hashes(&self) -> &[HashDigest] {
+        self
+    }
+}
+
+impl Hashed for &[HashDigest] {
+    fn hashes(&self) -> &[HashDigest] {
+        self
     }
 }
 

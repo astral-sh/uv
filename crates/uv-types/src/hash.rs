@@ -1,4 +1,5 @@
 use std::fmt::Display;
+use std::path::Path;
 use std::str::FromStr;
 use std::sync::Arc;
 
@@ -11,7 +12,7 @@ use uv_distribution_types::{
 };
 use uv_normalize::PackageName;
 use uv_pep440::Version;
-use uv_pypi_types::{HashDigest, HashDigests, HashError, ResolverMarkerEnvironment};
+use uv_pypi_types::{HashAlgorithm, HashDigest, HashDigests, HashError, ResolverMarkerEnvironment};
 use uv_redacted::DisplaySafeUrl;
 
 #[derive(Debug, Default, Clone)]
@@ -183,6 +184,10 @@ impl HashStrategy {
                 merge_digests(&mut digests, fragment_hashes.iter(), requirement)?;
             }
 
+            if mode.is_require() {
+                digests.retain(|digest| digest.algorithm() != HashAlgorithm::Md5);
+            }
+
             if digests.is_empty() {
                 continue;
             }
@@ -216,7 +221,7 @@ impl HashStrategy {
                 }
                 UnresolvedRequirement::Unnamed(requirement) => {
                     // Direct URLs are always allowed.
-                    VersionId::from_parsed_url(&requirement.url.parsed_url)
+                    VersionId::from_parsed_url(requirement.url.parsed_url.clone())
                 }
             };
 
@@ -228,6 +233,14 @@ impl HashStrategy {
                 .collect::<Result<Vec<_>, _>>()?;
             if let Some(fragment_hashes) = requirement.hashes().map(HashDigests::from) {
                 merge_digests(&mut digests, fragment_hashes.iter(), requirement)?;
+            }
+
+            let has_md5 = mode.is_require()
+                && digests
+                    .iter()
+                    .any(|digest| digest.algorithm() == HashAlgorithm::Md5);
+            if mode.is_require() {
+                digests.retain(|digest| digest.algorithm() != HashAlgorithm::Md5);
             }
 
             let digests = if let Some(constraint) = constraint_hashes.remove(&id) {
@@ -259,6 +272,13 @@ impl HashStrategy {
             // Under `--require-hashes`, every requirement must include a hash.
             if digests.is_empty() {
                 if mode.is_require() {
+                    if has_md5 {
+                        return Err(HashStrategyError::InsecureHashAlgorithm(
+                            requirement.to_string(),
+                            HashAlgorithm::Md5,
+                            mode,
+                        ));
+                    }
                     return Err(HashStrategyError::MissingHashes(
                         requirement.to_string(),
                         mode,
@@ -378,10 +398,16 @@ impl HashStrategy {
                 location,
                 subdirectory,
                 ..
-            } => Some(VersionId::from_archive(location, subdirectory.as_deref())),
-            RequirementSource::Git {
+            } => Some(VersionId::from_archive(
+                location.clone(),
+                subdirectory.clone().map(Path::into_path_buf),
+            )),
+            RequirementSource::GitDirectory {
                 git, subdirectory, ..
             } => Some(VersionId::from_git(git, subdirectory.as_deref())),
+            RequirementSource::GitPath {
+                git, install_path, ..
+            } => Some(VersionId::from_git(git, Some(install_path))),
             RequirementSource::Path { install_path, .. } => {
                 Some(VersionId::from_path(install_path))
             }
@@ -470,6 +496,10 @@ pub enum HashStrategyError {
         "In `{1}` mode, all requirements must have their versions pinned with `==`, but found: {0}"
     )]
     UnpinnedRequirement(String, HashCheckingMode),
+    #[error(
+        "`{1}` hashes are insecure and cannot be used with `{2}` but no other hashes are available for: {0}"
+    )]
+    InsecureHashAlgorithm(String, HashAlgorithm, HashCheckingMode),
     #[error("In `{1}` mode, all requirements must have a hash, but none were provided for: {0}")]
     MissingHashes(String, HashCheckingMode),
     #[error(

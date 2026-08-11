@@ -1,0 +1,7 @@
+rules:
+  secrets-inherit:
+    # Disable the secrets-inherit rule entirely.
+    # We use `secrets: inherit` pervasively in uv's CI to orchestrate reusable
+    # workflows in various contexts/with various inputs. Removing it would
+    # be extremely troublesome/high-risk at the moment.
+    disable: true

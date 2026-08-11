@@ -5,18 +5,25 @@
 use std::io;
 use std::path::Path;
 
+use tracing::debug;
+
 use crate::CleanReporter;
 
-/// Remove a file or directory and all its contents, returning a [`Removal`] with
-/// the number of files and directories removed, along with a total byte count.
-pub fn rm_rf(path: impl AsRef<Path>) -> io::Result<Removal> {
-    Remover::default().rm_rf(path, false)
+/// The storage accounting used when removing cache entries.
+#[derive(Debug, Clone, Copy, Default)]
+pub enum RemovalMode {
+    /// Report the logical size of the removed files.
+    #[default]
+    Logical,
+    /// Report the exclusively owned physical storage reclaimed by the removed files.
+    Physical,
 }
 
 /// A builder for a [`Remover`] that can remove files and directories.
 #[derive(Default)]
 pub(crate) struct Remover {
     reporter: Option<Box<dyn CleanReporter>>,
+    removal_mode: RemovalMode,
 }
 
 impl Remover {
@@ -24,7 +31,14 @@ impl Remover {
     pub(crate) fn new(reporter: Box<dyn CleanReporter>) -> Self {
         Self {
             reporter: Some(reporter),
+            ..Self::default()
         }
+    }
+
+    /// Set the storage accounting used before each file is removed.
+    pub(crate) fn with_removal_mode(mut self, removal_mode: RemovalMode) -> Self {
+        self.removal_mode = removal_mode;
+        self
     }
 
     /// Remove a file or directory and all its contents, returning a [`Removal`] with
@@ -34,7 +48,7 @@ impl Remover {
         path: impl AsRef<Path>,
         skip_locked_file: bool,
     ) -> io::Result<Removal> {
-        let mut removal = Removal::default();
+        let mut removal = Removal::new(self.removal_mode);
         removal.rm_rf(path.as_ref(), self.reporter.as_deref(), skip_locked_file)?;
         Ok(removal)
     }
@@ -47,14 +61,49 @@ pub struct Removal {
     pub num_files: u64,
     /// The number of directories removed.
     pub num_dirs: u64,
-    /// The total number of bytes removed.
+    /// The logical number of bytes removed.
     ///
     /// Note: this will both over-count bytes removed for hard-linked files, and under-count
     /// bytes in general since it's a measure of the exact byte size (as opposed to the block size).
-    pub total_bytes: u64,
+    pub logical_bytes: u64,
+    /// The exclusively owned physical file data reclaimed by the removal, when available.
+    pub physical_bytes: Option<u64>,
+    /// Whether any removed entries could not be measured, making the physical count a lower bound.
+    pub physical_bytes_incomplete: bool,
 }
 
 impl Removal {
+    /// Create an empty removal summary with the requested storage accounting.
+    pub(crate) fn new(removal_mode: RemovalMode) -> Self {
+        Self {
+            physical_bytes: match removal_mode {
+                RemovalMode::Logical => None,
+                RemovalMode::Physical => Some(0),
+            },
+            ..Self::default()
+        }
+    }
+
+    /// Account for a file while its current sharing state can still be inspected.
+    fn add_file(&mut self, path: &Path, metadata: &std::fs::Metadata) {
+        self.logical_bytes += metadata.len();
+
+        if let Some(physical_bytes) = self.physical_bytes {
+            match uv_fs::physical_space(path, metadata) {
+                Ok(physical) => {
+                    self.physical_bytes = Some(physical_bytes.saturating_add(physical));
+                }
+                Err(error) => {
+                    debug!(
+                        "Failed to measure physical space for {}: {error}",
+                        path.display()
+                    );
+                    self.physical_bytes_incomplete = true;
+                }
+            }
+        }
+    }
+
     /// Recursively remove a file or directory and all its contents.
     fn rm_rf(
         &mut self,
@@ -74,22 +123,21 @@ impl Removal {
             self.num_files += 1;
 
             // Remove the file.
-            self.total_bytes += metadata.len();
+            self.add_file(&path, &metadata);
             if metadata.is_symlink() {
-                #[cfg(windows)]
-                {
-                    use std::os::windows::fs::FileTypeExt;
+                cfg_select! {
+                    windows => {
+                        use std::os::windows::fs::FileTypeExt;
 
-                    if metadata.file_type().is_symlink_dir() {
-                        remove_dir(&path)?;
-                    } else {
+                        if metadata.file_type().is_symlink_dir() {
+                            remove_dir(&path)?;
+                        } else {
+                            remove_file(&path)?;
+                        }
+                    },
+                    _ => {
                         remove_file(&path)?;
-                    }
-                }
-
-                #[cfg(not(windows))]
-                {
-                    remove_file(&path)?;
+                    },
                 }
             } else {
                 remove_file(&path)?;
@@ -159,8 +207,10 @@ impl Removal {
                 self.num_files += 1;
 
                 // Remove the file.
-                if let Ok(meta) = entry.metadata() {
-                    self.total_bytes += meta.len();
+                if let Ok(metadata) = entry.metadata() {
+                    self.add_file(entry.path(), &metadata);
+                } else if self.physical_bytes.is_some() {
+                    self.physical_bytes_incomplete = true;
                 }
                 remove_file(entry.path())?;
             }
@@ -178,7 +228,12 @@ impl std::ops::AddAssign for Removal {
     fn add_assign(&mut self, other: Self) {
         self.num_files += other.num_files;
         self.num_dirs += other.num_dirs;
-        self.total_bytes += other.total_bytes;
+        self.logical_bytes += other.logical_bytes;
+        self.physical_bytes = self
+            .physical_bytes
+            .zip(other.physical_bytes)
+            .map(|(left, right)| left.saturating_add(right));
+        self.physical_bytes_incomplete |= other.physical_bytes_incomplete;
     }
 }
 

@@ -1,0 +1,14 @@
+name = "requires-less-version-does-not-exist"
+description = "The user requires a version of `a` less than `1.0.0` but only larger versions exist"
+
+[root]
+requires = ["a<2.0.0"]
+
+[expected]
+satisfiable = false
+
+[packages.a.versions."2.0.0"]
+
+[packages.a.versions."3.0.0"]
+
+[packages.a.versions."4.0.0"]

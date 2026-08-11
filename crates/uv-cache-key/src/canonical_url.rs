@@ -20,9 +20,7 @@ use crate::cache_key::{CacheKey, CacheKeyHasher};
 pub struct CanonicalUrl(DisplaySafeUrl);
 
 impl CanonicalUrl {
-    pub fn new(url: &DisplaySafeUrl) -> Self {
-        let mut url = url.clone();
-
+    pub fn new(mut url: DisplaySafeUrl) -> Self {
         // If the URL cannot be a base, then it's not a valid URL anyway.
         if url.cannot_be_a_base() {
             return Self(url);
@@ -99,7 +97,7 @@ impl CanonicalUrl {
     }
 
     pub fn parse(url: &str) -> Result<Self, DisplaySafeUrlError> {
-        Ok(Self::new(&DisplaySafeUrl::parse(url)?))
+        Ok(Self::new(DisplaySafeUrl::parse(url)?))
     }
 }
 
@@ -153,7 +151,7 @@ pub struct RepositoryUrl {
 }
 
 impl RepositoryUrl {
-    pub fn new(url: &DisplaySafeUrl) -> Self {
+    pub fn new(url: DisplaySafeUrl) -> Self {
         let mut url = CanonicalUrl::new(url).0;
 
         // If a Git URL ends in a reference (like a branch, tag, or commit), remove it.
@@ -178,7 +176,7 @@ impl RepositoryUrl {
     }
 
     pub fn parse(url: &str) -> Result<Self, DisplaySafeUrlError> {
-        Ok(Self::new(&DisplaySafeUrl::parse(url)?))
+        Ok(Self::new(DisplaySafeUrl::parse(url)?))
     }
 
     #[must_use]

@@ -1,0 +1,12 @@
+name = "direct-incompatible-versions"
+description = "The user requires two incompatible, existing versions of package `a`"
+
+[root]
+requires = ["a==1.0.0", "a==2.0.0"]
+
+[expected]
+satisfiable = false
+
+[packages.a.versions."1.0.0"]
+
+[packages.a.versions."2.0.0"]

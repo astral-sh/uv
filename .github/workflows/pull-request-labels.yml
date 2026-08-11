@@ -1,0 +1,126 @@
+# Recommend and apply labels for new pull requests.
+name: "Pull request labels"
+
+on:
+  workflow_dispatch:
+    inputs:
+      pull_request:
+        description: "A pull request number"
+        required: true
+        type: number
+      head_sha:
+        description: "The pull request head SHA at dispatch time"
+        required: false
+        type: string
+
+permissions: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ inputs.pull_request }}
+  cancel-in-progress: true
+
+jobs:
+  labels:
+    if: github.repository == 'astral-sh/uv' || github.repository == 'astral-sh/uv-dev'
+    runs-on: ubuntu-latest
+    environment: automations
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      issues: read
+      pull-requests: read
+    outputs:
+      result: ${{ steps.labels.outputs.final-message }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+          persist-credentials: false
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.head_sha || format('refs/pull/{0}/head', inputs.pull_request) }}
+          path: pull-request
+          persist-credentials: false
+
+      - name: "Collect pull request context"
+        working-directory: pull-request
+        run: |
+          # Remove potential PR-controlled paths for label configuration.
+          rm -f .pull-request-labels-event.json .pull-request-labels.json
+          gh pr view "$PULL_REQUEST_NUMBER" \
+            --repo "$GITHUB_REPOSITORY" \
+            --json number,title,body,author,baseRefName,headRefName,isDraft,labels,files,additions,deletions,changedFiles \
+            > .pull-request-labels-event.json
+          gh label list \
+            --repo "$GITHUB_REPOSITORY" \
+            --limit 1000 \
+            --json name,description \
+            > .pull-request-labels.json
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PULL_REQUEST_NUMBER: ${{ inputs.pull_request }}
+
+      - name: "Determine pull request labels"
+        id: labels
+        uses: openai/codex-action@52fe01ec70a42f454c9d2ebd47598f9fd6893d56 # v1.11
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          openai-api-key: ${{ secrets.OPENAI_API_KEY }}
+          codex-version: "0.146.0"
+          working-directory: "${{ github.workspace }}/pull-request"
+          codex-home: "${{ github.workspace }}/agents/codex"
+          permission-profile: "pull-request-labels"
+          safety-strategy: drop-sudo
+          allow-bot-users: "astral-automations-bot[bot]"
+          prompt-file: "${{ github.workspace }}/agents/prompts/pull-request-labels.md"
+          output-schema-file: "${{ github.workspace }}/agents/schemas/pull-request-labels.json"
+
+  report:
+    needs: labels
+    if: needs.labels.outputs.result != ''
+    runs-on: ubuntu-latest
+    permissions: {}
+    steps:
+      - name: "Write label recommendations"
+        run: printf '%s\n' "$LABEL_RESULT" >> "$GITHUB_STEP_SUMMARY"
+        env:
+          LABEL_RESULT: ${{ needs.labels.outputs.result }}
+
+  apply:
+    needs: labels
+    if: >-
+      github.repository == 'astral-sh/uv-dev' &&
+      needs.labels.outputs.result != '' &&
+      fromJSON(needs.labels.outputs.result).labels[0] != null
+    runs-on: ubuntu-slim
+    environment: automations
+    timeout-minutes: 5
+    permissions:
+      id-token: write # for the repository label credential broker
+    steps:
+      - name: "Get repository label token"
+        id: token
+        uses: open-security-tools/ost-simple-sts@9e012247e07c39080fb6a832dbfbcfeacebc19c4
+        with:
+          exchange-url: ${{ secrets.STS_API_URL }}/exchange
+          audience: ${{ secrets.STS_API_URL }}
+          repository: ${{ github.repository }}
+          permissions: |
+            pull_requests: write
+
+      - name: "Apply recommended labels"
+        run: |
+          # POST adds labels without removing any labels already on the pull request.
+          printf '%s\n' "$LABEL_RESULT" \
+            | jq '{labels}' \
+            | gh api \
+                --method POST \
+                "repos/$GITHUB_REPOSITORY/issues/$PULL_REQUEST_NUMBER/labels" \
+                --input - \
+                --silent
+        env:
+          GH_TOKEN: ${{ steps.token.outputs.token }}
+          LABEL_RESULT: ${{ needs.labels.outputs.result }}
+          PULL_REQUEST_NUMBER: ${{ inputs.pull_request }}

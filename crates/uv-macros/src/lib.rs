@@ -4,6 +4,7 @@ use proc_macro::TokenStream;
 use quote::{quote, quote_spanned};
 use syn::spanned::Spanned;
 use syn::{Attribute, DeriveInput, ImplItem, ItemImpl, LitStr, parse_macro_input};
+use textwrap::dedent;
 
 #[proc_macro_derive(OptionsMetadata, attributes(option, option_group))]
 pub fn derive_options_metadata(input: TokenStream) -> TokenStream {
@@ -12,6 +13,89 @@ pub fn derive_options_metadata(input: TokenStream) -> TokenStream {
     options_metadata::derive_impl(input)
         .unwrap_or_else(syn::Error::into_compile_error)
         .into()
+}
+
+#[proc_macro_derive(PreviewMetadata, attributes(preview))]
+pub fn derive_preview_metadata(input: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(input as DeriveInput);
+
+    impl_preview_metadata(&input)
+        .unwrap_or_else(syn::Error::into_compile_error)
+        .into()
+}
+
+fn impl_preview_metadata(input: &DeriveInput) -> syn::Result<proc_macro2::TokenStream> {
+    let name = &input.ident;
+
+    let syn::Data::Enum(data) = &input.data else {
+        return Err(syn::Error::new_spanned(
+            name,
+            "PreviewMetadata can only be derived for enums",
+        ));
+    };
+
+    let names = data.variants.iter().map(|variant| {
+        let variant_name = &variant.ident;
+        let mut feature_name = String::new();
+
+        for (index, character) in variant_name.to_string().chars().enumerate() {
+            if index > 0 && character.is_uppercase() {
+                feature_name.push('-');
+            }
+            feature_name.extend(character.to_lowercase());
+        }
+
+        quote! { Self::#variant_name => #feature_name }
+    });
+
+    let entries = data
+        .variants
+        .iter()
+        .map(|variant| {
+            let documentation = get_doc_comment(&variant.attrs);
+            if documentation.is_empty() {
+                return Err(syn::Error::new_spanned(
+                    variant,
+                    "PreviewMetadata variants must have documentation",
+                ));
+            }
+
+            let mut aliases = Vec::new();
+            for attribute in variant
+                .attrs
+                .iter()
+                .filter(|attribute| attribute.path().is_ident("preview"))
+            {
+                attribute.parse_nested_meta(|meta| {
+                    if meta.path.is_ident("alias") {
+                        aliases.push(meta.value()?.parse::<LitStr>()?);
+                        Ok(())
+                    } else {
+                        Err(meta.error("expected `alias`"))
+                    }
+                })?;
+            }
+
+            let variant_name = &variant.ident;
+            Ok(quote! { (Self::#variant_name, #documentation, &[#(#aliases),*]) })
+        })
+        .collect::<syn::Result<Vec<_>>>()?;
+
+    Ok(quote! {
+        impl #name {
+            /// Returns the canonical name of a single preview feature.
+            fn as_str(self) -> &'static str {
+                match self {
+                    #(#names),*
+                }
+            }
+
+            /// Returns each enum variant, its documentation, and its aliases.
+            pub const fn metadata() -> &'static [(Self, &'static str, &'static [&'static str])] {
+                &[#(#entries),*]
+            }
+        }
+    })
 }
 
 #[proc_macro_derive(CombineOptions)]
@@ -52,22 +136,22 @@ fn impl_combine(ast: &DeriveInput) -> TokenStream {
 }
 
 fn get_doc_comment(attrs: &[Attribute]) -> String {
-    attrs
+    let documentation = attrs
         .iter()
         .filter_map(|attr| {
-            if attr.path().is_ident("doc") {
-                if let syn::Meta::NameValue(meta) = &attr.meta {
-                    if let syn::Expr::Lit(expr) = &meta.value {
-                        if let syn::Lit::Str(str) = &expr.lit {
-                            return Some(str.value().trim().to_string());
-                        }
-                    }
-                }
+            if attr.path().is_ident("doc")
+                && let syn::Meta::NameValue(meta) = &attr.meta
+                && let syn::Expr::Lit(expr) = &meta.value
+                && let syn::Lit::Str(str) = &expr.lit
+            {
+                return Some(str.value());
             }
             None
         })
         .collect::<Vec<_>>()
-        .join("\n")
+        .join("\n");
+
+    dedent(&documentation).trim_matches('\n').to_string()
 }
 
 fn get_env_var_pattern_from_attr(attrs: &[Attribute]) -> Option<String> {
@@ -86,29 +170,27 @@ fn get_added_in(attrs: &[Attribute]) -> Option<String> {
         .map(|lit_str| lit_str.value())
 }
 
-fn is_valid_added_in(added_in: &str) -> bool {
-    added_in == "next release" || is_semantic_version(added_in)
-}
-
-fn is_semantic_version(version: &str) -> bool {
+fn parse_semantic_version(version: &str) -> Option<(u64, u64, u64)> {
     let mut components = version.split('.');
-    let Some(major) = components.next() else {
-        return false;
-    };
-    let Some(minor) = components.next() else {
-        return false;
-    };
-    let Some(patch) = components.next() else {
-        return false;
-    };
+    let major = components.next()?;
+    let minor = components.next()?;
+    let patch = components.next()?;
 
     if components.next().is_some() {
-        return false;
+        return None;
     }
 
-    [major, minor, patch].into_iter().all(|component| {
-        !component.is_empty() && component.bytes().all(|byte| byte.is_ascii_digit())
-    })
+    if [major, minor, patch].into_iter().any(|component| {
+        component.is_empty() || !component.bytes().all(|byte| byte.is_ascii_digit())
+    }) {
+        return None;
+    }
+
+    Some((
+        major.parse().ok()?,
+        minor.parse().ok()?,
+        patch.parse().ok()?,
+    ))
 }
 
 fn is_hidden(attrs: &[Attribute]) -> bool {
@@ -138,20 +220,20 @@ pub fn attribute_env_vars_metadata(_attr: TokenStream, input: TokenStream) -> To
                 Some((name, doc, added_in, item.ident.span()))
             }
             ImplItem::Fn(item) if !is_hidden(&item.attrs) => {
-                // Extract the environment variable patterns.
-                if let Some(pattern) = get_env_var_pattern_from_attr(&item.attrs) {
+                get_env_var_pattern_from_attr(&item.attrs).map(|pattern| {
+                    // Extract the environment variable patterns.
                     let doc = get_doc_comment(&item.attrs);
                     let added_in = get_added_in(&item.attrs);
-                    Some((pattern, doc, added_in, item.sig.span()))
-                } else {
-                    None // Skip if pattern extraction fails.
-                }
+                    (pattern, doc, added_in, item.sig.span())
+                })
             }
             _ => None,
         })
         .collect();
 
-    // Look for missing or invalid attr_added_in values and issue a compiler error if any are found.
+    // Look for missing, invalid, or future attr_added_in values and issue a compiler error.
+    let current_version = uv_version::version();
+    let current_semantic_version = parse_semantic_version(current_version);
     let added_in_errors: Vec<_> = constants
         .iter()
         .filter_map(|(name, _, added_in, span)| {
@@ -159,10 +241,21 @@ pub fn attribute_env_vars_metadata(_attr: TokenStream, input: TokenStream) -> To
                 None => format!(
                     "missing #[attr_added_in(\"x.y.z\")] on `{name}`\nnote: env vars for an upcoming release should be annotated with `#[attr_added_in(\"next release\")]`"
                 ),
-                Some(added_in) if !is_valid_added_in(added_in) => format!(
-                    "invalid #[attr_added_in(\"{added_in}\")] on `{name}`\nnote: expected `#[attr_added_in(\"x.y.z\")]` or `#[attr_added_in(\"next release\")]`"
-                ),
-                Some(_) => return None,
+                Some(added_in) if added_in == "next release" => return None,
+                Some(added_in) => match parse_semantic_version(added_in) {
+                    None => format!(
+                        "invalid #[attr_added_in(\"{added_in}\")] on `{name}`\nnote: expected `#[attr_added_in(\"x.y.z\")]` or `#[attr_added_in(\"next release\")]`"
+                    ),
+                    Some(added_in_version)
+                        if current_semantic_version
+                            .is_some_and(|current_version| added_in_version > current_version) =>
+                    {
+                        format!(
+                            "invalid #[attr_added_in(\"{added_in}\")] on `{name}`\nnote: `{added_in}` is newer than the current uv version `{current_version}`; use `#[attr_added_in(\"next release\")]` instead"
+                        )
+                    }
+                    Some(_) => return None,
+                },
             };
             Some(quote_spanned! {*span => compile_error!(#msg); })
         })

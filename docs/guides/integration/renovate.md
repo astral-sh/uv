@@ -37,7 +37,7 @@ option:
 ## Inline script metadata
 
 Renovate supports updating dependencies defined using
-[inline script metadata](../scripts.md/#declaring-script-dependencies).
+[inline script metadata](../scripts.md#declaring-script-dependencies).
 
 Since it cannot automatically detect which Python files use inline script metadata, their locations
 need to be explicitly defined using

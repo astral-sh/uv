@@ -7,16 +7,18 @@ use indexmap::IndexMap;
 use ref_cast::RefCast;
 use reqwest_retry::policies::ExponentialBackoff;
 use tracing::{debug, info};
+use uv_fs::Simplified;
 use uv_warnings::warn_user;
 
 use uv_cache::Cache;
+use uv_cache_key::{CacheKey, CacheKeyHasher};
 use uv_client::{BaseClient, BaseClientBuilder};
 use uv_pep440::{Prerelease, Version};
 use uv_platform::{Arch, Libc, Os, Platform};
-use uv_preview::Preview;
 
 use crate::discovery::{
-    EnvironmentPreference, PythonRequest, find_best_python_installation, find_python_installation,
+    EnvironmentPreference, PythonRequest, VersionRequest, find_best_python_installation,
+    find_python_installation,
 };
 use crate::downloads::{
     DownloadResult, ManagedPythonDownload, ManagedPythonDownloadList, PythonDownloadRequest,
@@ -25,8 +27,8 @@ use crate::downloads::{
 use crate::implementation::LenientImplementationName;
 use crate::managed::{ManagedPythonInstallation, ManagedPythonInstallations};
 use crate::{
-    Error, ImplementationName, Interpreter, PythonDownloads, PythonPreference, PythonSource,
-    PythonVariant, PythonVersion, downloads,
+    Error, ImplementationName, Interpreter, MissingPythonHint, PythonDownloads, PythonPreference,
+    PythonSource, PythonVariant, PythonVersion, downloads,
 };
 
 /// A Python interpreter and accompanying tools.
@@ -44,6 +46,50 @@ impl PythonInstallation {
             source,
             interpreter,
         }
+    }
+
+    /// Return a new installation with the given [`PythonSource`].
+    #[must_use]
+    fn with_source(self, source: PythonSource) -> Self {
+        Self { source, ..self }
+    }
+
+    /// In test mode, change the source to [`PythonSource::Managed`] if the interpreter was
+    /// marked as managed via `TestContext::with_versions_as_managed`.
+    #[must_use]
+    pub(crate) fn maybe_with_test_source(self) -> Self {
+        if std::env::var(uv_static::EnvVars::UV_INTERNAL__TEST_PYTHON_MANAGED).is_ok()
+            && self.interpreter.is_managed()
+        {
+            self.with_source(PythonSource::Managed)
+        } else {
+            self
+        }
+    }
+
+    /// Check whether this installation satisfies the standard post-query discovery filters:
+    /// environment preference, version request, and Python preference.
+    pub(crate) fn satisfies_preferences(
+        &self,
+        version: &VersionRequest,
+        environments: EnvironmentPreference,
+        preference: PythonPreference,
+    ) -> bool {
+        if !environments.allows_installation(self) {
+            return false;
+        }
+        if !version.matches_installation(self) {
+            debug!(
+                "Skipping interpreter at `{}` from {}: does not satisfy request `{version}`",
+                self.interpreter.sys_executable().user_display(),
+                self.source,
+            );
+            return false;
+        }
+        if !preference.allows_installation(self) {
+            return false;
+        }
+        true
     }
 
     /// Find an installed [`PythonInstallation`].
@@ -64,12 +110,25 @@ impl PythonInstallation {
         preference: PythonPreference,
         download_list: &ManagedPythonDownloadList,
         cache: &Cache,
-        preview: Preview,
     ) -> Result<Self, Error> {
-        let installation =
-            find_python_installation(request, environments, preference, cache, preview)??;
+        let installation = Self::find_existing(request, environments, preference, cache)?;
         installation.warn_if_outdated_prerelease(request, download_list);
         Ok(installation)
+    }
+
+    /// Find an existing [`PythonInstallation`].
+    pub fn find_existing(
+        request: &PythonRequest,
+        environments: EnvironmentPreference,
+        preference: PythonPreference,
+        cache: &Cache,
+    ) -> Result<Self, Error> {
+        Ok(find_python_installation(
+            request,
+            environments,
+            preference,
+            cache,
+        )??)
     }
 
     /// Find or download a [`PythonInstallation`] that satisfies a requested version, if the request
@@ -85,12 +144,7 @@ impl PythonInstallation {
         python_install_mirror: Option<&str>,
         pypy_install_mirror: Option<&str>,
         python_downloads_json_url: Option<&str>,
-        preview: Preview,
     ) -> Result<Self, Error> {
-        let retry_policy = client_builder.retry_policy();
-        let client = client_builder.clone().retries(0).build()?;
-        let download_list =
-            ManagedPythonDownloadList::new(&client, python_downloads_json_url).await?;
         let downloads_enabled = preference.allows_managed()
             && python_downloads.is_automatic()
             && client_builder.connectivity.is_online();
@@ -99,17 +153,22 @@ impl PythonInstallation {
             environments,
             preference,
             downloads_enabled,
-            &download_list,
-            &client,
-            &retry_policy,
+            client_builder,
             cache,
             reporter,
             python_install_mirror,
             pypy_install_mirror,
-            preview,
+            python_downloads_json_url,
         )
         .await?;
-        installation.warn_if_outdated_prerelease(request, &download_list);
+        installation
+            .download_and_warn_if_outdated_prerelease(
+                request,
+                client_builder,
+                cache,
+                python_downloads_json_url,
+            )
+            .await?;
         Ok(installation)
     }
 
@@ -127,27 +186,21 @@ impl PythonInstallation {
         python_install_mirror: Option<&str>,
         pypy_install_mirror: Option<&str>,
         python_downloads_json_url: Option<&str>,
-        preview: Preview,
     ) -> Result<Self, Error> {
         let request = request.unwrap_or(&PythonRequest::Default);
 
-        // Python downloads are performing their own retries to catch stream errors, disable the
-        // default retries to avoid the middleware performing uncontrolled retries.
-        let retry_policy = client_builder.retry_policy();
-        let client = client_builder.clone().retries(0).build()?;
-        let download_list =
-            ManagedPythonDownloadList::new(&client, python_downloads_json_url).await?;
-
-        // Search for the installation
-        let err = match Self::find(
-            request,
-            environments,
-            preference,
-            &download_list,
-            cache,
-            preview,
-        ) {
-            Ok(installation) => return Ok(installation),
+        let err = match Self::find_existing(request, environments, preference, cache) {
+            Ok(installation) => {
+                installation
+                    .download_and_warn_if_outdated_prerelease(
+                        request,
+                        client_builder,
+                        cache,
+                        python_downloads_json_url,
+                    )
+                    .await?;
+                return Ok(installation);
+            }
             Err(err) => err,
         };
 
@@ -164,6 +217,10 @@ impl PythonInstallation {
         let Some(download_request) = PythonDownloadRequest::from_request(request) else {
             return Err(err);
         };
+
+        let download_list =
+            ManagedPythonDownloadList::new(client_builder, cache, python_downloads_json_url)
+                .await?;
 
         let downloads_enabled = preference.allows_managed()
             && python_downloads.is_automatic()
@@ -186,10 +243,7 @@ impl PythonInstallation {
                     if matches!(request, PythonRequest::Default | PythonRequest::Any) {
                         return Err(err);
                     }
-                    return Err(err.with_missing_python_hint(
-                        "uv embeds available Python downloads and may require an update to install new versions. Consider retrying on a newer version of uv."
-                            .to_string(),
-                    ));
+                    return Err(err.with_hint(MissingPythonHint::RequiresUpdate));
                 }
                 None
             }
@@ -211,31 +265,21 @@ impl PythonInstallation {
 
         // If the download is available, but not usable, we attach a hint to the original error.
         if !downloads_enabled {
-            let for_request = match request {
-                PythonRequest::Default | PythonRequest::Any => String::new(),
-                _ => format!(" for {request}"),
-            };
-
             match python_downloads {
                 PythonDownloads::Automatic => {}
                 PythonDownloads::Manual => {
-                    return Err(err.with_missing_python_hint(format!(
-                        "A managed Python download is available{for_request}, but Python downloads are set to 'manual', use `uv python install {}` to install the required version",
-                        request.to_canonical_string(),
-                    )));
+                    return Err(err.with_hint(MissingPythonHint::DownloadsManual(request.clone())));
                 }
                 PythonDownloads::Never => {
-                    return Err(err.with_missing_python_hint(format!(
-                        "A managed Python download is available{for_request}, but Python downloads are set to 'never'"
-                    )));
+                    return Err(err.with_hint(MissingPythonHint::DownloadsNever(request.clone())));
                 }
             }
 
             match preference {
                 PythonPreference::OnlySystem => {
-                    return Err(err.with_missing_python_hint(format!(
-                        "A managed Python download is available{for_request}, but the Python preference is set to 'only system'"
-                    )));
+                    return Err(
+                        err.with_hint(MissingPythonHint::PreferenceOnlySystem(request.clone()))
+                    );
                 }
                 PythonPreference::Managed
                 | PythonPreference::OnlyManaged
@@ -243,17 +287,20 @@ impl PythonInstallation {
             }
 
             if !client_builder.connectivity.is_online() {
-                return Err(err.with_missing_python_hint(format!(
-                    "A managed Python download is available{for_request}, but uv is set to offline mode"
-                )));
+                return Err(err.with_hint(MissingPythonHint::Offline(request.clone())));
             }
 
             return Err(err);
         }
 
+        // Python downloads are performing their own retries to catch stream errors, disable the
+        // default retries to avoid the middleware performing uncontrolled retries.
+        let retry_policy = client_builder.retry_policy();
+        let download_client = client_builder.clone().retries(0).build()?;
+
         let installation = Self::fetch(
             download,
-            &client,
+            &download_client,
             &retry_policy,
             cache,
             reporter,
@@ -268,7 +315,7 @@ impl PythonInstallation {
     }
 
     /// Download and install the requested installation.
-    pub async fn fetch(
+    pub(crate) async fn fetch(
         download: &ManagedPythonDownload,
         client: &BaseClient,
         retry_policy: &ExponentialBackoff,
@@ -331,14 +378,6 @@ impl PythonInstallation {
         })
     }
 
-    /// Create a [`PythonInstallation`] from an existing [`Interpreter`].
-    pub fn from_interpreter(interpreter: Interpreter) -> Self {
-        Self {
-            source: PythonSource::ProvidedPath,
-            interpreter,
-        }
-    }
-
     /// Return the [`PythonSource`] of the Python installation, indicating where it was found.
     pub fn source(&self) -> &PythonSource {
         &self.source
@@ -361,7 +400,7 @@ impl PythonInstallation {
     /// Returns `true` if this is a managed (uv-installed) Python installation.
     ///
     /// Uses the source as a fast path, then falls back to checking the interpreter's base prefix.
-    pub fn is_managed(&self) -> bool {
+    pub(crate) fn is_managed(&self) -> bool {
         self.source.is_managed() || self.interpreter.is_managed()
     }
 
@@ -400,26 +439,20 @@ impl PythonInstallation {
         self.interpreter
     }
 
-    /// Emit a warning when the interpreter is a managed prerelease and a matching stable
-    /// build can be installed via `uv python upgrade`.
-    pub(crate) fn warn_if_outdated_prerelease(
-        &self,
-        request: &PythonRequest,
-        download_list: &ManagedPythonDownloadList,
-    ) {
+    /// Return `true` when checking for an outdated managed prerelease warning may be necessary.
+    fn should_check_outdated_prerelease_warning(&self, request: &PythonRequest) -> bool {
         if request.allows_prereleases() {
-            return;
+            return false;
         }
 
         let interpreter = self.interpreter();
-        let version = interpreter.python_version();
 
-        if version.pre().is_none() {
-            return;
+        if interpreter.python_version().pre().is_none() {
+            return false;
         }
 
         if !interpreter.is_managed() {
-            return;
+            return false;
         }
 
         // Transparent upgrades only exist for CPython, so skip the warning for other
@@ -430,8 +463,25 @@ impl PythonInstallation {
             .implementation_name()
             .eq_ignore_ascii_case("cpython")
         {
+            return false;
+        }
+
+        true
+    }
+
+    /// Emit a warning when the interpreter is a managed prerelease and a matching stable
+    /// build can be installed via `uv python upgrade`.
+    fn warn_if_outdated_prerelease(
+        &self,
+        request: &PythonRequest,
+        download_list: &ManagedPythonDownloadList,
+    ) {
+        if !self.should_check_outdated_prerelease_warning(request) {
             return;
         }
+
+        let interpreter = self.interpreter();
+        let version = interpreter.python_version();
 
         let release = version.only_release();
 
@@ -471,6 +521,30 @@ impl PythonInstallation {
             );
         }
     }
+
+    /// Emit a warning when the interpreter is a managed prerelease and a matching stable
+    /// build can be installed via `uv python upgrade`.
+    ///
+    /// Avoids loading the Python download list unless the discovered interpreter could require
+    /// the warning.
+    pub async fn download_and_warn_if_outdated_prerelease(
+        &self,
+        request: &PythonRequest,
+        client_builder: &BaseClientBuilder<'_>,
+        cache: &Cache,
+        python_downloads_json_url: Option<&str>,
+    ) -> Result<(), Error> {
+        if !self.should_check_outdated_prerelease_warning(request) {
+            return Ok(());
+        }
+
+        let download_list =
+            ManagedPythonDownloadList::new(client_builder, cache, python_downloads_json_url)
+                .await?;
+        self.warn_if_outdated_prerelease(request, &download_list);
+
+        Ok(())
+    }
 }
 
 #[derive(Error, Debug)]
@@ -481,17 +555,17 @@ pub enum PythonInstallationKeyError {
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct PythonInstallationKey {
-    pub(crate) implementation: LenientImplementationName,
-    pub(crate) major: u8,
-    pub(crate) minor: u8,
-    pub(crate) patch: u8,
-    pub(crate) prerelease: Option<Prerelease>,
-    pub(crate) platform: Platform,
-    pub(crate) variant: PythonVariant,
+    pub(super) implementation: LenientImplementationName,
+    pub(super) major: u8,
+    pub(super) minor: u8,
+    pub(super) patch: u8,
+    pub(super) prerelease: Option<Prerelease>,
+    pub(super) platform: Platform,
+    pub(super) variant: PythonVariant,
 }
 
 impl PythonInstallationKey {
-    pub fn new(
+    pub(crate) fn new(
         implementation: LenientImplementationName,
         major: u8,
         minor: u8,
@@ -511,7 +585,7 @@ impl PythonInstallationKey {
         }
     }
 
-    pub fn new_from_version(
+    pub(crate) fn new_from_version(
         implementation: LenientImplementationName,
         version: &PythonVersion,
         platform: Platform,
@@ -550,7 +624,8 @@ impl PythonInstallationKey {
     }
 
     /// The version in `x.y.z` format.
-    pub fn sys_version(&self) -> String {
+    #[cfg(windows)]
+    pub(crate) fn sys_version(&self) -> String {
         format!("{}.{}.{}", self.major, self.minor, self.patch)
     }
 
@@ -562,11 +637,11 @@ impl PythonInstallationKey {
         self.minor
     }
 
-    pub fn prerelease(&self) -> Option<Prerelease> {
+    pub(crate) fn prerelease(&self) -> Option<Prerelease> {
         self.prerelease
     }
 
-    pub fn platform(&self) -> &Platform {
+    pub(crate) fn platform(&self) -> &Platform {
         &self.platform
     }
 
@@ -639,6 +714,12 @@ impl fmt::Display for PythonInstallationKey {
             variant,
             self.platform
         )
+    }
+}
+
+impl CacheKey for PythonInstallationKey {
+    fn cache_key(&self, state: &mut CacheKeyHasher) {
+        self.hash(state);
     }
 }
 
@@ -812,6 +893,12 @@ impl Hash for PythonInstallationMinorVersionKey {
         self.0.minor.hash(state);
         self.0.platform.hash(state);
         self.0.variant.hash(state);
+    }
+}
+
+impl CacheKey for PythonInstallationMinorVersionKey {
+    fn cache_key(&self, state: &mut CacheKeyHasher) {
+        self.hash(state);
     }
 }
 

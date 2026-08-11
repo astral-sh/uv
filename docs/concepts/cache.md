@@ -16,6 +16,10 @@ The specifics of uv's caching semantics vary based on the nature of the dependen
 - **For local dependencies**, uv caches based on the last-modified time of the source archive (i.e.,
   the local `.whl` or `.tar.gz` file). For directories, uv caches based on the last-modified time of
   the `pyproject.toml`, `setup.py`, or `setup.cfg` file.
+- **For flat indexes** (i.e., `--find-links` locations), uv assumes the index contents are
+  immutable, caching each file by name. As such, replacing a file with new contents under the same
+  name (e.g., rebuilding a wheel into a `--find-links` directory) will not be picked up until the
+  cache is refreshed.
 
 If you're running into caching issues, uv includes a few escape hatches:
 
@@ -42,11 +46,10 @@ the `pyproject.toml`, `setup.py`, or `setup.cfg` file in the directory root has 
 re-installs than desired.
 
 To incorporate additional information into the cache key for a given package, you can add cache key
-entries under [`tool.uv.cache-keys`](https://docs.astral.sh/uv/reference/settings/#cache-keys),
-which covers both file paths and Git commit hashes. Setting
-[`tool.uv.cache-keys`](https://docs.astral.sh/uv/reference/settings/#cache-keys) will replace
-defaults, so any necessary files (like `pyproject.toml`) should still be included in the
-user-defined cache keys.
+entries under [`tool.uv.cache-keys`](../reference/settings.md#cache-keys), which covers both file
+paths and Git commit hashes. Setting [`tool.uv.cache-keys`](../reference/settings.md#cache-keys)
+will replace defaults, so any necessary files (like `pyproject.toml`) should still be included in
+the user-defined cache keys.
 
 For example, if a project specifies dependencies in `pyproject.toml` but uses
 [`setuptools-scm`](https://pypi.org/project/setuptools-scm/) to manage its version, and should thus
@@ -136,9 +139,22 @@ uv provides a few different mechanisms for removing entries from the cache:
 - `uv cache clean` removes _all_ cache entries from the cache directory, clearing it out entirely.
 - `uv cache clean ruff` removes all cache entries for the `ruff` package, useful for invalidating
   the cache for a single or finite set of packages.
-- `uv cache prune` removes all _unused_ cache entries. For example, the cache directory may contain
-  entries created in previous uv versions that are no longer necessary and can be safely removed.
-  `uv cache prune` is safe to run periodically, to keep the cache directory clean.
+- `uv cache prune` removes all _unused_ cache entries and all centralized project environments. For
+  example, the cache directory may contain entries created in previous uv versions that are no
+  longer necessary and can be safely removed. Centralized project environments are recreated as
+  needed. `uv cache prune` is safe to run periodically, to keep the cache directory clean.
+
+By default, cache cleanup reports the logical size of removed entries. Enable the
+`cache-physical-space` [preview feature](./preview.md) to instead report the physical disk space
+reclaimed, accounting for hardlinks and copy-on-write clones:
+
+```console
+$ uv cache clean --preview-features cache-physical-space
+```
+
+If an entry's allocated size cannot be measured, such as a compressed extent on Btrfs, uv reports a
+lower bound for the space reclaimed from the remaining entries. The preview feature is currently
+supported on macOS and Linux; other platforms continue reporting the logical removed size.
 
 uv blocks cache-modifying operations while other uv commands are running. By default, those
 `uv cache` commands have a 5 min timeout waiting for other uv processes to terminate to avoid

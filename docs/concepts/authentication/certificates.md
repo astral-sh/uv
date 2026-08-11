@@ -39,6 +39,12 @@ a PEM-encoded certificate bundle (e.g., `certs.pem`, `ca-bundle.crt`), or set
 PEM-encoded certificate files. Multiple entries are supported, separated using a platform-specific
 delimiter (`:` on Unix, `;` on Windows).
 
+!!! note
+
+    For a single `uv pip` invocation, pass [`--cert`](../../reference/cli.md#uv-pip) with the path
+    to a PEM-encoded certificate bundle. The bundle replaces uv's default certificate source for
+    that invocation.
+
 Certificates are usually stored with `.pem`, `.crt`, or `.cer` extensions, but uv will attempt to
 read a certificate from any regular file in the provided `SSL_CERT_DIR`.
 
@@ -47,8 +53,9 @@ dangling symlinks.
 
 DER-encoded files are not supported.
 
-When set, these environment variables **override** the default certificate source entirely — only
-the provided certificates will be trusted.
+When set to non-empty values, these environment variables **override** the default certificate
+source entirely — only the provided certificates will be trusted. If a configured file or directory
+does not exist or contains no valid certificates, no default certificates will be trusted.
 
 `SSL_CERT_FILE` can point to a single certificate or a bundle containing multiple certificates.
 `SSL_CERT_DIR` can include multiple directory entries; uv will load all valid certificates from each

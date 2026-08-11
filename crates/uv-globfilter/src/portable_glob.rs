@@ -2,7 +2,6 @@
 //! [PEP 639](https://packaging.python.org/en/latest/specifications/glob-patterns/).
 
 use globset::{Glob, GlobBuilder};
-use owo_colors::OwoColorize;
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -20,11 +19,7 @@ pub enum PortableGlobError {
         pos: usize,
         invalid: char,
     },
-    #[error(
-        "Invalid character `{invalid}` at position {pos} in glob: `{glob}`. {}{} Characters can be escaped with a backslash",
-        "hint".bold().cyan(),
-        ":".bold()
-    )]
+    #[error("Invalid character `{invalid}` at position {pos} in glob: `{glob}`")]
     InvalidCharacterUv {
         glob: String,
         pos: usize,
@@ -48,6 +43,17 @@ pub enum PortableGlobError {
     TooManyStars { glob: String, pos: usize },
     #[error("Trailing backslash at position {pos} in glob: `{glob}`")]
     TrailingEscape { glob: String, pos: usize },
+}
+
+impl uv_errors::Hint for PortableGlobError {
+    fn hints(&self) -> uv_errors::Hints<'_> {
+        match self {
+            Self::InvalidCharacterUv { .. } => {
+                uv_errors::Hints::from("Characters can be escaped with a backslash")
+            }
+            _ => uv_errors::Hints::none(),
+        }
+    }
 }
 
 /// Cross-language glob syntax from
@@ -100,7 +106,7 @@ impl PortableGlobParser {
     }
 
     /// See [`parse_portable_glob`].
-    pub fn check(&self, glob: &str) -> Result<(), PortableGlobError> {
+    fn check(self, glob: &str) -> Result<(), PortableGlobError> {
         let mut chars = glob.chars().enumerate().peekable();
         // A `..` is on a parent directory indicator at the start of the string or after a directory
         // separator.
@@ -217,6 +223,7 @@ impl PortableGlobParser {
 mod tests {
     use super::*;
     use insta::assert_snapshot;
+    use uv_errors::{ErrorWithHints, Hint};
 
     #[test]
     fn test_error() {
@@ -271,11 +278,16 @@ mod tests {
         );
         let parse_err_uv = |glob| {
             let error = PortableGlobParser::Uv.parse(glob).unwrap_err();
-            anstream::adapter::strip_str(&error.to_string()).to_string()
+            let formatted = ErrorWithHints::new(error.to_string(), error.hints()).to_string();
+            anstream::adapter::strip_str(&formatted).to_string()
         };
         assert_snapshot!(
             parse_err_uv(r"**/@test"),
-            @"Invalid character `@` at position 3 in glob: `**/@test`. hint: Characters can be escaped with a backslash"
+            @r"
+        Invalid character `@` at position 3 in glob: `**/@test`
+
+        hint: Characters can be escaped with a backslash
+        "
         );
         // Escaping slashes is not allowed.
         assert_snapshot!(

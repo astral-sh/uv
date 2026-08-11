@@ -26,6 +26,7 @@ from packaging.version import Version
 
 SELF_DIR = Path(__file__).parent
 ROOT = SELF_DIR.parent
+PYTHON_MINOR_VERSIONS = ("3.15", "3.14", "3.13", "3.12", "3.11", "3.10")
 
 
 def main() -> None:
@@ -64,36 +65,33 @@ def main() -> None:
 
     # Use stable if available, otherwise prerelease
     latest_versions: dict[str, str] = {}
-    for minor in stable_versions:
-        latest_versions[minor] = stable_versions[minor]
-    for minor in prerelease_versions:
+    for minor, version in stable_versions.items():
+        latest_versions[minor] = version
+    for minor, version in prerelease_versions.items():
         if minor not in latest_versions:
-            latest_versions[minor] = prerelease_versions[minor]
+            latest_versions[minor] = version
 
     # Update the constants in uv-test/src/lib.rs
     lib_path = ROOT / "crates" / "uv-test" / "src" / "lib.rs"
     content = lib_path.read_text()
 
-    # Extract old values first
     old_versions: dict[str, str] = {}
-    for minor in ["3.15", "3.14", "3.13", "3.12", "3.11", "3.10"]:
+    for minor in PYTHON_MINOR_VERSIONS:
         const_name = f"LATEST_PYTHON_{minor.replace('.', '_')}"
-        match = re.search(rf'pub const {const_name}: &str = "([^"]+)";', content)
+        pattern = rf'const {const_name}: &str = "([^"]+)";'
+        match = re.search(pattern, content)
         if match:
             old_versions[minor] = match.group(1)
 
-    for minor in ["3.15", "3.14", "3.13", "3.12", "3.11", "3.10"]:
         if minor not in latest_versions:
             continue
-        const_name = f"LATEST_PYTHON_{minor.replace('.', '_')}"
-        old_pattern = rf'pub const {const_name}: &str = "[^"]+";'
-        new_value = f'pub const {const_name}: &str = "{latest_versions[minor]}";'
-        content = re.sub(old_pattern, new_value, content)
+        new_value = f'const {const_name}: &str = "{latest_versions[minor]}";'
+        content = re.sub(pattern, new_value, content)
 
     lib_path.write_text(content)
 
     updates = []
-    for minor in ["3.15", "3.14", "3.13", "3.12", "3.11", "3.10"]:
+    for minor in PYTHON_MINOR_VERSIONS:
         if minor not in latest_versions:
             continue
         new_version = latest_versions[minor]

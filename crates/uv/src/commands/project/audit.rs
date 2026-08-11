@@ -20,20 +20,31 @@ use crate::settings::{FrozenSource, LockCheck, ResolverSettings};
 use anyhow::Result;
 use rustc_hash::FxHashSet;
 use tracing::trace;
-use uv_audit::service::project_status::ProjectStatusAudit;
-use uv_audit::service::{VulnerabilityServiceFormat, osv};
-use uv_audit::types::{AdverseStatus, Dependency, Finding, VulnerabilityID};
+use uv_audit::{
+    AdverseStatus, Dependency, Finding, ProjectStatus, ProjectStatusAudit, Vulnerability,
+    VulnerabilityID, VulnerabilityServiceFormat, osv,
+};
 use uv_cache::Cache;
-use uv_client::{BaseClientBuilder, RegistryClientBuilder};
-use uv_configuration::{Concurrency, DependencyGroups, ExtrasSpecification, TargetTriple};
+use uv_cli::AuditOutputFormat;
+use uv_client::{BaseClientBuilder, CachedClient, RegistryClientBuilder};
+use uv_configuration::{
+    Concurrency, DependencyGroups, DependencyGroupsWithDefaults, ExtrasSpecification,
+    ExtrasSpecificationWithDefaults, TargetTriple,
+};
 use uv_distribution_types::{IndexCapabilities, IndexUrl};
+use uv_fs::{CWD, find_git_repository_root, relative_to};
 use uv_normalize::{DefaultExtras, DefaultGroups};
 use uv_preview::{Preview, PreviewFeature};
-use uv_python::{PythonDownloads, PythonPreference, PythonVersion};
+use uv_python::{ConfigDiscovery, PythonDownloads, PythonPreference, PythonVersion};
+use uv_redacted::DisplaySafeUrl;
+use uv_resolver::Lock;
 use uv_scripts::Pep723Script;
 use uv_settings::PythonInstallMirrors;
 use uv_warnings::warn_user;
 use uv_workspace::{DiscoveryOptions, Workspace, WorkspaceCache};
+
+pub(crate) mod json;
+pub(crate) mod sarif;
 
 pub(crate) async fn audit(
     project_dir: &Path,
@@ -50,31 +61,44 @@ pub(crate) async fn audit(
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
     concurrency: Concurrency,
-    no_config: bool,
+    config_discovery: ConfigDiscovery,
     cache: Cache,
+    workspace_cache: &WorkspaceCache,
     printer: Printer,
     preview: Preview,
+    output_format: AuditOutputFormat,
     service: VulnerabilityServiceFormat,
-    service_url: Option<String>,
+    service_url: Option<DisplaySafeUrl>,
     ignore: Vec<VulnerabilityID>,
     ignore_until_fixed: Vec<VulnerabilityID>,
 ) -> Result<ExitStatus> {
     // Check if the audit feature is in preview
-    if !preview.is_enabled(PreviewFeature::Audit) {
+    if !preview.is_enabled(PreviewFeature::AuditCommand) {
         warn_user!(
             "`uv audit` is experimental and may change without warning. Pass `--preview-features {}` to disable this warning.",
-            PreviewFeature::Audit
+            PreviewFeature::AuditCommand
+        );
+    }
+    if matches!(output_format, AuditOutputFormat::Json)
+        && !preview.is_enabled(PreviewFeature::JsonOutput)
+    {
+        warn_user!(
+            "The `--output-format json` option is experimental and the schema may change without warning. Pass `--preview-features {}` to disable this warning.",
+            PreviewFeature::JsonOutput
         );
     }
 
-    let workspace_cache = WorkspaceCache::default();
     let workspace;
     let target = if let Some(script) = script.as_ref() {
         LockTarget::Script(script)
     } else {
-        workspace =
-            Workspace::discover(project_dir, &DiscoveryOptions::default(), &workspace_cache)
-                .await?;
+        workspace = Workspace::discover(
+            project_dir,
+            &DiscoveryOptions::default(),
+            &cache,
+            workspace_cache,
+        )
+        .await?;
         LockTarget::Workspace(&workspace)
     };
 
@@ -108,11 +132,10 @@ pub(crate) async fn audit(
                 python_downloads,
                 &install_mirrors,
                 false,
-                no_config,
+                config_discovery,
                 Some(false),
                 &cache,
                 printer,
-                preview,
             )
             .await?
             .into_interpreter(),
@@ -122,7 +145,7 @@ pub(crate) async fn audit(
                     Some(workspace),
                     &groups,
                     project_dir,
-                    no_config,
+                    config_discovery,
                 )
                 .await?;
                 ProjectInterpreter::discover(
@@ -137,7 +160,6 @@ pub(crate) async fn audit(
                     Some(false),
                     &cache,
                     printer,
-                    preview,
                 )
                 .await?
                 .into_interpreter()
@@ -170,7 +192,7 @@ pub(crate) async fn audit(
             Box::new(DefaultResolveLogger),
             &concurrency,
             &cache,
-            &WorkspaceCache::default(),
+            workspace_cache,
             printer,
             preview,
         )
@@ -180,11 +202,9 @@ pub(crate) async fn audit(
     {
         Ok(result) => result.into_lock(),
         Err(ProjectError::Operation(err)) => {
-            return diagnostics::OperationDiagnostic::with_system_certs(
-                client_builder.system_certs(),
-            )
-            .report(err)
-            .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+            return diagnostics::OperationDiagnostic::default()
+                .report(err)
+                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
         }
         Err(err) => return Err(err.into()),
     };
@@ -198,15 +218,79 @@ pub(crate) async fn audit(
         )
     });
 
-    // Build the set of auditable packages by traversing the lockfile from workspace roots,
-    // respecting the user's extras and dependency-group filters. Workspace members are excluded
-    // (they are local and have no external package identity), as are packages without a version.
-    // The `Auditable` view offers per-version and per-project projections from a single walk.
-    let auditable = lock.auditable(&extras, &groups);
-    let mut projects = auditable.projects(target.install_path())?;
+    let outcome = audit_lock(
+        &lock,
+        target.install_path(),
+        &extras,
+        &groups,
+        &settings,
+        client_builder,
+        concurrency,
+        &cache,
+        printer,
+        service,
+        service_url,
+        &ignore,
+        &ignore_until_fixed,
+    )
+    .await?;
 
-    // Drop projects whose index is configured as flat, since we know we won't
-    // find PEP 792 statuses.
+    warn_unmatched_ignores(
+        &ignore,
+        &ignore_until_fixed,
+        &outcome.matched_ignores,
+        "the project",
+    );
+
+    let display = AuditResults {
+        printer,
+        n_packages: outcome.n_packages,
+        output_format,
+        findings: outcome.findings,
+        artifact_uri: {
+            let lock_path = target.lock_path();
+            // If we've run `uv audit --script`, we might only have an in-memory lockfile.
+            // In that case, use the script's own path as the artifact path.
+            let artifact_path = if let LockTarget::Script(script) = target
+                && !lock_path.is_file()
+            {
+                script.path.as_path()
+            } else {
+                lock_path.as_path()
+            };
+            artifact_uri(artifact_path)
+        },
+    };
+    display.render()
+}
+
+/// Audit findings and ignore-rule matches for one lockfile.
+pub(crate) struct AuditOutcome {
+    pub(crate) n_packages: usize,
+    pub(crate) findings: Vec<Finding>,
+    pub(crate) matched_ignores: FxHashSet<VulnerabilityID>,
+}
+
+/// Audit the dependency graph reachable from a project, script, or tool lockfile.
+pub(crate) async fn audit_lock(
+    lock: &Lock,
+    root: &Path,
+    extras: &ExtrasSpecificationWithDefaults,
+    groups: &DependencyGroupsWithDefaults,
+    settings: &ResolverSettings,
+    client_builder: BaseClientBuilder<'_>,
+    concurrency: Concurrency,
+    cache: &Cache,
+    printer: Printer,
+    service: VulnerabilityServiceFormat,
+    service_url: Option<DisplaySafeUrl>,
+    ignore: &[VulnerabilityID],
+    ignore_until_fixed: &[VulnerabilityID],
+) -> Result<AuditOutcome> {
+    let auditable = lock.auditable(extras, groups, |_| true);
+    let mut projects = auditable.projects(root)?;
+
+    // Flat indexes cannot provide PEP 792 project-status metadata.
     let flat_index_urls: FxHashSet<&IndexUrl> = settings
         .index_locations
         .flat_indexes()
@@ -214,14 +298,12 @@ pub(crate) async fn audit(
         .collect();
     projects.retain(|(_, url)| !flat_index_urls.contains(url));
 
-    // Perform the audit.
     let reporter = AuditReporter::from(printer);
     let dependencies: Vec<Dependency> = auditable
         .packages()
         .map(|(name, version)| Dependency::new(name.clone(), version.clone()))
         .collect();
     let base_client = client_builder.clone().build()?;
-
     let registry_client = RegistryClientBuilder::new(client_builder, cache.clone())
         .index_locations(settings.index_locations.clone())
         .keyring(settings.keyring_provider)
@@ -233,13 +315,8 @@ pub(crate) async fn audit(
     let osv_future = async {
         match service {
             VulnerabilityServiceFormat::Osv => {
-                let osv_url = service_url
-                    .as_deref()
-                    .unwrap_or(osv::API_BASE)
-                    .parse()
-                    .expect("invalid OSV service URL");
-                let client = base_client.for_host(&osv_url).raw_client().clone();
-                let service = osv::Osv::new(client, Some(osv_url), concurrency);
+                let client = CachedClient::new(base_client);
+                let service = osv::Osv::new(client, service_url, concurrency, cache.clone());
                 trace!("Auditing {n} dependencies against OSV", n = auditable.len());
                 service.query_batch(&dependencies, osv::Filter::All).await
             }
@@ -253,27 +330,24 @@ pub(crate) async fn audit(
         status_audit.query_batch(&projects).await
     };
     let (osv_findings, status_findings) = tokio::join!(osv_future, status_future);
-    let mut all_findings = osv_findings?;
-    all_findings.extend(status_findings);
-
+    let mut findings = osv_findings?;
+    findings.extend(status_findings);
     reporter.on_audit_complete();
 
-    // Filter out ignored vulnerabilities, tracking how many were ignored
-    // and which ignore rules actually matched.
-    let mut matched_ignores: FxHashSet<&VulnerabilityID> = FxHashSet::default();
-    let all_findings: Vec<_> = all_findings
+    let mut matched_ignores = FxHashSet::default();
+    let findings = findings
         .into_iter()
         .filter(|finding| match finding {
             Finding::Vulnerability(vulnerability) => {
                 if let Some(id) = ignore.iter().find(|id| vulnerability.matches(id)) {
-                    matched_ignores.insert(id);
+                    matched_ignores.insert(id.clone());
                     return false;
                 }
                 if let Some(id) = ignore_until_fixed
                     .iter()
                     .find(|id| vulnerability.matches(id))
                 {
-                    matched_ignores.insert(id);
+                    matched_ignores.insert(id.clone());
                     if vulnerability.fix_versions.is_empty() {
                         return false;
                     }
@@ -284,41 +358,95 @@ pub(crate) async fn audit(
         })
         .collect();
 
-    // Warn about ignore rules that didn't match any vulnerability.
+    Ok(AuditOutcome {
+        n_packages: auditable.len(),
+        findings,
+        matched_ignores,
+    })
+}
+
+/// Warn once for each ignore rule that did not match an audited vulnerability.
+pub(crate) fn warn_unmatched_ignores(
+    ignore: &[VulnerabilityID],
+    ignore_until_fixed: &[VulnerabilityID],
+    matched_ignores: &FxHashSet<VulnerabilityID>,
+    scope: &str,
+) {
     for id in ignore.iter().chain(ignore_until_fixed.iter()) {
         if !matched_ignores.contains(id) {
             warn_user!(
-                "Ignored vulnerability `{}` does not match any vulnerability in the project",
+                "Ignored vulnerability `{}` does not match any vulnerability in {scope}",
                 id.as_str()
             );
         }
     }
-
-    let display = AuditResults {
-        printer,
-        n_packages: auditable.len(),
-        findings: all_findings,
-    };
-    display.render()
 }
 
-struct AuditResults {
-    printer: Printer,
-    n_packages: usize,
-    findings: Vec<Finding>,
+/// Resolve a lockfile path into the URI used by SARIF consumers.
+pub(crate) fn artifact_uri(path: &Path) -> String {
+    let path = if let Some(repository_root) = find_git_repository_root(path)
+        && let Ok(relative) = relative_to(path, repository_root)
+    {
+        relative
+    } else if let Ok(relative) = path.strip_prefix(&*CWD) {
+        relative.to_path_buf()
+    } else {
+        path.to_path_buf()
+    };
+    path.to_string_lossy().replace('\\', "/")
+}
+
+pub(crate) struct AuditResults {
+    pub(crate) printer: Printer,
+    pub(crate) n_packages: usize,
+    pub(crate) output_format: AuditOutputFormat,
+    pub(crate) findings: Vec<Finding>,
+    pub(crate) artifact_uri: String,
 }
 
 impl AuditResults {
-    fn render(&self) -> Result<ExitStatus> {
-        let (vulns, statuses): (Vec<_>, Vec<_>) =
-            self.findings.iter().partition_map(|finding| match finding {
-                Finding::Vulnerability(vuln) => itertools::Either::Left(vuln),
-                Finding::ProjectStatus(status) => itertools::Either::Right(status),
-            });
+    pub(crate) fn render(&self) -> Result<ExitStatus> {
+        match self.output_format {
+            AuditOutputFormat::Text => self.render_text(),
+            AuditOutputFormat::Json => self.render_json(),
+            AuditOutputFormat::Sarif => self.render_sarif(),
+        }
+    }
 
-        let vuln_banner = if !vulns.is_empty() {
-            let s = if vulns.len() == 1 { "y" } else { "ies" };
-            format!("{} known vulnerabilit{s}", vulns.len())
+    fn split_findings(&self) -> (Vec<&Vulnerability>, Vec<&ProjectStatus>) {
+        self.findings.iter().partition_map(|finding| match finding {
+            Finding::Vulnerability(vulnerability) => {
+                itertools::Either::Left(vulnerability.as_ref())
+            }
+            Finding::ProjectStatus(status) => itertools::Either::Right(status),
+        })
+    }
+
+    pub(crate) fn exit_status(&self) -> ExitStatus {
+        // NOTE: intentional: we don't currently fail if there are any adverse statuses,
+        // only when there are vulnerabilities. We will likely change this once we allow users
+        // to ignore adverse statuses and configure policies.
+        if self
+            .findings
+            .iter()
+            .any(|finding| matches!(finding, Finding::Vulnerability(_)))
+        {
+            ExitStatus::Failure
+        } else {
+            ExitStatus::Success
+        }
+    }
+
+    fn render_text(&self) -> Result<ExitStatus> {
+        let (vulnerabilities, statuses) = self.split_findings();
+
+        let vulnerability_banner = if !vulnerabilities.is_empty() {
+            let suffix = if vulnerabilities.len() == 1 {
+                "y"
+            } else {
+                "ies"
+            };
+            format!("{} known vulnerabilit{suffix}", vulnerabilities.len())
                 .yellow()
                 .to_string()
         } else {
@@ -338,7 +466,7 @@ impl AuditResults {
 
         writeln!(
             self.printer.stderr(),
-            "Found {vuln_banner} and {status_banner} in {packages}",
+            "Found {vulnerability_banner} and {status_banner} in {packages}",
             packages = format!(
                 "{npackages} {label}",
                 npackages = self.n_packages,
@@ -351,37 +479,45 @@ impl AuditResults {
             .bold()
         )?;
 
-        let has_vulnerabilities = !vulns.is_empty();
-
-        if !vulns.is_empty() {
+        if !vulnerabilities.is_empty() {
             writeln!(self.printer.stdout_important(), "\nVulnerabilities:\n")?;
 
             // Group vulnerabilities by (dependency name, version).
-            let groups = vulns
-                .into_iter()
-                .chunk_by(|vuln| (vuln.dependency.name(), vuln.dependency.version()));
+            let groups = vulnerabilities.into_iter().chunk_by(|vulnerability| {
+                (
+                    vulnerability.dependency.name(),
+                    vulnerability.dependency.version(),
+                )
+            });
 
-            for (dependency, vulns) in &groups {
-                let vulns: Vec<_> = vulns.collect();
+            for (dependency, vulnerabilities) in &groups {
+                let vulnerabilities: Vec<_> = vulnerabilities.collect();
                 let (name, version) = dependency;
 
                 writeln!(
                     self.printer.stdout_important(),
                     "{name_version} has {n} known vulnerabilit{ies}:\n",
                     name_version = format!("{name} {version}").bold(),
-                    n = vulns.len(),
-                    ies = if vulns.len() == 1 { "y" } else { "ies" },
+                    n = vulnerabilities.len(),
+                    ies = if vulnerabilities.len() == 1 {
+                        "y"
+                    } else {
+                        "ies"
+                    },
                 )?;
 
-                for vuln in vulns {
+                for vulnerability in vulnerabilities {
                     writeln!(
                         self.printer.stdout_important(),
                         "- {id}: {description}",
-                        id = vuln.best_id().as_str().bold(),
-                        description = vuln.summary.as_deref().unwrap_or("No summary provided"),
+                        id = vulnerability.best_id().as_str().bold(),
+                        description = vulnerability
+                            .summary
+                            .as_deref()
+                            .unwrap_or("No summary provided"),
                     )?;
 
-                    if vuln.fix_versions.is_empty() {
+                    if vulnerability.fix_versions.is_empty() {
                         writeln!(
                             self.printer.stdout_important(),
                             "\n  No fix versions available\n"
@@ -390,7 +526,8 @@ impl AuditResults {
                         writeln!(
                             self.printer.stdout_important(),
                             "\n  Fixed in: {}\n",
-                            vuln.fix_versions
+                            vulnerability
+                                .fix_versions
                                 .iter()
                                 .map(std::string::ToString::to_string)
                                 .join(", ")
@@ -398,7 +535,7 @@ impl AuditResults {
                         )?;
                     }
 
-                    if let Some(link) = &vuln.link {
+                    if let Some(link) = &vulnerability.link {
                         writeln!(
                             self.printer.stdout_important(),
                             "  Advisory information: {link}\n",
@@ -413,10 +550,11 @@ impl AuditResults {
             writeln!(self.printer.stdout_important(), "\nAdverse statuses:\n")?;
 
             for status in statuses {
-                let label = match status.status {
-                    AdverseStatus::Archived => "archived".yellow().to_string(),
-                    AdverseStatus::Deprecated => "deprecated".yellow().to_string(),
-                    AdverseStatus::Quarantined => "quarantined".red().to_string(),
+                let label = match &status.status {
+                    AdverseStatus::Archived | AdverseStatus::Deprecated => {
+                        status.status.to_string().yellow().to_string()
+                    }
+                    AdverseStatus::Quarantined => status.status.to_string().red().to_string(),
                 };
                 let name = status.name.bold();
                 if let Some(reason) = &status.reason {
@@ -430,13 +568,32 @@ impl AuditResults {
             }
         }
 
-        // NOTE: intentional: we don't currently fail if there are any adverse statuses,
-        // only when there are vulnerabilities. We will likely change this once we allow users
-        // to ignore adverse statuses and configure policies.
-        if has_vulnerabilities {
-            Ok(ExitStatus::Failure)
-        } else {
-            Ok(ExitStatus::Success)
-        }
+        Ok(self.exit_status())
+    }
+
+    fn render_json(&self) -> Result<ExitStatus> {
+        let (vulnerabilities, statuses) = self.split_findings();
+        let report = json::Report::from_findings(self.n_packages, &vulnerabilities, &statuses);
+
+        writeln!(
+            self.printer.stdout_important(),
+            "{}",
+            serde_json::to_string_pretty(&report)?
+        )?;
+
+        Ok(self.exit_status())
+    }
+
+    fn render_sarif(&self) -> Result<ExitStatus> {
+        let (vulnerabilities, statuses) = self.split_findings();
+        let report = sarif::Report::from_findings(&vulnerabilities, &statuses, &self.artifact_uri);
+
+        writeln!(
+            self.printer.stdout_important(),
+            "{}",
+            serde_json::to_string_pretty(&report)?
+        )?;
+
+        Ok(self.exit_status())
     }
 }

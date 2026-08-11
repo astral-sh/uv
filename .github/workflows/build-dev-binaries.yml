@@ -19,64 +19,80 @@ jobs:
     name: "linux libc"
     timeout-minutes: 10
     runs-on: github-ubuntu-24.04-x86_64-8
+    env:
+      RUSTC_BOOTSTRAP: 1
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
       - name: "Install mold"
         run: ./scripts/install-mold.sh
 
+      - name: "Install Rust toolchain"
+        run: rustup toolchain install --profile minimal
+
       - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
         with:
+          prefix-key: v1-rust-workspace
+          cache-workspace-crates: "true"
           save-if: ${{ inputs.save-rust-cache == 'true' }}
 
       - name: "Build"
-        run: cargo build --profile no-debug
+        run: cargo build --profile no-debug-nightly -Z checksum-freshness
 
       - name: "Upload binary"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: uv-linux-libc-${{ github.sha }}
           path: |
-            ./target/no-debug/uv
-            ./target/no-debug/uvx
+            ./target/no-debug-nightly/uv
+            ./target/no-debug-nightly/uvx
           retention-days: 1
 
   build-binary-linux-aarch64:
     name: "linux aarch64"
     timeout-minutes: 10
     runs-on: github-ubuntu-24.04-aarch64-4
+    env:
+      RUSTC_BOOTSTRAP: 1
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
       - name: "Install mold"
         run: ./scripts/install-mold.sh
 
+      - name: "Install Rust toolchain"
+        run: rustup toolchain install --profile minimal
+
       - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
         with:
+          prefix-key: v1-rust-workspace
+          cache-workspace-crates: "true"
           save-if: ${{ inputs.save-rust-cache == 'true' }}
 
       - name: "Build"
-        run: cargo build --profile no-debug
+        run: cargo build --profile no-debug-nightly -Z checksum-freshness
 
       - name: "Upload binary"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: uv-linux-aarch64-${{ github.sha }}
           path: |
-            ./target/no-debug/uv
-            ./target/no-debug/uvx
+            ./target/no-debug-nightly/uv
+            ./target/no-debug-nightly/uvx
           retention-days: 1
 
   build-binary-linux-armv7-gnueabihf:
     name: "linux armv7 gnueabihf"
     timeout-minutes: 15
     runs-on: github-ubuntu-24.04-x86_64-8
+    env:
+      RUSTC_BOOTSTRAP: 1
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
@@ -87,32 +103,40 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install gcc-arm-linux-gnueabihf
+
+      - name: "Install Rust toolchain"
+        run: |
+          rustup toolchain install --profile minimal
           rustup target add armv7-unknown-linux-gnueabihf
 
       - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
         with:
+          prefix-key: v1-rust-workspace
+          cache-workspace-crates: "true"
           save-if: ${{ inputs.save-rust-cache == 'true' }}
 
       - name: "Build"
         env:
           CARGO_TARGET_ARMV7_UNKNOWN_LINUX_GNUEABIHF_LINKER: arm-linux-gnueabihf-gcc
-        run: cargo build --profile no-debug --target armv7-unknown-linux-gnueabihf --bin uv --bin uvx
+        run: cargo build --profile no-debug-nightly -Z checksum-freshness --target armv7-unknown-linux-gnueabihf --bin uv --bin uvx
 
       - name: "Upload binary"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: uv-linux-armv7-gnueabihf-${{ github.sha }}
           path: |
-            ./target/armv7-unknown-linux-gnueabihf/no-debug/uv
-            ./target/armv7-unknown-linux-gnueabihf/no-debug/uvx
+            ./target/armv7-unknown-linux-gnueabihf/no-debug-nightly/uv
+            ./target/armv7-unknown-linux-gnueabihf/no-debug-nightly/uvx
           retention-days: 1
 
   build-binary-linux-musl:
     name: "linux musl"
     timeout-minutes: 10
     runs-on: github-ubuntu-24.04-x86_64-8
+    env:
+      RUSTC_BOOTSTRAP: 1
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
@@ -120,80 +144,103 @@ jobs:
         run: ./scripts/install-mold.sh
 
       - name: "Setup musl"
+        run: sudo apt-get install musl-tools
+
+      - name: "Install Rust toolchain"
         run: |
-          sudo apt-get install musl-tools
+          rustup toolchain install --profile minimal
           rustup target add x86_64-unknown-linux-musl
 
       - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
         with:
+          prefix-key: v1-rust-workspace
+          cache-workspace-crates: "true"
           save-if: ${{ inputs.save-rust-cache == 'true' }}
 
       - name: "Build"
-        run: cargo build --profile no-debug --target x86_64-unknown-linux-musl --bin uv --bin uvx
+        run: cargo build --profile no-debug-nightly -Z checksum-freshness --target x86_64-unknown-linux-musl --bin uv --bin uvx
 
       - name: "Upload binary"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: uv-linux-musl-${{ github.sha }}
           path: |
-            ./target/x86_64-unknown-linux-musl/no-debug/uv
-            ./target/x86_64-unknown-linux-musl/no-debug/uvx
+            ./target/x86_64-unknown-linux-musl/no-debug-nightly/uv
+            ./target/x86_64-unknown-linux-musl/no-debug-nightly/uvx
           retention-days: 1
 
   build-binary-macos-aarch64:
     name: "macos aarch64"
     timeout-minutes: 10
-    runs-on: macos-14 # github-macos-14-aarch64-3
+    runs-on: namespace-profile-macos-15
+    env:
+      RUSTC_BOOTSTRAP: 1
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
+      - name: "Install Rust toolchain"
+        run: rustup toolchain install --profile minimal
+
       - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
         with:
+          prefix-key: v1-rust-workspace
+          cache-workspace-crates: "true"
           save-if: ${{ inputs.save-rust-cache == 'true' }}
+          cache-bin: false
       - name: "Build"
-        run: cargo build --profile no-debug --bin uv --bin uvx
+        run: cargo build --profile no-debug-nightly -Z checksum-freshness --bin uv --bin uvx
 
       - name: "Upload binary"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: uv-macos-aarch64-${{ github.sha }}
           path: |
-            ./target/no-debug/uv
-            ./target/no-debug/uvx
+            ./target/no-debug-nightly/uv
+            ./target/no-debug-nightly/uvx
           retention-days: 1
 
   build-binary-macos-x86_64:
     name: "macos x86_64"
     timeout-minutes: 10
     runs-on: macos-latest-large # github-macos-14-x86_64-12
+    env:
+      RUSTC_BOOTSTRAP: 1
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
+      - name: "Install Rust toolchain"
+        run: rustup toolchain install --profile minimal
+
       - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
         with:
+          prefix-key: v1-rust-workspace
+          cache-workspace-crates: "true"
           save-if: ${{ inputs.save-rust-cache == 'true' }}
+          cache-bin: false
       - name: "Build"
-        run: cargo build --profile no-debug --bin uv --bin uvx
+        run: cargo build --profile no-debug-nightly -Z checksum-freshness --bin uv --bin uvx
 
       - name: "Upload binary"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: uv-macos-x86_64-${{ github.sha }}
           path: |
-            ./target/no-debug/uv
-            ./target/no-debug/uvx
+            ./target/no-debug-nightly/uv
+            ./target/no-debug-nightly/uvx
           retention-days: 1
 
   build-binary-windows-x86_64:
     name: "windows x86_64"
     timeout-minutes: 10
     runs-on: windows-latest
+    env:
+      RUSTC_BOOTSTRAP: 1
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
@@ -205,30 +252,38 @@ jobs:
         run: |
           Copy-Item -Path "${{ github.workspace }}" -Destination "$Env:UV_WORKSPACE" -Recurse
 
+      - name: "Install Rust toolchain"
+        working-directory: ${{ env.UV_WORKSPACE }}
+        run: rustup toolchain install --profile minimal
+
       - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
         with:
+          prefix-key: v1-rust-workspace
           workspaces: ${{ env.UV_WORKSPACE }}
+          cache-workspace-crates: "true"
           save-if: ${{ inputs.save-rust-cache == 'true' }}
 
       - name: "Build"
         working-directory: ${{ env.UV_WORKSPACE }}
-        run: cargo build --profile no-debug --bin uv --bin uvx
+        run: cargo build --profile no-debug-nightly -Z checksum-freshness --bin uv --bin uvx
 
       - name: "Upload binary"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: uv-windows-x86_64-${{ github.sha }}
           path: |
-            ${{ env.UV_WORKSPACE }}/target/no-debug/uv.exe
-            ${{ env.UV_WORKSPACE }}/target/no-debug/uvx.exe
+            ${{ env.UV_WORKSPACE }}/target/no-debug-nightly/uv.exe
+            ${{ env.UV_WORKSPACE }}/target/no-debug-nightly/uvx.exe
           retention-days: 1
 
   build-binary-windows-aarch64:
     name: "windows aarch64"
     timeout-minutes: 10
     runs-on: windows-11-arm
+    env:
+      RUSTC_BOOTSTRAP: 1
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
@@ -240,22 +295,28 @@ jobs:
         run: |
           Copy-Item -Path "${{ github.workspace }}" -Destination "$Env:UV_WORKSPACE" -Recurse
 
+      - name: "Install Rust toolchain"
+        working-directory: ${{ env.UV_WORKSPACE }}
+        run: rustup toolchain install --profile minimal
+
       - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
         with:
+          prefix-key: v1-rust-workspace
           workspaces: ${{ env.UV_WORKSPACE }}
+          cache-workspace-crates: "true"
           save-if: ${{ inputs.save-rust-cache == 'true' }}
 
       - name: "Build"
         working-directory: ${{ env.UV_WORKSPACE }}
-        run: cargo build --profile no-debug --bin uv --bin uvx
+        run: cargo build --profile no-debug-nightly -Z checksum-freshness --bin uv --bin uvx
 
       - name: "Upload binary"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: uv-windows-aarch64-${{ github.sha }}
           path: |
-            ${{ env.UV_WORKSPACE }}/target/no-debug/uv.exe
-            ${{ env.UV_WORKSPACE }}/target/no-debug/uvx.exe
+            ${{ env.UV_WORKSPACE }}/target/no-debug-nightly/uv.exe
+            ${{ env.UV_WORKSPACE }}/target/no-debug-nightly/uvx.exe
           retention-days: 1
 
   build-binary-msrv:
@@ -263,7 +324,7 @@ jobs:
     runs-on: github-ubuntu-24.04-x86_64-8
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
       - name: "Read MSRV from Cargo.toml"
@@ -289,8 +350,10 @@ jobs:
     name: "android aarch64"
     timeout-minutes: 10
     runs-on: github-ubuntu-24.04-x86_64-8
+    env:
+      RUSTC_BOOTSTRAP: 1
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
@@ -317,22 +380,27 @@ jobs:
             echo 'INPUT(-lunwind)' | sudo tee "${LIBDIR}/libgcc.a" > /dev/null
           fi
 
+      - name: "Install Rust toolchain"
+        run: |
+          rustup toolchain install --profile minimal
           rustup target add aarch64-linux-android
 
       - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
         with:
+          prefix-key: v1-rust-workspace
+          cache-workspace-crates: "true"
           save-if: ${{ inputs.save-rust-cache == 'true' }}
 
       - name: "Build"
-        run: cargo build --profile no-debug --target aarch64-linux-android --bin uv --bin uvx
+        run: cargo build --profile no-debug-nightly -Z checksum-freshness --target aarch64-linux-android --bin uv --bin uvx
 
       - name: "Upload binary"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: uv-android-aarch64-${{ github.sha }}
           path: |
-            ./target/aarch64-linux-android/no-debug/uv
-            ./target/aarch64-linux-android/no-debug/uvx
+            ./target/aarch64-linux-android/no-debug-nightly/uv
+            ./target/aarch64-linux-android/no-debug-nightly/uvx
           retention-days: 1
 
   build-binary-freebsd:
@@ -340,7 +408,7 @@ jobs:
     timeout-minutes: 10
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
       - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
@@ -356,7 +424,7 @@ jobs:
           cross build --target x86_64-unknown-freebsd --profile no-debug
 
       - name: Test in Firecracker VM
-        uses: acj/freebsd-firecracker-action@bab3e77871573c7943b80816f1641b6c1ce36896 # v0.9.1
+        uses: acj/freebsd-firecracker-action@e04896d2dd91f7ec7381e5f363c6fbe83ee445c3 # v0.11.0
         with:
           verbose: false
           checkout: false

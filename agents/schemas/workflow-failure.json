@@ -1,0 +1,67 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "related": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "items": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": ["issue", "pull_request"]
+              },
+              "number": { "type": "integer" },
+              "title": { "type": "string" },
+              "url": { "type": "string" },
+              "state": {
+                "type": "string",
+                "enum": ["open", "closed", "merged"]
+              },
+              "reason": { "type": "string" }
+            },
+            "required": ["kind", "number", "title", "url", "state", "reason"]
+          }
+        },
+        "search_scope": { "type": "string" }
+      },
+      "required": ["items", "search_scope"]
+    },
+    "decision": {
+      "type": "string",
+      "enum": ["create", "duplicate", "ignore"]
+    },
+    "failure_kind": {
+      "type": "string",
+      "enum": ["flaky", "deterministic"]
+    },
+    "decision_reason": { "type": "string" },
+    "comment_note": { "type": "string" },
+    "issue": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "title": { "type": "string" },
+        "body": { "type": "string" },
+        "label": {
+          "type": "string",
+          "enum": ["bug", "ci-flake"]
+        }
+      },
+      "required": ["title", "body", "label"]
+    }
+  },
+  "required": [
+    "related",
+    "decision",
+    "failure_kind",
+    "decision_reason",
+    "comment_note",
+    "issue"
+  ]
+}

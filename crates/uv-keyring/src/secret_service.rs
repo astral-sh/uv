@@ -95,9 +95,9 @@ use crate::error::{Error as ErrorCode, Result, decode_password};
 /// a search is ambiguous, each item found is represented by a credential that
 /// has the same attributes and label as the item.
 #[derive(Debug, Clone)]
-pub struct SsCredential {
-    pub attributes: HashMap<String, String>,
-    pub label: String,
+struct SsCredential {
+    attributes: HashMap<String, String>,
+    label: String,
     target: Option<String>,
 }
 
@@ -249,7 +249,7 @@ impl SsCredential {
     /// If there isn't already one there, it will be created only
     /// when [`set_password`](SsCredential::set_password) is
     /// called.
-    pub fn new_with_target(target: Option<&str>, service: &str, user: &str) -> Result<Self> {
+    fn new_with_target(target: Option<&str>, service: &str, user: &str) -> Result<Self> {
         if let Some("") = target {
             return Err(empty_target());
         }
@@ -275,27 +275,28 @@ impl SsCredential {
     ///
     /// This emulates what keyring v1 did, and can be very handy when you need to
     /// access an old v1 credential that's in your secret service default collection.
-    pub fn new_with_no_target(service: &str, user: &str) -> Result<Self> {
+    #[cfg(test)]
+    fn new_with_no_target(service: &str, user: &str) -> Self {
         let attributes = HashMap::from([
             ("service".to_string(), service.to_string()),
             ("username".to_string(), user.to_string()),
             ("application".to_string(), "uv".to_string()),
         ]);
-        Ok(Self {
+        Self {
             attributes,
             label: format!(
                 "uv v{} for no target, service '{service}', user '{user}'",
                 env!("CARGO_PKG_VERSION"),
             ),
             target: None,
-        })
+        }
     }
 
     /// Create a credential from an underlying item.
     ///
     /// The created credential will have all the attributes and label
     /// of the underlying item, so you can examine them.
-    pub async fn new_from_item(item: &Item<'_>) -> Result<Self> {
+    async fn new_from_item(item: &Item<'_>) -> Result<Self> {
         let attributes = item.get_attributes().await.map_err(decode_error)?;
         let target = attributes.get("target").cloned();
         Ok(Self {
@@ -307,28 +308,12 @@ impl SsCredential {
 
     /// Construct a credential for this credential's underlying matching item,
     /// if there is exactly one.
-    pub async fn new_from_matching_item(&self) -> Result<Self> {
+    #[cfg(test)]
+    async fn new_from_matching_item(&self) -> Result<Self> {
         Ok(self
             .map_matching_items(Self::new_from_item, true)
             .await?
             .remove(0))
-    }
-
-    /// If there are multiple matching items for this credential, get all of their passwords.
-    ///
-    /// (This is useful if [`get_password`](SsCredential::get_password)
-    /// returns an [`Ambiguous`](ErrorCode::Ambiguous) error.)
-    pub async fn get_all_passwords(&self) -> Result<Vec<String>> {
-        self.map_matching_items(get_item_password, false).await
-    }
-
-    /// If there are multiple matching items for this credential, delete all of them.
-    ///
-    /// (This is useful if [`delete_credential`](SsCredential::delete_credential)
-    /// returns an [`Ambiguous`](ErrorCode::Ambiguous) error.)
-    pub async fn delete_all_passwords(&self) -> Result<()> {
-        self.map_matching_items(delete_item, false).await?;
-        Ok(())
     }
 
     /// Map an async function over the items matching this credential.
@@ -402,7 +387,7 @@ impl SsCredential {
     /// credential, and the credential being searched for has the default target, we fall back and search the default collection for a v1-style credential.
     /// That preserves the legacy behavior at the cost of a second round-trip through
     /// the secret service for the collection search.
-    pub async fn map_matching_legacy_items<F, T>(
+    async fn map_matching_legacy_items<F, T>(
         &self,
         ss: &SecretService<'_>,
         f: F,
@@ -463,13 +448,13 @@ impl SsCredential {
 
 /// The builder for secret-service credentials
 #[derive(Debug, Default)]
-pub struct SsCredentialBuilder;
+struct SsCredentialBuilder;
 
 /// Returns an instance of the secret-service credential builder.
 ///
 /// If secret-service is the default credential store,
 /// this is called once when an entry is first created.
-pub fn default_credential_builder() -> Box<CredentialBuilder> {
+pub(crate) fn default_credential_builder() -> Box<CredentialBuilder> {
     Box::new(SsCredentialBuilder {})
 }
 
@@ -496,7 +481,7 @@ impl CredentialBuilderApi for SsCredentialBuilder {
 ///
 /// The name `default` is treated specially and is interpreted as naming
 /// the default collection regardless of its label (which might be different).
-pub async fn get_collection<'a>(ss: &'a SecretService<'_>, name: &str) -> Result<Collection<'a>> {
+async fn get_collection<'a>(ss: &'a SecretService<'_>, name: &str) -> Result<Collection<'a>> {
     let collection = if name.eq("default") {
         ss.get_default_collection().await.map_err(decode_error)?
     } else {
@@ -521,10 +506,7 @@ pub async fn get_collection<'a>(ss: &'a SecretService<'_>, name: &str) -> Result
 /// If a collection with that name already exists, it is returned.
 ///
 /// The name `default` is specially interpreted to mean the default collection.
-pub async fn create_collection<'a>(
-    ss: &'a SecretService<'_>,
-    name: &str,
-) -> Result<Collection<'a>> {
+async fn create_collection<'a>(ss: &'a SecretService<'_>, name: &str) -> Result<Collection<'a>> {
     let collection = if name.eq("default") {
         ss.get_default_collection().await.map_err(decode_error)?
     } else {
@@ -534,26 +516,26 @@ pub async fn create_collection<'a>(
 }
 
 /// Given an existing item, set its secret.
-pub async fn set_item_secret(item: &Item<'_>, secret: &[u8]) -> Result<()> {
+async fn set_item_secret(item: &Item<'_>, secret: &[u8]) -> Result<()> {
     item.set_secret(secret, "text/plain")
         .await
         .map_err(decode_error)
 }
 
 /// Given an existing item, retrieve and decode its password.
-pub async fn get_item_password(item: &Item<'_>) -> Result<String> {
+async fn get_item_password(item: &Item<'_>) -> Result<String> {
     let bytes = item.get_secret().await.map_err(decode_error)?;
     decode_password(bytes)
 }
 
 /// Given an existing item, retrieve its secret.
-pub async fn get_item_secret(item: &Item<'_>) -> Result<Vec<u8>> {
+async fn get_item_secret(item: &Item<'_>) -> Result<Vec<u8>> {
     let secret = item.get_secret().await.map_err(decode_error)?;
     Ok(secret)
 }
 
 /// Given an existing item, retrieve its non-controlled attributes.
-pub async fn get_item_attributes(item: &Item<'_>) -> Result<HashMap<String, String>> {
+async fn get_item_attributes(item: &Item<'_>) -> Result<HashMap<String, String>> {
     let mut attributes = item.get_attributes().await.map_err(decode_error)?;
     attributes.remove("target");
     attributes.remove("service");
@@ -566,10 +548,7 @@ pub async fn get_item_attributes(item: &Item<'_>) -> Result<HashMap<String, Stri
 }
 
 /// Given an existing item, retrieve its non-controlled attributes.
-pub async fn update_item_attributes(
-    item: &Item<'_>,
-    attributes: &HashMap<&str, &str>,
-) -> Result<()> {
+async fn update_item_attributes(item: &Item<'_>, attributes: &HashMap<&str, &str>) -> Result<()> {
     let existing = item.get_attributes().await.map_err(decode_error)?;
     let mut updated: HashMap<&str, &str> = HashMap::new();
     for (k, v) in &existing {
@@ -599,7 +578,7 @@ pub async fn update_item_attributes(
 }
 
 // Given an existing item, delete it.
-pub async fn delete_item(item: &Item<'_>) -> Result<()> {
+async fn delete_item(item: &Item<'_>) -> Result<()> {
     item.delete().await.map_err(decode_error)
 }
 
@@ -609,7 +588,7 @@ pub async fn delete_item(item: &Item<'_>) -> Result<()> {
 
 /// Map underlying secret-service errors to crate errors with
 /// appropriate annotation.
-pub fn decode_error(err: Error) -> ErrorCode {
+fn decode_error(err: Error) -> ErrorCode {
     match err {
         Error::Locked => no_access(err),
         Error::NoResult => no_access(err),
@@ -637,18 +616,9 @@ fn wrap(err: Error) -> Box<dyn std::error::Error + Send + Sync> {
 #[cfg(feature = "native-auth")]
 #[cfg(test)]
 mod tests {
-    use crate::credential::CredentialPersistence;
     use crate::secret_service::{EncryptionType, SecretService, SsCredential};
-    use crate::{Entry, Error, default_credential_builder, tests::generate_random_string};
+    use crate::{Entry, Error, tests::generate_random_string};
     use std::collections::HashMap;
-
-    #[test]
-    fn test_persistence() {
-        assert!(matches!(
-            default_credential_builder().persistence(),
-            CredentialPersistence::UntilDelete
-        ));
-    }
 
     fn entry_new(service: &str, user: &str) -> Entry {
         crate::tests::entry_from_constructor(SsCredential::new_with_target, service, user)
@@ -909,8 +879,7 @@ mod tests {
     async fn create_v1_entry(name: &str, password: &str) {
         use secret_service::{EncryptionType, SecretService};
 
-        let cred = SsCredential::new_with_no_target(name, name)
-            .expect("Can't create credential with no target");
+        let cred = SsCredential::new_with_no_target(name, name);
         let ss = SecretService::connect(EncryptionType::Dh)
             .await
             .expect("Can't connect to secret service");

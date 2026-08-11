@@ -49,13 +49,12 @@ pub struct Interpreter {
     virtualenv: Scheme,
     manylinux_compatible: bool,
     sys_prefix: PathBuf,
-    sys_base_exec_prefix: PathBuf,
     sys_base_prefix: PathBuf,
     sys_base_executable: Option<PathBuf>,
     sys_executable: PathBuf,
-    sys_path: Vec<PathBuf>,
     site_packages: Vec<PathBuf>,
     stdlib: PathBuf,
+    extension_suffixes: Vec<Box<str>>,
     standalone: bool,
     tags: OnceLock<Tags>,
     target: Option<Target>,
@@ -84,16 +83,15 @@ impl Interpreter {
             virtualenv: info.virtualenv,
             manylinux_compatible: info.manylinux_compatible,
             sys_prefix: info.sys_prefix,
-            sys_base_exec_prefix: info.sys_base_exec_prefix,
             pointer_size: info.pointer_size,
             gil_disabled: info.gil_disabled,
             debug_enabled: info.debug_enabled,
             sys_base_prefix: info.sys_base_prefix,
             sys_base_executable: info.sys_base_executable,
             sys_executable: info.sys_executable,
-            sys_path: info.sys_path,
             site_packages: info.site_packages,
             stdlib: info.stdlib,
+            extension_suffixes: info.extension_suffixes,
             standalone: info.standalone,
             tags: OnceLock::new(),
             target: None,
@@ -118,7 +116,7 @@ impl Interpreter {
     }
 
     /// Return a new [`Interpreter`] to install into the given `--target` directory.
-    pub fn with_target(self, target: Target) -> io::Result<Self> {
+    pub(crate) fn with_target(self, target: Target) -> io::Result<Self> {
         target.init()?;
         Ok(Self {
             target: Some(target),
@@ -127,7 +125,7 @@ impl Interpreter {
     }
 
     /// Return a new [`Interpreter`] to install into the given `--prefix` directory.
-    pub fn with_prefix(self, prefix: Prefix) -> io::Result<Self> {
+    pub(crate) fn with_prefix(self, prefix: Prefix) -> io::Result<Self> {
         prefix.init(self.virtualenv())?;
         Ok(Self {
             prefix: Some(prefix),
@@ -199,7 +197,7 @@ impl Interpreter {
     }
 
     /// Return the [`ResolverMarkerEnvironment`] for this Python executable.
-    pub fn resolver_marker_environment(&self) -> ResolverMarkerEnvironment {
+    pub fn to_resolver_marker_environment(&self) -> ResolverMarkerEnvironment {
         ResolverMarkerEnvironment::from(self.markers().clone())
     }
 
@@ -231,17 +229,17 @@ impl Interpreter {
     }
 
     /// Return the [`Arch`] reported by the interpreter platform tags.
-    pub fn arch(&self) -> Arch {
+    pub(crate) fn arch(&self) -> Arch {
         Arch::from(&self.platform().arch())
     }
 
     /// Return the [`Libc`] reported by the interpreter platform tags.
-    pub fn libc(&self) -> Libc {
+    pub(crate) fn libc(&self) -> Libc {
         Libc::from(self.platform().os())
     }
 
     /// Return the [`Os`] reported by the interpreter platform tags.
-    pub fn os(&self) -> Os {
+    pub(crate) fn os(&self) -> Os {
         Os::from(self.platform().os())
     }
 
@@ -249,7 +247,7 @@ impl Interpreter {
     pub fn tags(&self) -> Result<&Tags, TagsError> {
         if self.tags.get().is_none() {
             let tags = Tags::from_env(
-                self.platform(),
+                self.platform().clone(),
                 self.python_tuple(),
                 self.implementation_name(),
                 self.implementation_tuple(),
@@ -274,19 +272,19 @@ impl Interpreter {
     }
 
     /// Returns `true` if the environment is a `--target` environment.
-    pub fn is_target(&self) -> bool {
+    fn is_target(&self) -> bool {
         self.target.is_some()
     }
 
     /// Returns `true` if the environment is a `--prefix` environment.
-    pub fn is_prefix(&self) -> bool {
+    fn is_prefix(&self) -> bool {
         self.prefix.is_some()
     }
 
     /// Returns `true` if this interpreter is managed by uv.
     ///
     /// Returns `false` if we cannot determine the path of the uv managed Python interpreters.
-    pub fn is_managed(&self) -> bool {
+    pub(crate) fn is_managed(&self) -> bool {
         if let Ok(test_managed) =
             std::env::var(uv_static::EnvVars::UV_INTERNAL__TEST_PYTHON_MANAGED)
         {
@@ -392,7 +390,7 @@ impl Interpreter {
 
     /// Returns the Python version up to the patch component.
     #[inline]
-    pub fn python_patch_version(&self) -> Version {
+    pub(crate) fn python_patch_version(&self) -> Version {
         Version::new(self.python_version().release().iter().take(3).copied())
     }
 
@@ -409,7 +407,7 @@ impl Interpreter {
     }
 
     /// Return the patch version component of this Python version.
-    pub fn python_patch(&self) -> u8 {
+    pub(crate) fn python_patch(&self) -> u8 {
         let minor = self.markers.python_full_version().version.release()[2];
         u8::try_from(minor).expect("invalid patch version")
     }
@@ -420,13 +418,13 @@ impl Interpreter {
     }
 
     /// Return the major version of the implementation (e.g., `CPython` or `PyPy`).
-    pub fn implementation_major(&self) -> u8 {
+    fn implementation_major(&self) -> u8 {
         let major = self.markers.implementation_version().version.release()[0];
         u8::try_from(major).expect("invalid major version")
     }
 
     /// Return the minor version of the implementation (e.g., `CPython` or `PyPy`).
-    pub fn implementation_minor(&self) -> u8 {
+    fn implementation_minor(&self) -> u8 {
         let minor = self.markers.implementation_version().version.release()[1];
         u8::try_from(minor).expect("invalid minor version")
     }
@@ -441,11 +439,6 @@ impl Interpreter {
         self.markers.implementation_name()
     }
 
-    /// Return the `sys.base_exec_prefix` path for this Python interpreter.
-    pub fn sys_base_exec_prefix(&self) -> &Path {
-        &self.sys_base_exec_prefix
-    }
-
     /// Return the `sys.base_prefix` path for this Python interpreter.
     pub fn sys_base_prefix(&self) -> &Path {
         &self.sys_base_prefix
@@ -458,7 +451,7 @@ impl Interpreter {
 
     /// Return the `sys._base_executable` path for this Python interpreter. Some platforms do not
     /// have this attribute, so it may be `None`.
-    pub fn sys_base_executable(&self) -> Option<&Path> {
+    pub(crate) fn sys_base_executable(&self) -> Option<&Path> {
         self.sys_base_executable.as_deref()
     }
 
@@ -467,14 +460,14 @@ impl Interpreter {
         &self.sys_executable
     }
 
+    /// Return the recognized native extension module suffixes for this Python interpreter.
+    pub fn extension_suffixes(&self) -> &[Box<str>] {
+        &self.extension_suffixes
+    }
+
     /// Return the "real" queried executable path for this Python interpreter.
     pub fn real_executable(&self) -> &Path {
         &self.real_executable
-    }
-
-    /// Return the `sys.path` for this Python interpreter.
-    pub fn sys_path(&self) -> &[PathBuf] {
-        &self.sys_path
     }
 
     /// Return the `site.getsitepackages` for this Python interpreter.
@@ -494,12 +487,12 @@ impl Interpreter {
     }
 
     /// Return the `purelib` path for this Python interpreter, as returned by `sysconfig.get_paths()`.
-    pub fn purelib(&self) -> &Path {
+    fn purelib(&self) -> &Path {
         &self.scheme.purelib
     }
 
     /// Return the `platlib` path for this Python interpreter, as returned by `sysconfig.get_paths()`.
-    pub fn platlib(&self) -> &Path {
+    fn platlib(&self) -> &Path {
         &self.scheme.platlib
     }
 
@@ -509,12 +502,12 @@ impl Interpreter {
     }
 
     /// Return the `data` path for this Python interpreter, as returned by `sysconfig.get_paths()`.
-    pub fn data(&self) -> &Path {
+    fn data(&self) -> &Path {
         &self.scheme.data
     }
 
     /// Return the `include` path for this Python interpreter, as returned by `sysconfig.get_paths()`.
-    pub fn include(&self) -> &Path {
+    fn include(&self) -> &Path {
         &self.scheme.include
     }
 
@@ -549,12 +542,12 @@ impl Interpreter {
     }
 
     /// Return the `--target` directory for this interpreter, if any.
-    pub fn target(&self) -> Option<&Target> {
+    fn target(&self) -> Option<&Target> {
         self.target.as_ref()
     }
 
     /// Return the `--prefix` directory for this interpreter, if any.
-    pub fn prefix(&self) -> Option<&Prefix> {
+    fn prefix(&self) -> Option<&Prefix> {
         self.prefix.as_ref()
     }
 
@@ -648,18 +641,6 @@ impl Interpreter {
             .map(Cow::Borrowed)
             .chain(prefix.into_iter().flatten().map(Cow::Owned))
             .chain(interpreter.into_iter().flatten().map(Cow::Borrowed))
-    }
-
-    /// Check if the interpreter matches the given Python version.
-    ///
-    /// If a patch version is present, we will require an exact match.
-    /// Otherwise, just the major and minor version numbers need to match.
-    pub fn satisfies(&self, version: &PythonVersion) -> bool {
-        if version.patch().is_some() {
-            version.version() == self.python_version()
-        } else {
-            (version.major(), version.minor()) == self.python_tuple()
-        }
     }
 
     /// Whether or not this Python interpreter is from a default Python executable name, like
@@ -869,6 +850,15 @@ pub enum Error {
     Encode(#[from] rmp_serde::encode::Error),
 }
 
+impl uv_errors::Hint for Error {
+    fn hints(&self) -> uv_errors::Hints<'_> {
+        match self {
+            Self::BrokenLink(err) => err.hints(),
+            _ => uv_errors::Hints::none(),
+        }
+    }
+}
+
 #[derive(Debug, Error)]
 pub struct BrokenLink {
     pub path: PathBuf,
@@ -886,24 +876,27 @@ impl Display for BrokenLink {
                 f,
                 "Broken symlink at `{}`, was the underlying Python interpreter removed?",
                 self.path.user_display()
-            )?;
+            )
         } else {
             write!(
                 f,
                 "Broken Python trampoline at `{}`, was the underlying Python interpreter removed?",
                 self.path.user_display()
-            )?;
+            )
         }
+    }
+}
+
+impl uv_errors::Hint for BrokenLink {
+    fn hints(&self) -> uv_errors::Hints<'_> {
         if self.venv {
-            write!(
-                f,
-                "\n\n{}{} Consider recreating the environment (e.g., with `{}`)",
-                "hint".bold().cyan(),
-                ":".bold(),
+            uv_errors::Hints::from(format!(
+                "Consider recreating the environment (e.g., with `{}`)",
                 "uv venv".green()
-            )?;
+            ))
+        } else {
+            uv_errors::Hints::none()
         }
-        Ok(())
     }
 }
 
@@ -936,7 +929,7 @@ pub enum InterpreterInfoError {
         python_major: usize,
         python_minor: usize,
     },
-    #[error("Only Pyodide is support for Emscripten Python")]
+    #[error("Only Pyodide is supported for Emscripten Python")]
     EmscriptenNotPyodide,
 }
 
@@ -956,6 +949,7 @@ struct InterpreterInfo {
     sys_path: Vec<PathBuf>,
     site_packages: Vec<PathBuf>,
     stdlib: PathBuf,
+    extension_suffixes: Vec<Box<str>>,
     standalone: bool,
     pointer_size: PointerSize,
     gil_disabled: bool,
@@ -964,15 +958,19 @@ struct InterpreterInfo {
 
 impl InterpreterInfo {
     /// Return the resolved [`InterpreterInfo`] for the given Python executable.
-    pub(crate) fn query(interpreter: &Path, cache: &Cache) -> Result<Self, Error> {
+    fn query(interpreter: &Path, cache: &Cache) -> Result<Self, Error> {
         let tempdir = tempfile::tempdir_in(cache.root())?;
         Self::setup_python_query_files(tempdir.path())?;
 
         // Sanitize the path by (1) running under isolated mode (`-I`) to ignore any site packages
         // modifications, and then (2) adding the path containing our query script to the front of
         // `sys.path` so that we can import it.
+        // There are user reports that `sitecustomize.py` output breaks worker communication, but
+        // we cannot use `-S` here because interpreter discovery needs the site-initialized
+        // `sys.path`. We may want to fix this in the future if there are more reports. See:
+        // https://github.com/astral-sh/uv/issues/11508.
         let script = format!(
-            r#"import sys; sys.path = ["{}"] + sys.path; from python.get_interpreter_info import main; main()"#,
+            r"import sys; sys.path = [{}] + sys.path; from python.get_interpreter_info import main; main()",
             tempdir.path().escape_for_python()
         );
         let mut command = Command::new(interpreter);
@@ -1123,7 +1121,7 @@ impl InterpreterInfo {
     /// Running a Python script is (relatively) expensive, and the markers won't change
     /// unless the Python executable changes, so we use the executable's last modified
     /// time as a cache key.
-    pub(crate) fn query_cached(executable: &Path, cache: &Cache) -> Result<Self, Error> {
+    fn query_cached(executable: &Path, cache: &Cache) -> Result<Self, Error> {
         let absolute = std::path::absolute(executable)?;
 
         // Provide a better error message if the link is broken or the file does not exist. Since
@@ -1158,10 +1156,10 @@ impl InterpreterInfo {
             // invalidate the cache (e.g.) on OS upgrades.
             cache_digest(&(
                 ARCH,
-                uv_platform::host::OsType::from_env()
+                uv_platform::OsType::from_env()
                     .map(|os_type| os_type.to_string())
                     .unwrap_or_default(),
-                uv_platform::host::OsRelease::from_env()
+                uv_platform::OsRelease::from_env()
                     .map(|os_release| os_release.to_string())
                     .unwrap_or_default(),
             )),
@@ -1386,6 +1384,7 @@ mod tests {
                 "/home/ferris/.pyenv/versions/3.12.0/lib/python3.12/site-packages"
             ],
             "stdlib": "/home/ferris/.pyenv/versions/3.12.0/lib/python3.12",
+            "extension_suffixes": [".cpython-312-x86_64-linux-gnu.so", ".abi3.so", ".so"],
             "scheme": {
                 "data": "/home/ferris/.pyenv/versions/3.12.0",
                 "include": "/home/ferris/.pyenv/versions/3.12.0/include",

@@ -1,0 +1,19 @@
+name = "equivalent-dependency-ranges"
+description = "Two versions of a package use differently spelled but PEP 440-equivalent dependency ranges."
+
+[root]
+requires = ["a", "c>=2.0"]
+
+[expected]
+satisfiable = false
+explanation = "Both versions of `a` require the same logical range of `c`, which conflicts with the root requirement."
+
+[packages.a.versions."1.0.0"]
+requires = ["c<=1.0"]
+
+[packages.a.versions."2.0.0"]
+requires = ["c<1.0.post0.dev0"]
+
+[packages.c.versions."1.0.0"]
+
+[packages.c.versions."2.0.0"]

@@ -1,0 +1,34 @@
+name = "fork-marker-limited-inherit"
+description = '''
+This is like `fork-marker-inherit`, but it tests that dependency
+filtering only occurs in the context of a fork.
+
+For example, as in `fork-marker-inherit`, the `c` dependency of
+`a<2` should be entirely excluded here since it is possible for
+`sys_platform` to be simultaneously equivalent to Darwin and Linux.
+However, the unconditional dependency on `b`, which in turn depends on
+`c` for Linux only, should still incorporate `c` as the dependency is
+not part of any fork.
+'''
+
+[resolver_options]
+universal = true
+
+[expected]
+satisfiable = true
+
+[root]
+requires = [
+  "a>=2 ; sys_platform == 'linux'",
+  "a<2 ; sys_platform == 'darwin'",
+  "b",
+]
+
+[packages.a.versions."1.0.0"]
+requires = ["c ; sys_platform == 'linux'"]
+[packages.a.versions."2.0.0"]
+
+[packages.b.versions."1.0.0"]
+requires = ["c ; sys_platform == 'linux'"]
+
+[packages.c.versions."1.0.0"]

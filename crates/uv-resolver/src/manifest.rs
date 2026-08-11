@@ -15,42 +15,42 @@ use crate::{DependencyMode, Exclusions, ResolverEnvironment};
 #[derive(Clone, Debug)]
 pub struct Manifest {
     /// The direct requirements for the project.
-    pub(crate) requirements: Vec<Requirement>,
+    pub(super) requirements: Vec<Requirement>,
 
     /// The constraints for the project.
-    pub(crate) constraints: Constraints,
+    pub(super) constraints: Constraints,
 
     /// The overrides for the project.
-    pub(crate) overrides: Overrides,
+    pub(super) overrides: Overrides,
 
     /// The dependency excludes for the project.
-    pub(crate) excludes: Excludes,
+    pub(super) excludes: Excludes,
 
     /// The preferences for the project.
     ///
     /// These represent "preferred" versions of a given package. For example, they may be the
     /// versions that are already installed in the environment, or already pinned in an existing
     /// lockfile.
-    pub(crate) preferences: Preferences,
+    pub(super) preferences: Preferences,
 
     /// The name of the project.
-    pub(crate) project: Option<PackageName>,
+    pub(super) project: Option<PackageName>,
 
     /// Members of the project's workspace.
-    pub(crate) workspace_members: BTreeSet<PackageName>,
+    pub(super) workspace_members: BTreeSet<PackageName>,
 
     /// The installed packages to exclude from consideration during resolution.
     ///
     /// These typically represent packages that are being upgraded or reinstalled
     /// and should be pulled from a remote source like a package index.
-    pub(crate) exclusions: Exclusions,
+    pub(super) exclusions: Exclusions,
 
     /// The lookahead requirements for the project.
     ///
     /// These represent transitive dependencies that should be incorporated when making
     /// determinations around "allowed" versions (for example, "allowed" URLs or "allowed"
     /// pre-release versions).
-    pub(crate) lookaheads: Vec<RequestedRequirements>,
+    pub(super) lookaheads: Vec<RequestedRequirements>,
 }
 
 impl Manifest {
@@ -111,7 +111,7 @@ impl Manifest {
     /// - Determining which requirements should allow yanked versions.
     /// - Determining which requirements should allow pre-release versions (e.g., `torch>=2.2.0a1`).
     /// - Determining which requirements should allow direct URLs (e.g., `torch @ https://...`).
-    pub fn requirements<'a>(
+    pub(crate) fn requirements<'a>(
         &'a self,
         env: &'a ResolverEnvironment,
         mode: DependencyMode,
@@ -120,8 +120,36 @@ impl Manifest {
             .chain(self.overrides(env, mode))
     }
 
+    /// Return all requirements that affect manifest-wide candidate selection policy.
+    ///
+    /// Scoped overrides are included even when their scope is not selected. Whether a scoped
+    /// override applies is only known during resolution, after yanked-version policy has already
+    /// been initialized.
+    pub(crate) fn candidate_selection_requirements<'a>(
+        &'a self,
+        env: &'a ResolverEnvironment,
+        mode: DependencyMode,
+    ) -> impl Iterator<Item = Cow<'a, Requirement>> + 'a {
+        self.requirements(env, mode).chain(
+            self.overrides
+                .scoped_requirements()
+                .filter(|(package, version, requirement)| {
+                    !self.excludes.contains_for_scope(
+                        &self.overrides,
+                        package,
+                        *version,
+                        &requirement.name,
+                    )
+                })
+                .map(|(_, _, requirement)| Cow::Borrowed(requirement))
+                .filter(move |requirement| {
+                    requirement.evaluate_markers(env.marker_environment(), &[])
+                }),
+        )
+    }
+
     /// Like [`Self::requirements`], but without the overrides.
-    pub fn requirements_no_overrides<'a>(
+    pub(crate) fn requirements_no_overrides<'a>(
         &'a self,
         env: &'a ResolverEnvironment,
         mode: DependencyMode,
@@ -133,8 +161,18 @@ impl Manifest {
                     .iter()
                     .flat_map(move |lookahead| {
                         self.overrides
-                            .apply(lookahead.requirements())
-                            .filter(|requirement| !self.excludes.contains(&requirement.name))
+                            .apply_for(
+                                lookahead.package(),
+                                lookahead.version(),
+                                lookahead.requirements(),
+                            )
+                            .filter(|requirement| {
+                                !self.excludes.contains_for(
+                                    lookahead.package(),
+                                    lookahead.version(),
+                                    &requirement.name,
+                                )
+                            })
                             .filter(move |requirement| {
                                 requirement
                                     .evaluate_markers(env.marker_environment(), lookahead.extras())
@@ -172,7 +210,7 @@ impl Manifest {
     }
 
     /// Only the overrides from [`Self::requirements`].
-    pub fn overrides<'a>(
+    pub(crate) fn overrides<'a>(
         &'a self,
         env: &'a ResolverEnvironment,
         mode: DependencyMode,
@@ -181,7 +219,7 @@ impl Manifest {
             // Include all direct and transitive requirements, with constraints and overrides applied.
             DependencyMode::Transitive => Either::Left(
                 self.overrides
-                    .requirements()
+                    .global_requirements()
                     .filter(|requirement| !self.excludes.contains(&requirement.name))
                     .filter(move |requirement| {
                         requirement.evaluate_markers(env.marker_environment(), &[])
@@ -191,7 +229,7 @@ impl Manifest {
             // Include direct requirements, with constraints and overrides applied.
             DependencyMode::Direct => Either::Right(
                 self.overrides
-                    .requirements()
+                    .global_requirements()
                     .filter(|requirement| !self.excludes.contains(&requirement.name))
                     .filter(move |requirement| {
                         requirement.evaluate_markers(env.marker_environment(), &[])
@@ -211,7 +249,7 @@ impl Manifest {
     /// At time of writing, this is used for:
     /// - Determining which packages should use the "lowest-compatible version" of a package, when
     ///   the `lowest-direct` strategy is in use.
-    pub fn user_requirements<'a>(
+    pub(crate) fn user_requirements<'a>(
         &'a self,
         env: &'a ResolverEnvironment,
         mode: DependencyMode,
@@ -225,7 +263,18 @@ impl Manifest {
                     .filter(|lookahead| lookahead.direct())
                     .flat_map(move |lookahead| {
                         self.overrides
-                            .apply(lookahead.requirements())
+                            .apply_for(
+                                lookahead.package(),
+                                lookahead.version(),
+                                lookahead.requirements(),
+                            )
+                            .filter(|requirement| {
+                                !self.excludes.contains_for(
+                                    lookahead.package(),
+                                    lookahead.version(),
+                                    &requirement.name,
+                                )
+                            })
                             .filter(move |requirement| {
                                 requirement
                                     .evaluate_markers(env.marker_environment(), lookahead.extras())
@@ -247,31 +296,6 @@ impl Manifest {
                 ))
             }
         }
-    }
-
-    /// Returns an iterator over the direct requirements, with overrides applied.
-    ///
-    /// At time of writing, this is used for:
-    /// - Determining which packages should have development dependencies included in the
-    ///   resolution (assuming the user enabled development dependencies).
-    pub fn direct_requirements<'a>(
-        &'a self,
-        env: &'a ResolverEnvironment,
-    ) -> impl Iterator<Item = Cow<'a, Requirement>> + 'a {
-        self.overrides
-            .apply(self.requirements.iter())
-            .filter(move |requirement| requirement.evaluate_markers(env.marker_environment(), &[]))
-    }
-
-    /// Apply the overrides and constraints to a set of requirements.
-    ///
-    /// Constraints are always applied _on top_ of overrides, such that constraints are applied
-    /// even if a requirement is overridden.
-    pub fn apply<'a>(
-        &'a self,
-        requirements: impl IntoIterator<Item = &'a Requirement>,
-    ) -> impl Iterator<Item = Cow<'a, Requirement>> {
-        self.constraints.apply(self.overrides.apply(requirements))
     }
 
     /// Returns the number of input requirements.

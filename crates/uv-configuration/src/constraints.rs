@@ -17,10 +17,10 @@ impl Constraints {
         let mut constraints: FxHashMap<PackageName, Vec<Requirement>> = FxHashMap::default();
         for requirement in requirements {
             // Skip empty constraints.
-            if let RequirementSource::Registry { specifier, .. } = &requirement.source {
-                if specifier.is_empty() {
-                    continue;
-                }
+            if let RequirementSource::Registry { specifier, .. } = &requirement.source
+                && specifier.is_empty()
+            {
+                continue;
             }
 
             constraints
@@ -74,8 +74,8 @@ impl Constraints {
             Either::Right(Either::Left(std::iter::once(requirement).chain(
                 constraints.iter().cloned().map(move |constraint| {
                     // Add the extra to the override marker.
-                    let mut joint_marker = MarkerTree::expression(extra_expression.clone());
-                    joint_marker.and(constraint.marker);
+                    let joint_marker =
+                        MarkerTree::expression(extra_expression.clone()).and(constraint.marker);
                     Cow::Owned(Requirement {
                         marker: joint_marker,
                         ..constraint

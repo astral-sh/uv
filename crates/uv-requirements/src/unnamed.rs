@@ -11,8 +11,8 @@ use url::Host;
 use uv_distribution::{DistributionDatabase, Reporter};
 use uv_distribution_filename::{DistExtension, SourceDistFilename, WheelFilename};
 use uv_distribution_types::{
-    BuildableSource, DirectSourceUrl, DirectorySourceUrl, GitSourceUrl, Identifier, PathSourceUrl,
-    RemoteSource, Requirement, SourceUrl,
+    BuildableSource, DirectSourceUrl, DirectorySourceUrl, GitDirectorySourceUrl, GitPathSourceUrl,
+    Identifier, PathSourceUrl, RemoteSource, Requirement, SourceUrl,
 };
 use uv_fs::Simplified;
 use uv_normalize::PackageName;
@@ -23,7 +23,8 @@ use uv_types::{BuildContext, HashStrategy};
 
 use crate::Error;
 
-/// Like [`RequirementsSpecification`], but with concrete names for all requirements.
+/// Like [`RequirementsSpecification`](crate::RequirementsSpecification), but with concrete names
+/// for all requirements.
 pub struct NamedRequirementsResolver<'a, Context: BuildContext> {
     /// Whether to check hashes for distributions.
     hasher: &'a HashStrategy,
@@ -189,23 +190,22 @@ impl<'a, Context: BuildContext> NamedRequirementsResolver<'a, Context> {
                     }
 
                     // Read Poetry-specific metadata from the `pyproject.toml`.
-                    if let Some(tool) = pyproject.tool {
-                        if let Some(poetry) = tool.poetry {
-                            if let Some(name) = poetry.name {
-                                debug!(
-                                    "Found Poetry metadata for {path} in `pyproject.toml` ({name})",
-                                    path = parsed_directory_url.install_path.display(),
-                                    name = name
-                                );
-                                return Ok(uv_pep508::Requirement {
-                                    name,
-                                    extras: requirement.extras,
-                                    version_or_url: Some(VersionOrUrl::Url(requirement.url)),
-                                    marker: requirement.marker,
-                                    origin: requirement.origin,
-                                });
-                            }
-                        }
+                    if let Some(tool) = pyproject.tool
+                        && let Some(poetry) = tool.poetry
+                        && let Some(name) = poetry.name
+                    {
+                        debug!(
+                            "Found Poetry metadata for {path} in `pyproject.toml` ({name})",
+                            path = parsed_directory_url.install_path.display(),
+                            name = name
+                        );
+                        return Ok(uv_pep508::Requirement {
+                            name,
+                            extras: requirement.extras,
+                            version_or_url: Some(VersionOrUrl::Url(requirement.url)),
+                            marker: requirement.marker,
+                            origin: requirement.origin,
+                        });
                     }
                 }
 
@@ -219,23 +219,22 @@ impl<'a, Context: BuildContext> NamedRequirementsResolver<'a, Context> {
                             ini.read(contents).ok()
                         })
                 {
-                    if let Some(section) = setup_cfg.get("metadata") {
-                        if let Some(Some(name)) = section.get("name") {
-                            if let Ok(name) = PackageName::from_str(name) {
-                                debug!(
-                                    "Found setuptools metadata for {path} in `setup.cfg` ({name})",
-                                    path = parsed_directory_url.install_path.display(),
-                                    name = name
-                                );
-                                return Ok(uv_pep508::Requirement {
-                                    name,
-                                    extras: requirement.extras,
-                                    version_or_url: Some(VersionOrUrl::Url(requirement.url)),
-                                    marker: requirement.marker,
-                                    origin: requirement.origin,
-                                });
-                            }
-                        }
+                    if let Some(section) = setup_cfg.get("metadata")
+                        && let Some(Some(name)) = section.get("name")
+                        && let Ok(name) = PackageName::from_str(name)
+                    {
+                        debug!(
+                            "Found setuptools metadata for {path} in `setup.cfg` ({name})",
+                            path = parsed_directory_url.install_path.display(),
+                            name = name
+                        );
+                        return Ok(uv_pep508::Requirement {
+                            name,
+                            extras: requirement.extras,
+                            version_or_url: Some(VersionOrUrl::Url(requirement.url)),
+                            marker: requirement.marker,
+                            origin: requirement.origin,
+                        });
                     }
                 }
 
@@ -267,11 +266,25 @@ impl<'a, Context: BuildContext> NamedRequirementsResolver<'a, Context> {
                     ext,
                 })
             }
-            ParsedUrl::Git(parsed_git_url) => SourceUrl::Git(GitSourceUrl {
-                url: &requirement.url.verbatim,
-                git: &parsed_git_url.url,
-                subdirectory: parsed_git_url.subdirectory.as_deref(),
-            }),
+            ParsedUrl::GitDirectory(parsed_git_url) => {
+                SourceUrl::GitDirectory(GitDirectorySourceUrl {
+                    url: &requirement.url.verbatim,
+                    git: &parsed_git_url.url,
+                    subdirectory: parsed_git_url.subdirectory.as_deref(),
+                })
+            }
+            ParsedUrl::GitPath(parsed_git_url) => {
+                let ext = match parsed_git_url.ext {
+                    DistExtension::Source(ext) => ext,
+                    DistExtension::Wheel => unreachable!(),
+                };
+                SourceUrl::GitPath(GitPathSourceUrl {
+                    url: &requirement.url.verbatim,
+                    git: &parsed_git_url.url,
+                    path: Cow::Borrowed(&parsed_git_url.install_path),
+                    ext,
+                })
+            }
         };
 
         // Fetch the metadata for the distribution.

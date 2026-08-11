@@ -15,15 +15,11 @@ impl Exclusions {
         Self { reinstall, upgrade }
     }
 
-    pub fn reinstall(&self, package: &PackageName) -> bool {
+    pub(crate) fn reinstall(&self, package: &PackageName) -> bool {
         self.reinstall.contains_package(package)
     }
 
-    pub fn upgrade(&self, package: &PackageName) -> bool {
+    pub(crate) fn upgrade(&self, package: &PackageName) -> bool {
         self.upgrade.contains(package)
-    }
-
-    pub fn contains(&self, package: &PackageName) -> bool {
-        self.reinstall(package) || self.upgrade(package)
     }
 }

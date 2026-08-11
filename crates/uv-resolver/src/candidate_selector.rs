@@ -1,8 +1,8 @@
 use std::fmt::{Display, Formatter};
+use std::ops::Bound;
 
 use either::Either;
 use itertools::Itertools;
-use pubgrub::Range;
 use smallvec::SmallVec;
 use tracing::{debug, trace};
 
@@ -15,7 +15,8 @@ use uv_platform_tags::Tags;
 use uv_types::InstalledPackagesProvider;
 
 use crate::preferences::{Entry, PreferenceSource, Preferences};
-use crate::prerelease::{AllowPrerelease, PrereleaseStrategy};
+use crate::prerelease::{PrereleaseSelection, PrereleaseStrategy};
+use crate::pubgrub::Range;
 use crate::resolution_mode::ResolutionStrategy;
 use crate::version_map::{VersionMap, VersionMapDistHandle};
 use crate::{Exclusions, Manifest, Options, ResolverEnvironment};
@@ -42,8 +43,8 @@ impl CandidateSelector {
                 env,
                 options.dependency_mode,
             ),
-            prerelease_strategy: PrereleaseStrategy::from_mode(
-                options.prerelease_mode,
+            prerelease_strategy: PrereleaseStrategy::from_prerelease(
+                &options.prerelease,
                 manifest,
                 env,
                 options.dependency_mode,
@@ -89,6 +90,7 @@ impl CandidateSelector {
     ) -> Option<Candidate<'a>> {
         let reinstall = exclusions.reinstall(package_name);
         let upgrade = exclusions.upgrade(package_name);
+        let prerelease_selection = self.prerelease_strategy.selection(package_name, env);
 
         // If we have a preference (e.g., from a lockfile), search for a version matching that
         // preference.
@@ -107,6 +109,7 @@ impl CandidateSelector {
             installed_packages,
             reinstall,
             index,
+            prerelease_selection,
             env,
             tags,
         ) {
@@ -123,38 +126,42 @@ impl CandidateSelector {
         };
 
         // If we're not upgrading, we should prefer the already-installed distribution.
-        if !upgrade {
-            if let Some(installed) = installed {
-                trace!(
-                    "Using installed {} {} that satisfies {range}",
-                    installed.name, installed.version
-                );
-                return Some(installed);
-            }
+        if !upgrade && let Some(installed) = installed {
+            trace!(
+                "Using installed {} {} that satisfies {range}",
+                installed.name, installed.version
+            );
+            return Some(installed);
         }
 
         // Otherwise, find the best candidate from the version maps.
-        let compatible = self.select_no_preference(package_name, range, version_maps, env);
+        let compatible = self.select_no_preference_with(
+            package_name,
+            range,
+            version_maps,
+            prerelease_selection,
+            env,
+        );
 
         // Cross-reference against the already-installed distribution.
         //
         // If the already-installed version is _more_ compatible than the best candidate
         // from the version maps, use the installed version.
-        if let Some(installed) = installed {
-            if compatible.as_ref().is_none_or(|compatible| {
+        if let Some(installed) = installed
+            && compatible.as_ref().is_none_or(|compatible| {
                 let highest = self.use_highest_version(package_name, env);
                 if highest {
                     installed.version() >= compatible.version()
                 } else {
                     installed.version() <= compatible.version()
                 }
-            }) {
-                trace!(
-                    "Using installed {} {} that satisfies {range}",
-                    installed.name, installed.version
-                );
-                return Some(installed);
-            }
+            })
+        {
+            trace!(
+                "Using installed {} {} that satisfies {range}",
+                installed.name, installed.version
+            );
+            return Some(installed);
         }
 
         compatible
@@ -178,6 +185,7 @@ impl CandidateSelector {
         installed_packages: &'a InstalledPackages,
         reinstall: bool,
         index: Option<&'a IndexUrl>,
+        prerelease_selection: PrereleaseSelection,
         env: &ResolverEnvironment,
         tags: Option<&'a Tags>,
     ) -> Option<Candidate<'a>> {
@@ -227,28 +235,27 @@ impl CandidateSelector {
             }
         };
 
-        self.get_preferred_from_iter(
+        Self::get_preferred_from_iter(
             preferences,
             package_name,
             range,
             version_maps,
             installed_packages,
             reinstall,
-            env,
+            prerelease_selection,
             tags,
         )
     }
 
     /// Return the first preference that satisfies the current range and is allowed.
     fn get_preferred_from_iter<'a, InstalledPackages: InstalledPackagesProvider>(
-        &'a self,
         preferences: impl Iterator<Item = (&'a Version, PreferenceSource)>,
         package_name: &'a PackageName,
         range: &Range<Version>,
         version_maps: &'a [VersionMap],
         installed_packages: &'a InstalledPackages,
         reinstall: bool,
-        env: &ResolverEnvironment,
+        prerelease_selection: PrereleaseSelection,
         tags: Option<&Tags>,
     ) -> Option<Candidate<'a>> {
         for (version, source) in preferences {
@@ -302,12 +309,12 @@ impl CandidateSelector {
 
             // Respect the pre-release strategy for this fork.
             if version.any_prerelease() {
-                let allow = match self.prerelease_strategy.allows(package_name, env) {
-                    AllowPrerelease::Yes => true,
-                    AllowPrerelease::No => false,
+                let allow = match prerelease_selection {
+                    PrereleaseSelection::Allow => true,
+                    PrereleaseSelection::Disallow => false,
                     // If the pre-release was provided via an existing file, rather than from the
                     // current solve, accept it unless pre-releases are completely banned.
-                    AllowPrerelease::IfNecessary => match source {
+                    PrereleaseSelection::PreferStable => match source {
                         PreferenceSource::Resolver => false,
                         PreferenceSource::Lock
                         | PreferenceSource::Environment
@@ -419,18 +426,94 @@ impl CandidateSelector {
         version_maps: &'a [VersionMap],
         env: &ResolverEnvironment,
     ) -> Option<Candidate<'a>> {
+        self.select_no_preference_with(
+            package_name,
+            range,
+            version_maps,
+            self.prerelease_strategy.selection(package_name, env),
+            env,
+        )
+    }
+
+    fn select_no_preference_with<'a>(
+        &'a self,
+        package_name: &'a PackageName,
+        range: &Range<Version>,
+        version_maps: &'a [VersionMap],
+        prerelease_selection: PrereleaseSelection,
+        env: &ResolverEnvironment,
+    ) -> Option<Candidate<'a>> {
+        match prerelease_selection {
+            PrereleaseSelection::Allow => self.select_no_preference_from(
+                package_name,
+                range,
+                version_maps,
+                PrereleaseCandidates::All,
+                env,
+            ),
+            PrereleaseSelection::Disallow => self.select_no_preference_from(
+                package_name,
+                range,
+                version_maps,
+                PrereleaseCandidates::Stable,
+                env,
+            ),
+            PrereleaseSelection::PreferStable
+                if self.index_strategy == IndexStrategy::UnsafeFirstMatch =>
+            {
+                version_maps.iter().find_map(|version_map| {
+                    let version_maps = std::slice::from_ref(version_map);
+                    self.select_no_preference_from(
+                        package_name,
+                        range,
+                        version_maps,
+                        PrereleaseCandidates::Stable,
+                        env,
+                    )
+                    .or_else(|| {
+                        self.select_no_preference_from(
+                            package_name,
+                            range,
+                            version_maps,
+                            PrereleaseCandidates::Prerelease,
+                            env,
+                        )
+                    })
+                })
+            }
+            PrereleaseSelection::PreferStable => self
+                .select_no_preference_from(
+                    package_name,
+                    range,
+                    version_maps,
+                    PrereleaseCandidates::Stable,
+                    env,
+                )
+                .or_else(|| {
+                    self.select_no_preference_from(
+                        package_name,
+                        range,
+                        version_maps,
+                        PrereleaseCandidates::Prerelease,
+                        env,
+                    )
+                }),
+        }
+    }
+
+    fn select_no_preference_from<'a>(
+        &'a self,
+        package_name: &'a PackageName,
+        range: &Range<Version>,
+        version_maps: &'a [VersionMap],
+        prerelease_candidates: PrereleaseCandidates,
+        env: &ResolverEnvironment,
+    ) -> Option<Candidate<'a>> {
         trace!(
             "Selecting candidate for {package_name} with range {range} with {} remote versions",
             version_maps.iter().map(VersionMap::len).sum::<usize>(),
         );
         let highest = self.use_highest_version(package_name, env);
-
-        let allow_prerelease = match self.prerelease_strategy.allows(package_name, env) {
-            AllowPrerelease::Yes => true,
-            AllowPrerelease::No => false,
-            // Allow pre-releases if there are no stable versions available.
-            AllowPrerelease::IfNecessary => !version_maps.iter().any(VersionMap::stable),
-        };
 
         if self.index_strategy == IndexStrategy::UnsafeBestMatch {
             if highest {
@@ -440,7 +523,7 @@ impl CandidateSelector {
                         .enumerate()
                         .map(|(map_index, version_map)| {
                             version_map
-                                .iter(range)
+                                .iter_included(range)
                                 .rev()
                                 .map(move |item| (map_index, item))
                         })
@@ -456,7 +539,8 @@ impl CandidateSelector {
                         .map(|(_, item)| item),
                     package_name,
                     range,
-                    allow_prerelease,
+                    prerelease_candidates,
+                    highest,
                 )
             } else {
                 Self::select_candidate(
@@ -464,7 +548,9 @@ impl CandidateSelector {
                         .iter()
                         .enumerate()
                         .map(|(map_index, version_map)| {
-                            version_map.iter(range).map(move |item| (map_index, item))
+                            version_map
+                                .iter_included(range)
+                                .map(move |item| (map_index, item))
                         })
                         .kmerge_by(
                             |(index1, (version1, _)), (index2, (version2, _))| match version1
@@ -478,26 +564,29 @@ impl CandidateSelector {
                         .map(|(_, item)| item),
                     package_name,
                     range,
-                    allow_prerelease,
+                    prerelease_candidates,
+                    highest,
                 )
             }
         } else {
             if highest {
                 version_maps.iter().find_map(|version_map| {
                     Self::select_candidate(
-                        version_map.iter(range).rev(),
+                        version_map.iter_included(range).rev(),
                         package_name,
                         range,
-                        allow_prerelease,
+                        prerelease_candidates,
+                        highest,
                     )
                 })
             } else {
                 version_maps.iter().find_map(|version_map| {
                     Self::select_candidate(
-                        version_map.iter(range),
+                        version_map.iter_included(range),
                         package_name,
                         range,
-                        allow_prerelease,
+                        prerelease_candidates,
+                        highest,
                     )
                 })
             }
@@ -526,12 +615,26 @@ impl CandidateSelector {
     /// The returned [`Candidate`] _may not_ be compatible with the current platform; in such
     /// cases, the resolver is responsible for tracking the incompatibility and re-running the
     /// selection process with additional constraints.
+    ///
+    /// `versions` must be ordered from highest to lowest when `highest` is `true`, and from lowest
+    /// to highest otherwise.
     fn select_candidate<'a>(
         versions: impl Iterator<Item = (&'a Version, VersionMapDistHandle<'a>)>,
         package_name: &'a PackageName,
         range: &Range<Version>,
-        allow_prerelease: bool,
+        prerelease_candidates: PrereleaseCandidates,
+        highest: bool,
     ) -> Option<Candidate<'a>> {
+        let segments = range.iter();
+        let segments = if highest {
+            Either::Left(segments.rev())
+        } else {
+            Either::Right(segments)
+        };
+        let Some(mut cursor) = RangeCursor::new(segments, highest) else {
+            trace!("Exhausted all candidates for package {package_name} with empty range");
+            return None;
+        };
         let mut steps = 0usize;
         let mut incompatible: Option<Candidate> = None;
         for (version, maybe_dist) in versions {
@@ -549,10 +652,14 @@ impl CandidateSelector {
             }
 
             let candidate = {
-                if version.any_prerelease() && !allow_prerelease {
+                if match prerelease_candidates {
+                    PrereleaseCandidates::All => false,
+                    PrereleaseCandidates::Stable => version.any_prerelease(),
+                    PrereleaseCandidates::Prerelease => !version.any_prerelease(),
+                } {
                     continue;
                 }
-                if !range.contains(version) {
+                if !cursor.contains(version) {
                     continue;
                 }
                 let Some(dist) = maybe_dist.prioritized_dist() else {
@@ -627,6 +734,135 @@ impl CandidateSelector {
         );
         None
     }
+}
+
+/// Tracks membership in a range while visiting versions monotonically.
+///
+/// Unlike [`Range::contains`], which searches the segments for every version, the cursor visits
+/// each segment at most once.
+struct RangeCursor<'a, Segments> {
+    current: (Bound<&'a Version>, Bound<&'a Version>),
+    segments: Segments,
+    highest: bool,
+}
+
+impl<'a, Segments> RangeCursor<'a, Segments>
+where
+    Segments: Iterator<Item = (Bound<&'a Version>, Bound<&'a Version>)>,
+{
+    /// Create a cursor over segments ordered in the same direction as the visited versions.
+    fn new(mut segments: Segments, highest: bool) -> Option<Self> {
+        Some(Self {
+            current: segments.next()?,
+            segments,
+            highest,
+        })
+    }
+
+    /// Return whether `version` is in the range, advancing past segments that cannot contain any
+    /// subsequently visited versions.
+    fn contains(&mut self, version: &Version) -> bool {
+        if self.highest {
+            loop {
+                let (start, end) = self.current;
+                if is_before(version, start) {
+                    let Some(current) = self.segments.next() else {
+                        return false;
+                    };
+                    self.current = current;
+                } else {
+                    return !is_after(version, end);
+                }
+            }
+        } else {
+            loop {
+                let (start, end) = self.current;
+                if is_after(version, end) {
+                    let Some(current) = self.segments.next() else {
+                        return false;
+                    };
+                    self.current = current;
+                } else {
+                    return !is_before(version, start);
+                }
+            }
+        }
+    }
+}
+
+fn is_before(version: &Version, bound: Bound<&Version>) -> bool {
+    match bound {
+        Bound::Included(start) => version < start,
+        Bound::Excluded(start) => version <= start,
+        Bound::Unbounded => false,
+    }
+}
+
+fn is_after(version: &Version, bound: Bound<&Version>) -> bool {
+    match bound {
+        Bound::Included(end) => version > end,
+        Bound::Excluded(end) => version >= end,
+        Bound::Unbounded => false,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn version(value: &str) -> Version {
+        value.parse().expect("valid test version")
+    }
+
+    fn assert_range_cursor(highest: bool, values: &[&str]) {
+        let range = [
+            (Bound::Unbounded, Bound::Excluded(version("2"))),
+            (Bound::Included(version("3")), Bound::Included(version("4"))),
+            (Bound::Excluded(version("5")), Bound::Unbounded),
+        ]
+        .into_iter()
+        .collect::<Range<_>>();
+        let segments = if highest {
+            Either::Left(range.iter().rev())
+        } else {
+            Either::Right(range.iter())
+        };
+        let mut cursor = RangeCursor::new(segments, highest).expect("test range is not empty");
+
+        for value in values {
+            let version = version(value);
+            assert_eq!(
+                cursor.contains(&version),
+                range.contains(&version),
+                "{value}"
+            );
+        }
+    }
+
+    #[test]
+    fn range_cursor_ascending() {
+        assert_range_cursor(false, &["1", "2", "2.5", "3", "4", "5", "6"]);
+    }
+
+    #[test]
+    fn range_cursor_descending() {
+        assert_range_cursor(true, &["6", "5", "4", "3", "2.5", "2", "1"]);
+    }
+}
+
+/// Controls which release classes are visible during one candidate-selection pass.
+///
+/// Stable-first selection uses separate [`Self::Stable`] and [`Self::Prerelease`] passes so that
+/// an incompatible stable candidate does not prevent falling back to a pre-release. For
+/// [`IndexStrategy::UnsafeFirstMatch`], these passes are applied to each index in turn.
+#[derive(Debug, Clone, Copy)]
+enum PrereleaseCandidates {
+    /// Consider versions with or without a pre-release component.
+    All,
+    /// Consider only versions without a pre-release component.
+    Stable,
+    /// Consider only versions with a pre-release component.
+    Prerelease,
 }
 
 #[derive(Debug, Clone)]

@@ -6,10 +6,8 @@ use std::{cmp, num::NonZeroU32};
 
 use rustc_hash::FxHashMap;
 
-use uv_small_str::SmallString;
-
 use crate::abi_tag::CPythonAbiVariants;
-use crate::{AbiTag, Arch, LanguageTag, Os, Platform, PlatformError, PlatformTag};
+use crate::{AbiTag, Arch, LanguageTag, Os, Platform, PlatformError, PlatformTag, ReleaseArch};
 
 #[derive(Debug, thiserror::Error)]
 pub enum TagsError {
@@ -85,6 +83,15 @@ impl TagCompatibility {
     }
 }
 
+fn is_freethreaded_compatible_abi(abi: AbiTag) -> bool {
+    match abi {
+        AbiTag::None => true,
+        AbiTag::Abi3T => true,
+        AbiTag::CPython { variant, .. } => variant.contains(CPythonAbiVariants::Freethreading),
+        _ => false,
+    }
+}
+
 /// A set of compatible tags for a given Python version and platform.
 ///
 /// Its principle function is to determine whether the tags for a particular
@@ -146,7 +153,7 @@ impl Tags {
     /// Returns the compatible tags for the given Python implementation (e.g., `cpython`), version,
     /// and platform.
     pub fn from_env(
-        platform: &Platform,
+        platform: Platform,
         python_version: (u8, u8),
         implementation_name: &str,
         implementation_version: (u8, u8),
@@ -181,7 +188,7 @@ impl Tags {
 
         // Determine the compatible tags for the current platform.
         let platform_tags = {
-            let mut platform_tags = compatible_tags(platform)?;
+            let mut platform_tags = compatible_tags(&platform)?;
             if matches!(platform.os(), Os::Manylinux { .. }) && !options.manylinux_compatible {
                 platform_tags.retain(|tag| !tag.is_manylinux());
             }
@@ -308,7 +315,7 @@ impl Tags {
         }
         Ok(Self::new(
             tags,
-            platform.clone(),
+            platform,
             python_version,
             options.is_cross,
             options.gil_disabled,
@@ -351,28 +358,28 @@ impl Tags {
         false
     }
 
-    /// Returns the [`TagCompatibility`] of the given tags.
+    /// Returns the [`TagCompatibility`] of the given tag iterators.
     ///
     /// If compatible, includes the score of the most-compatible platform tag.
     /// If incompatible, includes the tag part which was a closest match.
-    pub fn compatibility(
+    ///
+    /// The ABI and platform iterators are cloned to restart the Cartesian product.
+    pub fn compatibility<'a>(
         &self,
-        wheel_python_tags: &[LanguageTag],
-        wheel_abi_tags: &[AbiTag],
-        wheel_platform_tags: &[PlatformTag],
+        wheel_python_tags: impl Iterator<Item = &'a LanguageTag>,
+        wheel_abi_tags: impl Iterator<Item = &'a AbiTag> + Clone,
+        wheel_platform_tags: impl Iterator<Item = &'a PlatformTag> + Clone,
     ) -> TagCompatibility {
+        let wheel_abi_tags = move || wheel_abi_tags.clone();
+        let wheel_platform_tags = move || wheel_platform_tags.clone();
+
         // On free-threaded Python, check if any wheel ABI tag is compatible.
         // Only `none` (pure Python), `abi3t`, and free-threaded CPython ABIs
         // (e.g., `cp313t`) are compatible.
         if self.is_freethreaded {
-            let has_compatible_abi = wheel_abi_tags.iter().any(|abi| match abi {
-                AbiTag::None => true,
-                AbiTag::Abi3T => true,
-                AbiTag::CPython { variant, .. } => {
-                    variant.contains(CPythonAbiVariants::Freethreading)
-                }
-                _ => false,
-            });
+            let has_compatible_abi = wheel_abi_tags()
+                .copied()
+                .any(is_freethreaded_compatible_abi);
             if !has_compatible_abi {
                 return TagCompatibility::Incompatible(IncompatibleTag::FreethreadedAbi);
             }
@@ -386,13 +393,13 @@ impl Tags {
                     max_compatibility.max(TagCompatibility::Incompatible(IncompatibleTag::Python));
                 continue;
             };
-            for wheel_abi in wheel_abi_tags {
+            for wheel_abi in wheel_abi_tags() {
                 let Some(platforms) = abis.get(wheel_abi) else {
                     max_compatibility =
                         max_compatibility.max(TagCompatibility::Incompatible(IncompatibleTag::Abi));
                     continue;
                 };
-                for wheel_platform in wheel_platform_tags {
+                for wheel_platform in wheel_platform_tags() {
                     let priority = platforms.get(wheel_platform).copied();
                     if let Some(priority) = priority {
                         max_compatibility =
@@ -405,6 +412,30 @@ impl Tags {
             }
         }
         max_compatibility
+    }
+
+    /// Returns the [`TagCompatibility`] of a single wheel tag.
+    pub fn compatibility_tag(
+        &self,
+        wheel_python_tag: &LanguageTag,
+        wheel_abi_tag: &AbiTag,
+        wheel_platform_tag: &PlatformTag,
+    ) -> TagCompatibility {
+        if self.is_freethreaded && !is_freethreaded_compatible_abi(*wheel_abi_tag) {
+            return TagCompatibility::Incompatible(IncompatibleTag::FreethreadedAbi);
+        }
+
+        let Some(abis) = self.map.get(wheel_python_tag) else {
+            return TagCompatibility::Incompatible(IncompatibleTag::Python);
+        };
+        let Some(platforms) = abis.get(wheel_abi_tag) else {
+            return TagCompatibility::Incompatible(IncompatibleTag::Abi);
+        };
+        let Some(priority) = platforms.get(wheel_platform_tag).copied() else {
+            return TagCompatibility::Incompatible(IncompatibleTag::Platform);
+        };
+
+        TagCompatibility::Compatible(priority)
     }
 
     /// Return the highest-priority Python tag for the [`Tags`].
@@ -427,8 +458,7 @@ impl Tags {
     pub fn is_compatible_abi(&self, python_tag: LanguageTag, abi_tag: AbiTag) -> bool {
         self.map
             .get(&python_tag)
-            .map(|abis| abis.contains_key(&abi_tag))
-            .unwrap_or(false)
+            .is_some_and(|abis| abis.contains_key(&abi_tag))
     }
 
     pub fn python_platform(&self) -> &Platform {
@@ -588,12 +618,16 @@ fn compatible_tags(platform: &Platform) -> Result<Vec<PlatformTag>, PlatformErro
             platform_tags
         }
         (Os::Musllinux { major, minor }, _) => {
-            let mut platform_tags = vec![PlatformTag::Linux { arch }];
-            platform_tags.extend((0..=*minor).map(|minor| PlatformTag::Musllinux {
-                major: *major,
-                minor,
-                arch,
-            }));
+            let mut platform_tags = (0..=*minor)
+                .rev()
+                .map(|minor| PlatformTag::Musllinux {
+                    major: *major,
+                    minor,
+                    arch,
+                })
+                .collect::<Vec<_>>();
+            // Non-musllinux is given lowest priority.
+            platform_tags.push(PlatformTag::Linux { arch });
             platform_tags
         }
         (Os::Macos { major, minor }, Arch::X86_64) => {
@@ -680,7 +714,12 @@ fn compatible_tags(platform: &Platform) -> Result<Vec<PlatformTag>, PlatformErro
             let arch_tag = arch.machine();
             let release_arch = format!("{release_tag}_{arch_tag}");
             vec![PlatformTag::FreeBsd {
-                release_arch: SmallString::from(release_arch),
+                release_arch: release_arch.parse::<ReleaseArch>().map_err(|error| {
+                    PlatformError::InvalidReleaseArch {
+                        release_arch,
+                        error,
+                    }
+                })?,
             }]
         }
         (Os::NetBsd { release }, arch) => {
@@ -688,7 +727,12 @@ fn compatible_tags(platform: &Platform) -> Result<Vec<PlatformTag>, PlatformErro
             let arch_tag = arch.machine();
             let release_arch = format!("{release_tag}_{arch_tag}");
             vec![PlatformTag::NetBsd {
-                release_arch: SmallString::from(release_arch),
+                release_arch: release_arch.parse::<ReleaseArch>().map_err(|error| {
+                    PlatformError::InvalidReleaseArch {
+                        release_arch,
+                        error,
+                    }
+                })?,
             }]
         }
         (Os::OpenBsd { release }, arch) => {
@@ -696,21 +740,36 @@ fn compatible_tags(platform: &Platform) -> Result<Vec<PlatformTag>, PlatformErro
             let arch_tag = arch.machine();
             let release_arch = format!("{release_tag}_{arch_tag}");
             vec![PlatformTag::OpenBsd {
-                release_arch: SmallString::from(release_arch),
+                release_arch: release_arch.parse::<ReleaseArch>().map_err(|error| {
+                    PlatformError::InvalidReleaseArch {
+                        release_arch,
+                        error,
+                    }
+                })?,
             }]
         }
         (Os::Dragonfly { release }, arch) => {
             let release = release.replace(['.', '-'], "_");
             let release_arch = format!("{release}_{arch}");
             vec![PlatformTag::Dragonfly {
-                release_arch: SmallString::from(release_arch),
+                release_arch: release_arch.parse::<ReleaseArch>().map_err(|error| {
+                    PlatformError::InvalidReleaseArch {
+                        release_arch,
+                        error,
+                    }
+                })?,
             }]
         }
         (Os::Haiku { release }, arch) => {
             let release = release.replace(['.', '-'], "_");
             let release_arch = format!("{release}_{arch}");
             vec![PlatformTag::Haiku {
-                release_arch: SmallString::from(release_arch),
+                release_arch: release_arch.parse::<ReleaseArch>().map_err(|error| {
+                    PlatformError::InvalidReleaseArch {
+                        release_arch,
+                        error,
+                    }
+                })?,
             }]
         }
         (Os::Illumos { release, arch }, _) => {
@@ -727,14 +786,24 @@ fn compatible_tags(platform: &Platform) -> Result<Vec<PlatformTag>, PlatformErro
                     let arch = format!("{arch}_64bit");
                     let release_arch = format!("{release}_{arch}");
                     return Ok(vec![PlatformTag::Solaris {
-                        release_arch: SmallString::from(release_arch),
+                        release_arch: release_arch.parse::<ReleaseArch>().map_err(|error| {
+                            PlatformError::InvalidReleaseArch {
+                                release_arch,
+                                error,
+                            }
+                        })?,
                     }]);
                 }
             }
 
             let release_arch = format!("{release}_{arch}");
             vec![PlatformTag::Illumos {
-                release_arch: SmallString::from(release_arch),
+                release_arch: release_arch.parse::<ReleaseArch>().map_err(|error| {
+                    PlatformError::InvalidReleaseArch {
+                        release_arch,
+                        error,
+                    }
+                })?,
             }]
         }
         (Os::Android { api_level }, arch) => {
@@ -754,10 +823,28 @@ fn compatible_tags(platform: &Platform) -> Result<Vec<PlatformTag>, PlatformErro
             platform_tags
         }
         (Os::Pyodide { major, minor }, Arch::Wasm32) => {
-            vec![PlatformTag::Pyodide {
-                major: *major,
-                minor: *minor,
-            }]
+            vec![
+                PlatformTag::PyEmscripten {
+                    major: *major,
+                    minor: *minor,
+                },
+                PlatformTag::Pyodide {
+                    major: *major,
+                    minor: *minor,
+                },
+            ]
+        }
+        (Os::PyEmscripten { major, minor }, Arch::Wasm32) => {
+            vec![
+                PlatformTag::PyEmscripten {
+                    major: *major,
+                    minor: *minor,
+                },
+                PlatformTag::Pyodide {
+                    major: *major,
+                    minor: *minor,
+                },
+            ]
         }
         (
             Os::Ios {
@@ -880,7 +967,7 @@ impl BinaryFormat {
     /// Determine the appropriate binary formats for a macOS version.
     ///
     /// See: <https://github.com/pypa/packaging/blob/fd4f11139d1c884a637be8aa26bb60a31fbc9411/packaging/tags.py#L314>
-    pub fn from_arch(arch: Arch) -> &'static [Self] {
+    fn from_arch(arch: Arch) -> &'static [Self] {
         match arch {
             Arch::Aarch64 => &[Self::Arm64, Self::Universal2],
             Arch::Powerpc64 => &[Self::Ppc64, Self::Fat64, Self::Universal],
@@ -992,7 +1079,7 @@ impl FromStr for AndroidAbi {
 
 impl AndroidAbi {
     /// Determine the appropriate Android arch.
-    pub fn from_arch(arch: Arch) -> Result<Self, PlatformError> {
+    fn from_arch(arch: Arch) -> Result<Self, PlatformError> {
         match arch {
             Arch::Aarch64 => Ok(Self::Arm64V8a),
             Arch::Armv7L => Ok(Self::ArmeabiV7a),
@@ -1058,7 +1145,7 @@ impl FromStr for IosMultiarch {
 
 impl IosMultiarch {
     /// Determine the appropriate multiarch for a iOS version.
-    pub fn from_arch(arch: Arch, simulator: bool) -> Result<Self, PlatformError> {
+    fn from_arch(arch: Arch, simulator: bool) -> Result<Self, PlatformError> {
         if simulator {
             match arch {
                 Arch::Aarch64 => Ok(Self::Arm64Simulator),
@@ -1130,6 +1217,27 @@ mod tests {
             "manylinux_2_6_x86_64",
             "manylinux_2_5_x86_64",
             "manylinux1_x86_64",
+            "linux_x86_64",
+        ]
+        "#
+        );
+    }
+
+    #[test]
+    fn test_platform_tags_musllinux() {
+        let tags = compatible_tags(&Platform::new(
+            Os::Musllinux { major: 1, minor: 2 },
+            Arch::X86_64,
+        ))
+        .unwrap();
+        let tags = tags.iter().map(ToString::to_string).collect::<Vec<_>>();
+        assert_debug_snapshot!(
+            tags,
+            @r#"
+        [
+            "musllinux_1_2_x86_64",
+            "musllinux_1_1_x86_64",
+            "musllinux_1_0_x86_64",
             "linux_x86_64",
         ]
         "#
@@ -1455,6 +1563,24 @@ mod tests {
     }
 
     #[test]
+    fn test_platform_tags_invalid_release_arch() {
+        let error = compatible_tags(&Platform::new(
+            Os::FreeBsd {
+                release: "13/14".to_string(),
+            },
+            Arch::X86_64,
+        ))
+        .unwrap_err();
+
+        assert_debug_snapshot!(error, @r#"
+        InvalidReleaseArch {
+            release_arch: "13/14_amd64",
+            error: ParseReleaseArchError,
+        }
+        "#);
+    }
+
+    #[test]
     fn test_platform_tags_android() {
         let tags =
             compatible_tags(&Platform::new(Os::Android { api_level: 14 }, Arch::Aarch64)).unwrap();
@@ -1571,12 +1697,56 @@ mod tests {
         );
     }
 
+    #[test]
+    fn test_platform_tags_pyodide() {
+        let tags = compatible_tags(&Platform::new(
+            Os::Pyodide {
+                major: 2025,
+                minor: 0,
+            },
+            Arch::Wasm32,
+        ))
+        .unwrap();
+        let tags = tags.iter().map(ToString::to_string).collect::<Vec<_>>();
+        assert_debug_snapshot!(
+            tags,
+            @r#"
+        [
+            "pyemscripten_2025_0_wasm32",
+            "pyodide_2025_0_wasm32",
+        ]
+        "#
+        );
+    }
+
+    #[test]
+    fn test_platform_tags_pyemscripten() {
+        let tags = compatible_tags(&Platform::new(
+            Os::PyEmscripten {
+                major: 2026,
+                minor: 0,
+            },
+            Arch::Wasm32,
+        ))
+        .unwrap();
+        let tags = tags.iter().map(ToString::to_string).collect::<Vec<_>>();
+        assert_debug_snapshot!(
+            tags,
+            @r#"
+        [
+            "pyemscripten_2026_0_wasm32",
+            "pyodide_2026_0_wasm32",
+        ]
+        "#
+        );
+    }
+
     /// Ensure the tags returned do not include the `manylinux` tags
     /// when `manylinux_incompatible` is set to `false`.
     #[test]
     fn test_manylinux_incompatible() {
         let tags = Tags::from_env(
-            &Platform::new(
+            Platform::new(
                 Os::Manylinux {
                     major: 2,
                     minor: 28,
@@ -1638,7 +1808,7 @@ mod tests {
     #[test]
     fn test_system_tags_manylinux() {
         let tags = Tags::from_env(
-            &Platform::new(
+            Platform::new(
                 Os::Manylinux {
                     major: 2,
                     minor: 28,
@@ -2264,7 +2434,7 @@ mod tests {
     #[test]
     fn test_system_tags_macos() {
         let tags = Tags::from_env(
-            &Platform::new(
+            Platform::new(
                 Os::Macos {
                     major: 14,
                     minor: 0,
@@ -2740,7 +2910,7 @@ mod tests {
     #[test]
     fn test_system_tags_freethreaded_include_abi3t() {
         let tags = Tags::from_env(
-            &Platform::new(
+            Platform::new(
                 Os::Manylinux {
                     major: 2,
                     minor: 28,
@@ -2820,7 +2990,7 @@ mod tests {
     fn test_system_tags_debug_cpython() {
         fn debug_compatibilities(debug_enabled: bool) -> (TagCompatibility, TagCompatibility) {
             let tags = Tags::from_env(
-                &Platform::new(
+                Platform::new(
                     Os::Manylinux {
                         major: 2,
                         minor: 28,
@@ -2839,14 +3009,14 @@ mod tests {
             .unwrap();
 
             let debug_compatibility = tags.compatibility(
-                &[LanguageTag::from_str("cp314").unwrap()],
-                &[AbiTag::from_str("cp314d").unwrap()],
-                &[PlatformTag::from_str("manylinux_2_28_x86_64").unwrap()],
+                [LanguageTag::from_str("cp314").unwrap()].iter(),
+                [AbiTag::from_str("cp314d").unwrap()].iter(),
+                [PlatformTag::from_str("manylinux_2_28_x86_64").unwrap()].iter(),
             );
             let non_debug_compatibility = tags.compatibility(
-                &[LanguageTag::from_str("cp314").unwrap()],
-                &[AbiTag::from_str("cp314").unwrap()],
-                &[PlatformTag::from_str("manylinux_2_28_x86_64").unwrap()],
+                [LanguageTag::from_str("cp314").unwrap()].iter(),
+                [AbiTag::from_str("cp314").unwrap()].iter(),
+                [PlatformTag::from_str("manylinux_2_28_x86_64").unwrap()].iter(),
             );
             (debug_compatibility, non_debug_compatibility)
         }
@@ -2862,5 +3032,41 @@ mod tests {
         assert!(debug_compatibility.is_compatible());
         assert!(non_debug_compatibility.is_compatible());
         assert!(debug_compatibility > non_debug_compatibility);
+    }
+
+    #[test]
+    fn test_compatibility_tag() {
+        let python_tag = LanguageTag::from_str("cp314").unwrap();
+        let abi_tag = AbiTag::from_str("cp314").unwrap();
+        let platform_tag = PlatformTag::from_str("manylinux_2_28_x86_64").unwrap();
+
+        for gil_disabled in [false, true] {
+            let tags = Tags::from_env(
+                Platform::new(
+                    Os::Manylinux {
+                        major: 2,
+                        minor: 28,
+                    },
+                    Arch::X86_64,
+                ),
+                (3, 14),
+                "cpython",
+                (3, 14),
+                TagsOptions {
+                    gil_disabled,
+                    ..TagsOptions::default()
+                },
+            )
+            .unwrap();
+
+            assert_eq!(
+                tags.compatibility_tag(&python_tag, &abi_tag, &platform_tag),
+                tags.compatibility(
+                    std::iter::once(&python_tag),
+                    std::iter::once(&abi_tag),
+                    std::iter::once(&platform_tag),
+                )
+            );
+        }
     }
 }

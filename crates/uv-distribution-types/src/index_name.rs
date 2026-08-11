@@ -16,7 +16,7 @@ pub struct IndexName(SmallString);
 impl IndexName {
     /// Validates the given index name and returns [`IndexName`] if it's valid, or an error
     /// otherwise.
-    pub fn new(name: &str) -> Result<Self, IndexNameError> {
+    fn new(name: &str) -> Result<Self, IndexNameError> {
         for c in name.chars() {
             match c {
                 'a'..='z' | 'A'..='Z' | '0'..='9' | '-' | '_' | '.' => {}
@@ -34,7 +34,7 @@ impl IndexName {
     /// Converts the index name to an environment variable name.
     ///
     /// For example, given `IndexName("foo-bar")`, this will return `"FOO_BAR"`.
-    pub fn to_env_var(&self) -> String {
+    pub(crate) fn to_env_var(&self) -> String {
         self.0
             .chars()
             .map(|c| {

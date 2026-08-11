@@ -1,0 +1,20 @@
+name = "local-transitive-less-than-or-equal"
+description = "A transitive constraint on a local version should match an inclusive ordered operator."
+
+[root]
+requires = ["a", "b==2.0.0+foo"]
+
+[expected]
+satisfiable = true
+explanation = "The version '2.0.0+foo' satisfies both <=2.0.0 and ==2.0.0+foo."
+
+[expected.packages]
+a = "1.0.0"
+b = "2.0.0+foo"
+
+[packages.a.versions."1.0.0"]
+requires = ["b<=2.0.0"]
+
+[packages.b.versions."2.0.0+bar"]
+
+[packages.b.versions."2.0.0+foo"]

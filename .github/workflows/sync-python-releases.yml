@@ -13,14 +13,15 @@ jobs:
   sync:
     if: github.repository == 'astral-sh/uv'
     runs-on: ubuntu-latest
+    environment: automations
     permissions:
-      contents: write
-      pull-requests: write
+      contents: read
+      id-token: write # for the credential broker
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+      - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
         with:
           version: "latest"
           enable-cache: true
@@ -28,25 +29,38 @@ jobs:
         with:
           save-if: false
       - name: Sync Python Releases
-        run: |
-          uv run -- fetch-download-metadata.py
+        run: uv run --locked --python 3.12 --no-build --script fetch-download-metadata.py
         working-directory: ./crates/uv-python
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Sync Sysconfig Targets
-        run: ${GITHUB_WORKSPACE}/crates/uv-dev/sync_sysconfig_targets.sh
+        run: ./sync_sysconfig_targets.sh
         working-directory: ./crates/uv-dev
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: "Update Python version constants"
-        run: uv run --no-project scripts/sync-python-version-constants.py
+        run: uv run --locked --python 3.12 --no-build --script scripts/sync-python-version-constants.py
+
+      - name: "Get uv token"
+        id: token
+        uses: open-security-tools/ost-simple-sts@bda64bffc5722085512dc618ab85f588b6c49b96 # v0.0.4
+        with:
+          exchange-url: ${{ secrets.STS_API_URL }}/exchange
+          audience: ${{ secrets.STS_API_URL }}
+          repository: astral-sh/uv
+          permissions: |
+            contents: write
+            pull_requests: write
 
       - name: "Create Pull Request"
         uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8.1.1
         with:
+          token: ${{ steps.token.outputs.token }}
           commit-message: "Sync latest Python releases"
+          committer: "astral-automations-bot[bot] <305554984+astral-automations-bot[bot]@users.noreply.github.com>"
+          author: "astral-automations-bot[bot] <305554984+astral-automations-bot[bot]@users.noreply.github.com>"
           add-paths: |
             crates/uv-python/download-metadata.json
             crates/uv-dev/src/generate_sysconfig_mappings.rs

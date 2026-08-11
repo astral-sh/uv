@@ -2,13 +2,13 @@ use std::cmp::min;
 use std::sync::Arc;
 
 use itertools::Itertools;
-use pubgrub::{Range, Ranges, Term};
+use pubgrub::Term;
 use rustc_hash::{FxHashMap, FxHashSet};
 use tokio::sync::mpsc::Sender;
 use tracing::{debug, trace};
 
 use crate::candidate_selector::CandidateSelector;
-use crate::pubgrub::{PubGrubPackage, PubGrubPackageInner};
+use crate::pubgrub::{PubGrubPackage, PubGrubPackageInner, Range};
 use crate::resolver::Request;
 use crate::{
     InMemoryIndex, PythonRequirement, ResolveError, ResolverEnvironment, VersionsResponse,
@@ -111,13 +111,13 @@ impl BatchPrefetcher {
                 .index
                 .explicit()
                 .wait_blocking(&(name.clone(), index.url().clone()))
-                .ok_or_else(|| ResolveError::UnregisteredTask(name.to_string()))?
+                .map_err(|_| ResolveError::UnregisteredTask(name.to_string()))?
         } else {
             self.prefetch_runner
                 .index
                 .implicit()
                 .wait_blocking(name)
-                .ok_or_else(|| ResolveError::UnregisteredTask(name.to_string()))?
+                .map_err(|_| ResolveError::UnregisteredTask(name.to_string()))?
         };
 
         let phase = BatchPrefetchStrategy::Compatible {
@@ -209,7 +209,7 @@ impl BatchPrefetcherRunner {
     fn send_prefetch(
         &self,
         name: &PackageName,
-        unchangeable_constraints: Option<&Term<Ranges<Version>>>,
+        unchangeable_constraints: Option<&Term<Range<Version>>>,
         total_prefetch: usize,
         versions_response: &Arc<VersionsResponse>,
         mut phase: BatchPrefetchStrategy,
@@ -231,9 +231,8 @@ impl BatchPrefetcherRunner {
                     if let Some(candidate) =
                         selector.select_no_preference(name, &compatible, version_map, env)
                     {
-                        let compatible = compatible.intersection(
-                            &Range::singleton(candidate.version().clone()).complement(),
-                        );
+                        let compatible =
+                            compatible.difference(&Range::singleton(candidate.version().clone()));
                         phase = BatchPrefetchStrategy::Compatible {
                             compatible,
                             previous: candidate.version().clone(),
@@ -259,7 +258,7 @@ impl BatchPrefetcherRunner {
                         range = match unchangeable_constraints {
                             Term::Positive(constraints) => range.intersection(constraints),
                             Term::Negative(negative_constraints) => {
-                                range.intersection(&negative_constraints.complement())
+                                range.difference(negative_constraints)
                             }
                         };
                     }

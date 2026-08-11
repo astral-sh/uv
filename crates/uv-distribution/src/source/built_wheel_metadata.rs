@@ -57,11 +57,11 @@ impl Hashed for BuiltWheelMetadata {
 #[derive(Debug, Clone)]
 pub(crate) struct BuiltWheelFile {
     /// The path to the built wheel.
-    pub(crate) path: Box<Path>,
+    path: Box<Path>,
     /// The expected path to the downloaded wheel's entry in the cache.
-    pub(crate) target: Box<Path>,
+    target: Box<Path>,
     /// The parsed filename.
-    pub(crate) filename: WheelFilename,
+    filename: WheelFilename,
 }
 
 impl BuiltWheelFile {

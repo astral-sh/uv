@@ -33,7 +33,7 @@ pub enum IdentifierParseError {
 }
 
 impl Identifier {
-    pub fn new(identifier: impl Into<Box<str>>) -> Result<Self, IdentifierParseError> {
+    pub(crate) fn new(identifier: impl Into<Box<str>>) -> Result<Self, IdentifierParseError> {
         let identifier = identifier.into();
         let mut chars = identifier.chars().enumerate();
         let (_, first_char) = chars.next().ok_or(IdentifierParseError::Empty)?;

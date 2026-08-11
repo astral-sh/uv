@@ -21,7 +21,7 @@ pub enum IndexStatusCodeStrategy {
 impl IndexStatusCodeStrategy {
     /// Derive a strategy from an index URL. We special-case PyTorch. Otherwise,
     /// we follow the default strategy.
-    pub fn from_index_url(url: &Url) -> Self {
+    pub(crate) fn from_index_url(url: &Url) -> Self {
         if url
             .host_str()
             .is_some_and(|host| host.eq_ignore_ascii_case("download.pytorch.org"))
@@ -37,7 +37,7 @@ impl IndexStatusCodeStrategy {
     }
 
     /// Derive a strategy from a list of status codes to ignore.
-    pub fn from_ignored_error_codes(status_codes: &[SerializableStatusCode]) -> Self {
+    pub(crate) fn from_ignored_error_codes(status_codes: &[SerializableStatusCode]) -> Self {
         Self::IgnoreErrorCodes {
             status_codes: status_codes
                 .iter()

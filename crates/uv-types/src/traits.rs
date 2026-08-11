@@ -174,6 +174,7 @@ pub trait BuildContext {
         source: &'a Path,
         subdirectory: Option<&'a Path>,
         install_path: &'a Path,
+        stop_discovery_at: Option<&'a Path>,
         version_id: Option<&'a str>,
         dist: Option<&'a SourceDist>,
         sources: &'a NoSources,
@@ -225,10 +226,21 @@ pub trait SourceBuildTrait {
     ) -> impl Future<Output = Result<String, AnyErrorBuild>> + 'a;
 }
 
-/// A wrapper for [`uv_installer::SitePackages`]
+/// Provides access to installed distributions during resolution.
 pub trait InstalledPackagesProvider: Clone + Send + Sync + 'static {
     fn iter(&self) -> impl Iterator<Item = &InstalledDist>;
     fn get_packages(&self, name: &PackageName) -> Vec<&InstalledDist>;
+}
+
+impl<Provider: InstalledPackagesProvider> InstalledPackagesProvider for Option<Provider> {
+    fn iter(&self) -> impl Iterator<Item = &InstalledDist> {
+        self.as_ref().into_iter().flat_map(Provider::iter)
+    }
+
+    fn get_packages(&self, name: &PackageName) -> Vec<&InstalledDist> {
+        self.as_ref()
+            .map_or_else(Vec::new, |provider| provider.get_packages(name))
+    }
 }
 
 /// An [`InstalledPackagesProvider`] with no packages in it.
@@ -289,6 +301,12 @@ impl std::error::Error for AnyErrorBuild {
     }
 }
 
+impl uv_errors::Hint for AnyErrorBuild {
+    fn hints(&self) -> uv_errors::Hints<'_> {
+        self.0.hints()
+    }
+}
+
 impl<T: IsBuildBackendError> From<T> for AnyErrorBuild {
     fn from(err: T) -> Self {
         Self(Box::new(err))
@@ -308,11 +326,6 @@ impl Deref for AnyErrorBuild {
 pub struct BuildStack(FxHashSet<DistributionId>);
 
 impl BuildStack {
-    /// Return an empty stack.
-    pub fn empty() -> Self {
-        Self(FxHashSet::default())
-    }
-
     pub fn contains(&self, id: &DistributionId) -> bool {
         self.0.contains(id)
     }

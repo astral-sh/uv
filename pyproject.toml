@@ -4,7 +4,7 @@ build-backend = "maturin"
 
 [project]
 name = "uv"
-version = "0.11.8"
+version = "0.12.3"
 description = "An extremely fast Python package and project manager, written in Rust."
 authors = [{ name = "Astral Software Inc.", email = "hey@astral.sh" }]
 requires-python = ">=3.8"
@@ -44,6 +44,7 @@ Discord = "https://discord.gg/astral-sh"
 
 [tool.maturin]
 bindings = "bin"
+editable-profile = "dev"
 manifest-path = "crates/uv/Cargo.toml"
 module-name = "uv"
 python-source = "python"
@@ -62,7 +63,7 @@ include = [
 changelog-contributors = false  # We exclude contributors from the CHANGELOG file
 major-labels = []  # We do not use the major version number yet
 minor-labels = ["breaking"]
-ignore-labels = ["internal", "ci", "testing"]
+ignore-labels = ["internal", "ci", "testing", "automations"]
 version_files = [
   "README.md",
   "pyproject.toml",
@@ -77,6 +78,7 @@ version_files = [
   "docs/guides/integration/github.md",
   "docs/guides/integration/gitlab.md",
   "docs/guides/integration/aws-lambda.md",
+  "docs/guides/projects.md",
   "docs/concepts/build-backend.md",
   "docs/concepts/projects/init.md",
   "docs/concepts/projects/workspaces.md",
@@ -109,7 +111,20 @@ docs = [
 docker = [
   "cargo-zigbuild>=0.19.8",
 ]
+release = [
+  "rooster==0.1.1",
+]
+
+[tool.uv]
+cache-keys = [
+    { file = "pyproject.toml" },
+    { file = "Cargo.toml" },
+    { file = "Cargo.lock" },
+    { file = "crates/**/*.rs" },
+    { file = "crates/**/Cargo.toml" },
+]
 
 [tool.uv.dependency-groups]
 docs = { requires-python = ">=3.12" }
 docker = { requires-python = ">=3.12" }
+release = { requires-python = ">=3.12" }

@@ -1,0 +1,30 @@
+name = "fork-marker-track"
+description = '''
+'''
+
+[resolver_options]
+universal = true
+
+[expected]
+satisfiable = true
+
+[root]
+requires = [
+  "a",
+  "b>=2.8 ; sys_platform == 'linux'",
+  "b<2.8 ; sys_platform == 'darwin'",
+]
+
+[packages.a.versions."1.3.1"]
+requires = ["c ; implementation_name == 'iron'"]
+[packages.a.versions."2.0.0"]
+requires = ["b>=2.8", "c ; implementation_name == 'cpython'"]
+[packages.a.versions."3.1.0"]
+requires = ["b>=2.8", "c ; implementation_name == 'pypy'"]
+[packages.a.versions."4.3.0"]
+requires = ["b>=2.8"]
+
+[packages.b.versions."2.7"]
+[packages.b.versions."2.8"]
+
+[packages.c.versions."1.10"]

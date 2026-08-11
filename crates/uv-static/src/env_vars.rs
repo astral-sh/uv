@@ -19,6 +19,14 @@ impl EnvVars {
     #[attr_added_in("0.6.0")]
     pub const UV: &'static str = "UV";
 
+    /// The path to the Ruff binary used by `uv format`.
+    #[attr_added_in("0.11.22")]
+    pub const RUFF: &'static str = "RUFF";
+
+    /// The path to the ty binary used by `uv check`.
+    #[attr_added_in("0.11.22")]
+    pub const TY: &'static str = "TY";
+
     /// Equivalent to the `--offline` command-line argument. If set, uv will disable network access.
     #[attr_added_in("0.5.9")]
     pub const UV_OFFLINE: &'static str = "UV_OFFLINE";
@@ -187,13 +195,18 @@ impl EnvVars {
     #[attr_added_in("0.2.30")]
     pub const UV_NO_CONFIG: &'static str = "UV_NO_CONFIG";
 
+    /// If set, uv will not read system-level configuration files.
+    #[attr_added_in("0.11.16")]
+    pub const UV_NO_SYSTEM_CONFIG: &'static str = "UV_NO_SYSTEM_CONFIG";
+
     /// Equivalent to the `--isolated` command-line argument. If set, uv will avoid discovering
     /// a `pyproject.toml` or `uv.toml` file.
     #[attr_added_in("0.8.14")]
     pub const UV_ISOLATED: &'static str = "UV_ISOLATED";
 
     /// Equivalent to the `--exclude-newer` command-line argument. If set, uv will
-    /// exclude distributions published after the specified date.
+    /// exclude distributions published after the specified date. Set to `false` to disable
+    /// `exclude-newer`.
     #[attr_added_in("0.2.12")]
     pub const UV_EXCLUDE_NEWER: &'static str = "UV_EXCLUDE_NEWER";
 
@@ -256,6 +269,38 @@ impl EnvVars {
     #[attr_added_in("0.9.9")]
     pub const UV_NO_DEFAULT_GROUPS: &'static str = "UV_NO_DEFAULT_GROUPS";
 
+    /// Equivalent to the `--no-install-project` command-line argument. If set, uv will
+    /// install the project's dependencies but not the project itself.
+    #[attr_added_in("0.11.20")]
+    pub const UV_NO_INSTALL_PROJECT: &'static str = "UV_NO_INSTALL_PROJECT";
+
+    /// Equivalent to the `--no-install-workspace` command-line argument. If set, uv will
+    /// install workspace dependencies but not workspace members (including the current
+    /// project).
+    #[attr_added_in("0.11.20")]
+    pub const UV_NO_INSTALL_WORKSPACE: &'static str = "UV_NO_INSTALL_WORKSPACE";
+
+    /// Equivalent to the `--no-install-local` command-line argument. If set, uv will skip
+    /// the current project, workspace members, and any other local (path or editable)
+    /// packages, installing only remote dependencies.
+    #[attr_added_in("0.11.20")]
+    pub const UV_NO_INSTALL_LOCAL: &'static str = "UV_NO_INSTALL_LOCAL";
+
+    /// Equivalent to the hidden `--only-install-project` command-line argument.
+    #[attr_hidden]
+    #[attr_added_in("0.11.20")]
+    pub const UV_ONLY_INSTALL_PROJECT: &'static str = "UV_ONLY_INSTALL_PROJECT";
+
+    /// Equivalent to the hidden `--only-install-workspace` command-line argument.
+    #[attr_hidden]
+    #[attr_added_in("0.11.20")]
+    pub const UV_ONLY_INSTALL_WORKSPACE: &'static str = "UV_ONLY_INSTALL_WORKSPACE";
+
+    /// Equivalent to the hidden `--only-install-local` command-line argument.
+    #[attr_hidden]
+    #[attr_added_in("0.11.20")]
+    pub const UV_ONLY_INSTALL_LOCAL: &'static str = "UV_ONLY_INSTALL_LOCAL";
+
     /// Equivalent to the `--no-binary` command-line argument. If set, uv will install
     /// all packages from source. The resolver will still use pre-built wheels to
     /// extract package metadata, if available.
@@ -307,6 +352,7 @@ impl EnvVars {
     #[attr_added_in("0.4.16")]
     pub const UV_PUBLISH_PASSWORD: &'static str = "UV_PUBLISH_PASSWORD";
 
+    /// Equivalent to the `--check-url` command-line argument in `uv publish`.
     /// Don't upload a file if it already exists on the index. The value is the URL of the index.
     #[attr_added_in("0.4.30")]
     pub const UV_PUBLISH_CHECK_URL: &'static str = "UV_PUBLISH_CHECK_URL";
@@ -375,6 +421,10 @@ impl EnvVars {
     /// packages.
     #[attr_added_in("0.1.45")]
     pub const UV_CONCURRENT_INSTALLS: &'static str = "UV_CONCURRENT_INSTALLS";
+
+    /// Controls the number of threads used to read cached HTTP responses.
+    #[attr_added_in("0.11.29")]
+    pub const UV_CONCURRENT_CACHE_READS: &'static str = "UV_CONCURRENT_CACHE_READS";
 
     /// Equivalent to the `--no-progress` command-line argument. Disables all progress output. For
     /// example, spinners and progress bars.
@@ -452,6 +502,9 @@ impl EnvVars {
     /// The provided URL will replace `https://github.com/astral-sh/python-build-standalone/releases/download` in, e.g.,
     /// `https://github.com/astral-sh/python-build-standalone/releases/download/20240713/cpython-3.12.4%2B20240713-aarch64-apple-darwin-install_only.tar.gz`.
     /// Distributions can be read from a local directory by using the `file://` URL scheme.
+    ///
+    /// This more-specific mirror takes precedence over
+    /// [`UV_ASTRAL_MIRROR_URL`](Self::UV_ASTRAL_MIRROR_URL) for CPython downloads.
     #[attr_added_in("0.2.35")]
     pub const UV_PYTHON_INSTALL_MIRROR: &'static str = "UV_PYTHON_INSTALL_MIRROR";
 
@@ -464,6 +517,26 @@ impl EnvVars {
     /// Distributions can be read from a local directory by using the `file://` URL scheme.
     #[attr_added_in("0.2.35")]
     pub const UV_PYPY_INSTALL_MIRROR: &'static str = "UV_PYPY_INSTALL_MIRROR";
+
+    /// Replaces the `https://releases.astral.sh` base URL for all Astral-mirrored
+    /// metadata and artifact downloads.
+    ///
+    /// When set, uv uses only the configured mirror URL and does not fall back to
+    /// GitHub or raw GitHub. Path components in the URL are preserved: only
+    /// trailing slashes are trimmed before appending the normal path suffix
+    /// (e.g., `/github/versions/main/v1/uv.ndjson`).
+    ///
+    /// This is useful for proxy repositories (e.g., Artifactory, Nexus) that
+    /// mirror `releases.astral.sh`.
+    ///
+    /// More-specific sources take precedence:
+    /// [`UV_PYTHON_INSTALL_MIRROR`](Self::UV_PYTHON_INSTALL_MIRROR) and
+    /// `python-install-mirror` override this variable for CPython downloads, while
+    /// [`UV_INSTALLER_GITHUB_BASE_URL`](Self::UV_INSTALLER_GITHUB_BASE_URL) and
+    /// [`UV_INSTALLER_GHE_BASE_URL`](Self::UV_INSTALLER_GHE_BASE_URL) override this
+    /// variable for `uv self update`.
+    #[attr_added_in("0.11.14")]
+    pub(crate) const UV_ASTRAL_MIRROR_URL: &'static str = "UV_ASTRAL_MIRROR_URL";
 
     /// Pin managed CPython versions to a specific build version.
     ///
@@ -527,6 +600,19 @@ impl EnvVars {
     #[attr_added_in("0.0.5")]
     pub const UV_NO_WRAP: &'static str = "UV_NO_WRAP";
 
+    /// Set to `1` to enable the automatic malware check that runs after `uv sync`.
+    ///
+    /// When enabled, uv performs a lightweight check against the OSV database for known
+    /// malware advisories after every lockfile sync. Set this variable to `0` to opt out.
+    #[attr_added_in("0.11.16")]
+    pub const UV_MALWARE_CHECK: &'static str = "UV_MALWARE_CHECK";
+
+    /// Override the vulnerability service URL for the automatic malware check.
+    ///
+    /// Defaults to the OSV API endpoint (`https://api.osv.dev/`).
+    #[attr_added_in("0.11.16")]
+    pub const UV_MALWARE_CHECK_URL: &'static str = "UV_MALWARE_CHECK_URL";
+
     /// Provides the HTTP Basic authentication username for a named index.
     ///
     /// The `name` parameter is the name of the index. For example, given an index named `foo`,
@@ -577,6 +663,11 @@ impl EnvVars {
     #[attr_added_in("0.2.0")]
     pub const UV_INTERNAL__PARENT_INTERPRETER: &'static str = "UV_INTERNAL__PARENT_INTERPRETER";
 
+    /// Used to identify the source tree when invoking PEP 517 build hooks.
+    #[attr_hidden]
+    #[attr_added_in("0.11.22")]
+    pub const UV_INTERNAL__BUILD_DIR: &'static str = "UV_INTERNAL__BUILD_DIR";
+
     /// Used to force showing the derivation tree during resolver error reporting.
     #[attr_hidden]
     #[attr_added_in("0.3.0")]
@@ -610,6 +701,13 @@ impl EnvVars {
     #[attr_hidden]
     #[attr_added_in("0.10.5")]
     pub const UV_INTERNAL__TEST_ALT_FS: &'static str = "UV_INTERNAL__TEST_ALT_FS";
+
+    /// Network path to a directory on an SMB filesystem for testing.
+    ///
+    /// When populated, uv will run additional tests that cover SMB-specific filesystem behavior.
+    #[attr_hidden]
+    #[attr_added_in("0.11.16")]
+    pub const UV_INTERNAL__TEST_SMB_FS: &'static str = "UV_INTERNAL__TEST_SMB_FS";
 
     /// Path to a directory on a filesystem with a low hardlink limit (e.g., minix with ~250).
     ///
@@ -1155,11 +1253,6 @@ impl EnvVars {
     #[attr_added_in("0.7.21")]
     pub const UV_TEST_NO_HTTP_RETRY_DELAY: &'static str = "UV_TEST_NO_HTTP_RETRY_DELAY";
 
-    /// Used to set a packse index url for tests.
-    #[attr_hidden]
-    #[attr_added_in("0.2.12")]
-    pub const UV_TEST_PACKSE_INDEX: &'static str = "UV_TEST_PACKSE_INDEX";
-
     /// Used for testing named indexes in tests.
     #[attr_hidden]
     #[attr_added_in("0.5.21")]
@@ -1209,11 +1302,17 @@ impl EnvVars {
 
     /// The URL from which to download uv using the standalone installer and `self update` feature,
     /// in lieu of the default GitHub URL.
+    ///
+    /// This more-specific installer source takes precedence over
+    /// [`UV_ASTRAL_MIRROR_URL`](Self::UV_ASTRAL_MIRROR_URL) for `uv self update`.
     #[attr_added_in("0.5.0")]
     pub const UV_INSTALLER_GITHUB_BASE_URL: &'static str = "UV_INSTALLER_GITHUB_BASE_URL";
 
     /// The URL from which to download uv using the standalone installer and `self update` feature,
     /// in lieu of the default GitHub Enterprise URL.
+    ///
+    /// This more-specific installer source takes precedence over
+    /// [`UV_ASTRAL_MIRROR_URL`](Self::UV_ASTRAL_MIRROR_URL) for `uv self update`.
     #[attr_added_in("0.5.0")]
     pub const UV_INSTALLER_GHE_BASE_URL: &'static str = "UV_INSTALLER_GHE_BASE_URL";
 
@@ -1246,6 +1345,14 @@ impl EnvVars {
     /// Enables fetching files stored in Git LFS when installing a package from a Git repository.
     #[attr_added_in("0.5.19")]
     pub const UV_GIT_LFS: &'static str = "UV_GIT_LFS";
+
+    /// Sets the soft open-file descriptor limit for commands executed by `uv run`.
+    ///
+    /// The limit is applied after uv prepares the environment and immediately before the command
+    /// is spawned. The hard open-file descriptor limit remains unchanged. If the limit cannot be
+    /// applied, uv exits with an error without running the command. Only supported on Unix.
+    #[attr_added_in("0.12.3")]
+    pub const UV_RUN_RLIMIT_NOFILE: &'static str = "UV_RUN_RLIMIT_NOFILE";
 
     /// Number of times that `uv run` has been recursively invoked. Used to guard against infinite
     /// recursion, e.g., when `uv run`` is used in a script shebang.
@@ -1321,6 +1428,12 @@ impl EnvVars {
     /// environment variable or Application Default Credentials.
     #[attr_added_in("0.9.26")]
     pub const UV_GCS_ENDPOINT_URL: &'static str = "UV_GCS_ENDPOINT_URL";
+
+    /// The URL to treat as an Azure Blob Storage endpoint. Requests to this endpoint will be signed
+    /// using Azure credentials from the default credential chain, including Azure CLI credentials
+    /// and workload identity.
+    #[attr_added_in("0.11.14")]
+    pub const UV_AZURE_ENDPOINT_URL: &'static str = "UV_AZURE_ENDPOINT_URL";
 
     /// The URL of the pyx Simple API server.
     #[attr_added_in("0.8.15")]

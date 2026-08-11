@@ -1,5 +1,5 @@
 pub use dependency_mode::DependencyMode;
-pub use error::{ErrorTree, NoSolutionError, NoSolutionHeader, ResolveError, SentinelRange};
+pub use error::{ErrorTree, NoSolutionError, NoSolutionHeader, ResolveError};
 pub use exclude_newer::{
     ExcludeNewer, ExcludeNewerChange, ExcludeNewerOverrideChange, ExcludeNewerPackage,
     ExcludeNewerPackageChange, ExcludeNewerPackageEntry, ExcludeNewerValueChange,
@@ -9,25 +9,28 @@ pub use exclusions::Exclusions;
 pub use flat_index::{FlatDistributions, FlatIndex};
 pub use fork_strategy::ForkStrategy;
 pub use lock::{
-    Installable, Lock, LockError, LockVersion, Metadata, Package, PackageMap, PylockToml,
-    PylockTomlErrorKind, RequirementsTxtExport, ResolverManifest, SatisfiesResult, TreeDisplay,
-    VERSION, cyclonedx_json,
+    CanonicalLockError, DependencySelection, Installable, InstallableRootKind, Lock, LockError,
+    LockParseError, Metadata, Package, PackageMap, PylockToml, PylockTomlError,
+    PylockTomlErrorKind, PythonReport, RequirementsTxtExport, ResolverManifest, SatisfiesResult,
+    SelectedDependency, TreeDisplay, TreeJsonTarget, cyclonedx_json, implicit_constraints_marker,
 };
 pub use manifest::Manifest;
 pub use options::{Flexibility, Options, OptionsBuilder};
 pub use preferences::{Preference, PreferenceError, Preferences};
-pub use prerelease::PrereleaseMode;
+pub use prerelease::{Prerelease, PrereleaseMode, PrereleasePackage, PrereleasePackageEntry};
+pub use pubgrub::PubGrubHint;
 pub use python_requirement::PythonRequirement;
 pub use resolution::{
     AnnotationStyle, ConflictingDistributionError, DisplayResolutionGraph, ResolverOutput,
 };
 pub use resolution_mode::ResolutionMode;
 pub use resolver::{
-    BuildId, DefaultResolverProvider, DerivationChainBuilder, InMemoryIndex, MetadataResponse,
-    PackageVersionsResult, Reporter as ResolverReporter, Resolver, ResolverEnvironment,
-    ResolverProvider, VersionsResponse, WheelMetadataResult,
+    DefaultResolverProvider, InMemoryIndex, MetadataResponse, PackageVersionsResult,
+    Reporter as ResolverReporter, Resolver, ResolverEnvironment, ResolverProvider,
+    VersionsResponse, WheelMetadataResult,
 };
-pub use universal_marker::{ConflictMarker, UniversalMarker};
+pub(crate) use universal_marker::ConflictMarker;
+pub use universal_marker::UniversalMarker;
 pub use upgrade::UpgradePackages;
 pub use uv_distribution_types::{ExcludeNewerOverride, ExcludeNewerSpan, ExcludeNewerValue};
 pub use version_map::VersionMap;

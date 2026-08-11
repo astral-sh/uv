@@ -1,0 +1,77 @@
+name = "preferences-dependent-forking-bistable"
+description = '''
+This test contains a bistable resolution scenario when not using ahead-of-time
+splitting of resolution forks: We meet one of two fork points depending on the
+preferences, creating a resolution whose preferences lead us the other fork
+point.
+
+In the first case, we are in cleaver 2 and fork on `sys_platform`, in the
+second case, we are in foo 1 or bar 1 amd fork over `os_name`.
+
+First case: We select cleaver 2, fork on `sys_platform`, we reject cleaver 2
+(missing fork `os_name`), we select cleaver 1 and don't fork on `os_name` in
+`fork-if-not-forked`, done.
+Second case: We have preference cleaver 1, fork on `os_name` in
+`fork-if-not-forked`, we reject cleaver 1, we select cleaver 2, we fork on
+`sys_platform`, we accept cleaver 2 since we forked on `os_name`, done.
+'''
+
+[resolver_options]
+universal = true
+
+[expected]
+satisfiable = true
+
+[root]
+requires = ["cleaver"]
+
+[packages.cleaver.versions."2.0.0"]
+requires = [
+  # Provoke a fork on sys_platform.
+  "fork-sys-platform==1; sys_platform == 'linux'",
+  "fork-sys-platform==2; sys_platform != 'linux'",
+  # Reject cleaver 2 if we didn't fork on os_name, without forking on os_name.
+  "reject-cleaver2==1; os_name == 'posix'",
+  "reject-cleaver2-proxy",
+]
+
+[packages.fork-sys-platform.versions."1.0.0"]
+[packages.fork-sys-platform.versions."2.0.0"]
+
+[packages.reject-cleaver2-proxy.versions."1.0.0"]
+requires = ["reject-cleaver2==2; os_name != 'posix'"]
+
+[packages.reject-cleaver2.versions."1.0.0"]
+[packages.reject-cleaver2.versions."2.0.0"]
+
+[packages.cleaver.versions."1.0.0"]
+requires = [
+  # Provoke a fork on os-name, but only if we didn't fork before.
+  "fork-if-not-forked!=2; sys_platform == 'linux'",
+  "fork-if-not-forked-proxy; sys_platform != 'linux'",
+  # Reject cleaver 1 if we didn't fork on sys_platform, without forking on sys_platform.
+  "reject-cleaver1==1; sys_platform == 'linux'",
+  "reject-cleaver1-proxy",
+]
+
+[packages.fork-if-not-forked-proxy.versions."1.0.0"]
+requires = ["fork-if-not-forked!=3"]
+
+[packages.reject-cleaver1-proxy.versions."1.0.0"]
+requires = ["reject-cleaver1==2; sys_platform != 'linux'"]
+
+[packages.reject-cleaver1.versions."1.0.0"]
+[packages.reject-cleaver1.versions."2.0.0"]
+
+[packages.fork-os-name.versions."1.0.0"]
+[packages.fork-os-name.versions."2.0.0"]
+
+[packages.fork-if-not-forked.versions."1.0.0"]
+requires = [
+  # Actually provoke the fork for cleaver 1.
+  "fork-os-name==1; os_name == 'posix'",
+  "fork-os-name==2; os_name != 'posix'",
+  "reject-cleaver1-proxy",
+]
+[packages.fork-if-not-forked.versions."2.0.0"]
+[packages.fork-if-not-forked.versions."3.0.0"]

@@ -46,8 +46,8 @@ fn read_pyx_auth_token() -> Option<AccessToken> {
 /// and a new refresh token.
 #[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
 pub struct PyxOAuthTokens {
-    pub access_token: AccessToken,
-    pub refresh_token: String,
+    access_token: AccessToken,
+    refresh_token: String,
 }
 
 /// An access token with an accompanying API key.
@@ -170,7 +170,7 @@ struct PyxDirectories {
 
 impl PyxDirectories {
     /// Detect the [`PyxDirectories`] for a given API URL.
-    fn from_api(api: &DisplaySafeUrl) -> Result<Self, io::Error> {
+    fn from_api(api: DisplaySafeUrl) -> Result<Self, io::Error> {
         // Store credentials in a subdirectory based on the API URL.
         let digest = uv_cache_key::cache_digest(&CanonicalUrl::new(api));
 
@@ -235,7 +235,7 @@ impl PyxTokenStore {
             .unwrap_or_else(|| SmallString::from(arcstr::literal!(PYX_DEFAULT_CDN_DOMAIN)));
 
         // Determine the root directory for the token store.
-        let PyxDirectories { root, subdirectory } = PyxDirectories::from_api(&api)?;
+        let PyxDirectories { root, subdirectory } = PyxDirectories::from_api(api.clone())?;
 
         Ok(Self {
             root,
@@ -286,7 +286,7 @@ impl PyxTokenStore {
     ///
     /// If no access token is found, but an API key is present, the API key will be used to
     /// bootstrap an access token.
-    pub async fn init(
+    async fn init(
         &self,
         client: &ClientWithMiddleware,
         tolerance_secs: u64,
@@ -340,7 +340,7 @@ impl PyxTokenStore {
     }
 
     /// Returns `true` if the user appears to have OAuth tokens stored on disk.
-    pub fn has_oauth_tokens(&self) -> bool {
+    fn has_oauth_tokens(&self) -> bool {
         self.subdirectory.join("tokens.json").is_file()
     }
 

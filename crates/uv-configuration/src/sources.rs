@@ -59,23 +59,6 @@ impl NoSources {
         }
     }
 
-    /// Extend a [`NoSources`] value with another.
-    pub fn extend(&mut self, other: Self) {
-        match (&mut *self, other) {
-            (Self::All, _) | (_, Self::All) => *self = Self::All,
-            (Self::None, Self::None) => {}
-            (Self::Packages(_), Self::None) => {}
-            (Self::None, Self::Packages(b)) => {
-                *self = Self::Packages(b);
-            }
-            (Self::Packages(a), Self::Packages(b)) => {
-                a.extend(b);
-            }
-        }
-    }
-}
-
-impl NoSources {
     /// Returns `true` if all sources are allowed.
     pub fn is_none(&self) -> bool {
         matches!(self, Self::None)

@@ -39,32 +39,25 @@ impl FlatIndex {
     ) -> Self {
         // Collect compatible distributions.
         let mut index = FxHashMap::<PackageName, FlatDistributions>::default();
-        for entry in entries.entries {
-            let distributions = index.entry(entry.filename.name().clone()).or_default();
-            distributions.add_file(
-                entry.file,
-                entry.filename,
-                tags,
-                hasher,
-                build_options,
-                entry.index,
-            );
-        }
+        let (entries, offline) = entries.into_parts();
 
-        // Collect offline entries.
-        let offline = entries.offline;
+        for entry in entries {
+            let (filename, file, index_url) = entry.into_parts();
+            let distributions = index.entry(filename.name().clone()).or_default();
+            distributions.add_file(file, filename, tags, hasher, build_options, index_url);
+        }
 
         Self { index, offline }
     }
 
     /// Get the [`FlatDistributions`] for the given package name.
-    pub fn get(&self, package_name: &PackageName) -> Option<&FlatDistributions> {
+    pub(crate) fn get(&self, package_name: &PackageName) -> Option<&FlatDistributions> {
         self.index.get(package_name)
     }
 
     /// Whether any `--find-links` entries could not be resolved due to a lack of network
     /// connectivity.
-    pub fn offline(&self) -> bool {
+    pub(crate) fn offline(&self) -> bool {
         self.offline
     }
 }
@@ -77,7 +70,7 @@ pub struct FlatDistributions(BTreeMap<Version, PrioritizedDist>);
 impl FlatDistributions {
     /// Collect all files from a `--find-links` target into a [`FlatIndex`].
     #[instrument(skip_all)]
-    pub fn from_entries(
+    pub(crate) fn from_entries(
         entries: Vec<FlatIndexEntry>,
         tags: Option<&Tags>,
         hasher: &HashStrategy,
@@ -85,26 +78,15 @@ impl FlatDistributions {
     ) -> Self {
         let mut distributions = Self::default();
         for entry in entries {
-            distributions.add_file(
-                entry.file,
-                entry.filename,
-                tags,
-                hasher,
-                build_options,
-                entry.index,
-            );
+            let (filename, file, index) = entry.into_parts();
+            distributions.add_file(file, filename, tags, hasher, build_options, index);
         }
         distributions
     }
 
     /// Returns an [`Iterator`] over the distributions.
-    pub fn iter(&self) -> impl Iterator<Item = (&Version, &PrioritizedDist)> {
+    pub(crate) fn iter(&self) -> impl Iterator<Item = (&Version, &PrioritizedDist)> {
         self.0.iter()
-    }
-
-    /// Removes the [`PrioritizedDist`] for the given version.
-    pub fn remove(&mut self, version: &Version) -> Option<PrioritizedDist> {
-        self.0.remove(version)
     }
 
     /// Add the given [`File`] to the [`FlatDistributions`] for the given package.
@@ -134,6 +116,7 @@ impl FlatDistributions {
                     filename,
                     file: Box::new(file),
                     index,
+                    size_is_authoritative: false,
                 };
                 match self.0.entry(version) {
                     Entry::Occupied(mut entry) => {
@@ -158,6 +141,7 @@ impl FlatDistributions {
                     file: Box::new(file),
                     index,
                     wheels: vec![],
+                    size_is_authoritative: false,
                 };
                 match self.0.entry(filename.version) {
                     Entry::Occupied(mut entry) => {
@@ -180,6 +164,14 @@ impl FlatDistributions {
         // Check if source distributions are allowed for this package.
         if build_options.no_build_package(&filename.name) {
             return SourceDistCompatibility::Incompatible(IncompatibleSource::NoBuild);
+        }
+
+        // Check if the filename is PEP 625-compliant.
+        // TODO: Strengthen this check more; right now we allow `.zip`
+        // (which is not compliant) and we don't strictly
+        // enforce the formatting rules for the name or version.
+        if !filename.extension.is_pep625_compliant() {
+            return SourceDistCompatibility::Incompatible(IncompatibleSource::NotPep625Filename);
         }
 
         // Check if hashes line up

@@ -96,7 +96,7 @@ Managing and inspecting uv's state, such as the cache, storage directories, or p
 self-update:
 
 - `uv cache clean`: Remove cache entries.
-- `uv cache prune`: Remove outdated cache entries.
+- `uv cache prune`: Remove outdated cache entries and all centralized project environments.
 - `uv cache dir`: Show the uv cache directory path.
 - `uv tool dir`: Show the uv tool directory path.
 - `uv python dir`: Show the uv installed Python versions path.

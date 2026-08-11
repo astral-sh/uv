@@ -33,9 +33,6 @@ pub struct PipCompileCompatArgs {
     max_rounds: Option<usize>,
 
     #[clap(long, hide = true)]
-    cert: Option<String>,
-
-    #[clap(long, hide = true)]
     client_cert: Option<String>,
 
     #[clap(long, hide = true)]
@@ -136,7 +133,7 @@ impl CompatArgs for PipCompileCompatArgs {
 
         if self.emit_options {
             return Err(anyhow!(
-                "pip-compile's `--emit-options` is unsupported (uv never emits options)"
+                "pip-compile's `--emit-options` is unsupported (try `--emit-build-options` instead)"
             ));
         }
 
@@ -191,9 +188,6 @@ pub struct PipSyncCompatArgs {
 
     #[clap(long, hide = true)]
     user: bool,
-
-    #[clap(long, hide = true)]
-    cert: Option<String>,
 
     #[clap(long, hide = true)]
     client_cert: Option<String>,

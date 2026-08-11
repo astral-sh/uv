@@ -1,0 +1,333 @@
+name: Promote pull request
+
+on:
+  workflow_dispatch:
+    inputs:
+      pull_request:
+        description: "The uv-dev pull request number"
+        required: true
+        type: string
+      head_sha:
+        description: "The uv-dev pull request head SHA at dispatch time"
+        required: false
+        type: string
+
+permissions: {}
+
+env:
+  UV_REPOSITORY_ID: "699532645"
+  UV_DEV_REPOSITORY_ID: "1302176231"
+
+concurrency:
+  group: promote-pull-request-${{ inputs.pull_request }}
+  cancel-in-progress: false
+
+jobs:
+  promote:
+    name: "Promote pull request #${{ inputs.pull_request }}"
+    if: github.repository == 'astral-sh/uv-dev'
+    runs-on: ubuntu-slim
+    environment: automations
+    timeout-minutes: 10
+    permissions:
+      id-token: write # for the credential broker
+      pull-requests: read # to verify the uv-dev pull request
+    steps:
+      - name: Verify pull request
+        id: verify
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PULL_REQUEST_NUMBER: ${{ inputs.pull_request }}
+        run: |
+          gh pr view "$PULL_REQUEST_NUMBER" \
+            --repo "$GITHUB_REPOSITORY" \
+            --json number,title,body,state,isDraft,baseRefName,headRefName,isCrossRepository \
+            > "$RUNNER_TEMP/pull-request.json"
+
+          if ! jq --exit-status \
+            '.state == "OPEN" and (.isDraft | not) and (.isCrossRepository | not)' \
+            "$RUNNER_TEMP/pull-request.json" > /dev/null; then
+            echo "The uv-dev pull request is no longer ready; refusing to promote it." >&2
+            exit 1
+          fi
+
+          head_ref=$(jq --raw-output '.headRefName' "$RUNNER_TEMP/pull-request.json")
+          base_ref=$(jq --raw-output '.baseRefName' "$RUNNER_TEMP/pull-request.json")
+          git check-ref-format "refs/heads/$head_ref"
+          git check-ref-format "refs/heads/$base_ref"
+
+          {
+            echo "base_ref=$base_ref"
+            echo "head_ref=$head_ref"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Get promotion token
+        id: token
+        uses: open-security-tools/ost-simple-sts@974a63a2daaaa40f7c6dec40d334f3da4421469e
+        with:
+          exchange-url: ${{ secrets.STS_API_URL }}/exchange
+          audience: ${{ secrets.STS_API_URL }}
+          repositories: |
+            astral-sh/uv
+            astral-sh/uv-dev
+          # `workflows: write` is required when the promoted branch modifies workflow files.
+          permissions: |
+            contents: write
+            pull_requests: write
+            workflows: write
+
+      - name: Promote pull request
+        id: promote
+        env:
+          BASE_REF: ${{ steps.verify.outputs.base_ref }}
+          GH_TOKEN: ${{ steps.token.outputs.token }}
+          HEAD_REF: ${{ steps.verify.outputs.head_ref }}
+          PULL_REQUEST_NUMBER: ${{ inputs.pull_request }}
+        run: |
+          source_pull_request=$(gh api --method GET "repos/astral-sh/uv-dev/pulls/$PULL_REQUEST_NUMBER")
+          if ! jq --exit-status \
+            --arg base_ref "$BASE_REF" \
+            --arg head_ref "$HEAD_REF" \
+            --argjson repository_id "$UV_DEV_REPOSITORY_ID" \
+            '.state == "open" and (.draft | not) and .base.ref == $base_ref and .head.ref == $head_ref and .base.repo.id == $repository_id and .head.repo.id == $repository_id' \
+            <<< "$source_pull_request" > /dev/null; then
+            echo "The uv-dev pull request is no longer ready on the expected branch; refusing to promote it." >&2
+            exit 1
+          fi
+
+          promoter=$(
+            gh api \
+              --method GET \
+              "repos/$GITHUB_REPOSITORY/issues/$PULL_REQUEST_NUMBER/events" \
+              --paginate \
+              --slurp |
+              jq --raw-output '[.[][] | select(.event == "ready_for_review" and .actor.type == "User") | .actor.login] | last // empty'
+          )
+          if [ -z "$promoter" ]; then
+            echo "The pull request does not have a human promoter; refusing to promote it." >&2
+            exit 1
+          fi
+
+          source_head=$(jq --raw-output '.head.sha' <<< "$source_pull_request")
+          base_head=$(jq --raw-output '.base.sha' <<< "$source_pull_request")
+
+          if ! gh api --method GET "repos/astral-sh/uv/git/ref/heads/$BASE_REF" --silent; then
+            parent_pull_requests=$(
+              gh pr list \
+                --repo astral-sh/uv \
+                --state open \
+                --head "$BASE_REF" \
+              --limit 2 \
+              --json headRefName,headRefOid,headRepository
+            )
+
+            if [ "$(jq 'length' <<< "$parent_pull_requests")" = "0" ]; then
+              source_parent_pull_requests=$(
+                gh pr list \
+                  --repo "$GITHUB_REPOSITORY" \
+                  --state open \
+                  --head "$BASE_REF" \
+                  --limit 2 \
+                  --json number,headRefName,headRefOid,headRepository
+              )
+              if [ "$(jq 'length' <<< "$source_parent_pull_requests")" != "0" ]; then
+                if ! jq --exit-status \
+                  --arg base_ref "$BASE_REF" \
+                  --arg base_head "$base_head" \
+                  'length == 1 and .[0].headRefName == $base_ref and .[0].headRefOid == $base_head and .[0].headRepository.nameWithOwner == "astral-sh/uv-dev"' \
+                  <<< "$source_parent_pull_requests" > /dev/null; then
+                  echo "The upstream base branch $BASE_REF does not have a matching open parent pull request; refusing to create its stack." >&2
+                  exit 1
+                fi
+
+                parent_number=$(jq --raw-output '.[0].number' <<< "$source_parent_pull_requests")
+                gh pr comment "$PULL_REQUEST_NUMBER" \
+                  --repo "$GITHUB_REPOSITORY" \
+                  --body "Waiting for promotion of parent #$parent_number"
+                echo "queued=true" >> "$GITHUB_OUTPUT"
+                exit 0
+              fi
+
+              merged_parent_pull_requests=$(
+                gh pr list \
+                  --repo astral-sh/uv \
+                  --state merged \
+                  --head "$BASE_REF" \
+                  --limit 2 \
+                  --json baseRefName,headRefName,headRefOid,headRepository
+              )
+              if ! jq --exit-status \
+                --arg base_ref "$BASE_REF" \
+                --arg base_head "$base_head" \
+                'length == 1 and .[0].headRefName == $base_ref and .[0].headRefOid == $base_head and .[0].headRepository.nameWithOwner == "astral-sh/uv"' \
+                <<< "$merged_parent_pull_requests" > /dev/null; then
+                echo "The upstream base branch $BASE_REF does not have a matching open or merged parent pull request; refusing to create its stack." >&2
+                exit 1
+              fi
+
+              parent_base_ref=$(jq --raw-output '.[0].baseRefName' <<< "$merged_parent_pull_requests")
+              git check-ref-format "refs/heads/$parent_base_ref"
+              current_pull_request=$(gh api --method GET "repos/$GITHUB_REPOSITORY/pulls/$PULL_REQUEST_NUMBER")
+              if ! jq --exit-status \
+                --arg base_ref "$BASE_REF" \
+                --arg base_head "$base_head" \
+                --arg head_ref "$HEAD_REF" \
+                --arg head_sha "$source_head" \
+                --argjson repository_id "$UV_DEV_REPOSITORY_ID" \
+                '.state == "open" and (.draft | not) and .base.ref == $base_ref and .base.sha == $base_head and .head.ref == $head_ref and .head.sha == $head_sha and .base.repo.id == $repository_id and .head.repo.id == $repository_id' \
+                <<< "$current_pull_request" > /dev/null; then
+                echo "The pull request changed before its merged parent could be retargeted; refusing to update it." >&2
+                exit 1
+              fi
+
+              gh api \
+                --method PATCH \
+                "repos/$GITHUB_REPOSITORY/pulls/$PULL_REQUEST_NUMBER" \
+                --raw-field base="$parent_base_ref" \
+                --silent
+              echo "Retargeted pull request #$PULL_REQUEST_NUMBER from its merged parent to $parent_base_ref." >> "$GITHUB_STEP_SUMMARY"
+              echo "queued=true" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+
+            if ! jq --exit-status \
+              --arg base_ref "$BASE_REF" \
+              --arg base_head "$base_head" \
+              'length == 1 and .[0].headRefName == $base_ref and .[0].headRefOid == $base_head and .[0].headRepository.nameWithOwner == "astral-sh/uv-dev"' \
+              <<< "$parent_pull_requests" > /dev/null; then
+              echo "The upstream base branch $BASE_REF does not have a matching open parent pull request; refusing to create its stack." >&2
+              exit 1
+            fi
+
+            gh api \
+              --method POST \
+              repos/astral-sh/uv/git/refs \
+              --raw-field ref="refs/heads/$BASE_REF" \
+              --raw-field sha="$base_head" \
+              --silent
+          fi
+
+          existing_pull_requests=$(
+            gh api \
+              --method GET \
+              repos/astral-sh/uv/pulls \
+              --raw-field state=all \
+              --raw-field head="astral-sh:$HEAD_REF" |
+              jq --compact-output \
+                --argjson repository_id "$UV_REPOSITORY_ID" \
+                '[.[] | select(.head.repo.id == $repository_id)]'
+          )
+          existing_count=$(jq 'length' <<< "$existing_pull_requests")
+          if (( existing_count > 1 )); then
+            echo "Found multiple upstream pull requests for $HEAD_REF; refusing to promote." >&2
+            exit 1
+          fi
+
+          if (( existing_count == 1 )); then
+            if ! jq --exit-status \
+              --arg base_ref "$BASE_REF" \
+              --arg head_ref "$HEAD_REF" \
+              --arg head_sha "$source_head" \
+              --argjson repository_id "$UV_REPOSITORY_ID" \
+              '.[0].state == "open" and .[0].base.ref == $base_ref and .[0].head.ref == $head_ref and .[0].head.sha == $head_sha and .[0].base.repo.id == $repository_id and .[0].head.repo.id == $repository_id' \
+              <<< "$existing_pull_requests" > /dev/null; then
+              echo "An upstream pull request already exists with a different state, base, or head; refusing to promote." >&2
+              exit 1
+            fi
+
+            upstream_pull_request=$(jq --compact-output '.[0]' <<< "$existing_pull_requests")
+          else
+            upstream_refs=$(gh api --method GET "repos/astral-sh/uv/git/matching-refs/heads/$HEAD_REF")
+            upstream_head=$(
+              jq --raw-output \
+                --arg head_ref "refs/heads/$HEAD_REF" \
+                '.[] | select(.ref == $head_ref) | .object.sha' \
+                <<< "$upstream_refs"
+            )
+
+            if [ -n "$upstream_head" ] && [ "$upstream_head" != "$source_head" ]; then
+              echo "The upstream branch already exists at a different head; refusing to overwrite it." >&2
+              exit 1
+            fi
+
+            if [ -z "$upstream_head" ]; then
+              gh api \
+                --method POST \
+                repos/astral-sh/uv/git/refs \
+                --raw-field ref="refs/heads/$HEAD_REF" \
+                --raw-field sha="$source_head" \
+                --silent
+            fi
+
+            upstream_pull_request=$(
+              jq \
+                --arg base_ref "$BASE_REF" \
+                --arg head_ref "$HEAD_REF" \
+                --arg source_repository "$GITHUB_REPOSITORY" \
+                '{
+                  title: .title,
+                  body: (
+                    (.body // "")
+                    | gsub(
+                      "(?<![[:alnum:]_/])#(?<number>[0-9]+)(?![[:alnum:]_])";
+                      "\($source_repository)#\(.number)"
+                    )
+                  ),
+                  base: $base_ref,
+                  head: $head_ref
+                }' \
+                "$RUNNER_TEMP/pull-request.json" |
+                gh api \
+                  --method POST \
+                  repos/astral-sh/uv/pulls \
+                  --input -
+            )
+          fi
+
+          upstream_number=$(jq --exit-status --raw-output '.number | select(type == "number")' <<< "$upstream_pull_request")
+
+          if jq --exit-status '.labels | length > 0' <<< "$source_pull_request" > /dev/null; then
+            jq '{labels: [.labels[].name]}' <<< "$source_pull_request" |
+              gh api \
+                --method POST \
+                "repos/astral-sh/uv/issues/$upstream_number/labels" \
+                --input - \
+                --silent
+          fi
+
+          gh api \
+            --method POST \
+            "repos/astral-sh/uv/issues/$upstream_number/assignees" \
+            --raw-field "assignees[]=$promoter" \
+            --silent
+
+          echo "number=$upstream_number" >> "$GITHUB_OUTPUT"
+
+      - name: Close uv-dev pull request
+        if: steps.promote.outputs.queued != 'true'
+        env:
+          GH_TOKEN: ${{ steps.token.outputs.token }}
+          PULL_REQUEST_NUMBER: ${{ inputs.pull_request }}
+          UPSTREAM_NUMBER: ${{ steps.promote.outputs.number }}
+        run: |
+          pull_request=$(gh pr view "$PULL_REQUEST_NUMBER" --repo "$GITHUB_REPOSITORY" --json state,isDraft,headRefOid)
+          if ! jq --exit-status \
+            '.state == "OPEN" and (.isDraft | not)' \
+            <<< "$pull_request" > /dev/null; then
+            echo "The uv-dev pull request is no longer ready; refusing to close it." >&2
+            exit 1
+          fi
+
+          upstream_url="https://github.com/astral-sh/uv/pull/$UPSTREAM_NUMBER"
+          source_head=$(jq --raw-output '.headRefOid' <<< "$pull_request")
+          promoted_head=$(gh pr view "$UPSTREAM_NUMBER" --repo astral-sh/uv --json headRefOid --jq .headRefOid)
+          comment="Promoted to [#$UPSTREAM_NUMBER]($upstream_url)."
+          if [ "$source_head" != "$promoted_head" ]; then
+            comment="Closed with un-sync'd commits. $comment"
+          fi
+
+          gh pr close "$PULL_REQUEST_NUMBER" \
+            --repo "$GITHUB_REPOSITORY" \
+            --comment "$comment"
+
+          echo "Promoted uv-dev pull request #$PULL_REQUEST_NUMBER to [#$UPSTREAM_NUMBER]($upstream_url)." >> "$GITHUB_STEP_SUMMARY"

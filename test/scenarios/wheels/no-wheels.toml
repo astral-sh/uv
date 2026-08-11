@@ -1,0 +1,11 @@
+name = "no-wheels"
+description = "No wheels are available, only source distributions."
+
+[root]
+requires = ["a"]
+
+[expected]
+satisfiable = true
+
+[packages.a.versions."1.0.0"]
+wheel = false

@@ -1,5 +1,4 @@
-use blake2::digest::consts::U32;
-use sha2::Digest;
+use sha2::{Digest, digest::consts::U32};
 use std::pin::Pin;
 use std::task::{Context, Poll};
 use tokio::io::{AsyncReadExt, ReadBuf};
@@ -16,7 +15,7 @@ pub enum Hasher {
 }
 
 impl Hasher {
-    pub fn update(&mut self, data: &[u8]) {
+    fn update(&mut self, data: &[u8]) {
         match self {
             Self::Md5(hasher) => hasher.update(data),
             Self::Sha256(hasher) => hasher.update(data),
@@ -44,23 +43,23 @@ impl From<Hasher> for HashDigest {
         match hasher {
             Hasher::Md5(hasher) => Self {
                 algorithm: HashAlgorithm::Md5,
-                digest: format!("{:x}", hasher.finalize()).into(),
+                digest: hex::encode(hasher.finalize()).into(),
             },
             Hasher::Sha256(hasher) => Self {
                 algorithm: HashAlgorithm::Sha256,
-                digest: format!("{:x}", hasher.finalize()).into(),
+                digest: hex::encode(hasher.finalize()).into(),
             },
             Hasher::Sha384(hasher) => Self {
                 algorithm: HashAlgorithm::Sha384,
-                digest: format!("{:x}", hasher.finalize()).into(),
+                digest: hex::encode(hasher.finalize()).into(),
             },
             Hasher::Sha512(hasher) => Self {
                 algorithm: HashAlgorithm::Sha512,
-                digest: format!("{:x}", hasher.finalize()).into(),
+                digest: hex::encode(hasher.finalize()).into(),
             },
             Hasher::Blake2b(hasher) => Self {
                 algorithm: HashAlgorithm::Blake2b,
-                digest: format!("{:x}", hasher.finalize()).into(),
+                digest: hex::encode(hasher.finalize()).into(),
             },
         }
     }
@@ -69,6 +68,7 @@ impl From<Hasher> for HashDigest {
 pub struct HashReader<'a, R> {
     reader: R,
     hashers: &'a mut [Hasher],
+    bytes_read: u64,
 }
 
 impl<'a, R> HashReader<'a, R>
@@ -76,7 +76,16 @@ where
     R: tokio::io::AsyncRead + Unpin,
 {
     pub fn new(reader: R, hashers: &'a mut [Hasher]) -> Self {
-        HashReader { reader, hashers }
+        HashReader {
+            reader,
+            hashers,
+            bytes_read: 0,
+        }
+    }
+
+    /// Return the number of bytes read from the underlying reader.
+    pub fn bytes_read(&self) -> u64 {
+        self.bytes_read
     }
 
     /// Exhaust the underlying reader.
@@ -97,10 +106,13 @@ where
         buf: &mut ReadBuf<'_>,
     ) -> Poll<std::io::Result<()>> {
         let reader = Pin::new(&mut self.reader);
+        let filled = buf.filled().len();
         match reader.poll_read(cx, buf) {
             Poll::Ready(Ok(())) => {
+                let bytes = &buf.filled()[filled..];
+                self.bytes_read += bytes.len() as u64;
                 for hasher in self.hashers.iter_mut() {
-                    hasher.update(buf.filled());
+                    hasher.update(bytes);
                 }
                 Poll::Ready(Ok(()))
             }

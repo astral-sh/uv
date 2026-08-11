@@ -92,6 +92,10 @@ Functionality for installing Python packages into a virtual environment.
 
 Functionality for detecting and leveraging the current Python interpreter.
 
+## [uv-netrc](./uv-netrc)
+
+A vendored netrc parser for uv.
+
 ## [uv-normalize](./uv-normalize)
 
 Normalize package and extra names as per Python specifications.

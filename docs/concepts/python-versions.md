@@ -59,10 +59,10 @@ check the user-level configuration directory. Any of the request formats describ
 used, though use of a version number is recommended for interoperability with other tools.
 
 A `.python-version` file can be created in the current directory with the
-[`uv python pin`](../reference/cli.md/#uv-python-pin) command.
+[`uv python pin`](../reference/cli.md#uv-python-pin) command.
 
 A global `.python-version` file can be created in the user configuration directory with the
-[`uv python pin --global`](../reference/cli.md/#uv-python-pin) command.
+[`uv python pin --global`](../reference/cli.md#uv-python-pin) command.
 
 Discovery of `.python-version` files can be disabled with `--no-config`.
 

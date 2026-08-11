@@ -1,0 +1,16 @@
+name = "local-greater-than-or-equal"
+description = "A local version should be included in inclusive ordered comparisons."
+
+[root]
+requires = ["a>=1.2.3"]
+
+[expected]
+satisfiable = true
+explanation = "The version '1.2.3+foo' satisfies the constraint '>=1.2.3'."
+
+[expected.packages]
+a = "1.2.3+foo"
+
+[packages.a.versions."1.2.3+bar"]
+
+[packages.a.versions."1.2.3+foo"]

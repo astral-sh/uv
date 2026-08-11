@@ -1,0 +1,21 @@
+name = "extra-does-not-exist-backtrack"
+description = "Optional dependencies are requested for the package, the extra is only available on an older version."
+
+[root]
+requires = ["a[extra]"]
+
+[expected]
+satisfiable = true
+explanation = "The resolver should not backtrack to `a==1.0.0` because missing extras are allowed during resolution. `b` should not be installed."
+
+[expected.packages]
+a = "3.0.0"
+
+[packages.a.versions."2.0.0"]
+
+[packages.a.versions."3.0.0"]
+
+[packages.b.versions."1.0.0"]
+
+[packages.a.versions."1.0.0".extras]
+extra = ["b==1.0.0"]

@@ -27,6 +27,11 @@ pub(crate) fn validate_and_normalize_ref(
 
 /// Normalize an unowned package or extra name.
 fn normalize(name: &str) -> Result<String, InvalidNameError> {
+    // An empty string is not a valid package, extra, or group name.
+    if name.is_empty() {
+        return Err(InvalidNameError(name.to_string()));
+    }
+
     let mut normalized = String::with_capacity(name.len());
 
     let mut last = None;
@@ -61,6 +66,11 @@ fn normalize(name: &str) -> Result<String, InvalidNameError> {
 
 /// Returns `true` if the name is already normalized.
 fn is_normalized(name: impl AsRef<str>) -> Result<bool, InvalidNameError> {
+    // An empty string is not a valid package, extra, or group name.
+    if name.as_ref().is_empty() {
+        return Err(InvalidNameError(name.as_ref().to_string()));
+    }
+
     let mut last = None;
     for char in name.as_ref().bytes() {
         match char {
@@ -101,13 +111,6 @@ fn is_normalized(name: impl AsRef<str>) -> Result<bool, InvalidNameError> {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct InvalidNameError(String);
 
-impl InvalidNameError {
-    /// Returns the invalid name.
-    pub fn as_str(&self) -> &str {
-        &self.0
-    }
-}
-
 impl Display for InvalidNameError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(
@@ -124,13 +127,6 @@ impl Error for InvalidNameError {}
 /// Path didn't end with `pyproject.toml`
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct InvalidPipGroupPathError(String);
-
-impl InvalidPipGroupPathError {
-    /// Returns the invalid path.
-    pub fn as_str(&self) -> &str {
-        &self.0
-    }
-}
 
 impl Display for InvalidPipGroupPathError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
@@ -227,6 +223,7 @@ mod tests {
     #[test]
     fn failures() {
         let failures = [
+            "",
             " starts-with-space",
             "-starts-with-dash",
             "ends-with-dash-",

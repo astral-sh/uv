@@ -1,0 +1,10 @@
+name = "post-less-than"
+description = "A less-than version constraint should not match a post-release version."
+
+[root]
+requires = ["a<1.2.3"]
+
+[expected]
+satisfiable = false
+
+[packages.a.versions."1.2.3.post1"]

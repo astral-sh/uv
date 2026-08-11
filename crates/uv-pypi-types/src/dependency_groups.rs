@@ -24,7 +24,9 @@ impl DependencyGroups {
     }
 
     /// Returns an iterator over the dependency groups.
-    pub fn iter(&self) -> impl Iterator<Item = (&GroupName, &Vec<DependencyGroupSpecifier>)> {
+    pub(crate) fn iter(
+        &self,
+    ) -> impl Iterator<Item = (&GroupName, &Vec<DependencyGroupSpecifier>)> {
         self.0.iter()
     }
 }
@@ -129,12 +131,13 @@ impl<'de> Deserialize<'de> for DependencyGroupSpecifier {
                     return Err(serde::de::Error::custom("missing field `include-group`"));
                 }
 
-                if let Some(include_group) = map_data
-                    .get("include-group")
-                    .map(String::as_str)
-                    .map(GroupName::from_str)
-                    .transpose()
-                    .map_err(serde::de::Error::custom)?
+                if map_data.len() == 1
+                    && let Some(include_group) = map_data
+                        .get("include-group")
+                        .map(String::as_str)
+                        .map(GroupName::from_str)
+                        .transpose()
+                        .map_err(serde::de::Error::custom)?
                 {
                     Ok(DependencyGroupSpecifier::IncludeGroup { include_group })
                 } else {

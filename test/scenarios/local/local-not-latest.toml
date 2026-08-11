@@ -1,0 +1,22 @@
+name = "local-not-latest"
+description = "Tests that we can select an older version with a local segment when newer versions are incompatible."
+
+[root]
+requires = ["a>=1"]
+
+[expected]
+satisfiable = true
+
+[expected.packages]
+a = "1.2.1+foo"
+
+[packages.a.versions."1.2.3"]
+wheel_tags = ["py3-any-macosx_10_0_ppc64"]
+sdist = false
+
+[packages.a.versions."1.2.2+foo"]
+wheel_tags = ["py3-any-macosx_10_0_ppc64"]
+sdist = false
+
+[packages.a.versions."1.2.1+foo"]
+sdist = true

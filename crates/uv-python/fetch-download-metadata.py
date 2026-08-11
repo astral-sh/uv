@@ -1,3 +1,4 @@
+#!/usr/bin/env -S uv run --script
 # /// script
 # requires-python = ">=3.12"
 # dependencies = [
@@ -11,7 +12,7 @@ Generates the `download-metadata.json` file.
 
 Usage:
 
-    uv run -- crates/uv-python/fetch-download-metadata.py
+    uv run --locked crates/uv-python/fetch-download-metadata.py
 
 Acknowledgements:
 
@@ -50,16 +51,18 @@ import json
 import logging
 import os
 import re
+from collections.abc import Generator, Iterable
 from dataclasses import asdict, dataclass, field
 from enum import StrEnum
 from pathlib import Path
-from typing import Any, Generator, Iterable, NamedTuple, Self
+from typing import Any, ClassVar, NamedTuple, Self
 from urllib.parse import unquote
 
 import httpx
 
 SELF_DIR = Path(__file__).parent
 VERSIONS_FILE = SELF_DIR / "download-metadata.json"
+logger = logging.getLogger(__name__)
 
 # The date at which the default CPython musl builds became dynamically linked
 # instead of statically.
@@ -193,7 +196,7 @@ class CPythonFinder(Finder):
 
     NDJSON_URL = "https://releases.astral.sh/github/versions/main/v1/python-build-standalone.ndjson"
 
-    FLAVOR_PREFERENCES = [
+    FLAVOR_PREFERENCES: ClassVar[list[str]] = [
         "install_only_stripped",
         "install_only",
         "shared-pgo",
@@ -201,7 +204,7 @@ class CPythonFinder(Finder):
         "static-noopt",
     ]
     # Normalized mappings to match the Rust types
-    ARCH_MAP = {
+    ARCH_MAP: ClassVar[dict[str, str]] = {
         "ppc64": "powerpc64",
         "ppc64le": "powerpc64le",
     }
@@ -217,7 +220,7 @@ class CPythonFinder(Finder):
 
     async def _fetch_downloads(self) -> list[PythonDownload]:
         """Fetch all CPython downloads from the NDJSON release index."""
-        logging.info("Fetching CPython release index")
+        logger.info("Fetching CPython release index")
         resp = await self.client.get(self.NDJSON_URL)
         resp.raise_for_status()
 
@@ -244,7 +247,7 @@ class CPythonFinder(Finder):
                     and download.triple.libc == "musl"
                 ):
                     continue
-                logging.debug("Found %s (%s)", download.key(), download.filename)
+                logger.debug("Found %s (%s)", download.key(), download.filename)
                 downloads_by_version.setdefault(download.version, []).append(download)
 
         # Collapse CPython variants to a single flavor per triple and variant
@@ -261,7 +264,7 @@ class CPythonFinder(Finder):
                     existing_download, existing_priority = existing
                     # Skip if we have a flavor with higher priority already (indicated by a smaller value)
                     if priority >= existing_priority:
-                        logging.debug(
+                        logger.debug(
                             "Skipping %s (%s): lower priority than %s (%s)",
                             download.key(),
                             download.flavor,
@@ -305,7 +308,7 @@ class CPythonFinder(Finder):
 
         # Skip static builds (not supported)
         if "static" in build_options:
-            logging.debug("Skipping %s: static unsupported", filename)
+            logger.debug("Skipping %s: static unsupported", filename)
             return None
 
         triple = self._normalize_triple(platform_str)
@@ -357,7 +360,7 @@ class CPythonFinder(Finder):
             else:
                 libc = "none"
         except IndexError:
-            logging.debug("Skipping %r: unknown triple", triple)
+            logger.debug("Skipping %r: unknown triple", triple)
             return None
 
         return PlatformTriple(operating_system, arch, libc)
@@ -410,7 +413,7 @@ class PyPyFinder(Finder):
         r"^\s*(?P<checksum>\w{64})\s+(?P<filename>pypy.+)$", re.MULTILINE
     )
 
-    ARCH_MAPPING = {
+    ARCH_MAPPING: ClassVar[dict[str, str]] = {
         "x64": "x86_64",
         "x86": "i686",
         "i686": "i686",
@@ -419,7 +422,7 @@ class PyPyFinder(Finder):
         "s390x": "s390x",
     }
 
-    PLATFORM_MAPPING = {
+    PLATFORM_MAPPING: ClassVar[dict[str, str]] = {
         "win32": "windows",
         "win64": "windows",
         "linux": "linux",
@@ -440,6 +443,7 @@ class PyPyFinder(Finder):
         versions = resp.json()
 
         results = {}
+        incomplete_versions = set()
         for version in versions:
             if not version["stable"]:
                 continue
@@ -448,6 +452,20 @@ class PyPyFinder(Finder):
                 continue
             pypy_version = version["pypy_version"]
             for file in version["files"]:
+                # Only a small number of older pypy builds are bz2; we filter
+                # them because uv 0.12+ won't support extracting them.
+                if file["filename"].endswith(".tar.bz2"):
+                    incomplete_versions.add(version["python_version"])
+                    continue
+
+                # If we've filtered out a bz2 distribution above, we want to
+                # make sure we filter out its other variants as well. Otherwise
+                # we'd have a partial state where some patch versions of PyPy
+                # are available on Windows but not other platforms (since Windows
+                # uses zip, not bz2).
+                if version["python_version"] in incomplete_versions:
+                    continue
+
                 arch = self._normalize_arch(file["arch"])
                 platform = self._normalize_os(file["platform"])
                 libc = "gnu" if platform == "linux" else "none"
@@ -478,7 +496,7 @@ class PyPyFinder(Finder):
         return self.PLATFORM_MAPPING.get(os, os)
 
     async def _fetch_checksums(self, downloads: list[PythonDownload]) -> None:
-        logging.info("Fetching PyPy checksums")
+        logger.info("Fetching PyPy checksums")
         resp = await self.client.get(self.CHECKSUM_URL)
         resp.raise_for_status()
         text = resp.text
@@ -494,7 +512,7 @@ class PyPyFinder(Finder):
 class PyodideFinder(Finder):
     implementation = ImplementationName.CPYTHON
 
-    RELEASE_URL = "https://api.github.com/repos/pyodide/pyodide/releases"
+    RELEASE_URL = "https://api.github.com/repos/pyodide/pyodide/releases?per_page=100"
     METADATA_URL = (
         "https://pyodide.github.io/pyodide/api/pyodide-cross-build-environments.json"
     )
@@ -514,14 +532,19 @@ class PyodideFinder(Finder):
         return downloads
 
     async def _fetch_downloads(self) -> list[PythonDownload]:
-        # This will only download the first page, i.e., ~30 releases
-        [release_resp, meta_resp] = await asyncio.gather(
-            self.client.get(self.RELEASE_URL), self.client.get(self.METADATA_URL)
-        )
-        release_resp.raise_for_status()
+        meta_resp = await self.client.get(self.METADATA_URL)
         meta_resp.raise_for_status()
-        releases = release_resp.json()
         metadata = meta_resp.json()["releases"]
+
+        # Paginate through all pages of releases via the Link header
+        releases = []
+        release_url: str | None = self.RELEASE_URL
+        while release_url is not None:
+            resp = await self.client.get(release_url)
+            resp.raise_for_status()
+            releases.extend(resp.json())
+            next_link = resp.links.get("next", {})
+            release_url = next_link.get("url")
 
         results = {}
         for release in releases:
@@ -533,13 +556,16 @@ class PyodideFinder(Finder):
             pyodide_version = release["tag_name"]
             meta = metadata.get(pyodide_version, None)
             if meta is None:
+                base_version = f"{pyodide_version.rsplit('.', 1)[0]}.0"
+                meta = metadata.get(base_version, None)
+            if meta is None:
                 continue
 
             python_version = Version.from_str(meta["python_version"])
 
             # Find xbuildenv asset
             for asset in release["assets"]:
-                if asset["name"].startswith("xbuildenv"):
+                if asset["name"] == f"xbuildenv-{pyodide_version}.tar.gz":
                     break
             else:
                 # not found: should not happen but just in case
@@ -566,7 +592,7 @@ class PyodideFinder(Finder):
 
     async def _fetch_checksums(self, downloads: list[PythonDownload], n: int) -> None:
         for idx, batch in enumerate(batched(downloads, n)):
-            logging.info("Fetching Pyodide checksums: %d/%d", idx * n, len(downloads))
+            logger.info("Fetching Pyodide checksums: %d/%d", idx * n, len(downloads))
             checksum_requests = []
             for download in batch:
                 url = download.url + ".sha256"
@@ -588,19 +614,20 @@ class GraalPyFinder(Finder):
 
     RELEASE_URL = "https://api.github.com/repos/oracle/graalpython/releases"
 
-    PLATFORM_MAPPING = {
+    PLATFORM_MAPPING: ClassVar[dict[str, str]] = {
         "windows": "windows",
         "linux": "linux",
         "macos": "darwin",
     }
 
-    ARCH_MAPPING = {
+    ARCH_MAPPING: ClassVar[dict[str, str]] = {
         "amd64": "x86_64",
         "aarch64": "aarch64",
     }
 
     GRAALPY_VERSION_RE = re.compile(r"-(\d+\.\d+\.\d+)$", re.ASCII)
     CPY_VERSION_RE = re.compile(r"Python (\d+\.\d+(\.\d+)?)", re.ASCII)
+    GRAALPY_ASSET_VERSION_RE = re.compile(r"graalpy(\d+\.\d+(\.\d+)?)-", re.ASCII)
     PLATFORM_RE = re.compile(r"(\w+)-(\w+)\.(?:zip|tar\.gz)$", re.ASCII)
 
     def __init__(self, client: httpx.AsyncClient):
@@ -625,13 +652,6 @@ class GraalPyFinder(Finder):
             if not m:
                 continue
             graalpy_version = m.group(1)
-            m = self.CPY_VERSION_RE.search(release["body"])
-            if not m:
-                continue
-            python_version_str = m.group(1)
-            if not m.group(2):
-                python_version_str += ".0"
-            python_version = Version.from_str(python_version_str)
             for asset in release["assets"]:
                 url = asset["browser_download_url"]
                 m = self.PLATFORM_RE.search(url)
@@ -643,6 +663,15 @@ class GraalPyFinder(Finder):
                 sha256 = None
                 if digest := asset["digest"]:
                     sha256 = digest.removeprefix("sha256:")
+                m = self.GRAALPY_ASSET_VERSION_RE.search(asset["name"])
+                if not m:
+                    m = self.CPY_VERSION_RE.search(release["body"])
+                if not m:
+                    continue
+                python_version_str = m.group(1)
+                if not m.group(2):
+                    python_version_str += ".0"
+                python_version = Version.from_str(python_version_str)
                 download = PythonDownload(
                     release=0,
                     version=python_version,
@@ -659,8 +688,9 @@ class GraalPyFinder(Finder):
                     sha256=sha256,
                 )
                 # Only keep the latest GraalPy version of each arch/platform
-                if (python_version, arch, platform) not in results:
-                    results[(python_version, arch, platform)] = download
+                key = (python_version, arch, platform)
+                if key not in results or graalpy_version > results[key].build:
+                    results[key] = download
 
         return list(results.values())
 
@@ -673,7 +703,7 @@ class GraalPyFinder(Finder):
     async def _fetch_checksums(self, downloads: list[PythonDownload], n: int) -> None:
         downloads = list(filter(lambda d: not d.sha256, downloads))
         for idx, batch in enumerate(batched(downloads, n)):
-            logging.info("Fetching GraalPy checksums: %d/%d", idx * n, len(downloads))
+            logger.info("Fetching GraalPy checksums: %d/%d", idx * n, len(downloads))
             checksum_requests = []
             for download in batch:
                 url = download.url + ".sha256"
@@ -739,15 +769,15 @@ def render(downloads: list[PythonDownload]) -> None:
     for download in downloads:
         key = download.key()
         if (download.version.major, download.version.minor) < (3, 8):
-            logging.info(
+            logger.info(
                 "Skipping unsupported version %s%s",
                 key,
-                (" (%s)" % download.flavor) if download.flavor else "",
+                f" ({download.flavor})" if download.flavor else "",
             )
             continue
 
-        logging.info(
-            "Selected %s%s", key, (" (%s)" % download.flavor) if download.flavor else ""
+        logger.info(
+            "Selected %s%s", key, f" ({download.flavor})" if download.flavor else ""
         )
         results[key] = {
             "name": download.implementation,
@@ -772,7 +802,7 @@ def render(downloads: list[PythonDownload]) -> None:
 async def find() -> None:
     token = os.environ.get("GITHUB_TOKEN")
     if not token:
-        logging.warning(
+        logger.warning(
             "`GITHUB_TOKEN` env var not found, you may hit rate limits for GitHub API requests."
         )
 
@@ -794,7 +824,7 @@ async def find() -> None:
 
     async with client:
         for finder in finders:
-            logging.info("Finding %s downloads...", finder.implementation)
+            logger.info("Finding %s downloads...", finder.implementation)
             downloads.extend(await finder.find())
 
     render(downloads)

@@ -1,0 +1,43 @@
+name = "lowest-fork-min-python"
+description = "Select different lowest versions where a Python marker raises the direct lower bound."
+
+[environment]
+python = "3.11"
+
+[root]
+requires_python = ">=0"
+requires = [
+  "forkroot==3.0.0",
+  "forkdep>=3; python_version >= '3.12'",
+]
+
+[expected]
+satisfiable = true
+
+[expected.packages]
+forkroot = "3.0.0"
+forkdep = "3.0"
+forkleaf = "1.1.0"
+
+[packages.forkroot.versions."3.0.0"]
+requires_python = ">=0"
+requires = ["forkdep>=2.8", "forkleaf>=1.1"]
+
+[packages.forkdep.versions."2.8"]
+requires_python = ">=0"
+
+[packages.forkdep.versions."3.0"]
+requires_python = ">=0"
+
+[packages.forkdep.versions."3.1"]
+requires_python = ">=0"
+
+[packages.forkleaf.versions."1.1.0"]
+requires_python = ">=3.11"
+
+[testgen]
+kind = "compile"
+
+[resolver_options]
+resolution = "lowest"
+universal = true

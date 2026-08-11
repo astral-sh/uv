@@ -1,0 +1,18 @@
+name = "requires-package-only-prereleases-in-range-global-opt-in"
+description = "The user requires a version of package `a` which only matches prerelease versions. They did not include a prerelease specifier for the package, but they opted into prereleases globally."
+
+[root]
+requires = ["a>0.1.0"]
+
+[expected]
+satisfiable = true
+
+[expected.packages]
+a = "1.0.0a1"
+
+[packages.a.versions."0.1.0"]
+
+[packages.a.versions."1.0.0a1"]
+
+[resolver_options]
+prereleases = true

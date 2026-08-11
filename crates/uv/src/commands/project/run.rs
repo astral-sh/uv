@@ -4,6 +4,8 @@ use std::ffi::OsString;
 use std::fmt::Write;
 use std::io;
 use std::io::Read;
+#[cfg(unix)]
+use std::os::unix::ffi::OsStringExt;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, anyhow, bail};
@@ -30,21 +32,24 @@ use uv_installer::{InstallationStrategy, SatisfiesResult, SitePackages};
 use uv_normalize::{DefaultExtras, DefaultGroups, PackageName};
 use uv_preview::Preview;
 use uv_python::{
-    EnvironmentPreference, Interpreter, PyVenvConfiguration, PythonDownloads, PythonEnvironment,
-    PythonInstallation, PythonPreference, PythonRequest, PythonVersionFile,
+    ConfigDiscovery, EnvironmentPreference, Interpreter, PyVenvConfiguration, PythonDownloads,
+    PythonEnvironment, PythonInstallation, PythonPreference, PythonRequest, PythonVersionFile,
     VersionFileDiscoveryOptions,
 };
 use uv_redacted::DisplaySafeUrl;
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
 use uv_resolver::{Installable, Lock, Preference};
 use uv_scripts::{Pep723Error, Pep723Item, Pep723Metadata, Pep723Script};
-use uv_settings::{EnvironmentOptions, FilesystemOptions, PythonInstallMirrors};
-use uv_shell::runnable::WindowsRunnable;
+use uv_settings::{
+    EnvironmentOptions, FilesystemOptions, MalwareCheckSettings, PythonInstallMirrors,
+};
+use uv_shell::WindowsRunnable;
 use uv_static::EnvVars;
 use uv_types::SourceTreeEditablePolicy;
 use uv_warnings::warn_user;
-use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceCache, WorkspaceError};
+use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceCache, WorkspaceErrorKind};
 
+use crate::base_client_builder;
 use crate::child::run_to_completion;
 
 /// GitHub Gist API response structure
@@ -66,13 +71,13 @@ use crate::commands::project::install_target::InstallTarget;
 use crate::commands::project::lock::LockMode;
 use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{
-    EnvironmentSpecification, PreferenceLocation, ProjectEnvironment, ProjectError,
-    ScriptEnvironment, ScriptInterpreter, UniversalState, WorkspacePython,
+    EnvironmentSpecification, LinkErrorReporting, PreferenceLocation, ProjectEnvironment,
+    ProjectError, ScriptEnvironment, ScriptInterpreter, UniversalState, WorkspacePython,
     default_dependency_groups, script_extra_build_requires, script_specification,
     update_environment, validate_project_requires_python,
 };
 use crate::commands::reporters::PythonDownloadReporter;
-use crate::commands::{ExitStatus, diagnostics, project};
+use crate::commands::{ExitStatus, diagnostics, project, read_env_files};
 use crate::printer::Printer;
 use crate::settings::{
     FrozenSource, GlobalSettings, LockCheck, LockCheckSource, ResolverInstallerSettings,
@@ -95,7 +100,7 @@ pub(crate) async fn run(
     all_packages: bool,
     package: Option<PackageName>,
     no_project: bool,
-    no_config: bool,
+    config_discovery: ConfigDiscovery,
     extras: ExtrasSpecification,
     groups: DependencyGroups,
     editable: Option<EditableMode>,
@@ -115,20 +120,19 @@ pub(crate) async fn run(
     env_file: EnvFile,
     preview: Preview,
     max_recursion_depth: u32,
+    malware_settings: MalwareCheckSettings,
+    #[cfg(unix)] run_rlimit_nofile: Option<u32>,
 ) -> anyhow::Result<ExitStatus> {
     // Check if max recursion depth was exceeded. This most commonly happens
     // for scripts with a shebang line like `#!/usr/bin/env -S uv run`, so try
     // to provide guidance for that case.
     let recursion_depth = read_recursion_depth_from_environment_variable()?;
     if recursion_depth > max_recursion_depth {
-        bail!(
-            r"
-`uv run` was recursively invoked {recursion_depth} times which exceeds the limit of {max_recursion_depth}.
-
-hint: If you are running a script with `{}` in the shebang, you may need to include the `{}` flag.",
-            "uv run".green(),
-            "--script".green(),
-        );
+        return Err(RecursionLimitError {
+            depth: recursion_depth,
+            max: max_recursion_depth,
+        }
+        .into());
     }
 
     // These cases seem quite complex because (in theory) they should change the "current package".
@@ -165,41 +169,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
     let lock_state = UniversalState::default();
     let sync_state = lock_state.fork();
 
-    // Read from the `.env` file, if necessary.
-    for env_file_path in env_file.iter().rev().map(PathBuf::as_path) {
-        match dotenvy::from_path(env_file_path) {
-            Err(dotenvy::Error::Io(err)) if err.kind() == std::io::ErrorKind::NotFound => {
-                bail!(
-                    "No environment file found at: `{}`",
-                    env_file_path.simplified_display()
-                );
-            }
-            Err(dotenvy::Error::Io(err)) => {
-                bail!(
-                    "Failed to read environment file `{}`: {err}",
-                    env_file_path.simplified_display()
-                );
-            }
-            Err(dotenvy::Error::LineParse(content, position)) => {
-                warn_user!(
-                    "Failed to parse environment file `{}` at position {position}: {content}",
-                    env_file_path.simplified_display(),
-                );
-            }
-            Err(err) => {
-                warn_user!(
-                    "Failed to parse environment file `{}`: {err}",
-                    env_file_path.simplified_display(),
-                );
-            }
-            Ok(()) => {
-                debug!(
-                    "Read environment file at: `{}`",
-                    env_file_path.simplified_display()
-                );
-            }
-        }
-    }
+    let env_file_environment = read_env_files(env_file.iter())?;
 
     // Initialize any output reporters.
     let download_reporter = PythonDownloadReporter::single(printer);
@@ -245,12 +215,11 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                 python_downloads,
                 &install_mirrors,
                 no_sync,
-                no_config,
+                config_discovery,
                 active.map_or(Some(false), Some),
                 &cache,
                 DryRun::Disabled,
                 printer,
-                preview,
             )
             .await?
             .into_environment()?;
@@ -296,12 +265,10 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
             {
                 Ok(result) => result.into_lock(),
                 Err(ProjectError::Operation(err)) => {
-                    return diagnostics::OperationDiagnostic::with_system_certs(
-                        client_builder.system_certs(),
-                    )
-                    .with_context("script")
-                    .report(err)
-                    .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+                    return diagnostics::OperationDiagnostic::default()
+                        .with_context("script")
+                        .report(err)
+                        .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
                 }
                 Err(err) => return Err(err.into()),
             };
@@ -319,7 +286,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                 &environment,
                 &extras.with_defaults(DefaultExtras::default()),
                 &groups.with_defaults(DefaultGroups::default()),
-                editable,
+                editable.clone(),
                 install_options,
                 modifications,
                 python_platform.as_ref(),
@@ -338,17 +305,16 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                 DryRun::Disabled,
                 printer,
                 preview,
+                &malware_settings,
             )
             .await
             {
                 Ok(_) => {}
                 Err(ProjectError::Operation(err)) => {
-                    return diagnostics::OperationDiagnostic::with_system_certs(
-                        client_builder.system_certs(),
-                    )
-                    .with_context("script")
-                    .report(err)
-                    .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+                    return diagnostics::OperationDiagnostic::default()
+                        .with_context("script")
+                        .report(err)
+                        .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
                 }
                 Err(err) => return Err(err.into()),
             }
@@ -399,13 +365,20 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
             if let Some(spec) = script_specification(
                 (&script).into(),
                 &settings.resolver,
+                &cache,
+                workspace_cache,
                 client_builder.credentials_cache(),
-            )? {
+            )
+            .await?
+            {
                 let script_extra_build_requires = script_extra_build_requires(
                     (&script).into(),
                     &settings.resolver,
+                    &cache,
+                    workspace_cache,
                     client_builder.credentials_cache(),
-                )?
+                )
+                .await?
                 .into_inner();
                 let environment = ScriptEnvironment::get_or_init(
                     (&script).into(),
@@ -415,12 +388,11 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     python_downloads,
                     &install_mirrors,
                     no_sync,
-                    no_config,
+                    config_discovery,
                     active.map_or(Some(false), Some),
                     &cache,
                     DryRun::Disabled,
                     printer,
-                    preview,
                 )
                 .await?
                 .into_environment()?;
@@ -483,12 +455,10 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                 {
                     Ok(update) => Some(update.into_environment().into_interpreter()),
                     Err(ProjectError::Operation(err)) => {
-                        return diagnostics::OperationDiagnostic::with_system_certs(
-                            client_builder.system_certs(),
-                        )
-                        .with_context("script")
-                        .report(err)
-                        .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+                        return diagnostics::OperationDiagnostic::default()
+                            .with_context("script")
+                            .report(err)
+                            .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
                     }
                     Err(err) => return Err(err.into()),
                 }
@@ -502,11 +472,10 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     python_downloads,
                     &install_mirrors,
                     no_sync,
-                    no_config,
+                    config_discovery,
                     active.map_or(Some(false), Some),
                     &cache,
                     printer,
-                    preview,
                 )
                 .await?
                 .into_interpreter();
@@ -521,7 +490,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                         uv_virtualenv::RemovalReason::TemporaryEnvironment,
                     ),
                     false,
-                    false,
+                    uv_virtualenv::Seed::Disabled,
                     false,
                 )?;
 
@@ -576,6 +545,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
             let project = VirtualProject::discover_with_package(
                 project_dir,
                 &DiscoveryOptions::default(),
+                &cache,
                 workspace_cache,
                 package.clone(),
             )
@@ -585,6 +555,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
             match VirtualProject::discover(
                 project_dir,
                 &DiscoveryOptions::default(),
+                &cache,
                 workspace_cache,
             )
             .await
@@ -597,20 +568,24 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                         Some(project)
                     }
                 }
-                Err(WorkspaceError::MissingPyprojectToml | WorkspaceError::NonWorkspace(_)) => {
-                    // If the user runs with `--no-project` and we can't find a project, warn.
-                    if no_project {
-                        warn!("`--no-project` was provided, but no project was found");
-                    }
-                    None
-                }
                 Err(err) => {
-                    // If the user runs with `--no-project`, ignore the error.
-                    if no_project {
-                        warn!("Ignoring project discovery error due to `--no-project`: {err}");
+                    if matches!(
+                        err.as_ref(),
+                        WorkspaceErrorKind::MissingPyprojectToml
+                            | WorkspaceErrorKind::NonWorkspace(_)
+                    ) {
+                        if no_project {
+                            warn!("`--no-project` was provided, but no project was found");
+                        }
                         None
                     } else {
-                        return Err(err.into());
+                        // If the user runs with `--no-project`, ignore the error.
+                        if no_project {
+                            warn!("Ignoring project discovery error due to `--no-project`: {err}");
+                            None
+                        } else {
+                            return Err(err.into());
+                        }
                     }
                 }
             }
@@ -683,7 +658,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     Some(project.workspace()),
                     &groups,
                     project_dir,
-                    no_config,
+                    config_discovery,
                 )
                 .await?;
 
@@ -698,7 +673,6 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     install_mirrors.python_install_mirror.as_deref(),
                     install_mirrors.pypy_install_mirror.as_deref(),
                     install_mirrors.python_downloads_json_url.as_deref(),
-                    preview,
                 )
                 .await?
                 .into_interpreter();
@@ -724,7 +698,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                         uv_virtualenv::RemovalReason::TemporaryEnvironment,
                     ),
                     false,
-                    false,
+                    uv_virtualenv::Seed::Disabled,
                     false,
                 )?
             } else {
@@ -739,12 +713,12 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     python_preference,
                     python_downloads,
                     no_sync,
-                    no_config,
+                    config_discovery,
                     active,
                     &cache,
                     DryRun::Disabled,
+                    LinkErrorReporting::Log,
                     printer,
-                    preview,
                 )
                 .await?
                 .into_environment()?
@@ -806,11 +780,9 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                 {
                     Ok(result) => result,
                     Err(ProjectError::Operation(err)) => {
-                        return diagnostics::OperationDiagnostic::with_system_certs(
-                            client_builder.system_certs(),
-                        )
-                        .report(err)
-                        .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+                        return diagnostics::OperationDiagnostic::default()
+                            .report(err)
+                            .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
                     }
                     Err(err) => return Err(err.into()),
                 };
@@ -889,16 +861,15 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     DryRun::Disabled,
                     printer,
                     preview,
+                    &malware_settings,
                 )
                 .await
                 {
                     Ok(_) => {}
                     Err(ProjectError::Operation(err)) => {
-                        return diagnostics::OperationDiagnostic::with_system_certs(
-                            client_builder.system_certs(),
-                        )
-                        .report(err)
-                        .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+                        return diagnostics::OperationDiagnostic::default()
+                            .report(err)
+                            .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
                     }
                     Err(err) => return Err(err.into()),
                 }
@@ -921,7 +892,8 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                 } else {
                     PythonVersionFile::discover(
                         &project_dir,
-                        &VersionFileDiscoveryOptions::default().with_no_config(no_config),
+                        &VersionFileDiscoveryOptions::default()
+                            .with_config_discovery(config_discovery),
                     )
                     .await?
                     .and_then(PythonVersionFile::into_version)
@@ -939,7 +911,6 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     install_mirrors.python_install_mirror.as_deref(),
                     install_mirrors.pypy_install_mirror.as_deref(),
                     install_mirrors.python_downloads_json_url.as_deref(),
-                    preview,
                 )
                 .await?;
 
@@ -960,7 +931,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                         uv_virtualenv::RemovalReason::TemporaryEnvironment,
                     ),
                     false,
-                    false,
+                    uv_virtualenv::Seed::Disabled,
                     false,
                 )?;
                 venv.into_interpreter()
@@ -1049,12 +1020,10 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
             let environment = match result {
                 Ok(resolution) => resolution,
                 Err(ProjectError::Operation(err)) => {
-                    return diagnostics::OperationDiagnostic::with_system_certs(
-                        client_builder.system_certs(),
-                    )
-                    .with_context("`--with`")
-                    .report(err)
-                    .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+                    return diagnostics::OperationDiagnostic::default()
+                        .with_context("`--with`")
+                        .report(err)
+                        .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
                 }
                 Err(err) => return Err(err.into()),
             };
@@ -1088,7 +1057,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     uv_virtualenv::RemovalReason::TemporaryEnvironment,
                 ),
                 false,
-                false,
+                uv_virtualenv::Seed::Disabled,
                 false,
             )
         })
@@ -1123,7 +1092,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     .chain(base_site_packages)
                     .dedup()
                     .inspect(|path| debug!("Adding `{}` to site packages", path.display()))
-                    .map(|path| format!("site.addsitedir(\"{}\")", path.escape_for_python()))
+                    .map(|path| format!("site.addsitedir({})", path.escape_for_python()))
                     .collect::<Vec<_>>()
                     .join("; ")
             );
@@ -1296,6 +1265,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
 
     debug!("Running `{command}`");
     let mut process = command.as_command(interpreter);
+    process.envs(env_file_environment);
 
     // Construct the `PATH` environment variable.
     let new_path = std::env::join_paths(
@@ -1332,6 +1302,16 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
     // Ensure `VIRTUAL_ENV` is set.
     if interpreter.is_virtualenv() {
         process.env(EnvVars::VIRTUAL_ENV, interpreter.sys_prefix().as_os_str());
+    }
+
+    #[cfg(unix)]
+    if let Some(limit) = run_rlimit_nofile {
+        uv_unix::set_open_file_limit(limit).with_context(|| {
+            format!(
+                "Failed to apply `{}` value `{limit}`",
+                EnvVars::UV_RUN_RLIMIT_NOFILE
+            )
+        })?;
     }
 
     // Spawn and wait for completion
@@ -1371,7 +1351,7 @@ fn can_skip_ephemeral(
     }
 
     // Determine the markers and tags to use for resolution.
-    let markers = interpreter.resolver_marker_environment();
+    let markers = interpreter.to_resolver_marker_environment();
     let Ok(tags) = interpreter.tags() else {
         return false;
     };
@@ -1385,6 +1365,8 @@ fn can_skip_ephemeral(
         &spec.requirements,
         &spec.constraints,
         &spec.overrides,
+        &spec.override_dependencies,
+        &spec.excludes,
         InstallationStrategy::Permissive,
         &markers,
         tags,
@@ -1502,19 +1484,8 @@ impl ParsedRunCommand {
                 Ok((script, run_command))
             }
             Self::PendingRemote(remote_command) => {
-                let settings = GlobalSettings::resolve(global_args, filesystem, environment);
-                let client_builder = BaseClientBuilder::new(
-                    settings.network_settings.connectivity,
-                    settings.network_settings.system_certs,
-                    settings.network_settings.allow_insecure_host,
-                    settings.preview,
-                    settings.network_settings.read_timeout,
-                    settings.network_settings.connect_timeout,
-                    settings.network_settings.retries,
-                )
-                .http_proxy(settings.network_settings.http_proxy)
-                .https_proxy(settings.network_settings.https_proxy)
-                .no_proxy(settings.network_settings.no_proxy);
+                let settings = GlobalSettings::resolve(global_args, filesystem, environment, None)?;
+                let client_builder = base_client_builder(&settings);
 
                 let (url, downloaded_script, args) =
                     remote_command.download(&client_builder).await?;
@@ -1805,16 +1776,15 @@ impl RunCommand {
                 let mut process = Command::new(interpreter.sys_executable());
                 process.arg("-c");
 
-                #[cfg(unix)]
-                {
-                    use std::os::unix::ffi::OsStringExt;
-                    process.arg(OsString::from_vec(script.clone()));
-                }
-
-                #[cfg(not(unix))]
-                {
-                    let script = String::from_utf8(script.clone()).expect("script is valid UTF-8");
-                    process.arg(script);
+                cfg_select! {
+                    unix => {
+                        process.arg(OsString::from_vec(script.clone()));
+                    },
+                    _ => {
+                        let script =
+                            String::from_utf8(script.clone()).expect("script is valid UTF-8");
+                        process.arg(script);
+                    },
                 }
                 process.args(args);
 
@@ -1837,16 +1807,15 @@ impl RunCommand {
                 let mut process = Command::new(&pythonw_executable);
                 process.arg("-c");
 
-                #[cfg(unix)]
-                {
-                    use std::os::unix::ffi::OsStringExt;
-                    process.arg(OsString::from_vec(script.clone()));
-                }
-
-                #[cfg(not(unix))]
-                {
-                    let script = String::from_utf8(script.clone()).expect("script is valid UTF-8");
-                    process.arg(script);
+                cfg_select! {
+                    unix => {
+                        process.arg(OsString::from_vec(script.clone()));
+                    },
+                    _ => {
+                        let script =
+                            String::from_utf8(script.clone()).expect("script is valid UTF-8");
+                        process.arg(script);
+                    },
                 }
                 process.args(args);
 
@@ -1866,7 +1835,7 @@ impl RunCommand {
     }
 
     /// Return the directory containing the script, if any.
-    pub(crate) fn script_dir(&self) -> Option<&Path> {
+    fn script_dir(&self) -> Option<&Path> {
         let parent = match self {
             Self::PythonScript(target, _)
             | Self::PythonGuiScript(target, _)
@@ -2005,9 +1974,26 @@ async fn resolve_gist_url(
 /// Returns `true` if the target is a ZIP archive containing a `__main__.py` file.
 fn is_python_zipapp(target: &Path) -> bool {
     if let Ok(file) = fs_err::File::open(target) {
-        if let Ok(mut archive) = zip::ZipArchive::new(file) {
-            return archive.by_name("__main__.py").is_ok_and(|f| f.is_file());
-        }
+        let reader = std::io::BufReader::new(file);
+        return futures::executor::block_on(async {
+            let archive = async_zip::base::read::seek::ZipFileReader::new(
+                futures::io::AllowStdIo::new(reader),
+            )
+            .await
+            .ok()?;
+            archive
+                .file()
+                .entries()
+                .iter()
+                .find(|entry| {
+                    entry
+                        .filename()
+                        .as_str()
+                        .is_ok_and(|name| name == "__main__.py")
+                })
+                .map(|entry| entry.dir().is_ok_and(|is_dir| !is_dir))
+        })
+        .unwrap_or(false);
     }
     false
 }
@@ -2169,4 +2155,22 @@ fn copy_entrypoint(
     trace!("Updated entrypoint at {}", target.user_display());
 
     Ok(())
+}
+
+/// `uv run` was invoked recursively too many times.
+#[derive(Debug, thiserror::Error)]
+#[error("`uv run` was recursively invoked {depth} times which exceeds the limit of {max}")]
+pub(crate) struct RecursionLimitError {
+    depth: u32,
+    max: u32,
+}
+
+impl uv_errors::Hint for RecursionLimitError {
+    fn hints(&self) -> uv_errors::Hints<'_> {
+        uv_errors::Hints::from(format!(
+            "If you are running a script with `{}` in the shebang, you may need to include the `{}` flag",
+            "uv run".green(),
+            "--script".green(),
+        ))
+    }
 }

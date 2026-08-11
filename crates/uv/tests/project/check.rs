@@ -1,0 +1,2827 @@
+use std::process::Command;
+
+use anyhow::Result;
+use assert_cmd::assert::OutputAssertExt;
+use assert_fs::prelude::*;
+use indoc::indoc;
+use insta::assert_snapshot;
+use serde_json::json;
+use wiremock::matchers::{body_string_contains, method, path};
+use wiremock::{Mock, MockServer, ResponseTemplate};
+
+use uv_static::EnvVars;
+use uv_test::packse::PackseServer;
+use uv_test::{diff_snapshot, uv_snapshot};
+
+fn workspace_check(context: &uv_test::TestContext) -> Command {
+    let mut command = context.check();
+    command.env("TY_OUTPUT_FORMAT", "concise");
+    // Select ty 0.0.64 independently of the suite-wide cutoff so these checks can
+    // exercise `--exclude-scripts` and track newer ty versions without disrupting other tests.
+    command.env(EnvVars::UV_EXCLUDE_NEWER, "2026-07-28T00:00:00Z");
+    command
+}
+
+fn write_workspace_member(context: &uv_test::TestContext, name: &str, source: &str) -> Result<()> {
+    let member = context.temp_dir.child("packages").child(name);
+    member.create_dir_all()?;
+    member.child("pyproject.toml").write_str(&format!(
+        "[project]\nname = \"{name}\"\nversion = \"0.1.0\"\nrequires-python = \">=3.12\"\ndependencies = []\n"
+    ))?;
+    member.child("main.py").write_str(source)?;
+
+    Ok(())
+}
+
+#[test]
+fn check_project() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+    "#})?;
+
+    let main_py = context.temp_dir.child("main.py");
+    main_py.write_str(indoc! {r"
+        x: int = 1
+    "})?;
+
+    uv_snapshot!(context.filters(), context.check(), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    All checks passed!
+
+    ----- stderr -----
+    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
+    ");
+
+    Ok(())
+}
+
+/// Check PEP 723 scripts only when explicitly selected, not as part of a workspace member.
+#[test]
+fn check_workspace_excludes_pep723_scripts() -> Result<()> {
+    let context =
+        uv_test::test_context!("3.12").with_filter((r"WARN Failed to fetch `ty`[^\n]*\n", ""));
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+            [project]
+            name = "project"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+            dependencies = []
+
+            [tool.uv.workspace]
+            members = ["packages/*"]
+        "#})?;
+    context
+        .temp_dir
+        .child("main.py")
+        .write_str("value: int = 'project'\n")?;
+    context.temp_dir.child("script.py").write_str(indoc! {r#"
+        # /// script
+        # requires-python = ">=3.12"
+        # dependencies = []
+        # ///
+        value: int = "script"
+    "#})?;
+
+    write_workspace_member(&context, "member", "value: int = 'member'\n")?;
+    context
+        .temp_dir
+        .child("packages/member/script.py")
+        .write_str(indoc! {r#"
+            # /// script
+            # requires-python = ">=3.12"
+            # dependencies = []
+            # ///
+            value: int = "member-script"
+        "#})?;
+
+    uv_snapshot!(context.filters(), workspace_check(&context), @r#"
+    exit_code: 1 (failure)
+    ----- stdout -----
+    main.py:1:14: error[invalid-assignment] Object of type `Literal["project"]` is not assignable to `int`
+    Found 1 diagnostic
+
+    ----- stderr -----
+    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
+    "#);
+
+    uv_snapshot!(
+        context.filters(),
+        workspace_check(&context).arg("--ty-version").arg("0.0.40"),
+        @r#"
+        exit_code: 1 (failure)
+        ----- stdout -----
+        main.py:1:14: error[invalid-assignment] Object of type `Literal["project"]` is not assignable to `int`
+        Found 1 diagnostic
+
+        ----- stderr -----
+        warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
+        "#
+    );
+
+    uv_snapshot!(context.filters(), workspace_check(&context).arg("--package").arg("member"), @r#"
+    exit_code: 1 (failure)
+    ----- stdout -----
+    main.py:1:14: error[invalid-assignment] Object of type `Literal["member"]` is not assignable to `int`
+    Found 1 diagnostic
+
+    ----- stderr -----
+    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
+    "#);
+
+    uv_snapshot!(context.filters(), workspace_check(&context).arg("--all-packages"), @r#"
+    exit_code: 1 (failure)
+    ----- stdout -----
+    main.py:1:14: error[invalid-assignment] Object of type `Literal["project"]` is not assignable to `int`
+    packages/member/main.py:1:14: error[invalid-assignment] Object of type `Literal["member"]` is not assignable to `int`
+    Found 2 diagnostics
+
+    ----- stderr -----
+    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
+    "#);
+
+    uv_snapshot!(context.filters(), workspace_check(&context).arg("--script").arg("script.py"), @r#"
+    exit_code: 1 (failure)
+    ----- stdout -----
+    script.py:5:14: error[invalid-assignment] Object of type `Literal["script"]` is not assignable to `int`
+    Found 1 diagnostic
+
+    ----- stderr -----
+    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
+    "#);
+
+    Ok(())
+}
+
+/// Invalid inline metadata should not prevent checking the surrounding project.
+#[test]
+fn check_project_ignores_invalid_pep723_scripts() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+            [project]
+            name = "project"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+            dependencies = []
+        "#})?;
+    context.temp_dir.child("main.py").write_str("value = 1\n")?;
+    context
+        .temp_dir
+        .child("fixtures/invalid-script.py")
+        .write_str(indoc! {r"
+            # /// script
+            # dependencies = []
+            # ///
+
+            # /// script
+            # dependencies = []
+            # ///
+            value: str = 1
+        "})?;
+
+    uv_snapshot!(context.filters(), context.check(), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    All checks passed!
+
+    ----- stderr -----
+    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
+    ");
+
+    uv_snapshot!(context.filters(), context.check().arg("--script").arg("fixtures/invalid-script.py"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: The script contains multiple PEP 723 metadata blocks
+    ");
+
+    Ok(())
+}
+
+/// Apply a safe fix and verify that the corrected source is written to disk.
+#[test]
+fn check_fix() -> Result<()> {
+    let context =
+        uv_test::test_context!("3.12").with_filter((r"WARN Failed to fetch `ty`[^\n]*\n", ""));
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+            [project]
+            name = "project"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+            dependencies = []
+        "#})?;
+    context
+        .temp_dir
+        .child("main.py")
+        .write_str("value = 1  # ty: ignore[unresolved-reference]\n")?;
+
+    uv_snapshot!(context.filters(), workspace_check(&context).arg("--fix"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    Found 1 diagnostic (1 fixed, 0 remaining).
+
+    ----- stderr -----
+    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
+    ");
+
+    assert_snapshot!(context.read("main.py"), @"
+    value = 1
+    ");
+
+    Ok(())
+}
+
+/// Apply available fixes while preserving unfixable diagnostics and their failure exit status.
+#[test]
+fn check_fix_unfixable() -> Result<()> {
+    let context =
+        uv_test::test_context!("3.12").with_filter((r"WARN Failed to fetch `ty`[^\n]*\n", ""));
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+            [project]
+            name = "project"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+            dependencies = []
+        "#})?;
+    context.temp_dir.child("main.py").write_str(indoc! {r#"
+        unused = 1  # ty: ignore[unresolved-reference]
+        value: int = "wrong"
+    "#})?;
+
+    uv_snapshot!(context.filters(), workspace_check(&context).arg("--fix"), @r#"
+    exit_code: 1 (failure)
+    ----- stdout -----
+    main.py:2:14: error[invalid-assignment] Object of type `Literal["wrong"]` is not assignable to `int`
+    Found 2 diagnostics (1 fixed, 1 remaining).
+
+    ----- stderr -----
+    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
+    "#);
+
+    assert_snapshot!(context.read("main.py"), @r#"
+    unused = 1
+    value: int = "wrong"
+    "#);
+
+    Ok(())
+}
+
+/// Leave a clean project unchanged and report success when there are no fixes to apply.
+#[test]
+fn check_fix_clean_project() -> Result<()> {
+    let context =
+        uv_test::test_context!("3.12").with_filter((r"WARN Failed to fetch `ty`[^\n]*\n", ""));
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+            [project]
+            name = "project"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+            dependencies = []
+        "#})?;
+    context
+        .temp_dir
+        .child("main.py")
+        .write_str("value: int = 1\n")?;
+
+    uv_snapshot!(context.filters(), workspace_check(&context).arg("--fix"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    All checks passed!
+
+    ----- stderr -----
+    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
+    ");
+
+    assert_snapshot!(context.read("main.py"), @"
+    value: int = 1
+    ");
+
+    Ok(())
+}
+
+/// Fix only the selected workspace member and leave other members and scripts untouched.
+#[test]
+fn check_fix_workspace_member_selection() -> Result<()> {
+    let context =
+        uv_test::test_context!("3.12").with_filter((r"WARN Failed to fetch `ty`[^\n]*\n", ""));
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+            [tool.uv.workspace]
+            members = ["packages/*"]
+        "#})?;
+    write_workspace_member(
+        &context,
+        "selected",
+        "value = 1  # ty: ignore[unresolved-reference]\n",
+    )?;
+    write_workspace_member(
+        &context,
+        "unselected",
+        "value = 2  # ty: ignore[unresolved-reference]\n",
+    )?;
+    context
+        .temp_dir
+        .child("packages/selected/script.py")
+        .write_str(indoc! {r#"
+            # /// script
+            # requires-python = ">=3.12"
+            # dependencies = []
+            # ///
+
+            value = 3  # ty: ignore[unresolved-reference]
+        "#})?;
+
+    uv_snapshot!(context.filters(), workspace_check(&context).arg("--fix").arg("--package").arg("selected"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    Found 1 diagnostic (1 fixed, 0 remaining).
+
+    ----- stderr -----
+    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
+    ");
+
+    assert_snapshot!(context.read("packages/selected/main.py"), @"
+    value = 1
+    ");
+    assert_snapshot!(context.read("packages/unselected/main.py"), @"
+    value = 2  # ty: ignore[unresolved-reference]
+    ");
+    assert_snapshot!(context.read("packages/selected/script.py"), @r#"
+    # /// script
+    # requires-python = ">=3.12"
+    # dependencies = []
+    # ///
+
+    value = 3  # ty: ignore[unresolved-reference]
+    "#);
+
+    Ok(())
+}
+
+/// Fix all explicitly selected workspace members without modifying standalone scripts.
+#[test]
+fn check_fix_all_packages() -> Result<()> {
+    let context =
+        uv_test::test_context!("3.12").with_filter((r"WARN Failed to fetch `ty`[^\n]*\n", ""));
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+            [tool.uv.workspace]
+            members = ["packages/*"]
+        "#})?;
+    write_workspace_member(
+        &context,
+        "selected-a",
+        "value = 1  # ty: ignore[unresolved-reference]\n",
+    )?;
+    write_workspace_member(
+        &context,
+        "selected-b",
+        "value = 2  # ty: ignore[unresolved-reference]\n",
+    )?;
+    context
+        .temp_dir
+        .child("packages/selected-a/script.py")
+        .write_str(indoc! {r#"
+            # /// script
+            # requires-python = ">=3.12"
+            # dependencies = []
+            # ///
+
+            value = 3  # ty: ignore[unresolved-reference]
+        "#})?;
+
+    uv_snapshot!(context.filters(), workspace_check(&context).arg("--fix").arg("--all-packages"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    Found 2 diagnostics (2 fixed, 0 remaining).
+
+    ----- stderr -----
+    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
+    ");
+
+    assert_snapshot!(context.read("packages/selected-a/main.py"), @"
+    value = 1
+    ");
+    assert_snapshot!(context.read("packages/selected-b/main.py"), @"
+    value = 2
+    ");
+    assert_snapshot!(context.read("packages/selected-a/script.py"), @r#"
+    # /// script
+    # requires-python = ">=3.12"
+    # dependencies = []
+    # ///
+
+    value = 3  # ty: ignore[unresolved-reference]
+    "#);
+
+    Ok(())
+}
+
+/// Fix a selected PEP 723 script without checking or changing another Python file.
+#[test]
+fn check_fix_script() -> Result<()> {
+    let context =
+        uv_test::test_context!("3.12").with_filter((r"WARN Failed to fetch `ty`[^\n]*\n", ""));
+
+    let selected = context.temp_dir.child("selected.py");
+    selected.write_str(indoc! {r#"
+        # /// script
+        # requires-python = ">=3.12"
+        # dependencies = []
+        # ///
+
+        value = 1  # ty: ignore[unresolved-reference]
+    "#})?;
+    context
+        .temp_dir
+        .child("unselected.py")
+        .write_str("value: int = 'unselected'\n")?;
+
+    uv_snapshot!(context.filters(), workspace_check(&context).arg("--fix").arg("--script").arg(selected.path()), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    Found 1 diagnostic (1 fixed, 0 remaining).
+
+    ----- stderr -----
+    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
+    ");
+
+    assert_snapshot!(context.read("selected.py"), @r#"
+    # /// script
+    # requires-python = ">=3.12"
+    # dependencies = []
+    # ///
+
+    value = 1
+    "#);
+    assert_snapshot!(context.read("unselected.py"), @"
+    value: int = 'unselected'
+    ");
+
+    Ok(())
+}
+
+/// Leave a fixable script unchanged when a different, clean script is selected.
+#[test]
+fn check_fix_script_does_not_fix_unselected_script() -> Result<()> {
+    let context =
+        uv_test::test_context!("3.12").with_filter((r"WARN Failed to fetch `ty`[^\n]*\n", ""));
+
+    let selected = context.temp_dir.child("selected.py");
+    selected.write_str(indoc! {r#"
+        # /// script
+        # requires-python = ">=3.12"
+        # dependencies = []
+        # ///
+
+        value: int = 1
+    "#})?;
+
+    let unselected = context.temp_dir.child("unselected.py");
+    unselected.write_str(indoc! {r#"
+        # /// script
+        # requires-python = ">=3.12"
+        # dependencies = []
+        # ///
+
+        value = 2  # ty: ignore[unresolved-reference]
+    "#})?;
+
+    uv_snapshot!(context.filters(), workspace_check(&context).arg("--fix").arg("--script").arg(selected.path()), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    All checks passed!
+
+    ----- stderr -----
+    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
+    ");
+
+    assert_snapshot!(context.read("selected.py"), @r#"
+    # /// script
+    # requires-python = ">=3.12"
+    # dependencies = []
+    # ///
+
+    value: int = 1
+    "#);
+    assert_snapshot!(context.read("unselected.py"), @r#"
+    # /// script
+    # requires-python = ">=3.12"
+    # dependencies = []
+    # ///
+
+    value = 2  # ty: ignore[unresolved-reference]
+    "#);
+
+    Ok(())
+}
+
+/// Check only the selected workspace member, whether selected implicitly or explicitly.
+#[test]
+fn check_workspace_member_selection() -> Result<()> {
+    let context =
+        uv_test::test_context!("3.12").with_filter((r"WARN Failed to fetch `ty`[^\n]*\n", ""));
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+            [tool.uv.workspace]
+            members = ["packages/*"]
+        "#})?;
+    write_workspace_member(&context, "member-a", "value: int = 'selected'\n")?;
+    write_workspace_member(&context, "member-b", "value: int = 'excluded'\n")?;
+
+    let member_a = context.temp_dir.child("packages").child("member-a");
+    uv_snapshot!(context.filters(), workspace_check(&context).current_dir(&member_a), @r#"
+    exit_code: 1 (failure)
+    ----- stdout -----
+    main.py:1:14: error[invalid-assignment] Object of type `Literal["selected"]` is not assignable to `int`
+    Found 1 diagnostic
+
+    ----- stderr -----
+    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
+    "#);
+
+    uv_snapshot!(context.filters(), workspace_check(&context).arg("--package").arg("member-a"), @r#"
+    exit_code: 1 (failure)
+    ----- stdout -----
+    main.py:1:14: error[invalid-assignment] Object of type `Literal["selected"]` is not assignable to `int`
+    Found 1 diagnostic
+
+    ----- stderr -----
+    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
+    "#);
+
+    Ok(())
+}
+
+/// Check every member when invoked from the root of a virtual workspace.
+#[test]
+fn check_virtual_workspace_checks_all_members_by_default() -> Result<()> {
+    let context =
+        uv_test::test_context!("3.12").with_filter((r"WARN Failed to fetch `ty`[^\n]*\n", ""));
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+            [tool.uv.workspace]
+            members = ["packages/*"]
+        "#})?;
+    write_workspace_member(&context, "member-a", "value: int = 'selected-a'\n")?;
+    write_workspace_member(&context, "member-b", "value: int = 'selected-b'\n")?;
+
+    uv_snapshot!(context.filters(), workspace_check(&context), @r#"
+    exit_code: 1 (failure)
+    ----- stdout -----
+    packages/member-a/main.py:1:14: error[invalid-assignment] Object of type `Literal["selected-a"]` is not assignable to `int`
+    packages/member-b/main.py:1:14: error[invalid-assignment] Object of type `Literal["selected-b"]` is not assignable to `int`
+    Found 2 diagnostics
+
+    ----- stderr -----
+    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
+    "#);
+
+    Ok(())
+}
+
+/// Ignore Python files at a virtual workspace root that do not belong to a member.
+#[test]
+fn check_virtual_workspace_only_checks_declared_members() -> Result<()> {
+    let context =
+        uv_test::test_context!("3.12").with_filter((r"WARN Failed to fetch `ty`[^\n]*\n", ""));
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+            [tool.uv.workspace]
+            members = ["packages/*"]
+        "#})?;
+    context
+        .temp_dir
+        .child("unowned.py")
+        .write_str("value: int = 'unowned'\n")?;
+    write_workspace_member(&context, "member", "value: int = 'selected'\n")?;
+
+    uv_snapshot!(context.filters(), workspace_check(&context), @r#"
+    exit_code: 1 (failure)
+    ----- stdout -----
+    packages/member/main.py:1:14: error[invalid-assignment] Object of type `Literal["selected"]` is not assignable to `int`
+    Found 1 diagnostic
+
+    ----- stderr -----
+    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
+    "#);
+
+    uv_snapshot!(context.filters(), workspace_check(&context).arg("--all-packages"), @r#"
+    exit_code: 1 (failure)
+    ----- stdout -----
+    packages/member/main.py:1:14: error[invalid-assignment] Object of type `Literal["selected"]` is not assignable to `int`
+    Found 1 diagnostic
+
+    ----- stderr -----
+    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
+    "#);
+
+    Ok(())
+}
+
+/// Include workspace members located outside the workspace root with `--all-packages`.
+#[test]
+fn check_workspace_all_packages_includes_external_members() -> Result<()> {
+    let context =
+        uv_test::test_context!("3.12").with_filter((r"WARN Failed to fetch `ty`[^\n]*\n", ""));
+    let workspace = context.temp_dir.child("workspace");
+    workspace.create_dir_all()?;
+    workspace.child("pyproject.toml").write_str(indoc! {r#"
+        [tool.uv.workspace]
+        members = ["../external-package"]
+    "#})?;
+
+    let external = context.temp_dir.child("external-package");
+    external.create_dir_all()?;
+    external.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "external-package"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+    "#})?;
+    external
+        .child("main.py")
+        .write_str("value: int = 'selected'\n")?;
+
+    uv_snapshot!(
+        context.filters(),
+        workspace_check(&context)
+            .current_dir(&workspace)
+            .arg("--all-packages"),
+        @r#"
+    exit_code: 1 (failure)
+    ----- stdout -----
+    [TEMP_DIR]/external-package/main.py:1:14: error[invalid-assignment] Object of type `Literal["selected"]` is not assignable to `int`
+    Found 1 diagnostic
+
+    ----- stderr -----
+    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment at: .venv
+    "#
+    );
+
+    Ok(())
+}
+
+/// Apply workspace configuration when checking an externally located member.
+#[test]
+fn check_external_workspace_member_inherits_workspace_configuration() -> Result<()> {
+    let context =
+        uv_test::test_context!("3.12").with_filter((r"WARN Failed to fetch `ty`[^\n]*\n", ""));
+    let workspace = context.temp_dir.child("workspace");
+    workspace.create_dir_all()?;
+    workspace.child("pyproject.toml").write_str(indoc! {r#"
+        [tool.uv.workspace]
+        members = ["../external-package"]
+
+        [tool.ty.rules]
+        invalid-assignment = "ignore"
+    "#})?;
+
+    let external = context.temp_dir.child("external-package");
+    external.create_dir_all()?;
+    external.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "external-package"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+    "#})?;
+    external.child("main.py").write_str(indoc! {r#"
+        value: int = "ignored"
+
+        def broken() -> int:
+            return "reported"
+    "#})?;
+
+    uv_snapshot!(
+        context.filters(),
+        workspace_check(&context)
+            .current_dir(&workspace)
+            .arg("--package")
+            .arg("external-package"),
+        @r#"
+    exit_code: 1 (failure)
+    ----- stdout -----
+    [TEMP_DIR]/external-package/main.py:4:12: error[invalid-return-type] Return type does not match returned value: expected `int`, found `Literal["reported"]`
+    Found 1 diagnostic
+
+    ----- stderr -----
+    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment at: .venv
+    "#
+    );
+
+    Ok(())
+}
+
+/// Exclude nested workspace members unless all packages are explicitly selected.
+#[test]
+fn check_virtual_workspace_member_excludes_nested_members() -> Result<()> {
+    let context =
+        uv_test::test_context!("3.12").with_filter((r"WARN Failed to fetch `ty`[^\n]*\n", ""));
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+            [tool.uv.workspace]
+            members = ["packages/parent", "packages/parent/child"]
+        "#})?;
+    write_workspace_member(&context, "parent", "value: int = 'parent'\n")?;
+
+    let child = context.temp_dir.child("packages/parent/child");
+    child.create_dir_all()?;
+    child.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "child"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+    "#})?;
+    child.child("main.py").write_str("value: int = 'child'\n")?;
+
+    uv_snapshot!(context.filters(), workspace_check(&context).arg("--package").arg("parent"), @r#"
+    exit_code: 1 (failure)
+    ----- stdout -----
+    main.py:1:14: error[invalid-assignment] Object of type `Literal["parent"]` is not assignable to `int`
+    Found 1 diagnostic
+
+    ----- stderr -----
+    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
+    "#);
+
+    uv_snapshot!(context.filters(), workspace_check(&context).arg("--all-packages"), @r#"
+    exit_code: 1 (failure)
+    ----- stdout -----
+    packages/parent/child/main.py:1:14: error[invalid-assignment] Object of type `Literal["child"]` is not assignable to `int`
+    packages/parent/main.py:1:14: error[invalid-assignment] Object of type `Literal["parent"]` is not assignable to `int`
+    Found 2 diagnostics
+
+    ----- stderr -----
+    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
+    "#);
+
+    Ok(())
+}
+
+/// Resolve an excluded nested member as a dependency without checking its files.
+#[test]
+fn check_virtual_workspace_member_resolves_excluded_nested_dependency() -> Result<()> {
+    let context =
+        uv_test::test_context!("3.12").with_filter((r"WARN Failed to fetch `ty`[^\n]*\n", ""));
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+            [tool.uv.workspace]
+            members = ["packages/parent", "packages/parent/child"]
+        "#})?;
+
+    let parent = context.temp_dir.child("packages/parent");
+    parent.create_dir_all()?;
+    parent.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "parent"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["child"]
+
+        [tool.uv.sources]
+        child = { workspace = true }
+    "#})?;
+    parent.child("main.py").write_str(indoc! {r"
+        from child import exported
+
+        value: int = exported
+    "})?;
+
+    let child = parent.child("child");
+    child.create_dir_all()?;
+    child.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "child"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+    "#})?;
+    let child_package = child.child("src/child");
+    child_package.create_dir_all()?;
+    child_package.child("__init__.py").write_str(indoc! {r#"
+        exported: str = "hello"
+        internal_broken: int = "wrong"
+    "#})?;
+
+    uv_snapshot!(context.filters(), workspace_check(&context).arg("--package").arg("parent"), @"
+    exit_code: 1 (failure)
+    ----- stdout -----
+    main.py:3:14: error[invalid-assignment] Object of type `str` is not assignable to `int`
+    Found 1 diagnostic
+
+    ----- stderr -----
+    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
+    Installed 1 package in [TIME]
+    ");
+
+    Ok(())
+}
+
+/// Apply workspace configuration when checking an explicitly selected member.
+#[test]
+fn check_workspace_member_inherits_workspace_configuration() -> Result<()> {
+    let context =
+        uv_test::test_context!("3.12").with_filter((r"WARN Failed to fetch `ty`[^\n]*\n", ""));
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+            [tool.uv.workspace]
+            members = ["packages/*"]
+
+            [tool.ty.rules]
+            invalid-assignment = "ignore"
+        "#})?;
+    write_workspace_member(
+        &context,
+        "member",
+        indoc! {r#"
+            value: int = "ignored"
+
+            def broken() -> int:
+                return "reported"
+        "#},
+    )?;
+
+    uv_snapshot!(context.filters(), workspace_check(&context).arg("--package").arg("member"), @r#"
+    exit_code: 1 (failure)
+    ----- stdout -----
+    main.py:4:12: error[invalid-return-type] Return type does not match returned value: expected `int`, found `Literal["reported"]`
+    Found 1 diagnostic
+
+    ----- stderr -----
+    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
+    "#);
+
+    Ok(())
+}
+
+/// Reject package selections that do not match any workspace member.
+#[test]
+fn check_workspace_missing_package() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+            [tool.uv.workspace]
+            members = ["packages/*"]
+        "#})?;
+    write_workspace_member(&context, "member", "value: int = 1\n")?;
+
+    uv_snapshot!(context.filters(), workspace_check(&context).arg("--package").arg("missing"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
+    error: Package `missing` not found in workspace
+    ");
+
+    Ok(())
+}
+
+/// Exclude nested members when checking only a non-virtual workspace's root package.
+#[test]
+fn check_workspace_root_excludes_nested_members() -> Result<()> {
+    let context =
+        uv_test::test_context!("3.12").with_filter((r"WARN Failed to fetch `ty`[^\n]*\n", ""));
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+            [project]
+            name = "root"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+            dependencies = []
+
+            [tool.uv.workspace]
+            members = ["packages/*"]
+        "#})?;
+    context
+        .temp_dir
+        .child("main.py")
+        .write_str("value: int = 'selected'\n")?;
+    write_workspace_member(&context, "member", "value: int = 'excluded'\n")?;
+
+    uv_snapshot!(context.filters(), workspace_check(&context), @r#"
+    exit_code: 1 (failure)
+    ----- stdout -----
+    main.py:1:14: error[invalid-assignment] Object of type `Literal["selected"]` is not assignable to `int`
+    Found 1 diagnostic
+
+    ----- stderr -----
+    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
+    "#);
+
+    uv_snapshot!(context.filters(), workspace_check(&context).arg("--all-packages"), @r#"
+    exit_code: 1 (failure)
+    ----- stdout -----
+    main.py:1:14: error[invalid-assignment] Object of type `Literal["selected"]` is not assignable to `int`
+    packages/member/main.py:1:14: error[invalid-assignment] Object of type `Literal["excluded"]` is not assignable to `int`
+    Found 2 diagnostics
+
+    ----- stderr -----
+    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
+    "#);
+
+    Ok(())
+}
+
+/// Check only explicitly selected packages and include every member with `--all-packages`.
+#[test]
+fn check_workspace_multiple_packages() -> Result<()> {
+    let context =
+        uv_test::test_context!("3.12").with_filter((r"WARN Failed to fetch `ty`[^\n]*\n", ""));
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+            [tool.uv.workspace]
+            members = ["packages/*"]
+        "#})?;
+    write_workspace_member(&context, "member-a", "value: int = 'selected-a'\n")?;
+    write_workspace_member(&context, "member-b", "value: int = 'selected-b'\n")?;
+    write_workspace_member(&context, "member-c", "value: int = 'excluded'\n")?;
+
+    uv_snapshot!(
+        context.filters(),
+        workspace_check(&context)
+            .arg("--package")
+            .arg("member-a")
+            .arg("--package")
+            .arg("member-b"),
+        @r#"
+    exit_code: 1 (failure)
+    ----- stdout -----
+    packages/member-a/main.py:1:14: error[invalid-assignment] Object of type `Literal["selected-a"]` is not assignable to `int`
+    packages/member-b/main.py:1:14: error[invalid-assignment] Object of type `Literal["selected-b"]` is not assignable to `int`
+    Found 2 diagnostics
+
+    ----- stderr -----
+    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
+    "#
+    );
+
+    uv_snapshot!(context.filters(), workspace_check(&context).arg("--all-packages"), @r#"
+    exit_code: 1 (failure)
+    ----- stdout -----
+    packages/member-a/main.py:1:14: error[invalid-assignment] Object of type `Literal["selected-a"]` is not assignable to `int`
+    packages/member-b/main.py:1:14: error[invalid-assignment] Object of type `Literal["selected-b"]` is not assignable to `int`
+    packages/member-c/main.py:1:14: error[invalid-assignment] Object of type `Literal["excluded"]` is not assignable to `int`
+    Found 3 diagnostics
+
+    ----- stderr -----
+    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
+    "#);
+
+    Ok(())
+}
+
+#[test]
+fn check_no_sync_creates_lock_without_sync() -> Result<()> {
+    let server = PackseServer::new("simple/single-package.toml");
+    let context = uv_test::test_context!("3.12");
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["a==1.0.0"]
+    "#})?;
+    context.temp_dir.child("main.py").write_str(indoc! {r"
+        x: int = 1
+    "})?;
+
+    uv_snapshot!(
+        context.filters(),
+        context
+            .check()
+            .arg("--no-sync")
+            .arg("--index")
+            .arg(server.index_url())
+            .arg("--ty-version")
+            .arg("0.0.17"),
+        @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    All checks passed!
+
+    ----- stderr -----
+    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
+    "
+    );
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(context.read("uv.lock"), @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2026-02-15T00:00:00Z"
+
+        [[package]]
+        name = "a"
+        version = "1.0.0"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        sdist = { url = "http://[LOCALHOST]/files/a-1.0.0.tar.gz", hash = "sha256:3d2b4c28a4e112f3a1cef1db4dc5efa33fcbbcc38bc11ccc80321097db86c097", upload-time = "2024-03-24T00:00:00Z" }
+        wheels = [
+            { url = "http://[LOCALHOST]/files/a-1.0.0-py3-none-any.whl", hash = "sha256:f936eedc194aa91ca01a4c6c9981136ca6c75ce6df47e3951b12522881dce809", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "a" },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "a", specifier = "==1.0.0" }]
+        "#);
+    });
+    assert!(!context.site_packages().join("a").exists());
+
+    Ok(())
+}
+
+#[test]
+fn check_no_sync_uses_compatible_lock_interpreter() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&["3.12", "3.11"]);
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.11"
+        dependencies = []
+    "#})?;
+    context.temp_dir.child("main.py").write_str(indoc! {r"
+        x: int = 1
+    "})?;
+    context
+        .venv()
+        .arg("--python")
+        .arg("3.12")
+        .assert()
+        .success();
+
+    uv_snapshot!(
+        context.filters(),
+        context
+            .check()
+            .arg("--no-sync")
+            .arg("--python")
+            .arg("3.11")
+            .arg("--ty-version")
+            .arg("0.0.17"),
+        @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    All checks passed!
+
+    ----- stderr -----
+    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
+    warning: Using incompatible environment (`.venv`) due to `--no-sync` (The project environment's Python version does not satisfy the request: `Python 3.11`)
+    Using CPython 3.11.[X] interpreter at: [PYTHON-3.11]
+    "
+    );
+
+    assert!(context.temp_dir.child("uv.lock").exists());
+    context
+        .assert_command("import sys; assert sys.version_info[:2] == (3, 12)")
+        .success();
+
+    Ok(())
+}
+
+#[test]
+fn check_no_sync_updates_stale_lock_without_sync() -> Result<()> {
+    let server = PackseServer::new("simple/single-package.toml");
+    let context = uv_test::test_context!("3.12").with_exclude_newer("2026-02-15T00:00:00Z");
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["a==1.0.0"]
+    "#})?;
+    context
+        .lock()
+        .arg("--index")
+        .arg(server.index_url())
+        .assert()
+        .success();
+    let stale_lock = context.read("uv.lock");
+
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["a==2.0.0"]
+    "#})?;
+    context.temp_dir.child("main.py").write_str(indoc! {r"
+        x: int = 1
+    "})?;
+
+    uv_snapshot!(
+        context.filters(),
+        context
+            .check()
+            .arg("--no-sync")
+            .arg("--index")
+            .arg(server.index_url())
+            .arg("--ty-version")
+            .arg("0.0.17"),
+        @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    All checks passed!
+
+    ----- stderr -----
+    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
+    "
+    );
+
+    let updated_lock = context.read("uv.lock");
+    let diff = diff_snapshot(&stale_lock, &updated_lock, 10);
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(diff, @r#"
+        --- old
+        +++ new
+        @@ -1,26 +1,26 @@
+         version = 1
+         revision = 3
+         requires-python = ">=3.12"
+
+         [options]
+         exclude-newer = "2026-02-15T00:00:00Z"
+
+         [[package]]
+         name = "a"
+        -version = "1.0.0"
+        +version = "2.0.0"
+         source = { registry = "http://[LOCALHOST]/simple/" }
+        -sdist = { url = "http://[LOCALHOST]/files/a-1.0.0.tar.gz", hash = "sha256:3d2b4c28a4e112f3a1cef1db4dc5efa33fcbbcc38bc11ccc80321097db86c097", upload-time = "2024-03-24T00:00:00Z" }
+        +sdist = { url = "http://[LOCALHOST]/files/a-2.0.0.tar.gz", hash = "sha256:80ec95a66cff82a78a3333e3f5702e4254cf80533f21762933252eec58c9869a", upload-time = "2024-03-24T00:00:00Z" }
+         wheels = [
+        -    { url = "http://[LOCALHOST]/files/a-1.0.0-py3-none-any.whl", hash = "sha256:f936eedc194aa91ca01a4c6c9981136ca6c75ce6df47e3951b12522881dce809", upload-time = "2024-03-24T00:00:00Z" },
+        +    { url = "http://[LOCALHOST]/files/a-2.0.0-py3-none-any.whl", hash = "sha256:833374310e0a15880f3be9e6d082f527c9ac70129b2054d733da9b754315361f", upload-time = "2024-03-24T00:00:00Z" },
+         ]
+
+         [[package]]
+         name = "project"
+         version = "0.1.0"
+         source = { virtual = "." }
+         dependencies = [
+             { name = "a" },
+         ]
+
+         [package.metadata]
+        -requires-dist = [{ name = "a", specifier = "==1.0.0" }]
+        +requires-dist = [{ name = "a", specifier = "==2.0.0" }]
+        "#);
+    });
+    assert!(!context.site_packages().join("a").exists());
+
+    Ok(())
+}
+
+#[test]
+fn check_no_sync_locked_rejects_stale_lock_without_update() -> Result<()> {
+    let server = PackseServer::new("simple/single-package.toml");
+    let context = uv_test::test_context!("3.12").with_exclude_newer("2026-02-15T00:00:00Z");
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["a==1.0.0"]
+    "#})?;
+    context
+        .lock()
+        .arg("--index")
+        .arg(server.index_url())
+        .assert()
+        .success();
+    let stale_lock = context.read("uv.lock");
+
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["a==2.0.0"]
+    "#})?;
+
+    uv_snapshot!(
+        context.filters(),
+        context
+            .check()
+            .arg("--no-sync")
+            .arg("--locked")
+            .arg("--index")
+            .arg(server.index_url()),
+        @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
+    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+
+    hint: To update the lockfile, run `uv lock`.
+    "
+    );
+
+    assert_eq!(stale_lock, context.read("uv.lock"));
+    assert!(!context.site_packages().join("a").exists());
+
+    Ok(())
+}
+
+#[test]
+fn check_no_sync_locked_requires_existing_lock() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+    "#})?;
+
+    uv_snapshot!(
+        context.filters(),
+        context.check().arg("--no-sync").arg("--locked"),
+        @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
+    error: Unable to find lockfile at `uv.lock`, but `--locked` was provided. To create a lockfile, run `uv lock` or `uv sync` without the flag.
+    "
+    );
+
+    assert!(!context.temp_dir.child("uv.lock").exists());
+
+    Ok(())
+}
+
+#[test]
+fn check_no_sync_frozen_uses_existing_lock_without_update() -> Result<()> {
+    let server = PackseServer::new("simple/single-package.toml");
+    let context = uv_test::test_context!("3.12").with_exclude_newer("2026-02-15T00:00:00Z");
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["a==1.0.0"]
+    "#})?;
+    context
+        .lock()
+        .arg("--index")
+        .arg(server.index_url())
+        .assert()
+        .success();
+    let stale_lock = context.read("uv.lock");
+
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["a==2.0.0"]
+    "#})?;
+    context.temp_dir.child("main.py").write_str(indoc! {r"
+        x: int = 1
+    "})?;
+
+    uv_snapshot!(
+        context.filters(),
+        context
+            .check()
+            .arg("--no-sync")
+            .arg("--frozen")
+            .arg("--index")
+            .arg(server.index_url())
+            .arg("--ty-version")
+            .arg("0.0.17"),
+        @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    All checks passed!
+
+    ----- stderr -----
+    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
+    "
+    );
+
+    assert_eq!(stale_lock, context.read("uv.lock"));
+    assert!(!context.site_packages().join("a").exists());
+
+    Ok(())
+}
+
+#[test]
+fn check_no_sync_frozen_requires_existing_lock() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+    "#})?;
+
+    uv_snapshot!(
+        context.filters(),
+        context.check().arg("--no-sync").arg("--frozen"),
+        @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
+    error: Unable to find lockfile at `uv.lock`, but `--frozen` was provided. To create a lockfile, run `uv lock` or `uv sync` without the flag.
+    "
+    );
+
+    assert!(!context.temp_dir.child("uv.lock").exists());
+
+    Ok(())
+}
+
+#[test]
+fn check_no_sync_isolated_does_not_write_lock_or_sync() -> Result<()> {
+    let server = PackseServer::new("simple/single-package.toml");
+    let context = uv_test::test_context!("3.12");
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["a==1.0.0"]
+    "#})?;
+    context.temp_dir.child("main.py").write_str(indoc! {r"
+        x: int = 1
+    "})?;
+
+    uv_snapshot!(
+        context.filters(),
+        context
+            .check()
+            .arg("--no-sync")
+            .arg("--isolated")
+            .arg("--index")
+            .arg(server.index_url())
+            .arg("--ty-version")
+            .arg("0.0.17"),
+        @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    All checks passed!
+
+    ----- stderr -----
+    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
+    "
+    );
+
+    assert!(!context.temp_dir.child("uv.lock").exists());
+    assert!(!context.site_packages().join("a").exists());
+
+    Ok(())
+}
+
+#[tokio::test]
+#[cfg(feature = "test-pypi")]
+async fn check_uses_exact_ty_version_from_selected_included_group() -> Result<()> {
+    let context =
+        uv_test::test_context!("3.12").with_filter((r"ty 0\.0\.17(?: \([^)]*\))?", "ty 0.0.17"));
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [dependency-groups]
+        typing = ["ty>=0.0.1"]
+        dev = [{ include-group = "typing" }]
+
+        [tool.uv]
+        constraint-dependencies = ["ty==0.0.17"]
+    "#})?;
+    context.temp_dir.child("main.py").write_str("x = 1")?;
+
+    // `dev` includes `typing`, so the selected tool is installed in the project environment.
+    uv_snapshot!(
+        context.filters(),
+        context
+            .check()
+            .arg("--no-default-groups")
+            .arg("--group")
+            .arg("dev")
+            .arg("--exclude-newer")
+            .arg("2026-02-15T00:00:00Z")
+            .arg("--show-version"),
+        @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    All checks passed!
+
+    ----- stderr -----
+    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
+    Installed 1 package in [TIME]
+    Using ty 0.0.17
+    "
+    );
+
+    assert!(context.temp_dir.child("uv.lock").exists());
+    assert!(context.site_packages().join("ty").exists());
+
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/v1/querybatch"))
+        .and(body_string_contains("ty"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "results": [{"vulns": []}]
+        })))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    // The preferred `dev` group is not enabled, so the tool uses a cached environment even though
+    // the enabled `typing` group selects the same package. The cached environment and normal sync
+    // should share the malware result instead of querying OSV twice.
+    uv_snapshot!(
+        context.filters(),
+        context
+            .check()
+            .arg("--no-default-groups")
+            .arg("--group")
+            .arg("typing")
+            .arg("--exclude-newer")
+            .arg("2026-02-15T00:00:00Z")
+            .arg("--show-version")
+            .env(EnvVars::UV_MALWARE_CHECK, "1")
+            .env(EnvVars::UV_MALWARE_CHECK_URL, server.uri()),
+        @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    All checks passed!
+
+    ----- stderr -----
+    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
+    warning: Malware checks are experimental and may change without warning. Pass `--preview-features malware-check` to disable this warning.
+    Installed 1 package in [TIME]
+    Using ty 0.0.17
+    "
+    );
+
+    Ok(())
+}
+
+/// Ensure that the cached environment for a locked tool rejects invalid lockfile hashes.
+#[test]
+#[cfg(feature = "test-pypi")]
+fn check_locked_tool_rejects_invalid_hash() -> Result<()> {
+    let context =
+        uv_test::test_context!("3.12").with_filter((r"sha256:[0-9a-f]{64}", "sha256:[HASH]"));
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [dependency-groups]
+        dev = ["ty==0.0.17"]
+    "#})?;
+    context.temp_dir.child("main.py").write_str("x = 1")?;
+
+    context
+        .lock()
+        .arg("--exclude-newer")
+        .arg("2026-02-15T00:00:00Z")
+        .assert()
+        .success();
+
+    let mut lock = context.read("uv.lock");
+    let hash_indices = lock
+        .match_indices("sha256:")
+        .map(|(index, _)| index + "sha256:".len())
+        .collect::<Vec<_>>();
+    assert!(!hash_indices.is_empty());
+    for index in hash_indices.into_iter().rev() {
+        let replacement = if lock.as_bytes()[index] == b'0' {
+            "1"
+        } else {
+            "0"
+        };
+        lock.replace_range(index..=index, replacement);
+    }
+    context.temp_dir.child("uv.lock").write_str(&lock)?;
+
+    uv_snapshot!(
+        context.filters(),
+        context.check().arg("--no-sync").arg("--frozen"),
+        @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
+      × Failed to download `ty==0.0.17`
+      ╰─▶ Hash mismatch for `ty==0.0.17`
+
+          Expected:
+            sha256:[HASH]
+
+          Computed:
+            sha256:[HASH]
+    "
+    );
+
+    Ok(())
+}
+
+/// Ensure that a cached environment for a locked tool is checked for malware before reuse.
+#[tokio::test]
+#[cfg(feature = "test-pypi")]
+async fn check_locked_tool_rejects_malware_from_warm_cache() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [dependency-groups]
+        dev = ["ty==0.0.17"]
+    "#})?;
+    context.temp_dir.child("main.py").write_str("x = 1")?;
+
+    context
+        .lock()
+        .arg("--exclude-newer")
+        .arg("2026-02-15T00:00:00Z")
+        .assert()
+        .success();
+
+    // Populate the locked tool environment without a malware check.
+    context
+        .check()
+        .arg("--no-sync")
+        .arg("--frozen")
+        .env(EnvVars::UV_MALWARE_CHECK, "0")
+        .assert()
+        .success();
+
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/v1/querybatch"))
+        .and(body_string_contains("ty"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "results": [{"vulns": [{"id": "MAL-2026-1234"}]}]
+        })))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    uv_snapshot!(
+        context.filters(),
+        context
+            .check()
+            .arg("--no-sync")
+            .arg("--frozen")
+            .arg("--preview-features")
+            .arg("malware-check")
+            .env(EnvVars::UV_MALWARE_CHECK, "1")
+            .env(EnvVars::UV_MALWARE_CHECK_URL, server.uri()),
+        @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
+    warning: Malware detected in locked dependencies:
+      - `ty==0.0.17`: MAL-2026-1234 (https://osv.dev/vulnerability/MAL-2026-1234)
+    error: Malware detected in one or more dependencies that would be installed; aborting sync. Set `UV_MALWARE_CHECK=0` to bypass this check.
+    "
+    );
+
+    Ok(())
+}
+
+#[test]
+#[cfg(feature = "test-pypi")]
+fn check_uses_ty_version_from_production_dependency() -> Result<()> {
+    let context =
+        uv_test::test_context!("3.12").with_filter((r"ty 0\.0\.16(?: \([^)]*\))?", "ty 0.0.16"));
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.11"
+        dependencies = [
+            "ty==0.0.17 ; python_version < '3.12'",
+            "ty==0.0.16 ; python_version >= '3.12'",
+        ]
+    "#})?;
+    context.temp_dir.child("main.py").write_str("x = 1")?;
+
+    uv_snapshot!(
+        context.filters(),
+        context
+            .check()
+            .arg("--show-version"),
+        @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    All checks passed!
+
+    ----- stderr -----
+    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
+    Installed 1 package in [TIME]
+    Using ty 0.0.16
+    "
+    );
+
+    assert!(context.site_packages().join("ty").exists());
+
+    Ok(())
+}
+
+#[test]
+#[cfg(feature = "test-pypi")]
+fn check_uses_ty_version_from_forked_lock() -> Result<()> {
+    let context =
+        uv_test::test_context!("3.12").with_filter((r"ty 0\.0\.17(?: \([^)]*\))?", "ty 0.0.17"));
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.11"
+        dependencies = []
+
+        [dependency-groups]
+        dev = [
+            "ty==0.0.16 ; python_version < '3.12'",
+            "ty==0.0.17 ; python_version >= '3.12'",
+        ]
+    "#})?;
+    context.temp_dir.child("main.py").write_str("x = 1")?;
+
+    uv_snapshot!(
+        context.filters(),
+        context
+            .check()
+            .arg("--show-version"),
+        @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    All checks passed!
+
+    ----- stderr -----
+    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
+    Installed 1 package in [TIME]
+    Using ty 0.0.17
+    "
+    );
+
+    assert!(context.site_packages().join("ty").exists());
+
+    Ok(())
+}
+
+#[test]
+#[cfg(feature = "test-pypi")]
+fn check_uses_workspace_ty_subgraph_from_lock() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [dependency-groups]
+        dev = ["ty"]
+
+        [tool.uv.sources]
+        ty = { workspace = true }
+
+        [tool.uv.workspace]
+        members = ["ty"]
+    "#})?;
+    let ty = context.temp_dir.child("ty");
+    ty.create_dir_all()?;
+    ty.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "ty"
+        version = "1.2.3"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [project.scripts]
+        ty = "ty:main"
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+    "#})?;
+    let ty_package = ty.child("src").child("ty");
+    ty_package.create_dir_all()?;
+    ty_package.child("__init__.py").write_str(indoc! {r#"
+        import sys
+
+        def main():
+            if "--version" in sys.argv:
+                print("ty 1.2.3")
+            else:
+                print("All checks passed!")
+    "#})?;
+    context.temp_dir.child("main.py").write_str("x = 1")?;
+
+    uv_snapshot!(
+        context.filters(),
+        context.check().arg("--no-sync").arg("--show-version"),
+        @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    All checks passed!
+
+    ----- stderr -----
+    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
+    Installed 1 package in [TIME]
+    Using ty 1.2.3
+    "
+    );
+
+    assert!(!context.site_packages().join("ty").exists());
+
+    Ok(())
+}
+
+#[test]
+#[cfg(feature = "test-pypi")]
+fn check_virtual_root_uses_own_ty() -> Result<()> {
+    let context =
+        uv_test::test_context!("3.12").with_filter((r"ty 0\.0\.17(?: \([^)]*\))?", "ty 0.0.17"));
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [dependency-groups]
+        dev = ["ty==0.0.17 ; python_version >= '3.12'"]
+
+        [tool.uv.workspace]
+        members = ["member"]
+    "#})?;
+    let member = context.temp_dir.child("member");
+    member.create_dir_all()?;
+    member.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "member"
+        version = "0.1.0"
+        requires-python = ">=3.11"
+        dependencies = []
+
+        [dependency-groups]
+        dev = ["ty==0.0.16 ; python_version < '3.12'"]
+    "#})?;
+    member.child("main.py").write_str("x = 1")?;
+    context
+        .lock()
+        .arg("--exclude-newer")
+        .arg("2026-02-15T00:00:00Z")
+        .assert()
+        .success();
+
+    uv_snapshot!(
+        context.filters(),
+        context
+            .check()
+            .arg("--no-sync")
+            .arg("--show-version"),
+        @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    All checks passed!
+
+    ----- stderr -----
+    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
+    Installed 1 package in [TIME]
+    Using ty 0.0.17
+    "
+    );
+
+    Ok(())
+}
+
+#[test]
+#[cfg(feature = "test-pypi")]
+fn check_uses_ty_from_environment() -> Result<()> {
+    let context =
+        uv_test::test_context!("3.12").with_filter((r"ty 0\.0\.17(?: \([^)]*\))?", "ty 0.0.17"));
+    let tool_dir = context.root.child("tools");
+    let bin_dir = context.root.child("tool-bin");
+
+    context
+        .tool_install()
+        .arg("ty==0.0.17")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::UV_EXCLUDE_NEWER, "2026-02-15T00:00:00Z")
+        .assert()
+        .success();
+
+    let ty_path = bin_dir.child(format!("ty{}", std::env::consts::EXE_SUFFIX));
+    // `TY` takes precedence over both an explicit version and a locked project version.
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [dependency-groups]
+        dev = ["ty==0.0.16"]
+    "#})?;
+    context.temp_dir.child("main.py").write_str("x = 1")?;
+
+    uv_snapshot!(
+        context.filters(),
+        context
+            .check()
+            .arg("--no-sync")
+            .arg("--ty-version")
+            .arg(">=999.0.0")
+            .arg("--show-version")
+            .env(EnvVars::TY, ty_path.as_os_str()),
+        @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    All checks passed!
+
+    ----- stderr -----
+    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
+    Using ty 0.0.17
+    "
+    );
+
+    Ok(())
+}
+
+#[test]
+#[cfg(feature = "test-pypi")]
+fn check_script() -> Result<()> {
+    let context =
+        uv_test::test_context!("3.12").with_filter((r"WARN Failed to fetch `ty`[^\n]*\n", ""));
+
+    // If `ty` accidentally uses the workspace environment, it will see this incompatible stub
+    // instead of the script dependency and report that `IniConfig` is not callable.
+    let workspace_iniconfig = context.site_packages().join("iniconfig");
+    fs_err::create_dir_all(&workspace_iniconfig)?;
+    fs_err::write(workspace_iniconfig.join("__init__.pyi"), "IniConfig: int\n")?;
+
+    let script = context.temp_dir.child("-script.py");
+    script.write_str(indoc! {r#"
+        # /// script
+        # requires-python = ">=3.12"
+        # dependencies = ["iniconfig"]
+        # ///
+
+        import iniconfig
+
+        iniconfig.IniConfig("config.ini")
+    "#})?;
+    context
+        .temp_dir
+        .child("unrelated.py")
+        .write_str(indoc! {r#"
+        value: int = "wrong"
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.check().arg("--script").arg(script.path()).arg("--no-sync"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    All checks passed!
+
+    ----- stderr -----
+    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
+    Installed 1 package in [TIME]
+    warning: `--no-sync` is a no-op for Python scripts with inline metadata, which always run in isolation
+    ");
+
+    assert!(!context.temp_dir.child("-script.py.lock").exists());
+
+    Ok(())
+}
+
+#[test]
+#[cfg(feature = "test-pypi")]
+fn check_script_uses_ty_version_from_forked_lock() -> Result<()> {
+    let context =
+        uv_test::test_context!("3.12").with_filter((r"ty 0\.0\.17(?: \([^)]*\))?", "ty 0.0.17"));
+
+    let script = context.temp_dir.child("script.py");
+    script.write_str(indoc! {r#"
+        # /// script
+        # requires-python = ">=3.11"
+        # dependencies = [
+        #   "ty==0.0.16 ; python_version < '3.12'",
+        #   "ty==0.0.17 ; python_version >= '3.12'",
+        # ]
+        # ///
+
+        value: int = 1
+    "#})?;
+
+    uv_snapshot!(
+        context.filters(),
+        context
+            .check()
+            .arg("--script")
+            .arg(script.path())
+            .arg("--show-version"),
+        @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    All checks passed!
+
+    ----- stderr -----
+    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
+    Installed 1 package in [TIME]
+    Using ty 0.0.17
+    "
+    );
+
+    assert!(!context.temp_dir.child("script.py.lock").exists());
+
+    Ok(())
+}
+
+#[test]
+#[cfg(feature = "test-pypi")]
+fn check_script_uses_ty_from_path_with_transitive_dependency() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let ty = context.temp_dir.child("ty");
+    ty.create_dir_all()?;
+    ty.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "ty"
+        version = "1.2.3"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig"]
+
+        [project.scripts]
+        ty = "ty:main"
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+    "#})?;
+    let ty_package = ty.child("src").child("ty");
+    ty_package.create_dir_all()?;
+    ty_package.child("__init__.py").write_str(indoc! {r#"
+        import sys
+
+        import iniconfig
+
+        def main():
+            assert iniconfig is not None
+            if "--version" in sys.argv:
+                print("ty 1.2.3")
+            else:
+                print("All checks passed!")
+    "#})?;
+
+    let script = context.temp_dir.child("script.py");
+    script.write_str(indoc! {r#"
+        # /// script
+        # requires-python = ">=3.12"
+        # dependencies = ["ty"]
+        #
+        # [tool.uv.sources]
+        # ty = { path = "ty" }
+        # ///
+
+        value: int = 1
+    "#})?;
+
+    uv_snapshot!(
+        context.filters(),
+        context
+            .check()
+            .arg("--script")
+            .arg(script.path())
+            .arg("--show-version"),
+        @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    All checks passed!
+
+    ----- stderr -----
+    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
+    Installed 2 packages in [TIME]
+    Using ty 1.2.3
+    "
+    );
+
+    Ok(())
+}
+
+#[test]
+#[cfg(feature = "test-pypi")]
+fn check_script_ty_override_precedence() -> Result<()> {
+    let context = uv_test::test_context!("3.12")
+        .with_filter((r"ty 0\.0\.17(?: \([^)]*\))?", "ty 0.0.17"))
+        .with_filter((
+            r"(?m)^WARN Failed to fetch `ty` from .+; falling back to .+\n",
+            "",
+        ));
+    let tool_dir = context.root.child("tools");
+    let bin_dir = context.root.child("tool-bin");
+
+    context
+        .tool_install()
+        .arg("ty==0.0.17")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::UV_EXCLUDE_NEWER, "2026-02-15T00:00:00Z")
+        .assert()
+        .success();
+
+    let script = context.temp_dir.child("script.py");
+    script.write_str(indoc! {r#"
+        # /// script
+        # requires-python = ">=3.12"
+        # dependencies = ["ty==0.0.16"]
+        # ///
+
+        value: int = 1
+    "#})?;
+    let ty_path = bin_dir.child(format!("ty{}", std::env::consts::EXE_SUFFIX));
+
+    uv_snapshot!(
+        context.filters(),
+        context
+            .check()
+            .arg("--script")
+            .arg(script.path())
+            .arg("--ty-version")
+            .arg(">=999.0.0")
+            .arg("--show-version")
+            .env(EnvVars::TY, ty_path.as_os_str()),
+        @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    All checks passed!
+
+    ----- stderr -----
+    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
+    Installed 1 package in [TIME]
+    Using ty 0.0.17
+    "
+    );
+
+    uv_snapshot!(
+        context.filters(),
+        context
+            .check()
+            .arg("--script")
+            .arg(script.path())
+            .arg("--ty-version")
+            .arg("0.0.17")
+            .arg("--show-version"),
+        @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    All checks passed!
+
+    ----- stderr -----
+    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
+    Using ty 0.0.17
+    "
+    );
+
+    Ok(())
+}
+
+#[test]
+#[cfg(feature = "test-pypi")]
+fn check_script_ignores_transitive_ty_for_tool_selection() -> Result<()> {
+    let context = uv_test::test_context!("3.12")
+        .with_filter((r"ty 0\.0\.17(?: \([^)]*\))?", "ty 0.0.17"))
+        .with_filter((
+            r"(?m)^WARN Failed to fetch `ty` from .+; falling back to .+\n",
+            "",
+        ));
+
+    let wrapper = context.temp_dir.child("wrapper");
+    wrapper.create_dir_all()?;
+    wrapper.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "wrapper"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+        dependencies = ["ty==0.0.16"]
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+    "#})?;
+    let wrapper_package = wrapper.child("src").child("wrapper");
+    wrapper_package.create_dir_all()?;
+    wrapper_package.child("__init__.py").write_str("")?;
+
+    let script = context.temp_dir.child("script.py");
+    script.write_str(indoc! {r#"
+        # /// script
+        # requires-python = ">=3.12"
+        # dependencies = ["wrapper"]
+        #
+        # [tool.uv.sources]
+        # wrapper = { path = "wrapper" }
+        # ///
+
+        import wrapper
+    "#})?;
+
+    uv_snapshot!(
+        context.filters(),
+        context
+            .check()
+            .arg("--script")
+            .arg(script.path())
+            .arg("--exclude-newer")
+            .arg("2026-02-15T00:00:00Z")
+            .arg("--show-version"),
+        @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    All checks passed!
+
+    ----- stderr -----
+    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
+    Installed 2 packages in [TIME]
+    Using ty 0.0.17
+    "
+    );
+
+    Ok(())
+}
+
+#[test]
+fn check_no_sync_errors_on_invalid_lockfile() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    // An explicit version bypasses implicit `ty` selection, but not project locking.
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+    "#})?;
+    context.temp_dir.child("uv.lock").write_str("invalid")?;
+    context.temp_dir.child("main.py").write_str(indoc! {r"
+        x: int = 1
+    "})?;
+
+    uv_snapshot!(
+        context.filters(),
+        context
+            .check()
+            .arg("--no-sync")
+            .arg("--ty-version")
+            .arg("0.0.17")
+            .env(EnvVars::RUST_LOG, "error"),
+        @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
+    error: Failed to parse `uv.lock`
+      Caused by: TOML parse error at line 1, column 8
+          |
+        1 | invalid
+          |        ^
+        key with no value, expected `=`
+    "
+    );
+
+    Ok(())
+}
+
+#[test]
+fn check_script_no_sync_errors_on_invalid_lockfile() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let script = context.temp_dir.child("script.py");
+    script.write_str(indoc! {r#"
+        # /// script
+        # requires-python = ">=3.12"
+        # dependencies = []
+        # ///
+
+        x: int = 1
+    "#})?;
+    context
+        .temp_dir
+        .child("script.py.lock")
+        .write_str("invalid")?;
+
+    uv_snapshot!(
+        context.filters(),
+        context
+            .check()
+            .arg("--script")
+            .arg(script.path())
+            .arg("--no-sync")
+            .arg("--ty-version")
+            .arg("0.0.17")
+            .env(EnvVars::RUST_LOG, "error"),
+        @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
+    error: Failed to parse `uv.lock`
+      Caused by: TOML parse error at line 1, column 8
+          |
+        1 | invalid
+          |        ^
+        key with no value, expected `=`
+    "
+    );
+
+    Ok(())
+}
+
+#[test]
+fn check_rejects_tool_arguments() {
+    let context = uv_test::test_context_with_versions!(&[]);
+
+    uv_snapshot!(context.filters(), context.check().arg("--").arg("main.py"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: unexpected argument 'main.py' found
+
+    Usage: uv check [OPTIONS]
+
+    For more information, try '--help'.
+    ");
+}
+
+#[test]
+fn check_ty_version_no_match() {
+    let context = uv_test::test_context_with_versions!(&[]);
+    let context = context.with_filter((
+        r"\b[a-z0-9_]+-(?:apple|pc|unknown)-[a-z0-9_]+(?:-[a-z0-9_]+)?\b",
+        "[PLATFORM]",
+    ));
+
+    uv_snapshot!(
+        context.filters(),
+        context.check().arg("--ty-version").arg(">=999.0.0"),
+        @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
+    error: Failed to find ty version matching: >=999.0.0
+      Caused by: No version of ty found matching `>=999.0.0` for platform `[PLATFORM]`
+    "
+    );
+}
+
+#[test]
+fn check_ty_version_show_version() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&[]).with_filter((
+        r"(?m)^WARN Failed to fetch `ty` from .+; falling back to .+\n",
+        "",
+    ));
+
+    let main_py = context.temp_dir.child("main.py");
+    main_py.write_str(indoc! {r"
+        x: int = 1
+    "})?;
+
+    uv_snapshot!(
+        context.filters(),
+        context
+            .check()
+            .arg("--no-project")
+            .arg("--ty-version")
+            .arg("0.0.17")
+            .arg("--show-version"),
+        @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    All checks passed!
+
+    ----- stderr -----
+    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
+    Using ty 0.0.17
+    "
+    );
+
+    Ok(())
+}
+
+#[test]
+fn check_missing_pyproject_toml() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&[]);
+
+    let main_py = context.temp_dir.child("main.py");
+    main_py.write_str(indoc! {r"
+        x: int = 1
+    "})?;
+
+    uv_snapshot!(context.filters(), context.check(), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    All checks passed!
+
+    ----- stderr -----
+    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
+    ");
+
+    // Project-only settings are ignored without a discovered project.
+    uv_snapshot!(context.filters(), context.check().arg("--group").arg("dev").arg("--frozen").arg("--no-sync"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    All checks passed!
+
+    ----- stderr -----
+    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
+    warning: `--group dev` has no effect when used outside of a project
+    warning: `--frozen` has no effect when used outside of a project
+    warning: `--no-sync` has no effect when used outside of a project
+    ");
+
+    Ok(())
+}
+
+#[test]
+fn check_no_project() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&[]).with_filtered_python_sources();
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=4.0"
+        dependencies = []
+    "#})?;
+
+    let main_py = context.temp_dir.child("main.py");
+    main_py.write_str(indoc! {r"
+        x: int = 1
+    "})?;
+
+    uv_snapshot!(context.filters(), context.check(), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
+    error: No interpreter found for Python >=4.0 in [PYTHON SOURCES]
+    ");
+
+    // The unavailable project environment is not initialized when project discovery is disabled.
+    uv_snapshot!(context.filters(), context.check().arg("--no-project"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    All checks passed!
+
+    ----- stderr -----
+    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
+    ");
+
+    // Project-only settings are ignored when project discovery is disabled.
+    uv_snapshot!(
+        context.filters(),
+        context
+            .check()
+            .arg("--no-project")
+            .arg("--extra")
+            .arg("foo")
+            .arg("--group")
+            .arg("bar")
+            .arg("--locked")
+            .arg("--no-sync"),
+        @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    All checks passed!
+
+    ----- stderr -----
+    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
+    warning: `--extra foo` has no effect when used alongside `--no-project`
+    warning: `--group bar` has no effect when used alongside `--no-project`
+    warning: `--locked` has no effect when used alongside `--no-project`
+    warning: `--no-sync` has no effect when used alongside `--no-project`
+    "
+    );
+
+    Ok(())
+}
+
+#[test]
+fn check_isolated_no_project() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=4.0"
+        dependencies = []
+    "#})?;
+
+    fs_err::write(context.site_packages().join("active_only.py"), "")?;
+
+    let main_py = context.temp_dir.child("main.py");
+    main_py.write_str(indoc! {r"
+        import active_only
+    "})?;
+
+    uv_snapshot!(
+        context.filters(),
+        context
+            .check()
+            .arg("--no-project")
+            .env(EnvVars::VIRTUAL_ENV, context.venv.as_os_str()),
+        @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    All checks passed!
+
+    ----- stderr -----
+    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
+    "
+    );
+
+    let filters = context
+        .filters()
+        .into_iter()
+        .chain([(
+            r"info:   4\. \[CACHE_DIR\]/builds-v0/\[TMP\]/lib64/python\d+\.\d+/site-packages \(site-packages\)\n",
+            "",
+        )])
+        .collect::<Vec<_>>();
+
+    uv_snapshot!(
+        filters,
+        context
+            .command()
+            .arg("--isolated")
+            .arg("check")
+            .arg("--no-project")
+            .env(EnvVars::UV_EXCLUDE_NEWER, "2026-02-15T00:00:00Z")
+            .env(EnvVars::VIRTUAL_ENV, context.venv.as_os_str()),
+        @r#"
+    exit_code: 1 (failure)
+    ----- stdout -----
+    error[unresolved-import]: Cannot resolve imported module `active_only`
+     --> main.py:1:8
+      |
+    1 | import active_only
+      |        ^^^^^^^^^^^
+      |
+    info: Searched in the following paths during module resolution:
+    info:   1. [TEMP_DIR]/ (first-party code)
+    info:   2. vendored://stdlib (stdlib typeshed stubs vendored by ty)
+    info:   3. [CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages (site-packages)
+    info: make sure your Python environment is properly configured: https://docs.astral.sh/ty/modules/#python-environment
+    info: rule `unresolved-import` is enabled by default
+
+    Found 1 diagnostic
+
+    ----- stderr -----
+    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
+    "#
+    );
+
+    Ok(())
+}
+
+#[test]
+fn check_type_error() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&[]);
+
+    let main_py = context.temp_dir.child("main.py");
+    main_py.write_str(indoc! {r#"
+        name: str = "project"
+        version: int = name
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.check(), @r#"
+    exit_code: 1 (failure)
+    ----- stdout -----
+    error[invalid-assignment]: Object of type `Literal["project"]` is not assignable to `int`
+     --> main.py:2:10
+      |
+    1 | name: str = "project"
+    2 | version: int = name
+      |          ---   ^^^^ Incompatible value of type `Literal["project"]`
+      |          |
+      |          Declared type
+      |
+    info: rule `invalid-assignment` is enabled by default
+
+    Found 1 diagnostic
+
+    ----- stderr -----
+    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
+    "#);
+
+    Ok(())
+}
+
+#[test]
+fn check_with_declared_dependency() -> Result<()> {
+    let server = PackseServer::new("extras/extra-does-not-exist-backtrack.toml");
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["a==3.0.0"]
+
+        [project.optional-dependencies]
+        test = ["b==1.0.0"]
+    "#})?;
+
+    let main_py = context.temp_dir.child("main.py");
+    main_py.write_str(indoc! {r"
+        import a
+    "})?;
+
+    // ty should resolve the import via the synced virtual environment.
+    uv_snapshot!(
+        context.filters(),
+        context
+            .check()
+            .arg("--index")
+            .arg(server.index_url()),
+        @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    All checks passed!
+
+    ----- stderr -----
+    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
+    Installed 1 package in [TIME]
+    "
+    );
+
+    context
+        .assert_command(
+            "from importlib.metadata import distribution; assert distribution('a').read_text('INSTALLER') == 'uv'",
+        )
+        .success();
+    assert!(!context.site_packages().join("b").exists());
+
+    Ok(())
+}
+
+#[test]
+fn check_isolated() -> Result<()> {
+    let server = PackseServer::new("extras/extra-does-not-exist-backtrack.toml");
+    let context = uv_test::test_context!("3.12").with_exclude_newer("2026-02-15T00:00:00Z");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["a==3.0.0"]
+    "#})?;
+
+    let main_py = context.temp_dir.child("main.py");
+    main_py.write_str(indoc! {r"
+        import a
+    "})?;
+
+    let environment_sentinel = context.venv.child("sentinel");
+    environment_sentinel.write_str("present")?;
+
+    uv_snapshot!(
+        context.filters(),
+        context
+            .check()
+            .arg("--isolated")
+            .arg("--index")
+            .arg(server.index_url()),
+        @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    All checks passed!
+
+    ----- stderr -----
+    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
+    Installed 1 package in [TIME]
+    "
+    );
+
+    assert!(!context.temp_dir.child("uv.lock").exists());
+    assert!(!context.site_packages().join("a").exists());
+    assert!(environment_sentinel.exists());
+
+    // An existing lockfile should not be updated.
+    context
+        .lock()
+        .arg("--index")
+        .arg(server.index_url())
+        .assert()
+        .success();
+    let existing_lock = context.read("uv.lock");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["a==3.0.0", "b==1.0.0"]
+    "#})?;
+    main_py.write_str(indoc! {r"
+        import a
+        import b
+    "})?;
+
+    context
+        .check()
+        .arg("--isolated")
+        .arg("--index")
+        .arg(server.index_url())
+        .assert()
+        .success();
+    assert_eq!(existing_lock, context.read("uv.lock"));
+    assert!(!context.site_packages().join("a").exists());
+    assert!(!context.site_packages().join("b").exists());
+    assert!(environment_sentinel.exists());
+
+    Ok(())
+}
+
+#[test]
+fn check_with_undeclared_dependency() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+    "#})?;
+
+    let main_py = context.temp_dir.child("main.py");
+    main_py.write_str(indoc! {r"
+        import iniconfig
+    "})?;
+
+    let filters = context
+        .filters()
+        .into_iter()
+        .chain([(
+            r"info:   \d+\. \[VENV\]/lib64/python3\.12/site-packages \(site-packages\)\n",
+            "",
+        )])
+        .collect::<Vec<_>>();
+
+    // ty should report a diagnostic for the unresolvable import.
+    uv_snapshot!(filters, context.check(), @"
+    exit_code: 1 (failure)
+    ----- stdout -----
+    error[unresolved-import]: Cannot resolve imported module `iniconfig`
+     --> main.py:1:8
+      |
+    1 | import iniconfig
+      |        ^^^^^^^^^
+      |
+    info: Searched in the following paths during module resolution:
+    info:   1. [TEMP_DIR]/ (first-party code)
+    info:   2. vendored://stdlib (stdlib typeshed stubs vendored by ty)
+    info:   3. [SITE_PACKAGES]/ (site-packages)
+    info: make sure your Python environment is properly configured: https://docs.astral.sh/ty/modules/#python-environment
+    info: rule `unresolved-import` is enabled by default
+
+    Found 1 diagnostic
+
+    ----- stderr -----
+    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
+    ");
+
+    Ok(())
+}

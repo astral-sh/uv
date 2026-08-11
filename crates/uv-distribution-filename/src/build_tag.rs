@@ -9,6 +9,8 @@ pub enum BuildTagError {
     Empty,
     #[error("must start with a digit")]
     NoLeadingDigit,
+    #[error("must contain only ASCII letters, digits, underscores, and periods")]
+    InvalidCharacters,
     #[error(transparent)]
     ParseInt(#[from] ParseIntError),
 }
@@ -45,8 +47,18 @@ impl FromStr for BuildTag {
             return Err(BuildTagError::Empty);
         }
 
+        let mut prefix_end = None;
+        for (index, byte) in s.bytes().enumerate() {
+            if !is_build_tag_byte(byte) {
+                return Err(BuildTagError::InvalidCharacters);
+            }
+            if prefix_end.is_none() && !byte.is_ascii_digit() {
+                prefix_end = Some(index);
+            }
+        }
+
         // A build tag must start with a digit.
-        let (prefix, suffix) = match s.find(|c: char| !c.is_ascii_digit()) {
+        let (prefix, suffix) = match prefix_end {
             // Ex) `abc`
             Some(0) => return Err(BuildTagError::NoLeadingDigit),
             // Ex) `123abc`
@@ -68,5 +80,47 @@ impl std::fmt::Display for BuildTag {
             Some(suffix) => write!(f, "{}{}", self.0, suffix),
             None => write!(f, "{}", self.0),
         }
+    }
+}
+
+fn is_build_tag_byte(byte: u8) -> bool {
+    byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'.')
+}
+
+#[cfg(test)]
+mod tests {
+    use std::str::FromStr;
+
+    use super::BuildTag;
+
+    #[test]
+    fn parse_periods() {
+        assert_eq!(
+            BuildTag::from_str("0.editable")
+                .map(|build_tag| build_tag.to_string())
+                .map_err(|err| err.to_string()),
+            Ok("0.editable".to_string())
+        );
+    }
+
+    #[test]
+    fn err_invalid_characters() {
+        let err = BuildTag::from_str("1/../../target").unwrap_err();
+        insta::assert_snapshot!(err, @"must contain only ASCII letters, digits, underscores, and periods");
+
+        let err = BuildTag::from_str(r"1..\..\target").unwrap_err();
+        insta::assert_snapshot!(err, @"must contain only ASCII letters, digits, underscores, and periods");
+
+        let err = BuildTag::from_str("1target:stream").unwrap_err();
+        insta::assert_snapshot!(err, @"must contain only ASCII letters, digits, underscores, and periods");
+
+        let err = BuildTag::from_str("1-target").unwrap_err();
+        insta::assert_snapshot!(err, @"must contain only ASCII letters, digits, underscores, and periods");
+
+        let err = BuildTag::from_str("1 target").unwrap_err();
+        insta::assert_snapshot!(err, @"must contain only ASCII letters, digits, underscores, and periods");
+
+        let err = BuildTag::from_str("1target\u{e9}").unwrap_err();
+        insta::assert_snapshot!(err, @"must contain only ASCII letters, digits, underscores, and periods");
     }
 }

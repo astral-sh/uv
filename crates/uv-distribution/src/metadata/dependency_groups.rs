@@ -2,6 +2,7 @@ use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use uv_auth::CredentialsCache;
+use uv_cache::Cache;
 use uv_configuration::NoSources;
 use uv_distribution_types::{IndexLocations, Requirement};
 use uv_normalize::{GroupName, PackageName};
@@ -9,6 +10,7 @@ use uv_workspace::dependency_groups::FlatDependencyGroups;
 use uv_workspace::pyproject::{Sources, ToolUvSources};
 use uv_workspace::{
     DiscoveryOptions, MemberDiscovery, VirtualProject, WorkspaceCache, WorkspaceError,
+    WorkspaceErrorKind,
 };
 
 use crate::metadata::{GitWorkspaceMember, LoweredRequirement, MetadataError};
@@ -57,7 +59,8 @@ impl SourcedDependencyGroups {
         git_member: Option<&GitWorkspaceMember<'_>>,
         locations: &IndexLocations,
         no_sources: NoSources,
-        cache: &WorkspaceCache,
+        cache: &Cache,
+        workspace_cache: &WorkspaceCache,
         credentials_cache: &CredentialsCache,
     ) -> Result<Self, MetadataError> {
         // If the `pyproject.toml` doesn't exist, fail early.
@@ -80,15 +83,15 @@ impl SourcedDependencyGroups {
             } else {
                 MemberDiscovery::None
             },
-            ..DiscoveryOptions::default()
         };
 
         // The subsequent API takes an absolute path to the dir the pyproject is in
         let empty = PathBuf::new();
-        let absolute_pyproject_path =
-            std::path::absolute(pyproject_path).map_err(WorkspaceError::Normalize)?;
+        let absolute_pyproject_path = std::path::absolute(pyproject_path)
+            .map_err(|err| WorkspaceError::from(WorkspaceErrorKind::Normalize(err)))?;
         let project_dir = absolute_pyproject_path.parent().unwrap_or(&empty);
-        let project = VirtualProject::discover(project_dir, &discovery, cache).await?;
+        let project =
+            VirtualProject::discover(project_dir, &discovery, cache, workspace_cache).await?;
 
         // Collect the dependency groups.
         let dependency_groups =
@@ -138,55 +141,54 @@ impl SourcedDependencyGroups {
         Self::validate_sources(project_sources, &dependency_groups)?;
 
         // Lower the dependency groups.
-        let dependency_groups = dependency_groups
-            .into_iter()
-            .map(|(name, group)| {
-                let requirements = group
-                    .requirements
-                    .into_iter()
-                    .flat_map(|requirement| {
-                        // Check if sources should be disabled for this specific package
-                        if no_sources.for_package(&requirement.name) {
-                            vec![Ok(Requirement::from(requirement))].into_iter()
-                        } else {
-                            let requirement_name = requirement.name.clone();
-                            let group = name.clone();
-                            let extra = None;
+        let mut lowered_dependency_groups = BTreeMap::new();
+        for (name, group) in dependency_groups {
+            let mut requirements = Vec::new();
+            for requirement in group.requirements {
+                if no_sources.for_package(&requirement.name) {
+                    requirements.push(Requirement::from(requirement));
+                    continue;
+                }
 
-                            LoweredRequirement::from_requirement(
-                                requirement,
-                                project.project_name(),
-                                project.root(),
-                                project_sources,
-                                project_indexes,
-                                extra,
-                                Some(&group),
-                                locations,
-                                project.workspace(),
-                                git_member,
-                                true,
-                                credentials_cache,
-                            )
-                            .map(move |requirement| match requirement {
-                                Ok(requirement) => Ok(requirement.into_inner()),
-                                Err(err) => Err(MetadataError::GroupLoweringError(
-                                    group.clone(),
+                let requirement_name = requirement.name.clone();
+                requirements.extend(
+                    LoweredRequirement::from_requirement(
+                        requirement,
+                        project.project_name(),
+                        project.root(),
+                        project_sources,
+                        project_indexes,
+                        None,
+                        Some(&name),
+                        locations,
+                        project.workspace(),
+                        git_member,
+                        true,
+                        cache,
+                        workspace_cache,
+                        credentials_cache,
+                    )
+                    .await
+                    .map(|requirement| {
+                        requirement
+                            .map(LoweredRequirement::into_inner)
+                            .map_err(|err| {
+                                MetadataError::GroupLoweringError(
+                                    name.clone(),
                                     requirement_name.clone(),
                                     Box::new(err),
-                                )),
+                                )
                             })
-                            .collect::<Vec<_>>()
-                            .into_iter()
-                        }
                     })
-                    .collect::<Result<Box<_>, _>>()?;
-                Ok::<(GroupName, Box<_>), MetadataError>((name, requirements))
-            })
-            .collect::<Result<BTreeMap<_, _>, _>>()?;
+                    .collect::<Result<Vec<_>, _>>()?,
+                );
+            }
+            lowered_dependency_groups.insert(name, requirements.into_boxed_slice());
+        }
 
         Ok(Self {
             name: project.project_name().cloned(),
-            dependency_groups,
+            dependency_groups: lowered_dependency_groups,
         })
     }
 

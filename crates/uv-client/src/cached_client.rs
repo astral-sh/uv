@@ -1,5 +1,5 @@
 use std::time::{Duration, Instant};
-use std::{borrow::Cow, path::Path};
+use std::{borrow::Cow, io::Read, path::Path};
 
 use futures::FutureExt;
 use reqwest::{Request, Response};
@@ -12,6 +12,7 @@ use uv_cache::{CacheEntry, Freshness};
 use uv_fs::write_atomic;
 use uv_redacted::DisplaySafeUrl;
 
+use crate::base_client::CertificateSource;
 use crate::httpcache::{AfterResponse, BeforeRequest, CachePolicy, CachePolicyBuilder};
 use crate::{BaseClient, Error, ErrorKind, OwnedArchive, ProblemDetails, RetryState};
 
@@ -21,14 +22,14 @@ use crate::{BaseClient, Error, ErrorKind, OwnedArchive, ProblemDetails, RetrySta
 /// either serde or other mechanisms of serialization such as `rkyv`.
 ///
 /// If you're using Serde, then unless you want to control the format, callers
-/// should just use `CachedClient::get_serde`. This will use a default
+/// should just use [`CachedClient::get_serde_with_retry`]. This will use a default
 /// implementation of `Cacheable` internally.
 ///
 /// Alternatively, callers using `rkyv` should use
-/// `CachedClient::get_cacheable`. If your types fit into the
+/// [`CachedClient::get_cacheable_with_retry`]. If your types fit into the
 /// `rkyvutil::OwnedArchive` mold, then an implementation of `Cacheable` is
 /// already provided for that type.
-pub trait Cacheable: Sized {
+pub(crate) trait Cacheable: Sized {
     /// This associated type permits customizing what the "output" type of
     /// deserialization is. It can be identical to `Self`.
     ///
@@ -48,7 +49,7 @@ pub trait Cacheable: Sized {
 /// implement `Cacheable`.
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(transparent)]
-pub(crate) struct SerdeCacheable<T> {
+struct SerdeCacheable<T> {
     inner: T,
 }
 
@@ -217,32 +218,8 @@ impl CachedClient {
         &self.0
     }
 
-    /// Make a cached request with a custom response transformation
-    /// while using serde to (de)serialize cached responses.
-    ///
-    /// If a new response was received (no prior cached response or modified
-    /// on the remote), the response is passed through `response_callback` and
-    /// only the result is cached and returned. The `response_callback` is
-    /// allowed to make subsequent requests, e.g. through the uncached client.
-    #[instrument(skip_all)]
-    pub async fn get_serde<
-        Payload: Serialize + DeserializeOwned + Send + 'static,
-        CallBackError: std::error::Error + 'static,
-        Callback: AsyncFn(Response) -> Result<Payload, CallBackError>,
-    >(
-        &self,
-        req: Request,
-        cache_entry: &CacheEntry,
-        cache_control: CacheControl,
-        response_callback: Callback,
-    ) -> Result<Payload, CachedClientError<CallBackError>> {
-        let payload = self
-            .get_cacheable(req, cache_entry, cache_control, async |resp| {
-                let payload = response_callback(resp).await?;
-                Ok(SerdeCacheable { inner: payload })
-            })
-            .await?;
-        Ok(payload)
+    pub(crate) fn certificate_source(&self) -> CertificateSource {
+        self.0.certificate_source()
     }
 
     /// Make a cached request with a custom response transformation while using
@@ -258,8 +235,8 @@ impl CachedClient {
     /// only the result is cached and returned. The `response_callback` is
     /// allowed to make subsequent requests, e.g. through the uncached client.
     #[instrument(skip_all)]
-    pub async fn get_cacheable<
-        Payload: Cacheable,
+    async fn get_cacheable<
+        Payload: Cacheable + 'static,
         CallBackError: std::error::Error + 'static,
         Callback: AsyncFn(Response) -> Result<Payload, CallBackError>,
     >(
@@ -269,9 +246,44 @@ impl CachedClient {
         cache_control: CacheControl,
         response_callback: Callback,
     ) -> Result<Payload::Target, CachedClientError<CallBackError>> {
-        let fresh_req = req.try_clone().expect("HTTP request must be cloneable");
         let start = Instant::now();
-        let cached_response = if let Some(cached) = Self::read_cache(cache_entry).await {
+
+        if matches!(cache_control, CacheControl::AllowStale) {
+            let (req, cached) = self
+                .read_and_decode_stale_cache::<Payload>(req, cache_entry)
+                .await;
+            match cached {
+                Ok(Some(payload)) => return Ok(payload),
+                Ok(None) => warn!(
+                    "Cached response doesn't match current request for: {}",
+                    DisplaySafeUrl::from_url(req.url().clone())
+                ),
+                Err(err) if err.is_file_not_exists() => {
+                    trace!("No cache entry exists for {}", cache_entry.path().display());
+                }
+                Err(err) => {
+                    warn!(
+                        "Broken cache entry at {}, removing: {err}",
+                        cache_entry.path().display()
+                    );
+                    let _ = fs_err::tokio::remove_file(&cache_entry.path()).await;
+                }
+            }
+
+            let (response, cache_policy) = self.fresh_request(req, cache_control).await?;
+            return self
+                .run_response_callback(
+                    cache_entry,
+                    cache_policy,
+                    start,
+                    response,
+                    response_callback,
+                )
+                .await;
+        }
+
+        let fresh_req = req.try_clone().expect("HTTP request must be cloneable");
+        let cached_response = if let Some(cached) = self.read_cache(cache_entry).await {
             self.send_cached(req, cache_control.clone(), cached)
                 .boxed_local()
                 .await?
@@ -287,7 +299,13 @@ impl CachedClient {
             }
         };
         match cached_response {
-            CachedResponse::FreshCache(cached) => match Payload::from_aligned_bytes(cached.data) {
+            CachedResponse::FreshCache(cached) => match self
+                .0
+                .cache_read_runtime()
+                .spawn_blocking(move || Payload::from_aligned_bytes(cached.data))
+                .await
+                .expect("cache payload decoding task panicked")
+            {
                 Ok(payload) => Ok(payload),
                 Err(err) => {
                     warn!(
@@ -312,7 +330,13 @@ impl CachedClient {
                     write_atomic(cache_entry.path(), data_with_cache_policy_bytes)
                         .await
                         .map_err(ErrorKind::CacheWrite)?;
-                    match Payload::from_aligned_bytes(cached.data) {
+                    match self
+                        .0
+                        .cache_read_runtime()
+                        .spawn_blocking(move || Payload::from_aligned_bytes(cached.data))
+                        .await
+                        .expect("cache payload decoding task panicked")
+                    {
                         Ok(payload) => Ok(payload),
                         Err(err) => {
                             warn!(
@@ -366,7 +390,7 @@ impl CachedClient {
     }
 
     /// Make a request without checking whether the cache is fresh.
-    pub async fn skip_cache<
+    async fn skip_cache<
         Payload: Serialize + DeserializeOwned + Send + 'static,
         CallBackError: std::error::Error + 'static,
         Callback: AsyncFnOnce(Response) -> Result<Payload, CallBackError>,
@@ -461,8 +485,10 @@ impl CachedClient {
 
     #[instrument(name = "read_and_parse_cache", skip_all, fields(file = %cache_entry.path().display()
     ))]
-    async fn read_cache(cache_entry: &CacheEntry) -> Option<DataWithCachePolicy> {
-        match DataWithCachePolicy::from_path_async(cache_entry.path()).await {
+    async fn read_cache(&self, cache_entry: &CacheEntry) -> Option<DataWithCachePolicy> {
+        match DataWithCachePolicy::from_path_async(cache_entry.path(), self.0.cache_read_runtime())
+            .await
+        {
             Ok(data) => Some(data),
             Err(err) => {
                 // When we know the cache entry doesn't exist, then things are
@@ -479,6 +505,33 @@ impl CachedClient {
                 None
             }
         }
+    }
+
+    /// Reads and decodes an allowed-stale cache entry in one blocking task.
+    ///
+    /// The task returns the request it owns while checking the policy. `Ok(None)` means the entry
+    /// belongs to a different request; errors indicate a broken entry for the caller to remove.
+    #[instrument(name = "read_and_decode_stale_cache", skip_all, fields(file = %cache_entry.path().display()))]
+    async fn read_and_decode_stale_cache<Payload: Cacheable + 'static>(
+        &self,
+        req: Request,
+        cache_entry: &CacheEntry,
+    ) -> (Request, Result<Option<Payload::Target>, Error>) {
+        let path = cache_entry.path().to_path_buf();
+        self.0
+            .cache_read_runtime()
+            .spawn_blocking(move || {
+                let cached = DataWithCachePolicy::from_path_sync(&path).and_then(|cached| {
+                    if cached.cache_policy.matches_stale_request(&req) {
+                        Payload::from_aligned_bytes(cached.data).map(Some)
+                    } else {
+                        Ok(None)
+                    }
+                });
+                (req, cached)
+            })
+            .await
+            .expect("cache read and payload decoding task panicked")
     }
 
     /// Send a request given that we have a (possibly) stale cached response.
@@ -547,7 +600,9 @@ impl CachedClient {
             .execute(req)
             .instrument(info_span!("revalidation_request", url = %url))
             .await
-            .map_err(|err| Error::from_reqwest_middleware(url.clone(), err, start))?;
+            .map_err(|err| {
+                Error::from_reqwest_middleware(url.clone(), err, start, self.certificate_source())
+            })?;
         trace!(
             "Received response for revalidation request with status {} for: {}",
             response.status(),
@@ -606,11 +661,9 @@ impl CachedClient {
         debug!("Sending fresh {} request for: {}", req.method(), url);
         let cache_policy_builder = CachePolicyBuilder::new(&req);
         let start = Instant::now();
-        let mut response = self
-            .0
-            .execute(req)
-            .await
-            .map_err(|err| Error::from_reqwest_middleware(url.clone(), err, start))?;
+        let mut response = self.0.execute(req).await.map_err(|err| {
+            Error::from_reqwest_middleware(url.clone(), err, start, self.certificate_source())
+        })?;
         trace!(
             "Received response for fresh request with status {} for: {}",
             response.status(),
@@ -673,8 +726,8 @@ impl CachedClient {
     ///
     /// See: <https://github.com/TrueLayer/reqwest-middleware/blob/8a494c165734e24c62823714843e1c9347027e8a/reqwest-retry/src/middleware.rs#L137>
     #[instrument(skip_all)]
-    pub async fn get_cacheable_with_retry<
-        Payload: Cacheable,
+    pub(crate) async fn get_cacheable_with_retry<
+        Payload: Cacheable + 'static,
         CallBackError: std::error::Error + 'static,
         Callback: AsyncFn(Response) -> Result<Payload, CallBackError>,
     >(
@@ -698,13 +751,12 @@ impl CachedClient {
 
             match result {
                 Ok(ok) => return Ok(ok),
-                Err(err) => {
-                    if let Some(backoff) = retry_state.should_retry(err.error(), err.retries()) {
-                        retry_state.sleep_backoff(backoff).await;
-                        continue;
-                    }
-                    return Err(err.with_retries(retry_state.total_retries()));
+                Err(err)
+                    if let Some(backoff) = retry_state.should_retry(err.error(), err.retries()) =>
+                {
+                    retry_state.sleep_backoff(backoff).await;
                 }
+                Err(err) => return Err(err.with_retries(retry_state.total_retries())),
             }
         }
     }
@@ -737,13 +789,12 @@ impl CachedClient {
 
             match result {
                 Ok(ok) => return Ok(ok),
-                Err(err) => {
-                    if let Some(backoff) = retry_state.should_retry(err.error(), err.retries()) {
-                        retry_state.sleep_backoff(backoff).await;
-                        continue;
-                    }
-                    return Err(err.with_retries(retry_state.total_retries()));
+                Err(err)
+                    if let Some(backoff) = retry_state.should_retry(err.error(), err.retries()) =>
+                {
+                    retry_state.sleep_backoff(backoff).await;
                 }
+                Err(err) => return Err(err.with_retries(retry_state.total_retries())),
             }
         }
     }
@@ -836,9 +887,13 @@ impl DataWithCachePolicy {
     ///
     /// If the given byte buffer is not in a valid format or if reading the
     /// file given fails, then this returns an error.
-    async fn from_path_async(path: &Path) -> Result<Self, Error> {
+    async fn from_path_async(
+        path: &Path,
+        runtime: &tokio::runtime::Runtime,
+    ) -> Result<Self, Error> {
         let path = path.to_path_buf();
-        tokio::task::spawn_blocking(move || Self::from_path_sync(&path))
+        runtime
+            .spawn_blocking(move || Self::from_path_sync(&path))
             .await
             // This just forwards panics from the closure.
             .unwrap()
@@ -853,12 +908,26 @@ impl DataWithCachePolicy {
     /// file given fails, then this returns an error.
     #[instrument]
     fn from_path_sync(path: &Path) -> Result<Self, Error> {
-        let file = fs_err::File::open(path).map_err(ErrorKind::Io)?;
-        // Note that we don't wrap our file in a buffer because it will just
-        // get passed to AlignedVec::extend_from_reader, which doesn't benefit
-        // from an intermediary buffer. In effect, the AlignedVec acts as the
-        // buffer.
-        Self::from_reader(file)
+        let mut file = fs_err::File::open(path).map_err(ErrorKind::Io)?;
+        let file_size = file.metadata().map_err(ErrorKind::Io)?.len();
+        let file_size = usize::try_from(file_size)
+            .ok()
+            .filter(|&file_size| file_size <= AlignedVec::<16>::MAX_CAPACITY)
+            .ok_or_else(|| {
+                ErrorKind::Io(std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    format!(
+                        "cache entry file size of {file_size} bytes exceeds the maximum supported \
+                         size of {} bytes",
+                        AlignedVec::<16>::MAX_CAPACITY,
+                    ),
+                ))
+            })?;
+
+        let mut aligned_bytes = AlignedVec::with_capacity(file_size);
+        aligned_bytes.resize(file_size, 0);
+        file.read_exact(&mut aligned_bytes).map_err(ErrorKind::Io)?;
+        Self::from_aligned_bytes(aligned_bytes)
     }
 
     /// Loads cached data and its associated HTTP cache policy from the given
@@ -992,7 +1061,7 @@ impl DataWithCachePolicy {
             );
             return Err(ErrorKind::ArchiveRead(msg).into());
         };
-        if bytes.len() < len_usize + 8 {
+        if len_usize > cache_policy_len_start {
             let msg = format!(
                 "invalid cache entry: data-with-cache-policy has cache policy length of {}, \
                  but total buffer size is {}",

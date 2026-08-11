@@ -1,0 +1,12 @@
+name = "post-equal-not-available"
+description = "An equal version constraint should not match a post-release version if the post-release version is not available."
+
+[root]
+requires = ["a==1.2.3.post0"]
+
+[expected]
+satisfiable = false
+
+[packages.a.versions."1.2.3"]
+
+[packages.a.versions."1.2.3.post1"]

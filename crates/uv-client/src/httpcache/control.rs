@@ -1,7 +1,5 @@
 use std::collections::HashSet;
 
-use crate::rkyvutil::OwnedArchive;
-
 /// Represents values for relevant cache-control directives.
 ///
 /// This does include some directives that we don't use mostly because they are
@@ -59,14 +57,6 @@ pub struct CacheControl {
     pub s_maxage_seconds: Option<u64>,
     /// <https://httpwg.org/specs/rfc8246.html>
     pub immutable: bool,
-}
-
-impl CacheControl {
-    /// Convert this to an owned archive value.
-    pub fn to_archived(&self) -> OwnedArchive<Self> {
-        // There's no way (other than OOM) for serializing this type to fail.
-        OwnedArchive::from_unarchived(self).expect("all possible values can be archived")
-    }
 }
 
 impl<'b, B: 'b + ?Sized + AsRef<[u8]>> FromIterator<&'b B> for CacheControl {

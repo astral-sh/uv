@@ -24,7 +24,7 @@ impl Os {
         matches!(self.0, target_lexicon::OperatingSystem::Emscripten)
     }
 
-    pub fn is_macos(&self) -> bool {
+    pub(crate) fn is_macos(self) -> bool {
         matches!(self.0, target_lexicon::OperatingSystem::Darwin(_))
     }
 
@@ -101,7 +101,7 @@ impl From<&uv_platform_tags::Os> for Os {
                 Self::new(target_lexicon::OperatingSystem::Openbsd)
             }
             uv_platform_tags::Os::Windows => Self::new(target_lexicon::OperatingSystem::Windows),
-            uv_platform_tags::Os::Pyodide { .. } => {
+            uv_platform_tags::Os::Pyodide { .. } | uv_platform_tags::Os::PyEmscripten { .. } => {
                 Self::new(target_lexicon::OperatingSystem::Emscripten)
             }
             uv_platform_tags::Os::Ios { .. } => {

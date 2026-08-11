@@ -1,0 +1,26 @@
+name = "marker-variants-have-different-extras"
+description = "Check the prioritization for virtual extra and marker packages"
+
+[expected]
+satisfiable = true
+
+[environment]
+python = "3.12"
+
+[root]
+requires = [
+  "psycopg[binary] ; platform_python_implementation != 'PyPy'",
+  "psycopg ; platform_python_implementation == 'PyPy'",
+]
+
+[packages.psycopg.versions."1.0.0"]
+requires = ['tzdata; sys_platform == "win32"']
+
+[packages.psycopg.versions."1.0.0".extras]
+binary = ["psycopg-binary; implementation_name != 'pypy'"]
+
+[packages.psycopg-binary.versions."1.0.0"]
+[packages.tzdata.versions."1.0.0"]
+
+[resolver_options]
+universal = true

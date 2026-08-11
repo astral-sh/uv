@@ -41,7 +41,20 @@ The `UV_PREVIEW_FEATURES` environment variable can be used similarly, e.g.:
 $ UV_PREVIEW_FEATURES=foo,bar uv run ...
 ```
 
-For backwards compatibility, enabling preview features that do not exist will warn, but not error.
+Preview features can also be enabled in `uv.toml`, or under `[tool.uv]` in `pyproject.toml` and PEP
+723 metadata:
+
+```toml
+preview-features = ["foo", "bar"]
+```
+
+Set `preview-features = true` to enable all preview features.
+
+Some preview features take effect before configuration files are loaded and cannot be enabled from
+configuration.
+
+For backwards compatibility, enabling preview features that do not exist will warn, but not error,
+regardless of the source.
 
 ## Using preview features
 
@@ -55,20 +68,7 @@ displayed that the feature is in preview. The preview feature can be enabled to 
 
 The following preview features are available:
 
-- `add-bounds`: Allows configuring the
-  [default bounds for `uv add`](../reference/settings.md#add-bounds) invocations.
-- `json-output`: Allows `--output-format json` for various uv commands.
-- `package-conflicts`: Allows defining workspace conflicts at the package level.
-- `pylock`: Allows installing from `pylock.toml` files.
-- `python-install-default`: Allows
-  [installing `python` and `python3` executables](./python-versions.md#installing-python-executables).
-- `format`: Allows using `uv format`.
-- `index-exclude-newer`: Allows setting `exclude-newer` on configured package indexes.
-- `native-auth`: Enables storage of credentials in a
-  [system-native location](../concepts/authentication/http.md#the-uv-credentials-store).
-- `workspace-metadata`: Allows using `uv workspace metadata`.
-- `workspace-dir`: Allows using `uv workspace dir`.
-- `workspace-list`: Allows using `uv workspace list`.
+--8<-- "docs/reference/.preview-features.md"
 
 ## Disabling preview features
 

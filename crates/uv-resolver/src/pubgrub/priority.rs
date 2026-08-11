@@ -1,16 +1,16 @@
 use std::cmp::Reverse;
 
 use hashbrown::hash_map::{EntryRef, OccupiedEntry};
-use pubgrub::{DependencyProvider, Range};
+use pubgrub::DependencyProvider;
 use rustc_hash::FxBuildHasher;
 
 use uv_normalize::PackageName;
 use uv_pep440::Version;
 
+use crate::FxHashbrownMap;
 use crate::dependency_provider::UvDependencyProvider;
 use crate::fork_urls::ForkUrls;
-use crate::pubgrub::{PubGrubPackage, PubGrubPackageInner, PubGrubPython};
-use crate::{FxHashbrownMap, SentinelRange};
+use crate::pubgrub::{PubGrubPackage, PubGrubPackageInner, PubGrubPython, Range};
 
 /// A prioritization map to guide the PubGrub resolution process.
 ///
@@ -61,9 +61,7 @@ impl PubGrubPriorities {
                 // Compute the priority.
                 let priority = if urls.get(name).is_some() {
                     PubGrubPriority::DirectUrl(Reverse(index))
-                } else if version.as_singleton().is_some()
-                    || SentinelRange::from(version).is_sentinel()
-                {
+                } else if version.is_singleton_constraint() {
                     PubGrubPriority::Singleton(Reverse(index))
                 } else {
                     // Keep the conflict-causing packages to avoid loops where we seesaw between
@@ -86,9 +84,7 @@ impl PubGrubPriorities {
                 // Compute the priority.
                 let priority = if urls.get(name).is_some() {
                     PubGrubPriority::DirectUrl(Reverse(len))
-                } else if version.as_singleton().is_some()
-                    || SentinelRange::from(version).is_sentinel()
-                {
+                } else if version.is_singleton_constraint() {
                     PubGrubPriority::Singleton(Reverse(len))
                 } else {
                     PubGrubPriority::Unspecified(Reverse(len))

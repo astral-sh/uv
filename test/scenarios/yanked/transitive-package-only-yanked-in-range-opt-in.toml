@@ -1,0 +1,21 @@
+name = "transitive-package-only-yanked-in-range-opt-in"
+description = "The user requires package `a` which has a dependency on a package which only matches yanked versions; the user has opted into allowing the yanked version of `b` explicitly."
+
+[root]
+requires = ["a", "b==1.0.0"]
+
+[expected]
+satisfiable = true
+explanation = "Since the user included a dependency on `b` with an exact specifier, the yanked version can be selected."
+
+[expected.packages]
+a = "0.1.0"
+b = "1.0.0"
+
+[packages.a.versions."0.1.0"]
+requires = ["b>0.1"]
+
+[packages.b.versions."0.1.0"]
+
+[packages.b.versions."1.0.0"]
+yanked = true

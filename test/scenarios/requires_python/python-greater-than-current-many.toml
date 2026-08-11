@@ -1,0 +1,47 @@
+name = "python-greater-than-current-many"
+description = "The user requires a package which has many versions which all require a Python version greater than the current version"
+
+[root]
+requires = ["a==1.0.0"]
+
+[expected]
+satisfiable = false
+
+[packages.a.versions."2.0.0"]
+requires_python = ">=3.10"
+
+[packages.a.versions."2.1.0"]
+requires_python = ">=3.10"
+
+[packages.a.versions."2.2.0"]
+requires_python = ">=3.10"
+
+[packages.a.versions."2.3.0"]
+requires_python = ">=3.10"
+
+[packages.a.versions."2.4.0"]
+requires_python = ">=3.10"
+
+[packages.a.versions."2.5.0"]
+requires_python = ">=3.10"
+
+[packages.a.versions."3.0.0"]
+requires_python = ">=3.11"
+
+[packages.a.versions."3.1.0"]
+requires_python = ">=3.11"
+
+[packages.a.versions."3.2.0"]
+requires_python = ">=3.11"
+
+[packages.a.versions."3.3.0"]
+requires_python = ">=3.11"
+
+[packages.a.versions."3.4.0"]
+requires_python = ">=3.11"
+
+[packages.a.versions."3.5.0"]
+requires_python = ">=3.11"
+
+[environment]
+python = "3.9"

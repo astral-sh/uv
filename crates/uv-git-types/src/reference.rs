@@ -1,5 +1,19 @@
+use std::borrow::Cow;
 use std::fmt::Display;
 use std::str;
+
+use percent_encoding::{AsciiSet, NON_ALPHANUMERIC, utf8_percent_encode};
+
+/// Percent-encode Git revisions for use after the `@` in VCS URLs.
+///
+/// This follows Python's `urllib.parse.quote(rev, safe="/")`.
+/// See: <https://docs.python.org/3/library/urllib.parse.html#urllib.parse.quote>
+const GIT_REFERENCE_ENCODE_SET: &AsciiSet = &NON_ALPHANUMERIC
+    .remove(b'/')
+    .remove(b'-')
+    .remove(b'.')
+    .remove(b'_')
+    .remove(b'~');
 
 /// A reference to commit or commit-ish.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -53,6 +67,16 @@ impl GitReference {
             Self::NamedRef(rev) => rev,
             Self::DefaultBranch => "HEAD",
         }
+    }
+
+    /// Converts the [`GitReference`] to a percent-encoded revision string for use in a URL.
+    pub fn as_url_rev(&self) -> Option<Cow<'_, str>> {
+        self.as_str().map(Self::encode_rev)
+    }
+
+    /// Percent-encode a revision string for use in a URL.
+    pub(crate) fn encode_rev(rev: &str) -> Cow<'_, str> {
+        utf8_percent_encode(rev, GIT_REFERENCE_ENCODE_SET).into()
     }
 
     /// Returns the kind of this reference.

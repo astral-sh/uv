@@ -3,17 +3,14 @@ use std::path::Path;
 use uv_cache::{Cache, CacheBucket, CacheEntry};
 use uv_cache_info::CacheInfo;
 use uv_distribution_filename::WheelFilename;
-use uv_distribution_types::{
-    BuildInfo, CachedDirectUrlDist, CachedRegistryDist, DirectUrlSourceDist, DirectorySourceDist,
-    GitSourceDist, Hashed, PathSourceDist,
-};
+use uv_distribution_types::{BuildInfo, CachedDirectUrlDist, CachedRegistryDist, Hashed};
 use uv_pypi_types::{HashDigest, HashDigests, VerbatimParsedUrl};
 
 use crate::archive::Archive;
-use crate::{HttpArchivePointer, LocalArchivePointer};
+use crate::{HttpArchivePointer, PathArchivePointer};
 
 #[derive(Debug, Clone)]
-pub struct ResolvedWheel {
+pub(crate) struct ResolvedWheel {
     /// The filename of the wheel.
     pub filename: WheelFilename,
     /// The [`CacheEntry`] for the wheel.
@@ -22,7 +19,7 @@ pub struct ResolvedWheel {
 
 impl ResolvedWheel {
     /// Try to parse a distribution from a cached directory name (like `typing-extensions-4.8.0-py3-none-any`).
-    pub fn from_built_source(path: impl AsRef<Path>, cache: &Cache) -> Option<Self> {
+    pub(crate) fn from_built_source(path: impl AsRef<Path>, cache: &Cache) -> Option<Self> {
         let path = path.as_ref();
 
         // Determine the wheel filename.
@@ -39,20 +36,25 @@ impl ResolvedWheel {
 #[derive(Debug, Clone)]
 pub struct CachedWheel {
     /// The filename of the wheel.
-    pub filename: WheelFilename,
+    pub(super) filename: WheelFilename,
     /// The [`CacheEntry`] for the wheel.
-    pub entry: CacheEntry,
+    pub(super) entry: CacheEntry,
     /// The [`HashDigest`]s for the wheel.
-    pub hashes: HashDigests,
+    pub(super) hashes: HashDigests,
     /// The [`CacheInfo`] for the wheel.
-    pub cache_info: CacheInfo,
+    pub(super) cache_info: CacheInfo,
     /// The [`BuildInfo`] for the wheel, if it was built.
-    pub build_info: Option<BuildInfo>,
+    pub(super) build_info: Option<BuildInfo>,
 }
 
 impl CachedWheel {
+    /// Return the filename of the wheel.
+    pub fn filename(&self) -> &WheelFilename {
+        &self.filename
+    }
+
     /// Create a [`CachedWheel`] from a [`ResolvedWheel`].
-    pub fn from_entry(
+    pub(crate) fn from_entry(
         wheel: ResolvedWheel,
         hashes: HashDigests,
         cache_info: CacheInfo,
@@ -68,7 +70,7 @@ impl CachedWheel {
     }
 
     /// Read a cached wheel from a `.http` pointer
-    pub fn from_http_pointer(path: impl AsRef<Path>, cache: &Cache) -> Option<Self> {
+    pub(crate) fn from_http_pointer(path: impl AsRef<Path>, cache: &Cache) -> Option<Self> {
         let path = path.as_ref();
 
         // Read the pointer.
@@ -96,11 +98,11 @@ impl CachedWheel {
     }
 
     /// Read a cached wheel from a `.rev` pointer
-    pub fn from_local_pointer(path: impl AsRef<Path>, cache: &Cache) -> Option<Self> {
+    pub(crate) fn from_local_pointer(path: impl AsRef<Path>, cache: &Cache) -> Option<Self> {
         let path = path.as_ref();
 
         // Read the pointer.
-        let pointer = LocalArchivePointer::read_from(path).ok()??;
+        let pointer = PathArchivePointer::read_from(path).ok()??;
         let cache_info = pointer.to_cache_info();
         let build_info = pointer.to_build_info();
         let archive = pointer.into_archive();
@@ -124,7 +126,7 @@ impl CachedWheel {
     }
 
     /// Convert a [`CachedWheel`] into a [`CachedRegistryDist`].
-    pub fn into_registry_dist(self) -> CachedRegistryDist {
+    pub(crate) fn into_registry_dist(self) -> CachedRegistryDist {
         CachedRegistryDist {
             filename: self.filename,
             path: self.entry.into_path_buf().into_boxed_path(),
@@ -134,63 +136,11 @@ impl CachedWheel {
         }
     }
 
-    /// Convert a [`CachedWheel`] into a [`CachedDirectUrlDist`] by merging in the given
-    /// [`DirectUrlSourceDist`].
-    pub fn into_url_dist(self, dist: &DirectUrlSourceDist) -> CachedDirectUrlDist {
+    /// Convert a [`CachedWheel`] into a [`CachedDirectUrlDist`] with the given URL.
+    pub fn into_url_dist(self, url: VerbatimParsedUrl) -> CachedDirectUrlDist {
         CachedDirectUrlDist {
             filename: self.filename,
-            url: VerbatimParsedUrl {
-                parsed_url: dist.parsed_url(),
-                verbatim: dist.url.clone(),
-            },
-            path: self.entry.into_path_buf().into_boxed_path(),
-            hashes: self.hashes,
-            cache_info: self.cache_info,
-            build_info: self.build_info,
-        }
-    }
-
-    /// Convert a [`CachedWheel`] into a [`CachedDirectUrlDist`] by merging in the given
-    /// [`PathSourceDist`].
-    pub fn into_path_dist(self, dist: &PathSourceDist) -> CachedDirectUrlDist {
-        CachedDirectUrlDist {
-            filename: self.filename,
-            url: VerbatimParsedUrl {
-                parsed_url: dist.parsed_url(),
-                verbatim: dist.url.clone(),
-            },
-            path: self.entry.into_path_buf().into_boxed_path(),
-            hashes: self.hashes,
-            cache_info: self.cache_info,
-            build_info: self.build_info,
-        }
-    }
-
-    /// Convert a [`CachedWheel`] into a [`CachedDirectUrlDist`] by merging in the given
-    /// [`DirectorySourceDist`].
-    pub fn into_directory_dist(self, dist: &DirectorySourceDist) -> CachedDirectUrlDist {
-        CachedDirectUrlDist {
-            filename: self.filename,
-            url: VerbatimParsedUrl {
-                parsed_url: dist.parsed_url(),
-                verbatim: dist.url.clone(),
-            },
-            path: self.entry.into_path_buf().into_boxed_path(),
-            hashes: self.hashes,
-            cache_info: self.cache_info,
-            build_info: self.build_info,
-        }
-    }
-
-    /// Convert a [`CachedWheel`] into a [`CachedDirectUrlDist`] by merging in the given
-    /// [`GitSourceDist`].
-    pub fn into_git_dist(self, dist: &GitSourceDist) -> CachedDirectUrlDist {
-        CachedDirectUrlDist {
-            filename: self.filename,
-            url: VerbatimParsedUrl {
-                parsed_url: dist.parsed_url(),
-                verbatim: dist.url.clone(),
-            },
+            url,
             path: self.entry.into_path_buf().into_boxed_path(),
             hashes: self.hashes,
             cache_info: self.cache_info,

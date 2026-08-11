@@ -33,6 +33,18 @@
       versioning: "regex:^v?(?<major>\\d+)(\\.(?<minor>\\d+)\\.(?<patch>\\d+))?$",
     },
     {
+      // Codex Action publishes two-component tags instead of full SemVer tags.
+      matchManagers: ["github-actions"],
+      matchPackageNames: ["openai/codex-action"],
+      extractVersion: "^(?<version>v?\\d+\\.\\d+)$",
+      versioning: "regex:^v?(?<major>\\d+)\\.(?<minor>\\d+)$",
+    },
+    {
+      groupName: "Codex automation dependencies",
+      matchPackageNames: ["@openai/codex", "openai/codex-action"],
+      description: "Weekly update of Codex Action and Codex CLI dependencies",
+    },
+    {
       // Disable updates of `zip-rs`; intentionally pinned for now due to ownership change
       // See: https://github.com/astral-sh/uv/issues/3642
       matchPackageNames: ["/zip/"],
@@ -138,6 +150,9 @@
       matchManagers: ["custom.regex"],
       matchDepNames: ["maturin"],
       commitMessageTopic: "maturin",
+      // Maturin upgrades can change release wheel contents, so keep release
+      // binary validation enabled.
+      labels: ["internal", "build:skip-docker"],
     },
   ],
   customManagers: [
@@ -162,6 +177,26 @@
       packageNameTemplate: "PyO3/maturin",
       datasourceTemplate: "github-releases",
     },
+    // Codex CLI versions passed to Codex Action.
+    {
+      customType: "regex",
+      managerFilePatterns: ["/^\\.github/workflows/.+\\.ya?ml$/"],
+      matchStrings: ['codex-version:\\s*"(?<currentValue>\\d+\\.\\d+\\.\\d+)"'],
+      depNameTemplate: "@openai/codex",
+      datasourceTemplate: "npm",
+      versioningTemplate: "semver",
+    },
+    // Keep the directly downloaded Codex release and its SHA-256 in sync.
+    {
+      customType: "regex",
+      managerFilePatterns: ["/^agents/scripts/install-codex-security\\.sh$/"],
+      matchStrings: [
+        "releases/download/rust-v(?<currentValue>\\d+\\.\\d+\\.\\d+)/codex-x86_64-unknown-linux-musl\\.tar\\.gz[\\s\\S]*?(?<currentDigest>[a-f0-9]{64})",
+      ],
+      depNameTemplate: "@openai/codex",
+      datasourceTemplate: "custom.codex-release-assets",
+      versioningTemplate: "semver",
+    },
     // Minimum supported Rust toolchain version
     {
       customType: "regex",
@@ -185,6 +220,15 @@
       datasourceTemplate: "github-releases",
     },
   ],
+  customDatasources: {
+    "codex-release-assets": {
+      // Include release history so the inherited minimum release age can apply.
+      defaultRegistryUrlTemplate: "https://api.github.com/repos/openai/codex/releases?per_page=100",
+      transformTemplates: [
+        '{"releases": [$[draft = false and prerelease = false and $exists(assets[name = "codex-x86_64-unknown-linux-musl.tar.gz"].digest)].{"version": $substringAfter(tag_name, "rust-v"), "digest": $substringAfter(assets[name = "codex-x86_64-unknown-linux-musl.tar.gz"].digest, "sha256:"), "releaseTimestamp": published_at, "isStable": true}]}',
+      ],
+    },
+  },
   vulnerabilityAlerts: {
     commitMessageSuffix: "",
     labels: ["internal", "security"],

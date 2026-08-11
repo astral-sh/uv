@@ -1,5 +1,8 @@
 use std::future::Future;
 use std::sync::Arc;
+
+use reqwest::StatusCode;
+
 use uv_client::MetadataFormat;
 use uv_configuration::BuildOptions;
 use uv_distribution::{ArchiveMetadata, DistributionDatabase, Reporter};
@@ -61,6 +64,8 @@ pub enum MetadataUnavailable {
     /// The source distribution has a `requires-python` requirement that is not met by the installed
     /// Python version (and static metadata is not available).
     RequiresPython(VersionSpecifiers, Version),
+    /// The wheel metadata could not be fetched due to a network error.
+    Network(StatusCode),
 }
 
 impl MetadataUnavailable {
@@ -72,7 +77,7 @@ impl MetadataUnavailable {
             Self::InvalidMetadata(err) => Some(err),
             Self::InconsistentMetadata(err) => Some(err),
             Self::InvalidStructure(err) => Some(err),
-            Self::RequiresPython(_, _) => None,
+            Self::RequiresPython(..) | Self::Network(..) => None,
         }
     }
 }
@@ -206,11 +211,11 @@ impl<Context: BuildContext> ResolverProvider for DefaultResolverProvider<'_, Con
                             MetadataFormat::Simple(metadata) => VersionMap::from_simple_metadata(
                                 metadata,
                                 package_name,
-                                index,
-                                self.tags.as_ref(),
-                                &self.requires_python,
-                                &self.allowed_yanks,
-                                &self.hasher,
+                                index.clone(),
+                                self.tags.clone(),
+                                self.requires_python.clone(),
+                                self.allowed_yanks.clone(),
+                                self.hasher.clone(),
                                 included_version_cutoff,
                                 available_version_cutoff,
                                 flat_index
@@ -291,6 +296,23 @@ impl<Context: BuildContext> ResolverProvider for DefaultResolverProvider<'_, Con
                             Ok(MetadataResponse::Unavailable(
                                 MetadataUnavailable::InvalidStructure(Arc::new(err)),
                             ))
+                        }
+                        uv_client::ErrorKind::WrappedReqwestError(url, err) => {
+                            let Some(status) = err.status().filter(|status| {
+                                dist.index().is_some_and(|index| {
+                                    self.index_locations.ignores_error_code_for(index, *status)
+                                })
+                            }) else {
+                                return Err(uv_client::Error::new(
+                                    uv_client::ErrorKind::WrappedReqwestError(url, err),
+                                    retries,
+                                    duration,
+                                )
+                                .into());
+                            };
+                            Ok(MetadataResponse::Unavailable(MetadataUnavailable::Network(
+                                status,
+                            )))
                         }
                         kind => Err(uv_client::Error::new(kind, retries, duration).into()),
                     }

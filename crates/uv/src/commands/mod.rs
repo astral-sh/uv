@@ -5,9 +5,10 @@ use std::time::Duration;
 use std::{fmt::Write, process::ExitCode};
 
 use anstream::AutoStream;
-use anyhow::Context;
+use anyhow::{Context, bail};
 use owo_colors::OwoColorize;
 use tracing::debug;
+use uv_warnings::warn_user;
 
 pub(crate) use auth::dir::dir as auth_dir;
 pub(crate) use auth::helper::helper as auth_helper;
@@ -29,8 +30,10 @@ pub(crate) use pip::show::pip_show;
 pub(crate) use pip::sync::pip_sync;
 pub(crate) use pip::tree::pip_tree;
 pub(crate) use pip::uninstall::pip_uninstall;
+pub(crate) use project::ProjectError;
 pub(crate) use project::add::add;
 pub(crate) use project::audit::audit;
+pub(crate) use project::check::check;
 pub(crate) use project::export::export;
 pub(crate) use project::format::format;
 pub(crate) use project::init::{InitKind, InitProjectKind, init};
@@ -39,6 +42,7 @@ pub(crate) use project::remove::remove;
 pub(crate) use project::run::{ParsedRunCommand, RunCommand, run};
 pub(crate) use project::sync::sync;
 pub(crate) use project::tree::tree;
+pub(crate) use project::upgrade::upgrade;
 pub(crate) use project::version::{project_version, self_version};
 pub(crate) use publish::publish;
 pub(crate) use python::dir::dir as python_dir;
@@ -52,6 +56,7 @@ pub(crate) use python::uninstall::uninstall as python_uninstall;
 pub(crate) use python::update_shell::update_shell as python_update_shell;
 #[cfg(feature = "self-update")]
 pub(crate) use self_update::self_update;
+pub(crate) use tool::audit::audit as tool_audit;
 pub(crate) use tool::dir::dir as tool_dir;
 pub(crate) use tool::install::install as tool_install;
 pub(crate) use tool::list::list as tool_list;
@@ -64,7 +69,7 @@ use uv_cache::Cache;
 use uv_configuration::Concurrency;
 pub(crate) use uv_console::human_readable_bytes;
 use uv_fs::{CWD, Simplified};
-use uv_installer::compile_tree;
+use uv_installer::{compile_files, compile_tree};
 use uv_python::PythonEnvironment;
 use uv_scripts::Pep723Script;
 pub(crate) use venv::venv;
@@ -82,7 +87,8 @@ mod cache_clean;
 mod cache_dir;
 mod cache_prune;
 mod cache_size;
-mod diagnostics;
+pub(crate) mod diagnostics;
+mod editable;
 mod help;
 pub(crate) mod pip;
 mod project;
@@ -93,22 +99,145 @@ pub(crate) mod reporters;
 #[cfg(feature = "self-update")]
 mod self_update;
 mod tool;
+mod update_shell;
 mod venv;
 mod workspace;
 
+/// The process status for a command that completed without a final error to render.
 #[derive(Copy, Clone)]
-pub(crate) enum ExitStatus {
+pub enum ExitStatus {
     /// The command succeeded.
     Success,
 
-    /// The command failed due to an error in the user input.
+    /// The command reported a failure caused by user input.
     Failure,
 
-    /// The command failed with an unexpected error.
+    /// The command reported an unexpected failure.
     Error,
 
     /// The command's exit status is propagated from an external command.
     External(u8),
+}
+
+/// A command error propagated to the entrypoint for exit-status selection.
+#[derive(Debug, thiserror::Error)]
+pub(crate) enum UvError {
+    /// An error caused by invalid or unsatisfiable user input.
+    #[error(transparent)]
+    User(anyhow::Error),
+
+    /// An error caused by invalid command-line arguments.
+    #[error(transparent)]
+    Argument(anyhow::Error),
+
+    /// An unexpected internal or environmental error.
+    #[error(transparent)]
+    Unexpected(anyhow::Error),
+}
+
+impl UvError {
+    /// Create a user-facing error.
+    fn user(error: impl Into<anyhow::Error>) -> Self {
+        Self::User(error.into())
+    }
+
+    /// Create an argument error.
+    pub(crate) fn argument(error: anyhow::Error) -> Self {
+        Self::Argument(error)
+    }
+
+    /// Create an unexpected error.
+    pub(crate) fn unexpected(error: anyhow::Error) -> Self {
+        Self::Unexpected(error)
+    }
+}
+
+/// Read dotenv files into an overlay for a spawned process.
+///
+/// These values intentionally do not mutate uv's process environment and cannot mutate
+/// the current uv process' settings.
+fn read_env_files<'a>(
+    env_file: impl DoubleEndedIterator<Item = &'a PathBuf>,
+) -> anyhow::Result<Vec<(String, String)>> {
+    let mut environment = Vec::new();
+
+    for env_file_path in env_file.rev().map(PathBuf::as_path) {
+        let iter = match dotenvy::from_path_iter(env_file_path) {
+            Err(dotenvy::Error::Io(err)) if err.kind() == std::io::ErrorKind::NotFound => {
+                bail!(
+                    "No environment file found at: `{}`",
+                    env_file_path.simplified_display()
+                );
+            }
+            Err(dotenvy::Error::Io(err)) => {
+                bail!(
+                    "Failed to read environment file `{}`: {err}",
+                    env_file_path.simplified_display()
+                );
+            }
+            Err(dotenvy::Error::LineParse(content, position)) => {
+                warn_user!(
+                    "Failed to parse environment file `{}` at position {position}: {content}",
+                    env_file_path.simplified_display(),
+                );
+                continue;
+            }
+            Err(err) => {
+                warn_user!(
+                    "Failed to parse environment file `{}`: {err}",
+                    env_file_path.simplified_display(),
+                );
+                continue;
+            }
+            Ok(iter) => iter,
+        };
+
+        let mut parsed = true;
+        for item in iter {
+            match item {
+                Ok((key, value)) => {
+                    if std::env::var(&key).is_err() {
+                        environment.push((key, value));
+                    }
+                }
+                Err(dotenvy::Error::Io(err)) => {
+                    bail!(
+                        "Failed to read environment file `{}`: {err}",
+                        env_file_path.simplified_display()
+                    );
+                }
+                Err(dotenvy::Error::LineParse(content, position)) => {
+                    warn_user!(
+                        "Failed to parse environment file `{}` at position {position}: {content}",
+                        env_file_path.simplified_display(),
+                    );
+                    parsed = false;
+                    break;
+                }
+                Err(err) => {
+                    warn_user!(
+                        "Failed to parse environment file `{}`: {err}",
+                        env_file_path.simplified_display(),
+                    );
+                    parsed = false;
+                    break;
+                }
+            }
+        }
+
+        if parsed {
+            debug!(
+                "Read environment file at: `{}`",
+                env_file_path.simplified_display()
+            );
+        }
+    }
+
+    // `dotenvy::from_path` preserves the first loaded value, while `Command::envs` preserves the
+    // last value set for the child process.
+    environment.reverse();
+
+    Ok(environment)
 }
 
 impl From<ExitStatus> for ExitCode {
@@ -189,6 +318,35 @@ pub(super) async fn compile_bytecode(
             )
         })?;
     }
+    write_bytecode_summary(files, start, printer)?;
+    Ok(())
+}
+
+/// Compile the given Python source files to bytecode.
+pub(super) async fn compile_bytecode_files(
+    files: impl IntoIterator<Item = anyhow::Result<PathBuf>>,
+    venv: &PythonEnvironment,
+    concurrency: &Concurrency,
+    cache: &Cache,
+    printer: Printer,
+) -> anyhow::Result<()> {
+    let start = std::time::Instant::now();
+    let files = compile_files(files, venv.python_executable(), concurrency, cache.root())
+        .await
+        .context("Failed to bytecode-compile installed packages")?;
+    if files == 0 {
+        return Ok(());
+    }
+
+    write_bytecode_summary(files, start, printer)?;
+    Ok(())
+}
+
+fn write_bytecode_summary(
+    files: usize,
+    start: std::time::Instant,
+    printer: Printer,
+) -> std::fmt::Result {
     let s = if files == 1 { "" } else { "s" };
     writeln!(
         printer.stderr(),
@@ -199,8 +357,7 @@ pub(super) async fn compile_bytecode(
             format!("in {}", elapsed(start.elapsed())).dimmed()
         )
         .dimmed()
-    )?;
-    Ok(())
+    )
 }
 
 /// A multicasting writer that writes to both the standard output and an output file, if present.

@@ -13,7 +13,6 @@ use uv_fs::Simplified;
 use uv_install_wheel::read_record;
 use uv_installer::SitePackages;
 use uv_normalize::PackageName;
-use uv_preview::Preview;
 use uv_python::{
     EnvironmentPreference, Prefix, PythonEnvironment, PythonPreference, PythonRequest, Target,
 };
@@ -34,7 +33,6 @@ pub(crate) fn pip_show(
     files: bool,
     cache: &Cache,
     printer: Printer,
-    preview: Preview,
 ) -> Result<ExitStatus> {
     if packages.is_empty() {
         {
@@ -54,7 +52,6 @@ pub(crate) fn pip_show(
         EnvironmentPreference::from_system_flag(system, false),
         PythonPreference::default().with_system_flag(system),
         cache,
-        preview,
     )?;
 
     // Apply any `--target` or `--prefix` directories.
@@ -80,7 +77,7 @@ pub(crate) fn pip_show(
     let site_packages = SitePackages::from_environment(&environment)?;
 
     // Determine the markers and tags to use for resolution.
-    let markers = environment.interpreter().resolver_marker_environment();
+    let markers = environment.interpreter().to_resolver_marker_environment();
     let tags = environment.interpreter().tags()?;
 
     // Sort and deduplicate the packages, which are keyed by name.

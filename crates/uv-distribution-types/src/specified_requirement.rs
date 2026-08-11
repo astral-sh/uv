@@ -93,12 +93,12 @@ impl UnresolvedRequirement {
             Self::Named(mut requirement) => Self::Named(Requirement {
                 marker: marker
                     .map(|marker| {
-                        requirement.marker.and(marker);
+                        requirement.marker = requirement.marker.and(marker);
                         requirement.marker
                     })
                     .unwrap_or(requirement.marker),
                 source: match requirement.source {
-                    RequirementSource::Git {
+                    RequirementSource::GitDirectory {
                         git,
                         subdirectory,
                         url,
@@ -113,9 +113,32 @@ impl UnresolvedRequirement {
                         } else {
                             git
                         };
-                        RequirementSource::Git {
+                        RequirementSource::GitDirectory {
                             git,
                             subdirectory,
+                            url,
+                        }
+                    }
+                    RequirementSource::GitPath {
+                        git,
+                        install_path,
+                        ext,
+                        url,
+                    } => {
+                        let git = if let Some(git_reference) = git_reference {
+                            git.with_reference(git_reference)
+                        } else {
+                            git
+                        };
+                        let git = if let Some(lfs) = lfs {
+                            git.with_lfs(GitLfs::from(lfs))
+                        } else {
+                            git
+                        };
+                        RequirementSource::GitPath {
+                            git,
+                            install_path,
+                            ext,
                             url,
                         }
                     }
@@ -126,12 +149,12 @@ impl UnresolvedRequirement {
             Self::Unnamed(mut requirement) => Self::Unnamed(UnnamedRequirement {
                 marker: marker
                     .map(|marker| {
-                        requirement.marker.and(marker);
+                        requirement.marker = requirement.marker.and(marker);
                         requirement.marker
                     })
                     .unwrap_or(requirement.marker),
                 url: match requirement.url.parsed_url {
-                    ParsedUrl::Git(mut git) => {
+                    ParsedUrl::GitDirectory(mut git) => {
                         if let Some(git_reference) = git_reference {
                             git.url = git.url.with_reference(git_reference);
                         }
@@ -139,7 +162,19 @@ impl UnresolvedRequirement {
                             git.url = git.url.with_lfs(GitLfs::from(lfs));
                         }
                         VerbatimParsedUrl {
-                            parsed_url: ParsedUrl::Git(git),
+                            parsed_url: ParsedUrl::GitDirectory(git),
+                            verbatim: requirement.url.verbatim,
+                        }
+                    }
+                    ParsedUrl::GitPath(mut git) => {
+                        if let Some(git_reference) = git_reference {
+                            git.url = git.url.with_reference(git_reference);
+                        }
+                        if let Some(lfs) = lfs {
+                            git.url = git.url.with_lfs(GitLfs::from(lfs));
+                        }
+                        VerbatimParsedUrl {
+                            parsed_url: ParsedUrl::GitPath(git),
                             verbatim: requirement.url.verbatim,
                         }
                     }
@@ -147,14 +182,6 @@ impl UnresolvedRequirement {
                 },
                 ..requirement
             }),
-        }
-    }
-
-    /// Returns the extras for the requirement.
-    pub fn extras(&self) -> &[ExtraName] {
-        match self {
-            Self::Named(requirement) => &requirement.extras,
-            Self::Unnamed(requirement) => &requirement.extras,
         }
     }
 
@@ -169,34 +196,17 @@ impl UnresolvedRequirement {
         }
     }
 
-    /// Returns `true` if the requirement is editable.
-    pub fn is_editable(&self) -> bool {
-        match self {
-            Self::Named(requirement) => requirement.is_editable(),
-            Self::Unnamed(requirement) => requirement.url.is_editable(),
-        }
-    }
-
     /// Return the hashes of the requirement, as specified in the URL fragment.
     pub fn hashes(&self) -> Option<Hashes> {
         match self {
             Self::Named(requirement) => requirement.hashes(),
             Self::Unnamed(requirement) => {
                 let fragment = requirement.url.verbatim.fragment()?;
-                Hashes::parse_fragment(fragment).ok()
+                fragment
+                    .split('&')
+                    .find_map(|fragment| Hashes::parse_fragment(fragment).ok())
             }
         }
-    }
-}
-
-impl NameRequirementSpecification {
-    /// Return the hashes of the requirement, as specified in the URL fragment.
-    pub fn hashes(&self) -> Option<Hashes> {
-        let RequirementSource::Url { ref url, .. } = self.requirement.source else {
-            return None;
-        };
-        let fragment = url.fragment()?;
-        Hashes::parse_fragment(fragment).ok()
     }
 }
 

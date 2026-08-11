@@ -10,12 +10,12 @@
 
 set -euo pipefail
 
-if [ ! -n "$COMMIT" ]; then
+if [ -z "${COMMIT:-}" ]; then
     echo "COMMIT is required."
     exit 1
 fi
 
-if [ ! -n "$RUN_ID" ]; then
+if [ -z "${RUN_ID:-}" ]; then
     echo "RUN_ID is required."
     exit 1
 fi
@@ -48,9 +48,15 @@ cp -r artifacts-*/* artifacts/
 rm -f artifacts/*-dist-manifest.json
 
 # Create release
-gh release create "$TAG" \
-    --target "$COMMIT" \
-    --title "$TITLE" \
-    --notes-file /tmp/notes.txt \
-    "$([ "$PRERELEASE" = "true" ] && echo "--prerelease")" \
-    artifacts/*
+release_args=(
+    "$TAG"
+    --target "$COMMIT"
+    --title "$TITLE"
+    --notes-file /tmp/notes.txt
+)
+
+if [ "$PRERELEASE" = "true" ]; then
+    release_args+=(--prerelease)
+fi
+
+gh release create "${release_args[@]}" artifacts/*

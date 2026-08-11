@@ -1,0 +1,28 @@
+name = "fork-marker-accrue"
+description = '''
+This is actually a non-forking test case that tests the tracking of marker
+expressions in general. In this case, the dependency on `c` should have its
+marker expressions automatically combined. In this case, it's `linux OR
+darwin`, even though `linux OR darwin` doesn't actually appear verbatim as a
+marker expression for any dependency on `c`.
+'''
+
+[resolver_options]
+universal = true
+
+[expected]
+satisfiable = true
+
+[root]
+requires = [
+  "a==1.0.0 ; implementation_name == 'cpython'",
+  "b==1.0.0 ; implementation_name == 'pypy'",
+]
+
+[packages.a.versions."1.0.0"]
+requires = ["c==1.0.0 ; sys_platform == 'linux'"]
+
+[packages.b.versions."1.0.0"]
+requires = ["c==1.0.0 ; sys_platform == 'darwin'"]
+
+[packages.c.versions."1.0.0"]

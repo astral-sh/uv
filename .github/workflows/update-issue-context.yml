@@ -1,0 +1,316 @@
+# Incorporate useful issue comments into their existing maintainer context.
+name: "update-issue-context"
+
+on:
+  issue_comment:
+    types: [created]
+
+permissions: {}
+
+jobs:
+  update:
+    if: github.repository == 'astral-sh/uv' && !github.event.issue.pull_request
+    runs-on: ubuntu-latest
+    environment: automations
+    timeout-minutes: 15
+    permissions:
+      actions: read
+      contents: read
+      issues: read
+    outputs:
+      changed: ${{ steps.changes.outputs.changed }}
+      context-sha: ${{ steps.issue.outputs.context-sha }}
+      issue-number: ${{ steps.issue.outputs.number }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: "Collect issue and comment context"
+        id: issue
+        run: |
+          gh issue view "$ISSUE_NUMBER" \
+            --repo "$GITHUB_REPOSITORY" \
+            --json number,title,body,author,url,comments \
+            > "$RUNNER_TEMP/issue.json"
+
+          if ! jq --exit-status \
+            --arg repository "$GITHUB_REPOSITORY" \
+            '.url | startswith("https://github.com/\($repository)/issues/")' \
+            "$RUNNER_TEMP/issue.json" > /dev/null; then
+            echo "The issue must belong to $GITHUB_REPOSITORY." >&2
+            exit 1
+          fi
+
+          jq '.comment | {
+            id,
+            body,
+            author: .user.login,
+            url: .html_url,
+            created_at
+          }' "$GITHUB_EVENT_PATH" > "$RUNNER_TEMP/issue-comment.json"
+
+          echo "number=$ISSUE_NUMBER" >> "$GITHUB_OUTPUT"
+
+          branch="refs/heads/issue/$ISSUE_NUMBER"
+          repository="https://github.com/astral-sh/uv-dev.git"
+
+          if git ls-remote --exit-code "$repository" "$branch" > /dev/null; then
+            git init --quiet "$RUNNER_TEMP/issue-context"
+            git -C "$RUNNER_TEMP/issue-context" fetch --quiet --depth 1 \
+              "$repository" "$branch"
+            git -C "$RUNNER_TEMP/issue-context" checkout --quiet FETCH_HEAD
+          else
+            status="$?"
+            if [ "$status" -ne 2 ]; then
+              exit "$status"
+            fi
+
+            echo "No issue context exists for $GITHUB_REPOSITORY#$ISSUE_NUMBER."
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if [ ! -f "$RUNNER_TEMP/issue-context/README.md" ]; then
+            echo "The issue context for $GITHUB_REPOSITORY#$ISSUE_NUMBER is not initialized."
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "exists=true" >> "$GITHUB_OUTPUT"
+          echo "context-sha=$(git -C "$RUNNER_TEMP/issue-context" rev-parse HEAD)" \
+            >> "$GITHUB_OUTPUT"
+
+          {
+            printf 'Issue context update for #%s: %s\n\n' \
+              "$ISSUE_NUMBER" \
+              "$(jq -r '.title | gsub("[\r\n]+"; " ")' "$RUNNER_TEMP/issue.json")"
+            cat agents/prompts/update-issue-context.md
+          } > "$RUNNER_TEMP/update-issue-context-prompt.md"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+
+      - name: "Find previous Codex thread"
+        id: find-thread
+        if: steps.issue.outputs.exists == 'true'
+        run: |
+          artifact_name="codex-thread-issue-$ISSUE_NUMBER"
+          artifacts="$(gh api \
+            "repos/$GITHUB_REPOSITORY/actions/artifacts?name=$artifact_name&per_page=20")"
+          thread_run_id=
+          while IFS=$'\t' read -r run_id; do
+            [ -n "$run_id" ] || continue
+            workflow_run="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$run_id")"
+            if jq --exit-status '
+              .head_branch == "main"
+              and .status == "completed"
+              and (
+                (
+                  .path == ".github/workflows/issue-triage.yml"
+                  and (.event == "issues" or .event == "workflow_dispatch")
+                )
+                or (
+                  .path == ".github/workflows/update-issue-context.yml"
+                  and .event == "issue_comment"
+                )
+              )
+            ' <<< "$workflow_run" > /dev/null; then
+              thread_run_id="$run_id"
+              break
+            fi
+          done < <(
+            jq --raw-output '
+              [.artifacts[] | select(.expired == false)]
+              | sort_by(.created_at)
+              | reverse
+              | .[]
+              | .workflow_run.id
+            ' <<< "$artifacts"
+          )
+
+          if [ -z "$thread_run_id" ]; then
+            echo "No trusted Codex thread exists for $GITHUB_REPOSITORY#$ISSUE_NUMBER."
+            echo "found=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          {
+            echo "found=true"
+            echo "run-id=$thread_run_id"
+            echo "artifact=$artifact_name"
+          } >> "$GITHUB_OUTPUT"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+
+      - name: "Restore Codex thread"
+        if: steps.find-thread.outputs.found == 'true'
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ steps.find-thread.outputs.run-id }}
+          name: ${{ steps.find-thread.outputs.artifact }}
+          path: agents/codex/sessions
+
+      - name: "Validate Codex thread"
+        id: thread
+        if: steps.find-thread.outputs.found == 'true'
+        run: |
+          while IFS= read -r -d '' compressed_rollout; do
+            zstd --decompress --stdout "$compressed_rollout" > "${compressed_rollout%.zst}"
+          done < <(find agents/codex/sessions -type f -name '*.jsonl.zst' -print0)
+
+          root_sessions=0
+          root_session_id=
+          while IFS= read -r -d '' rollout; do
+            metadata="$(head -n 1 "$rollout")"
+            if ! jq --exit-status '
+              .type == "session_meta"
+              and (.payload | type == "object")
+              and (.payload.id | type == "string")
+            ' <<< "$metadata" > /dev/null; then
+              echo "The artifact contains an invalid Codex session." >&2
+              exit 1
+            fi
+
+            if jq --exit-status '.payload.source == "exec"' <<< "$metadata" > /dev/null; then
+              root_sessions=$((root_sessions + 1))
+              root_session_id="$(jq --raw-output '.payload.id' <<< "$metadata")"
+              session_workspace="$(jq --raw-output '.payload.cwd' <<< "$metadata")"
+              if ! [[ "$root_session_id" =~ ^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$ ]] ||
+                [ "$session_workspace" != "$GITHUB_WORKSPACE" ]; then
+                echo "The Codex session does not match the trusted workspace." >&2
+                exit 1
+              fi
+            fi
+          done < <(find agents/codex/sessions -type f -name '*.jsonl' -print0)
+
+          if [ "$root_sessions" -ne 1 ]; then
+            echo "The artifact must contain exactly one root Codex session." >&2
+            exit 1
+          fi
+
+          echo "session-id=$root_session_id" >> "$GITHUB_OUTPUT"
+
+      - name: "Update issue context"
+        if: steps.find-thread.outputs.found == 'true'
+        uses: openai/codex-action@52fe01ec70a42f454c9d2ebd47598f9fd6893d56 # v1.11
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TMPDIR: ${{ runner.temp }}
+        with:
+          openai-api-key: ${{ secrets.OPENAI_API_KEY }}
+          codex-version: "0.146.0"
+          codex-home: "agents/codex"
+          effort: high
+          permission-profile: "issue-triage"
+          safety-strategy: drop-sudo
+          allow-users: "*"
+          prompt-file: "${{ runner.temp }}/update-issue-context-prompt.md"
+          codex-args: >-
+            ["resume", "${{ steps.thread.outputs.session-id }}", "-"]
+
+      - name: "Check issue context changes"
+        id: changes
+        if: steps.find-thread.outputs.found == 'true'
+        run: |
+          if [ -n "$(git -C "$RUNNER_TEMP/issue-context" status --porcelain -- . ':!README.md')" ]; then
+            echo "Codex changed files outside the issue-context README."
+            git -C "$RUNNER_TEMP/issue-context" status --short
+            exit 1
+          fi
+
+          if git -C "$RUNNER_TEMP/issue-context" diff --quiet HEAD -- README.md; then
+            echo "The comment does not require an issue-context update."
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          git -C "$RUNNER_TEMP/issue-context" diff --check -- README.md
+          echo "changed=true" >> "$GITHUB_OUTPUT"
+
+      - name: "Upload issue context"
+        if: steps.changes.outputs.changed == 'true'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: issue-comment-context-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/issue-context/README.md
+          if-no-files-found: error
+          retention-days: 1
+
+      - name: "Upload Codex thread"
+        if: always() && steps.find-thread.outputs.found == 'true'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: codex-thread-issue-${{ steps.issue.outputs.number }}
+          path: agents/codex/sessions
+          if-no-files-found: warn
+          overwrite: true
+
+  persist:
+    needs: update
+    if: needs.update.outputs.changed == 'true'
+    runs-on: ubuntu-latest
+    environment: automations
+    timeout-minutes: 10
+    concurrency:
+      group: issue-context-${{ needs.update.outputs.issue-number }}
+      cancel-in-progress: false
+    permissions:
+      id-token: write # for the uv-dev issue-context credential broker
+    steps:
+      - name: "Download issue context"
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: issue-comment-context-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/issue-context-update
+
+      - name: "Get issue context token"
+        id: token
+        uses: open-security-tools/ost-simple-sts@974a63a2daaaa40f7c6dec40d334f3da4421469e
+        with:
+          exchange-url: ${{ secrets.STS_API_URL }}/exchange
+          audience: ${{ secrets.STS_API_URL }}
+          repository: astral-sh/uv-dev
+          permissions: |
+            contents: write
+
+      - name: "Persist issue context"
+        run: |
+          branch="issue/$ISSUE_NUMBER"
+
+          git init --quiet "$RUNNER_TEMP/issue-context"
+          cd "$RUNNER_TEMP/issue-context"
+          git remote add origin \
+            "https://x-access-token:${GH_TOKEN}@github.com/astral-sh/uv-dev.git"
+          git fetch --quiet origin "refs/heads/$branch"
+          git checkout --quiet FETCH_HEAD
+
+          if [ "$(git rev-parse HEAD)" != "$CONTEXT_SHA" ]; then
+            echo "The issue context changed while this comment was being analyzed."
+            echo "Skipping the stale update to preserve the newer issue context."
+            exit 0
+          fi
+
+          cp "$RUNNER_TEMP/issue-context-update/README.md" README.md
+          git add README.md
+
+          if git diff --cached --quiet; then
+            echo "The existing issue context is unchanged."
+            exit 0
+          fi
+
+          git \
+            -c user.name="astral-automations-bot[bot]" \
+            -c user.email="305554984+astral-automations-bot[bot]@users.noreply.github.com" \
+            commit --message "Update issue context from a comment"
+          git push origin "HEAD:refs/heads/$branch"
+
+          printf 'Issue context: https://github.com/astral-sh/uv-dev/tree/%s\n' "$branch" \
+            >> "$GITHUB_STEP_SUMMARY"
+        env:
+          CONTEXT_SHA: ${{ needs.update.outputs.context-sha }}
+          GH_TOKEN: ${{ steps.token.outputs.token }}
+          ISSUE_NUMBER: ${{ needs.update.outputs.issue-number }}

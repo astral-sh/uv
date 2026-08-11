@@ -148,11 +148,12 @@ impl ResolverEnvironment {
     /// conflicting dependency specifications across distinct marker
     /// environments.
     ///
-    /// The order of the initial forks is significant, although we don't
-    /// guarantee any specific treatment (similar to, at time of writing, how
-    /// the order of dependencies specified is also significant but has no
-    /// specific guarantees around it). Changing the ordering can help when our
-    /// custom fork prioritization fails.
+    /// Initial forks with distinct lower Python bounds are ordered by the fork
+    /// strategy and resolution mode, the same way forks created during
+    /// resolution are. The given order still decides between forks that tie,
+    /// although we don't guarantee any specific treatment (similar to, at time
+    /// of writing, how the order of dependencies specified is also significant
+    /// but has no specific guarantees around it).
     pub fn universal(initial_forks: Vec<MarkerTree>) -> Self {
         let kind = Kind::Universal {
             initial_forks: initial_forks.into(),
@@ -265,7 +266,7 @@ impl ResolverEnvironment {
                 ref exclude,
             } => {
                 let mut markers = *lhs;
-                markers.and(rhs);
+                markers = markers.and(rhs);
                 let kind = Kind::Universal {
                     initial_forks: Arc::clone(initial_forks),
                     markers,
@@ -598,7 +599,7 @@ impl Forker<'_> {
         envs.push(env.narrow_environment(self.marker));
 
         let mut remaining_marker = self.marker;
-        remaining_marker.and(env_marker.negate());
+        remaining_marker = remaining_marker.and(env_marker.negate());
         let remaining_forker = Forker {
             package: self.package,
             marker: remaining_marker,
@@ -620,7 +621,7 @@ pub(crate) fn fork_version_by_python_requirement(
     python_requirement: &PythonRequirement,
     env: &ResolverEnvironment,
 ) -> Vec<ResolverEnvironment> {
-    let requires_python = RequiresPython::from_specifiers(requires_python);
+    let requires_python = RequiresPython::from_specifiers(requires_python.clone());
     let lower = requires_python.range().lower().clone();
 
     // Attempt to split the current Python requirement based on the `requires-python` specifier.

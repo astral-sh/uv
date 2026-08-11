@@ -7,13 +7,14 @@ pub use base_client::{
 pub use cached_client::{CacheControl, CachedClient, CachedClientError, DataWithCachePolicy};
 pub use error::{Error, ErrorKind, ProblemDetails, WrappedReqwestError};
 pub use flat_index::{FlatIndexClient, FlatIndexEntries, FlatIndexEntry, FlatIndexError};
-pub use linehaul::LineHaul;
 pub use registry_client::{
     Connectivity, MetadataFormat, RegistryClient, RegistryClientBuilder, SimpleDetailMetadata,
     SimpleDetailMetadatum, SimpleIndexMetadata, VersionFiles,
 };
-pub use retry::{RetriableError, RetryState, UvRetryableStrategy, retryable_on_request_failure};
-pub use rkyvutil::{Deserializer, OwnedArchive, Serializer, Validator};
+pub(crate) use retry::UvRetryableStrategy;
+pub use retry::{RetriableError, RetryState, retryable_on_request_failure};
+pub use rkyvutil::OwnedArchive;
+pub use tls::{CertificateFileError, Certificates};
 
 mod base_client;
 mod cached_client;

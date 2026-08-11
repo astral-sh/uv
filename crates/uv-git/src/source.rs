@@ -13,11 +13,11 @@ use uv_cache_key::cache_digest;
 use uv_git_types::{GitOid, GitReference, GitUrl};
 use uv_redacted::DisplaySafeUrl;
 
-use crate::GIT_STORE;
+use crate::credentials::GIT_STORE;
 use crate::git::{GitDatabase, GitRemote};
 
 /// A remote Git source that can be checked out locally.
-pub struct GitSource {
+pub(crate) struct GitSource {
     /// The Git reference from the manifest file.
     git: GitUrl,
     /// Whether to disable SSL verification.
@@ -32,7 +32,7 @@ pub struct GitSource {
 
 impl GitSource {
     /// Initialize a [`GitSource`] with the given Git URL, HTTP client, and cache path.
-    pub fn new(git: GitUrl, cache: impl Into<PathBuf>, offline: bool) -> Self {
+    pub(crate) fn new(git: GitUrl, cache: impl Into<PathBuf>, offline: bool) -> Self {
         Self {
             git,
             disable_ssl: false,
@@ -44,7 +44,7 @@ impl GitSource {
 
     /// Disable SSL verification for this [`GitSource`].
     #[must_use]
-    pub fn dangerous(self) -> Self {
+    pub(crate) fn dangerous(self) -> Self {
         Self {
             disable_ssl: true,
             ..self
@@ -53,7 +53,7 @@ impl GitSource {
 
     /// Set the [`Reporter`] to use for the [`GitSource`].
     #[must_use]
-    pub fn with_reporter(self, reporter: Arc<dyn Reporter>) -> Self {
+    pub(crate) fn with_reporter(self, reporter: Arc<dyn Reporter>) -> Self {
         Self {
             reporter: Some(reporter),
             ..self
@@ -62,7 +62,7 @@ impl GitSource {
 
     /// Fetch the underlying Git repository at the given revision.
     #[instrument(skip(self), fields(repository = %self.git.url(), rev = ?self.git.precise()))]
-    pub fn fetch(self) -> Result<Fetch> {
+    pub(crate) fn fetch(self) -> Result<Fetch> {
         let lfs_requested = self.git.lfs().enabled();
 
         // The path to the repo, within the Git database.
@@ -79,7 +79,7 @@ impl GitSource {
         // Fetch the commit, if we don't already have it. Wrapping this section in a closure makes
         // it easier to short-circuit this in the cases where we do have the commit.
         let (db, actual_rev, maybe_task) = || -> Result<(GitDatabase, GitOid, Option<usize>)> {
-            let git_remote = GitRemote::new(&remote);
+            let git_remote = GitRemote::new(remote.clone().into_owned());
             let maybe_db = git_remote.db_at(&db_path).ok();
 
             // If we have a locked revision, and we have a pre-existing database which has that
@@ -202,14 +202,6 @@ impl Fetch {
 
     pub fn lfs_ready(&self) -> &bool {
         &self.lfs_ready
-    }
-
-    pub fn into_git(self) -> GitUrl {
-        self.git
-    }
-
-    pub fn into_path(self) -> PathBuf {
-        self.path
     }
 }
 

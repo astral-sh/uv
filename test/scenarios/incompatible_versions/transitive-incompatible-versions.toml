@@ -1,0 +1,11 @@
+name = "transitive-incompatible-versions"
+description = "The user requires `a`, which requires two incompatible, existing versions of package `b`"
+
+[root]
+requires = ["a==1.0.0"]
+
+[expected]
+satisfiable = false
+
+[packages.a.versions."1.0.0"]
+requires = ["b==2.0.0", "b==1.0.0"]

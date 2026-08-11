@@ -1,0 +1,12 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "reproduction": {
+      "type": "string",
+      "enum": ["reproducible", "not_reproducible", "needs_more_information"]
+    },
+    "reason": { "type": "string" }
+  },
+  "required": ["reproduction", "reason"]
+}

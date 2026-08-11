@@ -3,7 +3,6 @@ use std::path::PathBuf;
 
 use owo_colors::OwoColorize;
 use tokio::task::JoinError;
-use zip::result::ZipError;
 
 use crate::metadata::MetadataError;
 use uv_cache::Error as CacheError;
@@ -37,6 +36,8 @@ impl fmt::Display for PythonVersion {
 pub enum Error {
     #[error("Building source distributions is disabled")]
     NoBuild,
+    #[error("Building source distributions for `{0}` is disabled")]
+    NoBuildPackage(PackageName),
 
     // Network error
     #[error(transparent)]
@@ -49,6 +50,8 @@ pub enum Error {
     Reqwest(#[from] WrappedReqwestError),
     #[error(transparent)]
     Client(#[from] uv_client::Error),
+    #[error(transparent)]
+    ClientBuild(#[from] uv_client::ClientBuildError),
 
     // Cache writing error
     #[error("Failed to read from the distribution cache")]
@@ -123,8 +126,6 @@ pub enum Error {
     WheelMetadata(PathBuf, #[source] Box<uv_metadata::Error>),
     #[error("Failed to read metadata from installed package `{0}`")]
     ReadInstalled(Box<InstalledDist>, #[source] InstalledDistError),
-    #[error("Failed to read zip archive from built wheel")]
-    Zip(#[from] ZipError),
     #[error("Failed to extract archive: {0}")]
     Extract(String, #[source] uv_extract::Error),
     #[error("The source distribution is missing a `PKG-INFO` file")]
@@ -132,7 +133,9 @@ pub enum Error {
     #[error("The source distribution `{}` has no subdirectory `{}`", _0, _1.display())]
     MissingSubdirectory(DisplaySafeUrl, PathBuf),
     #[error("The source distribution `{0}` is missing Git LFS artifacts.")]
-    MissingGitLfsArtifacts(DisplaySafeUrl, #[source] GitError),
+    MissingSourceDistGitLfsArtifacts(DisplaySafeUrl, #[source] GitError),
+    #[error("The wheel `{0}` is missing Git LFS artifacts.")]
+    MissingWheelGitLfsArtifacts(DisplaySafeUrl, #[source] GitError),
     #[error("Failed to extract static metadata from `PKG-INFO`")]
     PkgInfo(#[source] uv_pypi_types::MetadataError),
     #[error("The source distribution is missing a `pyproject.toml` file")]
@@ -168,6 +171,15 @@ pub enum Error {
         distribution: String,
         expected: String,
         actual: String,
+    },
+
+    #[error(
+        "Size mismatch for `{distribution}`: expected {expected} bytes, but downloaded {actual} bytes"
+    )]
+    MismatchedSize {
+        distribution: String,
+        expected: u64,
+        actual: u64,
     },
 
     #[error(
@@ -214,6 +226,17 @@ impl From<reqwest_middleware::Error> for Error {
             reqwest_middleware::Error::Reqwest(error) => {
                 Self::Reqwest(WrappedReqwestError::from(error))
             }
+        }
+    }
+}
+
+impl uv_errors::Hint for Error {
+    fn hints(&self) -> uv_errors::Hints<'_> {
+        match self {
+            Self::Build(err) => err.hints(),
+            Self::Client(err) => uv_errors::Hint::hints(err),
+            Self::MetadataLowering(err) => err.hints(),
+            _ => uv_errors::Hints::none(),
         }
     }
 }

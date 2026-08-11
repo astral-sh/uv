@@ -1,3 +1,4 @@
+use std::io;
 use std::path::{Path, PathBuf};
 
 #[cfg(feature = "tokio")]
@@ -6,15 +7,19 @@ use std::io::Read;
 #[cfg(feature = "tokio")]
 use encoding_rs_io::DecodeReaderBytes;
 use tempfile::NamedTempFile;
-use tracing::warn;
+use tracing::{debug, warn};
 
 pub use crate::locked_file::*;
 pub use crate::path::*;
+pub use crate::read::ValidatedReader;
+pub use crate::space::{physical_space, supports_physical_space};
 
 pub mod cachedir;
 pub mod link;
 mod locked_file;
 mod path;
+mod read;
+mod space;
 pub mod which;
 
 /// Attempt to check if the two paths refer to the same file.
@@ -78,6 +83,60 @@ pub async fn read_to_string_transcode(path: impl AsRef<Path>) -> std::io::Result
     Ok(buf)
 }
 
+/// Create a junction at `path` pointing to `target`.
+///
+/// Junctions can be silently broken when involving network paths or non-NTFS filesystems.
+///
+/// If creation fails but leaves behind an empty directory, it is cleaned up and the original
+/// creation error is propagated.
+#[cfg(windows)]
+fn create_junction(target: &Path, path: &Path) -> std::io::Result<()> {
+    use windows::Win32::Foundation::{
+        ERROR_ALREADY_EXISTS, ERROR_INVALID_NAME, ERROR_INVALID_PARAMETER,
+        ERROR_INVALID_REPARSE_DATA, ERROR_NOT_A_REPARSE_POINT, WIN32_ERROR,
+    };
+
+    let create_result = junction::create(target, path);
+
+    match path.metadata() {
+        Ok(_) if create_result.is_ok() => Ok(()),
+        Ok(_) => {
+            // Creation failed but left behind an empty directory. Only clean
+            // it up if the directory wasn't already there before we tried.
+            if let Err(ref create_err) = create_result {
+                if !matches!(
+                    create_err
+                        .raw_os_error()
+                        .map(|err| WIN32_ERROR(err.cast_unsigned())),
+                    Some(ERROR_ALREADY_EXISTS)
+                ) {
+                    // Not a junction (metadata succeeded normally), just
+                    // an empty directory left behind by junction::create.
+                    let _ = fs_err::remove_dir(path);
+                }
+            }
+            create_result
+        }
+        Err(err)
+            if matches!(
+                err.raw_os_error()
+                    .map(|err| WIN32_ERROR(err.cast_unsigned())),
+                Some(
+                    ERROR_INVALID_PARAMETER
+                        | ERROR_INVALID_NAME
+                        | ERROR_NOT_A_REPARSE_POINT
+                        | ERROR_INVALID_REPARSE_DATA
+                )
+            ) =>
+        {
+            // Broken reparse point.
+            let _ = fs_err::remove_dir(path);
+            Err(create_result.err().unwrap_or(err))
+        }
+        Err(err) => Err(create_result.err().unwrap_or(err)),
+    }
+}
+
 /// Create a directory link at `dst` pointing to `src`, replacing any existing link.
 ///
 /// On Windows, this normally creates an NTFS junction, since junctions don't
@@ -117,18 +176,14 @@ pub fn replace_symlink(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> std::io:
 #[cfg(windows)]
 fn replace_with_junction(src: &Path, dst: &Path) -> std::io::Result<()> {
     // Remove the existing junction, if any.
-    match junction::delete(dunce::simplified(dst)) {
-        Ok(()) => match fs_err::remove_dir_all(dst) {
-            Ok(()) => {}
-            Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
-            Err(err) => return Err(err),
-        },
+    match fs_err::remove_dir(dst) {
+        Ok(()) => {}
         Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
         Err(err) => return Err(err),
     }
 
     // Replace it with a new junction.
-    junction::create(dunce::simplified(src), dunce::simplified(dst))
+    create_junction(src, dst)
 }
 
 #[cfg(windows)]
@@ -147,25 +202,6 @@ fn replace_with_symlink_dir(src: &Path, dst: &Path) -> std::io::Result<()> {
     }
 
     fs_err::os::windows::fs::symlink_dir(dunce::simplified(src), dunce::simplified(dst))
-}
-
-/// Read the target of a directory link created by [`create_symlink`] or
-/// [`replace_symlink`].
-///
-/// On Windows, uv normally creates junctions for directory links, but creates
-/// directory symbolic links under Wine. This function reads the appropriate link
-/// type for the current environment. For junctions, this uses the `junction`
-/// crate, which handles the `\??\` prefix that Windows uses internally for
-/// junction targets.
-#[cfg(windows)]
-pub fn read_link(path: impl AsRef<Path>) -> std::io::Result<PathBuf> {
-    let path = path.as_ref();
-
-    if uv_windows::is_wine() {
-        fs_err::read_link(path)
-    } else {
-        junction::get_target(dunce::simplified(path))
-    }
 }
 
 /// Create a symlink at `dst` pointing to `src`, replacing any existing symlink if necessary.
@@ -218,7 +254,7 @@ pub fn create_symlink(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> std::io::
     if uv_windows::is_wine() {
         fs_err::os::windows::fs::symlink_dir(dunce::simplified(src), dunce::simplified(dst))
     } else {
-        junction::create(dunce::simplified(src), dunce::simplified(dst))
+        create_junction(src, dst)
     }
 }
 
@@ -228,17 +264,30 @@ pub fn create_symlink(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> std::io::
     fs_err::os::unix::fs::symlink(src.as_ref(), dst.as_ref())
 }
 
-#[cfg(unix)]
-pub fn remove_symlink(path: impl AsRef<Path>) -> std::io::Result<()> {
-    fs_err::remove_file(path.as_ref())
+/// Remove a symbolic link at `path` without following its target.
+pub fn remove_symlink(path: impl AsRef<Path>) -> io::Result<()> {
+    let path = path.as_ref();
+
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::FileTypeExt;
+
+        if fs_err::symlink_metadata(path)?.file_type().is_symlink_dir() {
+            return fs_err::remove_dir(path);
+        }
+    }
+
+    fs_err::remove_file(path)
 }
 
 #[cfg(all(test, windows))]
-mod tests {
+mod windows_tests {
+    use std::os::windows::ffi::OsStrExt;
+
     use super::*;
 
     #[test]
-    fn read_link_reads_created_directory_link() -> std::io::Result<()> {
+    fn fs_err_read_link_reads_created_directory_link() -> std::io::Result<()> {
         let tempdir = tempfile::tempdir()?;
         let target = tempdir.path().join("target");
         fs_err::create_dir(&target)?;
@@ -246,7 +295,50 @@ mod tests {
 
         create_symlink(&target, &link)?;
 
-        assert_eq!(read_link(&link)?, dunce::simplified(&target));
+        assert_eq!(
+            verbatim_path(&fs_err::read_link(&link)?),
+            verbatim_path(&target)
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn fs_err_read_link_reads_long_junction_target() -> std::io::Result<()> {
+        let tempdir = tempfile::tempdir()?;
+        let mut target = tempdir.path().join("target");
+        while target.as_os_str().encode_wide().count() < 257 {
+            target.push("long-path-component");
+        }
+        fs_err::create_dir_all(&target)?;
+        let link = tempdir.path().join("link");
+
+        create_symlink(&target, &link)?;
+
+        let link_target = fs_err::read_link(&link)?;
+        assert_eq!(verbatim_path(&link_target), verbatim_path(&target));
+        Ok(())
+    }
+
+    #[test]
+    fn create_junction_from_smb_failure_removes_directory() -> std::io::Result<()> {
+        #[expect(clippy::print_stderr)]
+        let Some(smb_fs) = std::env::var(uv_static::EnvVars::UV_INTERNAL__TEST_SMB_FS).ok() else {
+            eprintln!("Skipping: UV_INTERNAL__TEST_SMB_FS not set");
+            return Ok(());
+        };
+        fs_err::create_dir_all(&smb_fs)?;
+        let alt_tempdir = tempfile::tempdir_in(smb_fs)?;
+        let tempdir = tempfile::tempdir()?;
+        let link = tempdir.path().join("link");
+        let target = alt_tempdir.path().join("target");
+        fs_err::create_dir(&target)?;
+
+        let err = create_junction(&target, &link).unwrap_err();
+        assert_eq!(err.kind(), std::io::ErrorKind::InvalidFilename);
+        assert!(matches!(
+            fs_err::symlink_metadata(&link),
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound
+        ));
         Ok(())
     }
 }
@@ -260,29 +352,16 @@ mod tests {
 /// This function should only be used for files. If targeting a directory, use [`replace_symlink`]
 /// instead; it will use a junction on Windows, which is more performant.
 pub fn symlink_or_copy_file(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> std::io::Result<()> {
-    #[cfg(windows)]
-    {
-        fs_err::copy(src.as_ref(), dst.as_ref())?;
-    }
-    #[cfg(unix)]
-    {
-        fs_err::os::unix::fs::symlink(src.as_ref(), dst.as_ref())?;
+    cfg_select! {
+        windows => {
+            fs_err::copy(src.as_ref(), dst.as_ref())?;
+        },
+        unix => {
+            fs_err::os::unix::fs::symlink(src.as_ref(), dst.as_ref())?;
+        },
     }
 
     Ok(())
-}
-
-#[cfg(windows)]
-pub fn remove_symlink(path: impl AsRef<Path>) -> std::io::Result<()> {
-    match junction::delete(dunce::simplified(path.as_ref())) {
-        Ok(()) => match fs_err::remove_dir_all(path.as_ref()) {
-            Ok(()) => Ok(()),
-            Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(()),
-            Err(err) => Err(err),
-        },
-        Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(()),
-        Err(err) => Err(err),
-    }
 }
 
 /// Return a [`NamedTempFile`] in the specified directory.
@@ -449,7 +528,7 @@ enum PersistRetryError {
 /// Persist a `NamedTempFile`, retrying (on Windows) if it fails due to transient operating system
 /// errors.
 #[cfg(feature = "tokio")]
-pub async fn persist_with_retry(
+async fn persist_with_retry(
     from: NamedTempFile,
     to: impl AsRef<Path>,
 ) -> Result<(), std::io::Error> {
@@ -777,4 +856,132 @@ pub fn copy_dir_all(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> std::io::Re
         }
     }
     Ok(())
+}
+
+/// Perform a safe removal of a virtual environment.
+///
+/// The link or file at `location` is removed without following it.
+pub fn remove_virtualenv(location: &Path) -> io::Result<()> {
+    if !fs_err::symlink_metadata(location)?.is_dir() {
+        return remove_symlink(location);
+    }
+
+    // On Windows, if the current executable is in the directory, defer self-deletion since Windows
+    // won't let you unlink a running executable.
+    #[cfg(windows)]
+    if let Ok(itself) = std::env::current_exe() {
+        let target = std::path::absolute(location)?;
+        if itself.starts_with(&target) {
+            debug!("Detected self-delete of executable: {}", itself.display());
+            self_replace::self_delete_outside_path(location)?;
+        }
+    }
+
+    // We defer removal of the `pyvenv.cfg` until the end, so if we fail to remove the environment,
+    // uv can still identify it as a Python virtual environment that can be deleted.
+    for entry in fs_err::read_dir(location)? {
+        let entry = entry?;
+        let path = entry.path();
+        if path == location.join("pyvenv.cfg") {
+            continue;
+        }
+        if path.is_dir() {
+            fs_err::remove_dir_all(&path)?;
+        } else {
+            fs_err::remove_file(&path)?;
+        }
+    }
+
+    match fs_err::remove_file(location.join("pyvenv.cfg")) {
+        Ok(()) => {}
+        Err(err) if err.kind() == io::ErrorKind::NotFound => {}
+        Err(err) => return Err(err),
+    }
+
+    // Remove the virtual environment directory itself
+    match fs_err::remove_dir_all(location) {
+        Ok(()) => {}
+        Err(err) if err.kind() == io::ErrorKind::NotFound => {}
+        // If the virtual environment is a mounted file system, e.g., in a Docker container, we
+        // cannot delete it — but that doesn't need to be a fatal error
+        Err(err) if err.kind() == io::ErrorKind::ResourceBusy => {
+            debug!(
+                "Skipping removal of `{}` directory due to {err}",
+                location.display(),
+            );
+        }
+        Err(err) => return Err(err),
+    }
+
+    Ok(())
+}
+
+/// Prepare an empty virtual environment directory, resolving links when possible.
+///
+/// Returns whether an existing entry was found.
+pub fn clear_virtualenv(location: &Path) -> io::Result<bool> {
+    let location = location
+        .canonicalize()
+        .unwrap_or_else(|_| location.to_path_buf());
+    let cleared = match remove_virtualenv(&location) {
+        Ok(()) => true,
+        Err(err) if err.kind() == io::ErrorKind::NotFound => false,
+        Err(err) => return Err(err),
+    };
+    fs_err::create_dir_all(location)?;
+    Ok(cleared)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn remove_symlink_removes_directory_link_without_removing_target() -> io::Result<()> {
+        let tempdir = tempfile::tempdir()?;
+        let target = tempdir.path().join("target");
+        fs_err::create_dir(&target)?;
+        fs_err::write(target.join("file"), "content")?;
+        let link = tempdir.path().join("link");
+
+        create_symlink(&target, &link)?;
+        remove_symlink(&link)?;
+
+        assert!(matches!(
+            fs_err::symlink_metadata(&link),
+            Err(err) if err.kind() == io::ErrorKind::NotFound
+        ));
+        assert_eq!(fs_err::read_to_string(target.join("file"))?, "content");
+        Ok(())
+    }
+
+    #[test]
+    fn remove_virtualenv_removes_directory_link_without_removing_target() -> io::Result<()> {
+        let tempdir = tempfile::tempdir()?;
+        let target = tempdir.path().join("target");
+        fs_err::create_dir(&target)?;
+        let marker = target.join("marker");
+        fs_err::write(&marker, "")?;
+        let environment = tempdir.path().join("environment");
+        create_symlink(&target, &environment)?;
+
+        remove_virtualenv(&environment)?;
+
+        assert!(matches!(
+            fs_err::symlink_metadata(environment),
+            Err(err) if err.kind() == io::ErrorKind::NotFound
+        ));
+        assert!(marker.is_file());
+        Ok(())
+    }
+
+    #[test]
+    fn clear_virtualenv_recreates_missing_directory() -> io::Result<()> {
+        let tempdir = tempfile::tempdir()?;
+        let environment = tempdir.path().join("environment");
+
+        assert!(!clear_virtualenv(&environment)?);
+        assert!(environment.is_dir());
+        Ok(())
+    }
 }

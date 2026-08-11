@@ -20,10 +20,7 @@ fn check_self_update() {
     // To maximally emulate behaviour in practice, this test actually modifies CARGO_HOME
     // and therefore should only be run in CI by default, where it can't hurt developers.
     // We use the "CI" env-var that CI machines tend to run
-    if std::env::var(EnvVars::CI)
-        .map(|s| s.is_empty())
-        .unwrap_or(true)
-    {
+    if !std::env::var(EnvVars::CI).is_ok_and(|value| !value.is_empty()) {
         return;
     }
 
@@ -55,10 +52,7 @@ fn self_update_offline_error() {
 
     uv_snapshot!(context.self_update().arg("--offline"),
     @r"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
     error: Self-update is not possible because network connectivity is disabled (i.e., with `--offline`)
     ");
@@ -70,10 +64,7 @@ fn self_update_offline_quiet() {
 
     uv_snapshot!(context.self_update().arg("--offline").arg("--quiet"),
     @r"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
     error: Self-update is not possible because network connectivity is disabled (i.e., with `--offline`)
     ");
@@ -85,11 +76,7 @@ fn self_update_offline_extra_quiet() {
 
     uv_snapshot!(context.self_update().arg("--offline").arg("--quiet").arg("--quiet"),
     @r"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
-    ----- stderr -----
+    exit_code: 1 (failure)
     ");
 }
 
@@ -237,10 +224,7 @@ async fn test_self_update_uses_custom_path_with_ghe_override() -> Result<()> {
         .arg("--dry-run")
         .env("AXOUPDATER_CONFIG_PATH", receipt_dir.as_os_str())
         .env(EnvVars::UV_INSTALLER_GHE_BASE_URL, server.uri()), @r"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     info: Checking for updates...
     Would update uv from v[CURRENT_VERSION] to v9.9.9
@@ -261,10 +245,7 @@ async fn test_self_update_uses_legacy_path_with_ghe_override() -> Result<()> {
         .arg("--dry-run")
         .env("AXOUPDATER_CONFIG_PATH", receipt_dir.as_os_str())
         .env(EnvVars::UV_INSTALLER_GHE_BASE_URL, server.uri()), @r"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     info: Checking for updates...
     Would update uv from v[CURRENT_VERSION] to v9.9.9
@@ -286,10 +267,7 @@ async fn self_update_dry_run_quiet() -> Result<()> {
         .arg("--quiet")
         .env("AXOUPDATER_CONFIG_PATH", receipt_dir.as_os_str())
         .env(EnvVars::UV_INSTALLER_GHE_BASE_URL, server.uri()), @r"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Would update uv from v[CURRENT_VERSION] to v9.9.9
     ");
@@ -314,11 +292,7 @@ async fn self_update_dry_run_extra_quiet() -> Result<()> {
         .arg("--quiet")
         .env("AXOUPDATER_CONFIG_PATH", receipt_dir.as_os_str())
         .env(EnvVars::UV_INSTALLER_GHE_BASE_URL, server.uri()), @r"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
-    ----- stderr -----
+    exit_code: 0 (success)
     ");
 
     Ok(())
@@ -336,10 +310,7 @@ async fn self_update_noop_dry_run() -> Result<()> {
         .arg("--dry-run")
         .env("AXOUPDATER_CONFIG_PATH", receipt_dir.as_os_str())
         .env(EnvVars::UV_INSTALLER_GHE_BASE_URL, server.uri()), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     info: Checking for updates...
     You're on the latest version of uv (v[CURRENT_VERSION])
@@ -361,11 +332,7 @@ async fn self_update_noop_dry_run_quiet() -> Result<()> {
         .arg("--quiet")
         .env("AXOUPDATER_CONFIG_PATH", receipt_dir.as_os_str())
         .env(EnvVars::UV_INSTALLER_GHE_BASE_URL, server.uri()), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
-    ----- stderr -----
+    exit_code: 0 (success)
     ");
 
     Ok(())

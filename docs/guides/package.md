@@ -17,6 +17,10 @@ If your project does not include a `[build-system]` definition in the `pyproject
 build it during `uv sync` operations in the project, but will fall back to the legacy setuptools
 build system during `uv build`.
 
+!!! note
+
+    Projects created with `uv init` include a `[build-system]` definition by default.
+
 We strongly recommend configuring a build system. Read more about build systems in the
 [project configuration](../concepts/projects/config.md#build-systems) documentation.
 

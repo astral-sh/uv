@@ -2,10 +2,6 @@
 
 ## Finding ways to help
 
-We label issues that would be good for a first time contributor as
-[`good first issue`](https://github.com/astral-sh/uv/issues?q=is%3Aopen+is%3Aissue+label%3A%22good+first+issue%22).
-These usually do not require significant experience with Rust or the uv code base.
-
 We label issues that we think are a good opportunity for subsequent contributions as
 [`help wanted`](https://github.com/astral-sh/uv/issues?q=is%3Aopen+is%3Aissue+label%3A%22help+wanted%22).
 These require varying levels of experience with Rust and uv. Often, we want to accomplish these
@@ -153,9 +149,9 @@ cargo fmt --all
 uvx ruff format .
 
 # Markdown, YAML, and other files (requires Node.js)
-npx prettier --write .
+npx prettier@3.9.0 --write .
 # or in Docker
-docker run --rm -v .:/src/ -w /src/ node:alpine npx prettier --write .
+docker run --rm -v .:/src/ -w /src/ node:alpine npx prettier@3.9.0 --write .
 ```
 
 ## Linting
@@ -275,9 +271,11 @@ To preview any changes to the documentation locally:
 
 1. Install the [Rust toolchain](https://www.rust-lang.org/tools/install).
 
-2. Run `cargo dev generate-all`, to update any auto-generated documentation.
+2. Install [Node](https://nodejs.org/en/download) - needed to run Prettier to format the docs
 
-3. Run the development server with:
+3. Run `cargo dev generate-all`, to update any auto-generated documentation.
+
+4. Run the development server with:
 
    ```shell
    uv run --only-group docs mkdocs serve -f mkdocs.yml
@@ -343,6 +341,9 @@ Changelog entries and version bumps are automated. First, run:
 ```shell
 ./scripts/release.sh
 ```
+
+If release preparation detects a new workspace crate, add it to
+[`astral-sh/crates-policies`](https://github.com/astral-sh/crates-policies).
 
 Then, editorialize the `CHANGELOG.md` file to ensure entries are consistently styled.
 

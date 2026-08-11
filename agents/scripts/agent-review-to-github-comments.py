@@ -1,0 +1,99 @@
+#!/usr/bin/env -S uv run --script
+#
+# /// script
+# requires-python = ">=3.12"
+# dependencies = []
+# ///
+
+"""Convert a structured agent review into GitHub pull request review comment payloads."""
+
+from __future__ import annotations
+
+import argparse
+import json
+import re
+import sys
+from pathlib import PurePosixPath
+from typing import Any, TextIO
+
+
+def without_mentions(text: str) -> str:
+    lines = []
+    fence: tuple[str, int] | None = None
+    for line in text.splitlines(keepends=True):
+        match = re.match(r"^ {0,3}(`{3,}|~{3,})", line)
+        if match:
+            marker = match[1]
+            if fence is None:
+                fence = marker[0], len(marker)
+            elif (
+                marker[0] == fence[0]
+                and len(marker) >= fence[1]
+                and not line[match.end() :].strip()
+            ):
+                fence = None
+            lines.append(line)
+        elif fence is not None:
+            lines.append(line)
+        else:
+            lines.append(re.sub(r"(?<![A-Za-z0-9_.])@(?=[A-Za-z0-9])", "@\u200b", line))
+    return "".join(lines)
+
+
+def review_payload(review: dict[str, Any], commit_id: str) -> dict[str, Any]:
+    if not re.fullmatch(r"[0-9a-fA-F]{40}", commit_id):
+        msg = "commit ID must be a full Git commit SHA"
+        raise ValueError(msg)
+
+    comments = []
+    for finding in review["findings"]:
+        location = finding["code_location"]
+        path = PurePosixPath(location["relative_file_path"])
+        if path.is_absolute() or ".." in path.parts or str(path) in {"", "."}:
+            msg = f"invalid repository-relative path: {path}"
+            raise ValueError(msg)
+
+        side = location["side"]
+        if side not in {"LEFT", "RIGHT"}:
+            msg = f"invalid diff side: {side}"
+            raise ValueError(msg)
+
+        line_range = location["line_range"]
+        start = line_range["start"]
+        end = line_range["end"]
+        if start < 1 or end < start:
+            msg = f"invalid line range: {start}-{end}"
+            raise ValueError(msg)
+
+        title = re.sub(r"^(?:\[P[0-3]\]\s*)+", "", finding["title"])
+        comment: dict[str, Any] = {
+            "commit_id": commit_id,
+            "path": str(path),
+            "line": end,
+            "side": side,
+            "body": without_mentions(
+                f"**[P{finding['priority']}] {title}**\n\n{finding['body']}"
+            ),
+        }
+        if start != end:
+            comment["start_line"] = start
+            comment["start_side"] = side
+        comments.append(comment)
+
+    return {"comments": comments}
+
+
+def main(stdin: TextIO = sys.stdin, stdout: TextIO = sys.stdout) -> None:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--commit-id", required=True, help="the pull request head commit SHA"
+    )
+    args = parser.parse_args()
+
+    review = json.load(stdin)
+    json.dump(review_payload(review, args.commit_id), stdout, indent=2)
+    stdout.write("\n")
+
+
+if __name__ == "__main__":
+    main()

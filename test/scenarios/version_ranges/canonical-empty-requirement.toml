@@ -1,0 +1,10 @@
+name = "canonical-empty-requirement"
+description = "A requirement that canonicalizes to the empty PEP 440 set is reported as empty."
+
+[root]
+requires = ["a<0.dev0"]
+
+[expected]
+satisfiable = false
+
+[packages.a.versions."0.dev0"]

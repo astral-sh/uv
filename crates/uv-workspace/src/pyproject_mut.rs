@@ -11,12 +11,11 @@ use toml_edit::{
 };
 
 use uv_cache_key::CanonicalUrl;
-use uv_distribution_types::Index;
-use uv_fs::PortablePath;
+use uv_distribution_types::{Index, IndexFormat, IndexUrl};
+use uv_fs::{PortablePath, is_same_file_allow_missing, try_relative_to_if};
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::{Version, VersionParseError, VersionSpecifier, VersionSpecifiers};
 use uv_pep508::{MarkerTree, Requirement, VersionOrUrl};
-use uv_redacted::DisplaySafeUrl;
 
 use crate::pyproject::{DependencyType, Source};
 
@@ -27,6 +26,21 @@ use crate::pyproject::{DependencyType, Source};
 pub struct PyProjectTomlMut {
     doc: DocumentMut,
     target: DependencyTarget,
+}
+
+fn index_locations_equal(existing: &str, incoming: &IndexUrl, root_dir: &Path) -> bool {
+    let Ok(existing) = IndexUrl::parse(existing, Some(root_dir)) else {
+        return false;
+    };
+
+    if let (IndexUrl::Path(existing), IndexUrl::Path(incoming)) = (&existing, incoming)
+        && let (Ok(existing), Ok(incoming)) = (existing.to_file_path(), incoming.to_file_path())
+        && let Some(equal) = is_same_file_allow_missing(&existing, &incoming)
+    {
+        return equal;
+    }
+
+    CanonicalUrl::new(existing.url().clone()) == CanonicalUrl::new(incoming.url().clone())
 }
 
 #[derive(Error, Debug)]
@@ -77,14 +91,6 @@ enum CommentType {
 struct Comment {
     text: String,
     kind: CommentType,
-}
-
-impl ArrayEdit {
-    pub fn index(&self) -> usize {
-        match self {
-            Self::Update(i) | Self::Add(i) => *i,
-        }
-    }
 }
 
 /// The default version specifier when adding a dependency.
@@ -357,6 +363,65 @@ impl PyProjectTomlMut {
         Ok(edit)
     }
 
+    /// Replaces every exact match for a dependency declaration without modifying its source.
+    ///
+    /// Returns the position of every dependency that was replaced.
+    pub fn replace_dependency_declaration(
+        &mut self,
+        dependency_type: &DependencyType,
+        existing: &Requirement,
+        replacement: &Requirement,
+    ) -> Result<Vec<ArrayEdit>, Error> {
+        let Some(dependencies) = self.dependency_type_array_mut(dependency_type)? else {
+            return Ok(Vec::new());
+        };
+
+        let replacement = replacement.to_string();
+        let mut edits = Vec::new();
+        for (index, requirement) in
+            find_dependencies(&existing.name, Some(&existing.marker), dependencies)
+        {
+            if same_requirement_declaration(&requirement, existing) {
+                dependencies.replace(index, replacement.clone());
+                edits.push(ArrayEdit::Update(index));
+            }
+        }
+        Ok(edits)
+    }
+
+    /// Removes every exact string match for a dependency declaration without modifying its source.
+    ///
+    /// Returns the position of every dependency that was removed.
+    pub fn remove_dependency_declaration_text(
+        &mut self,
+        dependency_type: &DependencyType,
+        existing: &str,
+    ) -> Result<Vec<ArrayEdit>, Error> {
+        let Some(dependencies) = self.dependency_type_array_mut(dependency_type)? else {
+            return Ok(Vec::new());
+        };
+
+        let mut edits = Vec::new();
+        for index in dependencies
+            .iter()
+            .enumerate()
+            .filter_map(|(index, dependency)| {
+                (dependency.as_str() == Some(existing)).then_some(index)
+            })
+            .collect::<Vec<_>>()
+            .into_iter()
+            .rev()
+        {
+            remove_dependency_at(index, dependencies);
+            edits.push(ArrayEdit::Update(index));
+        }
+        if !edits.is_empty() {
+            reformat_array_multiline(dependencies);
+        }
+        edits.reverse();
+        Ok(edits)
+    }
+
     /// Adds a development dependency to `tool.uv.dev-dependencies`.
     ///
     /// Returns `true` if the dependency was added, `false` if it was updated.
@@ -392,7 +457,7 @@ impl PyProjectTomlMut {
     }
 
     /// Add an [`Index`] to `tool.uv.index`.
-    pub fn add_index(&mut self, index: &Index) -> Result<(), Error> {
+    pub fn add_index(&mut self, index: &Index, root_dir: &Path) -> Result<(), Error> {
         let size = self.doc.len();
         let existing = self
             .doc
@@ -414,14 +479,13 @@ impl PyProjectTomlMut {
             .iter()
             .find(|table| {
                 // If the index has the same name, reuse it.
-                if let Some(index) = index.name.as_deref() {
-                    if table
+                if let Some(index) = index.name.as_deref()
+                    && table
                         .get("name")
                         .and_then(|name| name.as_str())
                         .is_some_and(|name| name == index)
-                    {
-                        return true;
-                    }
+                {
+                    return true;
                 }
 
                 // If the index is the default, and there's another default index, reuse it.
@@ -437,10 +501,7 @@ impl PyProjectTomlMut {
                 if table
                     .get("url")
                     .and_then(|item| item.as_str())
-                    .and_then(|url| DisplaySafeUrl::parse(url).ok())
-                    .is_some_and(|url| {
-                        CanonicalUrl::new(&url) == CanonicalUrl::new(index.url.url())
-                    })
+                    .is_some_and(|url| index_locations_equal(url, &index.url, root_dir))
                 {
                     return true;
                 }
@@ -451,32 +512,42 @@ impl PyProjectTomlMut {
             .unwrap_or_default();
 
         // If necessary, update the name.
-        if let Some(index) = index.name.as_deref() {
-            if table
+        if let Some(index) = index.name.as_deref()
+            && table
                 .get("name")
                 .and_then(|name| name.as_str())
                 .is_none_or(|name| name != index)
-            {
-                let mut formatted = Formatted::new(index.to_string());
-                if let Some(value) = table.get("name").and_then(Item::as_value) {
-                    if let Some(prefix) = value.decor().prefix() {
-                        formatted.decor_mut().set_prefix(prefix.clone());
-                    }
-                    if let Some(suffix) = value.decor().suffix() {
-                        formatted.decor_mut().set_suffix(suffix.clone());
-                    }
+        {
+            let mut formatted = Formatted::new(index.to_string());
+            if let Some(value) = table.get("name").and_then(Item::as_value) {
+                if let Some(prefix) = value.decor().prefix() {
+                    formatted.decor_mut().set_prefix(prefix.clone());
                 }
-                table.insert("name", Value::String(formatted).into());
+                if let Some(suffix) = value.decor().suffix() {
+                    formatted.decor_mut().set_suffix(suffix.clone());
+                }
             }
+            table.insert("name", Value::String(formatted).into());
         }
 
-        // If necessary, update the URL.
-        if table
-            .get("url")
-            .and_then(|item| item.as_str())
-            .is_none_or(|url| url != index.url.without_credentials().as_str())
+        let url = if let IndexUrl::Path(url) = &index.url
+            && let Ok(path) = url.to_file_path()
+            && let Ok(path) = try_relative_to_if(path, root_dir, !url.was_given_absolute())
         {
-            let mut formatted = Formatted::new(index.url.without_credentials().to_string());
+            PortablePath::from(&path).to_string()
+        } else {
+            index.url.without_credentials().to_string()
+        };
+        let existing_url = table.get("url").and_then(|item| item.as_str());
+
+        // Update the stored URL independently of whether the index location changed.
+        let url_needs_update = existing_url.is_none_or(|existing| existing != url);
+        let index_location_changed = existing_url
+            .is_none_or(|existing| !index_locations_equal(existing, &index.url, root_dir));
+
+        // If necessary, update the URL.
+        if url_needs_update {
+            let mut formatted = Formatted::new(url);
             if let Some(value) = table.get("url").and_then(Item::as_value) {
                 if let Some(prefix) = value.decor().prefix() {
                     formatted.decor_mut().set_prefix(prefix.clone());
@@ -508,17 +579,44 @@ impl PyProjectTomlMut {
             }
         }
 
+        // If the index location changed, sync the format to match the incoming index.
+        if index_location_changed {
+            match index.format {
+                IndexFormat::Flat => {
+                    if table
+                        .get("format")
+                        .and_then(Item::as_str)
+                        .is_none_or(|format| format != "flat")
+                    {
+                        let mut formatted = Formatted::new("flat".to_string());
+                        if let Some(value) = table.get("format").and_then(Item::as_value) {
+                            if let Some(prefix) = value.decor().prefix() {
+                                formatted.decor_mut().set_prefix(prefix.clone());
+                            }
+                            if let Some(suffix) = value.decor().suffix() {
+                                formatted.decor_mut().set_suffix(suffix.clone());
+                            }
+                        }
+                        table.insert("format", Value::String(formatted).into());
+                    }
+                }
+                IndexFormat::Simple => {
+                    // Remove the format key if it exists (Simple is the default).
+                    table.remove("format");
+                }
+            }
+        }
+
         // Remove any replaced tables.
         existing.retain(|table| {
             // If the index has the same name, skip it.
-            if let Some(index) = index.name.as_deref() {
-                if table
+            if let Some(index) = index.name.as_deref()
+                && table
                     .get("name")
                     .and_then(|name| name.as_str())
                     .is_some_and(|name| name == index)
-                {
-                    return false;
-                }
+            {
+                return false;
             }
 
             // If there's another default index, skip it.
@@ -534,8 +632,7 @@ impl PyProjectTomlMut {
             if table
                 .get("url")
                 .and_then(|item| item.as_str())
-                .and_then(|url| DisplaySafeUrl::parse(url).ok())
-                .is_some_and(|url| CanonicalUrl::new(&url) == CanonicalUrl::new(index.url.url()))
+                .is_some_and(|url| index_locations_equal(url, &index.url, root_dir))
             {
                 return false;
             }
@@ -899,6 +996,89 @@ impl PyProjectTomlMut {
         Ok(group)
     }
 
+    /// Get an existing TOML array for a dependency type.
+    fn dependency_type_array_mut(
+        &mut self,
+        dependency_type: &DependencyType,
+    ) -> Result<Option<&mut Array>, Error> {
+        let dependencies = match dependency_type {
+            DependencyType::Production => self
+                .project_mut()?
+                .and_then(|project| project.get_mut("dependencies"))
+                .map(|dependencies| {
+                    dependencies
+                        .as_array_mut()
+                        .ok_or(Error::MalformedDependencies)
+                })
+                .transpose()?,
+            DependencyType::Dev => self
+                .doc
+                .get_mut("tool")
+                .map(|tool| tool.as_table_mut().ok_or(Error::MalformedDependencies))
+                .transpose()?
+                .and_then(|tool| tool.get_mut("uv"))
+                .map(|tool_uv| tool_uv.as_table_mut().ok_or(Error::MalformedDependencies))
+                .transpose()?
+                .and_then(|tool_uv| tool_uv.get_mut("dev-dependencies"))
+                .map(|dependencies| {
+                    dependencies
+                        .as_array_mut()
+                        .ok_or(Error::MalformedDependencies)
+                })
+                .transpose()?,
+            DependencyType::Optional(extra) => self
+                .project_mut()?
+                .and_then(|project| project.get_mut("optional-dependencies"))
+                .map(|extras| {
+                    extras
+                        .as_table_like_mut()
+                        .ok_or(Error::MalformedDependencies)
+                })
+                .transpose()?
+                .and_then(|extras| {
+                    extras.iter_mut().find_map(|(key, value)| {
+                        if ExtraName::from_str(key.get()).is_ok_and(|name| name == *extra) {
+                            Some(value)
+                        } else {
+                            None
+                        }
+                    })
+                })
+                .map(|dependencies| {
+                    dependencies
+                        .as_array_mut()
+                        .ok_or(Error::MalformedDependencies)
+                })
+                .transpose()?,
+            DependencyType::Group(group) => self
+                .doc
+                .get_mut("dependency-groups")
+                .map(|groups| {
+                    groups
+                        .as_table_like_mut()
+                        .ok_or(Error::MalformedDependencies)
+                })
+                .transpose()?
+                .and_then(|groups| {
+                    groups.iter_mut().find_map(|(key, value)| {
+                        if GroupName::from_str(key.get()).is_ok_and(|name| name == *group) {
+                            Some(value)
+                        } else {
+                            None
+                        }
+                    })
+                })
+                .map(|dependencies| {
+                    dependencies
+                        .as_array_mut()
+                        .ok_or(Error::MalformedDependencies)
+                })
+                .transpose()?,
+        };
+
+        Ok(dependencies)
+    }
+
     /// Adds a source to `tool.uv.sources`.
     fn add_source(&mut self, name: &PackageName, source: &Source) -> Result<(), Error> {
         // Get or create `tool.uv.sources`.
@@ -1132,10 +1312,10 @@ impl PyProjectTomlMut {
 
         if let Some(project) = self.doc.get("project").and_then(Item::as_table) {
             // Check `project.dependencies`.
-            if let Some(dependencies) = project.get("dependencies").and_then(Item::as_array) {
-                if !find_dependencies(name, marker, dependencies).is_empty() {
-                    types.push(DependencyType::Production);
-                }
+            if let Some(dependencies) = project.get("dependencies").and_then(Item::as_array)
+                && !find_dependencies(name, marker, dependencies).is_empty()
+            {
+                types.push(DependencyType::Production);
             }
 
             // Check `project.optional-dependencies`.
@@ -1183,10 +1363,9 @@ impl PyProjectTomlMut {
             .and_then(Item::as_table)
             .and_then(|uv| uv.get("dev-dependencies"))
             .and_then(Item::as_array)
+            && !find_dependencies(name, marker, dev_dependencies).is_empty()
         {
-            if !find_dependencies(name, marker, dev_dependencies).is_empty() {
-                types.push(DependencyType::Dev);
-            }
+            types.push(DependencyType::Dev);
         }
 
         types
@@ -1251,7 +1430,7 @@ fn implicit() -> Item {
 /// Adds a dependency to the given `deps` array.
 ///
 /// Returns `true` if the dependency was added, `false` if it was updated.
-pub fn add_dependency(
+fn add_dependency(
     req: &Requirement,
     deps: &mut Array,
     has_source: bool,
@@ -1563,37 +1742,7 @@ fn remove_dependency(name: &PackageName, deps: &mut Array) -> Vec<Requirement> {
     let removed = find_dependencies(name, None, deps)
         .into_iter()
         .rev()
-        .filter_map(|(i, _)| {
-            if let Some(prefix) = deps
-                .get(i)
-                .and_then(|item| item.decor().prefix().and_then(|s| s.as_str()))
-                .filter(|s| !s.is_empty())
-            {
-                let prefix = prefix.to_string();
-                if let Some(next) = deps.get(i + 1)
-                    && let Some(existing) = next.decor().prefix().and_then(|s| s.as_str())
-                {
-                    // Transfer removed item's prefix to the next item's prefix.
-                    let existing = existing.to_string();
-                    deps.get_mut(i + 1)
-                        .unwrap()
-                        .decor_mut()
-                        .set_prefix(format!("{prefix}{existing}"));
-                } else if let Some(next) = deps.get_mut(i + 1) {
-                    // Next item exists but has no prefix; use ours directly.
-                    next.decor_mut().set_prefix(&prefix);
-                } else if let Some(existing) = deps.trailing().as_str() {
-                    // No next item; move comments to the array trailing.
-                    deps.set_trailing(format!("{prefix}{existing}"));
-                } else {
-                    deps.set_trailing(&prefix);
-                }
-            }
-
-            deps.remove(i)
-                .as_str()
-                .and_then(|req| Requirement::from_str(req).ok())
-        })
+        .filter_map(|(i, _)| remove_dependency_at(i, deps))
         .collect::<Vec<_>>();
 
     if !removed.is_empty() {
@@ -1601,6 +1750,37 @@ fn remove_dependency(name: &PackageName, deps: &mut Array) -> Vec<Requirement> {
     }
 
     removed
+}
+
+fn remove_dependency_at(index: usize, deps: &mut Array) -> Option<Requirement> {
+    if let Some(prefix) = deps
+        .get(index)
+        .and_then(|item| item.decor().prefix().and_then(|s| s.as_str()))
+        .filter(|s| !s.is_empty())
+    {
+        let prefix = prefix.to_string();
+        if let Some(next) = deps.get(index + 1)
+            && let Some(existing) = next.decor().prefix().and_then(|s| s.as_str())
+        {
+            // Transfer removed item's prefix to the next item's prefix.
+            let existing = existing.to_string();
+            if let Some(next) = deps.get_mut(index + 1) {
+                next.decor_mut().set_prefix(format!("{prefix}{existing}"));
+            }
+        } else if let Some(next) = deps.get_mut(index + 1) {
+            // Next item exists but has no prefix; use ours directly.
+            next.decor_mut().set_prefix(&prefix);
+        } else if let Some(existing) = deps.trailing().as_str() {
+            // No next item; move comments to the array trailing.
+            deps.set_trailing(format!("{prefix}{existing}"));
+        } else {
+            deps.set_trailing(&prefix);
+        }
+    }
+
+    deps.remove(index)
+        .as_str()
+        .and_then(|req| Requirement::from_str(req).ok())
 }
 
 /// Returns a `Vec` containing the all dependencies with the given name, along with their positions
@@ -1612,13 +1792,22 @@ fn find_dependencies(
 ) -> Vec<(usize, Requirement)> {
     let mut to_replace = Vec::new();
     for (i, dep) in deps.iter().enumerate() {
-        if let Some(req) = dep.as_str().and_then(try_parse_requirement) {
-            if marker.is_none_or(|m| *m == req.marker) && *name == req.name {
-                to_replace.push((i, req));
-            }
+        if let Some(req) = dep.as_str().and_then(try_parse_requirement)
+            && marker.is_none_or(|m| *m == req.marker)
+            && *name == req.name
+        {
+            to_replace.push((i, req));
         }
     }
     to_replace
+}
+
+/// Return whether two requirements have the same serialized fields, ignoring their parsed origin.
+fn same_requirement_declaration(left: &Requirement, right: &Requirement) -> bool {
+    left.name == right.name
+        && left.extras == right.extras
+        && left.version_or_url == right.version_or_url
+        && left.marker == right.marker
 }
 
 /// Returns the key in `tool.uv.sources` that matches the given package name.
@@ -1703,6 +1892,19 @@ fn reformat_array_multiline(deps: &mut Array) {
             .flatten();
 
         Box::new(iter)
+    }
+
+    // Without a trailing comma, `toml_edit` stores comments after the final item in its
+    // suffix. Once we add a trailing comma, those comments must follow the comma instead.
+    if !deps.trailing_comma()
+        && let Some(last) = deps.iter_mut().last()
+        && let Some(suffix) = last.decor().suffix().and_then(RawString::as_str)
+        && suffix.contains('#')
+    {
+        let suffix = suffix.to_string();
+        last.decor_mut().set_suffix("");
+        let trailing = deps.trailing().as_str().unwrap_or_default();
+        deps.set_trailing(format!("{suffix}{trailing}"));
     }
 
     let mut indentation_prefix = None;
@@ -1790,12 +1992,21 @@ fn split_specifiers(req: &str) -> (&str, &str) {
 
 #[cfg(test)]
 mod test {
-    use super::{AddBoundsKind, reformat_array_multiline, remove_dependency, split_specifiers};
+    use crate::pyproject::DependencyType;
+
+    use super::{
+        AddBoundsKind, ArrayEdit, DependencyTarget, PyProjectTomlMut, reformat_array_multiline,
+        remove_dependency, split_specifiers,
+    };
+    use anyhow::Result;
     use insta::assert_snapshot;
+    use std::path::Path;
     use std::str::FromStr;
     use toml_edit::DocumentMut;
-    use uv_normalize::PackageName;
+    use uv_distribution_types::Index;
+    use uv_normalize::{ExtraName, GroupName, PackageName};
     use uv_pep440::Version;
+    use uv_pep508::{Requirement, RequirementOrigin};
 
     #[test]
     fn split() {
@@ -1968,6 +2179,88 @@ dependencies = [
                 .to_string();
             assert_eq!(actual, expected, "{version}");
         }
+    }
+
+    #[test]
+    fn replace_dependency_updates_every_exact_match() -> Result<()> {
+        let mut pyproject = PyProjectTomlMut::from_toml(
+            r#"[project]
+dependencies = ["anyio<=2", "anyio>=1", "anyio<=2"]
+
+[tool.uv.sources]
+anyio = { index = "internal" }
+            "#,
+            DependencyTarget::PyProjectToml,
+        )?;
+        let existing = Requirement::from_str("anyio<=2")?.with_origin(RequirementOrigin::Workspace);
+        let replacement = Requirement::from_str("anyio<3")?;
+
+        let replaced = pyproject.replace_dependency_declaration(
+            &DependencyType::Production,
+            &existing,
+            &replacement,
+        )?;
+        assert_eq!(replaced, vec![ArrayEdit::Update(0), ArrayEdit::Update(2)]);
+
+        assert_snapshot!(
+            pyproject.to_string(),
+            @r#"
+[project]
+dependencies = ["anyio<3", "anyio>=1", "anyio<3"]
+
+[tool.uv.sources]
+anyio = { index = "internal" }
+"#
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn replace_dependency_declaration_updates_selected_type() -> Result<()> {
+        let mut pyproject = PyProjectTomlMut::from_toml(
+            r#"[project]
+dependencies = ["anyio<=2"]
+
+[project.optional-dependencies]
+test = ["anyio<=2"]
+
+[dependency-groups]
+dev = ["anyio<=2"]
+            "#,
+            DependencyTarget::PyProjectToml,
+        )?;
+        let existing = Requirement::from_str("anyio<=2")?;
+        let optional_replacement = Requirement::from_str("anyio<3")?;
+        let group_replacement = Requirement::from_str("anyio<4")?;
+
+        let replaced = pyproject.replace_dependency_declaration(
+            &DependencyType::Optional(ExtraName::from_str("test")?),
+            &existing,
+            &optional_replacement,
+        )?;
+        assert_eq!(replaced, vec![ArrayEdit::Update(0)]);
+
+        let replaced = pyproject.replace_dependency_declaration(
+            &DependencyType::Group(GroupName::from_str("dev")?),
+            &existing,
+            &group_replacement,
+        )?;
+        assert_eq!(replaced, vec![ArrayEdit::Update(0)]);
+
+        assert_snapshot!(
+            pyproject.to_string(),
+            @r#"
+[project]
+dependencies = ["anyio<=2"]
+
+[project.optional-dependencies]
+test = ["anyio<3"]
+
+[dependency-groups]
+dev = ["anyio<4"]
+"#
+        );
+        Ok(())
     }
 
     #[test]
@@ -2215,5 +2508,70 @@ dependencies = [
 ]
 "#
         );
+    }
+
+    #[test]
+    fn add_index_syncs_format_on_url_update() {
+        let toml = r#"
+[[tool.uv.index]]
+name = "index"
+url = "https://example.com/flat/"
+format = "flat"
+"#;
+
+        let mut doc = PyProjectTomlMut::from_toml(toml, DependencyTarget::PyProjectToml).unwrap();
+
+        // The URL spelling changes, but the canonical URL does not, so format should be preserved.
+        let equivalent_index = Index::from_str("index=https://example.com/flat").unwrap();
+        doc.add_index(&equivalent_index, Path::new(".")).unwrap();
+
+        assert_snapshot!(doc.to_string(), @r#"
+
+[[tool.uv.index]]
+name = "index"
+url = "https://example.com/flat"
+format = "flat"
+"#);
+
+        let new_index = Index::from_str("index=https://pypi.org/simple").unwrap();
+        doc.add_index(&new_index, Path::new(".")).unwrap();
+
+        assert_snapshot!(doc.to_string(), @r#"
+
+[[tool.uv.index]]
+name = "index"
+url = "https://pypi.org/simple"
+"#);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn add_index_preserves_format_when_windows_path_unchanged() -> Result<()> {
+        let toml = r#"
+[[tool.uv.index]]
+name = "index"
+url = 'C:\links'
+format = "flat"
+"#;
+
+        let mut doc = PyProjectTomlMut::from_toml(toml, DependencyTarget::PyProjectToml)?;
+
+        let new_index = Index::from_str(r"index=C:\links")?;
+        doc.add_index(&new_index, &std::env::current_dir()?)?;
+
+        let index = doc.doc["tool"]["uv"]["index"]
+            .as_array_of_tables()
+            .and_then(|indexes| indexes.get(0))
+            .expect("index table");
+        assert_eq!(
+            index.get("url").and_then(|item| item.as_str()),
+            Some("C:/links")
+        );
+        assert_eq!(
+            index.get("format").and_then(|item| item.as_str()),
+            Some("flat")
+        );
+
+        Ok(())
     }
 }

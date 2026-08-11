@@ -1,0 +1,319 @@
+# Copyright (c) Jupyter Development Team.
+# Distributed under the terms of the Modified BSD License.
+
+[build-system]
+requires = ["hatchling>=1.21.1", "jupyter-builder>=1.0.2"]
+build-backend = "hatchling.build"
+
+[project]
+name = "jupyterlab"
+version = "4.6.1"
+description = "JupyterLab computational environment"
+readme = "README.md"
+license = { file = "LICENSE" }
+requires-python = ">=3.10"
+authors = [
+    { name = "Jupyter Development Team", email = "jupyter@googlegroups.com" },
+]
+keywords = [
+    "ipython",
+    "jupyter",
+]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Framework :: Jupyter",
+    "Framework :: Jupyter :: JupyterLab",
+    "Framework :: Jupyter :: JupyterLab :: 4",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "Intended Audience :: System Administrators",
+    "License :: OSI Approved :: BSD License",
+    "Programming Language :: Python",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+]
+dependencies = [
+    "jupyter-builder>=1.0.2",
+    "async_lru>=1.0.0",
+    "httpx>=0.25.0,<1",
+    "ipykernel>=6.5.0,!=6.30.0",
+    "jinja2>=3.0.3",
+    "jupyter_core",
+    "jupyter_server>=2.19.0,<3",
+    "jupyter-lsp>=2.0.0",
+    "jupyterlab_server>=2.28.0,<3",
+    "notebook_shim>=0.2",
+    "packaging>=23.2",
+    "tomli>=1.2.2;python_version<\"3.11\"",
+    "tornado>=6.2.0",
+    "traitlets",
+]
+
+[project.scripts]
+jupyter-lab = "jupyterlab.labapp:main"
+jupyter-labextension = "jupyterlab.labextensions:main"
+jupyter-labhub = "jupyterlab.labhubapp:main"
+
+[project.entry-points."jupyterlab.extension_manager_v1"]
+readonly = "jupyterlab.extensions:get_readonly_manager"
+pypi = "jupyterlab.extensions:get_pypi_manager"
+
+[project.urls]
+Homepage = "https://jupyter.org"
+Changelog = "https://jupyterlab.readthedocs.io/en/stable/getting_started/changelog.html"
+Documentation = "https://jupyterlab.readthedocs.io"
+Source = "https://github.com/jupyterlab/jupyterlab"
+Issues = "https://github.com/jupyterlab/jupyterlab/issues/new/choose"
+Zulip = "https://jupyter.zulipchat.com/#narrow/channel/469762-jupyterlab"
+Pypi = "https://pypi.org/project/jupyterlab"
+
+[project.optional-dependencies]
+docs-screenshots = [
+    # Freeze the packages to ensure consistent look and feel
+    # IPython is frozen because its version is displayed in
+    # the console header
+    "altair==6.0.0",
+    "ipykernel<7.0",
+    "ipython==8.16.1",
+    "ipywidgets==8.1.5",
+    "jupyterlab-geojson==3.4.0",
+    "jupyterlab-language-pack-zh-CN==4.3.post1",
+    "matplotlib==3.10.0",
+    "nbconvert>=7.0.0",
+    "pandas==2.2.3",
+    "scipy==1.15.1",
+]
+test = [
+    "coverage",
+    "pytest>=7.0",
+    "pytest-check-links>=0.7",
+    "pytest-console-scripts",
+    "pytest-cov",
+    "pytest-jupyter>=0.5.3",
+    "pytest-timeout",
+    "pytest-tornasync",
+    "pytest-xdist",
+    "requests",
+    "requests_cache",
+    "virtualenv",
+]
+# Check ruff version is aligned with the one in .pre-commit-config.yaml
+dev = [
+    "build",
+    "pre-commit",
+    "shellcheck-py",
+    "pytest-cov",
+    "coverage",
+    "hatch",
+    "bump2version",
+    "ruff==0.15.15",
+]
+upgrade-extension = [
+    "pyyaml-include<3.0",
+    "copier>=9,<10",
+    "jinja2-time<0.3",
+    "pydantic<3.0",
+    "tomli-w<2.0"
+]
+
+[dependency-groups]
+builder = [
+    "jupyter-builder>=1.0.2",
+]
+docs = [
+    { include-group = "builder" },
+    "jsx-lexer",
+    "myst-parser",
+    "pydata-sphinx-theme>=0.13.0",
+    "pytest",
+    "pytest-check-links",
+    "pytest-jupyter",
+    "shellcheck-py",
+    "sphinx>=1.8,<8.2.0",
+    "sphinx-copybutton",
+    "sphinxcontrib-mermaid",
+    "sphinxcontrib-spelling",
+]
+
+[tool.check-wheel-contents]
+ignore = ["W002", "W004"]
+
+[tool.hatch.version]
+path = "jupyterlab/_version.py"
+source = "code"
+
+[tool.hatch.build.targets.wheel.shared-data]
+"jupyterlab/static" = "share/jupyter/lab/static"
+"jupyterlab/schemas" = "share/jupyter/lab/schemas"
+"jupyterlab/themes" = "share/jupyter/lab/themes"
+"jupyter-config" = "etc/jupyter"
+"jupyterlab.svg" = "share/icons/hicolor/scalable/apps/jupyterlab.svg"
+"jupyterlab.desktop" = "share/applications/jupyterlab.desktop"
+
+[tool.hatch.build]
+ignore-vcs = true
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "/*.md",
+    "/buildapi.py",
+    "/conftest.py",
+    "/docs",
+    "/docker",
+    "/Dockerfile",
+    "/.dockerignore",
+    "/galata",
+    "/jupyter-config",
+    "/jupyterlab",
+    "/package.json",
+    "jupyterlab.svg",
+    "jupyterlab.desktop"
+]
+exclude = [
+    "/.github",
+    "*.js.map",
+    "node_modules",
+    "/clean.py",
+    "/binder",
+    "/buildutils",
+    "/dist",
+    "/docs/build",
+    "/docs/source/api",
+    "/design",
+    "/dev_mode",
+    "/examples",
+    "/galata/lib",
+    "/jupyterlab/staging/build",
+    "/jupyterlab/staging/.yarn",
+    "/packages",
+    "/release",
+    "/testutils"
+]
+
+[tool.hatch.build.targets.wheel]
+include = [
+    "/jupyterlab",
+]
+exclude = [
+    "*.js.map",
+    "/jupyterlab/staging/build",
+    "/jupyterlab/staging/.yarn",
+    "node_modules"
+]
+
+[tool.hatch.build.hooks.jupyter-builder]
+dependencies = ["hatch-jupyter-builder>=0.3.2"]
+build-function = "buildapi.builder"
+ensured-targets = [
+    "jupyterlab/static/package.json",
+    "jupyterlab/schemas/@jupyterlab/shortcuts-extension/shortcuts.json",
+    "jupyterlab/themes/@jupyterlab/theme-light-extension/index.css"
+]
+install-pre-commit-hook = true
+
+[tool.hatch.build.hooks.jupyter-builder.editable-build-kwargs]
+build_cmd = "build"
+source_dir = "packages"
+build_dir = "dev_mode/static"
+npm = ["jlpm"]
+
+[tool.hatch.build.hooks.jupyter-builder.build-kwargs]
+build_cmd = "build:prod:minimize"
+path = "jupyterlab/staging"
+source_dir = "jupyterlab/staging"
+build_dir = "jupyterlab/static"
+npm = ["jlpm"]
+
+[tool.pytest.ini_options]
+testpaths = "jupyterlab/tests"
+norecursedirs = "node_modules .git _build .ipynb_checkpoints"
+addopts = "--pdbcls=IPython.terminal.debugger:Pdb -v --junitxml=junit.xml --durations=3"
+ignore = "tests examples"
+
+[tool.jupyter-releaser.options]
+version-cmd = "jlpm bumpversion --force --skip-commit"
+npm-install-options = "--legacy-peer-deps"
+release-message = "[ci skip] Publish {version}"
+tag-message = "[ci skip] Release {tag_name}"
+
+[tool.jupyter-releaser.hooks]
+before-bump-version = [
+    "pip install -e .[dev]",
+    "git checkout .",
+]
+before-build-npm = [
+    "jlpm",
+    "jlpm build:all",
+    "node buildutils/lib/update-core-mode.js --skip-assets",
+]
+before-build-python = [
+    "node buildutils/lib/local-repository start",
+    "jlpm before:build:python",
+    "node buildutils/lib/local-repository stop",
+]
+after-publish-assets = "npm run after:publish:assets"
+
+[tool.ruff]
+exclude = ["*.ipynb"]
+target-version = "py310"
+line-length = 100
+lint.select = [
+  "A", "B", "C", "C4", "DTZ", "E", "EM", "F", "FBT", "FLY", "FURB", "I",
+  "ICN", "LOG", "N", "PERF", "PIE", "PLC", "PLE", "PLR", "PLW", "Q", "RSE",
+  "RUF", "S", "SIM", "SLOT", "T", "TC", "TID", "UP", "W", "YTT",
+]
+lint.ignore = [
+# FBT001 Boolean positional arg in function definition
+"FBT001", "FBT002", "FBT003",
+# E501 Line too long (158 > 100 characters)
+"E501",
+# PLR0913 Too many arguments to function call
+"PLR0913",
+# SIM105 Use `contextlib.suppress(...)`
+"SIM105",
+]
+
+[tool.ruff.lint.per-file-ignores]
+# F821 Undefined name `c`
+"binder/jupyter_config.py" = ["F821"]
+# RUF012 Mutable class attributes should be annotated with `typing.ClassVar`
+"examples/example_check.py" = ["RUF012"]
+# RUF012 Mutable class attributes should be annotated with `typing.ClassVar`
+"examples/federated/main.py" = ["RUF012"]
+# T201 `print` found
+"examples/test_examples.py" = ["T201"]
+# T201 `print` found
+"galata/*" = ["T201"]
+# F821 Undefined name `c`
+"galata/jupyter_server_test_config.py" = ["F821"]
+# RUF012 Mutable class attributes should be annotated with `typing.ClassVar`
+"jupyterlab/browser_check.py" = ["RUF012"]
+# C901 method is too complex
+"jupyterlab/commands.py" = ["C901"]
+# B028 No explicit `stacklevel` keyword argument found
+"jupyterlab/debuglog.py" = ["B028"]
+"jupyterlab/extensions/manager.py" = ["C901"]
+# RUF012 Mutable class attributes should be annotated with `typing.ClassVar`
+# T201 `print` found
+"jupyterlab/labapp.py" = ["RUF012", "T201"]
+# RUF012 Mutable class attributes should be annotated with `typing.ClassVar`
+"jupyterlab/labextensions.py" = ["RUF012"]
+# C901 method is too complex
+# S101 Use of `assert` detected
+# N802 Function name `foo` should be lowercase
+# EM101 Exception must not use a string literal
+# PLR2004 Magic value used in comparison
+"jupyterlab/tests/*" = ["C901", "S101", "N802", "E501", "EM101", "EM102", "EM103", "PLR2004"]
+# RUF012 Mutable class attributes should be annotated with `typing.ClassVar`
+"jupyterlab/tests/echo_kernel.py" = ["RUF012"]
+# T201 `print` found
+"scripts/milestone_check.py" = ["T201", "UP031"]
+# T201 `print` found
+"jupyterlab/upgrade_extension.py" = ["T201"]
+# RUF012 Mutable class attributes should be annotated with `typing.ClassVar`
+"packages/services/examples/node/main.py" = ["RUF012"]
+# T201 `print` found
+"scripts/i18n_check.py" = ["T201"]

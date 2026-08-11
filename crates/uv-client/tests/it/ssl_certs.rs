@@ -7,16 +7,19 @@ use anyhow::Result;
 use rcgen::CustomExtension;
 use temp_env::async_with_vars;
 use tempfile::{NamedTempFile, TempDir};
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::net::{TcpListener, TcpStream};
 use url::Url;
 
 use uv_cache::Cache;
-use uv_client::BaseClientBuilder;
-use uv_client::RegistryClientBuilder;
+use uv_client::{BaseClientBuilder, Certificates, RegistryClientBuilder};
+use uv_distribution_types::IndexUrl;
+use uv_errors::{ErrorOptions, Hint, write_error_chain_with_options};
 use uv_redacted::DisplaySafeUrl;
 use uv_static::EnvVars;
 
 use crate::http_util::{
-    SelfSigned, generate_self_signed_certs_with_ca,
+    SelfSigned, generate_expired_self_signed_certs_with_ca, generate_self_signed_certs_with_ca,
     generate_self_signed_certs_with_ca_custom_extensions, start_https_mtls_user_agent_server,
     start_https_user_agent_server, test_cert_dir,
 };
@@ -42,6 +45,12 @@ impl TestCertificate {
     /// relevant PEM files to a temporary directory.
     fn new() -> Result<Self> {
         let (ca, server, client) = generate_self_signed_certs_with_ca()?;
+        Self::persist(ca, server, &client)
+    }
+
+    /// Generate a fresh certificate set whose server certificate is expired.
+    fn new_expired() -> Result<Self> {
+        let (ca, server, client) = generate_expired_self_signed_certs_with_ca()?;
         Self::persist(ca, server, &client)
     }
 
@@ -130,6 +139,8 @@ impl TestCertificate {
 struct TestClient {
     overrides: Vec<(&'static str, String)>,
     system_certs: bool,
+    custom_client: bool,
+    cert: Option<PathBuf>,
 }
 
 /// Create a [`TestClient`] with no environment overrides.
@@ -137,13 +148,27 @@ fn client() -> TestClient {
     TestClient {
         overrides: Vec::new(),
         system_certs: false,
+        custom_client: false,
+        cert: None,
     }
 }
 
 impl TestClient {
+    /// Set the explicit certificate file used to construct [`Certificates`].
+    fn cert(mut self, path: &Path) -> Self {
+        self.cert = Some(path.to_path_buf());
+        self
+    }
+
     /// Enable or disable system certificate loading.
     fn system_certs(mut self, enabled: bool) -> Self {
         self.system_certs = enabled;
+        self
+    }
+
+    /// Use an externally constructed HTTP client.
+    fn custom_client(mut self) -> Self {
+        self.custom_client = true;
         self
     }
 
@@ -192,8 +217,58 @@ impl TestClient {
     /// error on the client side.
     async fn expect_https_connect_fails(&self, cert: &TestCertificate) {
         self.run_https(cert, |response, server_task| async move {
-            assert_connection_error(&response);
+            assert_fatal_reqwest_error(&response);
             // Server may or may not have errored — just ensure no panic.
+            let _ = server_task.await;
+        })
+        .await;
+    }
+
+    /// Assert whether a client TLS failure suggests enabling system certificate roots.
+    async fn expect_index_fetch_system_certs_hint(
+        &self,
+        cert: &TestCertificate,
+        expected_hint: bool,
+    ) {
+        let vars = self.ssl_vars();
+        let system_certs = self.system_certs;
+        let custom_client = self.custom_client;
+        async_with_vars(vars, async {
+            let (server_task, addr) = start_https_user_agent_server(&cert.server).await.unwrap();
+            let cache = Cache::temp().unwrap().init().await.unwrap();
+            let base = BaseClientBuilder::default()
+                .retries(0)
+                .no_retry_delay(true)
+                .with_system_certs(system_certs);
+            let base = if let Some(certificates) = Certificates::from_env() {
+                base.custom_certificates(certificates)
+            } else {
+                base
+            };
+            let client = RegistryClientBuilder::new(base, cache);
+            let client = if custom_client {
+                client.with_reqwest_client(reqwest::Client::new())
+            } else {
+                client
+            };
+            let client = client.build().unwrap();
+            let index = IndexUrl::from_str(&format!("https://{addr}/simple")).unwrap();
+            let error = client
+                .fetch_simple_index(&index)
+                .await
+                .expect_err("self-signed certificate should fail");
+            let mut rendered = String::new();
+            write_error_chain_with_options(
+                &error,
+                error.hints(),
+                ErrorOptions::default().with_stream(&mut rendered),
+            )
+            .unwrap();
+            assert_eq!(
+                rendered.contains("Consider enabling use of system TLS certificates"),
+                expected_hint,
+                "unexpected system certificate hint in {rendered:?} for {error:?}"
+            );
             let _ = server_task.await;
         })
         .await;
@@ -222,7 +297,10 @@ impl TestClient {
         F: FnOnce(&rustls::Error),
     {
         self.run_mtls(cert, |response, server_task| async move {
-            assert_connection_error(&response);
+            assert!(
+                response.is_err(),
+                "expected request error, got: {response:?}"
+            );
 
             let server_res = server_task.await.expect("server task panicked");
             let Err(anyhow_err) = server_res else {
@@ -245,10 +323,10 @@ impl TestClient {
     /// Assert that an mTLS connection to `cert`'s server fails because no
     /// valid client certificate was presented.
     async fn expect_mtls_connect_fails(&self, cert: &TestCertificate) {
-        self.expect_mtls_connect_fails_with_server_tls_error(cert, |tls_err| {
+        self.expect_mtls_connect_fails_with_server_tls_error(cert, |server_tls_err| {
             assert!(
-                matches!(tls_err, rustls::Error::NoCertificatesPresented),
-                "expected NoCertificatesPresented, got: {tls_err}"
+                matches!(server_tls_err, rustls::Error::NoCertificatesPresented),
+                "expected NoCertificatesPresented, got: {server_tls_err}"
             );
         })
         .await;
@@ -294,7 +372,7 @@ impl TestClient {
         let system_certs = self.system_certs;
         async_with_vars(vars, async {
             let response = send_request_to(&url, system_certs).await;
-            assert_connection_error(&response);
+            assert_fatal_reqwest_error(&response);
         })
         .await;
     }
@@ -313,7 +391,7 @@ impl TestClient {
         let system_certs = self.system_certs;
         async_with_vars(vars, async {
             let (server_task, addr) = start_https_user_agent_server(&cert.server).await.unwrap();
-            let response = send_request(addr, system_certs).await;
+            let response = send_request(addr, system_certs, self.cert.as_deref()).await;
             check(response, server_task).await;
         })
         .await;
@@ -335,7 +413,7 @@ impl TestClient {
             let (server_task, addr) = start_https_mtls_user_agent_server(&cert.ca, &cert.server)
                 .await
                 .unwrap();
-            let response = send_request(addr, system_certs).await;
+            let response = send_request(addr, system_certs, self.cert.as_deref()).await;
             check(response, server_task).await;
         })
         .await;
@@ -346,20 +424,40 @@ impl TestClient {
 async fn send_request(
     addr: SocketAddr,
     system_certs: bool,
+    cert: Option<&Path>,
 ) -> Result<reqwest::Response, reqwest_middleware::Error> {
     let url = DisplaySafeUrl::from_str(&format!("https://{addr}")).unwrap();
-    send_request_to(&url, system_certs).await
+    send_request_to_with_cert(&url, system_certs, cert).await
 }
 
 /// Send a GET request to an arbitrary URL using a fresh registry client.
+#[cfg(feature = "test-pypi")]
 async fn send_request_to(
     url: &DisplaySafeUrl,
     system_certs: bool,
 ) -> Result<reqwest::Response, reqwest_middleware::Error> {
+    send_request_to_with_cert(url, system_certs, None).await
+}
+
+async fn send_request_to_with_cert(
+    url: &DisplaySafeUrl,
+    system_certs: bool,
+    cert: Option<&Path>,
+) -> Result<reqwest::Response, reqwest_middleware::Error> {
     let cache = Cache::temp().unwrap().init().await.unwrap();
+    let custom_certificates = if let Some(cert) = cert {
+        Some(Certificates::from_file(cert).expect("failed to load certificate file"))
+    } else {
+        Certificates::from_env()
+    };
     let base = BaseClientBuilder::default()
         .no_retry_delay(true)
         .with_system_certs(system_certs);
+    let base = if let Some(certificates) = custom_certificates {
+        base.custom_certificates(certificates)
+    } else {
+        base
+    };
     let client = RegistryClientBuilder::new(base, cache)
         .build()
         .expect("failed to build registry client");
@@ -372,24 +470,32 @@ async fn send_request_to(
         .await
 }
 
-/// Assert that a request result is a TLS connection error.
-fn assert_connection_error(res: &Result<reqwest::Response, reqwest_middleware::Error>) {
+/// Assert that a request failed with a reqwest error without being retried.
+fn assert_fatal_reqwest_error(res: &Result<reqwest::Response, reqwest_middleware::Error>) {
     let Some(reqwest_middleware::Error::Middleware(middleware_error)) = res.as_ref().err() else {
         panic!("expected middleware error, got: {res:?}");
     };
-    let reqwest_error = middleware_error
-        .chain()
-        .find_map(|err| {
-            err.downcast_ref::<reqwest_middleware::Error>().map(|err| {
-                if let reqwest_middleware::Error::Reqwest(inner) = err {
-                    inner
-                } else {
-                    panic!("expected reqwest error, got: {err}")
-                }
-            })
-        })
-        .expect("expected reqwest error");
-    assert!(reqwest_error.is_connect());
+    let Some(reqwest_retry::RetryError::Error(reqwest_middleware::Error::Reqwest(_))) =
+        middleware_error.downcast_ref::<reqwest_retry::RetryError>()
+    else {
+        panic!("expected fatal reqwest error without retries, got: {middleware_error:?}");
+    };
+}
+
+/// Read the client's complete TLS record before sending a fatal alert.
+async fn send_tls_alert(stream: &mut TcpStream, alert_description: u8) -> Result<()> {
+    let mut client_hello_header = [0; 5];
+    stream.read_exact(&mut client_hello_header).await?;
+    let client_hello_length = usize::from(u16::from_be_bytes([
+        client_hello_header[3],
+        client_hello_header[4],
+    ]));
+    let mut client_hello = vec![0; client_hello_length];
+    stream.read_exact(&mut client_hello).await?;
+    stream
+        .write_all(&[0x15, 0x03, 0x03, 0x00, 0x02, 0x02, alert_description])
+        .await?;
+    Ok(())
 }
 
 /// A self-signed server certificate is rejected when no custom certs are
@@ -398,6 +504,98 @@ fn assert_connection_error(res: &Result<reqwest::Response, reqwest_middleware::E
 async fn test_no_custom_certs_rejects_self_signed() -> Result<()> {
     let cert = TestCertificate::new()?;
     client().expect_https_connect_fails(&cert).await;
+    Ok(())
+}
+
+/// TLS certificate failures are fatal instead of being retried against the single-use server.
+#[tokio::test]
+async fn test_tls_certificate_errors_are_not_retried() -> Result<()> {
+    let cert = TestCertificate::new()?;
+    client()
+        .run_https(&cert, |response, server_task| async move {
+            assert_fatal_reqwest_error(&response);
+            let _ = server_task.await;
+        })
+        .await;
+    Ok(())
+}
+
+/// Certificate TLS alerts are fatal instead of being retried.
+#[tokio::test]
+async fn test_certificate_tls_alerts_are_not_retried() -> Result<()> {
+    let listener = TcpListener::bind("127.0.0.1:0").await?;
+    let addr = listener.local_addr()?;
+    let server_task = tokio::spawn(async move {
+        let (mut stream, _) = listener.accept().await?;
+        // A fatal TLS `unknown_ca` alert.
+        send_tls_alert(&mut stream, 0x30).await?;
+        Ok::<_, anyhow::Error>(())
+    });
+
+    let response = send_request(addr, false, None).await;
+    assert_fatal_reqwest_error(&response);
+    server_task.await??;
+    Ok(())
+}
+
+/// An expired server certificate is rejected without retries.
+#[tokio::test]
+async fn test_expired_cert_rejected() -> Result<()> {
+    let cert = TestCertificate::new_expired()?;
+    client()
+        .ssl_cert_file(&cert.trust_path)
+        .expect_https_connect_fails(&cert)
+        .await;
+    Ok(())
+}
+
+/// TLS protocol failures that are not certificate errors remain retryable.
+#[tokio::test]
+async fn test_non_certificate_tls_errors_are_retried() -> Result<()> {
+    let listener = TcpListener::bind("127.0.0.1:0").await?;
+    let addr = listener.local_addr()?;
+    let server_task = tokio::spawn(async move {
+        for _ in 0..4 {
+            let (mut stream, _) = listener.accept().await?;
+            // A fatal TLS `internal_error` alert.
+            send_tls_alert(&mut stream, 0x50).await?;
+        }
+        Ok::<_, anyhow::Error>(())
+    });
+
+    let response = send_request(addr, false, None).await;
+    let Err(reqwest_middleware::Error::Middleware(middleware_error)) = response else {
+        panic!("expected middleware error, got: {response:?}");
+    };
+    let Some(reqwest_retry::RetryError::WithRetries { retries, .. }) =
+        middleware_error.downcast_ref::<reqwest_retry::RetryError>()
+    else {
+        panic!("expected retries after a non-certificate TLS error, got: {middleware_error:?}");
+    };
+    assert_eq!(*retries, 3);
+    server_task.await??;
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_tls_failure_suggests_system_certs_only_for_webpki_roots() -> Result<()> {
+    let cert = TestCertificate::new()?;
+    let custom_cert = TestCertificate::new()?;
+    client()
+        .expect_index_fetch_system_certs_hint(&cert, true)
+        .await;
+    client()
+        .system_certs(true)
+        .expect_index_fetch_system_certs_hint(&cert, false)
+        .await;
+    client()
+        .ssl_cert_file(&custom_cert.trust_path)
+        .expect_index_fetch_system_certs_hint(&cert, false)
+        .await;
+    client()
+        .custom_client()
+        .expect_index_fetch_system_certs_hint(&cert, false)
+        .await;
     Ok(())
 }
 
@@ -413,10 +611,9 @@ async fn test_ssl_cert_file_wrong_cert_rejected() -> Result<()> {
     Ok(())
 }
 
-/// A nonexistent `SSL_CERT_FILE` is ignored; the client falls back to webpki
-/// roots which don't include our test CA.
+/// A nonexistent `SSL_CERT_FILE` replaces the default roots with an empty trust store.
 #[tokio::test]
-async fn test_ssl_cert_file_nonexistent_falls_back() -> Result<()> {
+async fn test_ssl_cert_file_nonexistent_overrides_default_roots() -> Result<()> {
     let cert = TestCertificate::new()?;
     let dir = TempDir::new()?;
     let missing = dir.path().join("missing.pem");
@@ -424,19 +621,26 @@ async fn test_ssl_cert_file_nonexistent_falls_back() -> Result<()> {
         .ssl_cert_file(&missing)
         .expect_https_connect_fails(&cert)
         .await;
+    client()
+        .ssl_cert_file(&missing)
+        .expect_index_fetch_system_certs_hint(&cert, false)
+        .await;
     Ok(())
 }
 
-/// A nonexistent `SSL_CERT_DIR` is ignored; the client falls back to webpki
-/// roots which don't include our test CA.
+/// A nonexistent `SSL_CERT_DIR` replaces the default roots with an empty trust store.
 #[tokio::test]
-async fn test_ssl_cert_dir_nonexistent_falls_back() -> Result<()> {
+async fn test_ssl_cert_dir_nonexistent_overrides_default_roots() -> Result<()> {
     let cert = TestCertificate::new()?;
     let dir = TempDir::new()?;
     let missing = dir.path().join("missing-certs");
     client()
         .ssl_cert_dir(&missing)
         .expect_https_connect_fails(&cert)
+        .await;
+    client()
+        .ssl_cert_dir(&missing)
+        .expect_index_fetch_system_certs_hint(&cert, false)
         .await;
     Ok(())
 }
@@ -447,6 +651,30 @@ async fn test_ssl_cert_file_valid() -> Result<()> {
     let cert = TestCertificate::new()?;
     client()
         .ssl_cert_file(&cert.trust_path)
+        .expect_https_connect_succeeds(&cert)
+        .await;
+    Ok(())
+}
+
+/// An explicit certificate file pointing to the server's CA cert is trusted.
+#[tokio::test]
+async fn test_cli_cert_valid() -> Result<()> {
+    let cert = TestCertificate::new()?;
+    client()
+        .cert(&cert.trust_path)
+        .expect_https_connect_succeeds(&cert)
+        .await;
+    Ok(())
+}
+
+/// An explicit certificate file overrides the environment certificate sources.
+#[tokio::test]
+async fn test_cli_cert_overrides_environment() -> Result<()> {
+    let cert = TestCertificate::new()?;
+    let wrong_cert = TestCertificate::new()?;
+    client()
+        .ssl_cert_file(&wrong_cert.trust_path)
+        .cert(&cert.trust_path)
         .expect_https_connect_succeeds(&cert)
         .await;
     Ok(())
@@ -630,16 +858,16 @@ async fn test_mtls_with_wrong_client_cert() -> Result<()> {
     client()
         .ssl_cert_file(&server_cert.trust_path)
         .ssl_client_cert(&other_cert.client_cert_path)
-        .expect_mtls_connect_fails_with_server_tls_error(&server_cert, |tls_err| {
+        .expect_mtls_connect_fails_with_server_tls_error(&server_cert, |server_tls_err| {
             assert!(
                 matches!(
-                    tls_err,
+                    server_tls_err,
                     rustls::Error::InvalidCertificate(
                         rustls::CertificateError::BadSignature
                             | rustls::CertificateError::UnknownIssuer
                     )
                 ),
-                "expected InvalidCertificate(BadSignature | UnknownIssuer), got: {tls_err}"
+                "expected InvalidCertificate(BadSignature | UnknownIssuer), got: {server_tls_err}"
             );
         })
         .await;

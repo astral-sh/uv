@@ -1,12 +1,13 @@
 use std::path::Path;
 use std::str::FromStr;
 
-use http::HeaderValue;
+use http::{HeaderValue, StatusCode};
 use serde::{Deserialize, Serialize, Serializer};
 use thiserror::Error;
 use url::Url;
 
-use uv_auth::{AuthPolicy, Credentials};
+use uv_auth::{AuthPolicy, Credentials, CredentialsFromUrlError};
+use uv_pypi_types::HashAlgorithm;
 use uv_redacted::DisplaySafeUrl;
 use uv_small_str::SmallString;
 
@@ -21,20 +22,20 @@ use crate::{IndexStatusCodeStrategy, IndexUrl, IndexUrlError, SerializableStatus
 pub struct IndexCacheControl {
     /// Cache control header for Simple API requests.
     #[cfg_attr(feature = "schemars", schemars(with = "Option<String>"))]
-    pub api: Option<HeaderValue>,
+    pub(crate) api: Option<HeaderValue>,
     /// Cache control header for file downloads.
     #[cfg_attr(feature = "schemars", schemars(with = "Option<String>"))]
-    pub files: Option<HeaderValue>,
+    pub(crate) files: Option<HeaderValue>,
 }
 
 impl IndexCacheControl {
     /// Return the default Simple API cache control headers for the given index URL, if applicable.
-    pub fn simple_api_cache_control(_url: &Url) -> Option<HeaderValue> {
+    fn simple_api_cache_control(_url: &Url) -> Option<HeaderValue> {
         None
     }
 
     /// Return the default files cache control headers for the given index URL, if applicable.
-    pub fn artifact_cache_control(url: &Url) -> Option<HeaderValue> {
+    fn artifact_cache_control(url: &Url) -> Option<HeaderValue> {
         let dominated_by_pytorch_or_nvidia = url.host_str().is_some_and(|host| {
             host.eq_ignore_ascii_case("download.pytorch.org")
                 || host.eq_ignore_ascii_case("pypi.nvidia.com")
@@ -206,8 +207,8 @@ pub struct Index {
     /// ```
     #[serde(default)]
     pub authenticate: AuthPolicy,
-    /// Status codes that uv should ignore when deciding whether
-    /// to continue searching in the next index after a failure.
+    /// Status codes that uv should ignore when deciding whether to continue resolution after a
+    /// request to this index fails.
     ///
     /// ```toml
     /// [[tool.uv.index]]
@@ -230,6 +231,21 @@ pub struct Index {
     /// ```
     #[serde(default)]
     pub cache_control: Option<IndexCacheControl>,
+    /// The hash algorithm that must be used for distributions resolved from this index.
+    ///
+    /// If a distribution does not advertise a hash using this algorithm, lockfile generation
+    /// will fail.
+    ///
+    /// This option is in preview and may change in any future release.
+    ///
+    /// ```toml
+    /// [[tool.uv.index]]
+    /// name = "my-index"
+    /// url = "https://<omitted>/simple"
+    /// hash-algorithm = "sha256"
+    /// ```
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hash_algorithm: Option<IndexHashAlgorithm>,
     /// An index-specific `exclude-newer` cutoff.
     ///
     /// Accepts the same date, timestamp, and duration values as the global `exclude-newer`
@@ -255,6 +271,14 @@ pub struct Index {
     pub exclude_newer: Option<ExcludeNewerOverride>,
 }
 
+#[derive(Debug, Error)]
+#[error("Failed to parse credentials in index URL: {url}")]
+pub struct IndexCredentialsError {
+    url: DisplaySafeUrl,
+    #[source]
+    source: CredentialsFromUrlError,
+}
+
 impl PartialEq for Index {
     fn eq(&self, other: &Self) -> bool {
         let Self {
@@ -268,6 +292,7 @@ impl PartialEq for Index {
             authenticate,
             ignore_error_codes,
             cache_control,
+            hash_algorithm,
             exclude_newer,
         } = self;
         *url == other.url
@@ -279,6 +304,7 @@ impl PartialEq for Index {
             && *authenticate == other.authenticate
             && *ignore_error_codes == other.ignore_error_codes
             && *cache_control == other.cache_control
+            && *hash_algorithm == other.hash_algorithm
             && *exclude_newer == other.exclude_newer
     }
 }
@@ -304,6 +330,7 @@ impl Ord for Index {
             authenticate,
             ignore_error_codes,
             cache_control,
+            hash_algorithm,
             exclude_newer,
         } = self;
         url.cmp(&other.url)
@@ -315,6 +342,7 @@ impl Ord for Index {
             .then_with(|| authenticate.cmp(&other.authenticate))
             .then_with(|| ignore_error_codes.cmp(&other.ignore_error_codes))
             .then_with(|| cache_control.cmp(&other.cache_control))
+            .then_with(|| hash_algorithm.cmp(&other.hash_algorithm))
             .then_with(|| exclude_newer.cmp(&other.exclude_newer))
     }
 }
@@ -332,6 +360,7 @@ impl std::hash::Hash for Index {
             authenticate,
             ignore_error_codes,
             cache_control,
+            hash_algorithm,
             exclude_newer,
         } = self;
         url.hash(state);
@@ -343,6 +372,7 @@ impl std::hash::Hash for Index {
         authenticate.hash(state);
         ignore_error_codes.hash(state);
         cache_control.hash(state);
+        hash_algorithm.hash(state);
         exclude_newer.hash(state);
     }
 }
@@ -370,6 +400,32 @@ pub enum IndexFormat {
     Flat,
 }
 
+/// A hash algorithm that can be required for distributions resolved from an index.
+#[derive(
+    Debug, Copy, Clone, Hash, Eq, PartialEq, Ord, PartialOrd, serde::Serialize, serde::Deserialize,
+)]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+#[serde(rename_all = "lowercase")]
+pub enum IndexHashAlgorithm {
+    Md5,
+    Sha256,
+    Sha384,
+    Sha512,
+    Blake2b,
+}
+
+impl From<IndexHashAlgorithm> for HashAlgorithm {
+    fn from(value: IndexHashAlgorithm) -> Self {
+        match value {
+            IndexHashAlgorithm::Md5 => Self::Md5,
+            IndexHashAlgorithm::Sha256 => Self::Sha256,
+            IndexHashAlgorithm::Sha384 => Self::Sha384,
+            IndexHashAlgorithm::Sha512 => Self::Sha512,
+            IndexHashAlgorithm::Blake2b => Self::Blake2b,
+        }
+    }
+}
+
 impl Index {
     /// Initialize an [`Index`] from a pip-style `--index-url`.
     pub fn from_index_url(url: IndexUrl) -> Self {
@@ -384,6 +440,7 @@ impl Index {
             authenticate: AuthPolicy::default(),
             ignore_error_codes: None,
             cache_control: None,
+            hash_algorithm: None,
             exclude_newer: None,
         }
     }
@@ -401,6 +458,7 @@ impl Index {
             authenticate: AuthPolicy::default(),
             ignore_error_codes: None,
             cache_control: None,
+            hash_algorithm: None,
             exclude_newer: None,
         }
     }
@@ -418,6 +476,7 @@ impl Index {
             authenticate: AuthPolicy::default(),
             ignore_error_codes: None,
             cache_control: None,
+            hash_algorithm: None,
             exclude_newer: None,
         }
     }
@@ -432,11 +491,6 @@ impl Index {
     /// Return the [`IndexUrl`] of the index.
     pub fn url(&self) -> &IndexUrl {
         &self.url
-    }
-
-    /// Consume the [`Index`] and return the [`IndexUrl`].
-    pub fn into_url(self) -> IndexUrl {
-        self.url
     }
 
     /// Return the raw [`Url`] of the index.
@@ -458,37 +512,58 @@ impl Index {
     /// are stripped from the stored URL.
     #[must_use]
     pub fn with_promoted_auth_policy(mut self) -> Self {
-        if matches!(self.authenticate, AuthPolicy::Auto) && self.credentials().is_some() {
+        if matches!(self.authenticate, AuthPolicy::Auto) && self.has_credentials() {
             self.authenticate = AuthPolicy::Always;
         }
         self
     }
 
+    /// Return whether credentials are configured for the index.
+    ///
+    /// This only checks for the presence of credentials. It intentionally avoids decoding URL
+    /// credentials, since this is used to preserve the authentication policy after credentials are
+    /// removed from the stored URL; parsing errors are reported when the credentials are retrieved.
+    fn has_credentials(&self) -> bool {
+        if self
+            .name
+            .as_ref()
+            .is_some_and(|name| Credentials::from_env(name.to_env_var()).is_some())
+        {
+            return true;
+        }
+
+        let url = self.url.url();
+        !url.username().is_empty() || url.password().is_some()
+    }
+
     /// Retrieve the credentials for the index, either from the environment, or from the URL itself.
-    pub fn credentials(&self) -> Option<Credentials> {
+    pub fn credentials(&self) -> Result<Option<Credentials>, IndexCredentialsError> {
         // If the index is named, and credentials are provided via the environment, prefer those.
         if let Some(name) = self.name.as_ref() {
             if let Some(credentials) = Credentials::from_env(name.to_env_var()) {
-                return Some(credentials);
+                return Ok(Some(credentials));
             }
         }
 
         // Otherwise, extract the credentials from the URL.
-        Credentials::from_url(self.url.url())
+        Credentials::from_url(self.url.url()).map_err(|source| IndexCredentialsError {
+            url: self.url.url().clone(),
+            source,
+        })
     }
 
     /// Resolve the index relative to the given root directory.
     pub fn relative_to(mut self, root_dir: &Path) -> Result<Self, IndexUrlError> {
-        if let IndexUrl::Path(ref url) = self.url {
-            if let Some(given) = url.given() {
-                self.url = IndexUrl::parse(given, Some(root_dir))?;
-            }
+        if let IndexUrl::Path(ref url) = self.url
+            && let Some(given) = url.given()
+        {
+            self.url = IndexUrl::parse(given, Some(root_dir))?;
         }
         Ok(self)
     }
 
     /// Return the [`IndexStatusCodeStrategy`] for this index.
-    pub fn status_code_strategy(&self) -> IndexStatusCodeStrategy {
+    pub(crate) fn status_code_strategy(&self) -> IndexStatusCodeStrategy {
         if let Some(ignore_error_codes) = &self.ignore_error_codes {
             IndexStatusCodeStrategy::from_ignored_error_codes(ignore_error_codes)
         } else {
@@ -496,8 +571,17 @@ impl Index {
         }
     }
 
+    /// Return whether the given status code is explicitly ignored for this index.
+    pub(crate) fn ignores_error_code(&self, status_code: StatusCode) -> bool {
+        self.ignore_error_codes.as_ref().is_some_and(|codes| {
+            codes
+                .iter()
+                .any(|ignored_status_code| **ignored_status_code == status_code)
+        })
+    }
+
     /// Return the cache control header for file requests to this index, if any.
-    pub fn artifact_cache_control(&self) -> Option<HeaderValue> {
+    pub(crate) fn artifact_cache_control(&self) -> Option<HeaderValue> {
         self.cache_control
             .as_ref()
             .and_then(|cache_control| cache_control.files.clone())
@@ -505,7 +589,7 @@ impl Index {
     }
 
     /// Return the cache control header for API requests to this index, if any.
-    pub fn simple_api_cache_control(&self) -> Option<HeaderValue> {
+    pub(crate) fn simple_api_cache_control(&self) -> Option<HeaderValue> {
         self.cache_control
             .as_ref()
             .and_then(|cache_control| cache_control.api.clone())
@@ -513,7 +597,7 @@ impl Index {
     }
 
     /// Return the `exclude-newer` setting for this index.
-    pub fn exclude_newer(&self) -> Option<&ExcludeNewerOverride> {
+    pub(crate) fn exclude_newer(&self) -> Option<&ExcludeNewerOverride> {
         self.exclude_newer.as_ref()
     }
 }
@@ -531,6 +615,7 @@ impl From<IndexUrl> for Index {
             authenticate: AuthPolicy::default(),
             ignore_error_codes: None,
             cache_control: None,
+            hash_algorithm: None,
             exclude_newer: None,
         }
     }
@@ -541,24 +626,25 @@ impl FromStr for Index {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         // Determine whether the source is prefixed with a name, as in `name=https://pypi.org/simple`.
-        if let Some((name, url)) = s.split_once('=') {
-            if !name.chars().any(|c| c == ':') {
-                let name = IndexName::from_str(name)?;
-                let url = IndexUrl::from_str(url)?;
-                return Ok(Self {
-                    name: Some(name),
-                    url,
-                    explicit: false,
-                    default: false,
-                    origin: None,
-                    format: IndexFormat::Simple,
-                    publish_url: None,
-                    authenticate: AuthPolicy::default(),
-                    ignore_error_codes: None,
-                    cache_control: None,
-                    exclude_newer: None,
-                });
-            }
+        if let Some((name, url)) = s.split_once('=')
+            && !name.chars().any(|c| c == ':')
+        {
+            let name = IndexName::from_str(name)?;
+            let url = IndexUrl::from_str(url)?;
+            return Ok(Self {
+                name: Some(name),
+                url,
+                explicit: false,
+                default: false,
+                origin: None,
+                format: IndexFormat::Simple,
+                publish_url: None,
+                authenticate: AuthPolicy::default(),
+                ignore_error_codes: None,
+                cache_control: None,
+                hash_algorithm: None,
+                exclude_newer: None,
+            });
         }
 
         // Otherwise, assume the source is a URL.
@@ -574,6 +660,7 @@ impl FromStr for Index {
             authenticate: AuthPolicy::default(),
             ignore_error_codes: None,
             cache_control: None,
+            hash_algorithm: None,
             exclude_newer: None,
         })
     }
@@ -589,12 +676,6 @@ pub struct IndexMetadata {
 }
 
 impl IndexMetadata {
-    /// Return a reference to the [`IndexMetadata`].
-    pub fn as_ref(&self) -> IndexMetadataRef<'_> {
-        let Self { url, format: kind } = self;
-        IndexMetadataRef { url, format: *kind }
-    }
-
     /// Consume the [`IndexMetadata`] and return the [`IndexUrl`].
     pub fn into_url(self) -> IndexUrl {
         self.url
@@ -614,13 +695,6 @@ impl IndexMetadata {
     /// Return the [`IndexUrl`] of the index.
     pub fn url(&self) -> &IndexUrl {
         &self.url
-    }
-}
-
-impl IndexMetadataRef<'_> {
-    /// Return the [`IndexUrl`] of the index.
-    pub fn url(&self) -> &IndexUrl {
-        self.url
     }
 }
 
@@ -680,6 +754,8 @@ struct IndexWire {
     #[serde(default)]
     cache_control: Option<IndexCacheControl>,
     #[serde(default)]
+    hash_algorithm: Option<IndexHashAlgorithm>,
+    #[serde(default)]
     exclude_newer: Option<ExcludeNewerOverride>,
 }
 
@@ -708,6 +784,7 @@ impl<'de> Deserialize<'de> for Index {
             authenticate: wire.authenticate,
             ignore_error_codes: wire.ignore_error_codes,
             cache_control: wire.cache_control,
+            hash_algorithm: wire.hash_algorithm,
             exclude_newer: wire.exclude_newer,
         })
     }

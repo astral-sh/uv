@@ -1,0 +1,22 @@
+name = "all-extras-required"
+description = "Multiple optional dependencies are requested for the package via an 'all' extra."
+
+[root]
+requires = ["a[all]"]
+
+[expected]
+satisfiable = true
+
+[expected.packages]
+a = "1.0.0"
+b = "1.0.0"
+c = "1.0.0"
+
+[packages.b.versions."1.0.0"]
+
+[packages.c.versions."1.0.0"]
+
+[packages.a.versions."1.0.0".extras]
+all = ["a[extra_b]", "a[extra_c]"]
+extra_b = ["b"]
+extra_c = ["c"]

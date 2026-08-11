@@ -1,0 +1,28 @@
+name = "fork-requires-python-patch-overlap"
+description = '''
+This tests that a `Requires-Python` specifier that includes a Python
+patch version will not result in excluded a dependency specification
+with a `python_version == '3.10'` marker.
+
+This is a regression test for the universal resolver where it would
+convert a `Requires-Python: >=3.10.1` specifier into a
+`python_version >= '3.10.1'` marker expression, which would be
+considered disjoint with `python_version == '3.10'`. Thus, the
+dependency `a` below was erroneously excluded. It should be included.
+'''
+
+[resolver_options]
+universal = true
+
+[expected]
+satisfiable = true
+
+[environment]
+python = "3.12"
+
+[root]
+requires_python = ">=3.10.1"
+requires = ["a==1.0.0 ; python_version == '3.10'"]
+
+[packages.a.versions."1.0.0"]
+requires_python = ">=3.10"

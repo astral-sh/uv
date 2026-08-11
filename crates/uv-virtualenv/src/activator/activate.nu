@@ -23,8 +23,9 @@
 # - Activate with `overlay use activate.nu`
 # - Deactivate with `deactivate`, as usual
 #
-# To customize the overlay name, you can call `overlay use activate.nu as foo`, but then simply `deactivate` won't work
-# because it is just an alias to hide the "activate" overlay. You'd need to call `overlay hide foo` manually.
+# To customize the overlay name, call `overlay use activate.nu as foo`, but then `deactivate` won't work -
+# you'd need to run `overlay hide foo` manually. Do not activate with `use activate.nu *`; that does not
+# create an overlay and deactivation will fail.
 
 module warning {
     export-env {
@@ -99,4 +100,5 @@ export-env {
 }
 
 export alias pydoc = python -m pydoc
+# If deactivate errors "not an active overlay": activate with `overlay use activate.nu` not `use activate.nu *`; for custom names use `overlay hide NAME`
 export alias deactivate = overlay hide activate

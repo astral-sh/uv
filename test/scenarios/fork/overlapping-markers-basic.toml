@@ -1,0 +1,48 @@
+name = "fork-overlapping-markers-basic"
+description = '''
+This scenario tests a very basic case of overlapping markers. Namely,
+it emulates a common pattern in the ecosystem where marker expressions
+are used to progressively increase the version constraints of a package
+as the Python version increases.
+
+In this case, there is actually a split occurring between
+`python_version < '3.13'` and the other marker expressions, so this
+isn't just a scenario with overlapping but non-disjoint markers.
+
+In particular, this serves as a regression test. uv used to create a
+lock file with a dependency on `a` with the following markers:
+
+    python_version < '3.13' or python_version >= '3.14'
+
+But this implies that `a` won't be installed for Python 3.13, which is
+clearly wrong.
+
+The issue was that uv was intersecting *all* marker expressions. So
+that `a>=1.1.0` and `a>=1.2.0` fork was getting `python_version >=
+'3.13' and python_version >= '3.14'`, which, of course, simplifies
+to `python_version >= '3.14'`. But this is wrong! It should be
+`python_version >= '3.13' or python_version >= '3.14'`, which of course
+simplifies to `python_version >= '3.13'`. And thus, the resulting forks
+are not just disjoint but complete in this case.
+
+Since there are no other constraints on `a`, this causes uv to select
+`1.2.0` unconditionally. (The marker expressions get normalized out
+entirely.)
+'''
+
+[resolver_options]
+universal = true
+
+[expected]
+satisfiable = true
+
+[root]
+requires = [
+  "a>=1.0.0 ; python_version < '3.13'",
+  "a>=1.1.0 ; python_version >= '3.13'",
+  "a>=1.2.0 ; python_version >= '3.14'",
+]
+
+[packages.a.versions."1.0.0"]
+[packages.a.versions."1.1.0"]
+[packages.a.versions."1.2.0"]

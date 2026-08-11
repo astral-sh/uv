@@ -1,76 +1,16 @@
-use std::{fmt::Display, sync::LazyLock};
-
 pub use error::Error;
-use regex::Regex;
+use regex::regex;
 pub use sync::*;
 use uv_static::EnvVars;
 
+pub mod dirhash;
 mod error;
 pub mod hash;
 pub mod stream;
 mod sync;
 mod vendor;
 
-static CONTROL_CHARACTERS_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"\p{C}").unwrap());
 static REPLACEMENT_CHARACTER: &str = "\u{FFFD}";
-
-/// Compression methods that we consider supported.
-///
-/// Our underlying ZIP dependencies may support more.
-pub(crate) enum CompressionMethod {
-    Stored,
-    Deflated,
-    Zstd,
-    // NOTE: This will become `Unsupported(...)` in the future.
-    Deprecated(&'static str),
-}
-
-impl CompressionMethod {
-    /// Returns `true` if this is a well-known compression method that we
-    /// expect other ZIP implementations to support.
-    pub(crate) fn is_well_known(&self) -> bool {
-        matches!(self, Self::Stored | Self::Deflated | Self::Zstd)
-    }
-}
-
-impl Display for CompressionMethod {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Stored => write!(f, "stored"),
-            Self::Deflated => write!(f, "DEFLATE"),
-            Self::Zstd => write!(f, "zstd"),
-            Self::Deprecated(name) => write!(f, "{name}"),
-        }
-    }
-}
-
-impl From<async_zip::Compression> for CompressionMethod {
-    fn from(value: async_zip::Compression) -> Self {
-        match value {
-            async_zip::Compression::Stored => Self::Stored,
-            async_zip::Compression::Deflate => Self::Deflated,
-            async_zip::Compression::Zstd => Self::Zstd,
-            async_zip::Compression::Bz => Self::Deprecated("bzip2"),
-            async_zip::Compression::Lzma => Self::Deprecated("lzma"),
-            async_zip::Compression::Xz => Self::Deprecated("xz"),
-            _ => Self::Deprecated("unknown"),
-        }
-    }
-}
-
-impl From<zip::CompressionMethod> for CompressionMethod {
-    fn from(value: zip::CompressionMethod) -> Self {
-        match value {
-            zip::CompressionMethod::Stored => Self::Stored,
-            zip::CompressionMethod::Deflated => Self::Deflated,
-            zip::CompressionMethod::Zstd => Self::Zstd,
-            zip::CompressionMethod::Bzip2 => Self::Deprecated("bzip2"),
-            zip::CompressionMethod::Lzma => Self::Deprecated("lzma"),
-            zip::CompressionMethod::Xz => Self::Deprecated("xz"),
-            _ => Self::Deprecated("unknown"),
-        }
-    }
-}
 
 /// Validate that a given filename (e.g. reported by a ZIP archive's
 /// local file entries or central directory entries) is "safe" to use.
@@ -91,7 +31,7 @@ pub(crate) fn validate_archive_member_name(name: &str) -> Result<(), Error> {
         return Err(Error::EmptyFilename);
     }
 
-    match CONTROL_CHARACTERS_RE.replace_all(name, REPLACEMENT_CHARACTER) {
+    match regex!(r"\p{C}").replace_all(name, REPLACEMENT_CHARACTER) {
         // No replacements mean no control characters.
         std::borrow::Cow::Borrowed(_) => Ok(()),
         std::borrow::Cow::Owned(sanitized) => Err(Error::UnacceptableFilename {

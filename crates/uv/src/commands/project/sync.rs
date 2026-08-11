@@ -1,17 +1,18 @@
 use std::fmt::Write;
 use std::ops::Deref;
 use std::path::Path;
-use std::sync::Arc;
 
 use anyhow::Result;
 use itertools::Itertools;
 use owo_colors::OwoColorize;
 use rustc_hash::FxHashSet;
 use serde::Serialize;
-use tracing::warn;
+use tracing::{trace, warn};
+use uv_audit::Dependency;
+use uv_audit::osv::{self, Filter};
 use uv_cache::Cache;
 use uv_cli::SyncFormat;
-use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
+use uv_client::{BaseClientBuilder, CachedClient, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
     Concurrency, Constraints, DependencyGroups, DependencyGroupsWithDefaults, DryRun, EditableMode,
     ExtrasSpecification, ExtrasSpecificationWithDefaults, HashCheckingMode, InstallOptions,
@@ -20,23 +21,29 @@ use uv_configuration::{
 use uv_dispatch::BuildDispatch;
 use uv_distribution::LoweredExtraBuildDependencies;
 use uv_distribution_types::{
-    DirectorySourceDist, Dist, Index, Name, Requirement, Resolution, ResolvedDist, SourceDist,
+    Dist, Index, IndexUrl, Name, Requirement, Resolution, ResolvedDist, SourceDist,
 };
 use uv_fs::{PortablePathBuf, Simplified};
 use uv_installer::{InstallationStrategy, SitePackages};
 use uv_normalize::{DefaultExtras, DefaultGroups, PackageName};
 use uv_pep508::{MarkerTree, VersionOrUrl};
 use uv_preview::{Preview, PreviewFeature};
-use uv_pypi_types::{ParsedArchiveUrl, ParsedGitUrl, ParsedUrl};
-use uv_python::{PythonDownloads, PythonEnvironment, PythonPreference, PythonRequest};
-use uv_resolver::{FlatIndex, ForkStrategy, Installable, Lock, PrereleaseMode, ResolutionMode};
+use uv_pypi_types::{ParsedArchiveUrl, ParsedGitDirectoryUrl, ParsedGitPathUrl, ParsedUrl};
+use uv_python::{
+    ConfigDiscovery, PythonDownloads, PythonEnvironment, PythonPreference, PythonRequest,
+};
+use uv_redacted::DisplaySafeUrl;
+use uv_resolver::{
+    FlatIndex, ForkStrategy, Installable, Lock, Prerelease, PythonReport, ResolutionMode,
+};
 use uv_scripts::Pep723Script;
-use uv_settings::PythonInstallMirrors;
+use uv_settings::{MalwareCheckSettings, PythonInstallMirrors};
 use uv_types::{BuildIsolation, HashStrategy, SourceTreeEditablePolicy};
-use uv_warnings::warn_user;
+use uv_warnings::{warn_user, warn_user_once};
 use uv_workspace::pyproject::Source;
 use uv_workspace::{DiscoveryOptions, MemberDiscovery, VirtualProject, Workspace, WorkspaceCache};
 
+use crate::commands::editable::apply_editable_mode;
 use crate::commands::pip::loggers::{DefaultInstallLogger, DefaultResolveLogger, InstallLogger};
 use crate::commands::pip::operations::{ChangedDist, Changelog, Modifications};
 use crate::commands::pip::resolution_markers;
@@ -45,11 +52,11 @@ use crate::commands::project::install_target::InstallTarget;
 use crate::commands::project::lock::{LockMode, LockOperation, LockResult};
 use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{
-    EnvironmentUpdate, PlatformState, ProjectEnvironment, ProjectError, ScriptEnvironment,
-    UniversalState, default_dependency_groups, detect_conflicts, script_extra_build_requires,
-    script_specification, update_environment,
+    EnvironmentUpdate, LinkErrorReporting, MalwareFindings, PlatformState, ProjectEnvironment,
+    ProjectError, ScriptEnvironment, UniversalState, default_dependency_groups, detect_conflicts,
+    script_extra_build_requires, script_specification, update_environment,
 };
-use crate::commands::{ExitStatus, diagnostics};
+use crate::commands::{ExitStatus, UvError, diagnostics};
 use crate::printer::Printer;
 use crate::settings::{
     FrozenSource, InstallerSettingsRef, LockCheck, LockCheckSource, ResolverInstallerSettings,
@@ -80,12 +87,13 @@ pub(crate) async fn sync(
     script: Option<Pep723Script>,
     installer_metadata: bool,
     concurrency: Concurrency,
-    no_config: bool,
+    config_discovery: ConfigDiscovery,
     cache: &Cache,
     workspace_cache: &WorkspaceCache,
     printer: Printer,
     preview: Preview,
     output_format: SyncFormat,
+    malware_settings: MalwareCheckSettings,
 ) -> Result<ExitStatus> {
     if preview.is_enabled(PreviewFeature::JsonOutput) && matches!(output_format, SyncFormat::Json) {
         warn_user!(
@@ -103,9 +111,10 @@ pub(crate) async fn sync(
             VirtualProject::discover(
                 project_dir,
                 &DiscoveryOptions {
-                    members: MemberDiscovery::None,
+                    members: MemberDiscovery::Existing,
                     ..DiscoveryOptions::default()
                 },
+                cache,
                 workspace_cache,
             )
             .await?
@@ -113,6 +122,7 @@ pub(crate) async fn sync(
             VirtualProject::discover_with_package(
                 project_dir,
                 &DiscoveryOptions::default(),
+                cache,
                 workspace_cache,
                 name.clone(),
             )
@@ -121,6 +131,7 @@ pub(crate) async fn sync(
             let project = VirtualProject::discover(
                 project_dir,
                 &DiscoveryOptions::default(),
+                cache,
                 workspace_cache,
             )
             .await?;
@@ -161,12 +172,12 @@ pub(crate) async fn sync(
                 python_preference,
                 python_downloads,
                 false,
-                no_config,
+                config_discovery,
                 active,
                 cache,
                 dry_run,
+                LinkErrorReporting::User,
                 printer,
-                preview,
             )
             .await?,
         ),
@@ -179,12 +190,11 @@ pub(crate) async fn sync(
                 python_downloads,
                 &install_mirrors,
                 false,
-                no_config,
+                config_discovery,
                 active,
                 cache,
                 dry_run,
                 printer,
-                preview,
             )
             .await?,
         ),
@@ -234,14 +244,20 @@ pub(crate) async fn sync(
             let spec = script_specification(
                 script.into(),
                 &settings.resolver,
+                cache,
+                workspace_cache,
                 client_builder.credentials_cache(),
-            )?
+            )
+            .await?
             .unwrap_or_default();
             let script_extra_build_requires = script_extra_build_requires(
                 script.into(),
                 &settings.resolver,
+                cache,
+                workspace_cache,
                 client_builder.credentials_cache(),
-            )?
+            )
+            .await?
             .into_inner();
 
             // Parse the build constraints from the script.
@@ -307,18 +323,14 @@ pub(crate) async fn sync(
                         output_format,
                         printer,
                     )?;
-                    return diagnostics::OperationDiagnostic::with_system_certs(
-                        client_builder.system_certs(),
-                    )
-                    .report(operations::Error::OutdatedEnvironment(changelog))
-                    .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+                    return diagnostics::OperationDiagnostic::default()
+                        .report(operations::Error::OutdatedEnvironment(changelog))
+                        .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
                 }
                 Err(ProjectError::Operation(err)) => {
-                    return diagnostics::OperationDiagnostic::with_system_certs(
-                        client_builder.system_certs(),
-                    )
-                    .report(err)
-                    .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+                    return diagnostics::OperationDiagnostic::default()
+                        .report(err)
+                        .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
                 }
                 Err(err) => return Err(err.into()),
             }
@@ -363,26 +375,20 @@ pub(crate) async fn sync(
     {
         Ok(result) => Outcome::Success(result),
         Err(ProjectError::Operation(err)) => {
-            return diagnostics::OperationDiagnostic::with_system_certs(
-                client_builder.system_certs(),
-            )
-            .report(err)
-            .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+            return diagnostics::OperationDiagnostic::default()
+                .report(err)
+                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
         }
+        Err(err @ ProjectError::LockFormat(..)) => return Err(UvError::user(err).into()),
         Err(ProjectError::LockMismatch(prev, cur, lock_source)) => {
             if dry_run.enabled() {
                 // The lockfile is mismatched, but we're in dry-run mode. We should proceed with the
                 // sync operation, but exit with a non-zero status.
                 Outcome::LockMismatch(prev, cur, lock_source)
             } else {
-                writeln!(
-                    printer.stderr(),
-                    "{}",
-                    ProjectError::LockMismatch(prev, cur, lock_source)
-                        .to_string()
-                        .bold()
-                )?;
-                return Ok(ExitStatus::Failure);
+                return Err(
+                    UvError::user(ProjectError::LockMismatch(prev, cur, lock_source)).into(),
+                );
             }
         }
         Err(err) => return Err(err.into()),
@@ -436,6 +442,7 @@ pub(crate) async fn sync(
         dry_run,
         printer,
         preview,
+        &malware_settings,
     )
     .await
     {
@@ -450,18 +457,14 @@ pub(crate) async fn sync(
                 output_format,
                 printer,
             )?;
-            return diagnostics::OperationDiagnostic::with_system_certs(
-                client_builder.system_certs(),
-            )
-            .report(operations::Error::OutdatedEnvironment(changelog))
-            .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+            return diagnostics::OperationDiagnostic::default()
+                .report(operations::Error::OutdatedEnvironment(changelog))
+                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
         }
         Err(ProjectError::Operation(err)) => {
-            return diagnostics::OperationDiagnostic::with_system_certs(
-                client_builder.system_certs(),
-            )
-            .report(err)
-            .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+            return diagnostics::OperationDiagnostic::default()
+                .report(err)
+                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
         }
         Err(err) => return Err(err.into()),
     };
@@ -479,14 +482,7 @@ pub(crate) async fn sync(
     match outcome {
         Outcome::Success(..) => Ok(ExitStatus::Success),
         Outcome::LockMismatch(prev, cur, lock_source) => {
-            writeln!(
-                printer.stderr(),
-                "{}",
-                ProjectError::LockMismatch(prev, cur, lock_source)
-                    .to_string()
-                    .bold()
-            )?;
-            Ok(ExitStatus::Failure)
+            Err(UvError::user(ProjectError::LockMismatch(prev, cur, lock_source)).into())
         }
     }
 }
@@ -520,59 +516,69 @@ fn identify_installation_target<'a>(
     all_packages: bool,
     package: &'a [PackageName],
 ) -> InstallTarget<'a> {
-    match &target {
+    match target {
         SyncTarget::Project(project) => {
-            match &project {
-                VirtualProject::Project(project) => {
-                    if all_packages {
-                        InstallTarget::Workspace {
-                            workspace: project.workspace(),
-                            lock,
-                        }
-                    } else {
-                        match package {
-                            // By default, install the root project.
-                            [] => InstallTarget::Project {
-                                workspace: project.workspace(),
-                                name: project.project_name(),
-                                lock,
-                            },
-                            [name] => InstallTarget::Project {
-                                workspace: project.workspace(),
-                                name,
-                                lock,
-                            },
-                            names => InstallTarget::Projects {
-                                workspace: project.workspace(),
-                                names,
-                                lock,
-                            },
-                        }
-                    }
+            identify_project_installation_target(project, lock, all_packages, package)
+        }
+        SyncTarget::Script(script) => InstallTarget::Script { script, lock },
+    }
+}
+
+/// Select workspace members with the same semantics as `uv sync`.
+pub(crate) fn identify_project_installation_target<'a>(
+    project: &'a VirtualProject,
+    lock: &'a Lock,
+    all_packages: bool,
+    package: &'a [PackageName],
+) -> InstallTarget<'a> {
+    match project {
+        VirtualProject::Project(project) => {
+            if all_packages {
+                InstallTarget::Workspace {
+                    workspace: project.workspace(),
+                    lock,
                 }
-                VirtualProject::NonProject(workspace) => {
-                    if all_packages {
-                        InstallTarget::NonProjectWorkspace { workspace, lock }
-                    } else {
-                        match package {
-                            // By default, install the entire workspace.
-                            [] => InstallTarget::NonProjectWorkspace { workspace, lock },
-                            [name] => InstallTarget::Project {
-                                workspace,
-                                name,
-                                lock,
-                            },
-                            names => InstallTarget::Projects {
-                                workspace,
-                                names,
-                                lock,
-                            },
-                        }
-                    }
+            } else {
+                match package {
+                    // By default, install the current project.
+                    [] => InstallTarget::Project {
+                        workspace: project.workspace(),
+                        name: project.project_name(),
+                        lock,
+                    },
+                    [name] => InstallTarget::Project {
+                        workspace: project.workspace(),
+                        name,
+                        lock,
+                    },
+                    names => InstallTarget::Projects {
+                        workspace: project.workspace(),
+                        names,
+                        lock,
+                    },
                 }
             }
         }
-        SyncTarget::Script(script) => InstallTarget::Script { script, lock },
+        VirtualProject::NonProject(workspace) => {
+            if all_packages {
+                InstallTarget::NonProjectWorkspace { workspace, lock }
+            } else {
+                match package {
+                    // By default, install the entire virtual workspace.
+                    [] => InstallTarget::NonProjectWorkspace { workspace, lock },
+                    [name] => InstallTarget::Project {
+                        workspace,
+                        name,
+                        lock,
+                    },
+                    names => InstallTarget::Projects {
+                        workspace,
+                        names,
+                        lock,
+                    },
+                }
+            }
+        }
     }
 }
 
@@ -630,7 +636,7 @@ impl Deref for SyncEnvironment {
 }
 
 /// Sync a lockfile with an environment.
-pub(super) async fn do_sync(
+pub(crate) async fn do_sync<'a>(
     target: InstallTarget<'_>,
     venv: &PythonEnvironment,
     extras: &ExtrasSpecificationWithDefaults,
@@ -650,7 +656,10 @@ pub(super) async fn do_sync(
     dry_run: DryRun,
     printer: Printer,
     preview: Preview,
+    malware_settings: impl Into<MalwareCheckContext<'a>>,
 ) -> Result<Changelog, ProjectError> {
+    let malware_context = malware_settings.into();
+
     // Extract the project settings.
     let InstallerSettingsRef {
         index_locations,
@@ -681,8 +690,11 @@ pub(super) async fn do_sync(
                 workspace,
                 index_locations,
                 &sources,
+                cache,
+                workspace_cache,
                 client_builder.credentials_cache(),
-            )?
+            )
+            .await?
         }
         InstallTarget::Script { script, .. } => {
             // Try to get extra build dependencies from the script metadata
@@ -700,22 +712,30 @@ pub(super) async fn do_sync(
                 build_isolation: build_isolation.clone(),
                 extra_build_dependencies: extra_build_dependencies.clone(),
                 extra_build_variables: extra_build_variables.clone(),
-                prerelease: PrereleaseMode::default(),
+                prerelease: Prerelease::default(),
                 resolution: ResolutionMode::default(),
                 sources: sources.clone(),
                 torch_backend: None,
+                cuda_driver_version: None,
+                amd_gpu_architecture: None,
                 upgrade: Upgrade::default(),
             };
             script_extra_build_requires(
                 (*script).into(),
                 &resolver_settings,
+                cache,
+                workspace_cache,
                 client_builder.credentials_cache(),
-            )?
+            )
+            .await?
         }
     }
     .into_inner();
 
     let client_builder = client_builder.clone().keyring(keyring_provider);
+    // Save an authenticated builder for the malware check before moving the
+    // primary builder into the registry client below.
+    let malware_check_client_builder = client_builder.clone();
 
     // Validate that the Python version is supported by the lockfile.
     if !target
@@ -785,8 +805,54 @@ pub(super) async fn do_sync(
     // Constrain any build requirements marked as `match-runtime = true`.
     let extra_build_requires = extra_build_requires.match_runtime(&resolution)?;
 
+    // Extract the hashes from the lockfile.
+    let hasher = HashStrategy::from_resolution(&resolution, HashCheckingMode::Verify)?;
+
     // Populate credentials from the target.
-    store_credentials_from_target(target, &client_builder);
+    store_credentials_from_target(target, &client_builder)?;
+
+    let bytecode_compilation = compile_bytecode.then_some(operations::BytecodeCompilation::All);
+    let site_packages = SitePackages::from_environment(venv)?;
+    let installation_plan = operations::InstallationPlan::build(
+        &resolution,
+        site_packages,
+        InstallationStrategy::Strict,
+        reinstall,
+        build_options,
+        &hasher,
+        index_locations,
+        config_setting,
+        config_settings_package,
+        &extra_build_requires,
+        extra_build_variables,
+        cache,
+        venv,
+        &tags,
+    )?;
+
+    // Avoid constructing an HTTP client and build dispatch when planning shows that there is no
+    // installation work to perform.
+    if installation_plan.is_noop(modifications, bytecode_compilation, dry_run) {
+        maybe_check_malware(
+            &target,
+            &resolution,
+            &malware_check_client_builder,
+            concurrency,
+            cache,
+            preview,
+            &malware_context,
+        )
+        .await?;
+
+        return Ok(installation_plan.finish_noop(
+            &resolution,
+            modifications,
+            bytecode_compilation,
+            logger.as_ref(),
+            dry_run,
+            printer,
+        )?);
+    }
 
     // Initialize the registry client.
     let client = RegistryClientBuilder::new(client_builder, cache.clone())
@@ -811,9 +877,6 @@ pub(super) async fn do_sync(
     // TODO(charlie): These are all default values. We should consider whether we want to make them
     // optional on the downstream APIs.
     let build_hasher = HashStrategy::default();
-
-    // Extract the hashes from the lockfile.
-    let hasher = HashStrategy::from_resolution(&resolution, HashCheckingMode::Verify)?;
 
     // Resolve the flat indexes from `--find-links`.
     let flat_index = {
@@ -851,98 +914,256 @@ pub(super) async fn do_sync(
         preview,
     );
 
-    let site_packages = SitePackages::from_environment(venv)?;
-
-    // Sync the environment.
-    let changelog = operations::install(
+    // Run a malware check against OSV before installing.
+    maybe_check_malware(
+        &target,
         &resolution,
-        site_packages,
-        InstallationStrategy::Strict,
-        modifications,
-        reinstall,
-        build_options,
-        link_mode,
-        compile_bytecode,
-        &hasher,
-        &tags,
-        &client,
-        state.in_flight(),
+        &malware_check_client_builder,
         concurrency,
-        &build_dispatch,
         cache,
-        venv,
-        logger,
-        installer_metadata,
-        dry_run,
-        printer,
         preview,
+        &malware_context,
     )
     .await?;
+
+    // Sync the environment.
+    let changelog = installation_plan
+        .execute(
+            &resolution,
+            modifications,
+            build_options,
+            link_mode,
+            bytecode_compilation,
+            &hasher,
+            &tags,
+            &client,
+            state.in_flight(),
+            concurrency,
+            &build_dispatch,
+            cache,
+            venv,
+            logger,
+            installer_metadata,
+            dry_run,
+            printer,
+            preview,
+        )
+        .await?;
 
     Ok(changelog)
 }
 
-/// If necessary, convert any editable requirements to non-editable.
-fn apply_editable_mode(resolution: Resolution, editable: Option<EditableMode>) -> Resolution {
-    match editable {
-        // No modifications are necessary for editable mode; retain any editable distributions.
-        None => resolution,
+/// Carries dependencies checked during a locked-tool preflight into a following project sync.
+///
+/// The locked tool and project resolutions can overlap, so the later sync skips dependencies that
+/// were already checked instead of querying OSV twice.
+pub(crate) struct MalwareCheckContext<'a> {
+    settings: &'a MalwareCheckSettings,
+    checked_dependencies: FxHashSet<Dependency>,
+}
 
-        // Filter out any non-editable distributions.
-        Some(EditableMode::Editable) => resolution.map(|dist| {
-            let ResolvedDist::Installable { dist, version } = dist else {
-                return None;
-            };
-            let Dist::Source(SourceDist::Directory(DirectorySourceDist {
-                name,
-                install_path,
-                editable: None | Some(false),
-                r#virtual,
-                url,
-            })) = dist.as_ref()
-            else {
-                return None;
-            };
+impl MalwareCheckContext<'_> {
+    pub(super) fn record_resolution(&mut self, resolution: &Resolution) {
+        if self.settings.enabled {
+            self.checked_dependencies
+                .extend(malware_dependencies_from_resolution(resolution));
+        }
+    }
+}
 
-            Some(ResolvedDist::Installable {
-                dist: Arc::new(Dist::Source(SourceDist::Directory(DirectorySourceDist {
-                    name: name.clone(),
-                    install_path: install_path.clone(),
-                    editable: Some(true),
-                    r#virtual: *r#virtual,
-                    url: url.clone(),
-                }))),
-                version: version.clone(),
-            })
-        }),
+impl<'a> From<&'a MalwareCheckSettings> for MalwareCheckContext<'a> {
+    fn from(settings: &'a MalwareCheckSettings) -> Self {
+        Self {
+            settings,
+            checked_dependencies: FxHashSet::default(),
+        }
+    }
+}
 
-        // If a package is editable, map it to a non-editable distribution.
-        Some(EditableMode::NonEditable) => resolution.map(|dist| {
-            let ResolvedDist::Installable { dist, version } = dist else {
-                return None;
-            };
-            let Dist::Source(SourceDist::Directory(DirectorySourceDist {
-                name,
-                install_path,
-                editable: None | Some(true),
-                r#virtual,
-                url,
-            })) = dist.as_ref()
-            else {
-                return None;
-            };
+/// Run a malware check against OSV before reusing or materializing a locked [`Resolution`].
+pub(super) async fn check_resolution_malware(
+    resolution: &Resolution,
+    client_builder: &BaseClientBuilder<'_>,
+    concurrency: &Concurrency,
+    malware_settings: &MalwareCheckSettings,
+    cache: &Cache,
+    preview: Preview,
+) -> Result<(), ProjectError> {
+    if !malware_settings.enabled {
+        return Ok(());
+    }
+    warn_malware_check_preview(preview);
 
-            Some(ResolvedDist::Installable {
-                dist: Arc::new(Dist::Source(SourceDist::Directory(DirectorySourceDist {
-                    name: name.clone(),
-                    install_path: install_path.clone(),
-                    editable: Some(false),
-                    r#virtual: *r#virtual,
-                    url: url.clone(),
-                }))),
-                version: version.clone(),
-            })
-        }),
+    let dependencies = malware_dependencies_from_resolution(resolution);
+    let installed_dependencies = dependencies.iter().cloned().collect();
+
+    check_malware_dependencies(
+        &dependencies,
+        &installed_dependencies,
+        client_builder,
+        concurrency,
+        malware_settings.malware_check_url.clone(),
+        cache,
+    )
+    .await
+}
+
+fn malware_dependencies_from_resolution(resolution: &Resolution) -> Vec<Dependency> {
+    resolution
+        .distributions()
+        .filter(|dist| matches!(dist.index(), Some(IndexUrl::Pypi(_))))
+        .filter_map(|dist| {
+            dist.version()
+                .map(|version| Dependency::new(dist.name().clone(), version.clone()))
+        })
+        .collect()
+}
+
+fn warn_malware_check_preview(preview: Preview) {
+    if !preview.is_enabled(PreviewFeature::MalwareCheck) {
+        warn_user_once!(
+            "Malware checks are experimental and may change without warning. Pass `--preview-features {}` to disable this warning.",
+            PreviewFeature::MalwareCheck
+        );
+    }
+}
+
+/// Run a malware check against OSV if malware checking is enabled.
+async fn maybe_check_malware(
+    target: &InstallTarget<'_>,
+    resolution: &Resolution,
+    client_builder: &BaseClientBuilder<'_>,
+    concurrency: &Concurrency,
+    cache: &Cache,
+    preview: Preview,
+    malware_context: &MalwareCheckContext<'_>,
+) -> Result<(), ProjectError> {
+    if !malware_context.settings.enabled {
+        return Ok(());
+    }
+
+    warn_malware_check_preview(preview);
+    check_malware(
+        target,
+        resolution,
+        &malware_context.checked_dependencies,
+        client_builder,
+        concurrency,
+        malware_context.settings.malware_check_url.clone(),
+        cache,
+    )
+    .await
+}
+
+/// Run a malware check against OSV before installing dependencies.
+///
+/// This queries the OSV batch endpoint with [`Filter::Malware`] to detect only `MAL-`-prefixed
+/// advisories. All lockfile malware findings are emitted as warnings, but installation is only
+/// aborted if malware is found in a dependency that would actually be installed.
+async fn check_malware(
+    target: &InstallTarget<'_>,
+    resolution: &Resolution,
+    checked_dependencies: &FxHashSet<Dependency>,
+    client_builder: &BaseClientBuilder<'_>,
+    concurrency: &Concurrency,
+    malware_check_url: Option<DisplaySafeUrl>,
+    cache: &Cache,
+) -> Result<(), ProjectError> {
+    let installed_dependencies: FxHashSet<_> = resolution
+        .distributions()
+        .filter_map(|dist| {
+            dist.version()
+                .map(|version| Dependency::new(dist.name().clone(), version.clone()))
+        })
+        .collect();
+
+    let all_extras = ExtrasSpecification::from_all_extras().with_defaults(DefaultExtras::All);
+    let all_groups = DependencyGroups::from_args(None, vec![], vec![], false, vec![], true)
+        .with_defaults(DefaultGroups::All);
+
+    // NOTE: For now, we only check locked packages that indicate a source from
+    // PyPI. The rationale behind this is that private (i.e. non-PyPI) packages
+    // are almost certainly not going to be included in the OSV DB, and scanning
+    // for them against a remote service is both wasteful and arguably a small
+    // information leak (of potentially private package names).
+    // This effectively excludes public packages that are mirrored onto private
+    // indices, which is a tradeoff we'll need to reconsider.
+    let auditable = target.lock().auditable(
+        &all_extras,
+        &all_groups,
+        uv_resolver::Package::is_from_pypi_registry,
+    );
+    if auditable.is_empty() {
+        return Ok(());
+    }
+
+    let dependencies: Vec<Dependency> = auditable
+        .packages()
+        .map(|(name, version)| Dependency::new((*name).clone(), (*version).clone()))
+        .filter(|dependency| !checked_dependencies.contains(dependency))
+        .collect();
+
+    check_malware_dependencies(
+        &dependencies,
+        &installed_dependencies,
+        client_builder,
+        concurrency,
+        malware_check_url,
+        cache,
+    )
+    .await
+}
+
+async fn check_malware_dependencies(
+    dependencies: &[Dependency],
+    installed_dependencies: &FxHashSet<Dependency>,
+    client_builder: &BaseClientBuilder<'_>,
+    concurrency: &Concurrency,
+    malware_check_url: Option<DisplaySafeUrl>,
+    cache: &Cache,
+) -> Result<(), ProjectError> {
+    let osv_url = malware_check_url.unwrap_or_else(|| osv::API_BASE.clone());
+
+    let base_client = client_builder.build()?;
+    let client = CachedClient::new(base_client);
+    let service = osv::Osv::new(client, Some(osv_url), concurrency.clone(), cache.clone());
+
+    trace!(
+        "Running malware check for {} locked dependencies",
+        dependencies.len()
+    );
+
+    // NOTE: For now, we produce a hard failure if the OSV request fails.
+    // In the future we may want to relax this to a warning, but a hard failure
+    // seems fine while we're in preview since it'll help us shake out
+    // any reliability risks with OSV.
+    let identifiers = service
+        .query_identifiers(dependencies, Filter::Malware)
+        .await?;
+
+    let malware_findings: Vec<_> = identifiers
+        .into_iter()
+        .filter(|(_, vuln_ids)| !vuln_ids.is_empty())
+        .map(|(dependency, vuln_ids)| (dependency.clone(), vuln_ids.into_iter().collect()))
+        .collect();
+
+    if malware_findings.is_empty() {
+        Ok(())
+    } else {
+        warn_user!(
+            "Malware detected in locked dependencies:\n{}",
+            MalwareFindings(malware_findings.clone())
+        );
+
+        let has_installed_malware = malware_findings
+            .iter()
+            .any(|(dependency, _)| installed_dependencies.contains(dependency));
+
+        if has_installed_malware {
+            Err(ProjectError::MalwareFound)
+        } else {
+            Ok(())
+        }
     }
 }
 
@@ -971,10 +1192,13 @@ fn apply_no_virtual_project(resolution: Resolution) -> Resolution {
 ///
 /// These credentials can come from any of `tool.uv.sources`, `tool.uv.dev-dependencies`,
 /// `project.dependencies`, and `project.optional-dependencies`.
-fn store_credentials_from_target(target: InstallTarget<'_>, client_builder: &BaseClientBuilder) {
+pub(super) fn store_credentials_from_target(
+    target: InstallTarget<'_>,
+    client_builder: &BaseClientBuilder,
+) -> Result<()> {
     // Iterate over any indexes in the target.
     for index in target.indexes() {
-        if let Some(credentials) = index.credentials() {
+        if let Some(credentials) = index.credentials()? {
             if let Some(root_url) = index.root_url() {
                 client_builder.store_credentials(&root_url, credentials.clone());
             }
@@ -986,10 +1210,10 @@ fn store_credentials_from_target(target: InstallTarget<'_>, client_builder: &Bas
     for source in target.sources() {
         match source {
             Source::Git { git, .. } => {
-                uv_git::store_credentials_from_url(git);
+                uv_git::store_credentials_from_url(git)?;
             }
             Source::Url { url, .. } => {
-                client_builder.store_credentials_from_url(url);
+                client_builder.store_credentials_from_url(url)?;
             }
             _ => {}
         }
@@ -1001,15 +1225,17 @@ fn store_credentials_from_target(target: InstallTarget<'_>, client_builder: &Bas
             continue;
         };
         match &url.parsed_url {
-            ParsedUrl::Git(ParsedGitUrl { url, .. }) => {
-                uv_git::store_credentials_from_url(url.url());
+            ParsedUrl::GitDirectory(ParsedGitDirectoryUrl { url, .. })
+            | ParsedUrl::GitPath(ParsedGitPathUrl { url, .. }) => {
+                uv_git::store_credentials_from_url(url.url())?;
             }
             ParsedUrl::Archive(ParsedArchiveUrl { url, .. }) => {
-                client_builder.store_credentials_from_url(url);
+                client_builder.store_credentials_from_url(url)?;
             }
             _ => {}
         }
     }
+    Ok(())
 }
 
 #[derive(Debug, Serialize)]
@@ -1207,32 +1433,6 @@ impl LockAction {
 }
 
 #[derive(Serialize, Debug)]
-struct PythonReport {
-    path: PortablePathBuf,
-    version: uv_pep508::StringVersion,
-    implementation: String,
-}
-
-impl From<&uv_python::Interpreter> for PythonReport {
-    fn from(interpreter: &uv_python::Interpreter) -> Self {
-        Self {
-            path: interpreter.sys_executable().into(),
-            version: interpreter.python_full_version().clone(),
-            implementation: interpreter.implementation_name().to_string(),
-        }
-    }
-}
-
-impl PythonReport {
-    /// Set the path for this Python report.
-    #[must_use]
-    fn with_path(mut self, path: PortablePathBuf) -> Self {
-        self.path = path;
-        self
-    }
-}
-
-#[derive(Serialize, Debug)]
 struct EnvironmentReport {
     /// The path to the environment.
     path: PortablePathBuf,
@@ -1266,8 +1466,7 @@ impl EnvironmentReport {
     /// Set the path for this environment report.
     #[must_use]
     fn with_path(mut self, path: PortablePathBuf) -> Self {
-        let python_path = &self.python.path;
-        if let Ok(python_path) = python_path.as_ref().strip_prefix(self.path) {
+        if let Ok(python_path) = self.python.path().strip_prefix(self.path) {
             let new_path = path.as_ref().to_path_buf().join(python_path);
             self.python = self.python.with_path(new_path.as_path().into());
         }

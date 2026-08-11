@@ -309,6 +309,34 @@ pub enum ExcludeNewerOverride {
     Enabled(Box<ExcludeNewerValue>),
 }
 
+impl ExcludeNewerOverride {
+    /// Return the configured cutoff, or `None` if `exclude-newer` is disabled.
+    pub fn into_value(self) -> Option<ExcludeNewerValue> {
+        match self {
+            Self::Disabled => None,
+            Self::Enabled(value) => Some(*value),
+        }
+    }
+}
+
+impl From<ExcludeNewerValue> for ExcludeNewerOverride {
+    fn from(value: ExcludeNewerValue) -> Self {
+        Self::Enabled(Box::new(value))
+    }
+}
+
+impl FromStr for ExcludeNewerOverride {
+    type Err = String;
+
+    fn from_str(input: &str) -> Result<Self, Self::Err> {
+        if input == "false" {
+            Ok(Self::Disabled)
+        } else {
+            ExcludeNewerValue::from_str(input).map(Self::from)
+        }
+    }
+}
+
 #[cfg(feature = "schemars")]
 impl schemars::JsonSchema for ExcludeNewerOverride {
     fn schema_name() -> Cow<'static, str> {
@@ -351,8 +379,8 @@ impl<'de> serde::Deserialize<'de> for ExcludeNewerOverride {
                 E: serde::de::Error,
             {
                 ExcludeNewerValue::from_str(v)
-                    .map(|ts| ExcludeNewerOverride::Enabled(Box::new(ts)))
-                    .map_err(|e| E::custom(format!("failed to parse exclude-newer value: {e}")))
+                    .map(ExcludeNewerOverride::from)
+                    .map_err(E::custom)
             }
 
             fn visit_bool<E>(self, v: bool) -> Result<Self::Value, E>

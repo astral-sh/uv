@@ -50,7 +50,7 @@ pub enum RequirementsTxtRequirement {
 impl RequirementsTxtRequirement {
     /// Set the source file containing the requirement.
     #[must_use]
-    pub fn with_origin(self, origin: RequirementOrigin) -> Self {
+    pub(crate) fn with_origin(self, origin: RequirementOrigin) -> Self {
         match self {
             Self::Named(requirement) => Self::Named(requirement.with_origin(origin)),
             Self::Unnamed(requirement) => Self::Unnamed(requirement.with_origin(origin)),
@@ -82,7 +82,10 @@ impl RequirementsTxtRequirement {
                     ParsedUrl::Archive(_) => {
                         return Err(EditableError::Https(requirement.name, url.to_string()));
                     }
-                    ParsedUrl::Git(_) => {
+                    ParsedUrl::GitDirectory(_) => {
+                        return Err(EditableError::Git(requirement.name, url.to_string()));
+                    }
+                    ParsedUrl::GitPath(_) => {
                         return Err(EditableError::Git(requirement.name, url.to_string()));
                     }
                 };
@@ -107,7 +110,10 @@ impl RequirementsTxtRequirement {
                     ParsedUrl::Archive(_) => {
                         return Err(EditableError::UnnamedHttps(requirement.to_string()));
                     }
-                    ParsedUrl::Git(_) => {
+                    ParsedUrl::GitDirectory(_) => {
+                        return Err(EditableError::UnnamedGit(requirement.to_string()));
+                    }
+                    ParsedUrl::GitPath(_) => {
                         return Err(EditableError::UnnamedGit(requirement.to_string()));
                     }
                 };

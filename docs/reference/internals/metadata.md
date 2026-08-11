@@ -1,8 +1,9 @@
 # Workspace metadata
 
-`uv workspace metadata` exports the information uv has about your workspace as JSON so other tools
-can use it. In particular, if you want access to the information in a `uv.lock`, you should prefer
-this command's output, as `uv.lock` is not a stable format we guarantee anything about.
+`uv workspace metadata` exports the information uv has about your workspace or PEP 723 script as
+JSON so other tools can use it. In particular, if you want access to the information in a `uv.lock`
+or script lockfile, you should prefer this command's output, as lockfiles are not a stable format we
+guarantee anything about. Pass `--script path/to/script.py` to request metadata for a script.
 
 The primary structure is the "resolution" field which contains the dependency graph with exact
 package versions that a `uv.lock` encodes.
@@ -14,16 +15,21 @@ for the node it refers to, and an optional `marker` that
 [specifies on what platforms the dependency is required](https://packaging.python.org/en/latest/specifications/dependency-specifiers/#dependency-specifiers)
 (if there is no marker the dependency is always required).
 
-Nodes in the graph are uniquely identified by package `name`, `version`, `source`, and `kind`.
+Package-derived nodes in the graph are uniquely identified by package `name`, `version`, `source`,
+and `kind`. Script and workspace nodes are identified by their path. Workspace-root dependency group
+nodes are identified by their group name and the workspace path. All node ids should be treated as
+opaque.
 
-There are 3 kinds of node in the graph:
+There are 5 kinds of node in the graph:
 
+- `"script"` -- a PEP 723 script and its direct dependencies
+- `"workspace"` -- a workspace root and its workspace-exclusive dependency groups
 - `"package"` -- the package itself
 - `{ "extra": "extraname" }` -- an extra the package defines
-- `{ "group": "groupname" }` -- a dependency group the package defines
+- `{ "group": "groupname" }` -- a dependency group a package or workspace root defines
 
 (In the future we will add "build" nodes for the dependencies of
-[build environments](https://docs.astral.sh/uv/concepts/projects/config/#build-isolation).)
+[build environments](../../concepts/projects/config.md#build-isolation).)
 
 If you want to install `mypackage`, find its `"kind": "package"` node. This node will also include
 information on its sdist, its wheels, its extras (`optional_dependencies`), and dependency groups
@@ -37,6 +43,9 @@ If you want to install the dependency group `mypackage:mygroup` then find the no
 `"kind": { "group": "mygroup" }` for `mypackage` (this node will _not_ depend on `mypackage`, as
 dependency groups are just lists of things you might want when working on the package itself).
 
+If the workspace root defines dependency groups but is not itself a package, its `"workspace"` node
+provides the corresponding group node ids through `dependency_groups`.
+
 ## Handling multiple versions of a package
 
 Two versions of a package cannot be installed into a python environment, but the dependency graph
@@ -47,15 +56,15 @@ The first way is for
 to have conflicting requirements that force different versions of a package to be used.
 
 The second way is when a workspace has
-[conflicts](https://docs.astral.sh/uv/concepts/resolution/#conflicting-dependencies), implying some
-workspace members or their extras are mutually exclusive, and only one of them can be installed at a
-time. Information about conflicts can be found in the top-level `conflicts` field.
+[conflicts](../../concepts/resolution.md#conflicting-dependencies), implying some workspace members
+or their extras are mutually exclusive, and only one of them can be installed at a time. Information
+about conflicts can be found in the top-level `conflicts` field.
 
 The specific guarantee we provide is that **for any concrete choice of
 [markers](https://packaging.python.org/en/latest/specifications/dependency-specifiers/#dependency-specifiers),
 if you select a set of packages to install that has no
-[conflicts](https://docs.astral.sh/uv/concepts/resolution/#conflicting-dependencies), then the
-resulting set of packages to install will not have multiple versions of a package**.
+[conflicts](../../concepts/resolution.md#conflicting-dependencies), then the resulting set of
+packages to install will not have multiple versions of a package**.
 
 If you just want to get "every version of pydantic this workspace uses" you're free to iterate
 through the list of nodes and collect up every instance. If however you want to specifically analyze
@@ -63,15 +72,16 @@ the graph and get actual resolutions you will likely need to consult `conflicts`
 understand how to resolve `markers` for a specific platform.
 
 The best way to avoid mistakes when working with multiple versions of a package is to keep your
-queries into the dependency graph rooted in operations on workspace members, as those are the
-natural entry-points to the graph that uv wants to work on, and can give coherent responses for:
-"install `member1` and `member2[extra]`".
+queries into the dependency graph rooted in operations on the workspace root, workspace members, or
+the requested script. These are the natural entry-points to the graph and can give coherent
+responses for operations such as "install the workspace `dev` group", "install `member1` and
+`member2[extra]`", or "install this script's declared dependencies".
 
 Another way to put this is that when possible _you should avoid iterating over the `resolution`
 object to find a node_. Only access `resolution` like a map using ids that were provided by another
-part of the metadata. The only ids this initially gives you access to are the ones listed in the
-`members` array, which lists all the workspace members. From there you may find the ids of that
-package's dependencies, extras, and dependency groups and recursively discover other packages.
+part of the metadata. For a workspace, the workspace root is `workspace.id` and package entry points
+are listed in the `members` array. For a script, the initial id is `script.id`. From there you may
+recursively discover other packages by following dependency edges.
 
 So rather than trying to find a node for anyio in the dependency graph directly, you should decide
 what workspace member(s) you're interested in analyzing as if they were going to be installed. While
@@ -90,41 +100,57 @@ group_node = metadata.resolution[group.id]
 visit(metadata, [group_node])
 ```
 
+For a dependency group defined on the workspace root, look it up through the workspace node:
+
+```python
+workspace_node = metadata.resolution[metadata.workspace.id]
+group = find_by_name(workspace_node.dependency_groups, "dev")
+group_node = metadata.resolution[group.id]
+visit(metadata, [group_node])
+```
+
 If you wanted to analyze two particular workspace members installed together, it would look
 something like:
 
 ```python
 to_analyze = []
 for member_name in ["package1", "package2"]:
-  member = find_by_name(metadata.members, member_name)
-  member_node = metadata.resolution[member.id]
-  to_analyze.append(member_node)
+    member = find_by_name(metadata.members, member_name)
+    member_node = metadata.resolution[member.id]
+    to_analyze.append(member_node)
 visit(metadata, to_analyze)
+```
+
+For a script, start from its resolution node in exactly the same way:
+
+```python
+script_node = metadata.resolution[metadata.script.id]
+visit(metadata, [script_node])
 ```
 
 Where `visit` is your favourite graph traversal algorithm like depth-first-search:
 
 ```python
 def visit(metadata: UvMetadata, to_analyze: list[Node]):
-  visited = set()
-  while len(to_analyze) > 0:
-    node = to_analyze.pop()
+    visited = set()
+    while len(to_analyze) > 0:
+        node = to_analyze.pop()
 
-    # Handle cycles by avoiding revisiting nodes
-    if node.id in visited:
-      continue
-    visited.add(node.id)
+        # Handle cycles by avoiding revisiting nodes
+        if node.id in visited:
+            continue
+        visited.add(node.id)
 
-    # We also need to analyze its dependencies
-    for dependency in node.dependencies:
-      # Only follow edges if they satisfy the desired platform's markers
-      if dependency.marker and not satisfies(platform, dependency.marker):
-        continue
-      to_analyze.append(metadata.resolution[dependency.id])
+        # We also need to analyze its dependencies
+        for dependency in node.dependencies:
+            # Only follow edges if they satisfy the desired platform's markers
+            if dependency.marker and not satisfies(platform, dependency.marker):
+                continue
+            to_analyze.append(metadata.resolution[dependency.id])
 
-    # Analyze any package node we encounter
-    if node.kind == "package":
-      print(node.name, node.version, node.source)
+        # Analyze any package node we encounter
+        if node.kind == "package":
+            print(node.name, node.version, node.source)
 ```
 
 ## Schema
@@ -135,19 +161,48 @@ Here is a human-readable annotated example:
 
 ```js
 {
-	// Information about the schema of this output
-	"schema": {
-		// The version of this output, currently "preview"
-		"version": "preview"
-	},
-	// The directory the uv.lock can be found in
-	"workspace_root": "/workspace",
-	// Any requirements on the python version this workspace has
+  // Information about the schema of this output
+  "schema": {
+    // The version of this output, currently "preview"
+    "version": "preview"
+  },
+  // The directory the uv.lock can be found in
+  "workspace_root": "/workspace",
+  // Information about the environment, available when an environment exists or `--sync` is used
+  "environment": {
+    // The absolute path to the environment root
+    "root": "/workspace/.venv",
+    // Information about the Python interpreter in the environment
+    "python": {
+      // The absolute path to the Python executable
+      "path": "/workspace/.venv/bin/python",
+      // The full Python version
+      "version": "3.12.12",
+      // The Python implementation name
+      "implementation": "cpython"
+    }
+  },
+  // Information about the script target, only present with `--script`.
+  // Workspace metadata uses `workspace` and `members` below as graph entry-points instead.
+  "script": {
+    // The absolute path to the script
+    "path": "/workspace/script.py",
+    // The id of the script's node in the `resolution` map below
+    "id": "script+/workspace/script.py"
+  },
+  // Information about the workspace target, omitted when `--script` is used.
+  "workspace": {
+    // The absolute path to the workspace root
+    "path": "/workspace",
+    // The id of the workspace's node in the `resolution` map below
+    "id": "workspace+/workspace"
+  },
+  // Any requirements on the python version this workspace has
   //
   // `marker` fields all have this as an implicit constraint that is omitted for cleanliness
-	"requires_python": ">=3.12",
-	// A list of workspace members
-	"members": [
+  "requires_python": ">=3.12",
+  // A list of workspace members
+  "members": [
     {
       // The name of the package
       "name": "mypackage",
@@ -156,7 +211,7 @@ Here is a human-readable annotated example:
       // The id of this package's info in the `resolution` map below
       "id": "mypackage==0.1.0@editable+/workspace/packages/mypackage"
     },
-	],
+  ],
   // A list-of-sets of workspace items that are mutually-exclusive to install,
   // presumably because they need to install different versions of the same package.
   //
@@ -188,8 +243,10 @@ Here is a human-readable annotated example:
   // Resolved information about packages and dependencies.
   //
   // Each entry in this map is a node in the dependency graph. There are currently
-  // 3 kinds of node in the dependency graph, although more are planned in the future.
+  // 5 kinds of node in the dependency graph, although more are planned in the future.
   //
+  // * Scripts  -- "kind": "script"
+  // * Workspaces -- "kind": "workspace"
   // * Packages -- "kind": "package"
   // * Extras   -- "kind": { "extra": "extraname" }
   // * Groups   -- "kind": { "group": "groupname" }
@@ -205,6 +262,42 @@ Here is a human-readable annotated example:
   // The ids used here are human-readable but should be handled as opaque (the nodes contain
   // the same information in a more convenient form).
   "resolution": {
+
+    // The script node is present when metadata was requested with `--script`. Its dependencies
+    // are the direct requirements declared by the script.
+    "script+/workspace/script.py": {
+      "kind": "script",
+      "path": "/workspace/script.py",
+      "dependencies": [
+        {
+          "id": "iniconfig==2.0.0@registry+https://pypi.org/simple"
+        }
+      ]
+    },
+
+    // The workspace node owns metadata defined directly on the workspace root.
+    "workspace+/workspace": {
+      "kind": "workspace",
+      "path": "/workspace",
+      "dependencies": [],
+      "dependency_groups": [
+        {
+          "name": "dev",
+          "id": "workspace+/workspace:dev"
+        }
+      ]
+    },
+
+    // This node is a dependency group defined on the non-package workspace root.
+    "workspace+/workspace:dev": {
+      "kind": { "group": "dev" },
+      "path": "/workspace",
+      "dependencies": [
+        {
+          "id": "iniconfig==2.0.0@registry+https://pypi.org/simple"
+        }
+      ]
+    },
 
     // This node is a workspace member
     "mypackage==0.1.0@editable+/workspace/packages/mypackage": {

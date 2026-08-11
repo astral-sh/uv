@@ -1,0 +1,10 @@
+name = "requires-exact-version-does-not-exist"
+description = "The user requires an exact version of package `a` but only other versions exist"
+
+[root]
+requires = ["a==2.0.0"]
+
+[expected]
+satisfiable = false
+
+[packages.a.versions."1.0.0"]

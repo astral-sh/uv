@@ -3,13 +3,13 @@ use uv_pypi_types::SupportedEnvironments;
 use uv_torch::TorchStrategy;
 
 use crate::fork_strategy::ForkStrategy;
-use crate::{DependencyMode, ExcludeNewer, PrereleaseMode, ResolutionMode};
+use crate::{DependencyMode, ExcludeNewer, Prerelease, ResolutionMode};
 
 /// Options for resolving a manifest.
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct Options {
     pub resolution_mode: ResolutionMode,
-    pub prerelease_mode: PrereleaseMode,
+    pub prerelease: Prerelease,
     pub dependency_mode: DependencyMode,
     pub fork_strategy: ForkStrategy,
     pub exclude_newer: ExcludeNewer,
@@ -24,7 +24,7 @@ pub struct Options {
 #[derive(Debug, Default, Clone)]
 pub struct OptionsBuilder {
     resolution_mode: ResolutionMode,
-    prerelease_mode: PrereleaseMode,
+    prerelease: Prerelease,
     dependency_mode: DependencyMode,
     fork_strategy: ForkStrategy,
     exclude_newer: ExcludeNewer,
@@ -48,10 +48,10 @@ impl OptionsBuilder {
         self
     }
 
-    /// Sets the [`PrereleaseMode`].
+    /// Sets the [`Prerelease`] policy.
     #[must_use]
-    pub fn prerelease_mode(mut self, prerelease_mode: PrereleaseMode) -> Self {
-        self.prerelease_mode = prerelease_mode;
+    pub fn prerelease(mut self, prerelease: Prerelease) -> Self {
+        self.prerelease = prerelease;
         self
     }
 
@@ -115,7 +115,7 @@ impl OptionsBuilder {
     pub fn build(self) -> Options {
         Options {
             resolution_mode: self.resolution_mode,
-            prerelease_mode: self.prerelease_mode,
+            prerelease: self.prerelease,
             dependency_mode: self.dependency_mode,
             fork_strategy: self.fork_strategy,
             exclude_newer: self.exclude_newer,
@@ -130,7 +130,7 @@ impl OptionsBuilder {
 
 /// Whether the [`Options`] are configurable or fixed.
 ///
-/// Applies to the [`ResolutionMode`], [`PrereleaseMode`], and [`DependencyMode`] fields.
+/// Applies to the [`ResolutionMode`], [`Prerelease`], and [`DependencyMode`] fields.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub enum Flexibility {
     /// The setting is configurable.

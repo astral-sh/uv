@@ -4,9 +4,10 @@ use anyhow::{Context, Result};
 use owo_colors::OwoColorize;
 use tracing::debug;
 
-use uv_cache::{Cache, Removal};
+use uv_cache::{Cache, RemovalMode};
 use uv_fs::Simplified;
 use uv_normalize::PackageName;
+use uv_preview::{Preview, PreviewFeature};
 
 use crate::commands::reporters::{CleaningDirectoryReporter, CleaningPackageReporter};
 use crate::commands::{ExitStatus, human_readable_bytes};
@@ -18,6 +19,7 @@ pub(crate) async fn cache_clean(
     force: bool,
     cache: Cache,
     printer: Printer,
+    preview: Preview,
 ) -> Result<ExitStatus> {
     if !cache.root().exists() {
         writeln!(
@@ -43,6 +45,13 @@ pub(crate) async fn cache_clean(
         }
     };
 
+    let removal_mode = if preview.is_enabled(PreviewFeature::CachePhysicalSpace) {
+        RemovalMode::Physical
+    } else {
+        RemovalMode::Logical
+    };
+    let cache = cache.with_removal_mode(removal_mode);
+
     let summary = if packages.is_empty() {
         writeln!(
             printer.stderr(),
@@ -59,7 +68,7 @@ pub(crate) async fn cache_clean(
             .with_context(|| format!("Failed to clear cache at: {}", root.user_display()))?
     } else {
         let reporter = CleaningPackageReporter::new(printer, Some(packages.len()));
-        let mut summary = Removal::default();
+        let mut summary = cache.removal();
 
         for package in packages {
             let removed = cache.remove(package)?;
@@ -90,15 +99,20 @@ pub(crate) async fn cache_clean(
         }
     }
 
-    // If any, write a summary of the total byte count removed.
-    if summary.total_bytes > 0 {
-        let bytes = if summary.total_bytes < 1024 {
-            format!("{}B", summary.total_bytes)
+    // If any, report the physical space, falling back to the logical removed size.
+    let reported_bytes = summary.physical_bytes.unwrap_or(summary.logical_bytes);
+    if summary.logical_bytes > 0 || reported_bytes > 0 {
+        let bytes = if reported_bytes < 1024 {
+            format!("{reported_bytes}B")
         } else {
-            let (bytes, unit) = human_readable_bytes(summary.total_bytes);
+            let (bytes, unit) = human_readable_bytes(reported_bytes);
             format!("{bytes:.1}{unit}")
         };
-        write!(printer.stderr(), " ({})", bytes.green())?;
+        if summary.physical_bytes_incomplete {
+            write!(printer.stderr(), " (at least {})", bytes.green())?;
+        } else {
+            write!(printer.stderr(), " ({})", bytes.green())?;
+        }
     }
 
     writeln!(printer.stderr())?;

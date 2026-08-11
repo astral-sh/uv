@@ -140,15 +140,10 @@ impl Preference {
     pub fn name(&self) -> &PackageName {
         &self.name
     }
-
-    /// Return the [`Version`] of the package for this [`Preference`].
-    pub fn version(&self) -> &Version {
-        &self.version
-    }
 }
 
 #[derive(Debug, Clone)]
-pub enum PreferenceIndex {
+pub(crate) enum PreferenceIndex {
     /// The preference should match to any index.
     Any,
     /// The preference should match to an implicit index.
@@ -311,7 +306,7 @@ impl Preferences {
     }
 
     /// Returns an iterator over the preferences.
-    pub fn iter(
+    pub(crate) fn iter(
         &self,
     ) -> impl Iterator<
         Item = (
@@ -372,7 +367,7 @@ impl Pin {
     }
 
     /// Return the hashes of the pinned package.
-    pub(crate) fn hashes(&self) -> &[HashDigest] {
+    fn hashes(&self) -> &[HashDigest] {
         self.hashes.as_slice()
     }
 }

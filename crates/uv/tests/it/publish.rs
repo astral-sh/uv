@@ -12,13 +12,30 @@ use uv_test::{uv_snapshot, venv_bin_path};
 use wiremock::matchers::{basic_auth, method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
-fn dummy_wheel() -> PathBuf {
+fn test_link(filename: &str) -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
         .parent()
         .unwrap()
         .parent()
         .unwrap()
-        .join("test/links/ok-1.0.0-py3-none-any.whl")
+        .join("test/links")
+        .join(filename)
+}
+
+fn dummy_wheel() -> PathBuf {
+    test_link("ok-1.0.0-py3-none-any.whl")
+}
+
+fn basic_app_wheel() -> PathBuf {
+    test_link("basic_app-0.1.0-py3-none-any.whl")
+}
+
+fn basic_package_sdist() -> PathBuf {
+    test_link("basic_package-0.1.0.tar.gz")
+}
+
+fn basic_package_wheel() -> PathBuf {
+    test_link("basic_package-0.1.0-py3-none-any.whl")
 }
 
 #[test]
@@ -33,10 +50,7 @@ fn username_password_no_longer_supported() {
         .arg("--publish-url")
         .arg("https://test.pypi.org/legacy/")
         .arg(dummy_wheel()), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     Publishing 1 file to https://test.pypi.org/legacy/
     Hashing ok-1.0.0-py3-none-any.whl ([SIZE])
@@ -59,10 +73,7 @@ fn invalid_token() {
         .arg("--publish-url")
         .arg("https://test.pypi.org/legacy/")
         .arg(dummy_wheel()), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     Publishing 1 file to https://test.pypi.org/legacy/
     Hashing ok-1.0.0-py3-none-any.whl ([SIZE])
@@ -90,10 +101,7 @@ fn mixed_credentials() {
         .arg(dummy_wheel())
         // Emulate CI
         .env(EnvVars::GITHUB_ACTIONS, "true"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     Publishing 1 file to https://test.pypi.org/legacy/
     error: a username and a password are not allowed when using trusted publishing
@@ -114,10 +122,7 @@ fn missing_trusted_publishing_permission() {
         .arg(dummy_wheel())
         // Emulate CI
         .env(EnvVars::GITHUB_ACTIONS, "true"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     Publishing 1 file to https://test.pypi.org/legacy/
     error: Failed to obtain token for trusted publishing
@@ -140,10 +145,7 @@ fn no_credentials() {
         .arg(dummy_wheel())
         // Emulate CI
         .env(EnvVars::GITHUB_ACTIONS, "true"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     Publishing 1 file to https://test.pypi.org/legacy/
     Note: Neither credentials nor keyring are configured, and there was an error fetching the trusted publishing token. If you don't want to use trusted publishing, you can ignore this error, but you need to provide credentials.
@@ -169,10 +171,7 @@ fn skip_existing_redirect() {
         .arg("--skip-existing")
         .arg("--publish-url")
         .arg("https://test.pypi.org/legacy/"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: `uv publish` does not support `--skip-existing` because there is not a reliable way to identify when an upload fails due to an existing distribution. Instead, use `--check-url` to provide the URL to the simple API for your index. uv will check the index for existing distributions before attempting uploads.
     "
@@ -200,15 +199,51 @@ fn dubious_filenames() {
         .arg("--publish-url")
         .arg("https://test.pypi.org/legacy/")
         .arg(context.temp_dir.join("*")), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     warning: Skipping file that looks like a distribution, but is not a valid distribution filename: `[TEMP_DIR]/data.tar.gz`
     warning: Skipping file that looks like a distribution, but is not a valid distribution filename: `[TEMP_DIR]/not-a-wheel.whl`
     warning: Skipping file that looks like a distribution, but is not a valid distribution filename: `[TEMP_DIR]/not-sdist-1-2-3-asdf.zip`
     error: No files found to publish
+    "
+    );
+}
+
+#[tokio::test]
+async fn publish_wheels_before_sdist_in_filename_order() {
+    let context = uv_test::test_context!("3.12");
+    let server = MockServer::start().await;
+    let app_wheel = basic_app_wheel();
+    let sdist = basic_package_sdist();
+    let package_wheel = basic_package_wheel();
+
+    Mock::given(method("POST"))
+        .and(path("/upload"))
+        .respond_with(ResponseTemplate::new(200))
+        .expect(3)
+        .mount(&server)
+        .await;
+
+    uv_snapshot!(context.filters(), context.publish()
+        // Pass the source distribution first and the wheels in reverse filename order.
+        .arg(sdist)
+        .arg(package_wheel)
+        .arg(app_wheel)
+        .arg("--username")
+        .arg("dummy")
+        .arg("--password")
+        .arg("dummy")
+        .arg("--publish-url")
+        .arg(format!("{}/upload", server.uri())), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Publishing 3 files to http://[LOCALHOST]/upload
+    Hashing basic_app-0.1.0-py3-none-any.whl ([SIZE])
+    Uploading basic_app-0.1.0-py3-none-any.whl ([SIZE])
+    Hashing basic_package-0.1.0-py3-none-any.whl ([SIZE])
+    Uploading basic_package-0.1.0-py3-none-any.whl ([SIZE])
+    Hashing basic_package-0.1.0.tar.gz ([SIZE])
+    Uploading basic_package-0.1.0.tar.gz ([SIZE])
     "
     );
 }
@@ -245,10 +280,7 @@ fn check_keyring_behaviours() {
         .arg("https://test.pypi.org/legacy/?ok")
         .arg(dummy_wheel())
         .env(EnvVars::PATH, venv_bin_path(&context.venv)), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     Publishing 1 file to https://test.pypi.org/legacy/?ok
     Hashing ok-1.0.0-py3-none-any.whl ([SIZE])
@@ -270,10 +302,7 @@ fn check_keyring_behaviours() {
         .arg("https://test.pypi.org/legacy/?ok")
         .arg(dummy_wheel())
         .env(EnvVars::PATH, venv_bin_path(&context.venv)),  @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     Publishing 1 file to https://test.pypi.org/legacy/?ok
     warning: Using `--keyring-provider` with a password or token and no check URL has no effect
@@ -297,10 +326,7 @@ fn check_keyring_behaviours() {
         .arg("https://test.pypi.org/legacy/?ok")
         .arg(dummy_wheel())
         .env(EnvVars::PATH, venv_bin_path(&context.venv)), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     Publishing 1 file to https://test.pypi.org/legacy/?ok
     Keyring request for dummy@https://test.pypi.org/legacy/?ok
@@ -327,10 +353,7 @@ fn check_keyring_behaviours() {
         .arg(dummy_wheel())
         .env(EnvVars::KEYRING_TEST_CREDENTIALS, r#"{"https://test.pypi.org/legacy/?ok": {"dummy": "dummy"}}"#)
         .env(EnvVars::PATH, venv_bin_path(&context.venv)), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     Publishing 1 file to https://test.pypi.org/legacy/?ok
     Keyring request for dummy@https://test.pypi.org/legacy/?ok
@@ -380,10 +403,7 @@ fn invalid_index() {
         .arg("bar")
         .arg(&ok_wheel)
         .current_dir(context.temp_dir.path()), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: Index not found: `bar`. Found indexes: `foo`, `internal`
     "
@@ -399,10 +419,7 @@ fn invalid_index() {
         .arg("foo")
         .arg(&ok_wheel)
         .current_dir(context.temp_dir.path()), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: Index is missing a publish URL: `foo`
     "
@@ -450,7 +467,7 @@ async fn read_index_credential_env_vars_for_check_url() {
 
     let filename = "astral_test_private-0.1.0-py3-none-any.whl";
     let wheel = context.temp_dir.join("dist").join(filename);
-    let sha256 = format!("{:x}", Sha256::digest(fs_err::read(&wheel).unwrap()));
+    let sha256 = hex::encode(Sha256::digest(fs_err::read(&wheel).unwrap()));
 
     let simple_index = json! ({
           "files": [
@@ -481,10 +498,7 @@ async fn read_index_credential_env_vars_for_check_url() {
         .arg("--trusted-publishing")
         .arg("never"),
         @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     Publishing 1 file to http://[LOCALHOST]/upload
     Hashing astral_test_private-0.1.0-py3-none-any.whl ([SIZE])
@@ -504,13 +518,101 @@ async fn read_index_credential_env_vars_for_check_url() {
         .arg("--trusted-publishing")
         .arg("never"),
         @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Publishing 1 file to http://[LOCALHOST]/upload
     File astral_test_private-0.1.0-py3-none-any.whl already exists, skipping
+    "
+    );
+}
+
+#[tokio::test]
+async fn check_url_missing_package_ignores_content_type() {
+    let context = uv_test::test_context!("3.12");
+
+    let server = MockServer::start().await;
+
+    Mock::given(method("GET"))
+        .and(path("/simple/ok/"))
+        .respond_with(
+            ResponseTemplate::new(404).set_body_raw("Not found", "text/plain; charset=UTF-8"),
+        )
+        .expect(1)
+        .mount(&server)
+        .await;
+    Mock::given(method("POST"))
+        .and(path("/upload"))
+        .respond_with(ResponseTemplate::new(200))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    uv_snapshot!(context.filters(), context.publish()
+        .arg("-u")
+        .arg("dummy")
+        .arg("-p")
+        .arg("dummy")
+        .arg("--check-url")
+        .arg(format!("{}/simple/", server.uri()))
+        .arg("--publish-url")
+        .arg(format!("{}/upload", server.uri()))
+        .arg(dummy_wheel()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Publishing 1 file to http://[LOCALHOST]/upload
+    Hashing ok-1.0.0-py3-none-any.whl ([SIZE])
+    Uploading ok-1.0.0-py3-none-any.whl ([SIZE])
+    "
+    );
+}
+
+#[tokio::test]
+async fn check_url_missing_package_follows_redirect() {
+    let context = uv_test::test_context!("3.12");
+
+    let gitlab_server = MockServer::start().await;
+    let pypi_server = MockServer::start().await;
+
+    Mock::given(method("GET"))
+        .and(path("/simple/ok/"))
+        .respond_with(
+            ResponseTemplate::new(302)
+                .insert_header("Location", format!("{}/simple/ok/", pypi_server.uri()))
+                .set_body_raw("Redirecting", "text/plain"),
+        )
+        .expect(1)
+        .mount(&gitlab_server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/simple/ok/"))
+        .respond_with(
+            ResponseTemplate::new(404).set_body_raw("Not found", "text/plain; charset=UTF-8"),
+        )
+        .expect(1)
+        .mount(&pypi_server)
+        .await;
+    Mock::given(method("POST"))
+        .and(path("/upload"))
+        .respond_with(ResponseTemplate::new(200))
+        .expect(1)
+        .mount(&gitlab_server)
+        .await;
+
+    uv_snapshot!(context.filters(), context.publish()
+        .arg("-u")
+        .arg("dummy")
+        .arg("-p")
+        .arg("dummy")
+        .arg("--check-url")
+        .arg(format!("{}/simple/", gitlab_server.uri()))
+        .arg("--publish-url")
+        .arg(format!("{}/upload", gitlab_server.uri()))
+        .arg(dummy_wheel()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Publishing 1 file to http://[LOCALHOST]/upload
+    Hashing ok-1.0.0-py3-none-any.whl ([SIZE])
+    Uploading ok-1.0.0-py3-none-any.whl ([SIZE])
     "
     );
 }
@@ -556,10 +658,7 @@ async fn gitlab_trusted_publishing_pypi_id_token() {
         .arg(dummy_wheel())
         .env(EnvVars::GITLAB_CI, "true")
         .env(EnvVars::PYPI_ID_TOKEN, "gitlab-oidc-jwt"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Publishing 1 file to http://[LOCALHOST]/upload
     Hashing ok-1.0.0-py3-none-any.whl ([SIZE])
@@ -611,10 +710,7 @@ async fn gitlab_trusted_publishing_testpypi_id_token() {
         // Emulate GitLab CI with TESTPYPI_ID_TOKEN present
         .env(EnvVars::GITLAB_CI, "true")
         .env(EnvVars::TESTPYPI_ID_TOKEN, "gitlab-oidc-jwt"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Publishing 1 file to http://[LOCALHOST]/upload
     Hashing ok-1.0.0-py3-none-any.whl ([SIZE])
@@ -663,10 +759,7 @@ async fn direct_publish_redacts_presigned_upload_url() {
         .arg(format!("{}/upload", server.uri()))
         .arg(dummy_wheel())
         .env(EnvVars::RUST_LOG, "uv_publish=debug"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Publishing 1 file to http://[LOCALHOST]/upload
     Hashing ok-1.0.0-py3-none-any.whl ([SIZE])
@@ -707,10 +800,7 @@ async fn upload_error_pypi_json() {
         .arg("--publish-url")
         .arg(format!("{}/upload", server.uri()))
         .arg(dummy_wheel()), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     Publishing 1 file to http://[LOCALHOST]/upload
     Hashing ok-1.0.0-py3-none-any.whl ([SIZE])
@@ -744,10 +834,7 @@ async fn upload_error_problem_details() {
         .arg("--publish-url")
         .arg(format!("{}/upload", server.uri()))
         .arg(dummy_wheel()), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     Publishing 1 file to http://[LOCALHOST]/upload
     Hashing ok-1.0.0-py3-none-any.whl ([SIZE])
@@ -778,10 +865,7 @@ fn dry_run_reports_all_errors() {
         .arg("dummy")
         .arg(wheel_a.path())
         .arg(wheel_b.path()), @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
     Checking 2 files against https://test.pypi.org/legacy/
     Checking a-1.0.0-py3-none-any.whl ([SIZE])
@@ -799,65 +883,31 @@ fn dry_run_reports_all_errors() {
     );
 }
 
-/// Warn when a wheel has a non-normalized filename (e.g., leading zeros in version).
-#[test]
-fn non_normalized_filename_warning() {
-    let context = uv_test::test_context!("3.12");
-
-    // Create a wheel file with a non-normalized version (leading zero: 1.01.0 -> 1.1.0).
-    let wheel = context.temp_dir.child("ok-1.01.0-py3-none-any.whl");
-    wheel.touch().unwrap();
-
-    uv_snapshot!(context.filters(), context.publish()
-        .arg("-u")
-        .arg("dummy")
-        .arg("-p")
-        .arg("dummy")
-        .arg("--publish-url")
-        .arg("https://test.pypi.org/legacy/")
-        .arg(wheel.path()), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
-    ----- stderr -----
-    Publishing 1 file to https://test.pypi.org/legacy/
-    warning: `ok-1.01.0-py3-none-any.whl` has a non-normalized filename (expected `ok-1.1.0-py3-none-any.whl`). Pass `--preview-features publish-require-normalized` to skip such files.
-    Hashing ok-1.1.0-py3-none-any.whl ([SIZE])
-    error: Failed to publish: `ok-1.01.0-py3-none-any.whl`
-      Caused by: Failed to read metadata
-      Caused by: Failed to read from zip file
-      Caused by: unable to locate the end of central directory record
-    "
-    );
-}
-
-/// With the preview flag, skip wheels with non-normalized filenames.
+/// Skip distributions with non-normalized filenames (e.g., leading zeros in version).
 #[test]
 fn non_normalized_filename_skip() {
     let context = uv_test::test_context!("3.12");
 
-    // Create a wheel file with a non-normalized version.
+    // Create wheel and source distribution files with non-normalized versions.
     let wheel = context.temp_dir.child("ok-1.01.0-py3-none-any.whl");
     wheel.touch().unwrap();
+    let source_dist = context.temp_dir.child("ok-1.01.0.tar.gz");
+    source_dist.touch().unwrap();
 
     uv_snapshot!(context.filters(), context.publish()
-        .arg("--preview-features")
-        .arg("publish-require-normalized")
         .arg("-u")
         .arg("dummy")
         .arg("-p")
         .arg("dummy")
         .arg("--publish-url")
         .arg("https://test.pypi.org/legacy/")
-        .arg(wheel.path()), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+        .arg(wheel.path())
+        .arg(source_dist.path()), @"
+    exit_code: 0 (success)
     ----- stderr -----
-    Publishing 1 file to https://test.pypi.org/legacy/
+    Publishing 2 files to https://test.pypi.org/legacy/
     warning: `ok-1.01.0-py3-none-any.whl` has a non-normalized filename (expected `ok-1.1.0-py3-none-any.whl`), skipping
+    warning: `ok-1.01.0.tar.gz` has a non-normalized filename (expected `ok-1.1.0.tar.gz`), skipping
     "
     );
 }

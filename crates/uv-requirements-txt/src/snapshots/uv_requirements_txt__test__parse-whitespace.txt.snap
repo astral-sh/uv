@@ -1,6 +1,5 @@
 ---
 source: crates/uv-requirements-txt/src/lib.rs
-assertion_line: 1591
 expression: actual
 ---
 RequirementsTxt {
@@ -37,8 +36,8 @@ RequirementsTxt {
                     version_or_url: Some(
                         Url(
                             VerbatimParsedUrl {
-                                parsed_url: Git(
-                                    ParsedGitUrl {
+                                parsed_url: GitDirectory(
+                                    ParsedGitDirectoryUrl {
                                         url: GitUrl {
                                             url: DisplaySafeUrl {
                                                 scheme: "https",
@@ -121,6 +120,7 @@ RequirementsTxt {
     extra_index_urls: [],
     find_links: [],
     no_index: false,
+    require_hashes: false,
     no_binary: None,
     only_binary: None,
 }

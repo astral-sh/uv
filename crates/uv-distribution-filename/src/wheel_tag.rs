@@ -1,7 +1,7 @@
 use std::fmt::{Display, Formatter};
 
 use crate::BuildTag;
-use uv_platform_tags::{AbiTag, LanguageTag, PlatformTag};
+use uv_platform_tags::{AbiTag, LanguageTag, PlatformTag, TagCompatibility, Tags};
 use uv_small_str::SmallString;
 
 /// A [`SmallVec`] type for storing tags.
@@ -38,6 +38,22 @@ pub(crate) enum WheelTag {
 }
 
 impl WheelTag {
+    /// Return the [`TagCompatibility`] of the wheel tag with the given tags.
+    pub(crate) fn compatibility(&self, compatible_tags: &Tags) -> TagCompatibility {
+        match self {
+            Self::Small { small } => compatible_tags.compatibility_tag(
+                &small.python_tag,
+                &small.abi_tag,
+                &small.platform_tag,
+            ),
+            Self::Large { large } => compatible_tags.compatibility(
+                large.python_tag.iter(),
+                large.abi_tag.iter(),
+                large.platform_tag.iter(),
+            ),
+        }
+    }
+
     /// Return the Python tags.
     pub(crate) fn python_tags(&self) -> &[LanguageTag] {
         match self {
