@@ -5997,6 +5997,8 @@ dependencies = [
  "fs-err",
  "futures",
  "jiff",
+ "rmp-serde",
+ "serde_json",
  "sha2 0.11.0",
  "tempfile",
  "tokio",
