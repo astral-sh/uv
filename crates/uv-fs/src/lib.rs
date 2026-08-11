@@ -55,17 +55,17 @@ pub fn is_same_file_allow_missing(left: &Path, right: &Path) -> Option<bool> {
 }
 
 /// Return the number of hard links to a file.
-#[cfg(unix)]
-pub fn hardlink_count(path: impl AsRef<Path>) -> std::io::Result<u64> {
+#[cfg(all(test, unix))]
+fn hardlink_count(path: impl AsRef<Path>) -> std::io::Result<u64> {
     use std::os::unix::fs::MetadataExt;
 
     Ok(fs_err::metadata(path)?.nlink())
 }
 
 /// Return the number of hard links to a file.
-#[cfg(windows)]
+#[cfg(all(test, windows))]
 #[allow(unsafe_code)]
-pub fn hardlink_count(path: impl AsRef<Path>) -> std::io::Result<u64> {
+fn hardlink_count(path: impl AsRef<Path>) -> std::io::Result<u64> {
     use std::os::windows::io::AsRawHandle;
 
     use windows::Win32::Foundation::HANDLE;
@@ -84,8 +84,8 @@ pub fn hardlink_count(path: impl AsRef<Path>) -> std::io::Result<u64> {
 }
 
 /// Return the number of hard links to a file.
-#[cfg(not(any(unix, windows)))]
-pub fn hardlink_count(path: impl AsRef<Path>) -> std::io::Result<u64> {
+#[cfg(all(test, not(any(unix, windows))))]
+fn hardlink_count(path: impl AsRef<Path>) -> std::io::Result<u64> {
     let _ = path;
     Ok(u64::MAX)
 }

@@ -11,9 +11,7 @@ use uv_normalize::PackageName;
 use uv_pep440::Version;
 use uv_pypi_types::Scheme;
 
-pub use archive_file_manifest::{
-    ARCHIVE_FILE_MANIFEST, ArchiveFileManifest, ArchiveFileManifestEntry,
-};
+pub use archive_file_manifest::{ArchiveFileManifest, ArchiveFileManifestEntry};
 pub use install::{install_wheel, installed_dist_info_path};
 pub use linker::{InstallState, LinkMode};
 pub use record::RecordEntry;
