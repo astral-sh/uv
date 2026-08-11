@@ -23,7 +23,7 @@ use uv_platform::{Error as PlatformError, Os};
 use uv_platform::{LibcDetectionError, Platform};
 use uv_state::{StateBucket, StateStore};
 use uv_static::EnvVars;
-use uv_trampoline_builder::{Launcher, LauncherKind};
+use uv_trampoline_builder::{Launcher, LauncherKind, WindowMode, windows_python_launcher};
 
 use crate::discovery::VersionRequest;
 use crate::downloads::{Error as DownloadError, ManagedPythonDownload};
@@ -883,27 +883,54 @@ fn executable_path_from_base(
     }
 }
 
+/// A Python executable and its window mode.
+///
+/// The [`WindowMode`] is used by Windows launchers and ignored for Unix symlinks.
+#[derive(Debug, Clone, Copy)]
+pub struct PythonExecutable<'a> {
+    path: &'a Path,
+    window_mode: WindowMode,
+}
+
+impl<'a> PythonExecutable<'a> {
+    /// Create a Python executable that runs attached to a console.
+    pub fn console(path: &'a Path) -> Self {
+        Self {
+            path,
+            window_mode: WindowMode::Console,
+        }
+    }
+
+    /// Create a Python executable that runs without opening a console window.
+    pub fn windowed(path: &'a Path) -> Self {
+        Self {
+            path,
+            window_mode: WindowMode::Windowed,
+        }
+    }
+}
+
 /// Create a link to a managed Python executable.
 ///
 /// If the file already exists at the link path, an error will be returned.
-pub fn create_link_to_executable(link: &Path, executable: &Path) -> Result<(), Error> {
+pub fn create_link_to_executable(
+    link: &Path,
+    executable: PythonExecutable<'_>,
+) -> Result<(), Error> {
     let link_parent = link.parent().ok_or(Error::NoExecutableDirectory)?;
     fs_err::create_dir_all(link_parent).map_err(Error::ExecutableDirectory)?;
 
     if cfg!(unix) {
         // Note this will never copy on Unix — we use it here to allow compilation on Windows
-        match symlink_or_copy_file(executable, link) {
+        match symlink_or_copy_file(executable.path, link) {
             Ok(()) => Ok(()),
             Err(err) if err.kind() == io::ErrorKind::NotFound => {
-                Err(Error::MissingExecutable(executable.to_path_buf()))
+                Err(Error::MissingExecutable(executable.path.to_path_buf()))
             }
             Err(err) => Err(Error::LinkExecutable(err)),
         }
     } else if cfg!(windows) {
-        use uv_trampoline_builder::windows_python_launcher;
-
-        // TODO(zanieb): Install GUI launchers as well
-        let launcher = windows_python_launcher(executable, false)?;
+        let launcher = windows_python_launcher(executable.path, executable.window_mode)?;
 
         // OK to use `std::fs` here, `fs_err` does not support `File::create_new` and we attach
         // error context anyway
@@ -923,16 +950,17 @@ pub fn create_link_to_executable(link: &Path, executable: &Path) -> Result<(), E
 /// If a file already exists at the link path, it will be atomically replaced.
 ///
 /// See [`create_link_to_executable`] for a variant that errors if the link already exists.
-pub fn replace_link_to_executable(link: &Path, executable: &Path) -> Result<(), Error> {
+pub fn replace_link_to_executable(
+    link: &Path,
+    executable: PythonExecutable<'_>,
+) -> Result<(), Error> {
     let link_parent = link.parent().ok_or(Error::NoExecutableDirectory)?;
     fs_err::create_dir_all(link_parent).map_err(Error::ExecutableDirectory)?;
 
     if cfg!(unix) {
-        replace_symlink(executable, link).map_err(Error::LinkExecutable)
+        replace_symlink(executable.path, link).map_err(Error::LinkExecutable)
     } else if cfg!(windows) {
-        use uv_trampoline_builder::windows_python_launcher;
-
-        let launcher = windows_python_launcher(executable, false)?;
+        let launcher = windows_python_launcher(executable.path, executable.window_mode)?;
 
         uv_fs::write_atomic_sync(link, &*launcher).map_err(Error::LinkExecutable)
     } else {

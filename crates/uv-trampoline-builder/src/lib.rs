@@ -185,6 +185,15 @@ impl Launcher {
     }
 }
 
+/// The window mode of a Windows trampoline launcher.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WindowMode {
+    /// The launcher runs attached to a console.
+    Console,
+    /// The launcher runs without opening a console window.
+    Windowed,
+}
+
 /// The kind of trampoline launcher to create.
 ///
 /// See [`uv-trampoline::bounce::TrampolineKind`].
@@ -439,7 +448,7 @@ pub fn windows_script_launcher(
 #[cfg(not(windows))]
 pub fn windows_python_launcher(
     _python_executable: impl AsRef<Path>,
-    _is_gui: bool,
+    _window_mode: WindowMode,
 ) -> Result<Vec<u8>, Error> {
     Err(Error::NotWindows)
 }
@@ -452,11 +461,11 @@ pub fn windows_python_launcher(
 #[cfg(windows)]
 pub fn windows_python_launcher(
     python_executable: impl AsRef<Path>,
-    is_gui: bool,
+    window_mode: WindowMode,
 ) -> Result<Vec<u8>, Error> {
     use uv_fs::Simplified;
 
-    let launcher_bin: &[u8] = get_launcher_bin(is_gui)?;
+    let launcher_bin: &[u8] = get_launcher_bin(matches!(window_mode, WindowMode::Windowed))?;
 
     let python = python_executable.as_ref();
     let python_path = python.simplified_display().to_string();
@@ -500,7 +509,9 @@ mod test {
 
     use which::which;
 
-    use super::{Launcher, LauncherKind, windows_python_launcher, windows_script_launcher};
+    use super::{
+        Launcher, LauncherKind, WindowMode, windows_python_launcher, windows_script_launcher,
+    };
 
     #[test]
     #[cfg(all(windows, target_arch = "x86", feature = "production"))]
@@ -742,7 +753,8 @@ if __name__ == "__main__":
         let python_executable_path = which("python")?;
 
         // Generate Launcher Payload
-        let console_launcher = windows_python_launcher(&python_executable_path, false)?;
+        let console_launcher =
+            windows_python_launcher(&python_executable_path, WindowMode::Console)?;
 
         // Create Launcher
         {

@@ -1033,11 +1033,18 @@ fn python_install_freethreaded() {
     );
 
     #[cfg(windows)]
-    assert!(
-        scripts
-            .join(format!("pythonw{}", std::env::consts::EXE_SUFFIX))
-            .exists()
-    );
+    {
+        let pythonw = scripts.join(format!("pythonw{}", std::env::consts::EXE_SUFFIX));
+        assert!(pythonw.exists());
+
+        insta::with_settings!({
+            filters => context.filters(),
+        }, {
+            insta::assert_snapshot!(
+                read_link(&pythonw), @"[TEMP_DIR]/managed/cpython-3.13+freethreaded-[PLATFORM]/pythonw"
+            );
+        });
+    }
 
     #[cfg(unix)]
     assert!(
@@ -1060,11 +1067,18 @@ fn python_install_freethreaded() {
     );
 
     #[cfg(windows)]
-    assert!(
-        scripts
-            .join(format!("pythonw3.13t{}", std::env::consts::EXE_SUFFIX))
-            .exists()
-    );
+    {
+        let pythonw = scripts.join(format!("pythonw3.13t{}", std::env::consts::EXE_SUFFIX));
+        assert!(pythonw.exists());
+
+        insta::with_settings!({
+            filters => context.filters(),
+        }, {
+            insta::assert_snapshot!(
+                read_link(&pythonw), @"[TEMP_DIR]/managed/cpython-3.13+freethreaded-[PLATFORM]/pythonw"
+            );
+        });
+    }
 
     // Remove the virtual environment
     fs_err::remove_dir_all(&context.venv).unwrap();
@@ -2744,6 +2758,22 @@ fn install_transparent_patch_upgrade_uv_venv() {
     Activate with: source .venv/[BIN]/activate
     "
     );
+
+    #[cfg(windows)]
+    {
+        let scripts = context.venv.join("Scripts");
+
+        insta::with_settings!({
+            filters => context.filters(),
+        }, {
+            insta::assert_snapshot!(
+                read_link(&scripts.join("python.exe")), @"[TEMP_DIR]/managed/cpython-3.12-[PLATFORM]/python"
+            );
+            insta::assert_snapshot!(
+                read_link(&scripts.join("pythonw.exe")), @"[TEMP_DIR]/managed/cpython-3.12-[PLATFORM]/pythonw"
+            );
+        });
+    }
 
     uv_snapshot!(context.filters(), context.run().arg("python").arg("--version"), @"
     exit_code: 0 (success)
