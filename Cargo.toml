@@ -332,7 +332,7 @@ rcgen = { version = "0.14.5", features = [
   "pem",
   "ring",
 ], default-features = false }
-rustls = { version = "0.23.36", default-features = false }
+rustls = { version = "0.23.36" }
 similar = { version = "3.0.0" }
 webpki = { package = "rustls-webpki", version = "0.103.10" }
 x509-parser = { version = "0.18.0" }
