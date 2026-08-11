@@ -1,0 +1,35 @@
+[project]
+name = "pyx-member-34"
+version = "0.1.0"
+requires-python = "==3.14.*"
+dependencies = [
+    "aiofiles==25.1.0",
+    "boto3==1.42.88",
+    "msgspec==0.21.1",
+    "packaging==26.0",
+    "packaging-legacy==23.0.post0",
+    "pyx-member-03",
+    "pyx-member-06",
+    "pyx-member-23",
+    "pyx-member-24",
+    "pyx-member-25",
+    "pyx-member-26",
+    "pyx-member-35",
+    "sqlalchemy==2.0.49",
+    "stdlib-list==0.12.0",
+]
+
+[dependency-groups]
+dev = [
+    "coverage==7.13.5",
+    "deptry==0.25.1",
+    "dirty-equals==0.11",
+    "inline-snapshot==0.32.6",
+    "pytest==9.0.3",
+    "pytest-asyncio==1.3.0",
+    "python-dotenv==1.2.2",
+    "pyx-member-33",
+    "ruff==0.15.18",
+    "ty==0.0.51",
+    "types-aiofiles==25.1.0.20260409",
+]

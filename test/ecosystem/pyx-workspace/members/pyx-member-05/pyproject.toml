@@ -1,0 +1,18 @@
+[project]
+name = "pyx-member-05"
+version = "0.1.0"
+requires-python = "==3.14.*"
+dependencies = [
+    "cryptography==48.0.1",
+    "pyx-member-04",
+]
+
+[dependency-groups]
+dev = [
+    "deptry==0.25.1",
+    "inline-snapshot==0.32.6",
+    "pytest==9.0.3",
+    "pyx-member-33",
+    "ruff==0.15.18",
+    "ty==0.0.51",
+]

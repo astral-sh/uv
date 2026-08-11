@@ -1,0 +1,27 @@
+[project]
+name = "pyx-member-01"
+version = "0.1.0"
+requires-python = "==3.14.*"
+dependencies = [
+    "greenlet==3.4.0",
+    "pyx-member-06",
+    "pyx-member-23",
+    "pyx-member-29",
+    "sentry-sdk[sqlalchemy]==2.57.0",
+    "sqlalchemy==2.0.49",
+    "stripe==14.5.0a1",
+]
+
+[dependency-groups]
+dev = [
+    "coverage==7.13.5",
+    "deptry==0.25.1",
+    "dirty-equals==0.11",
+    "inline-snapshot==0.32.6",
+    "pytest==9.0.3",
+    "pytest-asyncio==1.3.0",
+    "python-dotenv==1.2.2",
+    "pyx-member-33",
+    "ruff==0.15.18",
+    "ty==0.0.51",
+]
