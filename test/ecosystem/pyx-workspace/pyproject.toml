@@ -1,0 +1,56 @@
+[project]
+name = "pyx-ecosystem"
+version = "0.1.0"
+requires-python = "==3.14.*"
+dependencies = [
+]
+
+[dependency-groups]
+dev = [
+    "deptry==0.25.1",
+    "pyx-component-33",
+    "ruff==0.15.18",
+    "ty==0.0.51",
+]
+
+[tool.uv.workspace]
+members = ["components/*"]
+
+[tool.uv.sources]
+pyx-component-01 = { workspace = true }
+pyx-component-02 = { workspace = true }
+pyx-component-03 = { workspace = true }
+pyx-component-04 = { workspace = true }
+pyx-component-05 = { workspace = true }
+pyx-component-06 = { workspace = true }
+pyx-component-07 = { workspace = true }
+pyx-component-08 = { workspace = true }
+pyx-component-09 = { workspace = true }
+pyx-component-10 = { workspace = true }
+pyx-component-11 = { workspace = true }
+pyx-component-12 = { workspace = true }
+pyx-component-13 = { workspace = true }
+pyx-component-14 = { workspace = true }
+pyx-component-15 = { workspace = true }
+pyx-component-16 = { workspace = true }
+pyx-component-17 = { workspace = true }
+pyx-component-18 = { workspace = true }
+pyx-component-19 = { workspace = true }
+pyx-component-20 = { workspace = true }
+pyx-component-21 = { workspace = true }
+pyx-component-22 = { workspace = true }
+pyx-component-23 = { workspace = true }
+pyx-component-24 = { workspace = true }
+pyx-component-25 = { workspace = true }
+pyx-component-26 = { workspace = true }
+pyx-component-27 = { workspace = true }
+pyx-component-28 = { workspace = true }
+pyx-component-29 = { workspace = true }
+pyx-component-30 = { workspace = true }
+pyx-component-31 = { workspace = true }
+pyx-component-32 = { workspace = true }
+pyx-component-33 = { workspace = true }
+pyx-component-34 = { workspace = true }
+pyx-component-35 = { workspace = true }
+pyx-component-36 = { workspace = true }
+pyx-component-37 = { workspace = true }

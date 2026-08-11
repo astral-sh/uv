@@ -1,0 +1,21 @@
+[project]
+name = "pyx-component-03"
+version = "0.1.0"
+requires-python = "==3.14.*"
+dependencies = [
+    "boto3==1.42.88",
+    "botocore==1.42.88",
+    "pyx-component-32",
+]
+
+[dependency-groups]
+dev = [
+    "deptry==0.25.1",
+    "dirty-equals==0.11",
+    "inline-snapshot==0.32.6",
+    "msgspec==0.21.1",
+    "pyx-component-23",
+    "pyx-component-30",
+    "pyx-component-33",
+    "ty==0.0.51",
+]
