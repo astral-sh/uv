@@ -1,0 +1,304 @@
+[project]
+name = "openai"
+version = "2.44.0"
+description = "The official Python library for the openai API"
+dynamic = ["readme"]
+license = "Apache-2.0"
+authors = [
+{ name = "OpenAI", email = "support@openai.com" },
+]
+
+dependencies = [
+  "httpx>=0.23.0, <1",
+  "pydantic>=1.9.0, <3",
+  "typing-extensions>=4.14, <5",
+  "anyio>=3.5.0, <5",
+  "distro>=1.7.0, <2",
+  "sniffio",
+    "tqdm > 4",
+    "jiter>=0.10.0, <1",
+]
+
+requires-python = ">= 3.9"
+classifiers = [
+  "Typing :: Typed",
+  "Intended Audience :: Developers",
+  "Programming Language :: Python :: 3.9",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Programming Language :: Python :: 3.14",
+  "Operating System :: OS Independent",
+  "Operating System :: POSIX",
+  "Operating System :: MacOS",
+  "Operating System :: POSIX :: Linux",
+  "Operating System :: Microsoft :: Windows",
+  "Topic :: Software Development :: Libraries :: Python Modules",
+  "License :: OSI Approved :: Apache Software License"
+]
+
+[project.urls]
+Homepage = "https://github.com/openai/openai-python"
+Repository = "https://github.com/openai/openai-python"
+
+[project.optional-dependencies]
+aiohttp = ["aiohttp", "httpx_aiohttp>=0.1.9"]
+realtime = ["websockets >= 13, < 16"]
+datalib = ["numpy >= 1", "pandas >= 1.2.3", "pandas-stubs >= 1.1.0.11"]
+voice_helpers = ["sounddevice>=0.5.1", "numpy>=2.0.2"]
+bedrock = [
+  "botocore>=1.40.0,<1.43; python_version < '3.10'",
+  "botocore>=1.40.0,<2; python_version >= '3.10'",
+]
+
+[tool.rye]
+managed = true
+# version pins are in requirements-dev.lock
+dev-dependencies = [
+    "pyright==1.1.399",
+    "mypy==1.17",
+    "respx",
+    "pytest",
+    "pytest-asyncio",
+    "jsonschema>=4.23.0",
+    "ruff",
+    "time-machine",
+    "nox",
+    "dirty-equals>=0.6.0",
+    "importlib-metadata>=6.7.0",
+    "rich>=13.7.1",
+    "inline-snapshot>=0.28.0",
+    "azure-identity >=1.14.1",
+    "botocore==1.42.97",
+    "types-tqdm > 4",
+    "types-pyaudio > 0",
+    "trio >=0.22.2",
+    "nest_asyncio==1.6.0",
+    "pytest-xdist>=3.6.1",
+    "griffe>=1",
+]
+
+[tool.rye.scripts]
+format = { chain = [
+  "format:ruff",
+  "format:docs",
+  "fix:ruff",
+  # run formatting again to fix any inconsistencies when imports are stripped
+  "format:ruff",
+]}
+"format:docs" = "bash -c 'python scripts/utils/ruffen-docs.py README.md $(find . -type f -name api.md)'"
+"format:ruff" = "ruff format"
+
+"lint" = { chain = [
+  "check:ruff",
+  "typecheck",
+  "check:importable",
+]}
+"check:ruff" = "ruff check ."
+"fix:ruff" = "ruff check --fix ."
+
+"check:importable" = "python -c 'import openai'"
+
+typecheck = { chain = [
+  "typecheck:pyright",
+  "typecheck:mypy"
+]}
+"typecheck:pyright" = "scripts/run-pyright"
+"typecheck:verify-types" = "pyright --verifytypes openai --ignoreexternal"
+"typecheck:mypy" = "mypy ."
+
+[build-system]
+requires = ["hatchling==1.26.3", "hatch-fancy-pypi-readme"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build]
+include = [
+  "src/*"
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/openai"]
+
+[tool.hatch.build.targets.sdist]
+# Basically everything except hidden files/directories (such as .github, .devcontainers, .python-version, etc)
+include = [
+  "/*.toml",
+  "/*.json",
+  "/*.lock",
+  "/*.md",
+  "/mypy.ini",
+  "/noxfile.py",
+  "bin/*",
+  "examples/*",
+  "src/*",
+  "tests/*",
+]
+
+[tool.hatch.metadata.hooks.fancy-pypi-readme]
+content-type = "text/markdown"
+
+[[tool.hatch.metadata.hooks.fancy-pypi-readme.fragments]]
+path = "README.md"
+
+[[tool.hatch.metadata.hooks.fancy-pypi-readme.substitutions]]
+# replace relative links with absolute links
+pattern = '\[(.+?)\]\(((?!https?://)\S+?)\)'
+replacement = '[\1](https://github.com/openai/openai-python/tree/main/\g<2>)'
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "--tb=short -n auto"
+xfail_strict = true
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "session"
+filterwarnings = [
+  "error"
+]
+
+[tool.inline-snapshot]
+format-command="ruff format --stdin-filename {filename}"
+
+[tool.pyright]
+# this enables practically every flag given by pyright.
+# there are a couple of flags that are still disabled by
+# default in strict mode as they are experimental and niche.
+typeCheckingMode = "strict"
+pythonVersion = "3.9"
+
+exclude = [
+    "_dev",
+    ".venv",
+    ".nox",
+    ".git",
+
+    # uses inline `uv` script dependencies
+    # which means it can't be type checked
+    "examples/realtime/audio_util.py",
+    "examples/realtime/push_to_talk_app.py"
+]
+
+reportImplicitOverride = true
+reportOverlappingOverload = false
+
+reportImportCycles = false
+reportPrivateUsage = false
+
+[tool.mypy]
+pretty = true
+show_error_codes = true
+
+# Exclude _files.py because mypy isn't smart enough to apply
+# the correct type narrowing and as this is an internal module
+# it's fine to just use Pyright.
+#
+# We also exclude our `tests` as mypy doesn't always infer
+# types correctly and Pyright will still catch any type errors.
+#
+# realtime examples use inline `uv` script dependencies
+# which means it can't be type checked
+exclude = [
+  'src/openai/_files.py',
+  '_dev/.*.py',
+  'tests/.*',
+  'src/openai/_utils/_logs.py',
+  'examples/realtime/audio_util.py',
+  'examples/realtime/push_to_talk_app.py',
+]
+
+strict_equality = true
+implicit_reexport = true
+check_untyped_defs = true
+no_implicit_optional = true
+
+warn_return_any = true
+warn_unreachable = true
+warn_unused_configs = true
+
+# Turn these options off as it could cause conflicts
+# with the Pyright options.
+warn_unused_ignores = false
+warn_redundant_casts = false
+
+disallow_any_generics = true
+disallow_untyped_defs = true
+disallow_untyped_calls = true
+disallow_subclassing_any = true
+disallow_incomplete_defs = true
+disallow_untyped_decorators = true
+cache_fine_grained = true
+
+# By default, mypy reports an error if you assign a value to the result
+# of a function call that doesn't return anything. We do this in our test
+# cases:
+# ```
+# result = ...
+# assert result is None
+# ```
+# Changing this codegen to make mypy happy would increase complexity
+# and would not be worth it.
+disable_error_code = "func-returns-value,overload-cannot-match"
+
+# https://github.com/python/mypy/issues/12162
+[[tool.mypy.overrides]]
+module = "black.files.*"
+ignore_errors = true
+ignore_missing_imports = true
+
+[tool.ruff]
+line-length = 120
+output-format = "grouped"
+target-version = "py38"
+
+[tool.ruff.format]
+docstring-code-format = true
+
+[tool.ruff.lint]
+select = [
+  # isort
+  "I",
+  # bugbear rules
+  "B",
+  # remove unused imports
+  "F401",
+  # check for missing future annotations
+  "FA102",
+  # bare except statements
+  "E722",
+  # unused arguments
+  "ARG",
+  # print statements
+  "T201",
+  "T203",
+  # misuse of typing.TYPE_CHECKING
+  "TC004",
+  # import rules
+  "TID251",
+]
+ignore = [
+  # mutable defaults
+  "B006",
+]
+unfixable = [
+  # disable auto fix for print statements
+  "T201",
+  "T203",
+]
+
+extend-safe-fixes = ["FA102"]
+
+[tool.ruff.lint.flake8-tidy-imports.banned-api]
+"functools.lru_cache".msg = "This function does not retain type information for the wrapped function's arguments; The `lru_cache` function from `_utils` should be used instead"
+
+[tool.ruff.lint.isort]
+length-sort = true
+length-sort-straight = true
+combine-as-imports = true
+extra-standard-library = ["typing_extensions"]
+known-first-party = ["openai", "tests"]
+
+[tool.ruff.lint.per-file-ignores]
+"bin/**.py" = ["T201", "T203"]
+"scripts/**.py" = ["T201", "T203"]
+"tests/**.py" = ["T201", "T203"]
+"examples/**.py" = ["T201", "T203"]

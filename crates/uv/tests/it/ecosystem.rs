@@ -33,6 +33,51 @@ fn black() -> Result<()> {
     lock_ecosystem_package("3.12", "black")
 }
 
+// Source: https://github.com/pypa/cibuildwheel/blob/294735312765b09d24a2fbec22660ce817587d55/pyproject.toml
+#[test]
+fn cibuildwheel() -> Result<()> {
+    lock_ecosystem_package_without_build("3.12", "cibuildwheel")
+}
+
+// Source: https://github.com/cookiecutter/cookiecutter/blob/083dd3c6104124221e2cbc3e13e0929795861ed5/pyproject.toml
+#[test]
+fn cookiecutter() -> Result<()> {
+    lock_ecosystem_package_without_build("3.12", "cookiecutter")
+}
+
+// Source: https://github.com/pallets/flask/blob/06ea505ce2b2042af26e96d35ebf159af7c0869d/pyproject.toml
+#[test]
+fn flask() -> Result<()> {
+    lock_ecosystem_package_without_build("3.12", "flask")
+}
+
+// Source: https://github.com/encode/httpx/blob/767cf6baa608a56d03f8fe438a39c2013904f0ae/pyproject.toml
+//
+// Replace the dynamically derived version with the version from the pinned
+// revision so locking does not execute the build backend.
+#[test]
+fn httpx() -> Result<()> {
+    lock_ecosystem_package_without_build("3.12", "httpx")
+}
+
+// Source: https://github.com/simonw/llm/blob/512659547241a61e30116e9ada4db34a624062ae/pyproject.toml
+#[test]
+fn llm() -> Result<()> {
+    lock_ecosystem_package_without_build("3.12", "llm")
+}
+
+// Source: https://github.com/openai/openai-python/blob/6d9262d5c666a1e4d47f63178db907ba3087ac5d/pyproject.toml
+#[test]
+fn openai_python() -> Result<()> {
+    lock_ecosystem_package_without_build("3.12", "openai-python")
+}
+
+// Source: https://github.com/pytest-dev/pytest-cov/blob/66c8a526b1246b5eb8fb1bc218878131bc628622/pyproject.toml
+#[test]
+fn pytest_cov() -> Result<()> {
+    lock_ecosystem_package_without_build("3.12", "pytest-cov")
+}
+
 // Source: astral-sh/pyx at 5752f1cd9766b9df934658ceaeb10eb37986e54d.
 //
 // This fixture combines the external project and dependency-group requirements
