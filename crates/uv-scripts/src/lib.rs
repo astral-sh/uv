@@ -561,15 +561,16 @@ impl ScriptTag {
         // ```
         //
         // The latter `///` is the closing pragma
-        let Some(index) = toml.iter().rev().position(|line| *line == "///") else {
-            // A closing tag with trailing whitespace (e.g. `# /// `) is a common mistake; flag it
-            // specifically instead of the generic "no closing tag" error.
-            if toml.iter().any(|line| line.trim_end() == "///") {
-                return Err(Pep723Error::UnclosedBlockTrailingWhitespace);
-            }
+        let Some(index) = toml.iter().rev().position(|line| line.trim_end() == "///") else {
             return Err(Pep723Error::UnclosedBlock);
         };
         let index = toml.len() - index;
+
+        // PEP 723 requires the closing tag to be exactly `# ///`. A terminator with trailing
+        // whitespace (`# /// `) is a common mistake, so flag it specifically.
+        if toml[index - 1] != "///" {
+            return Err(Pep723Error::UnclosedBlockTrailingWhitespace);
+        }
 
         // Discard any lines after the closing `# ///`.
         //
