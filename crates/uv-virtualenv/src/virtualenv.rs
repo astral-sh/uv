@@ -16,7 +16,7 @@ use uv_fs::{CWD, Simplified, cachedir};
 use uv_platform_tags::Os;
 use uv_pypi_types::Scheme;
 use uv_python::managed::{
-    LauncherTarget, ManagedPythonInstallation, PythonMinorVersionLink, replace_link_to_executable,
+    ManagedPythonInstallation, PythonExecutable, PythonMinorVersionLink, replace_link_to_executable,
 };
 use uv_python::{Interpreter, VirtualEnvironment};
 use uv_shell::escape_posix_for_single_quotes;
@@ -300,7 +300,7 @@ pub(crate) fn create(
             let target = scripts.join(WindowsExecutable::Python.exe(interpreter));
             replace_link_to_executable(
                 target.as_path(),
-                &LauncherTarget::console(executable_target.clone()),
+                PythonExecutable::console(&executable_target),
             )
             .map_err(Error::Python)?;
             let windowed_executable_name = WindowsExecutable::Pythonw.exe(interpreter);
@@ -309,20 +309,20 @@ pub(crate) fn create(
                 executable_target.with_file_name(windowed_executable_name);
             replace_link_to_executable(
                 targetw.as_path(),
-                &LauncherTarget::windowed(&windowed_executable_target),
+                PythonExecutable::windowed(&windowed_executable_target),
             )
             .map_err(Error::Python)?;
             if interpreter.gil_disabled() {
                 let targett = scripts.join(WindowsExecutable::PythonMajorMinort.exe(interpreter));
                 replace_link_to_executable(
                     targett.as_path(),
-                    &LauncherTarget::console(executable_target.clone()),
+                    PythonExecutable::console(&executable_target),
                 )
                 .map_err(Error::Python)?;
                 let targetwt = scripts.join(WindowsExecutable::PythonwMajorMinort.exe(interpreter));
                 replace_link_to_executable(
                     targetwt.as_path(),
-                    &LauncherTarget::windowed(&windowed_executable_target),
+                    PythonExecutable::windowed(&windowed_executable_target),
                 )
                 .map_err(Error::Python)?;
             }
@@ -332,7 +332,7 @@ pub(crate) fn create(
             let target = scripts.join(WindowsExecutable::Python.exe(interpreter));
             replace_link_to_executable(
                 target.as_path(),
-                &LauncherTarget::console(executable_target.clone()),
+                PythonExecutable::console(&executable_target),
             )
             .map_err(Error::Python)?;
         } else {
