@@ -55,7 +55,8 @@ DEFAULT_TIMEOUT = 30
 DEFAULT_PKG_NAME = "astral-registries-test-pkg"
 
 KNOWN_REGISTRIES = [
-    "artifactory",
+    # Temporarily disabled because Artifactory credentials need rotation.
+    # "artifactory",
     "azure",
     "aws",
     "cloudsmith",
