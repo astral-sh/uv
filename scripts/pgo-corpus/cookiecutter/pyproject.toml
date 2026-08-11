@@ -1,0 +1,45 @@
+# Dependency metadata from https://github.com/cookiecutter/cookiecutter/blob/083dd3c6104124221e2cbc3e13e0929795861ed5/pyproject.toml
+
+[project]
+name = "cookiecutter"
+version = "2.7.1"
+requires-python = ">=3.10"
+dependencies = [
+    "binaryornot>=0.4.4",
+    "Jinja2>=2.7,<4.0.0",
+    "click>=7.0,<9.0.0",
+    "pyyaml>=5.3.1",
+    "python-slugify>=4.0.0",
+    "requests>=2.23.0",
+    "arrow",
+    "rich",
+]
+
+[dependency-groups]
+dev = [
+    "uv",
+    "rust-just>=1.42.3",
+    { include-group = "test" },
+]
+docs = [
+    "sphinx",
+    "sphinx_click",
+    "myst_parser",
+    "sphinx_autodoc_typehints",
+    "sphinxcontrib.apidoc",
+    "sphinx_rtd_theme",
+    "sphinx-autobuild",
+]
+test = [
+    "pytest",
+    "pytest-cov",
+    "pytest-mock",
+    "freezegun",
+]
+lint = [
+    "ruff",
+    "safety",
+]
+
+[tool.uv]
+package = true

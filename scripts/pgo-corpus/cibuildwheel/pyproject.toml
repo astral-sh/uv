@@ -1,0 +1,56 @@
+# Dependency metadata from https://github.com/pypa/cibuildwheel/blob/294735312765b09d24a2fbec22660ce817587d55/pyproject.toml
+
+[project]
+name = "cibuildwheel"
+version = "4.1.0"
+requires-python = ">=3.11"
+dependencies = [
+    "bashlex!=0.13",
+    "bracex",
+    "build>=1.0.0",
+    "certifi",
+    "dependency-groups>=1.2",
+    "filelock",
+    "humanize",
+    "packaging>=20.9",
+    "platformdirs",
+]
+
+[project.optional-dependencies]
+uv = [
+    "uv",
+]
+
+[dependency-groups]
+docs = [
+    "jinja2>=3.1.2",
+    "mkdocs-include-markdown-plugin==7.1.8",
+    "mkdocs-intersphinx>=0.1.1; python_version >= '3.12'",
+    "mkdocs-macros-plugin>=1.4.1",
+    "mkdocs==1.6.1",
+    "pymdown-extensions",
+    "rich",
+]
+test = [
+    "build",
+    "filelock",
+    "jinja2",
+    "pytest-timeout",
+    "pytest-xdist",
+    "pytest-rerunfailures!=16.0",
+    "pytest>=9",
+    "setuptools",
+    "tomli_w",
+    "validate-pyproject",
+    "xdoctest",
+]
+dev = [
+    { include-group = "docs" },
+    { include-group = "test" },
+]
+
+[build-system]
+requires = [
+    "hatchling",
+]
+build-backend = "hatchling.build"

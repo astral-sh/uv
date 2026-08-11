@@ -20,26 +20,25 @@ EXCLUDE_NEWER = "2026-06-30T00:00:00Z"
 @dataclass(frozen=True, slots=True)
 class CorpusProject:
     name: str
-    requirements: str
-    python_version: str | None = None
-    install: bool = True
+    manifest: str
+    constraints: tuple[str, ...] = ()
 
 
-# Train on real project manifests and requirement snapshots that uv already
-# maintains for ecosystem tests. Keep the evaluation projects separate.
+# Keep immutable snapshots of real GitHub projects separate from the evaluation
+# corpus. Every training project supports the same complete project workflow.
 TRAINING_PROJECTS = (
-    CorpusProject("black", "test/ecosystem/black/pyproject.toml"),
-    CorpusProject("poetry", "test/ecosystem/poetry/pyproject.toml"),
-    CorpusProject("pandas", "test/ecosystem/pandas/pyproject.toml"),
-    CorpusProject("packse", "test/ecosystem/packse/pyproject.toml", "3.12"),
+    CorpusProject("cibuildwheel", "scripts/pgo-corpus/cibuildwheel/pyproject.toml"),
+    CorpusProject("cookiecutter", "scripts/pgo-corpus/cookiecutter/pyproject.toml"),
+    CorpusProject("flask", "scripts/pgo-corpus/flask/pyproject.toml"),
+    CorpusProject("llm", "scripts/pgo-corpus/llm/pyproject.toml", ("numpy==2.2.6",)),
+    CorpusProject("openai", "scripts/pgo-corpus/openai-python/pyproject.toml"),
     CorpusProject(
-        "github-wikidata-bot",
-        "test/ecosystem/github-wikidata-bot/pyproject.toml",
-        "3.12",
+        "poetry",
+        "test/ecosystem/poetry/pyproject.toml",
+        ("rapidfuzz==3.9.6",),
     ),
-    CorpusProject("flyte", "test/requirements/flyte.in", "3.11", install=False),
-    CorpusProject("trio", "test/requirements/trio.in"),
-    CorpusProject("uv-benchmark", "scripts/benchmark/pyproject.toml"),
+    CorpusProject("pytest-cov", "scripts/pgo-corpus/pytest-cov/pyproject.toml"),
+    CorpusProject("rich-cli", "scripts/pgo-corpus/rich-cli/pyproject.toml"),
 )
 
 EVALUATION_PROJECTS = (
@@ -53,9 +52,8 @@ EVALUATION_PROJECTS = (
 class PreparedProject:
     name: str
     project: Path
-    requirements: Path
-    python_version: str | None = None
-    install: bool = True
+    manifest: Path
+    constraints: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -281,9 +279,9 @@ def prepare_corpus(
 
     projects: list[PreparedProject] = []
     for definition in definitions:
-        source = REPOSITORY_ROOT / definition.requirements
+        source = REPOSITORY_ROOT / definition.manifest
         if not source.is_file():
-            raise RuntimeError(f"Real project requirements not found: {source}")
+            raise RuntimeError(f"Real project manifest not found: {source}")
 
         project = root / definition.name
         project.mkdir(parents=True, exist_ok=True)
@@ -291,21 +289,14 @@ def prepare_corpus(
         shutil.rmtree(project / "installed", ignore_errors=True)
         (project / "uv.lock").unlink(missing_ok=True)
 
-        requirements = project / source.name
-        shutil.copyfile(source, requirements)
-        if definition.name == "poetry":
-            # Newer RapidFuzz releases do not provide manylinux2014 wheels.
-            with requirements.open("a", encoding="utf-8") as manifest:
-                manifest.write(
-                    '\n[tool.uv]\nconstraint-dependencies = ["rapidfuzz==3.9.6"]\n'
-                )
+        manifest = project / source.name
+        shutil.copyfile(source, manifest)
         projects.append(
             PreparedProject(
                 definition.name,
                 project,
-                requirements,
-                definition.python_version,
-                definition.install,
+                manifest,
+                definition.constraints,
             )
         )
 
@@ -326,7 +317,7 @@ def run_workloads(
     training_environment.pop("UV_OFFLINE", None)
     training_environment.update(
         {
-            "UV_CACHE_DIR": str(corpus.root / "cache" / "poetry"),
+            "UV_CACHE_DIR": str(corpus.root / "cache"),
             "UV_EXCLUDE_NEWER": EXCLUDE_NEWER,
             "UV_NO_PROGRESS": "1",
             "UV_PYTHON_DOWNLOADS": "never",
@@ -336,18 +327,12 @@ def run_workloads(
     commands: list[tuple[str, list[str]]] = []
 
     for project in corpus.projects:
-        version = (
-            ["--python-version", project.python_version]
-            if project.python_version is not None
-            else []
-        )
         command = [
             str(binary),
             "pip",
             "compile",
-            str(project.requirements),
+            str(project.manifest),
             *python,
-            *version,
             "--no-build",
             "--quiet",
             "--output-file",
@@ -360,112 +345,99 @@ def run_workloads(
             )
         )
 
-    primary = next(
-        (project for project in corpus.projects if project.name == "poetry"),
-        None,
-    )
-    if primary is None:
-        raise RuntimeError("The training corpus must include the Poetry project")
-
-    commands.extend(
-        [
-            (
-                "universal",
-                [
-                    str(binary),
-                    "pip",
-                    "compile",
-                    str(primary.requirements),
-                    *python,
-                    "--universal",
-                    "--no-build",
-                    "--quiet",
-                    "--output-file",
-                    str(primary.project / "universal-requirements.txt"),
-                ],
-            ),
-            (
-                "lock",
-                [
-                    str(binary),
-                    "lock",
-                    "--project",
-                    str(primary.project),
-                    *python,
-                    "--no-build",
-                    "--quiet",
-                ],
-            ),
-            (
-                "export",
-                [
-                    str(binary),
-                    "export",
-                    "--project",
-                    str(primary.project),
-                    "--frozen",
-                    "--no-emit-project",
-                    "--no-hashes",
-                    "--quiet",
-                    "--output-file",
-                    str(primary.project / "exported-requirements.txt"),
-                ],
-            ),
-        ]
-    )
-
     for project in corpus.projects:
-        if project.python_version is not None or not project.install:
-            continue
-        commands.append(
+        constraints = [
+            argument
+            for constraint in project.constraints
+            for argument in ("--upgrade-package", constraint)
+        ]
+        commands.extend(
             (
-                f"install-{project.name}",
-                [
-                    str(binary),
-                    "pip",
-                    "install",
-                    *python,
-                    "--target",
-                    str(project.project / "installed"),
-                    "--requirements",
-                    str(project.project / "requirements.txt"),
-                    "--no-build",
-                    "--quiet",
-                ],
+                (
+                    f"universal-{project.name}",
+                    [
+                        str(binary),
+                        "pip",
+                        "compile",
+                        str(project.manifest),
+                        *python,
+                        "--universal",
+                        "--no-build",
+                        "--quiet",
+                        "--output-file",
+                        str(project.project / "universal-requirements.txt"),
+                    ],
+                ),
+                (
+                    f"lock-{project.name}",
+                    [
+                        str(binary),
+                        "lock",
+                        "--project",
+                        str(project.project),
+                        *python,
+                        *constraints,
+                        "--no-build",
+                        "--quiet",
+                    ],
+                ),
+                (
+                    f"export-{project.name}",
+                    [
+                        str(binary),
+                        "export",
+                        "--project",
+                        str(project.project),
+                        "--frozen",
+                        "--no-emit-project",
+                        "--no-hashes",
+                        "--quiet",
+                        "--output-file",
+                        str(project.project / "exported-requirements.txt"),
+                    ],
+                ),
+                (
+                    f"install-{project.name}",
+                    [
+                        str(binary),
+                        "pip",
+                        "install",
+                        *python,
+                        "--target",
+                        str(project.project / "installed"),
+                        "--requirements",
+                        str(project.project / "requirements.txt"),
+                        "--no-build",
+                        "--quiet",
+                    ],
+                ),
+                (
+                    f"sync-{project.name}",
+                    [
+                        str(binary),
+                        "sync",
+                        "--project",
+                        str(project.project),
+                        "--frozen",
+                        *python,
+                        "--no-install-project",
+                        "--no-build",
+                        "--quiet",
+                    ],
+                ),
             )
         )
-
-    commands.append(
-        (
-            "sync",
-            [
-                str(binary),
-                "sync",
-                "--project",
-                str(primary.project),
-                "--frozen",
-                *python,
-                "--no-install-project",
-                "--no-build",
-                "--quiet",
-            ],
-        )
-    )
 
     if launcher.is_file():
         commands.append(("launcher", [str(launcher), "--version"]))
 
     for label, command in commands:
         workload_environment = training_environment.copy()
-        for prefix in ("resolve-cold-", "resolve-warm-", "install-"):
-            if label.startswith(prefix):
-                project = label.removeprefix(prefix)
-                workload_environment["UV_CACHE_DIR"] = str(
-                    corpus.root / "cache" / project
-                )
-                break
+        group = profile_group(label)
+        if label != group:
+            project = label.removeprefix(f"{group}-")
+            workload_environment["UV_CACHE_DIR"] = str(corpus.root / "cache" / project)
         if profile_dir is not None:
-            group = profile_group(label)
             suffix = (
                 "%4m"
                 if group in {"resolve-cold", "resolve-warm", "install"}
@@ -481,12 +453,17 @@ def run_workloads(
 
 
 def profile_group(label: str) -> str:
-    if label.startswith("resolve-cold-"):
-        return "resolve-cold"
-    if label.startswith("resolve-warm-"):
-        return "resolve-warm"
-    if label.startswith("install-"):
-        return "install"
+    for group in (
+        "resolve-cold",
+        "resolve-warm",
+        "universal",
+        "lock",
+        "export",
+        "install",
+        "sync",
+    ):
+        if label.startswith(f"{group}-"):
+            return group
     return label
 
 

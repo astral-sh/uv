@@ -1,0 +1,54 @@
+# Dependency metadata from https://github.com/simonw/llm/blob/512659547241a61e30116e9ada4db34a624062ae/pyproject.toml
+
+[project]
+name = "llm"
+version = "0.32a3"
+requires-python = ">=3.10"
+dependencies = [
+    "click",
+    "condense-json>=0.1.3",
+    "openai>=2.32.0",
+    "click-default-group>=1.2.3",
+    "sqlite-utils>=3.37",
+    "sqlite-migrate>=0.1a2",
+    "pydantic>=2.0.0",
+    "PyYAML",
+    "pluggy",
+    "python-ulid",
+    "setuptools",
+    "pip",
+    "pyreadline3; sys_platform == 'win32'",
+    "puremagic",
+]
+
+[dependency-groups]
+dev = [
+    "build",
+    "click>=8.2.0",
+    "pytest",
+    "numpy",
+    "pytest-httpx>=0.33.0",
+    "pytest-asyncio",
+    "cogapp",
+    "mypy>=1.10.0",
+    "black>=26.3.1",
+    "pytest-recording",
+    "ruff",
+    "syrupy",
+    "types-click",
+    "types-PyYAML",
+    "types-setuptools",
+    "llm-echo==0.3a3",
+    "sphinx==7.2.6",
+    "furo==2023.9.10",
+    "sphinx-autobuild",
+    "sphinx-copybutton",
+    "sphinx-markdown-builder==0.6.8",
+    "myst-parser",
+]
+
+[build-system]
+requires = [
+    "setuptools",
+]
+build-backend = "setuptools.build_meta"

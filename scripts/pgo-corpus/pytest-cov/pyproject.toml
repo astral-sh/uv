@@ -1,0 +1,25 @@
+# Dependency metadata from https://github.com/pytest-dev/pytest-cov/blob/66c8a526b1246b5eb8fb1bc218878131bc628622/pyproject.toml
+
+[project]
+name = "pytest-cov"
+version = "7.1.0"
+requires-python = ">=3.9"
+dependencies = [
+    "coverage[toml]>=7.10.6",
+    "pytest>=7",
+    "pluggy>=1.2",
+]
+
+[project.optional-dependencies]
+testing = [
+    "process-tests",
+    "pytest-xdist",
+    "virtualenv",
+]
+
+[build-system]
+requires = [
+    "hatchling",
+    "hatch-fancy-pypi-readme",
+]
+build-backend = "hatchling.build"
