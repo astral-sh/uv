@@ -158,7 +158,7 @@ pub(crate) fn coverage(args: CoverageArgs) -> Result<()> {
 
     println!("LCOV profile: {}", lcov_profile.display());
     println!(
-        "Generate an HTML report with: uv run --script scripts/coverage-html-report.py {tracking_id}"
+        "Generate an HTML report with: uv run --frozen --script scripts/coverage-html-report.py {tracking_id}"
     );
 
     Ok(())
