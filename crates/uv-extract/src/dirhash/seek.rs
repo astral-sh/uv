@@ -1,52 +1,23 @@
 //! Directory hashing while extracting seekable ZIP archives.
 
-use std::io::SeekFrom;
 use std::path::{Path, PathBuf};
-use std::sync::{Mutex, OnceLock, mpsc};
+use std::sync::Mutex;
 
 use crate::vendor::CloneableSeekableReader;
 use crate::{Error, insecure_no_validate, validate_archive_member_name};
+use async_zip::StoredZipEntry;
 use async_zip::base::read::seek::ZipFileReader;
 use async_zip::error::ZipError;
-use async_zip::{Compression, StoredZipEntry};
 use futures::executor::block_on;
-use futures::io::{AllowStdIo, AsyncRead, AsyncReadExt, AsyncSeek, AsyncSeekExt, AsyncWriteExt};
+use futures::io::{AllowStdIo, AsyncReadExt, AsyncWriteExt};
 use rayon::prelude::*;
 use rustc_hash::FxHashSet;
-use tokio::sync::{Semaphore, SemaphorePermit};
+use tokio_util::compat::{FuturesAsyncReadCompatExt, FuturesAsyncWriteCompatExt};
 use tracing::warn;
 use uv_configuration::initialize_rayon_once;
 
-use super::{DirectoryDigest, ExtractedFile, directory_digest_from_extracted};
+use super::{DirectoryDigest, ExtractedFile, blake3_copy, directory_digest_from_extracted};
 use crate::archive_path::SanitizedArchivePath;
-
-const LOCAL_FILE_HEADER_LENGTH: u64 = 30;
-const LOCAL_FILE_HEADER_LENGTH_USIZE: usize = 30;
-const LOCAL_FILE_HEADER_SIGNATURE: u32 = 0x0403_4b50;
-#[cfg(not(test))]
-const STORED_HASH_FAST_PATH_THRESHOLD: u64 = 8 * 1024 * 1024;
-#[cfg(test)]
-const STORED_HASH_FAST_PATH_THRESHOLD: u64 = 1;
-const PARALLEL_HASH_THRESHOLD: u64 = 8 * 1024 * 1024;
-const PARALLEL_HASH_BUFFER_POOL_THRESHOLD: u64 = 64 * 1024 * 1024;
-const HASH_BUFFER_SIZE: usize = 16 * 1024 * 1024;
-const PARALLEL_HASH_BUFFER_COUNT: usize = 2;
-const ALLOCATING_HASH_BUFFER_COUNT: usize = 3;
-const HASH_BUFFER_PERMIT_COUNT: usize = 4;
-const _: () = {
-    assert!(ALLOCATING_HASH_BUFFER_COUNT <= HASH_BUFFER_PERMIT_COUNT);
-    assert!(PARALLEL_HASH_BUFFER_COUNT <= HASH_BUFFER_PERMIT_COUNT);
-};
-static HASH_BUFFER_LIMITER: Semaphore = Semaphore::const_new(HASH_BUFFER_PERMIT_COUNT);
-static HASH_THREAD_POOL: OnceLock<Option<rayon::ThreadPool>> = OnceLock::new();
-
-/// Reserve 16 MiB hash-buffer slots from the process-wide 64 MiB budget.
-fn acquire_hash_buffers(count: usize) -> Result<SemaphorePermit<'static>, Error> {
-    let count = u32::try_from(count)
-        .map_err(|_| Error::Io(std::io::Error::other("invalid hash buffer count")))?;
-    block_on(HASH_BUFFER_LIMITER.acquire_many(count))
-        .map_err(|_| Error::Io(std::io::Error::other("hash buffer limiter closed")))
-}
 
 /// A successfully extracted file, or an explicit directory that can affect the digest.
 enum ExtractedEntry {
@@ -94,7 +65,8 @@ fn unzip_inner(
     let (reader, _) = reader.into_parts();
 
     // Parse the central directory once, then clone the archive reader per Rayon worker so
-    // extraction stays parallel for already-downloaded wheels.
+    // extraction stays parallel for already-downloaded wheels. AllowStdIo adapts synchronous
+    // file I/O to async_zip; extraction itself runs on blocking and Rayon threads.
     let archive = block_on(ZipFileReader::new(AllowStdIo::new(
         CloneableSeekableReader::new(reader),
     )))?;
@@ -204,12 +176,10 @@ fn extract_entry<R>(
     hash_contents: bool,
 ) -> Result<Option<ExtractedEntry>, Error>
 where
-    R: std::io::BufRead + std::io::Seek + Clone + Send + Sync + Unpin,
-    AllowStdIo<R>: Clone,
+    R: std::io::BufRead + std::io::Seek + Unpin,
 {
     let entry = archive.file().entries()[file_number].clone();
     let file_name = entry_file_name(&entry, file_number)?;
-    let compression = entry.compression();
     if let Err(err) = validate_archive_member_name(file_name) {
         if !skip_validation {
             return Err(err);
@@ -240,7 +210,6 @@ where
         file_number,
         enclosed_name,
         &path,
-        compression,
         skip_validation,
         hash_contents,
     )
@@ -307,13 +276,11 @@ fn extract_file_entry<R>(
     file_number: usize,
     enclosed_name: SanitizedArchivePath,
     path: &Path,
-    compression: Compression,
     skip_validation: bool,
     hash_contents: bool,
 ) -> Result<ExtractedEntry, Error>
 where
-    R: std::io::BufRead + std::io::Seek + Clone + Send + Sync + Unpin,
-    AllowStdIo<R>: Clone,
+    R: std::io::BufRead + std::io::Seek + Unpin,
 {
     let outfile = if hash_contents {
         fs_err::OpenOptions::new()
@@ -329,13 +296,8 @@ where
     let executable = unix_permissions.is_some_and(|mode| mode & 0o111 != 0);
     let writer = buffered_file_writer(outfile, size);
 
-    let (copied, computed_crc32, digest) = if hash_contents {
-        let (copied, computed_crc32, digest) =
-            copy_entry_with_digest(archive, entry, file_number, writer, compression, size)?;
-        (copied, computed_crc32, Some(digest))
-    } else {
-        block_on(copy_entry(archive, file_number, writer, false))?
-    };
+    let (copied, computed_crc32, digest) =
+        block_on(copy_entry(archive, file_number, writer, hash_contents))?;
     validate_file_entry(
         enclosed_name.as_path(),
         copied,
@@ -362,57 +324,6 @@ fn buffered_file_writer(file: fs_err::File, size: u64) -> std::io::BufWriter<fs_
     } else {
         std::io::BufWriter::new(file)
     }
-}
-
-/// Copy an entry to disk while computing its content digest.
-///
-/// Small entries are hashed while copying. Large compressed entries move hashing to a dedicated
-/// thread, while large stored entries hash their raw archive bytes in parallel with extraction.
-fn copy_entry_with_digest<R>(
-    archive: &mut ZipFileReader<AllowStdIo<R>>,
-    entry: &StoredZipEntry,
-    file_number: usize,
-    writer: std::io::BufWriter<fs_err::File>,
-    compression: Compression,
-    size: u64,
-) -> Result<(u64, u32, blake3::Hash), Error>
-where
-    R: std::io::BufRead + std::io::Seek + Clone + Send + Sync + Unpin,
-    AllowStdIo<R>: Clone,
-{
-    let use_stored_hash_fast_path = matches!(compression, Compression::Stored)
-        && size >= STORED_HASH_FAST_PATH_THRESHOLD
-        && entry.compressed_size() == size;
-
-    if use_stored_hash_fast_path {
-        let _permit = acquire_hash_buffers(1)?;
-        let header_offset = entry.header_offset();
-        let mut hash_archive = archive.clone();
-        let (copied, stored_digest) = std::thread::scope(|scope| {
-            let stored_digest =
-                scope.spawn(move || hash_stored_entry(&mut hash_archive, header_offset, size));
-            let copied = block_on(copy_entry(archive, file_number, writer, false));
-            (copied, stored_digest.join())
-        });
-        let (copied, computed_crc32, digest) = copied?;
-        debug_assert!(digest.is_none());
-        let stored_digest = stored_digest.map_err(|_| thread_panic_error())??;
-        return Ok((copied, computed_crc32, stored_digest));
-    }
-
-    if size >= PARALLEL_HASH_THRESHOLD {
-        return copy_entry_with_hash_thread(archive, file_number, writer, size);
-    }
-
-    let (copied, computed_crc32, digest) =
-        block_on(copy_entry(archive, file_number, writer, true))?;
-    let Some(digest) = digest else {
-        return Err(Error::Io(std::io::Error::new(
-            std::io::ErrorKind::InvalidData,
-            "missing digest for ZIP entry",
-        )));
-    };
-    Ok((copied, computed_crc32, digest))
 }
 
 /// Validate the copied size and CRC for a file entry.
@@ -488,7 +399,17 @@ where
 {
     let mut file = archive.reader_with_entry(file_number).await?;
     let mut writer = AllowStdIo::new(writer);
-    let mut hasher = hash_contents.then(blake3::Hasher::new);
+
+    if hash_contents {
+        let (copied, digest) = Box::pin(blake3_copy(
+            (&mut file).compat(),
+            (&mut writer).compat_write(),
+        ))
+        .await
+        .map_err(Error::io_or_compression)?;
+        return Ok((copied, file.compute_hash(), Some(digest)));
+    }
+
     let mut copied = 0;
     let mut buffer = vec![0; 128 * 1024];
     loop {
@@ -499,272 +420,9 @@ where
         if read == 0 {
             break;
         }
-        if let Some(hasher) = hasher.as_mut() {
-            hasher.update(&buffer[..read]);
-        }
         writer.write_all(&buffer[..read]).await.map_err(Error::Io)?;
         copied += read as u64;
     }
     writer.flush().await.map_err(Error::Io)?;
-    Ok((
-        copied,
-        file.compute_hash(),
-        hasher.map(|hasher| hasher.finalize()),
-    ))
-}
-
-/// Copy an entry while hashing contents on a separate thread.
-fn copy_entry_with_hash_thread<R>(
-    archive: &mut ZipFileReader<AllowStdIo<R>>,
-    file_number: usize,
-    writer: std::io::BufWriter<fs_err::File>,
-    size: u64,
-) -> Result<(u64, u32, blake3::Hash), Error>
-where
-    R: std::io::BufRead + std::io::Seek + Unpin,
-{
-    if size < PARALLEL_HASH_BUFFER_POOL_THRESHOLD {
-        let _permit = acquire_hash_buffers(ALLOCATING_HASH_BUFFER_COUNT)?;
-        return copy_entry_with_allocating_hash_thread(archive, file_number, writer);
-    }
-    let _permit = acquire_hash_buffers(PARALLEL_HASH_BUFFER_COUNT)?;
-    copy_entry_with_buffer_pool_hash_thread(archive, file_number, writer)
-}
-
-/// Copy and hash an entry using freshly allocated buffers for each transferred chunk.
-fn copy_entry_with_allocating_hash_thread<R>(
-    archive: &mut ZipFileReader<AllowStdIo<R>>,
-    file_number: usize,
-    writer: std::io::BufWriter<fs_err::File>,
-) -> Result<(u64, u32, blake3::Hash), Error>
-where
-    R: std::io::BufRead + std::io::Seek + Unpin,
-{
-    std::thread::scope(|scope| {
-        let (sender, receiver) = mpsc::sync_channel::<Vec<u8>>(1);
-        let hash_thread = scope.spawn(move || {
-            let mut hasher = blake3::Hasher::new();
-            while let Ok(chunk) = receiver.recv() {
-                hasher.update(&chunk);
-            }
-            hasher.finalize()
-        });
-
-        let copied = block_on(async {
-            let mut file = archive.reader_with_entry(file_number).await?;
-            let mut writer = AllowStdIo::new(writer);
-            let mut copied = 0;
-            loop {
-                let mut buffer = vec![0; HASH_BUFFER_SIZE];
-                let read = file
-                    .read(&mut buffer)
-                    .await
-                    .map_err(Error::io_or_compression)?;
-                if read == 0 {
-                    break;
-                }
-                writer.write_all(&buffer[..read]).await.map_err(Error::Io)?;
-                copied += read as u64;
-                buffer.truncate(read);
-                sender.send(buffer).map_err(|_| {
-                    Error::Io(std::io::Error::new(
-                        std::io::ErrorKind::BrokenPipe,
-                        "failed to send ZIP entry chunk to hash thread",
-                    ))
-                })?;
-            }
-            writer.flush().await.map_err(Error::Io)?;
-            Ok::<_, Error>((copied, file.compute_hash()))
-        });
-
-        drop(sender);
-        let digest = hash_thread.join().map_err(|_| thread_panic_error())?;
-        copied.map(|(copied, computed_crc32)| (copied, computed_crc32, digest))
-    })
-}
-
-/// Copy and hash an entry using a small recycled buffer pool to reduce large allocations.
-fn copy_entry_with_buffer_pool_hash_thread<R>(
-    archive: &mut ZipFileReader<AllowStdIo<R>>,
-    file_number: usize,
-    writer: std::io::BufWriter<fs_err::File>,
-) -> Result<(u64, u32, blake3::Hash), Error>
-where
-    R: std::io::BufRead + std::io::Seek + Unpin,
-{
-    std::thread::scope(|scope| {
-        struct HashChunk {
-            buffer: Vec<u8>,
-            read: usize,
-        }
-
-        let (sender, receiver) = mpsc::sync_channel::<HashChunk>(PARALLEL_HASH_BUFFER_COUNT);
-        let (buffer_sender, buffer_receiver) =
-            mpsc::sync_channel::<Vec<u8>>(PARALLEL_HASH_BUFFER_COUNT);
-        for _ in 0..PARALLEL_HASH_BUFFER_COUNT {
-            buffer_sender.send(vec![0; HASH_BUFFER_SIZE]).map_err(|_| {
-                Error::Io(std::io::Error::new(
-                    std::io::ErrorKind::BrokenPipe,
-                    "failed to initialize ZIP entry hash buffer",
-                ))
-            })?;
-        }
-
-        let recycle_sender = buffer_sender.clone();
-        drop(buffer_sender);
-        let hash_thread = scope.spawn(move || {
-            let mut hasher = blake3::Hasher::new();
-            while let Ok(chunk) = receiver.recv() {
-                hasher.update(&chunk.buffer[..chunk.read]);
-                if recycle_sender.send(chunk.buffer).is_err() {
-                    break;
-                }
-            }
-            hasher.finalize()
-        });
-
-        let copied = block_on(async {
-            let mut file = archive.reader_with_entry(file_number).await?;
-            let mut writer = AllowStdIo::new(writer);
-            let mut copied = 0;
-            loop {
-                let mut buffer = buffer_receiver.recv().map_err(|_| {
-                    Error::Io(std::io::Error::new(
-                        std::io::ErrorKind::BrokenPipe,
-                        "failed to receive ZIP entry hash buffer",
-                    ))
-                })?;
-                let read = file
-                    .read(&mut buffer)
-                    .await
-                    .map_err(Error::io_or_compression)?;
-                if read == 0 {
-                    break;
-                }
-                writer.write_all(&buffer[..read]).await.map_err(Error::Io)?;
-                copied += read as u64;
-                sender.send(HashChunk { buffer, read }).map_err(|_| {
-                    Error::Io(std::io::Error::new(
-                        std::io::ErrorKind::BrokenPipe,
-                        "failed to send ZIP entry chunk to hash thread",
-                    ))
-                })?;
-            }
-            writer.flush().await.map_err(Error::Io)?;
-            Ok::<_, Error>((copied, file.compute_hash()))
-        });
-
-        drop(sender);
-        let digest = hash_thread.join().map_err(|_| thread_panic_error())?;
-        copied.map(|(copied, computed_crc32)| (copied, computed_crc32, digest))
-    })
-}
-
-/// Hash a stored entry's raw bytes from an already-open archive reader.
-///
-/// Stored entries have identical compressed and uncompressed contents, so a cloned seekable reader
-/// can hash the payload in parallel while the primary reader extracts and validates the entry.
-fn hash_stored_entry<R>(
-    archive: &mut ZipFileReader<AllowStdIo<R>>,
-    header_offset: u64,
-    compressed_size: u64,
-) -> Result<blake3::Hash, Error>
-where
-    R: std::io::BufRead + std::io::Seek + Unpin,
-{
-    block_on(async {
-        let reader = archive.inner_mut();
-        let data_offset = stored_entry_data_offset(reader, header_offset).await?;
-        reader
-            .seek(SeekFrom::Start(data_offset))
-            .await
-            .map_err(Error::Io)?;
-
-        let mut hasher = blake3::Hasher::new();
-        let mut remaining = compressed_size;
-        let mut buffer = vec![0; HASH_BUFFER_SIZE];
-        while remaining > 0 {
-            let read_size = usize::try_from(remaining.min(buffer.len() as u64)).map_err(|_| {
-                Error::Io(std::io::Error::new(
-                    std::io::ErrorKind::InvalidData,
-                    "stored ZIP entry is too large to hash",
-                ))
-            })?;
-            reader
-                .read_exact(&mut buffer[..read_size])
-                .await
-                .map_err(Error::Io)?;
-            update_hash_rayon(&mut hasher, &buffer[..read_size]);
-            remaining -= read_size as u64;
-        }
-
-        Ok(hasher.finalize())
-    })
-}
-
-/// Return the byte offset of a stored entry's payload from its local file header.
-///
-/// The central-directory offset points to the header, so the variable-length file name and extra
-/// field must be skipped before hashing the payload.
-async fn stored_entry_data_offset<R>(reader: &mut R, header_offset: u64) -> Result<u64, Error>
-where
-    R: AsyncRead + AsyncSeek + Unpin,
-{
-    reader
-        .seek(SeekFrom::Start(header_offset))
-        .await
-        .map_err(Error::Io)?;
-    let mut header = [0; LOCAL_FILE_HEADER_LENGTH_USIZE];
-    reader.read_exact(&mut header).await.map_err(Error::Io)?;
-
-    let signature = u32::from_le_bytes([header[0], header[1], header[2], header[3]]);
-    if signature != LOCAL_FILE_HEADER_SIGNATURE {
-        return Err(Error::Io(std::io::Error::new(
-            std::io::ErrorKind::InvalidData,
-            "invalid ZIP local file header signature",
-        )));
-    }
-
-    let filename_length = u64::from(u16::from_le_bytes([header[26], header[27]]));
-    let extra_field_length = u64::from(u16::from_le_bytes([header[28], header[29]]));
-    header_offset
-        .checked_add(LOCAL_FILE_HEADER_LENGTH)
-        .and_then(|offset| offset.checked_add(filename_length))
-        .and_then(|offset| offset.checked_add(extra_field_length))
-        .ok_or_else(|| {
-            Error::Io(std::io::Error::new(
-                std::io::ErrorKind::InvalidData,
-                "ZIP local file header is too large",
-            ))
-        })
-}
-
-fn thread_panic_error() -> Error {
-    Error::Io(std::io::Error::other("hash thread panicked"))
-}
-
-/// Hash a large stored-entry chunk using the bounded hash pool when available.
-fn update_hash_rayon(hasher: &mut blake3::Hasher, bytes: &[u8]) {
-    match HASH_THREAD_POOL.get_or_init(build_hash_thread_pool) {
-        Some(pool) => {
-            pool.install(|| {
-                hasher.update_rayon(bytes);
-            });
-        }
-        None => {
-            hasher.update(bytes);
-        }
-    }
-}
-
-/// Build a small pool for BLAKE3 chunk parallelism without occupying the extraction workers.
-fn build_hash_thread_pool() -> Option<rayon::ThreadPool> {
-    let threads = std::thread::available_parallelism()
-        .map(|threads| threads.get().clamp(1, 4))
-        .unwrap_or(1);
-    rayon::ThreadPoolBuilder::new()
-        .num_threads(threads)
-        .thread_name(|index| format!("uv-extract-hash-{index}"))
-        .build()
-        .ok()
+    Ok((copied, file.compute_hash(), None))
 }
