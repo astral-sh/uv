@@ -47,9 +47,8 @@ fn pyx_external() -> Result<()> {
 
 // Source: astral-sh/pyx at 5752f1cd9766b9df934658ceaeb10eb37986e54d.
 //
-// Preserve the complete workspace dependency graph while anonymizing private
-// package names. The sdist-only `atlas-provider-sqlalchemy` dependency is
-// omitted, and the exact Python patch requirement is widened to Python 3.14.
+// The sdist-only `atlas-provider-sqlalchemy` dependency is omitted, and the
+// exact Python patch requirement is widened to Python 3.14.
 #[test]
 fn pyx_workspace() -> Result<()> {
     lock_ecosystem_package_without_build("3.14", "pyx-workspace")

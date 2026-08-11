@@ -11,44 +11,44 @@ exclude-newer = "2026-06-30T00:00:00Z"
 
 [manifest]
 members = [
-    "pyx-component-01",
-    "pyx-component-02",
-    "pyx-component-03",
-    "pyx-component-04",
-    "pyx-component-05",
-    "pyx-component-06",
-    "pyx-component-07",
-    "pyx-component-08",
-    "pyx-component-09",
-    "pyx-component-10",
-    "pyx-component-11",
-    "pyx-component-12",
-    "pyx-component-13",
-    "pyx-component-14",
-    "pyx-component-15",
-    "pyx-component-16",
-    "pyx-component-17",
-    "pyx-component-18",
-    "pyx-component-19",
-    "pyx-component-20",
-    "pyx-component-21",
-    "pyx-component-22",
-    "pyx-component-23",
-    "pyx-component-24",
-    "pyx-component-25",
-    "pyx-component-26",
-    "pyx-component-27",
-    "pyx-component-28",
-    "pyx-component-29",
-    "pyx-component-30",
-    "pyx-component-31",
-    "pyx-component-32",
-    "pyx-component-33",
-    "pyx-component-34",
-    "pyx-component-35",
-    "pyx-component-36",
-    "pyx-component-37",
     "pyx-ecosystem",
+    "pyx-member-01",
+    "pyx-member-02",
+    "pyx-member-03",
+    "pyx-member-04",
+    "pyx-member-05",
+    "pyx-member-06",
+    "pyx-member-07",
+    "pyx-member-08",
+    "pyx-member-09",
+    "pyx-member-10",
+    "pyx-member-11",
+    "pyx-member-12",
+    "pyx-member-13",
+    "pyx-member-14",
+    "pyx-member-15",
+    "pyx-member-16",
+    "pyx-member-17",
+    "pyx-member-18",
+    "pyx-member-19",
+    "pyx-member-20",
+    "pyx-member-21",
+    "pyx-member-22",
+    "pyx-member-23",
+    "pyx-member-24",
+    "pyx-member-25",
+    "pyx-member-26",
+    "pyx-member-27",
+    "pyx-member-28",
+    "pyx-member-29",
+    "pyx-member-30",
+    "pyx-member-31",
+    "pyx-member-32",
+    "pyx-member-33",
+    "pyx-member-34",
+    "pyx-member-35",
+    "pyx-member-36",
+    "pyx-member-37",
 ]
 
 [[package]]
@@ -2034,14 +2034,37 @@ wheels = [
 ]
 
 [[package]]
-name = "pyx-component-01"
+name = "pyx-ecosystem"
 version = "0.1.0"
-source = { editable = "components/pyx-component-01" }
+source = { virtual = "." }
+
+[package.dev-dependencies]
+dev = [
+    { name = "deptry" },
+    { name = "pyx-member-33" },
+    { name = "ruff" },
+    { name = "ty" },
+]
+
+[package.metadata]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "deptry", specifier = "==0.25.1" },
+    { name = "pyx-member-33", editable = "members/pyx-member-33" },
+    { name = "ruff", specifier = "==0.15.18" },
+    { name = "ty", specifier = "==0.0.51" },
+]
+
+[[package]]
+name = "pyx-member-01"
+version = "0.1.0"
+source = { editable = "members/pyx-member-01" }
 dependencies = [
     { name = "greenlet" },
-    { name = "pyx-component-06" },
-    { name = "pyx-component-23" },
-    { name = "pyx-component-29" },
+    { name = "pyx-member-06" },
+    { name = "pyx-member-23" },
+    { name = "pyx-member-29" },
     { name = "sentry-sdk", extra = ["sqlalchemy"] },
     { name = "sqlalchemy" },
     { name = "stripe" },
@@ -2056,7 +2079,7 @@ dev = [
     { name = "pytest" },
     { name = "pytest-asyncio" },
     { name = "python-dotenv" },
-    { name = "pyx-component-33" },
+    { name = "pyx-member-33" },
     { name = "ruff" },
     { name = "ty" },
 ]
@@ -2064,9 +2087,9 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "greenlet", specifier = "==3.4.0" },
-    { name = "pyx-component-06", editable = "components/pyx-component-06" },
-    { name = "pyx-component-23", editable = "components/pyx-component-23" },
-    { name = "pyx-component-29", editable = "components/pyx-component-29" },
+    { name = "pyx-member-06", editable = "members/pyx-member-06" },
+    { name = "pyx-member-23", editable = "members/pyx-member-23" },
+    { name = "pyx-member-29", editable = "members/pyx-member-29" },
     { name = "sentry-sdk", extras = ["sqlalchemy"], specifier = "==2.57.0" },
     { name = "sqlalchemy", specifier = "==2.0.49" },
     { name = "stripe", specifier = "==14.5.0a1" },
@@ -2081,22 +2104,22 @@ dev = [
     { name = "pytest", specifier = "==9.0.3" },
     { name = "pytest-asyncio", specifier = "==1.3.0" },
     { name = "python-dotenv", specifier = "==1.2.2" },
-    { name = "pyx-component-33", editable = "components/pyx-component-33" },
+    { name = "pyx-member-33", editable = "members/pyx-member-33" },
     { name = "ruff", specifier = "==0.15.18" },
     { name = "ty", specifier = "==0.0.51" },
 ]
 
 [[package]]
-name = "pyx-component-02"
+name = "pyx-member-02"
 version = "0.1.0"
-source = { editable = "components/pyx-component-02" }
+source = { editable = "members/pyx-member-02" }
 dependencies = [
-    { name = "pyx-component-04" },
-    { name = "pyx-component-06" },
-    { name = "pyx-component-09", extra = ["aws"] },
-    { name = "pyx-component-23" },
-    { name = "pyx-component-24" },
-    { name = "pyx-component-29" },
+    { name = "pyx-member-04" },
+    { name = "pyx-member-06" },
+    { name = "pyx-member-09", extra = ["aws"] },
+    { name = "pyx-member-23" },
+    { name = "pyx-member-24" },
+    { name = "pyx-member-29" },
     { name = "sentry-sdk" },
     { name = "sqlalchemy" },
     { name = "tsayt" },
@@ -2107,19 +2130,19 @@ dev = [
     { name = "deptry" },
     { name = "inline-snapshot" },
     { name = "pytest" },
-    { name = "pyx-component-33" },
+    { name = "pyx-member-33" },
     { name = "ruff" },
     { name = "ty" },
 ]
 
 [package.metadata]
 requires-dist = [
-    { name = "pyx-component-04", editable = "components/pyx-component-04" },
-    { name = "pyx-component-06", editable = "components/pyx-component-06" },
-    { name = "pyx-component-09", extras = ["aws"], editable = "components/pyx-component-09" },
-    { name = "pyx-component-23", editable = "components/pyx-component-23" },
-    { name = "pyx-component-24", editable = "components/pyx-component-24" },
-    { name = "pyx-component-29", editable = "components/pyx-component-29" },
+    { name = "pyx-member-04", editable = "members/pyx-member-04" },
+    { name = "pyx-member-06", editable = "members/pyx-member-06" },
+    { name = "pyx-member-09", extras = ["aws"], editable = "members/pyx-member-09" },
+    { name = "pyx-member-23", editable = "members/pyx-member-23" },
+    { name = "pyx-member-24", editable = "members/pyx-member-24" },
+    { name = "pyx-member-29", editable = "members/pyx-member-29" },
     { name = "sentry-sdk", specifier = "==2.57.0" },
     { name = "sqlalchemy", specifier = "==2.0.49" },
     { name = "tsayt", specifier = "==0.1.1" },
@@ -2130,19 +2153,19 @@ dev = [
     { name = "deptry", specifier = "==0.25.1" },
     { name = "inline-snapshot", specifier = "==0.32.6" },
     { name = "pytest", specifier = "==9.0.3" },
-    { name = "pyx-component-33", editable = "components/pyx-component-33" },
+    { name = "pyx-member-33", editable = "members/pyx-member-33" },
     { name = "ruff", specifier = "==0.15.18" },
     { name = "ty", specifier = "==0.0.51" },
 ]
 
 [[package]]
-name = "pyx-component-03"
+name = "pyx-member-03"
 version = "0.1.0"
-source = { editable = "components/pyx-component-03" }
+source = { editable = "members/pyx-member-03" }
 dependencies = [
     { name = "boto3" },
     { name = "botocore" },
-    { name = "pyx-component-32" },
+    { name = "pyx-member-32" },
 ]
 
 [package.dev-dependencies]
@@ -2151,9 +2174,9 @@ dev = [
     { name = "dirty-equals" },
     { name = "inline-snapshot" },
     { name = "msgspec" },
-    { name = "pyx-component-23" },
-    { name = "pyx-component-30" },
-    { name = "pyx-component-33" },
+    { name = "pyx-member-23" },
+    { name = "pyx-member-30" },
+    { name = "pyx-member-33" },
     { name = "ty" },
 ]
 
@@ -2161,7 +2184,7 @@ dev = [
 requires-dist = [
     { name = "boto3", specifier = "==1.42.88" },
     { name = "botocore", specifier = "==1.42.88" },
-    { name = "pyx-component-32", editable = "components/pyx-component-32" },
+    { name = "pyx-member-32", editable = "members/pyx-member-32" },
 ]
 
 [package.metadata.requires-dev]
@@ -2170,16 +2193,16 @@ dev = [
     { name = "dirty-equals", specifier = "==0.11" },
     { name = "inline-snapshot", specifier = "==0.32.6" },
     { name = "msgspec", specifier = "==0.21.1" },
-    { name = "pyx-component-23", editable = "components/pyx-component-23" },
-    { name = "pyx-component-30", editable = "components/pyx-component-30" },
-    { name = "pyx-component-33", editable = "components/pyx-component-33" },
+    { name = "pyx-member-23", editable = "members/pyx-member-23" },
+    { name = "pyx-member-30", editable = "members/pyx-member-30" },
+    { name = "pyx-member-33", editable = "members/pyx-member-33" },
     { name = "ty", specifier = "==0.0.51" },
 ]
 
 [[package]]
-name = "pyx-component-04"
+name = "pyx-member-04"
 version = "0.1.0"
-source = { editable = "components/pyx-component-04" }
+source = { editable = "members/pyx-member-04" }
 
 [package.dev-dependencies]
 dev = [
@@ -2198,12 +2221,12 @@ dev = [
 ]
 
 [[package]]
-name = "pyx-component-05"
+name = "pyx-member-05"
 version = "0.1.0"
-source = { editable = "components/pyx-component-05" }
+source = { editable = "members/pyx-member-05" }
 dependencies = [
     { name = "cryptography" },
-    { name = "pyx-component-04" },
+    { name = "pyx-member-04" },
 ]
 
 [package.dev-dependencies]
@@ -2211,7 +2234,7 @@ dev = [
     { name = "deptry" },
     { name = "inline-snapshot" },
     { name = "pytest" },
-    { name = "pyx-component-33" },
+    { name = "pyx-member-33" },
     { name = "ruff" },
     { name = "ty" },
 ]
@@ -2219,7 +2242,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "cryptography", specifier = "==48.0.1" },
-    { name = "pyx-component-04", editable = "components/pyx-component-04" },
+    { name = "pyx-member-04", editable = "members/pyx-member-04" },
 ]
 
 [package.metadata.requires-dev]
@@ -2227,15 +2250,15 @@ dev = [
     { name = "deptry", specifier = "==0.25.1" },
     { name = "inline-snapshot", specifier = "==0.32.6" },
     { name = "pytest", specifier = "==9.0.3" },
-    { name = "pyx-component-33", editable = "components/pyx-component-33" },
+    { name = "pyx-member-33", editable = "members/pyx-member-33" },
     { name = "ruff", specifier = "==0.15.18" },
     { name = "ty", specifier = "==0.0.51" },
 ]
 
 [[package]]
-name = "pyx-component-06"
+name = "pyx-member-06"
 version = "0.1.0"
-source = { editable = "components/pyx-component-06" }
+source = { editable = "members/pyx-member-06" }
 dependencies = [
     { name = "aiomysql" },
     { name = "pymysql" },
@@ -2264,9 +2287,9 @@ dev = [
 ]
 
 [[package]]
-name = "pyx-component-07"
+name = "pyx-member-07"
 version = "0.1.0"
-source = { editable = "components/pyx-component-07" }
+source = { editable = "members/pyx-member-07" }
 dependencies = [
     { name = "aiofiles" },
     { name = "aiohttp" },
@@ -2279,17 +2302,17 @@ dependencies = [
     { name = "packaging" },
     { name = "packaging-legacy" },
     { name = "polars" },
-    { name = "pyx-component-06" },
-    { name = "pyx-component-09", extra = ["aws"] },
-    { name = "pyx-component-23" },
-    { name = "pyx-component-24", extra = ["aws"] },
-    { name = "pyx-component-25" },
-    { name = "pyx-component-26" },
-    { name = "pyx-component-28" },
-    { name = "pyx-component-29" },
-    { name = "pyx-component-31" },
-    { name = "pyx-component-32" },
-    { name = "pyx-component-37" },
+    { name = "pyx-member-06" },
+    { name = "pyx-member-09", extra = ["aws"] },
+    { name = "pyx-member-23" },
+    { name = "pyx-member-24", extra = ["aws"] },
+    { name = "pyx-member-25" },
+    { name = "pyx-member-26" },
+    { name = "pyx-member-28" },
+    { name = "pyx-member-29" },
+    { name = "pyx-member-31" },
+    { name = "pyx-member-32" },
+    { name = "pyx-member-37" },
     { name = "redis" },
     { name = "remotezip" },
     { name = "rfc3986" },
@@ -2320,7 +2343,7 @@ dev = [
     { name = "pytest" },
     { name = "pytest-asyncio" },
     { name = "pytest-cov" },
-    { name = "pyx-component-33" },
+    { name = "pyx-member-33" },
     { name = "ruff" },
     { name = "ty" },
     { name = "types-aiofiles" },
@@ -2341,17 +2364,17 @@ requires-dist = [
     { name = "packaging-legacy", specifier = "==23.0.post0" },
     { name = "pip", marker = "extra == 'modal'", specifier = "==26.1" },
     { name = "polars", specifier = "==1.39.3" },
-    { name = "pyx-component-06", editable = "components/pyx-component-06" },
-    { name = "pyx-component-09", extras = ["aws"], editable = "components/pyx-component-09" },
-    { name = "pyx-component-23", editable = "components/pyx-component-23" },
-    { name = "pyx-component-24", extras = ["aws"], editable = "components/pyx-component-24" },
-    { name = "pyx-component-25", editable = "components/pyx-component-25" },
-    { name = "pyx-component-26", editable = "components/pyx-component-26" },
-    { name = "pyx-component-28", editable = "components/pyx-component-28" },
-    { name = "pyx-component-29", editable = "components/pyx-component-29" },
-    { name = "pyx-component-31", editable = "components/pyx-component-31" },
-    { name = "pyx-component-32", editable = "components/pyx-component-32" },
-    { name = "pyx-component-37", editable = "components/pyx-component-37" },
+    { name = "pyx-member-06", editable = "members/pyx-member-06" },
+    { name = "pyx-member-09", extras = ["aws"], editable = "members/pyx-member-09" },
+    { name = "pyx-member-23", editable = "members/pyx-member-23" },
+    { name = "pyx-member-24", extras = ["aws"], editable = "members/pyx-member-24" },
+    { name = "pyx-member-25", editable = "members/pyx-member-25" },
+    { name = "pyx-member-26", editable = "members/pyx-member-26" },
+    { name = "pyx-member-28", editable = "members/pyx-member-28" },
+    { name = "pyx-member-29", editable = "members/pyx-member-29" },
+    { name = "pyx-member-31", editable = "members/pyx-member-31" },
+    { name = "pyx-member-32", editable = "members/pyx-member-32" },
+    { name = "pyx-member-37", editable = "members/pyx-member-37" },
     { name = "redis", specifier = "==7.4.0" },
     { name = "remotezip", specifier = "==0.12.3" },
     { name = "rfc3986", specifier = "==2.0.0" },
@@ -2377,24 +2400,24 @@ dev = [
     { name = "pytest", specifier = "==9.0.3" },
     { name = "pytest-asyncio", specifier = "==1.3.0" },
     { name = "pytest-cov", specifier = "==7.1.0" },
-    { name = "pyx-component-33", editable = "components/pyx-component-33" },
+    { name = "pyx-member-33", editable = "members/pyx-member-33" },
     { name = "ruff", specifier = "==0.15.18" },
     { name = "ty", specifier = "==0.0.51" },
     { name = "types-aiofiles", specifier = "==25.1.0.20260409" },
 ]
 
 [[package]]
-name = "pyx-component-08"
+name = "pyx-member-08"
 version = "0.1.0"
-source = { editable = "components/pyx-component-08" }
+source = { editable = "members/pyx-member-08" }
 
 [package.dev-dependencies]
 dev = [
     { name = "deptry" },
     { name = "packaging" },
     { name = "pytest" },
-    { name = "pyx-component-29" },
-    { name = "pyx-component-33" },
+    { name = "pyx-member-29" },
+    { name = "pyx-member-33" },
     { name = "rfc3986" },
     { name = "ruff" },
     { name = "sentry-sdk" },
@@ -2409,8 +2432,8 @@ dev = [
     { name = "deptry", specifier = "==0.25.1" },
     { name = "packaging", specifier = "==26.0" },
     { name = "pytest", specifier = "==9.0.3" },
-    { name = "pyx-component-29", editable = "components/pyx-component-29" },
-    { name = "pyx-component-33", editable = "components/pyx-component-33" },
+    { name = "pyx-member-29", editable = "members/pyx-member-29" },
+    { name = "pyx-member-33", editable = "members/pyx-member-33" },
     { name = "rfc3986", specifier = "==2.0.0" },
     { name = "ruff", specifier = "==0.15.18" },
     { name = "sentry-sdk", specifier = "==2.57.0" },
@@ -2419,13 +2442,13 @@ dev = [
 ]
 
 [[package]]
-name = "pyx-component-09"
+name = "pyx-member-09"
 version = "0.1.0"
-source = { editable = "components/pyx-component-09" }
+source = { editable = "members/pyx-member-09" }
 dependencies = [
     { name = "msgspec" },
-    { name = "pyx-component-04" },
-    { name = "pyx-component-23" },
+    { name = "pyx-member-04" },
+    { name = "pyx-member-23" },
     { name = "redis" },
 ]
 
@@ -2441,7 +2464,7 @@ dev = [
     { name = "pytest" },
     { name = "pytest-asyncio" },
     { name = "pytest-randomly" },
-    { name = "pyx-component-33" },
+    { name = "pyx-member-33" },
     { name = "ruff" },
     { name = "ty" },
 ]
@@ -2450,8 +2473,8 @@ dev = [
 requires-dist = [
     { name = "boto3", extras = ["crt"], marker = "extra == 'aws'", specifier = "==1.42.88" },
     { name = "msgspec", specifier = "==0.21.1" },
-    { name = "pyx-component-04", editable = "components/pyx-component-04" },
-    { name = "pyx-component-23", editable = "components/pyx-component-23" },
+    { name = "pyx-member-04", editable = "members/pyx-member-04" },
+    { name = "pyx-member-23", editable = "members/pyx-member-23" },
     { name = "redis", specifier = "==7.4.0" },
 ]
 provides-extras = ["aws"]
@@ -2463,17 +2486,17 @@ dev = [
     { name = "pytest", specifier = "==9.0.3" },
     { name = "pytest-asyncio", specifier = "==1.3.0" },
     { name = "pytest-randomly", specifier = "==4.0.1" },
-    { name = "pyx-component-33", editable = "components/pyx-component-33" },
+    { name = "pyx-member-33", editable = "members/pyx-member-33" },
     { name = "ruff", specifier = "==0.15.18" },
     { name = "ty", specifier = "==0.0.51" },
 ]
 
 [[package]]
-name = "pyx-component-10"
+name = "pyx-member-10"
 version = "0.1.0"
-source = { editable = "components/pyx-component-10" }
+source = { editable = "members/pyx-member-10" }
 dependencies = [
-    { name = "pyx-component-22" },
+    { name = "pyx-member-22" },
 ]
 
 [package.dev-dependencies]
@@ -2485,7 +2508,7 @@ dev = [
 ]
 
 [package.metadata]
-requires-dist = [{ name = "pyx-component-22", editable = "components/pyx-component-22" }]
+requires-dist = [{ name = "pyx-member-22", editable = "members/pyx-member-22" }]
 
 [package.metadata.requires-dev]
 dev = [
@@ -2496,13 +2519,13 @@ dev = [
 ]
 
 [[package]]
-name = "pyx-component-11"
+name = "pyx-member-11"
 version = "0.1.0"
-source = { editable = "components/pyx-component-11" }
+source = { editable = "members/pyx-member-11" }
 dependencies = [
     { name = "linehaul" },
     { name = "packaging" },
-    { name = "pyx-component-22" },
+    { name = "pyx-member-22" },
     { name = "types-boto3", extra = ["s3"] },
 ]
 
@@ -2517,7 +2540,7 @@ dev = [
     { name = "deptry" },
     { name = "inline-snapshot" },
     { name = "pytest" },
-    { name = "pyx-component-33" },
+    { name = "pyx-member-33" },
     { name = "ruff" },
     { name = "ty" },
 ]
@@ -2528,7 +2551,7 @@ requires-dist = [
     { name = "botocore", marker = "extra == 'aws'", specifier = "==1.42.88" },
     { name = "linehaul", specifier = "==1.0.3" },
     { name = "packaging", specifier = "==26.0" },
-    { name = "pyx-component-22", editable = "components/pyx-component-22" },
+    { name = "pyx-member-22", editable = "members/pyx-member-22" },
     { name = "types-boto3", extras = ["s3"], specifier = "==1.42.88" },
 ]
 provides-extras = ["aws"]
@@ -2538,17 +2561,17 @@ dev = [
     { name = "deptry", specifier = "==0.25.1" },
     { name = "inline-snapshot", specifier = "==0.32.6" },
     { name = "pytest", specifier = "==9.0.3" },
-    { name = "pyx-component-33", editable = "components/pyx-component-33" },
+    { name = "pyx-member-33", editable = "members/pyx-member-33" },
     { name = "ruff", specifier = "==0.15.18" },
     { name = "ty", specifier = "==0.0.51" },
 ]
 
 [[package]]
-name = "pyx-component-12"
+name = "pyx-member-12"
 version = "0.1.0"
-source = { editable = "components/pyx-component-12" }
+source = { editable = "members/pyx-member-12" }
 dependencies = [
-    { name = "pyx-component-22" },
+    { name = "pyx-member-22" },
 ]
 
 [package.optional-dependencies]
@@ -2562,7 +2585,7 @@ dev = [
     { name = "deptry" },
     { name = "inline-snapshot" },
     { name = "pytest" },
-    { name = "pyx-component-33" },
+    { name = "pyx-member-33" },
     { name = "ruff" },
     { name = "ty" },
 ]
@@ -2571,7 +2594,7 @@ dev = [
 requires-dist = [
     { name = "boto3", marker = "extra == 'aws'", specifier = "==1.42.88" },
     { name = "botocore", marker = "extra == 'aws'", specifier = "==1.42.88" },
-    { name = "pyx-component-22", editable = "components/pyx-component-22" },
+    { name = "pyx-member-22", editable = "members/pyx-member-22" },
 ]
 provides-extras = ["aws"]
 
@@ -2580,21 +2603,21 @@ dev = [
     { name = "deptry", specifier = "==0.25.1" },
     { name = "inline-snapshot", specifier = "==0.32.6" },
     { name = "pytest", specifier = "==9.0.3" },
-    { name = "pyx-component-33", editable = "components/pyx-component-33" },
+    { name = "pyx-member-33", editable = "members/pyx-member-33" },
     { name = "ruff", specifier = "==0.15.18" },
     { name = "ty", specifier = "==0.0.51" },
 ]
 
 [[package]]
-name = "pyx-component-13"
+name = "pyx-member-13"
 version = "0.1.0"
-source = { editable = "components/pyx-component-13" }
+source = { editable = "members/pyx-member-13" }
 dependencies = [
     { name = "py-rattler" },
-    { name = "pyx-component-03" },
-    { name = "pyx-component-06" },
-    { name = "pyx-component-22" },
-    { name = "pyx-component-23" },
+    { name = "pyx-member-03" },
+    { name = "pyx-member-06" },
+    { name = "pyx-member-22" },
+    { name = "pyx-member-23" },
     { name = "sqlalchemy" },
     { name = "types-boto3", extra = ["s3"] },
 ]
@@ -2617,10 +2640,10 @@ requires-dist = [
     { name = "boto3", marker = "extra == 'aws'", specifier = "==1.42.88" },
     { name = "botocore", marker = "extra == 'aws'", specifier = "==1.42.88" },
     { name = "py-rattler", specifier = "==0.24.0" },
-    { name = "pyx-component-03", editable = "components/pyx-component-03" },
-    { name = "pyx-component-06", editable = "components/pyx-component-06" },
-    { name = "pyx-component-22", editable = "components/pyx-component-22" },
-    { name = "pyx-component-23", editable = "components/pyx-component-23" },
+    { name = "pyx-member-03", editable = "members/pyx-member-03" },
+    { name = "pyx-member-06", editable = "members/pyx-member-06" },
+    { name = "pyx-member-22", editable = "members/pyx-member-22" },
+    { name = "pyx-member-23", editable = "members/pyx-member-23" },
     { name = "sqlalchemy", specifier = "==2.0.49" },
     { name = "types-boto3", extras = ["s3"], specifier = "==1.42.88" },
 ]
@@ -2634,16 +2657,16 @@ dev = [
 ]
 
 [[package]]
-name = "pyx-component-14"
+name = "pyx-member-14"
 version = "0.1.0"
-source = { editable = "components/pyx-component-14" }
+source = { editable = "members/pyx-member-14" }
 dependencies = [
     { name = "aiofiles" },
-    { name = "pyx-component-06" },
-    { name = "pyx-component-22" },
-    { name = "pyx-component-23" },
-    { name = "pyx-component-28" },
-    { name = "pyx-component-32" },
+    { name = "pyx-member-06" },
+    { name = "pyx-member-22" },
+    { name = "pyx-member-23" },
+    { name = "pyx-member-28" },
+    { name = "pyx-member-32" },
     { name = "sentry-sdk" },
     { name = "sqlalchemy" },
     { name = "types-boto3", extra = ["s3"] },
@@ -2660,7 +2683,7 @@ dev = [
     { name = "moto", extra = ["s3"] },
     { name = "pytest" },
     { name = "pytest-asyncio" },
-    { name = "pyx-component-33" },
+    { name = "pyx-member-33" },
     { name = "ruff" },
     { name = "ty" },
     { name = "types-aiofiles" },
@@ -2670,11 +2693,11 @@ dev = [
 requires-dist = [
     { name = "aiofiles", specifier = "==25.1.0" },
     { name = "boto3", marker = "extra == 'aws'", specifier = "==1.42.88" },
-    { name = "pyx-component-06", editable = "components/pyx-component-06" },
-    { name = "pyx-component-22", editable = "components/pyx-component-22" },
-    { name = "pyx-component-23", editable = "components/pyx-component-23" },
-    { name = "pyx-component-28", editable = "components/pyx-component-28" },
-    { name = "pyx-component-32", editable = "components/pyx-component-32" },
+    { name = "pyx-member-06", editable = "members/pyx-member-06" },
+    { name = "pyx-member-22", editable = "members/pyx-member-22" },
+    { name = "pyx-member-23", editable = "members/pyx-member-23" },
+    { name = "pyx-member-28", editable = "members/pyx-member-28" },
+    { name = "pyx-member-32", editable = "members/pyx-member-32" },
     { name = "sentry-sdk", specifier = "==2.57.0" },
     { name = "sqlalchemy", specifier = "==2.0.49" },
     { name = "types-boto3", extras = ["s3"], specifier = "==1.42.88" },
@@ -2687,20 +2710,20 @@ dev = [
     { name = "moto", extras = ["s3", "secretsmanager"], specifier = "==5.1.22" },
     { name = "pytest", specifier = "==9.0.3" },
     { name = "pytest-asyncio", specifier = "==1.3.0" },
-    { name = "pyx-component-33", editable = "components/pyx-component-33" },
+    { name = "pyx-member-33", editable = "members/pyx-member-33" },
     { name = "ruff", specifier = "==0.15.18" },
     { name = "ty", specifier = "==0.0.51" },
     { name = "types-aiofiles", specifier = "==25.1.0.20260409" },
 ]
 
 [[package]]
-name = "pyx-component-15"
+name = "pyx-member-15"
 version = "0.1.0"
-source = { editable = "components/pyx-component-15" }
+source = { editable = "members/pyx-member-15" }
 dependencies = [
     { name = "aws-lambda-powertools" },
     { name = "botocore", extra = ["crt"] },
-    { name = "pyx-component-22" },
+    { name = "pyx-member-22" },
     { name = "types-boto3-cloudfront-keyvaluestore" },
 ]
 
@@ -2723,7 +2746,7 @@ requires-dist = [
     { name = "boto3", marker = "extra == 'aws'", specifier = "==1.42.88" },
     { name = "botocore", marker = "extra == 'aws'", specifier = "==1.42.88" },
     { name = "botocore", extras = ["crt"], specifier = "==1.42.88" },
-    { name = "pyx-component-22", editable = "components/pyx-component-22" },
+    { name = "pyx-member-22", editable = "members/pyx-member-22" },
     { name = "types-boto3-cloudfront-keyvaluestore" },
 ]
 provides-extras = ["aws"]
@@ -2736,13 +2759,13 @@ dev = [
 ]
 
 [[package]]
-name = "pyx-component-16"
+name = "pyx-member-16"
 version = "0.1.0"
-source = { editable = "components/pyx-component-16" }
+source = { editable = "members/pyx-member-16" }
 dependencies = [
-    { name = "pyx-component-06" },
-    { name = "pyx-component-22" },
-    { name = "pyx-component-23" },
+    { name = "pyx-member-06" },
+    { name = "pyx-member-22" },
+    { name = "pyx-member-23" },
     { name = "sqlalchemy" },
     { name = "types-boto3", extra = ["s3"] },
 ]
@@ -2759,7 +2782,7 @@ dev = [
     { name = "inline-snapshot" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
-    { name = "pyx-component-33" },
+    { name = "pyx-member-33" },
     { name = "ruff" },
     { name = "ty" },
 ]
@@ -2768,9 +2791,9 @@ dev = [
 requires-dist = [
     { name = "boto3", marker = "extra == 'aws'", specifier = "==1.42.88" },
     { name = "botocore", marker = "extra == 'aws'", specifier = "==1.42.88" },
-    { name = "pyx-component-06", editable = "components/pyx-component-06" },
-    { name = "pyx-component-22", editable = "components/pyx-component-22" },
-    { name = "pyx-component-23", editable = "components/pyx-component-23" },
+    { name = "pyx-member-06", editable = "members/pyx-member-06" },
+    { name = "pyx-member-22", editable = "members/pyx-member-22" },
+    { name = "pyx-member-23", editable = "members/pyx-member-23" },
     { name = "sqlalchemy", specifier = "==2.0.49" },
     { name = "types-boto3", extras = ["s3"], specifier = "==1.42.88" },
 ]
@@ -2782,19 +2805,19 @@ dev = [
     { name = "inline-snapshot", specifier = "==0.32.6" },
     { name = "pytest", specifier = "==9.0.3" },
     { name = "pytest-asyncio", specifier = "==1.3.0" },
-    { name = "pyx-component-33", editable = "components/pyx-component-33" },
+    { name = "pyx-member-33", editable = "members/pyx-member-33" },
     { name = "ruff", specifier = "==0.15.18" },
     { name = "ty", specifier = "==0.0.51" },
 ]
 
 [[package]]
-name = "pyx-component-17"
+name = "pyx-member-17"
 version = "0.1.0"
-source = { editable = "components/pyx-component-17" }
+source = { editable = "members/pyx-member-17" }
 dependencies = [
-    { name = "pyx-component-06" },
-    { name = "pyx-component-22" },
-    { name = "pyx-component-23" },
+    { name = "pyx-member-06" },
+    { name = "pyx-member-22" },
+    { name = "pyx-member-23" },
     { name = "sqlalchemy" },
     { name = "types-boto3", extra = ["s3"] },
 ]
@@ -2811,7 +2834,7 @@ dev = [
     { name = "inline-snapshot" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
-    { name = "pyx-component-33" },
+    { name = "pyx-member-33" },
     { name = "ruff" },
     { name = "ty" },
 ]
@@ -2820,9 +2843,9 @@ dev = [
 requires-dist = [
     { name = "boto3", marker = "extra == 'aws'", specifier = "==1.42.88" },
     { name = "botocore", marker = "extra == 'aws'", specifier = "==1.42.88" },
-    { name = "pyx-component-06", editable = "components/pyx-component-06" },
-    { name = "pyx-component-22", editable = "components/pyx-component-22" },
-    { name = "pyx-component-23", editable = "components/pyx-component-23" },
+    { name = "pyx-member-06", editable = "members/pyx-member-06" },
+    { name = "pyx-member-22", editable = "members/pyx-member-22" },
+    { name = "pyx-member-23", editable = "members/pyx-member-23" },
     { name = "sqlalchemy", specifier = "==2.0.49" },
     { name = "types-boto3", extras = ["s3"], specifier = "==1.42.88" },
 ]
@@ -2834,20 +2857,20 @@ dev = [
     { name = "inline-snapshot", specifier = "==0.32.6" },
     { name = "pytest", specifier = "==9.0.3" },
     { name = "pytest-asyncio", specifier = "==1.3.0" },
-    { name = "pyx-component-33", editable = "components/pyx-component-33" },
+    { name = "pyx-member-33", editable = "members/pyx-member-33" },
     { name = "ruff", specifier = "==0.15.18" },
     { name = "ty", specifier = "==0.0.51" },
 ]
 
 [[package]]
-name = "pyx-component-18"
+name = "pyx-member-18"
 version = "0.1.0"
-source = { editable = "components/pyx-component-18" }
+source = { editable = "members/pyx-member-18" }
 dependencies = [
     { name = "polars" },
-    { name = "pyx-component-06" },
-    { name = "pyx-component-22" },
-    { name = "pyx-component-23" },
+    { name = "pyx-member-06" },
+    { name = "pyx-member-22" },
+    { name = "pyx-member-23" },
     { name = "sqlalchemy" },
     { name = "types-boto3", extra = ["s3"] },
 ]
@@ -2863,7 +2886,7 @@ dev = [
     { name = "deptry" },
     { name = "inline-snapshot" },
     { name = "pytest" },
-    { name = "pyx-component-33" },
+    { name = "pyx-member-33" },
     { name = "ruff" },
     { name = "ty" },
 ]
@@ -2873,9 +2896,9 @@ requires-dist = [
     { name = "boto3", marker = "extra == 'aws'", specifier = "==1.42.88" },
     { name = "botocore", marker = "extra == 'aws'", specifier = "==1.42.88" },
     { name = "polars", specifier = "==1.39.3" },
-    { name = "pyx-component-06", editable = "components/pyx-component-06" },
-    { name = "pyx-component-22", editable = "components/pyx-component-22" },
-    { name = "pyx-component-23", editable = "components/pyx-component-23" },
+    { name = "pyx-member-06", editable = "members/pyx-member-06" },
+    { name = "pyx-member-22", editable = "members/pyx-member-22" },
+    { name = "pyx-member-23", editable = "members/pyx-member-23" },
     { name = "sqlalchemy", specifier = "==2.0.49" },
     { name = "types-boto3", extras = ["s3"], specifier = "==1.42.88" },
 ]
@@ -2886,17 +2909,17 @@ dev = [
     { name = "deptry", specifier = "==0.25.1" },
     { name = "inline-snapshot", specifier = "==0.32.6" },
     { name = "pytest", specifier = "==9.0.3" },
-    { name = "pyx-component-33", editable = "components/pyx-component-33" },
+    { name = "pyx-member-33", editable = "members/pyx-member-33" },
     { name = "ruff", specifier = "==0.15.18" },
     { name = "ty", specifier = "==0.0.51" },
 ]
 
 [[package]]
-name = "pyx-component-19"
+name = "pyx-member-19"
 version = "0.1.0"
-source = { editable = "components/pyx-component-19" }
+source = { editable = "members/pyx-member-19" }
 dependencies = [
-    { name = "pyx-component-22" },
+    { name = "pyx-member-22" },
     { name = "types-boto3", extra = ["s3"] },
 ]
 
@@ -2912,7 +2935,7 @@ dev = [
     { name = "freezegun" },
     { name = "moto", extra = ["s3"] },
     { name = "pytest" },
-    { name = "pyx-component-33" },
+    { name = "pyx-member-33" },
     { name = "ruff" },
     { name = "ty" },
 ]
@@ -2921,7 +2944,7 @@ dev = [
 requires-dist = [
     { name = "boto3", marker = "extra == 'aws'", specifier = "==1.42.88" },
     { name = "botocore", marker = "extra == 'aws'", specifier = "==1.42.88" },
-    { name = "pyx-component-22", editable = "components/pyx-component-22" },
+    { name = "pyx-member-22", editable = "members/pyx-member-22" },
     { name = "types-boto3", extras = ["s3"], specifier = "==1.42.88" },
 ]
 provides-extras = ["aws"]
@@ -2932,22 +2955,22 @@ dev = [
     { name = "freezegun", specifier = "==1.5.5" },
     { name = "moto", extras = ["s3"], specifier = "==5.1.22" },
     { name = "pytest", specifier = "==9.0.3" },
-    { name = "pyx-component-33", editable = "components/pyx-component-33" },
+    { name = "pyx-member-33", editable = "members/pyx-member-33" },
     { name = "ruff", specifier = "==0.15.18" },
     { name = "ty", specifier = "==0.0.51" },
 ]
 
 [[package]]
-name = "pyx-component-20"
+name = "pyx-member-20"
 version = "0.1.0"
-source = { editable = "components/pyx-component-20" }
+source = { editable = "members/pyx-member-20" }
 dependencies = [
     { name = "aws-lambda-powertools" },
     { name = "msgspec" },
-    { name = "pyx-component-06" },
-    { name = "pyx-component-22" },
-    { name = "pyx-component-23" },
-    { name = "pyx-component-24" },
+    { name = "pyx-member-06" },
+    { name = "pyx-member-22" },
+    { name = "pyx-member-23" },
+    { name = "pyx-member-24" },
     { name = "sqlalchemy" },
     { name = "types-boto3", extra = ["s3"] },
 ]
@@ -2964,7 +2987,7 @@ dev = [
     { name = "moto" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
-    { name = "pyx-component-33" },
+    { name = "pyx-member-33" },
     { name = "ruff" },
     { name = "ty" },
 ]
@@ -2975,10 +2998,10 @@ requires-dist = [
     { name = "boto3", marker = "extra == 'aws'", specifier = "==1.42.88" },
     { name = "botocore", marker = "extra == 'aws'", specifier = "==1.42.88" },
     { name = "msgspec", specifier = "==0.21.1" },
-    { name = "pyx-component-06", editable = "components/pyx-component-06" },
-    { name = "pyx-component-22", editable = "components/pyx-component-22" },
-    { name = "pyx-component-23", editable = "components/pyx-component-23" },
-    { name = "pyx-component-24", editable = "components/pyx-component-24" },
+    { name = "pyx-member-06", editable = "members/pyx-member-06" },
+    { name = "pyx-member-22", editable = "members/pyx-member-22" },
+    { name = "pyx-member-23", editable = "members/pyx-member-23" },
+    { name = "pyx-member-24", editable = "members/pyx-member-24" },
     { name = "sqlalchemy", specifier = "==2.0.49" },
     { name = "types-boto3", extras = ["s3"], specifier = "==1.42.88" },
 ]
@@ -2990,18 +3013,18 @@ dev = [
     { name = "moto", extras = ["sqs"], specifier = "==5.1.22" },
     { name = "pytest", specifier = "==9.0.3" },
     { name = "pytest-asyncio", specifier = "==1.3.0" },
-    { name = "pyx-component-33", editable = "components/pyx-component-33" },
+    { name = "pyx-member-33", editable = "members/pyx-member-33" },
     { name = "ruff", specifier = "==0.15.18" },
     { name = "ty", specifier = "==0.0.51" },
 ]
 
 [[package]]
-name = "pyx-component-21"
+name = "pyx-member-21"
 version = "0.1.0"
-source = { editable = "components/pyx-component-21" }
+source = { editable = "members/pyx-member-21" }
 dependencies = [
     { name = "aws-lambda-powertools" },
-    { name = "pyx-component-22" },
+    { name = "pyx-member-22" },
     { name = "types-boto3-secretsmanager" },
     { name = "types-boto3-sns" },
 ]
@@ -3018,7 +3041,7 @@ dev = [
     { name = "freezegun" },
     { name = "moto" },
     { name = "pytest" },
-    { name = "pyx-component-33" },
+    { name = "pyx-member-33" },
     { name = "ruff" },
     { name = "ty" },
     { name = "types-boto3-sqs" },
@@ -3029,7 +3052,7 @@ requires-dist = [
     { name = "aws-lambda-powertools", specifier = "==3.27.0" },
     { name = "boto3", marker = "extra == 'aws'", specifier = "==1.42.88" },
     { name = "botocore", marker = "extra == 'aws'", specifier = "==1.42.88" },
-    { name = "pyx-component-22", editable = "components/pyx-component-22" },
+    { name = "pyx-member-22", editable = "members/pyx-member-22" },
     { name = "types-boto3-secretsmanager" },
     { name = "types-boto3-sns" },
 ]
@@ -3041,21 +3064,21 @@ dev = [
     { name = "freezegun", specifier = "==1.5.5" },
     { name = "moto", extras = ["secretsmanager", "sns", "sqs"], specifier = "==5.1.22" },
     { name = "pytest", specifier = "==9.0.3" },
-    { name = "pyx-component-33", editable = "components/pyx-component-33" },
+    { name = "pyx-member-33", editable = "members/pyx-member-33" },
     { name = "ruff", specifier = "==0.15.18" },
     { name = "ty", specifier = "==0.0.51" },
     { name = "types-boto3-sqs" },
 ]
 
 [[package]]
-name = "pyx-component-22"
+name = "pyx-member-22"
 version = "0.1.0"
-source = { editable = "components/pyx-component-22" }
+source = { editable = "members/pyx-member-22" }
 dependencies = [
     { name = "aws-lambda-powertools" },
     { name = "awslambdaric" },
     { name = "boto3" },
-    { name = "pyx-component-29" },
+    { name = "pyx-member-29" },
     { name = "sentry-sdk" },
 ]
 
@@ -3063,7 +3086,7 @@ dependencies = [
 dev = [
     { name = "deptry" },
     { name = "pytest" },
-    { name = "pyx-component-33" },
+    { name = "pyx-member-33" },
     { name = "ruff" },
     { name = "ty" },
 ]
@@ -3073,7 +3096,7 @@ requires-dist = [
     { name = "aws-lambda-powertools", specifier = "==3.27.0" },
     { name = "awslambdaric", specifier = "==4.0.0" },
     { name = "boto3", specifier = "==1.42.88" },
-    { name = "pyx-component-29", editable = "components/pyx-component-29" },
+    { name = "pyx-member-29", editable = "members/pyx-member-29" },
     { name = "sentry-sdk", specifier = "==2.57.0" },
 ]
 
@@ -3081,21 +3104,21 @@ requires-dist = [
 dev = [
     { name = "deptry", specifier = "==0.25.1" },
     { name = "pytest", specifier = "==9.0.3" },
-    { name = "pyx-component-33", editable = "components/pyx-component-33" },
+    { name = "pyx-member-33", editable = "members/pyx-member-33" },
     { name = "ruff", specifier = "==0.15.18" },
     { name = "ty", specifier = "==0.0.51" },
 ]
 
 [[package]]
-name = "pyx-component-23"
+name = "pyx-member-23"
 version = "0.1.0"
-source = { editable = "components/pyx-component-23" }
+source = { editable = "members/pyx-member-23" }
 dependencies = [
     { name = "msgspec" },
     { name = "nanoid" },
     { name = "packaging" },
     { name = "packaging-legacy" },
-    { name = "pyx-component-04" },
+    { name = "pyx-member-04" },
     { name = "sqlalchemy" },
 ]
 
@@ -3105,7 +3128,7 @@ dev = [
     { name = "freezegun" },
     { name = "inline-snapshot" },
     { name = "pytest" },
-    { name = "pyx-component-33" },
+    { name = "pyx-member-33" },
     { name = "ruff" },
     { name = "ty" },
 ]
@@ -3116,7 +3139,7 @@ requires-dist = [
     { name = "nanoid", specifier = "==2.0.0" },
     { name = "packaging", specifier = "==26.0" },
     { name = "packaging-legacy", specifier = "==23.0.post0" },
-    { name = "pyx-component-04", editable = "components/pyx-component-04" },
+    { name = "pyx-member-04", editable = "members/pyx-member-04" },
     { name = "sqlalchemy", specifier = "==2.0.49" },
 ]
 
@@ -3126,27 +3149,27 @@ dev = [
     { name = "freezegun", specifier = "==1.5.5" },
     { name = "inline-snapshot", specifier = "==0.32.6" },
     { name = "pytest", specifier = "==9.0.3" },
-    { name = "pyx-component-33", editable = "components/pyx-component-33" },
+    { name = "pyx-member-33", editable = "members/pyx-member-33" },
     { name = "ruff", specifier = "==0.15.18" },
     { name = "ty", specifier = "==0.0.51" },
 ]
 
 [[package]]
-name = "pyx-component-24"
+name = "pyx-member-24"
 version = "0.1.0"
-source = { editable = "components/pyx-component-24" }
+source = { editable = "members/pyx-member-24" }
 dependencies = [
     { name = "aiofiles" },
     { name = "aiohttp" },
     { name = "msgspec" },
     { name = "packaging" },
-    { name = "pyx-component-05" },
-    { name = "pyx-component-06" },
-    { name = "pyx-component-09" },
-    { name = "pyx-component-23" },
-    { name = "pyx-component-28" },
-    { name = "pyx-component-32" },
-    { name = "pyx-component-37" },
+    { name = "pyx-member-05" },
+    { name = "pyx-member-06" },
+    { name = "pyx-member-09" },
+    { name = "pyx-member-23" },
+    { name = "pyx-member-28" },
+    { name = "pyx-member-32" },
+    { name = "pyx-member-37" },
     { name = "sentry-sdk" },
     { name = "sqlalchemy" },
     { name = "stamina" },
@@ -3155,8 +3178,8 @@ dependencies = [
 [package.optional-dependencies]
 aws = [
     { name = "boto3" },
-    { name = "pyx-component-09", extra = ["aws"] },
-    { name = "pyx-component-28", extra = ["aws"] },
+    { name = "pyx-member-09", extra = ["aws"] },
+    { name = "pyx-member-28", extra = ["aws"] },
 ]
 
 [package.dev-dependencies]
@@ -3170,7 +3193,7 @@ dev = [
     { name = "pytest" },
     { name = "pytest-asyncio" },
     { name = "python-dotenv" },
-    { name = "pyx-component-33" },
+    { name = "pyx-member-33" },
     { name = "ruff" },
     { name = "ty" },
     { name = "types-aiofiles" },
@@ -3183,15 +3206,15 @@ requires-dist = [
     { name = "boto3", marker = "extra == 'aws'", specifier = "==1.42.88" },
     { name = "msgspec", specifier = "==0.21.1" },
     { name = "packaging", specifier = "==26.0" },
-    { name = "pyx-component-05", editable = "components/pyx-component-05" },
-    { name = "pyx-component-06", editable = "components/pyx-component-06" },
-    { name = "pyx-component-09", editable = "components/pyx-component-09" },
-    { name = "pyx-component-09", extras = ["aws"], marker = "extra == 'aws'", editable = "components/pyx-component-09" },
-    { name = "pyx-component-23", editable = "components/pyx-component-23" },
-    { name = "pyx-component-28", editable = "components/pyx-component-28" },
-    { name = "pyx-component-28", extras = ["aws"], marker = "extra == 'aws'", editable = "components/pyx-component-28" },
-    { name = "pyx-component-32", editable = "components/pyx-component-32" },
-    { name = "pyx-component-37", editable = "components/pyx-component-37" },
+    { name = "pyx-member-05", editable = "members/pyx-member-05" },
+    { name = "pyx-member-06", editable = "members/pyx-member-06" },
+    { name = "pyx-member-09", editable = "members/pyx-member-09" },
+    { name = "pyx-member-09", extras = ["aws"], marker = "extra == 'aws'", editable = "members/pyx-member-09" },
+    { name = "pyx-member-23", editable = "members/pyx-member-23" },
+    { name = "pyx-member-28", editable = "members/pyx-member-28" },
+    { name = "pyx-member-28", extras = ["aws"], marker = "extra == 'aws'", editable = "members/pyx-member-28" },
+    { name = "pyx-member-32", editable = "members/pyx-member-32" },
+    { name = "pyx-member-37", editable = "members/pyx-member-37" },
     { name = "sentry-sdk", specifier = "==2.57.0" },
     { name = "sqlalchemy", specifier = "==2.0.49" },
     { name = "stamina", specifier = "==25.2.0" },
@@ -3209,16 +3232,16 @@ dev = [
     { name = "pytest", specifier = "==9.0.3" },
     { name = "pytest-asyncio", specifier = "==1.3.0" },
     { name = "python-dotenv", specifier = "==1.2.2" },
-    { name = "pyx-component-33", editable = "components/pyx-component-33" },
+    { name = "pyx-member-33", editable = "members/pyx-member-33" },
     { name = "ruff", specifier = "==0.15.18" },
     { name = "ty", specifier = "==0.0.51" },
     { name = "types-aiofiles", specifier = "==25.1.0.20260409" },
 ]
 
 [[package]]
-name = "pyx-component-25"
+name = "pyx-member-25"
 version = "0.1.0"
-source = { editable = "components/pyx-component-25" }
+source = { editable = "members/pyx-member-25" }
 dependencies = [
     { name = "anyio" },
     { name = "opentelemetry-exporter-otlp-proto-http" },
@@ -3231,7 +3254,7 @@ dev = [
     { name = "dirty-equals" },
     { name = "inline-snapshot" },
     { name = "pytest" },
-    { name = "pyx-component-33" },
+    { name = "pyx-member-33" },
     { name = "ruff" },
     { name = "ty" },
 ]
@@ -3249,15 +3272,15 @@ dev = [
     { name = "dirty-equals", specifier = "==0.11" },
     { name = "inline-snapshot", specifier = "==0.32.6" },
     { name = "pytest", specifier = "==9.0.3" },
-    { name = "pyx-component-33", editable = "components/pyx-component-33" },
+    { name = "pyx-member-33", editable = "members/pyx-member-33" },
     { name = "ruff", specifier = "==0.15.18" },
     { name = "ty", specifier = "==0.0.51" },
 ]
 
 [[package]]
-name = "pyx-component-26"
+name = "pyx-member-26"
 version = "0.1.0"
-source = { editable = "components/pyx-component-26" }
+source = { editable = "members/pyx-member-26" }
 dependencies = [
     { name = "readme-renderer", extra = ["md"] },
 ]
@@ -3280,9 +3303,9 @@ dev = [
 ]
 
 [[package]]
-name = "pyx-component-27"
+name = "pyx-member-27"
 version = "0.1.0"
-source = { editable = "components/pyx-component-27" }
+source = { editable = "members/pyx-member-27" }
 dependencies = [
     { name = "aiohttp" },
     { name = "boto3" },
@@ -3290,11 +3313,11 @@ dependencies = [
     { name = "cryptography" },
     { name = "greenlet" },
     { name = "packaging-legacy" },
-    { name = "pyx-component-06" },
-    { name = "pyx-component-23" },
-    { name = "pyx-component-24", extra = ["aws"] },
-    { name = "pyx-component-28", extra = ["aws"] },
-    { name = "pyx-component-32" },
+    { name = "pyx-member-06" },
+    { name = "pyx-member-23" },
+    { name = "pyx-member-24", extra = ["aws"] },
+    { name = "pyx-member-28", extra = ["aws"] },
+    { name = "pyx-member-32" },
     { name = "rich" },
     { name = "sqlalchemy" },
     { name = "stripe" },
@@ -3319,11 +3342,11 @@ requires-dist = [
     { name = "cryptography", specifier = "==48.0.1" },
     { name = "greenlet", specifier = "==3.4.0" },
     { name = "packaging-legacy", specifier = "==23.0.post0" },
-    { name = "pyx-component-06", editable = "components/pyx-component-06" },
-    { name = "pyx-component-23", editable = "components/pyx-component-23" },
-    { name = "pyx-component-24", extras = ["aws"], editable = "components/pyx-component-24" },
-    { name = "pyx-component-28", extras = ["aws"], editable = "components/pyx-component-28" },
-    { name = "pyx-component-32", editable = "components/pyx-component-32" },
+    { name = "pyx-member-06", editable = "members/pyx-member-06" },
+    { name = "pyx-member-23", editable = "members/pyx-member-23" },
+    { name = "pyx-member-24", extras = ["aws"], editable = "members/pyx-member-24" },
+    { name = "pyx-member-28", extras = ["aws"], editable = "members/pyx-member-28" },
+    { name = "pyx-member-32", editable = "members/pyx-member-32" },
     { name = "rich", specifier = "==14.3.2" },
     { name = "sqlalchemy", specifier = "==2.0.49" },
     { name = "stripe", specifier = "==14.5.0a1" },
@@ -3341,9 +3364,9 @@ dev = [
 ]
 
 [[package]]
-name = "pyx-component-28"
+name = "pyx-member-28"
 version = "0.1.0"
-source = { editable = "components/pyx-component-28" }
+source = { editable = "members/pyx-member-28" }
 dependencies = [
     { name = "types-boto3-secretsmanager" },
 ]
@@ -3379,9 +3402,9 @@ dev = [
 ]
 
 [[package]]
-name = "pyx-component-29"
+name = "pyx-member-29"
 version = "0.1.0"
-source = { editable = "components/pyx-component-29" }
+source = { editable = "members/pyx-member-29" }
 dependencies = [
     { name = "sentry-sdk" },
 ]
@@ -3404,9 +3427,9 @@ dev = [
 ]
 
 [[package]]
-name = "pyx-component-30"
+name = "pyx-member-30"
 version = "0.1.0"
-source = { editable = "components/pyx-component-30" }
+source = { editable = "members/pyx-member-30" }
 dependencies = [
     { name = "abi3audit" },
     { name = "aiofiles" },
@@ -3433,20 +3456,20 @@ dependencies = [
     { name = "pydantic-extra-types" },
     { name = "pyjwt" },
     { name = "python-multipart" },
-    { name = "pyx-component-03" },
-    { name = "pyx-component-05" },
-    { name = "pyx-component-06" },
-    { name = "pyx-component-09", extra = ["aws"] },
-    { name = "pyx-component-23" },
-    { name = "pyx-component-24", extra = ["aws"] },
-    { name = "pyx-component-25" },
-    { name = "pyx-component-26" },
-    { name = "pyx-component-28", extra = ["aws"] },
-    { name = "pyx-component-29" },
-    { name = "pyx-component-31" },
-    { name = "pyx-component-32" },
-    { name = "pyx-component-34" },
-    { name = "pyx-component-35" },
+    { name = "pyx-member-03" },
+    { name = "pyx-member-05" },
+    { name = "pyx-member-06" },
+    { name = "pyx-member-09", extra = ["aws"] },
+    { name = "pyx-member-23" },
+    { name = "pyx-member-24", extra = ["aws"] },
+    { name = "pyx-member-25" },
+    { name = "pyx-member-26" },
+    { name = "pyx-member-28", extra = ["aws"] },
+    { name = "pyx-member-29" },
+    { name = "pyx-member-31" },
+    { name = "pyx-member-32" },
+    { name = "pyx-member-34" },
+    { name = "pyx-member-35" },
     { name = "rfc3986" },
     { name = "sentry-sdk", extra = ["fastapi"] },
     { name = "sqlalchemy" },
@@ -3471,7 +3494,7 @@ dev = [
     { name = "inline-snapshot" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
-    { name = "pyx-component-33" },
+    { name = "pyx-member-33" },
     { name = "respx" },
     { name = "ruff" },
     { name = "ty" },
@@ -3505,20 +3528,20 @@ requires-dist = [
     { name = "pydantic-extra-types", specifier = "==2.11.1" },
     { name = "pyjwt", specifier = "==2.13.0" },
     { name = "python-multipart", specifier = "==0.0.31" },
-    { name = "pyx-component-03", editable = "components/pyx-component-03" },
-    { name = "pyx-component-05", editable = "components/pyx-component-05" },
-    { name = "pyx-component-06", editable = "components/pyx-component-06" },
-    { name = "pyx-component-09", extras = ["aws"], editable = "components/pyx-component-09" },
-    { name = "pyx-component-23", editable = "components/pyx-component-23" },
-    { name = "pyx-component-24", extras = ["aws"], editable = "components/pyx-component-24" },
-    { name = "pyx-component-25", editable = "components/pyx-component-25" },
-    { name = "pyx-component-26", editable = "components/pyx-component-26" },
-    { name = "pyx-component-28", extras = ["aws"], editable = "components/pyx-component-28" },
-    { name = "pyx-component-29", editable = "components/pyx-component-29" },
-    { name = "pyx-component-31", editable = "components/pyx-component-31" },
-    { name = "pyx-component-32", editable = "components/pyx-component-32" },
-    { name = "pyx-component-34", editable = "components/pyx-component-34" },
-    { name = "pyx-component-35", editable = "components/pyx-component-35" },
+    { name = "pyx-member-03", editable = "members/pyx-member-03" },
+    { name = "pyx-member-05", editable = "members/pyx-member-05" },
+    { name = "pyx-member-06", editable = "members/pyx-member-06" },
+    { name = "pyx-member-09", extras = ["aws"], editable = "members/pyx-member-09" },
+    { name = "pyx-member-23", editable = "members/pyx-member-23" },
+    { name = "pyx-member-24", extras = ["aws"], editable = "members/pyx-member-24" },
+    { name = "pyx-member-25", editable = "members/pyx-member-25" },
+    { name = "pyx-member-26", editable = "members/pyx-member-26" },
+    { name = "pyx-member-28", extras = ["aws"], editable = "members/pyx-member-28" },
+    { name = "pyx-member-29", editable = "members/pyx-member-29" },
+    { name = "pyx-member-31", editable = "members/pyx-member-31" },
+    { name = "pyx-member-32", editable = "members/pyx-member-32" },
+    { name = "pyx-member-34", editable = "members/pyx-member-34" },
+    { name = "pyx-member-35", editable = "members/pyx-member-35" },
     { name = "rfc3986", specifier = "==2.0.0" },
     { name = "sentry-sdk", extras = ["fastapi"], specifier = "==2.57.0" },
     { name = "sqlalchemy", specifier = "==2.0.49" },
@@ -3543,7 +3566,7 @@ dev = [
     { name = "inline-snapshot", specifier = "==0.32.6" },
     { name = "pytest", specifier = "==9.0.3" },
     { name = "pytest-asyncio", specifier = "==1.3.0" },
-    { name = "pyx-component-33", editable = "components/pyx-component-33" },
+    { name = "pyx-member-33", editable = "members/pyx-member-33" },
     { name = "respx", specifier = "==0.23.1" },
     { name = "ruff", specifier = "==0.15.18" },
     { name = "ty", specifier = "==0.0.51" },
@@ -3551,9 +3574,9 @@ dev = [
 ]
 
 [[package]]
-name = "pyx-component-31"
+name = "pyx-member-31"
 version = "0.1.0"
-source = { editable = "components/pyx-component-31" }
+source = { editable = "members/pyx-member-31" }
 dependencies = [
     { name = "aiohttp" },
     { name = "lxml" },
@@ -3565,7 +3588,7 @@ dev = [
     { name = "deptry" },
     { name = "inline-snapshot" },
     { name = "pytest" },
-    { name = "pyx-component-33" },
+    { name = "pyx-member-33" },
     { name = "ruff" },
     { name = "ty" },
 ]
@@ -3582,15 +3605,15 @@ dev = [
     { name = "deptry", specifier = "==0.25.1" },
     { name = "inline-snapshot", specifier = "==0.32.6" },
     { name = "pytest", specifier = "==9.0.3" },
-    { name = "pyx-component-33", editable = "components/pyx-component-33" },
+    { name = "pyx-member-33", editable = "members/pyx-member-33" },
     { name = "ruff", specifier = "==0.15.18" },
     { name = "ty", specifier = "==0.0.51" },
 ]
 
 [[package]]
-name = "pyx-component-32"
+name = "pyx-member-32"
 version = "0.1.0"
-source = { editable = "components/pyx-component-32" }
+source = { editable = "members/pyx-member-32" }
 
 [package.optional-dependencies]
 aws = [
@@ -3602,7 +3625,7 @@ aws = [
 dev = [
     { name = "deptry" },
     { name = "inline-snapshot" },
-    { name = "pyx-component-33" },
+    { name = "pyx-member-33" },
     { name = "ruff" },
     { name = "ty" },
 ]
@@ -3618,15 +3641,15 @@ provides-extras = ["aws"]
 dev = [
     { name = "deptry", specifier = "==0.25.1" },
     { name = "inline-snapshot", specifier = "==0.32.6" },
-    { name = "pyx-component-33", editable = "components/pyx-component-33" },
+    { name = "pyx-member-33", editable = "members/pyx-member-33" },
     { name = "ruff", specifier = "==0.15.18" },
     { name = "ty", specifier = "==0.0.51" },
 ]
 
 [[package]]
-name = "pyx-component-33"
+name = "pyx-member-33"
 version = "0.1.0"
-source = { editable = "components/pyx-component-33" }
+source = { editable = "members/pyx-member-33" }
 dependencies = [
     { name = "aiohttp" },
     { name = "aioresponses" },
@@ -3645,14 +3668,14 @@ dependencies = [
     { name = "pytest" },
     { name = "pytest-asyncio" },
     { name = "python-dotenv" },
-    { name = "pyx-component-03" },
-    { name = "pyx-component-04" },
-    { name = "pyx-component-05" },
-    { name = "pyx-component-06" },
-    { name = "pyx-component-09" },
-    { name = "pyx-component-23" },
-    { name = "pyx-component-24" },
-    { name = "pyx-component-30" },
+    { name = "pyx-member-03" },
+    { name = "pyx-member-04" },
+    { name = "pyx-member-05" },
+    { name = "pyx-member-06" },
+    { name = "pyx-member-09" },
+    { name = "pyx-member-23" },
+    { name = "pyx-member-24" },
+    { name = "pyx-member-30" },
     { name = "sentry-sdk" },
     { name = "sqlalchemy" },
     { name = "trove-classifiers" },
@@ -3689,14 +3712,14 @@ requires-dist = [
     { name = "pytest", specifier = "==9.0.3" },
     { name = "pytest-asyncio", specifier = "==1.3.0" },
     { name = "python-dotenv", specifier = "==1.2.2" },
-    { name = "pyx-component-03", editable = "components/pyx-component-03" },
-    { name = "pyx-component-04", editable = "components/pyx-component-04" },
-    { name = "pyx-component-05", editable = "components/pyx-component-05" },
-    { name = "pyx-component-06", editable = "components/pyx-component-06" },
-    { name = "pyx-component-09", editable = "components/pyx-component-09" },
-    { name = "pyx-component-23", editable = "components/pyx-component-23" },
-    { name = "pyx-component-24", editable = "components/pyx-component-24" },
-    { name = "pyx-component-30", editable = "components/pyx-component-30" },
+    { name = "pyx-member-03", editable = "members/pyx-member-03" },
+    { name = "pyx-member-04", editable = "members/pyx-member-04" },
+    { name = "pyx-member-05", editable = "members/pyx-member-05" },
+    { name = "pyx-member-06", editable = "members/pyx-member-06" },
+    { name = "pyx-member-09", editable = "members/pyx-member-09" },
+    { name = "pyx-member-23", editable = "members/pyx-member-23" },
+    { name = "pyx-member-24", editable = "members/pyx-member-24" },
+    { name = "pyx-member-30", editable = "members/pyx-member-30" },
     { name = "sentry-sdk", specifier = "==2.57.0" },
     { name = "sqlalchemy" },
     { name = "trove-classifiers" },
@@ -3715,22 +3738,22 @@ dev = [
 ]
 
 [[package]]
-name = "pyx-component-34"
+name = "pyx-member-34"
 version = "0.1.0"
-source = { editable = "components/pyx-component-34" }
+source = { editable = "members/pyx-member-34" }
 dependencies = [
     { name = "aiofiles" },
     { name = "boto3" },
     { name = "msgspec" },
     { name = "packaging" },
     { name = "packaging-legacy" },
-    { name = "pyx-component-03" },
-    { name = "pyx-component-06" },
-    { name = "pyx-component-23" },
-    { name = "pyx-component-24" },
-    { name = "pyx-component-25" },
-    { name = "pyx-component-26" },
-    { name = "pyx-component-35" },
+    { name = "pyx-member-03" },
+    { name = "pyx-member-06" },
+    { name = "pyx-member-23" },
+    { name = "pyx-member-24" },
+    { name = "pyx-member-25" },
+    { name = "pyx-member-26" },
+    { name = "pyx-member-35" },
     { name = "sqlalchemy" },
     { name = "stdlib-list" },
 ]
@@ -3744,7 +3767,7 @@ dev = [
     { name = "pytest" },
     { name = "pytest-asyncio" },
     { name = "python-dotenv" },
-    { name = "pyx-component-33" },
+    { name = "pyx-member-33" },
     { name = "ruff" },
     { name = "ty" },
     { name = "types-aiofiles" },
@@ -3757,13 +3780,13 @@ requires-dist = [
     { name = "msgspec", specifier = "==0.21.1" },
     { name = "packaging", specifier = "==26.0" },
     { name = "packaging-legacy", specifier = "==23.0.post0" },
-    { name = "pyx-component-03", editable = "components/pyx-component-03" },
-    { name = "pyx-component-06", editable = "components/pyx-component-06" },
-    { name = "pyx-component-23", editable = "components/pyx-component-23" },
-    { name = "pyx-component-24", editable = "components/pyx-component-24" },
-    { name = "pyx-component-25", editable = "components/pyx-component-25" },
-    { name = "pyx-component-26", editable = "components/pyx-component-26" },
-    { name = "pyx-component-35", editable = "components/pyx-component-35" },
+    { name = "pyx-member-03", editable = "members/pyx-member-03" },
+    { name = "pyx-member-06", editable = "members/pyx-member-06" },
+    { name = "pyx-member-23", editable = "members/pyx-member-23" },
+    { name = "pyx-member-24", editable = "members/pyx-member-24" },
+    { name = "pyx-member-25", editable = "members/pyx-member-25" },
+    { name = "pyx-member-26", editable = "members/pyx-member-26" },
+    { name = "pyx-member-35", editable = "members/pyx-member-35" },
     { name = "sqlalchemy", specifier = "==2.0.49" },
     { name = "stdlib-list", specifier = "==0.12.0" },
 ]
@@ -3777,21 +3800,21 @@ dev = [
     { name = "pytest", specifier = "==9.0.3" },
     { name = "pytest-asyncio", specifier = "==1.3.0" },
     { name = "python-dotenv", specifier = "==1.2.2" },
-    { name = "pyx-component-33", editable = "components/pyx-component-33" },
+    { name = "pyx-member-33", editable = "members/pyx-member-33" },
     { name = "ruff", specifier = "==0.15.18" },
     { name = "ty", specifier = "==0.0.51" },
     { name = "types-aiofiles", specifier = "==25.1.0.20260409" },
 ]
 
 [[package]]
-name = "pyx-component-35"
+name = "pyx-member-35"
 version = "0.1.0"
-source = { editable = "components/pyx-component-35" }
+source = { editable = "members/pyx-member-35" }
 dependencies = [
     { name = "email-validator" },
     { name = "msgspec" },
     { name = "packaging" },
-    { name = "pyx-component-23" },
+    { name = "pyx-member-23" },
     { name = "rfc3986" },
     { name = "trove-classifiers" },
     { name = "urllib3" },
@@ -3809,7 +3832,7 @@ requires-dist = [
     { name = "email-validator", specifier = "==2.3.0" },
     { name = "msgspec", specifier = "==0.21.1" },
     { name = "packaging", specifier = "==26.0" },
-    { name = "pyx-component-23", editable = "components/pyx-component-23" },
+    { name = "pyx-member-23", editable = "members/pyx-member-23" },
     { name = "rfc3986", specifier = "==2.0.0" },
     { name = "trove-classifiers", specifier = "==2026.1.14.14" },
     { name = "urllib3", specifier = "==2.7.0" },
@@ -3823,21 +3846,21 @@ dev = [
 ]
 
 [[package]]
-name = "pyx-component-36"
+name = "pyx-member-36"
 version = "0.1.0"
-source = { editable = "components/pyx-component-36" }
+source = { editable = "members/pyx-member-36" }
 dependencies = [
     { name = "greenlet" },
     { name = "msgspec" },
-    { name = "pyx-component-06" },
-    { name = "pyx-component-09", extra = ["aws"] },
-    { name = "pyx-component-23" },
-    { name = "pyx-component-24" },
-    { name = "pyx-component-25" },
-    { name = "pyx-component-28", extra = ["aws"] },
-    { name = "pyx-component-29" },
-    { name = "pyx-component-32", extra = ["aws"] },
-    { name = "pyx-component-37" },
+    { name = "pyx-member-06" },
+    { name = "pyx-member-09", extra = ["aws"] },
+    { name = "pyx-member-23" },
+    { name = "pyx-member-24" },
+    { name = "pyx-member-25" },
+    { name = "pyx-member-28", extra = ["aws"] },
+    { name = "pyx-member-29" },
+    { name = "pyx-member-32", extra = ["aws"] },
+    { name = "pyx-member-37" },
     { name = "redis" },
     { name = "sentry-sdk", extra = ["sqlalchemy"] },
     { name = "sqlalchemy" },
@@ -3851,7 +3874,7 @@ dev = [
     { name = "inline-snapshot" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
-    { name = "pyx-component-33" },
+    { name = "pyx-member-33" },
     { name = "ruff" },
     { name = "ty" },
 ]
@@ -3860,15 +3883,15 @@ dev = [
 requires-dist = [
     { name = "greenlet", specifier = "==3.4.0" },
     { name = "msgspec", specifier = "==0.21.1" },
-    { name = "pyx-component-06", editable = "components/pyx-component-06" },
-    { name = "pyx-component-09", extras = ["aws"], editable = "components/pyx-component-09" },
-    { name = "pyx-component-23", editable = "components/pyx-component-23" },
-    { name = "pyx-component-24", editable = "components/pyx-component-24" },
-    { name = "pyx-component-25", editable = "components/pyx-component-25" },
-    { name = "pyx-component-28", extras = ["aws"], editable = "components/pyx-component-28" },
-    { name = "pyx-component-29", editable = "components/pyx-component-29" },
-    { name = "pyx-component-32", extras = ["aws"], editable = "components/pyx-component-32" },
-    { name = "pyx-component-37", editable = "components/pyx-component-37" },
+    { name = "pyx-member-06", editable = "members/pyx-member-06" },
+    { name = "pyx-member-09", extras = ["aws"], editable = "members/pyx-member-09" },
+    { name = "pyx-member-23", editable = "members/pyx-member-23" },
+    { name = "pyx-member-24", editable = "members/pyx-member-24" },
+    { name = "pyx-member-25", editable = "members/pyx-member-25" },
+    { name = "pyx-member-28", extras = ["aws"], editable = "members/pyx-member-28" },
+    { name = "pyx-member-29", editable = "members/pyx-member-29" },
+    { name = "pyx-member-32", extras = ["aws"], editable = "members/pyx-member-32" },
+    { name = "pyx-member-37", editable = "members/pyx-member-37" },
     { name = "redis", specifier = "==7.4.0" },
     { name = "sentry-sdk", extras = ["sqlalchemy"], specifier = "==2.57.0" },
     { name = "sqlalchemy", specifier = "==2.0.49" },
@@ -3882,17 +3905,17 @@ dev = [
     { name = "inline-snapshot", specifier = "==0.32.6" },
     { name = "pytest", specifier = "==9.0.3" },
     { name = "pytest-asyncio", specifier = "==1.3.0" },
-    { name = "pyx-component-33", editable = "components/pyx-component-33" },
+    { name = "pyx-member-33", editable = "members/pyx-member-33" },
     { name = "ruff", specifier = "==0.15.18" },
     { name = "ty", specifier = "==0.0.51" },
 ]
 
 [[package]]
-name = "pyx-component-37"
+name = "pyx-member-37"
 version = "0.1.0"
-source = { editable = "components/pyx-component-37" }
+source = { editable = "members/pyx-member-37" }
 dependencies = [
-    { name = "pyx-component-29" },
+    { name = "pyx-member-29" },
     { name = "sentry-sdk" },
 ]
 
@@ -3900,14 +3923,14 @@ dependencies = [
 dev = [
     { name = "deptry" },
     { name = "inline-snapshot" },
-    { name = "pyx-component-33" },
+    { name = "pyx-member-33" },
     { name = "ruff" },
     { name = "ty" },
 ]
 
 [package.metadata]
 requires-dist = [
-    { name = "pyx-component-29", editable = "components/pyx-component-29" },
+    { name = "pyx-member-29", editable = "members/pyx-member-29" },
     { name = "sentry-sdk", specifier = "==2.57.0" },
 ]
 
@@ -3915,30 +3938,7 @@ requires-dist = [
 dev = [
     { name = "deptry", specifier = "==0.25.1" },
     { name = "inline-snapshot", specifier = "==0.32.6" },
-    { name = "pyx-component-33", editable = "components/pyx-component-33" },
-    { name = "ruff", specifier = "==0.15.18" },
-    { name = "ty", specifier = "==0.0.51" },
-]
-
-[[package]]
-name = "pyx-ecosystem"
-version = "0.1.0"
-source = { virtual = "." }
-
-[package.dev-dependencies]
-dev = [
-    { name = "deptry" },
-    { name = "pyx-component-33" },
-    { name = "ruff" },
-    { name = "ty" },
-]
-
-[package.metadata]
-
-[package.metadata.requires-dev]
-dev = [
-    { name = "deptry", specifier = "==0.25.1" },
-    { name = "pyx-component-33", editable = "components/pyx-component-33" },
+    { name = "pyx-member-33", editable = "members/pyx-member-33" },
     { name = "ruff", specifier = "==0.15.18" },
     { name = "ty", specifier = "==0.0.51" },
 ]

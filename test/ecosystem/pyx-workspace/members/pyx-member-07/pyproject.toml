@@ -1,0 +1,62 @@
+[project]
+name = "pyx-member-07"
+version = "0.1.0"
+requires-python = "==3.14.*"
+dependencies = [
+    "aiofiles==25.1.0",
+    "aiohttp==3.14.1",
+    "beautifulsoup4==4.14.3",
+    "boto3==1.42.88",
+    "cvss==3.6",
+    "defusedxml==0.7.1",
+    "greenlet==3.4.0",
+    "msgspec==0.21.1",
+    "packaging-legacy==23.0.post0",
+    "packaging==26.0",
+    "polars==1.39.3",
+    "pyx-member-06",
+    "pyx-member-09[aws]",
+    "pyx-member-23",
+    "pyx-member-24[aws]",
+    "pyx-member-25",
+    "pyx-member-26",
+    "pyx-member-28",
+    "pyx-member-29",
+    "pyx-member-31",
+    "pyx-member-32",
+    "pyx-member-37",
+    "redis==7.4.0",
+    "remotezip==0.12.3",
+    "rfc3986==2.0.0",
+    "sentry-sdk[sqlalchemy]==2.57.0",
+    "sqlalchemy==2.0.49",
+    "stamina==25.2.0",
+    "tqdm==4.67.3",
+    "trove-classifiers==2026.1.14.14",
+    "types-boto3-sqs",
+    "workos==5.46.0",
+]
+
+[project.optional-dependencies]
+modal = [
+    "modal==1.4.1",
+    "pip==26.1",
+    "setuptools==82.0.1",
+]
+
+[dependency-groups]
+dev = [
+    "aioresponses==0.7.8",
+    "coverage==7.13.5",
+    "deptry==0.25.1",
+    "dirty-equals==0.11",
+    "freezegun==1.5.5",
+    "inline-snapshot==0.32.6",
+    "pytest==9.0.3",
+    "pytest-asyncio==1.3.0",
+    "pytest-cov==7.1.0",
+    "pyx-member-33",
+    "ruff==0.15.18",
+    "ty==0.0.51",
+    "types-aiofiles==25.1.0.20260409",
+]
