@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 
 /// The archive-metadata-local manifest that maps payloads to shared archive-file objects.
-pub const ARCHIVE_FILE_MANIFEST: &str = "manifest.json";
+const ARCHIVE_FILE_MANIFEST: &str = "manifest.json";
 
 /// A manifest for payloads stored in the content-addressed archive-file bucket.
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
@@ -21,7 +21,7 @@ impl ArchiveFileManifest {
     }
 
     /// Return whether the manifest contains no files.
-    pub fn is_empty(&self) -> bool {
+    fn is_empty(&self) -> bool {
         self.files.is_empty()
     }
 
@@ -91,7 +91,7 @@ impl ArchiveFileManifestEntry {
     }
 
     /// Return the archive-file-bucket-relative object path.
-    pub fn object(&self) -> &Path {
+    pub(crate) fn object(&self) -> &Path {
         &self.object
     }
 }
