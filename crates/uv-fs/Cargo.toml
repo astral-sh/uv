@@ -40,6 +40,9 @@ walkdir = { workspace = true }
 [target.'cfg(any(unix, target_os = "wasi", target_os = "redox"))'.dependencies]
 rustix = { workspace = true }
 
+[target.'cfg(target_os = "linux")'.dependencies]
+linux-raw-sys = { workspace = true }
+
 [target.'cfg(any(target_os = "macos", target_os = "ios"))'.dependencies]
 libc = { workspace = true }
 

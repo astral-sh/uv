@@ -8,6 +8,12 @@ use std::os::unix::ffi::OsStrExt;
 #[cfg(unix)]
 use std::os::unix::fs::MetadataExt;
 
+#[cfg(target_os = "linux")]
+use linux_raw_sys::ioctl::{
+    FIEMAP_EXTENT_DATA_INLINE, FIEMAP_EXTENT_DELALLOC, FIEMAP_EXTENT_ENCODED, FIEMAP_EXTENT_LAST,
+    FIEMAP_EXTENT_NOT_ALIGNED, FIEMAP_EXTENT_SHARED, FIEMAP_EXTENT_UNKNOWN, FS_IOC_FIEMAP,
+};
+
 /// Return whether the current platform can identify individual files' physical storage.
 pub const fn supports_physical_space() -> bool {
     cfg!(any(
@@ -107,13 +113,6 @@ fn apple_physical_space(path: &Path) -> io::Result<u64> {
 #[cfg(target_os = "linux")]
 #[expect(unsafe_code)]
 fn linux_physical_space(path: &Path) -> io::Result<u64> {
-    const FIEMAP_EXTENT_LAST: u32 = 0x0000_0001;
-    const FIEMAP_EXTENT_UNKNOWN: u32 = 0x0000_0002;
-    const FIEMAP_EXTENT_DELALLOC: u32 = 0x0000_0004;
-    const FIEMAP_EXTENT_ENCODED: u32 = 0x0000_0008;
-    const FIEMAP_EXTENT_NOT_ALIGNED: u32 = 0x0000_0100;
-    const FIEMAP_EXTENT_DATA_INLINE: u32 = 0x0000_0200;
-    const FIEMAP_EXTENT_SHARED: u32 = 0x0000_2000;
     const MAX_EXTENTS: usize = 32;
 
     #[derive(Default)]
@@ -145,9 +144,6 @@ fn linux_physical_space(path: &Path) -> io::Result<u64> {
         extents: [FiemapExtent; MAX_EXTENTS],
     }
 
-    const FS_IOC_FIEMAP: rustix::ioctl::Opcode =
-        rustix::ioctl::opcode::read_write::<Fiemap>(b'f', 11);
-
     let file = fs_err::File::open(path)?;
     let mut physical = 0_u64;
     let mut start = 0_u64;
@@ -168,7 +164,9 @@ fn linux_physical_space(path: &Path) -> io::Result<u64> {
         unsafe {
             rustix::ioctl::ioctl(
                 &file,
-                rustix::ioctl::Updater::<FS_IOC_FIEMAP, _>::new(&mut request),
+                rustix::ioctl::Updater::<{ FS_IOC_FIEMAP as rustix::ioctl::Opcode }, _>::new(
+                    &mut request,
+                ),
             )?;
         }
 
