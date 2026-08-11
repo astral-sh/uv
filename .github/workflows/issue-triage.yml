@@ -95,7 +95,7 @@ jobs:
           git \
             -c user.name="astral-automations-bot[bot]" \
             -c user.email="305554984+astral-automations-bot[bot]@users.noreply.github.com" \
-            commit --message "Initialize issue context for $GITHUB_REPOSITORY#$issue_number"
+            commit --message "Initialize issue context"
           git push origin "HEAD:refs/heads/$branch"
         env:
           GH_TOKEN: ${{ steps.token.outputs.token }}
@@ -233,7 +233,7 @@ jobs:
           git \
             -c user.name="astral-automations-bot[bot]" \
             -c user.email="305554984+astral-automations-bot[bot]@users.noreply.github.com" \
-            commit --message "Update issue context for $GITHUB_REPOSITORY#$issue_number"
+            commit --message "Update issue context"
           git push origin "HEAD:refs/heads/$branch"
 
           printf 'Issue context: https://github.com/astral-sh/uv-dev/tree/%s\n' "$branch" \

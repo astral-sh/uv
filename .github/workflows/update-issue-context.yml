@@ -305,7 +305,7 @@ jobs:
           git \
             -c user.name="astral-automations-bot[bot]" \
             -c user.email="305554984+astral-automations-bot[bot]@users.noreply.github.com" \
-            commit --message "Update issue context from a comment on $GITHUB_REPOSITORY#$ISSUE_NUMBER"
+            commit --message "Update issue context from a comment"
           git push origin "HEAD:refs/heads/$branch"
 
           printf 'Issue context: https://github.com/astral-sh/uv-dev/tree/%s\n' "$branch" \
