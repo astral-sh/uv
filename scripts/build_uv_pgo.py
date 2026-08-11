@@ -293,6 +293,12 @@ def prepare_corpus(
 
         requirements = project / source.name
         shutil.copyfile(source, requirements)
+        if definition.name == "poetry":
+            # Newer RapidFuzz releases do not provide manylinux2014 wheels.
+            with requirements.open("a", encoding="utf-8") as manifest:
+                manifest.write(
+                    '\n[tool.uv]\nconstraint-dependencies = ["rapidfuzz==3.9.6"]\n'
+                )
         projects.append(
             PreparedProject(
                 definition.name,
