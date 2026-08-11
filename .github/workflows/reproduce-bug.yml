@@ -189,7 +189,7 @@ jobs:
           git \
             -c user.name="astral-automations-bot[bot]" \
             -c user.email="305554984+astral-automations-bot[bot]@users.noreply.github.com" \
-            commit --message "Update reproduction context for $GITHUB_REPOSITORY#$ISSUE_NUMBER"
+            commit --message "Update reproduction context"
           git push origin "HEAD:refs/heads/$branch"
 
           printf 'Issue context: https://github.com/astral-sh/uv-dev/tree/%s\n' "$branch" \
@@ -296,12 +296,11 @@ jobs:
           fi
 
           git diff --cached --check
-          issue_number="$(jq --raw-output '.number' "$RUNNER_TEMP/issue-triage-event.json")"
           git \
             -c core.hooksPath=/dev/null \
             -c user.name="github-actions[bot]" \
             -c user.email="github-actions[bot]@users.noreply.github.com" \
-            commit --message "Add regression test for uv#${issue_number}"
+            commit --message "Add regression test"
 
           git_dir="$(git rev-parse --absolute-git-dir)"
           mv "$git_dir/config" "$RUNNER_TEMP/untrusted-git-config"
