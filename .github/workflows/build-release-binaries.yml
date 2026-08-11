@@ -563,7 +563,7 @@ jobs:
 
             if [[ "${{ matrix.platform.target }}" == "aarch64-unknown-linux-gnu" ]]; then
                 rustup component add llvm-tools-preview
-                /opt/python/cp311-cp311/bin/python scripts/build_uv_pgo.py \
+                python${{ env.PYTHON_VERSION }} scripts/build_uv_pgo.py \
                     --target "${{ matrix.platform.target }}" \
                     --target-dir "$PWD/target/uv-pgo" \
                     --train-only
