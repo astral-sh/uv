@@ -391,7 +391,11 @@ def wait_for_index(
     upload. We need to specifically run this through uv since to query the same cache
     (invalidation) as the registry client in skip existing in uv publish will later,
     just `get_filenames` fails non-deterministically.
+
+    Require consecutive successful checks since index responses can briefly disagree
+    after an upload.
     """
+    consecutive_successes = 0
     for _ in range(50):
         result = run(
             [
@@ -417,29 +421,35 @@ def wait_for_index(
         )
         # codeberg sometimes times out
         if result.returncode != 0:
+            consecutive_successes = 0
             print(
                 f"uv pip compile not updated, missing 2 files for {version}, "
                 + f"sleeping for 2s: `{plan.configuration.index_url}`:\n",
                 file=sys.stderr,
             )
-            sleep(2)
-            continue
-
-        if (
+        elif (
             f"{plan.configuration.project_name}=={version}" in result.stdout
             and result.stdout.count("--hash") == 2
         ):
-            break
-
-        print(
-            f"uv pip compile not updated, missing 2 files for {version}, "
-            + f"sleeping for 2s: `{plan.configuration.index_url}`:\n"
-            + "```\n"
-            + result.stdout.replace("\\\n    ", "")
-            + "```",
-            file=sys.stderr,
-        )
+            consecutive_successes += 1
+            if consecutive_successes == 3:
+                return
+        else:
+            consecutive_successes = 0
+            print(
+                f"uv pip compile not updated, missing 2 files for {version}, "
+                + f"sleeping for 2s: `{plan.configuration.index_url}`:\n"
+                + "```\n"
+                + result.stdout.replace("\\\n    ", "")
+                + "```",
+                file=sys.stderr,
+            )
         sleep(2)
+
+    raise RuntimeError(
+        f"Index did not consistently expose both files for "
+        f"{plan.configuration.project_name}=={version}"
+    )
 
 
 def get_fresh_version(plan: Plan) -> Version:
