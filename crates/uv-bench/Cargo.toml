@@ -63,7 +63,6 @@ uv-workspace = { workspace = true }
 
 anyhow = { workspace = true }
 async_zip = { workspace = true }
-astral-tokio-tar = { workspace = true }
 clap = { workspace = true }
 criterion = { version = "5.0.1", default-features = false, package = "codspeed-criterion-compat", features = ["async_tokio"] }
 flate2 = { workspace = true }
@@ -73,6 +72,7 @@ jiff = { workspace = true }
 rmp-serde = { workspace = true }
 serde_json = { workspace = true }
 sha2 = { workspace = true }
+tar-codec = { workspace = true }
 tempfile = { workspace = true }
 tokio = { workspace = true }
 tokio-util = { workspace = true }
