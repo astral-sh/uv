@@ -439,6 +439,10 @@ pub enum Pep723Error {
         "An opening tag (`# /// script`) was found without a closing tag (`# ///`). Ensure that every line between the opening and closing tags (including empty lines) starts with a leading `#`."
     )]
     UnclosedBlock,
+    #[error(
+        "An opening tag (`# /// script`) was found, but the closing tag (`# ///`) has trailing content. Remove the trailing content so the line is exactly `# ///`."
+    )]
+    UnclosedBlockTrailingContent,
     #[error("The script contains multiple PEP 723 metadata blocks")]
     DuplicateBlock,
     #[error("The PEP 723 metadata block is missing from the script.")]
@@ -556,11 +560,29 @@ impl ScriptTag {
         // # ///
         // ```
         //
-        // The latter `///` is the closing pragma
-        let Some(index) = toml.iter().rev().position(|line| *line == "///") else {
-            return Err(Pep723Error::UnclosedBlock);
+        // The latter `///` is the closing pragma. Track malformed terminators while searching, but
+        // continue looking for an exact terminator so trailing comments cannot invalidate it.
+        let mut has_trailing_content = false;
+        let mut closing_index = None;
+
+        for (index, line) in toml.iter().enumerate().rev() {
+            if *line == "///" {
+                closing_index = Some(index + 1);
+                break;
+            }
+
+            if line.starts_with("///") {
+                has_trailing_content = true;
+            }
+        }
+
+        let Some(index) = closing_index else {
+            return Err(if has_trailing_content {
+                Pep723Error::UnclosedBlockTrailingContent
+            } else {
+                Pep723Error::UnclosedBlock
+            });
         };
-        let index = toml.len() - index;
 
         // Discard any lines after the closing `# ///`.
         //
@@ -736,6 +758,61 @@ mod tests {
             ScriptTag::parse(contents.as_bytes()),
             Err(Pep723Error::UnclosedBlock)
         ));
+    }
+
+    #[test]
+    fn closing_tag_trailing_whitespace() {
+        // Explicit string (not `indoc`) so the closing tag's trailing space is preserved.
+        let contents = "# /// script\n# requires-python = '>=3.11'\n# /// \n";
+
+        assert!(matches!(
+            ScriptTag::parse(contents.as_bytes()),
+            Err(Pep723Error::UnclosedBlockTrailingContent)
+        ));
+    }
+
+    #[test]
+    fn closing_tag_trailing_content() {
+        let contents = indoc::indoc! {r"
+            # /// script
+            # requires-python = '>=3.11'
+            # /// unexpected
+        "};
+
+        assert!(matches!(
+            ScriptTag::parse(contents.as_bytes()),
+            Err(Pep723Error::UnclosedBlockTrailingContent)
+        ));
+    }
+
+    #[test]
+    fn closing_tag_followed_by_prefixed_comment() {
+        let contents = indoc::indoc! {r#"
+            # /// script
+            # dependencies = []
+            # ///
+            # /// documentation
+            print("Hello, world!")
+        "#};
+
+        let actual = ScriptTag::parse(contents.as_bytes()).unwrap().unwrap();
+
+        assert_eq!(actual.metadata, "dependencies = []\n");
+        assert_eq!(
+            actual.postlude,
+            "# /// documentation\nprint(\"Hello, world!\")\n"
+        );
+    }
+
+    #[test]
+    fn closing_tag_followed_by_trailing_whitespace_comment() {
+        let contents =
+            "# /// script\n# dependencies = []\n# ///\n# /// \nprint(\"Hello, world!\")\n";
+
+        let actual = ScriptTag::parse(contents.as_bytes()).unwrap().unwrap();
+
+        assert_eq!(actual.metadata, "dependencies = []\n");
+        assert_eq!(actual.postlude, "# /// \nprint(\"Hello, world!\")\n");
     }
 
     #[test]
@@ -918,13 +995,29 @@ mod tests {
     }
 
     #[test]
+    fn adjacent_unclosed_second_script_block_is_not_duplicate() {
+        let contents = indoc::indoc! {r#"
+            # /// script
+            # dependencies = []
+            # ///
+            # /// script
+            print("Hello, world!")
+        "#};
+
+        let actual = ScriptTag::parse(contents.as_bytes()).unwrap().unwrap();
+
+        assert_eq!(actual.metadata, "dependencies = []\n");
+        assert_eq!(actual.postlude, "# /// script\nprint(\"Hello, world!\")\n");
+    }
+
+    #[test]
     fn other_script_block_is_ignored() {
         let contents = indoc::indoc! {r#"
             # /// script
             # dependencies = ["requests"]
             # ///
 
-            
+
             # /// other
             # /// script
             # ///
