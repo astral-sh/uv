@@ -428,6 +428,29 @@ fn missing_find_links() -> Result<()> {
 }
 
 #[test]
+fn missing_find_links_from_requirements_file() -> Result<()> {
+    let context = uv_test::test_context!("3.12").with_filtered_missing_file_error();
+    let requirements_dir = context.temp_dir.child("requirements");
+    requirements_dir.create_dir_all()?;
+    requirements_dir
+        .child("requirements.txt")
+        .write_str("--find-links ./missing\nflask")?;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("-r")
+        .arg("requirements/requirements.txt")
+        .arg("--strict"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Invalid URL in `requirements/requirements.txt` at position 0: `./missing`
+      Caused by: relative URL without a base
+    "
+    );
+
+    Ok(())
+}
+
+#[test]
 fn invalid_pyproject_toml_syntax() -> Result<()> {
     let context = uv_test::test_context!("3.12");
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
@@ -7777,6 +7800,37 @@ fn find_links_relative_to_requirements_file() -> Result<()> {
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + ok==1.0.0
+    "
+    );
+
+    Ok(())
+}
+
+/// Install from a `--find-links` directory relative to the working directory.
+#[test]
+fn find_links_relative_to_working_directory() -> Result<()> {
+    let context = uv_test::test_context!("3.12").with_filtered_missing_file_error();
+    let links_dir = context.temp_dir.child("links");
+    links_dir.create_dir_all()?;
+    fs::copy(
+        context
+            .workspace_root
+            .join("test/links/ok-1.0.0-py3-none-any.whl"),
+        links_dir.child("ok-1.0.0-py3-none-any.whl").path(),
+    )?;
+    let requirements_dir = context.temp_dir.child("requirements");
+    requirements_dir.create_dir_all()?;
+    requirements_dir
+        .child("requirements.txt")
+        .write_str("--no-index\n--find-links ./links\nok==1.0.0\n")?;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("-r")
+        .arg("requirements/requirements.txt"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Invalid URL in `requirements/requirements.txt` at position 11: `./links`
+      Caused by: relative URL without a base
     "
     );
 
