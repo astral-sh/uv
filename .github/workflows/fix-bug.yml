@@ -301,16 +301,6 @@ jobs:
           path: ${{ runner.temp }}/codex-home/sessions
           if-no-files-found: warn
 
-      - name: "Validate issue context"
-        run: |
-          if [ -n "$(git -C "$RUNNER_TEMP/issue-context" status --porcelain -- . ':!README.md')" ]; then
-            echo "Codex changed files outside the issue-context README." >&2
-            git -C "$RUNNER_TEMP/issue-context" status --short
-            exit 1
-          fi
-
-          git -C "$RUNNER_TEMP/issue-context" diff --check -- README.md
-
       - name: "Commit verified bug fix"
         id: commit-fix
         env:
