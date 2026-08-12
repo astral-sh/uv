@@ -17,9 +17,7 @@ use uv_distribution_filename::{LegacySourceDistExtension, SourceDistExtension};
 use uv_preview::PreviewFeature;
 
 use crate::archive_path::SanitizedArchivePath;
-use crate::dirhash::{
-    DirectoryDigest, ExtractedFile, blake3_copy, directory_digest_from_extracted,
-};
+use crate::dirhash::{DirhashTree, ExtractedFile, blake3_copy, directory_tree_from_extracted};
 use crate::{Error, insecure_no_validate, validate_archive_member_name};
 
 const DEFAULT_BUF_SIZE: usize = 128 * 1024;
@@ -56,7 +54,7 @@ struct ComputedEntry {
 
 struct UnzipOutput {
     files: Vec<(PathBuf, u64)>,
-    digest: Option<DirectoryDigest>,
+    tree: Option<DirhashTree>,
 }
 
 /// Unpack a `.zip` archive into the target directory, without requiring `Seek`.
@@ -73,24 +71,24 @@ pub async fn unzip<R: tokio::io::AsyncRead + Unpin>(
     Ok(Box::pin(unzip_inner(reader, target, false)).await?.files)
 }
 
-/// Unpack a `.zip` archive into the target directory while computing a digest of the extracted
+/// Unpack a `.zip` archive into the target directory while computing a hash tree of the extracted
 /// files.
 ///
-/// The digest includes regular-file paths, contents, and empty directories. ZIP entries are never
+/// The tree includes regular-file paths, contents, and empty directories. ZIP entries are never
 /// followed as symlinks; non-directory entries are materialized and hashed as regular files.
 ///
 /// See [`unzip`] for details.
 pub async fn unzip_and_hash<R: tokio::io::AsyncRead + Unpin>(
     reader: R,
     target: impl AsRef<Path>,
-) -> Result<(Vec<(PathBuf, u64)>, DirectoryDigest), Error> {
+) -> Result<(Vec<(PathBuf, u64)>, DirhashTree), Error> {
     let output = Box::pin(unzip_inner(reader, target, true)).await?;
-    let Some(digest) = output.digest else {
+    let Some(tree) = output.tree else {
         return Err(Error::Io(std::io::Error::other(
-            "streaming ZIP digest was not computed",
+            "streaming ZIP hash tree was not computed",
         )));
     };
-    Ok((output.files, digest))
+    Ok((output.files, tree))
 }
 
 async fn unzip_inner<R: tokio::io::AsyncRead + Unpin>(
@@ -217,10 +215,9 @@ async fn unzip_inner<R: tokio::io::AsyncRead + Unpin>(
                         };
                         let mut reader = entry.reader_mut().compat();
                         let (bytes_read, digest) = if hash_contents {
-                            let (bytes_read, digest) =
-                                Box::pin(blake3_copy(&mut reader, &mut writer))
-                                    .await
-                                    .map_err(Error::io_or_compression)?;
+                            let (bytes_read, digest) = blake3_copy(&mut reader, &mut writer)
+                                .await
+                                .map_err(Error::io_or_compression)?;
                             (bytes_read, Some(digest))
                         } else {
                             let mut bytes_read = 0;
@@ -510,13 +507,9 @@ async fn unzip_inner<R: tokio::io::AsyncRead + Unpin>(
                         } else {
                             files.push((relpath.to_path_buf(), local_header.uncompressed_size));
                             if let Some(digest) = local_header.digest {
-                                let executable = entry
-                                    .unix_permissions()
-                                    .is_some_and(|mode| mode & 0o111 != 0);
                                 extracted_files.push(ExtractedFile::new(
                                     relpath.clone(),
                                     local_header.uncompressed_size,
-                                    executable,
                                     digest,
                                 ));
                             }
@@ -657,11 +650,11 @@ async fn unzip_inner<R: tokio::io::AsyncRead + Unpin>(
         }
     }
 
-    let digest = hash_contents
-        .then(|| directory_digest_from_extracted(&extracted_files, &digest_directories))
+    let tree = hash_contents
+        .then(|| directory_tree_from_extracted(&extracted_files, &digest_directories))
         .transpose()?;
 
-    Ok(UnzipOutput { files, digest })
+    Ok(UnzipOutput { files, tree })
 }
 
 /// Unpack the given tar archive into the destination directory.

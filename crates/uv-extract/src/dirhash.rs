@@ -75,7 +75,7 @@ mod archive;
 mod seek;
 
 pub use archive::DirectoryDigest;
-pub(crate) use archive::{ExtractedFile, directory_digest_from_extracted};
+pub(crate) use archive::{ExtractedFile, directory_tree_from_extracted};
 pub(crate) use seek::{unzip, unzip_and_hash};
 
 // Read repeatedly until the whole buffer is full, similar to `read_exact`. But if EOF is
@@ -112,7 +112,7 @@ where
     let mut reader = pin!(reader);
     let mut writer = pin!(writer);
     let mut hasher = blake3::Hasher::new();
-    let mut buffer = [0; 1 << 16]; // 64 KiB
+    let mut buffer = vec![0; 1 << 16]; // 64 KiB
     let mut total = 0u64;
     // BLAKE3 is fastest when hashing power-of-two sized buffers. That maximizes the time we spend
     // in the wide SIMD part of the implementation (which wants between 4 and 16 KiB at a time
@@ -678,7 +678,7 @@ mod tests {
     async fn test_blake3_copy() -> io::Result<()> {
         let input = b"hello";
         let mut output = Vec::new();
-        let (bytes_read, hash) = Box::pin(super::blake3_copy(&input[..], &mut output)).await?;
+        let (bytes_read, hash) = super::blake3_copy(&input[..], &mut output).await?;
         assert_eq!(bytes_read, input.len() as u64);
         assert_eq!(input, &output[..]);
         assert_eq!(hash, blake3::hash(input));
@@ -687,7 +687,7 @@ mod tests {
         paint_input(&mut big_input);
         let mut big_output = Vec::new();
         let (big_bytes_read, big_hash) =
-            Box::pin(super::blake3_copy(&big_input[..], &mut big_output)).await?;
+            super::blake3_copy(&big_input[..], &mut big_output).await?;
         assert_eq!(big_bytes_read, big_input.len() as u64);
         assert_eq!(big_input, big_output);
         assert_eq!(big_hash, blake3::hash(&big_input));
@@ -718,8 +718,7 @@ mod tests {
         let mut input = vec![0; 64_000 * 3];
         paint_input(&mut input);
         let mut output = Vec::new();
-        let (bytes_read, hash) =
-            Box::pin(super::blake3_copy(ShortReader(&input), &mut output)).await?;
+        let (bytes_read, hash) = super::blake3_copy(ShortReader(&input), &mut output).await?;
         assert_eq!(bytes_read, input.len() as u64);
         assert_eq!(input, &output[..]);
         assert_eq!(hash, blake3::hash(&input));

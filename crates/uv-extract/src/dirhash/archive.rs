@@ -51,13 +51,15 @@ impl From<&SanitizedArchivePath> for DigestPath {
 pub struct DirectoryDigest(String);
 
 impl DirectoryDigest {
-    fn from_hash(hash: blake3::Hash) -> Self {
-        Self(encode_digest(&hash))
-    }
-
     /// Return the complete path-safe digest string.
     pub fn as_str(&self) -> &str {
         &self.0
+    }
+}
+
+impl From<blake3::Hash> for DirectoryDigest {
+    fn from(hash: blake3::Hash) -> Self {
+        Self(encode_digest(&hash))
     }
 }
 
@@ -72,23 +74,12 @@ impl From<DirectoryDigest> for String {
 pub(crate) struct ExtractedFile {
     path: SanitizedArchivePath,
     size: u64,
-    executable: bool,
     digest: blake3::Hash,
 }
 
 impl ExtractedFile {
-    pub(crate) fn new(
-        path: SanitizedArchivePath,
-        size: u64,
-        executable: bool,
-        digest: blake3::Hash,
-    ) -> Self {
-        Self {
-            path,
-            size,
-            executable,
-            digest,
-        }
+    pub(crate) fn new(path: SanitizedArchivePath, size: u64, digest: blake3::Hash) -> Self {
+        Self { path, size, digest }
     }
 
     /// Return the path of the extracted file within the archive.
@@ -102,11 +93,11 @@ impl ExtractedFile {
     }
 }
 
-/// Compute the shared directory hash from extracted file and directory entries.
-pub(crate) fn directory_digest_from_extracted<'a>(
+/// Build the shared directory hash tree from extracted file and directory entries.
+pub(crate) fn directory_tree_from_extracted<'a>(
     files: &[ExtractedFile],
     directories: impl IntoIterator<Item = &'a SanitizedArchivePath>,
-) -> Result<DirectoryDigest, DirhashError> {
+) -> Result<DirhashTree, DirhashError> {
     let mut tree = DirhashTree::default();
 
     for directory in directories {
@@ -121,7 +112,7 @@ pub(crate) fn directory_digest_from_extracted<'a>(
         tree.add_file(path.as_str(), file.digest)?;
     }
 
-    Ok(DirectoryDigest::from_hash(tree.hash()))
+    Ok(tree)
 }
 
 fn encode_digest(digest: &blake3::Hash) -> String {
@@ -148,7 +139,8 @@ mod tests {
     use crate::archive_path::SanitizedArchivePath;
 
     use super::{
-        DIRECTORY_DIGEST_LENGTH, DigestPath, ExtractedFile, directory_digest_from_extracted,
+        DIRECTORY_DIGEST_LENGTH, DigestPath, DirectoryDigest, ExtractedFile,
+        directory_tree_from_extracted,
     };
 
     #[test]
@@ -157,14 +149,15 @@ mod tests {
         let c = SanitizedArchivePath::from_archive_member("b/c.txt").expect("valid path");
         let directory = SanitizedArchivePath::from_archive_member("b/d").expect("valid path");
 
-        let digest = directory_digest_from_extracted(
+        let tree = directory_tree_from_extracted(
             &[
-                ExtractedFile::new(a, 5, false, blake3::hash(b"hello")),
-                ExtractedFile::new(c, 7, false, blake3::hash(b"goodbye")),
+                ExtractedFile::new(a, 5, blake3::hash(b"hello")),
+                ExtractedFile::new(c, 7, blake3::hash(b"goodbye")),
             ],
             [&directory],
         )
         .expect("valid directory tree");
+        let digest = DirectoryDigest::from(tree.hash());
 
         assert_eq!(digest.as_str(), "xhg9bffqlabg1f3sq4i83jfb");
         assert_eq!(digest.as_str().len(), DIRECTORY_DIGEST_LENGTH);

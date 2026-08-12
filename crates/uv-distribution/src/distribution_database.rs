@@ -1,3 +1,4 @@
+use std::fmt::Display;
 use std::future::Future;
 use std::io;
 use std::path::{Path, PathBuf};
@@ -22,9 +23,9 @@ use uv_distribution_types::{
     BuildInfo, BuildableSource, BuiltDist, Dist, DistRef, File, HashPolicy, Hashed, IndexUrl,
     InstalledDist, Name, SourceDist, ToUrlError,
 };
-use uv_extract::dirhash::DirectoryDigest;
+use uv_extract::dirhash::{DirectoryDigest, DirhashTree, dirhash_path};
 use uv_extract::hash::Hasher;
-use uv_fs::write_atomic;
+use uv_fs::{PortablePath, write_atomic};
 use uv_git::{GIT_LFS, GitError};
 use uv_install_wheel::validate_and_heal_record;
 use uv_platform_tags::Tags;
@@ -725,7 +726,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 let temp_dir = tempfile::tempdir_in(self.build_context.cache().root())
                     .map_err(Error::CacheWrite)?;
 
-                let ExtractedWheelManifest { files, mut digest } = match progress {
+                let mut extracted = match progress {
                     Some((reporter, progress)) => {
                         let mut reader = ProgressReader::new(&mut hasher, progress, &**reporter);
                         match extension {
@@ -741,7 +742,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                                     uv_extract::stream::untar_zst(&mut reader, temp_dir.path())
                                         .await
                                         .map_err(|err| Error::Extract(filename.to_string(), err))?;
-                                ExtractedWheelManifest::without_digest(files)
+                                ExtractedWheelManifest::without_tree(files)
                             }
                         }
                     }
@@ -757,7 +758,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                             let files = uv_extract::stream::untar_zst(&mut hasher, temp_dir.path())
                                 .await
                                 .map_err(|err| Error::Extract(filename.to_string(), err))?;
-                            ExtractedWheelManifest::without_digest(files)
+                            ExtractedWheelManifest::without_tree(files)
                         }
                     },
                 };
@@ -776,15 +777,11 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
 
                 // Before we make the wheel accessible by persisting it, ensure that the RECORD is
                 // valid.
-                if validate_and_heal_record(temp_dir.path(), files.iter(), dist)
-                    .map_err(Error::InstallWheelError)?
-                {
-                    digest = None;
-                }
+                extracted.validate_and_heal_record(temp_dir.path(), dist)?;
 
                 // Persist the temporary directory to the directory store.
                 let id = self
-                    .persist_extracted_wheel(temp_dir, wheel_entry.path(), digest)
+                    .persist_extracted_wheel(temp_dir, wheel_entry.path(), extracted.tree)
                     .await?;
 
                 if let Some((reporter, progress)) = progress {
@@ -976,7 +973,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                     .map_err(Error::CacheWrite)?;
 
                 let target = temp_dir.path().to_owned();
-                let ExtractedWheelManifest { files, mut digest } = match extension {
+                let mut extracted = match extension {
                     WheelExtension::Whl => {
                         let file = file.into_std().await;
                         tokio::task::spawn_blocking(move || {
@@ -993,22 +990,18 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                         let files = uv_extract::stream::untar_zst(file, &target)
                             .await
                             .map_err(|err| Error::Extract(filename.to_string(), err))?;
-                        ExtractedWheelManifest::without_digest(files)
+                        ExtractedWheelManifest::without_tree(files)
                     }
                 };
                 let hashes = hashers.into_iter().map(HashDigest::from).collect();
 
                 // Before we make the wheel accessible by persisting it, ensure that the RECORD is
                 // valid.
-                if validate_and_heal_record(temp_dir.path(), files.iter(), dist)
-                    .map_err(Error::InstallWheelError)?
-                {
-                    digest = None;
-                }
+                extracted.validate_and_heal_record(temp_dir.path(), dist)?;
 
                 // Persist the temporary directory to the directory store.
                 let id = self
-                    .persist_extracted_wheel(temp_dir, wheel_entry.path(), digest)
+                    .persist_extracted_wheel(temp_dir, wheel_entry.path(), extracted.tree)
                     .await?;
 
                 if let Some((reporter, progress)) = progress {
@@ -1191,7 +1184,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             let mut hasher = uv_extract::hash::HashReader::new(file, &mut hashers);
 
             // Unzip the wheel to a temporary directory.
-            let ExtractedWheelManifest { files, mut digest } = match extension {
+            let mut extracted = match extension {
                 WheelExtension::Whl => ExtractedWheelManifest::extract_streaming(
                     &mut hasher,
                     temp_dir.path(),
@@ -1203,7 +1196,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                     let files = uv_extract::stream::untar_zst(&mut hasher, temp_dir.path())
                         .await
                         .map_err(|err| Error::Extract(filename.to_string(), err))?;
-                    ExtractedWheelManifest::without_digest(files)
+                    ExtractedWheelManifest::without_tree(files)
                 }
             };
 
@@ -1214,15 +1207,11 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
 
             // Before we make the wheel accessible by persisting it, ensure that the RECORD is
             // valid.
-            if validate_and_heal_record(temp_dir.path(), files.iter(), dist)
-                .map_err(Error::InstallWheelError)?
-            {
-                digest = None;
-            }
+            extracted.validate_and_heal_record(temp_dir.path(), dist)?;
 
             // Persist the temporary directory to the directory store.
             let id = self
-                .persist_extracted_wheel(temp_dir, wheel_entry.path(), digest)
+                .persist_extracted_wheel(temp_dir, wheel_entry.path(), extracted.tree)
                 .await?;
 
             // Create an archive.
@@ -1259,7 +1248,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
     ) -> Result<ArchiveId, Error> {
         let content_addressed_cache = self.content_addressed_cache;
 
-        let (temp_dir, extracted) = tokio::task::spawn_blocking({
+        let (temp_dir, mut extracted) = tokio::task::spawn_blocking({
             let path = path.to_owned();
             let root = self.build_context.cache().root().to_path_buf();
             move || -> Result<_, Error> {
@@ -1276,18 +1265,13 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             }
         })
         .await??;
-        let ExtractedWheelManifest { files, mut digest } = extracted;
 
         // Before we make the wheel accessible by persisting it, ensure that the RECORD is valid.
-        if validate_and_heal_record(temp_dir.path(), files.iter(), dist)
-            .map_err(Error::InstallWheelError)?
-        {
-            digest = None;
-        }
+        extracted.validate_and_heal_record(temp_dir.path(), dist)?;
 
         // Persist the temporary directory to the directory store.
         let id = self
-            .persist_extracted_wheel(temp_dir, target, digest)
+            .persist_extracted_wheel(temp_dir, target, extracted.tree)
             .await?;
 
         Ok(id)
@@ -1295,17 +1279,18 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
 
     /// Persist an extracted wheel into the archive store.
     ///
-    /// A digest makes identical extracted trees converge on one archive entry. Without a digest,
+    /// A hash tree makes identical extracted trees converge on one archive entry. Without one,
     /// persistence retains the existing behavior of assigning a unique archive ID.
     async fn persist_extracted_wheel(
         &self,
         temp_dir: tempfile::TempDir,
         target: &Path,
-        digest: Option<DirectoryDigest>,
+        tree: Option<DirhashTree>,
     ) -> Result<ArchiveId, Error> {
         let cache = self.build_context.cache();
-        match digest {
-            Some(digest) => {
+        match tree {
+            Some(tree) => {
+                let digest = DirectoryDigest::from(tree.hash());
                 let id = ArchiveId::from_digest(digest.into());
                 cache.persist_with_id(temp_dir, target, id).await
             }
@@ -1336,14 +1321,14 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
     }
 }
 
-/// The manifest of files extracted from a wheel, along with a hash of the unpacked archive.
+/// The manifest of files extracted from a wheel, along with a hash tree of the unpacked archive.
 struct ExtractedWheelManifest {
     files: Vec<(PathBuf, u64)>,
-    digest: Option<DirectoryDigest>,
+    tree: Option<DirhashTree>,
 }
 
 impl ExtractedWheelManifest {
-    /// Extract a wheel from a streaming reader, optionally computing its directory digest.
+    /// Extract a wheel from a streaming reader, optionally computing its directory hash tree.
     async fn extract_streaming<R>(
         reader: R,
         target: &Path,
@@ -1353,40 +1338,59 @@ impl ExtractedWheelManifest {
         R: AsyncRead + Unpin,
     {
         if content_addressed {
-            let (files, digest) = uv_extract::stream::unzip_and_hash(reader, target).await?;
+            let (files, tree) = uv_extract::stream::unzip_and_hash(reader, target).await?;
             Ok(Self {
                 files,
-                digest: Some(digest),
+                tree: Some(tree),
             })
         } else {
             let files = uv_extract::stream::unzip(reader, target).await?;
-            Ok(Self::without_digest(files))
+            Ok(Self::without_tree(files))
         }
     }
 
-    /// Extract a wheel from a seekable file, optionally computing its directory digest.
+    /// Extract a wheel from a seekable file, optionally computing its directory hash tree.
     fn extract_seekable(
         reader: fs_err::File,
         target: &Path,
         content_addressed: bool,
     ) -> Result<Self, uv_extract::Error> {
         if content_addressed {
-            let (files, digest) = uv_extract::unzip_and_hash(reader, target)?;
+            let (files, tree) = uv_extract::unzip_and_hash(reader, target)?;
             Ok(Self {
                 files,
-                digest: Some(digest),
+                tree: Some(tree),
             })
         } else {
             let files = uv_extract::unzip(reader, target)?;
-            Ok(Self::without_digest(files))
+            Ok(Self::without_tree(files))
         }
     }
 
-    fn without_digest(files: Vec<(PathBuf, u64)>) -> Self {
-        Self {
-            files,
-            digest: None,
-        }
+    fn without_tree(files: Vec<(PathBuf, u64)>) -> Self {
+        Self { files, tree: None }
+    }
+
+    /// Heal the wheel's `RECORD` and keep its hash tree consistent with the repaired contents.
+    fn validate_and_heal_record(&mut self, root: &Path, dist: impl Display) -> Result<(), Error> {
+        let Some(record_path) = validate_and_heal_record(root, self.files.iter(), dist)
+            .map_err(Error::InstallWheelError)?
+        else {
+            return Ok(());
+        };
+        let Some(tree) = self.tree.as_mut() else {
+            return Ok(());
+        };
+
+        let hash = dirhash_path(&root.join(&record_path)).map_err(|err| {
+            Error::Extract(
+                record_path.display().to_string(),
+                uv_extract::Error::from(err),
+            )
+        })?;
+        let record_path = PortablePath::from(record_path.as_path()).to_string();
+        tree.update_file(&record_path, hash)
+            .map_err(|err| Error::Extract(record_path, uv_extract::Error::from(err)))
     }
 }
 
