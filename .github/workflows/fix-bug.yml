@@ -252,6 +252,7 @@ jobs:
         with:
           name: fixed-bug-${{ inputs.issue-number }}-${{ github.run_id }}
           path: ${{ runner.temp }}/fixed-bug.bundle
+          overwrite: true
           if-no-files-found: error
           compression-level: 0
           retention-days: 1
