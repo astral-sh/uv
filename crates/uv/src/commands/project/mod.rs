@@ -1147,9 +1147,8 @@ fn discover_project_environment(
         cache,
     );
 
-    // A launcher's shared library can change without updating the executable timestamp used to
-    // invalidate its cache. If the environment reveals conflicting versions for the same base
-    // interpreter, refresh that entry before interpreter discovery can select stale metadata.
+    // Conflicting versions for the same base interpreter indicate its cached metadata may be
+    // corrupted. Refresh the entry before interpreter discovery can select stale metadata.
     if matches!(
         &compatibility,
         Err(EnvironmentIncompatibilityError::PyenvVersionConflict(..))
