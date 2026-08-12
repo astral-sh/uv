@@ -140,8 +140,7 @@ fn unzip_inner(
 
 /// Reject entries that would write to the same sanitized output path.
 ///
-/// This preflight runs before parallel extraction so duplicate entries cannot race to determine
-/// which contents are persisted or hashed.
+/// Duplicate paths can otherwise race to determine which contents are persisted or hashed.
 fn validate_unique_output_paths(entries: &[StoredZipEntry]) -> Result<(), Error> {
     let mut paths = FxHashSet::default();
     for (file_number, entry) in entries.iter().enumerate() {
