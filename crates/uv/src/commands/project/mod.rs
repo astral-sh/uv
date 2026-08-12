@@ -1164,7 +1164,7 @@ fn discover_project_environment(
             base_interpreter.python_version(),
             environment.interpreter().python_version(),
         );
-        Interpreter::query_fresh(&base_executable, cache)?;
+        Interpreter::query_with_cache(&base_executable, cache, true)?;
     }
 
     match compatibility {
