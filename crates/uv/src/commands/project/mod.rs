@@ -1148,7 +1148,7 @@ fn discover_project_environment(
     );
 
     // Conflicting versions for the same base interpreter indicate its cached metadata may be
-    // corrupted. Refresh the entry before interpreter discovery can select stale metadata.
+    // corrupted. Clear the entry before interpreter discovery can select stale metadata.
     if matches!(
         &compatibility,
         Err(EnvironmentIncompatibilityError::PyenvVersionConflict(..))
@@ -1158,12 +1158,12 @@ fn discover_project_environment(
         && environment.interpreter().python_version() != base_interpreter.python_version()
     {
         debug!(
-            "Refreshing cached interpreter info for {} after finding conflicting Python versions ({} and {})",
+            "Clearing cached interpreter info for {} after finding conflicting Python versions ({} and {})",
             base_executable.user_display(),
             base_interpreter.python_version(),
             environment.interpreter().python_version(),
         );
-        Interpreter::query_with_cache(&base_executable, cache, true)?;
+        Interpreter::clear_cache(&base_executable, cache)?;
     }
 
     match compatibility {
