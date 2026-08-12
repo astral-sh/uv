@@ -510,13 +510,9 @@ async fn unzip_inner<R: tokio::io::AsyncRead + Unpin>(
                         } else {
                             files.push((relpath.to_path_buf(), local_header.uncompressed_size));
                             if let Some(digest) = local_header.digest {
-                                let executable = entry
-                                    .unix_permissions()
-                                    .is_some_and(|mode| mode & 0o111 != 0);
                                 extracted_files.push(ExtractedFile::new(
                                     relpath.clone(),
                                     local_header.uncompressed_size,
-                                    executable,
                                     digest,
                                 ));
                             }

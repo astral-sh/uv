@@ -37,12 +37,9 @@ impl ArchiveId {
 
 impl ArchiveFileId {
     /// Generate a content-addressed identifier for an extracted file.
-    ///
-    /// The executable bit is part of the key because hard links share inode metadata.
-    pub fn from_content_digest(digest: &str, executable: bool) -> Self {
-        let mode = if executable { "executable" } else { "regular" };
+    pub fn from_content_digest(digest: &str) -> Self {
         let shard = digest.get(..2).unwrap_or(digest);
-        Self(PathBuf::from(mode).join(shard).join(digest))
+        Self(PathBuf::from(shard).join(digest))
     }
 }
 
