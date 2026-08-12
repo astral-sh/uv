@@ -560,23 +560,28 @@ impl ScriptTag {
         // # ///
         // ```
         //
-        // The latter `///` is the closing pragma
-        // Match on the trimmed candidate so a terminator with trailing whitespace (`# /// `),
-        // which PEP 723 does not allow, gets a specific error instead of the generic one.
-        // `index` is the position just past the terminator, matching the truncation below.
-        let index = match toml
-            .iter()
-            .enumerate()
-            .rev()
-            .find(|(_, line)| line.starts_with("///"))
-        {
-            // No matching terminator.
-            None => return Err(Pep723Error::UnclosedBlock),
-            // We have a matching terminator, but there's whitespace or other content trailing it.
-            Some((_, line)) if *line != "///" => {
-                return Err(Pep723Error::UnclosedBlockTrailingContent);
+        // The latter `///` is the closing pragma. Track malformed terminators while searching, but
+        // continue looking for an exact terminator so trailing comments cannot invalidate it.
+        let mut has_trailing_content = false;
+        let mut closing_index = None;
+
+        for (index, line) in toml.iter().enumerate().rev() {
+            if *line == "///" {
+                closing_index = Some(index + 1);
+                break;
             }
-            Some((index, _)) => index + 1,
+
+            if line.starts_with("///") {
+                has_trailing_content = true;
+            }
+        }
+
+        let Some(index) = closing_index else {
+            return Err(if has_trailing_content {
+                Pep723Error::UnclosedBlockTrailingContent
+            } else {
+                Pep723Error::UnclosedBlock
+            });
         };
 
         // Discard any lines after the closing `# ///`.
@@ -767,6 +772,50 @@ mod tests {
     }
 
     #[test]
+    fn closing_tag_trailing_content() {
+        let contents = indoc::indoc! {r"
+            # /// script
+            # requires-python = '>=3.11'
+            # /// unexpected
+        "};
+
+        assert!(matches!(
+            ScriptTag::parse(contents.as_bytes()),
+            Err(Pep723Error::UnclosedBlockTrailingContent)
+        ));
+    }
+
+    #[test]
+    fn closing_tag_followed_by_prefixed_comment() {
+        let contents = indoc::indoc! {r#"
+            # /// script
+            # dependencies = []
+            # ///
+            # /// documentation
+            print("Hello, world!")
+        "#};
+
+        let actual = ScriptTag::parse(contents.as_bytes()).unwrap().unwrap();
+
+        assert_eq!(actual.metadata, "dependencies = []\n");
+        assert_eq!(
+            actual.postlude,
+            "# /// documentation\nprint(\"Hello, world!\")\n"
+        );
+    }
+
+    #[test]
+    fn closing_tag_followed_by_trailing_whitespace_comment() {
+        let contents =
+            "# /// script\n# dependencies = []\n# ///\n# /// \nprint(\"Hello, world!\")\n";
+
+        let actual = ScriptTag::parse(contents.as_bytes()).unwrap().unwrap();
+
+        assert_eq!(actual.metadata, "dependencies = []\n");
+        assert_eq!(actual.postlude, "# /// \nprint(\"Hello, world!\")\n");
+    }
+
+    #[test]
     fn leading_content() {
         let contents = indoc::indoc! {r"
         pass # /// script
@@ -943,6 +992,22 @@ mod tests {
         "#};
 
         assert!(ScriptTag::parse(contents.as_bytes()).is_ok());
+    }
+
+    #[test]
+    fn adjacent_unclosed_second_script_block_is_not_duplicate() {
+        let contents = indoc::indoc! {r#"
+            # /// script
+            # dependencies = []
+            # ///
+            # /// script
+            print("Hello, world!")
+        "#};
+
+        let actual = ScriptTag::parse(contents.as_bytes()).unwrap().unwrap();
+
+        assert_eq!(actual.metadata, "dependencies = []\n");
+        assert_eq!(actual.postlude, "# /// script\nprint(\"Hello, world!\")\n");
     }
 
     #[test]
