@@ -25350,6 +25350,8 @@ fn lock_invalid_environment() -> Result<()> {
     Resolved 1 package in [TIME]
     ");
 
+    assert!(context.venv.child("bad").exists());
+
     Ok(())
 }
 
