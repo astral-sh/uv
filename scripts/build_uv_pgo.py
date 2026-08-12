@@ -1,9 +1,15 @@
-"""Build uv with profile-guided optimization using real ecosystem projects."""
+"""Build uv with profile-guided optimization using pinned ecosystem projects."""
+
+# /// script
+# requires-python = ">=3.11"
+# dependencies = []
+# ///
 
 from __future__ import annotations
 
 import argparse
 import os
+import re
 import shlex
 import shutil
 import subprocess
@@ -13,52 +19,23 @@ from dataclasses import dataclass
 from pathlib import Path
 
 REPOSITORY_ROOT = Path(__file__).resolve().parent.parent
-# Match the ecosystem tests and avoid installing newly published packages.
-EXCLUDE_NEWER = "2026-06-30T00:00:00Z"
+DEPENDENCY_EXCLUDE_NEWER = "2026-06-30T00:00:00Z"
 
 
 @dataclass(frozen=True, slots=True)
-class CorpusProject:
+class EcosystemProject:
     name: str
     python_version: str
     constraints: tuple[str, ...] = ()
     groups: tuple[str, ...] = ()
     native_platforms: tuple[str, ...] | None = None
 
-
-# Keep the training projects separate from the held-out evaluation corpus.
-TRAINING_PROJECTS = (
-    CorpusProject("cibuildwheel", "3.11"),
-    CorpusProject("cookiecutter", "3.12"),
-    CorpusProject("flask", "3.11"),
-    CorpusProject("httpx", "3.12"),
-    CorpusProject("llm", "3.12", constraints=("numpy==2.2.6",)),
-    CorpusProject("openai-python", "3.13"),
-    CorpusProject("poetry", "3.11", constraints=("rapidfuzz==3.9.6",)),
-    CorpusProject("pytest-cov", "3.14"),
-    CorpusProject("sentry", "3.13", native_platforms=("linux",)),
-    CorpusProject("zulip", "3.12", groups=("dev",), native_platforms=("win32",)),
-    CorpusProject("pyx-workspace", "3.14", groups=("dev",)),
-)
-
-EVALUATION_PROJECTS = (
-    CorpusProject("jupyterlab", "3.12"),
-    CorpusProject("saleor", "3.12"),
-    CorpusProject("semantic-kernel", "3.13"),
-    CorpusProject("transformers", "3.11"),
-    CorpusProject("warehouse", "3.11"),
-)
-
-
-@dataclass(frozen=True, slots=True)
-class PreparedProject:
-    name: str
-    project: Path
-    manifest: Path
-    python_version: str
-    constraints: tuple[str, ...] = ()
-    groups: tuple[str, ...] = ()
-    native_platforms: tuple[str, ...] | None = None
+    def __post_init__(self) -> None:
+        if re.fullmatch(r"3\.\d+", self.python_version) is None:
+            raise ValueError(
+                f"{self.name} must specify a Python major.minor version, "
+                f"got {self.python_version!r}"
+            )
 
     @property
     def supports_native_workloads(self) -> bool:
@@ -79,15 +56,52 @@ class PreparedProject:
         )
 
 
-@dataclass(frozen=True, slots=True)
-class PreparedCorpus:
-    root: Path
-    projects: tuple[PreparedProject, ...]
+# Train on existing ecosystem fixtures covering applications, workspaces,
+# libraries, and packaging tools across their supported Python versions.
+CORPUS_PROJECTS = (
+    EcosystemProject(name="cibuildwheel", python_version="3.11"),
+    EcosystemProject(name="cookiecutter", python_version="3.12"),
+    EcosystemProject(name="flask", python_version="3.11"),
+    EcosystemProject(name="httpx", python_version="3.12"),
+    EcosystemProject(
+        name="llm",
+        python_version="3.12",
+        constraints=("numpy==2.2.6",),
+    ),
+    EcosystemProject(name="openai-python", python_version="3.13"),
+    EcosystemProject(
+        name="poetry",
+        python_version="3.11",
+        constraints=("rapidfuzz==3.9.6",),
+    ),
+    EcosystemProject(name="pytest-cov", python_version="3.14"),
+    EcosystemProject(
+        name="sentry",
+        python_version="3.13",
+        native_platforms=("linux",),
+    ),
+    EcosystemProject(
+        name="zulip",
+        python_version="3.12",
+        groups=("dev",),
+        native_platforms=("win32",),
+    ),
+    EcosystemProject(
+        name="pyx-workspace",
+        python_version="3.14",
+        groups=("dev",),
+    ),
+)
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--target", help="Host-native Rust target triple")
+    parser.add_argument(
+        "--debug",
+        action="store_true",
+        help="Use debug builds to validate the complete PGO pipeline",
+    )
     parser.add_argument(
         "--target-dir",
         type=Path,
@@ -103,49 +117,33 @@ def main() -> None:
         type=Path,
         help="Override the active Rust toolchain's llvm-profdata executable",
     )
-    modes = parser.add_mutually_exclusive_group()
-    modes.add_argument(
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument(
         "--train-only",
         action="store_true",
         help="Only produce <target-dir>/uv.profdata for a subsequent release build",
     )
-    modes.add_argument(
+    mode.add_argument(
         "--prepare-corpus",
         action="store_true",
-        help="Only prepare the real-project training corpus",
-    )
-    modes.add_argument(
-        "--prepare-evaluation",
-        action="store_true",
-        help="Only prepare independent, held-out evaluation projects",
-    )
-    modes.add_argument(
-        "--exercise-binary",
-        type=Path,
-        help="Run the training workloads using an existing, uninstrumented uv binary",
+        help="Only prepare the pinned ecosystem training corpus",
     )
     args = parser.parse_args()
 
-    target_dir = Path(
+    target_dir = (
         args.target_dir
-        or os.environ.get("CARGO_TARGET_DIR", REPOSITORY_ROOT / "target" / "uv-pgo")
+        or Path(
+            os.environ.get("CARGO_TARGET_DIR", REPOSITORY_ROOT / "target" / "uv-pgo")
+        )
     ).resolve()
-    name = "evaluation" if args.prepare_evaluation else "training"
-    projects = EVALUATION_PROJECTS if args.prepare_evaluation else TRAINING_PROJECTS
-    corpus = prepare_corpus(target_dir / "corpus" / name, projects)
-    print(
-        f"Prepared {len(corpus.projects)} real {name} projects in {corpus.root}",
-        flush=True,
-    )
-
-    if args.prepare_corpus or args.prepare_evaluation:
-        return
+    corpus_directory = target_dir / "corpus"
+    profile_dir = (args.profile_dir or target_dir / "profiles").resolve()
+    merged_profile = target_dir / "uv.profdata"
 
     environment = os.environ.copy()
-    if args.exercise_binary is not None:
-        binary = args.exercise_binary.resolve()
-        launcher = binary.with_name("uvx.exe" if binary.suffix == ".exe" else "uvx")
-        run_workloads(binary, launcher, corpus, environment)
+    if args.prepare_corpus:
+        prepare_corpus(corpus_directory)
+        print(f"Prepared {len(CORPUS_PROJECTS)} ecosystem projects", flush=True)
         return
 
     host = rustc_host()
@@ -156,7 +154,9 @@ def main() -> None:
         )
 
     profiler = find_llvm_profdata(host, args.llvm_profdata)
-    profile_dir = (args.profile_dir or target_dir / "profiles").resolve()
+    prepare_corpus(corpus_directory)
+    print(f"Prepared {len(CORPUS_PROJECTS)} ecosystem projects", flush=True)
+
     profile_dir.mkdir(parents=True, exist_ok=True)
     for profile in profile_dir.glob("uv-*.profraw"):
         profile.unlink()
@@ -181,10 +181,11 @@ def main() -> None:
             environment.get("RUSTFLAGS"), f"-Cprofile-generate={profile_dir}"
         ),
     }
-    print("Building instrumented release uv and uvx", flush=True)
-    run(cargo_command(target), environment=instrumented_environment)
+    profile = "debug" if args.debug else "release"
+    print(f"Building instrumented {profile} uv and uvx", flush=True)
+    run(cargo_command(target, debug=args.debug), environment=instrumented_environment)
 
-    binary_directory = instrumented_target_dir / target / "release"
+    binary_directory = instrumented_target_dir / target / profile
     executable_suffix = ".exe" if "windows" in target else ""
     binary = binary_directory / f"uv{executable_suffix}"
     launcher = binary_directory / f"uvx{executable_suffix}"
@@ -193,21 +194,14 @@ def main() -> None:
             f"Instrumented uv or uvx binary missing from {binary_directory}"
         )
 
-    profiles, workload_count = train_uv(
+    profiles = train_uv(
         binary,
         launcher,
-        corpus,
+        corpus_directory,
         profile_dir,
         environment=instrumented_environment,
     )
-    merged_profile = target_dir / "uv.profdata"
-    merge_profiles(
-        profiler,
-        profiles,
-        merged_profile,
-        workload_count=workload_count,
-        environment=environment,
-    )
+    merge_profiles(profiler, profiles, merged_profile, environment=environment)
     if args.train_only:
         return
 
@@ -217,23 +211,25 @@ def main() -> None:
             environment.get("RUSTFLAGS"), f"-Cprofile-use={merged_profile}"
         ),
     }
-    print("Building optimized release uv and uvx", flush=True)
-    run(cargo_command(target), environment=optimized_environment)
-    print(f"Optimized uv: {target_dir / target / 'release' / binary.name}", flush=True)
+    print(f"Building profile-guided {profile} uv and uvx", flush=True)
+    run(cargo_command(target, debug=args.debug), environment=optimized_environment)
+    print(
+        f"Profile-guided uv: {target_dir / target / profile / binary.name}", flush=True
+    )
 
 
 def train_uv(
     binary: Path,
     launcher: Path,
-    corpus: PreparedCorpus,
+    corpus_directory: Path,
     profile_directory: Path,
     *,
     environment: dict[str, str],
-) -> tuple[list[Path], int]:
+) -> list[Path]:
     labels = run_workloads(
         binary,
         launcher,
-        corpus,
+        corpus_directory,
         environment,
         profile_dir=profile_directory,
     )
@@ -246,7 +242,8 @@ def train_uv(
             raise RuntimeError(f"No complete uv profiling data for workload {group!r}")
     if not profiles:
         raise RuntimeError(f"No uv profiling data found in {profile_directory}")
-    return profiles, len(labels)
+    print(f"Profiled {len(labels)} uv ecosystem workloads", flush=True)
+    return profiles
 
 
 def merge_profiles(
@@ -254,7 +251,6 @@ def merge_profiles(
     profiles: list[Path],
     destination: Path,
     *,
-    workload_count: int,
     environment: dict[str, str],
 ) -> None:
     profile_size = sum(profile.stat().st_size for profile in profiles)
@@ -278,62 +274,34 @@ def merge_profiles(
         temporary_profile.unlink(missing_ok=True)
 
     print(
-        f"Merged {len(profiles)} PGO profiles ({profile_size:,} bytes) "
-        f"from {workload_count} workloads: {destination}",
+        f"Merged {len(profiles)} PGO profiles ({profile_size:,} bytes): {destination}",
         flush=True,
     )
 
 
-def prepare_corpus(
-    root: Path, definitions: tuple[CorpusProject, ...]
-) -> PreparedCorpus:
-    root.mkdir(parents=True, exist_ok=True)
+def prepare_corpus(corpus_directory: Path) -> None:
+    corpus_directory.mkdir(parents=True, exist_ok=True)
 
-    # Remove artifacts produced by older generated-wheel training corpora.
-    for stale in (
-        "cache",
-        "ecosystem",
-        "graphs",
-        "installed",
-        "project",
-        "wheelhouse",
-    ):
-        shutil.rmtree(root / stale, ignore_errors=True)
-
-    projects: list[PreparedProject] = []
-    for definition in definitions:
+    for project in CORPUS_PROJECTS:
         source = (
-            REPOSITORY_ROOT / "test" / "ecosystem" / definition.name / "pyproject.toml"
+            REPOSITORY_ROOT / "test" / "ecosystem" / project.name / "pyproject.toml"
         )
         if not source.is_file():
             raise RuntimeError(f"Real project manifest not found: {source}")
 
-        project = root / definition.name
-        shutil.rmtree(project, ignore_errors=True)
+        destination = corpus_directory / project.name
+        shutil.rmtree(destination, ignore_errors=True)
         shutil.copytree(
             source.parent,
-            project,
+            destination,
             ignore=shutil.ignore_patterns(".venv", "installed", "uv.lock"),
         )
-        projects.append(
-            PreparedProject(
-                definition.name,
-                project,
-                project / source.name,
-                definition.python_version,
-                definition.constraints,
-                definition.groups,
-                definition.native_platforms,
-            )
-        )
-
-    return PreparedCorpus(root, tuple(projects))
 
 
 def run_workloads(
     binary: Path,
     launcher: Path,
-    corpus: PreparedCorpus,
+    corpus_directory: Path,
     environment: dict[str, str],
     profile_dir: Path | None = None,
 ) -> tuple[str, ...]:
@@ -344,33 +312,34 @@ def run_workloads(
     training_environment.pop("UV_OFFLINE", None)
     training_environment.update(
         {
-            "UV_CACHE_DIR": str(corpus.root / "cache"),
-            "UV_EXCLUDE_NEWER": EXCLUDE_NEWER,
+            "UV_CACHE_DIR": str(corpus_directory / "cache"),
+            "UV_EXCLUDE_NEWER": DEPENDENCY_EXCLUDE_NEWER,
             "UV_NO_PROGRESS": "1",
-            "UV_PYTHON_INSTALL_DIR": str(corpus.root / "python"),
+            "UV_PYTHON_INSTALL_DIR": str(corpus_directory / "python"),
             "UV_PYTHON_DOWNLOADS": "never",
         }
     )
-    labels = prepare_pythons(binary, corpus, training_environment, profile_dir)
+    labels = prepare_pythons(binary, training_environment, profile_dir)
     commands: list[tuple[str, list[str]]] = []
 
-    for project in corpus.projects:
+    for project in CORPUS_PROJECTS:
         if not project.supports_native_workloads:
             continue
 
+        project_directory = corpus_directory / project.name
         command = [
             str(binary),
             "pip",
             "compile",
-            str(project.manifest),
+            str(project_directory / "pyproject.toml"),
             "--project",
-            str(project.project),
+            str(project_directory),
             *project.group_arguments,
             *project.python_arguments,
             "--no-build",
             "--quiet",
             "--output-file",
-            str(project.project / "requirements.txt"),
+            str(project_directory / "requirements.txt"),
         ]
         commands.extend(
             (
@@ -379,7 +348,8 @@ def run_workloads(
             )
         )
 
-    for project in corpus.projects:
+    for project in CORPUS_PROJECTS:
+        project_directory = corpus_directory / project.name
         constraints = [
             argument
             for constraint in project.constraints
@@ -393,16 +363,16 @@ def run_workloads(
                         str(binary),
                         "pip",
                         "compile",
-                        str(project.manifest),
+                        str(project_directory / "pyproject.toml"),
                         "--project",
-                        str(project.project),
+                        str(project_directory),
                         *project.group_arguments,
                         *project.python_arguments,
                         "--universal",
                         "--no-build",
                         "--quiet",
                         "--output-file",
-                        str(project.project / "universal-requirements.txt"),
+                        str(project_directory / "universal-requirements.txt"),
                     ],
                 ),
                 (
@@ -411,7 +381,7 @@ def run_workloads(
                         str(binary),
                         "lock",
                         "--project",
-                        str(project.project),
+                        str(project_directory),
                         *project.python_arguments,
                         *constraints,
                         "--no-build",
@@ -424,7 +394,7 @@ def run_workloads(
                         str(binary),
                         "export",
                         "--project",
-                        str(project.project),
+                        str(project_directory),
                         *project.python_arguments,
                         *project.group_arguments,
                         "--frozen",
@@ -432,7 +402,7 @@ def run_workloads(
                         "--no-hashes",
                         "--quiet",
                         "--output-file",
-                        str(project.project / "exported-requirements.txt"),
+                        str(project_directory / "exported-requirements.txt"),
                     ],
                 ),
             )
@@ -449,9 +419,9 @@ def run_workloads(
                             "install",
                             *project.python_arguments,
                             "--target",
-                            str(project.project / "installed"),
+                            str(project_directory / "installed"),
                             "--requirements",
-                            str(project.project / "exported-requirements.txt"),
+                            str(project_directory / "exported-requirements.txt"),
                             "--no-build",
                             "--quiet",
                         ],
@@ -462,7 +432,7 @@ def run_workloads(
                             str(binary),
                             "sync",
                             "--project",
-                            str(project.project),
+                            str(project_directory),
                             "--frozen",
                             *project.python_arguments,
                             *project.group_arguments,
@@ -482,7 +452,9 @@ def run_workloads(
         group = profile_group(label)
         if label != group:
             project = label.removeprefix(f"{group}-")
-            workload_environment["UV_CACHE_DIR"] = str(corpus.root / "cache" / project)
+            workload_environment["UV_CACHE_DIR"] = str(
+                corpus_directory / "cache" / project
+            )
         if profile_dir is not None:
             workload_environment["LLVM_PROFILE_FILE"] = str(
                 profile_dir / f"uv-{group}-%m.profraw"
@@ -495,13 +467,12 @@ def run_workloads(
 
 def prepare_pythons(
     binary: Path,
-    corpus: PreparedCorpus,
     environment: dict[str, str],
     profile_dir: Path | None,
 ) -> tuple[str, ...]:
     current = f"{sys.version_info.major}.{sys.version_info.minor}"
     versions = sorted(
-        {project.python_version for project in corpus.projects} - {current}
+        {project.python_version for project in CORPUS_PROJECTS} - {current}
     )
     if not versions:
         return ()
@@ -536,7 +507,7 @@ def profile_group(label: str) -> str:
     return label
 
 
-def cargo_command(target: str) -> list[str]:
+def cargo_command(target: str, *, debug: bool = False) -> list[str]:
     windows = target.endswith("-pc-windows-msvc")
     return [
         os.environ.get("CARGO", "cargo"),
@@ -548,7 +519,7 @@ def cargo_command(target: str) -> list[str]:
         "--bin",
         "uvx",
         *(("--bin", "uvw") if windows else ()),
-        "--release",
+        *(() if debug else ("--release",)),
         "--locked",
         "--features",
         "self-update,windows-gui-bin" if windows else "self-update",
@@ -592,13 +563,28 @@ def find_llvm_profdata(host: str, override: Path | None) -> Path:
     return profiler
 
 
-def append_flags(existing: str | None, addition: str) -> str:
-    return " ".join(flag for flag in (existing, addition) if flag)
+def append_flags(existing: str | None, additional: str) -> str:
+    return " ".join(flag for flag in (existing, additional) if flag)
 
 
-def run(command: list[str], *, environment: dict[str, str]) -> None:
-    print(f"> {shlex.join(command)}", flush=True)
-    subprocess.run(command, cwd=REPOSITORY_ROOT, env=environment, check=True)
+def run(
+    command: list[str],
+    *,
+    environment: dict[str, str],
+    allowed_exit_codes: tuple[int, ...] = (0,),
+) -> None:
+    logged_arguments = 16
+    displayed_command = shlex.join(command[:logged_arguments])
+    if len(command) > logged_arguments:
+        displayed_command += (
+            f" ... ({len(command) - logged_arguments} arguments omitted)"
+        )
+    print(f"> {displayed_command}", flush=True)
+    completed = subprocess.run(
+        command, cwd=REPOSITORY_ROOT, env=environment, check=False
+    )
+    if completed.returncode not in allowed_exit_codes:
+        raise subprocess.CalledProcessError(completed.returncode, command)
 
 
 if __name__ == "__main__":
