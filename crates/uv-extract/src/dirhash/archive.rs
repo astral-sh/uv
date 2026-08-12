@@ -1,6 +1,6 @@
 //! Content-addressed identities for extracted wheel archives.
 
-use std::path::{Component, PathBuf};
+use std::path::PathBuf;
 
 use super::{DirhashError, DirhashTree};
 use crate::archive_path::SanitizedArchivePath;
@@ -8,36 +8,6 @@ use crate::archive_path::SanitizedArchivePath;
 const DIRECTORY_DIGEST_LENGTH: usize = 24;
 const BASE36_ALPHABET: &[u8; 36] = b"0123456789abcdefghijklmnopqrstuvwxyz";
 const BASE36_RADIX: u16 = 36;
-
-/// The platform-independent representation of a sanitized archive path.
-#[derive(Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-struct DigestPath(Box<str>);
-
-impl DigestPath {
-    fn as_str(&self) -> &str {
-        &self.0
-    }
-
-    fn is_empty(&self) -> bool {
-        self.0.is_empty()
-    }
-}
-
-impl From<&SanitizedArchivePath> for DigestPath {
-    fn from(path: &SanitizedArchivePath) -> Self {
-        let mut canonical = String::new();
-        for component in path.as_path().components() {
-            let Component::Normal(component) = component else {
-                continue;
-            };
-            if !canonical.is_empty() {
-                canonical.push('/');
-            }
-            canonical.push_str(component.to_string_lossy().as_ref());
-        }
-        Self(canonical.into_boxed_str())
-    }
-}
 
 /// A path-safe encoding of the directory hash of an extracted wheel.
 ///
@@ -101,18 +71,29 @@ pub(crate) fn directory_tree_from_extracted<'a>(
     let mut tree = DirhashTree::default();
 
     for directory in directories {
-        let path = DigestPath::from(directory);
+        let path = digest_path(directory);
         if !path.is_empty() {
-            tree.add_empty_dir(path.as_str())?;
+            tree.add_empty_dir(&path)?;
         }
     }
 
     for file in files {
-        let path = DigestPath::from(file.path());
-        tree.add_file(path.as_str(), file.digest)?;
+        tree.add_file(&digest_path(file.path()), file.digest)?;
     }
 
     Ok(tree)
+}
+
+/// Format a sanitized archive path with platform-independent separators.
+fn digest_path(path: &SanitizedArchivePath) -> String {
+    let mut normalized = String::new();
+    for component in path.as_path() {
+        if !normalized.is_empty() {
+            normalized.push('/');
+        }
+        normalized.push_str(&component.to_string_lossy());
+    }
+    normalized
 }
 
 fn encode_digest(digest: &blake3::Hash) -> String {
@@ -139,7 +120,7 @@ mod tests {
     use crate::archive_path::SanitizedArchivePath;
 
     use super::{
-        DIRECTORY_DIGEST_LENGTH, DigestPath, DirectoryDigest, ExtractedFile,
+        DIRECTORY_DIGEST_LENGTH, DirectoryDigest, ExtractedFile, digest_path,
         directory_tree_from_extracted,
     };
 
@@ -172,10 +153,8 @@ mod tests {
     #[test]
     fn digest_path_uses_normalized_archive_path() {
         let path = SanitizedArchivePath::from_archive_member("example/../package/./data.txt");
-        let digest_path = path.as_ref().map(DigestPath::from);
-
         assert_eq!(
-            digest_path.as_ref().map(DigestPath::as_str),
+            path.as_ref().map(digest_path).as_deref(),
             Some("package/data.txt")
         );
     }
