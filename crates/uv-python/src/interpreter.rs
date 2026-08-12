@@ -1337,7 +1337,8 @@ mod tests {
     use indoc::{formatdoc, indoc};
     use tempfile::tempdir;
 
-    use uv_cache::Cache;
+    use uv_cache::{Cache, CacheBucket};
+    use uv_cache_info::Timestamp;
     use uv_pep440::Version;
 
     use crate::Interpreter;
@@ -1346,6 +1347,7 @@ mod tests {
     async fn test_cache_invalidation() {
         let mock_dir = tempdir().unwrap();
         let mocked_interpreter = mock_dir.path().join("python");
+        let query_log = mock_dir.path().join("queries");
         let json = indoc! {r##"
         {
             "result": "success",
@@ -1375,7 +1377,7 @@ mod tests {
             "sys_base_exec_prefix": "/home/ferris/.pyenv/versions/3.12.0",
             "sys_base_prefix": "/home/ferris/.pyenv/versions/3.12.0",
             "sys_prefix": "/home/ferris/projects/uv/.venv",
-            "sys_executable": "/home/ferris/projects/uv/.venv/bin/python",
+            "sys_executable": "{sys_executable}",
             "sys_path": [
                 "/home/ferris/.pyenv/versions/3.12.0/lib/python3.12/lib/python3.12",
                 "/home/ferris/.pyenv/versions/3.12.0/lib/python3.12/site-packages"
@@ -1403,7 +1405,11 @@ mod tests {
             "gil_disabled": true,
             "debug_enabled": false
         }
-    "##};
+    "##}
+        .replace(
+            "{sys_executable}",
+            &mocked_interpreter.display().to_string(),
+        );
 
         let cache = Cache::temp().unwrap().init().await.unwrap();
 
@@ -1411,8 +1417,9 @@ mod tests {
             &mocked_interpreter,
             formatdoc! {r"
         #!/bin/sh
+        echo queried >> '{}'
         echo '{json}'
-        "},
+        ", query_log.display()},
         )
         .unwrap();
 
@@ -1426,18 +1433,38 @@ mod tests {
             interpreter.markers.python_version().version,
             Version::from_str("3.12").unwrap()
         );
+        assert!(cache.bucket(CacheBucket::Interpreter).is_dir());
+        assert_eq!(fs::read_to_string(&query_log).unwrap(), "queried\n");
+
+        let interpreter = Interpreter::query(&mocked_interpreter, &cache).unwrap();
+        assert_eq!(
+            interpreter.markers.python_version().version,
+            Version::from_str("3.12").unwrap()
+        );
+        assert_eq!(fs::read_to_string(&query_log).unwrap(), "queried\n");
+
+        let timestamp = Timestamp::from_path(&mocked_interpreter).unwrap();
         fs::write(
             &mocked_interpreter,
             formatdoc! {r"
         #!/bin/sh
+        echo queried >> '{}'
         echo '{}'
-        ", json.replace("3.12", "3.13")},
+        ", query_log.display(), json.replace("3.12", "3.13")},
         )
         .unwrap();
+        assert_ne!(
+            Timestamp::from_path(&mocked_interpreter).unwrap(),
+            timestamp
+        );
         let interpreter = Interpreter::query(&mocked_interpreter, &cache).unwrap();
         assert_eq!(
             interpreter.markers.python_version().version,
             Version::from_str("3.13").unwrap()
+        );
+        assert_eq!(
+            fs::read_to_string(&query_log).unwrap(),
+            "queried\nqueried\n"
         );
     }
 }
