@@ -440,9 +440,9 @@ pub enum Pep723Error {
     )]
     UnclosedBlock,
     #[error(
-        "An opening tag (`# /// script`) was found, but the closing tag (`# ///`) has trailing whitespace. Remove the trailing whitespace so the line is exactly `# ///`."
+        "An opening tag (`# /// script`) was found, but the closing tag (`# ///`) has trailing content. Remove the trailing content so the line is exactly `# ///`."
     )]
-    UnclosedBlockTrailingWhitespace,
+    UnclosedBlockTrailingContent,
     #[error("The script contains multiple PEP 723 metadata blocks")]
     DuplicateBlock,
     #[error("The PEP 723 metadata block is missing from the script.")]
@@ -566,14 +566,15 @@ impl ScriptTag {
         // `index` is the position just past the terminator, matching the truncation below.
         let index = match toml
             .iter()
-            .copied()
             .enumerate()
             .rev()
-            .find(|(_, line)| line.trim_end() == "///")
+            .find(|(_, line)| line.starts_with("///"))
         {
+            // No matching terminator.
             None => return Err(Pep723Error::UnclosedBlock),
-            Some((_, line)) if line != "///" => {
-                return Err(Pep723Error::UnclosedBlockTrailingWhitespace);
+            // We have a matching terminator, but there's whitespace or other content trailing it.
+            Some((_, line)) if *line != "///" => {
+                return Err(Pep723Error::UnclosedBlockTrailingContent);
             }
             Some((index, _)) => index + 1,
         };
@@ -761,7 +762,7 @@ mod tests {
 
         assert!(matches!(
             ScriptTag::parse(contents.as_bytes()),
-            Err(Pep723Error::UnclosedBlockTrailingWhitespace)
+            Err(Pep723Error::UnclosedBlockTrailingContent)
         ));
     }
 
@@ -951,7 +952,7 @@ mod tests {
             # dependencies = ["requests"]
             # ///
 
-            
+
             # /// other
             # /// script
             # ///
