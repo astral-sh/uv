@@ -434,7 +434,10 @@ fn missing_find_links_from_requirements_file() -> Result<()> {
     requirements_dir.create_dir_all()?;
     requirements_dir
         .child("requirements.txt")
-        .write_str("--find-links ./missing\nflask")?;
+        .write_str(indoc! {r"
+            --find-links ./missing
+            flask
+        "})?;
 
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("-r")
@@ -7774,6 +7777,123 @@ fn find_links_local_html() -> Result<()> {
     Ok(())
 }
 
+/// Install from a requirements-file `--find-links` URL with an uppercase `file` scheme.
+#[test]
+fn find_links_uppercase_file_url_from_requirements_file() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let links_url = Url::from_directory_path(context.workspace_root.join("test/links"))
+        .map_err(|()| anyhow!("Failed to convert links directory to URL"))?;
+    let links_url = links_url.as_str().replacen("file://", "FILE://", 1);
+    context
+        .temp_dir
+        .child("requirements.txt")
+        .write_str(&formatdoc! {r"
+            --no-index
+            --find-links {links_url}
+            ok==1.0.0
+        "})?;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("-r")
+        .arg("requirements.txt"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + ok==1.0.0
+    "
+    );
+
+    Ok(())
+}
+
+/// Install from a requirements-file `--find-links` URL with an uppercase `http` scheme.
+#[tokio::test]
+async fn find_links_uppercase_http_url_from_requirements_file() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let server = MockServer::start().await;
+    let wheel_filename = "ok-1.0.0-py3-none-any.whl";
+    let wheel_url = Url::from_file_path(
+        context
+            .workspace_root
+            .join("test/links")
+            .join(wheel_filename),
+    )
+    .map_err(|()| anyhow!("Failed to convert wheel path to URL"))?;
+
+    Mock::given(method("GET"))
+        .and(path("/"))
+        .respond_with(ResponseTemplate::new(200).set_body_raw(
+            format!("<a href=\"{wheel_url}\">{wheel_filename}</a>"),
+            "text/html",
+        ))
+        .mount(&server)
+        .await;
+
+    let links_url = server.uri().replacen("http://", "HTTP://", 1);
+    context
+        .temp_dir
+        .child("requirements.txt")
+        .write_str(&formatdoc! {r"
+            --no-index
+            --find-links {links_url}
+            ok==1.0.0
+        "})?;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("-r")
+        .arg("requirements.txt"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + ok==1.0.0
+    "
+    );
+
+    Ok(())
+}
+
+/// Prefer an existing `--find-links` directory even when its name resembles a URL.
+#[test]
+#[cfg(unix)]
+fn find_links_directory_with_url_scheme() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let links_dir = context.temp_dir.child("https:links");
+    links_dir.create_dir_all()?;
+    fs::copy(
+        context
+            .workspace_root
+            .join("test/links/ok-1.0.0-py3-none-any.whl"),
+        links_dir.child("ok-1.0.0-py3-none-any.whl").path(),
+    )?;
+    context
+        .temp_dir
+        .child("requirements.txt")
+        .write_str(indoc! {r"
+            --no-index
+            --find-links https:links
+            ok==1.0.0
+        "})?;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("-r")
+        .arg("requirements.txt")
+        .arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + ok==1.0.0
+    "
+    );
+
+    Ok(())
+}
+
 /// Install from a `--find-links` directory relative to the containing requirements file.
 #[test]
 fn find_links_relative_to_requirements_file() -> Result<()> {
@@ -7789,7 +7909,11 @@ fn find_links_relative_to_requirements_file() -> Result<()> {
     )?;
     requirements_dir
         .child("requirements.txt")
-        .write_str("--no-index\n--find-links ./links\nok==1.0.0\n")?;
+        .write_str(indoc! {r"
+            --no-index
+            --find-links ./links
+            ok==1.0.0
+        "})?;
 
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("-r")
@@ -7822,7 +7946,11 @@ fn find_links_relative_to_working_directory() -> Result<()> {
     requirements_dir.create_dir_all()?;
     requirements_dir
         .child("requirements.txt")
-        .write_str("--no-index\n--find-links ./links\nok==1.0.0\n")?;
+        .write_str(indoc! {r"
+            --no-index
+            --find-links ./links
+            ok==1.0.0
+        "})?;
 
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("-r")
