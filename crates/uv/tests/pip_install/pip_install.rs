@@ -16591,6 +16591,14 @@ fn binary_payloads_use_archive_file_store() -> Result<()> {
         .as_str()
         .ok_or_else(|| anyhow!("archive-file manifest entry is missing a path"))?;
     assert!(manifest_path.ends_with("native.so"));
+    let manifest_object = files[0]["object"]
+        .as_str()
+        .ok_or_else(|| anyhow!("archive-file manifest entry is missing an object"))?;
+    assert_eq!(Path::new(manifest_object).components().count(), 2);
+    assert_eq!(
+        archive_file,
+        &archive_file_root.path().join(manifest_object)
+    );
 
     let archive_root = context.cache_dir.child("archive-v0");
     let archive_binary = archive_root
