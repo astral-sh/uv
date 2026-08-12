@@ -597,7 +597,6 @@ def test_reupload_with_check_url(
         f"\n=== 3. Publishing {plan.configuration.project_name} {version} again with {mode} ===",
         file=sys.stderr,
     )
-    wait_for_index(plan, version)
     # Test twine-style and index-style uploads for different packages.
     if index := plan.configuration.index:
         args = [
@@ -617,25 +616,37 @@ def test_reupload_with_check_url(
             plan.configuration.index_url,
             *plan.extra_args,
         ]
-    output = run(
-        args,
-        cwd=project_dir,
-        env=plan.full_env(),
-        text=True,
-        check=True,
-        stderr=PIPE,
-    ).stderr
+    for attempt in range(5):
+        wait_for_index(plan, version)
+        output = run(
+            args,
+            cwd=project_dir,
+            env=plan.full_env(),
+            text=True,
+            check=True,
+            stderr=PIPE,
+        ).stderr
 
-    if output.count("Uploading") != 0 or output.count("already exists") != len(
-        expected_filenames
-    ):
-        raise RuntimeError(
-            f"Re-upload with check URL failed for {plan.target} "
-            f"({plan.configuration.publish_url}): "
-            f"{output.count('Uploading')} != 0, "
-            f"{output.count('already exists')} != {len(expected_filenames)}\n"
-            f"---\n{output}\n---"
-        )
+        if output.count("Uploading") == 0 and output.count("already exists") == len(
+            expected_filenames
+        ):
+            return
+
+        if attempt < 4:
+            print(
+                f"Index returned inconsistent files for "
+                f"{plan.configuration.project_name}=={version}; "
+                f"retrying check URL upload ({attempt + 1}/4)",
+                file=sys.stderr,
+            )
+
+    raise RuntimeError(
+        f"Re-upload with check URL failed for {plan.target} "
+        f"({plan.configuration.publish_url}): "
+        f"{output.count('Uploading')} != 0, "
+        f"{output.count('already exists')} != {len(expected_filenames)}\n"
+        f"---\n{output}\n---"
+    )
 
 
 def test_reupload_modified_files(
