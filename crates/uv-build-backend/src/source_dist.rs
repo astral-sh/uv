@@ -208,7 +208,7 @@ fn write_source_dist(
     show_warnings: bool,
 ) -> Result<SourceDistFilename, Error> {
     let pyproject_toml = PyProjectToml::parse(&source_tree.join("pyproject.toml"))?;
-    for warning in pyproject_toml.check_build_system(uv_version) {
+    for warning in pyproject_toml.check_source_distribution(uv_version) {
         warn_user_once!("{warning}");
     }
     let settings = pyproject_toml

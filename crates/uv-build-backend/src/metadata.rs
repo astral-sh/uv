@@ -423,7 +423,12 @@ impl PyProjectToml {
 
     /// See [`BuildSystem::check_build_system`].
     pub(crate) fn check_build_system(&self, uv_version: &str) -> Vec<String> {
-        self.build_system.check_build_system(uv_version)
+        self.build_system.check_build_system(uv_version, false)
+    }
+
+    /// Validate build-system metadata that will be included in a source distribution.
+    pub(crate) fn check_source_distribution(&self, uv_version: &str) -> Vec<String> {
+        self.build_system.check_build_system(uv_version, true)
     }
 
     /// Validate and convert a `pyproject.toml` to core metadata.
@@ -1176,7 +1181,7 @@ impl BuildSystem {
     /// requires = ["uv_build>=0.4.15,<0.5.0"]
     /// build-backend = "uv_build"
     /// ```
-    fn check_build_system(&self, uv_version: &str) -> Vec<String> {
+    fn check_build_system(&self, uv_version: &str, check_upper_bound: bool) -> Vec<String> {
         let mut warnings = Vec::new();
         if self.build_backend.as_deref() != Some("uv_build") {
             warnings.push(format!(
@@ -1187,9 +1192,6 @@ impl BuildSystem {
 
         let uv_version =
             Version::from_str(uv_version).expect("uv's own version is not PEP 440 compliant");
-        let next_minor = uv_version.release().get(1).copied().unwrap_or_default() + 1;
-        let next_breaking = Version::new([0, next_minor]);
-
         let [uv_requirement] = &self.requires.as_slice() else {
             warnings.push(format!(
                 "Expected `build-system.requires` to contain only `uv_build`, found `{}`",
@@ -1229,7 +1231,9 @@ impl BuildSystem {
             }
         };
 
-        if !bounded {
+        if check_upper_bound && !bounded {
+            let next_minor = uv_version.release().get(1).copied().unwrap_or_default() + 1;
+            let next_breaking = Version::new([0, next_minor]);
             warnings.push(format!(
                 "`build_system.requires = [\"{}\"]` is missing an \
                 upper bound on the `uv_build` version such as `<{next_breaking}`. \
@@ -1745,6 +1749,10 @@ mod tests {
         let pyproject_toml: PyProjectToml = toml::from_str(contents).unwrap();
         assert_snapshot!(
             pyproject_toml.check_build_system("0.4.15+test").join("\n"),
+            @""
+        );
+        assert_snapshot!(
+            pyproject_toml.check_source_distribution("0.4.15+test").join("\n"),
             @r#"`build_system.requires = ["uv_build"]` is missing an upper bound on the `uv_build` version such as `<0.5`. Without bounding the `uv_build` version, the source distribution will break when a future, breaking version of `uv_build` is released."#
         );
     }
