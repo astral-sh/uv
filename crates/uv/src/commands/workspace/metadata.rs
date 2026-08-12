@@ -18,7 +18,7 @@ use crate::commands::project::install_target::InstallTarget;
 use crate::commands::project::lock::{LockMode, LockOperation};
 use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{
-    LinkErrorReporting, ProjectEnvironment, ProjectEnvironmentRequirement, ProjectError,
+    LinkErrorReporting, ProjectEnvironment, ProjectEnvironmentPolicy, ProjectError,
     ProjectInterpreter, ScriptEnvironment, ScriptInterpreter, UniversalState, WorkspacePython,
 };
 use crate::commands::{ExitStatus, UvError, diagnostics};
@@ -114,11 +114,9 @@ pub(crate) async fn metadata(
                     python_downloads,
                     &install_mirrors,
                     if sync {
-                        ProjectEnvironmentRequirement::Required {
-                            keep_incompatible: false,
-                        }
+                        ProjectEnvironmentPolicy::Compatible
                     } else {
-                        ProjectEnvironmentRequirement::Optional
+                        ProjectEnvironmentPolicy::Optional
                     },
                     Some(active),
                     cache,

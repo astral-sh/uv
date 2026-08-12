@@ -49,7 +49,7 @@ use uv_workspace::{
 use crate::commands::pip::loggers::{DefaultResolveLogger, ResolveLogger, SummaryResolveLogger};
 use crate::commands::project::lock_target::{LockTarget, find_lock_format_error};
 use crate::commands::project::{
-    MissingLockfileSource, ProjectEnvironmentRequirement, ProjectError, ProjectInterpreter,
+    MissingLockfileSource, ProjectEnvironmentPolicy, ProjectError, ProjectInterpreter,
     ScriptInterpreter, UniversalState, WorkspacePython, init_script_python_requirement,
     script_extra_build_requires,
 };
@@ -168,7 +168,7 @@ pub(crate) async fn lock(
                     python_preference,
                     python_downloads,
                     &install_mirrors,
-                    ProjectEnvironmentRequirement::Optional,
+                    ProjectEnvironmentPolicy::Optional,
                     Some(false),
                     cache,
                     printer,

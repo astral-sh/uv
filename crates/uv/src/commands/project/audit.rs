@@ -11,8 +11,8 @@ use crate::commands::project::default_dependency_groups;
 use crate::commands::project::lock::{LockMode, LockOperation};
 use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{
-    ProjectEnvironmentRequirement, ProjectError, ProjectInterpreter, ScriptInterpreter,
-    UniversalState, WorkspacePython,
+    ProjectEnvironmentPolicy, ProjectError, ProjectInterpreter, ScriptInterpreter, UniversalState,
+    WorkspacePython,
 };
 use crate::commands::reporters::AuditReporter;
 use crate::printer::Printer;
@@ -157,7 +157,7 @@ pub(crate) async fn audit(
                     python_preference,
                     python_downloads,
                     &install_mirrors,
-                    ProjectEnvironmentRequirement::Optional,
+                    ProjectEnvironmentPolicy::Optional,
                     Some(false),
                     &cache,
                     printer,

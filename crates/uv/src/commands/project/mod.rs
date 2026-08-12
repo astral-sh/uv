@@ -1042,20 +1042,28 @@ fn check_environment_compatibility(
     Ok(())
 }
 
-/// Whether an existing project environment is required or only preferred for its interpreter.
+/// The policy for discovering and initializing a project environment.
 #[derive(Debug, Clone, Copy)]
-pub(crate) enum ProjectEnvironmentRequirement {
-    /// An interpreter is sufficient; an invalid project environment can be ignored.
+pub(crate) enum ProjectEnvironmentPolicy {
+    /// An environment is unnecessary; ignore it if invalid or incompatible.
     Optional,
-    /// The project environment will be used or initialized and must be valid.
-    Required { keep_incompatible: bool },
+
+    /// Require a valid environment compatible with the Python requirements.
+    ///
+    /// Replace an existing environment if it is incompatible.
+    Compatible,
+
+    /// Preserve a valid existing environment, even if incompatible.
+    ///
+    /// Create an environment if none exists, or replace an invalid virtual environment.
+    Preserve,
 }
 
 /// Discover an existing project environment at `root` without validating its compatibility.
 fn existing_project_environment(
     root: &Path,
     centralized: bool,
-    requirement: ProjectEnvironmentRequirement,
+    policy: ProjectEnvironmentPolicy,
     cache: &Cache,
 ) -> Result<Option<PythonEnvironment>, ProjectError> {
     let environment = match PythonEnvironment::from_root(root, cache) {
@@ -1070,7 +1078,7 @@ fn existing_project_environment(
                     ));
                 }
                 InvalidEnvironmentKind::MissingExecutable(_) => {
-                    if matches!(requirement, ProjectEnvironmentRequirement::Required { .. })
+                    if !matches!(policy, ProjectEnvironmentPolicy::Optional)
                         && !centralized
                         && fs_err::read_dir(root).is_ok_and(|mut dir| dir.next().is_some())
                     {
@@ -1122,12 +1130,11 @@ fn discover_project_environment(
     python_request: Option<&PythonRequest>,
     python_preference: PythonPreference,
     requires_python: Option<&RequiresPython>,
-    requirement: ProjectEnvironmentRequirement,
+    policy: ProjectEnvironmentPolicy,
     centralized: bool,
     cache: &Cache,
 ) -> Result<Option<PythonEnvironment>, ProjectError> {
-    let Some(environment) = existing_project_environment(root, centralized, requirement, cache)?
-    else {
+    let Some(environment) = existing_project_environment(root, centralized, policy, cache)? else {
         return Ok(None);
     };
 
@@ -1140,14 +1147,7 @@ fn discover_project_environment(
         cache,
     ) {
         Ok(()) => Ok(Some(environment)),
-        Err(err)
-            if matches!(
-                requirement,
-                ProjectEnvironmentRequirement::Required {
-                    keep_incompatible: true
-                }
-            ) =>
-        {
+        Err(err) if matches!(policy, ProjectEnvironmentPolicy::Preserve) => {
             if centralized {
                 let root = environment.root();
                 warn_user!(
@@ -1403,7 +1403,7 @@ impl ProjectInterpreter {
         existing_project_environment(
             &root,
             centralized,
-            ProjectEnvironmentRequirement::Optional,
+            ProjectEnvironmentPolicy::Optional,
             cache,
         )
     }
@@ -1417,7 +1417,7 @@ impl ProjectInterpreter {
         python_preference: PythonPreference,
         python_downloads: PythonDownloads,
         install_mirrors: &PythonInstallMirrors,
-        requirement: ProjectEnvironmentRequirement,
+        policy: ProjectEnvironmentPolicy,
         active: Option<bool>,
         cache: &Cache,
         printer: Printer,
@@ -1456,7 +1456,7 @@ impl ProjectInterpreter {
                     python_request.as_ref(),
                     python_preference,
                     requires_python.as_ref(),
-                    requirement,
+                    policy,
                     centralized,
                     cache,
                 )? {
@@ -1478,7 +1478,7 @@ impl ProjectInterpreter {
                     python_request.as_ref(),
                     python_preference,
                     requires_python.as_ref(),
-                    requirement,
+                    policy,
                     centralized,
                     cache,
                 )?
@@ -1512,7 +1512,7 @@ impl ProjectInterpreter {
                 python_request.as_ref(),
                 python_preference,
                 requires_python.as_ref(),
-                requirement,
+                policy,
                 centralized,
                 cache,
             )? {
@@ -1879,8 +1879,10 @@ impl ProjectEnvironment {
             python_preference,
             python_downloads,
             install_mirrors,
-            ProjectEnvironmentRequirement::Required {
-                keep_incompatible: no_sync,
+            if no_sync {
+                ProjectEnvironmentPolicy::Preserve
+            } else {
+                ProjectEnvironmentPolicy::Compatible
             },
             active,
             cache,

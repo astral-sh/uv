@@ -30,8 +30,7 @@ use crate::commands::pip::loggers::DefaultResolveLogger;
 use crate::commands::project::lock::{LockEvent, LockMode, LockOperation, LockResult};
 use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{
-    ProjectEnvironmentRequirement, ProjectError, ProjectInterpreter, UniversalState,
-    WorkspacePython,
+    ProjectEnvironmentPolicy, ProjectError, ProjectInterpreter, UniversalState, WorkspacePython,
 };
 use crate::commands::{ExitStatus, diagnostics};
 use crate::printer::Printer;
@@ -220,7 +219,7 @@ pub(crate) async fn upgrade(
             python_preference,
             python_downloads,
             &install_mirrors,
-            ProjectEnvironmentRequirement::Optional,
+            ProjectEnvironmentPolicy::Optional,
             Some(false),
             cache,
             printer,
@@ -379,7 +378,7 @@ pub(crate) async fn upgrade(
             python_preference,
             python_downloads,
             &install_mirrors,
-            ProjectEnvironmentRequirement::Optional,
+            ProjectEnvironmentPolicy::Optional,
             Some(false),
             &cache,
             printer,
