@@ -108,6 +108,7 @@ CORPUS_PROJECTS = (
         name="pyx-workspace",
         python_version="3.14",
         groups=("dev",),
+        minimum_glibc=(2, 28),
     ),
 )
 
