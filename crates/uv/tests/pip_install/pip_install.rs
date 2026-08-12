@@ -28,7 +28,9 @@ use wiremock::{
     matchers::{basic_auth, method, path},
 };
 
+use uv_extract::dirhash::{DirectoryDigest, dirhash_path};
 use uv_fs::{PortablePath, Simplified};
+use uv_install_wheel::validate_and_heal_record;
 use uv_static::EnvVars;
 #[cfg(feature = "test-git")]
 use uv_test::decode_token;
@@ -16291,11 +16293,14 @@ fn handle_record_mismatches() -> Result<()> {
     }
     fs_err::write(&repacked_wheel, block_on(writer.close())?)?;
 
-    // Healing changes the extracted tree, so the digest computed before healing must not be used
-    // as the archive ID.
+    // Healing changes the extracted tree, so the archive ID must reflect the repaired RECORD.
     let extracted = context.temp_dir.join("foo-extracted");
-    let (_, unhealed_digest) =
+    let (files, unhealed_tree) =
         uv_extract::unzip_and_hash(File::open(&repacked_wheel)?, &extracted)?;
+    let unhealed_digest = DirectoryDigest::from(unhealed_tree.hash());
+    assert!(validate_and_heal_record(&extracted, files.iter(), "foo")?.is_some());
+    let healed_digest = DirectoryDigest::from(dirhash_path(&extracted)?);
+    assert_ne!(unhealed_digest, healed_digest);
 
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("--find-links")
@@ -16318,6 +16323,11 @@ fn handle_record_mismatches() -> Result<()> {
         .child("archive-v0")
         .child(unhealed_digest.as_str())
         .assert(predicate::path::missing());
+    context
+        .cache_dir
+        .child("archive-v0")
+        .child(healed_digest.as_str())
+        .assert(predicate::path::exists());
 
     // Read the healed RECORD.
     let installed_record =

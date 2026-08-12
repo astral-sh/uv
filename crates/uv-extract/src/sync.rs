@@ -1,7 +1,7 @@
 use std::path::{Path, PathBuf};
 
 use crate::Error;
-use crate::dirhash::DirectoryDigest;
+use crate::dirhash::DirhashTree;
 
 /// Unzip a `.zip` archive into the target directory.
 ///
@@ -10,17 +10,18 @@ pub fn unzip(reader: fs_err::File, target: &Path) -> Result<Vec<(PathBuf, u64)>,
     crate::dirhash::unzip(reader, target)
 }
 
-/// Unzip a `.zip` archive into the target directory while computing a digest of the extracted files.
+/// Unzip a `.zip` archive into the target directory while computing a hash tree of the extracted
+/// files.
 ///
-/// The digest includes canonical relative paths, contents, and explicit empty directories. ZIP
+/// The tree includes canonical relative paths, contents, and explicit empty directories. ZIP
 /// entries are never followed as symlinks; non-directory entries are materialized and hashed as
 /// regular files.
 ///
-/// Returns the list of unpacked files and their sizes, along with the digest.
+/// Returns the list of unpacked files and their sizes, along with the hash tree.
 pub fn unzip_and_hash(
     reader: fs_err::File,
     target: &Path,
-) -> Result<(Vec<(PathBuf, u64)>, DirectoryDigest), Error> {
+) -> Result<(Vec<(PathBuf, u64)>, DirhashTree), Error> {
     crate::dirhash::unzip_and_hash(reader, target)
 }
 

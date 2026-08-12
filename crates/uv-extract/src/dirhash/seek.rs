@@ -16,7 +16,7 @@ use tokio_util::compat::{FuturesAsyncReadCompatExt, FuturesAsyncWriteCompatExt};
 use tracing::warn;
 use uv_configuration::initialize_rayon_once;
 
-use super::{DirectoryDigest, ExtractedFile, blake3_copy, directory_digest_from_extracted};
+use super::{DirhashTree, ExtractedFile, blake3_copy, directory_tree_from_extracted};
 use crate::archive_path::SanitizedArchivePath;
 
 /// A successfully extracted file, or an explicit directory that can affect the digest.
@@ -24,7 +24,6 @@ enum ExtractedEntry {
     File {
         path: SanitizedArchivePath,
         size: u64,
-        executable: bool,
         digest: Option<blake3::Hash>,
     },
     Directory(SanitizedArchivePath),
@@ -32,7 +31,7 @@ enum ExtractedEntry {
 
 struct UnzipOutput {
     files: Vec<(PathBuf, u64)>,
-    digest: Option<DirectoryDigest>,
+    tree: Option<DirhashTree>,
 }
 
 /// Unzip a `.zip` archive into the target directory.
@@ -40,21 +39,22 @@ pub(crate) fn unzip(reader: fs_err::File, target: &Path) -> Result<Vec<(PathBuf,
     Ok(unzip_inner(reader, target, false)?.files)
 }
 
-/// Unzip a `.zip` archive into the target directory while computing a digest of the extracted files.
+/// Unzip a `.zip` archive into the target directory while computing a hash tree of the extracted
+/// files.
 ///
-/// Returns the list of unpacked files and their sizes, along with a digest over the canonicalized
-/// extracted file paths, contents, and empty directories.
+/// Returns the list of unpacked files and their sizes, along with a hash tree containing the
+/// canonicalized extracted file paths, contents, and empty directories.
 pub(crate) fn unzip_and_hash(
     reader: fs_err::File,
     target: &Path,
-) -> Result<(Vec<(PathBuf, u64)>, DirectoryDigest), Error> {
+) -> Result<(Vec<(PathBuf, u64)>, DirhashTree), Error> {
     let output = unzip_inner(reader, target, true)?;
-    let Some(digest) = output.digest else {
+    let Some(tree) = output.tree else {
         return Err(Error::Io(std::io::Error::other(
-            "seekable ZIP digest was not computed",
+            "seekable ZIP hash tree was not computed",
         )));
     };
-    Ok((output.files, digest))
+    Ok((output.files, tree))
 }
 
 fn unzip_inner(
@@ -102,10 +102,7 @@ fn unzip_inner(
                 Err(err) => Some(Err(err)),
             })
             .collect::<Result<_, Error>>()?;
-        return Ok(UnzipOutput {
-            files,
-            digest: None,
-        });
+        return Ok(UnzipOutput { files, tree: None });
     }
 
     let extracted = (0..archive.file().entries().len())
@@ -119,14 +116,9 @@ fn unzip_inner(
     let mut digest_directories = FxHashSet::default();
     for extracted in extracted {
         match extracted {
-            ExtractedEntry::File {
-                path,
-                size,
-                executable,
-                digest,
-            } => {
+            ExtractedEntry::File { path, size, digest } => {
                 if let Some(digest) = digest {
-                    extracted_files.push(ExtractedFile::new(path, size, executable, digest));
+                    extracted_files.push(ExtractedFile::new(path, size, digest));
                 }
             }
             ExtractedEntry::Directory(path) => {
@@ -134,7 +126,7 @@ fn unzip_inner(
             }
         }
     }
-    let digest = directory_digest_from_extracted(&extracted_files, &digest_directories)?;
+    let tree = directory_tree_from_extracted(&extracted_files, &digest_directories)?;
     let files = extracted_files
         .into_iter()
         .map(ExtractedFile::into_record)
@@ -142,7 +134,7 @@ fn unzip_inner(
 
     Ok(UnzipOutput {
         files,
-        digest: Some(digest),
+        tree: Some(tree),
     })
 }
 
@@ -292,8 +284,6 @@ where
     }
     .map_err(Error::Io)?;
     let size = entry.uncompressed_size();
-    let unix_permissions = entry.unix_permissions();
-    let executable = unix_permissions.is_some_and(|mode| mode & 0o111 != 0);
     let writer = buffered_file_writer(outfile, size);
 
     let (copied, computed_crc32, digest) =
@@ -307,12 +297,11 @@ where
         skip_validation,
     )?;
     #[cfg(unix)]
-    preserve_executable_bit(path, unix_permissions)?;
+    preserve_executable_bit(path, entry.unix_permissions())?;
 
     Ok(ExtractedEntry::File {
         path: enclosed_name,
         size,
-        executable,
         digest,
     })
 }
@@ -401,12 +390,9 @@ where
     let mut writer = AllowStdIo::new(writer);
 
     if hash_contents {
-        let (copied, digest) = Box::pin(blake3_copy(
-            (&mut file).compat(),
-            (&mut writer).compat_write(),
-        ))
-        .await
-        .map_err(Error::io_or_compression)?;
+        let (copied, digest) = blake3_copy((&mut file).compat(), (&mut writer).compat_write())
+            .await
+            .map_err(Error::io_or_compression)?;
         return Ok((copied, file.compute_hash(), Some(digest)));
     }
 
