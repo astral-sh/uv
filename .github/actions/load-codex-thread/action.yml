@@ -9,8 +9,8 @@ inputs:
   run-id:
     description: "The workflow run containing the retained thread artifact."
     required: true
-  artifact-name:
-    description: "The source artifact containing Codex session rollouts."
+  artifact-id:
+    description: "The immutable ID of the artifact containing Codex session rollouts."
     required: true
   github-token:
     description: "A token with read access to workflow artifacts."
@@ -34,14 +34,14 @@ runs:
       id: source
       shell: bash
       env:
-        ARTIFACT_NAME: ${{ inputs.artifact-name }}
+        ARTIFACT_ID: ${{ inputs.artifact-id }}
         DIRECTORY: ${{ inputs.path }}
         REPOSITORY: ${{ inputs.repository }}
         RUN_ID: ${{ inputs.run-id }}
       run: |
         if ! [[ "$RUN_ID" =~ ^[1-9][0-9]*$ ]] ||
           ! [[ "$REPOSITORY" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]] ||
-          ! [[ "$ARTIFACT_NAME" =~ ^[A-Za-z0-9_.-]+$ ]] ||
+          ! [[ "$ARTIFACT_ID" =~ ^[1-9][0-9]*$ ]] ||
           ! [[ "$DIRECTORY" =~ ^[A-Za-z0-9_./-]+$ ]]; then
           echo "The Codex thread source or destination is invalid." >&2
           exit 1
@@ -74,7 +74,7 @@ runs:
         github-token: ${{ inputs.github-token }}
         repository: ${{ inputs.repository }}
         run-id: ${{ inputs.run-id }}
-        name: ${{ inputs.artifact-name }}
+        artifact-ids: ${{ inputs.artifact-id }}
         path: ${{ steps.source.outputs.path }}
 
     - name: "Validate root Codex session"
