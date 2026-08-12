@@ -28,6 +28,15 @@ on:
       pull-request:
         description: "The draft integration-test pull request URL"
         value: ${{ jobs.create-integration-test.outputs.pull-request }}
+      issue-number:
+        description: "The verified upstream issue number"
+        value: ${{ jobs.reproduce.outputs.issue-number }}
+      head-ref:
+        description: "The regression-test branch"
+        value: ${{ jobs.create-integration-test.outputs.head-ref }}
+      head-sha:
+        description: "The verified regression-test commit"
+        value: ${{ jobs.create-integration-test.outputs.head-sha }}
   workflow_dispatch:
     inputs:
       issue:
@@ -215,6 +224,8 @@ jobs:
     outputs:
       result: ${{ steps.create-test.outputs.final-message }}
       pull-request: ${{ steps.open-pr.outputs.url }}
+      head-ref: ${{ steps.open-pr.outputs.head_ref }}
+      head-sha: ${{ steps.open-pr.outputs.head_sha }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -339,7 +350,11 @@ jobs:
               --title "Add regression test for uv#${issue_number}" \
               --body "Add a minimal integration test that reproduces astral-sh/uv#${issue_number}."
           )"
-          echo "url=$pull_request" >> "$GITHUB_OUTPUT"
+          {
+            echo "url=$pull_request"
+            echo "head_ref=$branch"
+            echo "head_sha=$(git rev-parse HEAD)"
+          } >> "$GITHUB_OUTPUT"
           {
             printf '%s\n\n' '### Integration test created'
             printf '%s\n\n' "$CREATE_TEST_SUMMARY"

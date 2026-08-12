@@ -48,6 +48,23 @@ enabled = true
 "static.crates.io" = "allow"
 "static.rust-lang.org" = "allow"
 
+[permissions.fix-reproduced-bug]
+description = "Reproduced bug fixes with workspace and dependency-registry access."
+extends = ":workspace"
+
+[permissions.fix-reproduced-bug.network]
+enabled = true
+
+[permissions.fix-reproduced-bug.network.domains]
+"api.github.com" = "allow"
+"crates.io" = "allow"
+"files.pythonhosted.org" = "allow"
+"github.com" = "allow"
+"index.crates.io" = "allow"
+"pypi.org" = "allow"
+"static.crates.io" = "allow"
+"static.rust-lang.org" = "allow"
+
 [permissions.pull-request-review]
 description = "Pull request review with workspace and GitHub API access."
 extends = ":workspace"

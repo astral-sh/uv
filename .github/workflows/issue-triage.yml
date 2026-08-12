@@ -259,3 +259,28 @@ jobs:
       issue-type: ${{ fromJSON(needs.triage.outputs.result).type }}
       runner: ubuntu-latest
     secrets: inherit
+
+  fix-bug:
+    needs:
+      - triage
+      - reproduce-bug
+    if: >-
+      needs.triage.outputs.result != '' &&
+      fromJSON(needs.triage.outputs.result).type == 'bug' &&
+      needs.reproduce-bug.outputs.result != '' &&
+      fromJSON(needs.reproduce-bug.outputs.result).reproduction == 'reproducible' &&
+      needs.reproduce-bug.outputs.pull-request != ''
+    permissions:
+      contents: read
+      id-token: write
+      issues: read
+    uses: $/.github/workflows/fix-bug.yml
+    with:
+      issue: ${{ inputs.issue || github.event.issue.number }}
+      issue-number: ${{ needs.reproduce-bug.outputs.issue-number }}
+      reproduction-result: ${{ needs.reproduce-bug.outputs.result }}
+      parent-pull-request: ${{ needs.reproduce-bug.outputs.pull-request }}
+      parent-head-ref: ${{ needs.reproduce-bug.outputs.head-ref }}
+      parent-head-sha: ${{ needs.reproduce-bug.outputs.head-sha }}
+      runner: ubuntu-latest
+    secrets: inherit
