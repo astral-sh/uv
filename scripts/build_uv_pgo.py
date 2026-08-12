@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import platform
 import re
 import shlex
 import shutil
@@ -29,6 +30,7 @@ class EcosystemProject:
     constraints: tuple[str, ...] = ()
     groups: tuple[str, ...] = ()
     native_platforms: tuple[str, ...] | None = None
+    minimum_glibc: tuple[int, int] | None = None
 
     def __post_init__(self) -> None:
         if re.fullmatch(r"3\.\d+", self.python_version) is None:
@@ -39,7 +41,22 @@ class EcosystemProject:
 
     @property
     def supports_native_workloads(self) -> bool:
-        return self.native_platforms is None or sys.platform in self.native_platforms
+        if (
+            self.native_platforms is not None
+            and sys.platform not in self.native_platforms
+        ):
+            return False
+
+        if self.minimum_glibc is None or sys.platform != "linux":
+            return True
+
+        libc, version = platform.libc_ver()
+        match = re.fullmatch(r"(\d+)\.(\d+)", version)
+        return (
+            libc == "glibc"
+            and match is not None
+            and tuple(map(int, match.groups())) >= self.minimum_glibc
+        )
 
     @property
     def python_arguments(self) -> tuple[str, str]:
@@ -79,6 +96,7 @@ CORPUS_PROJECTS = (
         name="sentry",
         python_version="3.13",
         native_platforms=("linux",),
+        minimum_glibc=(2, 28),
     ),
     EcosystemProject(
         name="zulip",
