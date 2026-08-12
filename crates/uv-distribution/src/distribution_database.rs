@@ -1330,7 +1330,10 @@ impl ExtractedWheelManifest {
         tree: Option<DirhashTree>,
     ) -> Self {
         Self {
-            files: record_files(&extracted_files),
+            files: extracted_files
+                .iter()
+                .map(ExtractedFile::to_record)
+                .collect(),
             extracted_files: Some(extracted_files),
             tree,
         }
@@ -1367,10 +1370,6 @@ impl ExtractedWheelManifest {
     }
 }
 
-fn record_files(files: &[ExtractedFile]) -> Vec<(PathBuf, u64)> {
-    files.iter().map(ExtractedFile::to_record).collect()
-}
-
 fn persist_binary_archive_files(
     cache: &Cache,
     archive: &Path,
@@ -1397,10 +1396,10 @@ fn persist_binary_archive_files(
         }
 
         let digest = file.digest_hex();
-        let id = ArchiveFileId::from_content_digest(&digest, file.executable());
+        let id = ArchiveFileId::from_content_digest(&digest);
         let archive_file = cache.archive_file(&id);
         let extracted_file = archive.join(file.path());
-        persist_archive_file(&extracted_file, &archive_file, file.executable())?;
+        persist_archive_file(&extracted_file, &archive_file)?;
         entries.push(ArchiveFileManifestEntry::new(
             file.path().to_path_buf(),
             id.as_ref().to_path_buf(),
@@ -1424,19 +1423,15 @@ fn is_binary_payload(path: &Path) -> bool {
     is_binary_extension || file_name.to_ascii_lowercase().contains(".so.")
 }
 
-fn persist_archive_file(src: &Path, dst: &Path, executable: bool) -> io::Result<()> {
-    persist_archive_file_with(src, dst, executable, |src, dst| fs_err::hard_link(src, dst))
+fn persist_archive_file(src: &Path, dst: &Path) -> io::Result<()> {
+    persist_archive_file_with(src, dst, |src, dst| fs_err::hard_link(src, dst))
 }
 
 fn persist_archive_file_with(
     src: &Path,
     dst: &Path,
-    executable: bool,
     hard_link: impl FnOnce(&Path, &Path) -> io::Result<()>,
 ) -> io::Result<()> {
-    #[cfg(not(unix))]
-    let _ = executable;
-
     let Some(parent) = dst.parent() else {
         return Err(io::Error::new(
             io::ErrorKind::InvalidInput,
@@ -1445,42 +1440,18 @@ fn persist_archive_file_with(
     };
     fs_err::create_dir_all(parent)?;
 
-    if dst.try_exists()? {
-        #[cfg(unix)]
-        normalize_archive_file_permissions(dst, executable)?;
-    } else {
+    if !dst.try_exists()? {
         match hard_link(src, dst) {
             Ok(()) => {}
             Err(_) if dst.try_exists()? => {}
             Err(_) => uv_fs::copy_atomic_sync(src, dst)?,
         }
-        #[cfg(unix)]
-        normalize_archive_file_permissions(dst, executable)?;
     }
 
     match fs_err::remove_file(src) {
         Ok(()) => {}
         Err(err) if err.kind() == io::ErrorKind::NotFound => {}
         Err(err) => return Err(err),
-    }
-
-    Ok(())
-}
-
-#[cfg(unix)]
-fn normalize_archive_file_permissions(path: &Path, executable: bool) -> io::Result<()> {
-    use std::os::unix::fs::PermissionsExt;
-
-    let mut permissions = fs_err::metadata(path)?.permissions();
-    let mode = permissions.mode();
-    let normalized = if executable {
-        mode | 0o111
-    } else {
-        mode & !0o111
-    };
-    if normalized != mode {
-        permissions.set_mode(normalized);
-        fs_err::set_permissions(path, permissions)?;
     }
 
     Ok(())
@@ -1673,7 +1644,7 @@ mod tests {
         fs_err::write(&archive_file, "binary contents")?;
         let manifest = ArchiveFileManifest::new(vec![ArchiveFileManifestEntry::new(
             PathBuf::from("package/native.so"),
-            PathBuf::from("regular/ab/abcdef"),
+            PathBuf::from("ab/abcdef"),
         )]);
         manifest.write_to_metadata(&archive_metadata)?;
 
@@ -1698,7 +1669,7 @@ mod tests {
         let dst = archive_files_dir.join("native.so");
         fs_err::write(&dst, "binary contents")?;
 
-        persist_archive_file(&src, &dst, false)?;
+        persist_archive_file(&src, &dst)?;
 
         assert!(!src.exists());
         assert_eq!(fs_err::read(&dst)?, b"binary contents");
@@ -1715,7 +1686,7 @@ mod tests {
         let dst = archive_files_dir.join("native.so");
         fs_err::write(&src, "binary contents")?;
 
-        persist_archive_file_with(&src, &dst, false, |_, _| {
+        persist_archive_file_with(&src, &dst, |_, _| {
             Err(io::Error::new(
                 io::ErrorKind::Unsupported,
                 "hardlinks are unsupported",
@@ -1739,7 +1710,7 @@ mod tests {
         fs_err::write(&src, "binary contents")?;
         fs_err::write(&dst, "binary contents")?;
 
-        persist_archive_file(&src, &dst, false)?;
+        persist_archive_file(&src, &dst)?;
 
         assert!(!src.exists());
         assert_eq!(fs_err::read(&dst)?, b"binary contents");
