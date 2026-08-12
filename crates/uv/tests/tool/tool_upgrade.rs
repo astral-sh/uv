@@ -87,6 +87,29 @@ fn tool_upgrade_empty() {
 }
 
 #[test]
+fn tool_upgrade_all_ignores_invalid_tool_name() -> Result<()> {
+    let context = uv_test::test_context!("3.12").with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    tool_dir.child("tool backup").create_dir_all()?;
+
+    // Silently treating an enumeration error as an empty tool directory hides a broken
+    // installation and exits successfully; see astral-sh/uv#21058.
+    uv_snapshot!(context.filters(), context.tool_upgrade()
+        .arg("--all")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Nothing to upgrade
+    ");
+
+    Ok(())
+}
+
+#[test]
 fn tool_upgrade_preserves_workspace_member_editability() -> Result<()> {
     let context = uv_test::test_context!("3.12").with_filtered_exe_suffix();
     let tool_dir = context.temp_dir.child("tools");
