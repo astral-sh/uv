@@ -166,7 +166,7 @@ jobs:
   # attestations and PyPI does not support attestations in reusable workflows.
   test-publish:
     name: "test uv publish"
-    timeout-minutes: 60
+    timeout-minutes: 20
     needs:
       - plan
       - build-dev-binaries
@@ -290,17 +290,6 @@ jobs:
           UV_TEST_PUBLISH_PYTHON_VERSION: ${{ env.PYTHON_VERSION }}
           UV_TEST_PUBLISH_GITLAB_PYPI_OIDC_TOKEN: ${{ steps.load-gitlab-oidc-token.outputs.GITLAB_PYPI_OIDC_TOKEN }}
           UV_TEST_PUBLISH_GITLAB_PYX_OIDC_TOKEN: ${{ steps.load-gitlab-oidc-token.outputs.GITLAB_PYX_OIDC_TOKEN }}
-
-      - name: "Stress test PyPI keyring publishing"
-        run: |
-          for attempt in $(seq 1 100); do
-            echo "::group::PyPI keyring publishing sample ${attempt}/100"
-            ./uv run --no-project -p "${PYTHON_VERSION}" scripts/publish/test_publish.py --uv ./uv pypi-keyring
-            echo "::endgroup::"
-          done
-        env:
-          RUST_LOG: uv=debug,uv_publish=trace
-          UV_TEST_PUBLISH_PYTHON_VERSION: ${{ env.PYTHON_VERSION }}
 
   required-checks-passed:
     name: "all required jobs passed"
