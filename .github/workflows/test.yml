@@ -20,9 +20,12 @@ env:
   CARGO_INCREMENTAL: 0
   CARGO_NET_RETRY: 10
   CARGO_TERM_COLOR: always
+  # Aborting test processes prevents LLVM from flushing coverage on Windows.
+  CARGO_UNSTABLE_PANIC_ABORT_TESTS: ${{ !inputs.collect-coverage }}
   PYTHON_VERSION: "3.12"
   RUSTC_BOOTSTRAP: 1
   RUSTUP_MAX_RETRIES: 10
+  TEST_CARGO_PROFILE: ${{ inputs.collect-coverage && 'fast-build' || 'fast-build-nightly' }}
 
 jobs:
   # We use the large GitHub actions runners
@@ -107,7 +110,6 @@ jobs:
           tool: cargo-nextest
 
       - name: "Cargo test"
-        id: test
         env:
           # Retry more than default to reduce flakes in CI
           UV_HTTP_RETRIES: 5
@@ -121,21 +123,18 @@ jobs:
           INSTA_UPDATE: new
           INSTA_PENDING_DIR: ${{ github.workspace }}/pending-snapshots
         run: |
-          test_args=(
-            -Z checksum-freshness
-            --features test-python-patch,test-universal,native-auth,secret-service
-            --workspace
-            --profile ci-linux
-          )
           if ${{ inputs.collect-coverage }}; then
-            test_args+=(--cargo-profile fast-build)
-            tracking_id="${GITHUB_SHA:0:16}"
-            cargo dev coverage --id "$tracking_id" -- "${test_args[@]}"
-            echo "tracking_id=$tracking_id" >> "$GITHUB_OUTPUT"
+            command=(dev coverage --id "$GITHUB_SHA" --)
           else
-            test_args+=(--cargo-profile fast-build-nightly -Z panic-abort-tests)
-            cargo nextest run "${test_args[@]}"
+            command=(nextest run)
           fi
+
+          cargo "${command[@]}" \
+            --cargo-profile "$TEST_CARGO_PROFILE" \
+            -Z checksum-freshness \
+            --features test-python-patch,test-universal,native-auth,secret-service \
+            --workspace \
+            --profile ci-linux
 
       - name: "Upload LCOV coverage report"
         if: ${{ inputs.collect-coverage }}
@@ -143,7 +142,7 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: coverage-linux-${{ github.sha }}
-          path: target/coverage/lcov/${{ steps.test.outputs.tracking_id }}.lcov
+          path: target/coverage/lcov/${{ github.sha }}.lcov
           if-no-files-found: error
           retention-days: 14
 
@@ -228,7 +227,6 @@ jobs:
           tool: cargo-nextest
 
       - name: "Cargo test"
-        id: test
         env:
           # Retry more than default to reduce flakes in CI
           UV_HTTP_RETRIES: 5
@@ -243,22 +241,19 @@ jobs:
           INSTA_UPDATE: new
           INSTA_PENDING_DIR: ${{ github.workspace }}/pending-snapshots
         run: |
-          test_args=(
-            -Z checksum-freshness
-            --no-default-features
-            --features test-python,test-python-managed,test-pypi,test-git,test-git-lfs,performance,test-crates-io,native-auth,apple-native
-            --workspace
-            --profile ci-macos
-          )
           if ${{ inputs.collect-coverage }}; then
-            test_args+=(--cargo-profile fast-build)
-            tracking_id="${GITHUB_SHA:0:16}"
-            cargo dev coverage --id "$tracking_id" -- "${test_args[@]}"
-            echo "tracking_id=$tracking_id" >> "$GITHUB_OUTPUT"
+            command=(dev coverage --id "$GITHUB_SHA" --)
           else
-            test_args+=(--cargo-profile fast-build-nightly -Z panic-abort-tests)
-            cargo nextest run "${test_args[@]}"
+            command=(nextest run)
           fi
+
+          cargo "${command[@]}" \
+            --cargo-profile "$TEST_CARGO_PROFILE" \
+            -Z checksum-freshness \
+            --no-default-features \
+            --features test-python,test-python-managed,test-pypi,test-git,test-git-lfs,performance,test-crates-io,native-auth,apple-native \
+            --workspace \
+            --profile ci-macos
 
       - name: "Upload LCOV coverage report"
         if: ${{ inputs.collect-coverage }}
@@ -266,7 +261,7 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: coverage-macos-${{ github.sha }}
-          path: target/coverage/lcov/${{ steps.test.outputs.tracking_id }}.lcov
+          path: target/coverage/lcov/${{ github.sha }}.lcov
           if-no-files-found: error
           retention-days: 14
 
@@ -359,7 +354,6 @@ jobs:
           tool: cargo-nextest
 
       - name: "Cargo test"
-        id: test
         working-directory: ${{ env.UV_WORKSPACE }}
         env:
           # Retry more than default to reduce flakes in CI
@@ -377,26 +371,20 @@ jobs:
           INSTA_PENDING_DIR: ${{ github.workspace }}/pending-snapshots
         shell: bash
         run: |
-          test_args=(
-            -Z checksum-freshness
-            --no-default-features
-            --features test-python,test-pypi,test-python-managed,test-windows-registry,native-auth,windows-native
-            --workspace
-            --profile ci-windows
-            --partition hash:${{ matrix.partition }}/3
-          )
           if ${{ inputs.collect-coverage }}; then
-            # We don't include `-Z panic-abort-tests` on Windows when collecting
-            # coverage, since it causes tests to exit with `ExitProcess`, in turn
-            # stopping LLVM from flushing any coverage with its `atexit` handler.
-            test_args+=(--cargo-profile fast-build)
-            tracking_id="${GITHUB_SHA:0:16}"
-            cargo dev coverage --id "$tracking_id" -- "${test_args[@]}"
-            echo "tracking_id=$tracking_id" >> "$GITHUB_OUTPUT"
+            command=(dev coverage --id "$GITHUB_SHA" --)
           else
-            test_args+=(--cargo-profile fast-build-nightly -Z panic-abort-tests)
-            cargo nextest run "${test_args[@]}"
+            command=(nextest run)
           fi
+
+          cargo "${command[@]}" \
+            --cargo-profile "$TEST_CARGO_PROFILE" \
+            -Z checksum-freshness \
+            --no-default-features \
+            --features test-python,test-pypi,test-python-managed,test-windows-registry,native-auth,windows-native \
+            --workspace \
+            --profile ci-windows \
+            --partition hash:${{ matrix.partition }}/3
 
       - name: "Upload LCOV coverage report"
         if: ${{ inputs.collect-coverage }}
@@ -404,7 +392,7 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: coverage-windows-${{ matrix.partition }}-${{ github.sha }}
-          path: ${{ env.UV_WORKSPACE }}/target/coverage/lcov/${{ steps.test.outputs.tracking_id }}.lcov
+          path: ${{ env.UV_WORKSPACE }}/target/coverage/lcov/${{ github.sha }}.lcov
           if-no-files-found: error
           retention-days: 14
 
