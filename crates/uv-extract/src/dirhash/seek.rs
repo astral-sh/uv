@@ -392,17 +392,14 @@ where
     if hash_contents {
         let (copied, digest) = blake3_copy((&mut file).compat(), (&mut writer).compat_write())
             .await
-            .map_err(Error::io_or_compression)?;
+            .map_err(Error::io_or_zip)?;
         return Ok((copied, file.compute_hash(), Some(digest)));
     }
 
     let mut copied = 0;
     let mut buffer = vec![0; 128 * 1024];
     loop {
-        let read = file
-            .read(&mut buffer)
-            .await
-            .map_err(Error::io_or_compression)?;
+        let read = file.read(&mut buffer).await.map_err(Error::io_or_zip)?;
         if read == 0 {
             break;
         }

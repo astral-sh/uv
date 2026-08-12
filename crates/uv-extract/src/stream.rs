@@ -217,7 +217,7 @@ async fn unzip_inner<R: tokio::io::AsyncRead + Unpin>(
                         let (bytes_read, digest) = if hash_contents {
                             let (bytes_read, digest) = blake3_copy(&mut reader, &mut writer)
                                 .await
-                                .map_err(Error::io_or_compression)?;
+                                .map_err(Error::io_or_zip)?;
                             (bytes_read, Some(digest))
                         } else {
                             let mut bytes_read = 0;
@@ -225,7 +225,7 @@ async fn unzip_inner<R: tokio::io::AsyncRead + Unpin>(
                             loop {
                                 let read = tokio::io::AsyncReadExt::read(&mut reader, &mut buffer)
                                     .await
-                                    .map_err(Error::io_or_compression)?;
+                                    .map_err(Error::io_or_zip)?;
                                 if read == 0 {
                                     break;
                                 }
@@ -259,7 +259,7 @@ async fn unzip_inner<R: tokio::io::AsyncRead + Unpin>(
                         let bytes_read = entry_reader
                             .read_to_end(&mut expected_contents)
                             .await
-                            .map_err(Error::io_or_compression)?;
+                            .map_err(Error::io_or_zip)?;
 
                         // Verify that the existing file contents match the expected contents.
                         if existing_contents != expected_contents {
