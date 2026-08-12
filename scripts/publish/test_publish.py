@@ -681,7 +681,6 @@ def test_reupload_modified_files(
         f"again with skip existing (error test) ===",
         file=sys.stderr,
     )
-    wait_for_index(plan, version)
     args = [
         plan.uv,
         "publish",
@@ -691,25 +690,37 @@ def test_reupload_modified_files(
         plan.configuration.index_url,
         *plan.extra_args,
     ]
-    result = run(
-        args,
-        cwd=modified_project_dir,
-        env=plan.full_env(),
-        text=True,
-        stderr=PIPE,
-        check=False,
-    )
-
-    if (
-        result.returncode == 0
-        or "Local file and index file do not match for" not in result.stderr
-    ):
-        raise RuntimeError(
-            f"Re-upload with mismatching files should not have been started "
-            f"for {plan.target} ({plan.configuration.publish_url}): "
-            f"Exit code {result.returncode}\n"
-            f"---\n{result.stderr}\n---"
+    for attempt in range(5):
+        wait_for_index(plan, version)
+        result = run(
+            args,
+            cwd=modified_project_dir,
+            env=plan.full_env(),
+            text=True,
+            stderr=PIPE,
+            check=False,
         )
+
+        if (
+            result.returncode != 0
+            and "Local file and index file do not match for" in result.stderr
+        ):
+            return
+
+        if attempt < 4:
+            print(
+                f"Index returned inconsistent files for "
+                f"{plan.configuration.project_name}=={version}; "
+                f"retrying modified file check ({attempt + 1}/4)",
+                file=sys.stderr,
+            )
+
+    raise RuntimeError(
+        f"Re-upload with mismatching files should not have been started "
+        f"for {plan.target} ({plan.configuration.publish_url}): "
+        f"Exit code {result.returncode}\n"
+        f"---\n{result.stderr}\n---"
+    )
 
 
 def test_publish_project(plan: Plan, client: httpx.Client):
