@@ -52,6 +52,9 @@ enabled = true
 description = "Reproduced bug fixes with workspace and dependency-registry access."
 extends = ":workspace"
 
+[permissions.fix-reproduced-bug.filesystem]
+":tmpdir" = "write"
+
 [permissions.fix-reproduced-bug.network]
 enabled = true
 

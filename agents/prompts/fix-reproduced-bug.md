@@ -17,16 +17,25 @@ implement the smallest production fix and rerun the same focused debug-profile t
 Preserve existing behavior outside the reported bug and run any nearby focused coverage needed to
 verify the change.
 
-Modify only the affected production files under `crates/*/src/` and the parent regression-test files
-under `crates/uv/tests/` or `crates/uv-client/tests/it/`. Never modify workflows, actions,
-automation configuration, agent prompts, agent schemas, dependency manifests, lockfiles, unrelated
-tests, or other repository files. Do not weaken or delete the regression test, introduce symbolic
-links or submodules, run the entire test suite, or use a release profile. Follow nearby code and
-test style, and format changed Rust files with `cargo fmt --all`.
+Within the checkout, modify only the affected production files under `crates/*/src/` and the parent
+regression-test files under `crates/uv/tests/` or `crates/uv-client/tests/it/`. Never modify
+workflows, actions, automation configuration, agent prompts, agent schemas, dependency manifests,
+lockfiles, unrelated tests, or other repository files. Do not weaken or delete the regression test,
+introduce symbolic links or submodules, run the entire test suite, or use a release profile. Follow
+nearby code and test style, and format changed Rust files with `cargo fmt --all`.
 
 If the production change is speculative, requires a design decision, cannot be represented within
 the allowed paths, cannot be validated with focused tests, or would fix a broader problem than the
 reported bug, leave the checkout unchanged and explain why.
+
+Update `$RUNNER_TEMP/issue-context/README.md` directly with the fix investigation, even when the bug
+cannot be fixed. Read the entire existing document and revise any part that the fix attempt
+clarifies. Preserve accurate issue identification, classification, reproduction details, and related
+issues or pull requests. Include exactly one `## Fix` section describing the outcome, implementation
+or limitation, and successful focused validation. Preserve other useful sections and keep the
+document coherent, self-contained, and consistent with the structured JSON result. Do not modify any
+other files in `$RUNNER_TEMP/issue-context`. The publishing workflow will add the fix pull request
+after it has been created.
 
 Produce only a JSON object matching the supplied output schema. Set `outcome` to `fixed` only when
 the checkout contains both a focused production fix and the updated parent regression test. Set
