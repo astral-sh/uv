@@ -54,6 +54,7 @@ jobs:
       issues: read
     outputs:
       base-sha: ${{ steps.prepare.outputs.base-sha }}
+      bundle-artifact-id: ${{ steps.upload-fix.outputs.artifact-id }}
       created: ${{ steps.commit-fix.outputs.created }}
       result: ${{ steps.fix-bug.outputs.final-message }}
     steps:
@@ -314,12 +315,12 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: "Upload verified bug fix"
+        id: upload-fix
         if: steps.commit-fix.outputs.created == 'true'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: fixed-bug-${{ inputs.issue-number }}-${{ github.run_id }}
+          name: fixed-bug-${{ inputs.issue-number }}-${{ github.run_id }}-${{ github.run_attempt }}
           path: ${{ runner.temp }}/fixed-bug.bundle
-          overwrite: true
           if-no-files-found: error
           compression-level: 0
           retention-days: 1
@@ -343,7 +344,7 @@ jobs:
 
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          name: fixed-bug-${{ inputs.issue-number }}-${{ github.run_id }}
+          artifact-ids: ${{ needs.fix.outputs.bundle-artifact-id }}
           path: ${{ runner.temp }}/fixed-bug
 
       - name: "Verify regression and bug-fix commits"
