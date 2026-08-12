@@ -3,6 +3,7 @@ use itertools::Itertools;
 use owo_colors::OwoColorize;
 use std::collections::BTreeMap;
 use std::fmt::Write;
+use std::path::PathBuf;
 use std::str::FromStr;
 use tracing::{debug, trace};
 
@@ -13,7 +14,7 @@ use uv_configuration::{Concurrency, Constraints, DryRun, HashCheckingMode, Targe
 use uv_distribution::LoweredExtraBuildDependencies;
 use uv_distribution_types::{ExtraBuildRequires, Index, Name, Requirement, RequirementSource};
 use uv_errors::{ErrorOptions, Hints, write_error_chain_with_options};
-use uv_fs::CWD;
+use uv_fs::{CWD, Simplified};
 use uv_installer::{InstallationStrategy, Planner, SitePackages};
 use uv_normalize::PackageName;
 use uv_pep440::{Operator, Version};
@@ -68,7 +69,10 @@ pub(crate) async fn upgrade(
         if names.is_empty() {
             installed_tools
                 .tools()
-                .unwrap_or_default()
+                .map_err(|source| ToolEnumerationError {
+                    root: installed_tools.root().to_path_buf(),
+                    source,
+                })?
                 .into_iter()
                 .map(|(name, _)| (name, Vec::new()))
                 .collect()
@@ -213,6 +217,27 @@ pub(crate) async fn upgrade(
     }
 
     Ok(ExitStatus::Success)
+}
+
+/// An installed tool could not be discovered from the configured tool directory.
+#[derive(Debug, thiserror::Error)]
+#[error("Failed to inspect installed tools in `{}`", root.user_display())]
+pub(crate) struct ToolEnumerationError {
+    root: PathBuf,
+    #[source]
+    source: uv_tool::Error,
+}
+
+impl uv_errors::Hint for ToolEnumerationError {
+    fn hints(&self) -> Hints<'_> {
+        if matches!(&self.source, uv_tool::Error::ToolName(_)) {
+            Hints::from(
+                "Move directories with invalid package names out of the tool directory, or remove them if they are no longer needed",
+            )
+        } else {
+            Hints::none()
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
