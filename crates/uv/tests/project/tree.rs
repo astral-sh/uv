@@ -2925,6 +2925,61 @@ fn cycle_invert() -> Result<()> {
 
 #[cfg(feature = "test-universal")]
 #[test]
+fn cycle_invert_leaf() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    setup_leaf_cycle(&context, false)?;
+
+    uv_snapshot!(context.filters(), context.tree().arg("--frozen").arg("--invert"), @"
+    exit_code: 0 (success)
+    ");
+
+    assert_json_snapshot!(
+        json_tree_package_names(context.tree().arg("--frozen").arg("--invert"))?,
+        @r"[]"
+    );
+
+    Ok(())
+}
+
+#[cfg(feature = "test-universal")]
+#[test]
+fn cycle_invert_leaf_with_acyclic_leaf() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    setup_leaf_cycle(&context, true)?;
+
+    uv_snapshot!(context.filters(), context.tree().arg("--frozen").arg("--invert"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    leaf v1.0.0
+    └── project v1.0.0
+    ");
+
+    assert_json_snapshot!(
+        json_tree_package_names(context.tree().arg("--frozen").arg("--invert"))?,
+        @r#"
+    [
+      "leaf",
+      "project"
+    ]
+    "#
+    );
+
+    uv_snapshot!(context.filters(), context.tree().arg("--frozen").arg("--invert").arg("--package").arg("beta"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    beta v1.0.0
+    └── alpha v1.0.0
+        ├── beta v1.0.0
+        │   └── alpha v1.0.0 (*)
+        └── project v1.0.0
+    (*) Package tree already displayed
+    ");
+
+    Ok(())
+}
+
+#[cfg(feature = "test-universal")]
+#[test]
 fn cycle_depth_boundary_no_premature_dedupe() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
@@ -4600,6 +4655,68 @@ fn workspace_circular_dependencies() -> Result<()> {
     Resolved 2 packages in [TIME]
     "
     );
+
+    Ok(())
+}
+
+#[cfg(feature = "test-universal")]
+fn setup_leaf_cycle(context: &TestContext, with_acyclic_leaf: bool) -> Result<()> {
+    let project_dependencies = if with_acyclic_leaf {
+        r#""alpha==1.0.0", "leaf==1.0.0""#
+    } else {
+        r#""alpha==1.0.0""#
+    };
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&formatdoc! {r#"
+            [project]
+            name = "project"
+            version = "1.0.0"
+            requires-python = ">=3.12"
+            dependencies = [{project_dependencies}]
+        "#})?;
+
+    let (leaf, root_dependencies) = if with_acyclic_leaf {
+        (
+            indoc! {r#"
+                [[package]]
+                name = "leaf"
+                version = "1.0.0"
+                source = { registry = "https://pypi.org/simple" }
+
+            "#},
+            r#"{ name = "alpha" }, { name = "leaf" }"#,
+        )
+    } else {
+        ("", r#"{ name = "alpha" }"#)
+    };
+    context
+        .temp_dir
+        .child("uv.lock")
+        .write_str(&formatdoc! {r#"
+            version = 1
+            revision = 3
+            requires-python = ">=3.12"
+
+            [[package]]
+            name = "alpha"
+            version = "1.0.0"
+            source = {{ registry = "https://pypi.org/simple" }}
+            dependencies = [{{ name = "beta" }}]
+
+            [[package]]
+            name = "beta"
+            version = "1.0.0"
+            source = {{ registry = "https://pypi.org/simple" }}
+            dependencies = [{{ name = "alpha" }}]
+
+            {leaf}[[package]]
+            name = "project"
+            version = "1.0.0"
+            source = {{ virtual = "." }}
+            dependencies = [{root_dependencies}]
+        "#})?;
 
     Ok(())
 }
