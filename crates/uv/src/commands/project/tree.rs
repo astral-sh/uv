@@ -26,8 +26,8 @@ use crate::commands::pip::resolution_markers;
 use crate::commands::project::lock::{LockMode, LockOperation};
 use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{
-    ProjectError, ProjectInterpreter, ScriptInterpreter, UniversalState, WorkspacePython,
-    default_dependency_groups,
+    ProjectEnvironmentPolicy, ProjectError, ProjectInterpreter, ScriptInterpreter, UniversalState,
+    WorkspacePython, default_dependency_groups,
 };
 use crate::commands::reporters::LatestVersionReporter;
 use crate::commands::{ExitStatus, diagnostics};
@@ -134,7 +134,7 @@ pub(crate) async fn tree(
                     python_preference,
                     python_downloads,
                     &install_mirrors,
-                    false,
+                    ProjectEnvironmentPolicy::Optional,
                     Some(false),
                     cache,
                     printer,

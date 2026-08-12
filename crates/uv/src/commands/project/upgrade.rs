@@ -29,7 +29,9 @@ use uv_workspace::{
 use crate::commands::pip::loggers::DefaultResolveLogger;
 use crate::commands::project::lock::{LockEvent, LockMode, LockOperation, LockResult};
 use crate::commands::project::lock_target::LockTarget;
-use crate::commands::project::{ProjectError, ProjectInterpreter, UniversalState, WorkspacePython};
+use crate::commands::project::{
+    ProjectEnvironmentPolicy, ProjectError, ProjectInterpreter, UniversalState, WorkspacePython,
+};
 use crate::commands::{ExitStatus, diagnostics};
 use crate::printer::Printer;
 use crate::settings::ResolverSettings;
@@ -217,7 +219,7 @@ pub(crate) async fn upgrade(
             python_preference,
             python_downloads,
             &install_mirrors,
-            false,
+            ProjectEnvironmentPolicy::Optional,
             Some(false),
             cache,
             printer,
@@ -376,7 +378,7 @@ pub(crate) async fn upgrade(
             python_preference,
             python_downloads,
             &install_mirrors,
-            false,
+            ProjectEnvironmentPolicy::Optional,
             Some(false),
             &cache,
             printer,

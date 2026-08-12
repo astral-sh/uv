@@ -29,9 +29,9 @@ use crate::commands::project::install_target::InstallTarget;
 use crate::commands::project::lock::LockMode;
 use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{
-    LinkErrorReporting, ProjectEnvironment, ProjectError, ProjectInterpreter, ScriptEnvironment,
-    ScriptInterpreter, UniversalState, WorkspacePython, default_dependency_groups,
-    validate_project_requires_python,
+    LinkErrorReporting, ProjectEnvironment, ProjectEnvironmentPolicy, ProjectError,
+    ProjectInterpreter, ScriptEnvironment, ScriptInterpreter, UniversalState, WorkspacePython,
+    default_dependency_groups, validate_project_requires_python,
 };
 use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::{ExitStatus, diagnostics, project};
@@ -537,7 +537,7 @@ pub(crate) async fn check(
                     python_preference,
                     python_downloads,
                     &install_mirrors,
-                    false,
+                    ProjectEnvironmentPolicy::Optional,
                     None,
                     cache,
                     printer,

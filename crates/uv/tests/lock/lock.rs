@@ -25344,10 +25344,13 @@ fn lock_invalid_environment() -> Result<()> {
 
     // An unrelated invalid `.venv` should not prevent locking; see astral-sh/uv#19832.
     uv_snapshot!(context.filters(), context.lock(), @"
-    exit_code: 2 (failure)
+    exit_code: 0 (success)
     ----- stderr -----
-    error: Project virtual environment directory `[VENV]/` cannot be used because it is not a valid Python environment (no Python executable was found)
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Resolved 1 package in [TIME]
     ");
+
+    assert!(context.venv.child("bad").exists());
 
     Ok(())
 }
