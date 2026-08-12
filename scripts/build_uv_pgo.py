@@ -602,8 +602,4 @@ def run(
 
 
 if __name__ == "__main__":
-    try:
-        main()
-    except (OSError, RuntimeError, subprocess.CalledProcessError) as error:
-        print(f"error: {error}", file=sys.stderr)
-        raise SystemExit(1) from error
+    main()
