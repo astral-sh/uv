@@ -5,6 +5,7 @@ use indoc::{formatdoc, indoc};
 use insta::assert_snapshot;
 use predicates::prelude::predicate;
 use serde_json::json;
+use std::path::PathBuf;
 #[cfg(feature = "test-git")]
 use std::process::Command;
 use tempfile::tempdir_in;
@@ -12,7 +13,11 @@ use url::Url;
 use wiremock::matchers::{basic_auth, body_string_contains, method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
+use uv_cache::{Cache, CacheBucket};
+use uv_cache_key::cache_digest;
 use uv_fs::Simplified;
+use uv_platform::{OsRelease, OsType};
+use uv_python::{Interpreter, PythonEnvironment, canonicalize_executable};
 use uv_static::EnvVars;
 use uv_test::packse::PackseServer;
 
@@ -12690,6 +12695,182 @@ fn sync_workspace_member_build_constraints() -> Result<()> {
     Installed [N] packages in [TIME]
      + a==2.0.0
      + child==0.1.0 (from file://[TEMP_DIR]/child)
+    ");
+
+    Ok(())
+}
+
+/// Seed contradictory metadata for the virtual environment and its underlying interpreter.
+fn stale_base_interpreter_cache(context: &TestContext) -> Result<(PathBuf, String, String)> {
+    let cache = Cache::from_path(context.cache_dir.path());
+    let environment = PythonEnvironment::from_root(&context.venv, &cache)?;
+    let base_executable = environment.interpreter().to_base_python()?;
+    let actual_version = environment.interpreter().python_version().to_string();
+
+    Interpreter::query(&base_executable, &cache)?;
+
+    let mut stale_version = actual_version.clone();
+    let last_digit = stale_version
+        .pop()
+        .ok_or_else(|| anyhow!("Python version is empty"))?;
+    stale_version.push(if last_digit == '9' {
+        '8'
+    } else {
+        char::from_u32(u32::from(last_digit) + 1)
+            .ok_or_else(|| anyhow!("Python version does not end in a digit"))?
+    });
+
+    let absolute = std::path::absolute(&base_executable)?;
+    let canonical = canonicalize_executable(&absolute)?;
+    let cache_entry = cache.entry(
+        CacheBucket::Interpreter,
+        cache_digest(&(
+            std::env::consts::ARCH,
+            OsType::from_env()
+                .map(|operating_system| operating_system.to_string())
+                .unwrap_or_default(),
+            OsRelease::from_env()
+                .map(|release| release.to_string())
+                .unwrap_or_default(),
+        )),
+        format!("{}.msgpack", cache_digest(&(&absolute, &canonical))),
+    );
+
+    // Replace only exact MessagePack strings, preserving path fields and the executable ctime.
+    let mut encoded_version = vec![0xa0 | u8::try_from(actual_version.len())?];
+    encoded_version.extend_from_slice(actual_version.as_bytes());
+
+    let mut metadata = fs_err::read(cache_entry.path())?;
+    let mut offset = 0;
+    let mut replacements = 0;
+    while let Some(index) = metadata[offset..]
+        .windows(encoded_version.len())
+        .position(|window| window == encoded_version)
+    {
+        let start = offset + index + 1;
+        metadata[start..start + actual_version.len()].copy_from_slice(stale_version.as_bytes());
+        offset = start + actual_version.len();
+        replacements += 1;
+    }
+    assert!(
+        replacements >= 2,
+        "expected to replace the implementation and Python version markers"
+    );
+
+    fs_err::write(cache_entry.path(), metadata)?;
+    environment.set_pyvenv_cfg("version_info", &stale_version)?;
+
+    assert_eq!(
+        Interpreter::query(&base_executable, &cache)?
+            .python_version()
+            .to_string(),
+        stale_version,
+        "expected the base interpreter cache to contain the stale version"
+    );
+    assert_eq!(
+        PythonEnvironment::from_root(&context.venv, &cache)?
+            .interpreter()
+            .python_version()
+            .to_string(),
+        actual_version,
+        "expected the virtual environment cache to retain the actual version"
+    );
+
+    Ok((base_executable, actual_version, stale_version))
+}
+
+/// A stale base-interpreter cache must heal before recreating an incompatible environment.
+#[test]
+fn sync_refreshes_stale_base_interpreter_cache() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+    "#})?;
+    context
+        .temp_dir
+        .child(".python-version")
+        .write_str("3.12")?;
+
+    let (base_executable, actual_version, _) = stale_base_interpreter_cache(&context)?;
+    let search_path = base_executable
+        .parent()
+        .ok_or_else(|| anyhow!("base interpreter has no parent directory"))?;
+
+    uv_snapshot!(context.filters(), context.sync().env(EnvVars::UV_PYTHON_SEARCH_PATH, search_path), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Removed virtual environment at: .venv
+    Creating virtual environment at: .venv
+    Resolved 1 package in [TIME]
+    Checked in [TIME]
+    ");
+
+    let cache = Cache::from_path(context.cache_dir.path());
+    assert_eq!(
+        Interpreter::query(&base_executable, &cache)?
+            .python_version()
+            .to_string(),
+        actual_version,
+        "expected the refreshed base interpreter version to be persisted"
+    );
+    let pyvenv_configuration = context.read(".venv/pyvenv.cfg");
+    let pyvenv_version = pyvenv_configuration
+        .lines()
+        .find_map(|line| line.strip_prefix("version_info = "))
+        .ok_or_else(|| anyhow!("virtual environment has no Python version"))?;
+    assert_eq!(
+        pyvenv_version, actual_version,
+        "expected pyvenv.cfg to contain the actual Python version"
+    );
+
+    uv_snapshot!(context.filters(), context.sync().env(EnvVars::UV_PYTHON_SEARCH_PATH, search_path), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Checked in [TIME]
+    ");
+
+    Ok(())
+}
+
+/// Stale base-interpreter markers must not satisfy an incompatible Python requirement.
+#[test]
+fn sync_stale_base_interpreter_cache_respects_requires_python() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let (base_executable, _, stale_version) = stale_base_interpreter_cache(&context)?;
+    let search_path = base_executable
+        .parent()
+        .ok_or_else(|| anyhow!("base interpreter has no parent directory"))?;
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&formatdoc! {r#"
+            [project]
+            name = "project"
+            version = "0.1.0"
+            requires-python = "=={stale_version}"
+            dependencies = []
+        "#})?;
+    context
+        .temp_dir
+        .child(".python-version")
+        .write_str("3.12")?;
+
+    uv_snapshot!(context.filters(), context.sync().env(EnvVars::UV_PYTHON_SEARCH_PATH, search_path), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    error: The Python request from `.python-version` resolved to Python 3.12.[X], which is incompatible with the project's Python requirement: `==3.12.[X]` (from `project.requires-python`)
+    Use `uv python pin` to update the `.python-version` file to a compatible version
     ");
 
     Ok(())

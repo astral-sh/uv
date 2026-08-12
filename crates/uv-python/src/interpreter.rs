@@ -69,7 +69,16 @@ pub struct Interpreter {
 impl Interpreter {
     /// Detect the interpreter info for the given Python executable.
     pub fn query(executable: impl AsRef<Path>, cache: &Cache) -> Result<Self, Error> {
-        let info = InterpreterInfo::query_cached(executable.as_ref(), cache)?;
+        Self::query_with_cache(executable.as_ref(), cache, false)
+    }
+
+    /// Query the interpreter directly and update its cached metadata.
+    pub fn query_fresh(executable: impl AsRef<Path>, cache: &Cache) -> Result<Self, Error> {
+        Self::query_with_cache(executable.as_ref(), cache, true)
+    }
+
+    fn query_with_cache(executable: &Path, cache: &Cache, refresh: bool) -> Result<Self, Error> {
+        let info = InterpreterInfo::query_cached(executable, cache, refresh)?;
 
         debug_assert!(
             info.sys_executable.is_absolute(),
@@ -97,7 +106,7 @@ impl Interpreter {
             tags: OnceLock::new(),
             target: None,
             prefix: None,
-            real_executable: executable.as_ref().to_path_buf(),
+            real_executable: executable.to_path_buf(),
         })
     }
 
@@ -1122,7 +1131,7 @@ impl InterpreterInfo {
     /// Running a Python script is (relatively) expensive, and the markers won't change
     /// unless the Python executable changes, so we use the executable's last modified
     /// time as a cache key.
-    fn query_cached(executable: &Path, cache: &Cache) -> Result<Self, Error> {
+    fn query_cached(executable: &Path, cache: &Cache, refresh: bool) -> Result<Self, Error> {
         let absolute = std::path::absolute(executable)?;
 
         // Provide a better error message if the link is broken or the file does not exist. Since
@@ -1187,9 +1196,10 @@ impl InterpreterInfo {
         let modified = Timestamp::from_path(canonical).map_err(handle_io_error)?;
 
         // Read from the cache.
-        if cache
-            .freshness(&cache_entry, None, None)
-            .is_ok_and(Freshness::is_fresh)
+        if !refresh
+            && cache
+                .freshness(&cache_entry, None, None)
+                .is_ok_and(Freshness::is_fresh)
         {
             if let Ok(data) = fs::read(cache_entry.path()) {
                 match rmp_serde::from_slice::<CachedByTimestamp<Self>>(&data) {

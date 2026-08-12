@@ -1138,14 +1138,36 @@ fn discover_project_environment(
         return Ok(None);
     };
 
-    match check_environment_compatibility(
+    let compatibility = check_environment_compatibility(
         &environment,
         EnvironmentKind::Project,
         python_request,
         python_preference,
         requires_python,
         cache,
-    ) {
+    );
+
+    // A launcher's shared library can change without updating the executable timestamp used to
+    // invalidate its cache. If the environment reveals conflicting versions for the same base
+    // interpreter, refresh that entry before interpreter discovery can select stale metadata.
+    if matches!(
+        &compatibility,
+        Err(EnvironmentIncompatibilityError::PyenvVersionConflict(..))
+    ) && let Ok(base_executable) = environment.interpreter().to_base_python()
+        && let Ok(base_interpreter) = Interpreter::query(&base_executable, cache)
+        && environment.uses(&base_interpreter)
+        && environment.interpreter().python_version() != base_interpreter.python_version()
+    {
+        debug!(
+            "Refreshing cached interpreter info for {} after finding conflicting Python versions ({} and {})",
+            base_executable.user_display(),
+            base_interpreter.python_version(),
+            environment.interpreter().python_version(),
+        );
+        Interpreter::query_fresh(&base_executable, cache)?;
+    }
+
+    match compatibility {
         Ok(()) => Ok(Some(environment)),
         Err(err) if matches!(policy, ProjectEnvironmentPolicy::Preserve) => {
             if centralized {
