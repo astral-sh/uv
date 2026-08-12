@@ -143,7 +143,7 @@ fn python_find_cached_launcher_override() {
     let requested_python = venv_bin_path(&other_venv).join("python3");
     let override_python = venv_bin_path(&context.venv).join("python3");
 
-    // Cache the requested interpreter while a launcher override changes its reported executable.
+    // `PYTHONEXECUTABLE` makes the requested `other` interpreter report `.venv`.
     uv_snapshot!(context.filters(), context.python_find()
         .arg(&requested_python)
         .env("PYTHONEXECUTABLE", &override_python), @"
@@ -152,7 +152,7 @@ fn python_find_cached_launcher_override() {
     [VENV]/bin/python3
     ");
 
-    // Querying the same interpreter without the override should not reuse the overridden metadata.
+    // Without `PYTHONEXECUTABLE`, this should return `other`, not the cached `.venv`.
     uv_snapshot!(context.filters(), context.python_find()
         .arg(&requested_python)
         .env_remove("PYTHONEXECUTABLE"), @"
