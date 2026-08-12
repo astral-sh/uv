@@ -1,5 +1,10 @@
 """Build uv with profile-guided optimization using pinned ecosystem projects."""
 
+# /// script
+# requires-python = ">=3.11"
+# dependencies = []
+# ///
+
 from __future__ import annotations
 
 import argparse
