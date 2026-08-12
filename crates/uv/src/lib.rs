@@ -2481,6 +2481,7 @@ async fn run_project(
                 project_dir,
                 args.lock_check,
                 args.frozen,
+                args.active,
                 args.dry_run,
                 args.refresh,
                 args.python,

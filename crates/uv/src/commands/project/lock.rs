@@ -88,6 +88,7 @@ pub(crate) async fn lock(
     project_dir: &Path,
     lock_check: LockCheck,
     frozen: Option<FrozenSource>,
+    active: Option<bool>,
     dry_run: DryRun,
     refresh: Refresh,
     python: Option<String>,
@@ -168,7 +169,7 @@ pub(crate) async fn lock(
                     python_downloads,
                     &install_mirrors,
                     false,
-                    Some(false),
+                    active,
                     cache,
                     printer,
                 )
@@ -184,7 +185,7 @@ pub(crate) async fn lock(
                 &install_mirrors,
                 false,
                 config_discovery,
-                Some(false),
+                active,
                 cache,
                 printer,
             )
