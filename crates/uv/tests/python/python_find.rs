@@ -127,6 +127,42 @@ fn python_find_skips_download_metadata_when_python_is_found() {
 }
 
 #[test]
+#[cfg(unix)]
+fn python_find_cached_launcher_override() {
+    let context = uv_test::test_context!("3.12");
+    let other_venv = context.temp_dir.child("other");
+
+    context
+        .venv()
+        .arg("--python")
+        .arg("3.12")
+        .arg(other_venv.path())
+        .assert()
+        .success();
+
+    let requested_python = venv_bin_path(&other_venv).join("python3");
+    let override_python = venv_bin_path(&context.venv).join("python3");
+
+    // Cache the requested interpreter while a launcher override changes its reported executable.
+    uv_snapshot!(context.filters(), context.python_find()
+        .arg(&requested_python)
+        .env("PYTHONEXECUTABLE", &override_python), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    [VENV]/bin/python3
+    ");
+
+    // Querying the same interpreter without the override should not reuse the overridden metadata.
+    uv_snapshot!(context.filters(), context.python_find()
+        .arg(&requested_python)
+        .env_remove("PYTHONEXECUTABLE"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    [VENV]/bin/python3
+    ");
+}
+
+#[test]
 fn python_find_pin() {
     let context = uv_test::test_context_with_versions!(&["3.11", "3.12"]);
 
