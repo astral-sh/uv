@@ -1045,7 +1045,6 @@ fn check_environment_compatibility(
 /// Discover an existing project environment at `root` without validating its compatibility.
 fn existing_project_environment(
     root: &Path,
-    centralized: bool,
     cache: &Cache,
 ) -> Result<Option<PythonEnvironment>, ProjectError> {
     let environment = match PythonEnvironment::from_root(root, cache) {
@@ -1059,20 +1058,7 @@ fn existing_project_environment(
                         inner.kind.to_string(),
                     ));
                 }
-                InvalidEnvironmentKind::MissingExecutable(_) => {
-                    if !centralized
-                        && fs_err::read_dir(root).is_ok_and(|mut dir| dir.next().is_some())
-                    {
-                        if !root.join("pyvenv.cfg").try_exists().unwrap_or_default() {
-                            return Err(ProjectError::InvalidProjectEnvironmentDir(
-                                root.to_path_buf(),
-                                "it is not a valid Python environment (no Python executable was found)"
-                                    .to_string(),
-                            ));
-                        }
-                    }
-                }
-                InvalidEnvironmentKind::Empty => {}
+                InvalidEnvironmentKind::MissingExecutable(_) | InvalidEnvironmentKind::Empty => {}
             }
             return Ok(None);
         }
@@ -1115,7 +1101,7 @@ fn discover_project_environment(
     centralized: bool,
     cache: &Cache,
 ) -> Result<Option<PythonEnvironment>, ProjectError> {
-    let Some(environment) = existing_project_environment(root, centralized, cache)? else {
+    let Some(environment) = existing_project_environment(root, cache)? else {
         return Ok(None);
     };
 
@@ -1381,7 +1367,7 @@ impl ProjectInterpreter {
             root
         };
 
-        existing_project_environment(&root, centralized, cache)
+        existing_project_environment(&root, cache)
     }
 
     /// Discover the interpreter to use in the current [`Workspace`].
@@ -1846,6 +1832,26 @@ impl ProjectEnvironment {
             .python_request
             .as_ref()
             .is_none_or(|request| !request.includes_patch());
+
+        // Never create an environment over a non-empty directory that is not a virtual environment.
+        // Interpreter-only commands can ignore these directories, but initializing one cannot.
+        if !centralized {
+            let root = environment_selection
+                .explicit_path()
+                .map_or_else(|| workspace.install_path().join(".venv"), Path::to_path_buf);
+            if !root.join("pyvenv.cfg").try_exists().unwrap_or_default()
+                && fs_err::read_dir(&root).is_ok_and(|mut dir| dir.next().is_some())
+                && let Err(uv_python::Error::InvalidEnvironment(inner)) =
+                    PythonEnvironment::from_root(&root, cache)
+                && matches!(inner.kind, InvalidEnvironmentKind::MissingExecutable(_))
+            {
+                return Err(ProjectError::InvalidProjectEnvironmentDir(
+                    root,
+                    "it is not a valid Python environment (no Python executable was found)"
+                        .to_string(),
+                ));
+            }
+        }
 
         match ProjectInterpreter::discover(
             workspace,
