@@ -48,6 +48,51 @@ fn sync() -> Result<()> {
     Ok(())
 }
 
+/// Installing a project does not distribute its unbounded build-system requirement.
+#[test]
+fn sync_unbounded_build_backend() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["uv-build"]
+        build-backend = "uv_build"
+    "#})?;
+    context.temp_dir.child("src/project/__init__.py").touch()?;
+
+    uv_snapshot!(context.filters(), context.sync().arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + project==0.1.0 (from file://[TEMP_DIR]/)
+    ");
+
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--offline")
+        .arg("--no-editable")
+        .arg("--reinstall"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     ~ project==0.1.0 (from file://[TEMP_DIR]/)
+    ");
+
+    Ok(())
+}
+
 /// With `relocatable-envs-default`, project environments are relocatable by default.
 #[test]
 fn sync_relocatable_envs_default() -> Result<()> {
