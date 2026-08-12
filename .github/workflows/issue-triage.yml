@@ -280,6 +280,7 @@ jobs:
       issue: ${{ inputs.issue || github.event.issue.number }}
       issue-number: ${{ needs.reproduce-bug.outputs.issue-number }}
       reproduction-result: ${{ needs.reproduce-bug.outputs.result }}
+      reproduction-thread-artifact-id: ${{ needs.reproduce-bug.outputs.thread-artifact-id }}
       parent-pull-request: ${{ needs.reproduce-bug.outputs.pull-request }}
       parent-head-ref: ${{ needs.reproduce-bug.outputs.head-ref }}
       parent-head-sha: ${{ needs.reproduce-bug.outputs.head-sha }}

@@ -31,6 +31,9 @@ on:
       issue-number:
         description: "The verified upstream issue number"
         value: ${{ jobs.reproduce.outputs.issue-number }}
+      thread-artifact-id:
+        description: "The immutable artifact ID of the reproduction Codex thread"
+        value: ${{ jobs.reproduce.outputs.thread-artifact-id }}
       head-ref:
         description: "The regression-test branch"
         value: ${{ jobs.create-integration-test.outputs.head-ref }}
@@ -66,6 +69,7 @@ jobs:
     outputs:
       issue-number: ${{ steps.issue.outputs.number }}
       result: ${{ steps.reproduce.outputs.final-message }}
+      thread-artifact-id: ${{ steps.upload-thread.outputs.artifact-id }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -132,6 +136,7 @@ jobs:
           retention-days: 1
 
       - name: "Upload Codex thread"
+        id: upload-thread
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
