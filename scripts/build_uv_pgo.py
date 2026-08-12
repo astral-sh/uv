@@ -20,31 +20,33 @@ EXCLUDE_NEWER = "2026-06-30T00:00:00Z"
 @dataclass(frozen=True, slots=True)
 class CorpusProject:
     name: str
-    manifest: str
+    python_version: str
     constraints: tuple[str, ...] = ()
+    groups: tuple[str, ...] = ()
+    native_platforms: tuple[str, ...] | None = None
 
 
-# Keep immutable snapshots of real GitHub projects separate from the evaluation
-# corpus. Every training project supports the same complete project workflow.
+# Keep the training projects separate from the held-out evaluation corpus.
 TRAINING_PROJECTS = (
-    CorpusProject("cibuildwheel", "scripts/pgo-corpus/cibuildwheel/pyproject.toml"),
-    CorpusProject("cookiecutter", "scripts/pgo-corpus/cookiecutter/pyproject.toml"),
-    CorpusProject("flask", "scripts/pgo-corpus/flask/pyproject.toml"),
-    CorpusProject("llm", "scripts/pgo-corpus/llm/pyproject.toml", ("numpy==2.2.6",)),
-    CorpusProject("openai", "scripts/pgo-corpus/openai-python/pyproject.toml"),
-    CorpusProject(
-        "poetry",
-        "test/ecosystem/poetry/pyproject.toml",
-        ("rapidfuzz==3.9.6",),
-    ),
-    CorpusProject("pytest-cov", "scripts/pgo-corpus/pytest-cov/pyproject.toml"),
-    CorpusProject("rich-cli", "scripts/pgo-corpus/rich-cli/pyproject.toml"),
+    CorpusProject("cibuildwheel", "3.11"),
+    CorpusProject("cookiecutter", "3.12"),
+    CorpusProject("flask", "3.11"),
+    CorpusProject("httpx", "3.12"),
+    CorpusProject("llm", "3.12", constraints=("numpy==2.2.6",)),
+    CorpusProject("openai-python", "3.13"),
+    CorpusProject("poetry", "3.11", constraints=("rapidfuzz==3.9.6",)),
+    CorpusProject("pytest-cov", "3.14"),
+    CorpusProject("sentry", "3.13", native_platforms=("linux",)),
+    CorpusProject("zulip", "3.12", groups=("dev",), native_platforms=("win32",)),
+    CorpusProject("pyx-workspace", "3.14", groups=("dev",)),
 )
 
 EVALUATION_PROJECTS = (
-    CorpusProject("jupyterlab", "test/ecosystem/jupyterlab/pyproject.toml"),
-    CorpusProject("semantic-kernel", "test/ecosystem/semantic-kernel/pyproject.toml"),
-    CorpusProject("transformers", "test/ecosystem/transformers/pyproject.toml"),
+    CorpusProject("jupyterlab", "3.12"),
+    CorpusProject("saleor", "3.12"),
+    CorpusProject("semantic-kernel", "3.13"),
+    CorpusProject("transformers", "3.11"),
+    CorpusProject("warehouse", "3.11"),
 )
 
 
@@ -53,7 +55,28 @@ class PreparedProject:
     name: str
     project: Path
     manifest: Path
+    python_version: str
     constraints: tuple[str, ...] = ()
+    groups: tuple[str, ...] = ()
+    native_platforms: tuple[str, ...] | None = None
+
+    @property
+    def supports_native_workloads(self) -> bool:
+        return self.native_platforms is None or sys.platform in self.native_platforms
+
+    @property
+    def python_arguments(self) -> tuple[str, str]:
+        current = f"{sys.version_info.major}.{sys.version_info.minor}"
+        python = (
+            sys.executable if self.python_version == current else self.python_version
+        )
+        return "--python", python
+
+    @property
+    def group_arguments(self) -> tuple[str, ...]:
+        return tuple(
+            argument for group in self.groups for argument in ("--group", group)
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -279,24 +302,28 @@ def prepare_corpus(
 
     projects: list[PreparedProject] = []
     for definition in definitions:
-        source = REPOSITORY_ROOT / definition.manifest
+        source = (
+            REPOSITORY_ROOT / "test" / "ecosystem" / definition.name / "pyproject.toml"
+        )
         if not source.is_file():
             raise RuntimeError(f"Real project manifest not found: {source}")
 
         project = root / definition.name
-        project.mkdir(parents=True, exist_ok=True)
-        shutil.rmtree(project / ".venv", ignore_errors=True)
-        shutil.rmtree(project / "installed", ignore_errors=True)
-        (project / "uv.lock").unlink(missing_ok=True)
-
-        manifest = project / source.name
-        shutil.copyfile(source, manifest)
+        shutil.rmtree(project, ignore_errors=True)
+        shutil.copytree(
+            source.parent,
+            project,
+            ignore=shutil.ignore_patterns(".venv", "installed", "uv.lock"),
+        )
         projects.append(
             PreparedProject(
                 definition.name,
                 project,
-                manifest,
+                project / source.name,
+                definition.python_version,
                 definition.constraints,
+                definition.groups,
+                definition.native_platforms,
             )
         )
 
@@ -320,19 +347,26 @@ def run_workloads(
             "UV_CACHE_DIR": str(corpus.root / "cache"),
             "UV_EXCLUDE_NEWER": EXCLUDE_NEWER,
             "UV_NO_PROGRESS": "1",
+            "UV_PYTHON_INSTALL_DIR": str(corpus.root / "python"),
             "UV_PYTHON_DOWNLOADS": "never",
         }
     )
-    python = ["--python", sys.executable]
+    labels = prepare_pythons(binary, corpus, training_environment, profile_dir)
     commands: list[tuple[str, list[str]]] = []
 
     for project in corpus.projects:
+        if not project.supports_native_workloads:
+            continue
+
         command = [
             str(binary),
             "pip",
             "compile",
             str(project.manifest),
-            *python,
+            "--project",
+            str(project.project),
+            *project.group_arguments,
+            *project.python_arguments,
             "--no-build",
             "--quiet",
             "--output-file",
@@ -360,7 +394,10 @@ def run_workloads(
                         "pip",
                         "compile",
                         str(project.manifest),
-                        *python,
+                        "--project",
+                        str(project.project),
+                        *project.group_arguments,
+                        *project.python_arguments,
                         "--universal",
                         "--no-build",
                         "--quiet",
@@ -375,7 +412,7 @@ def run_workloads(
                         "lock",
                         "--project",
                         str(project.project),
-                        *python,
+                        *project.python_arguments,
                         *constraints,
                         "--no-build",
                         "--quiet",
@@ -388,45 +425,54 @@ def run_workloads(
                         "export",
                         "--project",
                         str(project.project),
+                        *project.python_arguments,
+                        *project.group_arguments,
                         "--frozen",
-                        "--no-emit-project",
+                        "--no-emit-workspace",
                         "--no-hashes",
                         "--quiet",
                         "--output-file",
                         str(project.project / "exported-requirements.txt"),
                     ],
                 ),
-                (
-                    f"install-{project.name}",
-                    [
-                        str(binary),
-                        "pip",
-                        "install",
-                        *python,
-                        "--target",
-                        str(project.project / "installed"),
-                        "--requirements",
-                        str(project.project / "requirements.txt"),
-                        "--no-build",
-                        "--quiet",
-                    ],
-                ),
-                (
-                    f"sync-{project.name}",
-                    [
-                        str(binary),
-                        "sync",
-                        "--project",
-                        str(project.project),
-                        "--frozen",
-                        *python,
-                        "--no-install-project",
-                        "--no-build",
-                        "--quiet",
-                    ],
-                ),
             )
         )
+
+        if project.supports_native_workloads:
+            commands.extend(
+                (
+                    (
+                        f"install-{project.name}",
+                        [
+                            str(binary),
+                            "pip",
+                            "install",
+                            *project.python_arguments,
+                            "--target",
+                            str(project.project / "installed"),
+                            "--requirements",
+                            str(project.project / "exported-requirements.txt"),
+                            "--no-build",
+                            "--quiet",
+                        ],
+                    ),
+                    (
+                        f"sync-{project.name}",
+                        [
+                            str(binary),
+                            "sync",
+                            "--project",
+                            str(project.project),
+                            "--frozen",
+                            *project.python_arguments,
+                            *project.group_arguments,
+                            "--no-install-workspace",
+                            "--no-build",
+                            "--quiet",
+                        ],
+                    ),
+                )
+            )
 
     if launcher.is_file():
         commands.append(("launcher", [str(launcher), "--version"]))
@@ -438,18 +484,41 @@ def run_workloads(
             project = label.removeprefix(f"{group}-")
             workload_environment["UV_CACHE_DIR"] = str(corpus.root / "cache" / project)
         if profile_dir is not None:
-            suffix = (
-                "%4m"
-                if group in {"resolve-cold", "resolve-warm", "install"}
-                else "%m-%p"
-            )
             workload_environment["LLVM_PROFILE_FILE"] = str(
-                profile_dir / f"uv-{group}-{suffix}.profraw"
+                profile_dir / f"uv-{group}-%m.profraw"
             )
         print(f"Training uv workload: {label}", flush=True)
         run(command, environment=workload_environment)
 
-    return tuple(label for label, _ in commands)
+    return (*labels, *(label for label, _ in commands))
+
+
+def prepare_pythons(
+    binary: Path,
+    corpus: PreparedCorpus,
+    environment: dict[str, str],
+    profile_dir: Path | None,
+) -> tuple[str, ...]:
+    current = f"{sys.version_info.major}.{sys.version_info.minor}"
+    versions = sorted(
+        {project.python_version for project in corpus.projects} - {current}
+    )
+    if not versions:
+        return ()
+
+    install_environment = environment.copy()
+    install_environment.pop("UV_PYTHON_DOWNLOADS", None)
+    if profile_dir is not None:
+        install_environment["LLVM_PROFILE_FILE"] = str(
+            profile_dir / "uv-python-install-%m.profraw"
+        )
+
+    print(f"Preparing training Python versions: {', '.join(versions)}", flush=True)
+    run(
+        [str(binary), "python", "install", "--no-bin", "--no-registry", *versions],
+        environment=install_environment,
+    )
+    return ("python-install",)
 
 
 def profile_group(label: str) -> str:
