@@ -146,7 +146,7 @@ fn python_find_cached_launcher_override() {
     // `PYTHONEXECUTABLE` makes the requested `other` interpreter report `.venv`.
     uv_snapshot!(context.filters(), context.python_find()
         .arg(&requested_python)
-        .env("PYTHONEXECUTABLE", &override_python), @"
+        .env(EnvVars::PYTHONEXECUTABLE, &override_python), @"
     exit_code: 0 (success)
     ----- stdout -----
     [VENV]/bin/python3
@@ -155,10 +155,10 @@ fn python_find_cached_launcher_override() {
     // Without `PYTHONEXECUTABLE`, this should return `other`, not the cached `.venv`.
     uv_snapshot!(context.filters(), context.python_find()
         .arg(&requested_python)
-        .env_remove("PYTHONEXECUTABLE"), @"
+        .env_remove(EnvVars::PYTHONEXECUTABLE), @"
     exit_code: 0 (success)
     ----- stdout -----
-    [VENV]/bin/python3
+    [TEMP_DIR]/other/bin/python3
     ");
 }
 
