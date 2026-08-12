@@ -389,26 +389,25 @@ def run_workloads(
             for constraint in project.constraints
             for argument in ("--upgrade-package", constraint)
         ]
+        universal_command = [
+            str(binary),
+            "pip",
+            "compile",
+            str(project_directory / "pyproject.toml"),
+            "--project",
+            str(project_directory),
+            *project.group_arguments,
+            *project.python_arguments,
+            "--universal",
+            "--no-build",
+            "--quiet",
+            "--output-file",
+            str(project_directory / "universal-requirements.txt"),
+        ]
         commands.extend(
             (
-                (
-                    f"universal-{project.name}",
-                    [
-                        str(binary),
-                        "pip",
-                        "compile",
-                        str(project_directory / "pyproject.toml"),
-                        "--project",
-                        str(project_directory),
-                        *project.group_arguments,
-                        *project.python_arguments,
-                        "--universal",
-                        "--no-build",
-                        "--quiet",
-                        "--output-file",
-                        str(project_directory / "universal-requirements.txt"),
-                    ],
-                ),
+                (f"universal-cold-{project.name}", universal_command),
+                (f"universal-warm-{project.name}", universal_command),
                 (
                     f"lock-{project.name}",
                     [
@@ -482,9 +481,10 @@ def run_workloads(
         group = profile_group(label)
         if label != group:
             project = label.removeprefix(f"{group}-")
-            workload_environment["UV_CACHE_DIR"] = str(
-                corpus_directory / "cache" / project
-            )
+            cache_directory = corpus_directory / "cache"
+            if group.startswith("universal-"):
+                cache_directory /= "universal"
+            workload_environment["UV_CACHE_DIR"] = str(cache_directory / project)
         if profile_dir is not None:
             workload_environment["LLVM_PROFILE_FILE"] = str(
                 profile_dir / f"uv-{group}-%m.profraw"
@@ -526,7 +526,8 @@ def profile_group(label: str) -> str:
     for group in (
         "resolve-cold",
         "resolve-warm",
-        "universal",
+        "universal-cold",
+        "universal-warm",
         "lock",
         "export",
         "install",
