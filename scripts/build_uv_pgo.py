@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import argparse
 import os
-import platform
 import re
 import shlex
 import shutil
@@ -29,8 +28,7 @@ class EcosystemProject:
     python_version: str
     constraints: tuple[str, ...] = ()
     groups: tuple[str, ...] = ()
-    native_platforms: tuple[str, ...] | None = None
-    minimum_glibc: tuple[int, int] | None = None
+    exclude_dependencies: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         if re.fullmatch(r"3\.\d+", self.python_version) is None:
@@ -38,25 +36,6 @@ class EcosystemProject:
                 f"{self.name} must specify a Python major.minor version, "
                 f"got {self.python_version!r}"
             )
-
-    @property
-    def supports_native_workloads(self) -> bool:
-        if (
-            self.native_platforms is not None
-            and sys.platform not in self.native_platforms
-        ):
-            return False
-
-        if self.minimum_glibc is None or sys.platform != "linux":
-            return True
-
-        libc, version = platform.libc_ver()
-        match = re.fullmatch(r"(\d+)\.(\d+)", version)
-        return (
-            libc == "glibc"
-            and match is not None
-            and tuple(map(int, match.groups())) >= self.minimum_glibc
-        )
 
     @property
     def python_arguments(self) -> tuple[str, str]:
@@ -95,20 +74,41 @@ CORPUS_PROJECTS = (
     EcosystemProject(
         name="sentry",
         python_version="3.13",
-        native_platforms=("linux",),
-        minimum_glibc=(2, 28),
+        exclude_dependencies=(
+            "confluent-kafka",
+            "emmett-core",
+            "granian",
+            "hf-xet",
+            "psycopg2-binary",
+            "python-rapidjson",
+            "sentry-ophio",
+            "sentry-options",
+            "sentry-relay",
+            "symbolic",
+            "tiktoken",
+            "vroomrs",
+            "xmlsec",
+        ),
     ),
     EcosystemProject(
         name="zulip",
         python_version="3.12",
         groups=("dev",),
-        native_platforms=("win32",),
+        exclude_dependencies=(
+            "argon2-cffi-bindings",
+            "css-inline",
+            "google-re2",
+            "line-profiler",
+            "psycopg2",
+            "xmlsec",
+            "zstd",
+        ),
     ),
     EcosystemProject(
         name="pyx-workspace",
         python_version="3.14",
         groups=("dev",),
-        minimum_glibc=(2, 28),
+        exclude_dependencies=("greenlet",),
     ),
 )
 
@@ -316,6 +316,24 @@ def prepare_corpus(corpus_directory: Path) -> None:
             ignore=shutil.ignore_patterns(".venv", "installed", "uv.lock"),
         )
 
+        if project.exclude_dependencies:
+            manifest = destination / "pyproject.toml"
+            content = manifest.read_text()
+            content = content.replace(
+                "environments = [\n",
+                "environments = [\n    \"sys_platform == 'win32'\",\n",
+                1,
+            )
+            dependencies = ", ".join(
+                f'"{dependency}"' for dependency in project.exclude_dependencies
+            )
+            setting = f"exclude-dependencies = [{dependencies}]\n"
+            if "[tool.uv]\n" in content:
+                content = content.replace("[tool.uv]\n", f"[tool.uv]\n{setting}", 1)
+            else:
+                content += f"\n[tool.uv]\n{setting}"
+            manifest.write_text(content)
+
 
 def run_workloads(
     binary: Path,
@@ -342,9 +360,6 @@ def run_workloads(
     commands: list[tuple[str, list[str]]] = []
 
     for project in CORPUS_PROJECTS:
-        if not project.supports_native_workloads:
-            continue
-
         project_directory = corpus_directory / project.name
         command = [
             str(binary),
@@ -424,44 +439,40 @@ def run_workloads(
                         str(project_directory / "exported-requirements.txt"),
                     ],
                 ),
+                (
+                    f"install-{project.name}",
+                    [
+                        str(binary),
+                        "pip",
+                        "install",
+                        "--project",
+                        str(project_directory),
+                        *project.python_arguments,
+                        "--target",
+                        str(project_directory / "installed"),
+                        "--requirements",
+                        str(project_directory / "exported-requirements.txt"),
+                        "--no-build",
+                        "--quiet",
+                    ],
+                ),
+                (
+                    f"sync-{project.name}",
+                    [
+                        str(binary),
+                        "sync",
+                        "--project",
+                        str(project_directory),
+                        "--frozen",
+                        *project.python_arguments,
+                        *project.group_arguments,
+                        "--no-install-workspace",
+                        "--no-build",
+                        "--quiet",
+                    ],
+                ),
             )
         )
-
-        if project.supports_native_workloads:
-            commands.extend(
-                (
-                    (
-                        f"install-{project.name}",
-                        [
-                            str(binary),
-                            "pip",
-                            "install",
-                            *project.python_arguments,
-                            "--target",
-                            str(project_directory / "installed"),
-                            "--requirements",
-                            str(project_directory / "exported-requirements.txt"),
-                            "--no-build",
-                            "--quiet",
-                        ],
-                    ),
-                    (
-                        f"sync-{project.name}",
-                        [
-                            str(binary),
-                            "sync",
-                            "--project",
-                            str(project_directory),
-                            "--frozen",
-                            *project.python_arguments,
-                            *project.group_arguments,
-                            "--no-install-workspace",
-                            "--no-build",
-                            "--quiet",
-                        ],
-                    ),
-                )
-            )
 
     if launcher.is_file():
         commands.append(("launcher", [str(launcher), "--version"]))
