@@ -44,23 +44,12 @@ impl From<DirectoryDigest> for String {
 pub struct ExtractedFile {
     path: SanitizedArchivePath,
     size: u64,
-    executable: bool,
     digest: blake3::Hash,
 }
 
 impl ExtractedFile {
-    pub(crate) fn new(
-        path: SanitizedArchivePath,
-        size: u64,
-        executable: bool,
-        digest: blake3::Hash,
-    ) -> Self {
-        Self {
-            path,
-            size,
-            executable,
-            digest,
-        }
+    pub(crate) fn new(path: SanitizedArchivePath, size: u64, digest: blake3::Hash) -> Self {
+        Self { path, size, digest }
     }
 
     /// Return the path of the extracted file within the archive.
@@ -68,24 +57,9 @@ impl ExtractedFile {
         self.path.as_path()
     }
 
-    /// Return the sanitized archive path used internally during extraction.
-    pub(crate) fn sanitized_path(&self) -> &SanitizedArchivePath {
-        &self.path
-    }
-
-    /// Return whether the extracted file should be executable.
-    pub fn executable(&self) -> bool {
-        self.executable
-    }
-
     /// Return the hex-encoded content digest of the extracted file.
     pub fn digest_hex(&self) -> String {
         self.digest.to_hex().to_string()
-    }
-
-    /// Convert the extracted file into a `(path, size)` pair.
-    pub fn into_record(self) -> (PathBuf, u64) {
-        (self.path.into_path_buf(), self.size)
     }
 
     /// Return the extracted file as a `(path, size)` pair.
@@ -109,7 +83,7 @@ pub(crate) fn directory_tree_from_extracted<'a>(
     }
 
     for file in files {
-        tree.add_file(&digest_path(file.sanitized_path()), file.digest)?;
+        tree.add_file(&digest_path(&file.path), file.digest)?;
     }
 
     Ok(tree)
@@ -163,8 +137,8 @@ mod tests {
 
         let tree = directory_tree_from_extracted(
             &[
-                ExtractedFile::new(a, 5, false, blake3::hash(b"hello")),
-                ExtractedFile::new(c, 7, false, blake3::hash(b"goodbye")),
+                ExtractedFile::new(a, 5, blake3::hash(b"hello")),
+                ExtractedFile::new(c, 7, blake3::hash(b"goodbye")),
             ],
             [&directory],
         )

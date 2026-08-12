@@ -24,7 +24,6 @@ enum ExtractedEntry {
     File {
         path: SanitizedArchivePath,
         size: u64,
-        executable: bool,
         digest: Option<blake3::Hash>,
     },
     Directory(SanitizedArchivePath),
@@ -122,14 +121,9 @@ fn unzip_inner(
     let mut digest_directories = FxHashSet::default();
     for extracted in extracted {
         match extracted {
-            ExtractedEntry::File {
-                path,
-                size,
-                executable,
-                digest,
-            } => {
+            ExtractedEntry::File { path, size, digest } => {
                 if let Some(digest) = digest {
-                    extracted_files.push(ExtractedFile::new(path, size, executable, digest));
+                    extracted_files.push(ExtractedFile::new(path, size, digest));
                 }
             }
             ExtractedEntry::Directory(path) => {
@@ -290,9 +284,6 @@ where
     }
     .map_err(Error::Io)?;
     let size = entry.uncompressed_size();
-    let executable = entry
-        .unix_permissions()
-        .is_some_and(|mode| mode & 0o111 != 0);
     let writer = buffered_file_writer(outfile, size);
 
     let (copied, computed_crc32, digest) =
@@ -311,7 +302,6 @@ where
     Ok(ExtractedEntry::File {
         path: enclosed_name,
         size,
-        executable,
         digest,
     })
 }
