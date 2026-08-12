@@ -434,7 +434,10 @@ fn missing_find_links_from_requirements_file() -> Result<()> {
     requirements_dir.create_dir_all()?;
     requirements_dir
         .child("requirements.txt")
-        .write_str("--find-links ./missing\nflask")?;
+        .write_str(indoc! {r"
+            --find-links ./missing
+            flask
+        "})?;
 
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("-r")
@@ -7780,13 +7783,15 @@ fn find_links_uppercase_file_url_from_requirements_file() -> Result<()> {
     let context = uv_test::test_context!("3.12");
     let links_url = Url::from_directory_path(context.workspace_root.join("test/links"))
         .map_err(|()| anyhow!("Failed to convert links directory to URL"))?;
+    let links_url = links_url.as_str().replacen("file://", "FILE://", 1);
     context
         .temp_dir
         .child("requirements.txt")
-        .write_str(&format!(
-            "--no-index\n--find-links {}\nok==1.0.0\n",
-            links_url.as_str().replacen("file://", "FILE://", 1)
-        ))?;
+        .write_str(&formatdoc! {r"
+            --no-index
+            --find-links {links_url}
+            ok==1.0.0
+        "})?;
 
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("-r")
@@ -7826,13 +7831,15 @@ async fn find_links_uppercase_http_url_from_requirements_file() -> Result<()> {
         .mount(&server)
         .await;
 
+    let links_url = server.uri().replacen("http://", "HTTP://", 1);
     context
         .temp_dir
         .child("requirements.txt")
-        .write_str(&format!(
-            "--no-index\n--find-links {}\nok==1.0.0\n",
-            server.uri().replacen("http://", "HTTP://", 1)
-        ))?;
+        .write_str(&formatdoc! {r"
+            --no-index
+            --find-links {links_url}
+            ok==1.0.0
+        "})?;
 
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("-r")
@@ -7865,7 +7872,11 @@ fn find_links_directory_with_url_scheme() -> Result<()> {
     context
         .temp_dir
         .child("requirements.txt")
-        .write_str("--no-index\n--find-links https:links\nok==1.0.0\n")?;
+        .write_str(indoc! {r"
+            --no-index
+            --find-links https:links
+            ok==1.0.0
+        "})?;
 
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("-r")
@@ -7898,7 +7909,11 @@ fn find_links_relative_to_requirements_file() -> Result<()> {
     )?;
     requirements_dir
         .child("requirements.txt")
-        .write_str("--no-index\n--find-links ./links\nok==1.0.0\n")?;
+        .write_str(indoc! {r"
+            --no-index
+            --find-links ./links
+            ok==1.0.0
+        "})?;
 
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("-r")
@@ -7931,7 +7946,11 @@ fn find_links_relative_to_working_directory() -> Result<()> {
     requirements_dir.create_dir_all()?;
     requirements_dir
         .child("requirements.txt")
-        .write_str("--no-index\n--find-links ./links\nok==1.0.0\n")?;
+        .write_str(indoc! {r"
+            --no-index
+            --find-links ./links
+            ok==1.0.0
+        "})?;
 
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("-r")
