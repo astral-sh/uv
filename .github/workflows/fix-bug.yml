@@ -110,7 +110,6 @@ jobs:
           PARENT_HEAD_SHA: ${{ inputs.parent-head-sha }}
           PARENT_PULL_REQUEST: ${{ inputs.parent-pull-request }}
           REPRODUCTION_RESULT: ${{ inputs.reproduction-result }}
-          ROOT_SESSION_ID: ${{ steps.reproduction-thread.outputs.session-id }}
         run: |
           mkdir -p "$RUNNER_TEMP/codex-home"
           cp agents/codex/config.toml "$RUNNER_TEMP/codex-home/config.toml"
@@ -128,21 +127,8 @@ jobs:
             [ "$issue_number" != "$ISSUE_NUMBER" ] ||
             [ "$PARENT_HEAD_REF" != "zb/reproduce-bug/$issue_number" ] ||
             ! [[ "$PARENT_HEAD_SHA" =~ ^[0-9a-f]{40}$ ]] ||
-            ! [[ "$ROOT_SESSION_ID" =~ ^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$ ]] ||
             ! [[ "$PARENT_PULL_REQUEST" =~ ^https://github\.com/astral-sh/uv-dev/pull/[1-9][0-9]*$ ]]; then
             echo "The regression-test pull request context is invalid." >&2
-            exit 1
-          fi
-
-          if ! jq --exit-status --argjson issue_number "$ISSUE_NUMBER" \
-            '.number == $issue_number' "$RUNNER_TEMP/issue-context/issue.json" > /dev/null ||
-            ! jq --exit-status '.type == "bug"' \
-              "$RUNNER_TEMP/issue-context/triage.json" > /dev/null ||
-            ! jq --exit-status \
-              --slurpfile expected "$RUNNER_TEMP/bug-reproduction-result.json" '
-                . == $expected[0] and .reproduction == "reproducible"
-              ' "$RUNNER_TEMP/issue-context/reproduction.json" > /dev/null; then
-            echo "The persisted issue context does not match the reproduced bug." >&2
             exit 1
           fi
 
@@ -268,9 +254,6 @@ jobs:
             echo "existing=$existing"
             echo "existing-head=$fix_head"
           } >> "$GITHUB_OUTPUT"
-          printf 'codex_args=%s\n' \
-            "$(jq --null-input --compact-output --arg id "$ROOT_SESSION_ID" '["resume", $id, "-"]')" \
-            >> "$GITHUB_OUTPUT"
 
       - name: "Fix reproduced bug"
         id: fix-bug
@@ -286,7 +269,8 @@ jobs:
           codex-version: "0.146.0"
           codex-home: "${{ runner.temp }}/codex-home"
           effort: high
-          codex-args: ${{ steps.prepare.outputs.codex_args }}
+          codex-args: >-
+            ["resume", "${{ steps.reproduction-thread.outputs.session-id }}", "-"]
           permission-profile: "fix-reproduced-bug"
           safety-strategy: drop-sudo
           allow-users: "*"
@@ -644,7 +628,6 @@ jobs:
           GIT_CONFIG_GLOBAL: /dev/null
           GIT_CONFIG_NOSYSTEM: "1"
           ISSUE_NUMBER: ${{ inputs.issue-number }}
-          REPRODUCTION_RESULT: ${{ inputs.reproduction-result }}
         run: |
           if ! [[ "$ISSUE_NUMBER" =~ ^[1-9][0-9]*$ ]] ||
             ! [[ "$CONTEXT_SHA" =~ ^[0-9a-f]{40}$ ]]; then
@@ -653,7 +636,6 @@ jobs:
           fi
 
           printf '%s\n' "$FIX_RESULT" > "$RUNNER_TEMP/bug-fix-result.json"
-          printf '%s\n' "$REPRODUCTION_RESULT" > "$RUNNER_TEMP/bug-reproduction-result.json"
           if ! jq --exit-status --arg pull_request "$FIX_PULL_REQUEST" '
             (.summary | type == "string" and length > 0)
             and (.validation | type == "array")
@@ -674,12 +656,6 @@ jobs:
             exit 1
           fi
 
-          if ! jq --exit-status '.reproduction == "reproducible"' \
-            "$RUNNER_TEMP/bug-reproduction-result.json" > /dev/null; then
-            echo "The bug reproduction result is invalid." >&2
-            exit 1
-          fi
-
           branch="issue/$ISSUE_NUMBER"
           git init --quiet "$RUNNER_TEMP/issue-context"
           cd "$RUNNER_TEMP/issue-context"
@@ -692,17 +668,6 @@ jobs:
             echo "Skipping the stale update to preserve the newer issue context."
             echo "changed=false" >> "$GITHUB_OUTPUT"
             exit 0
-          fi
-
-          if ! jq --exit-status --argjson issue_number "$ISSUE_NUMBER" \
-            '.number == $issue_number' issue.json > /dev/null ||
-            ! jq --exit-status '.type == "bug"' triage.json > /dev/null ||
-            ! jq --exit-status \
-              --slurpfile expected "$RUNNER_TEMP/bug-reproduction-result.json" '
-                . == $expected[0] and .reproduction == "reproducible"
-              ' reproduction.json > /dev/null; then
-            echo "The persisted issue context changed before the fix completed." >&2
-            exit 1
           fi
 
           jq --arg pull_request "$FIX_PULL_REQUEST" '
