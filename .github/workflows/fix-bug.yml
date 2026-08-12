@@ -143,7 +143,7 @@ jobs:
             esac
           done < <(git diff --name-only -z "$parent_base" "$PARENT_HEAD_SHA")
 
-          fix_branch="zb/fix-bug/$issue_number"
+          fix_branch="automations/fix-bug/$issue_number"
           gh pr list \
             --repo astral-sh/uv-dev \
             --head "$fix_branch" \
@@ -388,7 +388,7 @@ jobs:
           fi
 
           if [ "$FIX_BASE_SHA" != "$PARENT_HEAD_SHA" ]; then
-            fix_branch="zb/fix-bug/$ISSUE_NUMBER"
+            fix_branch="automations/fix-bug/$ISSUE_NUMBER"
             gh pr list \
               --repo astral-sh/uv-dev \
               --head "$fix_branch" \
@@ -500,7 +500,7 @@ jobs:
           ISSUE_NUMBER: ${{ inputs.issue-number }}
           PARENT_HEAD_REF: ${{ inputs.parent-head-ref }}
         run: |
-          branch="zb/fix-bug/$ISSUE_NUMBER"
+          branch="automations/fix-bug/$ISSUE_NUMBER"
           gh pr list \
             --repo astral-sh/uv-dev \
             --head "$branch" \
