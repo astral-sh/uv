@@ -25327,6 +25327,33 @@ fn lock_strip_fragment() -> Result<()> {
 
 #[cfg(feature = "test-universal")]
 #[test]
+fn lock_invalid_environment() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&["3.12"]);
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3"
+        "#,
+    )?;
+
+    context.venv.create_dir_all()?;
+    context.venv.child("bad").touch()?;
+
+    // An unrelated invalid `.venv` should not prevent locking; see astral-sh/uv#19832.
+    uv_snapshot!(context.filters(), context.lock(), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Project virtual environment directory `[VENV]/` cannot be used because it is not a valid Python environment (no Python executable was found)
+    ");
+
+    Ok(())
+}
+
+#[cfg(feature = "test-universal")]
+#[test]
 fn lock_request_requires_python() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
