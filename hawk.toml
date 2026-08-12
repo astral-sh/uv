@@ -210,15 +210,6 @@ reason = "read by generated activation scripts"
 [[override]]
 lint = "hawk::dead_public"
 crate = "uv_static"
-item = "env_vars::EnvVars::PYVENV_LAUNCHER"
-kind = "inherent_associated_constant"
-level = "expect"
-target = "cfg(not(windows))"
-reason = "used by Windows trampoline launchers"
-
-[[override]]
-lint = "hawk::dead_public"
-crate = "uv_static"
 item = "env_vars::EnvVars::UV_UNMANAGED_INSTALL"
 kind = "inherent_associated_constant"
 level = "expect"

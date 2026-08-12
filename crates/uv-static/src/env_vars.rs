@@ -1077,6 +1077,11 @@ impl EnvVars {
     #[attr_added_in("0.7.13")]
     pub const PYTHONHOME: &'static str = "PYTHONHOME";
 
+    /// Overrides the executable Python uses to determine its environment.
+    #[attr_hidden]
+    #[attr_added_in("next release")]
+    pub const PYTHONEXECUTABLE: &'static str = "PYTHONEXECUTABLE";
+
     /// Used to correctly detect virtual environments when using trampolines.
     #[attr_hidden]
     #[attr_added_in("0.7.13")]

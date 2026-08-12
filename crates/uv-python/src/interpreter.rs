@@ -27,6 +27,7 @@ use uv_pep508::{MarkerEnvironment, StringVersion};
 use uv_platform::{Arch, Libc, Os};
 use uv_platform_tags::{Platform, Tags, TagsError, TagsOptions};
 use uv_pypi_types::{ResolverMarkerEnvironment, Scheme};
+use uv_static::EnvVars;
 
 use crate::implementation::LenientImplementationName;
 use crate::managed::ManagedPythonInstallations;
@@ -1149,6 +1150,8 @@ impl InterpreterInfo {
         };
 
         let canonical = canonicalize_executable(&absolute).map_err(handle_io_error)?;
+        let python_executable = env::var_os(EnvVars::PYTHONEXECUTABLE).map(PathBuf::from);
+        let pyvenv_launcher = env::var_os(EnvVars::PYVENV_LAUNCHER).map(PathBuf::from);
 
         let cache_entry = cache.entry(
             CacheBucket::Interpreter,
@@ -1170,7 +1173,13 @@ impl InterpreterInfo {
             // absolute path refers to different interpreters with matching ctimes, e.g., if you
             // have a `.venv/bin/python` pointing to both Python 3.12 and Python 3.13 that were
             // modified at the same time.
-            format!("{}.msgpack", cache_digest(&(&absolute, &canonical))),
+            //
+            // Launcher overrides can also change the reported executable and virtual environment
+            // without changing either executable path.
+            format!(
+                "{}.msgpack",
+                cache_digest(&(&absolute, &canonical, &python_executable, &pyvenv_launcher))
+            ),
         );
 
         // We check the timestamp of the canonicalized executable to check if an underlying
