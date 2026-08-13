@@ -1,0 +1,721 @@
+# Attempt a focused production fix for a reproduced bug with a passing regression test.
+name: "fix-bug"
+
+on:
+  workflow_call:
+    inputs:
+      issue:
+        description: "An issue URL or number"
+        required: true
+        type: string
+      issue-number:
+        description: "The verified upstream issue number"
+        required: true
+        type: string
+      reproduction-result:
+        description: "The confirmed bug reproduction result"
+        required: true
+        type: string
+      reproduction-thread-artifact-id:
+        description: "The immutable artifact ID of the reproduction Codex thread"
+        required: true
+        type: string
+      parent-pull-request:
+        description: "The draft regression-test pull request URL"
+        required: true
+        type: string
+      parent-head-ref:
+        description: "The regression-test branch"
+        required: true
+        type: string
+      parent-head-sha:
+        description: "The verified regression-test commit"
+        required: true
+        type: string
+      runner:
+        description: "The runner to use for bug fixing"
+        default: ubuntu-latest
+        required: false
+        type: string
+    outputs:
+      result:
+        description: "The bug-fix creation result"
+        value: ${{ jobs.fix.outputs.result }}
+      pull-request:
+        description: "The draft stacked bug-fix pull request URL"
+        value: ${{ jobs.publish.outputs.pull-request }}
+
+permissions: {}
+
+jobs:
+  fix:
+    if: github.repository == 'astral-sh/uv'
+    runs-on: ${{ inputs.runner }}
+    environment: automations
+    timeout-minutes: 60
+    permissions:
+      actions: read
+      contents: read
+      issues: read
+    outputs:
+      bundle-artifact-id: ${{ steps.upload-fix.outputs.artifact-id }}
+      context-artifact-id: ${{ steps.upload-context.outputs.artifact-id }}
+      context-sha: ${{ steps.issue-context.outputs.head-sha }}
+      created: ${{ steps.commit-fix.outputs.created }}
+      existing-head: ${{ steps.prepare.outputs.existing-head }}
+      publish: ${{ steps.commit-fix.outputs.publish }}
+      result: ${{ steps.commit-fix.outputs.result }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: "Load issue context"
+        id: issue-context
+        uses: ./.github/actions/load-issue-context
+        with:
+          issue-number: ${{ inputs.issue-number }}
+          path: ${{ runner.temp }}/issue-context
+
+      - name: "Load reproduction Codex thread"
+        id: reproduction-thread
+        uses: ./.github/actions/load-codex-thread
+        with:
+          repository: ${{ github.repository }}
+          run-id: ${{ github.run_id }}
+          artifact-id: ${{ inputs.reproduction-thread-artifact-id }}
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/codex-home/sessions
+
+      - name: "Install uv"
+        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        with:
+          enable-cache: false
+
+      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+        with:
+          save-if: false
+
+      - name: "Install required Python versions"
+        run: uv python install
+
+      - name: "Prepare trusted bug-fix context"
+        id: prepare
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ISSUE: ${{ inputs.issue }}
+          ISSUE_NUMBER: ${{ inputs.issue-number }}
+          PARENT_HEAD_REF: ${{ inputs.parent-head-ref }}
+          PARENT_HEAD_SHA: ${{ inputs.parent-head-sha }}
+          PARENT_PULL_REQUEST: ${{ inputs.parent-pull-request }}
+          REPRODUCTION_RESULT: ${{ inputs.reproduction-result }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/codex-home"
+          cp agents/codex/config.toml "$RUNNER_TEMP/codex-home/config.toml"
+          cp agents/prompts/fix-reproduced-bug.md "$RUNNER_TEMP/fix-reproduced-bug.md"
+          cp agents/schemas/fix-reproduced-bug.json "$RUNNER_TEMP/fix-reproduced-bug.json"
+
+          gh issue view "$ISSUE" \
+            --repo "$GITHUB_REPOSITORY" \
+            --json number,title,body,author \
+            > "$RUNNER_TEMP/issue-triage-event.json"
+          printf '%s\n' "$REPRODUCTION_RESULT" > "$RUNNER_TEMP/bug-reproduction-result.json"
+
+          issue_number="$(jq --raw-output '.number' "$RUNNER_TEMP/issue-triage-event.json")"
+          if ! [[ "$ISSUE_NUMBER" =~ ^[1-9][0-9]*$ ]] ||
+            [ "$issue_number" != "$ISSUE_NUMBER" ] ||
+            [ "$PARENT_HEAD_REF" != "zb/reproduce-bug/$issue_number" ] ||
+            ! [[ "$PARENT_HEAD_SHA" =~ ^[0-9a-f]{40}$ ]] ||
+            ! [[ "$PARENT_PULL_REQUEST" =~ ^https://github\.com/astral-sh/uv-dev/pull/[1-9][0-9]*$ ]]; then
+            echo "The regression-test pull request context is invalid." >&2
+            exit 1
+          fi
+
+          pull_request_number="${PARENT_PULL_REQUEST##*/}"
+          gh api "repos/astral-sh/uv-dev/pulls/$pull_request_number" \
+            > "$RUNNER_TEMP/bug-regression-pull-request.json"
+          if ! jq --exit-status \
+            --arg head_ref "$PARENT_HEAD_REF" \
+            --arg head_sha "$PARENT_HEAD_SHA" '
+              .state == "open"
+              and .base.ref == "main"
+              and .base.repo.full_name == "astral-sh/uv-dev"
+              and .head.repo.full_name == "astral-sh/uv-dev"
+              and .head.ref == $head_ref
+              and .head.sha == $head_sha
+            ' "$RUNNER_TEMP/bug-regression-pull-request.json" > /dev/null; then
+            echo "The regression-test pull request no longer matches its verified head." >&2
+            exit 1
+          fi
+
+          git -c core.hooksPath=/dev/null fetch --no-tags \
+            https://github.com/astral-sh/uv-dev.git "refs/heads/$PARENT_HEAD_REF"
+          if [ "$(git rev-parse 'FETCH_HEAD^{commit}')" != "$PARENT_HEAD_SHA" ]; then
+            echo "The regression-test branch changed; refusing to use a stale revision." >&2
+            exit 1
+          fi
+
+          parent_base="$(git rev-parse "$PARENT_HEAD_SHA^")"
+          if [ "$parent_base" != "$GITHUB_SHA" ]; then
+            echo "The regression-test commit does not extend the trusted workflow revision." >&2
+            exit 1
+          fi
+
+          while IFS= read -r -d '' path; do
+            case "$path" in
+              crates/uv/tests/*|crates/uv-client/tests/it/*) ;;
+              *)
+                echo "The regression-test commit changes a non-test file: $path" >&2
+                exit 1
+                ;;
+            esac
+          done < <(git diff --name-only -z "$parent_base" "$PARENT_HEAD_SHA")
+
+          fix_branch="automations/fix-bug/$issue_number"
+          gh pr list \
+            --repo astral-sh/uv-dev \
+            --head "$fix_branch" \
+            --state open \
+            --json number \
+            --limit 2 \
+            > "$RUNNER_TEMP/bug-fix-pull-requests.json"
+          if [ "$(jq 'length' "$RUNNER_TEMP/bug-fix-pull-requests.json")" -gt 1 ]; then
+            echo "Multiple open pull requests claim the bug-fix branch." >&2
+            exit 1
+          fi
+
+          fix_head="$(git ls-remote --heads \
+            https://github.com/astral-sh/uv-dev.git \
+            "refs/heads/$fix_branch" | cut -f 1)"
+          existing=false
+          if [ -n "$fix_head" ]; then
+            if ! [[ "$fix_head" =~ ^[0-9a-f]{40}$ ]]; then
+              echo "The existing bug-fix branch head is invalid." >&2
+              exit 1
+            fi
+
+            gh api "repos/astral-sh/uv-dev/commits/$fix_head" \
+              > "$RUNNER_TEMP/bug-fix-commit.json"
+            if ! jq --exit-status --arg head_sha "$fix_head" '
+              .sha == $head_sha
+              and .author.login == "astral-automations-bot[bot]"
+              and .committer.login == "astral-automations-bot[bot]"
+            ' "$RUNNER_TEMP/bug-fix-commit.json" > /dev/null; then
+              echo "The existing bug-fix branch is not owned by this automation." >&2
+              exit 1
+            fi
+
+            if [ "$(jq 'length' "$RUNNER_TEMP/bug-fix-pull-requests.json")" = "1" ]; then
+              fix_pull_request_number="$(jq '.[0].number' \
+                "$RUNNER_TEMP/bug-fix-pull-requests.json")"
+              gh api "repos/astral-sh/uv-dev/pulls/$fix_pull_request_number" \
+                > "$RUNNER_TEMP/bug-fix-pull-request.json"
+              if ! jq --exit-status \
+                --arg head_ref "$fix_branch" \
+                --arg head_sha "$fix_head" \
+                --arg parent_ref "$PARENT_HEAD_REF" '
+                  .state == "open"
+                  and .user.login == "astral-automations-bot[bot]"
+                  and .base.repo.full_name == "astral-sh/uv-dev"
+                  and .base.ref == $parent_ref
+                  and .head.repo.full_name == "astral-sh/uv-dev"
+                  and .head.ref == $head_ref
+                  and .head.sha == $head_sha
+                ' "$RUNNER_TEMP/bug-fix-pull-request.json" > /dev/null; then
+                echo "The existing bug-fix pull request is not owned by this automation." >&2
+                exit 1
+              fi
+            fi
+
+            git -c core.hooksPath=/dev/null fetch --no-tags \
+              https://github.com/astral-sh/uv-dev.git "refs/heads/$fix_branch"
+            if [ "$(git rev-parse 'FETCH_HEAD^{commit}')" != "$fix_head" ] ||
+              [ "$(git rev-parse "$fix_head^")" != "$PARENT_HEAD_SHA" ] ||
+              [ "$(git show --no-patch --format=%s "$fix_head")" != "Fix reproduced bug" ] ||
+              [ "$(git show --no-patch --format=%ae "$fix_head")" != \
+                "305554984+astral-automations-bot[bot]@users.noreply.github.com" ]; then
+              echo "The existing bug-fix branch is not the expected automated fix." >&2
+              exit 1
+            fi
+
+            existing=true
+          elif [ "$(jq 'length' "$RUNNER_TEMP/bug-fix-pull-requests.json")" != "0" ]; then
+            echo "The bug-fix pull request exists, but its branch is missing." >&2
+            exit 1
+          fi
+
+          git -c core.hooksPath=/dev/null checkout --detach \
+            "$PARENT_HEAD_SHA"
+          if [ "$existing" = "true" ]; then
+            git -c core.hooksPath=/dev/null checkout --detach "$fix_head"
+          fi
+          {
+            echo "existing=$existing"
+            echo "existing-head=$fix_head"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: "Fix reproduced bug"
+        id: fix-bug
+        if: steps.prepare.outputs.existing != 'true'
+        uses: openai/codex-action@52fe01ec70a42f454c9d2ebd47598f9fd6893d56 # v1.11
+        env:
+          GH_TOKEN: ${{ github.token }}
+          INSTA_UPDATE: "no"
+          TMPDIR: ${{ runner.temp }}
+          UV_CACHE_DIR: ${{ runner.temp }}/uv-fix-bug-cache
+        with:
+          openai-api-key: ${{ secrets.OPENAI_API_KEY }}
+          codex-version: "0.146.0"
+          codex-home: "${{ runner.temp }}/codex-home"
+          effort: high
+          codex-args: >-
+            ["resume", "${{ steps.reproduction-thread.outputs.session-id }}", "-"]
+          permission-profile: "fix-reproduced-bug"
+          safety-strategy: drop-sudo
+          allow-users: "*"
+          prompt-file: "${{ runner.temp }}/fix-reproduced-bug.md"
+          output-schema-file: "${{ runner.temp }}/fix-reproduced-bug.json"
+
+      - name: "Upload Codex thread"
+        if: always() && steps.prepare.outputs.existing != 'true'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: codex-thread-fix-reproduced-bug-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/codex-home/sessions
+          if-no-files-found: warn
+
+      - name: "Commit verified bug fix"
+        id: commit-fix
+        env:
+          EXISTING_FIX: ${{ steps.prepare.outputs.existing }}
+          FIX_RESULT: ${{ steps.fix-bug.outputs.final-message }}
+          PARENT_HEAD_SHA: ${{ inputs.parent-head-sha }}
+        run: |
+          if [ "$EXISTING_FIX" = "true" ]; then
+            FIX_RESULT="$(jq --null-input --compact-output '{
+              outcome: "fixed",
+              summary: "Reused the existing verified automated bug fix.",
+              validation: ["Verified the production fix and existing regression test."]
+            }')"
+          fi
+
+          printf '%s\n' "$FIX_RESULT" > "$RUNNER_TEMP/bug-fix-result.json"
+          fix_outcome="$(jq --raw-output '.outcome' "$RUNNER_TEMP/bug-fix-result.json")"
+
+          if [ -z "$(git status --porcelain)" ] && [ "$EXISTING_FIX" != "true" ]; then
+            if [ "$fix_outcome" != "not_fixed" ]; then
+              echo "Codex reported a fix, but the checkout is unchanged." >&2
+              exit 1
+            fi
+            {
+              echo "created=false"
+              echo "publish=false"
+              jq --raw-output '"result=\(tojson)"' "$RUNNER_TEMP/bug-fix-result.json"
+            } >> "$GITHUB_OUTPUT"
+            jq --raw-output '.summary' "$RUNNER_TEMP/bug-fix-result.json" \
+              >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          if [ "$fix_outcome" != "fixed" ] ||
+            ! jq --exit-status '.validation | length > 0' \
+              "$RUNNER_TEMP/bug-fix-result.json" > /dev/null; then
+            echo "The modified checkout does not contain a validated bug fix." >&2
+            exit 1
+          fi
+
+          git -c core.hooksPath=/dev/null add -A
+          source_changed=false
+          regression_changed=false
+          changed_files=0
+          while IFS= read -r -d '' path; do
+            case "$path" in
+              crates/*/src/*)
+                source_changed=true
+                ;;
+              crates/uv/tests/*|crates/uv-client/tests/it/*)
+                if git diff --name-only "$PARENT_HEAD_SHA^" "$PARENT_HEAD_SHA" -- "$path" |
+                  grep -Fxq "$path"; then
+                  regression_changed=true
+                fi
+                ;;
+              *)
+                echo "The bug fix changes a protected or unrelated file: $path" >&2
+                exit 1
+                ;;
+            esac
+            changed_files=$((changed_files + 1))
+          done < <(git diff --cached --name-only -z "$PARENT_HEAD_SHA")
+
+          if [ "$source_changed" != "true" ] || [ "$regression_changed" != "true" ] ||
+            [ "$changed_files" -gt 50 ]; then
+            echo "The fix must update production code and the existing regression test." >&2
+            exit 1
+          fi
+
+          if git diff --cached --raw "$PARENT_HEAD_SHA" |
+            grep -Eq '^:[0-7]+ (120000|160000) '; then
+            echo "The bug fix introduces a symbolic link or Git submodule." >&2
+            exit 1
+          fi
+
+          git diff --cached --check "$PARENT_HEAD_SHA"
+          created=false
+          if [ "$EXISTING_FIX" != "true" ]; then
+            git \
+              -c core.hooksPath=/dev/null \
+              -c user.name="astral-automations-bot[bot]" \
+              -c user.email="305554984+astral-automations-bot[bot]@users.noreply.github.com" \
+              commit --message "Fix reproduced bug"
+            created=true
+          fi
+
+          git -c core.hooksPath=/dev/null bundle create \
+            "$RUNNER_TEMP/fixed-bug.bundle" "$PARENT_HEAD_SHA..HEAD"
+          {
+            echo "created=$created"
+            echo "publish=true"
+            jq --raw-output '"result=\(tojson)"' "$RUNNER_TEMP/bug-fix-result.json"
+          } >> "$GITHUB_OUTPUT"
+          {
+            printf '%s\n\n' '### Reproduced bug fixed'
+            jq --raw-output '.summary' "$RUNNER_TEMP/bug-fix-result.json"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: "Upload issue context"
+        id: upload-context
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: issue-fix-context-${{ inputs.issue-number }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/issue-context/README.md
+          if-no-files-found: error
+          retention-days: 1
+
+      - name: "Upload verified bug fix"
+        id: upload-fix
+        if: steps.commit-fix.outputs.publish == 'true'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: fixed-bug-${{ inputs.issue-number }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/fixed-bug.bundle
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 1
+
+  publish:
+    needs: fix
+    if: needs.fix.outputs.publish == 'true'
+    runs-on: ubuntu-slim
+    environment: automations
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      id-token: write # for the existing uv-dev credential broker
+    outputs:
+      pull-request: ${{ steps.open-pr.outputs.url }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          artifact-ids: ${{ needs.fix.outputs.bundle-artifact-id }}
+          path: ${{ runner.temp }}/fixed-bug
+
+      - name: "Verify regression and bug-fix commits"
+        id: verify
+        env:
+          EXISTING_HEAD_SHA: ${{ needs.fix.outputs.existing-head }}
+          GH_TOKEN: ${{ github.token }}
+          GIT_CONFIG_GLOBAL: /dev/null
+          GIT_CONFIG_NOSYSTEM: "1"
+          ISSUE_NUMBER: ${{ inputs.issue-number }}
+          PARENT_HEAD_REF: ${{ inputs.parent-head-ref }}
+          PARENT_HEAD_SHA: ${{ inputs.parent-head-sha }}
+          PARENT_PULL_REQUEST: ${{ inputs.parent-pull-request }}
+        run: |
+          pull_request_number="${PARENT_PULL_REQUEST##*/}"
+          gh api "repos/astral-sh/uv-dev/pulls/$pull_request_number" \
+            > "$RUNNER_TEMP/bug-regression-pull-request.json"
+          if ! jq --exit-status \
+            --arg head_ref "$PARENT_HEAD_REF" \
+            --arg head_sha "$PARENT_HEAD_SHA" '
+              .state == "open"
+              and .base.ref == "main"
+              and .base.repo.full_name == "astral-sh/uv-dev"
+              and .head.repo.full_name == "astral-sh/uv-dev"
+              and .head.ref == $head_ref
+              and .head.sha == $head_sha
+            ' "$RUNNER_TEMP/bug-regression-pull-request.json" > /dev/null; then
+            echo "The regression-test pull request changed; refusing to publish the fix." >&2
+            exit 1
+          fi
+
+          git -c core.hooksPath=/dev/null fetch --no-tags \
+            https://github.com/astral-sh/uv-dev.git "refs/heads/$PARENT_HEAD_REF"
+          if [ "$(git rev-parse 'FETCH_HEAD^{commit}')" != "$PARENT_HEAD_SHA" ]; then
+            echo "The regression-test branch changed; refusing to publish the fix." >&2
+            exit 1
+          fi
+
+          if [ -n "$EXISTING_HEAD_SHA" ]; then
+            if ! [[ "$EXISTING_HEAD_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+              echo "The existing bug-fix revision is invalid." >&2
+              exit 1
+            fi
+
+            fix_branch="automations/fix-bug/$ISSUE_NUMBER"
+            git -c core.hooksPath=/dev/null fetch --no-tags \
+              https://github.com/astral-sh/uv-dev.git "refs/heads/$fix_branch"
+            if [ "$(git rev-parse 'FETCH_HEAD^{commit}')" != "$EXISTING_HEAD_SHA" ]; then
+              echo "The existing bug-fix branch changed before publication." >&2
+              exit 1
+            fi
+          fi
+
+          bundle="$RUNNER_TEMP/fixed-bug/fixed-bug.bundle"
+          git -c core.hooksPath=/dev/null bundle verify "$bundle"
+          git -c core.hooksPath=/dev/null fetch --no-tags "$bundle" HEAD
+          fixed_head="$(git rev-parse 'FETCH_HEAD^{commit}')"
+          if [ "$(git rev-parse "$fixed_head^")" != "$PARENT_HEAD_SHA" ] ||
+            [ "$(git show --no-patch --format=%s "$fixed_head")" != "Fix reproduced bug" ] ||
+            [ "$(git show --no-patch --format=%ae "$fixed_head")" != \
+              "305554984+astral-automations-bot[bot]@users.noreply.github.com" ]; then
+            echo "The fix does not extend the verified regression-test commit." >&2
+            exit 1
+          fi
+
+          if [ -n "$EXISTING_HEAD_SHA" ] && [ "$fixed_head" != "$EXISTING_HEAD_SHA" ]; then
+            echo "The existing bug-fix bundle does not match its verified branch." >&2
+            exit 1
+          fi
+
+          source_changed=false
+          regression_changed=false
+          changed_files=0
+          while IFS= read -r -d '' path; do
+            case "$path" in
+              crates/*/src/*)
+                source_changed=true
+                ;;
+              crates/uv/tests/*|crates/uv-client/tests/it/*)
+                if git diff --name-only "$PARENT_HEAD_SHA^" "$PARENT_HEAD_SHA" -- "$path" |
+                  grep -Fxq "$path"; then
+                  regression_changed=true
+                fi
+                ;;
+              *)
+                echo "The fix changes a protected or unrelated file: $path" >&2
+                exit 1
+                ;;
+            esac
+            changed_files=$((changed_files + 1))
+          done < <(git diff --name-only -z "$PARENT_HEAD_SHA" "$fixed_head")
+
+          if [ "$source_changed" != "true" ] || [ "$regression_changed" != "true" ] ||
+            [ "$changed_files" -gt 50 ]; then
+            echo "The fix must update production code and the existing regression test." >&2
+            exit 1
+          fi
+
+          if git diff --raw "$PARENT_HEAD_SHA" "$fixed_head" |
+            grep -Eq '^:[0-7]+ (120000|160000) '; then
+            echo "The fix introduces a symbolic link or Git submodule." >&2
+            exit 1
+          fi
+
+          git diff --check "$PARENT_HEAD_SHA" "$fixed_head"
+          echo "head_sha=$fixed_head" >> "$GITHUB_OUTPUT"
+
+      - name: "Get uv-dev token"
+        id: token
+        uses: open-security-tools/ost-simple-sts@9e012247e07c39080fb6a832dbfbcfeacebc19c4
+        with:
+          exchange-url: ${{ secrets.STS_API_URL }}/exchange
+          audience: ${{ secrets.STS_API_URL }}
+          repository: astral-sh/uv-dev
+          permissions: |
+            contents: write
+            pull_requests: write
+
+      - name: "Open stacked fix pull request"
+        id: open-pr
+        env:
+          FIXED_HEAD_SHA: ${{ steps.verify.outputs.head_sha }}
+          GH_TOKEN: ${{ steps.token.outputs.token }}
+          GIT_CONFIG_GLOBAL: /dev/null
+          GIT_CONFIG_NOSYSTEM: "1"
+          ISSUE_NUMBER: ${{ inputs.issue-number }}
+          PARENT_HEAD_REF: ${{ inputs.parent-head-ref }}
+        run: |
+          branch="automations/fix-bug/$ISSUE_NUMBER"
+          gh pr list \
+            --repo astral-sh/uv-dev \
+            --head "$branch" \
+            --state open \
+            --json number,url,baseRefName,headRefName,headRefOid,author \
+            --limit 2 \
+            > "$RUNNER_TEMP/bug-fix-pull-requests.json"
+          if ! jq --exit-status \
+            --arg head_ref "$branch" \
+            --arg head_sha "$FIXED_HEAD_SHA" \
+            --arg parent_ref "$PARENT_HEAD_REF" '
+              length <= 1
+              and all(
+                .baseRefName == $parent_ref
+                and .headRefName == $head_ref
+                and .headRefOid == $head_sha
+                and .author.is_bot == true
+                and .author.login == "app/astral-automations-bot"
+              )
+            ' "$RUNNER_TEMP/bug-fix-pull-requests.json" > /dev/null; then
+            echo "The existing bug-fix pull request is not owned by this automation." >&2
+            exit 1
+          fi
+
+          git -c core.hooksPath=/dev/null push \
+            "https://x-access-token:${GH_TOKEN}@github.com/astral-sh/uv-dev.git" \
+            "$FIXED_HEAD_SHA:refs/heads/$branch"
+          pull_request="$(jq --raw-output '.[0].url // empty' \
+            "$RUNNER_TEMP/bug-fix-pull-requests.json")"
+          if [ -z "$pull_request" ]; then
+            pull_request="$(
+              gh pr create \
+                --repo astral-sh/uv-dev \
+                --base "$PARENT_HEAD_REF" \
+                --head "$branch" \
+                --draft \
+                --title "Fix uv#$ISSUE_NUMBER" \
+                --body "Fixes astral-sh/uv#$ISSUE_NUMBER by correcting the reproduced behavior and updating its regression test."
+            )"
+          fi
+          echo "url=$pull_request" >> "$GITHUB_OUTPUT"
+          printf 'Stacked fix pull request: %s\n' "$pull_request" >> "$GITHUB_STEP_SUMMARY"
+
+  context:
+    needs:
+      - fix
+      - publish
+    if: >-
+      always() &&
+      needs.fix.result == 'success' &&
+      needs.fix.outputs.result != '' &&
+      (needs.publish.result == 'success' || needs.publish.result == 'skipped')
+    runs-on: ubuntu-latest
+    environment: automations
+    timeout-minutes: 10
+    concurrency:
+      group: issue-context-${{ inputs.issue-number }}
+      cancel-in-progress: false
+    permissions:
+      id-token: write # for the uv-dev issue-context credential broker
+    steps:
+      - name: "Download issue context"
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          artifact-ids: ${{ needs.fix.outputs.context-artifact-id }}
+          path: ${{ runner.temp }}/issue-context-update
+
+      - name: "Prepare fix context"
+        id: prepare-context
+        env:
+          CONTEXT_SHA: ${{ needs.fix.outputs.context-sha }}
+          FIX_PULL_REQUEST: ${{ needs.publish.outputs.pull-request }}
+          FIX_RESULT: ${{ needs.fix.outputs.result }}
+          GIT_CONFIG_GLOBAL: /dev/null
+          GIT_CONFIG_NOSYSTEM: "1"
+          ISSUE_NUMBER: ${{ inputs.issue-number }}
+        run: |
+          if ! [[ "$ISSUE_NUMBER" =~ ^[1-9][0-9]*$ ]] ||
+            ! [[ "$CONTEXT_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "The issue number or context revision is invalid." >&2
+            exit 1
+          fi
+
+          printf '%s\n' "$FIX_RESULT" > "$RUNNER_TEMP/bug-fix-result.json"
+          if ! jq --exit-status --arg pull_request "$FIX_PULL_REQUEST" '
+            (.summary | type == "string" and length > 0)
+            and (.validation | type == "array")
+            and (
+              (
+                .outcome == "fixed"
+                and (.validation | length > 0)
+                and ($pull_request | test("^https://github\\.com/astral-sh/uv-dev/pull/[1-9][0-9]*$"))
+              )
+              or (
+                .outcome == "not_fixed"
+                and (.validation | length == 0)
+                and $pull_request == ""
+              )
+            )
+          ' "$RUNNER_TEMP/bug-fix-result.json" > /dev/null; then
+            echo "The bug-fix result does not match its published pull request." >&2
+            exit 1
+          fi
+
+          branch="issue/$ISSUE_NUMBER"
+          git init --quiet "$RUNNER_TEMP/issue-context"
+          cd "$RUNNER_TEMP/issue-context"
+          git remote add origin https://github.com/astral-sh/uv-dev.git
+          git -c core.hooksPath=/dev/null fetch --quiet origin "refs/heads/$branch"
+          git -c core.hooksPath=/dev/null checkout --quiet FETCH_HEAD
+
+          if [ "$(git rev-parse HEAD)" != "$CONTEXT_SHA" ]; then
+            echo "The issue context changed while the fix was being prepared."
+            echo "Skipping the stale update to preserve the newer issue context."
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          jq --arg pull_request "$FIX_PULL_REQUEST" '
+            . + {pull_request: (if $pull_request == "" then null else $pull_request end)}
+          ' "$RUNNER_TEMP/bug-fix-result.json" > fix.json
+          cp "$RUNNER_TEMP/issue-context-update/README.md" README.md
+          if [ -n "$FIX_PULL_REQUEST" ] &&
+            ! grep -Fq "$FIX_PULL_REQUEST" README.md; then
+            printf '\nPull request: %s\n' "$FIX_PULL_REQUEST" >> README.md
+          fi
+
+          git -c core.hooksPath=/dev/null add fix.json README.md
+          if git diff --cached --quiet; then
+            echo "The existing fix context is unchanged."
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          git \
+            -c core.hooksPath=/dev/null \
+            -c user.name="astral-automations-bot[bot]" \
+            -c user.email="305554984+astral-automations-bot[bot]@users.noreply.github.com" \
+            commit --message "Update fix context"
+          echo "changed=true" >> "$GITHUB_OUTPUT"
+
+      - name: "Get issue context token"
+        if: steps.prepare-context.outputs.changed == 'true'
+        id: token
+        uses: open-security-tools/ost-simple-sts@9e012247e07c39080fb6a832dbfbcfeacebc19c4
+        with:
+          exchange-url: ${{ secrets.STS_API_URL }}/exchange
+          audience: ${{ secrets.STS_API_URL }}
+          repository: astral-sh/uv-dev
+          permissions: |
+            contents: write
+
+      - name: "Persist fix context"
+        if: steps.prepare-context.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ steps.token.outputs.token }}
+          GIT_CONFIG_GLOBAL: /dev/null
+          GIT_CONFIG_NOSYSTEM: "1"
+          ISSUE_NUMBER: ${{ inputs.issue-number }}
+        run: |
+          branch="issue/$ISSUE_NUMBER"
+          cd "$RUNNER_TEMP/issue-context"
+          git -c core.hooksPath=/dev/null push \
+            "https://x-access-token:${GH_TOKEN}@github.com/astral-sh/uv-dev.git" \
+            "HEAD:refs/heads/$branch"
+          printf 'Issue context: https://github.com/astral-sh/uv-dev/tree/%s\n' "$branch" \
+            >> "$GITHUB_STEP_SUMMARY"
