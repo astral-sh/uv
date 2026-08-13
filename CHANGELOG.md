@@ -3,6 +3,46 @@
 <!-- prettier-ignore-start -->
 
 
+## 0.12.4
+
+Released on 2026-08-13.
+
+### Enhancements
+
+- Allow `uv check` without installing the project ([#21085](https://github.com/astral-sh/uv/pull/21085))
+- Avoid orphaned caret for empty PEP 508 requirements ([#21094](https://github.com/astral-sh/uv/pull/21094))
+- Enable default rustls features ([#21054](https://github.com/astral-sh/uv/pull/21054))
+- Give a specific error when a PEP 723 closing tag has trailing whitespace ([#20944](https://github.com/astral-sh/uv/pull/20944))
+- fix: Allow whitespace before the version for LenientRequirement star-operator patches ([#21012](https://github.com/astral-sh/uv/pull/21012))
+
+### Performance
+
+- Deserialize PypiFile/PyxFile directly ([#21041](https://github.com/astral-sh/uv/pull/21041))
+- Widen unavailable versions across gaps in the known versions ([#20804](https://github.com/astral-sh/uv/pull/20804))
+- ci: use perf for CodSpeed walltime benchmarks ([#21055](https://github.com/astral-sh/uv/pull/21055))
+
+### Bug fixes
+
+- Account for launcher overrides in interpreter cache keys ([#21075](https://github.com/astral-sh/uv/pull/21075))
+- Allow locking with an invalid project environment ([#21068](https://github.com/astral-sh/uv/pull/21068))
+- Fix pythonw launcher mode for managed Windows venv links ([#19235](https://github.com/astral-sh/uv/pull/19235))
+- Heal interpreter metadata cache entries when creating a virtual environment indicates corruption ([#21073](https://github.com/astral-sh/uv/pull/21073))
+- Preserve consecutive Python minor-version exclusions ([#21045](https://github.com/astral-sh/uv/pull/21045))
+- Preserve inline comments when updating dependencies ([#21008](https://github.com/astral-sh/uv/pull/21008))
+- Respect `fork-strategy` for `environments` ([#21000](https://github.com/astral-sh/uv/pull/21000))
+
+### Other changes
+
+- Authorize issue-comment context persistence ([#21087](https://github.com/astral-sh/uv/pull/21087))
+- Fix formatting of invalid version bump errors ([#21076](https://github.com/astral-sh/uv/pull/21076))
+- Forward `uv check` terminal settings to ty ([#21086](https://github.com/astral-sh/uv/pull/21086))
+- Handle promoted regression tests during automated bug fixes ([#21093](https://github.com/astral-sh/uv/pull/21093))
+- Improve regression coverage for related bug manifestations ([#21101](https://github.com/astral-sh/uv/pull/21101))
+- Revert "Authorize issue-comment context persistence" ([#21088](https://github.com/astral-sh/uv/pull/21088))
+- Revert "ci: use perf for CodSpeed walltime benchmarks" ([#21084](https://github.com/astral-sh/uv/pull/21084))
+- Temporarily disable Artifactory registry integration ([#21048](https://github.com/astral-sh/uv/pull/21048))
+- add `uv_extract::dirhash` a new scheme and implementation for hashing directory trees ([#20737](https://github.com/astral-sh/uv/pull/20737))
+
 ## 0.12.3
 
 Released on 2026-08-07.
