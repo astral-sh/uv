@@ -28,7 +28,7 @@ fn cache_dir_uses_configured_test_context_path() {
 /// the build.
 #[test]
 fn build_warns_cache_inside_source() -> Result<()> {
-    let mut context = uv_test::test_context!("3.12");
+    let context = uv_test::test_context!("3.12").with_cache_dir("project/.uv-cache");
     let project = context.temp_dir.child("project");
 
     project.child("pyproject.toml").write_str(
@@ -44,8 +44,6 @@ fn build_warns_cache_inside_source() -> Result<()> {
         "#,
     )?;
     project.child("src/project/__init__.py").touch()?;
-
-    context.cache_dir = project.child(".uv-cache");
 
     uv_snapshot!(context.filters(), context.build().arg("--sdist").arg("project"), @"
     exit_code: 0 (success)
@@ -117,7 +115,7 @@ fn build_warns_symlinked_cache_inside_source() -> Result<()> {
 /// A cache in the workspace root is allowed when building a member that does not contain it.
 #[test]
 fn build_allows_cache_outside_selected_source() -> Result<()> {
-    let mut context = uv_test::test_context!("3.12");
+    let context = uv_test::test_context!("3.12").with_cache_dir("workspace/.uv-cache");
     let workspace = context.temp_dir.child("workspace");
     let member = workspace.child("member");
 
@@ -140,8 +138,6 @@ fn build_allows_cache_outside_selected_source() -> Result<()> {
         "#,
     )?;
     member.child("src/member/__init__.py").touch()?;
-
-    context.cache_dir = workspace.child(".uv-cache");
 
     uv_snapshot!(context.filters(), context.build()
         .arg("--sdist")
@@ -320,7 +316,13 @@ fn cache_project_inside_cache_no_cache() -> Result<()> {
 fn cache_init_failure() -> Result<()> {
     use uv_test::ReadOnlyDirectoryGuard;
 
-    let context = uv_test::test_context!("3.12");
+    let context = uv_test::test_context!("3.12")
+        .with_cache_dir("cache_parent/cache")
+        .with_filter((r"cache_parent/cache", "[CACHE_DIR]"))
+        .with_filter((
+            r"failed to create directory `.*`",
+            "failed to create directory `[CACHE_DIR]`",
+        ));
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -339,29 +341,8 @@ fn cache_init_failure() -> Result<()> {
     fs_err::create_dir(&cache_parent)?;
     let _guard = ReadOnlyDirectoryGuard::new(cache_parent.path())?;
 
-    // Point the cache to a subdirectory within the read-only parent
-    let cache_dir = cache_parent.child("cache");
-
-    // Filter both the relative path (in the first line) and absolute path (in the cause)
-    let context = context
-        .with_filter((r"cache_parent/cache", "[CACHE_DIR]"))
-        .with_filter((
-            r"failed to create directory `.*`",
-            "failed to create directory `[CACHE_DIR]`",
-        ));
-
-    // Build the sync command manually to use our custom cache directory.
-    // We can't use context.sync() because it adds --cache-dir with the default cache.
-    let mut command = Command::new(get_bin!());
-    command
-        .arg("sync")
-        .arg("--cache-dir")
-        .arg(cache_dir.path())
-        .current_dir(context.temp_dir.path());
-    context.add_shared_env(&mut command, false);
-
     // Running a command should fail with a chained error about cache initialization
-    uv_snapshot!(context.filters(), command, @"
+    uv_snapshot!(context.filters(), context.sync(), @"
     exit_code: 2 (failure)
     ----- stderr -----
     error: Failed to initialize cache at `[CACHE_DIR]`
