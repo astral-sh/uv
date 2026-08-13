@@ -2386,60 +2386,6 @@ fn assert_effective_cache_directory(command: &Command) {
     );
 }
 
-#[cfg(test)]
-mod cache_directory_tests {
-    use std::process::Command;
-
-    use uv_static::EnvVars;
-
-    use super::assert_effective_cache_directory;
-
-    #[test]
-    #[should_panic(expected = "`UV_CACHE_DIR` is ignored")]
-    fn rejects_environment_override_with_explicit_cache_argument() {
-        let mut command = Command::new("uv");
-        command
-            .arg("--cache-dir")
-            .arg("context-cache")
-            .env(EnvVars::UV_CACHE_DIR, "ignored-cache");
-
-        assert_effective_cache_directory(&command);
-    }
-
-    #[test]
-    #[should_panic(expected = "`UV_CACHE_DIR` is ignored")]
-    fn rejects_environment_override_with_inline_cache_argument() {
-        let mut command = Command::new("uv");
-        command
-            .arg("--cache-dir=context-cache")
-            .env(EnvVars::UV_CACHE_DIR, "ignored-cache");
-
-        assert_effective_cache_directory(&command);
-    }
-
-    #[test]
-    fn allows_environment_override_without_explicit_cache_argument() {
-        let mut command = Command::new("uv");
-        command
-            .arg("cache")
-            .arg("dir")
-            .env(EnvVars::UV_CACHE_DIR, "effective-cache");
-
-        assert_effective_cache_directory(&command);
-    }
-
-    #[test]
-    fn allows_removed_environment_override_with_explicit_cache_argument() {
-        let mut command = Command::new("uv");
-        command
-            .arg("--cache-dir")
-            .arg("context-cache")
-            .env_remove(EnvVars::UV_CACHE_DIR);
-
-        assert_effective_cache_directory(&command);
-    }
-}
-
 /// Recursively copy a directory and its contents, skipping gitignored files.
 pub fn copy_dir_ignore(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> anyhow::Result<()> {
     for entry in ignore::Walk::new(&src) {
@@ -2630,4 +2576,58 @@ macro_rules! uv_snapshot {
         ::insta::assert_snapshot!(snapshot, @$snapshot);
         output
     }};
+}
+
+#[cfg(test)]
+mod cache_directory_tests {
+    use std::process::Command;
+
+    use uv_static::EnvVars;
+
+    use super::assert_effective_cache_directory;
+
+    #[test]
+    #[should_panic(expected = "`UV_CACHE_DIR` is ignored")]
+    fn rejects_environment_override_with_explicit_cache_argument() {
+        let mut command = Command::new("uv");
+        command
+            .arg("--cache-dir")
+            .arg("context-cache")
+            .env(EnvVars::UV_CACHE_DIR, "ignored-cache");
+
+        assert_effective_cache_directory(&command);
+    }
+
+    #[test]
+    #[should_panic(expected = "`UV_CACHE_DIR` is ignored")]
+    fn rejects_environment_override_with_inline_cache_argument() {
+        let mut command = Command::new("uv");
+        command
+            .arg("--cache-dir=context-cache")
+            .env(EnvVars::UV_CACHE_DIR, "ignored-cache");
+
+        assert_effective_cache_directory(&command);
+    }
+
+    #[test]
+    fn allows_environment_override_without_explicit_cache_argument() {
+        let mut command = Command::new("uv");
+        command
+            .arg("cache")
+            .arg("dir")
+            .env(EnvVars::UV_CACHE_DIR, "effective-cache");
+
+        assert_effective_cache_directory(&command);
+    }
+
+    #[test]
+    fn allows_removed_environment_override_with_explicit_cache_argument() {
+        let mut command = Command::new("uv");
+        command
+            .arg("--cache-dir")
+            .arg("context-cache")
+            .env_remove(EnvVars::UV_CACHE_DIR);
+
+        assert_effective_cache_directory(&command);
+    }
 }
