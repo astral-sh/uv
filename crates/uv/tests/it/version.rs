@@ -5,7 +5,7 @@ use indoc::indoc;
 use insta::assert_snapshot;
 
 use uv_static::EnvVars;
-use uv_test::uv_snapshot;
+use uv_test::{apply_filters, uv_snapshot};
 
 // Print the version
 #[test]
@@ -1366,8 +1366,12 @@ fn bump_invalid_component_color() -> Result<()> {
         .output()?;
 
     assert_eq!(output.status.code(), Some(2));
+    let stderr = apply_filters(
+        String::from_utf8_lossy(&output.stderr).into_owned(),
+        context.filters(),
+    );
     assert_snapshot!(
-        format!("{:?}", String::from_utf8_lossy(&output.stderr)),
+        format!("{stderr:?}"),
         @r#""\u{1b}[1m\u{1b}[31merror:\u{1b}[0m invalid bump component `foo`\n\n\u{1b}[1m\u{1b}[32mUsage:\u{1b}[0m \u{1b}[1m\u{1b}[36muv version\u{1b}[0m \u{1b}[36m[OPTIONS]\u{1b}[0m \u{1b}[36m[VALUE]\u{1b}[0m\n\nFor more information, try '\u{1b}[1m\u{1b}[36m--help\u{1b}[0m'.\n""#
     );
 
