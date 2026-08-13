@@ -99,8 +99,6 @@ pub const INSTA_FILTERS: &[(&str, &str)] = &[
     (r"--cache-dir [^\s]+", "--cache-dir [CACHE_DIR]"),
     // Operation times
     (r"(\s|\()(\d+m )?(\d+\.)?\d+(ms|s)", "$1[TIME]"),
-    // File sizes
-    (r"(\s|\()(\d+\.)?\d+([KM]i)?B", "$1[SIZE]"),
     // Timestamps
     (r"tv_sec: \d+", "tv_sec: [TIME]"),
     (r"tv_nsec: \d+", "tv_nsec: [TIME]"),
@@ -151,9 +149,6 @@ pub struct TestContext {
 
     /// Standard filters for this test context.
     filters: Vec<(String, String)>,
-
-    /// Preserve literal cache sizes in snapshots instead of applying the standard size filter.
-    preserve_cache_sizes: bool,
 
     /// Extra environment variables to apply to all commands.
     extra_env: Vec<(OsString, OsString)>,
@@ -228,23 +223,36 @@ impl TestContext {
         self
     }
 
-    /// Preserve cache sizes in snapshots so human-readable and machine output remain distinguishable.
+    /// Filter file sizes while retaining their units so human-readable output remains distinguishable.
     #[must_use]
-    pub fn with_cache_size_filters(mut self) -> Self {
-        self.preserve_cache_sizes = true;
+    pub fn with_filtered_sizes(mut self) -> Self {
+        self.filters.push((
+            r"(\s|\()(\d+\.)?\d+(([KMGT]i)?B)".to_string(),
+            "$1[SIZE]$3".to_string(),
+        ));
         self
     }
 
-    /// Add extra filtering for cache size output
+    /// Filter file sizes and units when the units vary across environments.
+    #[must_use]
+    pub fn with_filtered_sizes_and_units(mut self) -> Self {
+        self.filters.push((
+            r"(\s|\()(\d+\.)?\d+([KMGT]i)?B".to_string(),
+            "$1[SIZE]".to_string(),
+        ));
+        self
+    }
+
+    /// Filter cache size output while retaining human-readable units.
     #[must_use]
     pub fn with_filtered_cache_size(mut self) -> Self {
         // Filter raw byte counts (numbers on their own line)
         self.filters
             .push((r"(?m)^\d+\n".to_string(), "[SIZE]\n".to_string()));
-        // Filter human-readable sizes (e.g., "384.2 KiB")
+        // Filter human-readable sizes (e.g., "384.2 KiB") while retaining their units.
         self.filters.push((
-            r"(?m)^\d+(\.\d+)? [KMGT]i?B\n".to_string(),
-            "[SIZE]\n".to_string(),
+            r"(?m)^\d+(\.\d+)?( ?[KMGT]i?B)\n".to_string(),
+            "[SIZE]$2\n".to_string(),
         ));
         self
     }
@@ -1099,7 +1107,6 @@ impl TestContext {
             python_versions,
             uv_bin,
             filters,
-            preserve_cache_sizes: false,
             extra_env: vec![],
             _root: root,
             _extra_tempdirs: vec![],
@@ -1853,7 +1860,6 @@ impl TestContext {
             .iter()
             .map(|(p, r)| (p.as_str(), r.as_str()))
             .chain(INSTA_FILTERS.iter().copied())
-            .filter(|(_, replacement)| !self.preserve_cache_sizes || *replacement != "$1[SIZE]")
             .collect()
     }
 

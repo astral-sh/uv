@@ -15,7 +15,7 @@ use uv_test::uv_snapshot;
 /// `cache clean` should remove all packages.
 #[test]
 fn clean_all() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
+    let context = uv_test::test_context!("3.12").with_filtered_sizes_and_units();
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("typing-extensions\niniconfig")?;
@@ -43,9 +43,7 @@ fn clean_all() -> Result<()> {
 #[cfg(unix)]
 #[test]
 fn clean_all_hardlinked_file() -> Result<()> {
-    let context = uv_test::test_context!("3.12")
-        .with_filtered_counts()
-        .with_cache_size_filters();
+    let context = uv_test::test_context!("3.12").with_filtered_counts();
 
     // Keep the retained hardlink beside the cache so both entries share a filesystem.
     let retained = context.cache_dir.path().with_file_name("retained.bin");
@@ -101,7 +99,6 @@ fn clean_all_hardlinked_file() -> Result<()> {
 fn clean_all_cloned_file() -> Result<()> {
     let Some(context) = uv_test::test_context!("3.12")
         .with_filtered_counts()
-        .with_cache_size_filters()
         .with_cache_on_cow_fs()?
     else {
         return Ok(());
@@ -141,7 +138,6 @@ fn clean_all_cloned_file() -> Result<()> {
 fn clean_all_cached_clones() -> Result<()> {
     let Some(context) = uv_test::test_context!("3.12")
         .with_filtered_counts()
-        .with_cache_size_filters()
         .with_cache_on_cow_fs()?
     else {
         return Ok(());
@@ -176,7 +172,6 @@ fn clean_all_cached_clones() -> Result<()> {
 fn clean_all_compressed_file() -> Result<()> {
     let Some(context) = uv_test::test_context!("3.12")
         .with_filtered_counts()
-        .with_cache_size_filters()
         .with_cache_on_cow_fs()?
     else {
         return Ok(());
@@ -215,7 +210,7 @@ fn clean_all_compressed_file() -> Result<()> {
 /// `cache clear` should behave as an alias of `cache clean`.
 #[test]
 fn clear_all_alias() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
+    let context = uv_test::test_context!("3.12").with_filtered_sizes_and_units();
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("typing-extensions\niniconfig")?;
@@ -244,7 +239,9 @@ fn clear_all_alias() -> Result<()> {
 
 #[tokio::test]
 async fn clean_force() -> Result<()> {
-    let context = uv_test::test_context!("3.12").with_filtered_counts();
+    let context = uv_test::test_context!("3.12")
+        .with_filtered_counts()
+        .with_filtered_sizes_and_units();
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("typing-extensions\niniconfig")?;
@@ -294,7 +291,7 @@ async fn clean_force() -> Result<()> {
 /// `cache clean iniconfig` should remove a single package (`iniconfig`).
 #[test]
 fn clean_package_pypi() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
+    let context = uv_test::test_context!("3.12").with_filtered_sizes_and_units();
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("anyio\niniconfig")?;
@@ -362,7 +359,7 @@ fn clean_package_pypi() -> Result<()> {
 /// `cache clean iniconfig` should remove a single package (`iniconfig`).
 #[test]
 fn clean_package_index() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
+    let context = uv_test::test_context!("3.12").with_filtered_sizes_and_units();
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("anyio\niniconfig")?;
@@ -423,7 +420,7 @@ fn clean_package_index() -> Result<()> {
 #[cfg(unix)]
 #[test]
 fn clean_package_does_not_follow_symlinks() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
+    let context = uv_test::test_context!("3.12").with_filtered_sizes_and_units();
     let victim_dir = context.temp_dir.child("victim");
     let archive_entry = context.cache_dir.child("archive-v0").child("archive");
     let package_entry = context

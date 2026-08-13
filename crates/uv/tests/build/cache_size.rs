@@ -20,13 +20,13 @@ fn cache_size_empty_raw() {
 /// Test that `cache size` returns raw bytes after installing packages.
 #[test]
 fn cache_size_with_packages_raw() {
-    let context = uv_test::test_context!("3.12");
+    let context = uv_test::test_context!("3.12").with_filtered_cache_size();
 
     // Install a requirement to populate the cache.
     context.pip_install().arg("iniconfig").assert().success();
 
     // Check cache size is now positive (raw bytes).
-    uv_snapshot!(context.with_filtered_cache_size().filters(), context.cache_size().arg("--preview"), @"
+    uv_snapshot!(context.filters(), context.cache_size().arg("--preview"), @"
     exit_code: 0 (success)
     ----- stdout -----
     [SIZE]
@@ -36,23 +36,23 @@ fn cache_size_with_packages_raw() {
 /// Test that `cache size --human` returns human-readable format after installing packages.
 #[test]
 fn cache_size_with_packages_human() {
-    let context = uv_test::test_context!("3.12");
+    let context = uv_test::test_context!("3.12").with_filtered_cache_size();
 
     // Install a requirement to populate the cache.
     context.pip_install().arg("iniconfig").assert().success();
 
     // Check cache size with --human flag
-    uv_snapshot!(context.with_filtered_cache_size().filters(), context.cache_size().arg("--preview").arg("--human"), @"
+    uv_snapshot!(context.filters(), context.cache_size().arg("--preview").arg("--human"), @"
     exit_code: 0 (success)
     ----- stdout -----
-    [SIZE]
+    [SIZE]KiB
     ");
 }
 
 /// Explicit output formats override terminal detection.
 #[test]
 fn cache_size_output_formats() {
-    let context = uv_test::test_context!("3.12").with_cache_size_filters();
+    let context = uv_test::test_context!("3.12");
     context.clean().assert().success();
 
     uv_snapshot!(context.cache_size().arg("--preview").arg("--output-format").arg("auto"), @"
@@ -77,7 +77,7 @@ fn cache_size_output_formats() {
 /// Existing human-readable flags remain equivalent to `--output-format human`.
 #[test]
 fn cache_size_human_aliases() {
-    let context = uv_test::test_context!("3.12").with_cache_size_filters();
+    let context = uv_test::test_context!("3.12");
     context.clean().assert().success();
 
     uv_snapshot!(context.filters(), context.cache_size().arg("--preview").arg("--human"), @"

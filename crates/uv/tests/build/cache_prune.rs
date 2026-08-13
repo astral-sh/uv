@@ -44,7 +44,7 @@ fn prune_no_op() -> Result<()> {
 #[cfg(unix)]
 #[test]
 fn prune_hardlinked_file() -> Result<()> {
-    let context = uv_test::test_context!("3.12").with_cache_size_filters();
+    let context = uv_test::test_context!("3.12");
 
     // Keep both hardlinks on the selected filesystem.
     let retained = context.cache_dir.path().with_file_name("retained.bin");
@@ -143,7 +143,9 @@ fn prune_python_downloads() -> Result<()> {
 /// `cache prune` should remove all cached environments from the cache.
 #[test]
 fn prune_cached_env() {
-    let context = uv_test::test_context!("3.12").with_filtered_counts();
+    let context = uv_test::test_context!("3.12")
+        .with_filtered_counts()
+        .with_filtered_sizes_and_units();
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
@@ -199,7 +201,7 @@ fn prune_cached_env() {
 /// `cache prune` should remove any stale symlink from the cache.
 #[test]
 fn prune_stale_symlink() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
+    let context = uv_test::test_context!("3.12").with_filtered_sizes_and_units();
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("anyio")?;
@@ -307,7 +309,9 @@ fn prune_ci_empty_cache() -> Result<()> {
 /// `cache prune --ci` should remove all unzipped archives.
 #[test]
 fn prune_unzipped() -> Result<()> {
-    let context = uv_test::test_context!("3.12").with_exclude_newer("2025-01-01T00:00Z");
+    let context = uv_test::test_context!("3.12")
+        .with_exclude_newer("2025-01-01T00:00Z")
+        .with_filtered_sizes_and_units();
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str(indoc! { r"
@@ -372,7 +376,7 @@ fn prune_unzipped() -> Result<()> {
 /// `cache prune` should remove any stale source distribution revisions.
 #[test]
 fn prune_stale_revision() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
+    let context = uv_test::test_context!("3.12").with_filtered_sizes_and_units();
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
