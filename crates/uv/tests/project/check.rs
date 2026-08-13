@@ -65,72 +65,35 @@ fn check_project() -> Result<()> {
 
 /// Forward uv's terminal settings to the ty subprocess, including quiet-mode progress suppression.
 #[test]
-#[cfg(feature = "test-pypi")]
 fn check_propagates_terminal_settings() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
-
-    context
-        .temp_dir
-        .child("pyproject.toml")
-        .write_str(indoc! {r#"
-            [project]
-            name = "project"
-            version = "0.1.0"
-            requires-python = ">=3.12"
-            dependencies = ["ty"]
-
-            [tool.uv.sources]
-            ty = { path = "ty" }
-        "#})?;
+    let context = uv_test::test_context_with_versions!(&[]).with_filter((r"\x1b\[[0-9;]*m", ""));
     context.temp_dir.child("main.py").write_str("value = 1\n")?;
-
-    let ty = context.temp_dir.child("ty");
-    ty.create_dir_all()?;
-    ty.child("pyproject.toml").write_str(indoc! {r#"
-        [project]
-        name = "ty"
-        version = "1.2.3"
-        requires-python = ">=3.12"
-        dependencies = []
-
-        [project.scripts]
-        ty = "ty:main"
-
-        [build-system]
-        requires = ["uv_build>=0.7,<10000"]
-        build-backend = "uv_build"
-    "#})?;
-    let ty_package = ty.child("src").child("ty");
-    ty_package.create_dir_all()?;
-    ty_package.child("__init__.py").write_str(indoc! {r#"
-        import sys
-
-        def main():
-            if "--version" in sys.argv:
-                print("ty 1.2.3")
-            else:
-                print(" ".join(sys.argv[1:]))
-    "#})?;
 
     let check = || {
         let mut command = context.check();
         command
             .arg("--preview-features")
             .arg("check-command")
+            .arg("--no-project")
+            .arg("--ty-version")
+            .arg("0.0.17")
+            .arg("--show-command")
             // Logging independently disables progress, so isolate the inherited host setting.
             .env_remove(EnvVars::RUST_LOG);
         command
     };
 
-    check().assert().success();
-
     uv_snapshot!(
         context.filters(),
-        check(),
+        check().arg("--show-version"),
         @"
     exit_code: 0 (success)
     ----- stdout -----
-    check --color auto --exclude-scripts --
+    All checks passed!
+
+    ----- stderr -----
+    Using ty 0.0.17
+    Running `ty check --color auto`
     "
     );
 
@@ -143,7 +106,10 @@ fn check_propagates_terminal_settings() -> Result<()> {
         @"
     exit_code: 0 (success)
     ----- stdout -----
-    check --color never --no-progress --exclude-scripts --
+    All checks passed!
+
+    ----- stderr -----
+    Running `ty check --color never --no-progress`
     "
     );
 
@@ -153,7 +119,10 @@ fn check_propagates_terminal_settings() -> Result<()> {
         @"
     exit_code: 0 (success)
     ----- stdout -----
-    check --color auto --no-progress --exclude-scripts --
+    All checks passed!
+
+    ----- stderr -----
+    Running `ty check --color auto --no-progress`
     "
     );
 
@@ -163,7 +132,10 @@ fn check_propagates_terminal_settings() -> Result<()> {
         @"
     exit_code: 0 (success)
     ----- stdout -----
-    check --color always --exclude-scripts --
+    All checks passed!
+
+    ----- stderr -----
+    Running `ty check --color always`
     "
     );
 
@@ -175,7 +147,51 @@ fn check_propagates_terminal_settings() -> Result<()> {
         @"
     exit_code: 0 (success)
     ----- stdout -----
-    check --color never --no-progress --exclude-scripts --
+    All checks passed!
+
+    ----- stderr -----
+    Running `ty check --color never --no-progress`
+    "
+    );
+
+    Ok(())
+}
+
+/// Display shell-safe arguments when the selected script path contains spaces.
+#[test]
+fn check_show_command_quotes_script_path() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("script with spaces.py")
+        .write_str(indoc! {r#"
+            # /// script
+            # requires-python = ">=3.12"
+            # dependencies = []
+            # ///
+
+            value = 1
+        "#})?;
+
+    uv_snapshot!(
+        context.filters(),
+        context
+            .check()
+            .arg("--preview-features")
+            .arg("check-command")
+            .arg("--script")
+            .arg("script with spaces.py")
+            .arg("--ty-version")
+            .arg("0.0.17")
+            .arg("--show-command")
+            .env_remove(EnvVars::RUST_LOG),
+        @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    All checks passed!
+
+    ----- stderr -----
+    Running `ty check --color auto -- 'script with spaces.py'`
     "
     );
 

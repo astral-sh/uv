@@ -2928,6 +2928,7 @@ async fn run_project(
                 args.settings,
                 args.ty_version,
                 args.show_version,
+                args.show_command,
                 script,
                 client_builder.subcommand(vec!["check".to_owned()]),
                 globals.python_preference,

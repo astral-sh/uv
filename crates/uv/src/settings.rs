@@ -3045,6 +3045,7 @@ pub(crate) struct CheckSettings {
     pub(crate) settings: ResolverInstallerSettings,
     pub(crate) ty_version: Option<String>,
     pub(crate) show_version: bool,
+    pub(crate) show_command: bool,
     pub(crate) no_project: bool,
     pub(crate) malware_settings: MalwareCheckSettings,
 }
@@ -3083,6 +3084,7 @@ impl CheckSettings {
             python,
             ty_version,
             show_version,
+            show_command,
             no_project,
             installer,
             build,
@@ -3148,6 +3150,7 @@ impl CheckSettings {
             settings,
             ty_version,
             show_version,
+            show_command,
             no_project,
             malware_settings,
         })
