@@ -39,6 +39,11 @@ after it has been created.
 
 Produce only a JSON object matching the supplied output schema. Set `outcome` to `fixed` only when
 the checkout contains both a focused production fix and the updated parent regression test. Set
-`summary` to the concise mechanism of the fix, and list successful focused checks in `validation`.
+`summary` to one short paragraph explaining the reported bug and how the production change and
+regression test address it. Do not include issue references, generic boilerplate, validation
+commands, or a validation checklist; the publishing workflow uses the summary as the pull request
+body and appends the canonical issue reference. List successful focused checks in `validation`. Set
+`pull_request_title` to a concise, specific, imperative title describing the corrected behavior.
+
 Otherwise leave the checkout unchanged, set `outcome` to `not_fixed`, explain the limitation in
-`summary`, and use an empty `validation` array.
+`summary`, use an empty `validation` array, and set `pull_request_title` to an empty string.
