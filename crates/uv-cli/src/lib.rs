@@ -4996,6 +4996,15 @@ pub struct CheckArgs {
     #[arg(long)]
     pub no_sync: bool,
 
+    /// Do not install the current project [env: UV_NO_INSTALL_PROJECT=]
+    ///
+    /// By default, the current project is installed into the environment with all of its
+    /// dependencies. The `--no-install-project` option excludes the project itself while still
+    /// installing its dependencies, which is useful when the project can be type-checked from its
+    /// source tree without building native extensions.
+    #[arg(long, conflicts_with_all = ["no_sync", "script", "no_project"])]
+    pub no_install_project: bool,
+
     /// Run checks without mutating project state [env: UV_ISOLATED=]
     ///
     /// Uses a temporary virtual environment and leaves existing environments and the project
