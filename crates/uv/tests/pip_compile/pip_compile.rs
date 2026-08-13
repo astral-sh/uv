@@ -15269,7 +15269,7 @@ fn same_version_multi_index_incompatibility() -> Result<()> {
 /// Show the derivation chain on build failure.
 #[test]
 fn compile_derivation_chain() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
+    let context = uv_test::test_context!("3.12").with_filter((r"/.*/src", "/[TMP]/src"));
 
     let child = context.temp_dir.child("child");
     child.child("pyproject.toml").write_str(
@@ -15295,13 +15295,7 @@ fn compile_derivation_chain() -> Result<()> {
         ]
     "#, Url::from_file_path(child).unwrap()})?;
 
-    let filters = context
-        .filters()
-        .into_iter()
-        .chain([(r"/.*/src", "/[TMP]/src")])
-        .collect::<Vec<_>>();
-
-    uv_snapshot!(filters, context.pip_compile().arg("pyproject.toml"), @r#"
+    uv_snapshot!(context.filters(), context.pip_compile().arg("pyproject.toml"), @r#"
     exit_code: 1 (failure)
     ----- stderr -----
       × Failed to build `wsgiref==0.1.2`

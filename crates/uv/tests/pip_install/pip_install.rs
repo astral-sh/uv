@@ -10398,7 +10398,7 @@ fn sklearn() {
 
 #[test]
 fn resolve_derivation_chain() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
+    let context = uv_test::test_context!("3.12").with_filter((r"/.*/src", "/[TMP]/src"));
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {r#"
@@ -10410,13 +10410,7 @@ fn resolve_derivation_chain() -> Result<()> {
         "#
     })?;
 
-    let filters = context
-        .filters()
-        .into_iter()
-        .chain([(r"/.*/src", "/[TMP]/src")])
-        .collect::<Vec<_>>();
-
-    uv_snapshot!(filters, context.pip_install()
+    uv_snapshot!(context.filters(), context.pip_install()
         .arg("-e")
         .arg("."), @r#"
     exit_code: 1 (failure)
