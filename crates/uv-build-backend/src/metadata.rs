@@ -31,6 +31,13 @@ use crate::{BuildBackendSettings, Error, error_on_venv};
 /// By default, we ignore generated python files.
 pub(crate) const DEFAULT_EXCLUDES: &[&str] = &["__pycache__", "*.pyc", "*.pyo"];
 
+/// The artifact whose build-system requirements are being validated.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum BuildArtifact {
+    SourceDistribution,
+    Wheel,
+}
+
 /// No breaking changes were introduced to the uv build backend since these releases, so we can use
 /// the fast path for them too.
 const COMPATIBLE_VERSIONS: &[&str] = &["0.9.30", "0.10.12", "0.11.33"];
@@ -422,13 +429,12 @@ impl PyProjectToml {
     }
 
     /// See [`BuildSystem::check_build_system`].
-    pub(crate) fn check_build_system(&self, uv_version: &str) -> Vec<String> {
-        self.build_system.check_build_system(uv_version, false)
-    }
-
-    /// Validate build-system metadata that will be included in a source distribution.
-    pub(crate) fn check_source_distribution(&self, uv_version: &str) -> Vec<String> {
-        self.build_system.check_build_system(uv_version, true)
+    pub(crate) fn check_build_system(
+        &self,
+        uv_version: &str,
+        artifact: BuildArtifact,
+    ) -> Vec<String> {
+        self.build_system.check_build_system(uv_version, artifact)
     }
 
     /// Validate and convert a `pyproject.toml` to core metadata.
@@ -1181,7 +1187,7 @@ impl BuildSystem {
     /// requires = ["uv_build>=0.4.15,<0.5.0"]
     /// build-backend = "uv_build"
     /// ```
-    fn check_build_system(&self, uv_version: &str, check_upper_bound: bool) -> Vec<String> {
+    fn check_build_system(&self, uv_version: &str, artifact: BuildArtifact) -> Vec<String> {
         let mut warnings = Vec::new();
         if self.build_backend.as_deref() != Some("uv_build") {
             warnings.push(format!(
@@ -1231,7 +1237,7 @@ impl BuildSystem {
             }
         };
 
-        if check_upper_bound && !bounded {
+        if matches!(artifact, BuildArtifact::SourceDistribution) && !bounded {
             let next_minor = uv_version.release().get(1).copied().unwrap_or_default() + 1;
             let next_breaking = Version::new([0, next_minor]);
             warnings.push(format!(
@@ -1730,7 +1736,9 @@ mod tests {
         let contents = extend_project("");
         let pyproject_toml: PyProjectToml = toml::from_str(&contents).unwrap();
         assert_snapshot!(
-            pyproject_toml.check_build_system("0.4.15+test").join("\n"),
+            pyproject_toml
+                .check_build_system("0.4.15+test", BuildArtifact::Wheel)
+                .join("\n"),
             @""
         );
     }
@@ -1748,11 +1756,15 @@ mod tests {
         "#};
         let pyproject_toml: PyProjectToml = toml::from_str(contents).unwrap();
         assert_snapshot!(
-            pyproject_toml.check_build_system("0.4.15+test").join("\n"),
+            pyproject_toml
+                .check_build_system("0.4.15+test", BuildArtifact::Wheel)
+                .join("\n"),
             @""
         );
         assert_snapshot!(
-            pyproject_toml.check_source_distribution("0.4.15+test").join("\n"),
+            pyproject_toml
+                .check_build_system("0.4.15+test", BuildArtifact::SourceDistribution)
+                .join("\n"),
             @r#"`build_system.requires = ["uv_build"]` is missing an upper bound on the `uv_build` version such as `<0.5`. Without bounding the `uv_build` version, the source distribution will break when a future, breaking version of `uv_build` is released."#
         );
     }
@@ -1770,7 +1782,9 @@ mod tests {
         "#};
         let pyproject_toml: PyProjectToml = toml::from_str(contents).unwrap();
         assert_snapshot!(
-            pyproject_toml.check_build_system("0.4.15+test").join("\n"),
+            pyproject_toml
+                .check_build_system("0.4.15+test", BuildArtifact::Wheel)
+                .join("\n"),
             @"Expected `build-system.requires` to contain only `uv_build`, found `uv-build>=0.4.15,<0.5.0`, `wheel`"
         );
     }
@@ -1788,7 +1802,9 @@ mod tests {
         "#};
         let pyproject_toml: PyProjectToml = toml::from_str(contents).unwrap();
         assert_snapshot!(
-            pyproject_toml.check_build_system("0.4.15+test").join("\n"),
+            pyproject_toml
+                .check_build_system("0.4.15+test", BuildArtifact::Wheel)
+                .join("\n"),
             @"Expected `build-system.requires` to be `uv_build`, found `setuptools`"
         );
     }
@@ -1806,7 +1822,9 @@ mod tests {
         "#};
         let pyproject_toml: PyProjectToml = toml::from_str(contents).unwrap();
         assert_snapshot!(
-            pyproject_toml.check_build_system("0.4.15+test").join("\n"),
+            pyproject_toml
+                .check_build_system("0.4.15+test", BuildArtifact::Wheel)
+                .join("\n"),
             @r#"`build_system.build-backend` was expected to be `"uv_build"`, not `"setuptools"`"#
         );
     }

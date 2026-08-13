@@ -23,7 +23,7 @@ use uv_platform_tags::{AbiTag, LanguageTag, PlatformTag};
 use uv_preview::PreviewFeature;
 use uv_warnings::warn_user_once;
 
-use crate::metadata::DEFAULT_EXCLUDES;
+use crate::metadata::{BuildArtifact, DEFAULT_EXCLUDES};
 use crate::{
     BuildBackendSettings, DirectoryWriter, Error, FileList, ListWriter, PyProjectToml,
     error_on_venv, find_roots, write_directory_once, write_file_with_directories,
@@ -48,7 +48,7 @@ pub fn build_wheel(
     show_warnings: bool,
 ) -> Result<WheelFilename, Error> {
     let pyproject_toml = PyProjectToml::parse(&source_tree.join("pyproject.toml"))?;
-    for warning in pyproject_toml.check_build_system(uv_version) {
+    for warning in pyproject_toml.check_build_system(uv_version, BuildArtifact::Wheel) {
         warn_user_once!("{warning}");
     }
     crate::check_metadata_directory(source_tree, metadata_directory, &pyproject_toml)?;
@@ -97,7 +97,7 @@ pub fn list_wheel(
     show_warnings: bool,
 ) -> Result<(WheelFilename, FileList), Error> {
     let pyproject_toml = PyProjectToml::parse(&source_tree.join("pyproject.toml"))?;
-    for warning in pyproject_toml.check_build_system(uv_version) {
+    for warning in pyproject_toml.check_build_system(uv_version, BuildArtifact::Wheel) {
         warn_user_once!("{warning}");
     }
 
@@ -253,7 +253,7 @@ pub fn build_editable(
     show_warnings: bool,
 ) -> Result<WheelFilename, Error> {
     let pyproject_toml = PyProjectToml::parse(&source_tree.join("pyproject.toml"))?;
-    for warning in pyproject_toml.check_build_system(uv_version) {
+    for warning in pyproject_toml.check_build_system(uv_version, BuildArtifact::Wheel) {
         warn_user_once!("{warning}");
     }
     let settings = pyproject_toml
@@ -408,7 +408,7 @@ pub fn metadata(
     uv_version: &str,
 ) -> Result<String, Error> {
     let pyproject_toml = PyProjectToml::parse(&source_tree.join("pyproject.toml"))?;
-    for warning in pyproject_toml.check_build_system(uv_version) {
+    for warning in pyproject_toml.check_build_system(uv_version, BuildArtifact::Wheel) {
         warn_user_once!("{warning}");
     }
 
