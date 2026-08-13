@@ -44,7 +44,7 @@ fn prune_no_op() -> Result<()> {
 #[cfg(unix)]
 #[test]
 fn prune_hardlinked_file() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
+    let context = uv_test::test_context!("3.12").with_cache_size_filters();
 
     // Keep both hardlinks on the selected filesystem.
     let retained = context.cache_dir.path().with_file_name("retained.bin");
@@ -58,9 +58,7 @@ fn prune_hardlinked_file() -> Result<()> {
     stale.create_dir_all()?;
     fs_err::hard_link(&retained, stale.child("hardlinked.bin"))?;
 
-    let filters = context.with_cache_size_filters();
-
-    uv_snapshot!(&filters, context.prune(), @"
+    uv_snapshot!(context.filters(), context.prune(), @"
     exit_code: 0 (success)
     ----- stderr -----
     Pruning cache at: [CACHE_DIR]/
@@ -70,7 +68,7 @@ fn prune_hardlinked_file() -> Result<()> {
     stale.create_dir_all()?;
     fs_err::hard_link(&retained, stale.child("hardlinked.bin"))?;
 
-    uv_snapshot!(&filters, context.prune().arg("--preview-features").arg("cache-physical-space"), @"
+    uv_snapshot!(context.filters(), context.prune().arg("--preview-features").arg("cache-physical-space"), @"
     exit_code: 0 (success)
     ----- stderr -----
     Pruning cache at: [CACHE_DIR]/

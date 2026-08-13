@@ -52,7 +52,7 @@ fn cache_size_with_packages_human() {
 /// Explicit output formats override terminal detection.
 #[test]
 fn cache_size_output_formats() {
-    let context = uv_test::test_context!("3.12");
+    let context = uv_test::test_context!("3.12").with_cache_size_filters();
     context.clean().assert().success();
 
     uv_snapshot!(context.cache_size().arg("--preview").arg("--output-format").arg("auto"), @"
@@ -61,7 +61,7 @@ fn cache_size_output_formats() {
     0
     ");
 
-    uv_snapshot!(context.with_cache_size_filters(), context.cache_size().arg("--preview").arg("--output-format").arg("human"), @"
+    uv_snapshot!(context.filters(), context.cache_size().arg("--preview").arg("--output-format").arg("human"), @"
     exit_code: 0 (success)
     ----- stdout -----
     0B
@@ -77,23 +77,22 @@ fn cache_size_output_formats() {
 /// Existing human-readable flags remain equivalent to `--output-format human`.
 #[test]
 fn cache_size_human_aliases() {
-    let context = uv_test::test_context!("3.12");
+    let context = uv_test::test_context!("3.12").with_cache_size_filters();
     context.clean().assert().success();
-    let filters = context.with_cache_size_filters();
 
-    uv_snapshot!(&filters, context.cache_size().arg("--preview").arg("--human"), @"
+    uv_snapshot!(context.filters(), context.cache_size().arg("--preview").arg("--human"), @"
     exit_code: 0 (success)
     ----- stdout -----
     0B
     ");
 
-    uv_snapshot!(&filters, context.cache_size().arg("--preview").arg("-H"), @"
+    uv_snapshot!(context.filters(), context.cache_size().arg("--preview").arg("-H"), @"
     exit_code: 0 (success)
     ----- stdout -----
     0B
     ");
 
-    uv_snapshot!(&filters, context.cache_size().arg("--preview").arg("--human-readable"), @"
+    uv_snapshot!(context.filters(), context.cache_size().arg("--preview").arg("--human-readable"), @"
     exit_code: 0 (success)
     ----- stdout -----
     0B

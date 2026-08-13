@@ -43,7 +43,9 @@ fn clean_all() -> Result<()> {
 #[cfg(unix)]
 #[test]
 fn clean_all_hardlinked_file() -> Result<()> {
-    let context = uv_test::test_context!("3.12").with_filtered_counts();
+    let context = uv_test::test_context!("3.12")
+        .with_filtered_counts()
+        .with_cache_size_filters();
 
     // Keep the retained hardlink beside the cache so both entries share a filesystem.
     let retained = context.cache_dir.path().with_file_name("retained.bin");
@@ -56,9 +58,7 @@ fn clean_all_hardlinked_file() -> Result<()> {
     let cached = context.cache_dir.child("hardlinked.bin");
     fs_err::hard_link(&retained, &cached)?;
 
-    let filters = context.with_cache_size_filters();
-
-    uv_snapshot!(&filters, context.clean(), @"
+    uv_snapshot!(context.filters(), context.clean(), @"
     exit_code: 0 (success)
     ----- stderr -----
     Clearing cache at: [CACHE_DIR]/
@@ -68,7 +68,7 @@ fn clean_all_hardlinked_file() -> Result<()> {
     context.cache_dir.create_dir_all()?;
     fs_err::hard_link(&retained, &cached)?;
 
-    uv_snapshot!(&filters, context.clean().arg("--preview-features").arg("cache-physical-space"), @"
+    uv_snapshot!(context.filters(), context.clean().arg("--preview-features").arg("cache-physical-space"), @"
     exit_code: 0 (success)
     ----- stderr -----
     Clearing cache at: [CACHE_DIR]/
@@ -85,7 +85,7 @@ fn clean_all_hardlinked_file() -> Result<()> {
         .sync_all()?;
     fs_err::hard_link(&cached, context.cache_dir.child("second-hardlink.bin"))?;
 
-    uv_snapshot!(&filters, context.clean().arg("--preview-features").arg("cache-physical-space"), @"
+    uv_snapshot!(context.filters(), context.clean().arg("--preview-features").arg("cache-physical-space"), @"
     exit_code: 0 (success)
     ----- stderr -----
     Clearing cache at: [CACHE_DIR]/
@@ -101,12 +101,11 @@ fn clean_all_hardlinked_file() -> Result<()> {
 fn clean_all_cloned_file() -> Result<()> {
     let Some(context) = uv_test::test_context!("3.12")
         .with_filtered_counts()
+        .with_cache_size_filters()
         .with_cache_on_cow_fs()?
     else {
         return Ok(());
     };
-    let cache_dir = context.cache_dir.path().to_path_buf();
-    let context = context.with_filtered_path(&cache_dir, "CACHE_DIR");
     let retained = context.cache_dir.path().with_file_name("retained");
     fs_err::create_dir_all(&retained)?;
     let original = retained.join("original.bin");
@@ -124,12 +123,10 @@ fn clean_all_cloned_file() -> Result<()> {
         "the configured copy-on-write filesystem did not clone the cached file"
     );
 
-    let filters = context.with_cache_size_filters();
-
-    uv_snapshot!(&filters, context.clean().arg("--preview"), @"
+    uv_snapshot!(context.filters(), context.clean().arg("--preview"), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Clearing cache at: [CACHE_DIR]/
+    Clearing cache at: [COW_FS]/[CACHE_DIR]/
     Removed [N] files (0B)
     ");
 
@@ -144,12 +141,11 @@ fn clean_all_cloned_file() -> Result<()> {
 fn clean_all_cached_clones() -> Result<()> {
     let Some(context) = uv_test::test_context!("3.12")
         .with_filtered_counts()
+        .with_cache_size_filters()
         .with_cache_on_cow_fs()?
     else {
         return Ok(());
     };
-    let cache_dir = context.cache_dir.path().to_path_buf();
-    let context = context.with_filtered_path(&cache_dir, "CACHE_DIR");
     let original = context.cache_dir.child("original");
     original.create_dir_all()?;
     original
@@ -164,12 +160,10 @@ fn clean_all_cached_clones() -> Result<()> {
         "the configured copy-on-write filesystem did not clone the cached file"
     );
 
-    let filters = context.with_cache_size_filters();
-
-    uv_snapshot!(&filters, context.clean().arg("--preview-features").arg("cache-physical-space"), @"
+    uv_snapshot!(context.filters(), context.clean().arg("--preview-features").arg("cache-physical-space"), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Clearing cache at: [CACHE_DIR]/
+    Clearing cache at: [COW_FS]/[CACHE_DIR]/
     Removed [N] files (1.0MiB)
     ");
 
@@ -182,12 +176,11 @@ fn clean_all_cached_clones() -> Result<()> {
 fn clean_all_compressed_file() -> Result<()> {
     let Some(context) = uv_test::test_context!("3.12")
         .with_filtered_counts()
+        .with_cache_size_filters()
         .with_cache_on_cow_fs()?
     else {
         return Ok(());
     };
-    let cache_dir = context.cache_dir.path().to_path_buf();
-    let context = context.with_filtered_path(&cache_dir, "CACHE_DIR");
     let measured = context.cache_dir.child("measured.bin");
     measured.write_binary(&vec![42; 1024 * 1024])?;
     fs_err::OpenOptions::new()
@@ -209,12 +202,10 @@ fn clean_all_compressed_file() -> Result<()> {
         .open(compressed.path())?
         .sync_all()?;
 
-    let filters = context.with_cache_size_filters();
-
-    uv_snapshot!(&filters, context.clean().arg("--preview-features").arg("cache-physical-space"), @"
+    uv_snapshot!(context.filters(), context.clean().arg("--preview-features").arg("cache-physical-space"), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Clearing cache at: [CACHE_DIR]/
+    Clearing cache at: [COW_FS]/[CACHE_DIR]/
     Removed [N] files (at least 1.0MiB)
     ");
 

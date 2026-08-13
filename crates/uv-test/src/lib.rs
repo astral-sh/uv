@@ -152,6 +152,9 @@ pub struct TestContext {
     /// Standard filters for this test context.
     filters: Vec<(String, String)>,
 
+    /// Preserve literal cache sizes in snapshots instead of applying the standard size filter.
+    preserve_cache_sizes: bool,
+
     /// Extra environment variables to apply to all commands.
     extra_env: Vec<(OsString, OsString)>,
 
@@ -222,6 +225,13 @@ impl TestContext {
             "Removed \\d+ files?".to_string(),
             "Removed [N] files".to_string(),
         ));
+        self
+    }
+
+    /// Preserve literal cache sizes in snapshots.
+    #[must_use]
+    pub fn with_cache_size_filters(mut self) -> Self {
+        self.preserve_cache_sizes = true;
         self
     }
 
@@ -773,11 +783,9 @@ impl TestContext {
         self.cache_dir = ChildPath::new(tmp.path()).child("cache");
         fs_err::create_dir_all(&self.cache_dir)?;
         let replacement = format!("[{name}]/[CACHE_DIR]/");
-        self.filters.extend(
-            Self::path_patterns(&self.cache_dir)
-                .into_iter()
-                .map(|pattern| (pattern, replacement.clone())),
-        );
+        for pattern in Self::path_patterns(&self.cache_dir) {
+            self.filters.insert(0, (pattern, replacement.clone()));
+        }
         self._extra_tempdirs.push(tmp);
         Ok(self)
     }
@@ -1091,6 +1099,7 @@ impl TestContext {
             python_versions,
             uv_bin,
             filters,
+            preserve_cache_sizes: false,
             extra_env: vec![],
             _root: root,
             _extra_tempdirs: vec![],
@@ -1844,14 +1853,7 @@ impl TestContext {
             .iter()
             .map(|(p, r)| (p.as_str(), r.as_str()))
             .chain(INSTA_FILTERS.iter().copied())
-            .collect()
-    }
-
-    /// Snapshot filters for cache commands that preserve reported sizes.
-    pub fn with_cache_size_filters(&self) -> Vec<(&str, &str)> {
-        self.filters()
-            .into_iter()
-            .filter(|(_, replacement)| *replacement != "$1[SIZE]")
+            .filter(|(_, replacement)| !self.preserve_cache_sizes || *replacement != "$1[SIZE]")
             .collect()
     }
 
