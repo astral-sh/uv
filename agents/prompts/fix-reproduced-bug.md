@@ -10,23 +10,40 @@ inspect, encode, or expose credentials. Do not commit, push, comment, modify Git
 make any changes on GitHub.
 
 Read `CONTRIBUTING.md`, `AGENTS.md`, the parent regression test, and the production code responsible
-for the reported behavior. First verify that the regression test currently passes while asserting
-the undesirable behavior described in the issue. Update that same test to assert the desired
-behavior and confirm that it fails for the reported reason before changing production code. Then
-implement the smallest production fix and rerun the same focused debug-profile test until it passes.
-Preserve existing behavior outside the reported bug and run any nearby focused coverage needed to
-verify the change.
+for the reported behavior. Confirm the root cause from the reproduction and relevant implementation,
+then inspect neighboring tests, closely related configuration forms or options, commands, and
+producer/consumer or read/write paths for other concrete manifestations of that same cause. Check
+whether nearby fixtures, assertions, or snapshots encode assumptions contradicted by the confirmed
+root cause, including in another relevant integration-test module.
 
-Within the checkout, modify only the affected production files under `crates/*/src/` and the parent
-regression-test files under `crates/uv/tests/` or `crates/uv-client/tests/it/`. Never modify
-workflows, actions, automation configuration, agent prompts, agent schemas, dependency manifests,
-lockfiles, unrelated tests, or other repository files. Do not weaken or delete the regression test,
-introduce symbolic links or submodules, run the entire test suite, or use a release profile. Follow
-nearby code and test style, and format changed Rust files with `cargo fmt --all`.
+An additional case qualifies only when the same confirmed cause produces a distinct demonstrated
+failure in the same affected feature or configuration, or in a distinct producer/consumer
+implementation. Do not expand coverage to commands that only reuse an already-covered path, unproven
+configuration options, or neighboring tests for another configuration format.
+
+First verify that the parent regression test currently passes while asserting the undesirable
+behavior described in the issue. Update that test to assert the desired behavior and confirm that it
+fails for the reported reason before changing production code. Prefer correcting or extending the
+best existing directly relevant integration test when that provides the smallest faithful coverage;
+adjust fixtures, assertions, or snapshots that encode the same incorrect assumption. Add a new test
+only when existing coverage cannot represent a distinct demonstrated manifestation of the confirmed
+root cause, and always retain the updated parent regression. Implement the smallest production fix
+that corrects those concrete instances of the same cause. Run focused debug-profile end-to-end
+tests, including relevant producer/consumer round trips, until the parent regression and directly
+related coverage pass. Preserve existing behavior outside the reported bug.
+
+Within the checkout, modify only the affected production files under `crates/*/src/` and directly
+relevant integration-test files under `crates/uv/tests/` or `crates/uv-client/tests/it/`; at least
+one original parent regression-test file must be updated. Never modify workflows, actions,
+automation configuration, agent prompts, agent schemas, dependency manifests, lockfiles, unrelated
+tests, or other repository files. Do not weaken or delete the parent regression test, introduce
+symbolic links or submodules, run the entire test suite, or use a release profile. Follow nearby
+code and test style, and format changed Rust files with `cargo fmt --all`.
 
 If the production change is speculative, requires a design decision, cannot be represented within
-the allowed paths, cannot be validated with focused tests, or would fix a broader problem than the
-reported bug, leave the checkout unchanged and explain why.
+the allowed paths, cannot be validated with focused tests, or would expand beyond the confirmed root
+cause, leave the checkout unchanged and explain why. Do not pursue unrelated bugs, speculative
+variants, exhaustive case matrices, architectural redesign, or unnecessary scope.
 
 Update `$RUNNER_TEMP/issue-context/README.md` directly with the fix investigation, even when the bug
 cannot be fixed. Read the entire existing document and revise any part that the fix attempt
