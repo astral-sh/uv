@@ -852,7 +852,7 @@ fn run_pep723_script_relative_flat_index() -> Result<()> {
     let elsewhere = context.temp_dir.child("elsewhere");
     elsewhere.create_dir_all()?;
 
-    // This should resolve `./links` relative to the script, but astral-sh/uv#21096 currently
+    // This should resolve `./links` relative to the script, but as reported in astral-sh/uv#21096, uv currently
     // resolves it relative to the working directory instead.
     uv_snapshot!(context.filters(), context.run().arg("--offline").arg(test_script.path()).current_dir(elsewhere.path()), @"
     exit_code: 2 (failure)
