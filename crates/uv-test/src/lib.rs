@@ -228,7 +228,7 @@ impl TestContext {
         self
     }
 
-    /// Preserve literal cache sizes in snapshots.
+    /// Preserve cache sizes in snapshots so human-readable and machine output remain distinguishable.
     #[must_use]
     pub fn with_cache_size_filters(mut self) -> Self {
         self.preserve_cache_sizes = true;
