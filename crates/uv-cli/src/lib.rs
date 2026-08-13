@@ -835,19 +835,19 @@ impl TypedValueParser for VersionBumpSpecValueParser {
 
     fn parse_ref(
         &self,
-        _cmd: &clap::Command,
+        command: &clap::Command,
         _arg: Option<&clap::Arg>,
         value: &std::ffi::OsStr,
     ) -> Result<Self::Value, clap::Error> {
         let raw = value.to_str().ok_or_else(|| {
-            clap::Error::raw(
+            command.clone().error(
                 ErrorKind::InvalidUtf8,
                 "`--bump` values must be valid UTF-8",
             )
         })?;
 
         VersionBumpSpec::from_str(raw)
-            .map_err(|message| clap::Error::raw(ErrorKind::InvalidValue, message))
+            .map_err(|message| command.clone().error(ErrorKind::InvalidValue, message))
     }
 
     fn possible_values(&self) -> Option<Box<dyn Iterator<Item = PossibleValue> + '_>> {
