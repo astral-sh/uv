@@ -1064,7 +1064,7 @@ fn build_all_respects_workspace_build_constraint_dependencies() -> Result<()> {
 
     let stderr = apply_filters(
         String::from_utf8_lossy(&output.stderr).into_owned(),
-        &context.filters(),
+        context.filters(),
     );
 
     assert!(
