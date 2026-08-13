@@ -149,6 +149,25 @@ $ uv python upgrade
 See the [`python upgrade`](../concepts/python-versions.md#upgrading-python-versions) documentation
 for more details.
 
+## Configuring Python download sources
+
+Configure alternative download sources (mirrors) for Python and PyPy distributions. This replaces
+the default download location and can be useful for faster downloads or offline environments. For
+more details on how uv manages Python distributions, refer to the
+[Python distributions documentation](../concepts/python-versions.md#managed-python-distributions).
+
+You can configure these mirrors via CLI options, environment variables, or a configuration file.
+
+For Python, use the [`--mirror`](../reference/cli.md#uv-python-install--mirror) CLI option, the
+[`UV_PYTHON_INSTALL_MIRROR`](../reference/environment.md#uv_python_install_mirror) environment
+variable, or the [`python-install-mirror`](../reference/settings.md#python-install-mirror) setting
+in a configuration file.
+
+For PyPy, use the [`--pypy-mirror`](../reference/cli.md#uv-python-install--pypy-mirror) CLI option,
+the [`UV_PYPY_INSTALL_MIRROR`](../reference/environment.md#uv_pypy_install_mirror) environment
+variable, or the [`pypy-install-mirror`](../reference/settings.md#pypy-install-mirror) setting in a
+configuration file.
+
 ## Next steps
 
 To learn more about `uv python`, see the [Python version concept](../concepts/python-versions.md)
