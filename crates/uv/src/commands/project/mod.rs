@@ -313,7 +313,7 @@ pub(crate) enum ProjectError {
     IndexCredentials(#[from] IndexCredentialsError),
 
     #[error(transparent)]
-    Index(#[from] IndexUrlError),
+    IndexUrl(#[from] IndexUrlError),
 
     #[error(transparent)]
     Python(#[from] uv_python::Error),

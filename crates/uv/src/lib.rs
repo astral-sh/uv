@@ -44,7 +44,7 @@ use uv_pypi_types::{ParsedDirectoryUrl, ParsedUrl};
 use uv_python::{ConfigDiscovery, PythonRequest};
 use uv_requirements::{GroupsSpecification, RequirementsSource};
 use uv_requirements_txt::RequirementsTxtRequirement;
-use uv_scripts::{Pep723Error, Pep723Item, Pep723Script};
+use uv_scripts::{Pep723Error, Pep723Item, Pep723ItemRef, Pep723Script};
 use uv_settings::{Combine, EnvironmentOptions, FilesystemOptions, Options};
 use uv_static::EnvVars;
 use uv_warnings::{warn_user, warn_user_once};
@@ -487,14 +487,22 @@ async fn run_with_workspace_cache(
     };
 
     // If the target is a PEP 723 script, merge the metadata into the filesystem metadata.
-    let filesystem = script
+    let script_filesystem = script
         .as_ref()
         .map(Pep723Item::metadata)
         .and_then(|metadata| metadata.tool.as_ref())
         .and_then(|tool| tool.uv.as_ref())
         .map(|uv| Options::simple(uv.globals.clone(), uv.top_level.clone()))
-        .map(FilesystemOptions::from)
-        .combine(filesystem);
+        .map(FilesystemOptions::from);
+    let script_filesystem = if let Some(Pep723Item::Script(script)) = script.as_ref() {
+        let script_dir = Pep723ItemRef::from(script).directory()?;
+        script_filesystem
+            .map(|options| options.relative_to(&script_dir))
+            .transpose()?
+    } else {
+        script_filesystem
+    };
+    let filesystem = script_filesystem.combine(filesystem);
 
     let custom_certificate_file = match &*cli.command {
         Commands::Pip(PipNamespace { cert, .. }) => cert.as_deref(),
