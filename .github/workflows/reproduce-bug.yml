@@ -27,7 +27,7 @@ on:
         value: ${{ jobs.create-integration-test.outputs.result }}
       pull-request:
         description: "The draft integration-test pull request URL"
-        value: ${{ jobs.create-integration-test.outputs.pull-request }}
+        value: ${{ jobs.publish-integration-test.outputs.pull-request }}
       issue-number:
         description: "The verified upstream issue number"
         value: ${{ jobs.reproduce.outputs.issue-number }}
@@ -36,10 +36,10 @@ on:
         value: ${{ jobs.reproduce.outputs.thread-artifact-id }}
       head-ref:
         description: "The regression-test branch"
-        value: ${{ jobs.create-integration-test.outputs.head-ref }}
+        value: ${{ jobs.publish-integration-test.outputs.head-ref }}
       head-sha:
         description: "The verified regression-test commit"
-        value: ${{ jobs.create-integration-test.outputs.head-sha }}
+        value: ${{ jobs.publish-integration-test.outputs.head-sha }}
   workflow_dispatch:
     inputs:
       issue:
@@ -224,13 +224,11 @@ jobs:
     timeout-minutes: 60
     permissions:
       contents: read
-      id-token: write # for the uv-dev credential broker
       issues: read
     outputs:
+      bundle-artifact-id: ${{ steps.upload-test.outputs.artifact-id }}
+      created: ${{ steps.commit-test.outputs.created }}
       result: ${{ steps.create-test.outputs.final-message }}
-      pull-request: ${{ steps.open-pr.outputs.url }}
-      head-ref: ${{ steps.open-pr.outputs.head_ref }}
-      head-sha: ${{ steps.open-pr.outputs.head_sha }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -318,15 +316,102 @@ jobs:
             -c user.email="github-actions[bot]@users.noreply.github.com" \
             commit --message "Add regression test"
 
-          git_dir="$(git rev-parse --absolute-git-dir)"
-          mv "$git_dir/config" "$RUNNER_TEMP/untrusted-git-config"
+          git -c core.hooksPath=/dev/null bundle create \
+            "$RUNNER_TEMP/regression-test.bundle" "$GITHUB_SHA..HEAD"
           echo "created=true" >> "$GITHUB_OUTPUT"
         env:
           CREATE_TEST_OUTCOME: ${{ fromJSON(steps.create-test.outputs.final-message).outcome }}
           CREATE_TEST_SUMMARY: ${{ fromJSON(steps.create-test.outputs.final-message).summary }}
 
-      - name: "Get uv-dev token"
+      - name: "Upload regression test"
+        id: upload-test
         if: steps.commit-test.outputs.created == 'true'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: regression-test-${{ needs.reproduce.outputs.issue-number }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/regression-test.bundle
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 1
+
+  publish-integration-test:
+    needs: [reproduce, create-integration-test]
+    if: needs.create-integration-test.outputs.created == 'true'
+    runs-on: ubuntu-slim
+    environment: automations
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      id-token: write # for the uv-dev credential broker
+    outputs:
+      pull-request: ${{ steps.open-pr.outputs.url }}
+      head-ref: ${{ steps.open-pr.outputs.head_ref }}
+      head-sha: ${{ steps.open-pr.outputs.head_sha }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          artifact-ids: ${{ needs.create-integration-test.outputs.bundle-artifact-id }}
+          path: ${{ runner.temp }}/regression-test
+
+      - name: "Verify regression-test commit"
+        id: verify
+        env:
+          GIT_CONFIG_GLOBAL: /dev/null
+          GIT_CONFIG_NOSYSTEM: "1"
+          ISSUE_NUMBER: ${{ needs.reproduce.outputs.issue-number }}
+        run: |
+          if ! [[ "$ISSUE_NUMBER" =~ ^[1-9][0-9]*$ ]]; then
+            echo "The upstream issue number is invalid." >&2
+            exit 1
+          fi
+
+          bundle="$RUNNER_TEMP/regression-test/regression-test.bundle"
+          git -c core.hooksPath=/dev/null bundle verify "$bundle"
+          git -c core.hooksPath=/dev/null fetch --no-tags "$bundle" HEAD
+          regression_head="$(git rev-parse 'FETCH_HEAD^{commit}')"
+
+          if [ "$(git rev-list --parents -n 1 "$regression_head")" != \
+            "$regression_head $GITHUB_SHA" ] ||
+            [ "$(git show --no-patch --format=%s "$regression_head")" != \
+              "Add regression test" ] ||
+            [ "$(git show --no-patch --format=%ae "$regression_head")" != \
+              "github-actions[bot]@users.noreply.github.com" ]; then
+            echo "The regression test does not extend the trusted workflow revision." >&2
+            exit 1
+          fi
+
+          changed_files=0
+          while IFS= read -r -d '' path; do
+            case "$path" in
+              crates/uv/tests/*|crates/uv-client/tests/it/*) ;;
+              *)
+                echo "The regression test changes a protected or unrelated file: $path" >&2
+                exit 1
+                ;;
+            esac
+            changed_files=$((changed_files + 1))
+          done < <(git diff --no-renames --name-only -z "$GITHUB_SHA" "$regression_head")
+
+          if [ "$changed_files" -eq 0 ]; then
+            echo "The regression test does not change any integration-test files." >&2
+            exit 1
+          fi
+
+          if git diff --no-renames --raw "$GITHUB_SHA" "$regression_head" |
+            grep -Eq '^:[0-7]+ (120000|160000) '; then
+            echo "The regression test introduces a symbolic link or Git submodule." >&2
+            exit 1
+          fi
+
+          git diff --check "$GITHUB_SHA" "$regression_head"
+          echo "head_sha=$regression_head" >> "$GITHUB_OUTPUT"
+
+      - name: "Get uv-dev token"
         id: token
         uses: open-security-tools/ost-simple-sts@9e012247e07c39080fb6a832dbfbcfeacebc19c4
         with:
@@ -338,27 +423,25 @@ jobs:
             pull_requests: write
 
       - name: "Open draft pull request"
-        if: steps.commit-test.outputs.created == 'true'
         id: open-pr
         run: |
-          issue_number="$(jq --raw-output '.number' "$RUNNER_TEMP/issue-triage-event.json")"
-          branch="zb/reproduce-bug/${issue_number}"
+          branch="zb/reproduce-bug/$ISSUE_NUMBER"
           git -c core.hooksPath=/dev/null push \
             "https://x-access-token:${GH_TOKEN}@github.com/astral-sh/uv-dev.git" \
-            HEAD:"$branch"
+            "$REGRESSION_HEAD_SHA:refs/heads/$branch"
           pull_request="$(
             gh pr create \
               --repo astral-sh/uv-dev \
               --base main \
               --head "$branch" \
               --draft \
-              --title "Add regression test for uv#${issue_number}" \
-              --body "Add a minimal integration test that reproduces astral-sh/uv#${issue_number}."
+              --title "Add regression test for uv#$ISSUE_NUMBER" \
+              --body "Add a minimal integration test that reproduces astral-sh/uv#$ISSUE_NUMBER."
           )"
           {
             echo "url=$pull_request"
             echo "head_ref=$branch"
-            echo "head_sha=$(git rev-parse HEAD)"
+            echo "head_sha=$REGRESSION_HEAD_SHA"
           } >> "$GITHUB_OUTPUT"
           {
             printf '%s\n\n' '### Integration test created'
@@ -369,4 +452,6 @@ jobs:
           GIT_CONFIG_GLOBAL: /dev/null
           GIT_CONFIG_NOSYSTEM: "1"
           GH_TOKEN: ${{ steps.token.outputs.token }}
-          CREATE_TEST_SUMMARY: ${{ fromJSON(steps.create-test.outputs.final-message).summary }}
+          CREATE_TEST_SUMMARY: ${{ fromJSON(needs.create-integration-test.outputs.result).summary }}
+          ISSUE_NUMBER: ${{ needs.reproduce.outputs.issue-number }}
+          REGRESSION_HEAD_SHA: ${{ steps.verify.outputs.head_sha }}
