@@ -13642,13 +13642,8 @@ fn add_auth_policy_never_without_credentials() -> Result<()> {
 /// it should fail.
 #[tokio::test]
 async fn add_redirect_cross_origin() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
+    let context = uv_test::test_context!("3.12").with_filter((r"127\.0\.0\.1:\d*", "[LOCALHOST]"));
     let proxy = crate::pypi_proxy::start().await;
-    let filters = context
-        .filters()
-        .into_iter()
-        .chain([(r"127\.0\.0\.1:\d*", "[LOCALHOST]")])
-        .collect::<Vec<_>>();
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! { r#"
@@ -13675,7 +13670,7 @@ async fn add_redirect_cross_origin() -> Result<()> {
     let _ = redirect_url.set_username("public");
     let _ = redirect_url.set_password(Some("heron"));
 
-    uv_snapshot!(filters, context.add().arg("--default-index").arg(redirect_url.as_str()).arg("anyio"), @"
+    uv_snapshot!(context.filters(), context.add().arg("--default-index").arg(redirect_url.as_str()).arg("anyio"), @"
     exit_code: 1 (failure)
     ----- stderr -----
       × No solution found when resolving dependencies:
@@ -13693,13 +13688,8 @@ async fn add_redirect_cross_origin() -> Result<()> {
 /// in the location, use those credentials for the redirect request.
 #[tokio::test]
 async fn add_redirect_cross_origin_credentials_in_location() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
+    let context = uv_test::test_context!("3.12").with_filter((r"127\.0\.0\.1:\d*", "[LOCALHOST]"));
     let proxy = crate::pypi_proxy::start().await;
-    let filters = context
-        .filters()
-        .into_iter()
-        .chain([(r"127\.0\.0\.1:\d*", "[LOCALHOST]")])
-        .collect::<Vec<_>>();
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! { r#"
@@ -13725,7 +13715,7 @@ async fn add_redirect_cross_origin_credentials_in_location() -> Result<()> {
 
     let redirect_url = Url::parse(&redirect_server.uri())?;
 
-    uv_snapshot!(filters, context.add().arg("--default-index").arg(redirect_url.as_str()).arg("anyio"), @"
+    uv_snapshot!(context.filters(), context.add().arg("--default-index").arg(redirect_url.as_str()).arg("anyio"), @"
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 4 packages in [TIME]
@@ -13758,13 +13748,8 @@ async fn add_redirect_with_keyring_cross_origin() -> Result<()> {
         .assert()
         .success();
 
-    let context = uv_test::test_context!("3.12");
+    let context = uv_test::test_context!("3.12").with_filter((r"127\.0\.0\.1:\d*", "[LOCALHOST]"));
     let proxy = crate::pypi_proxy::start().await;
-    let filters = context
-        .filters()
-        .into_iter()
-        .chain([(r"127\.0\.0\.1:\d*", "[LOCALHOST]")])
-        .collect::<Vec<_>>();
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! { r#"
@@ -13793,7 +13778,7 @@ async fn add_redirect_with_keyring_cross_origin() -> Result<()> {
     let mut redirect_url = Url::parse(&redirect_server.uri())?;
     let _ = redirect_url.set_username("public");
 
-    uv_snapshot!(filters, context.add().arg("--default-index")
+    uv_snapshot!(context.filters(), context.add().arg("--default-index")
         .arg(redirect_url.as_str())
         .arg("anyio")
         .env(EnvVars::KEYRING_TEST_CREDENTIALS, format!(r#"{{"{host}": {{"public": "heron"}}}}"#, host = proxy.host_port()))
@@ -13818,13 +13803,8 @@ async fn add_redirect_with_keyring_cross_origin() -> Result<()> {
 /// for the new location.
 #[tokio::test]
 async fn pip_install_redirect_with_netrc_cross_origin() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
+    let context = uv_test::test_context!("3.12").with_filter((r"127\.0\.0\.1:\d*", "[LOCALHOST]"));
     let proxy = crate::pypi_proxy::start().await;
-    let filters = context
-        .filters()
-        .into_iter()
-        .chain([(r"127\.0\.0\.1:\d*", "[LOCALHOST]")])
-        .collect::<Vec<_>>();
 
     let netrc = context.temp_dir.child(".netrc");
     netrc.write_str(&format!(
@@ -13846,7 +13826,7 @@ async fn pip_install_redirect_with_netrc_cross_origin() -> Result<()> {
     let mut redirect_url = Url::parse(&redirect_server.uri())?;
     let _ = redirect_url.set_username("public");
 
-    uv_snapshot!(filters, context.pip_install()
+    uv_snapshot!(context.filters(), context.pip_install()
         .arg("anyio")
         .arg("--index-url")
         .arg(redirect_url.as_str())
