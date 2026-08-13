@@ -10,11 +10,11 @@ use uv_test::{get_bin, uv_snapshot};
 /// A custom cache directory must configure commands and snapshot filters together.
 #[test]
 fn cache_dir_uses_configured_test_context_path() {
-    let context = uv_test::test_context!("3.12").with_cache_dir("project-cache");
+    let context = uv_test::test_context!("3.12").with_cache_dir("project/cache");
 
     assert_eq!(
         context.cache_dir.path(),
-        context.temp_dir.child("project-cache").path()
+        context.temp_dir.child("project").child("cache").path()
     );
 
     uv_snapshot!(context.filters(), context.command().arg("cache").arg("dir"), @"

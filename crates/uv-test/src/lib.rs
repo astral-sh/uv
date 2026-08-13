@@ -180,7 +180,8 @@ impl TestContext {
         let cache_dir = if cache_dir.as_ref().is_absolute() {
             cache_dir.as_ref().to_path_buf()
         } else {
-            self.temp_dir.join(cache_dir)
+            self.temp_dir
+                .join(cache_dir.as_ref().components().collect::<PathBuf>())
         };
 
         self.filters
