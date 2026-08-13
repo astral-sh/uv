@@ -2322,7 +2322,23 @@ fn self_version_short() -> Result<()> {
 // (also setup a honeypot project and make sure it's not used)
 #[test]
 fn self_version_json() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
+    let context = uv_test::test_context!("3.12")
+        .with_filter((
+            r#"version": "\d+\.\d+\.\d+(-(alpha|beta|rc)\.\d+)?(\+\d+)?""#,
+            r#"version": "[VERSION]""#,
+        ))
+        .with_filter((
+            r#""short_commit_hash": ".*""#,
+            r#""short_commit_hash": "[HASH]""#,
+        ))
+        .with_filter((r#""commit_hash": ".*""#, r#""commit_hash": "[LONGHASH]""#))
+        .with_filter((r#"commit_date": ".*""#, r#"commit_date": "[DATE]""#))
+        .with_filter((r#"last_tag": (".*"|null)"#, r#"last_tag": "[TAG]""#))
+        .with_filter((
+            r#"commits_since_last_tag": .*"#,
+            r#"commits_since_last_tag": [COUNT]"#,
+        ))
+        .with_filter((r#"target_triple": ".*""#, r#"target_triple": "[TARGET]""#));
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -2333,31 +2349,8 @@ fn self_version_json() -> Result<()> {
         "#,
     )?;
 
-    let filters = context
-        .filters()
-        .into_iter()
-        .chain([
-            (
-                r#"version": "\d+\.\d+\.\d+(-(alpha|beta|rc)\.\d+)?(\+\d+)?""#,
-                r#"version": "[VERSION]""#,
-            ),
-            (
-                r#"short_commit_hash": ".*""#,
-                r#"short_commit_hash": "[HASH]""#,
-            ),
-            (r#"commit_hash": ".*""#, r#"commit_hash": "[LONGHASH]""#),
-            (r#"commit_date": ".*""#, r#"commit_date": "[DATE]""#),
-            (r#"last_tag": (".*"|null)"#, r#"last_tag": "[TAG]""#),
-            (
-                r#"commits_since_last_tag": .*"#,
-                r#"commits_since_last_tag": [COUNT]"#,
-            ),
-            (r#"target_triple": ".*""#, r#"target_triple": "[TARGET]""#),
-        ])
-        .collect::<Vec<_>>();
-
     if git_version_info_expected() {
-        uv_snapshot!(filters, context.self_version()
+        uv_snapshot!(context.filters(), context.self_version()
           .arg("--output-format").arg("json"), @r#"
         exit_code: 0 (success)
         ----- stdout -----
@@ -2365,7 +2358,7 @@ fn self_version_json() -> Result<()> {
           "package_name": "uv",
           "version": "[VERSION]",
           "commit_info": {
-            "short_commit_hash": "[LONGHASH]",
+            "short_commit_hash": "[HASH]",
             "commit_hash": "[LONGHASH]",
             "commit_date": "[DATE]",
             "last_tag": "[TAG]",
@@ -2375,7 +2368,7 @@ fn self_version_json() -> Result<()> {
         }
         "#);
     } else {
-        uv_snapshot!(filters, context.self_version()
+        uv_snapshot!(context.filters(), context.self_version()
           .arg("--output-format").arg("json"), @r#"
       exit_code: 0 (success)
       ----- stdout -----
