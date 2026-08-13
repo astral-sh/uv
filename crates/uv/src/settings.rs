@@ -2145,7 +2145,7 @@ pub(crate) struct MetadataSettings {
     pub(crate) lock_check: LockCheck,
     pub(crate) frozen: Option<FrozenSource>,
     pub(crate) dry_run: DryRun,
-    pub(crate) sync: bool,
+    pub(crate) sync: Option<Modifications>,
     pub(crate) active: bool,
     pub(crate) python: Option<String>,
     pub(crate) install_mirrors: PythonInstallMirrors,
@@ -2170,6 +2170,7 @@ impl MetadataSettings {
             build,
             refresh,
             sync,
+            exact,
             active,
             python,
         } = *args;
@@ -2193,7 +2194,11 @@ impl MetadataSettings {
             lock_check: resolve_lock_check(locked),
             frozen: resolve_frozen(frozen),
             dry_run: DryRun::from_args(dry_run),
-            sync,
+            sync: sync.then_some(if exact {
+                Modifications::Exact
+            } else {
+                Modifications::Sufficient
+            }),
             active,
             python: python.and_then(Maybe::into_option),
             refresh: Refresh::try_from(refresh)?,

@@ -7685,9 +7685,16 @@ pub struct MetadataArgs {
     /// Sync the environment to include module ownership metadata in the output.
     ///
     /// This adds a mapping from importable module names to references to the package nodes
-    /// that provide them. To do this, the venv will be synced in inexact mode.
+    /// that provide them. By default, the environment is synced in inexact mode.
     #[arg(long)]
     pub sync: bool,
+
+    /// Perform an exact sync, removing extraneous packages.
+    ///
+    /// By default, synchronization preserves packages that are not part of the selected
+    /// resolution. When enabled, uv removes those packages from the environment.
+    #[arg(long, requires = "sync")]
+    pub exact: bool,
 
     /// Sync dependencies to the active virtual environment.
     ///
