@@ -1847,6 +1847,14 @@ impl TestContext {
             .collect()
     }
 
+    /// Snapshot filters for cache commands that preserve reported sizes.
+    pub fn with_cache_size_filters(&self) -> Vec<(&str, &str)> {
+        self.filters()
+            .into_iter()
+            .filter(|(_, replacement)| *replacement != "$1[SIZE]")
+            .collect()
+    }
+
     /// Only the filters added to this test context.
     #[cfg(windows)]
     pub fn filters_without_standard_filters(&self) -> Vec<(&str, &str)> {

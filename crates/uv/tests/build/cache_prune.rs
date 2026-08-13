@@ -58,11 +58,7 @@ fn prune_hardlinked_file() -> Result<()> {
     stale.create_dir_all()?;
     fs_err::hard_link(&retained, stale.child("hardlinked.bin"))?;
 
-    let filters: Vec<_> = context
-        .filters()
-        .into_iter()
-        .filter(|(_, replacement)| *replacement != "$1[SIZE]")
-        .collect();
+    let filters = context.with_cache_size_filters();
 
     uv_snapshot!(&filters, context.prune(), @"
     exit_code: 0 (success)

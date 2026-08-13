@@ -1,15 +1,6 @@
 use assert_cmd::assert::OutputAssertExt;
 
-use uv_test::{TestContext, uv_snapshot};
-
-/// Preserve cache sizes in snapshots so human-readable and machine output remain distinguishable.
-fn cache_size_filters(context: &TestContext) -> Vec<(&str, &str)> {
-    context
-        .filters()
-        .into_iter()
-        .filter(|(_, replacement)| *replacement != "$1[SIZE]")
-        .collect()
-}
+use uv_test::uv_snapshot;
 
 /// Test that `cache size` returns 0 for an empty cache directory (raw output).
 #[test]
@@ -70,7 +61,7 @@ fn cache_size_output_formats() {
     0
     ");
 
-    uv_snapshot!(cache_size_filters(&context), context.cache_size().arg("--preview").arg("--output-format").arg("human"), @"
+    uv_snapshot!(context.with_cache_size_filters(), context.cache_size().arg("--preview").arg("--output-format").arg("human"), @"
     exit_code: 0 (success)
     ----- stdout -----
     0B
@@ -88,7 +79,7 @@ fn cache_size_output_formats() {
 fn cache_size_human_aliases() {
     let context = uv_test::test_context!("3.12");
     context.clean().assert().success();
-    let filters = cache_size_filters(&context);
+    let filters = context.with_cache_size_filters();
 
     uv_snapshot!(&filters, context.cache_size().arg("--preview").arg("--human"), @"
     exit_code: 0 (success)
