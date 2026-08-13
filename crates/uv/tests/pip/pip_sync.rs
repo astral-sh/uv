@@ -5020,7 +5020,6 @@ fn target_built_distribution() -> Result<()> {
         .arg("-c")
         .arg("import iniconfig")
         .env(EnvVars::PYTHONPATH, context.temp_dir.child("target").path())
-        .current_dir(&context.temp_dir)
         .assert()
         .success();
 
@@ -5116,7 +5115,6 @@ fn target_source_distribution() -> Result<()> {
         .arg("-c")
         .arg("import iniconfig")
         .env(EnvVars::PYTHONPATH, context.temp_dir.child("target").path())
-        .current_dir(&context.temp_dir)
         .assert()
         .success();
 
@@ -5181,7 +5179,6 @@ fn target_no_build_isolation() -> Result<()> {
         .arg("-c")
         .arg("import wheel")
         .env(EnvVars::PYTHONPATH, context.temp_dir.child("target").path())
-        .current_dir(&context.temp_dir)
         .assert()
         .success();
 
@@ -5255,7 +5252,6 @@ fn prefix() -> Result<()> {
             EnvVars::PYTHONPATH,
             site_packages_path(&context.temp_dir.join("prefix"), "python3.12"),
         )
-        .current_dir(&context.temp_dir)
         .assert()
         .success();
 

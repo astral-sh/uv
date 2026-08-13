@@ -1534,7 +1534,7 @@ fn init_workspace_relative_sub_package() -> Result<()> {
 
     let child = context.temp_dir.join("foo");
 
-    uv_snapshot!(context.filters(), context.init().arg("--lib").current_dir(&context.temp_dir).arg("foo"), @"
+    uv_snapshot!(context.filters(), context.init().arg("--lib").arg("foo"), @"
     exit_code: 0 (success)
     ----- stderr -----
     Adding `foo` as member of workspace `[TEMP_DIR]/`
@@ -1703,7 +1703,7 @@ fn init_normalized_names() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
     // `foo-bar` module is normalized to `foo-bar`.
-    uv_snapshot!(context.filters(), context.init().current_dir(&context.temp_dir).arg("foo-bar").arg("--lib"), @"
+    uv_snapshot!(context.filters(), context.init().arg("foo-bar").arg("--lib"), @"
     exit_code: 0 (success)
     ----- stderr -----
     Initialized project `foo-bar` at `[TEMP_DIR]/foo-bar`
@@ -1734,7 +1734,7 @@ fn init_normalized_names() -> Result<()> {
     });
 
     // `bar_baz` module is normalized to `bar-baz`.
-    uv_snapshot!(context.filters(), context.init().current_dir(&context.temp_dir).arg("bar_baz").arg("--app"), @"
+    uv_snapshot!(context.filters(), context.init().arg("bar_baz").arg("--app"), @"
     exit_code: 0 (success)
     ----- stderr -----
     Initialized project `bar-baz` at `[TEMP_DIR]/bar_baz`
@@ -1768,7 +1768,7 @@ fn init_normalized_names() -> Result<()> {
     });
 
     // "baz bop" is normalized to "baz-bop".
-    uv_snapshot!(context.filters(), context.init().current_dir(&context.temp_dir).arg("baz bop"), @"
+    uv_snapshot!(context.filters(), context.init().arg("baz bop"), @"
     exit_code: 0 (success)
     ----- stderr -----
     Initialized project `baz-bop` at `[TEMP_DIR]/baz bop`
@@ -1924,7 +1924,7 @@ fn init_no_workspace() -> Result<()> {
 fn init_no_workspace_warning() {
     let context = uv_test::test_context!("3.12");
 
-    uv_snapshot!(context.filters(), context.init().current_dir(&context.temp_dir).arg("--no-workspace").arg("--name").arg("project"), @"
+    uv_snapshot!(context.filters(), context.init().arg("--no-workspace").arg("--name").arg("project"), @"
     exit_code: 0 (success)
     ----- stderr -----
     Initialized project `project`
@@ -1972,7 +1972,7 @@ fn init_project_inside_project() -> Result<()> {
 
     // Create a child from the workspace root.
     let child = context.temp_dir.join("foo");
-    uv_snapshot!(context.filters(), context.init().current_dir(&context.temp_dir).arg(&child), @"
+    uv_snapshot!(context.filters(), context.init().arg(&child), @"
     exit_code: 0 (success)
     ----- stderr -----
     Adding `foo` as member of workspace `[TEMP_DIR]/`
@@ -2053,7 +2053,7 @@ fn init_explicit_workspace() -> Result<()> {
     })?;
 
     let child = context.temp_dir.join("foo");
-    uv_snapshot!(context.filters(), context.init().current_dir(&context.temp_dir).arg(&child), @"
+    uv_snapshot!(context.filters(), context.init().arg(&child), @"
     exit_code: 0 (success)
     ----- stderr -----
     Adding `foo` as member of workspace `[TEMP_DIR]/`
@@ -2201,7 +2201,7 @@ fn init_nested_virtual_workspace() -> Result<()> {
         ",
     })?;
 
-    uv_snapshot!(context.filters(), context.init().current_dir(&context.temp_dir).arg("--virtual").arg("foo"), @"
+    uv_snapshot!(context.filters(), context.init().arg("--virtual").arg("foo"), @"
     exit_code: 0 (success)
     ----- stderr -----
     Adding `foo` as member of workspace `[TEMP_DIR]/`
@@ -2342,7 +2342,7 @@ fn init_requires_python_workspace() -> Result<()> {
     })?;
 
     let child = context.temp_dir.join("foo");
-    uv_snapshot!(context.filters(), context.init().current_dir(&context.temp_dir).arg(&child), @"
+    uv_snapshot!(context.filters(), context.init().arg(&child), @"
     exit_code: 0 (success)
     ----- stderr -----
     Adding `foo` as member of workspace `[TEMP_DIR]/`
@@ -2404,7 +2404,7 @@ fn init_requires_python_version() -> Result<()> {
     })?;
 
     let child = context.temp_dir.join("foo");
-    uv_snapshot!(context.filters(), context.init().current_dir(&context.temp_dir).arg(&child).arg("--python").arg("3.9"), @"
+    uv_snapshot!(context.filters(), context.init().arg(&child).arg("--python").arg("3.9"), @"
     exit_code: 0 (success)
     ----- stderr -----
     Adding `foo` as member of workspace `[TEMP_DIR]/`
@@ -2467,7 +2467,7 @@ fn init_requires_python_specifiers() -> Result<()> {
     })?;
 
     let child = context.temp_dir.join("foo");
-    uv_snapshot!(context.filters(), context.init().current_dir(&context.temp_dir).arg(&child).arg("--python").arg("==3.9.*"), @"
+    uv_snapshot!(context.filters(), context.init().arg(&child).arg("--python").arg("==3.9.*"), @"
     exit_code: 0 (success)
     ----- stderr -----
     Adding `foo` as member of workspace `[TEMP_DIR]/`
@@ -2518,7 +2518,7 @@ fn init_requires_python_version_file() -> Result<()> {
     context.temp_dir.child(".python-version").write_str("3.9")?;
 
     let child = context.temp_dir.join("foo");
-    uv_snapshot!(context.filters(), context.init().current_dir(&context.temp_dir).arg(&child), @"
+    uv_snapshot!(context.filters(), context.init().arg(&child), @"
     exit_code: 0 (success)
     ----- stderr -----
     Initialized project `foo` at `[TEMP_DIR]/foo`
@@ -2568,7 +2568,7 @@ fn init_existing_environment() -> Result<()> {
     Activate with: source .venv/[BIN]/activate
     ");
 
-    uv_snapshot!(context.filters(), context.init().current_dir(&context.temp_dir).arg(child.as_os_str()), @"
+    uv_snapshot!(context.filters(), context.init().arg(child.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
     Initialized project `foo` at `[TEMP_DIR]/foo`
@@ -2607,7 +2607,7 @@ fn init_existing_environment_parent() -> Result<()> {
     let context = uv_test::test_context_with_versions!(&["3.9", "3.12"]);
 
     // Create a new virtual environment in the parent directory
-    uv_snapshot!(context.filters(), context.venv().current_dir(&context.temp_dir).arg("--python").arg("3.12"), @"
+    uv_snapshot!(context.filters(), context.venv().arg("--python").arg("3.12"), @"
     exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
@@ -2617,7 +2617,7 @@ fn init_existing_environment_parent() -> Result<()> {
 
     let child = context.temp_dir.child("foo");
 
-    uv_snapshot!(context.filters(), context.init().current_dir(&context.temp_dir).arg(child.as_os_str()), @"
+    uv_snapshot!(context.filters(), context.init().arg(child.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
     Initialized project `foo` at `[TEMP_DIR]/foo`

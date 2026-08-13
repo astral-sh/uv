@@ -12490,7 +12490,7 @@ fn lock_migrate() -> Result<()> {
         "#
     )?;
 
-    uv_snapshot!(context.filters(), context.lock().current_dir(&context.temp_dir), @"
+    uv_snapshot!(context.filters(), context.lock(), @"
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 4 packages in [TIME]
