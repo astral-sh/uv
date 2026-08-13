@@ -138,7 +138,7 @@ jobs:
           if ! jq --exit-status \
             --arg head_ref "$PARENT_HEAD_REF" \
             --arg head_sha "$PARENT_HEAD_SHA" '
-              .state == "open"
+              (.state == "open" or .state == "closed")
               and .base.ref == "main"
               and .base.repo.full_name == "astral-sh/uv-dev"
               and .head.repo.full_name == "astral-sh/uv-dev"
@@ -147,6 +147,30 @@ jobs:
             ' "$RUNNER_TEMP/bug-regression-pull-request.json" > /dev/null; then
             echo "The regression-test pull request no longer matches its verified head." >&2
             exit 1
+          fi
+
+          if jq --exit-status '.state == "closed"' \
+            "$RUNNER_TEMP/bug-regression-pull-request.json" > /dev/null; then
+            gh api repos/astral-sh/uv/pulls \
+              --method GET \
+              --raw-field state=all \
+              --raw-field head="astral-sh:$PARENT_HEAD_REF" \
+              --raw-field base=main \
+              > "$RUNNER_TEMP/promoted-regression-pull-requests.json"
+            if ! jq --exit-status \
+              --arg head_ref "$PARENT_HEAD_REF" \
+              --arg head_sha "$PARENT_HEAD_SHA" '
+                length == 1
+                and (.[0].state == "open" or .[0].merged_at != null)
+                and .[0].base.ref == "main"
+                and .[0].base.repo.full_name == "astral-sh/uv"
+                and .[0].head.repo.full_name == "astral-sh/uv"
+                and .[0].head.ref == $head_ref
+                and .[0].head.sha == $head_sha
+              ' "$RUNNER_TEMP/promoted-regression-pull-requests.json" > /dev/null; then
+              echo "The closed regression-test pull request was not promoted at its verified head." >&2
+              exit 1
+            fi
           fi
 
           git -c core.hooksPath=/dev/null fetch --no-tags \
@@ -443,7 +467,7 @@ jobs:
           if ! jq --exit-status \
             --arg head_ref "$PARENT_HEAD_REF" \
             --arg head_sha "$PARENT_HEAD_SHA" '
-              .state == "open"
+              (.state == "open" or .state == "closed")
               and .base.ref == "main"
               and .base.repo.full_name == "astral-sh/uv-dev"
               and .head.repo.full_name == "astral-sh/uv-dev"
@@ -452,6 +476,30 @@ jobs:
             ' "$RUNNER_TEMP/bug-regression-pull-request.json" > /dev/null; then
             echo "The regression-test pull request changed; refusing to publish the fix." >&2
             exit 1
+          fi
+
+          if jq --exit-status '.state == "closed"' \
+            "$RUNNER_TEMP/bug-regression-pull-request.json" > /dev/null; then
+            gh api repos/astral-sh/uv/pulls \
+              --method GET \
+              --raw-field state=all \
+              --raw-field head="astral-sh:$PARENT_HEAD_REF" \
+              --raw-field base=main \
+              > "$RUNNER_TEMP/promoted-regression-pull-requests.json"
+            if ! jq --exit-status \
+              --arg head_ref "$PARENT_HEAD_REF" \
+              --arg head_sha "$PARENT_HEAD_SHA" '
+                length == 1
+                and (.[0].state == "open" or .[0].merged_at != null)
+                and .[0].base.ref == "main"
+                and .[0].base.repo.full_name == "astral-sh/uv"
+                and .[0].head.repo.full_name == "astral-sh/uv"
+                and .[0].head.ref == $head_ref
+                and .[0].head.sha == $head_sha
+              ' "$RUNNER_TEMP/promoted-regression-pull-requests.json" > /dev/null; then
+              echo "The closed regression-test pull request was not promoted at its verified head." >&2
+              exit 1
+            fi
           fi
 
           git -c core.hooksPath=/dev/null fetch --no-tags \
