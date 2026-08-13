@@ -2238,6 +2238,8 @@ pub fn run_and_format_silent<T: AsRef<str>>(
     windows_filters: Option<WindowsFilters>,
     input: Option<&str>,
 ) -> (String, Output) {
+    assert_effective_cache_directory(command.borrow_mut());
+
     let program = command
         .borrow_mut()
         .get_program()
@@ -2355,6 +2357,87 @@ pub fn run_and_format_silent<T: AsRef<str>>(
     }
 
     (snapshot, output)
+}
+
+/// Reject cache environment overrides hidden by an explicit cache-directory argument.
+///
+/// Context commands always include `--cache-dir`, so setting `UV_CACHE_DIR` after constructing
+/// one cannot change its cache. Check the completed command immediately before execution so
+/// snapshots cannot silently pass without exercising their intended cache configuration.
+fn assert_effective_cache_directory(command: &Command) {
+    let cache_directory_override = command
+        .get_envs()
+        .find(|(name, value)| *name == EnvVars::UV_CACHE_DIR && value.is_some());
+
+    if cache_directory_override.is_none() {
+        return;
+    }
+
+    let explicit_cache_directory = command.get_args().any(|argument| {
+        argument == "--cache-dir"
+            || argument
+                .to_str()
+                .is_some_and(|argument| argument.starts_with("--cache-dir="))
+    });
+
+    assert!(
+        !explicit_cache_directory,
+        "`UV_CACHE_DIR` is ignored because this command already supplies `--cache-dir`; configure `TestContext::cache_dir` instead"
+    );
+}
+
+#[cfg(test)]
+mod cache_directory_tests {
+    use std::process::Command;
+
+    use uv_static::EnvVars;
+
+    use super::assert_effective_cache_directory;
+
+    #[test]
+    #[should_panic(expected = "`UV_CACHE_DIR` is ignored")]
+    fn rejects_environment_override_with_explicit_cache_argument() {
+        let mut command = Command::new("uv");
+        command
+            .arg("--cache-dir")
+            .arg("context-cache")
+            .env(EnvVars::UV_CACHE_DIR, "ignored-cache");
+
+        assert_effective_cache_directory(&command);
+    }
+
+    #[test]
+    #[should_panic(expected = "`UV_CACHE_DIR` is ignored")]
+    fn rejects_environment_override_with_inline_cache_argument() {
+        let mut command = Command::new("uv");
+        command
+            .arg("--cache-dir=context-cache")
+            .env(EnvVars::UV_CACHE_DIR, "ignored-cache");
+
+        assert_effective_cache_directory(&command);
+    }
+
+    #[test]
+    fn allows_environment_override_without_explicit_cache_argument() {
+        let mut command = Command::new("uv");
+        command
+            .arg("cache")
+            .arg("dir")
+            .env(EnvVars::UV_CACHE_DIR, "effective-cache");
+
+        assert_effective_cache_directory(&command);
+    }
+
+    #[test]
+    fn allows_removed_environment_override_with_explicit_cache_argument() {
+        let mut command = Command::new("uv");
+        command
+            .arg("--cache-dir")
+            .arg("context-cache")
+            .env_remove(EnvVars::UV_CACHE_DIR);
+
+        assert_effective_cache_directory(&command);
+    }
 }
 
 /// Recursively copy a directory and its contents, skipping gitignored files.
