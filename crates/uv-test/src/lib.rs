@@ -658,6 +658,21 @@ impl TestContext {
         self
     }
 
+    /// Configure isolated directories for installed tools and their executable entry points.
+    #[must_use]
+    pub fn with_tool_dirs(mut self) -> Self {
+        self.extra_env.push((
+            EnvVars::UV_TOOL_DIR.into(),
+            self.temp_dir.join("tools").into(),
+        ));
+        self.extra_env.push((
+            EnvVars::XDG_BIN_HOME.into(),
+            self.temp_dir.join("bin").into(),
+        ));
+
+        self
+    }
+
     #[must_use]
     pub fn with_versions_as_managed(mut self, versions: &[&str]) -> Self {
         self.extra_env.push((
