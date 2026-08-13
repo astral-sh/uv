@@ -5,6 +5,7 @@ use anyhow::Result;
 use tracing::debug;
 
 use uv_cache::Cache;
+use uv_cli::ColorChoice;
 use uv_client::BaseClientBuilder;
 use uv_configuration::{
     Concurrency, DependencyGroups, DependencyGroupsWithDefaults, DryRun, ExtrasSpecification,
@@ -67,6 +68,7 @@ pub(crate) async fn check(
     concurrency: Concurrency,
     cache: &Cache,
     workspace_cache: &WorkspaceCache,
+    color: ColorChoice,
     printer: Printer,
     preview: Preview,
     no_project: bool,
@@ -739,6 +741,7 @@ pub(crate) async fn check(
         show_version,
         &client_builder,
         cache,
+        color,
         printer,
     )
     .await

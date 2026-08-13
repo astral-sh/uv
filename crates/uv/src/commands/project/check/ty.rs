@@ -8,6 +8,7 @@ use tracing::debug;
 
 use uv_bin_install::{BinVersion, Binary, ResolvedVersion, bin_install, find_matching_version};
 use uv_cache::Cache;
+use uv_cli::ColorChoice;
 use uv_client::BaseClientBuilder;
 use uv_fs::Simplified;
 use uv_pep440::Version;
@@ -32,6 +33,7 @@ pub(super) async fn run(
     show_version: bool,
     client_builder: &BaseClientBuilder<'_>,
     cache: &Cache,
+    color: ColorChoice,
     printer: Printer,
 ) -> Result<ExitStatus> {
     let (ty_path, ty_version) = if let Some(ty_path) = ty_path {
@@ -141,6 +143,10 @@ pub(super) async fn run(
     let mut command = Command::new(&ty_path);
     command.current_dir(target_dir);
     command.arg("check");
+    command.arg("--color").arg(color.as_str());
+    if printer != Printer::Default {
+        command.arg("--no-progress");
+    }
     if fix {
         command.arg("--fix");
     }

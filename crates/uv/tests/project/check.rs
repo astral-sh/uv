@@ -63,6 +63,125 @@ fn check_project() -> Result<()> {
     Ok(())
 }
 
+/// Forward uv's terminal settings to the ty subprocess, including quiet-mode progress suppression.
+#[test]
+#[cfg(feature = "test-pypi")]
+fn check_propagates_terminal_settings() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+            [project]
+            name = "project"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+            dependencies = ["ty"]
+
+            [tool.uv.sources]
+            ty = { path = "ty" }
+        "#})?;
+    context.temp_dir.child("main.py").write_str("value = 1\n")?;
+
+    let ty = context.temp_dir.child("ty");
+    ty.create_dir_all()?;
+    ty.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "ty"
+        version = "1.2.3"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [project.scripts]
+        ty = "ty:main"
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+    "#})?;
+    let ty_package = ty.child("src").child("ty");
+    ty_package.create_dir_all()?;
+    ty_package.child("__init__.py").write_str(indoc! {r#"
+        import sys
+
+        def main():
+            if "--version" in sys.argv:
+                print("ty 1.2.3")
+            else:
+                print(" ".join(sys.argv[1:]))
+    "#})?;
+
+    let check = || {
+        let mut command = context.check();
+        command
+            .arg("--preview-features")
+            .arg("check-command")
+            // Logging independently disables progress, so isolate the inherited host setting.
+            .env_remove(EnvVars::RUST_LOG);
+        command
+    };
+
+    check().assert().success();
+
+    uv_snapshot!(
+        context.filters(),
+        check(),
+        @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    check --color auto --exclude-scripts --
+    "
+    );
+
+    uv_snapshot!(
+        context.filters(),
+        check()
+            .arg("--color")
+            .arg("never")
+            .arg("--no-progress"),
+        @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    check --color never --no-progress --exclude-scripts --
+    "
+    );
+
+    uv_snapshot!(
+        context.filters(),
+        check().arg("--quiet"),
+        @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    check --color auto --no-progress --exclude-scripts --
+    "
+    );
+
+    uv_snapshot!(
+        context.filters(),
+        check().arg("--color").arg("always"),
+        @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    check --color always --exclude-scripts --
+    "
+    );
+
+    uv_snapshot!(
+        context.filters(),
+        check()
+            .env(EnvVars::NO_COLOR, "1")
+            .env(EnvVars::UV_NO_PROGRESS, "1"),
+        @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    check --color never --no-progress --exclude-scripts --
+    "
+    );
+
+    Ok(())
+}
+
 /// Check PEP 723 scripts only when explicitly selected, not as part of a workspace member.
 #[test]
 fn check_workspace_excludes_pep723_scripts() -> Result<()> {
