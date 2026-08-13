@@ -815,6 +815,55 @@ fn run_pep723_script_index() -> Result<()> {
     Ok(())
 }
 
+/// Run a PEP 723-compatible script with a relative flat index from another directory.
+#[test]
+fn run_pep723_script_relative_flat_index() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let scripts = context.temp_dir.child("scripts");
+    let links = scripts.child("links");
+    links.create_dir_all()?;
+    fs_err::copy(
+        context
+            .workspace_root
+            .join("test/links/ok-1.0.0-py3-none-any.whl"),
+        links.child("ok-1.0.0-py3-none-any.whl"),
+    )?;
+
+    let test_script = scripts.child("main.py");
+    test_script.write_str(indoc! { r#"
+        # /// script
+        # requires-python = ">=3.11"
+        # dependencies = ["ok"]
+        #
+        # [[tool.uv.index]]
+        # name = "local"
+        # url = "./links"
+        # format = "flat"
+        #
+        # [tool.uv.sources]
+        # ok = { index = "local" }
+        # ///
+
+        import ok
+       "#
+    })?;
+
+    let elsewhere = context.temp_dir.child("elsewhere");
+    elsewhere.create_dir_all()?;
+
+    // This should resolve `./links` relative to the script, but astral-sh/uv#21096 currently
+    // resolves it relative to the working directory instead.
+    uv_snapshot!(context.filters(), context.run().arg("--offline").arg(test_script.path()).current_dir(elsewhere.path()), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Failed to read `--find-links` directory: [TEMP_DIR]/elsewhere/links
+      Caused by: No such file or directory (os error 2)
+    ");
+
+    Ok(())
+}
+
 /// Package-scoped source disabling must not discard unrelated script sources or indexes.
 #[test]
 fn run_pep723_script_no_sources_package() -> Result<()> {
