@@ -815,6 +815,60 @@ fn run_pep723_script_index() -> Result<()> {
     Ok(())
 }
 
+/// Run a PEP 723-compatible script with a relative `[[tool.uv.index]]` from another directory.
+#[test]
+fn run_pep723_script_relative_index_from_another_directory() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let scripts = context.temp_dir.child("scripts");
+    let links = scripts.child("links");
+    links.create_dir_all()?;
+    fs_err::copy(
+        context
+            .workspace_root
+            .join("test/links/ok-1.0.0-py3-none-any.whl"),
+        links.child("ok-1.0.0-py3-none-any.whl"),
+    )?;
+
+    let test_script = scripts.child("main.py");
+    test_script.write_str(indoc! { r#"
+        # /// script
+        # requires-python = ">=3.11"
+        # dependencies = ["ok"]
+        #
+        # [[tool.uv.index]]
+        # name = "local"
+        # url = "./links"
+        # format = "flat"
+        #
+        # [tool.uv.sources]
+        # ok = { index = "local" }
+        # ///
+
+        import ok
+
+        print("ok imported")
+        "#
+    })?;
+
+    let elsewhere = context.temp_dir.child("elsewhere");
+    elsewhere.create_dir_all()?;
+
+    uv_snapshot!(context.filters(), context.run().current_dir(elsewhere).arg("--offline").arg(test_script.path()), @r"
+    exit_code: 0 (success)
+    ----- stdout -----
+    ok imported
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + ok==1.0.0
+    ");
+
+    Ok(())
+}
+
 /// Package-scoped source disabling must not discard unrelated script sources or indexes.
 #[test]
 fn run_pep723_script_no_sources_package() -> Result<()> {

@@ -10841,7 +10841,7 @@ fn add_index_with_existing_relative_path_in_script() -> Result<()> {
         #
         # [[tool.uv.index]]
         # name = "local"
-        # url = "./links"
+        # url = "../links"
         # format = "flat"
         # ///
     "#})?;
@@ -10872,7 +10872,7 @@ fn add_index_with_existing_relative_path_in_script() -> Result<()> {
         #
         # [[tool.uv.index]]
         # name = "local"
-        # url = "links"
+        # url = "../links"
         # format = "flat"
         #
         # [tool.uv.sources]

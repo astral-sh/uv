@@ -21,7 +21,7 @@ use uv_dispatch::{BuildDispatch, SharedState};
 use uv_distribution::{DistributionDatabase, LoweredExtraBuildDependencies, LoweredRequirement};
 use uv_distribution_types::{
     ExtraBuildRequirement, ExtraBuildRequires, HashGeneration, Index, IndexCredentialsError,
-    Requirement, RequiresPython, Resolution, UnresolvedRequirement,
+    IndexUrlError, Requirement, RequiresPython, Resolution, UnresolvedRequirement,
     UnresolvedRequirementSpecification,
 };
 use uv_fs::{CWD, LockedFile, LockedFileError, LockedFileMode, Simplified, verbatim_path};
@@ -311,6 +311,9 @@ pub(crate) enum ProjectError {
 
     #[error(transparent)]
     IndexCredentials(#[from] IndexCredentialsError),
+
+    #[error(transparent)]
+    Index(#[from] IndexUrlError),
 
     #[error(transparent)]
     Python(#[from] uv_python::Error),
@@ -3319,7 +3322,12 @@ pub(crate) async fn script_specification(
     };
 
     let script_dir = script.directory()?;
-    let script_indexes = script.indexes(&settings.sources);
+    let script_indexes = script
+        .indexes(&settings.sources)
+        .iter()
+        .cloned()
+        .map(|index| index.relative_to(&script_dir))
+        .collect::<Result<Vec<_>, _>>()?;
     let script_sources = script.sources(&settings.sources);
 
     let mut requirements = Vec::new();
@@ -3329,7 +3337,7 @@ pub(crate) async fn script_specification(
                 requirement,
                 script_dir.as_ref(),
                 script_sources.as_ref(),
-                script_indexes,
+                &script_indexes,
                 &settings.index_locations,
                 cache,
                 workspace_cache,
@@ -3356,7 +3364,7 @@ pub(crate) async fn script_specification(
                 requirement,
                 script_dir.as_ref(),
                 script_sources.as_ref(),
-                script_indexes,
+                &script_indexes,
                 &settings.index_locations,
                 cache,
                 workspace_cache,
@@ -3386,7 +3394,7 @@ pub(crate) async fn script_specification(
                             requirement,
                             script_dir.as_ref(),
                             script_sources.as_ref(),
-                            script_indexes,
+                            &script_indexes,
                             &settings.index_locations,
                             cache,
                             workspace_cache,
@@ -3406,7 +3414,7 @@ pub(crate) async fn script_specification(
                                 requirement,
                                 script_dir.as_ref(),
                                 script_sources.as_ref(),
-                                script_indexes,
+                                &script_indexes,
                                 &settings.index_locations,
                                 cache,
                                 workspace_cache,
@@ -3453,7 +3461,12 @@ pub(crate) async fn script_extra_build_requires(
     credentials_cache: &CredentialsCache,
 ) -> Result<LoweredExtraBuildDependencies, ProjectError> {
     let script_dir = script.directory()?;
-    let script_indexes = script.indexes(&settings.sources);
+    let script_indexes = script
+        .indexes(&settings.sources)
+        .iter()
+        .cloned()
+        .map(|index| index.relative_to(&script_dir))
+        .collect::<Result<Vec<_>, _>>()?;
     let script_sources = script.sources(&settings.sources);
 
     // Collect any `tool.uv.extra-build-dependencies` from the script.
@@ -3480,7 +3493,7 @@ pub(crate) async fn script_extra_build_requires(
                     requirement,
                     script_dir.as_ref(),
                     script_sources.as_ref(),
-                    script_indexes,
+                    &script_indexes,
                     &settings.index_locations,
                     cache,
                     workspace_cache,
