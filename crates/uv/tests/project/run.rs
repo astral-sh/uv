@@ -144,9 +144,7 @@ fn run_with_python_version() -> Result<()> {
 
 #[test]
 fn run_args() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
-
-    let context = context
+    let context = uv_test::test_context!("3.12")
         .with_filter((
             r"Usage: uv(?:\.exe)? run \[OPTIONS\] (?s:.*?)(\n----- stderr -----|$)",
             "[UV RUN HELP]$1",
@@ -4648,11 +4646,12 @@ fn run_gui_script_explicit_stdin_unix() -> Result<()> {
 
 #[test]
 fn run_remote_pep723_script() {
-    let context = uv_test::test_context!("3.12").with_filtered_python_names();
-    let context = context.with_filter((
-        r"(?m)^Downloaded remote script to:.*\.py$",
-        "Downloaded remote script to: [TEMP_PATH].py",
-    ));
+    let context = uv_test::test_context!("3.12")
+        .with_filtered_python_names()
+        .with_filter((
+            r"(?m)^Downloaded remote script to:.*\.py$",
+            "Downloaded remote script to: [TEMP_PATH].py",
+        ));
     uv_snapshot!(context.filters(), context.run().arg("https://raw.githubusercontent.com/astral-sh/uv/df45b9ac2584824309ff29a6a09421055ad730f6/scripts/uv-run-remote-script-test.py").arg(EnvVars::CI), @"
     exit_code: 0 (success)
     ----- stdout -----
@@ -4998,18 +4997,16 @@ fn run_with_malformed_env() -> Result<()> {
 
 #[test]
 fn run_with_not_existing_env_file() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
+    let context = uv_test::test_context!("3.12").with_filter((
+        r"(?m)^error: Failed to read environment file `.env.development`: .*$",
+        "error: Failed to read environment file `.env.development`: [ERR]",
+    ));
 
     context.temp_dir.child("test.py").write_str(indoc! { "
         import os
         print(os.environ.get('THE_EMPIRE_VARIABLE'))
        "
     })?;
-
-    let context = context.with_filter((
-        r"(?m)^error: Failed to read environment file `.env.development`: .*$",
-        "error: Failed to read environment file `.env.development`: [ERR]",
-    ));
 
     uv_snapshot!(context.filters(), context.run().arg("--env-file").arg(".env.development").arg("test.py"), @"
     exit_code: 2 (failure)
