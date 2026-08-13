@@ -1028,7 +1028,7 @@ fn connect_timeout_stream() {
 
 #[tokio::test]
 async fn retry_read_timeout_index() {
-    let context = uv_test::test_context!("3.12").with_http_timeout("1");
+    let context = uv_test::test_context!("3.12").with_fast_http_retry();
 
     let (server, _guard) = read_timeout_server();
 
@@ -1036,9 +1036,7 @@ async fn retry_read_timeout_index() {
         .pip_install()
         .arg("tqdm")
         .arg("--index-url")
-        .arg(server)
-        // Speed the test up with the minimum testable values
-        .env(EnvVars::UV_HTTP_RETRIES, "1"), @"
+        .arg(server), @"
     exit_code: 2 (failure)
     ----- stderr -----
     error: Request failed after 1 retry in [TIME]
@@ -1051,7 +1049,7 @@ async fn retry_read_timeout_index() {
 
 #[tokio::test]
 async fn retry_read_timeout_python_downloads_json() {
-    let context = uv_test::test_context!("3.12").with_http_timeout("1");
+    let context = uv_test::test_context!("3.12").with_fast_http_retry();
 
     let (server, _guard) = read_timeout_server();
 
@@ -1059,9 +1057,7 @@ async fn retry_read_timeout_python_downloads_json() {
         .python_list()
         .env_remove(EnvVars::UV_PYTHON_DOWNLOADS)
         .arg("--python-downloads-json-url")
-        .arg(&server)
-        // Speed the test up with the minimum testable values
-        .env(EnvVars::UV_HTTP_RETRIES, "1"), @"
+        .arg(&server), @"
     exit_code: 2 (failure)
     ----- stderr -----
     error: Error while fetching remote python downloads json from 'http://[LOCALHOST]/'
@@ -1075,15 +1071,13 @@ async fn retry_read_timeout_python_downloads_json() {
 
 #[tokio::test]
 async fn retry_read_timeout_stream() {
-    let context = uv_test::test_context!("3.12").with_http_timeout("1");
+    let context = uv_test::test_context!("3.12").with_fast_http_retry();
 
     let (server, _guard) = read_timeout_server();
 
     uv_snapshot!(context.filters(), context
         .pip_install()
-        .arg(format!("{server}/tqdm-0.1-py3-none-any.whl"))
-        // Speed the test up with the minimum testable values
-        .env(EnvVars::UV_HTTP_RETRIES, "1"), @"
+        .arg(format!("{server}/tqdm-0.1-py3-none-any.whl")), @"
     exit_code: 1 (failure)
     ----- stderr -----
       × Failed to download `tqdm @ http://[LOCALHOST]/tqdm-0.1-py3-none-any.whl`
