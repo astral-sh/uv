@@ -10542,8 +10542,7 @@ fn build_tag() {
     // Ensure that we choose the highest build tag (5).
     uv_snapshot!(context.python_command()
         .arg("-c")
-        .arg("import build_tag; build_tag.main()")
-        .current_dir(&context.temp_dir), @"
+        .arg("import build_tag; build_tag.main()"), @"
     exit_code: 0 (success)
     ----- stdout -----
     5

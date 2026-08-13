@@ -401,8 +401,7 @@ fn invalid_index() {
         .arg("dummy")
         .arg("--index")
         .arg("bar")
-        .arg(&ok_wheel)
-        .current_dir(context.temp_dir.path()), @"
+        .arg(&ok_wheel), @"
     exit_code: 2 (failure)
     ----- stderr -----
     error: Index not found: `bar`. Found indexes: `foo`, `internal`
@@ -417,8 +416,7 @@ fn invalid_index() {
         .arg("dummy")
         .arg("--index")
         .arg("foo")
-        .arg(&ok_wheel)
-        .current_dir(context.temp_dir.path()), @"
+        .arg(&ok_wheel), @"
     exit_code: 2 (failure)
     ----- stderr -----
     error: Index is missing a publish URL: `foo`
