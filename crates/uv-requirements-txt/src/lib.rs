@@ -59,8 +59,7 @@ use uv_pypi_types::VerbatimParsedUrl;
 use uv_redacted::DisplaySafeUrl;
 use uv_redacted::DisplaySafeUrlError;
 
-use crate::requirement::EditableError;
-pub use crate::requirement::RequirementsTxtRequirement;
+pub use crate::requirement::{MakeEditableError, RequirementsTxtRequirement};
 use crate::shquote::unquote;
 
 mod requirement;
@@ -745,16 +744,17 @@ fn parse_entry(
             Some(requirements_txt)
         };
 
-        let (requirement, hashes) =
+        let (mut requirement, hashes) =
             parse_requirement_and_hashes(s, content, source, working_dir, true)?;
-        let requirement =
-            requirement
-                .into_editable()
-                .map_err(|err| RequirementsTxtParserError::NonEditable {
-                    source: err,
-                    start,
-                    end: s.cursor(),
-                })?;
+        requirement
+            .make_editable()
+            .map_err(|source| RequirementsTxtParserError::NonEditable {
+                source,
+                requirement: requirement.to_string(),
+                start,
+                end: s.cursor(),
+                line: calculate_row_column(content, start).0,
+            })?;
         RequirementsTxtStatement::EditableRequirementEntry(RequirementEntry {
             requirement,
             hashes,
@@ -1170,9 +1170,11 @@ pub enum RequirementsTxtParserError {
     UnsupportedUrl(String),
     MissingRequirementPrefix(String),
     NonEditable {
-        source: EditableError,
+        source: MakeEditableError,
+        requirement: String,
         start: usize,
         end: usize,
+        line: usize,
     },
     NoBinary {
         source: uv_normalize::InvalidNameError,
@@ -1245,8 +1247,13 @@ impl Display for RequirementsTxtParserError {
             Self::UnsupportedUrl(url) => {
                 write!(f, "Unsupported URL (expected a `file://` scheme): `{url}`")
             }
-            Self::NonEditable { .. } => {
-                write!(f, "Unsupported editable requirement")
+            Self::NonEditable {
+                requirement, line, ..
+            } => {
+                write!(
+                    f,
+                    "Unsupported editable requirement at line {line}: `{requirement}`"
+                )
             }
             Self::MissingRequirementPrefix(given) => {
                 write!(
@@ -1382,10 +1389,12 @@ impl Display for RequirementsTxtFileError {
                     self.file.user_display(),
                 )
             }
-            RequirementsTxtParserError::NonEditable { .. } => {
+            RequirementsTxtParserError::NonEditable {
+                requirement, line, ..
+            } => {
                 write!(
                     f,
-                    "Unsupported editable requirement in `{}`",
+                    "Unsupported editable requirement in `{}` at line {line}: `{requirement}`",
                     self.file.user_display(),
                 )
             }
@@ -1898,8 +1907,8 @@ mod test {
             filters => filters
         }, {
             insta::assert_snapshot!(errors, @"
-            Unsupported editable requirement in `<REQUIREMENTS_TXT>`
-            Editable must refer to a local directory, not an HTTPS URL: `https://files.pythonhosted.org/packages/f7/69/96766da2cdb5605e6a31ef2734aff0be17901cefb385b885c2ab88896d76/ruff-0.5.6.tar.gz`
+            Unsupported editable requirement in `<REQUIREMENTS_TXT>` at line 1: `https://files.pythonhosted.org/packages/f7/69/96766da2cdb5605e6a31ef2734aff0be17901cefb385b885c2ab88896d76/ruff-0.5.6.tar.gz`
+            Remote archives cannot be editable
             ");
         });
 
