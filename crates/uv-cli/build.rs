@@ -40,25 +40,19 @@ fn commit_info(workspace_root: &Path) {
     if let Some(git_head_path) = git_head(&git_dir) {
         println!("cargo:rerun-if-changed={}", git_head_path.display());
 
-        let common_git_dir = git_common_dir(&git_head_path);
-        if let Some(common_git_dir) = common_git_dir.as_deref() {
-            watch_git_tags(common_git_dir);
-        }
-
-        let git_head_contents = fs::read_to_string(&git_head_path);
-        if let Ok(git_head_contents) = git_head_contents
-            && let Some(common_git_dir) = common_git_dir.as_deref()
+        if let Some(common_git_dir) = git_common_dir(&git_head_path)
             && let Some(worktree_git_dir) = git_head_path.parent()
+            && !watch_git_reftables(worktree_git_dir, &common_git_dir)
         {
-            // The contents are either a commit or a reference in the following formats
-            // - "<commit>" when the head is detached
-            // - "ref: <ref>" when working on a branch
-            // If a commit, checking if the HEAD file has changed is sufficient
-            // If a ref, we also need to watch where Git stores its current commit
-            let mut git_ref_parts = git_head_contents.split_whitespace();
-            git_ref_parts.next();
-            if let Some(git_ref) = git_ref_parts.next() {
-                watch_git_ref(worktree_git_dir, common_git_dir, git_ref, 1);
+            watch_git_tags(&common_git_dir);
+
+            if let Ok(git_head_contents) = fs::read_to_string(&git_head_path) {
+                // A files-backed HEAD contains either a commit when detached or a symbolic
+                // reference such as `ref: refs/heads/main`. Its own path tracks detached
+                // commits; an attached branch also needs to track its mutable reference.
+                if let Some(git_ref) = git_head_contents.strip_prefix("ref:") {
+                    watch_git_ref(worktree_git_dir, &common_git_dir, git_ref.trim(), 1);
+                }
             }
         }
     }
@@ -156,6 +150,29 @@ fn git_common_dir(git_head_path: &Path) -> Option<PathBuf> {
     };
 
     Some(common_git_dir)
+}
+
+/// Watch the reftable manifests containing shared and worktree-specific Git references.
+fn watch_git_reftables(worktree_git_dir: &Path, common_git_dir: &Path) -> bool {
+    let common_reftable = common_git_dir.join("reftable").join("tables.list");
+    if !common_reftable.is_file() {
+        return false;
+    }
+
+    // A reftable repository keeps `.git/HEAD` as the fixed compatibility stub
+    // `ref: refs/heads/.invalid`. References and tags actually change when Git replaces
+    // `.git/reftable/tables.list`, so watching the stub cannot detect commits or checkouts.
+    println!("cargo:rerun-if-changed={}", common_reftable.display());
+
+    // Linked worktrees have a second table for their private HEAD and refs. For example,
+    // switching branches updates `.git/worktrees/example/reftable/tables.list` even when the
+    // shared `.git/reftable/tables.list` remains unchanged.
+    let worktree_reftable = worktree_git_dir.join("reftable").join("tables.list");
+    if worktree_reftable != common_reftable && worktree_reftable.is_file() {
+        println!("cargo:rerun-if-changed={}", worktree_reftable.display());
+    }
+
+    true
 }
 
 /// Watch loose and packed tags used by `git log --format=%(describe:tags)`.
