@@ -216,6 +216,12 @@ impl TestContext {
                 format!("{verb} [N] packages"),
             ));
         }
+        self.with_filtered_file_counts()
+    }
+
+    /// Filter removed file counts without hiding exact package counts.
+    #[must_use]
+    pub fn with_filtered_file_counts(mut self) -> Self {
         self.filters.push((
             "Removed \\d+ files?".to_string(),
             "Removed [N] files".to_string(),
