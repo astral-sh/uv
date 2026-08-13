@@ -40,18 +40,17 @@ fn commit_info(workspace_root: &Path) {
     if let Some(git_head_path) = git_head(&git_dir) {
         println!("cargo:rerun-if-changed={}", git_head_path.display());
 
-        let git_head_contents = fs::read_to_string(git_head_path);
+        let git_head_contents = fs::read_to_string(&git_head_path);
         if let Ok(git_head_contents) = git_head_contents {
             // The contents are either a commit or a reference in the following formats
             // - "<commit>" when the head is detached
-            // - "ref <ref>" when working on a branch
+            // - "ref: <ref>" when working on a branch
             // If a commit, checking if the HEAD file has changed is sufficient
-            // If a ref, we need to add the head file for that ref to rebuild on commit
+            // If a ref, we also need to watch where Git stores its current commit
             let mut git_ref_parts = git_head_contents.split_whitespace();
             git_ref_parts.next();
             if let Some(git_ref) = git_ref_parts.next() {
-                let git_ref_path = git_dir.join(git_ref);
-                println!("cargo:rerun-if-changed={}", git_ref_path.display());
+                watch_git_ref(&git_head_path, git_ref);
             }
         }
     }
@@ -98,16 +97,16 @@ fn commit_info(workspace_root: &Path) {
 
 fn git_head(git_dir: &Path) -> Option<PathBuf> {
     // The typical case is a standard git repository.
-    let git_head_path = git_dir.join("HEAD");
-    if git_head_path.exists() {
-        return Some(git_head_path);
+    if git_dir.is_dir() {
+        return Some(git_dir.join("HEAD"));
     }
     if !git_dir.is_file() {
         return None;
     }
-    // If `.git/HEAD` doesn't exist and `.git` is actually a file,
-    // then let's try to attempt to read it as a worktree. If it's
-    // a worktree, then its contents will look like this, e.g.:
+    // Watch the pointer in case the worktree's Git directory changes.
+    println!("cargo:rerun-if-changed={}", git_dir.display());
+    // A linked worktree has a `.git` file instead of a `.git` directory.
+    // Its contents point to the worktree-specific Git directory, e.g.:
     //
     //     gitdir: /home/andrew/astral/uv/main/.git/worktrees/pr2
     //
@@ -119,6 +118,52 @@ fn git_head(git_dir: &Path) -> Option<PathBuf> {
     if label != "gitdir" {
         return None;
     }
-    let worktree_path = worktree_path.trim();
-    Some(PathBuf::from(worktree_path))
+    // Relative `gitdir:` paths are relative to the directory containing `.git`.
+    let worktree_path = PathBuf::from(worktree_path.trim());
+    let worktree_path = if worktree_path.is_absolute() {
+        worktree_path
+    } else {
+        git_dir.parent()?.join(worktree_path)
+    };
+    Some(worktree_path.join("HEAD"))
+}
+
+/// Watch the loose or packed Git reference for the current branch.
+fn watch_git_ref(git_head_path: &Path, git_ref: &str) {
+    let Some(worktree_git_dir) = git_head_path.parent() else {
+        return;
+    };
+
+    // Worktrees have their own HEAD, but branch refs live in the shared Git directory. Their
+    // `commondir` file points to that directory, either absolutely or relative to this Git directory.
+    let common_dir_path = worktree_git_dir.join("commondir");
+    let common_git_dir = if let Ok(common_dir) = fs::read_to_string(&common_dir_path) {
+        println!("cargo:rerun-if-changed={}", common_dir_path.display());
+        let common_dir = PathBuf::from(common_dir.trim());
+        if common_dir.is_absolute() {
+            common_dir
+        } else {
+            worktree_git_dir.join(common_dir)
+        }
+    } else {
+        worktree_git_dir.to_path_buf()
+    };
+
+    let git_ref_path = common_git_dir.join(git_ref);
+    if git_ref_path.exists() {
+        println!("cargo:rerun-if-changed={}", git_ref_path.display());
+    } else {
+        // A packed branch ref has no loose ref file. Watch `packed-refs` instead of the missing
+        // loose ref, since Cargo would rebuild on every invocation for a nonexistent watched path.
+        let packed_refs = common_git_dir.join("packed-refs");
+        if packed_refs.exists() {
+            println!("cargo:rerun-if-changed={}", packed_refs.display());
+        }
+        // A later commit can recreate the loose ref, even when its parent directories do not exist
+        // yet. Watch the nearest existing ancestor so Cargo notices that transition. This can
+        // also rebuild when another ref in that directory changes.
+        if let Some(parent) = git_ref_path.ancestors().find(|parent| parent.is_dir()) {
+            println!("cargo:rerun-if-changed={}", parent.display());
+        }
+    }
 }
