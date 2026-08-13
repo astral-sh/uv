@@ -2694,6 +2694,156 @@ fn check_with_declared_dependency() -> Result<()> {
     Ok(())
 }
 
+/// Type-check first-party extension stubs without building or installing the project.
+#[test]
+fn check_no_install_project() -> Result<()> {
+    let server = PackseServer::new("simple/single-package.toml");
+    let context = uv_test::test_context!("3.12");
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["a==1.0.0"]
+
+        [build-system]
+        requires = ["missing-build-backend==1.0.0"]
+        build-backend = "missing_build_backend"
+    "#})?;
+
+    let project = context.temp_dir.child("src").child("project");
+    project.create_dir_all()?;
+    project.child("__init__.py").write_str(indoc! {r"
+        from project._core import hello
+    "})?;
+    project.child("_core.pyi").write_str(indoc! {r"
+        def hello() -> str: ...
+    "})?;
+    context.temp_dir.child("main.py").write_str(indoc! {r"
+        import a
+        from project import hello
+
+        message: str = hello()
+    "})?;
+
+    uv_snapshot!(
+        context.filters(),
+        context
+            .check()
+            .arg("--no-install-project")
+            .arg("--index")
+            .arg(server.index_url()),
+        @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    All checks passed!
+
+    ----- stderr -----
+    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
+    Installed 1 package in [TIME]
+    "
+    );
+
+    assert!(context.site_packages().join("a").exists());
+    assert!(
+        !context
+            .site_packages()
+            .join("project-0.1.0.dist-info")
+            .exists()
+    );
+
+    fs_err::remove_dir_all(&context.venv)?;
+
+    uv_snapshot!(
+        context.filters(),
+        context
+            .check()
+            .arg("--index")
+            .arg(server.index_url())
+            .env(EnvVars::UV_NO_INSTALL_PROJECT, "1"),
+        @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    All checks passed!
+
+    ----- stderr -----
+    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment at: .venv
+    Installed 1 package in [TIME]
+    "
+    );
+
+    assert!(context.site_packages().join("a").exists());
+    assert!(
+        !context
+            .site_packages()
+            .join("project-0.1.0.dist-info")
+            .exists()
+    );
+
+    Ok(())
+}
+
+/// Reject project installation filters when no project synchronization will occur.
+#[test]
+fn check_no_install_project_env_var_conflicts() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let script = context.temp_dir.child("script.py");
+    script.write_str(indoc! {r#"
+        # /// script
+        # requires-python = ">=3.12"
+        # ///
+    "#})?;
+
+    uv_snapshot!(
+        context.filters(),
+        context
+            .check()
+            .arg("--no-sync")
+            .env(EnvVars::UV_NO_INSTALL_PROJECT, "1"),
+        @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: the argument `UV_NO_INSTALL_PROJECT` (environment variable) cannot be used with `--no-sync`
+    "
+    );
+
+    uv_snapshot!(
+        context.filters(),
+        context
+            .check()
+            .arg("--script")
+            .arg("script.py")
+            .env(EnvVars::UV_NO_INSTALL_PROJECT, "1"),
+        @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: the argument `UV_NO_INSTALL_PROJECT` (environment variable) cannot be used with `--script`
+    "
+    );
+
+    uv_snapshot!(
+        context.filters(),
+        context
+            .check()
+            .arg("--no-project")
+            .env(EnvVars::UV_NO_INSTALL_PROJECT, "1"),
+        @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: the argument `UV_NO_INSTALL_PROJECT` (environment variable) cannot be used with `--no-project`
+    "
+    );
+
+    Ok(())
+}
+
 #[test]
 fn check_isolated() -> Result<()> {
     let server = PackseServer::new("extras/extra-does-not-exist-backtrack.toml");
