@@ -1610,10 +1610,10 @@ fn tool_install_suggest_other_packages_with_executable() {
     // FastAPI 0.111 is only available from this date onwards.
     let context = uv_test::test_context!("3.12")
         .with_exclude_newer("2024-05-04T00:00:00Z")
-        .with_filtered_exe_suffix();
+        .with_filtered_exe_suffix()
+        .with_filter(("\\+ uvloop(.+)\n ", ""));
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
-    let context = context.with_filter(("\\+ uvloop(.+)\n ", ""));
 
     uv_snapshot!(context.filters(), context.tool_install()
         .arg("fastapi==0.111.0")

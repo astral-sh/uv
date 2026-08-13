@@ -539,7 +539,10 @@ fn invalid_pyproject_toml_option_schema() -> Result<()> {
 
 #[test]
 fn invalid_pyproject_toml_option_unknown_field() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
+    let context = uv_test::test_context!("3.12").with_filter((
+        "expected one of `required-version`, `native-tls`, .*",
+        "expected one of `required-version`, `native-tls`, [...]",
+    ));
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {r#"
         [tool.uv]
@@ -549,11 +552,6 @@ fn invalid_pyproject_toml_option_unknown_field() -> Result<()> {
         requires = ["setuptools"]
         build-backend = "setuptools.build_meta"
     "#})?;
-
-    let context = context.with_filter((
-        "expected one of `required-version`, `native-tls`, .*",
-        "expected one of `required-version`, `native-tls`, [...]",
-    ));
 
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("-r")
@@ -3092,12 +3090,11 @@ fn install_git_private_https_pat_and_username() {
 #[test]
 #[cfg(all(not(windows), feature = "test-git"))]
 fn install_git_private_https_pat_not_authorized() {
-    let context = uv_test::test_context!(DEFAULT_PYTHON_VERSION);
+    let context = uv_test::test_context!(DEFAULT_PYTHON_VERSION)
+        .with_filter(("`.*/git fetch (.*)`", "`git fetch $1`"));
 
     // A revoked token
     let token = "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";
-
-    let context = context.with_filter(("`.*/git fetch (.*)`", "`git fetch $1`"));
 
     // We provide a username otherwise (since the token is invalid), the git cli will prompt for a password
     // and hang the test
