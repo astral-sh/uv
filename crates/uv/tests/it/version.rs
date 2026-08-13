@@ -2494,7 +2494,10 @@ fn version_virtual_workspace_root_rejects_before_members() -> Result<()> {
 /// Read the frozen version of a workspace member without discovering an interpreter.
 #[test]
 fn version_get_frozen_workspace_without_python() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
+    let mut context = uv_test::test_context!("3.12").with_filter((
+        r"Caused by: failed to create directory `[^`]+`: .*",
+        "Caused by: failed to create directory `[CACHE_DIR]`: [ERROR]",
+    ));
 
     context
         .temp_dir
@@ -2531,11 +2534,11 @@ fn version_get_frozen_workspace_without_python() -> Result<()> {
     // A file can't be initialized as a cache directory.
     let cache_file = context.temp_dir.child("cache-file");
     cache_file.touch()?;
+    context.cache_dir = cache_file;
 
     uv_snapshot!(context.filters(), context.version()
         .arg("--package").arg("child")
-        .arg("--short")
-        .env(EnvVars::UV_CACHE_DIR, cache_file.as_os_str()), @"
+        .arg("--short"), @"
     exit_code: 0 (success)
     ----- stdout -----
     2.0.0
@@ -2545,11 +2548,21 @@ fn version_get_frozen_workspace_without_python() -> Result<()> {
         .arg("--package").arg("child")
         .arg("--frozen")
         .arg("--python").arg("9.9")
-        .arg("--no-python-downloads")
-        .env(EnvVars::UV_CACHE_DIR, cache_file.as_os_str()), @"
+        .arg("--no-python-downloads"), @"
     exit_code: 0 (success)
     ----- stdout -----
     child 1.0.0
+    ");
+
+    // Writing a version initializes the cache, confirming that the cache path is invalid.
+    uv_snapshot!(context.filters(), context.version()
+        .arg("--package").arg("child")
+        .arg("--frozen")
+        .arg("--bump").arg("patch"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Failed to initialize cache at `cache-file`
+      Caused by: failed to create directory `[CACHE_DIR]`: [ERROR]
     ");
 
     Ok(())
