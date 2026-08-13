@@ -7,6 +7,23 @@ use std::process::Command;
 use uv_fs::create_symlink;
 use uv_test::{get_bin, uv_snapshot};
 
+/// A custom cache directory must configure commands and snapshot filters together.
+#[test]
+fn cache_dir_uses_configured_test_context_path() {
+    let context = uv_test::test_context!("3.12").with_cache_dir("project-cache");
+
+    assert_eq!(
+        context.cache_dir.path(),
+        context.temp_dir.child("project-cache").path()
+    );
+
+    uv_snapshot!(context.filters(), context.command().arg("cache").arg("dir"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    [CACHE_DIR]/
+    ");
+}
+
 /// When the active cache directory is inside an explicit build source, we should warn and continue
 /// the build.
 #[test]
