@@ -644,7 +644,7 @@ jobs:
           pull_request="$(jq --raw-output '.[0].url // empty' \
             "$RUNNER_TEMP/bug-fix-pull-requests.json")"
           if [ -z "$pull_request" ]; then
-            printf '%s Fixes astral-sh/uv#%s.\n' \
+            printf '%s Fixes astral-sh/uv#%s\n' \
               "$FIX_SUMMARY" "$ISSUE_NUMBER" > "$RUNNER_TEMP/bug-fix-pull-request.md"
             pull_request="$(
               gh pr create \
