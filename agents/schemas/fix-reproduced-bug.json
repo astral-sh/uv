@@ -17,14 +17,7 @@
         "minLength": 1
       }
     },
-    "pull_request_title": { "type": "string" },
-    "pull_request_body": { "type": "string" }
+    "pull_request_title": { "type": "string" }
   },
-  "required": [
-    "outcome",
-    "summary",
-    "validation",
-    "pull_request_title",
-    "pull_request_body"
-  ]
+  "required": ["outcome", "summary", "validation", "pull_request_title"]
 }

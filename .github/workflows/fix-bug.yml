@@ -64,7 +64,7 @@ jobs:
       created: ${{ steps.commit-fix.outputs.created }}
       existing-head: ${{ steps.prepare.outputs.existing-head }}
       publish: ${{ steps.commit-fix.outputs.publish }}
-      pull-request-metadata: ${{ steps.commit-fix.outputs.pull-request-metadata }}
+      pull-request-title: ${{ steps.commit-fix.outputs.pull-request-title }}
       result: ${{ steps.commit-fix.outputs.result }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -324,14 +324,11 @@ jobs:
                 outcome: "fixed",
                 summary: "Reused the existing verified automated bug fix.",
                 validation: ["Verified the production fix and existing regression test."],
-                pull_request_title: ($issue_title[:256]),
-                pull_request_body: "Apply the existing verified fix and update its regression test."
+                pull_request_title: ($issue_title[:256])
               }')"
           fi
 
-          printf '%s\n' "$FIX_RESULT" > "$RUNNER_TEMP/bug-fix-agent-result.json"
-          jq 'del(.pull_request_title, .pull_request_body)' \
-            "$RUNNER_TEMP/bug-fix-agent-result.json" > "$RUNNER_TEMP/bug-fix-result.json"
+          printf '%s\n' "$FIX_RESULT" > "$RUNNER_TEMP/bug-fix-result.json"
           fix_outcome="$(jq --raw-output '.outcome' "$RUNNER_TEMP/bug-fix-result.json")"
 
           if [ -z "$(git status --porcelain)" ] && [ "$EXISTING_FIX" != "true" ]; then
@@ -342,7 +339,9 @@ jobs:
             {
               echo "created=false"
               echo "publish=false"
-              jq --raw-output '"result=\(tojson)"' "$RUNNER_TEMP/bug-fix-result.json"
+              jq --raw-output '
+                del(.pull_request_title) | "result=\(tojson)"
+              ' "$RUNNER_TEMP/bug-fix-result.json"
             } >> "$GITHUB_OUTPUT"
             jq --raw-output '.summary' "$RUNNER_TEMP/bug-fix-result.json" \
               >> "$GITHUB_STEP_SUMMARY"
@@ -353,8 +352,7 @@ jobs:
             (.validation | length > 0)
             and (.pull_request_title | type == "string" and length > 0 and length <= 256
               and (test("[\\r\\n]") | not))
-            and (.pull_request_body | type == "string" and length > 0)
-          ' "$RUNNER_TEMP/bug-fix-agent-result.json" > /dev/null; then
+          ' "$RUNNER_TEMP/bug-fix-result.json" > /dev/null; then
             echo "The modified checkout does not contain a validated bug fix and pull request." >&2
             exit 1
           fi
@@ -410,13 +408,11 @@ jobs:
           {
             echo "created=$created"
             echo "publish=true"
+            jq --raw-output '"pull-request-title=\(.pull_request_title)"' \
+              "$RUNNER_TEMP/bug-fix-result.json"
             jq --raw-output '
-              "pull-request-metadata=\({
-                title: .pull_request_title,
-                body: .pull_request_body
-              } | tojson)"
-            ' "$RUNNER_TEMP/bug-fix-agent-result.json"
-            jq --raw-output '"result=\(tojson)"' "$RUNNER_TEMP/bug-fix-result.json"
+              del(.pull_request_title) | "result=\(tojson)"
+            ' "$RUNNER_TEMP/bug-fix-result.json"
           } >> "$GITHUB_OUTPUT"
           {
             printf '%s\n\n' '### Reproduced bug fixed'
@@ -609,12 +605,13 @@ jobs:
         id: open-pr
         env:
           FIXED_HEAD_SHA: ${{ steps.verify.outputs.head_sha }}
+          FIX_SUMMARY: ${{ fromJSON(needs.fix.outputs.result).summary }}
           GH_TOKEN: ${{ steps.token.outputs.token }}
           GIT_CONFIG_GLOBAL: /dev/null
           GIT_CONFIG_NOSYSTEM: "1"
           ISSUE_NUMBER: ${{ inputs.issue-number }}
           PARENT_HEAD_REF: ${{ inputs.parent-head-ref }}
-          PULL_REQUEST_METADATA: ${{ needs.fix.outputs.pull-request-metadata }}
+          PULL_REQUEST_TITLE: ${{ needs.fix.outputs.pull-request-title }}
         run: |
           branch="automations/fix-bug/$ISSUE_NUMBER"
           gh pr list \
@@ -647,17 +644,15 @@ jobs:
           pull_request="$(jq --raw-output '.[0].url // empty' \
             "$RUNNER_TEMP/bug-fix-pull-requests.json")"
           if [ -z "$pull_request" ]; then
-            pull_request_title="$(jq --raw-output '.title' <<< "$PULL_REQUEST_METADATA")"
             printf '%s Fixes astral-sh/uv#%s.\n' \
-              "$(jq --raw-output '.body' <<< "$PULL_REQUEST_METADATA")" \
-              "$ISSUE_NUMBER" > "$RUNNER_TEMP/bug-fix-pull-request.md"
+              "$FIX_SUMMARY" "$ISSUE_NUMBER" > "$RUNNER_TEMP/bug-fix-pull-request.md"
             pull_request="$(
               gh pr create \
                 --repo astral-sh/uv-dev \
                 --base "$PARENT_HEAD_REF" \
                 --head "$branch" \
                 --draft \
-                --title "$pull_request_title" \
+                --title "$PULL_REQUEST_TITLE" \
                 --body-file "$RUNNER_TEMP/bug-fix-pull-request.md"
             )"
           fi
