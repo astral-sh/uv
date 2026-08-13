@@ -66,8 +66,7 @@ pub(crate) async fn upgrade(
     let names: BTreeMap<PackageName, Vec<Requirement>> = {
         if names.is_empty() {
             installed_tools
-                .tools()
-                .unwrap_or_default()
+                .tools()?
                 .into_iter()
                 .map(|(name, _)| (name, Vec::new()))
                 .collect()
