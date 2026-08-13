@@ -324,7 +324,7 @@ jobs:
                 outcome: "fixed",
                 summary: "Reused the existing verified automated bug fix.",
                 validation: ["Verified the production fix and existing regression test."],
-                pull_request_title: ($issue_title[:256])
+                pull_request_title: $issue_title
               }')"
           fi
 
@@ -350,7 +350,7 @@ jobs:
 
           if [ "$fix_outcome" != "fixed" ] || ! jq --exit-status '
             (.validation | length > 0)
-            and (.pull_request_title | type == "string" and length > 0 and length <= 256
+            and (.pull_request_title | type == "string" and length > 0
               and (test("[\\r\\n]") | not))
           ' "$RUNNER_TEMP/bug-fix-result.json" > /dev/null; then
             echo "The modified checkout does not contain a validated bug fix and pull request." >&2
