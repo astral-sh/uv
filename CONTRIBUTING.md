@@ -276,14 +276,14 @@ this:
 
 ```console
 Coverage tracking ID: WuSYqZVUl0R9YPka
-Raw profiles: /Users/ww/oss/astral-sh/uv/target/coverage/profraw/WuSYqZVUl0R9YPka
+Raw profiles: /home/example/devel/~uv/target/coverage/profraw/WuSYqZVUl0R9YPka
 
 [... normal test output ...]
 [... normal test output ...]
 [... normal test output ...]
 
-Merged profile: /Users/ww/oss/astral-sh/uv/target/coverage/profdata/WuSYqZVUl0R9YPka.profdata
-LCOV profile: /Users/ww/oss/astral-sh/uv/target/coverage/lcov/WuSYqZVUl0R9YPka.lcov
+Merged profile: /home/example/devel/~uv/target/coverage/profdata/WuSYqZVUl0R9YPka.profdata
+LCOV profile: /home/example/devel/~uv/target/coverage/lcov/WuSYqZVUl0R9YPka.lcov
 Generate an HTML report with: uv run --script scripts/coverage-html-report.py WuSYqZVUl0R9YPka
 ```
 
