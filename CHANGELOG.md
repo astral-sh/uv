@@ -7,20 +7,16 @@
 
 Released on 2026-08-13.
 
-### Python
-
-- Use windowed `pythonw.exe` launchers for virtual environments created from managed Python minor-version links ([#19235](https://github.com/astral-sh/uv/pull/19235))
-
 ### Enhancements
 
-- Prefer post-quantum key exchange and enable opt-in TLS diagnostics with rustls's default features ([#21054](https://github.com/astral-sh/uv/pull/21054))
+- Prefer post-quantum key exchange and enable opt-in TLS diagnostics ([#21054](https://github.com/astral-sh/uv/pull/21054))
 - Accept whitespace before versions in noncompliant wildcard comparisons such as `Requires-Python: >= 3.5.*` ([#21012](https://github.com/astral-sh/uv/pull/21012))
 - Report a specific error when a PEP 723 closing tag contains trailing whitespace or other content ([#20944](https://github.com/astral-sh/uv/pull/20944))
 - Omit source-span carets from diagnostics for empty PEP 508 requirements ([#21094](https://github.com/astral-sh/uv/pull/21094))
 
 ### Preview features
 
-- Add `uv check --no-install-project` and `UV_NO_INSTALL_PROJECT` to install dependencies without building or installing the project ([#21085](https://github.com/astral-sh/uv/pull/21085))
+- Add `uv check --no-install-project` and respect `UV_NO_INSTALL_PROJECT` to install dependencies without building or installing the project ([#21085](https://github.com/astral-sh/uv/pull/21085))
 - Make the ty subprocess invoked by `uv check` honor uv's color and progress settings, including quiet mode ([#21086](https://github.com/astral-sh/uv/pull/21086))
 
 ### Performance
@@ -30,6 +26,7 @@ Released on 2026-08-13.
 
 ### Bug fixes
 
+- Use windowed `pythonw.exe` launchers for virtual environments created from managed Python minor-version links ([#19235](https://github.com/astral-sh/uv/pull/19235))
 - Allow `uv lock` to proceed when `.venv` is an unusable project environment ([#21068](https://github.com/astral-sh/uv/pull/21068))
 - Respect `fork-strategy` when ordering forks created from `environments` or existing lockfile `resolution-markers` ([#21000](https://github.com/astral-sh/uv/pull/21000))
 - Preserve consecutive wildcard Python minor-version exclusions such as `!=3.11.*, !=3.12.*` in `uv.lock` ([#21045](https://github.com/astral-sh/uv/pull/21045))
