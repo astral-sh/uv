@@ -152,9 +152,17 @@ reclaimed, accounting for hardlinks and copy-on-write clones:
 $ uv cache clean --preview-features cache-physical-space
 ```
 
-If an entry's allocated size cannot be measured, such as a compressed extent on Btrfs, uv reports a
-lower bound for the space reclaimed from the remaining entries. The preview feature is currently
-supported on macOS and Linux; other platforms continue reporting the logical removed size.
+The same preview feature can be used with `uv cache size` to count physical blocks shared by
+hardlinks or copy-on-write clones within the cache only once:
+
+```console
+$ uv cache size --preview-features cache-size,cache-physical-space
+```
+
+If an entry's allocated size cannot be measured during cleanup, such as a compressed extent on
+Btrfs, uv reports a lower bound for the space reclaimed from the remaining entries. The preview
+feature is currently supported on macOS and Linux; other platforms continue reporting the logical
+removed size.
 
 uv blocks cache-modifying operations while other uv commands are running. By default, those
 `uv cache` commands have a 5 min timeout waiting for other uv processes to terminate to avoid

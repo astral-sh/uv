@@ -40,9 +40,13 @@ pub(crate) fn cache_size(
         return Ok(ExitStatus::Success);
     }
 
-    let disk_usage = DiskUsage::new(vec![cache.root().to_path_buf()]);
-
-    let total_bytes = disk_usage.count_ignoring_errors();
+    let total_bytes = if preview.is_enabled(PreviewFeature::CachePhysicalSpace)
+        && uv_fs::supports_physical_space()
+    {
+        uv_fs::physical_disk_usage(cache.root())?
+    } else {
+        DiskUsage::new(vec![cache.root().to_path_buf()]).count_ignoring_errors()
+    };
 
     if human_readable {
         let (bytes, unit) = human_readable_bytes(total_bytes);
