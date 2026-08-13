@@ -15269,7 +15269,7 @@ fn same_version_multi_index_incompatibility() -> Result<()> {
 /// Show the derivation chain on build failure.
 #[test]
 fn compile_derivation_chain() -> Result<()> {
-    let context = uv_test::test_context!("3.12").with_filter((r"/.*/src", "/[TMP]/src"));
+    let context = uv_test::test_context!("3.12").with_filter((r"[/\\].*[/\\]src", "/[TMP]/src"));
 
     let child = context.temp_dir.child("child");
     child.child("pyproject.toml").write_str(

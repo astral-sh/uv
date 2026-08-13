@@ -9816,7 +9816,7 @@ fn sync_multiple_sources_index_disjoint_extras() -> Result<()> {
 
 #[test]
 fn sync_derivation_chain() -> Result<()> {
-    let context = uv_test::test_context!("3.12").with_filter((r"/.*/src", "/[TMP]/src"));
+    let context = uv_test::test_context!("3.12").with_filter((r"[/\\].*[/\\]src", "/[TMP]/src"));
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -9870,7 +9870,7 @@ fn sync_derivation_chain() -> Result<()> {
 
 #[test]
 fn sync_derivation_chain_extra() -> Result<()> {
-    let context = uv_test::test_context!("3.12").with_filter((r"/.*/src", "/[TMP]/src"));
+    let context = uv_test::test_context!("3.12").with_filter((r"[/\\].*[/\\]src", "/[TMP]/src"));
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -9925,7 +9925,7 @@ fn sync_derivation_chain_extra() -> Result<()> {
 
 #[test]
 fn sync_derivation_chain_group() -> Result<()> {
-    let context = uv_test::test_context!("3.12").with_filter((r"/.*/src", "/[TMP]/src"));
+    let context = uv_test::test_context!("3.12").with_filter((r"[/\\].*[/\\]src", "/[TMP]/src"));
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(

@@ -30628,7 +30628,7 @@ fn lock_bump_static_version() -> Result<()> {
 #[cfg(feature = "test-universal")]
 #[test]
 fn lock_derivation_chain_prod() -> Result<()> {
-    let context = uv_test::test_context!("3.12").with_filter((r"/.*/src", "/[TMP]/src"));
+    let context = uv_test::test_context!("3.12").with_filter((r"[/\\].*[/\\]src", "/[TMP]/src"));
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -30677,7 +30677,7 @@ fn lock_derivation_chain_prod() -> Result<()> {
 #[cfg(feature = "test-universal")]
 #[test]
 fn lock_derivation_chain_extra() -> Result<()> {
-    let context = uv_test::test_context!("3.12").with_filter((r"/.*/src", "/[TMP]/src"));
+    let context = uv_test::test_context!("3.12").with_filter((r"[/\\].*[/\\]src", "/[TMP]/src"));
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -30727,7 +30727,7 @@ fn lock_derivation_chain_extra() -> Result<()> {
 #[cfg(feature = "test-universal")]
 #[test]
 fn lock_derivation_chain_group() -> Result<()> {
-    let context = uv_test::test_context!("3.12").with_filter((r"/.*/src", "/[TMP]/src"));
+    let context = uv_test::test_context!("3.12").with_filter((r"[/\\].*[/\\]src", "/[TMP]/src"));
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -30779,7 +30779,7 @@ fn lock_derivation_chain_group() -> Result<()> {
 #[cfg(feature = "test-universal")]
 #[test]
 fn lock_derivation_chain_extended() -> Result<()> {
-    let context = uv_test::test_context!("3.12").with_filter((r"/.*/src", "/[TMP]/src"));
+    let context = uv_test::test_context!("3.12").with_filter((r"[/\\].*[/\\]src", "/[TMP]/src"));
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(

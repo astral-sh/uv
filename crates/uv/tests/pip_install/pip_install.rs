@@ -10398,7 +10398,7 @@ fn sklearn() {
 
 #[test]
 fn resolve_derivation_chain() -> Result<()> {
-    let context = uv_test::test_context!("3.12").with_filter((r"/.*/src", "/[TMP]/src"));
+    let context = uv_test::test_context!("3.12").with_filter((r"[/\\].*[/\\]src", "/[TMP]/src"));
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {r#"
