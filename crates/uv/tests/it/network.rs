@@ -1028,7 +1028,7 @@ fn connect_timeout_stream() {
 
 #[tokio::test]
 async fn retry_read_timeout_index() {
-    let context = uv_test::test_context!("3.12");
+    let context = uv_test::test_context!("3.12").with_http_timeout("1");
 
     let (server, _guard) = read_timeout_server();
 
@@ -1038,7 +1038,6 @@ async fn retry_read_timeout_index() {
         .arg("--index-url")
         .arg(server)
         // Speed the test up with the minimum testable values
-        .env(EnvVars::UV_HTTP_TIMEOUT, "1")
         .env(EnvVars::UV_HTTP_RETRIES, "1"), @"
     exit_code: 2 (failure)
     ----- stderr -----
@@ -1052,7 +1051,7 @@ async fn retry_read_timeout_index() {
 
 #[tokio::test]
 async fn retry_read_timeout_python_downloads_json() {
-    let context = uv_test::test_context!("3.12");
+    let context = uv_test::test_context!("3.12").with_http_timeout("1");
 
     let (server, _guard) = read_timeout_server();
 
@@ -1062,7 +1061,6 @@ async fn retry_read_timeout_python_downloads_json() {
         .arg("--python-downloads-json-url")
         .arg(&server)
         // Speed the test up with the minimum testable values
-        .env(EnvVars::UV_HTTP_TIMEOUT, "1")
         .env(EnvVars::UV_HTTP_RETRIES, "1"), @"
     exit_code: 2 (failure)
     ----- stderr -----
@@ -1077,7 +1075,7 @@ async fn retry_read_timeout_python_downloads_json() {
 
 #[tokio::test]
 async fn retry_read_timeout_stream() {
-    let context = uv_test::test_context!("3.12");
+    let context = uv_test::test_context!("3.12").with_http_timeout("1");
 
     let (server, _guard) = read_timeout_server();
 
@@ -1085,7 +1083,6 @@ async fn retry_read_timeout_stream() {
         .pip_install()
         .arg(format!("{server}/tqdm-0.1-py3-none-any.whl"))
         // Speed the test up with the minimum testable values
-        .env(EnvVars::UV_HTTP_TIMEOUT, "1")
         .env(EnvVars::UV_HTTP_RETRIES, "1"), @"
     exit_code: 1 (failure)
     ----- stderr -----
