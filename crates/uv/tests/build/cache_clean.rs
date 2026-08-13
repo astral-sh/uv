@@ -15,7 +15,7 @@ use uv_test::uv_snapshot;
 /// `cache clean` should remove all packages.
 #[test]
 fn clean_all() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
+    let context = uv_test::test_context!("3.12").with_filtered_sizes_and_units();
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("typing-extensions\niniconfig")?;
@@ -56,9 +56,7 @@ fn clean_all_hardlinked_file() -> Result<()> {
     let cached = context.cache_dir.child("hardlinked.bin");
     fs_err::hard_link(&retained, &cached)?;
 
-    let filters = size_filters(&context);
-
-    uv_snapshot!(&filters, context.clean(), @"
+    uv_snapshot!(context.filters(), context.clean(), @"
     exit_code: 0 (success)
     ----- stderr -----
     Clearing cache at: [CACHE_DIR]/
@@ -68,7 +66,7 @@ fn clean_all_hardlinked_file() -> Result<()> {
     context.cache_dir.create_dir_all()?;
     fs_err::hard_link(&retained, &cached)?;
 
-    uv_snapshot!(&filters, context.clean().arg("--preview-features").arg("cache-physical-space"), @"
+    uv_snapshot!(context.filters(), context.clean().arg("--preview-features").arg("cache-physical-space"), @"
     exit_code: 0 (success)
     ----- stderr -----
     Clearing cache at: [CACHE_DIR]/
@@ -85,7 +83,7 @@ fn clean_all_hardlinked_file() -> Result<()> {
         .sync_all()?;
     fs_err::hard_link(&cached, context.cache_dir.child("second-hardlink.bin"))?;
 
-    uv_snapshot!(&filters, context.clean().arg("--preview-features").arg("cache-physical-space"), @"
+    uv_snapshot!(context.filters(), context.clean().arg("--preview-features").arg("cache-physical-space"), @"
     exit_code: 0 (success)
     ----- stderr -----
     Clearing cache at: [CACHE_DIR]/
@@ -99,7 +97,12 @@ fn clean_all_hardlinked_file() -> Result<()> {
 #[cfg(unix)]
 #[test]
 fn clean_all_cloned_file() -> Result<()> {
-    let context = copy_on_write_test_context()?;
+    let Some(context) = uv_test::test_context!("3.12")
+        .with_filtered_counts()
+        .with_cache_on_cow_fs()?
+    else {
+        return Ok(());
+    };
     let retained = context.cache_dir.path().with_file_name("retained");
     fs_err::create_dir_all(&retained)?;
     let original = retained.join("original.bin");
@@ -111,20 +114,16 @@ fn clean_all_cloned_file() -> Result<()> {
 
     let cached = context.cache_dir.child("cloned");
     let link_mode = link_dir(&retained, &cached, &LinkOptions::new(LinkMode::Clone))?;
-    if link_mode != LinkMode::Clone {
-        assert!(
-            std::env::var_os(EnvVars::UV_INTERNAL__TEST_COW_FS).is_none(),
-            "the configured copy-on-write filesystem did not clone the cached file"
-        );
-        return Ok(());
-    }
+    assert_eq!(
+        link_mode,
+        LinkMode::Clone,
+        "the configured copy-on-write filesystem did not clone the cached file"
+    );
 
-    let filters = size_filters(&context);
-
-    uv_snapshot!(&filters, context.clean().arg("--preview"), @"
+    uv_snapshot!(context.filters(), context.clean().arg("--preview"), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Clearing cache at: [CACHE_DIR]/
+    Clearing cache at: [COW_FS]/[CACHE_DIR]/
     Removed [N] files (0B)
     ");
 
@@ -137,7 +136,12 @@ fn clean_all_cloned_file() -> Result<()> {
 #[cfg(unix)]
 #[test]
 fn clean_all_cached_clones() -> Result<()> {
-    let context = copy_on_write_test_context()?;
+    let Some(context) = uv_test::test_context!("3.12")
+        .with_filtered_counts()
+        .with_cache_on_cow_fs()?
+    else {
+        return Ok(());
+    };
     let original = context.cache_dir.child("original");
     original.create_dir_all()?;
     original
@@ -146,20 +150,16 @@ fn clean_all_cached_clones() -> Result<()> {
 
     let cloned = context.cache_dir.child("cloned");
     let link_mode = link_dir(&original, &cloned, &LinkOptions::new(LinkMode::Clone))?;
-    if link_mode != LinkMode::Clone {
-        assert!(
-            std::env::var_os(EnvVars::UV_INTERNAL__TEST_COW_FS).is_none(),
-            "the configured copy-on-write filesystem did not clone the cached file"
-        );
-        return Ok(());
-    }
+    assert_eq!(
+        link_mode,
+        LinkMode::Clone,
+        "the configured copy-on-write filesystem did not clone the cached file"
+    );
 
-    let filters = size_filters(&context);
-
-    uv_snapshot!(&filters, context.clean().arg("--preview-features").arg("cache-physical-space"), @"
+    uv_snapshot!(context.filters(), context.clean().arg("--preview-features").arg("cache-physical-space"), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Clearing cache at: [CACHE_DIR]/
+    Clearing cache at: [COW_FS]/[CACHE_DIR]/
     Removed [N] files (1.0MiB)
     ");
 
@@ -170,11 +170,12 @@ fn clean_all_cached_clones() -> Result<()> {
 #[cfg(target_os = "linux")]
 #[test]
 fn clean_all_compressed_file() -> Result<()> {
-    if std::env::var_os(EnvVars::UV_INTERNAL__TEST_COW_FS).is_none() {
+    let Some(context) = uv_test::test_context!("3.12")
+        .with_filtered_counts()
+        .with_cache_on_cow_fs()?
+    else {
         return Ok(());
-    }
-
-    let context = copy_on_write_test_context()?;
+    };
     let measured = context.cache_dir.child("measured.bin");
     measured.write_binary(&vec![42; 1024 * 1024])?;
     fs_err::OpenOptions::new()
@@ -196,48 +197,20 @@ fn clean_all_compressed_file() -> Result<()> {
         .open(compressed.path())?
         .sync_all()?;
 
-    let filters = size_filters(&context);
-
-    uv_snapshot!(&filters, context.clean().arg("--preview-features").arg("cache-physical-space"), @"
+    uv_snapshot!(context.filters(), context.clean().arg("--preview-features").arg("cache-physical-space"), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Clearing cache at: [CACHE_DIR]/
+    Clearing cache at: [COW_FS]/[CACHE_DIR]/
     Removed [N] files (at least 1.0MiB)
     ");
 
     Ok(())
 }
 
-/// Put the cache and retained files on CI's Btrfs or APFS volume, when configured.
-#[cfg(unix)]
-fn copy_on_write_test_context() -> Result<uv_test::TestContext> {
-    let context = uv_test::test_context!("3.12").with_filtered_counts();
-    if std::env::var_os(EnvVars::UV_INTERNAL__TEST_COW_FS).is_none() {
-        return Ok(context);
-    }
-
-    let Some(context) = context.with_cache_on_cow_fs()? else {
-        anyhow::bail!("the configured copy-on-write cache filesystem was unavailable");
-    };
-
-    let cache_dir = context.cache_dir.path().to_path_buf();
-    Ok(context.with_filtered_path(&cache_dir, "CACHE_DIR"))
-}
-
-/// Preserve physical sizes while applying the context's other snapshot filters.
-#[cfg(unix)]
-fn size_filters(context: &uv_test::TestContext) -> Vec<(&str, &str)> {
-    context
-        .filters()
-        .into_iter()
-        .filter(|(_, replacement)| *replacement != "$1[SIZE]")
-        .collect()
-}
-
 /// `cache clear` should behave as an alias of `cache clean`.
 #[test]
 fn clear_all_alias() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
+    let context = uv_test::test_context!("3.12").with_filtered_sizes_and_units();
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("typing-extensions\niniconfig")?;
@@ -266,7 +239,9 @@ fn clear_all_alias() -> Result<()> {
 
 #[tokio::test]
 async fn clean_force() -> Result<()> {
-    let context = uv_test::test_context!("3.12").with_filtered_counts();
+    let context = uv_test::test_context!("3.12")
+        .with_filtered_counts()
+        .with_filtered_sizes_and_units();
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("typing-extensions\niniconfig")?;
@@ -316,7 +291,7 @@ async fn clean_force() -> Result<()> {
 /// `cache clean iniconfig` should remove a single package (`iniconfig`).
 #[test]
 fn clean_package_pypi() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
+    let context = uv_test::test_context!("3.12").with_filtered_sizes_and_units();
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("anyio\niniconfig")?;
@@ -384,7 +359,7 @@ fn clean_package_pypi() -> Result<()> {
 /// `cache clean iniconfig` should remove a single package (`iniconfig`).
 #[test]
 fn clean_package_index() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
+    let context = uv_test::test_context!("3.12").with_filtered_sizes_and_units();
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("anyio\niniconfig")?;
@@ -445,7 +420,7 @@ fn clean_package_index() -> Result<()> {
 #[cfg(unix)]
 #[test]
 fn clean_package_does_not_follow_symlinks() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
+    let context = uv_test::test_context!("3.12").with_filtered_sizes_and_units();
     let victim_dir = context.temp_dir.child("victim");
     let archive_entry = context.cache_dir.child("archive-v0").child("archive");
     let package_entry = context

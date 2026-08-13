@@ -4406,7 +4406,7 @@ fn only_group() -> Result<()> {
 #[cfg(feature = "test-universal")]
 #[test]
 fn show_sizes() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
+    let context = uv_test::test_context!("3.12").with_filtered_sizes();
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -4423,7 +4423,7 @@ fn show_sizes() -> Result<()> {
     exit_code: 0 (success)
     ----- stdout -----
     project v0.1.0
-    └── iniconfig v2.0.0 ([SIZE])
+    └── iniconfig v2.0.0 ([SIZE]KiB)
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
