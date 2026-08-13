@@ -16,7 +16,15 @@
         "type": "string",
         "minLength": 1
       }
-    }
+    },
+    "pull_request_title": { "type": "string" },
+    "pull_request_body": { "type": "string" }
   },
-  "required": ["outcome", "summary", "validation"]
+  "required": [
+    "outcome",
+    "summary",
+    "validation",
+    "pull_request_title",
+    "pull_request_body"
+  ]
 }
