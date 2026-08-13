@@ -18,6 +18,29 @@ use linux_raw_sys::ioctl::{
 #[cfg(any(target_os = "linux", target_os = "macos", target_os = "ios"))]
 use rustc_hash::{FxHashMap, FxHashSet};
 
+/// A filesystem and the allocation-block size used for its physical extents.
+#[cfg(any(target_os = "linux", target_os = "macos", target_os = "ios"))]
+#[derive(Clone, Copy, Eq, Hash, PartialEq)]
+struct Filesystem {
+    device: u64,
+    block_size: u64,
+}
+
+/// A physical file extent before it has been aligned to filesystem blocks.
+#[cfg(any(target_os = "linux", target_os = "macos", target_os = "ios"))]
+struct FileExtent {
+    start: u64,
+    length: u64,
+}
+
+/// A physical extent aligned to its filesystem's allocation blocks.
+#[cfg(any(target_os = "linux", target_os = "macos", target_os = "ios"))]
+#[derive(Clone, Copy)]
+struct PhysicalExtent {
+    start: u64,
+    end: u64,
+}
+
 /// Return whether the current platform can identify individual files' physical storage.
 pub const fn supports_physical_space() -> bool {
     cfg!(any(
@@ -36,7 +59,7 @@ pub const fn supports_physical_space() -> bool {
 pub fn physical_disk_usage(path: &Path) -> io::Result<u64> {
     let mut seen_files = FxHashSet::default();
     let mut filesystem_block_sizes = FxHashMap::default();
-    let mut physical_extents: FxHashMap<(u64, u64), Vec<(u64, u64)>> = FxHashMap::default();
+    let mut physical_extents: FxHashMap<Filesystem, Vec<PhysicalExtent>> = FxHashMap::default();
     let mut untracked_bytes = 0_u64;
 
     for entry in walkdir::WalkDir::new(path).follow_links(false) {
@@ -80,9 +103,12 @@ pub fn physical_disk_usage(path: &Path) -> io::Result<u64> {
         match file_physical_extents(&file, &metadata) {
             Ok(extents) => {
                 let device_extents = physical_extents
-                    .entry((metadata.dev(), block_size))
+                    .entry(Filesystem {
+                        device: metadata.dev(),
+                        block_size,
+                    })
                     .or_default();
-                for (start, length) in extents {
+                for FileExtent { start, length } in extents {
                     let end = start.checked_add(length).ok_or_else(|| {
                         io::Error::new(
                             io::ErrorKind::InvalidData,
@@ -97,7 +123,10 @@ pub fn physical_disk_usage(path: &Path) -> io::Result<u64> {
                                 "an aligned physical extent exceeds the filesystem address space",
                             )
                         })?;
-                    device_extents.push((aligned_start, aligned_end));
+                    device_extents.push(PhysicalExtent {
+                        start: aligned_start,
+                        end: aligned_end,
+                    });
                 }
             }
             Err(error) => {
@@ -111,25 +140,26 @@ pub fn physical_disk_usage(path: &Path) -> io::Result<u64> {
     }
 
     for extents in physical_extents.values_mut() {
-        extents.sort_unstable_by_key(|&(start, _)| start);
-        let mut current: Option<(u64, u64)> = None;
+        extents.sort_unstable_by_key(|extent| extent.start);
+        let mut current: Option<PhysicalExtent> = None;
 
-        for &(start, end) in extents.iter() {
-            if let Some((current_start, current_end)) = current {
-                if start <= current_end {
-                    current = Some((current_start, current_end.max(end)));
+        for &extent in extents.iter() {
+            if let Some(current_extent) = current.as_mut() {
+                if extent.start <= current_extent.end {
+                    current_extent.end = current_extent.end.max(extent.end);
                 } else {
-                    untracked_bytes =
-                        untracked_bytes.saturating_add(current_end.saturating_sub(current_start));
-                    current = Some((start, end));
+                    untracked_bytes = untracked_bytes
+                        .saturating_add(current_extent.end.saturating_sub(current_extent.start));
+                    *current_extent = extent;
                 }
             } else {
-                current = Some((start, end));
+                current = Some(extent);
             }
         }
 
-        if let Some((start, end)) = current {
-            untracked_bytes = untracked_bytes.saturating_add(end.saturating_sub(start));
+        if let Some(extent) = current {
+            untracked_bytes =
+                untracked_bytes.saturating_add(extent.end.saturating_sub(extent.start));
         }
     }
 
@@ -192,7 +222,7 @@ pub fn physical_space(path: &Path, metadata: &std::fs::Metadata) -> io::Result<u
 fn file_physical_extents(
     file: &fs_err::File,
     metadata: &std::fs::Metadata,
-) -> io::Result<Vec<(u64, u64)>> {
+) -> io::Result<Vec<FileExtent>> {
     let mut extents = Vec::new();
     let mut offset = 0_u64;
 
@@ -236,7 +266,10 @@ fn file_physical_extents(
             }
 
             let length = contiguous.min(end - extent_offset);
-            extents.push((physical, length));
+            extents.push(FileExtent {
+                start: physical,
+                length,
+            });
             extent_offset = extent_offset.saturating_add(length);
         }
 
@@ -325,7 +358,7 @@ fn linux_physical_space(path: &Path) -> io::Result<u64> {
 fn file_physical_extents(
     file: &fs_err::File,
     _metadata: &std::fs::Metadata,
-) -> io::Result<Vec<(u64, u64)>> {
+) -> io::Result<Vec<FileExtent>> {
     let mut extents = Vec::new();
 
     linux_file_extents(file, |extent| {
@@ -343,7 +376,10 @@ fn file_physical_extents(
             ));
         }
 
-        extents.push((extent.physical, extent.length));
+        extents.push(FileExtent {
+            start: extent.physical,
+            length: extent.length,
+        });
         Ok(())
     })?;
 
