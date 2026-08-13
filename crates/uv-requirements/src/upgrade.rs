@@ -136,7 +136,7 @@ pub async fn read_pylock_toml_requirements(
         }
 
         // Map each entry in the lockfile to a Git SHA.
-        if let Some(git_ref) = package.as_git_ref() {
+        if let Some(git_ref) = package.as_git_ref()? {
             git.push(git_ref);
         }
     }

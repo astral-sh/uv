@@ -5316,12 +5316,21 @@ impl TryFrom<SourceWire> for Source {
                     })
                     .map_err(LockErrorKind::InvalidGitSourceUrl)?;
 
-                let git_source = GitSource::from_url(&url)
-                    .map_err(|err| match err {
-                        GitSourceError::InvalidSha => SourceParseError::InvalidSha { given: git },
-                        GitSourceError::MissingSha => SourceParseError::MissingSha { given: git },
-                    })
-                    .map_err(LockErrorKind::InvalidGitSourceUrl)?;
+                let git_source = GitSource::from_url(&url).map_err(|err| match err {
+                    GitSourceError::InvalidSha => {
+                        LockErrorKind::InvalidGitSourceUrl(SourceParseError::InvalidSha {
+                            given: git,
+                        })
+                    }
+                    GitSourceError::MissingSha => {
+                        LockErrorKind::InvalidGitSourceUrl(SourceParseError::MissingSha {
+                            given: git,
+                        })
+                    }
+                    GitSourceError::RevisionMismatch => {
+                        LockErrorKind::MismatchedGitSourceUrl { given: url.clone() }
+                    }
+                })?;
 
                 Ok(Self::Git(UrlString::from(url), git_source))
             }
@@ -5438,6 +5447,7 @@ struct GitSource {
 enum GitSourceError {
     InvalidSha,
     MissingSha,
+    RevisionMismatch,
 }
 
 impl GitSource {
@@ -5466,6 +5476,15 @@ impl GitSource {
 
         let precise = GitOid::from_str(url.fragment().ok_or(GitSourceError::MissingSha)?)
             .map_err(|_| GitSourceError::InvalidSha)?;
+
+        // A full commit requested as `rev` is already precise and must not resolve to another
+        // commit through the lockfile fragment.
+        if let GitSourceKind::Rev(revision) = &kind
+            && GitOid::from_str(revision).is_ok()
+            && !revision.eq_ignore_ascii_case(precise.as_str())
+        {
+            return Err(GitSourceError::RevisionMismatch);
+        }
 
         Ok(Self {
             precise,
@@ -7317,6 +7336,12 @@ enum LockErrorKind {
         #[source]
         SourceParseError,
     ),
+    /// An exact Git revision differs from the precise commit SHA.
+    #[error("Exact revision does not match precise SHA in Git source `{given}`")]
+    MismatchedGitSourceUrl {
+        /// The display-safe Git source URL.
+        given: DisplaySafeUrl,
+    },
     #[error("Failed to parse timestamp")]
     InvalidTimestamp(
         /// The underlying error that occurred. This includes the
@@ -8001,6 +8026,34 @@ mod tests {
             sys_platform: "darwin",
         })
         .expect("valid marker environment")
+    }
+
+    #[test]
+    fn git_source_rejects_mismatched_exact_revision() -> Result<(), url::ParseError> {
+        let url = Url::parse(
+            "https://example.com/repository?rev=0dacfd662c64cb4ceb16e6cf65a157a8b715b979#b270df1a2fb5d012294e9aaf05e7e0bab1e6a389",
+        )?;
+        assert_eq!(
+            GitSource::from_url(&url),
+            Err(GitSourceError::RevisionMismatch)
+        );
+
+        let url = Url::parse(
+            "https://example.com/repository?rev=0DACFD662C64CB4CEB16E6CF65A157A8B715B979#0dacfd662c64cb4ceb16e6cf65a157a8b715b979",
+        )?;
+        assert!(GitSource::from_url(&url).is_ok());
+
+        let url = Url::parse(
+            "https://example.com/repository?rev=0dacfd6#b270df1a2fb5d012294e9aaf05e7e0bab1e6a389",
+        )?;
+        assert!(GitSource::from_url(&url).is_ok());
+
+        let url = Url::parse(
+            "https://example.com/repository?branch=0dacfd662c64cb4ceb16e6cf65a157a8b715b979#b270df1a2fb5d012294e9aaf05e7e0bab1e6a389",
+        )?;
+        assert!(GitSource::from_url(&url).is_ok());
+
+        Ok(())
     }
 
     #[test]

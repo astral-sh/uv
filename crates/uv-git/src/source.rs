@@ -6,7 +6,7 @@ use std::borrow::Cow;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use anyhow::Result;
+use anyhow::{Result, anyhow};
 use tracing::{debug, instrument};
 
 use uv_cache_key::cache_digest;
@@ -63,6 +63,17 @@ impl GitSource {
     /// Fetch the underlying Git repository at the given revision.
     #[instrument(skip(self), fields(repository = %self.git.url(), rev = ?self.git.precise()))]
     pub(crate) fn fetch(self) -> Result<Fetch> {
+        if let GitReference::BranchOrTagOrCommit(revision) = self.git.reference()
+            && revision.parse::<GitOid>().is_ok()
+            && let Some(precise) = self.git.precise()
+            && !revision.eq_ignore_ascii_case(precise.as_str())
+        {
+            return Err(anyhow!(
+                "Exact Git revision `{revision}` does not match precise commit `{precise}` for `{}`",
+                self.git.url()
+            ));
+        }
+
         let lfs_requested = self.git.lfs().enabled();
 
         // The path to the repo, within the Git database.

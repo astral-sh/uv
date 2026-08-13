@@ -307,6 +307,13 @@ impl GitRemote {
         with_lfs: bool,
     ) -> Result<(GitDatabase, GitOid)> {
         let reference = locked_rev
+            .or_else(|| {
+                if let GitReference::BranchOrTagOrCommit(revision) = reference {
+                    revision.parse::<GitOid>().ok()
+                } else {
+                    None
+                }
+            })
             .map(ReferenceOrOid::Oid)
             .unwrap_or(ReferenceOrOid::Reference(reference));
         if let Some(mut db) = db {

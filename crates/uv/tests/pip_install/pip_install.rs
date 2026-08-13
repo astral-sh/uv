@@ -2662,6 +2662,152 @@ fn install_git_workspace_build_requirement() -> Result<()> {
     Ok(())
 }
 
+/// A full commit revision must not resolve to a branch with the same name.
+#[test]
+#[cfg(feature = "test-git")]
+fn install_git_full_commit_ignores_same_named_branch() -> Result<()> {
+    let context = uv_test::test_context!(DEFAULT_PYTHON_VERSION);
+
+    let repository = context.temp_dir.child("repository");
+    repository.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "example"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+    "#})?;
+    repository
+        .child("src/example/__init__.py")
+        .write_str(r#"__version__ = "0.1.0""#)?;
+
+    Command::new("git")
+        .arg("init")
+        .arg(repository.path())
+        .assert()
+        .success();
+    Command::new("git")
+        .arg("-C")
+        .arg(repository.path())
+        .args(["add", "."])
+        .assert()
+        .success();
+    Command::new("git")
+        .arg("-C")
+        .arg(repository.path())
+        .args([
+            "-c",
+            "user.name=ferris",
+            "-c",
+            "user.email=ferris@example.com",
+            "commit",
+            "-m",
+            "Trusted commit",
+        ])
+        .env("GIT_AUTHOR_DATE", "2000-01-01T00:00:00Z")
+        .env("GIT_COMMITTER_DATE", "2000-01-01T00:00:00Z")
+        .assert()
+        .success();
+
+    let trusted_commit = Command::new("git")
+        .arg("-C")
+        .arg(repository.path())
+        .args(["rev-parse", "HEAD"])
+        .output()?;
+    assert!(trusted_commit.status.success());
+    let trusted_commit = String::from_utf8(trusted_commit.stdout)?;
+    let trusted_commit = trusted_commit.trim();
+
+    repository.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "example"
+        version = "9.9.9"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+    "#})?;
+    repository
+        .child("src/example/__init__.py")
+        .write_str(r#"__version__ = "9.9.9""#)?;
+    Command::new("git")
+        .arg("-C")
+        .arg(repository.path())
+        .args(["add", "."])
+        .assert()
+        .success();
+    Command::new("git")
+        .arg("-C")
+        .arg(repository.path())
+        .args([
+            "-c",
+            "user.name=ferris",
+            "-c",
+            "user.email=ferris@example.com",
+            "commit",
+            "-m",
+            "Untrusted commit",
+        ])
+        .env("GIT_AUTHOR_DATE", "2000-01-02T00:00:00Z")
+        .env("GIT_COMMITTER_DATE", "2000-01-02T00:00:00Z")
+        .assert()
+        .success();
+    Command::new("git")
+        .arg("-C")
+        .arg(repository.path())
+        .arg("update-ref")
+        .arg(format!("refs/heads/{trusted_commit}"))
+        .arg("HEAD")
+        .assert()
+        .success();
+    Command::new("git")
+        .arg("-C")
+        .arg(repository.path())
+        .args(["update-ref", "refs/heads/20240222", "HEAD"])
+        .assert()
+        .success();
+
+    let repository_url = Url::from_directory_path(repository.path())
+        .map_err(|()| anyhow!("failed to convert repository path to file URL"))?;
+    let repository_url = repository_url.as_str().trim_end_matches('/');
+
+    let mut filters = context.filters();
+    filters.push((r"@[0-9a-f]{40}", "@[COMMIT]"));
+    uv_snapshot!(filters, context
+        .pip_install()
+        .arg(format!("example @ git+{repository_url}@{trusted_commit}")), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + example==0.1.0 (from git+file://[TEMP_DIR]/repository@[COMMIT])
+    ");
+
+    context.assert_installed("example", "0.1.0");
+
+    // Short hexadecimal references remain ambiguous and can legitimately name a branch.
+    uv_snapshot!(filters, context
+        .pip_install()
+        .arg(format!("example @ git+{repository_url}@20240222")), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     - example==0.1.0 (from git+file://[TEMP_DIR]/repository@[COMMIT])
+     + example==9.9.9 (from git+file://[TEMP_DIR]/repository@[COMMIT])
+    ");
+
+    context.assert_installed("example", "9.9.9");
+
+    Ok(())
+}
+
 /// Install a package from a public GitHub repository, omitting the `git+` prefix
 #[test]
 #[cfg(feature = "test-git")]
@@ -2909,7 +3055,7 @@ async fn install_git_public_rate_limited_by_github_rest_api_429_response() {
 fn install_git_public_https_missing_commit() {
     // Windows does not style the command the same as Unix, so we must omit it from the snapshot
     let context = uv_test::test_context!(DEFAULT_PYTHON_VERSION)
-        .with_filter(("`.*/git(.exe)? rev-parse .*`", "`git rev-parse [...]`"))
+        .with_filter(("`.*/git(.exe)? fetch .*`", "`git fetch [...]`"))
         .with_filter(("exit status", "exit code"))
         // There are flakes on Windows where this irrelevant error is appended
         .with_filter((
@@ -2925,15 +3071,11 @@ fn install_git_public_https_missing_commit() {
     ----- stderr -----
       × Failed to download and build `uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage@79a935a7a1a0ad6d0bdf72dce0e16cb0a24a1b3b`
       ├─▶ Git operation failed
-      ├─▶ failed to find branch, tag, or commit `79a935a7a1a0ad6d0bdf72dce0e16cb0a24a1b3b`
-      ╰─▶ process didn't exit successfully: `git rev-parse [...]` (exit code: 128)
-          --- stdout
-          79a935a7a1a0ad6d0bdf72dce0e16cb0a24a1b3b^0
-
+      ├─▶ failed to clone into: [CACHE_DIR]/git-v0/db/8dab139913c4b566
+      ├─▶ failed to fetch commit `79a935a7a1a0ad6d0bdf72dce0e16cb0a24a1b3b`
+      ╰─▶ process didn't exit successfully: `git fetch [...]` (exit code: 128)
           --- stderr
-          fatal: ambiguous argument '79a935a7a1a0ad6d0bdf72dce0e16cb0a24a1b3b^0': unknown revision or path not in the working tree.
-          Use '--' to separate paths from revisions, like this:
-          'git <command> [<revision>...] -- [<file>...]'
+          fatal: remote error: upload-pack: not our ref 79a935a7a1a0ad6d0bdf72dce0e16cb0a24a1b3b
     ");
 }
 
@@ -12729,6 +12871,51 @@ fn pep_751_install_require_hashes_directory() -> Result<()> {
     error: In `--require-hashes` mode, all requirements must have a hash, but none were provided for: foo
     "
     );
+
+    Ok(())
+}
+
+#[test]
+#[cfg(all(feature = "test-git", feature = "test-universal"))]
+fn pep_751_install_git_rejects_mismatched_exact_revision() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context.temp_dir.child("pylock.toml").write_str(indoc! {r#"
+        lock-version = "1.0"
+        created-by = "uv"
+        requires-python = ">=3.12"
+
+        [[packages]]
+        name = "example"
+        version = "1.0.0"
+        vcs = { type = "git", url = "https://git:secret-token@example.com/pkg.git", requested-revision = "0dacfd662c64cb4ceb16e6cf65a157a8b715b979", commit-id = "b270df1a2fb5d012294e9aaf05e7e0bab1e6a389" }
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--preview")
+        .arg("--offline")
+        .arg("--dry-run")
+        .arg("-r")
+        .arg("pylock.toml"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Exact Git revision `0dacfd662c64cb4ceb16e6cf65a157a8b715b979` does not match precise commit `b270df1a2fb5d012294e9aaf05e7e0bab1e6a389` for `https://git:****@example.com/pkg.git`
+    ");
+
+    context.temp_dir.child("requirements.in").write_str(
+        "example @ git+https://git:secret-token@example.com/pkg.git@0dacfd662c64cb4ceb16e6cf65a157a8b715b979\n",
+    )?;
+
+    uv_snapshot!(context.filters(), context.pip_compile()
+        .arg("requirements.in")
+        .arg("--universal")
+        .arg("--offline")
+        .arg("-o")
+        .arg("pylock.toml"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Exact Git revision `0dacfd662c64cb4ceb16e6cf65a157a8b715b979` does not match precise commit `b270df1a2fb5d012294e9aaf05e7e0bab1e6a389` for `https://git:****@example.com/pkg.git`
+    ");
 
     Ok(())
 }

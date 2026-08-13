@@ -1423,20 +1423,30 @@ impl PylockTomlPackage {
     }
 
     /// Returns the [`ResolvedRepositoryReference`] for the package, if it is a Git source.
-    pub fn as_git_ref(&self) -> Option<ResolvedRepositoryReference> {
-        let vcs = self.vcs.as_ref()?;
-        let url = vcs.url.as_ref()?;
+    pub fn as_git_ref(&self) -> Result<Option<ResolvedRepositoryReference>, GitUrlParseError> {
+        let Some(vcs) = self.vcs.as_ref() else {
+            return Ok(None);
+        };
+        let Some(url) = vcs.url.as_ref() else {
+            return Ok(None);
+        };
         let reference = match vcs.requested_revision.as_ref() {
             Some(rev) => GitReference::from_rev(rev.clone()),
             None => GitReference::DefaultBranch,
         };
-        Some(ResolvedRepositoryReference {
+        GitUrl::from_commit(
+            url.clone(),
+            reference.clone(),
+            vcs.commit_id,
+            GitLfs::from_env(),
+        )?;
+        Ok(Some(ResolvedRepositoryReference {
             reference: RepositoryReference {
                 url: RepositoryUrl::new(url.clone()),
                 reference,
             },
             sha: vcs.commit_id,
-        })
+        }))
     }
 }
 
