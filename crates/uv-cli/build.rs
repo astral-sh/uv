@@ -48,6 +48,7 @@ fn commit_info(workspace_root: &Path) {
         let git_head_contents = fs::read_to_string(&git_head_path);
         if let Ok(git_head_contents) = git_head_contents
             && let Some(common_git_dir) = common_git_dir.as_deref()
+            && let Some(worktree_git_dir) = git_head_path.parent()
         {
             // The contents are either a commit or a reference in the following formats
             // - "<commit>" when the head is detached
@@ -57,7 +58,7 @@ fn commit_info(workspace_root: &Path) {
             let mut git_ref_parts = git_head_contents.split_whitespace();
             git_ref_parts.next();
             if let Some(git_ref) = git_ref_parts.next() {
-                watch_git_ref(common_git_dir, git_ref);
+                watch_git_ref(worktree_git_dir, common_git_dir, git_ref);
             }
         }
     }
@@ -138,8 +139,8 @@ fn git_head(git_dir: &Path) -> Option<PathBuf> {
 /// Resolve the Git directory shared by the repository's worktrees.
 fn git_common_dir(git_head_path: &Path) -> Option<PathBuf> {
     let worktree_git_dir = git_head_path.parent()?;
-    // Worktrees have their own HEAD, but branch refs live in the shared Git directory. Their
-    // `commondir` file points to that directory, either absolutely or relative to this Git
+    // Worktrees have their own HEAD, but most branch refs live in the shared Git directory.
+    // Their `commondir` file points to that directory, either absolutely or relative to this Git
     // directory. For example, `.git/worktrees/example/commondir` usually contains `../..`.
     let common_dir_path = worktree_git_dir.join("commondir");
     let common_git_dir = if let Ok(common_dir) = fs::read_to_string(&common_dir_path) {
@@ -178,8 +179,19 @@ fn watch_git_tags(common_git_dir: &Path) {
 }
 
 /// Watch the loose or packed Git reference for the current branch.
-fn watch_git_ref(common_git_dir: &Path, git_ref: &str) {
-    let git_ref_path = common_git_dir.join(git_ref);
+fn watch_git_ref(worktree_git_dir: &Path, common_git_dir: &Path, git_ref: &str) {
+    // Most refs, such as `refs/heads/main`, are shared between worktrees. Git keeps
+    // `refs/bisect/*`, `refs/worktree/*`, and `refs/rewritten/*` in the worktree-specific
+    // directory instead; for example, `.git/worktrees/example/refs/worktree/current`.
+    let git_ref_dir = if git_ref.starts_with("refs/bisect/")
+        || git_ref.starts_with("refs/worktree/")
+        || git_ref.starts_with("refs/rewritten/")
+    {
+        worktree_git_dir
+    } else {
+        common_git_dir
+    };
+    let git_ref_path = git_ref_dir.join(git_ref);
     if git_ref_path.exists() {
         println!("cargo:rerun-if-changed={}", git_ref_path.display());
     } else {
