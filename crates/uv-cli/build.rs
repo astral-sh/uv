@@ -58,7 +58,7 @@ fn commit_info(workspace_root: &Path) {
             let mut git_ref_parts = git_head_contents.split_whitespace();
             git_ref_parts.next();
             if let Some(git_ref) = git_ref_parts.next() {
-                watch_git_ref(worktree_git_dir, common_git_dir, git_ref);
+                watch_git_ref(worktree_git_dir, common_git_dir, git_ref, 1);
             }
         }
     }
@@ -179,7 +179,14 @@ fn watch_git_tags(common_git_dir: &Path) {
 }
 
 /// Watch the loose or packed Git reference for the current branch.
-fn watch_git_ref(worktree_git_dir: &Path, common_git_dir: &Path, git_ref: &str) {
+fn watch_git_ref(worktree_git_dir: &Path, common_git_dir: &Path, git_ref: &str, depth: usize) {
+    // Git resolves at most five references, including HEAD. Applying the same limit
+    // also prevents a malformed cycle, such as `refs/heads/a -> refs/heads/b -> refs/heads/a`,
+    // from recursing.
+    if depth >= 5 {
+        return;
+    }
+
     // Most refs, such as `refs/heads/main`, are shared between worktrees. Git keeps
     // `refs/bisect/*`, `refs/worktree/*`, and `refs/rewritten/*` in the worktree-specific
     // directory instead; for example, `.git/worktrees/example/refs/worktree/current`.
@@ -194,6 +201,15 @@ fn watch_git_ref(worktree_git_dir: &Path, common_git_dir: &Path, git_ref: &str) 
     let git_ref_path = git_ref_dir.join(git_ref);
     if git_ref_path.exists() {
         println!("cargo:rerun-if-changed={}", git_ref_path.display());
+
+        // Branch references can themselves be symbolic. For example, HEAD can point to
+        // `refs/heads/alias`, which contains `ref: refs/heads/main`; commits update `main`, not
+        // `alias`, so Cargo needs to watch every step of the chain.
+        if let Ok(contents) = fs::read_to_string(&git_ref_path)
+            && let Some(next_ref) = contents.strip_prefix("ref:")
+        {
+            watch_git_ref(worktree_git_dir, common_git_dir, next_ref.trim(), depth + 1);
+        }
     } else {
         // Packed shared refs are already covered by `watch_git_tags`; worktree-private refs are
         // never packed. A later commit can create a loose ref even when its parent directories do
