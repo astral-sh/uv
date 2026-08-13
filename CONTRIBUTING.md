@@ -255,7 +255,7 @@ uv run resolver \
 You can run uv's unit and integration tests under instrumentation to get a sense for which APIs
 currently lack test coverage.
 
-To performan a coverage-instrumented run, you'll need some additional LLVM tools. We strongly
+To perform a coverage-instrumented run, you'll need some additional LLVM tools. We strongly
 recommend adding these via `rustup` so that they match your current Rust toolchain's LLVM version:
 
 ```shell
@@ -291,7 +291,7 @@ Raw profiles: /home/example/devel/~uv/target/coverage/profraw/WuSYqZVUl0R9YPka
 
 Merged profile: /home/example/devel/~uv/target/coverage/profdata/WuSYqZVUl0R9YPka.profdata
 LCOV profile: /home/example/devel/~uv/target/coverage/lcov/WuSYqZVUl0R9YPka.lcov
-Generate an HTML report with: uv run --script scripts/coverage-html-report.py WuSYqZVUl0R9YPka
+Generate an HTML report with: uv run --frozen --script scripts/coverage-html-report.py WuSYqZVUl0R9YPka
 ```
 
 Then, to turn your run's coverage into a human-readable HTML report:
