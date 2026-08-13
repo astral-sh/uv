@@ -147,25 +147,32 @@ impl GitUrl {
             }
         }
 
-        if let GitReference::BranchOrTagOrCommit(revision) = &reference
-            && revision.parse::<GitOid>().is_ok()
-            && let Some(precise) = precise
-            && !revision.eq_ignore_ascii_case(precise.as_str())
-        {
-            return Err(GitUrlParseError::MismatchedRevision {
-                revision: revision.clone(),
-                precise,
-                url: Box::new(url),
-            });
-        }
-
-        Ok(Self {
+        let git = Self {
             repository: RepositoryUrl::new(url.clone()),
             url,
             reference,
             precise,
             lfs,
-        })
+        };
+        git.validate_revision()?;
+        Ok(git)
+    }
+
+    /// Validate that an exact Git revision agrees with its precise commit, if known.
+    pub fn validate_revision(&self) -> Result<(), GitUrlParseError> {
+        if let GitReference::BranchOrTagOrCommit(revision) = &self.reference
+            && revision.parse::<GitOid>().is_ok()
+            && let Some(precise) = self.precise
+            && !revision.eq_ignore_ascii_case(precise.as_str())
+        {
+            return Err(GitUrlParseError::MismatchedRevision {
+                revision: revision.clone(),
+                precise,
+                url: Box::new(self.url.clone()),
+            });
+        }
+
+        Ok(())
     }
 
     /// Set the precise [`GitOid`] to use for this Git URL.

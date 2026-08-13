@@ -12876,7 +12876,7 @@ fn pep_751_install_require_hashes_directory() -> Result<()> {
 }
 
 #[test]
-#[cfg(all(feature = "test-git", feature = "test-universal"))]
+#[cfg(all(feature = "test-universal", feature = "test-git"))]
 fn pep_751_install_git_rejects_mismatched_exact_revision() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 

@@ -5327,8 +5327,15 @@ impl TryFrom<SourceWire> for Source {
                             given: git,
                         })
                     }
-                    GitSourceError::RevisionMismatch => {
-                        LockErrorKind::MismatchedGitSourceUrl { given: url.clone() }
+                    GitSourceError::RevisionMismatch { revision, precise } => {
+                        let mut repository_url = url.clone();
+                        repository_url.set_query(None);
+                        repository_url.set_fragment(None);
+                        LockErrorKind::GitUrlParse(GitUrlParseError::MismatchedRevision {
+                            revision,
+                            precise,
+                            url: Box::new(repository_url),
+                        })
                     }
                 })?;
 
@@ -5447,7 +5454,7 @@ struct GitSource {
 enum GitSourceError {
     InvalidSha,
     MissingSha,
-    RevisionMismatch,
+    RevisionMismatch { revision: String, precise: GitOid },
 }
 
 impl GitSource {
@@ -5483,7 +5490,10 @@ impl GitSource {
             && GitOid::from_str(revision).is_ok()
             && !revision.eq_ignore_ascii_case(precise.as_str())
         {
-            return Err(GitSourceError::RevisionMismatch);
+            return Err(GitSourceError::RevisionMismatch {
+                revision: revision.clone(),
+                precise,
+            });
         }
 
         Ok(Self {
@@ -7336,12 +7346,6 @@ enum LockErrorKind {
         #[source]
         SourceParseError,
     ),
-    /// An exact Git revision differs from the precise commit SHA.
-    #[error("Exact revision does not match precise SHA in Git source `{given}`")]
-    MismatchedGitSourceUrl {
-        /// The display-safe Git source URL.
-        given: DisplaySafeUrl,
-    },
     #[error("Failed to parse timestamp")]
     InvalidTimestamp(
         /// The underlying error that occurred. This includes the
@@ -8029,13 +8033,16 @@ mod tests {
     }
 
     #[test]
-    fn git_source_rejects_mismatched_exact_revision() -> Result<(), url::ParseError> {
+    fn git_source_rejects_mismatched_exact_revision() -> Result<(), Box<dyn Error>> {
         let url = Url::parse(
             "https://example.com/repository?rev=0dacfd662c64cb4ceb16e6cf65a157a8b715b979#b270df1a2fb5d012294e9aaf05e7e0bab1e6a389",
         )?;
         assert_eq!(
             GitSource::from_url(&url),
-            Err(GitSourceError::RevisionMismatch)
+            Err(GitSourceError::RevisionMismatch {
+                revision: "0dacfd662c64cb4ceb16e6cf65a157a8b715b979".to_string(),
+                precise: GitOid::from_str("b270df1a2fb5d012294e9aaf05e7e0bab1e6a389")?,
+            })
         );
 
         let url = Url::parse(

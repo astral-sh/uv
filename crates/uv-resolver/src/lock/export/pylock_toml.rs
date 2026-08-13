@@ -13,7 +13,6 @@ use serde::Deserialize;
 use toml_edit::{Array, ArrayOfTables, Item, Table, Value, value};
 use url::Url;
 
-use uv_cache_key::RepositoryUrl;
 use uv_configuration::{
     BuildOptions, DependencyGroupsWithDefaults, EditableMode, ExtrasSpecificationWithDefaults,
     InstallOptions,
@@ -1434,17 +1433,9 @@ impl PylockTomlPackage {
             Some(rev) => GitReference::from_rev(rev.clone()),
             None => GitReference::DefaultBranch,
         };
-        GitUrl::from_commit(
-            url.clone(),
-            reference.clone(),
-            vcs.commit_id,
-            GitLfs::from_env(),
-        )?;
+        let git = GitUrl::from_commit(url.clone(), reference, vcs.commit_id, GitLfs::Disabled)?;
         Ok(Some(ResolvedRepositoryReference {
-            reference: RepositoryReference {
-                url: RepositoryUrl::new(url.clone()),
-                reference,
-            },
+            reference: RepositoryReference::from(&git),
             sha: vcs.commit_id,
         }))
     }

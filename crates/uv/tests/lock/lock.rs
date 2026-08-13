@@ -286,6 +286,49 @@ fn lock_sdist_registry() -> Result<()> {
     Ok(())
 }
 
+/// Reject a locked Git source when its exact revision differs from the pinned commit.
+#[cfg(all(feature = "test-universal", feature = "test-git"))]
+#[test]
+fn lock_rejects_mismatched_exact_git_revision() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+    "#})?;
+
+    context.temp_dir.child("uv.lock").write_str(indoc! {r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+
+        [[package]]
+        name = "example"
+        version = "1.0.0"
+        source = { git = "https://git:secret-token@example.com/pkg.git?rev=0dacfd662c64cb4ceb16e6cf65a157a8b715b979#b270df1a2fb5d012294e9aaf05e7e0bab1e6a389" }
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--locked")
+        .arg("--offline"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Failed to parse `uv.lock`
+      Caused by: TOML parse error at line 5, column 1
+          |
+        5 | [[package]]
+          | ^^^^^^^^^^^
+        Exact Git revision `0dacfd662c64cb4ceb16e6cf65a157a8b715b979` does not match precise commit `b270df1a2fb5d012294e9aaf05e7e0bab1e6a389` for `https://git:****@example.com/pkg.git`
+    ");
+
+    Ok(())
+}
+
 /// Lock a Git requirement using `tool.uv.sources`.
 #[cfg(all(feature = "test-universal", feature = "test-git"))]
 #[test]
