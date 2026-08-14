@@ -3,6 +3,7 @@ use std::path::Path;
 
 use cyclonedx_bom::models::component::Classification;
 use cyclonedx_bom::models::dependency::{Dependencies, Dependency};
+use cyclonedx_bom::models::hash::{Hash, HashAlgorithm, HashValue, Hashes};
 use cyclonedx_bom::models::metadata::Metadata;
 use cyclonedx_bom::models::property::{Properties, Property};
 use cyclonedx_bom::models::tool::{Tool, Tools};
@@ -18,6 +19,7 @@ use uv_fs::PortablePath;
 use uv_normalize::PackageName;
 use uv_pep508::MarkerTree;
 use uv_preview::{Preview, PreviewFeature};
+use uv_pypi_types::{HashAlgorithm as UvHashAlgorithm, HashDigest};
 use uv_warnings::warn_user;
 
 use crate::lock::export::{ExportableRequirement, ExportableRequirements};
@@ -52,6 +54,7 @@ const PURL_ENCODE_SET: &AsciiSet = &CONTROLS
 struct ComponentBuilder<'a> {
     id_counter: usize, // Used as prefix in bom-ref generation, to ensure uniqueness
     package_to_component_map: HashMap<&'a PackageId, Component>,
+    include_hashes: bool,
 }
 
 impl<'a> ComponentBuilder<'a> {
@@ -218,6 +221,22 @@ impl<'a> ComponentBuilder<'a> {
             ));
         }
 
+        let hashes = if self.include_hashes {
+            let mut hashes = package.hashes();
+            hashes.sort_unstable();
+            let cyclonedx_hashes = hashes
+                .iter()
+                .filter_map(to_cyclonedx_hash)
+                .collect::<Vec<_>>();
+            if cyclonedx_hashes.is_empty() {
+                None
+            } else {
+                Some(Hashes(cyclonedx_hashes))
+            }
+        } else {
+            None
+        };
+
         Component {
             component_type: Classification::Library,
             name: NormalizedString::new(name),
@@ -231,7 +250,7 @@ impl<'a> ComponentBuilder<'a> {
             group: None,
             description: None,
             scope: None,
-            hashes: None,
+            hashes,
             licenses: None,
             copyright: None,
             cpe: None,
@@ -263,6 +282,7 @@ pub fn from_lock<'lock>(
     extras: &ExtrasSpecificationWithDefaults,
     groups: &DependencyGroupsWithDefaults,
     annotate: bool,
+    hashes: bool,
     install_options: &'lock InstallOptions,
     preview: Preview,
     all_packages: bool,
@@ -298,7 +318,10 @@ pub fn from_lock<'lock>(
     }
     .or_else(|| target.lock().root()); // Fallback to project root
 
-    let mut component_builder = ComponentBuilder::default();
+    let mut component_builder = ComponentBuilder {
+        include_hashes: hashes,
+        ..ComponentBuilder::default()
+    };
 
     let mut metadata = Metadata {
         component: root
@@ -442,4 +465,70 @@ enum PackageType<'a> {
     Root,
     Workspace(&'a Path),
     Dependency,
+}
+
+/// Convert an internal [`HashDigest`] into a `CycloneDX` [`Hash`].
+fn to_cyclonedx_hash(hash: &HashDigest) -> Option<Hash> {
+    let alg = match hash.algorithm() {
+        UvHashAlgorithm::Md5 => HashAlgorithm::MD5,
+        UvHashAlgorithm::Sha256 => HashAlgorithm::SHA_256,
+        UvHashAlgorithm::Sha384 => HashAlgorithm::SHA_384,
+        UvHashAlgorithm::Sha512 => HashAlgorithm::SHA_512,
+        UvHashAlgorithm::Blake2b => match hash.digest.len() {
+            64 => HashAlgorithm::BLAKE2b_256,
+            96 => HashAlgorithm::BLAKE2b_384,
+            128 => HashAlgorithm::BLAKE2b_512,
+            _ => return None,
+        },
+    };
+
+    Some(Hash {
+        alg,
+        content: HashValue(hash.digest.to_string()),
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use cyclonedx_bom::models::hash::HashAlgorithm;
+    use uv_small_str::SmallString;
+
+    #[test]
+    fn test_to_cyclonedx_hash() {
+        // SHA-256 (standard lockfile algorithm)
+        let hash = HashDigest {
+            algorithm: UvHashAlgorithm::Sha256,
+            digest: SmallString::from(
+                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            ),
+        };
+        let cdx_hash = to_cyclonedx_hash(&hash).expect("SHA-256 conversion should succeed");
+        assert_eq!(cdx_hash.alg, HashAlgorithm::SHA_256);
+        assert_eq!(
+            cdx_hash.content.0,
+            "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        );
+
+        // BLAKE2b digest length mappings (256, 384, 512 bits)
+        for (len, expected_alg) in [
+            (64, HashAlgorithm::BLAKE2b_256),
+            (96, HashAlgorithm::BLAKE2b_384),
+            (128, HashAlgorithm::BLAKE2b_512),
+        ] {
+            let hash = HashDigest {
+                algorithm: UvHashAlgorithm::Blake2b,
+                digest: SmallString::from("a".repeat(len)),
+            };
+            let cdx_hash = to_cyclonedx_hash(&hash).expect("BLAKE2b conversion should succeed");
+            assert_eq!(cdx_hash.alg, expected_alg);
+        }
+
+        // BLAKE2b with unsupported length is safely skipped
+        let hash = HashDigest {
+            algorithm: UvHashAlgorithm::Blake2b,
+            digest: SmallString::from("a".repeat(32)),
+        };
+        assert!(to_cyclonedx_hash(&hash).is_none());
+    }
 }
