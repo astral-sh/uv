@@ -250,8 +250,8 @@ pub enum PythonSource {
 
 /// A non-empty group of equally preferred Python executables.
 ///
-/// Minor-version fallback candidates from one `PATH` directory share a group. Explicitly named
-/// executables and interpreters from other sources form singleton groups.
+/// Minor-version fallback candidates from one `PATH` directory share a group. Preferred executable
+/// names and interpreters from other sources form singleton groups.
 struct PythonExecutableGroup(Vec<(PythonSource, PathBuf)>);
 
 impl PythonExecutableGroup {
@@ -626,10 +626,21 @@ fn python_executables<'a>(
 /// Executables are returned in the search path order, then by specificity of the name, e.g.
 /// `python3.9` is preferred over `python3` and `pypy3.9` is preferred over `python3.9`.
 ///
-/// Executables are returned in groups by search-path directory and name specificity. For a version
-/// range, `python3.15`, `python3.15t`, and `python3.14` in the same directory share a group, while
-/// `python3` in that directory forms a separate group. This allows interpreters to be sorted by
-/// preference instead of filesystem enumeration order.
+/// For a `PATH` directory containing `python`, `python3`, `python3.14`, `python3.15`, and
+/// `python3.15t`, an exact `3.15` request produces the following groups:
+///
+/// ```text
+/// [python3.15], [python3], [python]
+/// ```
+///
+/// A `>=3.14,<3.16` request instead produces:
+///
+/// ```text
+/// [python3], [python], [python3.14, python3.15, python3.15t]
+/// ```
+///
+/// Grouping minor-version fallback candidates from the same directory allows their queried
+/// installation keys to determine their relative order without overriding search-path precedence.
 ///
 /// If a `version` is not provided, we will only look for default executable names e.g.
 /// `python3` and `python` — `python3.9` and similar will not be included.
