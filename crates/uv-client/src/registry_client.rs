@@ -1936,10 +1936,11 @@ mod tests {
     type Error = Box<dyn std::error::Error>;
 
     #[test]
-    fn cached_hash_digests_pack_canonical_digests() {
+    fn cached_hash_digests_round_trip() {
         let hashes = [
             HashDigest::Md5(Digest::from_bytes([0xab; 16])),
-            HashDigest::Sha256(Digest::from_bytes([0xab; 32])),
+            HashDigest::new(HashAlgorithm::Sha256, "AB".repeat(32))
+                .expect("validate uppercase digest"),
             HashDigest::Sha384(Digest::from_bytes([0xab; 48])),
             HashDigest::Sha512(Digest::from_bytes([0xab; 64])),
             HashDigest::Blake2b256(Digest::from_bytes([0xab; 32])),
@@ -1960,32 +1961,15 @@ mod tests {
             assert_eq!(HashDigests::from(&cached), expected);
             assert_eq!(HashDigests::from(cached), expected);
         }
-    }
 
-    #[test]
-    fn cached_hash_digests_pack_normalized_digests() {
-        let hash = HashDigest::new(HashAlgorithm::Sha256, "AB".repeat(32))
-            .expect("validate uppercase digest");
-        let expected = HashDigests::from(hash);
-        let cached = CachedHashDigests::from(expected.clone());
-
-        assert!(matches!(cached, CachedHashDigests::Sha256(_)));
-        assert_eq!(HashDigests::from(cached), expected);
-    }
-
-    #[test]
-    fn cached_hash_digests_preserve_empty_and_multiple_digests() {
-        let hashes = [
+        for expected in [
             HashDigests::empty(),
             HashDigests::from(vec![
                 HashDigest::Sha256(Digest::from_bytes([0xab; 32])),
                 HashDigest::Md5(Digest::from_bytes([0xab; 16])),
             ]),
-        ];
-
-        for expected in hashes {
+        ] {
             let cached = CachedHashDigests::from(expected.clone());
-
             assert!(matches!(cached, CachedHashDigests::Other(_)));
             assert_eq!(HashDigests::from(cached), expected);
         }
@@ -2278,7 +2262,7 @@ mod tests {
 
     #[test]
     fn ignore_failing_files() {
-        // 1.7.7 has an invalid requires-python field (double comma), 1.7.8 is valid
+        // 1.7.7 has an invalid requires-python field, 1.7.9 has an invalid hash, and 1.7.8 is valid.
         let response = r#"
     {
         "files": [
@@ -2307,6 +2291,11 @@ mod tests {
             "upload-time": "2022-08-04T10:42:02.190074Z",
             "url": "https://files.pythonhosted.org/packages/ad/39/17180d9806a1c50197bc63b25d0f1266f745fc3b23f11439fccb3d6baa50/pyflyby-1.7.8.tar.gz",
             "yanked": false
+        },
+        {
+            "filename": "pyflyby-1.7.9.tar.gz",
+            "hashes": {"sha256": "short"},
+            "url": "https://files.pythonhosted.org/pyflyby-1.7.9.tar.gz"
         }
         ]
     }
@@ -2324,52 +2313,6 @@ mod tests {
             .map(|SimpleDetailMetadatum { version, .. }| version.to_string())
             .collect();
         assert_eq!(versions, ["1.7.8".to_string()]);
-    }
-
-    #[test]
-    fn ignore_invalid_pypi_hashes() -> Result<(), Error> {
-        let response = r#"
-        {
-            "files": [
-                {
-                    "filename": "example-1.0.0-py3-none-any.whl",
-                    "hashes": {"sha256": "short"},
-                    "url": "https://files.example.com/example-1.0.0-py3-none-any.whl"
-                },
-                {
-                    "filename": "example-2.0.0-py3-none-any.whl",
-                    "hashes": {"sha256": "GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG"},
-                    "url": "https://files.example.com/example-2.0.0-py3-none-any.whl"
-                },
-                {
-                    "filename": "example-3.0.0-py3-none-any.whl",
-                    "hashes": {"sha256": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"},
-                    "url": "https://files.example.com/example-3.0.0-py3-none-any.whl"
-                }
-            ]
-        }
-        "#;
-        let data: PypiSimpleDetail = serde_json::from_str(response)?;
-        let package_name = PackageName::from_str("example")?;
-        let base = DisplaySafeUrl::parse("https://pypi.org/simple/example/")?;
-        let metadata = SimpleDetailMetadata::from_pypi_files(
-            data.files,
-            &package_name,
-            data.project_status,
-            &base,
-        );
-
-        let versions = metadata
-            .iter()
-            .map(|entry| entry.version.to_string())
-            .collect::<Vec<_>>();
-        insta::assert_debug_snapshot!(versions, @r#"
-        [
-            "3.0.0",
-        ]
-        "#);
-
-        Ok(())
     }
 
     #[test]

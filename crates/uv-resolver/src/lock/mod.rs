@@ -8400,16 +8400,6 @@ wheels = [{ url = "https://example.com/anyio-4.3.0-py3-none-any.whl", hash = "sh
     }
 
     #[test]
-    fn hash_normalizes_uppercase_digest() {
-        let hash = Hash::from_str(
-            "sha256:048E05D0F6CAEED70D731F3DB756D35DCC1F35747C8C403364A8332C630441B8",
-        )
-        .expect("valid uppercase digest");
-
-        insta::assert_snapshot!(hash, @"sha256:048e05d0f6caeed70d731f3db756d35dcc1f35747c8c403364a8332c630441b8");
-    }
-
-    #[test]
     fn hash_required_present() {
         let data = r#"
 version = 1

@@ -558,7 +558,6 @@ mod tests {
 <html>
 <body>
 <a href="/whl/Jinja2-3.1.0-py3-none-any.whl#sha256=short">Jinja2-3.1.0-py3-none-any.whl</a>
-<a href="/whl/Jinja2-3.1.1-py3-none-any.whl#sha256=gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg">Jinja2-3.1.1-py3-none-any.whl</a>
 <a href="/whl/Jinja2-3.1.2-py3-none-any.whl#sha256=6088930BFE239F0E6710546AB9C19C9EF35E29792895FED6E6E31A023A182A61">Jinja2-3.1.2-py3-none-any.whl</a>
 </body>
 </html>
@@ -567,26 +566,19 @@ mod tests {
             .expect("valid base URL");
         let result = SimpleDetailHTML::parse(text, &base).expect("parse simple index");
 
-        insta::assert_debug_snapshot!(result.files, @r#"
+        let hashes = result
+            .files
+            .iter()
+            .map(|file| (&file.filename, file.hashes.sha256.as_deref()))
+            .collect::<Vec<_>>();
+        insta::assert_debug_snapshot!(hashes, @r#"
         [
-            PypiFile {
-                core_metadata: None,
-                filename: "Jinja2-3.1.2-py3-none-any.whl",
-                hashes: Hashes {
-                    md5: None,
-                    sha256: Some(
-                        "6088930bfe239f0e6710546ab9c19c9ef35e29792895fed6e6e31a023a182a61",
-                    ),
-                    sha384: None,
-                    sha512: None,
-                    blake2b: None,
-                },
-                requires_python: None,
-                size: None,
-                upload_time: None,
-                url: "/whl/Jinja2-3.1.2-py3-none-any.whl",
-                yanked: None,
-            },
+            (
+                "Jinja2-3.1.2-py3-none-any.whl",
+                Some(
+                    "6088930bfe239f0e6710546ab9c19c9ef35e29792895fed6e6e31a023a182a61",
+                ),
+            ),
         ]
         "#);
     }

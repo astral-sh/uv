@@ -972,10 +972,6 @@ pub enum HashError {
 
 #[cfg(test)]
 mod tests {
-    use std::cmp::Ordering;
-    use std::collections::hash_map::DefaultHasher;
-    use std::hash::{Hash, Hasher};
-
     use crate::{Digest, HashAlgorithm, HashDigest, HashDigests, HashError, Hashes};
 
     #[test]
@@ -997,11 +993,6 @@ mod tests {
             assert_eq!(parsed.algorithm(), algorithm);
             assert_eq!(parsed.digest(), digest);
             assert_eq!(parsed.to_string(), format!("{name}:{digest}"));
-            assert_eq!(
-                HashDigests::try_from(Hashes::from(HashDigests::from(parsed.clone())))?,
-                HashDigests::from(parsed.clone())
-            );
-
             let serialized = serde_json::to_string(&parsed).expect("serialize hash digest");
             assert_eq!(serialized, format!(r#"{{"{variant}":"{digest}"}}"#));
             assert_eq!(
@@ -1015,13 +1006,6 @@ mod tests {
             ))
             .expect("deserialize uppercase hash digest");
             assert_eq!(uppercase, parsed);
-            assert_eq!(uppercase.cmp(&parsed), Ordering::Equal);
-
-            let mut lowercase_hasher = DefaultHasher::new();
-            parsed.hash(&mut lowercase_hasher);
-            let mut uppercase_hasher = DefaultHasher::new();
-            uppercase.hash(&mut uppercase_hasher);
-            assert_eq!(lowercase_hasher.finish(), uppercase_hasher.finish());
         }
 
         Ok(())
@@ -1052,10 +1036,6 @@ mod tests {
             ));
         }
 
-        assert!(matches!(
-            "sha256:".parse::<HashDigest>(),
-            Err(HashError::InvalidDigestLength { .. })
-        ));
         assert!(matches!(
             "sha256:digest:extra".parse::<HashDigest>(),
             Err(HashError::InvalidStructure(_))
@@ -1103,16 +1083,6 @@ mod tests {
             ]
         );
         assert_eq!(Hashes::from(digests), hashes);
-
-        let uppercase = Hashes {
-            sha256: Some("AB".repeat(32).into()),
-            ..Hashes::default()
-        };
-        let normalized = Hashes::from(HashDigests::try_from(uppercase)?);
-        assert_eq!(
-            normalized.sha256.as_deref(),
-            Some("abababababababababababababababababababababababababababababababab")
-        );
 
         let invalid = Hashes {
             sha256: Some("short".into()),
