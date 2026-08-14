@@ -12629,11 +12629,16 @@ fn pep_751_install_invalid_hashes() -> Result<()> {
         .arg("--offline")
         .arg("--dry-run")
         .arg("-r")
-        .arg("pylock.toml"), @"
+        .arg("pylock.toml"), @r###"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: Invalid hash digest length (expected 64 hexadecimal characters, found 5)
-    ");
+    error: Not a valid `pylock.toml` file: pylock.toml
+      Caused by: TOML parse error at line 9, column 134
+          |
+        9 |         wheels = [{ name = "foo-1.0.0-py3-none-any.whl", url = "https://example.com/foo-1.0.0-py3-none-any.whl", hashes = { sha256 = "short" } }]
+          |                                                                                                                                      ^^^^^^^
+        Invalid hash digest length (expected 64 hexadecimal characters, found 5)
+    "###);
 
     Ok(())
 }

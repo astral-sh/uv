@@ -502,15 +502,15 @@ pub struct Zstd {
 #[derive(Debug, Clone, Eq, PartialEq, Default, Deserialize, Serialize)]
 pub struct Hashes {
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub md5: Option<SmallString>,
+    pub md5: Option<Digest<16>>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub sha256: Option<SmallString>,
+    pub sha256: Option<Digest<32>>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub sha384: Option<SmallString>,
+    pub sha384: Option<Digest<48>>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub sha512: Option<SmallString>,
+    pub sha512: Option<Digest<64>>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub blake2b: Option<SmallString>,
+    pub blake2b: Option<Digest<32>>,
 }
 
 impl Hashes {
@@ -687,8 +687,20 @@ impl<const BYTES: usize> Digest<BYTES> {
         &self.0
     }
 
-    fn into_inner(self) -> SmallString {
-        self.0
+    /// Decode the validated hexadecimal digest into its fixed-size byte array.
+    pub fn decode(&self) -> [u8; BYTES] {
+        let mut decoded = [0; BYTES];
+        for (index, pair) in self.0.as_bytes().chunks_exact(2).enumerate() {
+            let decode_digit = |digit: u8| {
+                if digit.is_ascii_digit() {
+                    digit - b'0'
+                } else {
+                    digit - b'a' + 10
+                }
+            };
+            decoded[index] = (decode_digit(pair[0]) << 4) | decode_digit(pair[1]);
+        }
+        decoded
     }
 }
 
@@ -855,10 +867,8 @@ impl HashDigests {
 }
 
 /// Convert a set of [`Hashes`] into a list of [`HashDigest`]s.
-impl TryFrom<Hashes> for HashDigests {
-    type Error = HashError;
-
-    fn try_from(value: Hashes) -> Result<Self, Self::Error> {
+impl From<Hashes> for HashDigests {
+    fn from(value: Hashes) -> Self {
         let mut digests = Vec::with_capacity(
             usize::from(value.sha512.is_some())
                 + usize::from(value.sha384.is_some())
@@ -867,21 +877,21 @@ impl TryFrom<Hashes> for HashDigests {
                 + usize::from(value.blake2b.is_some()),
         );
         if let Some(sha512) = value.sha512 {
-            digests.push(HashDigest::new(HashAlgorithm::Sha512, sha512)?);
+            digests.push(HashDigest::Sha512(sha512));
         }
         if let Some(sha384) = value.sha384 {
-            digests.push(HashDigest::new(HashAlgorithm::Sha384, sha384)?);
+            digests.push(HashDigest::Sha384(sha384));
         }
         if let Some(sha256) = value.sha256 {
-            digests.push(HashDigest::new(HashAlgorithm::Sha256, sha256)?);
+            digests.push(HashDigest::Sha256(sha256));
         }
         if let Some(md5) = value.md5 {
-            digests.push(HashDigest::new(HashAlgorithm::Md5, md5)?);
+            digests.push(HashDigest::Md5(md5));
         }
         if let Some(blake2b) = value.blake2b {
-            digests.push(HashDigest::new(HashAlgorithm::Blake2b256, blake2b)?);
+            digests.push(HashDigest::Blake2b256(blake2b));
         }
-        Ok(Self::from(digests))
+        Self::from(digests)
     }
 }
 
@@ -889,11 +899,11 @@ impl From<HashDigest> for Hashes {
     fn from(value: HashDigest) -> Self {
         let mut hashes = Self::default();
         match value {
-            HashDigest::Md5(digest) => hashes.md5 = Some(digest.into_inner()),
-            HashDigest::Sha256(digest) => hashes.sha256 = Some(digest.into_inner()),
-            HashDigest::Sha384(digest) => hashes.sha384 = Some(digest.into_inner()),
-            HashDigest::Sha512(digest) => hashes.sha512 = Some(digest.into_inner()),
-            HashDigest::Blake2b256(digest) => hashes.blake2b = Some(digest.into_inner()),
+            HashDigest::Md5(digest) => hashes.md5 = Some(digest),
+            HashDigest::Sha256(digest) => hashes.sha256 = Some(digest),
+            HashDigest::Sha384(digest) => hashes.sha384 = Some(digest),
+            HashDigest::Sha512(digest) => hashes.sha512 = Some(digest),
+            HashDigest::Blake2b256(digest) => hashes.blake2b = Some(digest),
         }
         hashes
     }
@@ -904,11 +914,11 @@ impl From<HashDigests> for Hashes {
         let mut hashes = Self::default();
         for digest in value {
             match digest {
-                HashDigest::Md5(digest) => hashes.md5 = Some(digest.into_inner()),
-                HashDigest::Sha256(digest) => hashes.sha256 = Some(digest.into_inner()),
-                HashDigest::Sha384(digest) => hashes.sha384 = Some(digest.into_inner()),
-                HashDigest::Sha512(digest) => hashes.sha512 = Some(digest.into_inner()),
-                HashDigest::Blake2b256(digest) => hashes.blake2b = Some(digest.into_inner()),
+                HashDigest::Md5(digest) => hashes.md5 = Some(digest),
+                HashDigest::Sha256(digest) => hashes.sha256 = Some(digest),
+                HashDigest::Sha384(digest) => hashes.sha384 = Some(digest),
+                HashDigest::Sha512(digest) => hashes.sha512 = Some(digest),
+                HashDigest::Blake2b256(digest) => hashes.blake2b = Some(digest),
             }
         }
         hashes
@@ -1006,6 +1016,13 @@ mod tests {
             ))
             .expect("deserialize uppercase hash digest");
             assert_eq!(uppercase, parsed);
+
+            let hashes = serde_json::from_str::<Hashes>(&format!(
+                r#"{{"{name}":"{}"}}"#,
+                digest.to_ascii_uppercase()
+            ))
+            .expect("deserialize uppercase hash map");
+            assert_eq!(hashes, Hashes::from(parsed));
         }
 
         Ok(())
@@ -1046,19 +1063,20 @@ mod tests {
         ));
 
         assert!(serde_json::from_str::<HashDigest>(r#"{"Sha256":"short"}"#).is_err());
+        assert!(serde_json::from_str::<Hashes>(r#"{"sha256":"short"}"#).is_err());
         assert!(serde_json::from_str::<Digest<32>>(&format!(r#""{}""#, "g".repeat(64))).is_err());
     }
 
     #[test]
-    fn hash_digests_round_trip_hashes() -> Result<(), HashError> {
+    fn hash_digests_round_trip_hashes() {
         let hashes = Hashes {
-            md5: Some("11".repeat(16).into()),
-            sha256: Some("22".repeat(32).into()),
-            sha384: Some("33".repeat(48).into()),
-            sha512: Some("44".repeat(64).into()),
-            blake2b: Some("55".repeat(32).into()),
+            md5: Some(Digest::from_bytes([0x11; 16])),
+            sha256: Some(Digest::from_bytes([0x22; 32])),
+            sha384: Some(Digest::from_bytes([0x33; 48])),
+            sha512: Some(Digest::from_bytes([0x44; 64])),
+            blake2b: Some(Digest::from_bytes([0x55; 32])),
         };
-        let digests = HashDigests::try_from(hashes.clone())?;
+        let digests = HashDigests::from(hashes.clone());
 
         assert_eq!(
             digests.as_slice(),
@@ -1083,20 +1101,6 @@ mod tests {
             ]
         );
         assert_eq!(Hashes::from(digests), hashes);
-
-        let invalid = Hashes {
-            sha256: Some("short".into()),
-            ..Hashes::default()
-        };
-        assert!(matches!(
-            HashDigests::try_from(invalid),
-            Err(HashError::InvalidDigestLength {
-                expected: 64,
-                actual: 5,
-            })
-        ));
-
-        Ok(())
     }
 
     #[test]
@@ -1110,9 +1114,9 @@ mod tests {
                 sha256: None,
                 sha384: None,
                 sha512: None,
-                blake2b: Some(
-                    "af4793213ee66ef8fae3b93b3e29206f6b251e65c97bd91d8e1c5596ef15af0a".into()
-                ),
+                blake2b: Some(Digest::from_hex(
+                    "af4793213ee66ef8fae3b93b3e29206f6b251e65c97bd91d8e1c5596ef15af0a"
+                )?),
             }
         );
 
@@ -1124,7 +1128,7 @@ mod tests {
                 md5: None,
                 sha256: None,
                 sha384: None,
-                sha512: Some(sha512.into()),
+                sha512: Some(Digest::from_hex(sha512)?),
                 blake2b: None,
             }
         );
@@ -1136,7 +1140,7 @@ mod tests {
             Hashes {
                 md5: None,
                 sha256: None,
-                sha384: Some(sha384.into()),
+                sha384: Some(Digest::from_hex(sha384)?),
                 sha512: None,
                 blake2b: None,
             }
@@ -1148,9 +1152,9 @@ mod tests {
             hashes,
             Hashes {
                 md5: None,
-                sha256: Some(
-                    "40627dcf047dadb22cd25ea7ecfe9cbf3bbbad0482ee5920b582f3809c97654f".into()
-                ),
+                sha256: Some(Digest::from_hex(
+                    "40627dcf047dadb22cd25ea7ecfe9cbf3bbbad0482ee5920b582f3809c97654f"
+                )?),
                 sha384: None,
                 sha512: None,
                 blake2b: None,
@@ -1161,7 +1165,7 @@ mod tests {
         assert_eq!(
             hashes,
             Hashes {
-                md5: Some("090376d812fb6ac5f171e5938e82e7f2".into()),
+                md5: Some(Digest::from_hex("090376d812fb6ac5f171e5938e82e7f2")?),
                 sha256: None,
                 sha384: None,
                 sha512: None,

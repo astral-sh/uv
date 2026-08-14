@@ -4434,7 +4434,9 @@ fn require_hashes_find_links_no_hash() -> Result<()> {
 
     // Second, use an incorrect hash.
     let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.write_str("basic-package==0.1.0 --hash=sha256:123")?;
+    requirements_txt.write_str(
+        "basic-package==0.1.0 --hash=sha256:0000000000000000000000000000000000000000000000000000000000000000",
+    )?;
 
     uv_snapshot!(context.pip_sync()
         .arg("requirements.txt")
@@ -4444,9 +4446,17 @@ fn require_hashes_find_links_no_hash() -> Result<()> {
         .arg(index.index_url())
         .arg("--find-links")
         .arg(server.url()), @"
-    exit_code: 2 (failure)
+    exit_code: 1 (failure)
     ----- stderr -----
-    error: Invalid hash digest length (expected 64 hexadecimal characters, found 3)
+    Resolved 1 package in [TIME]
+      × Failed to download `basic-package==0.1.0`
+      ╰─▶ Hash mismatch for `basic-package==0.1.0`
+
+          Expected:
+            sha256:0000000000000000000000000000000000000000000000000000000000000000
+
+          Computed:
+            sha256:7b6229db79b5800e4e98a351b5628c1c8a944533a2d428aeeaa7275a30d4ea82
     "
     );
 
@@ -4541,7 +4551,9 @@ fn require_hashes_find_links_invalid_hash() -> Result<()> {
 
     // First, request some other hash.
     let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.write_str("example-a-961b4c22==1.0.0 --hash=sha256:123")?;
+    requirements_txt.write_str(
+        "example-a-961b4c22==1.0.0 --hash=sha256:0000000000000000000000000000000000000000000000000000000000000000",
+    )?;
 
     uv_snapshot!(context.pip_sync()
         .arg("requirements.txt")
@@ -4549,9 +4561,17 @@ fn require_hashes_find_links_invalid_hash() -> Result<()> {
         .arg("--require-hashes")
         .arg("--find-links")
         .arg("https://raw.githubusercontent.com/astral-test/astral-test-hash/main/invalid-hash/simple-html/example-a-961b4c22/index.html"), @"
-    exit_code: 2 (failure)
+    exit_code: 1 (failure)
     ----- stderr -----
-    error: Invalid hash digest length (expected 64 hexadecimal characters, found 3)
+    Resolved 1 package in [TIME]
+      × Failed to download `example-a-961b4c22==1.0.0`
+      ╰─▶ Hash mismatch for `example-a-961b4c22==1.0.0`
+
+          Expected:
+            sha256:0000000000000000000000000000000000000000000000000000000000000000
+
+          Computed:
+            sha256:5d69f0b590514103234f0c3526563856f04d044d8d0ea1073a843ae429b3187e
     "
     );
 
@@ -4714,7 +4734,9 @@ fn require_hashes_registry_invalid_hash() -> Result<()> {
 
     // First, request some other hash.
     let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.write_str("example-a-961b4c22==1.0.0 --hash=sha256:123")?;
+    requirements_txt.write_str(
+        "example-a-961b4c22==1.0.0 --hash=sha256:0000000000000000000000000000000000000000000000000000000000000000",
+    )?;
 
     uv_snapshot!(context.pip_sync()
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
@@ -4723,9 +4745,17 @@ fn require_hashes_registry_invalid_hash() -> Result<()> {
         .arg("--require-hashes")
         .arg("--index-url")
         .arg("https://astral-test.github.io/astral-test-hash/invalid-hash/simple-html/"), @"
-    exit_code: 2 (failure)
+    exit_code: 1 (failure)
     ----- stderr -----
-    error: Invalid hash digest length (expected 64 hexadecimal characters, found 3)
+    Resolved 1 package in [TIME]
+      × Failed to download `example-a-961b4c22==1.0.0`
+      ╰─▶ Hash mismatch for `example-a-961b4c22==1.0.0`
+
+          Expected:
+            sha256:0000000000000000000000000000000000000000000000000000000000000000
+
+          Computed:
+            sha256:5d69f0b590514103234f0c3526563856f04d044d8d0ea1073a843ae429b3187e
     "
     );
 

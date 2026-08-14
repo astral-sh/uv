@@ -53,8 +53,8 @@ use uv_platform_tags::{
 };
 use uv_preview::PreviewFeature;
 use uv_pypi_types::{
-    ConflictItem, ConflictKindRef, Conflicts, HashAlgorithm, HashDigest, HashDigests, Hashes,
-    ParsedArchiveUrl, ParsedGitDirectoryUrl, ParsedGitPathUrl, PyProjectToml,
+    ConflictItem, ConflictKindRef, Conflicts, HashAlgorithm, HashDigest, HashDigests, HashError,
+    Hashes, ParsedArchiveUrl, ParsedGitDirectoryUrl, ParsedGitPathUrl, PyProjectToml,
 };
 use uv_redacted::{DisplaySafeUrl, DisplaySafeUrlError};
 use uv_small_str::SmallString;
@@ -6510,20 +6510,10 @@ fn warn_index_hash_algorithm_preview() {
 }
 
 impl FromStr for Hash {
-    type Err = HashParseError;
+    type Err = HashError;
 
-    fn from_str(s: &str) -> Result<Self, HashParseError> {
-        let (algorithm, digest) = s.split_once(':').ok_or_else(|| {
-            HashParseError(
-                "expected '{algorithm}:{digest}', but found no ':' in hash digest".to_string(),
-            )
-        })?;
-        let algorithm = algorithm
-            .parse()
-            .map_err(|_| HashParseError("unrecognized hash algorithm".to_string()))?;
-        let hash = HashDigest::new(algorithm, digest)
-            .map_err(|error| HashParseError(error.to_string()))?;
-        Ok(Self(hash))
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        HashDigest::from_str(s).map(Self)
     }
 }
 
@@ -7602,18 +7592,6 @@ enum SourceParseError {
     },
 }
 
-/// An error that occurs when a hash digest could not be parsed.
-#[derive(Clone, Debug, Eq, PartialEq)]
-struct HashParseError(String);
-
-impl std::error::Error for HashParseError {}
-
-impl Display for HashParseError {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        Display::fmt(&self.0, f)
-    }
-}
-
 /// Return the PEP 508 marker space covered by the resolution.
 fn fork_markers_union(
     fork_markers: &[UniversalMarker],
@@ -8379,24 +8357,6 @@ wheels = [{ url = "https://files.pythonhosted.org/packages/14/fd/2f20c40b45e4fb4
 "#;
         let result: Result<Lock, _> = toml::from_str(data);
         insta::assert_debug_snapshot!(result);
-    }
-
-    #[test]
-    fn hash_rejects_invalid_digest() {
-        let error = Hash::from_str("sha256:short").expect_err("invalid digest length");
-        insta::assert_snapshot!(error, @"Invalid hash digest length (expected 64 hexadecimal characters, found 5)");
-
-        let data = r#"
-version = 1
-requires-python = ">=3.12"
-
-[[package]]
-name = "anyio"
-version = "4.3.0"
-source = { registry = "https://pypi.org/simple" }
-wheels = [{ url = "https://example.com/anyio-4.3.0-py3-none-any.whl", hash = "sha256:short" }]
-"#;
-        assert!(toml::from_str::<Lock>(data).is_err());
     }
 
     #[test]

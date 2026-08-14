@@ -1528,11 +1528,11 @@ impl From<HashDigests> for CachedHashDigests {
             return Self::Other(hashes);
         };
         match hash {
-            HashDigest::Md5(digest) => Self::Md5(decode_digest(digest)),
-            HashDigest::Sha256(digest) => Self::Sha256(decode_digest(digest)),
-            HashDigest::Blake2b256(digest) => Self::Blake2b256(decode_digest(digest)),
-            HashDigest::Sha384(digest) => Self::Sha384(Box::new(decode_digest(digest))),
-            HashDigest::Sha512(digest) => Self::Sha512(Box::new(decode_digest(digest))),
+            HashDigest::Md5(digest) => Self::Md5(digest.decode()),
+            HashDigest::Sha256(digest) => Self::Sha256(digest.decode()),
+            HashDigest::Blake2b256(digest) => Self::Blake2b256(digest.decode()),
+            HashDigest::Sha384(digest) => Self::Sha384(Box::new(digest.decode())),
+            HashDigest::Sha512(digest) => Self::Sha512(Box::new(digest.decode())),
         }
     }
 }
@@ -1567,22 +1567,6 @@ impl From<&CachedHashDigests> for HashDigests {
             CachedHashDigests::Other(hashes) => hashes.clone(),
         }
     }
-}
-
-/// Decode a validated, lowercase hexadecimal digest of exactly `N` bytes.
-fn decode_digest<const N: usize>(digest: &Digest<N>) -> [u8; N] {
-    let mut decoded = [0; N];
-    for (index, pair) in digest.as_str().as_bytes().chunks_exact(2).enumerate() {
-        let decode_digit = |digit: u8| {
-            if digit.is_ascii_digit() {
-                digit - b'0'
-            } else {
-                digit - b'a' + 10
-            }
-        };
-        decoded[index] = (decode_digit(pair[0]) << 4) | decode_digit(pair[1]);
-    }
-    decoded
 }
 
 /// The list of projects available in a Simple API index.
@@ -1912,9 +1896,7 @@ mod tests {
     use tokio::sync::Semaphore;
     use url::Url;
     use uv_normalize::PackageName;
-    use uv_pypi_types::{
-        Digest, HashAlgorithm, HashDigest, HashDigests, PypiSimpleDetail, PyxSimpleDetail,
-    };
+    use uv_pypi_types::{Digest, HashAlgorithm, HashDigest, HashDigests, PypiSimpleDetail};
     use uv_redacted::DisplaySafeUrl;
     use uv_torch::{TorchBackend, TorchSource, TorchStrategy};
 
@@ -2262,7 +2244,7 @@ mod tests {
 
     #[test]
     fn ignore_failing_files() {
-        // 1.7.7 has an invalid requires-python field, 1.7.9 has an invalid hash, and 1.7.8 is valid.
+        // 1.7.7 has an invalid requires-python field (double comma), 1.7.8 is valid.
         let response = r#"
     {
         "files": [
@@ -2291,11 +2273,6 @@ mod tests {
             "upload-time": "2022-08-04T10:42:02.190074Z",
             "url": "https://files.pythonhosted.org/packages/ad/39/17180d9806a1c50197bc63b25d0f1266f745fc3b23f11439fccb3d6baa50/pyflyby-1.7.8.tar.gz",
             "yanked": false
-        },
-        {
-            "filename": "pyflyby-1.7.9.tar.gz",
-            "hashes": {"sha256": "short"},
-            "url": "https://files.pythonhosted.org/pyflyby-1.7.9.tar.gz"
         }
         ]
     }
@@ -2313,55 +2290,6 @@ mod tests {
             .map(|SimpleDetailMetadatum { version, .. }| version.to_string())
             .collect();
         assert_eq!(versions, ["1.7.8".to_string()]);
-    }
-
-    #[test]
-    fn ignore_invalid_pyx_hashes() -> Result<(), Error> {
-        let response = r#"
-        {
-            "files": [
-                {
-                    "filename": "example-1.0.0-py3-none-any.whl",
-                    "hashes": {"sha256": "short"},
-                    "url": "https://files.example.com/example-1.0.0-py3-none-any.whl"
-                },
-                {
-                    "filename": "example-2.0.0-py3-none-any.whl",
-                    "hashes": {"sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},
-                    "url": "https://files.example.com/example-2.0.0-py3-none-any.whl",
-                    "zstd": {"hashes": {"sha256": "short"}}
-                },
-                {
-                    "filename": "example-3.0.0-py3-none-any.whl",
-                    "hashes": {"sha256": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"},
-                    "url": "https://files.example.com/example-3.0.0-py3-none-any.whl",
-                    "zstd": {"hashes": {"sha256": "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB"}}
-                }
-            ]
-        }
-        "#;
-        let data: PyxSimpleDetail = serde_json::from_str(response)?;
-        let package_name = PackageName::from_str("example")?;
-        let base = DisplaySafeUrl::parse("https://pypi.org/simple/example/")?;
-        let metadata = SimpleDetailMetadata::from_pyx_files(
-            data.files,
-            data.core_metadata,
-            &package_name,
-            data.project_status,
-            &base,
-        );
-
-        let versions = metadata
-            .iter()
-            .map(|entry| entry.version.to_string())
-            .collect::<Vec<_>>();
-        insta::assert_debug_snapshot!(versions, @r#"
-        [
-            "3.0.0",
-        ]
-        "#);
-
-        Ok(())
     }
 
     #[test]

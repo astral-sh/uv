@@ -6721,7 +6721,6 @@ dependencies = [
  "flate2",
  "fs-err",
  "futures",
- "hex",
  "md-5",
  "rayon",
  "regex",

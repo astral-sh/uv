@@ -181,7 +181,7 @@ impl HashStrategy {
                 .map(|digest| HashDigest::from_str(digest))
                 .collect::<Result<Vec<_>, _>>()?;
             if let Some(fragment_hashes) = requirement.hashes()? {
-                let fragment_hashes = HashDigests::try_from(fragment_hashes)?;
+                let fragment_hashes = HashDigests::from(fragment_hashes);
                 merge_digests(&mut digests, fragment_hashes.iter(), requirement)?;
             }
 
@@ -233,7 +233,7 @@ impl HashStrategy {
                 .map(|digest| HashDigest::from_str(digest))
                 .collect::<Result<Vec<_>, _>>()?;
             if let Some(fragment_hashes) = requirement.hashes()? {
-                let fragment_hashes = HashDigests::try_from(fragment_hashes)?;
+                let fragment_hashes = HashDigests::from(fragment_hashes);
                 merge_digests(&mut digests, fragment_hashes.iter(), requirement)?;
             }
 
@@ -373,7 +373,7 @@ impl HashStrategy {
         let Some(hashes) = requirement.hashes()? else {
             return Ok(None);
         };
-        let mut digests = HashDigests::try_from(hashes)?.to_vec();
+        let mut digests = HashDigests::from(hashes).to_vec();
         if digests.is_empty() {
             return Ok(None);
         }

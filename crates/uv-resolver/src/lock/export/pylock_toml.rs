@@ -35,7 +35,7 @@ use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::Version;
 use uv_pep508::{MarkerEnvironment, MarkerTree, VerbatimUrl};
 use uv_platform_tags::{TagCompatibility, TagPriority, Tags};
-use uv_pypi_types::{HashDigests, HashError, Hashes, ParsedGitDirectoryUrl, VcsKind};
+use uv_pypi_types::{HashDigests, Hashes, ParsedGitDirectoryUrl, VcsKind};
 use uv_redacted::DisplaySafeUrl;
 use uv_small_str::SmallString;
 
@@ -170,8 +170,6 @@ pub enum PylockTomlErrorKind {
     LockError(#[from] LockError),
     #[error(transparent)]
     Extension(#[from] ExtensionError),
-    #[error(transparent)]
-    Hash(#[from] HashError),
     #[error(transparent)]
     Jiff(#[from] jiff::Error),
     #[error(transparent)]
@@ -1182,7 +1180,7 @@ impl<'lock> PylockToml {
             let dist = if let Some(best_wheel) =
                 package.find_best_wheel(tags).filter(|_| !no_binary)
             {
-                let hashes = HashDigests::try_from(best_wheel.hashes.clone())?;
+                let hashes = HashDigests::from(best_wheel.hashes.clone());
                 let built_dist = Dist::Built(BuiltDist::Registry(RegistryBuiltDist {
                     wheels: vec![best_wheel.to_registry_wheel(
                         install_path,
@@ -1202,7 +1200,7 @@ impl<'lock> PylockToml {
                     install: true,
                 }
             } else if let Some(sdist) = package.sdist.as_ref().filter(|_| !no_build) {
-                let hashes = HashDigests::try_from(sdist.hashes.clone())?;
+                let hashes = HashDigests::from(sdist.hashes.clone());
                 let sdist = Dist::Source(SourceDist::Registry(sdist.to_sdist(
                     install_path,
                     &package.name,
@@ -1251,7 +1249,7 @@ impl<'lock> PylockToml {
                 .as_ref()
                 .filter(|_| if is_wheel { !no_binary } else { !no_build })
             {
-                let hashes = HashDigests::try_from(dist.hashes.clone())?;
+                let hashes = HashDigests::from(dist.hashes.clone());
                 let dist = dist.to_dist(install_path, &package.name, package.version.as_ref())?;
                 let dist = ResolvedDist::Installable {
                     dist: Arc::new(dist),
@@ -1505,7 +1503,7 @@ impl PylockTomlWheel {
         let file = Box::new(uv_distribution_types::File {
             dist_info_metadata: false,
             filename: SmallString::from(filename.to_string()),
-            hashes: HashDigests::try_from(self.hashes.clone())?,
+            hashes: HashDigests::from(self.hashes.clone()),
             requires_python: None,
             size: self.size,
             upload_time_utc_ms: self.upload_time.map(Timestamp::as_millisecond),
@@ -1668,7 +1666,7 @@ impl PylockTomlSdist {
         let file = Box::new(uv_distribution_types::File {
             dist_info_metadata: false,
             filename,
-            hashes: HashDigests::try_from(self.hashes.clone())?,
+            hashes: HashDigests::from(self.hashes.clone()),
             requires_python: None,
             size: self.size,
             upload_time_utc_ms: self.upload_time.map(Timestamp::as_millisecond),

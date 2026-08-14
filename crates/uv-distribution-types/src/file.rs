@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 
 use uv_pep440::{VersionSpecifiers, VersionSpecifiersParseError};
 use uv_pep508::split_scheme;
-use uv_pypi_types::{CoreMetadata, HashDigests, HashError, Yanked};
+use uv_pypi_types::{CoreMetadata, HashDigests, Yanked};
 use uv_redacted::{DisplaySafeUrl, DisplaySafeUrlError};
 use uv_small_str::SmallString;
 
@@ -23,8 +23,6 @@ pub enum FileConversionError {
     MissingPathSegments(String),
     #[error(transparent)]
     Utf8(#[from] std::str::Utf8Error),
-    #[error(transparent)]
-    Hash(#[from] HashError),
 }
 
 /// Internal analog to [`uv_pypi_types::PypiFile`].
@@ -58,7 +56,7 @@ impl File {
                 .as_ref()
                 .is_some_and(CoreMetadata::is_available),
             filename: file.filename,
-            hashes: HashDigests::try_from(file.hashes)?,
+            hashes: HashDigests::from(file.hashes),
             requires_python: file
                 .requires_python
                 .transpose()
@@ -104,7 +102,7 @@ impl File {
                 .core_metadata
                 .as_ref()
                 .is_some_and(CoreMetadata::is_available),
-            hashes: HashDigests::try_from(file.hashes)?,
+            hashes: HashDigests::from(file.hashes),
             requires_python: file
                 .requires_python
                 .transpose()
@@ -115,13 +113,11 @@ impl File {
             yanked: file.yanked,
             zstd: file
                 .zstd
-                .map(|zstd| {
-                    Ok::<_, HashError>(Box::new(Zstd {
-                        hashes: HashDigests::try_from(zstd.hashes)?,
-                        size: zstd.size,
-                    }))
+                .map(|zstd| Zstd {
+                    hashes: HashDigests::from(zstd.hashes),
+                    size: zstd.size,
                 })
-                .transpose()?,
+                .map(Box::new),
         })
     }
 }
@@ -336,9 +332,7 @@ mod tests {
         assert_eq!(location.raw_filename(), "example%20pkg.whl");
 
         let location = FileLocation::new(
-            SmallString::from(
-                "https://files.example.com/example.whl#sha256=0000000000000000000000000000000000000000000000000000000000000000",
-            ),
+            SmallString::from("https://files.example.com/example.whl#sha256=digest"),
             &base,
         );
         assert_eq!(location.raw_filename(), "example.whl");
