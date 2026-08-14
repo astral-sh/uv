@@ -897,17 +897,17 @@ impl<'a> PublishSession<'a> {
         if let Some(remote_hash) = archived_file.hashes().first() {
             // We accept the risk for TOCTOU errors here, since we already read the file once before the
             // streaming upload to compute the hash for the form metadata.
-            let local_hash = &hash_file(
+            let [local_hash] = hash_file(
                 file,
                 filename,
-                vec![Hasher::from(remote_hash.algorithm())],
+                [Hasher::from(remote_hash.algorithm())],
                 reporter,
             )
             .await
             .map_err(|err| {
                 PublishError::PublishPrepare(file.clone(), Box::new(PublishPrepareError::Io(err)))
-            })?[0];
-            if local_hash.digest() == remote_hash.digest() {
+            })?;
+            if &local_hash == remote_hash {
                 debug!(
                     "Found {filename} in the registry with matching hash {}",
                     remote_hash.digest()
@@ -948,12 +948,12 @@ impl<'a> PublishSession<'a> {
 }
 
 /// Calculate the requested hashes of a file.
-async fn hash_file(
+async fn hash_file<const COUNT: usize>(
     path: impl AsRef<Path>,
     filename: &DistFilename,
-    hashers: Vec<Hasher>,
+    hashers: [Hasher; COUNT],
     reporter: Arc<impl Reporter>,
-) -> Result<Vec<HashDigest>, io::Error> {
+) -> Result<[HashDigest; COUNT], io::Error> {
     let path = path.as_ref().to_path_buf();
     debug!("Hashing {}", path.user_display());
     let filename = filename.clone();
@@ -981,10 +981,7 @@ async fn hash_file(
         reporter.on_hash_complete(index);
         result?;
 
-        Ok(hashers
-            .into_iter()
-            .map(HashDigest::from)
-            .collect::<Vec<_>>())
+        Ok(hashers.map(HashDigest::from))
     })
     .await?
 }
@@ -1118,10 +1115,10 @@ impl FormMetadata {
         filename: &DistFilename,
         reporter: Arc<impl Reporter>,
     ) -> Result<Self, PublishPrepareError> {
-        let hashes = hash_file(
+        let [sha256_hash, blake2b_hash] = hash_file(
             file,
             filename,
-            vec![
+            [
                 Hasher::from(HashAlgorithm::Sha256),
                 Hasher::from(HashAlgorithm::Blake2b256),
             ],
@@ -1129,23 +1126,13 @@ impl FormMetadata {
         )
         .await?;
 
-        let sha256_hash = hashes
-            .iter()
-            .find(|hash| hash.algorithm() == HashAlgorithm::Sha256)
-            .unwrap();
-
-        let blake2b_hash = hashes
-            .iter()
-            .find(|hash| hash.algorithm() == HashAlgorithm::Blake2b256)
-            .unwrap();
-
         let metadata = metadata(file, filename).await?;
 
         Ok(Self::from_metadata(
             metadata,
             filename,
-            sha256_hash,
-            blake2b_hash,
+            &sha256_hash,
+            &blake2b_hash,
         ))
     }
 
