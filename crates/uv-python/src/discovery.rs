@@ -248,31 +248,17 @@ pub enum PythonSource {
     ParentInterpreter,
 }
 
-/// One executable, or a group of equally preferred executables from the same search-path tier.
-enum PythonExecutableGroup {
-    Single((PythonSource, PathBuf)),
-    Multiple(Vec<(PythonSource, PathBuf)>),
-}
+/// Equally preferred executables from the same search-path tier.
+struct PythonExecutableGroup(Vec<(PythonSource, PathBuf)>);
 
 impl PythonExecutableGroup {
-    fn new(mut executables: Vec<(PythonSource, PathBuf)>) -> Option<Self> {
-        match executables.len() {
-            0 => None,
-            1 => executables.pop().map(Self::Single),
-            _ => Some(Self::Multiple(executables)),
-        }
+    fn new(executables: Vec<(PythonSource, PathBuf)>) -> Option<Self> {
+        (!executables.is_empty()).then_some(Self(executables))
     }
 
-    fn filter(self, mut predicate: impl FnMut(PythonSource, &Path) -> bool) -> Option<Self> {
-        match self {
-            Self::Single((source, path)) => {
-                predicate(source, &path).then_some(Self::Single((source, path)))
-            }
-            Self::Multiple(mut executables) => {
-                executables.retain(|(source, path)| predicate(*source, path));
-                Self::new(executables)
-            }
-        }
+    fn filter(mut self, mut predicate: impl FnMut(PythonSource, &Path) -> bool) -> Option<Self> {
+        self.0.retain(|(source, path)| predicate(*source, path));
+        (!self.0.is_empty()).then_some(self)
     }
 }
 
@@ -466,7 +452,7 @@ fn python_executables_from_installed<'a>(
             })
     })
     .flatten_ok()
-    .map_ok(PythonExecutableGroup::Single);
+    .map_ok(|executable| PythonExecutableGroup(vec![executable]));
 
     let from_search_path = iter::once_with(move || {
         let mut first = true;
@@ -524,7 +510,7 @@ fn python_executables_from_installed<'a>(
                     .map_err(Error::from)
             })
             .flatten_ok()
-            .map_ok(PythonExecutableGroup::Single),
+            .map_ok(|executable| PythonExecutableGroup(vec![executable])),
         ),
         Err(err) => Box::new(iter::once(Err(Error::from(err)))),
     };
@@ -580,10 +566,10 @@ fn python_executables<'a>(
         env::var_os(EnvVars::UV_INTERNAL__PARENT_INTERPRETER)
             .into_iter()
             .map(|path| {
-                Ok(PythonExecutableGroup::Single((
+                Ok(PythonExecutableGroup(vec![(
                     PythonSource::ParentInterpreter,
                     PathBuf::from(path),
-                )))
+                )]))
             })
     })
     .flatten();
@@ -594,16 +580,16 @@ fn python_executables<'a>(
             .into_iter()
             .map(virtualenv_python_executable)
             .map(|path| {
-                Ok(PythonExecutableGroup::Single((
+                Ok(PythonExecutableGroup(vec![(
                     PythonSource::BaseCondaPrefix,
                     path,
-                )))
+                )]))
             })
     })
     .flatten();
 
-    let from_virtual_environments =
-        python_executables_from_virtual_environments().map_ok(PythonExecutableGroup::Single);
+    let from_virtual_environments = python_executables_from_virtual_environments()
+        .map_ok(|executable| PythonExecutableGroup(vec![executable]));
     let from_installed =
         python_executables_from_installed(version, implementation, platform, preference);
 
@@ -906,10 +892,7 @@ fn python_installations_from_executable_group(
 ) -> impl Iterator<Item = Result<PythonInstallation, Error>> + use<> {
     match group {
         Err(error) => Either::Left(iter::once(Err(error))),
-        Ok(PythonExecutableGroup::Single((source, path))) => Either::Left(iter::once(
-            python_installation_from_executable(source, path, cache),
-        )),
-        Ok(PythonExecutableGroup::Multiple(executables)) => {
+        Ok(PythonExecutableGroup(executables)) => {
             let mut installations = executables
                 .into_iter()
                 .map(|(source, path)| python_installation_from_executable(source, path, cache))
@@ -1124,7 +1107,8 @@ fn python_installations_with_name<'a>(
     strategy: QueryStrategy,
 ) -> Box<dyn Iterator<Item = Result<PythonInstallation, Error>> + 'a> {
     python_installations_from_executables(
-        python_executables_with_name(name).map_ok(PythonExecutableGroup::Single),
+        python_executables_with_name(name)
+            .map_ok(|executable| PythonExecutableGroup(vec![executable])),
         cache,
         strategy,
     )
