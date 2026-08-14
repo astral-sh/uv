@@ -1124,6 +1124,7 @@ fn python_find_freethreaded_314() {
 fn python_find_version_range_variant_order() {
     let context = uv_test::test_context_with_versions!(&[])
         .with_filtered_python_keys()
+        .with_filtered_latest_python_versions()
         .with_filtered_python_sources()
         .with_managed_python_dirs()
         .with_python_download_cache()
@@ -1152,6 +1153,18 @@ fn python_find_version_range_variant_order() {
     [BIN]/python3.15
     ");
 
+    // Listing installed interpreters exercises the parallel query strategy within the same group.
+    uv_snapshot!(context.filters(), context.python_list()
+        .arg("==3.15.*")
+        .arg("--only-installed")
+        .env(EnvVars::UV_PYTHON_SEARCH_PATH, context.bin_dir.path())
+        .env(EnvVars::UV_PYTHON_INSTALL_DIR, context.temp_dir.child("missing-managed").path()), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    cpython-3.15.[LATEST]-[PLATFORM]                 [BIN]/python3.15 -> managed/cpython-3.15-[PLATFORM]/[INSTALL-BIN]/python3.15
+    cpython-3.15.[LATEST]+freethreaded-[PLATFORM]    [BIN]/python3.15t -> managed/cpython-3.15+freethreaded-[PLATFORM]/[INSTALL-BIN]/python3.15t
+    ");
+
     // Interpreter metadata, rather than the executable name, determines whether a build is
     // free-threaded.
     let misleading_names = context.temp_dir.child("misleading-names");
@@ -1177,10 +1190,39 @@ fn python_find_version_range_variant_order() {
     [TEMP_DIR]/misleading-names/python3.15t
     ");
 
-    // Version priority also comes from the queried interpreter, even when executable names do not
-    // describe the versions they launch.
     context.python_install().arg("3.14").assert().success();
 
+    // Preferred executable names must remain ahead of newer minor-version fallback candidates.
+    let preferred_names = context.temp_dir.child("preferred-names");
+    preferred_names.create_dir_all().unwrap();
+    fs_err::os::unix::fs::symlink(
+        context.bin_dir.path().join("python3.14"),
+        preferred_names.join("python3"),
+    )
+    .unwrap();
+    fs_err::os::unix::fs::symlink(
+        context.bin_dir.path().join("python3.15"),
+        preferred_names.join("python3.15"),
+    )
+    .unwrap();
+    fs_err::os::unix::fs::symlink(
+        context.bin_dir.path().join("python3.15t"),
+        preferred_names.join("python3.15t"),
+    )
+    .unwrap();
+
+    uv_snapshot!(context.filters(), context.python_find()
+        .arg(">=3.14,<3.16")
+        .arg("--python-preference")
+        .arg("system")
+        .env(EnvVars::UV_PYTHON_SEARCH_PATH, preferred_names.path()), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    [TEMP_DIR]/preferred-names/python3
+    ");
+
+    // Version priority also comes from the queried interpreter, even when executable names do not
+    // describe the versions they launch.
     let misleading_versions = context.temp_dir.child("misleading-versions");
     misleading_versions.create_dir_all().unwrap();
     fs_err::os::unix::fs::symlink(
@@ -1202,6 +1244,38 @@ fn python_find_version_range_variant_order() {
     exit_code: 0 (success)
     ----- stdout -----
     [TEMP_DIR]/misleading-versions/python3.14
+    ");
+
+    // Failed queries retain their discovery position and separate sortable interpreter runs.
+    let interrupted_group = context.temp_dir.child("interrupted-group");
+    interrupted_group.create_dir_all().unwrap();
+    fs_err::os::unix::fs::symlink(
+        context.bin_dir.path().join("python3.15t"),
+        interrupted_group.join("python3.15t"),
+    )
+    .unwrap();
+
+    let broken_executable = interrupted_group.join("python3.15");
+    fs_err::write(&broken_executable, "#!/bin/sh\nexit 1\n").unwrap();
+    let permissions = fs_err::metadata(context.bin_dir.path().join("python3.14"))
+        .unwrap()
+        .permissions();
+    fs_err::set_permissions(&broken_executable, permissions).unwrap();
+
+    fs_err::os::unix::fs::symlink(
+        context.bin_dir.path().join("python3.15"),
+        interrupted_group.join("python3.14"),
+    )
+    .unwrap();
+
+    uv_snapshot!(context.filters(), context.python_find()
+        .arg(">=3.14,<3.16")
+        .arg("--python-preference")
+        .arg("system")
+        .env(EnvVars::UV_PYTHON_SEARCH_PATH, interrupted_group.path()), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    [TEMP_DIR]/interrupted-group/python3.15t
     ");
 
     // Installation-key ordering must not override the order of directories on the search path.
