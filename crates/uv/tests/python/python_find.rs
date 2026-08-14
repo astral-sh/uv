@@ -1120,7 +1120,7 @@ fn python_find_freethreaded_314() {
 
 #[test]
 #[cfg(feature = "test-python-managed")]
-#[cfg(target_os = "macos")]
+#[cfg(unix)]
 fn python_find_version_range_installation_key_order() {
     let context = uv_test::test_context_with_versions!(&[])
         .with_filtered_python_keys()
