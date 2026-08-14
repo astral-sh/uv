@@ -21,7 +21,7 @@ failure in the same affected feature or configuration, or in a distinct producer
 implementation. Do not expand coverage to commands that only reuse an already-covered path, unproven
 configuration options, or neighboring tests for another configuration format.
 
-First verify that the parent regression test currently passes while asserting the undesirable
+First verify that the parent regression tests currently pass while asserting the undesirable
 behavior described in the issue. Update that test to assert the desired behavior and confirm that it
 fails for the reported reason before changing production code. Prefer correcting or extending the
 best existing directly relevant integration test when that provides the smallest faithful coverage;
