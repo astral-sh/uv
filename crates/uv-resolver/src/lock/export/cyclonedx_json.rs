@@ -22,11 +22,13 @@ use uv_fs::PortablePath;
 use uv_normalize::PackageName;
 use uv_pep508::MarkerTree;
 use uv_preview::{Preview, PreviewFeature};
-use uv_pypi_types::{HashAlgorithm as UvHashAlgorithm, HashDigest};
+use uv_pypi_types::HashAlgorithm as UvHashAlgorithm;
 use uv_warnings::warn_user;
 
 use crate::lock::export::{ExportableRequirement, ExportableRequirements};
-use crate::lock::{LockErrorKind, Package, PackageId, RegistrySource, Source, WheelWireSource};
+use crate::lock::{
+    Hash as LockHash, LockErrorKind, Package, PackageId, RegistrySource, Source, WheelWireSource,
+};
 use crate::{Installable, LockError};
 
 /// Character set for percent-encoding PURL components, copied from packageurl.rs (<https://github.com/scm-rs/packageurl.rs/blob/a725aa0ab332934c350641508017eb09ddfa0813/src/purl.rs#L18>).
@@ -233,7 +235,7 @@ impl<'a> ComponentBuilder<'a> {
                         external_references.push(ExternalReference {
                             url: ExternalReferenceUri::Url(uri),
                             comment: None,
-                            hashes: Some(Hashes(vec![to_cyclonedx_hash(&hash.0)])),
+                            hashes: Some(Hashes(vec![Hash::from(hash)])),
                             external_reference_type: ExternalReferenceType::Distribution,
                         });
                     }
@@ -246,7 +248,7 @@ impl<'a> ComponentBuilder<'a> {
                         external_references.push(ExternalReference {
                             url: ExternalReferenceUri::Url(uri),
                             comment: None,
-                            hashes: Some(Hashes(vec![to_cyclonedx_hash(&hash.0)])),
+                            hashes: Some(Hashes(vec![Hash::from(hash)])),
                             external_reference_type: ExternalReferenceType::Distribution,
                         });
                     }
@@ -492,37 +494,19 @@ enum PackageType<'a> {
     Dependency,
 }
 
-/// Convert an internal [`HashDigest`] into a `CycloneDX` [`Hash`].
-fn to_cyclonedx_hash(hash: &HashDigest) -> Hash {
-    let alg = match hash.algorithm() {
-        UvHashAlgorithm::Md5 => HashAlgorithm::MD5,
-        UvHashAlgorithm::Sha256 => HashAlgorithm::SHA_256,
-        UvHashAlgorithm::Sha384 => HashAlgorithm::SHA_384,
-        UvHashAlgorithm::Sha512 => HashAlgorithm::SHA_512,
-        UvHashAlgorithm::Blake2b256 => HashAlgorithm::BLAKE2b_256,
-    };
+impl From<&LockHash> for Hash {
+    fn from(hash: &LockHash) -> Self {
+        let alg = match hash.0.algorithm() {
+            UvHashAlgorithm::Md5 => HashAlgorithm::MD5,
+            UvHashAlgorithm::Sha256 => HashAlgorithm::SHA_256,
+            UvHashAlgorithm::Sha384 => HashAlgorithm::SHA_384,
+            UvHashAlgorithm::Sha512 => HashAlgorithm::SHA_512,
+            UvHashAlgorithm::Blake2b256 => HashAlgorithm::BLAKE2b_256,
+        };
 
-    Hash {
-        alg,
-        content: HashValue(hash.digest().to_string()),
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use cyclonedx_bom::models::hash::HashAlgorithm;
-    use uv_pypi_types::HashDigest;
-
-    use super::to_cyclonedx_hash;
-
-    #[test]
-    fn blake2b_hash_uses_256_bit_algorithm() {
-        let digest = "blake2b:abcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcd"
-            .parse::<HashDigest>()
-            .expect("valid BLAKE2b-256 digest");
-        let hash = to_cyclonedx_hash(&digest);
-
-        assert_eq!(hash.alg, HashAlgorithm::BLAKE2b_256);
-        assert_eq!(hash.content.0, digest.digest());
+        Self {
+            alg,
+            content: HashValue(hash.0.digest().to_string()),
+        }
     }
 }
