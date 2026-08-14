@@ -4,8 +4,6 @@ use regex::Regex;
 use rustc_hash::{FxBuildHasher, FxHashSet};
 use same_file::is_same_file;
 use std::borrow::Cow;
-use std::cmp::Reverse;
-use std::collections::VecDeque;
 use std::env::consts::EXE_SUFFIX;
 use std::fmt::{self, Debug, Formatter};
 use std::{env, io, iter};
@@ -235,20 +233,10 @@ pub enum PythonSource {
     BaseCondaPrefix,
     /// An environment was discovered e.g. via `.venv`
     DiscoveredEnvironment,
-    /// An executable was found in the search path i.e. `PATH`.
-    SearchPath {
-        /// The candidate's priority in search-path discovery.
-        position: usize,
-        /// Whether this is the final candidate with the same priority.
-        last: bool,
-    },
-    /// The first executable found in the search path i.e. `PATH`.
-    SearchPathFirst {
-        /// The candidate's priority in search-path discovery.
-        position: usize,
-        /// Whether this is the final candidate with the same priority.
-        last: bool,
-    },
+    /// An executable was found in the search path i.e. `PATH`
+    SearchPath,
+    /// The first executable found in the search path i.e. `PATH`
+    SearchPathFirst,
     /// An executable was found in the Windows registry via PEP 514
     Registry,
     /// An executable was found in the known Microsoft Store locations
@@ -379,6 +367,7 @@ fn python_executables_from_installed<'a>(
     implementation: Option<&'a ImplementationName>,
     platform: PlatformRequest,
     preference: PythonPreference,
+    cache: &'a Cache,
 ) -> Box<dyn Iterator<Item = Result<(PythonSource, PathBuf), Error>> + 'a> {
     let from_managed_installations = iter::once_with(move || {
         ManagedPythonInstallations::from_settings(None)
@@ -451,13 +440,13 @@ fn python_executables_from_installed<'a>(
     .flatten_ok();
 
     let from_search_path = iter::once_with(move || {
-        python_executables_from_search_path(version, implementation)
+        python_executables_from_search_path(version, implementation, cache)
             .enumerate()
-            .map(|(index, (position, last, path))| {
-                if index == 0 {
-                    Ok((PythonSource::SearchPathFirst { position, last }, path))
+            .map(|(i, path)| {
+                if i == 0 {
+                    Ok((PythonSource::SearchPathFirst, path))
                 } else {
-                    Ok((PythonSource::SearchPath { position, last }, path))
+                    Ok((PythonSource::SearchPath, path))
                 }
             })
     })
@@ -548,6 +537,7 @@ fn python_executables<'a>(
     platform: PlatformRequest,
     environments: EnvironmentPreference,
     preference: PythonPreference,
+    cache: &'a Cache,
 ) -> Box<dyn Iterator<Item = Result<(PythonSource, PathBuf), Error>> + 'a> {
     // Always read from `UV_INTERNAL__PARENT_INTERPRETER` — it could be a system interpreter
     let from_parent_interpreter = iter::once_with(|| {
@@ -568,7 +558,7 @@ fn python_executables<'a>(
 
     let from_virtual_environments = python_executables_from_virtual_environments();
     let from_installed =
-        python_executables_from_installed(version, implementation, platform, preference);
+        python_executables_from_installed(version, implementation, platform, preference, cache);
 
     // Limit the search to the relevant environment preference; this avoids unnecessary work like
     // traversal of the file system. Subsequent filtering should be done by the caller with
@@ -605,7 +595,8 @@ fn python_executables<'a>(
 fn python_executables_from_search_path<'a>(
     version: &'a VersionRequest,
     implementation: Option<&'a ImplementationName>,
-) -> impl Iterator<Item = (usize, bool, PathBuf)> + 'a {
+    cache: &'a Cache,
+) -> impl Iterator<Item = PathBuf> + 'a {
     // `UV_PYTHON_SEARCH_PATH` can be used to override `PATH` for Python executable discovery
     let search_path = env::var_os(EnvVars::UV_PYTHON_SEARCH_PATH)
         .unwrap_or(env::var_os(EnvVars::PATH).unwrap_or_default());
@@ -615,7 +606,6 @@ fn python_executables_from_search_path<'a>(
         .into_iter()
         .map(|name| name.to_string())
         .collect();
-    let minor_version_priority = possible_names.len();
 
     trace!(
         "Searching PATH for executables: {}",
@@ -629,9 +619,8 @@ fn python_executables_from_search_path<'a>(
     let mut seen_dirs = FxHashSet::with_capacity_and_hasher(search_dirs.len(), FxBuildHasher);
     search_dirs
         .into_iter()
-        .enumerate()
-        .filter(|(_, dir)| dir.is_dir())
-        .flat_map(move |(directory_position, dir)| {
+        .filter(|dir| dir.is_dir())
+        .flat_map(move |dir| {
             // Clone the directory for second closure
             let dir_clone = dir.clone();
             trace!(
@@ -650,51 +639,33 @@ fn python_executables_from_search_path<'a>(
                 // If we cannot determine if the directory is unique, we'll assume it is
                 .unwrap_or(true)
                 .then(|| {
-                    let minor_versions = find_all_minor(implementation, version, &dir_clone)
-                        .filter(|path| !is_windows_store_shim(path))
-                        .collect::<Vec<_>>();
-                    let minor_version_count = minor_versions.len();
+                    let minor_version_directory = dir_clone.clone();
 
                     possible_names
                         .clone()
                         .into_iter()
-                        .enumerate()
-                        .flat_map(move |(name_priority, name)| {
+                        .flat_map(move |name| {
                             // Since we're just working with a single directory at a time, we collect to simplify ownership
-                            let candidates = which::which_in_global(&*name, Some(&dir))
+                            which::which_in_global(&*name, Some(&dir))
                                 .into_iter()
                                 .flatten()
-                                .filter(|path| !is_windows_store_shim(path))
                                 // We have to collect since `which` requires that the regex outlives its
                                 // parameters, and the dir is local while we return the iterator.
-                                .collect::<Vec<_>>();
-                            let candidate_count = candidates.len();
-                            candidates
-                                .into_iter()
-                                .enumerate()
-                                .map(move |(index, path)| {
-                                    (
-                                        directory_position,
-                                        name_priority,
-                                        index + 1 == candidate_count,
-                                        path,
-                                    )
-                                })
+                                .collect::<Vec<_>>()
                         })
                         .chain(
-                            minor_versions
-                                .into_iter()
-                                .enumerate()
-                                .map(move |(index, path)| {
-                                    (
-                                        directory_position,
-                                        minor_version_priority,
-                                        index + 1 == minor_version_count,
-                                        path,
-                                    )
-                                }),
+                            iter::once_with(move || {
+                                find_all_minor(
+                                    implementation,
+                                    version,
+                                    &minor_version_directory,
+                                    cache,
+                                )
+                            })
+                            .flatten(),
                         )
-                        .inspect(|(_, _, _, path)| {
+                        .filter(|path| !is_windows_store_shim(path))
+                        .inspect(|path| {
                             trace!("Found possible Python executable: {}", path.display());
                         })
                         .chain(
@@ -704,14 +675,6 @@ fn python_executables_from_search_path<'a>(
                                     which::which_in_global("python.bat", Some(&dir_clone))
                                         .into_iter()
                                         .flatten()
-                                        .map(move |path| {
-                                            (
-                                                directory_position,
-                                                minor_version_priority + 1,
-                                                true,
-                                                path,
-                                            )
-                                        })
                                         .collect::<Vec<_>>()
                                 })
                                 .into_iter()
@@ -721,17 +684,6 @@ fn python_executables_from_search_path<'a>(
                 .into_iter()
                 .flatten()
         })
-        .scan(
-            (None, 0_usize),
-            |(previous_priority, position), (directory, name, last, path)| {
-                let priority = (directory, name);
-                if previous_priority.is_some_and(|previous| previous != priority) {
-                    *position += 1;
-                }
-                *previous_priority = Some(priority);
-                Some((*position, last, path))
-            },
-        )
 }
 
 /// Find all acceptable `python3.x` minor versions.
@@ -742,6 +694,7 @@ fn find_all_minor(
     implementation: Option<&ImplementationName>,
     version_request: &VersionRequest,
     dir: &Path,
+    cache: &Cache,
 ) -> impl Iterator<Item = PathBuf> + use<> {
     match version_request {
         &VersionRequest::Any
@@ -762,7 +715,7 @@ fn find_all_minor(
                 ))
                 .unwrap()
             };
-            let all_minors = fs_err::read_dir(dir)
+            let mut all_minors = fs_err::read_dir(dir)
                 .into_iter()
                 .flatten()
                 .flatten()
@@ -794,6 +747,26 @@ fn find_all_minor(
                 })
                 .filter(|path| is_executable(path))
                 .collect::<Vec<_>>();
+
+            if all_minors.len() > 1 {
+                let mut installations = all_minors
+                    .into_iter()
+                    .map(|path| {
+                        let key = Interpreter::query(&path, cache)
+                            .ok()
+                            .map(|interpreter| interpreter.key());
+                        (path, key)
+                    })
+                    .collect::<Vec<_>>();
+
+                // Keep failed queries in discovery order; the normal query path reports them.
+                for candidates in installations.split_mut(|(_, key)| key.is_none()) {
+                    candidates.sort_by(|(_, left_key), (_, right_key)| right_key.cmp(left_key));
+                }
+
+                all_minors = installations.into_iter().map(|(path, _)| path).collect();
+            }
+
             Either::Left(all_minors.into_iter())
         }
         VersionRequest::MajorMinor(_, _, _)
@@ -835,10 +808,17 @@ fn python_installations<'a>(
             // Perform filtering on the discovered executables based on their source. This avoids
             // unnecessary interpreter queries, which are generally expensive. We'll filter again
             // with `PythonInstallation::satisfies_preferences` after querying.
-            python_executables(version, implementation, platform, environments, preference)
-                .filter_ok(move |(source, path)| {
-                    source_satisfies_environment_preference(*source, path, environments)
-                }),
+            python_executables(
+                version,
+                implementation,
+                platform,
+                environments,
+                preference,
+                cache,
+            )
+            .filter_ok(move |(source, path)| {
+                source_satisfies_environment_preference(*source, path, environments)
+            }),
             cache,
             strategy,
         )
@@ -878,100 +858,21 @@ fn python_installations_from_executables<'a>(
     strategy: QueryStrategy,
 ) -> Box<dyn Iterator<Item = Result<PythonInstallation, Error>> + 'a> {
     match strategy {
-        QueryStrategy::Sequential => {
-            let mut executables = executables;
-            let mut deferred_executable = None;
-            let mut pending = VecDeque::new();
-
-            Box::new(iter::from_fn(move || {
-                if let Some(installation) = pending.pop_front() {
-                    return Some(installation);
-                }
-
-                let (source, path) =
-                    match deferred_executable.take().or_else(|| executables.next())? {
-                        Ok(executable) => executable,
-                        Err(err) => return Some(Err(err)),
-                    };
-
-                let Some((position, mut last)) = source.search_path_priority() else {
-                    return Some(python_installation_from_executable(source, path, cache));
-                };
-
-                if last {
-                    return Some(python_installation_from_executable(source, path, cache));
-                }
-
-                let mut matching_executables = vec![(source, path)];
-                while !last {
-                    match executables.next() {
-                        Some(Ok((source, path)))
-                            if source.search_path_position() == Some(position) =>
-                        {
-                            last = source.search_path_priority().is_none_or(|(_, last)| last);
-                            matching_executables.push((source, path));
-                        }
-                        Some(executable) => {
-                            deferred_executable = Some(executable);
-                            break;
-                        }
-                        None => break,
-                    }
-                }
-
-                let mut installations = matching_executables
-                    .into_iter()
-                    .map(|(source, path)| python_installation_from_executable(source, path, cache))
-                    .collect::<Vec<_>>();
-                sort_python_installations(&mut installations);
-                pending.extend(installations);
-                pending.pop_front()
-            }))
-        }
+        QueryStrategy::Sequential => Box::new(executables.map(move |result| match result {
+            Ok((source, path)) => python_installation_from_executable(source, path, cache),
+            Err(err) => Err(err),
+        })),
         QueryStrategy::Parallel => {
             let items: Vec<Result<(PythonSource, PathBuf), Error>> = executables.collect();
-            let mut results: Vec<Result<PythonInstallation, Error>> = items
+            let results: Vec<Result<PythonInstallation, Error>> = items
                 .into_par_iter()
                 .map(|result| match result {
                     Ok((source, path)) => python_installation_from_executable(source, path, cache),
                     Err(err) => Err(err),
                 })
                 .collect();
-            sort_python_installations(&mut results);
             Box::new(results.into_iter())
         }
-    }
-}
-
-/// Sort equally preferred search-path installations by their queried installation keys.
-fn sort_python_installations(installations: &mut [Result<PythonInstallation, Error>]) {
-    let mut start = 0;
-    while start < installations.len() {
-        let Some(position) = installations[start]
-            .as_ref()
-            .ok()
-            .and_then(|installation| installation.source.search_path_position())
-        else {
-            start += 1;
-            continue;
-        };
-
-        let mut end = start + 1;
-        while installations.get(end).is_some_and(|result| {
-            result.as_ref().is_ok_and(|installation| {
-                installation.source.search_path_position() == Some(position)
-            })
-        }) {
-            end += 1;
-        }
-
-        installations[start..end].sort_by_key(|result| {
-            result
-                .as_ref()
-                .ok()
-                .map(|installation| Reverse(installation.key()))
-        });
-        start = end;
     }
 }
 
@@ -1160,17 +1061,9 @@ fn python_installation_from_directory(
 fn python_executables_with_name(
     name: &str,
 ) -> impl Iterator<Item = Result<(PythonSource, PathBuf), Error>> + '_ {
-    which_all(name).into_iter().flat_map(|inner| {
-        inner.enumerate().map(|(position, path)| {
-            Ok((
-                PythonSource::SearchPath {
-                    position,
-                    last: true,
-                },
-                path,
-            ))
-        })
-    })
+    which_all(name)
+        .into_iter()
+        .flat_map(|inner| inner.map(|path| Ok((PythonSource::SearchPath, path))))
 }
 
 /// Lazily iterate over all Python installations on the path with the given executable name.
@@ -1270,7 +1163,7 @@ fn find_python_installations_with_strategy<'a>(
             }
         })),
         PythonRequest::ExecutableName(name) => {
-            if preference.allows_source(PythonSource::SEARCH_PATH) {
+            if preference.allows_source(PythonSource::SearchPath) {
                 debug!("Searching for Python interpreter with {request}");
                 Box::new(
                     python_installations_with_name(name, cache, strategy)
@@ -1282,7 +1175,7 @@ fn find_python_installations_with_strategy<'a>(
             } else {
                 Box::new(iter::once(Err(Error::SourceNotAllowed(
                     request.clone(),
-                    PythonSource::SEARCH_PATH,
+                    PythonSource::SearchPath,
                     preference,
                 ))))
             }
@@ -1464,7 +1357,7 @@ pub(crate) fn find_python_installation(
         let has_default_executable_name = installation.interpreter.has_default_executable_name()
             && matches!(
                 installation.source,
-                PythonSource::SearchPath { .. } | PythonSource::SearchPathFirst { .. }
+                PythonSource::SearchPath | PythonSource::SearchPathFirst
             );
 
         // If it's a pre-release and pre-releases aren't allowed, skip it — but store it for later
@@ -2428,37 +2321,16 @@ impl PythonRequest {
 }
 
 impl PythonSource {
-    /// A representative search-path source for preference checks and diagnostics.
-    const SEARCH_PATH: Self = Self::SearchPath {
-        position: 0,
-        last: true,
-    };
-
     pub fn is_managed(self) -> bool {
         matches!(self, Self::Managed)
-    }
-
-    /// Return the discovery position for executable candidates found on the search path.
-    fn search_path_position(self) -> Option<usize> {
-        self.search_path_priority().map(|(position, _)| position)
-    }
-
-    /// Return the discovery position and whether it contains additional candidates.
-    fn search_path_priority(self) -> Option<(usize, bool)> {
-        match self {
-            Self::SearchPath { position, last } | Self::SearchPathFirst { position, last } => {
-                Some((position, last))
-            }
-            _ => None,
-        }
     }
 
     /// Whether a pre-release Python installation from this source can be used without opt-in.
     fn allows_prereleases(self) -> bool {
         match self {
             Self::Managed | Self::Registry | Self::MicrosoftStore => false,
-            Self::SearchPath { .. }
-            | Self::SearchPathFirst { .. }
+            Self::SearchPath
+            | Self::SearchPathFirst
             | Self::CondaPrefix
             | Self::BaseCondaPrefix
             | Self::ProvidedPath
@@ -2472,8 +2344,8 @@ impl PythonSource {
     fn allows_debug(self) -> bool {
         match self {
             Self::Managed | Self::Registry | Self::MicrosoftStore => false,
-            Self::SearchPath { .. }
-            | Self::SearchPathFirst { .. }
+            Self::SearchPath
+            | Self::SearchPathFirst
             | Self::CondaPrefix
             | Self::BaseCondaPrefix
             | Self::ProvidedPath
@@ -2488,10 +2360,10 @@ impl PythonSource {
         match self {
             Self::Managed
             | Self::Registry
-            | Self::SearchPath { .. }
+            | Self::SearchPath
             // TODO(zanieb): We may want to allow this at some point, but when adding this variant
             // we want compatibility with existing behavior
-            | Self::SearchPathFirst { .. }
+            | Self::SearchPathFirst
             | Self::MicrosoftStore => false,
             Self::CondaPrefix
             | Self::BaseCondaPrefix
@@ -2521,10 +2393,8 @@ impl PythonSource {
             | Self::CondaPrefix
             | Self::BaseCondaPrefix
             | Self::ParentInterpreter
-            | Self::SearchPathFirst { .. } => true,
-            Self::Managed | Self::SearchPath { .. } | Self::Registry | Self::MicrosoftStore => {
-                false
-            }
+            | Self::SearchPathFirst => true,
+            Self::Managed | Self::SearchPath | Self::Registry | Self::MicrosoftStore => false,
         }
     }
 
@@ -2538,8 +2408,8 @@ impl PythonSource {
             | Self::CondaPrefix => true,
             Self::Managed
             | Self::DiscoveredEnvironment
-            | Self::SearchPath { .. }
-            | Self::SearchPathFirst { .. }
+            | Self::SearchPath
+            | Self::SearchPathFirst
             | Self::Registry
             | Self::MicrosoftStore
             | Self::BaseCondaPrefix => false,
@@ -2554,8 +2424,8 @@ impl PythonSource {
             | Self::ParentInterpreter
             | Self::ProvidedPath
             | Self::Managed
-            | Self::SearchPath { .. }
-            | Self::SearchPathFirst { .. }
+            | Self::SearchPath
+            | Self::SearchPathFirst
             | Self::Registry
             | Self::MicrosoftStore => true,
             Self::ActiveEnvironment | Self::DiscoveredEnvironment => false,
@@ -2568,7 +2438,7 @@ impl PythonPreference {
         // If not dealing with a system interpreter source, we don't care about the preference
         if !matches!(
             source,
-            PythonSource::Managed | PythonSource::SearchPath { .. } | PythonSource::Registry
+            PythonSource::Managed | PythonSource::SearchPath | PythonSource::Registry
         ) {
             return true;
         }
@@ -2577,13 +2447,10 @@ impl PythonPreference {
             Self::OnlyManaged => matches!(source, PythonSource::Managed),
             Self::Managed | Self::System => matches!(
                 source,
-                PythonSource::Managed | PythonSource::SearchPath { .. } | PythonSource::Registry
+                PythonSource::Managed | PythonSource::SearchPath | PythonSource::Registry
             ),
             Self::OnlySystem => {
-                matches!(
-                    source,
-                    PythonSource::SearchPath { .. } | PythonSource::Registry
-                )
+                matches!(source, PythonSource::SearchPath | PythonSource::Registry)
             }
         }
     }
@@ -3131,8 +2998,8 @@ impl VersionRequest {
                 | PythonSource::ProvidedPath
                 | PythonSource::DiscoveredEnvironment
                 | PythonSource::ActiveEnvironment => Self::Any,
-                PythonSource::SearchPath { .. }
-                | PythonSource::SearchPathFirst { .. }
+                PythonSource::SearchPath
+                | PythonSource::SearchPathFirst
                 | PythonSource::Registry
                 | PythonSource::MicrosoftStore
                 | PythonSource::Managed => Self::Default,
@@ -3717,8 +3584,8 @@ impl fmt::Display for PythonSource {
             Self::ActiveEnvironment => f.write_str("active virtual environment"),
             Self::CondaPrefix | Self::BaseCondaPrefix => f.write_str("conda prefix"),
             Self::DiscoveredEnvironment => f.write_str("virtual environment"),
-            Self::SearchPath { .. } => f.write_str("search path"),
-            Self::SearchPathFirst { .. } => f.write_str("first executable in the search path"),
+            Self::SearchPath => f.write_str("search path"),
+            Self::SearchPathFirst => f.write_str("first executable in the search path"),
             Self::Registry => f.write_str("registry"),
             Self::MicrosoftStore => f.write_str("Microsoft Store"),
             Self::Managed => f.write_str("managed installations"),
@@ -3737,29 +3604,29 @@ impl PythonPreference {
                 if cfg!(windows) {
                     &[
                         PythonSource::Managed,
-                        PythonSource::SEARCH_PATH,
+                        PythonSource::SearchPath,
                         PythonSource::Registry,
                     ]
                 } else {
-                    &[PythonSource::Managed, PythonSource::SEARCH_PATH]
+                    &[PythonSource::Managed, PythonSource::SearchPath]
                 }
             }
             Self::System => {
                 if cfg!(windows) {
                     &[
-                        PythonSource::SEARCH_PATH,
+                        PythonSource::SearchPath,
                         PythonSource::Registry,
                         PythonSource::Managed,
                     ]
                 } else {
-                    &[PythonSource::SEARCH_PATH, PythonSource::Managed]
+                    &[PythonSource::SearchPath, PythonSource::Managed]
                 }
             }
             Self::OnlySystem => {
                 if cfg!(windows) {
-                    &[PythonSource::SEARCH_PATH, PythonSource::Registry]
+                    &[PythonSource::SearchPath, PythonSource::Registry]
                 } else {
-                    &[PythonSource::SEARCH_PATH]
+                    &[PythonSource::SearchPath]
                 }
             }
         }
@@ -3925,7 +3792,7 @@ mod tests {
             pulls.set(pulls.get() + 1);
             Err::<(PythonSource, PathBuf), _>(Error::SourceNotAllowed(
                 PythonRequest::Default,
-                PythonSource::SEARCH_PATH,
+                PythonSource::SearchPath,
                 PythonPreference::OnlyManaged,
             ))
         });
