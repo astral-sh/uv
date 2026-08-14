@@ -124,7 +124,11 @@ mod tests {
     fn round_trip_archive_with_hashes() {
         let archive = Archive::new(
             ArchiveId::default(),
-            HashDigests::from(HashDigest::Sha256("digest".into())),
+            HashDigests::from(
+                "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+                    .parse::<HashDigest>()
+                    .expect("valid SHA-256 digest"),
+            ),
             WheelFilename::from_str("iniconfig-2.0.0-py3-none-any.whl")
                 .expect("valid wheel filename"),
             Some(42),

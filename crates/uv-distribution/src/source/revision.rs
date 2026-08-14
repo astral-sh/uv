@@ -142,8 +142,11 @@ mod tests {
 
     #[test]
     fn round_trip_current_revision() {
-        let original =
-            Revision::new().with_hashes(HashDigests::from(HashDigest::Sha256("digest".into())));
+        let original = Revision::new().with_hashes(HashDigests::from(
+            "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+                .parse::<HashDigest>()
+                .expect("valid SHA-256 digest"),
+        ));
         let bytes = rmp_serde::to_vec(&original).expect("serialize revision");
         let parsed: Revision = rmp_serde::from_slice(&bytes).expect("deserialize revision");
         assert_eq!(parsed.id().as_str(), original.id().as_str());

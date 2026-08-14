@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 
 use uv_pep440::{VersionSpecifiers, VersionSpecifiersParseError};
 use uv_pep508::split_scheme;
-use uv_pypi_types::{CoreMetadata, HashDigests, Yanked};
+use uv_pypi_types::{CoreMetadata, HashDigests, HashError, Yanked};
 use uv_redacted::{DisplaySafeUrl, DisplaySafeUrlError};
 use uv_small_str::SmallString;
 
@@ -17,6 +17,8 @@ use uv_small_str::SmallString;
 pub enum FileConversionError {
     #[error("Failed to parse `requires-python`: `{0}`")]
     RequiresPython(String, #[source] VersionSpecifiersParseError),
+    #[error(transparent)]
+    Hash(#[from] HashError),
 }
 
 /// Internal analog to [`uv_pypi_types::PypiFile`].
@@ -45,9 +47,9 @@ impl File {
         base: &SmallString,
     ) -> Result<Self, FileConversionError> {
         Ok(Self {
-            dist_info_metadata: Self::dist_info_metadata(file.core_metadata),
+            dist_info_metadata: Self::dist_info_metadata(file.core_metadata)?,
             filename: file.filename,
-            hashes: HashDigests::from(file.hashes),
+            hashes: HashDigests::try_from(file.hashes)?,
             requires_python: file
                 .requires_python
                 .transpose()
@@ -59,12 +61,14 @@ impl File {
         })
     }
 
-    fn dist_info_metadata(metadata: Option<CoreMetadata>) -> Option<HashDigests> {
-        match metadata? {
-            CoreMetadata::Bool(false) => None,
-            CoreMetadata::Bool(true) => Some(HashDigests::empty()),
-            CoreMetadata::Hashes(hashes) => Some(HashDigests::from(hashes)),
-        }
+    fn dist_info_metadata(
+        metadata: Option<CoreMetadata>,
+    ) -> Result<Option<HashDigests>, HashError> {
+        Ok(match metadata {
+            None | Some(CoreMetadata::Bool(false)) => None,
+            Some(CoreMetadata::Bool(true)) => Some(HashDigests::empty()),
+            Some(CoreMetadata::Hashes(hashes)) => Some(HashDigests::try_from(hashes)?),
+        })
     }
 }
 
@@ -274,7 +278,9 @@ mod tests {
         assert_eq!(location.raw_filename(), "example%20pkg.whl");
 
         let location = FileLocation::new(
-            SmallString::from("https://files.example.com/example.whl#sha256=digest"),
+            SmallString::from(
+                "https://files.example.com/example.whl#sha256=0000000000000000000000000000000000000000000000000000000000000000",
+            ),
             &base,
         );
         assert_eq!(location.raw_filename(), "example.whl");

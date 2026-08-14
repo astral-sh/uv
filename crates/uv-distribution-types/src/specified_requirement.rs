@@ -1,10 +1,11 @@
 use std::borrow::Cow;
 use std::fmt::{Display, Formatter};
+use std::str::FromStr;
 
 use uv_git_types::{GitLfs, GitReference};
 use uv_normalize::ExtraName;
 use uv_pep508::{MarkerEnvironment, MarkerTree, UnnamedRequirement};
-use uv_pypi_types::{Hashes, ParsedUrl};
+use uv_pypi_types::{HashAlgorithm, HashError, Hashes, ParsedUrl};
 
 use crate::{Requirement, RequirementSource, VerbatimParsedUrl};
 
@@ -197,14 +198,21 @@ impl UnresolvedRequirement {
     }
 
     /// Return the hashes of the requirement, as specified in the URL fragment.
-    pub fn hashes(&self) -> Option<Hashes> {
+    pub fn hashes(&self) -> Result<Option<Hashes>, HashError> {
         match self {
             Self::Named(requirement) => requirement.hashes(),
             Self::Unnamed(requirement) => {
-                let fragment = requirement.url.verbatim.fragment()?;
-                fragment
-                    .split('&')
-                    .find_map(|fragment| Hashes::parse_fragment(fragment).ok())
+                let Some(fragment) = requirement.url.verbatim.fragment() else {
+                    return Ok(None);
+                };
+                for fragment in fragment.split('&') {
+                    if let Some((algorithm, _)) = fragment.split_once('=')
+                        && HashAlgorithm::from_str(algorithm).is_ok()
+                    {
+                        return Hashes::parse_fragment(fragment).map(Some);
+                    }
+                }
+                Ok(None)
             }
         }
     }
