@@ -71,10 +71,9 @@ Ok(
                         },
                         hash: Some(
                             Hash(
-                                HashDigest {
-                                    algorithm: Sha256,
-                                    digest: "048e05d0f6caeed70d731f3db756d35dcc1f35747c8c403364a8332c630441b8",
-                                },
+                                Sha256(
+                                    "048e05d0f6caeed70d731f3db756d35dcc1f35747c8c403364a8332c630441b8",
+                                ),
                             ),
                         ),
                         size: None,

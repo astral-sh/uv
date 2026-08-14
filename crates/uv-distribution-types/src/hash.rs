@@ -57,7 +57,7 @@ impl ArchiveHashPolicy<'_> {
             Self::None => true,
             Self::Generate => hashes
                 .iter()
-                .any(|hash| hash.algorithm == HashAlgorithm::Sha256),
+                .any(|hash| hash.algorithm() == HashAlgorithm::Sha256),
             Self::Any(required) => {
                 !required.is_empty() && hashes.iter().any(|hash| required.contains(hash))
             }
@@ -73,20 +73,20 @@ impl ArchiveHashPolicy<'_> {
             Self::None => true,
             Self::Generate => hashes
                 .iter()
-                .any(|hash| hash.algorithm == HashAlgorithm::Sha256),
+                .any(|hash| hash.algorithm() == HashAlgorithm::Sha256),
             Self::Any(required) => {
                 !required.is_empty()
                     && required
                         .iter()
                         .map(HashDigest::algorithm)
-                        .any(|algorithm| hashes.iter().any(|hash| hash.algorithm == algorithm))
+                        .any(|algorithm| hashes.iter().any(|hash| hash.algorithm() == algorithm))
             }
             Self::All(required) => {
                 !required.is_empty()
                     && required
                         .iter()
                         .map(HashDigest::algorithm)
-                        .all(|algorithm| hashes.iter().any(|hash| hash.algorithm == algorithm))
+                        .all(|algorithm| hashes.iter().any(|hash| hash.algorithm() == algorithm))
             }
         }
     }

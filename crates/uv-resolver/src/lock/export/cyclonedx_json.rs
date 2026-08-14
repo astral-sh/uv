@@ -503,7 +503,7 @@ fn to_cyclonedx_hash(hash: &HashDigest) -> Option<Hash> {
         UvHashAlgorithm::Sha256 => HashAlgorithm::SHA_256,
         UvHashAlgorithm::Sha384 => HashAlgorithm::SHA_384,
         UvHashAlgorithm::Sha512 => HashAlgorithm::SHA_512,
-        UvHashAlgorithm::Blake2b => match hash.digest.len() {
+        UvHashAlgorithm::Blake2b => match hash.digest().len() {
             64 => HashAlgorithm::BLAKE2b_256,
             96 => HashAlgorithm::BLAKE2b_384,
             128 => HashAlgorithm::BLAKE2b_512,
@@ -513,6 +513,6 @@ fn to_cyclonedx_hash(hash: &HashDigest) -> Option<Hash> {
 
     Some(Hash {
         alg,
-        content: HashValue(hash.digest.to_string()),
+        content: HashValue(hash.digest().to_string()),
     })
 }
