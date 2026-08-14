@@ -7,28 +7,24 @@
 
 Released on 2026-08-14.
 
+### Python
+
+- Add CPython 3.10.21, 3.11.16, and 3.12.14 ([#21138](https://github.com/astral-sh/uv/pull/21138))
+- Order equal-priority Python executables deterministically, preferring newer versions and standard builds over free-threaded variants ([#21134](https://github.com/astral-sh/uv/pull/21134))
+
 ### Enhancements
 
-- Include hashes in cyclonedx exports ([#21131](https://github.com/astral-sh/uv/pull/21131))
-- Simplify editable requirement errors and hints ([#21130](https://github.com/astral-sh/uv/pull/21130))
-- Support referencing indexes by name via `--index` and `--default-index` ([#17455](https://github.com/astral-sh/uv/pull/17455))
+- Redact credentials in invalid editable requirement URLs and provide clearer errors and hints ([#21130](https://github.com/astral-sh/uv/pull/21130))
 
 ### Preview features
 
-- Fall back to logical cache accounting on unsupported filesystems ([#21133](https://github.com/astral-sh/uv/pull/21133))
+- Allow configured indexes to be selected by name with `--index` and `--default-index` under the `index-by-name` preview feature ([#17455](https://github.com/astral-sh/uv/pull/17455))
+- Include distribution artifact URLs and hashes in CycloneDX SBOM exports by default, with `--no-hashes` to omit them ([#21131](https://github.com/astral-sh/uv/pull/21131))
+- Fall back to logical cache-size accounting when a filesystem does not support physical-space accounting ([#21133](https://github.com/astral-sh/uv/pull/21133))
 
 ### Bug fixes
 
-- Fix relative indexes in scrolls ([#21097](https://github.com/astral-sh/uv/pull/21097))
-- Order equal-priority Python installations by key ([#21134](https://github.com/astral-sh/uv/pull/21134))
-
-### Other changes
-
-- Add a cache directory builder to test contexts ([#21120](https://github.com/astral-sh/uv/pull/21120))
-- Reject ignored cache overrides in integration snapshots ([#21119](https://github.com/astral-sh/uv/pull/21119))
-- Stabilize publish index readiness checks ([#21050](https://github.com/astral-sh/uv/pull/21050))
-- Sync latest Python releases: 3.10.21, 3.11.16, 3.12.14  ([#21138](https://github.com/astral-sh/uv/pull/21138))
-- Test unnamed Git source build exceptions ([#21126](https://github.com/astral-sh/uv/pull/21126))
+- Resolve relative index paths in PEP 723 scripts against the script directory instead of the current working directory, and have `uv add --script` write them relative to the script ([#21097](https://github.com/astral-sh/uv/pull/21097))
 
 ## 0.12.4
 
