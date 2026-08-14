@@ -3852,7 +3852,7 @@ mod tests {
     };
 
     #[test]
-    fn sequential_query_strategy_does_not_prefetch_executables() -> anyhow::Result<()> {
+    fn sequential_query_strategy_does_not_prefetch_executable_groups() -> anyhow::Result<()> {
         let cache = Cache::temp()?;
         let pulls = Cell::new(0);
         let executables = (0..2).map(|_| {

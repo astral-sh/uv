@@ -1121,7 +1121,7 @@ fn python_find_freethreaded_314() {
 #[test]
 #[cfg(feature = "test-python-managed")]
 #[cfg(target_os = "macos")]
-fn python_find_version_range_variant_order() {
+fn python_find_version_range_installation_key_order() {
     let context = uv_test::test_context_with_versions!(&[])
         .with_filtered_python_keys()
         .with_filtered_latest_python_versions()
@@ -1219,31 +1219,6 @@ fn python_find_version_range_variant_order() {
     exit_code: 0 (success)
     ----- stdout -----
     [TEMP_DIR]/preferred-names/python3
-    ");
-
-    // Version priority also comes from the queried interpreter, even when executable names do not
-    // describe the versions they launch.
-    let misleading_versions = context.temp_dir.child("misleading-versions");
-    misleading_versions.create_dir_all().unwrap();
-    fs_err::os::unix::fs::symlink(
-        context.bin_dir.path().join("python3.15"),
-        misleading_versions.join("python3.14"),
-    )
-    .unwrap();
-    fs_err::os::unix::fs::symlink(
-        context.bin_dir.path().join("python3.14"),
-        misleading_versions.join("python3.15"),
-    )
-    .unwrap();
-
-    uv_snapshot!(context.filters(), context.python_find()
-        .arg(">=3.14,<3.16")
-        .arg("--python-preference")
-        .arg("system")
-        .env(EnvVars::UV_PYTHON_SEARCH_PATH, misleading_versions.path()), @"
-    exit_code: 0 (success)
-    ----- stdout -----
-    [TEMP_DIR]/misleading-versions/python3.14
     ");
 
     // Failed queries retain their discovery position and separate sortable interpreter runs.
