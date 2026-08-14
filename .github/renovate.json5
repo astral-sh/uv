@@ -1,7 +1,5 @@
 {
   $schema: "https://docs.renovatebot.com/renovate-schema.json",
-  dependencyDashboard: true,
-  suppressNotifications: ["prEditedNotification"],
   extends: [
     "github>astral-sh/renovate-config",
     // For tool versions defined in GitHub Actions:
@@ -9,29 +7,14 @@
   ],
   labels: ["internal", "build:skip-docker", "build:skip-release"],
   schedule: ["* 0-3 * * 1"],
-  semanticCommits: "disabled",
-  separateMajorMinor: false,
   enabledManagers: ["github-actions", "pre-commit", "cargo", "custom.regex"],
   cargo: {
-    // See https://docs.renovatebot.com/configuration-options/#rangestrategy
-    rangeStrategy: "update-lockfile",
     managerFilePatterns: ["/^Cargo\\.toml$/", "/^crates/.*Cargo\\.toml$/"],
   },
   "pre-commit": {
     enabled: true,
   },
   packageRules: [
-    // Pin GitHub Actions to immutable SHAs.
-    {
-      matchDepTypes: ["action"],
-      pinDigests: true,
-    },
-    // Annotate GitHub Actions SHAs with a SemVer version.
-    {
-      extends: ["helpers:pinGitHubActionDigests"],
-      extractVersion: "^(?<version>v?\\d+\\.\\d+\\.\\d+)$",
-      versioning: "regex:^v?(?<major>\\d+)(\\.(?<minor>\\d+)\\.(?<patch>\\d+))?$",
-    },
     {
       // Codex Action publishes two-component tags instead of full SemVer tags.
       matchManagers: ["github-actions"],
@@ -138,7 +121,6 @@
       // We have a rolling support policy for the MSRV
       // 2 releases back * 6 weeks per release * 7 days per week + 1
       minimumReleaseAge: "85 days",
-      internalChecksFilter: "strict",
       groupName: "MSRV",
     },
     {
@@ -230,7 +212,6 @@
     },
   },
   vulnerabilityAlerts: {
-    commitMessageSuffix: "",
     labels: ["internal", "security"],
   },
 }
