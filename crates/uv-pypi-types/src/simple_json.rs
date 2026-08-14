@@ -346,15 +346,15 @@ impl Default for Yanked {
 #[derive(Debug, Clone, Eq, PartialEq, Default, Deserialize, Serialize)]
 pub struct Hashes {
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) md5: Option<Digest<16>>,
+    md5: Option<Digest<16>>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) sha256: Option<Digest<32>>,
+    sha256: Option<Digest<32>>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) sha384: Option<Digest<48>>,
+    sha384: Option<Digest<48>>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) sha512: Option<Digest<64>>,
+    sha512: Option<Digest<64>>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) blake2b: Option<Digest<32>>,
+    blake2b: Option<Digest<32>>,
 }
 
 impl Hashes {
@@ -512,7 +512,7 @@ pub struct Digest<const BYTES: usize>(SmallString);
 
 impl<const BYTES: usize> Digest<BYTES> {
     /// Validate a hexadecimal digest and normalize it to lowercase.
-    pub(crate) fn from_hex(digest: impl Into<SmallString>) -> Result<Self, HashError> {
+    fn from_hex(digest: impl Into<SmallString>) -> Result<Self, HashError> {
         let digest = digest.into();
         if digest.len() != BYTES * 2 {
             return Err(HashError::InvalidDigestLength {
@@ -551,7 +551,7 @@ impl<const BYTES: usize> Digest<BYTES> {
     /// Decode the validated hexadecimal digest into its fixed-size byte array.
     pub fn decode(&self) -> [u8; BYTES] {
         let mut decoded = [0; BYTES];
-        for (index, pair) in self.0.as_bytes().chunks_exact(2).enumerate() {
+        for (index, pair) in self.0.as_bytes().as_chunks::<2>().0.iter().enumerate() {
             let decode_digit = |digit: u8| {
                 if digit.is_ascii_digit() {
                     digit - b'0'
@@ -852,7 +852,8 @@ mod tests {
 
             assert!(matches!(
                 pypi_file.core_metadata,
-                Some(CoreMetadata::Hashes(hashes)) if hashes.sha256.as_deref() == Some(SHA256)
+                Some(CoreMetadata::Hashes(hashes))
+                    if hashes.sha256.as_ref().map(Digest::as_str) == Some(SHA256)
             ));
         }
 
