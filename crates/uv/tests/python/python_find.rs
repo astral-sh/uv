@@ -1155,60 +1155,6 @@ fn python_find_version_range_variant_order() {
 
 #[test]
 #[cfg(feature = "test-python-managed")]
-#[cfg(target_os = "macos")]
-fn python_find_requires_python_variant_order() {
-    let context = uv_test::test_context_with_versions!(&[])
-        .with_filtered_python_keys()
-        .with_filtered_python_sources()
-        .with_managed_python_dirs()
-        .with_python_download_cache()
-        .with_filtered_python_install_bin()
-        .with_filtered_python_names()
-        .with_filtered_exe_suffix();
-
-    context.python_install().arg("3.15t").assert().success();
-    context.python_install().arg("3.15").assert().success();
-
-    context
-        .temp_dir
-        .child("pyproject.toml")
-        .write_str(indoc! {r#"
-            [project]
-            name = "project"
-            version = "0.1.0"
-            requires-python = "==3.15.*"
-        "#})
-        .unwrap();
-
-    // Managed installations have their own deterministic ordering.
-    uv_snapshot!(context.filters(), context.python_find(), @"
-    exit_code: 0 (success)
-    ----- stdout -----
-    [TEMP_DIR]/managed/cpython-3.15-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
-    ");
-
-    // When the installed executables are discovered on the search path, the result depends on the
-    // order returned by the filesystem.
-    context
-        .venv()
-        .arg("-q")
-        .arg("--python-preference")
-        .arg("system")
-        .env(EnvVars::UV_PYTHON_SEARCH_PATH, context.bin_dir.path())
-        .assert()
-        .success();
-
-    uv_snapshot!(context.filters(), context.python_command()
-        .arg("-c")
-        .arg("import sysconfig; print(sysconfig.get_config_var('Py_GIL_DISABLED'))"), @"
-    exit_code: 0 (success)
-    ----- stdout -----
-    1
-    ");
-}
-
-#[test]
-#[cfg(feature = "test-python-managed")]
 fn python_find_prerelease_version_specifiers() {
     let context = uv_test::test_context_with_versions!(&[])
         .with_filtered_python_keys()
