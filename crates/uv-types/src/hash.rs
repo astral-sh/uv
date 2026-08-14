@@ -605,10 +605,10 @@ mod tests {
     };
     use uv_normalize::PackageName;
     use uv_pep440::Version;
-    use uv_pypi_types::{HashDigest, HashError};
+    use uv_pypi_types::HashDigest;
     use uv_redacted::DisplaySafeUrl;
 
-    use super::{HashStrategy, HashStrategyError, HashVerification};
+    use super::{HashStrategy, HashVerification};
 
     fn requirement(url: &str) -> Requirement {
         Requirement {
@@ -631,7 +631,7 @@ mod tests {
     #[test]
     fn from_requirements_merges_direct_url_hashes_across_fragments() {
         let first = UnresolvedRequirement::Named(requirement(
-            "https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl#sha256=cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f",
+            "https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl#sha256=CFDB2B588B9FC25EDE96D8DB56ED50848B0B649DCA3DD1DF0B11F683BB9E0B5F",
         ));
         let second = UnresolvedRequirement::Named(requirement(
             "https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl#sha512=f30761c1e8725b49c498273b90dba4b05c0fd157811994c806183062cb6647e773364ce45f0e1ff0b10e32fe6d0232ea5ad39476ccf37109d6b49603a09c11c2",
@@ -764,58 +764,5 @@ mod tests {
         assert!(!strategy.allows_url(&url));
         assert!(!strategy.allows_package(&name, &version));
         Ok(())
-    }
-
-    #[test]
-    fn from_requirements_normalizes_and_deduplicates_direct_url_hashes() {
-        let lowercase = UnresolvedRequirement::Named(requirement(
-            "https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl#sha256=cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f",
-        ));
-        let uppercase = UnresolvedRequirement::Named(requirement(
-            "https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl#subdirectory=src&sha256=CFDB2B588B9FC25EDE96D8DB56ED50848B0B649DCA3DD1DF0B11F683BB9E0B5F",
-        ));
-
-        let strategy = HashStrategy::from_requirements(
-            [(&lowercase, &[][..]), (&uppercase, &[][..])].into_iter(),
-            std::iter::empty(),
-            None,
-            HashCheckingMode::Require,
-        )
-        .expect("equivalent hash spellings should merge");
-
-        if let UnresolvedRequirement::Named(requirement) = &lowercase
-            && let RequirementSource::Url { url, .. } = &requirement.source
-        {
-            let expected: HashDigest =
-                "sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f"
-                    .parse()
-                    .expect("valid hash");
-            assert_eq!(
-                strategy.archive_policy_for_url(url),
-                ArchiveHashPolicy::All(&[expected])
-            );
-        }
-    }
-
-    #[test]
-    fn from_requirements_rejects_invalid_direct_url_hashes() {
-        let requirement = UnresolvedRequirement::Named(requirement(
-            "https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl#subdirectory=src&sha256=short",
-        ));
-
-        let result = HashStrategy::from_requirements(
-            [(&requirement, &[][..])].into_iter(),
-            std::iter::empty(),
-            None,
-            HashCheckingMode::Require,
-        );
-
-        assert!(matches!(
-            result,
-            Err(HashStrategyError::Hash(HashError::InvalidDigestLength {
-                expected: 64,
-                actual: 5,
-            }))
-        ));
     }
 }

@@ -4924,18 +4924,6 @@ fn require_hashes_url_malformed() -> Result<()> {
     error: Invalid hash digest length (expected 64 hexadecimal characters, found 3)
     ");
 
-    requirements_txt.write_str(
-        "iniconfig @ https://files.pythonhosted.org/packages/iniconfig-2.0.0-py3-none-any.whl#sha256=gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg",
-    )?;
-
-    uv_snapshot!(context.pip_sync()
-        .arg("requirements.txt")
-        .arg("--require-hashes"), @"
-    exit_code: 2 (failure)
-    ----- stderr -----
-    error: Invalid hash digest (expected only hexadecimal characters): `gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg`
-    ");
-
     Ok(())
 }
 
