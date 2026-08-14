@@ -1140,8 +1140,8 @@ fn python_find_version_range_variant_order() {
     [TEMP_DIR]/managed/cpython-3.15-[PLATFORM]/[INSTALL-BIN]/python3.15
     ");
 
-    // When the installed executables are discovered on the search path, the result depends on the
-    // order returned by the filesystem.
+    // Equally preferred search-path executables use the ordering of their queried installation
+    // keys, rather than the order returned by the filesystem.
     uv_snapshot!(context.filters(), context.python_find()
         .arg("==3.15.*")
         .arg("--python-preference")
@@ -1149,7 +1149,89 @@ fn python_find_version_range_variant_order() {
         .env(EnvVars::UV_PYTHON_SEARCH_PATH, context.bin_dir.path()), @"
     exit_code: 0 (success)
     ----- stdout -----
-    [BIN]/python3.15t
+    [BIN]/python3.15
+    ");
+
+    // Interpreter metadata, rather than the executable name, determines whether a build is
+    // free-threaded.
+    let misleading_names = context.temp_dir.child("misleading-names");
+    misleading_names.create_dir_all().unwrap();
+    fs_err::os::unix::fs::symlink(
+        context.bin_dir.path().join("python3.15t"),
+        misleading_names.join("python3.15"),
+    )
+    .unwrap();
+    fs_err::os::unix::fs::symlink(
+        context.bin_dir.path().join("python3.15"),
+        misleading_names.join("python3.15t"),
+    )
+    .unwrap();
+
+    uv_snapshot!(context.filters(), context.python_find()
+        .arg("==3.15.*")
+        .arg("--python-preference")
+        .arg("system")
+        .env(EnvVars::UV_PYTHON_SEARCH_PATH, misleading_names.path()), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    [TEMP_DIR]/misleading-names/python3.15t
+    ");
+
+    // Version priority also comes from the queried interpreter, even when executable names do not
+    // describe the versions they launch.
+    context.python_install().arg("3.14").assert().success();
+
+    let misleading_versions = context.temp_dir.child("misleading-versions");
+    misleading_versions.create_dir_all().unwrap();
+    fs_err::os::unix::fs::symlink(
+        context.bin_dir.path().join("python3.15"),
+        misleading_versions.join("python3.14"),
+    )
+    .unwrap();
+    fs_err::os::unix::fs::symlink(
+        context.bin_dir.path().join("python3.14"),
+        misleading_versions.join("python3.15"),
+    )
+    .unwrap();
+
+    uv_snapshot!(context.filters(), context.python_find()
+        .arg(">=3.14,<3.16")
+        .arg("--python-preference")
+        .arg("system")
+        .env(EnvVars::UV_PYTHON_SEARCH_PATH, misleading_versions.path()), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    [TEMP_DIR]/misleading-versions/python3.14
+    ");
+
+    // Installation-key ordering must not override the order of directories on the search path.
+    let first_directory = context.temp_dir.child("first");
+    first_directory.create_dir_all().unwrap();
+    fs_err::os::unix::fs::symlink(
+        context.bin_dir.path().join("python3.15t"),
+        first_directory.join("python3.15t"),
+    )
+    .unwrap();
+
+    let second_directory = context.temp_dir.child("second");
+    second_directory.create_dir_all().unwrap();
+    fs_err::os::unix::fs::symlink(
+        context.bin_dir.path().join("python3.15"),
+        second_directory.join("python3.15"),
+    )
+    .unwrap();
+
+    let search_path = std::env::join_paths([first_directory.path(), second_directory.path()])
+        .expect("The test directories should form a valid search path");
+
+    uv_snapshot!(context.filters(), context.python_find()
+        .arg("==3.15.*")
+        .arg("--python-preference")
+        .arg("system")
+        .env(EnvVars::UV_PYTHON_SEARCH_PATH, search_path), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    [TEMP_DIR]/first/python3.15t
     ");
 }
 
