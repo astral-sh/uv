@@ -626,9 +626,10 @@ fn python_executables<'a>(
 /// Executables are returned in the search path order, then by specificity of the name, e.g.
 /// `python3.9` is preferred over `python3` and `pypy3.9` is preferred over `python3.9`.
 ///
-/// Explicitly named executables form individual groups. Minor-version fallback candidates from
-/// the same directory share a group so their queried installation keys can determine their order
-/// without overriding search-path precedence.
+/// Executables are returned in groups by search-path directory and name specificity. For a version
+/// range, `python3.15`, `python3.15t`, and `python3.14` in the same directory share a group, while
+/// `python3` in that directory forms a separate group. This allows interpreters to be sorted by
+/// preference instead of filesystem enumeration order.
 ///
 /// If a `version` is not provided, we will only look for default executable names e.g.
 /// `python3` and `python` — `python3.9` and similar will not be included.
