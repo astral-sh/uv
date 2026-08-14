@@ -28,7 +28,9 @@ use wiremock::{
     matchers::{basic_auth, method, path},
 };
 
+use uv_extract::dirhash::{DirectoryDigest, dirhash_path};
 use uv_fs::{PortablePath, Simplified};
+use uv_install_wheel::validate_and_heal_record;
 use uv_static::EnvVars;
 #[cfg(feature = "test-git")]
 use uv_test::decode_token;
@@ -14434,6 +14436,19 @@ fn reject_invalid_streaming_zip() {
       ╰─▶ ZIP file contains multiple entries with different contents for: cbwheelstreamtest/__init__.py
     "
     );
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("cbwheelstreamtest==0.0.1")
+        .arg("--preview-features")
+        .arg("content-addressed-cache"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+      × Failed to download `cbwheelstreamtest==0.0.1`
+      ├─▶ Failed to extract archive: cbwheelstreamtest-0.0.1-py2.py3-none-any.whl
+      ╰─▶ ZIP file contains multiple entries for the same output path: cbwheelstreamtest/__init__.py
+    "
+    );
 }
 
 #[test]
@@ -16268,10 +16283,21 @@ fn handle_record_mismatches() -> Result<()> {
     }
     fs_err::write(&repacked_wheel, block_on(writer.close())?)?;
 
+    // Healing changes the extracted tree, so the archive ID must reflect the repaired RECORD.
+    let extracted = context.temp_dir.join("foo-extracted");
+    let (files, unhealed_tree) =
+        uv_extract::unzip_and_hash(File::open(&repacked_wheel)?, &extracted)?;
+    let unhealed_digest = DirectoryDigest::from(unhealed_tree.hash());
+    assert!(validate_and_heal_record(&extracted, files.iter(), "foo")?.is_some());
+    let healed_digest = DirectoryDigest::from(dirhash_path(&extracted)?);
+    assert_ne!(unhealed_digest, healed_digest);
+
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("--find-links")
         .arg(context.temp_dir.as_ref())
         .arg("--offline")
+        .arg("--preview-features")
+        .arg("content-addressed-cache")
         .arg("foo"), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -16281,6 +16307,17 @@ fn handle_record_mismatches() -> Result<()> {
      + foo==0.1.0
     "
     );
+
+    context
+        .cache_dir
+        .child("archive-v0")
+        .child(unhealed_digest.as_str())
+        .assert(predicate::path::missing());
+    context
+        .cache_dir
+        .child("archive-v0")
+        .child(healed_digest.as_str())
+        .assert(predicate::path::exists());
 
     // Read the healed RECORD.
     let installed_record =
