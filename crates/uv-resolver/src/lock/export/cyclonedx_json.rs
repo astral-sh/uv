@@ -3,10 +3,14 @@ use std::path::Path;
 
 use cyclonedx_bom::models::component::Classification;
 use cyclonedx_bom::models::dependency::{Dependencies, Dependency};
+use cyclonedx_bom::models::external_reference::{
+    ExternalReference, ExternalReferenceType, ExternalReferences, Uri as ExternalReferenceUri,
+};
+use cyclonedx_bom::models::hash::{Hash, HashAlgorithm, HashValue, Hashes};
 use cyclonedx_bom::models::metadata::Metadata;
 use cyclonedx_bom::models::property::{Properties, Property};
 use cyclonedx_bom::models::tool::{Tool, Tools};
-use cyclonedx_bom::prelude::{Bom, Component, Components, NormalizedString};
+use cyclonedx_bom::prelude::{Bom, Component, Components, NormalizedString, Uri};
 use itertools::Itertools;
 use percent_encoding::{AsciiSet, CONTROLS, percent_encode};
 use rustc_hash::FxHashSet;
@@ -18,10 +22,11 @@ use uv_fs::PortablePath;
 use uv_normalize::PackageName;
 use uv_pep508::MarkerTree;
 use uv_preview::{Preview, PreviewFeature};
+use uv_pypi_types::{HashAlgorithm as UvHashAlgorithm, HashDigest};
 use uv_warnings::warn_user;
 
 use crate::lock::export::{ExportableRequirement, ExportableRequirements};
-use crate::lock::{LockErrorKind, Package, PackageId, RegistrySource, Source};
+use crate::lock::{LockErrorKind, Package, PackageId, RegistrySource, Source, WheelWireSource};
 use crate::{Installable, LockError};
 
 /// Character set for percent-encoding PURL components, copied from packageurl.rs (<https://github.com/scm-rs/packageurl.rs/blob/a725aa0ab332934c350641508017eb09ddfa0813/src/purl.rs#L18>).
@@ -52,6 +57,7 @@ const PURL_ENCODE_SET: &AsciiSet = &CONTROLS
 struct ComponentBuilder<'a> {
     id_counter: usize, // Used as prefix in bom-ref generation, to ensure uniqueness
     package_to_component_map: HashMap<&'a PackageId, Component>,
+    include_hashes: bool,
 }
 
 impl<'a> ComponentBuilder<'a> {
@@ -218,6 +224,48 @@ impl<'a> ComponentBuilder<'a> {
             ));
         }
 
+        let external_references = if self.include_hashes {
+            let mut external_references = Vec::new();
+
+            if let Some(sdist) = &package.sdist {
+                if let (Some(url), Some(hash)) = (sdist.url(), sdist.hash()) {
+                    if let (Ok(uri), Some(cdx_hash)) =
+                        (Uri::try_from(url.to_string()), to_cyclonedx_hash(&hash.0))
+                    {
+                        external_references.push(ExternalReference {
+                            url: ExternalReferenceUri::Url(uri),
+                            comment: None,
+                            hashes: Some(Hashes(vec![cdx_hash])),
+                            external_reference_type: ExternalReferenceType::Distribution,
+                        });
+                    }
+                }
+            }
+
+            for wheel in &package.wheels {
+                if let (WheelWireSource::Url { url }, Some(hash)) = (&wheel.url, &wheel.hash) {
+                    if let (Ok(uri), Some(cdx_hash)) =
+                        (Uri::try_from(url.to_string()), to_cyclonedx_hash(&hash.0))
+                    {
+                        external_references.push(ExternalReference {
+                            url: ExternalReferenceUri::Url(uri),
+                            comment: None,
+                            hashes: Some(Hashes(vec![cdx_hash])),
+                            external_reference_type: ExternalReferenceType::Distribution,
+                        });
+                    }
+                }
+            }
+
+            if external_references.is_empty() {
+                None
+            } else {
+                Some(ExternalReferences(external_references))
+            }
+        } else {
+            None
+        };
+
         Component {
             component_type: Classification::Library,
             name: NormalizedString::new(name),
@@ -238,7 +286,7 @@ impl<'a> ComponentBuilder<'a> {
             swid: None,
             modified: None,
             pedigree: None,
-            external_references: None,
+            external_references,
             properties: if !properties.is_empty() {
                 Some(Properties(properties))
             } else {
@@ -263,6 +311,7 @@ pub fn from_lock<'lock>(
     extras: &ExtrasSpecificationWithDefaults,
     groups: &DependencyGroupsWithDefaults,
     annotate: bool,
+    hashes: bool,
     install_options: &'lock InstallOptions,
     preview: Preview,
     all_packages: bool,
@@ -298,7 +347,10 @@ pub fn from_lock<'lock>(
     }
     .or_else(|| target.lock().root()); // Fallback to project root
 
-    let mut component_builder = ComponentBuilder::default();
+    let mut component_builder = ComponentBuilder {
+        include_hashes: hashes,
+        ..ComponentBuilder::default()
+    };
 
     let mut metadata = Metadata {
         component: root
@@ -442,4 +494,25 @@ enum PackageType<'a> {
     Root,
     Workspace(&'a Path),
     Dependency,
+}
+
+/// Convert an internal [`HashDigest`] into a `CycloneDX` [`Hash`].
+fn to_cyclonedx_hash(hash: &HashDigest) -> Option<Hash> {
+    let alg = match hash.algorithm() {
+        UvHashAlgorithm::Md5 => HashAlgorithm::MD5,
+        UvHashAlgorithm::Sha256 => HashAlgorithm::SHA_256,
+        UvHashAlgorithm::Sha384 => HashAlgorithm::SHA_384,
+        UvHashAlgorithm::Sha512 => HashAlgorithm::SHA_512,
+        UvHashAlgorithm::Blake2b => match hash.digest.len() {
+            64 => HashAlgorithm::BLAKE2b_256,
+            96 => HashAlgorithm::BLAKE2b_384,
+            128 => HashAlgorithm::BLAKE2b_512,
+            _ => return None,
+        },
+    };
+
+    Some(Hash {
+        alg,
+        content: HashValue(hash.digest.to_string()),
+    })
 }

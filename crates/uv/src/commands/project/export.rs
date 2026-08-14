@@ -474,6 +474,7 @@ pub(crate) async fn export(
                 &extras,
                 &groups,
                 include_annotations,
+                hashes,
                 &install_options,
                 preview,
                 all_packages,
