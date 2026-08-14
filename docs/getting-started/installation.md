@@ -284,6 +284,41 @@ If you need to remove uv from your system, follow these steps:
         uninstall. Upgrading from an older version will not automatically remove the binaries from
         `~/.cargo/bin`.
 
+### Removing the standalone installer receipt on Windows
+
+!!! note
+
+    Only relevant if uv was installed via the standalone installer and you intend to switch to a
+    different distribution channel such as [WinGet](#winget).
+
+When uv is installed via the standalone installer on Windows, a receipt file is written to
+`%LOCALAPPDATA%\uv\uv-receipt.json`. Removing the binaries as described above does not delete
+the receipt. If left in place, the receipt confuses `uv self update` and other tooling, producing
+errors like:
+
+```text
+The current executable is at ... but the standalone installer was used to install uv to ...
+Are multiple copies of uv installed?
+```
+
+To complete the uninstallation, delete the receipt (or, more conveniently, the entire
+`%LOCALAPPDATA%\uv\` directory):
+
+=== "PowerShell"
+
+    ```pwsh-session
+    PS> rm $env:LOCALAPPDATA\uv\uv-receipt.json
+    ```
+
+=== "Command Prompt"
+
+    ```console
+    $ del "%LOCALAPPDATA%\uv\uv-receipt.json"
+    ```
+
+If you no longer need the cached Python interpreters or installed tools, the rest of the contents
+of `%LOCALAPPDATA%\uv\` can be removed as well.
+
 ## Next steps
 
 See the [first steps](./first-steps.md) or jump straight to the [guides](../guides/index.md) to
