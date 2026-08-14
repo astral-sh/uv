@@ -28,7 +28,7 @@ use uv_cli::{
     HashCheckingArgs, PackageExcludeNewerArgs, PublishArgs, PythonDirArgs, RegistryClientArgs,
     ResolverArgs, ResolverInstallerArgs, ToolUpgradeArgs,
     options::{
-        Flag, FlagSource, check_conflicts, flag, resolve_flag, resolve_flag_pair,
+        Flag, FlagSource, check_conflicts, flag, flag_custom, resolve_flag, resolve_flag_pair,
         resolver_installer_options, resolver_options,
     },
 };
@@ -810,7 +810,7 @@ impl RunSettings {
                 flag(editable.into(), no_editable.into(), "editable")?,
                 no_editable_package,
             ),
-            modifications: if flag(exact, inexact, "inexact")?.unwrap_or(false) {
+            modifications: if flag_custom(exact, inexact, "exact", "inexact")?.unwrap_or(false) {
                 Modifications::Exact
             } else {
                 Modifications::Sufficient
@@ -2012,7 +2012,7 @@ impl SyncSettings {
                 no_install_package,
                 only_install_package,
             ),
-            modifications: if flag(exact, inexact, "inexact")?.unwrap_or(true) {
+            modifications: if flag_custom(exact, inexact, "exact", "inexact")?.unwrap_or(true) {
                 Modifications::Exact
             } else {
                 Modifications::Sufficient
@@ -3778,7 +3778,7 @@ impl PipInstallSettings {
             overrides_from_workspace,
             excludes_from_workspace,
             build_constraints_from_workspace,
-            modifications: if flag(exact, inexact, "inexact")?.unwrap_or(false) {
+            modifications: if flag_custom(exact, inexact, "exact", "inexact")?.unwrap_or(false) {
                 Modifications::Exact
             } else {
                 Modifications::Sufficient
