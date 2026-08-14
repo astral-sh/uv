@@ -2,7 +2,10 @@
 //! Cargo is dual-licensed under either Apache 2.0 or MIT, at the user's choice.
 //! Source: <https://github.com/rust-lang/cargo/blob/e1ebce1035f9b53bb46a55bd4b0ecf51e24c6458/src/cargo/ops/cargo_clean.rs#L324>
 
+use std::fs::Metadata;
 use std::io;
+#[cfg(unix)]
+use std::os::unix::fs::MetadataExt;
 use std::path::Path;
 
 use tracing::debug;
@@ -55,6 +58,18 @@ impl Remover {
     }
 }
 
+/// Estimate the storage reclaimed by removing a non-directory entry.
+#[cfg(unix)]
+fn file_size(metadata: &Metadata) -> u64 {
+    metadata.blocks().saturating_mul(512)
+}
+
+/// Estimate the storage reclaimed by removing a non-directory entry.
+#[cfg(not(unix))]
+fn file_size(metadata: &Metadata) -> u64 {
+    metadata.len()
+}
+
 /// A removal operation with statistics on the number of files and directories removed.
 #[derive(Debug, Default)]
 pub struct Removal {
@@ -83,8 +98,8 @@ impl Removal {
     }
 
     /// Account for a file while its current sharing state can still be inspected.
-    fn add_file(&mut self, path: &Path, metadata: &std::fs::Metadata) {
-        self.coarse_bytes += metadata.len();
+    fn add_file(&mut self, path: &Path, metadata: &Metadata) {
+        self.coarse_bytes += file_size(metadata);
 
         if let Some(fine_bytes) = self.fine_bytes {
             match uv_fs::physical_space(path, metadata) {
