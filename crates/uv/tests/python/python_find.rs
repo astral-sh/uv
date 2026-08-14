@@ -1221,38 +1221,6 @@ fn python_find_version_range_installation_key_order() {
     [TEMP_DIR]/preferred-names/python3
     ");
 
-    // Failed queries retain their discovery position and separate sortable interpreter runs.
-    let interrupted_group = context.temp_dir.child("interrupted-group");
-    interrupted_group.create_dir_all().unwrap();
-    fs_err::os::unix::fs::symlink(
-        context.bin_dir.path().join("python3.15t"),
-        interrupted_group.join("python3.15t"),
-    )
-    .unwrap();
-
-    let broken_executable = interrupted_group.join("python3.15");
-    fs_err::write(&broken_executable, "#!/bin/sh\nexit 1\n").unwrap();
-    let permissions = fs_err::metadata(context.bin_dir.path().join("python3.14"))
-        .unwrap()
-        .permissions();
-    fs_err::set_permissions(&broken_executable, permissions).unwrap();
-
-    fs_err::os::unix::fs::symlink(
-        context.bin_dir.path().join("python3.15"),
-        interrupted_group.join("python3.14"),
-    )
-    .unwrap();
-
-    uv_snapshot!(context.filters(), context.python_find()
-        .arg(">=3.14,<3.16")
-        .arg("--python-preference")
-        .arg("system")
-        .env(EnvVars::UV_PYTHON_SEARCH_PATH, interrupted_group.path()), @"
-    exit_code: 0 (success)
-    ----- stdout -----
-    [TEMP_DIR]/interrupted-group/python3.15t
-    ");
-
     // Installation-key ordering must not override the order of directories on the search path.
     let first_directory = context.temp_dir.child("first");
     first_directory.create_dir_all().unwrap();

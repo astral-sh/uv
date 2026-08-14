@@ -4,7 +4,7 @@ use regex::Regex;
 use rustc_hash::{FxBuildHasher, FxHashSet};
 use same_file::is_same_file;
 use std::borrow::Cow;
-use std::cmp::Ordering;
+use std::cmp::Reverse;
 use std::env::consts::EXE_SUFFIX;
 use std::fmt::{self, Debug, Formatter};
 use std::{env, io, iter};
@@ -924,16 +924,24 @@ fn python_installations_from_executable_group(
                     .collect::<Vec<_>>(),
             };
 
-            // Preserve failed queries in their discovery positions while sorting successful runs.
-            for candidates in installations.split_mut(Result::is_err) {
-                candidates.sort_by(|left, right| match (left, right) {
-                    (Ok(left), Ok(right)) => right.key().cmp(&left.key()),
-                    _ => Ordering::Equal,
-                });
-            }
+            sort_installations_by_key(&mut installations, PythonInstallation::key);
 
             Either::Right(installations.into_iter())
         }
+    }
+}
+
+/// Sort successful installations without moving them across critical query errors.
+fn sort_installations_by_key<T, K: Ord>(
+    installations: &mut [Result<T, Error>],
+    key: impl Fn(&T) -> K,
+) {
+    // Critical errors preserve discovery order; non-critical errors must not interrupt
+    // installation-key ordering and can follow successful queries.
+    for candidates in
+        installations.split_mut(|result| result.as_ref().is_err_and(Error::is_critical))
+    {
+        candidates.sort_by_key(|result| Reverse(result.as_ref().ok().map(&key)));
     }
 }
 
@@ -3829,7 +3837,7 @@ fn split_wheel_tag_release_version(version: Version) -> Version {
 
 #[cfg(test)]
 mod tests {
-    use std::{cell::Cell, path::PathBuf, str::FromStr};
+    use std::{cell::Cell, io, path::PathBuf, str::FromStr};
 
     use assert_fs::{TempDir, prelude::*};
     use target_lexicon::{Aarch64Architecture, Architecture};
@@ -3846,10 +3854,42 @@ mod tests {
     use uv_platform::{Arch, Libc, Os};
 
     use super::{
-        DiscoveryPreferences, EnvironmentPreference, Error, PythonExecutableGroup,
-        PythonPreference, PythonSource, PythonVariant, QueryStrategy,
-        python_installations_from_executables,
+        DiscoveryPreferences, EnvironmentPreference, Error, InterpreterError,
+        PythonExecutableGroup, PythonPreference, PythonSource, PythonVariant, QueryStrategy,
+        python_installations_from_executables, sort_installations_by_key,
     };
+
+    // Testing this at a higher level would necessitate relying on filesystem ordering.
+    #[test]
+    fn installation_key_order_only_partitions_critical_errors() {
+        let query_error = |error| {
+            Error::Query(
+                Box::new(error),
+                PathBuf::from("python"),
+                PythonSource::SearchPath,
+            )
+        };
+
+        let mut installations = [
+            Ok(1_u8),
+            Err(query_error(InterpreterError::NotFound(PathBuf::from(
+                "missing",
+            )))),
+            Ok(2),
+            Err(query_error(InterpreterError::Io(io::Error::other(
+                "critical",
+            )))),
+            Ok(3),
+        ];
+
+        sort_installations_by_key(&mut installations, |key| *key);
+
+        assert!(matches!(
+            &installations[..],
+            [Ok(2), Ok(1), Err(noncritical), Err(critical), Ok(3)]
+                if !noncritical.is_critical() && critical.is_critical()
+        ));
+    }
 
     #[test]
     fn sequential_query_strategy_does_not_prefetch_executable_groups() -> anyhow::Result<()> {
