@@ -1381,7 +1381,7 @@ impl Lock {
             warn_index_hash_algorithm_preview();
 
             let mismatched =
-                |hash: Option<&Hash>| hash.is_none_or(|hash| hash.0.algorithm != algorithm);
+                |hash: Option<&Hash>| hash.is_none_or(|hash| hash.0.algorithm() != algorithm);
 
             if package.sdist.iter().any(|sdist| mismatched(sdist.hash()))
                 || package.wheels.iter().any(|wheel| {
@@ -6485,7 +6485,7 @@ fn select_registry_hash(
 
     hashes
         .iter()
-        .find(|hash| hash.algorithm == algorithm)
+        .find(|hash| hash.algorithm() == algorithm)
         .cloned()
         .map(Hash::from)
         .map(Some)
@@ -6519,16 +6519,21 @@ impl FromStr for Hash {
         let algorithm = algorithm
             .parse()
             .map_err(|_| HashParseError("unrecognized hash algorithm"))?;
-        Ok(Self(HashDigest {
-            algorithm,
-            digest: digest.into(),
-        }))
+        let digest = digest.into();
+        let hash = match algorithm {
+            HashAlgorithm::Md5 => HashDigest::Md5(digest),
+            HashAlgorithm::Sha256 => HashDigest::Sha256(digest),
+            HashAlgorithm::Sha384 => HashDigest::Sha384(digest),
+            HashAlgorithm::Sha512 => HashDigest::Sha512(digest),
+            HashAlgorithm::Blake2b => HashDigest::Blake2b(digest),
+        };
+        Ok(Self(hash))
     }
 }
 
 impl Display for Hash {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "{}:{}", self.0.algorithm, self.0.digest)
+        write!(f, "{}:{}", self.0.algorithm(), self.0.digest())
     }
 }
 
@@ -6557,41 +6562,41 @@ impl<'de> serde::Deserialize<'de> for Hash {
 
 impl From<Hash> for Hashes {
     fn from(value: Hash) -> Self {
-        match value.0.algorithm {
-            HashAlgorithm::Md5 => Self {
-                md5: Some(value.0.digest),
+        match value.0 {
+            HashDigest::Md5(digest) => Self {
+                md5: Some(digest),
                 sha256: None,
                 sha384: None,
                 sha512: None,
                 blake2b: None,
             },
-            HashAlgorithm::Sha256 => Self {
+            HashDigest::Sha256(digest) => Self {
                 md5: None,
-                sha256: Some(value.0.digest),
+                sha256: Some(digest),
                 sha384: None,
                 sha512: None,
                 blake2b: None,
             },
-            HashAlgorithm::Sha384 => Self {
+            HashDigest::Sha384(digest) => Self {
                 md5: None,
                 sha256: None,
-                sha384: Some(value.0.digest),
+                sha384: Some(digest),
                 sha512: None,
                 blake2b: None,
             },
-            HashAlgorithm::Sha512 => Self {
+            HashDigest::Sha512(digest) => Self {
                 md5: None,
                 sha256: None,
                 sha384: None,
-                sha512: Some(value.0.digest),
+                sha512: Some(digest),
                 blake2b: None,
             },
-            HashAlgorithm::Blake2b => Self {
+            HashDigest::Blake2b(digest) => Self {
                 md5: None,
                 sha256: None,
                 sha384: None,
                 sha512: None,
-                blake2b: Some(value.0.digest),
+                blake2b: Some(digest),
             },
         }
     }

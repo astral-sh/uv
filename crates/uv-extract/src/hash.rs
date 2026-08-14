@@ -41,26 +41,11 @@ impl From<HashAlgorithm> for Hasher {
 impl From<Hasher> for HashDigest {
     fn from(hasher: Hasher) -> Self {
         match hasher {
-            Hasher::Md5(hasher) => Self {
-                algorithm: HashAlgorithm::Md5,
-                digest: hex::encode(hasher.finalize()).into(),
-            },
-            Hasher::Sha256(hasher) => Self {
-                algorithm: HashAlgorithm::Sha256,
-                digest: hex::encode(hasher.finalize()).into(),
-            },
-            Hasher::Sha384(hasher) => Self {
-                algorithm: HashAlgorithm::Sha384,
-                digest: hex::encode(hasher.finalize()).into(),
-            },
-            Hasher::Sha512(hasher) => Self {
-                algorithm: HashAlgorithm::Sha512,
-                digest: hex::encode(hasher.finalize()).into(),
-            },
-            Hasher::Blake2b(hasher) => Self {
-                algorithm: HashAlgorithm::Blake2b,
-                digest: hex::encode(hasher.finalize()).into(),
-            },
+            Hasher::Md5(hasher) => Self::Md5(hex::encode(hasher.finalize()).into()),
+            Hasher::Sha256(hasher) => Self::Sha256(hex::encode(hasher.finalize()).into()),
+            Hasher::Sha384(hasher) => Self::Sha384(hex::encode(hasher.finalize()).into()),
+            Hasher::Sha512(hasher) => Self::Sha512(hex::encode(hasher.finalize()).into()),
+            Hasher::Blake2b(hasher) => Self::Blake2b(hex::encode(hasher.finalize()).into()),
         }
     }
 }

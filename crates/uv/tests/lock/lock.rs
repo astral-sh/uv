@@ -13720,7 +13720,7 @@ fn lock_find_links_http_wheel() -> Result<()> {
     Resolved 2 packages in [TIME]
     ");
 
-    assert!(context.cache_dir.child("flat-index-v4").is_dir());
+    assert!(context.cache_dir.child("flat-index-v5").is_dir());
 
     let lock = context.read("uv.lock");
 

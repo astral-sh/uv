@@ -1529,7 +1529,7 @@ impl From<HashDigests> for CachedHashDigests {
         let [hash] = hashes.as_slice() else {
             return Self::Other(hashes);
         };
-        let cached = match hash.algorithm {
+        let cached = match hash.algorithm() {
             HashAlgorithm::Md5 => decode_digest(hash).map(Self::Md5),
             HashAlgorithm::Sha256 => decode_digest(hash).map(Self::Sha256),
             HashAlgorithm::Blake2b => decode_digest(hash).map(Self::Blake2b),
@@ -1582,9 +1582,9 @@ impl From<&CachedHashDigests> for HashDigests {
 /// Rejecting non-canonical spellings lets [`CachedHashDigests::Other`] preserve their original
 /// text.
 fn decode_digest<const N: usize>(hash: &HashDigest) -> Option<[u8; N]> {
-    if hash.digest.len() != N * 2
+    if hash.digest().len() != N * 2
         || !hash
-            .digest
+            .digest()
             .as_bytes()
             .iter()
             .all(|byte| byte.is_ascii_digit() || matches!(byte, b'a'..=b'f'))
@@ -1592,7 +1592,7 @@ fn decode_digest<const N: usize>(hash: &HashDigest) -> Option<[u8; N]> {
         return None;
     }
     let mut digest = [0; N];
-    hex::decode_to_slice(hash.digest.as_bytes(), &mut digest).ok()?;
+    hex::decode_to_slice(hash.digest().as_bytes(), &mut digest).ok()?;
     Some(digest)
 }
 
@@ -1607,7 +1607,13 @@ fn hash_digest(algorithm: HashAlgorithm, digest: &[u8]) -> HashDigest {
     } else {
         SmallString::from(hex::encode(digest))
     };
-    HashDigest { algorithm, digest }
+    match algorithm {
+        HashAlgorithm::Md5 => HashDigest::Md5(digest),
+        HashAlgorithm::Sha256 => HashDigest::Sha256(digest),
+        HashAlgorithm::Sha384 => HashDigest::Sha384(digest),
+        HashAlgorithm::Sha512 => HashDigest::Sha512(digest),
+        HashAlgorithm::Blake2b => HashDigest::Blake2b(digest),
+    }
 }
 
 /// The list of projects available in a Simple API index.
@@ -1937,7 +1943,7 @@ mod tests {
     use tokio::sync::Semaphore;
     use url::Url;
     use uv_normalize::PackageName;
-    use uv_pypi_types::PypiSimpleDetail;
+    use uv_pypi_types::{HashAlgorithm, HashDigest, HashDigests, PypiSimpleDetail};
     use uv_redacted::DisplaySafeUrl;
     use uv_torch::{TorchBackend, TorchSource, TorchStrategy};
 
@@ -1954,7 +1960,57 @@ mod tests {
     use wiremock::matchers::{basic_auth, method, path_regex};
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
+    use super::CachedHashDigests;
+
     type Error = Box<dyn std::error::Error>;
+
+    #[test]
+    fn cached_hash_digests_pack_canonical_digests() {
+        let hashes = [
+            HashDigest::Md5("ab".repeat(16).into()),
+            HashDigest::Sha256("ab".repeat(32).into()),
+            HashDigest::Sha384("ab".repeat(48).into()),
+            HashDigest::Sha512("ab".repeat(64).into()),
+            HashDigest::Blake2b("ab".repeat(32).into()),
+        ];
+
+        for hash in hashes {
+            let expected = HashDigests::from(hash.clone());
+            let cached = CachedHashDigests::from(expected.clone());
+
+            assert!(matches!(
+                (&cached, hash.algorithm()),
+                (CachedHashDigests::Md5(_), HashAlgorithm::Md5)
+                    | (CachedHashDigests::Sha256(_), HashAlgorithm::Sha256)
+                    | (CachedHashDigests::Sha384(_), HashAlgorithm::Sha384)
+                    | (CachedHashDigests::Sha512(_), HashAlgorithm::Sha512)
+                    | (CachedHashDigests::Blake2b(_), HashAlgorithm::Blake2b)
+            ));
+            assert_eq!(HashDigests::from(&cached), expected);
+            assert_eq!(HashDigests::from(cached), expected);
+        }
+    }
+
+    #[test]
+    fn cached_hash_digests_preserve_noncanonical_digests() {
+        let hashes = [
+            HashDigests::empty(),
+            HashDigests::from(HashDigest::Sha256("AB".repeat(32).into())),
+            HashDigests::from(HashDigest::Sha256("too-short".into())),
+            HashDigests::from(HashDigest::Sha256("gg".repeat(32).into())),
+            HashDigests::from(vec![
+                HashDigest::Sha256("ab".repeat(32).into()),
+                HashDigest::Md5("ab".repeat(16).into()),
+            ]),
+        ];
+
+        for expected in hashes {
+            let cached = CachedHashDigests::from(expected.clone());
+
+            assert!(matches!(cached, CachedHashDigests::Other(_)));
+            assert_eq!(HashDigests::from(cached), expected);
+        }
+    }
 
     async fn start_test_server(username: &'static str, password: &'static str) -> MockServer {
         let server = MockServer::start().await;

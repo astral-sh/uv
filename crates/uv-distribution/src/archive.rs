@@ -121,6 +121,23 @@ mod tests {
     }
 
     #[test]
+    fn round_trip_archive_with_hashes() {
+        let archive = Archive::new(
+            ArchiveId::default(),
+            HashDigests::from(HashDigest::Sha256("digest".into())),
+            WheelFilename::from_str("iniconfig-2.0.0-py3-none-any.whl")
+                .expect("valid wheel filename"),
+            Some(42),
+        );
+
+        let bytes = rmp_serde::to_vec(&archive).expect("serialize archive");
+        let parsed: Archive = rmp_serde::from_slice(&bytes).expect("deserialize archive");
+
+        assert_eq!(parsed.hashes, archive.hashes);
+        assert_eq!(parsed.size, archive.size);
+    }
+
+    #[test]
     fn serialize_archive_for_legacy_reader() {
         #[derive(serde::Deserialize)]
         struct LegacyArchive {

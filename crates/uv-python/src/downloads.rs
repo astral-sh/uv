@@ -1498,12 +1498,12 @@ impl ManagedPythonDownload {
 
         // Check the hash
         if let Some(expected) = self.sha256.as_deref() {
-            let actual = HashDigest::from(hashers.pop().unwrap()).digest;
-            if !actual.eq_ignore_ascii_case(expected) {
+            let actual = HashDigest::from(hashers.pop().unwrap());
+            if !actual.digest().eq_ignore_ascii_case(expected) {
                 return Err(Error::HashMismatch {
                     installation: self.key.to_string(),
                     expected: expected.to_string(),
-                    actual: actual.to_string(),
+                    actual: actual.digest().to_string(),
                 });
             }
         }

@@ -1028,25 +1028,25 @@ pub async fn check_url(
         let local_hash = &hash_file(
             file,
             filename,
-            vec![Hasher::from(remote_hash.algorithm)],
+            vec![Hasher::from(remote_hash.algorithm())],
             reporter,
         )
         .await
         .map_err(|err| {
             PublishError::PublishPrepare(file.to_path_buf(), Box::new(PublishPrepareError::Io(err)))
         })?[0];
-        if local_hash.digest == remote_hash.digest {
+        if local_hash.digest() == remote_hash.digest() {
             debug!(
                 "Found {filename} in the registry with matching hash {}",
-                remote_hash.digest
+                remote_hash.digest()
             );
             Ok(true)
         } else {
             Err(PublishError::HashMismatch {
                 filename: Box::new(filename.clone()),
-                hash_algorithm: remote_hash.algorithm,
-                local: local_hash.digest.to_string(),
-                remote: remote_hash.digest.to_string(),
+                hash_algorithm: remote_hash.algorithm(),
+                local: local_hash.digest().to_string(),
+                remote: remote_hash.digest().to_string(),
             })
         }
     } else {
@@ -1230,12 +1230,12 @@ impl FormMetadata {
 
         let sha256_hash = hashes
             .iter()
-            .find(|hash| hash.algorithm == HashAlgorithm::Sha256)
+            .find(|hash| hash.algorithm() == HashAlgorithm::Sha256)
             .unwrap();
 
         let blake2b_hash = hashes
             .iter()
-            .find(|hash| hash.algorithm == HashAlgorithm::Blake2b)
+            .find(|hash| hash.algorithm() == HashAlgorithm::Blake2b)
             .unwrap();
 
         let metadata = metadata(file, filename).await?;
@@ -1289,8 +1289,8 @@ impl FormMetadata {
 
         let mut form_metadata = vec![
             (":action", "file_upload".to_string()),
-            ("sha256_digest", sha256_hash.digest.to_string()),
-            ("blake2_256_digest", blake2b_hash.digest.to_string()),
+            ("sha256_digest", sha256_hash.digest().to_string()),
+            ("blake2_256_digest", blake2b_hash.digest().to_string()),
             ("protocol_version", "1".to_string()),
             ("metadata_version", metadata_version.clone()),
             // Twine transforms the name with `re.sub("[^A-Za-z0-9.]+", "-", name)`
