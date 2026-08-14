@@ -11,9 +11,6 @@
   cargo: {
     managerFilePatterns: ["/^Cargo\\.toml$/", "/^crates/.*Cargo\\.toml$/"],
   },
-  "pre-commit": {
-    enabled: true,
-  },
   packageRules: [
     {
       // Codex Action publishes two-component tags instead of full SemVer tags.
@@ -48,14 +45,6 @@
       semanticCommitType: "docs",
       semanticCommitScope: null,
       additionalBranchPrefix: "docs-",
-    },
-    {
-      // Group upload/download artifact updates, the versions are dependent
-      groupName: "Artifact GitHub Actions dependencies",
-      matchManagers: ["github-actions"],
-      matchDatasources: ["gitea-tags", "github-tags"],
-      matchPackageNames: ["/actions/.*-artifact/"],
-      description: "Weekly update of artifact-related GitHub Actions dependencies",
     },
     {
       // This package rule disables updates for GitHub runners:
@@ -210,8 +199,5 @@
         '{"releases": [$[draft = false and prerelease = false and $exists(assets[name = "codex-x86_64-unknown-linux-musl.tar.gz"].digest)].{"version": $substringAfter(tag_name, "rust-v"), "digest": $substringAfter(assets[name = "codex-x86_64-unknown-linux-musl.tar.gz"].digest, "sha256:"), "releaseTimestamp": published_at, "isStable": true}]}',
       ],
     },
-  },
-  vulnerabilityAlerts: {
-    labels: ["internal", "security"],
   },
 }
