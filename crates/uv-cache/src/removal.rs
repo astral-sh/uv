@@ -61,7 +61,11 @@ impl Remover {
 /// Estimate the storage reclaimed by removing a non-directory entry.
 #[cfg(unix)]
 fn file_size(metadata: &Metadata) -> u64 {
-    metadata.blocks().saturating_mul(512)
+    if metadata.nlink() == 1 {
+        metadata.blocks().saturating_mul(512)
+    } else {
+        0
+    }
 }
 
 /// Estimate the storage reclaimed by removing a non-directory entry.
