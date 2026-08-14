@@ -74,6 +74,30 @@ fn prune_hardlinked_file() -> Result<()> {
     Ok(())
 }
 
+/// `cache prune` should fall back to logical space on unsupported filesystems.
+#[cfg(unix)]
+#[test]
+fn prune_physical_space_unsupported_fs() -> Result<()> {
+    let Some(context) = uv_test::test_context!("3.12").with_cache_on_alt_fs()? else {
+        return Ok(());
+    };
+
+    let stale = context.cache_dir.child("stale-v0");
+    stale.create_dir_all()?;
+    stale
+        .child("cached.bin")
+        .write_binary(&vec![42; 1024 * 1024])?;
+
+    uv_snapshot!(context.filters(), context.prune().arg("--preview-features").arg("cache-physical-space"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Pruning cache at: [ALT_FS]/[CACHE_DIR]/
+    Removed 1 file (1.0MiB)
+    ");
+
+    Ok(())
+}
+
 /// `cache prune` should remove any stale top-level directories from the cache.
 #[test]
 fn prune_stale_directory() -> Result<()> {
