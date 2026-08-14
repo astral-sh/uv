@@ -338,11 +338,11 @@ impl ToolLock {
         manifest: &ResolverManifest,
         index_locations: &IndexLocations,
     ) -> anyhow::Result<Self> {
-        let lock = Lock::from_resolution(resolution, root, Vec::new(), index_locations)?;
         let manifest = manifest.clone().relative_to(root)?;
+        let lock = Lock::from_resolution(resolution, manifest, root, Vec::new(), index_locations)?;
         Ok(Self {
             root: root.to_path_buf(),
-            lock: lock.with_manifest(manifest),
+            lock,
         })
     }
 

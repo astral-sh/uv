@@ -986,12 +986,13 @@ impl<'lock> DependencySelection<'lock> {
 }
 
 impl Lock {
-    /// Initialize a [`Lock`] from a [`ResolverOutput`], applying any index-specific hash
-    /// requirements to registry artifacts.
+    /// Initialize a [`Lock`] from a [`ResolverOutput`] and [`ResolverManifest`], applying any
+    /// index-specific hash requirements to registry artifacts.
     ///
     /// Returns an error if an artifact does not advertise its index's required algorithm.
     pub fn from_resolution(
         resolution: &ResolverOutput,
+        manifest: ResolverManifest,
         root: &Path,
         supported_environments: Vec<MarkerTree>,
         index_locations: &IndexLocations,
@@ -1141,7 +1142,7 @@ impl Lock {
             packages,
             requires_python,
             options,
-            ResolverManifest::default(),
+            manifest,
             Conflicts::empty(),
             supported_environments,
             vec![],
@@ -1291,13 +1292,6 @@ impl Lock {
             manifest,
         };
         Ok(lock)
-    }
-
-    /// Record the requirements that were used to generate this lock.
-    #[must_use]
-    pub fn with_manifest(mut self, manifest: ResolverManifest) -> Self {
-        self.manifest = manifest;
-        self
     }
 
     /// Record the conflicting groups that were used to generate this lock.
