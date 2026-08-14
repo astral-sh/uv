@@ -815,57 +815,7 @@ fn run_pep723_script_index() -> Result<()> {
     Ok(())
 }
 
-/// Run a PEP 723-compatible script with a relative pinned index from another directory.
-#[test]
-fn run_pep723_script_relative_index_pinned() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
-
-    let scripts = context.temp_dir.child("scripts");
-    let links = scripts.child("links");
-    links.create_dir_all()?;
-    fs_err::copy(
-        context
-            .workspace_root
-            .join("test/links/ok-1.0.0-py3-none-any.whl"),
-        links.child("ok-1.0.0-py3-none-any.whl"),
-    )?;
-
-    let test_script = scripts.child("main.py");
-    test_script.write_str(indoc! { r#"
-        # /// script
-        # requires-python = ">=3.11"
-        # dependencies = ["ok"]
-        #
-        # [[tool.uv.index]]
-        # name = "local"
-        # url = "./links"
-        # explicit = true
-        # format = "flat"
-        #
-        # [tool.uv.sources]
-        # ok = { index = "local" }
-        # ///
-
-        import ok
-        "#
-    })?;
-
-    let elsewhere = context.temp_dir.child("elsewhere");
-    elsewhere.create_dir_all()?;
-
-    uv_snapshot!(context.filters(), context.run().current_dir(elsewhere).arg("--offline").arg(test_script.path()), @r"
-    exit_code: 0 (success)
-    ----- stderr -----
-    Resolved 1 package in [TIME]
-    Prepared 1 package in [TIME]
-    Installed 1 package in [TIME]
-     + ok==1.0.0
-    ");
-
-    Ok(())
-}
-
-/// Run a PEP 723-compatible script with a relative unpinned index from another directory.
+/// Run a PEP 723-compatible script with a relative index and pinned and unpinned dependencies.
 #[test]
 fn run_pep723_script_relative_index() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -879,20 +829,30 @@ fn run_pep723_script_relative_index() -> Result<()> {
             .join("test/links/ok-1.0.0-py3-none-any.whl"),
         links.child("ok-1.0.0-py3-none-any.whl"),
     )?;
+    fs_err::copy(
+        context
+            .workspace_root
+            .join("test/links/validation-1.0.0-py3-none-any.whl"),
+        links.child("validation-1.0.0-py3-none-any.whl"),
+    )?;
 
     let test_script = scripts.child("main.py");
     test_script.write_str(indoc! { r#"
         # /// script
         # requires-python = ">=3.11"
-        # dependencies = ["ok"]
+        # dependencies = ["ok", "validation"]
         #
         # [[tool.uv.index]]
         # name = "local"
         # url = "./links"
         # format = "flat"
+        #
+        # [tool.uv.sources]
+        # ok = { index = "local" }
         # ///
 
         import ok
+        import validation
         "#
     })?;
 
@@ -902,10 +862,11 @@ fn run_pep723_script_relative_index() -> Result<()> {
     uv_snapshot!(context.filters(), context.run().current_dir(elsewhere).arg("--offline").arg(test_script.path()), @r"
     exit_code: 0 (success)
     ----- stderr -----
-    Resolved 1 package in [TIME]
-    Prepared 1 package in [TIME]
-    Installed 1 package in [TIME]
+    Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
      + ok==1.0.0
+     + validation==1.0.0
     ");
 
     Ok(())
