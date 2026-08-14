@@ -815,9 +815,9 @@ fn run_pep723_script_index() -> Result<()> {
     Ok(())
 }
 
-/// Run a PEP 723-compatible script with a relative `[[tool.uv.index]]` from another directory.
+/// Run a PEP 723-compatible script with a relative pinned index from another directory.
 #[test]
-fn run_pep723_script_relative_index_from_another_directory() -> Result<()> {
+fn run_pep723_script_relative_index_pinned() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
     let scripts = context.temp_dir.child("scripts");
@@ -839,6 +839,7 @@ fn run_pep723_script_relative_index_from_another_directory() -> Result<()> {
         # [[tool.uv.index]]
         # name = "local"
         # url = "./links"
+        # explicit = true
         # format = "flat"
         #
         # [tool.uv.sources]
@@ -846,8 +847,6 @@ fn run_pep723_script_relative_index_from_another_directory() -> Result<()> {
         # ///
 
         import ok
-
-        print("ok imported")
         "#
     })?;
 
@@ -856,9 +855,6 @@ fn run_pep723_script_relative_index_from_another_directory() -> Result<()> {
 
     uv_snapshot!(context.filters(), context.run().current_dir(elsewhere).arg("--offline").arg(test_script.path()), @r"
     exit_code: 0 (success)
-    ----- stdout -----
-    ok imported
-
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -869,9 +865,9 @@ fn run_pep723_script_relative_index_from_another_directory() -> Result<()> {
     Ok(())
 }
 
-/// Run a PEP 723-compatible script with a relative default index from another directory.
+/// Run a PEP 723-compatible script with a relative unpinned index from another directory.
 #[test]
-fn run_pep723_script_relative_default_index_from_another_directory() -> Result<()> {
+fn run_pep723_script_relative_index() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
     let scripts = context.temp_dir.child("scripts");
@@ -897,8 +893,6 @@ fn run_pep723_script_relative_default_index_from_another_directory() -> Result<(
         # ///
 
         import ok
-
-        print("ok imported")
         "#
     })?;
 
@@ -907,9 +901,6 @@ fn run_pep723_script_relative_default_index_from_another_directory() -> Result<(
 
     uv_snapshot!(context.filters(), context.run().current_dir(elsewhere).arg("--offline").arg(test_script.path()), @r"
     exit_code: 0 (success)
-    ----- stdout -----
-    ok imported
-
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]

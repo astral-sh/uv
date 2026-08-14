@@ -6,7 +6,7 @@ use std::path::Path;
 use std::str::FromStr;
 use std::sync::Arc;
 
-use anyhow::{Result, anyhow, bail};
+use anyhow::{Result, bail};
 use itertools::Itertools;
 use owo_colors::OwoColorize;
 use rustc_hash::{FxBuildHasher, FxHashMap};
@@ -695,12 +695,9 @@ pub(crate) async fn add(
     // Add any indexes that were provided on the command-line, in priority order.
     if !raw {
         let root_dir = match &target {
-            AddTarget::Script(script, _) => script.path.parent().ok_or_else(|| {
-                anyhow!(
-                    "Script path has no parent directory: {}",
-                    script.path.display()
-                )
-            })?,
+            AddTarget::Script(script, _) => {
+                script.path.parent().expect("script path has no parent")
+            }
             AddTarget::Project(project, _) => project.root(),
         };
         let locations = IndexLocations::new(indexes, Vec::new(), false);

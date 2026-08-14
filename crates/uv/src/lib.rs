@@ -44,7 +44,7 @@ use uv_pypi_types::{ParsedDirectoryUrl, ParsedUrl};
 use uv_python::{ConfigDiscovery, PythonRequest};
 use uv_requirements::{GroupsSpecification, RequirementsSource};
 use uv_requirements_txt::RequirementsTxtRequirement;
-use uv_scripts::{Pep723Error, Pep723Item, Pep723ItemRef, Pep723Script};
+use uv_scripts::{Pep723Error, Pep723Item, Pep723Script};
 use uv_settings::{Combine, EnvironmentOptions, FilesystemOptions, Options};
 use uv_static::EnvVars;
 use uv_warnings::{warn_user, warn_user_once};
@@ -495,9 +495,9 @@ async fn run_with_workspace_cache(
         .map(|uv| Options::simple(uv.globals.clone(), uv.top_level.clone()))
         .map(FilesystemOptions::from);
     let script_filesystem = if let Some(Pep723Item::Script(script)) = script.as_ref() {
-        let script_dir = Pep723ItemRef::from(script).directory()?;
+        let script_dir = script.path.parent().expect("script path has no parent");
         script_filesystem
-            .map(|options| options.relative_to(&script_dir))
+            .map(|options| options.relative_to(script_dir))
             .transpose()?
     } else {
         script_filesystem
