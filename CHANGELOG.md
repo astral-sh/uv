@@ -3,6 +3,33 @@
 <!-- prettier-ignore-start -->
 
 
+## 0.12.5
+
+Released on 2026-08-14.
+
+### Enhancements
+
+- Include hashes in cyclonedx exports ([#21131](https://github.com/astral-sh/uv/pull/21131))
+- Simplify editable requirement errors and hints ([#21130](https://github.com/astral-sh/uv/pull/21130))
+- Support referencing indexes by name via `--index` and `--default-index` ([#17455](https://github.com/astral-sh/uv/pull/17455))
+
+### Preview features
+
+- Fall back to logical cache accounting on unsupported filesystems ([#21133](https://github.com/astral-sh/uv/pull/21133))
+
+### Bug fixes
+
+- Fix relative indexes in scrolls ([#21097](https://github.com/astral-sh/uv/pull/21097))
+- Order equal-priority Python installations by key ([#21134](https://github.com/astral-sh/uv/pull/21134))
+
+### Other changes
+
+- Add a cache directory builder to test contexts ([#21120](https://github.com/astral-sh/uv/pull/21120))
+- Reject ignored cache overrides in integration snapshots ([#21119](https://github.com/astral-sh/uv/pull/21119))
+- Stabilize publish index readiness checks ([#21050](https://github.com/astral-sh/uv/pull/21050))
+- Sync latest Python releases: 3.10.21, 3.11.16, 3.12.14  ([#21138](https://github.com/astral-sh/uv/pull/21138))
+- Test unnamed Git source build exceptions ([#21126](https://github.com/astral-sh/uv/pull/21126))
+
 ## 0.12.4
 
 Released on 2026-08-13.
