@@ -6,6 +6,7 @@ use std::io;
 use std::path::Path;
 
 use tracing::debug;
+use uv_fs::PhysicalSpaceError;
 
 use crate::CleanReporter;
 
@@ -93,7 +94,15 @@ impl Removal {
                 Ok(physical) => {
                     self.physical_bytes = Some(physical_bytes.saturating_add(physical));
                 }
-                Err(error) => {
+                Err(PhysicalSpaceError::UnsupportedFilesystem) => {
+                    debug!(
+                        "Physical space accounting is unsupported for {}; falling back to logical space",
+                        path.display()
+                    );
+                    self.physical_bytes = None;
+                    self.physical_bytes_incomplete = false;
+                }
+                Err(PhysicalSpaceError::UnmeasurableFile(error)) => {
                     debug!(
                         "Failed to measure physical space for {}: {error}",
                         path.display()
@@ -233,7 +242,8 @@ impl std::ops::AddAssign for Removal {
             .physical_bytes
             .zip(other.physical_bytes)
             .map(|(left, right)| left.saturating_add(right));
-        self.physical_bytes_incomplete |= other.physical_bytes_incomplete;
+        self.physical_bytes_incomplete = self.physical_bytes.is_some()
+            && (self.physical_bytes_incomplete || other.physical_bytes_incomplete);
     }
 }
 
