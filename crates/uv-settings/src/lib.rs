@@ -7,7 +7,7 @@ use tracing::info_span;
 use uv_client::{DEFAULT_CONNECT_TIMEOUT, DEFAULT_READ_TIMEOUT, DEFAULT_READ_TIMEOUT_UPLOAD};
 use uv_configuration::RequiredVersion;
 use uv_dirs::{system_config_file, user_config_dir};
-use uv_distribution_types::Origin;
+use uv_distribution_types::{IndexUrlError, Origin};
 use uv_flags::EnvironmentFlags;
 use uv_fs::Simplified;
 use uv_normalize::{GroupName, PackageName};
@@ -31,6 +31,11 @@ impl FilesystemOptions {
     /// Convert the [`FilesystemOptions`] into [`Options`].
     pub fn into_options(self) -> Options {
         self.0
+    }
+
+    /// Resolve the [`FilesystemOptions`] relative to the given root directory.
+    pub fn relative_to(self, root_dir: &Path) -> Result<Self, IndexUrlError> {
+        Ok(Self(self.0.relative_to(root_dir)?))
     }
 }
 
