@@ -172,6 +172,30 @@ impl TestContext {
         new
     }
 
+    /// Set the cache directory for all commands and update its snapshot filters.
+    ///
+    /// Relative paths are resolved against the test working directory.
+    #[must_use]
+    pub fn with_cache_dir(mut self, cache_dir: impl AsRef<Path>) -> Self {
+        let cache_dir = if cache_dir.as_ref().is_absolute() {
+            cache_dir.as_ref().to_path_buf()
+        } else {
+            self.temp_dir
+                .join(cache_dir.as_ref().components().collect::<PathBuf>())
+        };
+
+        self.filters
+            .retain(|(_, replacement)| replacement != "[CACHE_DIR]/");
+        self.cache_dir = ChildPath::new(cache_dir);
+
+        for pattern in Self::path_patterns(&self.cache_dir) {
+            self.filters
+                .insert(0, (pattern, "[CACHE_DIR]/".to_string()));
+        }
+
+        self
+    }
+
     /// Set the "exclude newer" timestamp for all commands in this context.
     #[must_use]
     pub fn with_exclude_newer(mut self, exclude_newer: &str) -> Self {

@@ -257,7 +257,7 @@ fn workspace_list_no_project() {
 /// boundaries.
 #[test]
 fn workspace_list_scripts() -> Result<()> {
-    let mut context = uv_test::test_context!("3.12");
+    let context = uv_test::test_context!("3.12");
 
     context.init().arg("project").assert().success();
     let project = context.temp_dir.child("project");
@@ -347,7 +347,7 @@ fn workspace_list_scripts() -> Result<()> {
     // The configured cache is excluded even when it has not been initialized with ignore files.
     let cache = project.child("cache");
     cache.child("script.py").write_str(script)?;
-    context.cache_dir = cache;
+    let context = context.with_cache_dir(cache.path());
     uv_snapshot!(context.filters(), context.workspace_list()
         .arg("--scripts")
         .current_dir(&project), @"

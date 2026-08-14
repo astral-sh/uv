@@ -436,8 +436,7 @@ fn sync_centralized_env_dry_run() -> Result<()> {
 
 #[test]
 fn cache_prune_removes_and_recreates_centralized_environment() -> Result<()> {
-    let mut context = uv_test::test_context_with_versions!(&["3.12"]);
-    context.cache_dir = context.temp_dir.child("cache");
+    let context = uv_test::test_context_with_versions!(&["3.12"]).with_cache_dir("cache");
     write_project(&context, ">=3.12", &[])?;
 
     context
