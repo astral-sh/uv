@@ -40,6 +40,19 @@ pub enum ParsedUrlError {
     MissingExtensionPath(PathBuf, ExtensionError),
 }
 
+/// An error converting a parsed URL into an editable source.
+#[derive(Debug, Error)]
+pub enum MakeEditableError {
+    #[error("Local archives cannot be editable")]
+    LocalArchive,
+
+    #[error("Remote archives cannot be editable")]
+    RemoteArchive,
+
+    #[error("Git sources cannot be editable")]
+    Git,
+}
+
 #[derive(Debug, Clone, Hash, PartialEq, PartialOrd, Eq, Ord)]
 pub struct VerbatimParsedUrl {
     pub parsed_url: ParsedUrl,
@@ -56,6 +69,15 @@ impl VerbatimParsedUrl {
     /// Returns `true` if the URL is editable.
     pub fn is_editable(&self) -> bool {
         self.parsed_url.is_editable()
+    }
+
+    /// Make the URL an editable source.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`MakeEditableError`] if the URL does not refer to a local directory.
+    pub fn make_editable(&mut self) -> Result<(), MakeEditableError> {
+        self.parsed_url.make_editable()
     }
 }
 
@@ -211,6 +233,23 @@ impl ParsedUrl {
                 ..
             })
         )
+    }
+
+    /// Make the URL an editable source.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`MakeEditableError`] if the URL does not refer to a local directory.
+    fn make_editable(&mut self) -> Result<(), MakeEditableError> {
+        match self {
+            Self::Directory(directory) => {
+                directory.editable = Some(true);
+                Ok(())
+            }
+            Self::Path(_) => Err(MakeEditableError::LocalArchive),
+            Self::Archive(_) => Err(MakeEditableError::RemoteArchive),
+            Self::GitDirectory(_) | Self::GitPath(_) => Err(MakeEditableError::Git),
+        }
     }
 }
 
