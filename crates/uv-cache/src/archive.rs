@@ -1,5 +1,5 @@
 use std::convert::Infallible;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
 /// A unique identifier for an archive (unzipped wheel) in the cache.
@@ -9,6 +9,10 @@ use std::str::FromStr;
 /// we may want to bump to `archive-v1` and switch to using `uv_fastid::Id` directly.
 #[derive(Debug, Clone, Eq, PartialEq, Hash, serde::Serialize, serde::Deserialize)]
 pub struct ArchiveId(String);
+
+/// A unique identifier for a file stored in the archive file bucket.
+#[derive(Debug, Clone, Eq, PartialEq, Hash)]
+pub struct ArchiveFileId(PathBuf);
 
 impl Default for ArchiveId {
     fn default() -> Self {
@@ -28,6 +32,20 @@ impl ArchiveId {
     /// identifies the persisted directory contents.
     pub fn from_digest(digest: String) -> Self {
         Self(digest)
+    }
+}
+
+impl ArchiveFileId {
+    /// Generate a content-addressed identifier for an extracted file.
+    pub fn from_content_digest(digest: &str) -> Self {
+        let shard = digest.get(..2).unwrap_or(digest);
+        Self(PathBuf::from(shard).join(digest))
+    }
+}
+
+impl AsRef<Path> for ArchiveFileId {
+    fn as_ref(&self) -> &Path {
+        &self.0
     }
 }
 

@@ -1,4 +1,5 @@
 use std::convert;
+use std::path::Path;
 use std::sync::Arc;
 
 use anyhow::{Context, Error, Result};
@@ -6,7 +7,7 @@ use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use tokio::sync::oneshot;
 use tracing::{instrument, warn};
 
-use uv_cache::Cache;
+use uv_cache::{Cache, CacheBucket};
 use uv_configuration::initialize_rayon_once;
 use uv_distribution_types::CachedDist;
 use uv_install_wheel::{Layout, LinkMode};
@@ -15,7 +16,7 @@ use uv_python::PythonEnvironment;
 
 pub struct Installer<'a> {
     venv: &'a PythonEnvironment,
-    link_mode: LinkMode,
+    link_mode: Option<LinkMode>,
     cache: Option<&'a Cache>,
     reporter: Option<Arc<dyn Reporter>>,
     /// The name of the [`Installer`].
@@ -31,7 +32,7 @@ impl<'a> Installer<'a> {
     pub fn new(venv: &'a PythonEnvironment, preview: Preview) -> Self {
         Self {
             venv,
-            link_mode: LinkMode::default(),
+            link_mode: None,
             cache: None,
             reporter: None,
             name: Some("uv".to_string()),
@@ -42,7 +43,7 @@ impl<'a> Installer<'a> {
 
     /// Set the [`LinkMode`][`uv_install_wheel::LinkMode`] to use for this installer.
     #[must_use]
-    pub fn with_link_mode(self, link_mode: LinkMode) -> Self {
+    pub fn with_link_mode(self, link_mode: Option<LinkMode>) -> Self {
         Self { link_mode, ..self }
     }
 
@@ -96,7 +97,7 @@ impl<'a> Installer<'a> {
         } = self;
 
         if cache.is_some_and(Cache::is_temporary) {
-            if link_mode.is_symlink() {
+            if link_mode.is_some_and(|link_mode| link_mode.is_symlink()) {
                 return Err(anyhow::anyhow!(
                     "Symlink-based installation is not supported with `--no-cache`. The created environment will be rendered unusable by the removal of the cache."
                 ));
@@ -107,6 +108,8 @@ impl<'a> Installer<'a> {
 
         let layout = venv.interpreter().layout();
         let relocatable = venv.relocatable();
+        let archive_metadata = cache.map(|cache| cache.bucket(CacheBucket::ArchiveMetadata));
+        let archive_files = cache.map(|cache| cache.bucket(CacheBucket::ArchiveFiles));
         // Initialize the threadpool with the user settings.
         initialize_rayon_once();
         rayon::spawn(move || {
@@ -115,6 +118,8 @@ impl<'a> Installer<'a> {
                 &layout,
                 installer_name.as_deref(),
                 link_mode,
+                archive_metadata.as_deref(),
+                archive_files.as_deref(),
                 reporter.as_ref(),
                 relocatable,
                 installer_metadata,
@@ -134,18 +139,30 @@ impl<'a> Installer<'a> {
     #[instrument(skip_all, fields(num_wheels = %wheels.len()))]
     pub fn install_blocking(self, wheels: Vec<CachedDist>) -> Result<Vec<CachedDist>> {
         if self.cache.is_some_and(Cache::is_temporary) {
-            if self.link_mode.is_symlink() {
+            if self
+                .link_mode
+                .is_some_and(|link_mode| link_mode.is_symlink())
+            {
                 return Err(anyhow::anyhow!(
                     "Symlink-based installation is not supported with `--no-cache`. The created environment will be rendered unusable by the removal of the cache."
                 ));
             }
         }
 
+        let archive_metadata = self
+            .cache
+            .map(|cache| cache.bucket(CacheBucket::ArchiveMetadata));
+        let archive_files = self
+            .cache
+            .map(|cache| cache.bucket(CacheBucket::ArchiveFiles));
+
         install(
             wheels,
             &self.venv.interpreter().layout(),
             self.name.as_deref(),
             self.link_mode,
+            archive_metadata.as_deref(),
+            archive_files.as_deref(),
             self.reporter.as_ref(),
             self.venv.relocatable(),
             self.metadata,
@@ -160,7 +177,9 @@ fn install(
     wheels: Vec<CachedDist>,
     layout: &Layout,
     installer_name: Option<&str>,
-    link_mode: LinkMode,
+    link_mode: Option<LinkMode>,
+    archive_metadata: Option<&Path>,
+    archive_files: Option<&Path>,
     reporter: Option<&Arc<dyn Reporter>>,
     relocatable: bool,
     installer_metadata: bool,
@@ -187,6 +206,8 @@ fn install(
             wheel.build_info(),
             installer_name,
             installer_metadata,
+            archive_metadata,
+            archive_files,
             link_mode,
             &state,
         )

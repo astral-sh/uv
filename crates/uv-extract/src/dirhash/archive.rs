@@ -1,6 +1,6 @@
 //! Content-addressed identities for extracted wheel archives.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use super::{DirhashError, DirhashTree};
 use crate::archive_path::SanitizedArchivePath;
@@ -41,7 +41,7 @@ impl From<DirectoryDigest> for String {
 
 /// A file extracted from an archive, along with its content-addressing metadata.
 #[derive(Debug, Clone, Eq, PartialEq)]
-pub(crate) struct ExtractedFile {
+pub struct ExtractedFile {
     path: SanitizedArchivePath,
     size: u64,
     digest: blake3::Hash,
@@ -53,13 +53,18 @@ impl ExtractedFile {
     }
 
     /// Return the path of the extracted file within the archive.
-    pub(crate) fn path(&self) -> &SanitizedArchivePath {
-        &self.path
+    pub fn path(&self) -> &Path {
+        self.path.as_path()
     }
 
-    /// Convert the extracted file into a `(path, size)` pair.
-    pub(crate) fn into_record(self) -> (PathBuf, u64) {
-        (self.path.into_path_buf(), self.size)
+    /// Return the hex-encoded content digest of the extracted file.
+    pub fn digest_hex(&self) -> String {
+        self.digest.to_hex().to_string()
+    }
+
+    /// Return the extracted file as a `(path, size)` pair.
+    pub fn to_record(&self) -> (PathBuf, u64) {
+        (self.path.to_path_buf(), self.size)
     }
 }
 
@@ -78,7 +83,7 @@ pub(crate) fn directory_tree_from_extracted<'a>(
     }
 
     for file in files {
-        tree.add_file(&digest_path(file.path()), file.digest)?;
+        tree.add_file(&digest_path(&file.path), file.digest)?;
     }
 
     Ok(tree)
