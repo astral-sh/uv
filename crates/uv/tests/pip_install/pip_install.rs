@@ -12607,6 +12607,86 @@ fn pep_751_install_invalid_artifact_urls() -> Result<()> {
 }
 
 #[test]
+fn pep_751_install_invalid_hashes() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let pylock_toml = context.temp_dir.child("pylock.toml");
+
+    pylock_toml.write_str(
+        r#"
+        lock-version = "1.0"
+        created-by = "uv"
+        requires-python = ">=3.12"
+
+        [[packages]]
+        name = "foo"
+        version = "1.0.0"
+        wheels = [{ name = "foo-1.0.0-py3-none-any.whl", url = "https://example.com/foo-1.0.0-py3-none-any.whl", hashes = { sha256 = "short" } }]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--preview")
+        .arg("--offline")
+        .arg("--dry-run")
+        .arg("-r")
+        .arg("pylock.toml"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Invalid hash digest length (expected 64 hexadecimal characters, found 5)
+    ");
+
+    pylock_toml.write_str(
+        r#"
+        lock-version = "1.0"
+        created-by = "uv"
+        requires-python = ">=3.12"
+
+        [[packages]]
+        name = "foo"
+        version = "1.0.0"
+        sdist = { name = "foo-1.0.0.tar.gz", url = "https://example.com/foo-1.0.0.tar.gz", hashes = { sha256 = "gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg" } }
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--preview")
+        .arg("--offline")
+        .arg("--dry-run")
+        .arg("-r")
+        .arg("pylock.toml"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Invalid hash digest (expected only hexadecimal characters): `gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg`
+    ");
+
+    pylock_toml.write_str(
+        r#"
+        lock-version = "1.0"
+        created-by = "uv"
+        requires-python = ">=3.12"
+
+        [[packages]]
+        name = "foo"
+        version = "1.0.0"
+        archive = { url = "https://example.com/foo-1.0.0-py3-none-any.whl", hashes = { sha256 = "short" } }
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--preview")
+        .arg("--offline")
+        .arg("--dry-run")
+        .arg("-r")
+        .arg("pylock.toml"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Invalid hash digest length (expected 64 hexadecimal characters, found 5)
+    ");
+
+    Ok(())
+}
+
+#[test]
 fn pep_751_install_directory() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 

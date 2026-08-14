@@ -6513,20 +6513,16 @@ impl FromStr for Hash {
     type Err = HashParseError;
 
     fn from_str(s: &str) -> Result<Self, HashParseError> {
-        let (algorithm, digest) = s.split_once(':').ok_or(HashParseError(
-            "expected '{algorithm}:{digest}', but found no ':' in hash digest",
-        ))?;
+        let (algorithm, digest) = s.split_once(':').ok_or_else(|| {
+            HashParseError(
+                "expected '{algorithm}:{digest}', but found no ':' in hash digest".to_string(),
+            )
+        })?;
         let algorithm = algorithm
             .parse()
-            .map_err(|_| HashParseError("unrecognized hash algorithm"))?;
-        let digest = digest.into();
-        let hash = match algorithm {
-            HashAlgorithm::Md5 => HashDigest::Md5(digest),
-            HashAlgorithm::Sha256 => HashDigest::Sha256(digest),
-            HashAlgorithm::Sha384 => HashDigest::Sha384(digest),
-            HashAlgorithm::Sha512 => HashDigest::Sha512(digest),
-            HashAlgorithm::Blake2b => HashDigest::Blake2b(digest),
-        };
+            .map_err(|_| HashParseError("unrecognized hash algorithm".to_string()))?;
+        let hash = HashDigest::new(algorithm, digest)
+            .map_err(|error| HashParseError(error.to_string()))?;
         Ok(Self(hash))
     }
 }
@@ -6562,43 +6558,7 @@ impl<'de> serde::Deserialize<'de> for Hash {
 
 impl From<Hash> for Hashes {
     fn from(value: Hash) -> Self {
-        match value.0 {
-            HashDigest::Md5(digest) => Self {
-                md5: Some(digest),
-                sha256: None,
-                sha384: None,
-                sha512: None,
-                blake2b: None,
-            },
-            HashDigest::Sha256(digest) => Self {
-                md5: None,
-                sha256: Some(digest),
-                sha384: None,
-                sha512: None,
-                blake2b: None,
-            },
-            HashDigest::Sha384(digest) => Self {
-                md5: None,
-                sha256: None,
-                sha384: Some(digest),
-                sha512: None,
-                blake2b: None,
-            },
-            HashDigest::Sha512(digest) => Self {
-                md5: None,
-                sha256: None,
-                sha384: None,
-                sha512: Some(digest),
-                blake2b: None,
-            },
-            HashDigest::Blake2b(digest) => Self {
-                md5: None,
-                sha256: None,
-                sha384: None,
-                sha512: None,
-                blake2b: Some(digest),
-            },
-        }
+        Self::from(value.0)
     }
 }
 
@@ -7644,13 +7604,13 @@ enum SourceParseError {
 
 /// An error that occurs when a hash digest could not be parsed.
 #[derive(Clone, Debug, Eq, PartialEq)]
-struct HashParseError(&'static str);
+struct HashParseError(String);
 
 impl std::error::Error for HashParseError {}
 
 impl Display for HashParseError {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        Display::fmt(self.0, f)
+        Display::fmt(&self.0, f)
     }
 }
 
@@ -8419,6 +8379,34 @@ wheels = [{ url = "https://files.pythonhosted.org/packages/14/fd/2f20c40b45e4fb4
 "#;
         let result: Result<Lock, _> = toml::from_str(data);
         insta::assert_debug_snapshot!(result);
+    }
+
+    #[test]
+    fn hash_rejects_invalid_digest() {
+        let error = Hash::from_str("sha256:short").expect_err("invalid digest length");
+        insta::assert_snapshot!(error, @"Invalid hash digest length (expected 64 hexadecimal characters, found 5)");
+
+        let data = r#"
+version = 1
+requires-python = ">=3.12"
+
+[[package]]
+name = "anyio"
+version = "4.3.0"
+source = { registry = "https://pypi.org/simple" }
+wheels = [{ url = "https://example.com/anyio-4.3.0-py3-none-any.whl", hash = "sha256:short" }]
+"#;
+        assert!(toml::from_str::<Lock>(data).is_err());
+    }
+
+    #[test]
+    fn hash_normalizes_uppercase_digest() {
+        let hash = Hash::from_str(
+            "sha256:048E05D0F6CAEED70D731F3DB756D35DCC1F35747C8C403364A8332C630441B8",
+        )
+        .expect("valid uppercase digest");
+
+        insta::assert_snapshot!(hash, @"sha256:048e05d0f6caeed70d731f3db756d35dcc1f35747c8c403364a8332c630441b8");
     }
 
     #[test]

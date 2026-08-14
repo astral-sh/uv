@@ -180,7 +180,8 @@ impl HashStrategy {
                 .iter()
                 .map(|digest| HashDigest::from_str(digest))
                 .collect::<Result<Vec<_>, _>>()?;
-            if let Some(fragment_hashes) = requirement.hashes().map(HashDigests::from) {
+            if let Some(fragment_hashes) = requirement.hashes()? {
+                let fragment_hashes = HashDigests::try_from(fragment_hashes)?;
                 merge_digests(&mut digests, fragment_hashes.iter(), requirement)?;
             }
 
@@ -231,7 +232,8 @@ impl HashStrategy {
                 .iter()
                 .map(|digest| HashDigest::from_str(digest))
                 .collect::<Result<Vec<_>, _>>()?;
-            if let Some(fragment_hashes) = requirement.hashes().map(HashDigests::from) {
+            if let Some(fragment_hashes) = requirement.hashes()? {
+                let fragment_hashes = HashDigests::try_from(fragment_hashes)?;
                 merge_digests(&mut digests, fragment_hashes.iter(), requirement)?;
             }
 
@@ -344,7 +346,7 @@ impl HashStrategy {
         let mut hashes = None;
 
         for requirement in requirements {
-            let Some((id, digests)) = Self::requirement_hashes(requirement) else {
+            let Some((id, digests)) = Self::requirement_hashes(requirement)? else {
                 continue;
             };
             let current = hashes.as_ref().unwrap_or(existing);
@@ -365,14 +367,21 @@ impl HashStrategy {
     }
 
     /// Extract the archive URL hash target and digests for a requirement, if any.
-    fn requirement_hashes(requirement: &Requirement) -> Option<(VersionId, Vec<HashDigest>)> {
-        let mut digests = HashDigests::from(requirement.hashes()?).to_vec();
+    fn requirement_hashes(
+        requirement: &Requirement,
+    ) -> Result<Option<(VersionId, Vec<HashDigest>)>, HashStrategyError> {
+        let Some(hashes) = requirement.hashes()? else {
+            return Ok(None);
+        };
+        let mut digests = HashDigests::try_from(hashes)?.to_vec();
         if digests.is_empty() {
-            return None;
+            return Ok(None);
         }
         digests.sort_unstable();
-        let id = Self::pin(requirement)?;
-        Some((id, digests))
+        let Some(id) = Self::pin(requirement) else {
+            return Ok(None);
+        };
+        Ok(Some((id, digests)))
     }
 
     /// Pin a [`Requirement`] to a [`VersionId`], if possible.
@@ -516,9 +525,9 @@ mod tests {
     use uv_distribution_types::{
         HashPolicy, Requirement, RequirementSource, UnresolvedRequirement,
     };
-    use uv_pypi_types::HashDigest;
+    use uv_pypi_types::{HashDigest, HashError};
 
-    use super::HashStrategy;
+    use super::{HashStrategy, HashStrategyError};
 
     fn requirement(url: &str) -> Requirement {
         Requirement {
@@ -576,5 +585,55 @@ mod tests {
             };
             assert_eq!(hasher.get_url(url), HashPolicy::All(expected.as_slice()));
         }
+    }
+
+    #[test]
+    fn from_requirements_normalizes_and_deduplicates_direct_url_hashes() {
+        let lowercase = UnresolvedRequirement::Named(requirement(
+            "https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl#sha256=cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f",
+        ));
+        let uppercase = UnresolvedRequirement::Named(requirement(
+            "https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl#subdirectory=src&sha256=CFDB2B588B9FC25EDE96D8DB56ED50848B0B649DCA3DD1DF0B11F683BB9E0B5F",
+        ));
+
+        let strategy = HashStrategy::from_requirements(
+            [(&lowercase, &[][..]), (&uppercase, &[][..])].into_iter(),
+            std::iter::empty(),
+            None,
+            HashCheckingMode::Require,
+        )
+        .expect("equivalent hash spellings should merge");
+
+        if let UnresolvedRequirement::Named(requirement) = &lowercase
+            && let RequirementSource::Url { url, .. } = &requirement.source
+        {
+            let expected: HashDigest =
+                "sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f"
+                    .parse()
+                    .expect("valid hash");
+            assert_eq!(strategy.get_url(url), HashPolicy::All(&[expected]));
+        }
+    }
+
+    #[test]
+    fn from_requirements_rejects_invalid_direct_url_hashes() {
+        let requirement = UnresolvedRequirement::Named(requirement(
+            "https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl#subdirectory=src&sha256=short",
+        ));
+
+        let result = HashStrategy::from_requirements(
+            [(&requirement, &[][..])].into_iter(),
+            std::iter::empty(),
+            None,
+            HashCheckingMode::Require,
+        );
+
+        assert!(matches!(
+            result,
+            Err(HashStrategyError::Hash(HashError::InvalidDigestLength {
+                expected: 64,
+                actual: 5,
+            }))
+        ));
     }
 }

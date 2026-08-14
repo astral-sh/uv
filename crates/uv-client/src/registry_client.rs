@@ -30,7 +30,7 @@ use uv_normalize::PackageName;
 use uv_pep440::{Version, VersionSpecifiers};
 use uv_pep508::MarkerEnvironment;
 use uv_platform_tags::Platform;
-use uv_pypi_types::{HashAlgorithm, HashDigest, HashDigests, ProjectStatus, Yanked};
+use uv_pypi_types::{Digest, HashDigest, HashDigests, ProjectStatus, Yanked};
 use uv_pypi_types::{
     PypiSimpleDetail, PypiSimpleIndex, PyxSimpleDetail, PyxSimpleIndex, ResolutionMetadata,
 };
@@ -1495,16 +1495,14 @@ impl From<CachedFile> for File {
 
 /// A compact representation of a single, canonical hash digest.
 ///
-/// Only lowercase hexadecimal digests of the expected length use the packed variants. Multiple
-/// hashes and non-canonical spellings remain in [`Self::Other`] so conversion back to
-/// [`HashDigests`] is lossless. The larger digests are boxed to keep the common archived layout
-/// small.
+/// Single validated digests use the packed variants; empty and multiple-hash collections remain
+/// in [`Self::Other`]. The larger digests are boxed to keep the common archived layout small.
 #[derive(rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)]
 #[rkyv(derive(Debug))]
 enum CachedHashDigests {
     Sha256([u8; 32]),
     Md5([u8; 16]),
-    Blake2b([u8; 32]),
+    Blake2b256([u8; 32]),
     Sha384(Box<[u8; 48]>),
     Sha512(Box<[u8; 64]>),
     Other(HashDigests),
@@ -1515,7 +1513,7 @@ impl Debug for CachedHashDigests {
         let (name, digest) = match self {
             Self::Md5(digest) => ("Md5", digest.as_slice()),
             Self::Sha256(digest) => ("Sha256", digest.as_slice()),
-            Self::Blake2b(digest) => ("Blake2b", digest.as_slice()),
+            Self::Blake2b256(digest) => ("Blake2b256", digest.as_slice()),
             Self::Sha384(digest) => ("Sha384", digest.as_slice()),
             Self::Sha512(digest) => ("Sha512", digest.as_slice()),
             Self::Other(hashes) => return f.debug_tuple("Other").field(hashes).finish(),
@@ -1529,21 +1527,13 @@ impl From<HashDigests> for CachedHashDigests {
         let [hash] = hashes.as_slice() else {
             return Self::Other(hashes);
         };
-        let cached = match hash.algorithm() {
-            HashAlgorithm::Md5 => decode_digest(hash).map(Self::Md5),
-            HashAlgorithm::Sha256 => decode_digest(hash).map(Self::Sha256),
-            HashAlgorithm::Blake2b => decode_digest(hash).map(Self::Blake2b),
-            HashAlgorithm::Sha384 => {
-                decode_digest(hash).map(|digest| Self::Sha384(Box::new(digest)))
-            }
-            HashAlgorithm::Sha512 => {
-                decode_digest(hash).map(|digest| Self::Sha512(Box::new(digest)))
-            }
-        };
-        let Some(cached) = cached else {
-            return Self::Other(hashes);
-        };
-        cached
+        match hash {
+            HashDigest::Md5(digest) => Self::Md5(decode_digest(digest)),
+            HashDigest::Sha256(digest) => Self::Sha256(decode_digest(digest)),
+            HashDigest::Blake2b256(digest) => Self::Blake2b256(decode_digest(digest)),
+            HashDigest::Sha384(digest) => Self::Sha384(Box::new(decode_digest(digest))),
+            HashDigest::Sha512(digest) => Self::Sha512(Box::new(decode_digest(digest))),
+        }
     }
 }
 
@@ -1559,61 +1549,40 @@ impl From<CachedHashDigests> for HashDigests {
 impl From<&CachedHashDigests> for HashDigests {
     fn from(hashes: &CachedHashDigests) -> Self {
         match hashes {
-            CachedHashDigests::Md5(digest) => Self::from(hash_digest(HashAlgorithm::Md5, digest)),
-            CachedHashDigests::Sha256(digest) => {
-                Self::from(hash_digest(HashAlgorithm::Sha256, digest))
+            CachedHashDigests::Md5(digest) => {
+                Self::from(HashDigest::Md5(Digest::from_bytes(*digest)))
             }
-            CachedHashDigests::Blake2b(digest) => {
-                Self::from(hash_digest(HashAlgorithm::Blake2b, digest))
+            CachedHashDigests::Sha256(digest) => {
+                Self::from(HashDigest::Sha256(Digest::from_bytes(*digest)))
+            }
+            CachedHashDigests::Blake2b256(digest) => {
+                Self::from(HashDigest::Blake2b256(Digest::from_bytes(*digest)))
             }
             CachedHashDigests::Sha384(digest) => {
-                Self::from(hash_digest(HashAlgorithm::Sha384, digest.as_slice()))
+                Self::from(HashDigest::Sha384(Digest::from_bytes(**digest)))
             }
             CachedHashDigests::Sha512(digest) => {
-                Self::from(hash_digest(HashAlgorithm::Sha512, digest.as_slice()))
+                Self::from(HashDigest::Sha512(Digest::from_bytes(**digest)))
             }
             CachedHashDigests::Other(hashes) => hashes.clone(),
         }
     }
 }
 
-/// Decodes a lowercase hexadecimal digest of exactly `N` bytes.
-///
-/// Rejecting non-canonical spellings lets [`CachedHashDigests::Other`] preserve their original
-/// text.
-fn decode_digest<const N: usize>(hash: &HashDigest) -> Option<[u8; N]> {
-    if hash.digest().len() != N * 2
-        || !hash
-            .digest()
-            .as_bytes()
-            .iter()
-            .all(|byte| byte.is_ascii_digit() || matches!(byte, b'a'..=b'f'))
-    {
-        return None;
+/// Decode a validated, lowercase hexadecimal digest of exactly `N` bytes.
+fn decode_digest<const N: usize>(digest: &Digest<N>) -> [u8; N] {
+    let mut decoded = [0; N];
+    for (index, pair) in digest.as_str().as_bytes().chunks_exact(2).enumerate() {
+        let decode_digit = |digit: u8| {
+            if digit.is_ascii_digit() {
+                digit - b'0'
+            } else {
+                digit - b'a' + 10
+            }
+        };
+        decoded[index] = (decode_digit(pair[0]) << 4) | decode_digit(pair[1]);
     }
-    let mut digest = [0; N];
-    hex::decode_to_slice(hash.digest().as_bytes(), &mut digest).ok()?;
-    Some(digest)
-}
-
-/// Reconstructs the canonical lowercase spelling of a packed digest.
-fn hash_digest(algorithm: HashAlgorithm, digest: &[u8]) -> HashDigest {
-    let mut encoded = [0; 128];
-    let length = digest.len() * 2;
-    let digest = if let Some(encoded) = encoded.get_mut(..length)
-        && hex::encode_to_slice(digest, &mut *encoded).is_ok()
-    {
-        SmallString::from(String::from_utf8_lossy(encoded))
-    } else {
-        SmallString::from(hex::encode(digest))
-    };
-    match algorithm {
-        HashAlgorithm::Md5 => HashDigest::Md5(digest),
-        HashAlgorithm::Sha256 => HashDigest::Sha256(digest),
-        HashAlgorithm::Sha384 => HashDigest::Sha384(digest),
-        HashAlgorithm::Sha512 => HashDigest::Sha512(digest),
-        HashAlgorithm::Blake2b => HashDigest::Blake2b(digest),
-    }
+    decoded
 }
 
 /// The list of projects available in a Simple API index.
@@ -1943,7 +1912,9 @@ mod tests {
     use tokio::sync::Semaphore;
     use url::Url;
     use uv_normalize::PackageName;
-    use uv_pypi_types::{HashAlgorithm, HashDigest, HashDigests, PypiSimpleDetail};
+    use uv_pypi_types::{
+        Digest, HashAlgorithm, HashDigest, HashDigests, PypiSimpleDetail, PyxSimpleDetail,
+    };
     use uv_redacted::DisplaySafeUrl;
     use uv_torch::{TorchBackend, TorchSource, TorchStrategy};
 
@@ -1967,11 +1938,11 @@ mod tests {
     #[test]
     fn cached_hash_digests_pack_canonical_digests() {
         let hashes = [
-            HashDigest::Md5("ab".repeat(16).into()),
-            HashDigest::Sha256("ab".repeat(32).into()),
-            HashDigest::Sha384("ab".repeat(48).into()),
-            HashDigest::Sha512("ab".repeat(64).into()),
-            HashDigest::Blake2b("ab".repeat(32).into()),
+            HashDigest::Md5(Digest::from_bytes([0xab; 16])),
+            HashDigest::Sha256(Digest::from_bytes([0xab; 32])),
+            HashDigest::Sha384(Digest::from_bytes([0xab; 48])),
+            HashDigest::Sha512(Digest::from_bytes([0xab; 64])),
+            HashDigest::Blake2b256(Digest::from_bytes([0xab; 32])),
         ];
 
         for hash in hashes {
@@ -1984,7 +1955,7 @@ mod tests {
                     | (CachedHashDigests::Sha256(_), HashAlgorithm::Sha256)
                     | (CachedHashDigests::Sha384(_), HashAlgorithm::Sha384)
                     | (CachedHashDigests::Sha512(_), HashAlgorithm::Sha512)
-                    | (CachedHashDigests::Blake2b(_), HashAlgorithm::Blake2b)
+                    | (CachedHashDigests::Blake2b256(_), HashAlgorithm::Blake2b256)
             ));
             assert_eq!(HashDigests::from(&cached), expected);
             assert_eq!(HashDigests::from(cached), expected);
@@ -1992,15 +1963,23 @@ mod tests {
     }
 
     #[test]
-    fn cached_hash_digests_preserve_noncanonical_digests() {
+    fn cached_hash_digests_pack_normalized_digests() {
+        let hash = HashDigest::new(HashAlgorithm::Sha256, "AB".repeat(32))
+            .expect("validate uppercase digest");
+        let expected = HashDigests::from(hash);
+        let cached = CachedHashDigests::from(expected.clone());
+
+        assert!(matches!(cached, CachedHashDigests::Sha256(_)));
+        assert_eq!(HashDigests::from(cached), expected);
+    }
+
+    #[test]
+    fn cached_hash_digests_preserve_empty_and_multiple_digests() {
         let hashes = [
             HashDigests::empty(),
-            HashDigests::from(HashDigest::Sha256("AB".repeat(32).into())),
-            HashDigests::from(HashDigest::Sha256("too-short".into())),
-            HashDigests::from(HashDigest::Sha256("gg".repeat(32).into())),
             HashDigests::from(vec![
-                HashDigest::Sha256("ab".repeat(32).into()),
-                HashDigest::Md5("ab".repeat(16).into()),
+                HashDigest::Sha256(Digest::from_bytes([0xab; 32])),
+                HashDigest::Md5(Digest::from_bytes([0xab; 16])),
             ]),
         ];
 
@@ -2345,6 +2324,101 @@ mod tests {
             .map(|SimpleDetailMetadatum { version, .. }| version.to_string())
             .collect();
         assert_eq!(versions, ["1.7.8".to_string()]);
+    }
+
+    #[test]
+    fn ignore_invalid_pypi_hashes() -> Result<(), Error> {
+        let response = r#"
+        {
+            "files": [
+                {
+                    "filename": "example-1.0.0-py3-none-any.whl",
+                    "hashes": {"sha256": "short"},
+                    "url": "https://files.example.com/example-1.0.0-py3-none-any.whl"
+                },
+                {
+                    "filename": "example-2.0.0-py3-none-any.whl",
+                    "hashes": {"sha256": "GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG"},
+                    "url": "https://files.example.com/example-2.0.0-py3-none-any.whl"
+                },
+                {
+                    "filename": "example-3.0.0-py3-none-any.whl",
+                    "hashes": {"sha256": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"},
+                    "url": "https://files.example.com/example-3.0.0-py3-none-any.whl"
+                }
+            ]
+        }
+        "#;
+        let data: PypiSimpleDetail = serde_json::from_str(response)?;
+        let package_name = PackageName::from_str("example")?;
+        let base = DisplaySafeUrl::parse("https://pypi.org/simple/example/")?;
+        let metadata = SimpleDetailMetadata::from_pypi_files(
+            data.files,
+            &package_name,
+            data.project_status,
+            &base,
+        );
+
+        let versions = metadata
+            .iter()
+            .map(|entry| entry.version.to_string())
+            .collect::<Vec<_>>();
+        insta::assert_debug_snapshot!(versions, @r#"
+        [
+            "3.0.0",
+        ]
+        "#);
+
+        Ok(())
+    }
+
+    #[test]
+    fn ignore_invalid_pyx_hashes() -> Result<(), Error> {
+        let response = r#"
+        {
+            "files": [
+                {
+                    "filename": "example-1.0.0-py3-none-any.whl",
+                    "hashes": {"sha256": "short"},
+                    "url": "https://files.example.com/example-1.0.0-py3-none-any.whl"
+                },
+                {
+                    "filename": "example-2.0.0-py3-none-any.whl",
+                    "hashes": {"sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},
+                    "url": "https://files.example.com/example-2.0.0-py3-none-any.whl",
+                    "zstd": {"hashes": {"sha256": "short"}}
+                },
+                {
+                    "filename": "example-3.0.0-py3-none-any.whl",
+                    "hashes": {"sha256": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"},
+                    "url": "https://files.example.com/example-3.0.0-py3-none-any.whl",
+                    "zstd": {"hashes": {"sha256": "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB"}}
+                }
+            ]
+        }
+        "#;
+        let data: PyxSimpleDetail = serde_json::from_str(response)?;
+        let package_name = PackageName::from_str("example")?;
+        let base = DisplaySafeUrl::parse("https://pypi.org/simple/example/")?;
+        let metadata = SimpleDetailMetadata::from_pyx_files(
+            data.files,
+            data.core_metadata,
+            &package_name,
+            data.project_status,
+            &base,
+        );
+
+        let versions = metadata
+            .iter()
+            .map(|entry| entry.version.to_string())
+            .collect::<Vec<_>>();
+        insta::assert_debug_snapshot!(versions, @r#"
+        [
+            "3.0.0",
+        ]
+        "#);
+
+        Ok(())
     }
 
     #[test]

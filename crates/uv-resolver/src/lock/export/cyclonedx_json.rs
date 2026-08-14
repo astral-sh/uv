@@ -229,13 +229,11 @@ impl<'a> ComponentBuilder<'a> {
 
             if let Some(sdist) = &package.sdist {
                 if let (Some(url), Some(hash)) = (sdist.url(), sdist.hash()) {
-                    if let (Ok(uri), Some(cdx_hash)) =
-                        (Uri::try_from(url.to_string()), to_cyclonedx_hash(&hash.0))
-                    {
+                    if let Ok(uri) = Uri::try_from(url.to_string()) {
                         external_references.push(ExternalReference {
                             url: ExternalReferenceUri::Url(uri),
                             comment: None,
-                            hashes: Some(Hashes(vec![cdx_hash])),
+                            hashes: Some(Hashes(vec![to_cyclonedx_hash(&hash.0)])),
                             external_reference_type: ExternalReferenceType::Distribution,
                         });
                     }
@@ -244,13 +242,11 @@ impl<'a> ComponentBuilder<'a> {
 
             for wheel in &package.wheels {
                 if let (WheelWireSource::Url { url }, Some(hash)) = (&wheel.url, &wheel.hash) {
-                    if let (Ok(uri), Some(cdx_hash)) =
-                        (Uri::try_from(url.to_string()), to_cyclonedx_hash(&hash.0))
-                    {
+                    if let Ok(uri) = Uri::try_from(url.to_string()) {
                         external_references.push(ExternalReference {
                             url: ExternalReferenceUri::Url(uri),
                             comment: None,
-                            hashes: Some(Hashes(vec![cdx_hash])),
+                            hashes: Some(Hashes(vec![to_cyclonedx_hash(&hash.0)])),
                             external_reference_type: ExternalReferenceType::Distribution,
                         });
                     }
@@ -497,22 +493,36 @@ enum PackageType<'a> {
 }
 
 /// Convert an internal [`HashDigest`] into a `CycloneDX` [`Hash`].
-fn to_cyclonedx_hash(hash: &HashDigest) -> Option<Hash> {
+fn to_cyclonedx_hash(hash: &HashDigest) -> Hash {
     let alg = match hash.algorithm() {
         UvHashAlgorithm::Md5 => HashAlgorithm::MD5,
         UvHashAlgorithm::Sha256 => HashAlgorithm::SHA_256,
         UvHashAlgorithm::Sha384 => HashAlgorithm::SHA_384,
         UvHashAlgorithm::Sha512 => HashAlgorithm::SHA_512,
-        UvHashAlgorithm::Blake2b => match hash.digest().len() {
-            64 => HashAlgorithm::BLAKE2b_256,
-            96 => HashAlgorithm::BLAKE2b_384,
-            128 => HashAlgorithm::BLAKE2b_512,
-            _ => return None,
-        },
+        UvHashAlgorithm::Blake2b256 => HashAlgorithm::BLAKE2b_256,
     };
 
-    Some(Hash {
+    Hash {
         alg,
         content: HashValue(hash.digest().to_string()),
-    })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use cyclonedx_bom::models::hash::HashAlgorithm;
+    use uv_pypi_types::HashDigest;
+
+    use super::to_cyclonedx_hash;
+
+    #[test]
+    fn blake2b_hash_uses_256_bit_algorithm() {
+        let digest = "blake2b:abcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcd"
+            .parse::<HashDigest>()
+            .expect("valid BLAKE2b-256 digest");
+        let hash = to_cyclonedx_hash(&digest);
+
+        assert_eq!(hash.alg, HashAlgorithm::BLAKE2b_256);
+        assert_eq!(hash.content.0, digest.digest());
+    }
 }

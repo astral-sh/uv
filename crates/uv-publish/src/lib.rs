@@ -1222,7 +1222,7 @@ impl FormMetadata {
             filename,
             vec![
                 Hasher::from(HashAlgorithm::Sha256),
-                Hasher::from(HashAlgorithm::Blake2b),
+                Hasher::from(HashAlgorithm::Blake2b256),
             ],
             reporter,
         )
@@ -1235,7 +1235,7 @@ impl FormMetadata {
 
         let blake2b_hash = hashes
             .iter()
-            .find(|hash| hash.algorithm() == HashAlgorithm::Blake2b)
+            .find(|hash| hash.algorithm() == HashAlgorithm::Blake2b256)
             .unwrap();
 
         let metadata = metadata(file, filename).await?;
@@ -2022,8 +2022,14 @@ mod tests {
     #[test]
     fn form_metadata_import_names() {
         let filename = DistFilename::try_from_normalized_filename("pkg-1.0.0.tar.gz").unwrap();
-        let sha256_hash: HashDigest = "sha256:0123".parse().unwrap();
-        let blake2b_hash: HashDigest = "blake2b:4567".parse().unwrap();
+        let sha256_hash: HashDigest =
+            "sha256:0123012301230123012301230123012301230123012301230123012301230123"
+                .parse()
+                .unwrap();
+        let blake2b_hash: HashDigest =
+            "blake2b:4567456745674567456745674567456745674567456745674567456745674567"
+                .parse()
+                .unwrap();
         let metadata = Metadata23 {
             metadata_version: "2.5".to_string(),
             name: "pkg".to_string(),
@@ -2043,8 +2049,8 @@ mod tests {
 
         assert_snapshot!(formatted_metadata, @r###"
         :action: file_upload
-        sha256_digest: 0123
-        blake2_256_digest: 4567
+        sha256_digest: 0123012301230123012301230123012301230123012301230123012301230123
+        blake2_256_digest: 4567456745674567456745674567456745674567456745674567456745674567
         protocol_version: 1
         metadata_version: 2.5
         name: pkg
