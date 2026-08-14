@@ -248,7 +248,10 @@ pub enum PythonSource {
     ParentInterpreter,
 }
 
-/// Equally preferred executables from the same search-path tier.
+/// A non-empty group of equally preferred Python executables.
+///
+/// Minor-version fallback candidates from one `PATH` directory share a group. Explicitly named
+/// executables and interpreters from other sources form singleton groups.
 struct PythonExecutableGroup(Vec<(PythonSource, PathBuf)>);
 
 impl PythonExecutableGroup {
@@ -623,6 +626,10 @@ fn python_executables<'a>(
 /// Executables are returned in the search path order, then by specificity of the name, e.g.
 /// `python3.9` is preferred over `python3` and `pypy3.9` is preferred over `python3.9`.
 ///
+/// Explicitly named executables form individual groups. Minor-version fallback candidates from
+/// the same directory share a group so their queried installation keys can determine their order
+/// without overriding search-path precedence.
+///
 /// If a `version` is not provided, we will only look for default executable names e.g.
 /// `python3` and `python` — `python3.9` and similar will not be included.
 fn python_executables_from_search_path<'a>(
@@ -791,9 +798,9 @@ fn find_all_minor(
 /// How to query discovered Python executables.
 #[derive(Debug, Clone, Copy)]
 enum QueryStrategy {
-    /// Query each executable as it is requested by the consumer.
+    /// Lazily query one executable group at a time.
     Sequential,
-    /// Query all executables concurrently before yielding results.
+    /// Query groups and their executables concurrently before yielding results.
     Parallel,
 }
 
@@ -868,16 +875,16 @@ fn python_installations_from_executables<'a>(
     strategy: QueryStrategy,
 ) -> Box<dyn Iterator<Item = Result<PythonInstallation, Error>> + 'a> {
     match strategy {
-        QueryStrategy::Sequential => Box::new(
-            executables
-                .flat_map(move |group| python_installations_from_executable_group(group, cache)),
-        ),
+        QueryStrategy::Sequential => Box::new(executables.flat_map(move |group| {
+            python_installations_from_executable_group(group, cache, strategy)
+        })),
         QueryStrategy::Parallel => {
             let items: Vec<Result<PythonExecutableGroup, Error>> = executables.collect();
             let results: Vec<Vec<Result<PythonInstallation, Error>>> = items
                 .into_par_iter()
                 .map(|group| {
-                    python_installations_from_executable_group(group, cache).collect::<Vec<_>>()
+                    python_installations_from_executable_group(group, cache, strategy)
+                        .collect::<Vec<_>>()
                 })
                 .collect();
             Box::new(results.into_iter().flatten())
@@ -889,15 +896,23 @@ fn python_installations_from_executables<'a>(
 fn python_installations_from_executable_group(
     group: Result<PythonExecutableGroup, Error>,
     cache: &Cache,
+    strategy: QueryStrategy,
 ) -> impl Iterator<Item = Result<PythonInstallation, Error>> + use<> {
     match group {
         Err(error) => Either::Left(iter::once(Err(error))),
         Ok(PythonExecutableGroup(executables)) => {
-            let mut installations = executables
-                .into_iter()
-                .map(|(source, path)| python_installation_from_executable(source, path, cache))
-                .collect::<Vec<_>>();
+            let mut installations = match strategy {
+                QueryStrategy::Sequential => executables
+                    .into_iter()
+                    .map(|(source, path)| python_installation_from_executable(source, path, cache))
+                    .collect::<Vec<_>>(),
+                QueryStrategy::Parallel => executables
+                    .into_par_iter()
+                    .map(|(source, path)| python_installation_from_executable(source, path, cache))
+                    .collect::<Vec<_>>(),
+            };
 
+            // Preserve failed queries in their discovery positions while sorting successful runs.
             for candidates in installations.split_mut(Result::is_err) {
                 candidates.sort_by(|left, right| match (left, right) {
                     (Ok(left), Ok(right)) => right.key().cmp(&left.key()),
