@@ -502,15 +502,15 @@ pub struct Zstd {
 #[derive(Debug, Clone, Eq, PartialEq, Default, Deserialize, Serialize)]
 pub struct Hashes {
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) md5: Option<Digest<16>>,
+    md5: Option<Digest<16>>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) sha256: Option<Digest<32>>,
+    sha256: Option<Digest<32>>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) sha384: Option<Digest<48>>,
+    sha384: Option<Digest<48>>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) sha512: Option<Digest<64>>,
+    sha512: Option<Digest<64>>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) blake2b: Option<Digest<32>>,
+    blake2b: Option<Digest<32>>,
 }
 
 impl Hashes {
@@ -652,7 +652,7 @@ pub struct Digest<const BYTES: usize>(SmallString);
 
 impl<const BYTES: usize> Digest<BYTES> {
     /// Validate a hexadecimal digest and normalize it to lowercase.
-    pub(crate) fn from_hex(digest: impl Into<SmallString>) -> Result<Self, HashError> {
+    fn from_hex(digest: impl Into<SmallString>) -> Result<Self, HashError> {
         let digest = digest.into();
         if digest.len() != BYTES * 2 {
             return Err(HashError::InvalidDigestLength {

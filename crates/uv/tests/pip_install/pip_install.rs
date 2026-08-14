@@ -28,6 +28,7 @@ use wiremock::{
     matchers::{basic_auth, method, path},
 };
 
+use uv_cache::CacheBucket;
 use uv_fs::{PortablePath, Simplified};
 use uv_static::EnvVars;
 #[cfg(feature = "test-git")]
@@ -105,6 +106,12 @@ fn install_wheel_cache_incompatible_with_older_uv() -> Result<()> {
             write_many_files_wheel(&wheel, 1)?;
 
             context.pip_install().arg(&wheel).assert().success();
+            // Expose the current archive metadata to older versions, despite the wheel cache bump.
+            fs::rename(
+                context.cache_dir.child(CacheBucket::Wheels.to_string()),
+                // NOTE: Update this cache bucket version as necessary.
+                context.cache_dir.child("wheels-v6"),
+            )?;
             context.venv().arg("--clear").assert().success();
 
             // New cache entries should not make older uv versions fail; see astral-sh/uv#20949.
