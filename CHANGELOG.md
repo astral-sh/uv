@@ -10,21 +10,21 @@ Released on 2026-08-14.
 ### Python
 
 - Add CPython 3.10.21, 3.11.16, and 3.12.14 ([#21138](https://github.com/astral-sh/uv/pull/21138))
-- Order equal-priority Python executables deterministically, preferring newer versions and standard builds over free-threaded variants ([#21134](https://github.com/astral-sh/uv/pull/21134))
+- Prefer newer versions and standard variants when selecting between equally prioritized Python interpreters ([#21134](https://github.com/astral-sh/uv/pull/21134))
 
 ### Enhancements
 
-- Redact credentials in invalid editable requirement URLs and provide clearer errors and hints ([#21130](https://github.com/astral-sh/uv/pull/21130))
+- Simplify errors and hints for invalid editable requirements, and redact credentials in requirement URLs ([#21130](https://github.com/astral-sh/uv/pull/21130))
 
 ### Preview features
 
-- Allow configured indexes to be selected by name with `--index` and `--default-index` under the `index-by-name` preview feature ([#17455](https://github.com/astral-sh/uv/pull/17455))
-- Include distribution artifact URLs and hashes in CycloneDX SBOM exports by default, with `--no-hashes` to omit them ([#21131](https://github.com/astral-sh/uv/pull/21131))
-- Fall back to logical cache-size accounting when a filesystem does not support physical-space accounting ([#21133](https://github.com/astral-sh/uv/pull/21133))
+- Allow `--index` and `--default-index` to select configured package indexes by name with the `index-by-name` preview feature ([#17455](https://github.com/astral-sh/uv/pull/17455))
+- Include distribution artifact URLs and hashes in CycloneDX SBOM exports by default ([#21131](https://github.com/astral-sh/uv/pull/21131))
+- Fall back to logical file sizes when using `cache-physical-space` on filesystems that do not support physical-space accounting ([#21133](https://github.com/astral-sh/uv/pull/21133))
 
 ### Bug fixes
 
-- Resolve relative index paths in PEP 723 scripts against the script directory instead of the current working directory, and have `uv add --script` write them relative to the script ([#21097](https://github.com/astral-sh/uv/pull/21097))
+- Resolve relative package index paths in PEP 723 scripts against the script directory ([#21097](https://github.com/astral-sh/uv/pull/21097))
 
 ## 0.12.4
 
