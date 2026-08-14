@@ -518,6 +518,7 @@ impl Hashes {
     pub fn parse_fragment(fragment: &str) -> Result<Self, HashError> {
         let mut parts = fragment.split('=');
 
+        // Extract exactly two parts.
         if let Some(name) = parts.next()
             && let Some(value) = parts.next()
             && let None = parts.next()
@@ -537,22 +538,17 @@ impl FromStr for Hashes {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let mut parts = s.split(':');
 
-        // Extract the key and value.
-        let name = parts
-            .next()
-            .ok_or_else(|| HashError::InvalidStructure(s.to_string()))?;
-        let value = parts
-            .next()
-            .ok_or_else(|| HashError::InvalidStructure(s.to_string()))?;
-
-        // Ensure there are no more parts.
-        if parts.next().is_some() {
-            return Err(HashError::InvalidStructure(s.to_string()));
+        // Extract exactly two parts.
+        if let Some(name) = parts.next()
+            && let Some(value) = parts.next()
+            && let None = parts.next()
+        {
+            let algorithm = HashAlgorithm::from_str(name)
+                .map_err(|_| HashError::InvalidStructure(s.to_string()))?;
+            Ok(Self::from(HashDigest::new(algorithm, value)?))
+        } else {
+            Err(HashError::InvalidStructure(s.to_string()))
         }
-
-        let algorithm = HashAlgorithm::from_str(name)
-            .map_err(|_| HashError::UnsupportedHashAlgorithm(s.to_string()))?;
-        Ok(Self::from(HashDigest::new(algorithm, value)?))
     }
 }
 
