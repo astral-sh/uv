@@ -518,22 +518,16 @@ impl Hashes {
     pub fn parse_fragment(fragment: &str) -> Result<Self, HashError> {
         let mut parts = fragment.split('=');
 
-        // Extract the key and value.
-        let name = parts
-            .next()
-            .ok_or_else(|| HashError::InvalidFragment(fragment.to_string()))?;
-        let value = parts
-            .next()
-            .ok_or_else(|| HashError::InvalidFragment(fragment.to_string()))?;
-
-        // Ensure there are no more parts.
-        if parts.next().is_some() {
-            return Err(HashError::InvalidFragment(fragment.to_string()));
+        if let Some(name) = parts.next()
+            && let Some(value) = parts.next()
+            && let None = parts.next()
+        {
+            let algorithm = HashAlgorithm::from_str(name)
+                .map_err(|_| HashError::UnsupportedHashAlgorithm(fragment.to_string()))?;
+            Ok(Self::from(HashDigest::new(algorithm, value)?))
+        } else {
+            Err(HashError::InvalidFragment(fragment.to_string()))
         }
-
-        let algorithm = HashAlgorithm::from_str(name)
-            .map_err(|_| HashError::UnsupportedHashAlgorithm(fragment.to_string()))?;
-        Ok(Self::from(HashDigest::new(algorithm, value)?))
     }
 }
 
