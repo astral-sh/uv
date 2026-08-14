@@ -3,11 +3,14 @@ use std::path::Path;
 
 use cyclonedx_bom::models::component::Classification;
 use cyclonedx_bom::models::dependency::{Dependencies, Dependency};
+use cyclonedx_bom::models::external_reference::{
+    ExternalReference, ExternalReferenceType, ExternalReferences, Uri as ExternalReferenceUri,
+};
 use cyclonedx_bom::models::hash::{Hash, HashAlgorithm, HashValue, Hashes};
 use cyclonedx_bom::models::metadata::Metadata;
 use cyclonedx_bom::models::property::{Properties, Property};
 use cyclonedx_bom::models::tool::{Tool, Tools};
-use cyclonedx_bom::prelude::{Bom, Component, Components, NormalizedString};
+use cyclonedx_bom::prelude::{Bom, Component, Components, NormalizedString, Uri};
 use itertools::Itertools;
 use percent_encoding::{AsciiSet, CONTROLS, percent_encode};
 use rustc_hash::FxHashSet;
@@ -23,7 +26,7 @@ use uv_pypi_types::{HashAlgorithm as UvHashAlgorithm, HashDigest};
 use uv_warnings::warn_user;
 
 use crate::lock::export::{ExportableRequirement, ExportableRequirements};
-use crate::lock::{LockErrorKind, Package, PackageId, RegistrySource, Source};
+use crate::lock::{LockErrorKind, Package, PackageId, RegistrySource, Source, WheelWireSource};
 use crate::{Installable, LockError};
 
 /// Character set for percent-encoding PURL components, copied from packageurl.rs (<https://github.com/scm-rs/packageurl.rs/blob/a725aa0ab332934c350641508017eb09ddfa0813/src/purl.rs#L18>).
@@ -221,17 +224,43 @@ impl<'a> ComponentBuilder<'a> {
             ));
         }
 
-        let hashes = if self.include_hashes {
-            let mut hashes = package.hashes();
-            hashes.sort_unstable();
-            let cyclonedx_hashes = hashes
-                .iter()
-                .filter_map(to_cyclonedx_hash)
-                .collect::<Vec<_>>();
-            if cyclonedx_hashes.is_empty() {
+        let external_references = if self.include_hashes {
+            let mut external_references = Vec::new();
+
+            if let Some(sdist) = &package.sdist {
+                if let (Some(url), Some(hash)) = (sdist.url(), sdist.hash()) {
+                    if let (Ok(uri), Some(cdx_hash)) =
+                        (Uri::try_from(url.to_string()), to_cyclonedx_hash(&hash.0))
+                    {
+                        external_references.push(ExternalReference {
+                            url: ExternalReferenceUri::Url(uri),
+                            comment: None,
+                            hashes: Some(Hashes(vec![cdx_hash])),
+                            external_reference_type: ExternalReferenceType::Distribution,
+                        });
+                    }
+                }
+            }
+
+            for wheel in &package.wheels {
+                if let (WheelWireSource::Url { url }, Some(hash)) = (&wheel.url, &wheel.hash) {
+                    if let (Ok(uri), Some(cdx_hash)) =
+                        (Uri::try_from(url.to_string()), to_cyclonedx_hash(&hash.0))
+                    {
+                        external_references.push(ExternalReference {
+                            url: ExternalReferenceUri::Url(uri),
+                            comment: None,
+                            hashes: Some(Hashes(vec![cdx_hash])),
+                            external_reference_type: ExternalReferenceType::Distribution,
+                        });
+                    }
+                }
+            }
+
+            if external_references.is_empty() {
                 None
             } else {
-                Some(Hashes(cyclonedx_hashes))
+                Some(ExternalReferences(external_references))
             }
         } else {
             None
@@ -250,14 +279,14 @@ impl<'a> ComponentBuilder<'a> {
             group: None,
             description: None,
             scope: None,
-            hashes,
+            hashes: None,
             licenses: None,
             copyright: None,
             cpe: None,
             swid: None,
             modified: None,
             pedigree: None,
-            external_references: None,
+            external_references,
             properties: if !properties.is_empty() {
                 Some(Properties(properties))
             } else {
@@ -496,32 +525,25 @@ mod tests {
 
     #[test]
     fn test_to_cyclonedx_hash() {
-        // SHA-256 (standard lockfile algorithm)
-        let hash = HashDigest {
-            algorithm: UvHashAlgorithm::Sha256,
-            digest: SmallString::from(
-                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-            ),
-        };
-        let cdx_hash = to_cyclonedx_hash(&hash).expect("SHA-256 conversion should succeed");
-        assert_eq!(cdx_hash.alg, HashAlgorithm::SHA_256);
-        assert_eq!(
-            cdx_hash.content.0,
-            "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
-        );
+        let cases = [
+            (UvHashAlgorithm::Md5, 32, HashAlgorithm::MD5),
+            (UvHashAlgorithm::Sha256, 64, HashAlgorithm::SHA_256),
+            (UvHashAlgorithm::Sha384, 96, HashAlgorithm::SHA_384),
+            (UvHashAlgorithm::Sha512, 128, HashAlgorithm::SHA_512),
+            (UvHashAlgorithm::Blake2b, 64, HashAlgorithm::BLAKE2b_256),
+            (UvHashAlgorithm::Blake2b, 96, HashAlgorithm::BLAKE2b_384),
+            (UvHashAlgorithm::Blake2b, 128, HashAlgorithm::BLAKE2b_512),
+        ];
 
-        // BLAKE2b digest length mappings (256, 384, 512 bits)
-        for (len, expected_alg) in [
-            (64, HashAlgorithm::BLAKE2b_256),
-            (96, HashAlgorithm::BLAKE2b_384),
-            (128, HashAlgorithm::BLAKE2b_512),
-        ] {
+        for (uv_alg, len, expected_alg) in cases {
+            let digest_str = "a".repeat(len);
             let hash = HashDigest {
-                algorithm: UvHashAlgorithm::Blake2b,
-                digest: SmallString::from("a".repeat(len)),
+                algorithm: uv_alg,
+                digest: SmallString::from(digest_str.as_str()),
             };
-            let cdx_hash = to_cyclonedx_hash(&hash).expect("BLAKE2b conversion should succeed");
+            let cdx_hash = to_cyclonedx_hash(&hash).expect("conversion should succeed");
             assert_eq!(cdx_hash.alg, expected_alg);
+            assert_eq!(cdx_hash.content.0, digest_str);
         }
 
         // BLAKE2b with unsupported length is safely skipped

@@ -5692,17 +5692,29 @@ fn cyclonedx_export_basic() -> Result<()> {
           "bom-ref": "urllib3-2@2.2.0",
           "name": "urllib3",
           "version": "2.2.0",
-          "hashes": [
+          "purl": "pkg:pypi/urllib3@2.2.0",
+          "externalReferences": [
             {
-              "alg": "SHA-256",
-              "content": "051d961ad0c62a94e50ecf1af379c3aba230c66c710493493560c0c223c49f20"
+              "type": "distribution",
+              "url": "https://files.pythonhosted.org/packages/e2/cc/abf6746cc90bc52df4ba730f301b89b3b844d6dc133cb89a01cfe2511eb9/urllib3-2.2.0.tar.gz",
+              "hashes": [
+                {
+                  "alg": "SHA-256",
+                  "content": "051d961ad0c62a94e50ecf1af379c3aba230c66c710493493560c0c223c49f20"
+                }
+              ]
             },
             {
-              "alg": "SHA-256",
-              "content": "ce3711610ddce217e6d113a2732fafad960a03fd0318c91faa79481e35c11224"
+              "type": "distribution",
+              "url": "https://files.pythonhosted.org/packages/88/75/311454fd3317aefe18415f04568edc20218453b709c63c58b9292c71be17/urllib3-2.2.0-py3-none-any.whl",
+              "hashes": [
+                {
+                  "alg": "SHA-256",
+                  "content": "ce3711610ddce217e6d113a2732fafad960a03fd0318c91faa79481e35c11224"
+                }
+              ]
             }
-          ],
-          "purl": "pkg:pypi/urllib3@2.2.0"
+          ]
         }
       ],
       "dependencies": [
@@ -5758,17 +5770,29 @@ fn cyclonedx_export_basic() -> Result<()> {
           "bom-ref": "urllib3-2@2.2.0",
           "name": "urllib3",
           "version": "2.2.0",
-          "hashes": [
+          "purl": "pkg:pypi/urllib3@2.2.0",
+          "externalReferences": [
             {
-              "alg": "SHA-256",
-              "content": "051d961ad0c62a94e50ecf1af379c3aba230c66c710493493560c0c223c49f20"
+              "type": "distribution",
+              "url": "https://files.pythonhosted.org/packages/e2/cc/abf6746cc90bc52df4ba730f301b89b3b844d6dc133cb89a01cfe2511eb9/urllib3-2.2.0.tar.gz",
+              "hashes": [
+                {
+                  "alg": "SHA-256",
+                  "content": "051d961ad0c62a94e50ecf1af379c3aba230c66c710493493560c0c223c49f20"
+                }
+              ]
             },
             {
-              "alg": "SHA-256",
-              "content": "ce3711610ddce217e6d113a2732fafad960a03fd0318c91faa79481e35c11224"
+              "type": "distribution",
+              "url": "https://files.pythonhosted.org/packages/88/75/311454fd3317aefe18415f04568edc20218453b709c63c58b9292c71be17/urllib3-2.2.0-py3-none-any.whl",
+              "hashes": [
+                {
+                  "alg": "SHA-256",
+                  "content": "ce3711610ddce217e6d113a2732fafad960a03fd0318c91faa79481e35c11224"
+                }
+              ]
             }
-          ],
-          "purl": "pkg:pypi/urllib3@2.2.0"
+          ]
         }
       ],
       "dependencies": [
@@ -7265,17 +7289,29 @@ fn cyclonedx_export_all_packages_non_workspace_root_dependency() -> Result<()> {
           "bom-ref": "urllib3-2@2.2.0",
           "name": "urllib3",
           "version": "2.2.0",
-          "hashes": [
+          "purl": "pkg:pypi/urllib3@2.2.0",
+          "externalReferences": [
             {
-              "alg": "SHA-256",
-              "content": "051d961ad0c62a94e50ecf1af379c3aba230c66c710493493560c0c223c49f20"
+              "type": "distribution",
+              "url": "https://files.pythonhosted.org/packages/e2/cc/abf6746cc90bc52df4ba730f301b89b3b844d6dc133cb89a01cfe2511eb9/urllib3-2.2.0.tar.gz",
+              "hashes": [
+                {
+                  "alg": "SHA-256",
+                  "content": "051d961ad0c62a94e50ecf1af379c3aba230c66c710493493560c0c223c49f20"
+                }
+              ]
             },
             {
-              "alg": "SHA-256",
-              "content": "ce3711610ddce217e6d113a2732fafad960a03fd0318c91faa79481e35c11224"
+              "type": "distribution",
+              "url": "https://files.pythonhosted.org/packages/88/75/311454fd3317aefe18415f04568edc20218453b709c63c58b9292c71be17/urllib3-2.2.0-py3-none-any.whl",
+              "hashes": [
+                {
+                  "alg": "SHA-256",
+                  "content": "ce3711610ddce217e6d113a2732fafad960a03fd0318c91faa79481e35c11224"
+                }
+              ]
             }
-          ],
-          "purl": "pkg:pypi/urllib3@2.2.0"
+          ]
         },
         {
           "type": "library",
