@@ -421,7 +421,7 @@ impl From<IndexHashAlgorithm> for HashAlgorithm {
             IndexHashAlgorithm::Sha256 => Self::Sha256,
             IndexHashAlgorithm::Sha384 => Self::Sha384,
             IndexHashAlgorithm::Sha512 => Self::Sha512,
-            IndexHashAlgorithm::Blake2b => Self::Blake2b,
+            IndexHashAlgorithm::Blake2b => Self::Blake2b256,
         }
     }
 }
