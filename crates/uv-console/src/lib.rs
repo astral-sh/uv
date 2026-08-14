@@ -298,22 +298,28 @@ pub fn input(prompt: &str, term: &Term) -> std::io::Result<String> {
 }
 
 /// Formats a number of bytes into a human readable IEC-prefixed size (binary units).
-#[allow(
-    clippy::cast_possible_truncation,
-    clippy::cast_possible_wrap,
-    clippy::cast_precision_loss,
-    clippy::cast_sign_loss
-)]
+#[expect(clippy::cast_precision_loss)]
 pub fn human_readable_bytes(bytes: u64) -> impl fmt::Display {
     const UNITS: [&str; 7] = ["B", "KiB", "MiB", "GiB", "TiB", "PiB", "EiB"];
 
     fmt::from_fn(move |formatter| {
-        let bytes_f32 = bytes as f32;
-        let i = ((bytes_f32.log2() / 10.0) as usize).min(UNITS.len() - 1);
-        let quantity = bytes_f32 / 1024_f32.powi(i as i32);
+        let rounding_margin = formatter
+            .precision()
+            .and_then(|precision| i32::try_from(precision).ok())
+            .map_or(0.0, |precision| 0.5 / 10_f64.powi(precision));
+        let mut quantity = bytes as f64;
+        let [mut unit, units @ ..] = UNITS;
+
+        for next_unit in units {
+            if 1024.0 - quantity > rounding_margin {
+                break;
+            }
+            quantity /= 1024.0;
+            unit = next_unit;
+        }
 
         fmt::Display::fmt(&quantity, formatter)?;
-        formatter.write_str(UNITS[i])
+        formatter.write_str(unit)
     })
 }
 
@@ -323,11 +329,39 @@ mod tests {
 
     #[test]
     fn human_readable_sizes() {
+        const MIB: u64 = 1024_u64.pow(2);
+        const PIB: u64 = 1024_u64.pow(5);
+
         assert_eq!(format!("{}", human_readable_bytes(0)), "0B");
         assert_eq!(format!("{}", human_readable_bytes(1024)), "1KiB");
         assert_eq!(format!("{}", human_readable_bytes(1536)), "1.5KiB");
         assert_eq!(format!("{}", human_readable_bytes(u64::MAX)), "16EiB");
+        assert_eq!(
+            format!("{}", human_readable_bytes(MIB - 51)),
+            "1023.9501953125KiB"
+        );
 
         assert_eq!(format!("{:.2}", human_readable_bytes(1023)), "1023.00B");
+        assert_eq!(format!("{:.0}", human_readable_bytes(MIB - 513)), "1023KiB");
+        assert_eq!(format!("{:.0}", human_readable_bytes(MIB - 512)), "1MiB");
+        assert_eq!(
+            format!("{:.1}", human_readable_bytes(MIB - 52)),
+            "1023.9KiB"
+        );
+        assert_eq!(format!("{:.1}", human_readable_bytes(MIB - 51)), "1.0MiB");
+        assert_eq!(
+            format!("{:.2}", human_readable_bytes(MIB - 51)),
+            "1023.95KiB"
+        );
+
+        assert_eq!(
+            format!("{:.10}", human_readable_bytes(PIB - 55)),
+            "1023.9999999999TiB"
+        );
+        // Specifically trigger a floating point imprecision corner case.
+        assert_eq!(
+            format!("{:.1}", human_readable_bytes(PIB * 1024 - PIB / 20 - 1)),
+            "1.0EiB"
+        );
     }
 }
