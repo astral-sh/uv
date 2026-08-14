@@ -10968,6 +10968,7 @@ async fn add_index_with_non_existent_relative_path_with_same_name_as_index() -> 
 fn add_index_by_name() -> Result<()> {
     let context = uv_test::test_context!("3.12");
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    // `explicit` and `default` are supported together; use both to test overriding behaviour.
     let initial = indoc! {r#"
         [project]
         name = "project"
@@ -10977,13 +10978,13 @@ fn add_index_by_name() -> Result<()> {
 
         [[tool.uv.index]]
         name = "internal"
-        url = "https://test.pypi.org/simple"
+        url = "https://example.invalid/simple"
         explicit = true
         default = true
     "#};
     pyproject_toml.write_str(initial)?;
 
-    // Without preview, a configured name is used only when no matching path exists.
+    // Without preview, selecting a configured index by name emits a warning.
     uv_snapshot!(context.filters(), context.add()
         .arg("iniconfig")
         .arg("--index").arg("internal")
@@ -11019,7 +11020,7 @@ fn add_index_by_name() -> Result<()> {
 
         [[tool.uv.index]]
         name = "internal"
-        url = "https://test.pypi.org/simple"
+        url = "https://example.invalid/simple"
         explicit = true
         default = true
 
@@ -11031,7 +11032,7 @@ fn add_index_by_name() -> Result<()> {
     Ok(())
 }
 
-/// Keep a configured local index relative when selecting it by name.
+/// Keep a named local index relative to its project when invoked from another directory.
 #[test]
 fn add_index_by_name_with_relative_path() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -11056,7 +11057,7 @@ fn add_index_by_name_with_relative_path() -> Result<()> {
     packages.create_dir_all()?;
     packages.child("placeholder").touch()?;
 
-    // Select the configured local index by name from outside the project directory.
+    // Base the relative index URL at the project, not the invocation directory.
     uv_snapshot!(context.filters(), context.add()
         .arg("iniconfig")
         .arg("--index").arg("local")
@@ -11070,7 +11071,7 @@ fn add_index_by_name_with_relative_path() -> Result<()> {
 
     let pyproject_toml = fs_err::read_to_string(pyproject_toml.path())?;
 
-    // Preserve the relative index URL and pin the dependency to the configured index.
+    // Preserve the relative URL spelling and pin the dependency to the configured index.
     insta::with_settings!({
         filters => context.filters(),
     }, {

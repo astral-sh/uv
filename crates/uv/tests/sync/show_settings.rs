@@ -1,5 +1,4 @@
 use std::process::Command;
-use std::rc::Rc;
 
 use assert_fs::prelude::*;
 use url::Url;
@@ -3232,29 +3231,6 @@ fn index_priority() -> anyhow::Result<()> {
     Ok(())
 }
 
-fn named_index_context() -> anyhow::Result<(Rc<TestContext>, impl Fn() -> Command)> {
-    let context = Rc::new(uv_test::test_context!("3.12"));
-    context
-        .temp_dir
-        .child("uv.toml")
-        .write_str(indoc::indoc! {r#"
-        [[index]]
-        name = "internal"
-        url = "https://test.pypi.org/simple"
-        explicit = true
-        default = true
-    "#})?;
-
-    let command_context = Rc::clone(&context);
-    let settings = move || {
-        let mut command = add_shared_args(command_context.pip_compile());
-        command.arg("requirements.in").arg("--show-settings");
-        command
-    };
-
-    Ok((context, settings))
-}
-
 /// Named index arguments must resolve identically to their explicit CLI spellings.
 #[test]
 #[cfg_attr(
@@ -3262,7 +3238,24 @@ fn named_index_context() -> anyhow::Result<(Rc<TestContext>, impl Fn() -> Comman
     ignore = "Configuration tests are not yet supported on Windows"
 )]
 fn index_by_name() -> anyhow::Result<()> {
-    let (context, show_settings) = named_index_context()?;
+    let context = uv_test::test_context!("3.12");
+    // `explicit` and `default` are supported together; use both to test overriding behaviour.
+    context
+        .temp_dir
+        .child("uv.toml")
+        .write_str(indoc::indoc! {r#"
+        [[index]]
+        name = "internal"
+        url = "https://example.invalid/simple"
+        explicit = true
+        default = true
+    "#})?;
+
+    let show_settings = || {
+        let mut command = add_shared_args(context.pip_compile());
+        command.arg("requirements.in").arg("--show-settings");
+        command
+    };
 
     for argument in ["--index", "--default-index"] {
         let named = capture_uv_snapshot!(
@@ -3277,7 +3270,7 @@ fn index_by_name() -> anyhow::Result<()> {
             context.filters(),
             show_settings()
                 .arg(argument)
-                .arg("internal=https://test.pypi.org/simple")
+                .arg("internal=https://example.invalid/simple")
                 .arg("--preview-features")
                 .arg("index-by-name")
         );
@@ -3309,7 +3302,7 @@ fn index_by_name() -> anyhow::Result<()> {
                 add_shared_args(command(&context))
                     .arg("--show-settings")
                     .arg(argument)
-                    .arg("internal=https://test.pypi.org/simple")
+                    .arg("internal=https://example.invalid/simple")
                     .arg("--preview-features")
                     .arg("index-by-name")
             );
@@ -3322,7 +3315,7 @@ fn index_by_name() -> anyhow::Result<()> {
         context.filters(),
         show_settings()
             .arg("--index")
-            .arg("internal=https://test.pypi.org/simple")
+            .arg("internal=https://example.invalid/simple")
     );
 
     // Without preview, configured names resolve identically but produce a preview warning.
@@ -3361,7 +3354,21 @@ fn index_by_name() -> anyhow::Result<()> {
     ignore = "Configuration tests are not yet supported on Windows"
 )]
 fn index_by_name_with_matching_path() -> anyhow::Result<()> {
-    let (context, show_settings) = named_index_context()?;
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("uv.toml")
+        .write_str(indoc::indoc! {r#"
+        [[index]]
+        name = "internal"
+        url = "https://example.invalid/simple"
+    "#})?;
+
+    let show_settings = || {
+        let mut command = add_shared_args(context.pip_compile());
+        command.arg("requirements.in").arg("--show-settings");
+        command
+    };
     context.temp_dir.child("internal").create_dir_all()?;
 
     let path = capture_uv_snapshot!(
@@ -3404,7 +3411,7 @@ fn index_by_name_with_matching_path() -> anyhow::Result<()> {
         context.filters(),
         show_settings()
             .arg("--index")
-            .arg("internal=https://test.pypi.org/simple")
+            .arg("internal=https://example.invalid/simple")
             .arg("--preview-features")
             .arg("index-by-name")
     );
@@ -3430,9 +3437,7 @@ fn index_by_name_from_user_configuration() -> anyhow::Result<()> {
         .write_str(indoc::indoc! {r#"
         [[index]]
         name = "internal"
-        url = "https://test.pypi.org/simple"
-        explicit = true
-        default = true
+        url = "https://example.invalid/simple"
         authenticate = "always"
     "#})?;
 
@@ -3446,7 +3451,7 @@ fn index_by_name_from_user_configuration() -> anyhow::Result<()> {
         context.filters(),
         show_settings()
             .arg("--index")
-            .arg("internal=https://test.pypi.org/simple")
+            .arg("internal=https://example.invalid/simple")
             .arg("--preview-features")
             .arg("index-by-name")
     );
@@ -3481,10 +3486,11 @@ fn index_by_name_from_user_configuration() -> anyhow::Result<()> {
 fn tool_index_by_name() -> anyhow::Result<()> {
     let context = uv_test::test_context!("3.12");
     let configuration = context.temp_dir.child("uv.toml");
+    // `explicit` and `default` are supported together; use both to test overriding behaviour.
     configuration.write_str(indoc::indoc! {r#"
         [[index]]
         name = "internal"
-        url = "https://test.pypi.org/simple"
+        url = "https://example.invalid/simple"
         explicit = true
         default = true
     "#})?;
@@ -3519,7 +3525,7 @@ fn tool_index_by_name() -> anyhow::Result<()> {
                 context.filters(),
                 show_settings()
                     .arg(argument)
-                    .arg("internal=https://test.pypi.org/simple")
+                    .arg("internal=https://example.invalid/simple")
                     .arg("iniconfig")
             );
 
@@ -3548,8 +3554,6 @@ fn index_by_name_with_directory() -> anyhow::Result<()> {
         [[index]]
         name = "internal"
         url = "./configured-index"
-        explicit = true
-        default = true
     "#})?;
 
     let project_directory = context.temp_dir.child("project");

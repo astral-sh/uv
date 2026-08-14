@@ -6723,7 +6723,7 @@ pub struct GenerateShellCompletionArgs {
 
 #[derive(Args)]
 pub struct IndexArgs {
-    /// The URLs to use when resolving dependencies, in addition to the default index.
+    /// The indexes to use when resolving dependencies, in addition to the default index.
     ///
     /// Accepts either a repository compliant with PEP 503 (the simple repository API), or a local
     /// directory laid out in the same format.
@@ -6750,7 +6750,7 @@ pub struct IndexArgs {
     )]
     pub index: Option<Vec<Vec<Maybe<IndexArg>>>>,
 
-    /// The URL of the default package index (by default: <https://pypi.org/simple>).
+    /// The default package index (by default: <https://pypi.org/simple>).
     ///
     /// Accepts either a repository compliant with PEP 503 (the simple repository API), or a local
     /// directory laid out in the same format.

@@ -40,8 +40,8 @@ Index names may only contain alphanumeric characters, dashes, underscores, and p
 valid ASCII.
 
 When providing an index on the command line (with `--index` or `--default-index`) or through an
-environment variable (`UV_INDEX` or `UV_DEFAULT_INDEX`), names are optional but can be included
-using the `<name>=<url>` syntax, as in:
+environment variable (`UV_INDEX` or `UV_DEFAULT_INDEX`), use its URL, a configured name, or the
+`<name>=<url>` syntax:
 
 ```shell
 # On the command line.
@@ -50,9 +50,7 @@ $ uv lock --index pytorch=https://download.pytorch.org/whl/cpu
 $ UV_INDEX=pytorch=https://download.pytorch.org/whl/cpu uv lock
 ```
 
-With `--preview-features index-by-name`, configured indexes can be selected by name using `--index`
-or `--default-index`. Named indexes take precedence over matching paths and retain their configured
-settings, while taking the role of the selected option.
+With `--preview-features index-by-name`, configured index names take precedence over matching paths.
 
 ## Pinning a package to an index
 
