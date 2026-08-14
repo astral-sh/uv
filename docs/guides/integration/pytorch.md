@@ -128,6 +128,8 @@ We recommend the use of `explicit = true` to ensure that the index is _only_ use
 `torchvision`, and other PyTorch-related packages, as opposed to generic dependencies like `jinja2`,
 which should continue to be sourced from the default index (PyPI).
 
+<!-- TODO(tk): Show `uv add --index <name>` once index-by-name is stable. -->
+
 Next, update the `pyproject.toml` to point `torch` and `torchvision` to the desired index:
 
 === "CPU-only"

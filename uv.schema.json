@@ -1825,7 +1825,8 @@
             "index-hash-algorithm",
             "lockfile-format-check",
             "lock-without-metadata",
-            "tar-codec"
+            "tar-codec",
+            "index-by-name"
           ]
         },
         {
