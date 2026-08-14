@@ -530,25 +530,36 @@ impl Hashes {
             Err(HashError::InvalidFragment(fragment.to_string()))
         }
     }
+
+    /// Parse a supported hash from a URL fragment, ignoring unrelated fragment parameters.
+    pub fn parse_url_fragment(fragment: &str) -> Result<Option<Self>, HashError> {
+        for fragment in fragment.split('&') {
+            if let Some((algorithm, _)) = fragment.split_once('=')
+                && HashAlgorithm::from_str(algorithm).is_ok()
+            {
+                return Self::parse_fragment(fragment).map(Some);
+            }
+        }
+        Ok(None)
+    }
+
+    /// Insert a digest into its algorithm-specific slot.
+    fn insert(&mut self, digest: HashDigest) {
+        match digest {
+            HashDigest::Md5(digest) => self.md5 = Some(digest),
+            HashDigest::Sha256(digest) => self.sha256 = Some(digest),
+            HashDigest::Sha384(digest) => self.sha384 = Some(digest),
+            HashDigest::Sha512(digest) => self.sha512 = Some(digest),
+            HashDigest::Blake2b256(digest) => self.blake2b = Some(digest),
+        }
+    }
 }
 
 impl FromStr for Hashes {
     type Err = HashError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let mut parts = s.split(':');
-
-        // Extract exactly two parts.
-        if let Some(name) = parts.next()
-            && let Some(value) = parts.next()
-            && let None = parts.next()
-        {
-            let algorithm = HashAlgorithm::from_str(name)
-                .map_err(|_| HashError::InvalidStructure(s.to_string()))?;
-            Ok(Self::from(HashDigest::new(algorithm, value)?))
-        } else {
-            Err(HashError::InvalidStructure(s.to_string()))
-        }
+        HashDigest::from_str(s).map(Self::from)
     }
 }
 
@@ -784,20 +795,15 @@ impl FromStr for HashDigest {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let mut parts = s.split(':');
 
-        // Extract the key and value.
-        let name = parts
-            .next()
-            .ok_or_else(|| HashError::InvalidStructure(s.to_string()))?;
-        let value = parts
-            .next()
-            .ok_or_else(|| HashError::InvalidStructure(s.to_string()))?;
-
-        // Ensure there are no more parts.
-        if parts.next().is_some() {
-            return Err(HashError::InvalidStructure(s.to_string()));
+        // Extract exactly two parts.
+        if let Some(name) = parts.next()
+            && let Some(value) = parts.next()
+            && let None = parts.next()
+        {
+            Self::new(HashAlgorithm::from_str(name)?, value)
+        } else {
+            Err(HashError::InvalidStructure(s.to_string()))
         }
-
-        Self::new(HashAlgorithm::from_str(name)?, value)
     }
 }
 
@@ -888,13 +894,7 @@ impl From<Hashes> for HashDigests {
 impl From<HashDigest> for Hashes {
     fn from(value: HashDigest) -> Self {
         let mut hashes = Self::default();
-        match value {
-            HashDigest::Md5(digest) => hashes.md5 = Some(digest),
-            HashDigest::Sha256(digest) => hashes.sha256 = Some(digest),
-            HashDigest::Sha384(digest) => hashes.sha384 = Some(digest),
-            HashDigest::Sha512(digest) => hashes.sha512 = Some(digest),
-            HashDigest::Blake2b256(digest) => hashes.blake2b = Some(digest),
-        }
+        hashes.insert(value);
         hashes
     }
 }
@@ -903,13 +903,7 @@ impl From<HashDigests> for Hashes {
     fn from(value: HashDigests) -> Self {
         let mut hashes = Self::default();
         for digest in value {
-            match digest {
-                HashDigest::Md5(digest) => hashes.md5 = Some(digest),
-                HashDigest::Sha256(digest) => hashes.sha256 = Some(digest),
-                HashDigest::Sha384(digest) => hashes.sha384 = Some(digest),
-                HashDigest::Sha512(digest) => hashes.sha512 = Some(digest),
-                HashDigest::Blake2b256(digest) => hashes.blake2b = Some(digest),
-            }
+            hashes.insert(digest);
         }
         hashes
     }
@@ -1169,7 +1163,10 @@ mod tests {
 
         let result = "blake2:55f44b440d491028addb3b88f72207d71eeebfb7b5dbf0643f7c023ae1fba619"
             .parse::<Hashes>();
-        assert!(result.is_err());
+        assert!(matches!(
+            result,
+            Err(HashError::UnsupportedHashAlgorithm(_))
+        ));
 
         Ok(())
     }

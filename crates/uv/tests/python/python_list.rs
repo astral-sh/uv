@@ -486,7 +486,7 @@ async fn python_list_remote_python_downloads_json_url() -> Result<()> {
             "patch": 0,
             "prerelease": "",
             "url": "https://custom.com/cpython-3.14.0-darwin-aarch64-none.tar.gz",
-            "sha256": "c3223d5924a0ed0ef5958a750377c362d0957587f896c0f6c635ae4b39e0f337",
+            "sha256": "C3223D5924A0ED0EF5958A750377C362D0957587F896C0F6C635AE4B39E0F337",
             "variant": null,
             "build": "20251028"
         },
@@ -518,6 +518,18 @@ async fn python_list_remote_python_downloads_json_url() -> Result<()> {
     Mock::given(method("GET"))
         .and(path("/invalid"))
         .respond_with(ResponseTemplate::new(200).set_body_raw("{", "application/json"))
+        .mount(&server)
+        .await;
+
+    Mock::given(method("GET"))
+        .and(path("/invalid-hash"))
+        .respond_with(ResponseTemplate::new(200).set_body_raw(
+            remote_json.replace(
+                "C3223D5924A0ED0EF5958A750377C362D0957587F896C0F6C635AE4B39E0F337",
+                "short",
+            ),
+            "application/json",
+        ))
         .mount(&server)
         .await;
 
@@ -557,6 +569,17 @@ async fn python_list_remote_python_downloads_json_url() -> Result<()> {
     ----- stderr -----
     error: Unable to parse the JSON Python download list at http://[LOCALHOST]/invalid
       Caused by: EOF while parsing an object at line 1 column 1
+    ");
+
+    // Test a syntactically valid JSON document containing an invalid SHA-256 digest.
+    uv_snapshot!(context.filters(), context
+        .python_list()
+        .env_remove(EnvVars::UV_PYTHON_DOWNLOADS)
+        .arg("--python-downloads-json-url").arg(format!("{}/invalid-hash", server.uri())), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Unable to parse the JSON Python download list at http://[LOCALHOST]/invalid-hash
+      Caused by: Invalid hash digest length (expected 64 hexadecimal characters, found 5) at line 16 column 29
     ");
 
     Ok(())

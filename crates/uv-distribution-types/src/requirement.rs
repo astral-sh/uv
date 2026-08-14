@@ -18,9 +18,8 @@ use uv_redacted::{DisplaySafeUrl, DisplaySafeUrlError};
 use crate::{IndexMetadata, IndexUrl};
 
 use uv_pypi_types::{
-    ConflictItem, HashAlgorithm, HashError, Hashes, ParsedArchiveUrl, ParsedDirectoryUrl,
-    ParsedGitDirectoryUrl, ParsedGitPathUrl, ParsedPathUrl, ParsedUrl, ParsedUrlError,
-    VerbatimParsedUrl,
+    ConflictItem, HashError, Hashes, ParsedArchiveUrl, ParsedDirectoryUrl, ParsedGitDirectoryUrl,
+    ParsedGitPathUrl, ParsedPathUrl, ParsedUrl, ParsedUrlError, VerbatimParsedUrl,
 };
 
 #[derive(Debug, Error)]
@@ -101,14 +100,7 @@ impl Requirement {
         let Some(fragment) = url.fragment() else {
             return Ok(None);
         };
-        for fragment in fragment.split('&') {
-            if let Some((algorithm, _)) = fragment.split_once('=')
-                && HashAlgorithm::from_str(algorithm).is_ok()
-            {
-                return Hashes::parse_fragment(fragment).map(Some);
-            }
-        }
-        Ok(None)
+        Hashes::parse_url_fragment(fragment)
     }
 
     /// Set the source file containing the requirement.
