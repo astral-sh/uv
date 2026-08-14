@@ -649,7 +649,7 @@ fn merge_digests<'a>(
     for digest in incoming {
         match existing
             .iter()
-            .find(|candidate| candidate.algorithm == digest.algorithm)
+            .find(|candidate| candidate.algorithm() == digest.algorithm())
         {
             Some(candidate) if candidate == digest => {}
             Some(conflict) => {
