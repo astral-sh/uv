@@ -543,7 +543,7 @@ fn prune_stale_revision_content_addressed_cache() -> Result<()> {
     DEBUG Searching for user configuration in: `[UV_USER_CONFIG_DIR]/uv.toml`
     DEBUG uv [VERSION] ([COMMIT] DATE)
     Pruning cache at: [CACHE_DIR]/
-    DEBUG Removing dangling source revision: [CACHE_DIR]/sdists-v9/[ENTRY]
+    DEBUG Removing dangling source revision: [CACHE_DIR]/sdists-v10/[ENTRY]
     Removed [N] files ([SIZE])
     ");
 

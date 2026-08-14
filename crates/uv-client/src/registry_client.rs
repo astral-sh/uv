@@ -32,7 +32,7 @@ use uv_normalize::PackageName;
 use uv_pep440::{Version, VersionSpecifiers};
 use uv_pep508::MarkerEnvironment;
 use uv_platform_tags::Platform;
-use uv_pypi_types::{Digest, HashAlgorithm, HashDigest, HashDigests, ProjectStatus, Yanked};
+use uv_pypi_types::{Digest, HashDigest, HashDigests, ProjectStatus, Yanked};
 use uv_pypi_types::{PypiSimpleDetail, PypiSimpleIndex, ResolutionMetadata};
 use uv_redacted::DisplaySafeUrl;
 use uv_small_str::SmallString;
@@ -1123,7 +1123,7 @@ impl RegistryClient {
                     let mut hasher = Hasher::from(expected.algorithm());
                     hasher.update(&bytes);
                     let actual = HashDigest::from(hasher);
-                    if !actual.digest.eq_ignore_ascii_case(expected.digest.as_ref()) {
+                    if &actual != expected {
                         return Err(Error::from(ErrorKind::MetadataHashMismatch {
                             url: url.clone(),
                             expected: expected.clone(),

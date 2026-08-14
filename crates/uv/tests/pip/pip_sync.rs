@@ -4449,14 +4449,14 @@ fn require_hashes_find_links_no_hash() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
     Resolved 1 package in [TIME]
-      × Failed to download `basic-package==0.1.0`
-      ╰─▶ Hash mismatch for `basic-package==0.1.0`
+    error: Failed to download `basic-package==0.1.0`
+      cause: Hash mismatch for `basic-package==0.1.0`
 
-          Expected:
-            sha256:0000000000000000000000000000000000000000000000000000000000000000
+             Expected:
+               sha256:0000000000000000000000000000000000000000000000000000000000000000
 
-          Computed:
-            sha256:7b6229db79b5800e4e98a351b5628c1c8a944533a2d428aeeaa7275a30d4ea82
+             Computed:
+               sha256:7b6229db79b5800e4e98a351b5628c1c8a944533a2d428aeeaa7275a30d4ea82
     "
     );
 
@@ -4564,14 +4564,14 @@ fn require_hashes_find_links_invalid_hash() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
     Resolved 1 package in [TIME]
-      × Failed to download `example-a-961b4c22==1.0.0`
-      ╰─▶ Hash mismatch for `example-a-961b4c22==1.0.0`
+    error: Failed to download `example-a-961b4c22==1.0.0`
+      cause: Hash mismatch for `example-a-961b4c22==1.0.0`
 
-          Expected:
-            sha256:0000000000000000000000000000000000000000000000000000000000000000
+             Expected:
+               sha256:0000000000000000000000000000000000000000000000000000000000000000
 
-          Computed:
-            sha256:5d69f0b590514103234f0c3526563856f04d044d8d0ea1073a843ae429b3187e
+             Computed:
+               sha256:5d69f0b590514103234f0c3526563856f04d044d8d0ea1073a843ae429b3187e
     "
     );
 
@@ -4748,14 +4748,14 @@ fn require_hashes_registry_invalid_hash() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
     Resolved 1 package in [TIME]
-      × Failed to download `example-a-961b4c22==1.0.0`
-      ╰─▶ Hash mismatch for `example-a-961b4c22==1.0.0`
+    error: Failed to download `example-a-961b4c22==1.0.0`
+      cause: Hash mismatch for `example-a-961b4c22==1.0.0`
 
-          Expected:
-            sha256:0000000000000000000000000000000000000000000000000000000000000000
+             Expected:
+               sha256:0000000000000000000000000000000000000000000000000000000000000000
 
-          Computed:
-            sha256:5d69f0b590514103234f0c3526563856f04d044d8d0ea1073a843ae429b3187e
+             Computed:
+               sha256:5d69f0b590514103234f0c3526563856f04d044d8d0ea1073a843ae429b3187e
     "
     );
 

@@ -372,10 +372,7 @@ impl HashSource {
             }
         }
         let [hasher] = hashers;
-        Ok(Hashes {
-            sha256: Some(HashDigest::from(hasher).digest),
-            ..Hashes::default()
-        })
+        Ok(Hashes::from(HashDigest::from(hasher)))
     }
 }
 

@@ -1303,12 +1303,12 @@ impl CacheBucket {
             Self::SourceDistributions => "sdists-v10",
             // Note that when bumping this, you'll also need to bump it
             // in `crates/uv/tests/lock/lock.rs`.
-            Self::FlatIndex => "flat-index-v5",
+            Self::FlatIndex => "flat-index-v6",
             Self::Git => "git-v0",
             Self::Interpreter => "interpreter-v4",
             // Note that when bumping this, you'll also need to bump it
             // in `crates/uv/tests/build/cache_clean.rs`.
-            Self::Simple => "simple-v25",
+            Self::Simple => "simple-v26",
             // Note that when bumping this, you'll also need to bump it
             // in `crates/uv/tests/build/cache_prune.rs`.
             Self::Wheels => "wheels-v7",
