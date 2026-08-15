@@ -106,6 +106,23 @@ $ uvx --isolated ruff --version
 0.6.2
 ```
 
+!!! note
+
+    `uvx` reuses the installed version only when the resolver settings recorded at install time
+    match the current invocation. A tool installed with options such as `--exclude-newer` is
+    considered incompatible with a plain `uvx` invocation, which resolves a fresh environment
+    instead:
+
+    ```console
+    $ uv tool install --exclude-newer 2023-01-01 pycowsay
+     + pycowsay==0.0.0.1
+    $ uvx pycowsay --version
+    0.0.0.2
+    ```
+
+    To run the version that was installed, invoke its executable directly rather than through
+    `uvx`.
+
 `uv tool install` will also respect the `{package}@{version}` and `{package}@latest` specifiers, as
 in:
 
