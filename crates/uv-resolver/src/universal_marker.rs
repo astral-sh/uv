@@ -81,6 +81,34 @@ pub struct UniversalMarker {
     pep508: MarkerTree,
 }
 
+/// An activated set of projects, extras, and groups, encoded once for repeated
+/// [`UniversalMarker::evaluate_activated`] calls.
+#[derive(Debug)]
+pub(crate) struct ActivatedConflictItems(Vec<ExtraName>);
+
+impl ActivatedConflictItems {
+    /// Encodes the given activated projects, extras, and groups.
+    ///
+    /// Each extra and group must be scoped to the particular package that it's enabled for.
+    pub(crate) fn new<P, E, G>(
+        projects: impl Iterator<Item = P>,
+        extras: impl Iterator<Item = (P, E)>,
+        groups: impl Iterator<Item = (P, G)>,
+    ) -> Self
+    where
+        P: Borrow<PackageName>,
+        E: Borrow<ExtraName>,
+        G: Borrow<GroupName>,
+    {
+        let projects = projects.map(|package| encode_project(package.borrow()));
+        let extras =
+            extras.map(|(package, extra)| encode_package_extra(package.borrow(), extra.borrow()));
+        let groups =
+            groups.map(|(package, group)| encode_package_group(package.borrow(), group.borrow()));
+        Self(projects.chain(extras).chain(groups).collect())
+    }
+}
+
 impl UniversalMarker {
     /// A constant universal marker that always evaluates to `true`.
     pub(crate) const TRUE: Self = Self {
@@ -307,7 +335,7 @@ impl UniversalMarker {
     }
 
     /// Returns true if this universal marker is satisfied by the given marker
-    /// environment and list of activated extras and groups.
+    /// environment and list of activated projects, extras, and groups.
     ///
     /// The activated extras and groups should be the complete set activated
     /// for a particular context. And each extra and group must be scoped to
@@ -324,18 +352,17 @@ impl UniversalMarker {
         E: Borrow<ExtraName>,
         G: Borrow<GroupName>,
     {
-        let projects = projects.map(|package| encode_project(package.borrow()));
-        let extras =
-            extras.map(|(package, extra)| encode_package_extra(package.borrow(), extra.borrow()));
-        let groups =
-            groups.map(|(package, group)| encode_package_group(package.borrow(), group.borrow()));
-        self.marker.evaluate(
-            env,
-            &projects
-                .chain(extras)
-                .chain(groups)
-                .collect::<Vec<ExtraName>>(),
-        )
+        let activated = ActivatedConflictItems::new(projects, extras, groups);
+        self.evaluate_activated(env, &activated)
+    }
+
+    /// Returns true if this universal marker is satisfied by an already encoded activated set.
+    pub(crate) fn evaluate_activated(
+        self,
+        env: &MarkerEnvironment,
+        activated: &ActivatedConflictItems,
+    ) -> bool {
+        self.marker.evaluate(env, &activated.0)
     }
 
     /// Returns true if the marker always evaluates to true if the given set of extras is activated.
@@ -878,6 +905,7 @@ mod tests {
     use super::*;
     use std::str::FromStr;
 
+    use uv_pep508::MarkerEnvironmentBuilder;
     use uv_pypi_types::ConflictSet;
 
     /// Creates a collection of declared conflicts from the sets
@@ -913,6 +941,24 @@ mod tests {
         ExtraName::from_str(name).unwrap()
     }
 
+    /// Creates a marker environment for evaluating universal markers.
+    fn marker_environment() -> MarkerEnvironment {
+        MarkerEnvironment::try_from(MarkerEnvironmentBuilder {
+            implementation_name: "cpython",
+            implementation_version: "3.12.0",
+            os_name: "posix",
+            platform_machine: "arm64",
+            platform_python_implementation: "CPython",
+            platform_release: "23.0.0",
+            platform_system: "Darwin",
+            platform_version: "test",
+            python_full_version: "3.12.0",
+            python_version: "3.12",
+            sys_platform: "darwin",
+        })
+        .expect("valid marker environment")
+    }
+
     /// Shortcut for creating a conflict marker from an extra name.
     fn create_extra_marker(name: &str) -> ConflictMarker {
         ConflictMarker::extra(&create_package("pkg"), &create_extra(name))
@@ -946,6 +992,36 @@ mod tests {
         cm.marker
             .try_to_string()
             .unwrap_or_else(|| "true".to_string())
+    }
+
+    /// This tests that an activated set encodes all three kinds of conflict
+    /// item, and nothing that was not activated.
+    #[test]
+    fn activated_conflict_items_encode_every_kind() {
+        let package = create_package("project");
+        let extra = create_extra("feature");
+        let group = GroupName::from_str("dev").expect("valid group name");
+        let marker = UniversalMarker::new(
+            MarkerTree::TRUE,
+            ConflictMarker::project(&package)
+                .and(ConflictMarker::extra(&package, &extra))
+                .and(ConflictMarker::group(&package, &group)),
+        );
+        let env = marker_environment();
+
+        let activated = ActivatedConflictItems::new(
+            [&package].into_iter(),
+            [(&package, &extra)].into_iter(),
+            [(&package, &group)].into_iter(),
+        );
+        assert!(marker.evaluate_activated(&env, &activated));
+
+        let without_group = ActivatedConflictItems::new(
+            [&package].into_iter(),
+            [(&package, &extra)].into_iter(),
+            std::iter::empty::<(&PackageName, &GroupName)>(),
+        );
+        assert!(!marker.evaluate_activated(&env, &without_group));
     }
 
     /// This tests the conversion from declared conflicts into a conflict
