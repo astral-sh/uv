@@ -3046,7 +3046,10 @@ fn tool_run_with_script_and_from_script() {
 }
 
 /// A repository can be named `foo.py`, so a URL requirement is not a script path.
+// The `--offline` git error text is not reproducible on Windows, where the test harness
+// cannot execute its bundled `git.exe`.
 #[test]
+#[cfg(not(windows))]
 fn tool_run_with_url_ending_in_py() {
     let context = uv_test::test_context!("3.12").with_filtered_counts();
 
@@ -3063,7 +3066,10 @@ fn tool_run_with_url_ending_in_py() {
 }
 
 /// As above, but passed to `--from`.
+// The `--offline` git error text is not reproducible on Windows, where the test harness
+// cannot execute its bundled `git.exe`.
 #[test]
+#[cfg(not(windows))]
 fn tool_run_with_from_url_ending_in_py() {
     let context = uv_test::test_context!("3.12").with_filtered_counts();
 
