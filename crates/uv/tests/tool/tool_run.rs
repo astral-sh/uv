@@ -3045,6 +3045,42 @@ fn tool_run_with_script_and_from_script() {
     ");
 }
 
+/// A repository can be named `foo.py`, so a URL requirement is not a script path.
+#[test]
+fn tool_run_with_url_ending_in_py() {
+    let context = uv_test::test_context!("3.12").with_filtered_counts();
+
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("--offline")
+        .arg("git+https://github.com/uPesy/easyeda2kicad.py"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: Failed to resolve `--with` requirement
+      Caused by: Git operation failed
+      Caused by: failed to fetch into: [CACHE_DIR]/git-v0/db/efbd3507bcbea33c
+      Caused by: Remote Git fetches are not allowed because network connectivity is disabled (i.e., with `--offline`)
+    ");
+}
+
+/// As above, but passed to `--from`.
+#[test]
+fn tool_run_with_from_url_ending_in_py() {
+    let context = uv_test::test_context!("3.12").with_filtered_counts();
+
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("--offline")
+        .arg("--from")
+        .arg("git+https://github.com/uPesy/easyeda2kicad.py")
+        .arg("easyeda2kicad"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: Failed to resolve `--with` requirement
+      Caused by: Git operation failed
+      Caused by: failed to fetch into: [CACHE_DIR]/git-v0/db/efbd3507bcbea33c
+      Caused by: Remote Git fetches are not allowed because network connectivity is disabled (i.e., with `--offline`)
+    ");
+}
+
 /// Test that when a user provides `--verbose` to the subcommand,
 /// we show a helpful hint.
 #[test]

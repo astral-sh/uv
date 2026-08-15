@@ -25,7 +25,7 @@ use uv_distribution_types::{
 use uv_installer::{InstallationStrategy, SatisfiesResult, SitePackages};
 use uv_normalize::PackageName;
 use uv_pep440::{VersionSpecifier, VersionSpecifiers};
-use uv_pep508::MarkerTree;
+use uv_pep508::{MarkerTree, Scheme, split_scheme};
 use uv_preview::Preview;
 use uv_python::{
     ConfigDiscovery, EnvironmentPreference, PythonDownloads, PythonEnvironment, PythonInstallation,
@@ -129,6 +129,13 @@ pub(crate) async fn run(
             .is_some_and(|ext| ext.eq_ignore_ascii_case("py") || ext.eq_ignore_ascii_case("pyw"))
     }
 
+    /// Whether the target names a URL requirement rather than a path. A repository can be named
+    /// `foo.py`, so `git+https://github.com/example/foo.py` has a `.py` extension without being a
+    /// script. Requires a known scheme so that a Windows drive letter is not read as one.
+    fn is_url_requirement(target: &str) -> bool {
+        split_scheme(target).is_some_and(|(scheme, _)| Scheme::parse(scheme).is_some())
+    }
+
     if settings.resolver.torch_backend.is_some() {
         warn_user_once!(
             "The `--torch-backend` option is experimental and may change without warning."
@@ -160,7 +167,7 @@ pub(crate) async fn run(
     };
 
     if let Some(ref from) = from {
-        if has_python_script_ext(Path::new(from)) {
+        if !is_url_requirement(from) && has_python_script_ext(Path::new(from)) {
             let package_name = PackageName::from_str(from)?;
             return Err(ToolRunScriptError::FromScript {
                 package_name,
@@ -173,7 +180,7 @@ pub(crate) async fn run(
         let target_path = Path::new(target);
 
         // If the user tries to invoke `uvx script.py`, hint them towards `uv run`.
-        if has_python_script_ext(target_path) {
+        if !is_url_requirement(target) && has_python_script_ext(target_path) {
             return if target_path.try_exists()? {
                 Err(ToolRunScriptError::TargetScriptExists {
                     path: target_path.to_path_buf(),
