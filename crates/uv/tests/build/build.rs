@@ -2811,6 +2811,72 @@ fn venv_included_in_sdist() -> Result<()> {
     Ok(())
 }
 
+/// The virtual-environment hint must survive a base interpreter that does not live in `bin`.
+///
+/// <https://github.com/astral-sh/uv/issues/21128>
+#[cfg(unix)]
+#[test]
+fn venv_included_in_sdist_interpreter_outside_bin() -> Result<()> {
+    let context = uv_test::test_context!("3.12")
+        .with_filter((r"at byte \d+", "at byte [OFFSET]"))
+        .with_filter((r#""[^"]*/python3""#, r#""[INTERPRETER]""#));
+
+    let pyproject_toml = indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12.0"
+
+        [tool.hatch.build.targets.sdist.force-include]
+        ".venv" = ".venv"
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+    "#};
+
+    context
+        .init()
+        .arg("--name")
+        .arg("project")
+        .assert()
+        .success();
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(pyproject_toml)?;
+
+    // A base interpreter at `<root>/python/3.12/python3`, so the link target's parent is the
+    // version rather than `bin`. This is the layout the Gentoo package build produces.
+    let interpreter = context.temp_dir.child("python").child("3.12");
+    interpreter.create_dir_all()?;
+    interpreter.child("python3").touch()?;
+
+    let bin = context.temp_dir.child(".venv").child("bin");
+    bin.create_dir_all()?;
+    let link = bin.child("python");
+    if link.exists() {
+        fs_err::remove_file(&link)?;
+    }
+    fs_err::os::unix::fs::symlink(interpreter.child("python3"), &link)?;
+
+    uv_snapshot!(context.filters(), context
+        .build()
+        .arg("--preview-features")
+        .arg("tar-codec"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    Building source distribution...
+    error: Failed to build `[TEMP_DIR]/`
+      Caused by: Invalid tar file
+      Caused by: at byte [OFFSET]: unsafe symbolic-link target \"[INTERPRETER]\": is absolute
+
+    hint: The source distribution includes a virtual environment. Virtual environments must be excluded from source distributions.
+    ");
+
+    Ok(())
+}
+
 /// Ensure that workspace discovery works with and without trailing slash.
 ///
 /// <https://github.com/astral-sh/uv/issues/13914>
