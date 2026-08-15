@@ -42,9 +42,11 @@ uv-workspace = { workspace = true, features = ["schemars"] }
 # dependencies, to ensure that we're forced to think twice before including them in other crates.
 anstream = { workspace = true }
 anyhow = { workspace = true }
+blake3 = { workspace = true }
 clap = { workspace = true, features = ["derive", "wrap_help"] }
 fs-err = { workspace = true, features = ["tokio"] }
 futures = { workspace = true }
+indexmap = { workspace = true, features = ["serde"] }
 itertools = { workspace = true }
 markdown = { version = "1.0.0" }
 poloto = { version = "19.1.2", optional = true }

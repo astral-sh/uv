@@ -6489,9 +6489,11 @@ version = "0.0.72"
 dependencies = [
  "anstream",
  "anyhow",
+ "blake3",
  "clap",
  "fs-err",
  "futures",
+ "indexmap",
  "insta",
  "itertools 0.14.0",
  "markdown",
