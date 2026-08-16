@@ -2726,6 +2726,7 @@ fn force_pep517() -> Result<()> {
 /// Check that we show a hint when there's a venv in the source distribution.
 ///
 /// <https://github.com/astral-sh/uv/issues/15096>
+/// <https://github.com/astral-sh/uv/issues/21128>
 // Windows uses trampolines instead of symlinks. You don't want those in your source distribution
 // either, but that's for the build backend to catch, we're only checking for the unix error hint
 // in uv here.
@@ -2777,8 +2778,14 @@ fn venv_included_in_sdist() -> Result<()> {
     hint: The source distribution includes a virtual environment. Virtual environments must be excluded from source distributions.
     ");
 
+    // Point the virtual environment at the test interpreter's `python/3.12/python3` shim to
+    // exercise a base interpreter outside `bin`, as in Gentoo's test layout.
+    let venv_python = context.venv.child("bin").child("python");
+    fs_err::remove_file(&venv_python)?;
+    venv_python.symlink_to_file(context.root.child("python").child("3.12").child("python3"))?;
+
     // The preview tar-codec backend reports a structured unsafe-link error and preserves the same
-    // user-facing hint.
+    // user-facing hint, regardless of the base interpreter's installation layout.
     uv_snapshot!(context.filters(), context
         .build()
         .arg("--preview-features")
@@ -2806,72 +2813,6 @@ fn venv_included_in_sdist() -> Result<()> {
 
     uv_snapshot!(context.filters(), context.build().arg("-qq"), @"
     exit_code: 2 (failure)
-    ");
-
-    Ok(())
-}
-
-/// The virtual-environment hint must survive a base interpreter that does not live in `bin`.
-///
-/// <https://github.com/astral-sh/uv/issues/21128>
-#[cfg(unix)]
-#[test]
-fn venv_included_in_sdist_interpreter_outside_bin() -> Result<()> {
-    let context = uv_test::test_context!("3.12")
-        .with_filter((r"at byte \d+", "at byte [OFFSET]"))
-        .with_filter((r#""[^"]*/python3""#, r#""[INTERPRETER]""#));
-
-    let pyproject_toml = indoc! {r#"
-        [project]
-        name = "project"
-        version = "0.1.0"
-        requires-python = ">=3.12.0"
-
-        [tool.hatch.build.targets.sdist.force-include]
-        ".venv" = ".venv"
-
-        [build-system]
-        requires = ["hatchling"]
-        build-backend = "hatchling.build"
-    "#};
-
-    context
-        .init()
-        .arg("--name")
-        .arg("project")
-        .assert()
-        .success();
-    context
-        .temp_dir
-        .child("pyproject.toml")
-        .write_str(pyproject_toml)?;
-
-    // A base interpreter at `<root>/python/3.12/python3`, so the link target's parent is the
-    // version rather than `bin`. This is the layout the Gentoo package build produces.
-    let interpreter = context.temp_dir.child("python").child("3.12");
-    interpreter.create_dir_all()?;
-    interpreter.child("python3").touch()?;
-
-    let bin = context.temp_dir.child(".venv").child("bin");
-    bin.create_dir_all()?;
-    let link = bin.child("python");
-    if link.exists() {
-        fs_err::remove_file(&link)?;
-    }
-    fs_err::os::unix::fs::symlink(interpreter.child("python3"), &link)?;
-
-    uv_snapshot!(context.filters(), context
-        .build()
-        .arg("--preview-features")
-        .arg("tar-codec"), @"
-    exit_code: 2 (failure)
-    ----- stderr -----
-    Building source distribution...
-    error: Failed to build `[TEMP_DIR]/`
-      Caused by: Invalid tar file
-      Caused by: at byte [OFFSET]: unsafe symbolic-link target \"[INTERPRETER]\": is absolute
-
-    hint: The source distribution includes a virtual environment. Virtual environments must be excluded from source distributions.
     ");
 
     Ok(())
