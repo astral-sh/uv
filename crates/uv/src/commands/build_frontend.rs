@@ -132,11 +132,14 @@ impl Hint for Error {
                 }
             }
             Self::Extract(uv_extract::Error::TarCodec(err)) => {
+                let is_python_executable = |path: &Path| {
+                    path.file_name()
+                        .is_some_and(|name| name.to_string_lossy().starts_with("python"))
+                };
+                // An archive entry is only a virtual environment interpreter if it sits in `bin`.
                 let is_virtual_environment_python = |path: &Path| {
                     path.parent().is_some_and(|parent| parent.ends_with("bin"))
-                        && path
-                            .file_name()
-                            .is_some_and(|name| name.to_string_lossy().starts_with("python"))
+                        && is_python_executable(path)
                 };
                 let involves_virtual_environment_python = match err {
                     tar_codec::ExtractError::UnsafePath {
@@ -145,9 +148,12 @@ impl Hint for Error {
                         reason,
                         ..
                     } => {
+                        // `UnsafePath` carries only the link target, never the entry that
+                        // declared it, and a base interpreter is not required to live in `bin`,
+                        // so the target is matched on its file name alone.
                         *context == "symbolic-link target"
                             && matches!(*reason, "is absolute" | "escapes the destination root")
-                            && is_virtual_environment_python(Path::new(value))
+                            && is_python_executable(Path::new(value))
                     }
                     tar_codec::ExtractError::InvalidLink {
                         path,
@@ -157,7 +163,7 @@ impl Hint for Error {
                     } => {
                         *reason == "ambient target is not allowed"
                             && (is_virtual_environment_python(path)
-                                || is_virtual_environment_python(Path::new(target)))
+                                || is_python_executable(Path::new(target)))
                     }
                     _ => false,
                 };
