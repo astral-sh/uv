@@ -168,3 +168,44 @@ $ uv add --dev uv
 From there, you can use `!uv add pydantic` to add `pydantic` to the project's dependencies, or
 `!uv pip install pydantic` to install `pydantic` into the project's virtual environment without
 updating the project's `pyproject.toml` or `uv.lock` files.
+
+## Using JupyterLab in its own environment
+
+You can have JupyterLab in a different (permanent) environment than yur project's one.
+
+Create a folder called `my-jupyterlab` that will contain your JupyterLab project.
+
+Initialize the project
+
+```console
+$ uv init
+```
+
+and add JupyterLab and any JupyterLab extension you want:
+
+```console
+uv add jupyterlab jupyterlab-git jupyter-ruff
+```
+
+Optionally, open \.venv\share\jupyter\kernels\python3\kernel.json` and change the `display_name` of your JupyterLab kernel into something more significant (e.g. "JupyterLab kernel").
+
+Cd into your project folder (i.e., the code you actually want to run) and install a Jupyter kernel with
+
+```console
+# For Windows
+uv run ipython kernel install --user --env VIRTUAL_ENV %cd%\.venv --name=my-kernel
+# For MacOS and Linux
+uv run ipython kernel install --user --env VIRTUAL_ENV $(pwd)\.venv --name=my-kernel
+```
+
+Substitute `my-kernel` with a name of your choice.
+
+Note: the `ipython` here is the one of your project's environment, not the JupyterLab's environment.
+
+Note: The kernel is installed in a user-level directory, so it is also detected if you run JupyterLab in some other way (e.g. with `uv run --with jupyter jupyter-lab`).
+
+Note: Some libraries require additional installation steps if JupyterLab and the IPython kernel of your projects are installed in different environments. [ipywidgets](https://ipywidgets.readthedocs.io/en/latest/user_install.html#installing-in-classic-jupyter-notebook) is among those.
+
+From your project's directory, run JupyterLab with `[PATH_TO_JUPYTERLAB_PROJECT]/.venv/Scripts/jupyter-lab.exe`.
+
+The advantage of this method over `uv run --with jupyter jupyter-lab` is that starting JupyterLab in this way is much faster, as (1) (always) uv doesn't have to create an ephemeral environment (2) (sometimes) JupyterLab dependencies are not updated each time (3) (always) apparently JupyterLab takes some additional time the first time it is started up, and with uv run --with jupyter jupyter-lab it is always the first time.
