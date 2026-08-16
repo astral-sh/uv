@@ -208,13 +208,30 @@ impl Set {
 
 #[expect(clippy::format_push_string)]
 fn emit_field(output: &mut String, name: &str, field: &OptionField, parents: &[Set]) {
+    let Set::Global { option_type, .. } = &parents[0] else {
+        unreachable!()
+    };
+
     let header_level = if parents.len() > 1 { "####" } else { "###" };
     let parents_anchor = parents.iter().filter_map(|parent| parent.name()).join("_");
 
     if parents_anchor.is_empty() {
+        let anchor = if name == "index" {
+            match option_type {
+                OptionType::ProjectMetadata => "index",
+                OptionType::Configuration => "index-configuration",
+            }
+        } else {
+            name
+        };
+
         output.push_str(&format!(
-            "{header_level} [`{name}`](#{name}) {{: #{name} }}\n"
+            "{header_level} [`{name}`](#{anchor}) {{: #{anchor} }}\n"
         ));
+
+        if anchor != name {
+            output.push_str(&format!("<span id=\"{name}\"></span>\n"));
+        }
     } else {
         output.push_str(&format!(
             "{header_level} [`{name}`](#{parents_anchor}_{name}) {{: #{parents_anchor}_{name} }}\n"
