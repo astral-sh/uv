@@ -77,7 +77,7 @@ use crate::commands::project::{
     update_environment, validate_project_requires_python,
 };
 use crate::commands::reporters::PythonDownloadReporter;
-use crate::commands::{ExitStatus, diagnostics, project, read_env_files};
+use crate::commands::{ExitStatus, diagnostics, project, read_env_files, spawn};
 use crate::printer::Printer;
 use crate::settings::{
     FrozenSource, GlobalSettings, LockCheck, LockCheckSource, ResolverInstallerSettings,
@@ -1267,21 +1267,22 @@ pub(crate) async fn run(
     let mut process = command.as_command(interpreter);
     process.envs(env_file_environment);
 
+    let ephemeral_scripts = ephemeral_env.as_ref().map(PythonEnvironment::scripts);
+    let requirements_scripts = requirements_env.as_ref().map(PythonEnvironment::scripts);
+    let base_scripts = base_interpreter.scripts();
+    // On Windows, non-virtual Python distributions put `python.exe` in the top-level directory,
+    // rather than in the `Scripts` subdirectory.
+    let base_scripts_windows_extra = cfg!(windows)
+        .then(|| base_interpreter.sys_executable().parent())
+        .flatten();
+
     // Construct the `PATH` environment variable.
     let new_path = std::env::join_paths(
-        ephemeral_env
-            .as_ref()
-            .map(PythonEnvironment::scripts)
+        ephemeral_scripts
             .into_iter()
-            .chain(requirements_env.as_ref().map(PythonEnvironment::scripts))
-            .chain(std::iter::once(base_interpreter.scripts()))
-            .chain(
-                // On Windows, non-virtual Python distributions put `python.exe` in the top-level
-                // directory, rather than in the `Scripts` subdirectory.
-                cfg!(windows)
-                    .then(|| base_interpreter.sys_executable().parent())
-                    .flatten(),
-            )
+            .chain(requirements_scripts)
+            .chain(std::iter::once(base_scripts))
+            .chain(base_scripts_windows_extra)
             .dedup()
             .map(PathBuf::from)
             .chain(
@@ -1291,7 +1292,26 @@ pub(crate) async fn run(
                     .flat_map(std::env::split_paths),
             ),
     )?;
-    process.env(EnvVars::PATH, new_path);
+    process.env(EnvVars::PATH, &new_path);
+
+    // The subset of the directories above that belong to a virtual environment, as opposed to
+    // the ambient `PATH` or a non-virtualenv (e.g. system or Homebrew) Python's own `bin` — used
+    // to scope the dangling-shebang diagnostic in `spawn_error` to environments `uv venv` can
+    // actually recreate. `base_scripts` only qualifies when `base_interpreter` is a virtualenv;
+    // a same-named script in a non-virtualenv interpreter's `bin` isn't `uv venv`'s to fix.
+    let managed_scripts_dirs: Vec<PathBuf> = ephemeral_scripts
+        .into_iter()
+        .chain(requirements_scripts)
+        .chain(base_interpreter.is_virtualenv().then_some(base_scripts))
+        .chain(
+            base_interpreter
+                .is_virtualenv()
+                .then_some(base_scripts_windows_extra)
+                .flatten(),
+        )
+        .dedup()
+        .map(PathBuf::from)
+        .collect();
 
     // Increment recursion depth counter.
     process.env(
@@ -1316,10 +1336,19 @@ pub(crate) async fn run(
 
     // Spawn and wait for completion
     // Standard input, output, and error streams are all inherited
-    // TODO(zanieb): Throw a nicer error message if the command is not found
-    let handle = process
-        .spawn()
-        .with_context(|| format!("Failed to spawn: `{}`", command.display_executable()))?;
+    let program = process.as_std().get_program().to_os_string();
+    let handle = process.spawn().map_err(|err| {
+        spawn::spawn_error(
+            &command.display_executable(),
+            &program,
+            Some(new_path.as_os_str()),
+            &managed_scripts_dirs,
+            Some(
+                "The virtual environment may have been moved or deleted; recreate it with `uv venv`.",
+            ),
+            err,
+        )
+    })?;
 
     run_to_completion(handle).await
 }
