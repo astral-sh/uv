@@ -239,7 +239,11 @@ impl CredentialBuilderApi for MacCredentialBuilder {
     /// the User keychain is selected.
     fn build(&self, target: Option<&str>, service: &str, user: &str) -> Result<Box<Credential>> {
         let domain: MacKeychainDomain = if let Some(target) = target {
-            target.parse().unwrap_or(MacKeychainDomain::User)
+            match target.parse() {
+                Ok(domain) => domain,
+                Err(err) if MacKeychainDomain::is_protected_target(target) => return Err(err),
+                Err(_) => MacKeychainDomain::User,
+            }
         } else {
             MacKeychainDomain::User
         };
@@ -293,13 +297,24 @@ impl std::str::FromStr for MacKeychainDomain {
             "system" => Ok(Self::System),
             "common" => Ok(Self::Common),
             "dynamic" => Ok(Self::Dynamic),
-            "protected" => Ok(Self::Protected),
-            "data protection" => Ok(Self::Protected),
+            "protected" | "data protection" => Err(ErrorCode::Invalid(
+                "target".to_string(),
+                format!("'{s}' is not a keychain domain on macOS"),
+            )),
             _ => Err(ErrorCode::Invalid(
                 "target".to_string(),
-                format!("'{s}' is not User, System, Common, Dynamic, or Protected"),
+                format!("'{s}' is not User, System, Common, or Dynamic"),
             )),
         }
+    }
+}
+
+impl MacKeychainDomain {
+    fn is_protected_target(target: &str) -> bool {
+        matches!(
+            target.to_ascii_lowercase().as_str(),
+            "protected" | "data protection"
+        )
     }
 }
 
@@ -309,7 +324,12 @@ fn get_keychain(domain: MacKeychainDomain) -> Result<SecKeychain> {
         MacKeychainDomain::System => SecPreferencesDomain::System,
         MacKeychainDomain::Common => SecPreferencesDomain::Common,
         MacKeychainDomain::Dynamic => SecPreferencesDomain::Dynamic,
-        MacKeychainDomain::Protected => panic!("Protected is not a keychain domain on macOS"),
+        MacKeychainDomain::Protected => {
+            return Err(ErrorCode::Invalid(
+                "target".to_string(),
+                "Protected is not a keychain domain on macOS".to_string(),
+            ));
+        }
     };
     match SecKeychain::default_for_domain(domain) {
         Ok(keychain) => Ok(keychain),
@@ -438,5 +458,24 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn test_protected_keychain_rejected() {
+        for target in ["protected", "data protection", "Protected"] {
+            let credential = Entry::new_with_target(target, "service", "user");
+            assert!(
+                matches!(credential, Err(Error::Invalid(_, _))),
+                "Created credential with unsupported target {target:?}"
+            );
+        }
+
+        assert!(
+            matches!(
+                super::get_keychain(super::MacKeychainDomain::Protected),
+                Err(Error::Invalid(_, _))
+            ),
+            "Protected target should return an error"
+        );
     }
 }
