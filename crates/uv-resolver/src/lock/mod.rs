@@ -18,7 +18,7 @@ use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
 use tracing::{debug, instrument, trace};
 use url::Url;
 
-use uv_cache_key::RepositoryUrl;
+use uv_cache_key::{CanonicalUrl, RepositoryUrl};
 use uv_configuration::{
     BuildOptions, Constraints, DependencyGroupsWithDefaults, ExcludeDependency, Excludes,
     ExtrasSpecificationWithDefaults, InstallTarget, Override, Overrides, PackageOverride,
@@ -2110,7 +2110,7 @@ impl Lock {
         package_requires_python: Option<&VersionSpecifiers>,
         package: &'lock Package,
         activated_extras: &mut FxHashMap<PackageId, BTreeSet<ExtraName>>,
-        remotes: &mut Option<BTreeSet<UrlString>>,
+        remotes: &mut Option<FxHashSet<CanonicalUrl>>,
         locals: &mut Option<BTreeSet<Box<Path>>>,
         root: &Path,
         allow_missing_package_metadata: bool,
@@ -2311,14 +2311,16 @@ impl Lock {
 
     fn record_index(
         index: &IndexMetadata,
-        remotes: &mut Option<BTreeSet<UrlString>>,
+        remotes: &mut Option<FxHashSet<CanonicalUrl>>,
         locals: &mut Option<BTreeSet<Box<Path>>>,
         root: &Path,
     ) {
         match &index.url {
             IndexUrl::Pypi(_) | IndexUrl::Url(_) => {
                 if let Some(remotes) = remotes.as_mut() {
-                    remotes.insert(UrlString::from(index.url().without_credentials().as_ref()));
+                    remotes.insert(CanonicalUrl::new(
+                        index.url().without_credentials().into_owned(),
+                    ));
                 }
             }
             IndexUrl::Path(url) => {
@@ -2613,12 +2615,12 @@ impl Lock {
                 .allowed_indexes()
                 .into_iter()
                 .filter_map(|index| match index.url() {
-                    IndexUrl::Pypi(_) | IndexUrl::Url(_) => {
-                        Some(UrlString::from(index.url().without_credentials().as_ref()))
-                    }
+                    IndexUrl::Pypi(_) | IndexUrl::Url(_) => Some(CanonicalUrl::new(
+                        index.url().without_credentials().into_owned(),
+                    )),
                     IndexUrl::Path(_) => None,
                 })
-                .collect::<BTreeSet<_>>()
+                .collect::<FxHashSet<_>>()
         });
 
         let mut locals = indexes.map(|locations| {
@@ -2726,10 +2728,10 @@ impl Lock {
             if let Source::Registry(index) = &package.id.source {
                 match index {
                     RegistrySource::Url(url) => {
-                        if remotes
-                            .as_ref()
-                            .is_some_and(|remotes| !remotes.contains(url))
-                        {
+                        if remotes.as_ref().is_some_and(|remotes| {
+                            CanonicalUrl::parse(url.as_ref())
+                                .is_ok_and(|canonical| !remotes.contains(&canonical))
+                        }) {
                             let name = &package.id.name;
                             let version = &package
                                 .id
@@ -3029,7 +3031,6 @@ impl Lock {
             } else {
                 return Ok(SatisfiesResult::MissingVersion(&package.id.name));
             }
-
             // Revisit an already-validated dependency if another parent activated more extras.
             // Empty extras have no locked edges, so their activation is otherwise order-dependent.
             validated_extras.insert(
@@ -3039,6 +3040,19 @@ impl Lock {
                     .cloned()
                     .unwrap_or_default(),
             );
+            for requirement in package
+                .metadata
+                .requires_dist
+                .iter()
+                .chain(package.metadata.dependency_groups.values().flatten())
+            {
+                if let RequirementSource::Registry {
+                    index: Some(index), ..
+                } = &requirement.source
+                {
+                    Self::record_index(index, &mut remotes, &mut locals, root);
+                }
+            }
             for dependency in package.all_dependencies() {
                 let needs_extra_validation = validated_extras
                     .get(&dependency.package_id)
@@ -4848,6 +4862,9 @@ enum Source {
     Virtual(Box<Path>),
 }
 
+static PYPI_CANONICAL_URL: LazyLock<CanonicalUrl> =
+    LazyLock::new(|| CanonicalUrl::new(PYPI_URL.clone()));
+
 impl Source {
     fn from_resolved_dist(resolved_dist: &ResolvedDist, root: &Path) -> Result<Self, LockError> {
         match *resolved_dist {
@@ -5059,10 +5076,10 @@ impl Source {
 
     /// Returns `true` if the source is a registry entry pointing at PyPI (`https://pypi.org/simple`).
     fn is_pypi_registry(&self) -> bool {
-        matches!(
-            self,
-            Self::Registry(RegistrySource::Url(url)) if url.as_ref() == PYPI_URL.as_str()
-        )
+        let Self::Registry(RegistrySource::Url(url)) = self else {
+            return false;
+        };
+        CanonicalUrl::parse(url.as_ref()).is_ok_and(|canonical| canonical == *PYPI_CANONICAL_URL)
     }
 
     /// Returns whether this locked source can satisfy a refreshed requirement.
@@ -5091,6 +5108,20 @@ impl Source {
                     })?;
                 normalize_path(root.join(actual)).as_ref() == normalize_path(expected).as_ref()
             }
+            (
+                Self::Registry(RegistrySource::Url(actual)),
+                RequirementSource::Registry {
+                    index: Some(index), ..
+                },
+            ) => match index.url() {
+                IndexUrl::Pypi(_) | IndexUrl::Url(_) => {
+                    let actual = CanonicalUrl::parse(actual.as_ref());
+                    let expected =
+                        CanonicalUrl::new(index.url().without_credentials().into_owned());
+                    actual.is_ok_and(|actual| actual == expected)
+                }
+                IndexUrl::Path(_) => false,
+            },
             (
                 Self::Registry(_),
                 RequirementSource::Registry {
@@ -8514,6 +8545,64 @@ wheels = [
             Source::Registry(RegistrySource::Path(
                 Path::new("C:/Users/user/links").into()
             ))
+        );
+    }
+
+    #[test]
+    fn is_pypi_registry_trailing_slash() {
+        let url_with_slash =
+            uv_redacted::DisplaySafeUrl::parse("https://pypi.org/simple/").unwrap();
+        let url_without_slash =
+            uv_redacted::DisplaySafeUrl::parse("https://pypi.org/simple").unwrap();
+        let source_with_slash =
+            Source::Registry(RegistrySource::Url(UrlString::from(&url_with_slash)));
+        let source_without_slash =
+            Source::Registry(RegistrySource::Url(UrlString::from(&url_without_slash)));
+        assert!(source_with_slash.is_pypi_registry());
+        assert!(source_without_slash.is_pypi_registry());
+    }
+
+    #[test]
+    fn is_pypi_registry_custom_index() {
+        let url_with_slash =
+            uv_redacted::DisplaySafeUrl::parse("https://custom.index/simple/").unwrap();
+        let url_without_slash =
+            uv_redacted::DisplaySafeUrl::parse("https://custom.index/simple").unwrap();
+        let custom_with_slash =
+            Source::Registry(RegistrySource::Url(UrlString::from(&url_with_slash)));
+        let custom_without_slash =
+            Source::Registry(RegistrySource::Url(UrlString::from(&url_without_slash)));
+        assert!(!custom_with_slash.is_pypi_registry());
+        assert!(!custom_without_slash.is_pypi_registry());
+    }
+
+    #[test]
+    fn satisfies_remote_index_matching_canonical() {
+        let url1 = uv_redacted::DisplaySafeUrl::parse("https://custom.index/simple/").unwrap();
+        let url2 = uv_redacted::DisplaySafeUrl::parse("https://custom.index/simple").unwrap();
+        let canonical1 = CanonicalUrl::new(url1.clone());
+        let canonical2 = CanonicalUrl::new(url2.clone());
+        assert_eq!(canonical1, canonical2);
+
+        let mut remotes = FxHashSet::default();
+        remotes.insert(canonical1);
+
+        assert!(remotes.contains(&canonical2));
+
+        let source = Source::Registry(RegistrySource::Url(UrlString::from(&url1)));
+        let req_source = RequirementSource::Registry {
+            specifier: VersionSpecifiers::empty(),
+            index: Some(IndexMetadata {
+                url: IndexUrl::Url(std::sync::Arc::new(uv_pep508::VerbatimUrl::from_url(url2))),
+                format: uv_distribution_types::IndexFormat::default(),
+            }),
+            conflict: None,
+        };
+        let root = std::path::Path::new("/");
+        assert!(
+            source
+                .satisfies_requirement_source(&req_source, root)
+                .unwrap()
         );
     }
 }

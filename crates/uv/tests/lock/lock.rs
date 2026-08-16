@@ -35855,7 +35855,7 @@ fn lock_trailing_slash_find_links() -> Result<()> {
     Resolved 2 packages in [TIME]
     ");
 
-    // Add a trailing slash, which should invalidate the lockfile
+    // Add a trailing slash, which should not invalidate the lockfile
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
         r#"
@@ -35872,12 +35872,9 @@ fn lock_trailing_slash_find_links() -> Result<()> {
 
     // Re-run with `--locked`
     uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
-    exit_code: 1 (failure)
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
-
-    hint: To update the lockfile, run `uv lock`.
     ");
 
     uv_snapshot!(context.filters(), context.lock(), @"
@@ -35902,7 +35899,7 @@ fn lock_trailing_slash_find_links() -> Result<()> {
         [[package]]
         name = "packaging"
         version = "23.2"
-        source = { registry = "https://pypi.org/simple/packaging/" }
+        source = { registry = "https://pypi.org/simple/packaging" }
         sdist = { url = "https://files.pythonhosted.org/packages/fb/2b/9b9c33ffed44ee921d0967086d653047286054117d584f1b1a7c22ceaf7b/packaging-23.2.tar.gz", hash = "sha256:048fb0e9405036518eaaf48a55953c750c11e1a1b68e0dd1a9d62ed0c092cfc5" }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/ec/1a/610693ac4ee14fcdf2d9bf3c493370e4f2ef7ae2e19217d7a237ff42367d/packaging-23.2-py3-none-any.whl", hash = "sha256:8c491190033a9af7e1d931d0b5dacc2ef47509b34dd0de67ed209b5203fc88c7" },
