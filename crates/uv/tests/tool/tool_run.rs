@@ -2961,6 +2961,15 @@ fn tool_run_with_existing_py_script() -> anyhow::Result<()> {
 
     hint: Use `uv run script.py` instead
     ");
+
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg(context.temp_dir.child("script.py").path()), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: It looks like you tried to run a Python script at `[TEMP_DIR]/script.py`, which is not supported by `uv tool run`
+
+    hint: Use `uv run [TEMP_DIR]/script.py` instead
+    ");
     Ok(())
 }
 
@@ -3046,10 +3055,8 @@ fn tool_run_with_script_and_from_script() {
 }
 
 /// A repository can be named `foo.py`, so a URL requirement is not a script path.
-// The `--offline` git error text is not reproducible on Windows, where the test harness
-// cannot execute its bundled `git.exe`.
 #[test]
-#[cfg(not(windows))]
+#[cfg(feature = "test-git")]
 fn tool_run_with_url_ending_in_py() {
     let context = uv_test::test_context!("3.12").with_filtered_counts();
 
@@ -3063,13 +3070,22 @@ fn tool_run_with_url_ending_in_py() {
       Caused by: failed to fetch into: [CACHE_DIR]/git-v0/db/efbd3507bcbea33c
       Caused by: Remote Git fetches are not allowed because network connectivity is disabled (i.e., with `--offline`)
     ");
+
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("--offline")
+        .arg("easyeda2kicad @ git+https://github.com/uPesy/easyeda2kicad.py"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+      × Failed to download and build `easyeda2kicad @ git+https://github.com/uPesy/easyeda2kicad.py`
+      ├─▶ Git operation failed
+      ├─▶ failed to fetch into: [CACHE_DIR]/git-v0/db/efbd3507bcbea33c
+      ╰─▶ Remote Git fetches are not allowed because network connectivity is disabled (i.e., with `--offline`)
+    ");
 }
 
 /// As above, but passed to `--from`.
-// The `--offline` git error text is not reproducible on Windows, where the test harness
-// cannot execute its bundled `git.exe`.
 #[test]
-#[cfg(not(windows))]
+#[cfg(feature = "test-git")]
 fn tool_run_with_from_url_ending_in_py() {
     let context = uv_test::test_context!("3.12").with_filtered_counts();
 
@@ -3084,6 +3100,19 @@ fn tool_run_with_from_url_ending_in_py() {
       Caused by: Git operation failed
       Caused by: failed to fetch into: [CACHE_DIR]/git-v0/db/efbd3507bcbea33c
       Caused by: Remote Git fetches are not allowed because network connectivity is disabled (i.e., with `--offline`)
+    ");
+
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("--offline")
+        .arg("--from")
+        .arg("easyeda2kicad @ git+https://github.com/uPesy/easyeda2kicad.py")
+        .arg("easyeda2kicad"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+      × Failed to download and build `easyeda2kicad @ git+https://github.com/uPesy/easyeda2kicad.py`
+      ├─▶ Git operation failed
+      ├─▶ failed to fetch into: [CACHE_DIR]/git-v0/db/efbd3507bcbea33c
+      ╰─▶ Remote Git fetches are not allowed because network connectivity is disabled (i.e., with `--offline`)
     ");
 }
 
