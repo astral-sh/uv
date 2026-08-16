@@ -658,13 +658,19 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: "Checkout pyenv"
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: pyenv/pyenv
+          ref: da172db42d2c152b9ee3e52a774df4f81d45bc20 # v2.8.3
+          path: .pyenv
+          persist-credentials: false
+
       - name: "Install pyenv"
         run: |
-          # Install pyenv
-          curl https://pyenv.run | bash
+          export PYENV_ROOT="$GITHUB_WORKSPACE/.pyenv"
 
           # Set up environment variables for current step
-          export PYENV_ROOT="$HOME/.pyenv"
           export PATH="$PYENV_ROOT/bin:$PATH"
           eval "$(pyenv init -)"
 
@@ -673,9 +679,9 @@ jobs:
           pyenv global 3.9
 
           # Make environment variables persist across steps
-          echo "PYENV_ROOT=$HOME/.pyenv" >> $GITHUB_ENV
-          echo "$HOME/.pyenv/bin" >> $GITHUB_PATH
-          echo "$HOME/.pyenv/shims" >> $GITHUB_PATH
+          echo "PYENV_ROOT=$PYENV_ROOT" >> $GITHUB_ENV
+          echo "$PYENV_ROOT/bin" >> $GITHUB_PATH
+          echo "$PYENV_ROOT/shims" >> $GITHUB_PATH
 
       - name: "Download binary"
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1

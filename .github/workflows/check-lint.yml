@@ -67,12 +67,6 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - name: "Install shellcheck"
-        run: |
-          # renovate: datasource=github-releases depName=koalaman/shellcheck
-          SHELLCHECK_VERSION="v0.11.0"
-          curl -sSL "https://github.com/koalaman/shellcheck/releases/download/${SHELLCHECK_VERSION}/shellcheck-${SHELLCHECK_VERSION}.linux.x86_64.tar.xz" | tar -xJf -
-          sudo mv "shellcheck-${SHELLCHECK_VERSION}/shellcheck" /usr/local/bin/
       - name: "Run shellcheck"
         run: find . -name '*.sh' -type f | xargs shellcheck --shell bash --severity style
 

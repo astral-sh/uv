@@ -17,7 +17,15 @@ RUN apt-get update \
         python3-venv \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
-RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+ARG RUSTUP_VERSION=1.29.0
+ARG RUSTUP_SHA256=4acc9acc76d5079515b46346a485974457b5a79893cfb01112423c89aeb5aa10
+RUN curl --proto '=https' --tlsv1.2 -sSf \
+        --output /tmp/rustup-init \
+        "https://static.rust-lang.org/rustup/archive/${RUSTUP_VERSION}/x86_64-unknown-linux-gnu/rustup-init" \
+    && printf '%s  %s\n' "$RUSTUP_SHA256" /tmp/rustup-init | sha256sum --check \
+    && chmod +x /tmp/rustup-init \
+    && /tmp/rustup-init -y \
+    && rm /tmp/rustup-init
 ENV HOME="/root"
 WORKDIR /app
 RUN python3 -m venv $HOME/venv-docker

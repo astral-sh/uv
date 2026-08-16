@@ -620,7 +620,10 @@ jobs:
 
       - name: "Check a GraalPy dev version (different version parsing)"
         run: |
-          curl -sLf https://github.com/graalvm/graal-languages-ea-builds/releases/download/graalpy-25.0.0-ea.31/graalpy-25.0.0-ea.31-linux-amd64.tar.gz | tar xz
+          GRAALPY_ARCHIVE="graalpy-25.0.0-ea.31-linux-amd64.tar.gz"
+          curl -sLf --output "$RUNNER_TEMP/$GRAALPY_ARCHIVE" "https://github.com/graalvm/graal-languages-ea-builds/releases/download/graalpy-25.0.0-ea.31/$GRAALPY_ARCHIVE"
+          printf '%s  %s\n' 5cdc28620545ec5a81f5cbd2916f9ff962dae6b03978e691b80c45fd36900a90 "$RUNNER_TEMP/$GRAALPY_ARCHIVE" | sha256sum --check
+          tar xzf "$RUNNER_TEMP/$GRAALPY_ARCHIVE"
           ./uv run --no-project -p ./graalpy-25.0.0-dev-linux-amd64/bin/python python --version
 
   integration-test-graalpy-windows-x86_64:
@@ -920,15 +923,20 @@ jobs:
           distribution: Ubuntu-22.04
           wsl-version: ${{ matrix.wsl-version }}
 
-      - name: "Install pyenv-win"
+      - name: "Checkout pyenv-win"
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: pyenv-win/pyenv-win
+          ref: 067b0829665744483802c19a19376f409b3a81d8
+          path: .pyenv
+          persist-credentials: false
+
+      - name: "Install Python with pyenv-win"
         shell: pwsh
         run: |
-          Write-Host "Installing pyenv-win..."
-          Invoke-WebRequest -UseBasicParsing -Uri "https://raw.githubusercontent.com/pyenv-win/pyenv-win/master/pyenv-win/install-pyenv-win.ps1" -OutFile "./install-pyenv-win.ps1"
-          .\install-pyenv-win.ps1
+          $env:PYENV = "${{ github.workspace }}\.pyenv\pyenv-win"
 
           # Add pyenv-win to PATH for this session
-          $env:PYENV = "$env:USERPROFILE\.pyenv\pyenv-win"
           $env:PATH = "$env:PYENV\bin;$env:PYENV\shims;$env:PATH"
 
           # Add to GITHUB_PATH so WSL can find the shims
