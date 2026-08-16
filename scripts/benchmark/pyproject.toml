@@ -20,3 +20,6 @@ tools = "benchmark.tools:main"
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
+
+[tool.uv]
+exclude-newer = "P7D"
