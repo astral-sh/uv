@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 use serde::Deserialize;
 use tracing::{debug, info_span, warn};
 
-use uv_fs::Simplified;
+use uv_fs::{Simplified, created_time};
 
 use crate::git_info::{Commit, Tags};
 use crate::glob::cluster_globs;
@@ -160,7 +160,7 @@ impl CacheInfo {
                         continue;
                     }
 
-                    if let Ok(created) = metadata.created() {
+                    if let Ok(created) = created_time(&path, &metadata) {
                         // Prefer the creation time.
                         directories.insert(
                             dir,
