@@ -311,7 +311,6 @@ jobs:
           AWS_LC_SYS_PREBUILT_NASM: "0"
       # uv
       - name: "Build wheels"
-        if: ${{ matrix.platform.target != 'x86_64-pc-windows-msvc' }}
         uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
         with:
           maturin-version: v1.14.1
@@ -321,17 +320,8 @@ jobs:
           CARGO: ${{ github.workspace }}/scripts/cargo.cmd
           # Disable prebuilt NASM objects so we always compile assembly from source.
           AWS_LC_SYS_PREBUILT_NASM: "0"
-      - name: "Build PGO wheels"
-        if: ${{ matrix.platform.target == 'x86_64-pc-windows-msvc' }}
-        uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
-        with:
-          maturin-version: v1.14.1
-          target: ${{ matrix.platform.target }}
-          args: --release --locked --out dist --features self-update,windows-gui-bin --compatibility pypi
-        env:
-          CARGO: ${{ github.workspace }}/scripts/cargo.cmd
-          AWS_LC_SYS_PREBUILT_NASM: "0"
-          RUSTFLAGS: "-C target-feature=+crt-static -Cprofile-use=${{ github.workspace }}/target/uv-pgo/uv.profdata"
+          # Target-specific flags preserve the static CRT configured in .cargo/config.toml.
+          CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_RUSTFLAGS: ${{ matrix.platform.target == 'x86_64-pc-windows-msvc' && format('-Cprofile-use={0}/target/uv-pgo/uv.profdata', github.workspace) || '' }}
       - name: "Verify static Windows runtime"
         if: ${{ matrix.platform.target == 'x86_64-pc-windows-msvc' }}
         shell: bash
