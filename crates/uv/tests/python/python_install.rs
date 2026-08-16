@@ -2189,6 +2189,47 @@ fn python_install_default_prerelease() {
     bin_python_default.assert(predicate::path::exists());
 }
 
+/// `--default` cannot move the default executables to an older patch of the same minor
+/// version, because both are reached through the same minor version link. Warn rather than
+/// reporting a switch that did not happen.
+///
+/// <https://github.com/astral-sh/uv/issues/21125>
+#[test]
+fn python_install_default_older_patch_warns() {
+    let context = uv_test::test_context_with_versions!(&[])
+        .with_filtered_python_keys()
+        .with_filtered_exe_suffix()
+        .with_managed_python_dirs()
+        .with_python_download_cache();
+
+    context
+        .python_install()
+        .arg("--default")
+        .arg("3.13.2")
+        .assert()
+        .success();
+
+    // Installing an older patch of the same minor version does not change what the default
+    // executables resolve to.
+    uv_snapshot!(context.filters(), context.python_install().arg("--default").arg("3.13.0"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    warning: The `--default` option is experimental and may change without warning. Pass `--preview-features python-install-default` to disable this warning
+    warning: `--default` will not switch the default executables from `cpython-3.13.2-[PLATFORM]` to `cpython-3.13.0-[PLATFORM]`; both are reached through the same cpython-3.13-[PLATFORM] link
+    Installed Python 3.13.0 in [TIME]
+     + cpython-3.13.0-[PLATFORM] (python, python3, python3.13)
+    ");
+
+    // A different minor version is a real switch, so it must not warn.
+    uv_snapshot!(context.filters(), context.python_install().arg("--default").arg("3.12"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    warning: The `--default` option is experimental and may change without warning. Pass `--preview-features python-install-default` to disable this warning
+    Installed Python 3.12.14 in [TIME]
+     + cpython-3.12.14-[PLATFORM] (python, python3, python3.12)
+    ");
+}
+
 #[test]
 fn python_install_default_from_env() {
     let context = uv_test::test_context_with_versions!(&[])
