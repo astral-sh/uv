@@ -125,7 +125,7 @@ uv executes and installs command-line tools provided by Python packages, similar
 Run a tool in an ephemeral environment using `uvx` (an alias for `uv tool run`):
 
 ```console
-$ uvx pycowsay 'hello world!'
+$ uvx pycowsay@0.0.0.2 'hello world!'
 Resolved 1 package in 167ms
 Installed 1 package in 9ms
  + pycowsay==0.0.0.2

@@ -21,13 +21,13 @@ For ad-hoc access to marimo notebooks, start a marimo server at any time in an i
 with:
 
 ```console
-$ uvx marimo edit
+$ uvx marimo@0.23.16 edit
 ```
 
 Start a specific notebook with:
 
 ```console
-$ uvx marimo edit my_notebook.py
+$ uvx marimo@0.23.16 edit my_notebook.py
 ```
 
 ## Using marimo with inline script metadata
@@ -43,7 +43,7 @@ $ uv add --script my_notebook.py numpy
 To interactively edit a notebook containing inline script metadata, use:
 
 ```console
-$ uvx marimo edit --sandbox my_notebook.py
+$ uvx marimo@0.23.16 edit --sandbox my_notebook.py
 ```
 
 marimo will automatically use uv to start your notebook in an isolated virtual environment with your
@@ -73,7 +73,7 @@ behalf.
 If marimo is not a project dependency, you can still run a notebook with the following command:
 
 ```console
-$ uv run --with marimo marimo edit my_notebook.py
+$ uv run --with marimo==0.23.16 marimo edit my_notebook.py
 ```
 
 This will let you import your project's modules while editing your notebook. However, packages

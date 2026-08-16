@@ -17,7 +17,7 @@ If you're working within a [project](../../concepts/projects/index.md), you can 
 server with access to the project's virtual environment via the following:
 
 ```console
-$ uv run --with jupyter jupyter lab
+$ uv run --with jupyter==1.1.1 jupyter lab
 ```
 
 By default, `jupyter lab` will start the server at
@@ -38,9 +38,9 @@ for your project. Kernels enable the Jupyter server to run in one environment, w
 notebooks running in their own, separate environments.
 
 In the context of uv, we can create a kernel for a project while installing Jupyter itself in an
-isolated environment, as in `uv run --with jupyter jupyter lab`. Creating a kernel for the project
-ensures that the notebook is hooked up to the correct environment, and that any packages installed
-from within the notebook are installed into the project's virtual environment.
+isolated environment, as in `uv run --with jupyter==1.1.1 jupyter lab`. Creating a kernel for the
+project ensures that the notebook is hooked up to the correct environment, and that any packages
+installed from within the notebook are installed into the project's virtual environment.
 
 To create a kernel, you'll need to install `ipykernel` as a development dependency:
 
@@ -57,7 +57,7 @@ $ uv run ipython kernel install --user --env VIRTUAL_ENV $(pwd)/.venv --name=pro
 From there, start the server with:
 
 ```console
-$ uv run --with jupyter jupyter lab
+$ uv run --with jupyter==1.1.1 jupyter lab
 ```
 
 When creating a notebook, select the `project` kernel from the dropdown. Then use `!uv add pydantic`
@@ -70,7 +70,7 @@ or `uv.lock` files. Either command will make `import pydantic` work within the n
 If you don't want to create a kernel, you can still install packages from within the notebook.
 However, there are a few caveats to consider.
 
-Though `uv run --with jupyter` runs in an isolated environment, within the notebook itself,
+Though `uv run --with jupyter==1.1.1` runs in an isolated environment, within the notebook itself,
 `!uv add` and related commands will modify the _project's_ environment, even without a kernel.
 
 For example, running `!uv add pydantic` from within a notebook will add `pydantic` to the project's
@@ -87,7 +87,7 @@ server. For example, given:
 
 ```console
 $ uv venv --seed
-$ uv run --with jupyter jupyter lab
+$ uv run --with jupyter==1.1.1 jupyter lab
 ```
 
 Subsequent `%pip install` invocations within the notebook will install packages into the project's
@@ -97,8 +97,8 @@ virtual environment. However, such modifications will _not_ be reflected in the 
 ## Using Jupyter as a standalone tool
 
 If you ever need ad hoc access to a notebook (i.e., to run a Python snippet interactively), you can
-start a Jupyter server at any time with `uv tool run jupyter lab`. This will run a Jupyter server in
-an isolated environment.
+start a Jupyter server at any time with `uv tool run jupyter@1.1.1 lab`. This will run a Jupyter
+server in an isolated environment.
 
 ## Using Jupyter with a non-project environment
 

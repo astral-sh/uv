@@ -74,7 +74,7 @@ First, authenticate with Coiled using
 [`coiled login`](https://docs.coiled.io/user_guide/api.html?utm_source=uv-docs#coiled-login) :
 
 ```bash
-$ uvx coiled login
+$ uvx coiled@1.135.2 login
 ```
 
 You'll be prompted to create a Coiled account if you don't already have one — it's free to start
@@ -120,7 +120,7 @@ To submit a batch job for Coiled to run, use
 to execute the `uv run` command in the cloud:
 
 ```bash hl_lines="1"
-$ uvx coiled batch run \
+$ uvx coiled@1.135.2 batch run \
     uv run process.py
 ```
 

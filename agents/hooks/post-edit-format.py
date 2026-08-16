@@ -31,7 +31,7 @@ def format_python(file_path: str, cwd: str) -> None:
     """Format Python files with ruff."""
     try:
         subprocess.run(
-            ["uvx", "ruff", "format", file_path],
+            ["uvx", "ruff@0.16.2", "format", file_path],
             cwd=cwd,
             capture_output=True,
             check=False,

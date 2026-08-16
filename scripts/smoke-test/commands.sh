@@ -19,4 +19,4 @@ uv run --no-project python -c "import numpy; print(numpy.__version__)"
 uvx --version
 
 # Run a package via `uvx`
-uvx -v ruff --version
+uvx -v ruff@0.16.2 --version

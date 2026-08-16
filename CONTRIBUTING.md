@@ -146,7 +146,7 @@ cargo run -- pip install requests
 cargo fmt --all
 
 # Python
-uvx ruff format .
+uvx ruff@0.16.2 format .
 
 # Markdown, YAML, and other files (requires Node.js)
 npx prettier@3.9.0 --write .
@@ -164,16 +164,16 @@ Linting requires [shellcheck](https://github.com/koalaman/shellcheck) and
 cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
 
 # Python
-uvx ruff check .
+uvx ruff@0.16.2 check .
 
 # Python type checking
-uvx ty check python/uv
+uvx ty@0.0.69 check python/uv
 
 # Shell scripts
 shellcheck <script>
 
 # Spell checking
-uvx typos
+uvx typos@1.48.0
 
 # Unused Rust dependencies
 cargo shear
