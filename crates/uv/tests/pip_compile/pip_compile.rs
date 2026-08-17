@@ -18065,12 +18065,23 @@ async fn torch_backend_index() -> Result<()> {
             <!DOCTYPE html>
             <html>
                 <body>
-                    <a href="torch-0.0.1+cu128-py3-none-any.whl">torch-0.0.1+cu128-py3-none-any.whl</a>
+                    <a href="torch-0.0.1+cu128-py3-none-any.whl" data-dist-info-metadata="true">torch-0.0.1+cu128-py3-none-any.whl</a>
                 </body>
             </html>
             "#,
             "text/html",
         ))
+        .mount(&server)
+        .await;
+
+    Mock::given(method("GET"))
+        .and(path(
+            "/cu128/torch/torch-0.0.1+cu128-py3-none-any.whl.metadata",
+        ))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_string("Metadata-Version: 2.1\nName: torch\nVersion: 0.0.1+cu128\n"),
+        )
         .mount(&server)
         .await;
 
