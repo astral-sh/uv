@@ -121,6 +121,7 @@ check = [
 ]
 
 [tool.uv]
+exclude-newer = "P7D"
 cache-keys = [
     { file = "pyproject.toml" },
     { file = "Cargo.toml" },
