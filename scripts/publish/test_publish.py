@@ -1,11 +1,10 @@
 # /// script
 # requires-python = ">=3.12"
 # dependencies = [
-#     "httpx>=0.28.1,<0.29",
+#     "httpx[socks]>=0.28.1,<0.29",
 #     "packaging>=24.1,<25",
 #     "pypi-attestations==0.0.28",
 #     "sigstore==4.1.0",
-#     "socksio",
 # ]
 # ///
 
