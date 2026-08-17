@@ -2067,6 +2067,7 @@ mod tests {
         .torch_backend(Some(TorchStrategy::Backend {
             backend: TorchBackend::Cpu,
             source: TorchSource::PyTorch,
+            index: None,
         }))
         .build()?;
 

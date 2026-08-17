@@ -43,7 +43,7 @@ use std::sync::LazyLock;
 use either::Either;
 use url::Url;
 
-use uv_distribution_types::IndexUrl;
+use uv_distribution_types::{IndexUrl, IndexUrlError};
 use uv_normalize::PackageName;
 use uv_pep440::Version;
 use uv_platform_tags::Os;
@@ -216,20 +216,36 @@ pub enum TorchStrategy {
         os: Os,
         driver_version: Version,
         source: TorchSource,
+        index: Option<IndexUrl>,
     },
     /// Select the appropriate PyTorch index based on the operating system and AMD GPU architecture (e.g., `gfx1100`).
     Amd {
         os: Os,
         gpu_architecture: AmdGpuArchitecture,
         source: TorchSource,
+        index: Option<IndexUrl>,
     },
     /// Select the appropriate PyTorch index based on the operating system and Intel GPU presence.
-    Xpu { os: Os, source: TorchSource },
+    Xpu {
+        os: Os,
+        source: TorchSource,
+        index: Option<IndexUrl>,
+    },
     /// Use the specified PyTorch index.
     Backend {
         backend: TorchBackend,
         source: TorchSource,
+        index: Option<IndexUrl>,
     },
+}
+
+/// An error that occurs when determining a [`TorchStrategy`].
+#[derive(Debug, thiserror::Error)]
+pub enum TorchStrategyError {
+    #[error(transparent)]
+    Accelerator(#[from] AcceleratorError),
+    #[error("Invalid value for `UV_TORCH_BACKEND_INDEX`")]
+    IndexUrl(#[source] IndexUrlError),
 }
 
 impl TorchStrategy {
@@ -237,14 +253,20 @@ impl TorchStrategy {
     ///
     /// The `cuda_driver_version` and `amd_gpu_architecture` overrides, if provided, take
     /// precedence over system detection and correspond to the `UV_CUDA_DRIVER_VERSION` and
-    /// `UV_AMD_GPU_ARCHITECTURE` environment variables respectively.
+    /// `UV_AMD_GPU_ARCHITECTURE` environment variables respectively. When
+    /// `UV_TORCH_BACKEND_INDEX` is set, it overrides the index selected for the backend.
     pub fn from_mode(
         mode: TorchMode,
         source: TorchSource,
         os: &Os,
         cuda_driver_version: Option<Version>,
         amd_gpu_architecture: Option<AmdGpuArchitecture>,
-    ) -> Result<Self, AcceleratorError> {
+    ) -> Result<Self, TorchStrategyError> {
+        let index = std::env::var(EnvVars::UV_TORCH_BACKEND_INDEX)
+            .ok()
+            .map(|index| IndexUrl::from_str(&index))
+            .transpose()
+            .map_err(TorchStrategyError::IndexUrl)?;
         let backend = match mode {
             TorchMode::Auto => {
                 match Accelerator::detect(cuda_driver_version, amd_gpu_architecture)? {
@@ -253,6 +275,7 @@ impl TorchStrategy {
                             os: os.clone(),
                             driver_version: driver_version.clone(),
                             source,
+                            index: index.clone(),
                         });
                     }
                     Some(Accelerator::Amd { gpu_architecture }) => {
@@ -260,12 +283,14 @@ impl TorchStrategy {
                             os: os.clone(),
                             gpu_architecture,
                             source,
+                            index: index.clone(),
                         });
                     }
                     Some(Accelerator::Xpu) => {
                         return Ok(Self::Xpu {
                             os: os.clone(),
                             source,
+                            index,
                         });
                     }
                     None => TorchBackend::Cpu,
@@ -321,7 +346,11 @@ impl TorchStrategy {
             TorchMode::Rocm401 => TorchBackend::Rocm401,
             TorchMode::Xpu => TorchBackend::Xpu,
         };
-        Ok(Self::Backend { backend, source })
+        Ok(Self::Backend {
+            backend,
+            source,
+            index,
+        })
     }
 
     /// Returns `true` if the [`TorchStrategy`] applies to the given [`PackageName`].
@@ -434,20 +463,43 @@ impl TorchStrategy {
 
     /// Return the appropriate index URLs for the given [`TorchStrategy`].
     pub fn index_urls(&self) -> impl Iterator<Item = &IndexUrl> {
-        match self {
-            Self::Cuda {
-                os,
-                driver_version,
-                source,
-            } => {
-                // If this is a GPU-enabled package, and CUDA drivers are installed, use PyTorch's CUDA
-                // indexes.
-                //
-                // See: https://github.com/pmeier/light-the-torch/blob/33397cbe45d07b51ad8ee76b004571a4c236e37f/light_the_torch/_patch.py#L36-L49
-                match os {
-                    Os::Manylinux { .. } | Os::Musllinux { .. } => {
-                        Either::Left(Either::Left(Either::Left(
-                            LINUX_CUDA_DRIVERS
+        let index = match self {
+            Self::Cuda { index, .. }
+            | Self::Amd { index, .. }
+            | Self::Xpu { index, .. }
+            | Self::Backend { index, .. } => index,
+        };
+        if let Some(index) = index {
+            Either::Left(std::iter::once(index))
+        } else {
+            Either::Right(match self {
+                Self::Cuda {
+                    os,
+                    driver_version,
+                    source,
+                    ..
+                } => {
+                    // If this is a GPU-enabled package, and CUDA drivers are installed, use PyTorch's CUDA
+                    // indexes.
+                    //
+                    // See: https://github.com/pmeier/light-the-torch/blob/33397cbe45d07b51ad8ee76b004571a4c236e37f/light_the_torch/_patch.py#L36-L49
+                    match os {
+                        Os::Manylinux { .. } | Os::Musllinux { .. } => {
+                            Either::Left(Either::Left(Either::Left(
+                                LINUX_CUDA_DRIVERS
+                                    .iter()
+                                    .filter_map(move |(backend, version)| {
+                                        if driver_version >= version {
+                                            Some(backend.index_url(*source))
+                                        } else {
+                                            None
+                                        }
+                                    })
+                                    .chain(std::iter::once(TorchBackend::Cpu.index_url(*source))),
+                            )))
+                        }
+                        Os::Windows => Either::Left(Either::Left(Either::Right(
+                            WINDOWS_CUDA_VERSIONS
                                 .iter()
                                 .filter_map(move |(backend, version)| {
                                     if driver_version >= version {
@@ -457,21 +509,42 @@ impl TorchStrategy {
                                     }
                                 })
                                 .chain(std::iter::once(TorchBackend::Cpu.index_url(*source))),
-                        )))
+                        ))),
+                        Os::Macos { .. }
+                        | Os::FreeBsd { .. }
+                        | Os::NetBsd { .. }
+                        | Os::OpenBsd { .. }
+                        | Os::Dragonfly { .. }
+                        | Os::Illumos { .. }
+                        | Os::Haiku { .. }
+                        | Os::Android { .. }
+                        | Os::Pyodide { .. }
+                        | Os::PyEmscripten { .. }
+                        | Os::Ios { .. } => Either::Right(Either::Left(std::iter::once(
+                            TorchBackend::Cpu.index_url(*source),
+                        ))),
                     }
-                    Os::Windows => Either::Left(Either::Left(Either::Right(
-                        WINDOWS_CUDA_VERSIONS
+                }
+                Self::Amd {
+                    os,
+                    gpu_architecture,
+                    source,
+                    ..
+                } => match os {
+                    Os::Manylinux { .. } | Os::Musllinux { .. } => Either::Left(Either::Right(
+                        LINUX_AMD_GPU_DRIVERS
                             .iter()
-                            .filter_map(move |(backend, version)| {
-                                if driver_version >= version {
+                            .filter_map(move |(backend, architecture)| {
+                                if gpu_architecture == architecture {
                                     Some(backend.index_url(*source))
                                 } else {
                                     None
                                 }
                             })
                             .chain(std::iter::once(TorchBackend::Cpu.index_url(*source))),
-                    ))),
-                    Os::Macos { .. }
+                    )),
+                    Os::Windows
+                    | Os::Macos { .. }
                     | Os::FreeBsd { .. }
                     | Os::NetBsd { .. }
                     | Os::OpenBsd { .. }
@@ -484,62 +557,32 @@ impl TorchStrategy {
                     | Os::Ios { .. } => Either::Right(Either::Left(std::iter::once(
                         TorchBackend::Cpu.index_url(*source),
                     ))),
-                }
-            }
-            Self::Amd {
-                os,
-                gpu_architecture,
-                source,
-            } => match os {
-                Os::Manylinux { .. } | Os::Musllinux { .. } => Either::Left(Either::Right(
-                    LINUX_AMD_GPU_DRIVERS
-                        .iter()
-                        .filter_map(move |(backend, architecture)| {
-                            if gpu_architecture == architecture {
-                                Some(backend.index_url(*source))
-                            } else {
-                                None
-                            }
-                        })
-                        .chain(std::iter::once(TorchBackend::Cpu.index_url(*source))),
-                )),
-                Os::Windows
-                | Os::Macos { .. }
-                | Os::FreeBsd { .. }
-                | Os::NetBsd { .. }
-                | Os::OpenBsd { .. }
-                | Os::Dragonfly { .. }
-                | Os::Illumos { .. }
-                | Os::Haiku { .. }
-                | Os::Android { .. }
-                | Os::Pyodide { .. }
-                | Os::PyEmscripten { .. }
-                | Os::Ios { .. } => Either::Right(Either::Left(std::iter::once(
-                    TorchBackend::Cpu.index_url(*source),
-                ))),
-            },
-            Self::Xpu { os, source } => match os {
-                Os::Manylinux { .. } | Os::Windows => Either::Right(Either::Right(Either::Left(
-                    std::iter::once(TorchBackend::Xpu.index_url(*source)),
-                ))),
-                Os::Musllinux { .. }
-                | Os::Macos { .. }
-                | Os::FreeBsd { .. }
-                | Os::NetBsd { .. }
-                | Os::OpenBsd { .. }
-                | Os::Dragonfly { .. }
-                | Os::Illumos { .. }
-                | Os::Haiku { .. }
-                | Os::Android { .. }
-                | Os::Pyodide { .. }
-                | Os::PyEmscripten { .. }
-                | Os::Ios { .. } => Either::Right(Either::Left(std::iter::once(
-                    TorchBackend::Cpu.index_url(*source),
-                ))),
-            },
-            Self::Backend { backend, source } => Either::Right(Either::Right(Either::Right(
-                std::iter::once(backend.index_url(*source)),
-            ))),
+                },
+                Self::Xpu { os, source, .. } => match os {
+                    Os::Manylinux { .. } | Os::Windows => Either::Right(Either::Right(
+                        Either::Left(std::iter::once(TorchBackend::Xpu.index_url(*source))),
+                    )),
+                    Os::Musllinux { .. }
+                    | Os::Macos { .. }
+                    | Os::FreeBsd { .. }
+                    | Os::NetBsd { .. }
+                    | Os::OpenBsd { .. }
+                    | Os::Dragonfly { .. }
+                    | Os::Illumos { .. }
+                    | Os::Haiku { .. }
+                    | Os::Android { .. }
+                    | Os::Pyodide { .. }
+                    | Os::PyEmscripten { .. }
+                    | Os::Ios { .. } => Either::Right(Either::Left(std::iter::once(
+                        TorchBackend::Cpu.index_url(*source),
+                    ))),
+                },
+                Self::Backend {
+                    backend, source, ..
+                } => Either::Right(Either::Right(Either::Right(std::iter::once(
+                    backend.index_url(*source),
+                )))),
+            })
         }
     }
 }

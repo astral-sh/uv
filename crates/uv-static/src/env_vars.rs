@@ -1391,6 +1391,10 @@ impl EnvVars {
     #[attr_added_in("0.6.9")]
     pub const UV_TORCH_BACKEND: &'static str = "UV_TORCH_BACKEND";
 
+    /// Overrides the PyTorch index selected by `UV_TORCH_BACKEND`.
+    #[attr_added_in("next release")]
+    pub const UV_TORCH_BACKEND_INDEX: &'static str = "UV_TORCH_BACKEND_INDEX";
+
     /// Equivalent to the `--project` command-line argument.
     #[attr_added_in("0.4.4")]
     pub const UV_PROJECT: &'static str = "UV_PROJECT";

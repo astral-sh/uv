@@ -50,7 +50,7 @@ use uv_resolver::{
 use uv_scripts::Pep723ItemRef;
 use uv_settings::PythonInstallMirrors;
 use uv_static::EnvVars;
-use uv_torch::{TorchSource, TorchStrategy};
+use uv_torch::{TorchSource, TorchStrategy, TorchStrategyError};
 use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy, SourceTreeEditablePolicy};
 use uv_warnings::{warn_user, warn_user_once};
 use uv_workspace::dependency_groups::DependencyGroupError;
@@ -377,6 +377,9 @@ pub(crate) enum ProjectError {
 
     #[error(transparent)]
     Accelerator(#[from] uv_torch::AcceleratorError),
+
+    #[error(transparent)]
+    TorchStrategy(#[from] TorchStrategyError),
 
     #[error(transparent)]
     Anyhow(#[from] anyhow::Error),

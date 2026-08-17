@@ -527,4 +527,13 @@ $ # With an environment variable.
 $ UV_TORCH_BACKEND=cu130 uv pip install torch torchvision
 ```
 
+To use a mirror or another compatible index, set `UV_TORCH_BACKEND_INDEX`. uv uses this index for
+all relevant PyTorch packages instead of the official index selected by `UV_TORCH_BACKEND`:
+
+```shell
+$ UV_TORCH_BACKEND=cu128 \
+    UV_TORCH_BACKEND_INDEX=https://jfrog/artifactory/api/pypi/pytorch/simple \
+    uv pip install torch torchvision
+```
+
 At present, `--torch-backend` is only available in the `uv pip` interface.
