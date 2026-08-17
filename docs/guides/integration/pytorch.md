@@ -528,8 +528,8 @@ $ UV_TORCH_BACKEND=cu130 uv pip install torch torchvision
 ```
 
 To use a mirror or another compatible index, set `--torch-backend-index` (or
-`UV_TORCH_BACKEND_INDEX`) to its base URL. uv appends the backend selected by
-`--torch-backend` (or `UV_TORCH_BACKEND`) for all relevant PyTorch packages:
+`UV_TORCH_BACKEND_INDEX`) to its base URL. uv appends the backend selected by `--torch-backend` (or
+`UV_TORCH_BACKEND`) for all relevant PyTorch packages:
 
 ```shell
 $ uv pip install torch torchvision \
@@ -537,6 +537,4 @@ $ uv pip install torch torchvision \
     --torch-backend-index=https://download.pytorch.org/whl/
 ```
 
-The command above resolves PyTorch packages from
-`https://download.pytorch.org/whl/cu128`.
-
+The command above resolves PyTorch packages from `https://download.pytorch.org/whl/cu128`.
