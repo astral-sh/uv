@@ -785,6 +785,33 @@ async fn upload_error_problem_details() {
     );
 }
 
+/// A dry run checks valid distribution metadata without uploading the file.
+#[tokio::test]
+async fn dry_run_does_not_upload() {
+    let context = uv_test::test_context!("3.12").with_filtered_sizes();
+    let server = MockServer::start().await;
+
+    Mock::given(method("POST"))
+        .respond_with(ResponseTemplate::new(200))
+        .expect(0)
+        .mount(&server)
+        .await;
+
+    uv_snapshot!(context.filters(), context.publish()
+        .arg("--dry-run")
+        .arg("--publish-url")
+        .arg(format!("{}/upload", server.uri()))
+        .arg("--token")
+        .arg("dummy")
+        .arg(dummy_wheel()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Checking 1 file against http://[LOCALHOST]/upload
+    Checking ok-1.0.0-py3-none-any.whl ([SIZE]B)
+    "
+    );
+}
+
 /// Test that `--dry-run` checks all files and reports all errors instead of
 /// stopping at the first failure.
 #[test]
