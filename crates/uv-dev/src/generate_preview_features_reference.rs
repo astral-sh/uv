@@ -120,7 +120,6 @@ mod tests {
         - `content-addressed-cache`: Enables content-addressed wheel archives in the cache.
         - `detect-module-conflicts`: Warns when multiple packages would install conflicting Python modules into the same
           environment.
-        - `direct-publish`: Allows publishing directly to a package index.
         - `extra-build-dependencies`: Allows specifying additional dependencies for package builds.
         - `format-command`: Allows using `uv format`.
         - `gcs-endpoint`: Allows signing requests to configured Google Cloud Storage endpoints.

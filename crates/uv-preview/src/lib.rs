@@ -267,8 +267,6 @@ pub enum PreviewFeature {
     SbomExport,
     /// Allows using `uv auth helper` as a credential helper for external tools.
     AuthHelper,
-    /// Allows publishing directly to a package index.
-    DirectPublish,
     /// Uses the directory containing a local `uv run` target, rather than the current working
     /// directory, as the starting point for project and workspace discovery. This feature takes
     /// effect before configuration is loaded.
