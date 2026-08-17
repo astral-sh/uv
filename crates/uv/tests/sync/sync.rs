@@ -15005,31 +15005,34 @@ fn sync_extra_build_dependencies_cache() -> Result<()> {
     Ok(())
 }
 
-/// Sync an existing lockfile containing a zstd-compressed wheel.
+/// Ignore deprecated pyx-specific zstd wheel metadata and install the ordinary wheel from an
+/// existing lockfile.
 #[tokio::test]
-async fn sync_zstd_wheel() -> Result<()> {
-    use wiremock::{
-        Mock, MockServer, ResponseTemplate,
-        matchers::{method, path},
-    };
-
+async fn sync_deprecated_zstd_wheel() -> Result<()> {
     let context = uv_test::test_context!("3.13");
     let server = MockServer::start().await;
 
-    let zstd_wheel_path = context
+    let wheel_path = context
         .temp_dir
-        .child("basic_package-0.1.0-py3-none-any.whl.tar.zst");
+        .child("basic_package-0.1.0-py3-none-any.whl");
     fs_err::copy(
         context
             .workspace_root
-            .join("test/links/basic_package-0.1.0-py3-none-any.whl.tar.zst"),
-        &zstd_wheel_path,
+            .join("test/links/basic_package-0.1.0-py3-none-any.whl"),
+        &wheel_path,
     )?;
 
-    // Serve the zstd-compressed wheel file
+    // Only the ordinary wheel is available.
+    Mock::given(method("GET"))
+        .and(path("/files/basic_package-0.1.0-py3-none-any.whl"))
+        .respond_with(ResponseTemplate::new(200).set_body_bytes(fs_err::read(&wheel_path)?))
+        .expect(1)
+        .mount(&server)
+        .await;
     Mock::given(method("GET"))
         .and(path("/files/basic_package-0.1.0-py3-none-any.whl.tar.zst"))
-        .respond_with(ResponseTemplate::new(200).set_body_bytes(fs_err::read(&zstd_wheel_path)?))
+        .respond_with(ResponseTemplate::new(403))
+        .expect(0)
         .mount(&server)
         .await;
 
