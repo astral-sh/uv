@@ -28,6 +28,7 @@ class EcosystemProject:
     python_version: str
     constraints: tuple[str, ...] = ()
     groups: tuple[str, ...] = ()
+    additional_environments: tuple[str, ...] = ()
     exclude_dependencies: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
@@ -74,6 +75,7 @@ CORPUS_PROJECTS = (
     EcosystemProject(
         name="sentry",
         python_version="3.13",
+        additional_environments=("sys_platform == 'win32'",),
         exclude_dependencies=(
             "confluent-kafka",
             "emmett-core",
@@ -316,23 +318,44 @@ def prepare_corpus(corpus_directory: Path) -> None:
             ignore=shutil.ignore_patterns(".venv", "installed", "uv.lock"),
         )
 
-        if project.exclude_dependencies:
+        if project.additional_environments or project.exclude_dependencies:
             manifest = destination / "pyproject.toml"
             content = manifest.read_text()
-            content = content.replace(
-                "environments = [\n",
-                "environments = [\n    \"sys_platform == 'win32'\",\n",
-                1,
-            )
-            dependencies = ", ".join(
-                f'"{dependency}"' for dependency in project.exclude_dependencies
-            )
-            setting = f"exclude-dependencies = [{dependencies}]\n"
-            if "[tool.uv]\n" in content:
-                content = content.replace("[tool.uv]\n", f"[tool.uv]\n{setting}", 1)
-            else:
-                content += f"\n[tool.uv]\n{setting}"
+            if project.additional_environments:
+                content = extend_project_environments(project, content)
+            if project.exclude_dependencies:
+                dependencies = ", ".join(
+                    f'"{dependency}"' for dependency in project.exclude_dependencies
+                )
+                setting = f"exclude-dependencies = [{dependencies}]\n"
+                if "[tool.uv]\n" in content:
+                    content = content.replace("[tool.uv]\n", f"[tool.uv]\n{setting}", 1)
+                else:
+                    content += f"\n[tool.uv]\n{setting}"
             manifest.write_text(content)
+
+
+def extend_project_environments(project: EcosystemProject, content: str) -> str:
+    lines = content.splitlines(keepends=True)
+    in_uv_table = False
+
+    for index, line in enumerate(lines):
+        if section := re.match(r"^\s*\[([^]]+)\]\s*(?:#.*)?$", line):
+            in_uv_table = section.group(1).strip() == "tool.uv"
+            continue
+        if not in_uv_table:
+            continue
+        if match := re.match(r"^\s*environments\s*=\s*\[", line):
+            additions = "".join(
+                f'\n    "{environment}",'
+                for environment in project.additional_environments
+            )
+            lines[index] = f"{line[: match.end()]}{additions}{line[match.end() :]}"
+            return "".join(lines)
+
+    raise RuntimeError(
+        f"Project manifest for {project.name!r} has no [tool.uv].environments setting"
+    )
 
 
 def run_workloads(
