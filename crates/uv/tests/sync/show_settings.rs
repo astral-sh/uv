@@ -213,6 +213,7 @@ fn pip_compile_baseline() {
             },
             reinstall: None,
         },
+        torch_backend_index: None,
     }
     "#);
 }
@@ -582,6 +583,7 @@ fn pip_install_baseline() {
             },
             reinstall: None,
         },
+        torch_backend_index: None,
     }
     "#);
 }
@@ -701,6 +703,7 @@ fn lock_baseline() {
             resolution: Highest,
             sources: None,
             torch_backend: None,
+            torch_backend_index: None,
             cuda_driver_version: None,
             amd_gpu_architecture: None,
             upgrade: Upgrade {
@@ -834,6 +837,7 @@ fn version_baseline() {
                 resolution: Highest,
                 sources: None,
                 torch_backend: None,
+                torch_backend_index: None,
                 cuda_driver_version: None,
                 amd_gpu_architecture: None,
                 upgrade: Upgrade {
@@ -1008,6 +1012,7 @@ fn tool_install_baseline() {
                 resolution: Highest,
                 sources: None,
                 torch_backend: None,
+                torch_backend_index: None,
                 cuda_driver_version: None,
                 amd_gpu_architecture: None,
                 upgrade: Upgrade {
@@ -2007,7 +2012,7 @@ fn resolve_tool() -> anyhow::Result<()> {
     +            resolution: LowestDirect,
                  sources: None,
                  torch_backend: None,
-                 cuda_driver_version: None,
+                 torch_backend_index: None,
     ...
     "
     );
@@ -2191,8 +2196,8 @@ fn resolve_both() -> anyhow::Result<()> {
                  {},
              ),
     ...
-             reinstall: None,
          },
+         torch_backend_index: None,
      }
     +
     +----- stderr -----
@@ -2325,8 +2330,8 @@ fn resolve_both_special_fields() -> anyhow::Result<()> {
                  {},
              ),
     ...
-             reinstall: None,
          },
+         torch_backend_index: None,
      }
     +
     +----- stderr -----
@@ -3323,8 +3328,8 @@ fn index_by_name() -> anyhow::Result<()> {
         .arg("--index")
         .arg("internal"), @"
     ...
-             reinstall: None,
          },
+         torch_backend_index: None,
      }
     +
     +----- stderr -----
@@ -3390,8 +3395,8 @@ fn index_by_name_with_matching_path() -> anyhow::Result<()> {
                                  expanded: false,
                              },
     ...
-             reinstall: None,
          },
+         torch_backend_index: None,
      }
     +
     +----- stderr -----

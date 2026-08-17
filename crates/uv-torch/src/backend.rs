@@ -282,7 +282,7 @@ impl TorchStrategy {
                         })
                     }
                     Some(Accelerator::Amd { gpu_architecture }) => {
-                        let indexes = Self::amd_indexes(os, &gpu_architecture, source, index_base)?;
+                        let indexes = Self::amd_indexes(os, gpu_architecture, source, index_base)?;
                         Ok(Self::Amd {
                             os: os.clone(),
                             gpu_architecture,
@@ -410,7 +410,7 @@ impl TorchStrategy {
 
     fn amd_indexes(
         os: &Os,
-        gpu_architecture: &AmdGpuArchitecture,
+        gpu_architecture: AmdGpuArchitecture,
         source: TorchSource,
         configured_index_base: Option<&str>,
     ) -> Result<Box<[IndexUrl]>, TorchStrategyError> {
@@ -418,7 +418,7 @@ impl TorchStrategy {
             Os::Manylinux { .. } | Os::Musllinux { .. } => Self::indexes(
                 LINUX_AMD_GPU_DRIVERS
                     .iter()
-                    .filter(|(_, architecture)| gpu_architecture == architecture)
+                    .filter(|(_, architecture)| gpu_architecture == *architecture)
                     .map(|(backend, _)| *backend)
                     .chain(std::iter::once(TorchBackend::Cpu)),
                 source,
@@ -489,11 +489,11 @@ impl TorchStrategy {
             .collect()
     }
 
-    fn index_base<'a>(source: TorchSource, configured_index_base: Option<&'a str>) -> Cow<'a, str> {
+    fn index_base(source: TorchSource, configured_index_base: Option<&str>) -> Cow<'_, str> {
         configured_index_base.map_or_else(
             || match source {
                 TorchSource::PyTorch => Cow::Borrowed(PYTORCH_INDEX_BASE_URL),
-                TorchSource::Pyx => Cow::Owned(format!("{}/simple/astral-sh", &*PYX_API_BASE_URL)),
+                TorchSource::Pyx => Cow::Owned(format!("{}/simple/astral-sh", *PYX_API_BASE_URL)),
             },
             Cow::Borrowed,
         )

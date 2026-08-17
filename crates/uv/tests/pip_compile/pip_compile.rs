@@ -18081,6 +18081,7 @@ async fn torch_backend_index() -> Result<()> {
 
     uv_snapshot!(context
         .pip_compile()
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .env(
             EnvVars::UV_TORCH_BACKEND_INDEX,
             format!("{}/not-used", server.uri()),
