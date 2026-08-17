@@ -686,20 +686,31 @@ async fn untar_in_tokio_tar(
 
         let entry_type = file.header().entry_type();
 
-        // Match `tar-codec`'s default policy.
-        if entry_type.is_hard_link() {
-            let relpath = file.path()?.into_owned();
-            return Err(io::Error::new(
-                ErrorKind::InvalidData,
-                format!("archive hardlinks are not supported: {}", relpath.display()),
-            ));
-        }
-
         // Unpack the file into the destination directory.
         let unpacked_at = file.unpack_in_raw(&dst, &mut memo).await?;
 
+        // `tokio-tar` ensures that hardlink targets resolve within the extraction root, but it
+        // allows hardlinks to symlink inodes. Reject those because moving the resulting link can
+        // change where the symlink resolves.
+        if entry_type.is_hard_link()
+            && let Some(path) = unpacked_at.as_deref()
+            && fs_err::tokio::symlink_metadata(path)
+                .await?
+                .file_type()
+                .is_symlink()
+        {
+            let relpath = file.path()?.into_owned();
+            return Err(io::Error::new(
+                ErrorKind::InvalidData,
+                format!(
+                    "archive hardlinks to symlinks are not supported: {}",
+                    relpath.display()
+                ),
+            ));
+        }
+
         // Collect file paths (excluding directories) that were unpacked successfully.
-        if unpacked_at.is_some() && entry_type.is_file() {
+        if unpacked_at.is_some() && (entry_type.is_file() || entry_type.is_hard_link()) {
             let relpath = file.path()?.into_owned();
             let size = file.header().size()?;
             files.push((relpath, size));
@@ -711,7 +722,7 @@ async fn untar_in_tokio_tar(
             use std::fs::Permissions;
             use std::os::unix::fs::PermissionsExt;
 
-            if entry_type.is_file() {
+            if entry_type.is_file() || entry_type.is_hard_link() {
                 let mode = file.header().mode()?;
                 let has_any_executable_bit = mode & 0o111;
                 if has_any_executable_bit != 0 {

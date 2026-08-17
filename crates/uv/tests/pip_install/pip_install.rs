@@ -20,6 +20,7 @@ use predicates::prelude::predicate;
 use tar_codec::{ArchiveBuilder as _, EntryMetadata, TarEncoder};
 #[cfg(unix)]
 use tokio::io::AsyncWriteExt;
+#[cfg(unix)]
 use tokio_tar::{Builder as TarBuilder, EntryType as TarEntryType, Header as TarHeader};
 use tokio_util::compat::FuturesAsyncWriteCompatExt;
 use url::Url;
@@ -16438,9 +16439,10 @@ async fn tar_wheel_traversal_is_not_recorded() -> Result<()> {
     Ok(())
 }
 
-/// Hardlinks in source distributions must be rejected before extraction.
+/// Hardlinks to symlinks in source distributions must be rejected during extraction.
+#[cfg(unix)]
 #[tokio::test]
-async fn sdist_hardlink_is_rejected() -> Result<()> {
+async fn sdist_symlink_backed_hardlink_is_rejected() -> Result<()> {
     let context = uv_test::test_context!("3.12");
     let source_dist = context.temp_dir.child("hardlink_sdist-1.0.0.tar.gz");
 
@@ -16457,10 +16459,29 @@ async fn sdist_hardlink_is_rejected() -> Result<()> {
     header.set_cksum();
     tar.append(&header, pyproject_toml.as_bytes()).await?;
 
+    // Ordinary hardlinks within the extraction root are allowed.
     let mut header = TarHeader::new_gnu();
     header.set_path("hardlink_sdist-1.0.0/hardlink.toml")?;
     header.set_entry_type(TarEntryType::hard_link());
     header.set_link_name("hardlink_sdist-1.0.0/pyproject.toml")?;
+    header.set_size(0);
+    header.set_mode(0o644);
+    header.set_cksum();
+    tar.append(&header, &[][..]).await?;
+
+    let mut header = TarHeader::new_gnu();
+    header.set_path("hardlink_sdist-1.0.0/symlink.toml")?;
+    header.set_entry_type(TarEntryType::symlink());
+    header.set_link_name("pyproject.toml")?;
+    header.set_size(0);
+    header.set_mode(0o644);
+    header.set_cksum();
+    tar.append(&header, &[][..]).await?;
+
+    let mut header = TarHeader::new_gnu();
+    header.set_path("hardlink_sdist-1.0.0/symlink-hardlink.toml")?;
+    header.set_entry_type(TarEntryType::hard_link());
+    header.set_link_name("hardlink_sdist-1.0.0/symlink.toml")?;
     header.set_size(0);
     header.set_mode(0o644);
     header.set_cksum();
@@ -16478,7 +16499,7 @@ async fn sdist_hardlink_is_rejected() -> Result<()> {
       × Failed to build `hardlink-sdist @ file://[TEMP_DIR]/hardlink_sdist-1.0.0.tar.gz`
       ├─▶ Failed to extract archive: [CACHE_DIR]/sdists-v9/[TMP]
       ├─▶ I/O operation failed during extraction
-      ╰─▶ archive hardlinks are not supported: hardlink_sdist-1.0.0/hardlink.toml
+      ╰─▶ archive hardlinks to symlinks are not supported: hardlink_sdist-1.0.0/symlink-hardlink.toml
     ");
 
     Ok(())
