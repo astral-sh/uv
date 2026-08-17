@@ -14,3 +14,6 @@ jobs:
           persist-credentials: false
 
       - uses: zizmorcore/zizmor-action@3dc1ecc9bcb9e94e9b2c709687979e1298497054 # v0.6.2
+        with:
+          advanced-security: ${{ github.repository == 'astral-sh/uv' }}
+          annotations: ${{ github.repository != 'astral-sh/uv' }}
