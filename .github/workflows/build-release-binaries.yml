@@ -714,7 +714,9 @@ jobs:
           - target: powerpc64le-unknown-linux-gnu
             arch: ppc64le
             # see https://github.com/astral-sh/uv/issues/6528
-            # and https://github.com/aws/aws-lc/pull/3429
+            # Older PowerPC build images lack AT_HWCAP2 in their glibc headers.
+            # Use the Linux ABI value until bundled AWS-LC includes:
+            # https://github.com/aws/aws-lc/pull/3429
             maturin_docker_options: -e JEMALLOC_SYS_WITH_LG_PAGE=16 -e AWS_LC_SYS_CFLAGS_powerpc64le_unknown_linux_gnu=-DAT_HWCAP2=26
 
     steps:
