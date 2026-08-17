@@ -13,6 +13,9 @@ on:
 
 permissions: {}
 
+env:
+  ACTIONS_CACHE_MODE: none
+
 jobs:
   publish-versions:
     runs-on: ubuntu-latest
