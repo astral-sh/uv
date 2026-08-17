@@ -114,6 +114,13 @@ docker = [
 release = [
   "rooster==0.1.1",
 ]
+dev = [
+    "ruff>=0.16.2",
+    "ty>=0.0.69",
+]
+validate-pyproject = [
+    "validate-pyproject[all,store]>=0.25",
+]
 
 [tool.uv]
 cache-keys = [

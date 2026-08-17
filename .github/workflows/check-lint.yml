@@ -31,7 +31,7 @@ jobs:
         uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
         with:
           version: "0.12.5"
-      - run: uvx ruff check .
+      - run: uv run --only-group=dev ruff check .
 
   ty:
     timeout-minutes: 10
@@ -45,7 +45,7 @@ jobs:
         with:
           version: "0.12.5"
       # `uv check` checks the entire repository; keep this scoped to the Python package.
-      - run: uvx ty check python/uv
+      - run: uv run --only-group=dev ty check python/uv
       - name: "Check scrolls"
         env:
           # TODO: Remove once ty infers Python versions from script environments instead of the root project.
@@ -90,7 +90,7 @@ jobs:
         # Replace the bundled `uv` schema with the checked-in schema. validate-pyproject requires
         # an absolute `$id` to resolve the schema's internal references.
         run: >
-          uvx --from 'validate-pyproject[all,store]' validate-pyproject
+          uv run --only-group=validate-pyproject validate-pyproject
           --disable-plugins uv
           --tool uv=<(jq '.["$id"]="https://example.com/uv.schema.json"' uv.schema.json)
           pyproject.toml
