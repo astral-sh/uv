@@ -296,7 +296,6 @@ fn publish_resolved_settings() -> anyhow::Result<()> {
         index: None,
         dry_run: false,
         no_attestations: false,
-        direct: false,
         publish_url: DisplaySafeUrl {
             scheme: "https",
             cannot_be_a_base: false,
@@ -3758,7 +3757,6 @@ fn preview_features() {
     +            WorkspaceList,
     +            SbomExport,
     +            AuthHelper,
-    +            DirectPublish,
     +            TargetWorkspaceDiscovery,
     +            MetadataJson,
     +            GcsEndpoint,

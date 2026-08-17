@@ -2064,7 +2064,6 @@ async fn run_with_workspace_cache(
                 password,
                 dry_run,
                 no_attestations,
-                direct,
                 publish_url,
                 trusted_publishing,
                 keyring_provider,
@@ -2087,8 +2086,6 @@ async fn run_with_workspace_cache(
                 index_locations,
                 dry_run,
                 no_attestations,
-                direct,
-                globals.preview,
                 &cache,
                 printer,
             )

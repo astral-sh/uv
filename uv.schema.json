@@ -1801,7 +1801,6 @@
             "workspace-list",
             "sbom-export",
             "auth-helper",
-            "direct-publish",
             "target-workspace-discovery",
             "metadata-json",
             "gcs-endpoint",
