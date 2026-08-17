@@ -1701,9 +1701,10 @@ version = "0.12.5"
 source = { editable = "." }
 
 [package.dev-dependencies]
-dev = [
+check = [
     { name = "ruff" },
     { name = "ty" },
+    { name = "validate-pyproject", extra = ["all", "store"] },
 ]
 docker = [
     { name = "cargo-zigbuild", marker = "python_full_version >= '3.12'" },
@@ -1722,16 +1723,14 @@ docs = [
 release = [
     { name = "rooster", marker = "python_full_version >= '3.12'" },
 ]
-validate-pyproject = [
-    { name = "validate-pyproject", extra = ["all", "store"] },
-]
 
 [package.metadata]
 
 [package.metadata.requires-dev]
-dev = [
+check = [
     { name = "ruff", specifier = ">=0.16.2" },
     { name = "ty", specifier = ">=0.0.69" },
+    { name = "validate-pyproject", extras = ["all", "store"], specifier = ">=0.25" },
 ]
 docker = [{ name = "cargo-zigbuild", marker = "python_full_version >= '3.12'", specifier = ">=0.19.8" }]
 docs = [
@@ -1746,7 +1745,6 @@ docs = [
     { name = "mkdocs-redirects", marker = "python_full_version >= '3.12'", specifier = ">=1.2.2" },
 ]
 release = [{ name = "rooster", marker = "python_full_version >= '3.12'", specifier = "==0.1.1" }]
-validate-pyproject = [{ name = "validate-pyproject", extras = ["all", "store"], specifier = ">=0.25" }]
 
 [[package]]
 name = "validate-pyproject"
