@@ -20,7 +20,6 @@ use predicates::prelude::predicate;
 use tar_codec::{ArchiveBuilder as _, EntryMetadata, TarEncoder};
 #[cfg(unix)]
 use tokio::io::AsyncWriteExt;
-#[cfg(unix)]
 use tokio_tar::{Builder as TarBuilder, EntryType as TarEntryType, Header as TarHeader};
 use tokio_util::compat::FuturesAsyncWriteCompatExt;
 use url::Url;
@@ -16439,147 +16438,48 @@ async fn tar_wheel_traversal_is_not_recorded() -> Result<()> {
     Ok(())
 }
 
-/// A hardlink to a symlink in a zstd-compressed tar wheel must not turn into a relocated symlink
-/// that lets a later wheel data entry write outside the environment.
-#[cfg(unix)]
+/// Hardlinks in source distributions must be rejected before extraction.
 #[tokio::test]
-async fn tar_wheel_hardlink_to_symlink_is_rejected() -> Result<()> {
+async fn sdist_hardlink_is_rejected() -> Result<()> {
     let context = uv_test::test_context!("3.12");
+    let source_dist = context.temp_dir.child("hardlink_sdist-1.0.0.tar.gz");
 
-    let victim = context.temp_dir.child("headers");
-    victim.create_dir_all()?;
-    victim
-        .child("trusted.h")
-        .write_str("I should not be replaced")?;
-
-    // The hardlink member is intentionally absent: the vulnerable extractor classified TAR
-    // hardlinks as files and added them during RECORD healing.
-    let record = indoc! {"
-        tar_wheel/__init__.py,,
-        tar_wheel/headers/placeholder,,
-        tar_wheel-1.0.0.data/data/benign.txt,,
-        tar_wheel-1.0.0.data/headers/trusted.h,,
-        tar_wheel-1.0.0.dist-info/METADATA,,
-        tar_wheel-1.0.0.dist-info/WHEEL,,
-        tar_wheel-1.0.0.dist-info/RECORD,,
-    "};
-    let entries = [
-        ("tar_wheel/__init__.py", ""),
-        ("tar_wheel/headers/placeholder", ""),
-        (
-            "tar_wheel-1.0.0.dist-info/METADATA",
-            "Metadata-Version: 2.1\nName: tar-wheel\nVersion: 1.0.0\n",
-        ),
-        (
-            "tar_wheel-1.0.0.dist-info/WHEEL",
-            "Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
-        ),
-        ("tar_wheel-1.0.0.data/data/benign.txt", "benign"),
-        (
-            "tar_wheel-1.0.0.data/headers/trusted.h",
-            "attacker controlled",
-        ),
-        ("tar_wheel-1.0.0.dist-info/RECORD", record),
-    ];
-
-    let mut tar = TarBuilder::new_non_terminated(ZstdEncoder::new(Vec::new()));
-    for (path, contents) in entries {
-        let mut header = TarHeader::new_gnu();
-        header.set_path(path)?;
-        header.set_size(contents.len() as u64);
-        header.set_mode(0o644);
-        header.set_cksum();
-        tar.append(&header, contents.as_bytes()).await?;
-    }
-
-    // This symlink is safe at its original location: it resolves to `tar_wheel/headers`.
-    let symlink_path = "tar_wheel/links/a/b/c/source";
+    let pyproject_toml = indoc! {r#"
+        [build-system]
+        requires = []
+        build-backend = "build_backend"
+    "#};
+    let mut tar = TarBuilder::new(Vec::new());
     let mut header = TarHeader::new_gnu();
-    header.set_path(symlink_path)?;
-    header.set_entry_type(TarEntryType::symlink());
-    header.set_link_name("../../../../headers")?;
-    header.set_size(0);
-    header.set_mode(0o777);
+    header.set_path("hardlink_sdist-1.0.0/pyproject.toml")?;
+    header.set_size(pyproject_toml.len() as u64);
+    header.set_mode(0o644);
     header.set_cksum();
-    tar.append(&header, &[][..]).await?;
+    tar.append(&header, pyproject_toml.as_bytes()).await?;
 
-    // The vulnerable extractor recorded this as a file, but it is actually another name for the
-    // symlink inode. Once moved to the include scheme, the relative target resolves beside the venv.
     let mut header = TarHeader::new_gnu();
-    header.set_path("tar_wheel-1.0.0.data/data/include/site/python3.12/tar-wheel")?;
+    header.set_path("hardlink_sdist-1.0.0/hardlink.toml")?;
     header.set_entry_type(TarEntryType::hard_link());
-    header.set_link_name(symlink_path)?;
+    header.set_link_name("hardlink_sdist-1.0.0/pyproject.toml")?;
     header.set_size(0);
-    header.set_mode(0o777);
+    header.set_mode(0o644);
     header.set_cksum();
     tar.append(&header, &[][..]).await?;
 
-    let mut encoder = tar.into_inner().await?;
-    encoder.shutdown().await?;
-    let tar_wheel = encoder.into_inner();
+    let tar = tar.into_inner().await?;
+    let mut encoder = GzEncoder::new(Vec::new(), flate2::Compression::default());
+    std::io::copy(&mut tar.as_slice(), &mut encoder)?;
+    fs_err::write(source_dist.path(), encoder.finish()?)?;
 
-    let server = MockServer::start().await;
-    let wheel_url = format!("{}/files/tar_wheel-1.0.0-py3-none-any.whl", server.uri());
-    Mock::given(method("GET"))
-        .and(path("/tar-wheel/"))
-        .respond_with(ResponseTemplate::new(200).set_body_raw(
-            formatdoc! {r#"
-                {{
-                    "name": "tar-wheel",
-                    "files": [{{
-                        "filename": "tar_wheel-1.0.0-py3-none-any.whl",
-                        "url": "{wheel_url}",
-                        "hashes": {{}},
-                        "core-metadata": true,
-                        "upload-time": "2024-03-24T00:00:00Z",
-                        "zstd": {{
-                            "hashes": {{}},
-                            "size": {}
-                        }}
-                    }}]
-                }}
-            "#, tar_wheel.len()},
-            "application/vnd.pyx.simple.v1+json",
-        ))
-        .mount(&server)
-        .await;
-    Mock::given(method("GET"))
-        .and(path("/files/tar_wheel-1.0.0-py3-none-any.whl.metadata"))
-        .respond_with(ResponseTemplate::new(200).set_body_string(indoc! {"
-            Metadata-Version: 2.1
-            Name: tar-wheel
-            Version: 1.0.0
-        "}))
-        .expect(1)
-        .mount(&server)
-        .await;
-    Mock::given(method("GET"))
-        .and(path("/files/tar_wheel-1.0.0-py3-none-any.whl.tar.zst"))
-        .respond_with(ResponseTemplate::new(200).set_body_bytes(tar_wheel))
-        .expect(1)
-        .mount(&server)
-        .await;
-
-    uv_snapshot!(context.filters(), context
-        .pip_install()
-        .arg("tar-wheel==1.0.0")
-        .arg("--link-mode")
-        .arg("hardlink")
-        .arg("--default-index")
-        .arg(server.uri())
-        .env(EnvVars::UV_HTTP_RETRIES, "0"), @r"
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg(source_dist.path()), @r"
     exit_code: 1 (failure)
     ----- stderr -----
-    Resolved 1 package in [TIME]
-      × Failed to download `tar-wheel==1.0.0`
-      ├─▶ Failed to extract archive: tar_wheel-1.0.0-py3-none-any.whl
+      × Failed to build `hardlink-sdist @ file://[TEMP_DIR]/hardlink_sdist-1.0.0.tar.gz`
+      ├─▶ Failed to extract archive: [CACHE_DIR]/sdists-v9/[TMP]
       ├─▶ I/O operation failed during extraction
-      ╰─▶ archive hardlinks are not supported: tar_wheel-1.0.0.data/data/include/site/python3.12/tar-wheel
+      ╰─▶ archive hardlinks are not supported: hardlink_sdist-1.0.0/hardlink.toml
     ");
-
-    victim
-        .child("trusted.h")
-        .assert(predicate::eq("I should not be replaced"));
 
     Ok(())
 }

@@ -686,8 +686,7 @@ async fn untar_in_tokio_tar(
 
         let entry_type = file.header().entry_type();
 
-        // Match `tar-codec`'s default policy. In addition to their usual aliasing behavior,
-        // hardlinks can refer to symlink inodes and survive wheel RECORD healing as files.
+        // Match `tar-codec`'s default policy.
         if entry_type.is_hard_link() {
             let relpath = file.path()?.into_owned();
             return Err(io::Error::new(
