@@ -27,7 +27,8 @@ env:
   CARGO_TERM_COLOR: always
   RUSTUP_MAX_RETRIES: 10
 
-permissions: {}
+permissions:
+  contents: read
 
 jobs:
   sdist:
@@ -175,6 +176,18 @@ jobs:
         shell: bash
         run: scripts/install-cargo-extensions.sh
 
+      - name: "Install LLVM profiling tools"
+        run: rustup component add llvm-tools-preview
+      - name: "Train PGO uv"
+        run: |
+          python scripts/build_uv_pgo.py \
+            --target aarch64-apple-darwin \
+            --target-dir "${{ github.workspace }}/target/uv-pgo" \
+            --train-only
+        env:
+          CARGO: ${{ github.workspace }}/scripts/cargo.sh
+          RUSTFLAGS: "-C linker=rust-lld -C linker-flavor=ld64.lld -C link-arg=--icf=safe"
+
       # uv
       - name: "Build wheels - aarch64"
         uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
@@ -187,7 +200,9 @@ jobs:
           CARGO: ${{ github.workspace }}/scripts/cargo.sh
           # Use Rust's bundled Mach-O LLD, which supports ICF.
           # ICF reduces the macOS aarch64 uv binary size by ~1.4%.
-          RUSTFLAGS: "-C linker=rust-lld -C linker-flavor=ld64.lld -C link-arg=--icf=safe"
+          RUSTFLAGS: "-C linker=rust-lld -C linker-flavor=ld64.lld -C link-arg=--icf=safe -Cprofile-use=${{ github.workspace }}/target/uv-pgo/uv.profdata"
+          CFLAGS: "-fno-profile-generate -fno-profile-use"
+          CXXFLAGS: "-fno-profile-generate -fno-profile-use"
       - name: "Test wheel - aarch64"
         run: |
           pip install ${PACKAGE_NAME} --no-index --find-links dist/ --force-reinstall
@@ -278,6 +293,22 @@ jobs:
         run: |
           winget install NASM.NASM --accept-source-agreements --accept-package-agreements
           echo "C:\Program Files\NASM" | Out-File -FilePath $env:GITHUB_PATH -Append
+      - name: "Install LLVM profiling tools"
+        if: ${{ matrix.platform.target == 'x86_64-pc-windows-msvc' }}
+        run: rustup component add llvm-tools-preview
+      - name: "Train PGO uv"
+        if: ${{ matrix.platform.target == 'x86_64-pc-windows-msvc' }}
+        shell: bash
+        run: |
+          export RUSTFLAGS="${RUSTFLAGS:+${RUSTFLAGS} }-C target-feature=+crt-static"
+
+          python scripts/build_uv_pgo.py \
+            --target "${{ matrix.platform.target }}" \
+            --target-dir "${{ github.workspace }}/target/uv-pgo" \
+            --train-only
+        env:
+          CARGO: ${{ github.workspace }}/scripts/cargo.cmd
+          AWS_LC_SYS_PREBUILT_NASM: "0"
       # uv
       - name: "Build wheels"
         uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
@@ -289,6 +320,23 @@ jobs:
           CARGO: ${{ github.workspace }}/scripts/cargo.cmd
           # Disable prebuilt NASM objects so we always compile assembly from source.
           AWS_LC_SYS_PREBUILT_NASM: "0"
+          # Target-specific flags preserve the static CRT configured in .cargo/config.toml.
+          CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_RUSTFLAGS: ${{ matrix.platform.target == 'x86_64-pc-windows-msvc' && format('-Cprofile-use={0}/target/uv-pgo/uv.profdata', github.workspace) || '' }}
+      - name: "Verify static Windows runtime"
+        if: ${{ matrix.platform.target == 'x86_64-pc-windows-msvc' }}
+        shell: bash
+        run: |
+          LLVM_READOBJ="$(rustc --print sysroot)/lib/rustlib/${{ matrix.platform.target }}/bin/llvm-readobj.exe"
+
+          for binary in uv uvx uvw; do
+            IMPORTS_FILE="$RUNNER_TEMP/${binary}-coff-imports.txt"
+            "$LLVM_READOBJ" --coff-imports "target/${{ matrix.platform.target }}/release/${binary}.exe" > "$IMPORTS_FILE"
+
+            if grep -Eiq 'vcruntime[[:digit:]_]*\.dll|ucrtbase\.dll|api-ms-win-crt-' "$IMPORTS_FILE"; then
+              echo "$binary must not dynamically link the Visual C++ runtime" >&2
+              exit 1
+            fi
+          done
       - name: "Test wheel"
         shell: bash
         run: |
@@ -396,6 +444,16 @@ jobs:
             fi
             # Install cargo extensions as a static musl binary so it runs in any container.
             scripts/install-cargo-extensions.sh
+
+            if [[ "${{ matrix.target }}" == "x86_64-unknown-linux-gnu" ]]; then
+                rustup component add llvm-tools-preview
+                python${{ env.PYTHON_VERSION }} scripts/build_uv_pgo.py \
+                    --target "${{ matrix.target }}" \
+                    --target-dir "$PWD/target/uv-pgo" \
+                    --train-only
+
+                export RUSTFLAGS="${RUSTFLAGS:+${RUSTFLAGS} }-Cprofile-use=$PWD/target/uv-pgo/uv.profdata"
+            fi
         env:
           CC: ${{ matrix.cc }}
           CARGO: ${{ github.workspace }}/scripts/cargo.sh
@@ -459,13 +517,16 @@ jobs:
 
   linux-arm:
     name: ${{ matrix.platform.target }}
-    runs-on: depot-ubuntu-24.04-8
-    timeout-minutes: 30
+    runs-on: ${{ matrix.platform.runner }}
+    timeout-minutes: ${{ matrix.platform.pgo && 60 || 30 }}
     strategy:
       matrix:
         platform:
+          # PGO requires a native runner; the 32-bit ARM targets are cross-compiled.
           - target: aarch64-unknown-linux-gnu
             arch: aarch64
+            runner: depot-ubuntu-24.04-arm-8
+            pgo: true
             # see https://github.com/astral-sh/ruff/issues/3791
             # and https://github.com/gnzlbg/jemallocator/issues/170#issuecomment-1503228963
             maturin_docker_options: -e JEMALLOC_SYS_WITH_LG_PAGE=16
@@ -473,9 +534,13 @@ jobs:
             manylinux: 2_28
           - target: armv7-unknown-linux-gnueabihf
             arch: armv7
+            runner: depot-ubuntu-24.04-8
+            pgo: false
             manylinux: 2_17
           - target: arm-unknown-linux-musleabihf
             arch: arm
+            runner: depot-ubuntu-24.04-8
+            pgo: false
             # Special case: armv6l is linux_armv6l, no manylinux or musllinux.
             # "auto" instead of "off" to get the cross container
             manylinux: auto
@@ -502,6 +567,16 @@ jobs:
           args: --release --locked --out dist --features self-update --compatibility pypi
           before-script-linux: |
             scripts/install-cargo-extensions.sh
+
+            if [[ "${{ matrix.platform.pgo }}" == "true" ]]; then
+                rustup component add llvm-tools-preview
+                python${{ env.PYTHON_VERSION }} scripts/build_uv_pgo.py \
+                    --target "${{ matrix.platform.target }}" \
+                    --target-dir "$PWD/target/uv-pgo" \
+                    --train-only
+
+                export RUSTFLAGS="${RUSTFLAGS:+${RUSTFLAGS} }-Cprofile-use=$PWD/target/uv-pgo/uv.profdata"
+            fi
         env:
           CARGO: ${{ github.workspace }}/scripts/cargo.sh
       - uses: uraimo/run-on-arch-action@f9b26e3a1a408d5fd530d20c17b9f3f4428ff8d9 # v3.1.0

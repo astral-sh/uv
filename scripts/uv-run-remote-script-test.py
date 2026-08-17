@@ -4,6 +4,8 @@
 # dependencies = [
 #   "rich==13.7.1",
 # ]
+# [tool.uv]
+# exclude-newer = "P7D"
 # ///
 import sys
 

@@ -10,7 +10,8 @@ on:
         type: string
         default: "false"
 
-permissions: {}
+permissions:
+  contents: read
 
 env:
   CARGO_INCREMENTAL: 0

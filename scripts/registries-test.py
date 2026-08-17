@@ -29,6 +29,8 @@ env vars for any of the following fields, if present:
 # /// script
 # requires-python = ">=3.12"
 # dependencies = ["colorama>=0.4.6"]
+# [tool.uv]
+# exclude-newer = "P7D"
 # ///
 """
 
