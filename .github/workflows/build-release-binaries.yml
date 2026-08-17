@@ -176,6 +176,18 @@ jobs:
         shell: bash
         run: scripts/install-cargo-extensions.sh
 
+      - name: "Install LLVM profiling tools"
+        run: rustup component add llvm-tools-preview
+      - name: "Train PGO uv"
+        run: |
+          python scripts/build_uv_pgo.py \
+            --target aarch64-apple-darwin \
+            --target-dir "${{ github.workspace }}/target/uv-pgo" \
+            --train-only
+        env:
+          CARGO: ${{ github.workspace }}/scripts/cargo.sh
+          RUSTFLAGS: "-C linker=rust-lld -C linker-flavor=ld64.lld -C link-arg=--icf=safe"
+
       # uv
       - name: "Build wheels - aarch64"
         uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
@@ -188,7 +200,9 @@ jobs:
           CARGO: ${{ github.workspace }}/scripts/cargo.sh
           # Use Rust's bundled Mach-O LLD, which supports ICF.
           # ICF reduces the macOS aarch64 uv binary size by ~1.4%.
-          RUSTFLAGS: "-C linker=rust-lld -C linker-flavor=ld64.lld -C link-arg=--icf=safe"
+          RUSTFLAGS: "-C linker=rust-lld -C linker-flavor=ld64.lld -C link-arg=--icf=safe -Cprofile-use=${{ github.workspace }}/target/uv-pgo/uv.profdata"
+          CFLAGS: "-fno-profile-generate -fno-profile-use"
+          CXXFLAGS: "-fno-profile-generate -fno-profile-use"
       - name: "Test wheel - aarch64"
         run: |
           pip install ${PACKAGE_NAME} --no-index --find-links dist/ --force-reinstall
