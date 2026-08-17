@@ -1,4 +1,4 @@
-use crate::metadata::{BuildArtifact, DEFAULT_EXCLUDES};
+use crate::metadata::DEFAULT_EXCLUDES;
 use crate::wheel::build_exclude_matcher;
 use crate::{
     BuildBackendSettings, DirectoryWriter, Error, FileList, ListWriter, PyProjectToml,
@@ -25,6 +25,7 @@ use uv_distribution_filename::{SourceDistExtension, SourceDistFilename};
 use uv_fs::{Simplified, normalize_path};
 use uv_globfilter::{GlobDirFilter, PortableGlobParser};
 use uv_preview::PreviewFeature;
+use uv_pypi_types::BuildKind;
 use uv_warnings::warn_user_once;
 use walkdir::WalkDir;
 
@@ -208,8 +209,7 @@ fn write_source_dist(
     show_warnings: bool,
 ) -> Result<SourceDistFilename, Error> {
     let pyproject_toml = PyProjectToml::parse(&source_tree.join("pyproject.toml"))?;
-    for warning in pyproject_toml.check_build_system(uv_version, BuildArtifact::SourceDistribution)
-    {
+    for warning in pyproject_toml.check_build_system(uv_version, BuildKind::Sdist) {
         warn_user_once!("{warning}");
     }
     let settings = pyproject_toml
