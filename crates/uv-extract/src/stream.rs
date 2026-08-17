@@ -1,4 +1,3 @@
-use std::io::{self, ErrorKind};
 use std::path::{Component, Path, PathBuf};
 use std::pin::Pin;
 
@@ -190,7 +189,7 @@ pub async fn unzip<R: tokio::io::AsyncRead + Unpin>(
 
                     (bytes_read, reader)
                 }
-                Err(err) if err.kind() == ErrorKind::AlreadyExists => {
+                Err(err) if err.kind() == std::io::ErrorKind::AlreadyExists => {
                     debug!(
                         "Found duplicate local file header for: {}",
                         relpath.display()
@@ -659,7 +658,7 @@ fn tar_extract_policy() -> ExtractPolicy {
 async fn untar_in_tokio_tar(
     mut archive: tokio_tar::Archive<&'_ mut (dyn tokio::io::AsyncRead + Unpin)>,
     dst: &Path,
-) -> io::Result<Vec<(PathBuf, u64)>> {
+) -> std::io::Result<Vec<(PathBuf, u64)>> {
     // Like `tokio-tar`, canonicalize the destination prior to unpacking.
     let dst = fs_err::tokio::canonicalize(dst).await?;
 
@@ -688,26 +687,6 @@ async fn untar_in_tokio_tar(
 
         // Unpack the file into the destination directory.
         let unpacked_at = file.unpack_in_raw(&dst, &mut memo).await?;
-
-        // `tokio-tar` ensures that hardlink targets resolve within the extraction root, but it
-        // allows hardlinks to symlink inodes. Reject those because moving the resulting link can
-        // change where the symlink resolves.
-        if entry_type.is_hard_link()
-            && let Some(path) = unpacked_at.as_deref()
-            && fs_err::tokio::symlink_metadata(path)
-                .await?
-                .file_type()
-                .is_symlink()
-        {
-            let relpath = file.path()?.into_owned();
-            return Err(io::Error::new(
-                ErrorKind::InvalidData,
-                format!(
-                    "archive hardlinks to symlinks are not supported: {}",
-                    relpath.display()
-                ),
-            ));
-        }
 
         // Collect file paths (excluding directories) that were unpacked successfully.
         if unpacked_at.is_some() && (entry_type.is_file() || entry_type.is_hard_link()) {

@@ -14,7 +14,10 @@ use sha2::{Digest, Sha256};
 use tracing::{debug, instrument, trace, warn};
 use walkdir::WalkDir;
 
-use uv_fs::{PortablePath, Simplified, normalize_path_under, persist_with_retry_sync, relative_to};
+use uv_fs::{
+    PortablePath, Simplified, normalize_path, normalize_path_under, persist_with_retry_sync,
+    relative_to,
+};
 use uv_normalize::PackageName;
 use uv_pypi_types::DirectUrl;
 use uv_shell::escape_posix_for_single_quotes;
@@ -184,7 +187,7 @@ fn reserved_script_name(name: &str) -> Option<&str> {
     .then_some(normalized_name)
 }
 
-/// An unpacked wheel whose data directories cannot overwrite a reserved script.
+/// An unpacked wheel whose data entries have safe installation destinations.
 pub(crate) struct ValidatedWheel<'wheel> {
     path: &'wheel Path,
 }
@@ -194,11 +197,16 @@ impl<'wheel> ValidatedWheel<'wheel> {
         layout: &Layout,
         wheel: &'wheel Path,
         dist_info_prefix: &str,
+        dist_name: &PackageName,
     ) -> Result<Self, Error> {
         let data_dir = wheel.join(format!("{dist_info_prefix}.data"));
+        let headers = layout.scheme.include.join(dist_name.as_str());
         for (source, destination) in [
             (data_dir.join("scripts"), &layout.scheme.scripts),
             (data_dir.join("data"), &layout.scheme.data),
+            (data_dir.join("headers"), &headers),
+            (data_dir.join("purelib"), &layout.scheme.purelib),
+            (data_dir.join("platlib"), &layout.scheme.platlib),
         ] {
             if !source.is_dir() {
                 continue;
@@ -211,10 +219,9 @@ impl<'wheel> ValidatedWheel<'wheel> {
                 }
 
                 let relative = relative_to(entry.path(), &source)?;
-                validate_data_script_destination(
-                    &destination.join(relative),
-                    &layout.scheme.scripts,
-                )?;
+                let target = destination.join(relative);
+                validate_data_script_destination(&target, &layout.scheme.scripts)?;
+                validate_relocated_symlink(entry.path(), &target, wheel, layout)?;
             }
         }
 
@@ -224,6 +231,51 @@ impl<'wheel> ValidatedWheel<'wheel> {
     pub(crate) fn as_path(&self) -> &Path {
         self.path
     }
+}
+
+/// Validate a symlink at the location to which wheel `.data` processing will move it.
+fn validate_relocated_symlink(
+    source: &Path,
+    target: &Path,
+    wheel: &Path,
+    layout: &Layout,
+) -> Result<(), Error> {
+    if !fs::symlink_metadata(source)?.file_type().is_symlink() {
+        return Ok(());
+    }
+
+    let relative = relative_to(source, wheel)?;
+    let link_target = fs::read_link(source)?;
+    let resolved = if link_target.is_absolute() {
+        normalize_path(&link_target).into_owned()
+    } else {
+        let parent = target.parent().ok_or_else(|| {
+            Error::InvalidWheel(format!(
+                "Symlink has no parent at its installation destination: {}",
+                relative.simplified_display()
+            ))
+        })?;
+        normalize_path(parent.join(&link_target)).into_owned()
+    };
+
+    let contained = [
+        &layout.scheme.data,
+        &layout.scheme.purelib,
+        &layout.scheme.platlib,
+        &layout.scheme.scripts,
+        &layout.scheme.include,
+    ]
+    .into_iter()
+    .any(|root| resolved.starts_with(normalize_path(root).as_ref()));
+    if contained {
+        return Ok(());
+    }
+
+    Err(Error::InvalidWheel(format!(
+        "Symlink would point outside the installation environment after relocation: {} -> {}",
+        relative.simplified_display(),
+        link_target.simplified_display()
+    )))
 }
 
 fn validate_data_script_destination(target: &Path, scripts: &Path) -> Result<(), Error> {
@@ -1221,15 +1273,70 @@ impl RenameOrCopy {
 mod test {
     use std::io::{Cursor, ErrorKind};
     use std::path::Path;
+    #[cfg(unix)]
+    use std::str::FromStr;
 
+    #[cfg(unix)]
+    use anyhow::Context;
     use anyhow::Result;
     use assert_fs::prelude::*;
     use indoc::{formatdoc, indoc};
+    #[cfg(unix)]
+    use uv_normalize::PackageName;
+    #[cfg(unix)]
+    use uv_pypi_types::Scheme;
 
     use super::{
         Error, RecordEntry, Script, WheelFile, format_shebang, get_script_executable,
         parse_email_message_file, parse_scripts, read_record, write_installer_metadata,
     };
+    #[cfg(unix)]
+    use super::{Layout, ValidatedWheel};
+
+    #[cfg(unix)]
+    #[test]
+    fn relocated_symlink_must_stay_in_installation_environment() -> Result<()> {
+        let temp = assert_fs::TempDir::new()?;
+        let environment = temp.child("venv");
+        let layout = Layout {
+            sys_executable: environment.child("bin/python").to_path_buf(),
+            python_version: (3, 12),
+            os_name: "posix".to_string(),
+            scheme: Scheme {
+                purelib: environment
+                    .child("lib/python3.12/site-packages")
+                    .to_path_buf(),
+                platlib: environment
+                    .child("lib/python3.12/site-packages")
+                    .to_path_buf(),
+                scripts: environment.child("bin").to_path_buf(),
+                data: environment.to_path_buf(),
+                include: environment.child("include").to_path_buf(),
+            },
+        };
+        let wheel = temp.child("wheel");
+        let links = wheel.child("foo-1.0.0.data/data/include/site/python3.12");
+        links.create_dir_all()?;
+        let source = links.child("source");
+        let safe = links.child("safe");
+        fs_err::os::unix::fs::symlink("target", &source)?;
+        fs_err::hard_link(&source, &safe)?;
+        assert!(fs_err::symlink_metadata(&safe)?.file_type().is_symlink());
+
+        let name = PackageName::from_str("foo")?;
+        ValidatedWheel::new(&layout, wheel.path(), "foo-1.0.0", &name)?;
+
+        fs_err::os::unix::fs::symlink("../../../../outside", links.child("escape"))?;
+        let error = ValidatedWheel::new(&layout, wheel.path(), "foo-1.0.0", &name)
+            .err()
+            .context("an escaping symlink should make the wheel invalid")?;
+        assert_eq!(
+            error.to_string(),
+            "The wheel is invalid: Symlink would point outside the installation environment after relocation: foo-1.0.0.data/data/include/site/python3.12/escape -> ../../../../outside"
+        );
+
+        Ok(())
+    }
 
     #[test]
     fn test_parse_email_message_file() {

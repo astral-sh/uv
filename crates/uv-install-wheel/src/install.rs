@@ -88,7 +88,7 @@ pub fn install_wheel<Cache: serde::Serialize, Build: serde::Serialize>(
     // > 1.b Check that installer is compatible with Wheel-Version. Warn if minor version is greater, abort if major version is greater.
     // > 1.c If Root-Is-Purelib == ‘true’, unpack archive into purelib (site-packages).
     // > 1.d Else unpack archive into platlib (site-packages).
-    let validated_wheel = ValidatedWheel::new(layout, wheel, &dist_info_prefix)?;
+    let validated_wheel = ValidatedWheel::new(layout, wheel, &dist_info_prefix, &name)?;
     trace!(?name, "Extracting wheel files");
     link_wheel_files(link_mode, site_packages, &validated_wheel, state, filename)?;
     trace!(?name, "Extracted wheel files");

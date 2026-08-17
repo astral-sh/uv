@@ -16439,68 +16439,137 @@ async fn tar_wheel_traversal_is_not_recorded() -> Result<()> {
     Ok(())
 }
 
-/// Hardlinks to symlinks in source distributions must be rejected during extraction.
+/// A relocated hardlink to a symlink must not write outside the environment.
 #[cfg(unix)]
 #[tokio::test]
-async fn sdist_symlink_backed_hardlink_is_rejected() -> Result<()> {
+async fn tar_wheel_relocated_symlink_escape_is_rejected() -> Result<()> {
     let context = uv_test::test_context!("3.12");
-    let source_dist = context.temp_dir.child("hardlink_sdist-1.0.0.tar.gz");
 
-    let pyproject_toml = indoc! {r#"
-        [build-system]
-        requires = []
-        build-backend = "build_backend"
-    "#};
-    let mut tar = TarBuilder::new(Vec::new());
-    let mut header = TarHeader::new_gnu();
-    header.set_path("hardlink_sdist-1.0.0/pyproject.toml")?;
-    header.set_size(pyproject_toml.len() as u64);
-    header.set_mode(0o644);
-    header.set_cksum();
-    tar.append(&header, pyproject_toml.as_bytes()).await?;
+    let victim = context.temp_dir.child("headers");
+    victim.create_dir_all()?;
+    victim
+        .child("trusted.h")
+        .write_str("I should not be replaced")?;
 
-    // Ordinary hardlinks within the extraction root are allowed.
-    let mut header = TarHeader::new_gnu();
-    header.set_path("hardlink_sdist-1.0.0/hardlink.toml")?;
-    header.set_entry_type(TarEntryType::hard_link());
-    header.set_link_name("hardlink_sdist-1.0.0/pyproject.toml")?;
-    header.set_size(0);
-    header.set_mode(0o644);
-    header.set_cksum();
-    tar.append(&header, &[][..]).await?;
+    // The hardlink is intentionally absent: RECORD healing adds it as an extracted file.
+    let record = indoc! {"
+        tar_wheel/__init__.py,,
+        tar_wheel/headers/placeholder,,
+        tar_wheel-1.0.0.data/headers/trusted.h,,
+        tar_wheel-1.0.0.dist-info/METADATA,,
+        tar_wheel-1.0.0.dist-info/WHEEL,,
+        tar_wheel-1.0.0.dist-info/RECORD,,
+    "};
+    let entries = [
+        ("tar_wheel/__init__.py", ""),
+        ("tar_wheel/headers/placeholder", ""),
+        (
+            "tar_wheel-1.0.0.data/headers/trusted.h",
+            "attacker controlled",
+        ),
+        (
+            "tar_wheel-1.0.0.dist-info/METADATA",
+            "Metadata-Version: 2.1\nName: tar-wheel\nVersion: 1.0.0\n",
+        ),
+        (
+            "tar_wheel-1.0.0.dist-info/WHEEL",
+            "Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
+        ),
+        ("tar_wheel-1.0.0.dist-info/RECORD", record),
+    ];
 
+    let mut tar = TarBuilder::new_non_terminated(ZstdEncoder::new(Vec::new()));
+    for (path, contents) in entries {
+        let mut header = TarHeader::new_gnu();
+        header.set_path(path)?;
+        header.set_size(contents.len() as u64);
+        header.set_mode(0o644);
+        header.set_cksum();
+        tar.append(&header, contents.as_bytes()).await?;
+    }
+
+    let symlink_path = "tar_wheel/links/a/b/c/source";
     let mut header = TarHeader::new_gnu();
-    header.set_path("hardlink_sdist-1.0.0/symlink.toml")?;
+    header.set_path(symlink_path)?;
     header.set_entry_type(TarEntryType::symlink());
-    header.set_link_name("pyproject.toml")?;
+    header.set_link_name("../../../../headers")?;
     header.set_size(0);
-    header.set_mode(0o644);
+    header.set_mode(0o777);
     header.set_cksum();
     tar.append(&header, &[][..]).await?;
 
     let mut header = TarHeader::new_gnu();
-    header.set_path("hardlink_sdist-1.0.0/symlink-hardlink.toml")?;
+    header.set_path("tar_wheel-1.0.0.data/data/include/site/python3.12/tar-wheel")?;
     header.set_entry_type(TarEntryType::hard_link());
-    header.set_link_name("hardlink_sdist-1.0.0/symlink.toml")?;
+    header.set_link_name(symlink_path)?;
     header.set_size(0);
-    header.set_mode(0o644);
+    header.set_mode(0o777);
     header.set_cksum();
     tar.append(&header, &[][..]).await?;
 
-    let tar = tar.into_inner().await?;
-    let mut encoder = GzEncoder::new(Vec::new(), flate2::Compression::default());
-    std::io::copy(&mut tar.as_slice(), &mut encoder)?;
-    fs_err::write(source_dist.path(), encoder.finish()?)?;
+    let mut encoder = tar.into_inner().await?;
+    encoder.shutdown().await?;
+    let tar_wheel = encoder.into_inner();
 
-    uv_snapshot!(context.filters(), context.pip_install()
-        .arg(source_dist.path()), @r"
-    exit_code: 1 (failure)
+    let server = MockServer::start().await;
+    let wheel_url = format!("{}/files/tar_wheel-1.0.0-py3-none-any.whl", server.uri());
+    Mock::given(method("GET"))
+        .and(path("/tar-wheel/"))
+        .respond_with(ResponseTemplate::new(200).set_body_raw(
+            formatdoc! {r#"
+                {{
+                    "name": "tar-wheel",
+                    "files": [{{
+                        "filename": "tar_wheel-1.0.0-py3-none-any.whl",
+                        "url": "{wheel_url}",
+                        "hashes": {{}},
+                        "core-metadata": true,
+                        "upload-time": "2024-03-24T00:00:00Z",
+                        "zstd": {{
+                            "hashes": {{}},
+                            "size": {}
+                        }}
+                    }}]
+                }}
+            "#, tar_wheel.len()},
+            "application/vnd.pyx.simple.v1+json",
+        ))
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/files/tar_wheel-1.0.0-py3-none-any.whl.metadata"))
+        .respond_with(ResponseTemplate::new(200).set_body_string(indoc! {"
+            Metadata-Version: 2.1
+            Name: tar-wheel
+            Version: 1.0.0
+        "}))
+        .expect(1)
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/files/tar_wheel-1.0.0-py3-none-any.whl.tar.zst"))
+        .respond_with(ResponseTemplate::new(200).set_body_bytes(tar_wheel))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    uv_snapshot!(context.filters(), context
+        .pip_install()
+        .arg("tar-wheel==1.0.0")
+        .arg("--default-index")
+        .arg(server.uri())
+        .env(EnvVars::UV_HTTP_RETRIES, "0"), @r"
+    exit_code: 2 (failure)
     ----- stderr -----
-      × Failed to build `hardlink-sdist @ file://[TEMP_DIR]/hardlink_sdist-1.0.0.tar.gz`
-      ├─▶ Failed to extract archive: [CACHE_DIR]/sdists-v9/[TMP]
-      ├─▶ I/O operation failed during extraction
-      ╰─▶ archive hardlinks to symlinks are not supported: hardlink_sdist-1.0.0/symlink-hardlink.toml
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    error: Failed to install: tar_wheel-1.0.0-py3-none-any.whl (tar-wheel==1.0.0)
+      Caused by: The wheel is invalid: Symlink would point outside the installation environment after relocation: tar_wheel-1.0.0.data/data/include/site/python3.12/tar-wheel -> ../../../../headers
     ");
+
+    victim
+        .child("trusted.h")
+        .assert(predicate::eq("I should not be replaced"));
 
     Ok(())
 }
