@@ -1,4 +1,3 @@
-use std::marker::PhantomData;
 use std::mem::size_of;
 use std::str::FromStr;
 use std::sync::Arc;
@@ -8,13 +7,12 @@ use rustc_hash::FxHashMap;
 use serde::de::{DeserializeSeed, MapAccess, SeqAccess, Visitor};
 use serde::{Deserialize, Deserializer, Serialize};
 
-use uv_normalize::{ExtraName, PackageName};
-use uv_pep440::{Version, VersionSpecifiers, VersionSpecifiersParseError};
-use uv_pep508::Requirement;
+use uv_normalize::PackageName;
+use uv_pep440::{VersionSpecifiers, VersionSpecifiersParseError};
 use uv_small_str::SmallString;
 
+use crate::ProjectStatus;
 use crate::lenient_requirement::LenientVersionSpecifiers;
-use crate::{ProjectStatus, VerbatimParsedUrl};
 
 /// A collection of "files" from `PyPI`'s JSON API for a single package, as served by the
 /// `vnd.pypi.simple.v1` media type.
@@ -57,7 +55,6 @@ enum FileField {
     UploadTime,
     Url,
     Yanked,
-    Zstd,
     #[serde(other)]
     Ignore,
 }
@@ -84,41 +81,25 @@ impl RequiresPythonInterner {
     }
 }
 
-trait SimpleFile: Sized {
-    fn deserialize_with_interner<'de, D>(
-        deserializer: D,
-        interner: &mut RequiresPythonInterner,
-    ) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>;
-}
-
-struct SimpleFileSeed<'a, T> {
+struct PypiFileSeed<'a> {
     interner: &'a mut RequiresPythonInterner,
-    marker: PhantomData<T>,
 }
 
-impl<'de, T> DeserializeSeed<'de> for SimpleFileSeed<'_, T>
-where
-    T: SimpleFile,
-{
-    type Value = T;
+impl<'de> DeserializeSeed<'de> for PypiFileSeed<'_> {
+    type Value = PypiFile;
 
     fn deserialize<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
     where
         D: Deserializer<'de>,
     {
-        T::deserialize_with_interner(deserializer, self.interner)
+        PypiFile::deserialize_with_interner(deserializer, self.interner)
     }
 }
 
-struct SimpleFilesVisitor<T>(PhantomData<T>);
+struct PypiFilesVisitor;
 
-impl<'de, T> Visitor<'de> for SimpleFilesVisitor<T>
-where
-    T: SimpleFile,
-{
-    type Value = Vec<T>;
+impl<'de> Visitor<'de> for PypiFilesVisitor {
+    type Value = Vec<PypiFile>;
 
     fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
         formatter.write_str("a sequence of files")
@@ -132,13 +113,12 @@ where
         let capacity = access
             .size_hint()
             .unwrap_or_default()
-            .min(1024 * 1024 / size_of::<T>());
+            .min(1024 * 1024 / size_of::<PypiFile>());
         let mut files = Vec::with_capacity(capacity);
         let mut interner = RequiresPythonInterner::default();
 
-        while let Some(file) = access.next_element_seed(SimpleFileSeed {
+        while let Some(file) = access.next_element_seed(PypiFileSeed {
             interner: &mut interner,
-            marker: PhantomData,
         })? {
             files.push(file);
         }
@@ -148,12 +128,11 @@ where
 }
 
 /// Deserialize files while parsing each distinct `requires-python` value only once.
-fn deserialize_files<'de, D, T>(deserializer: D) -> Result<Vec<T>, D::Error>
+fn deserialize_files<'de, D>(deserializer: D) -> Result<Vec<PypiFile>, D::Error>
 where
     D: Deserializer<'de>,
-    T: SimpleFile,
 {
-    deserializer.deserialize_seq(SimpleFilesVisitor(PhantomData))
+    deserializer.deserialize_seq(PypiFilesVisitor)
 }
 
 struct RequiresPythonSeed<'a>(&'a mut RequiresPythonInterner);
@@ -208,7 +187,7 @@ impl<'de> Deserialize<'de> for PypiFile {
     }
 }
 
-impl SimpleFile for PypiFile {
+impl PypiFile {
     fn deserialize_with_interner<'de, D>(
         deserializer: D,
         interner: &mut RequiresPythonInterner,
@@ -276,132 +255,6 @@ impl<'de> Visitor<'de> for PypiFileVisitor<'_> {
             yanked,
         })
     }
-}
-
-/// A collection of "files" from the Simple API.
-#[derive(Debug, Clone, Deserialize)]
-#[serde(rename_all = "kebab-case")]
-pub struct PyxSimpleDetail {
-    /// PEP 792 project status information.
-    #[serde(default)]
-    pub project_status: ProjectStatus,
-    /// The list of [`PyxFile`]s available for download sorted by filename.
-    #[serde(deserialize_with = "deserialize_files")]
-    pub files: Vec<PyxFile>,
-    /// The core metadata for the project, keyed by version.
-    #[serde(default)]
-    pub core_metadata: FxHashMap<Version, CoreMetadatum>,
-}
-
-/// A single (remote) file belonging to a package, either a wheel or a source distribution,
-/// as served by the Simple API.
-#[derive(Debug, Clone)]
-pub struct PyxFile {
-    pub core_metadata: Option<CoreMetadata>,
-    pub filename: Option<SmallString>,
-    pub hashes: Hashes,
-    pub requires_python: Option<Result<Arc<VersionSpecifiers>, VersionSpecifiersParseError>>,
-    pub size: Option<u64>,
-    pub upload_time: Option<Timestamp>,
-    pub url: SmallString,
-    pub yanked: Option<Box<Yanked>>,
-    pub zstd: Option<Zstd>,
-}
-
-impl<'de> Deserialize<'de> for PyxFile {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        let mut interner = RequiresPythonInterner::default();
-        Self::deserialize_with_interner(deserializer, &mut interner)
-    }
-}
-
-impl SimpleFile for PyxFile {
-    fn deserialize_with_interner<'de, D>(
-        deserializer: D,
-        interner: &mut RequiresPythonInterner,
-    ) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        deserializer.deserialize_map(PyxFileVisitor { interner })
-    }
-}
-
-struct PyxFileVisitor<'a> {
-    interner: &'a mut RequiresPythonInterner,
-}
-
-impl<'de> Visitor<'de> for PyxFileVisitor<'_> {
-    type Value = PyxFile;
-
-    fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
-        formatter.write_str("a map containing file metadata")
-    }
-
-    fn visit_map<M>(self, mut access: M) -> Result<Self::Value, M::Error>
-    where
-        M: MapAccess<'de>,
-    {
-        let mut core_metadata = None;
-        let mut filename = None;
-        let mut hashes = None;
-        let mut requires_python = None;
-        let mut size = None;
-        let mut upload_time = None;
-        let mut url = None;
-        let mut yanked = None;
-        let mut zstd = None;
-
-        while let Some(key) = access.next_key::<FileField>()? {
-            match key {
-                FileField::CoreMetadata if core_metadata.is_none() => {
-                    core_metadata = access.next_value()?;
-                }
-                FileField::Filename => filename = Some(access.next_value()?),
-                FileField::Hashes => hashes = Some(access.next_value()?),
-                FileField::RequiresPython => {
-                    requires_python =
-                        access.next_value_seed(RequiresPythonSeed(&mut *self.interner))?;
-                }
-                FileField::Size => size = access.next_value()?,
-                FileField::UploadTime => upload_time = Some(access.next_value()?),
-                FileField::Url => url = Some(access.next_value()?),
-                FileField::Yanked => yanked = Some(access.next_value()?),
-                FileField::Zstd => {
-                    zstd = Some(access.next_value()?);
-                }
-                _ => {
-                    let _: serde::de::IgnoredAny = access.next_value()?;
-                }
-            }
-        }
-
-        Ok(PyxFile {
-            core_metadata,
-            filename,
-            hashes: hashes.ok_or_else(|| serde::de::Error::missing_field("hashes"))?,
-            requires_python,
-            size,
-            upload_time,
-            url: url.ok_or_else(|| serde::de::Error::missing_field("url"))?,
-            yanked,
-            zstd,
-        })
-    }
-}
-
-#[derive(Debug, Clone, Deserialize)]
-#[serde(rename_all = "kebab-case")]
-pub struct CoreMetadatum {
-    #[serde(default)]
-    pub requires_python: Option<VersionSpecifiers>,
-    #[serde(default)]
-    pub requires_dist: Box<[Requirement<VerbatimParsedUrl>]>,
-    #[serde(default, alias = "provides-extras")]
-    pub provides_extra: Box<[ExtraName]>,
 }
 
 #[derive(Debug, Clone)]
@@ -487,13 +340,6 @@ impl Default for Yanked {
     fn default() -> Self {
         Self::Bool(false)
     }
-}
-
-#[derive(Debug, Clone, Eq, PartialEq, Default, Deserialize, Serialize)]
-pub struct Zstd {
-    pub hashes: Hashes,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub size: Option<u64>,
 }
 
 /// A dictionary mapping a hash name to a hex encoded digest of the file.
@@ -1028,15 +874,6 @@ pub struct PypiSimpleIndex {
     projects: Vec<ProjectEntry>,
 }
 
-/// Response from the Pyx Simple API root endpoint listing all available projects,
-/// as served by the `vnd.pyx.simple.v1` media types.
-#[derive(Debug, Clone, Deserialize, Serialize)]
-#[serde(rename_all = "kebab-case")]
-pub struct PyxSimpleIndex {
-    /// The list of projects available in the index.
-    projects: Vec<ProjectEntry>,
-}
-
 /// A single project entry in the Simple API index.
 #[derive(Debug, Clone, Deserialize, Serialize)]
 struct ProjectEntry {
@@ -1045,13 +882,6 @@ struct ProjectEntry {
 }
 
 impl PypiSimpleIndex {
-    /// Return the project names in the index.
-    pub fn into_project_names(self) -> Vec<PackageName> {
-        self.projects.into_iter().map(|entry| entry.name).collect()
-    }
-}
-
-impl PyxSimpleIndex {
     /// Return the project names in the index.
     pub fn into_project_names(self) -> Vec<PackageName> {
         self.projects.into_iter().map(|entry| entry.name).collect()
