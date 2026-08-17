@@ -1868,6 +1868,7 @@ async fn run_with_workspace_cache(
                 args.all_versions,
                 args.all_platforms,
                 args.all_arches,
+                args.all_variants,
                 args.show_urls,
                 args.output_format,
                 args.python_downloads_json_url,
