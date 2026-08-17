@@ -27,7 +27,8 @@ env:
   CARGO_TERM_COLOR: always
   RUSTUP_MAX_RETRIES: 10
 
-permissions: {}
+permissions:
+  contents: read
 
 jobs:
   sdist:

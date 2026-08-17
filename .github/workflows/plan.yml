@@ -64,7 +64,8 @@ on:
         description: "Whether the Docker image should be pushed"
         value: ${{ jobs.plan.outputs.push-docker }}
 
-permissions: {}
+permissions:
+  contents: read
 
 jobs:
   plan:
