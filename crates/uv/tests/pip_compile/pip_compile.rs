@@ -18053,13 +18053,13 @@ fn incompatible_cuda() -> Result<()> {
     Ok(())
 }
 
-/// Resolve a PyTorch package from a custom backend index.
+/// Resolve a PyTorch package from a command-line backend index base URL.
 #[tokio::test]
 async fn torch_backend_index() -> Result<()> {
     let context = uv_test::test_context!("3.11");
     let server = MockServer::start().await;
     Mock::given(method("GET"))
-        .and(path("/torch/"))
+        .and(path("/cu128/torch/"))
         .respond_with(ResponseTemplate::new(200).set_body_raw(
             r#"
             <!DOCTYPE html>
@@ -18081,8 +18081,13 @@ async fn torch_backend_index() -> Result<()> {
 
     uv_snapshot!(context
         .pip_compile()
-        .env(EnvVars::UV_TORCH_BACKEND, "cu128")
-        .env(EnvVars::UV_TORCH_BACKEND_INDEX, server.uri())
+        .env(
+            EnvVars::UV_TORCH_BACKEND_INDEX,
+            format!("{}/not-used", server.uri()),
+        )
+        .arg("--torch-backend=cu128")
+        .arg("--torch-backend-index")
+        .arg(server.uri())
         .arg("--preview")
         .arg("requirements.in"), @"
     exit_code: 0 (success)

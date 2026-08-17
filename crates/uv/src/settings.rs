@@ -907,6 +907,7 @@ impl ToolRunSettings {
             python,
             python_platform,
             torch_backend,
+            torch_backend_index,
             generate_shell_completion: _,
         } = args;
 
@@ -964,6 +965,7 @@ impl ToolRunSettings {
         if torch_backend.is_some() {
             settings.resolver.torch_backend = torch_backend;
         }
+        settings.resolver.torch_backend_index = torch_backend_index;
         let lfs = GitLfsSetting::new(lfs.then_some(true), environment.lfs);
 
         // Resolve flags from CLI and environment variables.
@@ -1066,6 +1068,7 @@ impl ToolInstallSettings {
             python,
             python_platform,
             torch_backend,
+            torch_backend_index,
         } = args;
 
         let filesystem_options = filesystem.map(FilesystemOptions::into_options);
@@ -1096,6 +1099,7 @@ impl ToolInstallSettings {
         if torch_backend.is_some() {
             settings.resolver.torch_backend = torch_backend;
         }
+        settings.resolver.torch_backend_index = torch_backend_index;
         let lfs = GitLfsSetting::new(lfs.then_some(true), environment.lfs);
 
         Ok(Self {
@@ -3347,6 +3351,7 @@ pub(crate) struct PipCompileSettings {
     pub(crate) required_environments: SupportedEnvironments,
     pub(crate) refresh: Refresh,
     pub(crate) settings: PipSettings,
+    pub(crate) torch_backend_index: Option<IndexUrl>,
 }
 
 impl PipCompileSettings {
@@ -3407,6 +3412,7 @@ impl PipCompileSettings {
             emit_index_annotation,
             no_emit_index_annotation,
             torch_backend,
+            torch_backend_index,
             compat_args: _,
         } = args;
 
@@ -3490,6 +3496,7 @@ impl PipCompileSettings {
             environments,
             required_environments,
             refresh: Refresh::try_from(refresh)?,
+            torch_backend_index,
             settings: PipSettings::combine(
                 PipOptions {
                     python: python.and_then(Maybe::into_option),
@@ -3549,6 +3556,7 @@ pub(crate) struct PipSyncSettings {
     pub(crate) dry_run: DryRun,
     pub(crate) refresh: Refresh,
     pub(crate) settings: PipSettings,
+    pub(crate) torch_backend_index: Option<IndexUrl>,
 }
 
 impl PipSyncSettings {
@@ -3594,6 +3602,7 @@ impl PipSyncSettings {
             no_strict,
             dry_run,
             torch_backend,
+            torch_backend_index,
             compat_args: _,
         } = *args;
 
@@ -3609,6 +3618,7 @@ impl PipSyncSettings {
                 .collect(),
             dry_run: DryRun::from_args(dry_run),
             refresh: Refresh::try_from(refresh)?,
+            torch_backend_index,
             settings: PipSettings::combine(
                 PipOptions {
                     python: python.and_then(Maybe::into_option),
@@ -3665,6 +3675,7 @@ pub(crate) struct PipInstallSettings {
     pub(crate) modifications: Modifications,
     pub(crate) refresh: Refresh,
     pub(crate) settings: PipSettings,
+    pub(crate) torch_backend_index: Option<IndexUrl>,
 }
 
 impl PipInstallSettings {
@@ -3718,6 +3729,7 @@ impl PipInstallSettings {
             no_strict,
             dry_run,
             torch_backend,
+            torch_backend_index,
             compat_args: _,
         } = args;
 
@@ -3799,6 +3811,7 @@ impl PipInstallSettings {
                 no_editable_package,
             ),
             refresh: Refresh::try_from(refresh)?,
+            torch_backend_index,
             settings: PipSettings::combine(
                 PipOptions {
                     python: python.and_then(Maybe::into_option),
@@ -4392,6 +4405,7 @@ pub(crate) struct ResolverSettings {
     pub(crate) resolution: ResolutionMode,
     pub(crate) sources: NoSources,
     pub(crate) torch_backend: Option<TorchMode>,
+    pub(crate) torch_backend_index: Option<IndexUrl>,
     pub(crate) cuda_driver_version: Option<Version>,
     pub(crate) amd_gpu_architecture: Option<AmdGpuArchitecture>,
     pub(crate) upgrade: Upgrade,
@@ -4504,6 +4518,7 @@ impl From<ResolverOptions> for ResolverSettings {
             ),
             link_mode: value.link_mode.unwrap_or_default(),
             torch_backend: value.torch_backend,
+            torch_backend_index: None,
             cuda_driver_version: None,
             amd_gpu_architecture: None,
             sources: NoSources::from_args(
@@ -4632,6 +4647,7 @@ impl From<ResolverInstallerOptions> for ResolverInstallerSettings {
                     value.no_sources_package.unwrap_or_default(),
                 ),
                 torch_backend: value.torch_backend,
+                torch_backend_index: None,
                 cuda_driver_version: None,
                 amd_gpu_architecture: None,
                 upgrade: value.upgrade.unwrap_or_default(),

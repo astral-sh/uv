@@ -2359,6 +2359,7 @@ pub(crate) async fn resolve_names(
                 resolution: _,
                 sources,
                 torch_backend,
+                torch_backend_index,
                 cuda_driver_version,
                 amd_gpu_architecture,
                 upgrade: _,
@@ -2385,6 +2386,9 @@ pub(crate) async fn resolve_names(
                 interpreter.platform().os(),
                 cuda_driver_version.clone(),
                 *amd_gpu_architecture,
+                torch_backend_index
+                    .as_ref()
+                    .map(|index| index.url().as_str()),
             )
         })
         .transpose()
@@ -2557,6 +2561,7 @@ pub(crate) async fn resolve_environment(
         build_options,
         sources,
         torch_backend,
+        torch_backend_index,
         cuda_driver_version,
         amd_gpu_architecture,
     } = settings;
@@ -2620,6 +2625,9 @@ pub(crate) async fn resolve_environment(
                     .os(),
                 cuda_driver_version.clone(),
                 *amd_gpu_architecture,
+                torch_backend_index
+                    .as_ref()
+                    .map(|index| index.url().as_str()),
             )
         })
         .transpose()?;
@@ -2968,6 +2976,7 @@ pub(crate) async fn update_environment(
                 resolution,
                 sources,
                 torch_backend,
+                torch_backend_index,
                 cuda_driver_version,
                 amd_gpu_architecture,
                 upgrade,
@@ -3063,6 +3072,9 @@ pub(crate) async fn update_environment(
                     .os(),
                 cuda_driver_version.clone(),
                 *amd_gpu_architecture,
+                torch_backend_index
+                    .as_ref()
+                    .map(|index| index.url().as_str()),
             )
         })
         .transpose()?;
