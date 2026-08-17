@@ -71,6 +71,7 @@ jobs:
   rewrite-changelog:
     needs: prepare-release
     runs-on: ubuntu-latest
+    environment: automations
     permissions:
       contents: read
     outputs:
