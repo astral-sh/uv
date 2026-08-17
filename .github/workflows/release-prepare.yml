@@ -17,6 +17,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+      pull-requests: read
     outputs:
       artifact-id: ${{ steps.upload-release.outputs.artifact-id }}
     steps:
