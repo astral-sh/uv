@@ -714,7 +714,8 @@ jobs:
           - target: powerpc64le-unknown-linux-gnu
             arch: ppc64le
             # see https://github.com/astral-sh/uv/issues/6528
-            maturin_docker_options: -e JEMALLOC_SYS_WITH_LG_PAGE=16
+            # and https://github.com/aws/aws-lc/pull/3429
+            maturin_docker_options: -e JEMALLOC_SYS_WITH_LG_PAGE=16 -e AWS_LC_SYS_CFLAGS_powerpc64le_unknown_linux_gnu=-DAT_HWCAP2=26
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
