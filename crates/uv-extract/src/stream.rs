@@ -1,3 +1,4 @@
+use std::io::{self, ErrorKind};
 use std::path::{Component, Path, PathBuf};
 use std::pin::Pin;
 
@@ -189,7 +190,7 @@ pub async fn unzip<R: tokio::io::AsyncRead + Unpin>(
 
                     (bytes_read, reader)
                 }
-                Err(err) if err.kind() == std::io::ErrorKind::AlreadyExists => {
+                Err(err) if err.kind() == ErrorKind::AlreadyExists => {
                     debug!(
                         "Found duplicate local file header for: {}",
                         relpath.display()
@@ -658,7 +659,7 @@ fn tar_extract_policy() -> ExtractPolicy {
 async fn untar_in_tokio_tar(
     mut archive: tokio_tar::Archive<&'_ mut (dyn tokio::io::AsyncRead + Unpin)>,
     dst: &Path,
-) -> std::io::Result<Vec<(PathBuf, u64)>> {
+) -> io::Result<Vec<(PathBuf, u64)>> {
     // Like `tokio-tar`, canonicalize the destination prior to unpacking.
     let dst = fs_err::tokio::canonicalize(dst).await?;
 
@@ -685,11 +686,21 @@ async fn untar_in_tokio_tar(
 
         let entry_type = file.header().entry_type();
 
+        // Match `tar-codec`'s default policy. In addition to their usual aliasing behavior,
+        // hardlinks can refer to symlink inodes and survive wheel RECORD healing as files.
+        if entry_type.is_hard_link() {
+            let relpath = file.path()?.into_owned();
+            return Err(io::Error::new(
+                ErrorKind::InvalidData,
+                format!("archive hardlinks are not supported: {}", relpath.display()),
+            ));
+        }
+
         // Unpack the file into the destination directory.
         let unpacked_at = file.unpack_in_raw(&dst, &mut memo).await?;
 
         // Collect file paths (excluding directories) that were unpacked successfully.
-        if unpacked_at.is_some() && (entry_type.is_file() || entry_type.is_hard_link()) {
+        if unpacked_at.is_some() && entry_type.is_file() {
             let relpath = file.path()?.into_owned();
             let size = file.header().size()?;
             files.push((relpath, size));
@@ -701,7 +712,7 @@ async fn untar_in_tokio_tar(
             use std::fs::Permissions;
             use std::os::unix::fs::PermissionsExt;
 
-            if entry_type.is_file() || entry_type.is_hard_link() {
+            if entry_type.is_file() {
                 let mode = file.header().mode()?;
                 let has_any_executable_bit = mode & 0o111;
                 if has_any_executable_bit != 0 {
