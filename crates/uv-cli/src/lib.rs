@@ -7712,8 +7712,7 @@ pub struct PublishArgs {
     /// again, to handle cases where the identical file was uploaded twice in parallel.
     ///
     /// The exact behavior will vary based on the index. When uploading to PyPI, uploading the same
-    /// file succeeds even without `--check-url`, while most other indexes error. When uploading to
-    /// pyx, the index URL can be inferred automatically from the publish URL.
+    /// file succeeds even without `--check-url`, while most other indexes error.
     ///
     /// The index must provide one of the supported hashes (SHA-256, SHA-384, or SHA-512).
     #[arg(long, env = EnvVars::UV_PUBLISH_CHECK_URL, hide_env_values = true)]
@@ -7724,8 +7723,8 @@ pub struct PublishArgs {
 
     /// Perform a dry run without uploading files.
     ///
-    /// When enabled, the command will check for existing files if `--check-url` is provided,
-    /// and will perform validation against the index if supported, but will not upload any files.
+    /// The command checks the distribution metadata locally, and checks for existing files if
+    /// `--check-url` or `--index` is provided, but will not upload any files.
     #[arg(long)]
     pub dry_run: bool,
 

@@ -68,12 +68,6 @@ pub enum PublishError {
         Box<DisplaySafeUrl>,
         #[source] Box<PublishSendError>,
     ),
-    #[error("Validation failed for `{}` on {}", _0.user_display(), _1)]
-    Validate(
-        PathBuf,
-        Box<DisplaySafeUrl>,
-        #[source] Box<PublishSendError>,
-    ),
     #[error("Failed to obtain token for trusted publishing")]
     TrustedPublishing(#[from] Box<TrustedPublishingError>),
     #[error("{0} are not allowed when using trusted publishing")]
@@ -649,84 +643,6 @@ pub async fn upload(
     }
 }
 
-/// Validate a distribution before uploading.
-///
-/// Returns `true` if the file should be uploaded, `false` if it already exists on the server.
-pub async fn validate(
-    file: &Path,
-    form_metadata: &FormMetadata,
-    raw_filename: &str,
-    registry: &DisplaySafeUrl,
-    store: &PyxTokenStore,
-    client: &BaseClient,
-    credentials: &Credentials,
-) -> Result<bool, PublishError> {
-    if store.is_known_url(registry) {
-        debug!("Performing validation request for {registry}");
-
-        let mut validation_url = registry.clone();
-        validation_url
-            .path_segments_mut()
-            .expect("URL must have path segments")
-            .push("validate");
-
-        let request = build_metadata_request(
-            raw_filename,
-            &validation_url,
-            client,
-            credentials,
-            form_metadata,
-        );
-
-        let response = request.send().await.map_err(|err| {
-            PublishError::Validate(
-                file.to_path_buf(),
-                registry.clone().into(),
-                PublishSendError::ReqwestMiddleware(err).into(),
-            )
-        })?;
-
-        let status_code = response.status();
-        debug!("Response code for {validation_url}: {status_code}");
-
-        if status_code.is_success() {
-            #[derive(Deserialize)]
-            struct ValidateResponse {
-                exists: bool,
-            }
-
-            // Check if the file already exists.
-            match response.text().await {
-                Ok(body) => {
-                    trace!("Response content for {validation_url}: {body}");
-                    if let Ok(response) = serde_json::from_str::<ValidateResponse>(&body) {
-                        if response.exists {
-                            debug!("File already uploaded: {raw_filename}");
-                            return Ok(false);
-                        }
-                    }
-                }
-                Err(err) => {
-                    trace!("Failed to read response content for {validation_url}: {err}");
-                }
-            }
-            return Ok(true);
-        }
-
-        // Handle error response.
-        handle_response(&validation_url, response)
-            .await
-            .map_err(|err| {
-                PublishError::Validate(file.to_path_buf(), registry.clone().into(), err.into())
-            })?;
-
-        Ok(true)
-    } else {
-        debug!("Skipping validation request for unsupported publish URL: {registry}");
-        Ok(true)
-    }
-}
-
 /// Check whether we should skip the upload of a file because it already exists on the index.
 pub async fn check_url(
     check_url_client: &CheckUrlClient<'_>,
@@ -1232,61 +1148,6 @@ async fn build_upload_request<'a>(
     }
 
     Ok((request, idx))
-}
-
-/// Build a request with form metadata but without the file content.
-fn build_metadata_request<'a>(
-    raw_filename: &str,
-    registry: &DisplaySafeUrl,
-    client: &'a BaseClient,
-    credentials: &Credentials,
-    form_metadata: &FormMetadata,
-) -> RequestBuilder<'a> {
-    let mut form = reqwest::multipart::Form::new();
-    for (key, value) in form_metadata.iter() {
-        form = form.text(*key, value.clone());
-    }
-    form = form.text("filename", raw_filename.to_owned());
-
-    // If we have a username but no password, attach the username to the URL so the authentication
-    // middleware can find the matching password.
-    let url = if let Some(username) = credentials
-        .username()
-        .filter(|_| credentials.password().is_none())
-    {
-        let mut url = registry.clone();
-        let _ = url.set_username(username);
-        url
-    } else {
-        registry.clone()
-    };
-
-    let mut request = client
-        .for_host(&url)
-        .post(Url::from(url))
-        .multipart(form)
-        // Ask PyPI for a structured error messages instead of HTML-markup error messages.
-        // For other registries, we ask them to return plain text over HTML. See
-        // [`PublishSendError::extract_remote_error`].
-        .header(
-            reqwest::header::ACCEPT,
-            "application/json;q=0.9, text/plain;q=0.8, text/html;q=0.7",
-        );
-
-    match credentials {
-        Credentials::Basic { password, .. } => {
-            if password.is_some() {
-                debug!("Using HTTP Basic authentication");
-                request = request.header(AUTHORIZATION, credentials.to_header_value());
-            }
-        }
-        Credentials::Bearer { .. } => {
-            debug!("Using Bearer token authentication");
-            request = request.header(AUTHORIZATION, credentials.to_header_value());
-        }
-    }
-
-    request
 }
 
 /// Log response information and map response to an error variant if not successful.

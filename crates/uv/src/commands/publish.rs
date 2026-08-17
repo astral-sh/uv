@@ -80,14 +80,8 @@ pub(crate) async fn publish(
             .clone()
             .with_context(|| format!("Index is missing a publish URL: `{index_name}`"))?;
 
-        // pyx has the same behavior as PyPI where uploads of identical
-        // files + contents are idempotent, so we don't need to pre-check.
-        if token_store.is_known_url(&publish_url) {
-            (publish_url, None)
-        } else {
-            let check_url = index.url.clone();
-            (publish_url, Some(check_url))
-        }
+        let check_url = index.url.clone();
+        (publish_url, Some(check_url))
     } else {
         (publish_url, check_url)
     };
@@ -272,6 +266,10 @@ pub(crate) async fn publish(
                 }
             };
 
+        if dry_run {
+            continue;
+        }
+
         writeln!(
             printer.stderr(),
             "{} {} {}",
@@ -280,55 +278,18 @@ pub(crate) async fn publish(
             format!("({bytes:.1}{unit})").dimmed()
         )?;
 
-        // Run validation checks on the file, but don't upload it (if possible).
-        let uploaded = match uv_publish::validate(
-            &group.file,
+        let uploaded = upload(
+            &group,
             &form_metadata,
-            &group.raw_filename,
             &publish_url,
-            &token_store,
             &upload_client,
+            retry_policy,
             &credentials,
+            check_url_client.as_ref(),
+            &download_concurrency,
+            reporter.clone(),
         )
-        .await
-        {
-            Ok(should_upload) => {
-                if dry_run {
-                    continue;
-                }
-
-                // If validation indicates the file already exists, skip the upload.
-                if !should_upload {
-                    false
-                } else {
-                    upload(
-                        &group,
-                        &form_metadata,
-                        &publish_url,
-                        &upload_client,
-                        retry_policy,
-                        &credentials,
-                        check_url_client.as_ref(),
-                        &download_concurrency,
-                        reporter.clone(),
-                    )
-                    .await? // Filename and/or URL are already attached, if applicable.
-                }
-            }
-            Err(err) => {
-                if dry_run {
-                    let err: anyhow::Error = err.into();
-                    write_error_chain_with_options(
-                        err.as_ref(),
-                        Hints::none(),
-                        ErrorOptions::default().with_stream(printer.stderr()),
-                    )?;
-                    error_count += 1;
-                    continue;
-                }
-                return Err(err.into());
-            }
-        };
+        .await?;
         info!("Upload succeeded");
 
         if !uploaded {
