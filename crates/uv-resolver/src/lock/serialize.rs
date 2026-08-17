@@ -542,18 +542,6 @@ fn write_wheel_inline(writer: &mut LockWriter, wheel: &Wheel) -> Result<(), Writ
     if let Some(upload_time) = wheel.upload_time {
         writer.inline_value(&mut first, "upload-time", upload_time.to_string())?;
     }
-    if let Some(zstd) = &wheel.zstd {
-        writer.inline_key_start(&mut first, "zstd")?;
-        let mut zstd_first = true;
-        writer.start_inline_table();
-        if let Some(hash) = &zstd.hash {
-            writer.inline_value(&mut zstd_first, "hash", hash.to_string())?;
-        }
-        if let Some(size) = zstd.size {
-            writer.inline_value(&mut zstd_first, "size", size)?;
-        }
-        writer.finish_inline_table(zstd_first);
-    }
     writer.finish_inline_table(first);
     Ok(())
 }

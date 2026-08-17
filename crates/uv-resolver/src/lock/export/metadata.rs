@@ -14,7 +14,7 @@ use uv_workspace::Workspace;
 
 use crate::lock::{
     Dependency, DirectSource, Package, PackageId, RegistrySource, Source, SourceDist,
-    SourceDistMetadata, Wheel, WheelWireSource, ZstdWheel,
+    SourceDistMetadata, Wheel, WheelWireSource,
 };
 use crate::{Lock, LockError};
 
@@ -1101,9 +1101,6 @@ struct MetadataWheel {
     /// deserialization time. Not being able to extract a wheel filename from a
     /// wheel URL is thus a deserialization error.
     filename: WheelFilename,
-    /// The zstandard-compressed wheel metadata, if any.
-    #[serde(skip_serializing_if = "Option::is_none", default)]
-    zstd: Option<MetadataZstdWheel>,
 }
 
 impl MetadataWheel {
@@ -1114,7 +1111,6 @@ impl MetadataWheel {
             size: wheel.size,
             upload_time: wheel.upload_time,
             filename: wheel.filename.clone(),
-            zstd: wheel.zstd.as_ref().map(MetadataZstdWheel::from_wheel),
         }
     }
 }
@@ -1135,23 +1131,6 @@ impl MetadataWheelWireSource {
             }),
             // We guarantee this as a separate field so it's redundant
             WheelWireSource::Filename { .. } => None,
-        }
-    }
-}
-
-#[derive(Clone, Debug, serde::Serialize)]
-struct MetadataZstdWheel {
-    #[serde(skip_serializing_if = "BTreeMap::is_empty", default)]
-    hashes: BTreeMap<HashAlgorithm, Hash>,
-    #[serde(skip_serializing_if = "Option::is_none", default)]
-    size: Option<u64>,
-}
-
-impl MetadataZstdWheel {
-    fn from_wheel(wheel: &ZstdWheel) -> Self {
-        Self {
-            hashes: wheel.hash.as_ref().map(hashes_map).unwrap_or_default(),
-            size: wheel.size,
         }
     }
 }
