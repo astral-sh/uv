@@ -71,7 +71,11 @@
         "/changes/base/ref/from": { "exists": true }
       },
       "allow_draft": true,
-      "workflow": "pull-request-conflicts.yml"
+      "workflow": "pull-request-conflicts.yml",
+      "inputs": {
+        "base_previous_ref": "/changes/base/ref/from",
+        "base_previous_sha": "/changes/base/sha/from"
+      }
     },
     {
       "repository": "uv",

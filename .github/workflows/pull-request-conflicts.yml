@@ -13,6 +13,14 @@ on:
         description: "The expected pull request head SHA"
         required: false
         type: string
+      base_previous_ref:
+        description: "The previous base branch of a retargeted pull request"
+        required: false
+        type: string
+      base_previous_sha:
+        description: "The previous base SHA from the signed base-change event"
+        required: false
+        type: string
 
 permissions: {}
 
@@ -44,6 +52,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           EXPECTED_HEAD_SHA: ${{ inputs.head_sha }}
+          BASE_PREVIOUS_REF: ${{ inputs.base_previous_ref }}
+          BASE_PREVIOUS_SHA: ${{ inputs.base_previous_sha }}
           PULL_REQUEST_NUMBER: ${{ inputs.pull_request }}
         run: |
           if [ -n "$PULL_REQUEST_NUMBER" ]; then
@@ -63,7 +73,26 @@ jobs:
               exit 1
             fi
 
-            pull_requests=$(jq --compact-output '[{number, url: .html_url, base_ref: .base.ref, head_ref: .head.ref, head_sha: .head.sha, head_repository: .head.repo.full_name}]' <<< "$pull_request")
+            base_previous_sha=''
+            if [ -n "$BASE_PREVIOUS_REF" ] || [ -n "$BASE_PREVIOUS_SHA" ]; then
+              if [[ "$GH_REPO" != "astral-sh/uv-dev" ]] || ! git check-ref-format "refs/heads/$BASE_PREVIOUS_REF" || ! [[ "$BASE_PREVIOUS_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+                echo "The previous pull request base is invalid." >&2
+                exit 1
+              fi
+              if [ "$BASE_PREVIOUS_REF" != main ]; then
+                base_previous_sha="$BASE_PREVIOUS_SHA"
+              fi
+            fi
+
+            pull_requests=$(
+              jq --compact-output \
+                --arg base_previous_sha "$base_previous_sha" \
+                '[{number, url: .html_url, base_ref: .base.ref, base_previous_sha: $base_previous_sha, head_ref: .head.ref, head_sha: .head.sha, head_repository: .head.repo.full_name}]' \
+                <<< "$pull_request"
+            )
+          elif [ -n "$EXPECTED_HEAD_SHA" ] || [ -n "$BASE_PREVIOUS_REF" ] || [ -n "$BASE_PREVIOUS_SHA" ]; then
+            echo "The dispatched rebase context is incomplete." >&2
+            exit 1
           elif [[ "$GH_REPO" == "astral-sh/uv" ]]; then
             pull_requests=$(./scripts/find-conflicted-pull-requests.sh --author app/astral-automations-bot)
           else
@@ -85,7 +114,7 @@ jobs:
             exit 1
           fi
 
-          matrix=$(jq --compact-output '{include: [.[] | {number, base_ref, head_ref, head_sha, head_repository}]}' <<< "$rebasable_pull_requests")
+          matrix=$(jq --compact-output '{include: [.[] | {number, base_ref, base_previous_sha: (.base_previous_sha // ""), head_ref, head_sha, head_repository}]}' <<< "$rebasable_pull_requests")
           {
             echo "matrix=$matrix"
             echo "rebasable=$rebasable"
@@ -123,6 +152,7 @@ jobs:
     with:
       number: ${{ matrix.number }}
       base-ref: ${{ matrix.base_ref }}
+      base-previous-sha: ${{ matrix.base_previous_sha }}
       head-ref: ${{ matrix.head_ref }}
       head-sha: ${{ matrix.head_sha }}
       head-repository: ${{ matrix.head_repository }}
