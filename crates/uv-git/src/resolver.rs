@@ -164,10 +164,14 @@ impl GitResolver {
         let precise = response.text().await?;
         let precise =
             GitOid::from_str(&precise).map_err(|err| GitResolverError::Git(err.into()))?;
+        let url = url
+            .clone()
+            .with_precise(precise)
+            .map_err(|error| GitResolverError::Git(error.into()))?;
 
         // Insert the resolved URL into the in-memory cache. This ensures that subsequent fetches
         // resolve to the same precise commit.
-        self.insert(RepositoryReference::from(url), precise);
+        self.insert(RepositoryReference::from(&url), precise);
 
         Ok(Some(precise))
     }
@@ -188,7 +192,11 @@ impl GitResolver {
         // single process are consistent.
         let url = {
             if let Some(precise) = self.get(&reference) {
-                Cow::Owned(url.clone().with_precise(precise))
+                Cow::Owned(
+                    url.clone()
+                        .with_precise(precise)
+                        .map_err(|error| GitResolverError::Git(error.into()))?,
+                )
             } else {
                 Cow::Borrowed(url)
             }
@@ -248,7 +256,7 @@ impl GitResolver {
     pub fn precise(&self, url: GitUrl) -> Option<GitUrl> {
         let reference = RepositoryReference::from(&url);
         let precise = self.get(&reference)?;
-        Some(url.with_precise(precise))
+        url.with_precise(precise).ok()
     }
 
     /// Returns `true` if the two Git URLs refer to the same precise commit.

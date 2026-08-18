@@ -63,8 +63,6 @@ impl GitSource {
     /// Fetch the underlying Git repository at the given revision.
     #[instrument(skip(self), fields(repository = %self.git.url(), rev = ?self.git.precise()))]
     pub(crate) fn fetch(self) -> Result<Fetch> {
-        self.git.validate_revision()?;
-
         let lfs_requested = self.git.lfs().enabled();
 
         // The path to the repo, within the Git database.
@@ -145,12 +143,15 @@ impl GitSource {
             Ok((db, actual_rev, task))
         }()?;
 
+        // Validate the resolved commit before checking out its contents.
+        let git = self.git.clone().with_precise(actual_rev)?;
+
         // Don’t use the full hash, in order to contribute less to reaching the
         // path length limit on Windows.
         let short_id = db.to_short_id(actual_rev)?;
 
         // Compute the canonical URL for the repository checkout.
-        let canonical = self.git.repository().clone().with_lfs(Some(lfs_requested));
+        let canonical = git.repository().clone().with_lfs(Some(lfs_requested));
         // Recompute the checkout hash when Git LFS is enabled as we want
         // to distinctly differentiate between LFS vs non-LFS source trees.
         let ident = if lfs_requested {
@@ -177,7 +178,7 @@ impl GitSource {
         }
 
         Ok(Fetch {
-            git: self.git.with_precise(actual_rev),
+            git,
             path: checkout_path,
             lfs_ready: checkout.lfs_ready().unwrap_or(false),
         })

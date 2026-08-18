@@ -2998,6 +2998,55 @@ fn install_git_public_https_missing_branch_or_tag() {
 
 #[tokio::test]
 #[cfg(feature = "test-git")]
+async fn install_git_public_rejects_mismatched_github_api_commit() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [[tool.uv.dependency-metadata]]
+        name = "uv-public-pypackage"
+        version = "0.1.0"
+    "#})?;
+
+    let requested_revision = "0dacfd662c64cb4ceb16e6cf65a157a8b715b979";
+    let precise = "b270df1a2fb5d012294e9aaf05e7e0bab1e6a389";
+
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path(format!(
+            "/astral-test/uv-public-pypackage/commits/{requested_revision}"
+        )))
+        .respond_with(ResponseTemplate::new(200).set_body_string(precise))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    uv_snapshot!(context.filters(), context
+        .pip_install()
+        .arg("--dry-run")
+        .arg("--no-index")
+        .arg(format!(
+            "uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage@{requested_revision}"
+        ))
+        .env(EnvVars::UV_GITHUB_FAST_PATH_URL, server.uri()), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+      × Failed to download and build `uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage@0dacfd662c64cb4ceb16e6cf65a157a8b715b979`
+      ├─▶ Git operation failed
+      ╰─▶ Exact Git revision `0dacfd662c64cb4ceb16e6cf65a157a8b715b979` does not match precise commit `b270df1a2fb5d012294e9aaf05e7e0bab1e6a389` for `https://github.com/astral-test/uv-public-pypackage`
+    ");
+
+    Ok(())
+}
+
+#[tokio::test]
+#[cfg(feature = "test-git")]
 async fn install_git_public_rate_limited_by_github_rest_api_403_response() {
     let context = uv_test::test_context!("3.12");
 
