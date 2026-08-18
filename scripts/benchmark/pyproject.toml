@@ -22,4 +22,16 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.uv]
+no-build = true
+no-binary-package = ["benchmark"]
+# Pin the isolated build environment for source-build exceptions.
+build-constraint-dependencies = [
+    "editables==0.6",
+    "hatchling==1.32.0",
+    "packaging==26.3",
+    "pathspec==1.1.1",
+    "pluggy==1.6.0",
+    "tomlkit==0.15.1",
+    "trove-classifiers==2026.6.1.19",
+]
 exclude-newer = "P7D"

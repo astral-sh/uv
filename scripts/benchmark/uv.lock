@@ -6,6 +6,17 @@ requires-python = ">=3.11"
 exclude-newer = "0001-01-01T00:00:00Z" # This has no effect and is included for backwards compatibility when using relative exclude-newer values.
 exclude-newer-span = "P7D"
 
+[manifest]
+build-constraints = [
+    { name = "editables", specifier = "==0.6" },
+    { name = "hatchling", specifier = "==1.32.0" },
+    { name = "packaging", specifier = "==26.3" },
+    { name = "pathspec", specifier = "==1.1.1" },
+    { name = "pluggy", specifier = "==1.6.0" },
+    { name = "tomlkit", specifier = "==0.15.1" },
+    { name = "trove-classifiers", specifier = "==2026.6.1.19" },
+]
+
 [[package]]
 name = "anyio"
 version = "4.14.2"
