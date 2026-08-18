@@ -38,7 +38,7 @@ pub enum TrustedPublishingError {
     #[error(
         "Server returned error code {0}, is trusted publishing correctly configured?\nResponse: {1}\nToken claims, which must match the publisher configuration: {2:#?}"
     )]
-    TokenRejected(StatusCode, String, OidcTokenClaims),
+    TokenRejected(StatusCode, String, Box<OidcTokenClaims>),
     /// When trusted publishing is misconfigured, the error above should occur, not this one.
     #[error(
         "Server returned error code {0}, and the OIDC has an unexpected format.\nResponse: {1}"
