@@ -339,16 +339,6 @@ impl PyxTokenStore {
         read_pyx_api_key().is_some()
     }
 
-    /// Returns `true` if the user appears to have OAuth tokens stored on disk.
-    fn has_oauth_tokens(&self) -> bool {
-        self.subdirectory.join("tokens.json").is_file()
-    }
-
-    /// Returns `true` if the user appears to have credentials (which may be invalid).
-    pub fn has_credentials(&self) -> bool {
-        self.has_auth_token() || self.has_api_key() || self.has_oauth_tokens()
-    }
-
     /// Read the tokens from the store.
     pub async fn read(&self) -> Result<Option<PyxTokens>, TokenStoreError> {
         if let Some(api_key) = read_pyx_api_key() {
