@@ -23,4 +23,5 @@ build-backend = "hatchling.build"
 
 [tool.uv]
 no-build = true
+no-binary-package = ["benchmark"]
 exclude-newer = "P7D"

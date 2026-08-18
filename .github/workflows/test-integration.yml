@@ -1089,7 +1089,7 @@ jobs:
       - name: "Test uv_build package"
         env:
           # This test intentionally builds and installs source distributions.
-          UV_NO_BUILD: "0"
+          UV_NO_CONFIG: "1"
         run: |
           # Build the Python package, which is not covered by uv's integration tests since they can't depend on having
           # a Python package (only the binary itself is built before running Rust's tests)
