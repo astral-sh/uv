@@ -30,6 +30,7 @@ env vars for any of the following fields, if present:
 # requires-python = ">=3.12"
 # dependencies = ["colorama>=0.4.6"]
 # [tool.uv]
+# no-build = true
 # exclude-newer = "P7D"
 # ///
 """

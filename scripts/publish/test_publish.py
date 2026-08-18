@@ -7,6 +7,7 @@
 #     "sigstore==4.4.0",
 # ]
 # [tool.uv]
+# no-build = true
 # exclude-newer = "P7D"
 # ///
 
