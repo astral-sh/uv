@@ -6,7 +6,7 @@ use console::Term;
 use owo_colors::OwoColorize;
 use tokio::sync::Semaphore;
 use tracing::{debug, info, trace};
-use uv_auth::{Credentials, PyxTokenStore};
+use uv_auth::Credentials;
 use uv_cache::Cache;
 use uv_client::{
     AuthIntegration, BaseClient, BaseClientBuilder, RedirectPolicy, RegistryClientBuilder,
@@ -47,8 +47,6 @@ pub(crate) async fn publish(
     if client_builder.is_offline() {
         bail!("Unable to publish files in offline mode");
     }
-
-    let token_store = PyxTokenStore::from_settings()?;
 
     let (publish_url, check_url) = if let Some(index_name) = index {
         // If the user provided an index by name, look it up.
@@ -151,7 +149,6 @@ pub(crate) async fn publish(
         password,
         trusted_publishing,
         keyring_provider,
-        &token_store,
         &oidc_client,
         check_url.as_ref(),
         Prompt::Enabled,
@@ -354,7 +351,6 @@ async fn gather_credentials(
     mut password: Option<String>,
     trusted_publishing: TrustedPublishing,
     keyring_provider: KeyringProviderType,
-    token_store: &PyxTokenStore,
     oidc_client: &BaseClient,
     check_url: Option<&IndexUrl>,
     prompt: Prompt,
@@ -386,7 +382,6 @@ async fn gather_credentials(
         username.as_deref(),
         password.as_deref(),
         keyring_provider,
-        token_store,
         trusted_publishing,
         &publish_url,
         oidc_client,
@@ -396,20 +391,13 @@ async fn gather_credentials(
     let (username, mut password) =
         if let TrustedPublishResult::Configured(password) = &trusted_publishing_token {
             (Some("__token__".to_string()), Some(password.to_string()))
-        } else {
-            if username.is_none() && password.is_none() {
-                // Skip prompting for pyx URLs; the auth middleware will handle authentication.
-                if token_store.is_known_url(&publish_url) {
-                    (None, None)
-                } else {
-                    match prompt {
-                        Prompt::Enabled => prompt_username_and_password()?,
-                        Prompt::Disabled => (None, None),
-                    }
-                }
-            } else {
-                (username, password)
+        } else if username.is_none() && password.is_none() {
+            match prompt {
+                Prompt::Enabled => prompt_username_and_password()?,
+                Prompt::Disabled => (None, None),
             }
+        } else {
+            (username, password)
         };
 
     if password.is_some() && username.is_none() {
@@ -423,29 +411,27 @@ async fn gather_credentials(
     if username.is_none()
         && password.is_none()
         && keyring_provider == KeyringProviderType::Disabled
-        && !token_store.is_known_url(&publish_url)
+        && let TrustedPublishResult::Ignored(err) = trusted_publishing_token
     {
-        if let TrustedPublishResult::Ignored(err) = trusted_publishing_token {
-            // The user has configured something incorrectly:
-            // * The user forgot to configure credentials.
-            // * The user forgot to forward the secrets as env vars (or used the wrong ones).
-            // * The trusted publishing configuration is wrong.
-            writeln!(
-                printer.stderr(),
-                "Note: Neither credentials nor keyring are configured, and there was an error \
-                fetching the trusted publishing token. If you don't want to use trusted \
-                publishing, you can ignore this error, but you need to provide credentials."
-            )?;
+        // The user has configured something incorrectly:
+        // * The user forgot to configure credentials.
+        // * The user forgot to forward the secrets as env vars (or used the wrong ones).
+        // * The trusted publishing configuration is wrong.
+        writeln!(
+            printer.stderr(),
+            "Note: Neither credentials nor keyring are configured, and there was an error \
+            fetching the trusted publishing token. If you don't want to use trusted \
+            publishing, you can ignore this error, but you need to provide credentials."
+        )?;
 
-            trace!("Error trace: {err:?}");
-            write_error_chain_with_options(
-                anyhow::Error::from(err)
-                    .context("Trusted publishing failed")
-                    .as_ref(),
-                Hints::none(),
-                ErrorOptions::default().with_stream(printer.stderr()),
-            )?;
-        }
+        trace!("Error trace: {err:?}");
+        write_error_chain_with_options(
+            anyhow::Error::from(err)
+                .context("Trusted publishing failed")
+                .as_ref(),
+            Hints::none(),
+            ErrorOptions::default().with_stream(printer.stderr()),
+        )?;
     }
 
     // If applicable, fetch the password from the keyring eagerly to avoid user confusion about
@@ -510,14 +496,12 @@ mod tests {
         password: Option<String>,
     ) -> Result<(DisplaySafeUrl, Credentials)> {
         let client = BaseClientBuilder::default().build()?;
-        let token_store = PyxTokenStore::from_settings()?;
         gather_credentials(
             url,
             username,
             password,
             TrustedPublishing::Never,
             KeyringProviderType::Disabled,
-            &token_store,
             &client,
             None,
             Prompt::Disabled,
