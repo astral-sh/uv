@@ -1315,7 +1315,21 @@ impl Lock {
     #[must_use]
     pub fn without_package_metadata(mut self) -> Self {
         self.revision = METADATA_FREE_REVISION;
+        let workspace_root = self.root().map(|package| package.id.clone());
         for package in &mut self.packages {
+            for extra in &package.metadata.provides_extra {
+                package
+                    .optional_dependencies
+                    .entry(extra.clone())
+                    .or_default();
+            }
+            if self.manifest.members.contains(&package.id.name)
+                || workspace_root.as_ref().is_some_and(|id| id == &package.id)
+            {
+                for group in package.metadata.dependency_groups.keys() {
+                    package.dependency_groups.entry(group.clone()).or_default();
+                }
+            }
             package.metadata = PackageMetadata::default();
         }
         self
