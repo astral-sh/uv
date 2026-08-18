@@ -38,9 +38,8 @@ repos:
     hooks:
       - id: prettier
         name: prettier
-        entry: prettier --write --ignore-unknown
-        language: node
-        additional_dependencies: ["prettier@3"]
+        entry: npx --yes --ignore-scripts prettier@3.9.0 --write --ignore-unknown
+        language: system
         types_or: [yaml, json5]
 
   - repo: https://github.com/astral-sh/ruff-pre-commit

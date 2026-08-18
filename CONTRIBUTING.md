@@ -141,6 +141,9 @@ cargo run -- pip install requests
 
 ## Formatting
 
+The Prettier `pre-commit` hook requires Node.js and `npm` on `PATH`. It runs the pinned formatter
+directly instead of installing a Node environment.
+
 ```shell
 # Rust
 cargo fmt --all
