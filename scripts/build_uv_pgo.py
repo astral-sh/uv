@@ -4,6 +4,7 @@
 # requires-python = ">=3.11"
 # dependencies = []
 # [tool.uv]
+# no-build = true
 # exclude-newer = "P7D"
 # ///
 

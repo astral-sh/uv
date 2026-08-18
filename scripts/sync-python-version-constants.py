@@ -15,6 +15,7 @@ in sync with the latest available Python versions.
 # requires-python = ">=3.12"
 # dependencies = ["packaging"]
 # [tool.uv]
+# no-build = true
 # exclude-newer = "P7D"
 # ///
 
