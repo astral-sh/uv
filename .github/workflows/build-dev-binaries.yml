@@ -102,6 +102,13 @@ jobs:
 
       - name: "Setup armv7"
         run: |
+          # Try the next configured mirror after the first failed download.
+          cat /etc/apt/apt-mirrors.txt
+          printf '%s\n' \
+            'Acquire::Retries "0";' \
+            'Acquire::http::Timeout "10";' \
+            'Acquire::https::Timeout "10";' \
+            | sudo tee /etc/apt/apt.conf.d/80-retries > /dev/null
           sudo apt-get update
           sudo apt-get install gcc-arm-linux-gnueabihf
 
