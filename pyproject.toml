@@ -117,6 +117,7 @@ release = [
 check = [
     "ruff>=0.16.2",
     "ty>=0.0.69",
+    "typos>=1.49.0",
     "validate-pyproject[all,store]>=0.25",
 ]
 
