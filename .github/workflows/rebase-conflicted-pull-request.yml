@@ -9,6 +9,10 @@ on:
       base-ref:
         required: true
         type: string
+      base-previous-sha:
+        required: false
+        type: string
+        default: ""
       head-ref:
         required: true
         type: string
@@ -59,6 +63,7 @@ jobs:
         id: prepare
         env:
           BASE_REF: ${{ inputs.base-ref }}
+          BASE_PREVIOUS_SHA: ${{ inputs.base-previous-sha }}
           HEAD_REF: ${{ inputs.head-ref }}
           HEAD_SHA: ${{ inputs.head-sha }}
           HEAD_REPOSITORY: ${{ inputs.head-repository }}
@@ -71,6 +76,11 @@ jobs:
           current_head=$(git rev-parse 'FETCH_HEAD^{commit}')
           if [ "$current_head" != "$HEAD_SHA" ]; then
             echo "The pull request head changed; refusing to rebase a stale revision." >&2
+            exit 1
+          fi
+
+          if [ -n "$BASE_PREVIOUS_SHA" ] && { ! [[ "$BASE_PREVIOUS_SHA" =~ ^[0-9a-f]{40}$ ]] || ! git merge-base --is-ancestor "$BASE_PREVIOUS_SHA" "$HEAD_SHA"; }; then
+            echo "The stacked pull request does not contain its previous base; refusing to rebase it." >&2
             exit 1
           fi
 
@@ -96,6 +106,7 @@ jobs:
         uses: openai/codex-action@52fe01ec70a42f454c9d2ebd47598f9fd6893d56 # v1.11
         env:
           BASE_REF: ${{ inputs.base-ref }}
+          BASE_PREVIOUS_SHA: ${{ inputs.base-previous-sha }}
           TMPDIR: ${{ runner.temp }}
         with:
           openai-api-key: ${{ secrets.OPENAI_API_KEY }}
