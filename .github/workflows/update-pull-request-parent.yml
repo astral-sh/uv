@@ -40,7 +40,7 @@ permissions: {}
 jobs:
   update:
     name: "Update parent of pull request #${{ inputs.number }}"
-    if: github.repository == 'astral-sh/uv-dev'
+    if: github.repository == 'astral-sh/uv-dev' || github.repository == 'astral-sh/uv-security'
     runs-on: ubuntu-slim
     timeout-minutes: 10
     permissions:
@@ -64,6 +64,7 @@ jobs:
           PARENT_MERGE_SHA: ${{ inputs.parent-merge-sha }}
           HEAD_REF: ${{ inputs.head-ref }}
           HEAD_SHA: ${{ inputs.head-sha }}
+          GH_TOKEN: ${{ github.token }}
           GIT_CONFIG_GLOBAL: /dev/null
           GIT_CONFIG_NOSYSTEM: "1"
           GIT_EDITOR: "true"
@@ -77,7 +78,8 @@ jobs:
             fi
           done
 
-          git fetch --no-tags https://github.com/astral-sh/uv-dev.git "refs/heads/$HEAD_REF"
+          git -c credential.helper= -c 'credential.helper=!gh auth git-credential' fetch \
+            --no-tags "https://github.com/$GITHUB_REPOSITORY.git" "refs/heads/$HEAD_REF"
           if [ "$(git rev-parse 'FETCH_HEAD^{commit}')" != "$HEAD_SHA" ] || [ "$(git rev-parse --verify "refs/remotes/origin/$BASE_REF^{commit}")" != "$BASE_SHA" ]; then
             echo "rejection_reason=The source or destination changed before its parent update." >> "$GITHUB_OUTPUT"
             exit 0

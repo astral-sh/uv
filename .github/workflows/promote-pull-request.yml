@@ -362,7 +362,7 @@ jobs:
     outputs:
       number: ${{ steps.promote.outputs.number }}
       rejection_reason: ${{ steps.verify.outputs.rejection_reason || steps.promote.outputs.rejection_reason || steps.close.outputs.rejection_reason }}
-      changed_head: ${{ steps.close.outputs.changed_head }}
+      changed_head: ${{ steps.promote.outputs.changed_head || steps.close.outputs.changed_head }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -431,6 +431,7 @@ jobs:
           ACTION: ${{ needs.prepare.outputs.action }}
           APPROVAL_ID: ${{ needs.prepare.outputs.approval_id }}
           BASE_REF: ${{ needs.prepare.outputs.base_ref }}
+          BASE_SHA: ${{ needs.prepare.outputs.base_sha }}
           EXPECTED_HEAD_SHA: ${{ inputs.head_sha }}
           GH_TOKEN: ${{ steps.token.outputs.token }}
           HEAD_REF: ${{ needs.prepare.outputs.head_ref }}
@@ -461,6 +462,18 @@ jobs:
             '.state == "open" and (.draft | not) and .base.ref == $source_base_ref and ($action != "update-parent" or .base.sha == $source_base_sha) and .head.ref == $head_ref and .head.sha == $head_sha and .base.repo.id == $repository_id and .head.repo.id == $repository_id' \
             <<< "$source_pull_request" > /dev/null; then
             reject "The source pull request or its approval changed before publication."
+          fi
+
+          if [ "$GITHUB_REPOSITORY" = "astral-sh/uv-security" ]; then
+            promoter_permission=$(gh api --method GET "repos/$GITHUB_REPOSITORY/collaborators/$PROMOTER/permission")
+            if ! jq --exit-status \
+              '.permission == "admin" or .permission == "maintain" or .permission == "write"' \
+              <<< "$promoter_permission" > /dev/null; then
+              reject "The private pull request is no longer approved by a repository writer."
+            fi
+            if [ "$(jq --raw-output '.base.sha' <<< "$source_pull_request")" != "$SOURCE_BASE_SHA" ]; then
+              reject "The private pull request base changed before publication."
+            fi
           fi
 
           existing_pull_requests=$(
@@ -504,27 +517,39 @@ jobs:
             fi
 
             if [ -z "$upstream_head" ]; then
-              if [ "$GITHUB_REPOSITORY" = "astral-sh/uv-security" ] && [ "$PROMOTED_HEAD" = "$EXPECTED_HEAD_SHA" ]; then
-                # The private repository is not in uv's public fork network. Transfer the
-                # approved commit without checking out or executing any of its contents.
+              if [ "$GITHUB_REPOSITORY" = "astral-sh/uv-security" ]; then
+                # The private repository is not in uv's public fork network. Transfer
+                # only the approved revision, without checking out its contents here.
+                candidate_repository=$(git rev-parse --show-toplevel)
                 promotion_repository="$RUNNER_TEMP/promotion.git"
-                git init --bare "$promotion_repository"
-                git -C "$promotion_repository" config credential.helper '!gh auth git-credential'
-                git -C "$promotion_repository" fetch --no-tags \
-                  https://github.com/astral-sh/uv.git \
+                git -c core.hooksPath=/dev/null init --bare "$promotion_repository"
+                promotion_git() {
+                  git -C "$promotion_repository" -c core.hooksPath=/dev/null \
+                    -c credential.helper= -c 'credential.helper=!gh auth git-credential' "$@"
+                }
+                promotion_git fetch --no-tags https://github.com/astral-sh/uv.git \
                   "refs/heads/$BASE_REF:refs/heads/upstream-base"
 
+                public_base="$SOURCE_BASE_SHA"
+                if [ "$ACTION" = update-parent ]; then
+                  public_base="$BASE_SHA"
+                fi
                 # Do not disclose an unpublished private parent as part of another PR.
-                if ! git -C "$promotion_repository" merge-base --is-ancestor \
-                  "$SOURCE_BASE_SHA" refs/heads/upstream-base; then
+                if ! promotion_git merge-base --is-ancestor "$public_base" refs/heads/upstream-base; then
                   reject "The private pull request base is not on its upstream branch."
                 fi
 
-                git -C "$promotion_repository" fetch --no-tags \
-                  "https://github.com/$GITHUB_REPOSITORY.git" \
-                  "$EXPECTED_HEAD_SHA:refs/heads/approved"
-                test "$(git -C "$promotion_repository" rev-parse refs/heads/approved)" = "$EXPECTED_HEAD_SHA"
-                git -C "$promotion_repository" merge-base refs/heads/upstream-base refs/heads/approved > /dev/null
+                if [ "$ACTION" = update-parent ]; then
+                  # The preceding verification imported the clean parent-update bundle.
+                  promotion_git fetch --no-tags "$candidate_repository" \
+                    "$PROMOTED_HEAD:refs/heads/approved"
+                  promotion_git merge-base --is-ancestor "$public_base" refs/heads/approved
+                else
+                  promotion_git fetch --no-tags "https://github.com/$GITHUB_REPOSITORY.git" \
+                    "$EXPECTED_HEAD_SHA:refs/heads/approved"
+                fi
+                test "$(promotion_git rev-parse refs/heads/approved)" = "$PROMOTED_HEAD"
+                promotion_git merge-base refs/heads/upstream-base refs/heads/approved > /dev/null
 
                 current_pull_request=$(gh api --method GET "repos/$GITHUB_REPOSITORY/pulls/$PULL_REQUEST_NUMBER")
                 current_head=$(jq --raw-output '.head.sha' <<< "$current_pull_request")
@@ -532,20 +557,20 @@ jobs:
                   echo "changed_head=$current_head" >> "$GITHUB_OUTPUT"
                   exit 0
                 fi
-                if ! jq --exit-status \
-                  --arg base_ref "$SOURCE_BASE_REF" \
-                  --arg base_head "$SOURCE_BASE_SHA" \
-                  --arg head_ref "$HEAD_REF" \
-                  --argjson repository_id "$GITHUB_REPOSITORY_ID" \
+                current_approval=$(
+                  gh api --method GET "repos/$GITHUB_REPOSITORY/issues/$PULL_REQUEST_NUMBER/events" --paginate --slurp |
+                    jq --raw-output '[.[][] | select(.event == "ready_for_review" and .actor.type == "User") | .id] | last // empty'
+                )
+                if [ "$current_approval" != "$APPROVAL_ID" ] || ! jq --exit-status \
+                  --arg base_ref "$SOURCE_BASE_REF" --arg base_head "$SOURCE_BASE_SHA" \
+                  --arg head_ref "$HEAD_REF" --argjson repository_id "$GITHUB_REPOSITORY_ID" \
                   '.state == "open" and (.draft | not) and .base.ref == $base_ref and .base.sha == $base_head and .head.ref == $head_ref and .base.repo.id == $repository_id and .head.repo.id == $repository_id' \
                   <<< "$current_pull_request" > /dev/null; then
-                  reject "The private pull request changed before publication."
+                  reject "The private pull request or its approval changed before publication."
                 fi
 
-                git -C "$promotion_repository" push \
-                  "--force-with-lease=refs/heads/$HEAD_REF:" \
-                  https://github.com/astral-sh/uv.git \
-                  "$EXPECTED_HEAD_SHA:refs/heads/$HEAD_REF"
+                promotion_git push --force-with-lease="refs/heads/$HEAD_REF:" \
+                  https://github.com/astral-sh/uv.git "$PROMOTED_HEAD:refs/heads/$HEAD_REF"
               elif [ "$PROMOTED_HEAD" != "$EXPECTED_HEAD_SHA" ]; then
                 git -c core.hooksPath=/dev/null -c credential.helper= -c 'credential.helper=!gh auth git-credential' push \
                   --force-with-lease="refs/heads/$HEAD_REF:" \
@@ -729,7 +754,11 @@ jobs:
             fi
             gh api --method PATCH "repos/$GITHUB_REPOSITORY/pulls/$PULL_REQUEST_NUMBER" \
               --raw-field base="$REBASE_REF" --silent
-            comment="$comment Retargeted it to $REBASE_REF so the existing rebase automation can resolve conflicts in the commits after $BASE_PREVIOUS_SHA. Review the result and mark this pull request ready again."
+            if [ "$GITHUB_REPOSITORY" = "astral-sh/uv-security" ]; then
+              comment="$comment Retargeted it to $REBASE_REF. Rebase the commits after $BASE_PREVIOUS_SHA, review the result, and mark this pull request ready again."
+            else
+              comment="$comment Retargeted it to $REBASE_REF so the existing rebase automation can resolve conflicts in the commits after $BASE_PREVIOUS_SHA. Review the result and mark this pull request ready again."
+            fi
           else
             comment="$comment Please review the updated changes and mark it ready for review again."
           fi
