@@ -53,6 +53,19 @@
       "installation": "automations"
     },
     {
+      "caller": "uv-security",
+      "environment": "automations",
+      "caller_workflow": "promote-pull-request.yml",
+      "on": ["workflow_dispatch"],
+      "permissions": {
+        "contents": "write",
+        "pull_requests": "write",
+        "workflows": "write"
+      },
+      "targets": ["uv", "uv-security"],
+      "installation": "automations"
+    },
+    {
       "caller": "uv",
       "environment": "automations",
       "caller_workflow": "issue-triage.yml",

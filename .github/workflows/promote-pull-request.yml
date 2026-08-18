@@ -4,11 +4,11 @@ on:
   workflow_dispatch:
     inputs:
       pull_request:
-        description: "The uv-dev pull request number"
+        description: "The source pull request number"
         required: true
         type: string
       head_sha:
-        description: "The uv-dev pull request head SHA approved for promotion"
+        description: "The source pull request head SHA approved for promotion"
         required: true
         type: string
 
@@ -16,7 +16,6 @@ permissions: {}
 
 env:
   UV_REPOSITORY_ID: "699532645"
-  UV_DEV_REPOSITORY_ID: "1302176231"
   AUTOMATIONS_BOT_ID: "305554984"
 
 concurrency:
@@ -26,7 +25,7 @@ concurrency:
 jobs:
   prepare:
     name: "Prepare promotion of pull request #${{ inputs.pull_request }}"
-    if: github.repository == 'astral-sh/uv-dev'
+    if: github.repository == 'astral-sh/uv-dev' || github.repository == 'astral-sh/uv-security'
     runs-on: ubuntu-slim
     environment: automations
     timeout-minutes: 10
@@ -67,7 +66,7 @@ jobs:
           if ! jq --exit-status \
             '.state == "OPEN" and (.isDraft | not) and (.isCrossRepository | not)' \
             "$RUNNER_TEMP/pull-request.json" > /dev/null; then
-            echo "The uv-dev pull request is no longer ready; refusing to promote it." >&2
+            echo "The source pull request is no longer ready; refusing to promote it." >&2
             exit 1
           fi
 
@@ -89,7 +88,7 @@ jobs:
           audience: ${{ secrets.STS_API_URL }}
           repositories: |
             astral-sh/uv
-            astral-sh/uv-dev
+            ${{ github.repository }}
           # `workflows: write` is required when the promoted branch modifies workflow files.
           permissions: |
             contents: write
@@ -111,7 +110,7 @@ jobs:
             exit 1
           }
 
-          source_pull_request=$(gh api --method GET "repos/astral-sh/uv-dev/pulls/$PULL_REQUEST_NUMBER")
+          source_pull_request=$(gh api --method GET "repos/$GITHUB_REPOSITORY/pulls/$PULL_REQUEST_NUMBER")
           approval=$(
             gh api \
               --method GET \
@@ -128,13 +127,22 @@ jobs:
           echo "promoter=$promoter" >> "$GITHUB_OUTPUT"
           echo "approval_id=$(jq --raw-output '.id' <<< "$approval")" >> "$GITHUB_OUTPUT"
 
+          if [ "$GITHUB_REPOSITORY" = "astral-sh/uv-security" ]; then
+            promoter_permission=$(gh api --method GET "repos/$GITHUB_REPOSITORY/collaborators/$promoter/permission")
+            if ! jq --exit-status \
+              '.permission == "admin" or .permission == "maintain" or .permission == "write"' \
+              <<< "$promoter_permission" > /dev/null; then
+              reject "The private pull request was not approved by a repository writer."
+            fi
+          fi
+
           if ! jq --exit-status \
             --arg base_ref "$BASE_REF" \
             --arg head_ref "$HEAD_REF" \
-            --argjson repository_id "$UV_DEV_REPOSITORY_ID" \
+            --argjson repository_id "$GITHUB_REPOSITORY_ID" \
             '.state == "open" and (.draft | not) and .base.ref == $base_ref and .head.ref == $head_ref and .base.repo.id == $repository_id and .head.repo.id == $repository_id' \
             <<< "$source_pull_request" > /dev/null; then
-            reject "The uv-dev pull request is no longer ready on the expected branch."
+            reject "The source pull request is no longer ready on the expected branch."
           fi
 
           source_head=$(jq --raw-output '.head.sha' <<< "$source_pull_request")
@@ -171,7 +179,8 @@ jobs:
                 if ! jq --exit-status \
                   --arg base_ref "$BASE_REF" \
                   --arg base_head "$base_head" \
-                  'length == 1 and .[0].headRefName == $base_ref and .[0].headRefOid == $base_head and .[0].headRepository.nameWithOwner == "astral-sh/uv-dev"' \
+                  --arg source_repository "$GITHUB_REPOSITORY" \
+                  'length == 1 and .[0].headRefName == $base_ref and .[0].headRefOid == $base_head and .[0].headRepository.nameWithOwner == $source_repository' \
                   <<< "$source_parent_pull_requests" > /dev/null; then
                   reject "The upstream base branch $BASE_REF does not have a matching open parent pull request."
                 fi
@@ -219,7 +228,8 @@ jobs:
                 )
                 if ! jq --exit-status \
                   --arg base_ref "$BASE_REF" --arg base_head "$base_head" \
-                  'length == 1 and .[0].headRefName == $base_ref and .[0].headRefOid == $base_head and .[0].headRepository.nameWithOwner == "astral-sh/uv-dev"' \
+                  --arg source_repository "$GITHUB_REPOSITORY" \
+                  'length == 1 and .[0].headRefName == $base_ref and .[0].headRefOid == $base_head and .[0].headRepository.nameWithOwner == $source_repository' \
                   <<< "$closed_source_parents" > /dev/null; then
                   reject "The merged parent of $BASE_REF is at $parent_head, but the original source parent at $base_head could not be verified."
                 fi
@@ -227,7 +237,7 @@ jobs:
                 source_parent=$(gh api --method GET "repos/$GITHUB_REPOSITORY/pulls/$source_parent_number")
                 if ! jq --exit-status \
                   --arg base_ref "$BASE_REF" --arg base_head "$base_head" \
-                  --argjson repository_id "$UV_DEV_REPOSITORY_ID" \
+                  --argjson repository_id "$GITHUB_REPOSITORY_ID" \
                   '.state == "closed" and .head.ref == $base_ref and .head.sha == $base_head and .base.repo.id == $repository_id and .head.repo.id == $repository_id' \
                   <<< "$source_parent" > /dev/null; then
                   reject "The original source parent of $BASE_REF changed before it could be verified."
@@ -287,7 +297,7 @@ jobs:
                 --arg base_head "$base_head" \
                 --arg head_ref "$HEAD_REF" \
                 --arg head_sha "$source_head" \
-                --argjson repository_id "$UV_DEV_REPOSITORY_ID" \
+                --argjson repository_id "$GITHUB_REPOSITORY_ID" \
                 '.state == "open" and (.draft | not) and .base.ref == $base_ref and .base.sha == $base_head and .head.ref == $head_ref and .head.sha == $head_sha and .base.repo.id == $repository_id and .head.repo.id == $repository_id' \
                 <<< "$current_pull_request" > /dev/null; then
                 reject "The pull request changed before its merged parent could be updated."
@@ -306,7 +316,8 @@ jobs:
             if ! jq --exit-status \
               --arg base_ref "$BASE_REF" \
               --arg base_head "$base_head" \
-              'length == 1 and .[0].headRefName == $base_ref and .[0].headRefOid == $base_head and .[0].headRepository.nameWithOwner == "astral-sh/uv-dev"' \
+              --arg source_repository "$GITHUB_REPOSITORY" \
+              'length == 1 and .[0].headRefName == $base_ref and .[0].headRefOid == $base_head and .[0].headRepository.nameWithOwner == $source_repository' \
               <<< "$parent_pull_requests" > /dev/null; then
               reject "The upstream base branch $BASE_REF does not have a matching open parent pull request."
             fi
@@ -406,7 +417,7 @@ jobs:
           audience: ${{ secrets.STS_API_URL }}
           repositories: |
             astral-sh/uv
-            astral-sh/uv-dev
+            ${{ github.repository }}
           # `workflows: write` is required when the promoted branch modifies workflow files.
           permissions: |
             contents: write
@@ -437,7 +448,7 @@ jobs:
             exit 1
           }
 
-          source_pull_request=$(gh api --method GET "repos/astral-sh/uv-dev/pulls/$PULL_REQUEST_NUMBER")
+          source_pull_request=$(gh api --method GET "repos/$GITHUB_REPOSITORY/pulls/$PULL_REQUEST_NUMBER")
           current_approval=$(
             gh api --method GET "repos/$GITHUB_REPOSITORY/issues/$PULL_REQUEST_NUMBER/events" --paginate --slurp |
               jq --raw-output '[.[][] | select(.event == "ready_for_review" and .actor.type == "User") | .id] | last // empty'
@@ -446,7 +457,7 @@ jobs:
             --arg action "$ACTION" \
             --arg source_base_ref "$SOURCE_BASE_REF" --arg source_base_sha "$SOURCE_BASE_SHA" \
             --arg head_ref "$HEAD_REF" --arg head_sha "$EXPECTED_HEAD_SHA" \
-            --argjson repository_id "$UV_DEV_REPOSITORY_ID" \
+            --argjson repository_id "$GITHUB_REPOSITORY_ID" \
             '.state == "open" and (.draft | not) and .base.ref == $source_base_ref and ($action != "update-parent" or .base.sha == $source_base_sha) and .head.ref == $head_ref and .head.sha == $head_sha and .base.repo.id == $repository_id and .head.repo.id == $repository_id' \
             <<< "$source_pull_request" > /dev/null; then
             reject "The source pull request or its approval changed before publication."
@@ -493,7 +504,49 @@ jobs:
             fi
 
             if [ -z "$upstream_head" ]; then
-              if [ "$PROMOTED_HEAD" != "$EXPECTED_HEAD_SHA" ]; then
+              if [ "$GITHUB_REPOSITORY" = "astral-sh/uv-security" ] && [ "$PROMOTED_HEAD" = "$EXPECTED_HEAD_SHA" ]; then
+                # The private repository is not in uv's public fork network. Transfer the
+                # approved commit without checking out or executing any of its contents.
+                promotion_repository="$RUNNER_TEMP/promotion.git"
+                git init --bare "$promotion_repository"
+                git -C "$promotion_repository" config credential.helper '!gh auth git-credential'
+                git -C "$promotion_repository" fetch --no-tags \
+                  https://github.com/astral-sh/uv.git \
+                  "refs/heads/$BASE_REF:refs/heads/upstream-base"
+
+                # Do not disclose an unpublished private parent as part of another PR.
+                if ! git -C "$promotion_repository" merge-base --is-ancestor \
+                  "$SOURCE_BASE_SHA" refs/heads/upstream-base; then
+                  reject "The private pull request base is not on its upstream branch."
+                fi
+
+                git -C "$promotion_repository" fetch --no-tags \
+                  "https://github.com/$GITHUB_REPOSITORY.git" \
+                  "$EXPECTED_HEAD_SHA:refs/heads/approved"
+                test "$(git -C "$promotion_repository" rev-parse refs/heads/approved)" = "$EXPECTED_HEAD_SHA"
+                git -C "$promotion_repository" merge-base refs/heads/upstream-base refs/heads/approved > /dev/null
+
+                current_pull_request=$(gh api --method GET "repos/$GITHUB_REPOSITORY/pulls/$PULL_REQUEST_NUMBER")
+                current_head=$(jq --raw-output '.head.sha' <<< "$current_pull_request")
+                if [ "$current_head" != "$EXPECTED_HEAD_SHA" ]; then
+                  echo "changed_head=$current_head" >> "$GITHUB_OUTPUT"
+                  exit 0
+                fi
+                if ! jq --exit-status \
+                  --arg base_ref "$SOURCE_BASE_REF" \
+                  --arg base_head "$SOURCE_BASE_SHA" \
+                  --arg head_ref "$HEAD_REF" \
+                  --argjson repository_id "$GITHUB_REPOSITORY_ID" \
+                  '.state == "open" and (.draft | not) and .base.ref == $base_ref and .base.sha == $base_head and .head.ref == $head_ref and .base.repo.id == $repository_id and .head.repo.id == $repository_id' \
+                  <<< "$current_pull_request" > /dev/null; then
+                  reject "The private pull request changed before publication."
+                fi
+
+                git -C "$promotion_repository" push \
+                  "--force-with-lease=refs/heads/$HEAD_REF:" \
+                  https://github.com/astral-sh/uv.git \
+                  "$EXPECTED_HEAD_SHA:refs/heads/$HEAD_REF"
+              elif [ "$PROMOTED_HEAD" != "$EXPECTED_HEAD_SHA" ]; then
                 git -c core.hooksPath=/dev/null -c credential.helper= -c 'credential.helper=!gh auth git-credential' push \
                   --force-with-lease="refs/heads/$HEAD_REF:" \
                   https://github.com/astral-sh/uv.git "$PROMOTED_HEAD:refs/heads/$HEAD_REF"
@@ -551,7 +604,7 @@ jobs:
 
           echo "number=$upstream_number" >> "$GITHUB_OUTPUT"
 
-      - name: Close uv-dev pull request
+      - name: Close source pull request
         id: close
         if: steps.promote.outputs.number != ''
         env:
@@ -565,7 +618,7 @@ jobs:
           if ! jq --exit-status \
             '.state == "OPEN" and (.isDraft | not)' \
             <<< "$pull_request" > /dev/null; then
-            echo "The uv-dev pull request is no longer ready; refusing to close it." >&2
+            echo "The source pull request is no longer ready; refusing to close it." >&2
             exit 1
           fi
 
@@ -585,7 +638,7 @@ jobs:
             --repo "$GITHUB_REPOSITORY" \
             --comment "Promoted to [#$UPSTREAM_NUMBER]($upstream_url)."
 
-          echo "Promoted uv-dev pull request #$PULL_REQUEST_NUMBER to [#$UPSTREAM_NUMBER]($upstream_url)." >> "$GITHUB_STEP_SUMMARY"
+          echo "Promoted $GITHUB_REPOSITORY#$PULL_REQUEST_NUMBER to [#$UPSTREAM_NUMBER]($upstream_url)." >> "$GITHUB_STEP_SUMMARY"
 
   recover:
     name: "Recover rejected promotion #${{ inputs.pull_request }}"
@@ -606,7 +659,7 @@ jobs:
           audience: ${{ secrets.STS_API_URL }}
           repositories: |
             astral-sh/uv
-            astral-sh/uv-dev
+            ${{ github.repository }}
           # `workflows: write` is required when the promoted branch modifies workflow files.
           permissions: |
             contents: write
@@ -635,7 +688,7 @@ jobs:
           )
           pull_request=$(gh api --method GET "repos/$GITHUB_REPOSITORY/pulls/$PULL_REQUEST_NUMBER")
           if [ -z "$APPROVAL_ID" ] || [ "$current_approval" != "$APPROVAL_ID" ] || ! jq --exit-status \
-            --argjson repository_id "$UV_DEV_REPOSITORY_ID" \
+            --argjson repository_id "$GITHUB_REPOSITORY_ID" \
             '.state == "open" and .base.repo.id == $repository_id and .head.repo.id == $repository_id' \
             <<< "$pull_request" > /dev/null; then
             echo "The rejected promotion was superseded; leaving the pull request unchanged."
@@ -695,4 +748,4 @@ jobs:
             gh pr comment "$PULL_REQUEST_NUMBER" --repo "$GITHUB_REPOSITORY" --body "$comment"
           fi
 
-          echo "Returned uv-dev pull request #$PULL_REQUEST_NUMBER to draft: $REJECTION_REASON" >> "$GITHUB_STEP_SUMMARY"
+          echo "Returned $GITHUB_REPOSITORY#$PULL_REQUEST_NUMBER to draft: $REJECTION_REASON" >> "$GITHUB_STEP_SUMMARY"
