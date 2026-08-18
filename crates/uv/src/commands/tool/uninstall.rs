@@ -134,12 +134,11 @@ async fn do_uninstall(
         let mut entrypoints = vec![];
         for name in names {
             let receipt = match installed_tools.get_tool_receipt(&name) {
-                Ok(Some(receipt)) => Some(receipt),
-                Ok(None) => None,
-                // If the receipt is malformed, treat it the same as a missing receipt so we can
-                // still remove the dangling environment.
-                Err(uv_tool::Error::ReceiptRead(..)) => None,
-                Err(err) => return Err(err.into()),
+                Ok(receipt) => receipt,
+                // If the receipt is malformed (e.g., invalid TOML or non-UTF-8 content), treat
+                // it the same as a missing receipt so we can still remove the dangling
+                // environment.
+                Err(_) => None,
             };
             let Some(receipt) = receipt else {
                 // If the tool is not installed properly, attempt to remove the environment anyway.
