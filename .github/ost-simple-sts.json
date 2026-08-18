@@ -137,6 +137,15 @@
     {
       "caller": "uv-dev",
       "environment": "automations",
+      "caller_workflow": "pull-request-conflicts.yml",
+      "reusable_workflow": "rebase-conflicted-pull-request.yml",
+      "on": ["workflow_dispatch"],
+      "permissions": { "pull_requests": "write" },
+      "target": "uv-dev"
+    },
+    {
+      "caller": "uv-dev",
+      "environment": "automations",
       "caller_workflow": "diagnose-workflow-failure.yml",
       "on": ["workflow_dispatch"],
       "permissions": {

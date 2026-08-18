@@ -1,9 +1,9 @@
-Rebase the checked-out pull request onto `refs/remotes/origin/$BASE_REF` and resolve its conflicts:
+The checked-out pull request's rebase onto `$BASE_SHA` is already in progress and has conflicts.
 
-- If `$BASE_PREVIOUS_SHA` is set, run
-  `git rebase --onto "refs/remotes/origin/$BASE_REF" "$BASE_PREVIOUS_SHA"` so only the stacked pull
-  request's commits are replayed.
-- Otherwise, run `git rebase "refs/remotes/origin/$BASE_REF"`.
+If `$BASE_PREVIOUS_SHA` is set, the workflow started
+`git rebase --onto "$BASE_SHA" "$BASE_PREVIOUS_SHA"` to replay only the stacked pull request's
+commits. Otherwise it started `git rebase "$BASE_SHA"`. Continue that rebase; do not restart it or
+widen its commit range.
 
 In any GitHub-facing output, write issue and pull request references in the canonical
 owner/repository#number form, such as astral-sh/uv#123 or astral-sh/uv-dev#123. This preserves
