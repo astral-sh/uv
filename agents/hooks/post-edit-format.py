@@ -42,9 +42,12 @@ def format_python(file_path: str, cwd: str) -> None:
 
 def format_prettier(file_path: str, cwd: str) -> None:
     """Format files with prettier."""
+    prettier = (
+        Path(__file__).resolve().parents[2] / "node_modules/prettier/bin/prettier.cjs"
+    )
     try:
         subprocess.run(
-            ["npx", "--ignore-scripts", "prettier@3.9.0", "--write", file_path],
+            ["node", str(prettier), "--write", file_path],
             cwd=cwd,
             capture_output=True,
             check=False,

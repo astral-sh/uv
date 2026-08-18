@@ -149,9 +149,10 @@ cargo fmt --all
 uvx ruff format .
 
 # Markdown, YAML, and other files (requires Node.js)
-npx --ignore-scripts prettier@3.9.0 --write .
+npm ci --ignore-scripts
+npm run prettier -- --write .
 # or in Docker
-docker run --rm -v .:/src/ -w /src/ node:alpine npx --ignore-scripts prettier@3.9.0 --write .
+docker run --rm -v .:/src/ -w /src/ node:alpine sh -c 'npm ci --ignore-scripts && npm run prettier -- --write .'
 ```
 
 ## Linting
@@ -278,7 +279,8 @@ To preview any changes to the documentation locally:
 
 1. Install the [Rust toolchain](https://www.rust-lang.org/tools/install).
 
-2. Install [Node](https://nodejs.org/en/download) - needed to run Prettier to format the docs
+2. Install [Node](https://nodejs.org/en/download) and run `npm ci --ignore-scripts` to install the
+   locked formatting tools.
 
 3. Run `cargo dev generate-all`, to update any auto-generated documentation.
 

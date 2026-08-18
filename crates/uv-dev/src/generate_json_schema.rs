@@ -98,14 +98,14 @@ fn generate() -> Result<String> {
 
     let json = serde_json::to_string_pretty(&schema).unwrap();
 
-    // Format with prettier
-    let output = Command::new("npx")
-        .args([
-            "--ignore-scripts",
-            "prettier@3.9.0",
-            "--stdin-filepath",
-            "uv.schema.json",
-        ])
+    // Format with the locked Prettier installation.
+    let prettier = PathBuf::from(ROOT_DIR).join("node_modules/prettier/bin/prettier.cjs");
+    if !prettier.is_file() {
+        bail!("Prettier is not installed; run `npm ci --ignore-scripts` first");
+    }
+    let output = Command::new("node")
+        .arg(prettier)
+        .args(["--stdin-filepath", "uv.schema.json"])
         .current_dir(ROOT_DIR)
         .stdin(std::process::Stdio::piped())
         .stdout(std::process::Stdio::piped())

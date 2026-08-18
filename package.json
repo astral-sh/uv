@@ -1,0 +1,11 @@
+{
+  "name": "uv-development",
+  "private": true,
+  "scripts": {
+    "prettier": "node node_modules/prettier/bin/prettier.cjs"
+  },
+  "devDependencies": {
+    "prettier": "3.9.0",
+    "prettier-readmes": "npm:prettier@3.8.3"
+  }
+}
