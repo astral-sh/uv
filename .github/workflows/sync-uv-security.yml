@@ -35,13 +35,10 @@ jobs:
           fi
 
           # Keep the object database limited to public main. No checkout is needed.
-          mkdir "$SYNC_REPOSITORY"
-          git init --quiet --bare --initial-branch=main "$SYNC_REPOSITORY"
-          git -C "$SYNC_REPOSITORY" fetch --quiet --no-tags --no-recurse-submodules \
-            https://github.com/astral-sh/uv.git \
-            refs/heads/main:refs/heads/public-main
+          git clone --quiet --bare --single-branch --branch main --no-tags --no-recurse-submodules \
+            https://github.com/astral-sh/uv.git "$SYNC_REPOSITORY"
           if [[ "$(git -C "$SYNC_REPOSITORY" cat-file -t "$SOURCE_SHA" 2>/dev/null)" != commit ]] ||
-            ! git -C "$SYNC_REPOSITORY" merge-base --is-ancestor "$SOURCE_SHA" refs/heads/public-main; then
+            ! git -C "$SYNC_REPOSITORY" merge-base --is-ancestor "$SOURCE_SHA" refs/heads/main; then
             echo "::error::The requested commit is not on public main."
             exit 1
           fi
@@ -86,7 +83,7 @@ jobs:
 
           if [[ "$(git -C "$SYNC_REPOSITORY" cat-file -t "$destination_sha" 2>/dev/null)" != commit ]] ||
             ! git -C "$SYNC_REPOSITORY" merge-base --is-ancestor \
-              "$destination_sha" refs/heads/public-main 2>/dev/null; then
+              "$destination_sha" refs/heads/main 2>/dev/null; then
             echo "::error::uv-security main is not on public main; refusing to sync."
             exit 1
           fi
