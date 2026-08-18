@@ -47,6 +47,8 @@ on:
         type: string
 
 env:
+  # Release actions must not consume shared GitHub Actions caches.
+  ACTIONS_CACHE_MODE: none
   CARGO_DIST_VERSION: "0.31.0"
   CARGO_DIST_CHECKSUM: "cd355dab0b4c02fb59038fef87655550021d07f45f1d82f947a34ef98560abb8"
 

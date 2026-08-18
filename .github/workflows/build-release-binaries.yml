@@ -19,6 +19,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
+  ACTIONS_CACHE_MODE: none
   PACKAGE_NAME: uv
   MODULE_NAME: uv
   PYTHON_VERSION: "3.11"
