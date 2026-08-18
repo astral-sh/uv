@@ -10797,7 +10797,7 @@ dev = [
     Ok(())
 }
 
-/// Resolve from a `pyproject.toml` file with a recursive extra, with a marker attached.
+/// Resolve a recursive extra with requirements shared between production and another extra.
 #[cfg(feature = "test-universal")]
 #[test]
 fn compile_pyproject_toml_recursive_extra_marker() -> Result<()> {
@@ -10809,13 +10809,12 @@ fn compile_pyproject_toml_recursive_extra_marker() -> Result<()> {
 name = "project"
 version = "0.0.1"
 dependencies = [
-    "anyio"
+    "anyio",
+    "iniconfig ; sys_platform == 'win32' or extra == 'test'",
 ]
 
 [project.optional-dependencies]
-test = [
-    "iniconfig",
-]
+test = []
 dev = [
     "project[test] ; sys_platform == 'darwin'",
 ]
@@ -10835,7 +10834,7 @@ dev = [
         # via project (pyproject.toml)
     idna==3.6
         # via anyio
-    iniconfig==2.0.0 ; sys_platform == 'darwin'
+    iniconfig==2.0.0 ; sys_platform == 'win32'
         # via project (pyproject.toml)
     sniffio==1.3.1
         # via anyio
