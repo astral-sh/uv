@@ -294,15 +294,6 @@ impl Serialize for CoreMetadata {
     }
 }
 
-impl CoreMetadata {
-    pub fn is_available(&self) -> bool {
-        match self {
-            Self::Bool(is_available) => *is_available,
-            Self::Hashes(_) => true,
-        }
-    }
-}
-
 #[derive(Debug, Clone, PartialEq, Eq, Hash, rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)]
 #[rkyv(derive(Debug))]
 pub enum Yanked {

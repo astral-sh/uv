@@ -356,7 +356,7 @@ impl<'a> FlatIndexClient<'a> {
             let url = DisplaySafeUrl::from_file_path(entry.path()).unwrap();
 
             let file = File {
-                dist_info_metadata: false,
+                dist_info_metadata: None,
                 filename: filename.into(),
                 hashes: HashDigests::empty(),
                 requires_python: None,
@@ -399,16 +399,22 @@ mod tests {
     use tempfile::tempdir;
     use uv_distribution_types::Zstd;
 
-    /// Round-trip a synthetic cache entry containing deprecated pyx-specific zstd wheel metadata
-    /// and verify that the metadata is discarded before the file is used.
+    /// Round-trip a synthetic flat-index cache entry, preserving sidecar hashes and discarding
+    /// deprecated pyx-specific zstd wheel metadata before the file is used.
     #[test]
-    fn cached_files_ignore_deprecated_zstd() -> Result<(), Box<dyn std::error::Error>> {
+    fn cached_files_round_trip() -> Result<(), Box<dyn std::error::Error>> {
         let url = DisplaySafeUrl::parse("https://example.com/flat/")?;
         let mut files = FlatIndexClient::parse_html(
-            r#"<a href="example-1.0.0-py3-none-any.whl">example-1.0.0-py3-none-any.whl</a>"#,
+            r#"<a href="example-1.0.0-py3-none-any.whl" data-core-metadata="sha256=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef">example-1.0.0-py3-none-any.whl</a>"#,
             &url,
         )?;
         assert_eq!(files.len(), 1);
+        let metadata_hashes = files[0].dist_info_metadata.clone();
+        assert!(
+            metadata_hashes
+                .as_ref()
+                .is_some_and(|hashes| !hashes.is_empty())
+        );
         assert!(files[0].zstd.is_none());
         files[0].zstd = Some(Box::new(Zstd {
             hashes: HashDigests::empty(),
@@ -421,6 +427,7 @@ mod tests {
             FlatIndexClient::entries_from_files(files, &IndexUrl::parse(url.as_str(), None)?);
         assert_eq!(entries.entries.len(), 1);
         assert!(entries.entries[0].file.zstd.is_none());
+        assert_eq!(entries.entries[0].file.dist_info_metadata, metadata_hashes);
         Ok(())
     }
 

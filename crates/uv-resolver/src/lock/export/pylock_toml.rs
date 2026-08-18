@@ -1708,7 +1708,7 @@ impl PylockTomlWheel {
         };
 
         let file = Box::new(uv_distribution_types::File {
-            dist_info_metadata: false,
+            dist_info_metadata: None,
             filename: SmallString::from(filename.to_string()),
             hashes: HashDigests::from(self.hashes.clone()),
             requires_python: None,
@@ -1872,7 +1872,7 @@ impl PylockTomlSdist {
         };
 
         let file = Box::new(uv_distribution_types::File {
-            dist_info_metadata: false,
+            dist_info_metadata: None,
             filename,
             hashes: HashDigests::from(self.hashes.clone()),
             requires_python: None,

@@ -1025,7 +1025,7 @@ impl RegistryClient {
         } = wheel;
 
         // If the metadata file is available at its own url (PEP 658), download it from there.
-        if file.dist_info_metadata {
+        if file.dist_info_metadata.is_some() {
             let mut url = url.clone();
             let path = format!("{}.metadata", url.path());
             url.set_path(&path);
@@ -1370,6 +1370,8 @@ pub struct CachedFile {
     // TODO: Remove this field when the Simple API cache format is next bumped.
     #[rkyv(with = rkyv::with::Niche)]
     zstd: Option<Box<Zstd>>,
+    #[rkyv(with = rkyv::with::Niche)]
+    metadata_hashes: Option<Box<CachedHashDigests>>,
     dist_info_metadata: bool,
     has_size: bool,
     has_upload_time: bool,
@@ -1403,8 +1405,15 @@ impl From<File> for CachedFile {
             (file.url.raw_filename() != file.filename.as_ref()).then(|| Box::new(file.filename));
         let has_size = file.size.is_some();
         let has_upload_time = file.upload_time_utc_ms.is_some();
+        let dist_info_metadata = file.dist_info_metadata.is_some();
+        let metadata_hashes = file
+            .dist_info_metadata
+            .filter(|hashes| !hashes.is_empty())
+            .map(CachedHashDigests::from)
+            .map(Box::new);
         Self {
-            dist_info_metadata: file.dist_info_metadata,
+            dist_info_metadata,
+            metadata_hashes,
             filename,
             hashes: CachedHashDigests::from(file.hashes),
             requires_python: file.requires_python,
@@ -1422,8 +1431,12 @@ impl From<File> for CachedFile {
 impl From<CachedFile> for File {
     fn from(file: CachedFile) -> Self {
         let filename = SmallString::from(file.filename());
+        let dist_info_metadata = file.dist_info_metadata.then(|| {
+            file.metadata_hashes
+                .map_or_else(HashDigests::empty, |hashes| HashDigests::from(*hashes))
+        });
         Self {
-            dist_info_metadata: file.dist_info_metadata,
+            dist_info_metadata,
             filename,
             hashes: HashDigests::from(file.hashes),
             requires_python: file.requires_python,
@@ -1791,7 +1804,7 @@ mod tests {
     use tokio::sync::Semaphore;
     use url::Url;
     use uv_normalize::PackageName;
-    use uv_pypi_types::{HashDigests, PypiSimpleDetail};
+    use uv_pypi_types::{HashDigest, HashDigests, PypiSimpleDetail};
     use uv_redacted::DisplaySafeUrl;
     use uv_torch::{TorchBackend, TorchStrategy};
 
@@ -2151,6 +2164,9 @@ mod tests {
             "files": [
                 {
                     "filename": "example_1-1.0.0-py3-none-any.whl",
+                    "core-metadata": {
+                        "sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+                    },
                     "hashes": {},
                     "url": "https://files.pythonhosted.org/example_1-1.0.0-py3-none-any.whl"
                 },
@@ -2181,7 +2197,7 @@ mod tests {
         let archived = super::OwnedArchive::from_unarchived(&simple_metadata)?;
         let simple_metadata = super::OwnedArchive::deserialize(&archived);
 
-        let filenames: Vec<_> = simple_metadata
+        let files: Vec<_> = simple_metadata
             .versions
             .into_iter()
             .flat_map(|datum| datum.files.all(&package_name))
@@ -2194,13 +2210,26 @@ mod tests {
                 }));
                 let cached = super::CachedFile::from(file);
                 assert!(cached.zstd.is_none());
-                assert!(File::from(cached).zstd.is_none());
-                filename.to_string()
+                let file = File::from(cached);
+                assert!(file.zstd.is_none());
+                (filename, file)
             })
+            .collect();
+        let filenames: Vec<_> = files
+            .iter()
+            .map(|(filename, _)| filename.to_string())
             .collect();
         assert_eq!(
             filenames,
             ["example_1-1.0.0.tar.gz", "example_1-1.0.0-py3-none-any.whl"]
+        );
+        assert!(files[0].1.dist_info_metadata.is_none());
+        let metadata_hashes = HashDigests::from(HashDigest::from_str(
+            "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+        )?);
+        assert_eq!(
+            files[1].1.dist_info_metadata.as_ref(),
+            Some(&metadata_hashes)
         );
 
         Ok(())
@@ -2288,6 +2317,7 @@ mod tests {
                                 filename: None,
                                 yanked: None,
                                 zstd: None,
+                                metadata_hashes: None,
                                 dist_info_metadata: false,
                                 has_size: true,
                                 has_upload_time: true,
@@ -2360,6 +2390,7 @@ mod tests {
                                 filename: None,
                                 yanked: None,
                                 zstd: None,
+                                metadata_hashes: None,
                                 dist_info_metadata: false,
                                 has_size: false,
                                 has_upload_time: false,

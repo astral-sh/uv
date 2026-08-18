@@ -23,7 +23,8 @@ pub enum FileConversionError {
 #[derive(Debug, Clone, PartialEq, Eq, Hash, rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)]
 #[rkyv(derive(Debug))]
 pub struct File {
-    pub dist_info_metadata: bool,
+    /// Hashes for separately available metadata, or an empty list when no hashes were provided.
+    pub dist_info_metadata: Option<HashDigests>,
     pub filename: SmallString,
     pub hashes: HashDigests,
     pub requires_python: Option<Arc<VersionSpecifiers>>,
@@ -48,10 +49,7 @@ impl File {
         base: &SmallString,
     ) -> Result<Self, FileConversionError> {
         Ok(Self {
-            dist_info_metadata: file
-                .core_metadata
-                .as_ref()
-                .is_some_and(CoreMetadata::is_available),
+            dist_info_metadata: Self::dist_info_metadata(file.core_metadata),
             filename: file.filename,
             hashes: HashDigests::from(file.hashes),
             requires_python: file
@@ -64,6 +62,14 @@ impl File {
             yanked: file.yanked,
             zstd: None,
         })
+    }
+
+    fn dist_info_metadata(metadata: Option<CoreMetadata>) -> Option<HashDigests> {
+        match metadata? {
+            CoreMetadata::Bool(false) => None,
+            CoreMetadata::Bool(true) => Some(HashDigests::empty()),
+            CoreMetadata::Hashes(hashes) => Some(HashDigests::from(hashes)),
+        }
     }
 }
 
