@@ -13,7 +13,7 @@ uv pip install ruff==0.16.2 -v
 
 # Install a package with extension modules, e.g., `cryptography` and make sure it's importable
 uv pip install cryptography==50.0.0 -v
-uv run --no-project python -c "import cryptography; print(numpy.__version__)"
+uv run --no-project python -c "import cryptography; print(cryptography.__version__)"
 
 # Show the `uvx` version
 uvx --version
