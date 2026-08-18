@@ -751,7 +751,7 @@ async fn upload_error_pypi_json() {
     );
 }
 
-/// pyx returns `application/problem+json` errors with RFC 9457 Problem Details.
+/// Handle `application/problem+json` errors with RFC 9457 Problem Details.
 #[tokio::test]
 async fn upload_error_problem_details() {
     let context = uv_test::test_context!("3.12").with_filtered_sizes();
