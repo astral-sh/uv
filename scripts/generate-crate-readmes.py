@@ -153,7 +153,7 @@ def main() -> None:
 
     # Format all generated READMEs once at the end
     subprocess.run(
-        ["npx", "--yes", f"prettier@{PRETTIER_VERSION}", "--write"]
+        ["npx", "--yes", "--ignore-scripts", f"prettier@{PRETTIER_VERSION}", "--write"]
         + [str(path) for path in generated_paths],
         check=True,
         stdout=subprocess.DEVNULL,

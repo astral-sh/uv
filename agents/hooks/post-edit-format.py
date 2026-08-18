@@ -44,7 +44,7 @@ def format_prettier(file_path: str, cwd: str) -> None:
     """Format files with prettier."""
     try:
         subprocess.run(
-            ["npx", "prettier@3.9.0", "--write", file_path],
+            ["npx", "--ignore-scripts", "prettier@3.9.0", "--write", file_path],
             cwd=cwd,
             capture_output=True,
             check=False,
