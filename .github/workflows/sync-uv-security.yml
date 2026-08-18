@@ -1,0 +1,105 @@
+name: Sync uv-security
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: sync-uv-security-main
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    name: Sync uv-security
+    if: github.repository == 'astral-sh/uv' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-slim
+    environment: automations
+    permissions:
+      id-token: write # for the credential broker
+    defaults:
+      run:
+        shell: bash
+    env:
+      SOURCE_SHA: ${{ github.sha }}
+    steps:
+      - name: Prepare public history
+        env:
+          SYNC_REPOSITORY: ${{ runner.temp }}/uv-security-sync.git
+        run: |
+          if [[ ! "$SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::Expected a public commit SHA."
+            exit 1
+          fi
+
+          # Keep the object database limited to public main. No checkout is needed.
+          git clone --quiet --bare --single-branch --branch main --no-tags --no-recurse-submodules \
+            https://github.com/astral-sh/uv.git "$SYNC_REPOSITORY"
+          if [[ "$(git -C "$SYNC_REPOSITORY" cat-file -t "$SOURCE_SHA" 2>/dev/null)" != commit ]] ||
+            ! git -C "$SYNC_REPOSITORY" merge-base --is-ancestor "$SOURCE_SHA" refs/heads/main; then
+            echo "::error::The requested commit is not on public main."
+            exit 1
+          fi
+
+      - name: Get uv-security token
+        id: token
+        uses: open-security-tools/ost-simple-sts@9e012247e07c39080fb6a832dbfbcfeacebc19c4
+        with:
+          exchange-url: ${{ secrets.STS_API_URL }}/exchange
+          audience: ${{ secrets.STS_API_URL }}
+          repository: astral-sh/uv-security
+          # Workflow permission is required to sync changes to `.github/workflows`.
+          permissions: |
+            contents: write
+            workflows: write
+
+      - name: Sync main
+        env:
+          GH_TOKEN: ${{ steps.token.outputs.token }}
+          SYNC_REPOSITORY: ${{ runner.temp }}/uv-security-sync.git
+        run: |
+          destination_url=https://github.com/astral-sh/uv-security.git
+          destination_git() {
+            git -C "$SYNC_REPOSITORY" \
+              -c credential.helper= \
+              -c 'credential.helper=!gh auth git-credential' "$@"
+          }
+
+          # Read only the private main ref, never its objects or other branches.
+          # Suppress remote diagnostics so private refs cannot enter public logs.
+          if ! destination_main=$(destination_git ls-remote --exit-code --refs \
+            "$destination_url" refs/heads/main 2>/dev/null); then
+            echo "::error::Could not read uv-security main."
+            exit 1
+          fi
+          destination_sha="${destination_main%%$'\t'*}"
+          if [[ ! "$destination_sha" =~ ^[0-9a-f]{40}$ ||
+            "$destination_main" != "$destination_sha"$'\t'refs/heads/main ]]; then
+            echo "::error::Unexpected uv-security main ref."
+            exit 1
+          fi
+
+          if [[ "$(git -C "$SYNC_REPOSITORY" cat-file -t "$destination_sha" 2>/dev/null)" != commit ]] ||
+            ! git -C "$SYNC_REPOSITORY" merge-base --is-ancestor \
+              "$destination_sha" refs/heads/main 2>/dev/null; then
+            echo "::error::uv-security main is not on public main; refusing to sync."
+            exit 1
+          fi
+          if git -C "$SYNC_REPOSITORY" merge-base --is-ancestor "$SOURCE_SHA" "$destination_sha"; then
+            echo "uv-security main already contains this public commit."
+            exit 0
+          fi
+          if ! git -C "$SYNC_REPOSITORY" merge-base --is-ancestor "$destination_sha" "$SOURCE_SHA"; then
+            echo "::error::uv-security main has diverged from this public commit; refusing to sync."
+            exit 1
+          fi
+
+          # The explicit refspec and ordinary push cannot rewrite private main.
+          if ! destination_git push --quiet --no-force --no-follow-tags \
+            "$destination_url" "$SOURCE_SHA:refs/heads/main" > /dev/null 2>&1; then
+            echo "::error::Could not fast-forward uv-security main."
+            exit 1
+          fi
+          echo "Synced uv-security main to the public commit."
