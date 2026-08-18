@@ -3,11 +3,7 @@ use std::fmt::Write;
 use anyhow::{Context, Result, bail};
 use owo_colors::OwoColorize;
 
-use uv_auth::{
-    AuthBackend, Credentials, PyxTokenStore, Service, TextCredentialStore, Username,
-    is_default_pyx_domain,
-};
-use uv_client::BaseClientBuilder;
+use uv_auth::{AuthBackend, Credentials, Service, TextCredentialStore, Username};
 use uv_distribution_types::IndexUrl;
 use uv_pep508::VerbatimUrl;
 use uv_preview::Preview;
@@ -20,15 +16,9 @@ use crate::{commands::ExitStatus, printer::Printer};
 pub(crate) async fn logout(
     service: Service,
     username: Option<String>,
-    client_builder: BaseClientBuilder<'_>,
     printer: Printer,
     preview: Preview,
 ) -> Result<ExitStatus> {
-    let pyx_store = PyxTokenStore::from_settings()?;
-    if pyx_store.is_known_domain(service.url()) || is_default_pyx_domain(service.url()) {
-        return pyx_logout(&pyx_store, client_builder, printer).await;
-    }
-
     let backend = AuthBackend::from_settings(preview).await?;
 
     // TODO(zanieb): Use a shared abstraction across `login` and `logout`?
@@ -87,66 +77,6 @@ pub(crate) async fn logout(
         printer.stderr(),
         "Removed credentials for {}",
         display_url.bold().cyan()
-    )?;
-
-    Ok(ExitStatus::Success)
-}
-
-/// Log out via the [`PyxTokenStore`], invalidating the existing tokens.
-async fn pyx_logout(
-    store: &PyxTokenStore,
-    client_builder: BaseClientBuilder<'_>,
-    printer: Printer,
-) -> Result<ExitStatus> {
-    // Initialize the client.
-    let client = client_builder.build()?;
-
-    // Retrieve the token store.
-    let Some(tokens) = store.read().await? else {
-        writeln!(
-            printer.stderr(),
-            "{}",
-            format_args!("No credentials found for {}", store.api().bold().cyan())
-        )?;
-        return Ok(ExitStatus::Success);
-    };
-
-    // Add the token to the request.
-    let url = {
-        let mut url = store.api().clone();
-        url.set_path("auth/cli/logout");
-        url
-    };
-
-    // Build a basic request first, then authenticate it
-    let request = reqwest::Request::new(reqwest::Method::GET, url.into());
-    let request = Credentials::from(tokens).authenticate(request);
-
-    // Hit the logout endpoint using the client's execute method
-    let response = client.execute(request).await?;
-    match response.error_for_status_ref() {
-        Ok(..) => {}
-        Err(err) if matches!(err.status(), Some(reqwest::StatusCode::UNAUTHORIZED)) => {
-            tracing::debug!(
-                "Received 401 (Unauthorized) response from logout endpoint; removing tokens..."
-            );
-        }
-        Err(err) => {
-            return Err(err.into());
-        }
-    }
-
-    // Remove the tokens from the store.
-    match store.delete().await {
-        Ok(..) => {}
-        Err(err) if matches!(err.kind(), std::io::ErrorKind::NotFound) => {}
-        Err(err) => return Err(err.into()),
-    }
-
-    writeln!(
-        printer.stderr(),
-        "{}",
-        format_args!("Logged out from {}", store.api().bold().cyan())
     )?;
 
     Ok(ExitStatus::Success)

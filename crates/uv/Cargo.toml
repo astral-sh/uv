@@ -92,7 +92,6 @@ indicatif = { workspace = true }
 indoc = { workspace = true }
 itertools = { workspace = true }
 miette = { workspace = true, features = ["fancy-no-backtrace"] }
-open = { workspace = true }
 owo-colors = { workspace = true }
 petgraph = { workspace = true }
 reqwest = { workspace = true }
@@ -114,7 +113,6 @@ tracing-subscriber = { workspace = true, features = ["env-filter", "registry"] }
 tracing-tree = { workspace = true }
 unicode-width = { workspace = true }
 url = { workspace = true }
-uuid = { workspace = true, features = ["v4"] }
 version-ranges = { workspace = true }
 walkdir = { workspace = true }
 which = { workspace = true }

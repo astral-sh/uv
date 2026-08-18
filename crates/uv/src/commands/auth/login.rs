@@ -3,14 +3,7 @@ use std::fmt::Write;
 use anyhow::{Result, bail};
 use console::Term;
 use owo_colors::OwoColorize;
-use url::Url;
-use uuid::Uuid;
-
-use uv_auth::{
-    AccessToken, AuthBackend, Credentials, PyxJwt, PyxOAuthTokens, PyxTokenStore, PyxTokens,
-    Service, TextCredentialStore, is_default_pyx_domain,
-};
-use uv_client::{AuthIntegration, BaseClient, BaseClientBuilder};
+use uv_auth::{AuthBackend, Credentials, Service, TextCredentialStore};
 use uv_distribution_types::IndexUrl;
 use uv_pep508::VerbatimUrl;
 use uv_preview::Preview;
@@ -18,48 +11,15 @@ use uv_preview::Preview;
 use crate::commands::ExitStatus;
 use crate::printer::Printer;
 
-// We retry no more than this many times when polling for login status.
-const STATUS_RETRY_LIMIT: u32 = 60;
-
 /// Login to a service.
 pub(crate) async fn login(
     service: Service,
     username: Option<String>,
     password: Option<String>,
     token: Option<String>,
-    client_builder: BaseClientBuilder<'_>,
     printer: Printer,
     preview: Preview,
 ) -> Result<ExitStatus> {
-    let pyx_store = PyxTokenStore::from_settings()?;
-    if pyx_store.is_known_domain(service.url()) || is_default_pyx_domain(service.url()) {
-        if username.is_some() {
-            bail!("Cannot specify a username when logging in to pyx");
-        }
-        if password.is_some() {
-            bail!("Cannot specify a password when logging in to pyx");
-        }
-
-        let client = client_builder
-            .auth_integration(AuthIntegration::NoAuthMiddleware)
-            .build()?;
-
-        let access_token = pyx_login_with_browser(&pyx_store, &client, &printer).await?;
-        let jwt = PyxJwt::decode(&access_token)?;
-
-        if let Some(name) = jwt.name.as_deref() {
-            writeln!(printer.stderr(), "Logged in to {}", name.bold().cyan())?;
-        } else {
-            writeln!(
-                printer.stderr(),
-                "Logged in to {}",
-                pyx_store.api().bold().cyan()
-            )?;
-        }
-
-        return Ok(ExitStatus::Success);
-    }
-
     let backend = AuthBackend::from_settings(preview).await?;
 
     // If the URL includes a known index URL suffix, strip it
@@ -175,73 +135,4 @@ pub(crate) async fn login(
         display_url.bold().cyan()
     )?;
     Ok(ExitStatus::Success)
-}
-
-/// Log in via the [`PyxTokenStore`].
-pub(crate) async fn pyx_login_with_browser(
-    store: &PyxTokenStore,
-    client: &BaseClient,
-    printer: &Printer,
-) -> Result<AccessToken> {
-    // Generate a login code, like `67e55044-10b1-426f-9247-bb680e5fe0c8`.
-    let cli_token = Uuid::new_v4();
-    let url = {
-        let mut url = store.api().clone();
-        url.set_path(&format!("auth/cli/login/{cli_token}"));
-        url
-    };
-    match open::that(url.as_ref()) {
-        Ok(()) => {
-            writeln!(printer.stderr(), "Logging in with {}", url.cyan().bold())?;
-        }
-        Err(..) => {
-            writeln!(
-                printer.stderr(),
-                "Open the following URL in your browser: {}",
-                url.cyan().bold()
-            )?;
-        }
-    }
-
-    // Poll the server for the login code.
-    let url = {
-        let mut url = store.api().clone();
-        url.set_path(&format!("auth/cli/status/{cli_token}"));
-        url
-    };
-
-    let mut retry = 0;
-    let credentials = loop {
-        let response = client
-            .for_host(store.api())
-            .get(Url::from(url.clone()))
-            .send()
-            .await?;
-        match response.status() {
-            // Retry on 404.
-            reqwest::StatusCode::NOT_FOUND => {
-                tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-                retry += 1;
-            }
-            // Parse the credentials on success.
-            _ if response.status().is_success() => {
-                let credentials = response.json::<PyxOAuthTokens>().await?;
-                break Ok::<PyxTokens, anyhow::Error>(PyxTokens::OAuth(credentials));
-            }
-            // Fail on any other status code (like a 500).
-            status => {
-                break Err(anyhow::anyhow!("Failed to login with code `{status}`"));
-            }
-        }
-
-        if retry >= STATUS_RETRY_LIMIT {
-            break Err(anyhow::anyhow!(
-                "Login session timed out after {STATUS_RETRY_LIMIT} seconds"
-            ));
-        }
-    }?;
-
-    store.write(&credentials).await?;
-
-    Ok(AccessToken::from(credentials))
 }
