@@ -25,10 +25,6 @@ on:
 
 permissions: {}
 
-env:
-  AUTOMATIONS_BOT_ID: "305554984"
-  UV_DEV_REPOSITORY_ID: "1302176231"
-
 jobs:
   rebase:
     name: "Rebase pull request #${{ inputs.number }}"
@@ -39,7 +35,6 @@ jobs:
       contents: read
     outputs:
       base_sha: ${{ steps.prepare.outputs.base_sha }}
-      clean: ${{ steps.git-rebase.outputs.clean }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -95,29 +90,7 @@ jobs:
           base_sha=$(git rev-parse --verify "refs/remotes/origin/$BASE_REF^{commit}")
           echo "base_sha=$base_sha" >> "$GITHUB_OUTPUT"
 
-      - name: Rebase without conflict resolution
-        id: git-rebase
-        env:
-          BASE_SHA: ${{ steps.prepare.outputs.base_sha }}
-          BASE_PREVIOUS_SHA: ${{ inputs.base-previous-sha }}
-          GIT_EDITOR: "true"
-        run: |
-          rebase_args=("$BASE_SHA")
-          if [ -n "$BASE_PREVIOUS_SHA" ]; then
-            rebase_args=(--onto "$BASE_SHA" "$BASE_PREVIOUS_SHA")
-          fi
-
-          if git -c core.hooksPath=/dev/null rebase "${rebase_args[@]}"; then
-            echo "clean=true" >> "$GITHUB_OUTPUT"
-          elif { [ -d "$(git rev-parse --git-path rebase-merge)" ] || [ -d "$(git rev-parse --git-path rebase-apply)" ]; } && [ -n "$(git ls-files --unmerged)" ]; then
-            echo "clean=false" >> "$GITHUB_OUTPUT"
-          else
-            echo "Git failed without leaving merge conflicts; refusing model recovery." >&2
-            exit 1
-          fi
-
       - name: Enable Linux user namespaces for bubblewrap
-        if: steps.git-rebase.outputs.clean == 'false'
         run: |
           current_userns="$(sysctl -n kernel.unprivileged_userns_clone 2>/dev/null || true)"
           if [ -n "$current_userns" ] && [ "$current_userns" != "1" ]; then
@@ -129,12 +102,10 @@ jobs:
             sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
           fi
 
-      - name: Resolve rebase conflicts
-        if: steps.git-rebase.outputs.clean == 'false'
+      - name: Rebase pull request
         uses: openai/codex-action@52fe01ec70a42f454c9d2ebd47598f9fd6893d56 # v1.11
         env:
           BASE_REF: ${{ inputs.base-ref }}
-          BASE_SHA: ${{ steps.prepare.outputs.base_sha }}
           BASE_PREVIOUS_SHA: ${{ inputs.base-previous-sha }}
           TMPDIR: ${{ runner.temp }}
         with:
@@ -183,7 +154,6 @@ jobs:
     permissions:
       contents: read
       id-token: write
-      pull-requests: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -201,15 +171,8 @@ jobs:
         env:
           BASE_REF: ${{ inputs.base-ref }}
           BASE_SHA: ${{ needs.rebase.outputs.base_sha }}
-          BASE_PREVIOUS_SHA: ${{ inputs.base-previous-sha }}
-          CLEAN_REBASE: ${{ needs.rebase.outputs.clean }}
-          GH_TOKEN: ${{ github.token }}
           GIT_CONFIG_GLOBAL: /dev/null
           GIT_CONFIG_NOSYSTEM: "1"
-          HEAD_REF: ${{ inputs.head-ref }}
-          HEAD_REPOSITORY: ${{ inputs.head-repository }}
-          HEAD_SHA: ${{ inputs.head-sha }}
-          PULL_REQUEST_NUMBER: ${{ inputs.number }}
         run: |
           current_base_sha=$(git rev-parse --verify "refs/remotes/origin/$BASE_REF^{commit}")
           if [ "$current_base_sha" != "$BASE_SHA" ]; then
@@ -229,38 +192,6 @@ jobs:
 
           echo "head_sha=$rebased_head" >> "$GITHUB_OUTPUT"
 
-          if [ "$CLEAN_REBASE" = true ] && [ -n "$BASE_PREVIOUS_SHA" ] && [ "$GITHUB_REPOSITORY" = astral-sh/uv-dev ] && [ "$HEAD_REPOSITORY" = "$GITHUB_REPOSITORY" ]; then
-            pull_request=$(gh api --method GET "repos/$GITHUB_REPOSITORY/pulls/$PULL_REQUEST_NUMBER")
-            if ! jq --exit-status \
-              --argjson repository_id "$UV_DEV_REPOSITORY_ID" \
-              --arg head_ref "$HEAD_REF" --arg head_sha "$HEAD_SHA" --arg base_ref "$BASE_REF" --arg base_sha "$BASE_SHA" \
-              '.state == "open" and .draft and .head.repo.id == $repository_id and .base.repo.id == $repository_id and .head.ref == $head_ref and .head.sha == $head_sha and .base.ref == $base_ref and .base.sha == $base_sha' \
-              <<< "$pull_request" > /dev/null; then
-              exit 0
-            fi
-            approval_id=$(
-              gh api --method GET "repos/$GITHUB_REPOSITORY/issues/$PULL_REQUEST_NUMBER/events" --paginate --slurp |
-                jq --raw-output '[.[][] | select(.event == "ready_for_review" and .actor.type == "User") | .id | tostring] | last // empty'
-            )
-            comments=$(gh api --method GET "repos/$GITHUB_REPOSITORY/issues/$PULL_REQUEST_NUMBER/comments" --paginate --slurp)
-            recovery=$(jq --compact-output \
-              --argjson bot_id "$AUTOMATIONS_BOT_ID" --arg approval_id "$approval_id" \
-              --arg head_ref "$HEAD_REF" --arg head_sha "$HEAD_SHA" --arg base_previous_sha "$BASE_PREVIOUS_SHA" \
-              --arg base_ref "$BASE_REF" '
-                [.[][] |
-                  select(.user.id == $bot_id and .performed_via_github_app.slug == "astral-automations-bot") | . as $comment |
-                  .body | split("<!-- uv-promotion-rebase-request:")[1]? | select(type == "string") | split(" -->")[0] | fromjson? |
-                  select($approval_id != "" and .approval_id == $approval_id and .head_ref == $head_ref and .head_sha == $head_sha and .base_previous_sha == $base_previous_sha and .base_ref == $base_ref) |
-                  . + {request_id: ($comment.id | tostring)}] | last // empty
-              ' <<< "$comments")
-            if [ -n "$recovery" ]; then
-              approved_base=$(jq --raw-output '.base_sha' <<< "$recovery")
-              if [[ "$approved_base" =~ ^[0-9a-f]{40}$ ]] && git merge-base --is-ancestor "$approved_base" "$BASE_SHA"; then
-                echo "recovery=$recovery" >> "$GITHUB_OUTPUT"
-              fi
-            fi
-          fi
-
       - name: Get pull request head token
         id: token
         if: steps.import.outputs.head_sha != ''
@@ -275,7 +206,6 @@ jobs:
             workflows: write
 
       - name: Push rebased pull request
-        id: push
         if: steps.import.outputs.head_sha != ''
         env:
           GIT_CONFIG_GLOBAL: /dev/null
@@ -290,53 +220,3 @@ jobs:
             --force-with-lease="refs/heads/$HEAD_REF:$HEAD_SHA" \
             "https://x-access-token:${GH_TOKEN}@github.com/${HEAD_REPOSITORY}.git" \
             "${REBASED_HEAD}:refs/heads/$HEAD_REF"
-
-      - name: Get clean rebase promotion token
-        id: promotion-token
-        if: steps.push.outcome == 'success' && steps.import.outputs.recovery != ''
-        uses: open-security-tools/ost-simple-sts@9e012247e07c39080fb6a832dbfbcfeacebc19c4
-        with:
-          exchange-url: ${{ secrets.STS_API_URL }}/exchange
-          audience: ${{ secrets.STS_API_URL }}
-          repository: astral-sh/uv-dev
-          permissions: |
-            pull_requests: write
-
-      - name: Resume cleanly rebased promotion
-        id: resume
-        if: steps.promotion-token.outcome == 'success'
-        env:
-          BASE_SHA: ${{ needs.rebase.outputs.base_sha }}
-          GH_TOKEN: ${{ steps.promotion-token.outputs.token }}
-          PULL_REQUEST_NUMBER: ${{ inputs.number }}
-          REBASED_HEAD: ${{ steps.import.outputs.head_sha }}
-          RECOVERY: ${{ steps.import.outputs.recovery }}
-        run: |
-          pull_request=$(gh api --method GET "repos/$GITHUB_REPOSITORY/pulls/$PULL_REQUEST_NUMBER")
-          approval_id=$(
-            gh api --method GET "repos/$GITHUB_REPOSITORY/issues/$PULL_REQUEST_NUMBER/events" --paginate --slurp |
-              jq --raw-output '[.[][] | select(.event == "ready_for_review" and .actor.type == "User") | .id | tostring] | last // empty'
-          )
-          if ! jq --exit-status \
-            --argjson recovery "$RECOVERY" --arg approval_id "$approval_id" --arg head_sha "$REBASED_HEAD" --arg base_sha "$BASE_SHA" \
-            --argjson repository_id "$UV_DEV_REPOSITORY_ID" \
-            '.state == "open" and .draft and .head.repo.id == $repository_id and .base.repo.id == $repository_id and .head.ref == $recovery.head_ref and .head.sha == $head_sha and .base.ref == $recovery.base_ref and .base.sha == $base_sha and $approval_id == $recovery.approval_id' \
-            <<< "$pull_request" > /dev/null; then
-            echo "The rebase approval was superseded; leaving the pull request unchanged."
-            exit 0
-          fi
-
-          request_id=$(jq --raw-output '.request_id' <<< "$RECOVERY")
-          request=$(gh api --method GET "repos/$GITHUB_REPOSITORY/issues/comments/$request_id")
-          if ! jq --exit-status --argjson recovery "$RECOVERY" --argjson bot_id "$AUTOMATIONS_BOT_ID" '
-            .user.id == $bot_id and .performed_via_github_app.slug == "astral-automations-bot" and
-            (.body | split("<!-- uv-promotion-rebase-request:")[1]? | select(type == "string") | split(" -->")[0] | fromjson?) == ($recovery | del(.request_id))
-          ' <<< "$request" > /dev/null; then
-            echo "The rebase approval record changed; refusing to resume promotion." >&2
-            exit 1
-          fi
-
-          receipt=$(jq --compact-output --arg rebased_head_sha "$REBASED_HEAD" --arg rebased_base_sha "$BASE_SHA" '. + {rebased_head_sha: $rebased_head_sha, rebased_base_sha: $rebased_base_sha}' <<< "$RECOVERY")
-          printf -v comment "Rebased the approved changes without conflicts or model edits. Resuming promotion at \`%s\`. <!-- uv-promotion-clean-rebase:%s -->" "$REBASED_HEAD" "$receipt"
-          gh pr comment "$PULL_REQUEST_NUMBER" --repo "$GITHUB_REPOSITORY" --body "$comment"
-          gh pr ready "$PULL_REQUEST_NUMBER" --repo "$GITHUB_REPOSITORY"
