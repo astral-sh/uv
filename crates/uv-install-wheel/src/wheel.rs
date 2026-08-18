@@ -1295,7 +1295,7 @@ mod test {
 
     #[cfg(unix)]
     #[test]
-    fn relocated_symlink_must_stay_in_installation_environment() -> Result<()> {
+    fn relocated_hardlink_to_symlink_must_stay_in_installation_environment() -> Result<()> {
         let temp = assert_fs::TempDir::new()?;
         let environment = temp.child("venv");
         let layout = Layout {
@@ -1315,24 +1315,34 @@ mod test {
             },
         };
         let wheel = temp.child("wheel");
-        let links = wheel.child("foo-1.0.0.data/data/include/site/python3.12");
-        links.create_dir_all()?;
-        let source = links.child("source");
-        let safe = links.child("safe");
-        fs_err::os::unix::fs::symlink("target", &source)?;
+        let source = wheel.child("foo/links/a/b/c/source");
+        wheel.child("foo/links/a/b/c").create_dir_all()?;
+        wheel.child("foo/headers").create_dir_all()?;
+        fs_err::os::unix::fs::symlink("../../../../headers", &source)?;
+
+        let safe = wheel.child("foo-1.0.0.data/data/links/a/b/c/safe");
+        wheel
+            .child("foo-1.0.0.data/data/links/a/b/c")
+            .create_dir_all()?;
         fs_err::hard_link(&source, &safe)?;
         assert!(fs_err::symlink_metadata(&safe)?.file_type().is_symlink());
 
         let name = PackageName::from_str("foo")?;
         ValidatedWheel::new(&layout, wheel.path(), "foo-1.0.0", &name)?;
 
-        fs_err::os::unix::fs::symlink("../../../../outside", links.child("escape"))?;
+        let escape = wheel.child("foo-1.0.0.data/data/include/site/python3.12/escape");
+        wheel
+            .child("foo-1.0.0.data/data/include/site/python3.12")
+            .create_dir_all()?;
+        fs_err::hard_link(&source, &escape)?;
+        assert!(fs_err::symlink_metadata(&escape)?.file_type().is_symlink());
+
         let error = ValidatedWheel::new(&layout, wheel.path(), "foo-1.0.0", &name)
             .err()
             .context("an escaping symlink should make the wheel invalid")?;
         assert_eq!(
             error.to_string(),
-            "The wheel is invalid: Symlink would point outside the installation environment after relocation: foo-1.0.0.data/data/include/site/python3.12/escape -> ../../../../outside"
+            "The wheel is invalid: Symlink would point outside the installation environment after relocation: foo-1.0.0.data/data/include/site/python3.12/escape -> ../../../../headers"
         );
 
         Ok(())
