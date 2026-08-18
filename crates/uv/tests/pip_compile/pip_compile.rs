@@ -10834,7 +10834,7 @@ dev = [
         # via project (pyproject.toml)
     idna==3.6
         # via anyio
-    iniconfig==2.0.0 ; sys_platform == 'win32'
+    iniconfig==2.0.0 ; sys_platform == 'darwin' or sys_platform == 'win32'
         # via project (pyproject.toml)
     sniffio==1.3.1
         # via anyio

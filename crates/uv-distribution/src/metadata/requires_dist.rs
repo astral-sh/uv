@@ -367,12 +367,6 @@ impl FlatRequiresDist {
             return Self(requirements);
         }
 
-        // Memoize the top level extras, in the same order as `requirements`
-        let top_level_extras: Vec<_> = requirements
-            .iter()
-            .map(|req| req.marker.top_level_extra_name())
-            .collect();
-
         // Transitively process all extras that are recursively included.
         let mut flattened = requirements.to_vec();
         let mut seen = FxHashSet::<(ExtraName, MarkerTree)>::default();
@@ -386,21 +380,27 @@ impl FlatRequiresDist {
                 continue;
             }
 
-            // Find the requirements for the extra.
-            for (requirement, top_level_extra) in requirements.iter().zip(top_level_extras.iter()) {
-                if top_level_extra.as_deref() != Some(&extra) {
+            // Find the optional portion of each requirement for this extra. A requirement can
+            // also apply in production, as in `sys_platform == 'win32' or extra == 'base'`.
+            for requirement in &requirements {
+                let production_marker = requirement.marker.simplify_not_extras_with(|_| true);
+                let extra_marker = requirement
+                    .marker
+                    .simplify_extras(slice::from_ref(&extra))
+                    .simplify_not_extras_with(|candidate| candidate != &extra)
+                    .and(production_marker.negate());
+                if extra_marker.is_false() {
                     continue;
                 }
                 let requirement = {
-                    let mut marker = marker;
-                    marker = marker.and(requirement.marker);
+                    let marker = marker.and(extra_marker);
                     Requirement {
                         name: requirement.name.clone(),
                         extras: requirement.extras.clone(),
                         groups: requirement.groups.clone(),
                         source: requirement.source.clone(),
                         origin: requirement.origin.clone(),
-                        marker: marker.simplify_extras(slice::from_ref(&extra)),
+                        marker,
                     }
                 };
                 if requirement.name == *name {
