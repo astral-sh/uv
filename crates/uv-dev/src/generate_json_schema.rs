@@ -103,9 +103,17 @@ fn generate() -> Result<String> {
     if !prettier.is_file() {
         bail!("Prettier is not installed; run `npm ci --ignore-scripts` first");
     }
-    let output = Command::new("node")
-        .arg(prettier)
-        .args(["--stdin-filepath", "uv.schema.json"])
+    let output = Command::new(if cfg!(windows) { "npm.cmd" } else { "npm" })
+        .args([
+            "run",
+            "--silent",
+            "--ignore-scripts",
+            "--if-present=false",
+            "prettier",
+            "--",
+            "--stdin-filepath",
+            "uv.schema.json",
+        ])
         .current_dir(ROOT_DIR)
         .stdin(std::process::Stdio::piped())
         .stdout(std::process::Stdio::piped())
