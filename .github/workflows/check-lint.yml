@@ -88,13 +88,7 @@ jobs:
         with:
           version: "0.12.5"
       - name: "Validate pyproject and uv schema"
-        # Replace the bundled `uv` schema with the checked-in schema. validate-pyproject requires
-        # an absolute `$id` to resolve the schema's internal references.
-        run: >
-          uv run --only-group=check validate-pyproject
-          --disable-plugins uv
-          --tool uv=<(jq '.["$id"]="https://example.com/uv.schema.json"' uv.schema.json)
-          pyproject.toml
+        run: ./scripts/validate-pyproject.sh
 
   readme:
     timeout-minutes: 10

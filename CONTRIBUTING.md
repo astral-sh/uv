@@ -171,10 +171,7 @@ uvx ruff check .
 uvx ty check python/uv
 
 # Python project metadata and uv schema
-uv run --only-group=check validate-pyproject \
-  --disable-plugins uv \
-  --tool uv=<(jq '.["$id"]="https://example.com/uv.schema.json"' uv.schema.json) \
-  pyproject.toml
+./scripts/validate-pyproject.sh
 
 # Generated files
 cargo dev generate-all --mode dry-run
