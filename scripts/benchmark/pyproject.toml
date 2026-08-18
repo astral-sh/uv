@@ -22,4 +22,5 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.uv]
+no-build = true
 exclude-newer = "P7D"
