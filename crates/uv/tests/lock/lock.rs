@@ -18011,7 +18011,7 @@ fn lock_metadata_free_many_conflicts() -> Result<()> {
     Ok(())
 }
 
-/// An empty extra remains selectable when its lockfile omits package metadata.
+/// Empty extras and groups remain selectable when a lockfile omits package metadata.
 #[cfg(feature = "test-universal")]
 #[test]
 fn lock_metadata_free_frozen_empty_extra() -> Result<()> {
@@ -18026,6 +18026,9 @@ fn lock_metadata_free_frozen_empty_extra() -> Result<()> {
         requires-python = ">=3.12"
 
         [project.optional-dependencies]
+        empty = []
+
+        [dependency-groups]
         empty = []
         "#})?;
 
@@ -18042,10 +18045,10 @@ fn lock_metadata_free_frozen_empty_extra() -> Result<()> {
         .write_str(&lock.to_string())?;
 
     uv_snapshot!(context.filters(), context.sync()
-        .arg("--preview-features")
-        .arg("lock-without-metadata")
         .arg("--frozen")
         .arg("--extra")
+        .arg("empty")
+        .arg("--group")
         .arg("empty"), @"
     exit_code: 0 (success)
     ----- stderr -----
