@@ -14,7 +14,7 @@ use jiff::Timestamp;
 use owo_colors::OwoColorize;
 use petgraph::graph::NodeIndex;
 use petgraph::visit::EdgeRef;
-use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
+use rustc_hash::{FxHashMap, FxHashSet};
 use tracing::{debug, instrument, trace};
 use url::Url;
 
@@ -559,7 +559,7 @@ impl<'a> LockedDependencyBuilder<'a> {
             let required_marker = required_marker.combined();
 
             let mut covered_marker = MarkerTree::FALSE;
-            for dependency in expected.packages_for_name(&requirement.name) {
+            for dependency in expected.lock.packages_for_name(&requirement.name) {
                 if !expected.package_satisfies_requirement(dependency, requirement)? {
                     continue;
                 }
@@ -755,17 +755,6 @@ impl<'lock> ExpectedPackageDependencies<'lock> {
             lock_marker,
             workspace_root,
         }
-    }
-
-    /// Locked packages are already sorted by ID, so locate all versions without scanning the lock.
-    fn packages_for_name(&self, name: &PackageName) -> &'lock [Package] {
-        let first = self
-            .lock
-            .packages
-            .partition_point(|package| &package.id.name < name);
-        let candidates = &self.lock.packages[first..];
-        let count = candidates.partition_point(|package| &package.id.name == name);
-        &candidates[..count]
     }
 
     /// Check the resolved source and version once for both generation and existing-edge lookup.
@@ -2014,6 +2003,15 @@ impl Lock {
         serialize::to_toml(self)
     }
 
+    /// Locate every locked version without scanning unrelated sorted packages.
+    fn packages_for_name(&self, name: &PackageName) -> &[Package] {
+        let first = self
+            .packages
+            .partition_point(|package| &package.id.name < name);
+        let candidates = &self.packages[first..];
+        &candidates[..candidates.partition_point(|package| &package.id.name == name)]
+    }
+
     /// Returns the package with the given name. If there are multiple
     /// matching packages, then an error is returned. If there are no
     /// matching packages, then `Ok(None)` is returned.
@@ -2671,23 +2669,8 @@ impl Lock {
         }
 
         if !root_requirements.is_empty() {
-            let names = root_requirements
-                .iter()
-                .map(|requirement| &requirement.name)
-                .collect::<FxHashSet<_>>();
-
-            let by_name: FxHashMap<_, Vec<_>> = self.packages.iter().fold(
-                FxHashMap::with_capacity_and_hasher(self.packages.len(), FxBuildHasher),
-                |mut by_name, package| {
-                    if names.contains(&package.id.name) {
-                        by_name.entry(&package.id.name).or_default().push(package);
-                    }
-                    by_name
-                },
-            );
-
             for requirement in root_requirements {
-                for package in by_name.get(&requirement.name).into_iter().flatten() {
+                for package in self.packages_for_name(&requirement.name) {
                     if !package.id.source.is_source_tree() {
                         continue;
                     }
@@ -3822,49 +3805,16 @@ impl Package {
         let id = PackageId::from_annotated_dist(annotated_dist, root)?;
         let sdist = SourceDist::from_annotated_dist(&id, annotated_dist, index_locations)?;
         let wheels = Wheel::from_annotated_dist(annotated_dist, index_locations)?;
-        let requires_dist = if id.source.is_immutable() {
-            BTreeSet::default()
+        let metadata = if id.source.is_immutable() {
+            PackageMetadata::default()
         } else {
-            annotated_dist
-                .metadata
-                .as_ref()
-                .expect("metadata is present")
-                .requires_dist
-                .iter()
-                .cloned()
-                .map(|requirement| requirement.relative_to(root))
-                .collect::<Result<_, _>>()
-                .map_err(LockErrorKind::RequirementRelativePath)?
-        };
-        let provides_extra = if id.source.is_immutable() {
-            Box::default()
-        } else {
-            annotated_dist
-                .metadata
-                .as_ref()
-                .expect("metadata is present")
-                .provides_extra
-                .clone()
-        };
-        let dependency_groups = if id.source.is_immutable() {
-            BTreeMap::default()
-        } else {
-            annotated_dist
-                .metadata
-                .as_ref()
-                .expect("metadata is present")
-                .dependency_groups
-                .iter()
-                .map(|(group, requirements)| {
-                    let requirements = requirements
-                        .iter()
-                        .cloned()
-                        .map(|requirement| requirement.relative_to(root))
-                        .collect::<Result<_, _>>()
-                        .map_err(LockErrorKind::RequirementRelativePath)?;
-                    Ok::<_, LockError>((group.clone(), requirements))
-                })
-                .collect::<Result<_, _>>()?
+            PackageMetadata::from_distribution(
+                annotated_dist
+                    .metadata
+                    .as_ref()
+                    .expect("metadata is present"),
+                root,
+            )?
         };
         Ok(Self {
             id,
@@ -3874,11 +3824,7 @@ impl Package {
             dependencies: vec![],
             optional_dependencies: BTreeMap::default(),
             dependency_groups: BTreeMap::default(),
-            metadata: PackageMetadata {
-                requires_dist,
-                provides_extra,
-                dependency_groups,
-            },
+            metadata,
         })
     }
 
@@ -4642,6 +4588,37 @@ struct PackageMetadata {
     provides_extra: Box<[ExtraName]>,
     #[serde(default, rename = "requires-dev", alias = "dependency-groups")]
     dependency_groups: BTreeMap<GroupName, BTreeSet<Requirement>>,
+}
+
+impl PackageMetadata {
+    fn from_distribution(metadata: &DistributionMetadata, root: &Path) -> Result<Self, LockError> {
+        let requires_dist = metadata
+            .requires_dist
+            .iter()
+            .cloned()
+            .map(|requirement| requirement.relative_to(root))
+            .collect::<Result<_, _>>()
+            .map_err(LockErrorKind::RequirementRelativePath)?;
+        let dependency_groups = metadata
+            .dependency_groups
+            .iter()
+            .map(|(group, requirements)| {
+                let requirements = requirements
+                    .iter()
+                    .cloned()
+                    .map(|requirement| requirement.relative_to(root))
+                    .collect::<Result<_, _>>()
+                    .map_err(LockErrorKind::RequirementRelativePath)?;
+                Ok::<_, LockError>((group.clone(), requirements))
+            })
+            .collect::<Result<_, _>>()?;
+
+        Ok(Self {
+            requires_dist,
+            provides_extra: metadata.provides_extra.clone(),
+            dependency_groups,
+        })
+    }
 }
 
 impl PackageWire {

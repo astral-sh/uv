@@ -11,6 +11,9 @@ on:
         required: true
         type: string
 
+env:
+  ACTIONS_CACHE_MODE: none
+
 jobs:
   crates-publish-uv:
     name: Upload uv to crates.io

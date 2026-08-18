@@ -114,8 +114,14 @@ docker = [
 release = [
   "rooster==0.1.1",
 ]
+check = [
+    "ruff>=0.16.2",
+    "ty>=0.0.69",
+    "validate-pyproject[all,store]>=0.25",
+]
 
 [tool.uv]
+exclude-newer = "P7D"
 cache-keys = [
     { file = "pyproject.toml" },
     { file = "Cargo.toml" },

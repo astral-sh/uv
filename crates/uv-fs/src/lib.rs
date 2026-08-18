@@ -1,11 +1,17 @@
 use std::io;
 use std::path::{Path, PathBuf};
+use std::time::SystemTime;
+
+#[cfg(target_os = "linux")]
+use std::time::{Duration, UNIX_EPOCH};
 
 #[cfg(feature = "tokio")]
 use std::io::Read;
 
 #[cfg(feature = "tokio")]
 use encoding_rs_io::DecodeReaderBytes;
+#[cfg(target_os = "linux")]
+use rustix::fs::{AtFlags, CWD as RUSTIX_CWD, StatxFlags, statx};
 use tempfile::NamedTempFile;
 use tracing::{debug, warn};
 
@@ -21,6 +27,50 @@ mod path;
 mod read;
 mod space;
 pub mod which;
+
+/// Return a path's creation time, including on Linux targets where [`std::fs::Metadata::created`]
+/// does not expose the filesystem birth time.
+pub fn created_time(path: &Path, metadata: &std::fs::Metadata) -> io::Result<SystemTime> {
+    #[cfg(target_os = "linux")]
+    {
+        let _ = metadata;
+
+        let metadata = statx(
+            RUSTIX_CWD,
+            path,
+            AtFlags::empty(),
+            StatxFlags::BASIC_STATS | StatxFlags::BTIME,
+        )?;
+
+        if metadata.stx_mask & StatxFlags::BTIME.bits() == 0 {
+            return Err(io::Error::new(
+                io::ErrorKind::Unsupported,
+                "creation time is not available for the filesystem",
+            ));
+        }
+
+        let birth_time = metadata.stx_btime;
+        let seconds = Duration::from_secs(birth_time.tv_sec.unsigned_abs());
+        let created = if birth_time.tv_sec < 0 {
+            UNIX_EPOCH.checked_sub(seconds)
+        } else {
+            UNIX_EPOCH.checked_add(seconds)
+        };
+
+        created
+            .filter(|_| birth_time.tv_nsec < 1_000_000_000)
+            .and_then(|created| {
+                created.checked_add(Duration::from_nanos(u64::from(birth_time.tv_nsec)))
+            })
+            .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "invalid creation time"))
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _ = path;
+        metadata.created()
+    }
+}
 
 /// Attempt to check if the two paths refer to the same file.
 ///

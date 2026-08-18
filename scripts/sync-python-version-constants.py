@@ -14,6 +14,8 @@ in sync with the latest available Python versions.
 # /// script
 # requires-python = ">=3.12"
 # dependencies = ["packaging"]
+# [tool.uv]
+# exclude-newer = "P7D"
 # ///
 
 from __future__ import annotations

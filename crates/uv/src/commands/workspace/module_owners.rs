@@ -29,9 +29,10 @@ use crate::settings::{InstallerSettingsRef, ResolverSettings};
 
 /// Map importable modules to package IDs, optionally syncing all locked extras and groups first.
 ///
-/// This uses a sufficient (inexact) sync so required distributions are available to inspect
-/// without removing unrelated packages from an existing environment. Only distributions in the
-/// selected resolution are assigned package IDs, so those unrelated packages are not reported.
+/// By default, synchronization is sufficient (inexact), so required distributions are available
+/// to inspect without removing unrelated packages from an existing environment. Exact
+/// synchronization removes those unrelated packages instead. Only distributions in the selected
+/// resolution are assigned package IDs.
 pub(crate) async fn collect_module_owners(
     target: InstallTarget<'_>,
     venv: &PythonEnvironment,
@@ -43,14 +44,15 @@ pub(crate) async fn collect_module_owners(
     workspace_cache: &WorkspaceCache,
     preview: Preview,
     malware_settings: &MalwareCheckSettings,
-    sync: bool,
+    sync: Option<Modifications>,
 ) -> Result<BTreeMap<ModuleName, Vec<String>>> {
     let (extras, groups) = target_selection(target);
-    let Some(package_ids) = selected_package_ids(target, venv, &extras, &groups, settings)? else {
+    let package_ids = selected_package_ids(target, venv, &extras, &groups, settings)?;
+    if package_ids.is_none() && !matches!(sync, Some(Modifications::Exact)) {
         return Ok(BTreeMap::new());
-    };
+    }
 
-    if sync {
+    if let Some(modifications) = sync {
         let reinstall = Reinstall::None;
         let installer_settings = InstallerSettingsRef {
             index_locations: &settings.index_locations,
@@ -77,7 +79,7 @@ pub(crate) async fn collect_module_owners(
             &groups,
             None,
             InstallOptions::default(),
-            Modifications::Sufficient,
+            modifications,
             None,
             installer_settings,
             client_builder,
@@ -94,6 +96,10 @@ pub(crate) async fn collect_module_owners(
         )
         .await?;
     }
+
+    let Some(package_ids) = package_ids else {
+        return Ok(BTreeMap::new());
+    };
 
     find_module_owners_in_environment(venv, &package_ids)
 }
