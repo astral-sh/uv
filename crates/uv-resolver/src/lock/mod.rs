@@ -3822,49 +3822,16 @@ impl Package {
         let id = PackageId::from_annotated_dist(annotated_dist, root)?;
         let sdist = SourceDist::from_annotated_dist(&id, annotated_dist, index_locations)?;
         let wheels = Wheel::from_annotated_dist(annotated_dist, index_locations)?;
-        let requires_dist = if id.source.is_immutable() {
-            BTreeSet::default()
+        let metadata = if id.source.is_immutable() {
+            PackageMetadata::default()
         } else {
-            annotated_dist
-                .metadata
-                .as_ref()
-                .expect("metadata is present")
-                .requires_dist
-                .iter()
-                .cloned()
-                .map(|requirement| requirement.relative_to(root))
-                .collect::<Result<_, _>>()
-                .map_err(LockErrorKind::RequirementRelativePath)?
-        };
-        let provides_extra = if id.source.is_immutable() {
-            Box::default()
-        } else {
-            annotated_dist
-                .metadata
-                .as_ref()
-                .expect("metadata is present")
-                .provides_extra
-                .clone()
-        };
-        let dependency_groups = if id.source.is_immutable() {
-            BTreeMap::default()
-        } else {
-            annotated_dist
-                .metadata
-                .as_ref()
-                .expect("metadata is present")
-                .dependency_groups
-                .iter()
-                .map(|(group, requirements)| {
-                    let requirements = requirements
-                        .iter()
-                        .cloned()
-                        .map(|requirement| requirement.relative_to(root))
-                        .collect::<Result<_, _>>()
-                        .map_err(LockErrorKind::RequirementRelativePath)?;
-                    Ok::<_, LockError>((group.clone(), requirements))
-                })
-                .collect::<Result<_, _>>()?
+            PackageMetadata::from_distribution(
+                annotated_dist
+                    .metadata
+                    .as_ref()
+                    .expect("metadata is present"),
+                root,
+            )?
         };
         Ok(Self {
             id,
@@ -3874,11 +3841,7 @@ impl Package {
             dependencies: vec![],
             optional_dependencies: BTreeMap::default(),
             dependency_groups: BTreeMap::default(),
-            metadata: PackageMetadata {
-                requires_dist,
-                provides_extra,
-                dependency_groups,
-            },
+            metadata,
         })
     }
 
@@ -4642,6 +4605,37 @@ struct PackageMetadata {
     provides_extra: Box<[ExtraName]>,
     #[serde(default, rename = "requires-dev", alias = "dependency-groups")]
     dependency_groups: BTreeMap<GroupName, BTreeSet<Requirement>>,
+}
+
+impl PackageMetadata {
+    fn from_distribution(metadata: &DistributionMetadata, root: &Path) -> Result<Self, LockError> {
+        let requires_dist = metadata
+            .requires_dist
+            .iter()
+            .cloned()
+            .map(|requirement| requirement.relative_to(root))
+            .collect::<Result<_, _>>()
+            .map_err(LockErrorKind::RequirementRelativePath)?;
+        let dependency_groups = metadata
+            .dependency_groups
+            .iter()
+            .map(|(group, requirements)| {
+                let requirements = requirements
+                    .iter()
+                    .cloned()
+                    .map(|requirement| requirement.relative_to(root))
+                    .collect::<Result<_, _>>()
+                    .map_err(LockErrorKind::RequirementRelativePath)?;
+                Ok::<_, LockError>((group.clone(), requirements))
+            })
+            .collect::<Result<_, _>>()?;
+
+        Ok(Self {
+            requires_dist,
+            provides_extra: metadata.provides_extra.clone(),
+            dependency_groups,
+        })
+    }
 }
 
 impl PackageWire {
