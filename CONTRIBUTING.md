@@ -148,7 +148,7 @@ cargo fmt --all
 # Python
 uvx ruff format .
 
-# Markdown, YAML, and other files (requires Node.js)
+# Markdown, YAML, and other files (requires Node.js and npm >=11.10.0)
 npm ci --ignore-scripts
 npm run prettier -- --write .
 # or in Docker
@@ -279,8 +279,8 @@ To preview any changes to the documentation locally:
 
 1. Install the [Rust toolchain](https://www.rust-lang.org/tools/install).
 
-2. Install [Node](https://nodejs.org/en/download) and run `npm ci --ignore-scripts` to install the
-   locked formatting tools.
+2. Install [Node](https://nodejs.org/en/download) with `npm` 11.10.0 or newer, then run
+   `npm ci --ignore-scripts` to install the locked formatting tools.
 
 3. Run `cargo dev generate-all`, to update any auto-generated documentation.
 

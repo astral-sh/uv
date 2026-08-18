@@ -1,6 +1,9 @@
 {
   "name": "uv-development",
   "private": true,
+  "engines": {
+    "npm": ">=11.10.0"
+  },
   "scripts": {
     "prettier": "node node_modules/prettier/bin/prettier.cjs"
   },
