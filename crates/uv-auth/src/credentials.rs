@@ -388,7 +388,7 @@ impl Credentials {
     ///
     /// Any existing credentials will be overridden.
     #[must_use]
-    pub fn authenticate(&self, mut request: Request) -> Request {
+    fn authenticate(&self, mut request: Request) -> Request {
         request
             .headers_mut()
             .insert(reqwest::header::AUTHORIZATION, Self::to_header_value(self));
