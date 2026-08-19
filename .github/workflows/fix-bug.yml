@@ -63,6 +63,7 @@ jobs:
       context-sha: ${{ steps.issue-context.outputs.head-sha }}
       created: ${{ steps.commit-fix.outputs.created }}
       existing-head: ${{ steps.prepare.outputs.existing-head }}
+      parent-head-sha: ${{ steps.prepare.outputs.parent-head-sha }}
       publish: ${{ steps.commit-fix.outputs.publish }}
       pull-request-title: ${{ steps.commit-fix.outputs.pull-request-title }}
       result: ${{ steps.commit-fix.outputs.result }}
@@ -137,18 +138,20 @@ jobs:
           gh api "repos/astral-sh/uv-dev/pulls/$pull_request_number" \
             > "$RUNNER_TEMP/bug-regression-pull-request.json"
           if ! jq --exit-status \
-            --arg head_ref "$PARENT_HEAD_REF" \
-            --arg head_sha "$PARENT_HEAD_SHA" '
+            --arg head_ref "$PARENT_HEAD_REF" '
               (.state == "open" or .state == "closed")
               and .base.ref == "main"
               and .base.repo.full_name == "astral-sh/uv-dev"
               and .head.repo.full_name == "astral-sh/uv-dev"
               and .head.ref == $head_ref
-              and .head.sha == $head_sha
+              and (.head.sha | test("^[0-9a-f]{40}$"))
             ' "$RUNNER_TEMP/bug-regression-pull-request.json" > /dev/null; then
-            echo "The regression-test pull request no longer matches its verified head." >&2
+            echo "The regression-test pull request no longer matches its verified branch." >&2
             exit 1
           fi
+          expected_parent_head_sha="$PARENT_HEAD_SHA"
+          PARENT_HEAD_SHA="$(jq --raw-output '.head.sha' \
+            "$RUNNER_TEMP/bug-regression-pull-request.json")"
 
           if jq --exit-status '.state == "closed"' \
             "$RUNNER_TEMP/bug-regression-pull-request.json" > /dev/null; then
@@ -181,9 +184,9 @@ jobs:
             exit 1
           fi
 
-          parent_base="$(git rev-parse "$PARENT_HEAD_SHA^")"
-          if [ "$parent_base" != "$GITHUB_SHA" ]; then
-            echo "The regression-test commit does not extend the trusted workflow revision." >&2
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" "$PARENT_HEAD_SHA" ||
+            ! git merge-base --is-ancestor "$expected_parent_head_sha" "$PARENT_HEAD_SHA"; then
+            echo "The regression-test branch does not extend its verified revision." >&2
             exit 1
           fi
 
@@ -195,7 +198,7 @@ jobs:
                 exit 1
                 ;;
             esac
-          done < <(git diff --name-only -z "$parent_base" "$PARENT_HEAD_SHA")
+          done < <(git diff --name-only -z "$GITHUB_SHA" "$PARENT_HEAD_SHA")
 
           fix_branch="automations/fix-bug/$issue_number"
           gh pr list \
@@ -278,6 +281,7 @@ jobs:
           {
             echo "existing=$existing"
             echo "existing-head=$fix_head"
+            echo "parent-head-sha=$PARENT_HEAD_SHA"
           } >> "$GITHUB_OUTPUT"
 
       - name: "Fix reproduced bug"
@@ -316,7 +320,7 @@ jobs:
         env:
           EXISTING_FIX: ${{ steps.prepare.outputs.existing }}
           FIX_RESULT: ${{ steps.fix-bug.outputs.final-message }}
-          PARENT_HEAD_SHA: ${{ inputs.parent-head-sha }}
+          PARENT_HEAD_SHA: ${{ steps.prepare.outputs.parent-head-sha }}
         run: |
           if [ "$EXISTING_FIX" = "true" ]; then
             FIX_RESULT="$(jq --null-input --compact-output \
@@ -368,7 +372,7 @@ jobs:
                 source_changed=true
                 ;;
               crates/uv/tests/*|crates/uv-client/tests/it/*)
-                if git diff --name-only "$PARENT_HEAD_SHA^" "$PARENT_HEAD_SHA" -- "$path" |
+                if git diff --name-only "$GITHUB_SHA" "$PARENT_HEAD_SHA" -- "$path" |
                   grep -Fxq "$path"; then
                   regression_changed=true
                 fi
@@ -471,7 +475,7 @@ jobs:
           GIT_CONFIG_NOSYSTEM: "1"
           ISSUE_NUMBER: ${{ inputs.issue-number }}
           PARENT_HEAD_REF: ${{ inputs.parent-head-ref }}
-          PARENT_HEAD_SHA: ${{ inputs.parent-head-sha }}
+          PARENT_HEAD_SHA: ${{ needs.fix.outputs.parent-head-sha }}
           PARENT_PULL_REQUEST: ${{ inputs.parent-pull-request }}
         run: |
           pull_request_number="${PARENT_PULL_REQUEST##*/}"
@@ -563,7 +567,7 @@ jobs:
                 source_changed=true
                 ;;
               crates/uv/tests/*|crates/uv-client/tests/it/*)
-                if git diff --name-only "$PARENT_HEAD_SHA^" "$PARENT_HEAD_SHA" -- "$path" |
+                if git diff --name-only "$GITHUB_SHA" "$PARENT_HEAD_SHA" -- "$path" |
                   grep -Fxq "$path"; then
                   regression_changed=true
                 fi
