@@ -18286,6 +18286,112 @@ fn lock_regenerates_dependencies_without_metadata() -> Result<()> {
     Ok(())
 }
 
+/// Scoped dependency rules use the resolved version even when a dynamic package omits it.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_regenerates_dynamic_version_scoped_override() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let server = PackseServer::new("extras/lock-without-metadata.toml");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["provider"]
+
+        [tool.uv]
+        override-dependencies = [
+            { package = { name = "provider" }, dependencies = ["anyio==4.3.0"] },
+            { package = { name = "provider", version = "1.0.0" }, dependencies = ["anyio==4.4.0"] },
+        ]
+        exclude-dependencies = [
+            { package = { name = "provider", version = "2.0.0.post1" }, dependencies = ["anyio"] },
+        ]
+
+        [tool.uv.sources]
+        provider = { path = "provider" }
+        "#})?;
+    context
+        .temp_dir
+        .child("provider/pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "provider"
+        requires-python = ">=3.12"
+        dependencies = ["anyio==4.3.0"]
+        dynamic = ["version"]
+
+        [tool.uv]
+        cache-keys = [{ file = "pyproject.toml" }, { file = "backend.py" }]
+
+        [build-system]
+        requires = []
+        backend-path = ["."]
+        build-backend = "backend"
+        "#})?;
+    let backend = context.temp_dir.child("provider/backend.py");
+    let backend_contents = indoc! {r#"
+        import pathlib
+
+        def prepare_metadata_for_build_wheel(metadata_directory, config_settings=None):
+            dist_info = pathlib.Path(metadata_directory, "provider-1.0.0.dist-info")
+            dist_info.mkdir()
+            dist_info.joinpath("METADATA").write_text(
+                "Metadata-Version: 2.1\n"
+                "Name: provider\n"
+                "Version: 1.0.0\n"
+                "Requires-Python: >=3.12\n"
+                "Requires-Dist: anyio==4.3.0\n"
+            )
+            return dist_info.name
+        "#};
+    backend.write_str(backend_contents)?;
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("lock-without-metadata")
+        .arg("--index-url")
+        .arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    ");
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("lock-without-metadata")
+        .arg("--check")
+        .arg("--offline")
+        .arg("--no-cache")
+        .arg("--index-url")
+        .arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    ");
+
+    // Changing the dynamic version selects the exact exclusion instead of the exact override.
+    backend.write_str(&backend_contents.replace("1.0.0", "2.0.0.post1"))?;
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("lock-without-metadata")
+        .arg("--locked")
+        .arg("--index-url")
+        .arg(server.index_url()), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+
+    hint: To update the lockfile, run `uv lock`.
+    ");
+
+    Ok(())
+}
+
 /// A metadata-free lock must not hide a newly incompatible self-requirement.
 #[cfg(feature = "test-universal")]
 #[test]
