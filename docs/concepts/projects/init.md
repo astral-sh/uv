@@ -35,7 +35,8 @@ Applications are the default target for `uv init`, but can also be specified wit
 $ uv init example-app
 ```
 
-The source code lives in a `src` directory with a module directory and an `__init__.py` file:
+The source code lives in a `src` directory with a module directory containing an `__init__.py` file
+and a `__main__.py` file:
 
 ```console
 $ tree example-app
@@ -45,7 +46,8 @@ example-app/
 ├── pyproject.toml
 └── src
     └── example_app
-        └── __init__.py
+        ├── __init__.py
+        └── __main__.py
 ```
 
 A [build system](./config.md#build-systems) is defined, so the project will be installed into the
@@ -209,6 +211,7 @@ example-ext/
     ├── lib.rs
     └── example_ext
         ├── __init__.py
+        ├── __main__.py
         └── _core.pyi
 ```
 
