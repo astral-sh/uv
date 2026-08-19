@@ -118,6 +118,18 @@ impl IndexUrl {
         }
     }
 
+    /// Return the URL with any password removed, retaining the username.
+    pub fn without_password(&self) -> Cow<'_, DisplaySafeUrl> {
+        let url = self.url();
+        if url.password().is_none() {
+            Cow::Borrowed(url)
+        } else {
+            let mut url = url.clone();
+            let _ = url.set_password(None);
+            Cow::Owned(url)
+        }
+    }
+
     /// Warn user if the given URL was provided as an ambiguous relative path.
     ///
     /// This is a temporary warning. Ambiguous values will not be
