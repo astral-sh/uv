@@ -105,6 +105,7 @@ pub(crate) async fn pip_install(
     link_mode: LinkMode,
     compile: bool,
     hash_checking: Option<HashCheckingMode>,
+    require_build_hashes: bool,
     installer_metadata: bool,
     config_settings: &ConfigSettings,
     config_settings_package: &PackageConfigSettings,
@@ -462,13 +463,15 @@ pub(crate) async fn pip_install(
         }
     };
 
-    // Verify supplied build hashes unless hash verification was explicitly disabled.
-    let build_hasher = if hash_checking.is_some() {
-        HashStrategy::from_constraints(
-            &build_constraints,
-            Some(&marker_env),
-            HashCheckingMode::Verify,
-        )?
+    let build_hash_checking = if require_build_hashes {
+        Some(HashCheckingMode::Require)
+    } else if hash_checking.is_some() {
+        Some(HashCheckingMode::Verify)
+    } else {
+        None
+    };
+    let build_hasher = if let Some(build_hash_checking) = build_hash_checking {
+        HashStrategy::from_constraints(&build_constraints, Some(&marker_env), build_hash_checking)?
     } else {
         HashStrategy::default()
     };
