@@ -119,7 +119,7 @@ impl IndexUrl {
     }
 
     /// Return the URL with any password removed, retaining the username.
-    pub fn without_password(&self) -> Cow<'_, DisplaySafeUrl> {
+    pub(crate) fn without_password(&self) -> Cow<'_, DisplaySafeUrl> {
         let url = self.url();
         if url.password().is_none() {
             Cow::Borrowed(url)
