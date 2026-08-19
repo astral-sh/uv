@@ -227,13 +227,14 @@ fn lock_ecosystem_package_with_args(python_version: &str, name: &str, args: &[&s
     command.env(EnvVars::UV_EXCLUDE_NEWER, EXCLUDE_NEWER);
     command.args(args);
 
-    let (snapshot, _) = uv_test::run_and_format(
+    let (snapshot, output) = uv_test::run_and_format(
         &mut command,
         context.filters(),
         name,
         Some(uv_test::WindowsFilters::Platform),
         None,
     );
+    assert!(output.status.success(), "{snapshot}");
 
     // Ensure generated lockfiles take the canonical fast path and produce the
     // same lock as the general TOML parser.

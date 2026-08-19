@@ -2109,13 +2109,14 @@ macro_rules! diff_uv_snapshot {
 macro_rules! capture_uv_snapshot {
     ($filters:expr, $spawnable:expr) => {{
         // Don't echo the output to stderr while capturing without asserting.
-        let (snapshot, _) = $crate::run_and_format_silent(
+        let (snapshot, output) = $crate::run_and_format_silent(
             $spawnable,
             &$filters,
             $crate::function_name!(),
             Some($crate::WindowsFilters::Platform),
             None,
         );
+        assert!(output.status.success(), "{snapshot}");
         snapshot
     }};
     ($filters:expr, $spawnable:expr, @$snapshot:literal) => {{
@@ -2126,6 +2127,7 @@ macro_rules! capture_uv_snapshot {
             Some($crate::WindowsFilters::Platform),
             None,
         );
+        assert_eq!(snapshot.lines().next(), $snapshot.trim_start().lines().next(), "snapshot acceptance must not change the command exit status");
         ::insta::assert_snapshot!(snapshot, @$snapshot);
         snapshot
     }};
@@ -2608,24 +2610,28 @@ macro_rules! uv_snapshot {
     ($filters:expr, $spawnable:expr, @$snapshot:literal) => {{
         // Take a reference for backwards compatibility with the vec-expecting insta filters.
         let (snapshot, output) = $crate::run_and_format($spawnable, &$filters, $crate::function_name!(), Some($crate::WindowsFilters::Platform), None);
+        assert_eq!(snapshot.lines().next(), $snapshot.trim_start().lines().next(), "snapshot acceptance must not change the command exit status");
         ::insta::assert_snapshot!(snapshot, @$snapshot);
         output
     }};
     ($filters:expr, $spawnable:expr, input=$input:expr, @$snapshot:literal) => {{
         // Take a reference for backwards compatibility with the vec-expecting insta filters.
         let (snapshot, output) = $crate::run_and_format($spawnable, &$filters, $crate::function_name!(), Some($crate::WindowsFilters::Platform), Some($input));
+        assert_eq!(snapshot.lines().next(), $snapshot.trim_start().lines().next(), "snapshot acceptance must not change the command exit status");
         ::insta::assert_snapshot!(snapshot, @$snapshot);
         output
     }};
     ($filters:expr, windows_filters=false, $spawnable:expr, @$snapshot:literal) => {{
         // Take a reference for backwards compatibility with the vec-expecting insta filters.
         let (snapshot, output) = $crate::run_and_format($spawnable, &$filters, $crate::function_name!(), None, None);
+        assert_eq!(snapshot.lines().next(), $snapshot.trim_start().lines().next(), "snapshot acceptance must not change the command exit status");
         ::insta::assert_snapshot!(snapshot, @$snapshot);
         output
     }};
     ($filters:expr, universal_windows_filters=true, $spawnable:expr, @$snapshot:literal) => {{
         // Take a reference for backwards compatibility with the vec-expecting insta filters.
         let (snapshot, output) = $crate::run_and_format($spawnable, &$filters, $crate::function_name!(), Some($crate::WindowsFilters::Universal), None);
+        assert_eq!(snapshot.lines().next(), $snapshot.trim_start().lines().next(), "snapshot acceptance must not change the command exit status");
         ::insta::assert_snapshot!(snapshot, @$snapshot);
         output
     }};

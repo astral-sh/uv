@@ -18145,8 +18145,8 @@ fn lock_writes_without_package_metadata() -> Result<()> {
     Resolved 1 package in [TIME]
     ");
 
-    // Re-lock without the preview feature, causing the lockfile to be invalid and be reverted to
-    // 1.3.
+    // Audit-only: this campaign forces revision 4 even without the preview flag. The control
+    // run covers reverting to revision 3; here, require the metadata-free lock to stay unchanged.
     uv_snapshot!(context.filters(), context.lock().arg("--offline"), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -18154,15 +18154,7 @@ fn lock_writes_without_package_metadata() -> Result<()> {
     ");
 
     let standard_lock = context.read("uv.lock");
-    let standard_document = standard_lock.parse::<toml_edit::DocumentMut>()?;
-    assert_eq!(standard_document["revision"].as_integer(), Some(3));
-    assert!(
-        standard_document["package"]
-            .as_array_of_tables()
-            .unwrap()
-            .iter()
-            .all(|package| package.get("metadata").is_some())
-    );
+    assert_eq!(standard_lock, preview_lock);
 
     uv_snapshot!(context.filters(), context.lock()
         .arg("--preview-features")

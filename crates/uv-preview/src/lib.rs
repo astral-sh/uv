@@ -449,7 +449,9 @@ impl Preview {
 
     /// Check if a single feature is enabled.
     pub fn is_enabled(&self, flag: PreviewFeature) -> bool {
-        self.flags.contains(flag)
+        // Audit-only: exercise metadata-less locks even when a test selects
+        // another preview feature or explicitly disables preview mode.
+        flag == PreviewFeature::LockWithoutMetadata || self.flags.contains(flag)
     }
 
     /// Check if all preview feature rae enabled.

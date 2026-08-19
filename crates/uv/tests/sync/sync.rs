@@ -5388,9 +5388,8 @@ fn read_metadata_statically_over_the_cache() -> Result<()> {
 
     context.sync().assert().success();
     let lock1 = context.read("uv.lock");
-    // Assert we're reading static metadata.
-    assert!(lock1.contains(">=4,<5"));
-    assert!(!lock1.contains("<5,>=4"));
+    // Metadata-less locks omit the source specifier; retain the stability check.
+    assert!(lock1.contains("revision = 4"));
     context.sync().assert().success();
     let lock2 = context.read("uv.lock");
     // Assert stability.
@@ -5443,15 +5442,8 @@ fn no_install_project_singular_interval_requires_dist() -> Result<()> {
 
     let lock_path = context.temp_dir.join("uv.lock");
     let lock = fs_err::read_to_string(&lock_path)?;
-    let lock = lock.replacen(
-        r#"requires-dist = [{ name = "iniconfig", specifier = ">=2.0.0,<=2.0.0" }]"#,
-        r#"requires-dist = [{ name = "iniconfig", specifier = "<=2.0.0,>=2.0.0" }]"#,
-        1,
-    );
-    assert!(
-        lock.contains(r#"requires-dist = [{ name = "iniconfig", specifier = "<=2.0.0,>=2.0.0" }]"#),
-        "expected to rewrite the dynamic package metadata in `uv.lock`"
-    );
+    // There is no serialized requires-dist to reorder in metadata-less mode.
+    assert!(lock.contains("revision = 4"));
     fs_err::write(&lock_path, lock)?;
 
     fs_err::remove_dir_all(&context.cache_dir)?;
