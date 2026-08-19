@@ -360,7 +360,7 @@ def build_project_at_version(
         )
         init_py.write_text("x = 1")
 
-    # Build the project, explicitly overriding no-build from the project's uv.toml.
+    # Build the project, explicitly overriding no-build from the project's pyprojec.toml
     check_call([uv, "build", "--build"], cwd=project_root)
     # Test that we ignore unknown any file.
     project_root.joinpath("dist").joinpath(".DS_Store").touch()
