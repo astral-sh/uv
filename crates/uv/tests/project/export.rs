@@ -1661,7 +1661,7 @@ fn requirements_txt_ssh_git_username() -> Result<()> {
       × Failed to download and build `uv-private-pypackage @ git+ssh://git@github.com/astral-test/uv-private-pypackage.git@d780faf0ac91257d4d5a4f0c5a0e4509608c0071`
       ├─▶ Git operation failed
       ├─▶ failed to clone into: [PATH]
-      ├─▶ failed to fetch branch, tag, or commit `d780faf0ac91257d4d5a4f0c5a0e4509608c0071`
+      ├─▶ failed to fetch commit `d780faf0ac91257d4d5a4f0c5a0e4509608c0071`
       ╰─▶ process didn't exit successfully: [GIT_COMMAND_ERROR]
           --- stderr
           Load key "[TEMP_DIR]/fake_deploy_key": [ERROR]

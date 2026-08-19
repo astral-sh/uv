@@ -5293,12 +5293,28 @@ impl TryFrom<SourceWire> for Source {
                     })
                     .map_err(LockErrorKind::InvalidGitSourceUrl)?;
 
-                let git_source = GitSource::from_url(&url)
-                    .map_err(|err| match err {
-                        GitSourceError::InvalidSha => SourceParseError::InvalidSha { given: git },
-                        GitSourceError::MissingSha => SourceParseError::MissingSha { given: git },
-                    })
-                    .map_err(LockErrorKind::InvalidGitSourceUrl)?;
+                let git_source = GitSource::from_url(&url).map_err(|err| match err {
+                    GitSourceError::InvalidSha => {
+                        LockErrorKind::InvalidGitSourceUrl(SourceParseError::InvalidSha {
+                            given: git,
+                        })
+                    }
+                    GitSourceError::MissingSha => {
+                        LockErrorKind::InvalidGitSourceUrl(SourceParseError::MissingSha {
+                            given: git,
+                        })
+                    }
+                    GitSourceError::RevisionMismatch { revision, precise } => {
+                        let mut repository_url = url.clone();
+                        repository_url.set_query(None);
+                        repository_url.set_fragment(None);
+                        LockErrorKind::GitUrlParse(GitUrlParseError::MismatchedRevision {
+                            revision,
+                            precise,
+                            url: Box::new(repository_url),
+                        })
+                    }
+                })?;
 
                 Ok(Self::Git(UrlString::from(url), git_source))
             }
@@ -5415,6 +5431,7 @@ struct GitSource {
 enum GitSourceError {
     InvalidSha,
     MissingSha,
+    RevisionMismatch { revision: String, precise: GitOid },
 }
 
 impl GitSource {
@@ -5443,6 +5460,18 @@ impl GitSource {
 
         let precise = GitOid::from_str(url.fragment().ok_or(GitSourceError::MissingSha)?)
             .map_err(|_| GitSourceError::InvalidSha)?;
+
+        // A full commit requested as `rev` is already precise and must not resolve to another
+        // commit through the lockfile fragment.
+        if let GitSourceKind::Rev(revision) = &kind
+            && GitOid::from_str(revision).is_ok()
+            && !revision.eq_ignore_ascii_case(precise.as_str())
+        {
+            return Err(GitSourceError::RevisionMismatch {
+                revision: revision.clone(),
+                precise,
+            });
+        }
 
         Ok(Self {
             precise,
@@ -7978,6 +8007,37 @@ mod tests {
             sys_platform: "darwin",
         })
         .expect("valid marker environment")
+    }
+
+    #[test]
+    fn git_source_rejects_mismatched_exact_revision() -> Result<(), Box<dyn Error>> {
+        let url = Url::parse(
+            "https://example.com/repository?rev=0dacfd662c64cb4ceb16e6cf65a157a8b715b979#b270df1a2fb5d012294e9aaf05e7e0bab1e6a389",
+        )?;
+        assert_eq!(
+            GitSource::from_url(&url),
+            Err(GitSourceError::RevisionMismatch {
+                revision: "0dacfd662c64cb4ceb16e6cf65a157a8b715b979".to_string(),
+                precise: GitOid::from_str("b270df1a2fb5d012294e9aaf05e7e0bab1e6a389")?,
+            })
+        );
+
+        let url = Url::parse(
+            "https://example.com/repository?rev=0DACFD662C64CB4CEB16E6CF65A157A8B715B979#0dacfd662c64cb4ceb16e6cf65a157a8b715b979",
+        )?;
+        assert!(GitSource::from_url(&url).is_ok());
+
+        let url = Url::parse(
+            "https://example.com/repository?rev=0dacfd6#b270df1a2fb5d012294e9aaf05e7e0bab1e6a389",
+        )?;
+        assert!(GitSource::from_url(&url).is_ok());
+
+        let url = Url::parse(
+            "https://example.com/repository?branch=0dacfd662c64cb4ceb16e6cf65a157a8b715b979#b270df1a2fb5d012294e9aaf05e7e0bab1e6a389",
+        )?;
+        assert!(GitSource::from_url(&url).is_ok());
+
+        Ok(())
     }
 
     #[test]
