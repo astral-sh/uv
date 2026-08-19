@@ -2157,6 +2157,53 @@ fn check_script() -> Result<()> {
 
 #[test]
 #[cfg(feature = "test-pypi")]
+fn check_script_ignores_exclude_newer_package_for_ty_selection() -> Result<()> {
+    let context =
+        uv_test::test_context!("3.12").with_filter((r"ty 0\.0\.16(?: \([^)]*\))?", "ty 0.0.16"));
+
+    let script = context.temp_dir.child("script.py");
+    script.write_str(indoc! {r#"
+        # /// script
+        # requires-python = ">=3.12"
+        # dependencies = []
+        #
+        # [tool.uv]
+        # exclude-newer = "2026-02-12T00:00:00Z"
+        # exclude-newer-package = { ty = false }
+        # ///
+
+        value: int = 1
+    "#})?;
+
+    // This undesirably applies the global cutoff to `ty` despite its exemption; see
+    // astral-sh/uv#21211.
+    uv_snapshot!(
+        context.filters(),
+        context
+            .check()
+            .arg("--script")
+            .arg(script.path())
+            .arg("--ty-version")
+            .arg("<0.0.18")
+            .arg("--show-version")
+            .arg("--preview-features")
+            .arg("check-command")
+            .env_remove(EnvVars::UV_EXCLUDE_NEWER),
+        @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    All checks passed!
+
+    ----- stderr -----
+    Using ty 0.0.16
+    "
+    );
+
+    Ok(())
+}
+
+#[test]
+#[cfg(feature = "test-pypi")]
 fn check_script_uses_ty_version_from_forked_lock() -> Result<()> {
     let context =
         uv_test::test_context!("3.12").with_filter((r"ty 0\.0\.17(?: \([^)]*\))?", "ty 0.0.17"));
