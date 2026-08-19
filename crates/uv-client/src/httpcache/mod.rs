@@ -283,8 +283,13 @@ impl ArchivedCachePolicy {
     /// checks because those produce [`BeforeRequest::Stale`], which an allow-stale caller accepts.
     pub(crate) fn matches_stale_request(&self, request: &reqwest::Request) -> bool {
         self.is_storable()
-            && self.request.uri == request.url().as_str()
+            && self.matches_uri(request)
             && (request.method() == http::Method::GET || request.method() == http::Method::HEAD)
+    }
+
+    /// Fragments are not part of the HTTP request target. Older cache entries may include them.
+    fn matches_uri(&self, request: &reqwest::Request) -> bool {
+        self.request.uri.split('#').next() == request.url().as_str().split('#').next()
     }
 
     /// Determines what caching behavior is correct given an existing
@@ -329,7 +334,7 @@ impl ArchivedCachePolicy {
         //
         // "the presented target URI and that of the stored response match,
         // and..."
-        if self.request.uri != request.url().as_str() {
+        if !self.matches_uri(request) {
             tracing::trace!(
                 "Request {} does not match cache URL of {}",
                 request.url(),

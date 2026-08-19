@@ -242,6 +242,7 @@ impl CachedClient {
     >(
         &self,
         req: Request,
+        cache_read_entry: &CacheEntry,
         cache_entry: &CacheEntry,
         cache_control: CacheControl,
         response_callback: Callback,
@@ -250,7 +251,7 @@ impl CachedClient {
 
         if matches!(cache_control, CacheControl::AllowStale) {
             let (req, cached) = self
-                .read_and_decode_stale_cache::<Payload>(req, cache_entry)
+                .read_and_decode_stale_cache::<Payload>(req, cache_read_entry)
                 .await;
             match cached {
                 Ok(Some(payload)) => return Ok(payload),
@@ -259,14 +260,17 @@ impl CachedClient {
                     DisplaySafeUrl::from_url(req.url().clone())
                 ),
                 Err(err) if err.is_file_not_exists() => {
-                    trace!("No cache entry exists for {}", cache_entry.path().display());
+                    trace!(
+                        "No cache entry exists for {}",
+                        cache_read_entry.path().display()
+                    );
                 }
                 Err(err) => {
                     warn!(
                         "Broken cache entry at {}, removing: {err}",
-                        cache_entry.path().display()
+                        cache_read_entry.path().display()
                     );
-                    let _ = fs_err::tokio::remove_file(&cache_entry.path()).await;
+                    let _ = fs_err::tokio::remove_file(cache_read_entry.path()).await;
                 }
             }
 
@@ -283,7 +287,7 @@ impl CachedClient {
         }
 
         let fresh_req = req.try_clone().expect("HTTP request must be cloneable");
-        let cached_response = if let Some(cached) = self.read_cache(cache_entry).await {
+        let cached_response = if let Some(cached) = self.read_cache(cache_read_entry).await {
             self.send_cached(req, cache_control.clone(), cached)
                 .boxed_local()
                 .await?
@@ -327,6 +331,9 @@ impl CachedClient {
                 async {
                     let data_with_cache_policy_bytes =
                         DataWithCachePolicy::serialize(&new_policy, &cached.data)?;
+                    fs_err::tokio::create_dir_all(cache_entry.dir())
+                        .await
+                        .map_err(ErrorKind::CacheWrite)?;
                     write_atomic(cache_entry.path(), data_with_cache_policy_bytes)
                         .await
                         .map_err(ErrorKind::CacheWrite)?;
@@ -713,11 +720,42 @@ impl CachedClient {
         cache_control: CacheControl,
         response_callback: Callback,
     ) -> Result<Payload, CachedClientError<CallBackError>> {
+        self.get_serde_with_retry_from(
+            req,
+            cache_entry,
+            cache_entry,
+            cache_control,
+            response_callback,
+        )
+        .await
+    }
+
+    /// Make a cached request, reading from one entry and writing new or revalidated responses to
+    /// another. This allows callers to reuse an older cache key without continuing to populate it.
+    #[instrument(skip_all)]
+    pub async fn get_serde_with_retry_from<
+        Payload: Serialize + DeserializeOwned + Send + 'static,
+        CallBackError: std::error::Error + 'static,
+        Callback: AsyncFn(Response) -> Result<Payload, CallBackError>,
+    >(
+        &self,
+        req: Request,
+        cache_read_entry: &CacheEntry,
+        cache_entry: &CacheEntry,
+        cache_control: CacheControl,
+        response_callback: Callback,
+    ) -> Result<Payload, CachedClientError<CallBackError>> {
         let payload = self
-            .get_cacheable_with_retry(req, cache_entry, cache_control, async |resp| {
-                let payload = response_callback(resp).await?;
-                Ok(SerdeCacheable { inner: payload })
-            })
+            .get_cacheable_with_retry_from(
+                req,
+                cache_read_entry,
+                cache_entry,
+                cache_control,
+                async |resp| {
+                    let payload = response_callback(resp).await?;
+                    Ok(SerdeCacheable { inner: payload })
+                },
+            )
             .await?;
         Ok(payload)
     }
@@ -737,12 +775,36 @@ impl CachedClient {
         cache_control: CacheControl,
         response_callback: Callback,
     ) -> Result<Payload::Target, CachedClientError<CallBackError>> {
+        self.get_cacheable_with_retry_from(
+            req,
+            cache_entry,
+            cache_entry,
+            cache_control,
+            response_callback,
+        )
+        .boxed_local()
+        .await
+    }
+
+    async fn get_cacheable_with_retry_from<
+        Payload: Cacheable + 'static,
+        CallBackError: std::error::Error + 'static,
+        Callback: AsyncFn(Response) -> Result<Payload, CallBackError>,
+    >(
+        &self,
+        req: Request,
+        cache_read_entry: &CacheEntry,
+        cache_entry: &CacheEntry,
+        cache_control: CacheControl,
+        response_callback: Callback,
+    ) -> Result<Payload::Target, CachedClientError<CallBackError>> {
         let mut retry_state = RetryState::start(self.uncached().retry_policy(), req.url().clone());
         loop {
             let fresh_req = req.try_clone().expect("HTTP request must be cloneable");
             let result = self
                 .get_cacheable(
                     fresh_req,
+                    cache_read_entry,
                     cache_entry,
                     cache_control.clone(),
                     &response_callback,
