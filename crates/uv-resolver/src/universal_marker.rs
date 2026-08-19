@@ -485,6 +485,37 @@ impl ConflictMarker {
         marker
     }
 
+    /// Construct only conflict constraints observable in the provided markers.
+    ///
+    /// An unreferenced item can always be disabled, so its conflict pairs cannot affect the
+    /// markers. Comparisons must provide both sides to project them into the same conflict world.
+    pub(crate) fn from_relevant_conflicts(
+        conflicts: &Conflicts,
+        markers: impl IntoIterator<Item = UniversalMarker>,
+    ) -> Self {
+        let mut referenced = BTreeSet::new();
+        for marker in markers {
+            marker.marker.visit_extras(|_, extra| {
+                referenced.insert(extra.clone());
+            });
+        }
+
+        let mut marker = Self::TRUE;
+        for set in conflicts.iter() {
+            for (first, second) in set
+                .iter()
+                .filter(|item| referenced.contains(&encode_conflict_item(item)))
+                .tuple_combinations()
+            {
+                let pair = Self::from_conflict_item(first)
+                    .negate()
+                    .or(Self::from_conflict_item(second).negate());
+                marker = marker.and(pair);
+            }
+        }
+        marker
+    }
+
     /// Create a conflict marker that is true only when the given extra or
     /// group (for a specific package) is activated.
     pub(crate) fn from_conflict_item(item: &ConflictItem) -> Self {
@@ -1132,6 +1163,25 @@ mod tests {
         );
         dep_conflict_marker.imbibe(conflicts_marker);
         assert_eq!(format!("{dep_conflict_marker:?}"), "true");
+
+        // Comparisons share a conflict world, even when only one side references a conflict.
+        // Unrelated conflict sets do not affect the comparison.
+        let conflicts = create_conflicts([create_set(["foo", "bar"]), create_set(["fox", "ant"])]);
+        let mut impossible = UniversalMarker::new(MarkerTree::TRUE, foo.and(bar));
+        let mut absent = UniversalMarker::FALSE;
+        let relevant = ConflictMarker::from_relevant_conflicts(&conflicts, [impossible, absent]);
+        assert_eq!(relevant, conflicts_marker);
+        impossible.imbibe(relevant);
+        absent.imbibe(relevant);
+        assert_eq!(impossible, absent);
+
+        assert_eq!(
+            ConflictMarker::from_relevant_conflicts(
+                &conflicts,
+                [UniversalMarker::new(MarkerTree::TRUE, foo)],
+            ),
+            ConflictMarker::TRUE,
+        );
     }
 
     #[test]

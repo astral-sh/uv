@@ -885,12 +885,22 @@ impl<'lock> ExpectedPackageDependencies<'lock> {
             .contains(&self.package.id.name, ConflictKindRef::Project);
         let project = ConflictItem::from(self.package.id.name.clone());
         let selected = context.selected_conflict(&self.package.id.name, &self.lock.conflicts);
+        let project_active = project_conflicts && !matches!(context, DependencyContext::Group(_));
+        let selected_items = project_active
+            .then_some(&project)
+            .into_iter()
+            .chain(selected.as_ref());
 
         let mut world = UniversalMarker::new(
             MarkerTree::TRUE,
-            ConflictMarker::from_conflicts(&self.lock.conflicts),
+            ConflictMarker::from_relevant_conflicts(
+                &self.lock.conflicts,
+                selected_items.map(|item| {
+                    UniversalMarker::new(MarkerTree::TRUE, ConflictMarker::from_conflict_item(item))
+                }),
+            ),
         );
-        if project_conflicts && !matches!(context, DependencyContext::Group(_)) {
+        if project_active {
             world.assume_conflict_item(&project);
         }
         if let Some(selected) = &selected {
@@ -927,8 +937,8 @@ impl<'lock> ExpectedPackageDependencies<'lock> {
     fn comparable_dependencies(
         &self,
         dependencies: &[Dependency],
+        conflicts: ConflictMarker,
     ) -> Vec<(PackageId, BTreeSet<ExtraName>, SimplifiedMarkerTree)> {
-        let conflicts = ConflictMarker::from_conflicts(&self.lock.conflicts);
         let mut comparable = dependencies
             .iter()
             .map(|dependency| {
@@ -2291,10 +2301,19 @@ impl Lock {
                 continue;
             }
             let actual = context.dependencies(package);
-            if !complete
-                || expected.comparable_dependencies(&generated)
-                    != expected.comparable_dependencies(actual)
-            {
+            let matches = complete && {
+                // Both sides must be simplified under the same observable conflict constraints.
+                let conflicts = ConflictMarker::from_relevant_conflicts(
+                    &self.conflicts,
+                    generated
+                        .iter()
+                        .chain(actual)
+                        .map(|dependency| dependency.complexified_marker),
+                );
+                expected.comparable_dependencies(&generated, conflicts)
+                    == expected.comparable_dependencies(actual, conflicts)
+            };
+            if !matches {
                 return Ok(SatisfiesResult::MismatchedPackageDependencies(
                     &package.id.name,
                     package.id.version.as_ref(),
