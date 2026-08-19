@@ -2205,9 +2205,8 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                             }
                         }
                     };
-                    // The recursive marker can make an otherwise applicable requirement disjoint
-                    // from the Python range or current fork. Constraints can still reference the
-                    // active extra, so restrict it only for this reachability check.
+                    // Filter out unreachable unsatisfiable requirements before they reach the
+                    // unsatisfiability check.
                     let applicable_marker = requirement
                         .marker
                         .simplify_extras(slice::from_ref(&extra))
