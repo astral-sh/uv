@@ -6473,6 +6473,7 @@ dependencies = [
  "uv-pep440",
  "uv-pep508",
  "uv-platform-tags",
+ "uv-pypi-types",
  "uv-redacted",
  "uv-static",
 ]
