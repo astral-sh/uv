@@ -845,7 +845,7 @@ mod test {
             Requirement::from_str("pkg[dev]; extra == 'test' and sys_platform == 'win32'")
                 .unwrap()
                 .into(),
-            Requirement::from_str("black; extra == 'dev' and sys_platform == 'win32'")
+            Requirement::from_str("black; python_version < '3.12' or extra == 'dev'")
                 .unwrap()
                 .into(),
         ];
@@ -856,12 +856,14 @@ mod test {
                 Requirement::from_str("pytest; extra == 'test'")
                     .unwrap()
                     .into(),
-                Requirement::from_str("black; extra == 'dev' and sys_platform == 'win32'")
+                Requirement::from_str("black; python_version < '3.12' or extra == 'dev'")
                     .unwrap()
                     .into(),
-                Requirement::from_str("black; extra == 'test' and sys_platform == 'win32'")
-                    .unwrap()
-                    .into(),
+                Requirement::from_str(
+                    "black; python_version >= '3.12' and extra == 'test' and sys_platform == 'win32'",
+                )
+                .unwrap()
+                .into(),
             ]
             .into(),
         );
