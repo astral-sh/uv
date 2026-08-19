@@ -79,4 +79,5 @@ jobs:
         run: |
           # Wait for PR to be created before merging
           sleep 10
-          gh pr merge --squash "$BRANCH_NAME"
+          # Explicitly use the versions bot's pull-request ruleset bypass.
+          gh pr merge --squash --admin "$BRANCH_NAME"
