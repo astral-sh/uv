@@ -17912,6 +17912,63 @@ fn lock_writes_without_package_metadata() -> Result<()> {
     ");
     assert_eq!(context.read("uv.lock"), standard_lock);
 
+    let server = PackseServer::new("extras/lock-without-metadata.toml");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&formatdoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["httpx[http2] @ {httpx_url}"]
+        "#,
+            httpx_url = server.file_url("httpx-1.0.0-py3-none-any.whl"),
+        })?;
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("lock-without-metadata")
+        .arg("--index-url")
+        .arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Added h2 v1.0.0
+    Added httpx v1.0.0
+    ");
+
+    let preview_lock = context.read("uv.lock").parse::<toml_edit::DocumentMut>()?;
+    let Some(metadata) = preview_lock
+        .get("package")
+        .and_then(|packages| packages.as_array_of_tables())
+        .and_then(|packages| {
+            packages
+                .iter()
+                .find(|package| package["name"].as_str() == Some("httpx"))
+        })
+        .and_then(|package| package.get("metadata"))
+    else {
+        anyhow::bail!("lockfile did not retain the URL package metadata");
+    };
+    assert_snapshot!(metadata, @r#"
+    requires-dist = [{ name = "h2", marker = "extra == 'http2'" }]
+    provides-extras = ["http2"]
+    "#);
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("lock-without-metadata")
+        .arg("--check")
+        .arg("--offline")
+        .arg("--no-cache")
+        .arg("--index-url")
+        .arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+
     Ok(())
 }
 
@@ -25245,6 +25302,30 @@ fn lock_dependency_metadata_git() -> Result<()> {
      + anyio==4.6.2 (from git+https://github.com/agronholm/anyio@c4844254e6db0cb804c240ba07405db73d810e0b)
      + iniconfig==2.0.0
     ");
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("lock-without-metadata")
+        .arg("--upgrade"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+
+    let preview_lock = context.read("uv.lock").parse::<toml_edit::DocumentMut>()?;
+    let Some(metadata) = preview_lock
+        .get("package")
+        .and_then(|packages| packages.as_array_of_tables())
+        .and_then(|packages| {
+            packages
+                .iter()
+                .find(|package| package["name"].as_str() == Some("anyio"))
+        })
+        .and_then(|package| package.get("metadata"))
+    else {
+        anyhow::bail!("lockfile did not retain the Git package metadata");
+    };
+    assert_snapshot!(metadata, @r#"requires-dist = [{ name = "iniconfig" }]"#);
 
     Ok(())
 }
