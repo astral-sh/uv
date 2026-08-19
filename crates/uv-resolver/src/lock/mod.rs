@@ -3107,6 +3107,11 @@ impl Lock {
         };
 
         for package in &self.packages {
+            // Registry metadata can use authorized direct sources, but cannot introduce them.
+            if matches!(package.id.source, Source::Registry(..)) {
+                continue;
+            }
+
             if let Some(metadata) =
                 dependency_metadata.get(&package.id.name, package.id.version.as_ref())
             {
