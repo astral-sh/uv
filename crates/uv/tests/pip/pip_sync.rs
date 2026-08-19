@@ -1,12 +1,13 @@
 use std::env::consts::EXE_SUFFIX;
 
-use anyhow::Result;
+use anyhow::{Result, bail};
 use assert_cmd::prelude::*;
 use assert_fs::fixture::ChildPath;
 use assert_fs::prelude::*;
 use fs_err as fs;
 use indoc::{formatdoc, indoc};
 use predicates::Predicate;
+use sha2::{Digest, Sha256};
 use url::Url;
 use wiremock::matchers::{method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
@@ -4877,6 +4878,91 @@ fn require_hashes_url() -> Result<()> {
      + iniconfig==2.0.0 (from https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl#sha256=b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374)
     "
     );
+
+    Ok(())
+}
+
+/// Changed hashes must refresh a direct wheel even when its HTTP cache is still fresh.
+#[tokio::test]
+async fn direct_url_wheel_cache_tracks_content() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let wheel_filename = "ok-1.0.0-py3-none-any.whl";
+    let wheel = fs::read(
+        context
+            .workspace_root
+            .join("test/links")
+            .join(wheel_filename),
+    )?;
+    // Give the valid fixture a ZIP comment, changing its hash without changing its contents.
+    let Some(prefix) = wheel.strip_suffix(&[0, 0]) else {
+        bail!("expected a wheel fixture without a ZIP comment");
+    };
+    let comment = b"replacement archive";
+    let mut replacement = prefix.to_vec();
+    replacement.extend_from_slice(&u16::try_from(comment.len())?.to_le_bytes());
+    replacement.extend_from_slice(comment);
+    let original_hash = hex::encode(Sha256::digest(&wheel));
+    let replacement_hash = hex::encode(Sha256::digest(&replacement));
+    let filters = context
+        .filters()
+        .into_iter()
+        .chain([
+            (original_hash.as_str(), "[ORIGINAL_HASH]"),
+            (replacement_hash.as_str(), "[REPLACEMENT_HASH]"),
+        ])
+        .collect::<Vec<_>>();
+
+    let server = MockServer::start().await;
+    let response = |wheel| {
+        ResponseTemplate::new(200)
+            .insert_header("Cache-Control", "max-age=3600")
+            .set_body_bytes(wheel)
+    };
+    Mock::given(path(format!("/{wheel_filename}")))
+        .respond_with(response(wheel))
+        .mount(&server)
+        .await;
+    let wheel_url = format!("{}/{wheel_filename}", server.uri());
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str(&format!("ok @ {wheel_url} --hash=sha256:{original_hash}\n"))?;
+
+    uv_snapshot!(filters.clone(), context.pip_sync()
+        .arg("requirements.txt")
+        .arg("--require-hashes"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + ok==1.0.0 (from http://[LOCALHOST]/ok-1.0.0-py3-none-any.whl)
+    ");
+
+    // Require another install without `--reinstall`, which also refreshes the cache.
+    context.pip_uninstall().arg("ok").assert().success();
+    server.reset().await;
+    Mock::given(path(format!("/{wheel_filename}")))
+        .respond_with(response(replacement))
+        .mount(&server)
+        .await;
+    requirements_txt.write_str(&format!(
+        "ok @ {wheel_url} --hash=sha256:{replacement_hash}\n"
+    ))?;
+
+    uv_snapshot!(filters, context.pip_sync()
+        .arg("requirements.txt")
+        .arg("--require-hashes"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+      × Failed to download `ok @ http://[LOCALHOST]/ok-1.0.0-py3-none-any.whl`
+      ╰─▶ Hash mismatch for `ok @ http://[LOCALHOST]/ok-1.0.0-py3-none-any.whl`
+
+          Expected:
+            sha256:[REPLACEMENT_HASH]
+
+          Computed:
+            sha256:[ORIGINAL_HASH]
+    ");
 
     Ok(())
 }
