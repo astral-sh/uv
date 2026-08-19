@@ -389,19 +389,17 @@ impl FlatRequiresDist {
                     .simplify_extras(slice::from_ref(&extra))
                     .simplify_not_extras_with(|candidate| candidate != &extra)
                     .and(production_marker.negate());
-                if extra_marker.is_false() {
+                let marker = marker.and(extra_marker);
+                if marker.is_false() {
                     continue;
                 }
-                let requirement = {
-                    let marker = marker.and(extra_marker);
-                    Requirement {
-                        name: requirement.name.clone(),
-                        extras: requirement.extras.clone(),
-                        groups: requirement.groups.clone(),
-                        source: requirement.source.clone(),
-                        origin: requirement.origin.clone(),
-                        marker,
-                    }
+                let requirement = Requirement {
+                    name: requirement.name.clone(),
+                    extras: requirement.extras.clone(),
+                    groups: requirement.groups.clone(),
+                    source: requirement.source.clone(),
+                    origin: requirement.origin.clone(),
+                    marker,
                 };
                 if requirement.name == *name {
                     // Add each transitively included extra.
@@ -412,33 +410,33 @@ impl FlatRequiresDist {
                             .cloned()
                             .map(|extra| (extra, requirement.marker)),
                     );
-                } else {
-                    // Add the requirements for that extra.
-                    flattened.push(requirement);
                 }
+
+                // Retain the requirement, including any recursively reached self-constraint.
+                flattened.push(requirement);
+            }
+        }
+
+        // Retain any self-constraints for that extra, e.g., if `project[foo]` includes
+        // `project[bar]>1.0`, as a dependency, we need to propagate `project>1.0`, in addition to
+        // transitively expanding `project[bar]`.
+        let mut self_constraints = vec![];
+        for req in &flattened {
+            if req.name == *name && !req.source.is_empty() {
+                self_constraints.push(Requirement {
+                    name: req.name.clone(),
+                    extras: Box::new([]),
+                    groups: req.groups.clone(),
+                    source: req.source.clone(),
+                    origin: req.origin.clone(),
+                    marker: req.marker,
+                });
             }
         }
 
         // Drop all the self-references now that we've flattened them out.
         flattened.retain(|req| req.name != *name);
-
-        // Retain any self-constraints for that extra, e.g., if `project[foo]` includes
-        // `project[bar]>1.0`, as a dependency, we need to propagate `project>1.0`, in addition to
-        // transitively expanding `project[bar]`.
-        for req in &requirements {
-            if req.name == *name {
-                if !req.source.is_empty() {
-                    flattened.push(Requirement {
-                        name: req.name.clone(),
-                        extras: Box::new([]),
-                        groups: req.groups.clone(),
-                        source: req.source.clone(),
-                        origin: req.origin.clone(),
-                        marker: req.marker,
-                    });
-                }
-            }
-        }
+        flattened.extend(self_constraints);
 
         Self(flattened.into_boxed_slice())
     }
