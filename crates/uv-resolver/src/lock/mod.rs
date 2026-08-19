@@ -577,6 +577,16 @@ impl<'a> LockedDependencyBuilder<'a> {
                 if marker.is_false() {
                     continue;
                 }
+                if matches!(dependency.id.source, Source::Registry(_))
+                    && requirement
+                        .extras
+                        .iter()
+                        .any(|extra| !dependency.optional_dependencies.contains_key(extra))
+                {
+                    // Registry metadata is not retained. An extra that was never resolved may
+                    // introduce dependencies, so its base package cannot satisfy this request.
+                    continue;
+                }
                 covered_marker = covered_marker.or(marker.combined());
 
                 activated_extras
@@ -992,6 +1002,9 @@ impl Lock {
     /// Initialize a [`Lock`] from a [`ResolverOutput`] and [`ResolverManifest`], applying any
     /// index-specific hash requirements to registry artifacts.
     ///
+    /// Set `retain_empty_extras` when omitting package metadata, so selected registry extras
+    /// retain their incoming edges even if they resolve to no dependencies.
+    ///
     /// Returns an error if an artifact does not advertise its index's required algorithm.
     pub fn from_resolution(
         resolution: &ResolverOutput,
@@ -999,6 +1012,7 @@ impl Lock {
         root: &Path,
         supported_environments: Vec<MarkerTree>,
         index_locations: &IndexLocations,
+        retain_empty_extras: bool,
     ) -> Result<Self, LockError> {
         let mut packages = BTreeMap::new();
         let requires_python = resolution.requires_python.clone();
@@ -1096,6 +1110,15 @@ impl Lock {
                     }
                     .into());
                 };
+                if retain_empty_extras && matches!(package.id.source, Source::Registry(_)) {
+                    // A metadata-free lock must distinguish an extra that resolved to no
+                    // dependencies (including nonexistent extras) from one never requested.
+                    // Keeping the section also preserves its incoming, marker-bearing edge.
+                    package
+                        .optional_dependencies
+                        .entry(extra.clone())
+                        .or_default();
+                }
                 package.add_dependencies(
                     DependencyContext::Extra(extra),
                     &requires_python,

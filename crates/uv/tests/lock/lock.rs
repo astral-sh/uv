@@ -8894,6 +8894,8 @@ fn lock_new_extras() -> Result<()> {
     Resolved 6 packages in [TIME]
     ");
 
+    let lock_without_extras = lock_without_package_metadata(&lock)?;
+
     // Enable a new extra.
     pyproject_toml.write_str(
         r#"
@@ -9025,6 +9027,165 @@ fn lock_new_extras() -> Result<()> {
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 7 packages in [TIME]
+    ");
+
+    // The original metadata-free graph must also reject the newly requested extra.
+    context
+        .temp_dir
+        .child("uv.lock")
+        .write_str(&lock_without_extras.to_string())?;
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("lock-without-metadata")
+        .arg("--locked"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Resolved 7 packages in [TIME]
+    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+
+    hint: To update the lockfile, run `uv lock`.
+    ");
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("lock-without-metadata"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 7 packages in [TIME]
+    Added pysocks v1.7.1
+    ");
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("lock-without-metadata")
+        .arg("--check")
+        .arg("--offline")
+        .arg("--no-cache"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 7 packages in [TIME]
+    ");
+
+    // Empty and nonexistent extras are still valid resolved requests. Record enough
+    // information to recognize them without loading registry metadata on the next check.
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["requests[security,nonexistent]==2.31.0"]
+        "#})?;
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("lock-without-metadata"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
+    warning: The package `requests==2.31.0` does not have an extra named `nonexistent`
+    Removed pysocks v1.7.1
+    ");
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("lock-without-metadata")
+        .arg("--check")
+        .arg("--offline")
+        .arg("--no-cache"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
+/// An extra that resolved to no edges in one environment can add dependencies in another.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_metadata_free_new_extra_marker() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let server = PackseServer::new("tag_and_markers/virtual-package-extra-priorities.toml");
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    let pyproject = indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["psycopg", "psycopg[binary] ; implementation_name == 'pypy'"]
+
+        [dependency-groups]
+        dev = ["psycopg"]
+        "#};
+    pyproject_toml.write_str(pyproject)?;
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("lock-without-metadata")
+        .arg("--index-url")
+        .arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("lock-without-metadata")
+        .arg("--index-url")
+        .arg(server.index_url())
+        .arg("--check")
+        .arg("--offline")
+        .arg("--no-cache"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+
+    // The old extra selection is empty only on PyPy. A new incoming edge must not
+    // infer that it is also empty in the group's CPython environment.
+    pyproject_toml.write_str(&pyproject.replace(
+        "dev = [\"psycopg\"]",
+        "dev = [\"psycopg\", \"psycopg[binary] ; implementation_name == 'cpython'\"]",
+    ))?;
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("lock-without-metadata")
+        .arg("--index-url")
+        .arg(server.index_url())
+        .arg("--locked"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+
+    hint: To update the lockfile, run `uv lock`.
+    ");
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("lock-without-metadata")
+        .arg("--index-url")
+        .arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    Added psycopg-binary v1.0.0
+    ");
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("lock-without-metadata")
+        .arg("--index-url")
+        .arg(server.index_url())
+        .arg("--check")
+        .arg("--offline")
+        .arg("--no-cache"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
     ");
 
     Ok(())
