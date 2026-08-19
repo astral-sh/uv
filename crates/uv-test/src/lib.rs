@@ -2274,7 +2274,8 @@ pub fn run_and_format<T: AsRef<str>>(
         run_and_format_silent(command, filters, function_name, windows_filters, input);
     eprintln!("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ Unfiltered output ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
     eprintln!(
-        "----- stdout -----\n{}\n----- stderr -----\n{}",
+        "----- exit status -----\n{}\n----- stdout -----\n{}\n----- stderr -----\n{}",
+        output.status,
         String::from_utf8_lossy(&output.stdout),
         String::from_utf8_lossy(&output.stderr),
     );
@@ -2349,6 +2350,11 @@ pub fn run_and_format_silent<T: AsRef<str>>(
             "failure"
         },
     );
+    if output.status.code().is_none() {
+        snapshot.push_str("exit_status: ");
+        snapshot.push_str(&output.status.to_string());
+        snapshot.push('\n');
+    }
     if !output.stdout.is_empty() {
         snapshot.push_str("----- stdout -----\n");
         snapshot.push_str(&String::from_utf8_lossy(&output.stdout));
@@ -2629,6 +2635,37 @@ macro_rules! uv_snapshot {
         ::insta::assert_snapshot!(snapshot, @$snapshot);
         output
     }};
+}
+
+#[cfg(all(test, unix))]
+mod process_status_tests {
+    use std::process::Command;
+
+    use super::run_and_format_silent;
+
+    #[test]
+    fn reports_signal() {
+        let mut command = Command::new("sh");
+        command.args(["-c", "kill -TERM $$"]);
+        let filters: &[(&str, &str)] = &[];
+        let (snapshot, _) = run_and_format_silent(command, filters, "reports_signal", None, None);
+
+        insta::assert_snapshot!(snapshot, @"
+        exit_code: -1 (failure)
+        exit_status: signal: 15 (SIGTERM)
+        ");
+    }
+
+    #[test]
+    fn preserves_exit_code() {
+        let mut command = Command::new("sh");
+        command.args(["-c", "exit 7"]);
+        let filters: &[(&str, &str)] = &[];
+        let (snapshot, _) =
+            run_and_format_silent(command, filters, "preserves_exit_code", None, None);
+
+        insta::assert_snapshot!(snapshot, @"exit_code: 7 (failure)");
+    }
 }
 
 #[cfg(test)]
