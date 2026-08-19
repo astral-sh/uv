@@ -470,6 +470,7 @@ fn pip_install_baseline() {
         overrides: [],
         excludes: [],
         build_constraints: [],
+        require_build_hashes: false,
         dry_run: Disabled,
         output_format: Text,
         constraints_from_workspace: [],
