@@ -1202,18 +1202,17 @@ async fn lock_and_sync(
             // Update the `pypackage.toml` in-memory.
             target = target.update(&content, &WorkspaceCache::default())?;
 
-            // Invalidate the project metadata.
+            // Invalidate any cached project metadata. Reusing a metadata-free lock may not
+            // populate the in-memory index.
             if let AddTarget::Project(VirtualProject::Project(ref project), _) = target {
                 let url = DisplaySafeUrl::from_file_path(project.project_root())
                     .expect("project root is a valid URL");
                 let distribution_id = url.distribution_id();
-                let existing = lock_state
+                lock_state
                     .index_mut()
                     .distributions_mut()
                     .context("Cannot invalidate project metadata while the cache is in use")?
                     .remove(&distribution_id);
-                // TODO: Allow an absent entry after reusing a metadata-free lock.
-                debug_assert!(existing.is_some(), "distribution should exist");
             }
 
             // If the file was modified, we have to lock again, though the only expected change is
