@@ -105,8 +105,7 @@ pub(crate) async fn cache_clean(
         let bytes = if reported_bytes < 1024 {
             format!("{reported_bytes}B")
         } else {
-            let (bytes, unit) = human_readable_bytes(reported_bytes);
-            format!("{bytes:.1}{unit}")
+            format!("{:.1}", human_readable_bytes(reported_bytes))
         };
         if summary.physical_bytes_incomplete {
             write!(printer.stderr(), " (at least {})", bytes.green())?;

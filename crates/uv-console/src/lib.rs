@@ -1,5 +1,5 @@
 use console::{Key, Term, measure_text_width, style};
-use std::{cmp::Ordering, iter};
+use std::{cmp::Ordering, fmt, iter};
 
 /// Prompt the user for confirmation in the given [`Term`].
 ///
@@ -297,18 +297,37 @@ pub fn input(prompt: &str, term: &Term) -> std::io::Result<String> {
     Ok(input)
 }
 
-/// Formats a number of bytes into a human readable SI-prefixed size (binary units).
-///
-/// Returns a tuple of `(quantity, units)`.
+/// Formats a number of bytes into a human readable IEC-prefixed size (binary units).
 #[allow(
     clippy::cast_possible_truncation,
     clippy::cast_possible_wrap,
     clippy::cast_precision_loss,
     clippy::cast_sign_loss
 )]
-pub fn human_readable_bytes(bytes: u64) -> (f32, &'static str) {
+pub fn human_readable_bytes(bytes: u64) -> impl fmt::Display {
     const UNITS: [&str; 7] = ["B", "KiB", "MiB", "GiB", "TiB", "PiB", "EiB"];
-    let bytes_f32 = bytes as f32;
-    let i = ((bytes_f32.log2() / 10.0) as usize).min(UNITS.len() - 1);
-    (bytes_f32 / 1024_f32.powi(i as i32), UNITS[i])
+
+    fmt::from_fn(move |formatter| {
+        let bytes_f32 = bytes as f32;
+        let i = ((bytes_f32.log2() / 10.0) as usize).min(UNITS.len() - 1);
+        let quantity = bytes_f32 / 1024_f32.powi(i as i32);
+
+        fmt::Display::fmt(&quantity, formatter)?;
+        formatter.write_str(UNITS[i])
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::human_readable_bytes;
+
+    #[test]
+    fn human_readable_sizes() {
+        assert_eq!(format!("{}", human_readable_bytes(0)), "0B");
+        assert_eq!(format!("{}", human_readable_bytes(1024)), "1KiB");
+        assert_eq!(format!("{}", human_readable_bytes(1536)), "1.5KiB");
+        assert_eq!(format!("{}", human_readable_bytes(u64::MAX)), "16EiB");
+
+        assert_eq!(format!("{:.2}", human_readable_bytes(1023)), "1023.00B");
+    }
 }
