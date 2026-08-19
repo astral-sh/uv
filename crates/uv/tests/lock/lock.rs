@@ -18017,7 +18017,7 @@ fn lock_metadata_free_many_conflicts() -> Result<()> {
     Ok(())
 }
 
-/// An empty extra remains selectable when its lockfile omits package metadata.
+/// Empty extras and groups remain selectable when a lockfile omits package metadata.
 #[cfg(feature = "test-universal")]
 #[test]
 fn lock_metadata_free_frozen_empty_extra() -> Result<()> {
@@ -18033,25 +18033,25 @@ fn lock_metadata_free_frozen_empty_extra() -> Result<()> {
 
         [project.optional-dependencies]
         empty = []
+
+        [dependency-groups]
+        empty = []
         "#})?;
 
-    uv_snapshot!(context.filters(), context.lock().arg("--offline"), @"
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("lock-without-metadata")
+        .arg("--offline"), @"
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     ");
 
-    let lock = lock_without_package_metadata(&context.read("uv.lock"))?;
-    context
-        .temp_dir
-        .child("uv.lock")
-        .write_str(&lock.to_string())?;
-
     uv_snapshot!(context.filters(), context.sync()
-        .arg("--preview-features")
-        .arg("lock-without-metadata")
         .arg("--frozen")
         .arg("--extra")
+        .arg("empty")
+        .arg("--group")
         .arg("empty"), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -18529,18 +18529,15 @@ fn lock_metadata_free_frozen_filtered_dependency_selections() -> Result<()> {
         exclude-dependencies = ["excluded-dependency"]
         "#})?;
 
-    uv_snapshot!(context.filters(), context.lock().arg("--offline"), @"
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("lock-without-metadata")
+        .arg("--offline"), @"
     exit_code: 0 (success)
     ----- stderr -----
     warning: The `tool.uv.dev-dependencies` field (used in `pyproject.toml`) is deprecated and will be removed in a future release; use `dependency-groups.dev` instead
     Resolved 1 package in [TIME]
     ");
-
-    let lock = lock_without_package_metadata(&context.read("uv.lock"))?;
-    context
-        .temp_dir
-        .child("uv.lock")
-        .write_str(&lock.to_string())?;
 
     uv_snapshot!(context.filters(), context.sync()
         .arg("--preview-features")
@@ -18585,10 +18582,10 @@ fn lock_metadata_free_frozen_preserves_recorded_selections() -> Result<()> {
         dependencies = ["dependency"]
 
         [project.optional-dependencies]
-        original = ["dependency"]
+        original = []
 
         [dependency-groups]
-        original = ["dependency"]
+        original = []
 
         [tool.uv.sources]
         dependency = { path = "dependency" }
@@ -18632,6 +18629,41 @@ fn lock_metadata_free_frozen_preserves_recorded_selections() -> Result<()> {
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + dependency==1.0.0 (from file://[TEMP_DIR]/dependency)
+    ");
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--extra").arg("added"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Extra `added` is not defined in the `optional-dependencies` table for `project`
+    ");
+
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--group").arg("original"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Checked 1 package in [TIME]
+    ");
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--group").arg("added"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Group `added` is not defined in the project's `dependency-groups` table
+    ");
+
+    // Locks without package metadata must likewise preserve the recorded empty selections.
+    pyproject_toml.write_str(original_pyproject)?;
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("lock-without-metadata")
+        .arg("--upgrade")
+        .arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+    pyproject_toml.write_str(&original_pyproject.replace("original =", "added ="))?;
+
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--extra").arg("original"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Checked 1 package in [TIME]
     ");
     uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--extra").arg("added"), @"
     exit_code: 2 (failure)

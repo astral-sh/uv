@@ -13,7 +13,6 @@ use uv_configuration::{
 use uv_distribution_types::{Index, Resolution};
 use uv_normalize::{DEV_DEPENDENCIES, ExtraName, GroupName, PackageName};
 use uv_platform_tags::Tags;
-use uv_preview::PreviewFeature;
 use uv_pypi_types::{
     DependencyGroupSpecifier, DependencyGroups, LenientRequirement, ResolverMarkerEnvironment,
     VerbatimParsedUrl,
@@ -411,48 +410,29 @@ impl<'lock> InstallTarget<'lock> {
             return Ok(());
         }
         match self {
-            Self::Project {
-                lock, workspace, ..
-            }
-            | Self::Projects {
-                lock, workspace, ..
-            }
-            | Self::Workspace { lock, workspace }
-            | Self::NonProjectWorkspace { lock, workspace } => {
+            Self::Project { lock, .. }
+            | Self::Projects { lock, .. }
+            | Self::Workspace { lock, .. }
+            | Self::NonProjectWorkspace { lock, .. } => {
                 if !lock.supports_provides_extra() {
                     return Ok(());
                 }
 
-                let metadata_free_lock = lock.supports_missing_package_metadata()
-                    && uv_preview::is_enabled(PreviewFeature::LockWithoutMetadata);
+                let metadata_free_lock = lock.supports_missing_package_metadata();
                 let roots = self.roots().collect::<FxHashSet<_>>();
-                // Collect all known extras from the member packages.
+                // Revision 4 records even empty extras in the resolved dependency table. Read
+                // only the lockfile so frozen installs cannot select newly declared extras.
                 let known_extras = lock
                     .packages()
                     .iter()
                     .filter(|package| roots.contains(package.name()))
                     .flat_map(|package| {
-                        // Extras that are empty or where the dependencies are filtered out through
-                        // their marker have no locked edges, so we read the workspace instead.
-                        let declared_extras = metadata_free_lock
-                            .then_some(package)
-                            .filter(|package| !package.has_metadata())
-                            .and_then(|package| workspace.packages().get(package.name()))
-                            .and_then(|member| member.pyproject_toml().project.as_ref())
-                            .and_then(|project| project.optional_dependencies.as_ref())
-                            .into_iter()
-                            .flat_map(|dependencies| dependencies.keys());
-
-                        package
-                            .provides_extras()
-                            .iter()
-                            .chain(
-                                metadata_free_lock
-                                    .then(|| package.optional_dependencies().keys())
-                                    .into_iter()
-                                    .flatten(),
-                            )
-                            .chain(declared_extras)
+                        package.provides_extras().iter().chain(
+                            metadata_free_lock
+                                .then(|| package.optional_dependencies().keys())
+                                .into_iter()
+                                .flatten(),
+                        )
                     })
                     .collect::<FxHashSet<_>>();
 
@@ -504,8 +484,7 @@ impl<'lock> InstallTarget<'lock> {
             }
             | Self::Workspace { lock, workspace }
             | Self::NonProjectWorkspace { lock, workspace } => {
-                let metadata_free_lock = lock.supports_missing_package_metadata()
-                    && uv_preview::is_enabled(PreviewFeature::LockWithoutMetadata);
+                let metadata_free_lock = lock.supports_missing_package_metadata();
                 // Validate inherited root groups even when `--no-group` excludes them from
                 // installation and therefore omits the root from the selected group roots.
                 let workspace_root = matches!(self, Self::Project { .. })
@@ -518,31 +497,8 @@ impl<'lock> InstallTarget<'lock> {
                     .iter()
                     .filter(|package| roots.contains(package.name()))
                     .flat_map(|package| {
-                        // Groups that are empty or where the dependencies are filtered out through
-                        // their marker have no locked edges, so we read the workspace instead.
-                        let declared_groups = metadata_free_lock
-                            .then_some(package)
-                            .filter(|package| !package.has_metadata())
-                            .and_then(|package| workspace.packages().get(package.name()))
-                            .into_iter()
-                            .flat_map(|member| {
-                                let pyproject = member.pyproject_toml();
-                                let declared_groups = pyproject
-                                    .dependency_groups
-                                    .as_ref()
-                                    .into_iter()
-                                    .flatten()
-                                    .map(|(group, _)| group);
-                                let legacy_dev = pyproject
-                                    .tool
-                                    .as_ref()
-                                    .and_then(|tool| tool.uv.as_ref())
-                                    .and_then(|uv| uv.dev_dependencies.as_ref())
-                                    .is_some()
-                                    .then_some(&*DEV_DEPENDENCIES);
-                                declared_groups.chain(legacy_dev)
-                            });
-
+                        // Revision 4 retains empty groups as resolved dependency table entries.
+                        // Do not admit groups added to the workspace after the lock was written.
                         package
                             .dependency_groups()
                             .keys()
@@ -552,7 +508,6 @@ impl<'lock> InstallTarget<'lock> {
                                     .into_iter()
                                     .flatten(),
                             )
-                            .chain(declared_groups)
                             .map(Cow::Borrowed)
                     });
 
