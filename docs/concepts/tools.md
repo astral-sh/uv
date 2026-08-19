@@ -74,7 +74,8 @@ $ uvx ruff@latest --version
 0.6.2
 ```
 
-Once a tool is installed with `uv tool install`, `uvx` will use the installed version by default.
+Once a tool is installed with `uv tool install`, `uvx` will use the installed version by default,
+provided the settings for the invocation match those recorded when the tool was installed.
 
 For example, after installing an older version of Ruff:
 
