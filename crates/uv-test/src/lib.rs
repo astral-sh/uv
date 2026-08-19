@@ -1,6 +1,7 @@
 // The `unreachable_pub` is to silence false positives in RustRover.
 #![allow(dead_code, unreachable_pub)]
 
+pub mod archive;
 pub mod find_links;
 mod http_server;
 pub mod packse;
