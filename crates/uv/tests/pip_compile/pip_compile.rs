@@ -8,17 +8,12 @@ use std::str::FromStr;
 
 use anyhow::Result;
 use assert_fs::prelude::*;
-use flate2::write::GzEncoder;
 use fs_err::File;
-use futures::executor::block_on;
-use futures::io::AllowStdIo;
 #[cfg(feature = "test-python-managed")]
 use http::StatusCode;
 #[cfg(feature = "test-universal")]
 use indoc::formatdoc;
 use indoc::indoc;
-use tar_codec::{ArchiveBuilder as _, EntryMetadata, TarEncoder};
-use tokio_util::compat::FuturesAsyncWriteCompatExt;
 use url::Url;
 use wiremock::matchers::{method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
@@ -29,22 +24,10 @@ use uv_pep440::Version;
 use uv_pep508::Requirement;
 use uv_static::EnvVars;
 
+use uv_test::archive::write_tar_gz;
 use uv_test::packse::PackseServer;
 use uv_test::packse::scenario::{Package, PackageMetadata, Scenario};
 use uv_test::{DEFAULT_PYTHON_VERSION, TestContext, download_to_disk, uv_snapshot};
-
-fn write_tar_gz(file: File, entries: &[(&str, &str)]) -> Result<()> {
-    let mut encoder = GzEncoder::new(file, flate2::Compression::default());
-    let mut tar = TarEncoder::new(AllowStdIo::new(&mut encoder).compat_write()).builder();
-
-    for (path, contents) in entries {
-        block_on(tar.add_file(path, contents.as_bytes(), EntryMetadata::default()))?;
-    }
-
-    block_on(tar.finish())?;
-    encoder.finish()?;
-    Ok(())
-}
 
 #[test]
 fn compile_requirements_in() -> Result<()> {

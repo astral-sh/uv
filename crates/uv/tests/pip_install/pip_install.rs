@@ -9,18 +9,14 @@ use assert_fs::prelude::*;
 use async_compression::tokio::write::ZstdEncoder;
 use async_zip::base::write::ZipFileWriter;
 use async_zip::{Compression, ZipEntryBuilder};
-use flate2::write::GzEncoder;
 use fs_err as fs;
 use fs_err::File;
 use futures::executor::block_on;
-use futures::io::AllowStdIo;
 use indoc::{formatdoc, indoc};
 use insta::{allow_duplicates, assert_snapshot};
 use predicates::prelude::predicate;
-use tar_codec::{ArchiveBuilder as _, EntryMetadata, TarEncoder};
 #[cfg(unix)]
 use tokio::io::AsyncWriteExt;
-use tokio_util::compat::FuturesAsyncWriteCompatExt;
 use url::Url;
 use walkdir::WalkDir;
 use wiremock::{
@@ -30,6 +26,7 @@ use wiremock::{
 
 use uv_fs::{PortablePath, Simplified};
 use uv_static::EnvVars;
+use uv_test::archive::write_tar_gz;
 #[cfg(feature = "test-git")]
 use uv_test::decode_token;
 use uv_test::find_links::FindLinksServer;
@@ -38,19 +35,6 @@ use uv_test::{
     DEFAULT_PYTHON_VERSION, TestContext, apply_filters, download_to_disk, get_bin, uv_snapshot,
     venv_bin_path,
 };
-
-fn write_tar_gz(file: File, entries: &[(&str, &str)]) -> Result<()> {
-    let mut encoder = GzEncoder::new(file, flate2::Compression::default());
-    let mut tar = TarEncoder::new(AllowStdIo::new(&mut encoder).compat_write()).builder();
-
-    for (path, contents) in entries {
-        block_on(tar.add_file(path, contents.as_bytes(), EntryMetadata::default()))?;
-    }
-
-    block_on(tar.finish())?;
-    encoder.finish()?;
-    Ok(())
-}
 
 fn write_many_files_wheel(path: &Path, source_files: usize) -> Result<()> {
     let mut writer = ZipFileWriter::new(Vec::new());
