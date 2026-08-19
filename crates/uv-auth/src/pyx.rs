@@ -525,14 +525,14 @@ impl PyxTokenStore {
 
     /// Returns `true` if the given URL is "known" to this token store (i.e., should be
     /// authenticated using the store's tokens).
-    pub fn is_known_url(&self, url: &Url) -> bool {
+    pub(crate) fn is_known_url(&self, url: &Url) -> bool {
         is_known_url(url, &self.api, &self.cdn)
     }
 
     /// Returns `true` if the URL is on a "known" domain (i.e., the same domain as the API or CDN).
     ///
-    /// Like [`is_known_url`](Self::is_known_url), but also returns `true` if the API is on the
-    /// subdomain of the URL (e.g., if the API is `api.pyx.dev` and the URL is `pyx.dev`).
+    /// Also returns `true` if the API is on a subdomain of the URL (e.g., if the API is
+    /// `api.pyx.dev` and the URL is `pyx.dev`).
     pub fn is_known_domain(&self, url: &Url) -> bool {
         is_known_domain(url, &self.api, &self.cdn)
     }
