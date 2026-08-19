@@ -8354,6 +8354,23 @@ fn require_hashes_build_dependencies() -> Result<()> {
         .arg("--no-binary").arg("a")
         .arg("-r")
         .arg("requirements.txt")
+        .arg("--require-hashes")
+        .arg("--require-build-hashes"), @r"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+      × Failed to download and build `a==1.0.0`
+      ├─▶ Failed to resolve requirements from `build-system.requires`
+      ├─▶ No solution found when resolving: `hatchling`
+      ╰─▶ In `--require-hashes` mode, all requirements must be pinned upfront with `==`, but found: `hatchling`
+    "
+    );
+
+    uv_snapshot!(context.pip_install()
+        .arg("--index-url").arg(server.index_url())
+        .arg("--no-binary").arg("a")
+        .arg("-r")
+        .arg("requirements.txt")
         .arg("--require-hashes"), @"
     exit_code: 0 (success)
     ----- stderr -----

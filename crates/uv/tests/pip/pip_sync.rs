@@ -5335,6 +5335,17 @@ fn compatible_build_constraint() -> Result<()> {
     uv_snapshot!(context.pip_sync()
         .arg("requirements.txt")
         .arg("--build-constraint")
+        .arg("build_constraints.txt")
+        .arg("--require-build-hashes"), @r"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: In `--require-hashes` mode, all requirements must have their versions pinned with `==`, but found: setuptools>=40
+    "
+    );
+
+    uv_snapshot!(context.pip_sync()
+        .arg("requirements.txt")
+        .arg("--build-constraint")
         .arg("build_constraints.txt"), @"
     exit_code: 0 (success)
     ----- stderr -----
