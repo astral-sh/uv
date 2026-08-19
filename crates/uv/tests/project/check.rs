@@ -2158,10 +2158,7 @@ fn check_script() -> Result<()> {
 #[test]
 #[cfg(feature = "test-pypi")]
 fn check_script_respects_exclude_newer_package_for_ty_selection() -> Result<()> {
-    let context = uv_test::test_context!("3.12").with_filter((
-        r"(?m)^WARN Failed to fetch `ty` from .+; falling back to .+\n",
-        "",
-    ));
+    let context = uv_test::test_context!("3.12");
 
     let script = context.temp_dir.child("script.py");
     script.write_str(indoc! {r#"
@@ -2233,10 +2230,7 @@ fn check_script_respects_exclude_newer_package_for_ty_selection() -> Result<()> 
 #[test]
 #[cfg(feature = "test-pypi")]
 fn check_respects_exclude_newer_package_for_ty_selection() -> Result<()> {
-    let context = uv_test::test_context!("3.12").with_filter((
-        r"(?m)^WARN Failed to fetch `ty` from .+; falling back to .+\n",
-        "",
-    ));
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {r#"
