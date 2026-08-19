@@ -2158,8 +2158,7 @@ fn check_script() -> Result<()> {
 #[test]
 #[cfg(feature = "test-pypi")]
 fn check_script_ignores_exclude_newer_package_for_ty_selection() -> Result<()> {
-    let context =
-        uv_test::test_context!("3.12").with_filter((r"ty 0\.0\.16(?: \([^)]*\))?", "ty 0.0.16"));
+    let context = uv_test::test_context!("3.12");
 
     let script = context.temp_dir.child("script.py");
     script.write_str(indoc! {r#"
