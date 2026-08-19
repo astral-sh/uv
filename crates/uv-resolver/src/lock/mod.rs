@@ -5,7 +5,6 @@ use std::fmt::{Debug, Display, Formatter};
 use std::io;
 use std::iter;
 use std::path::{Path, PathBuf};
-use std::slice;
 use std::str::FromStr;
 use std::sync::{Arc, LazyLock};
 
@@ -525,15 +524,10 @@ impl<'a> LockedDependencyBuilder<'a> {
         for requirement in requirements {
             // Specialize the declaration to its production, extra, or dependency-group context.
             // This handles cases such as `sys_platform == "darwin" or extra == "foo"`.
-            let production_marker = requirement.marker.simplify_not_extras_with(|_| true);
-            let requirement_marker = match context {
-                DependencyContext::Production | DependencyContext::Group(_) => production_marker,
-                DependencyContext::Extra(extra) => requirement
-                    .marker
-                    .simplify_extras(slice::from_ref(extra))
-                    .simplify_not_extras_with(|candidate| candidate != extra)
-                    .and(production_marker.negate()),
-            };
+            let requirement_marker = requirement.marker_for_extra(match context {
+                DependencyContext::Production | DependencyContext::Group(_) => None,
+                DependencyContext::Extra(extra) => Some(extra),
+            });
             let mut required_marker = UniversalMarker::from_combined(requirement_marker);
             required_marker.and(self.parent_marker);
             if let Some(conflict_marker) =

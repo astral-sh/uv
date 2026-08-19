@@ -2277,19 +2277,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 // The requirements are then separately tracked in production and optional
                 // dependencies respectively.
 
-                let marker = match extra {
-                    Some(extra) => requirement
-                        .marker
-                        .simplify_extras(slice::from_ref(extra))
-                        .simplify_not_extras_with(|candidate| candidate != extra)
-                        .and(
-                            requirement
-                                .marker
-                                .simplify_not_extras_with(|_| true)
-                                .negate(),
-                        ),
-                    None => requirement.marker.simplify_not_extras_with(|_| true),
-                };
+                let marker = requirement.marker_for_extra(extra);
 
                 if requirement.marker != marker {
                     requirement.to_mut().marker = marker;

@@ -1,6 +1,7 @@
 use std::fmt::{Display, Formatter};
 use std::io;
 use std::path::{Path, PathBuf};
+use std::slice;
 use std::str::FromStr;
 
 use thiserror::Error;
@@ -71,6 +72,24 @@ impl Requirement {
     /// environment independent marker evaluation.
     pub fn evaluate_markers(&self, env: Option<&MarkerEnvironment>, extras: &[ExtraName]) -> bool {
         self.marker.evaluate_optional_environment(env, extras)
+    }
+
+    /// Return the part of the requirement marker activated by the given extra.
+    ///
+    /// With no extra, return the production marker. With an extra, exclude environments where the
+    /// requirement is already active in production. For example, `sys_platform == 'win32' or
+    /// extra == 'feature'` applies in production on Windows and through `feature` elsewhere.
+    #[must_use]
+    pub fn marker_for_extra(&self, extra: Option<&ExtraName>) -> MarkerTree {
+        let production_marker = self.marker.simplify_not_extras_with(|_| true);
+        match extra {
+            Some(extra) => self
+                .marker
+                .simplify_extras(slice::from_ref(extra))
+                .simplify_not_extras_with(|candidate| candidate != extra)
+                .and(production_marker.negate()),
+            None => production_marker,
+        }
     }
 
     /// Convert to a [`Requirement`] with a relative path based on the given root.
