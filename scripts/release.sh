@@ -22,7 +22,7 @@ uv run "$project_root/scripts/generate-crate-readmes.py"
 echo "Updating lockfiles..."
 cargo update -p uv
 pushd crates/uv-trampoline; cargo update -p uv-trampoline; popd
-uv lock --no-config
+uv lock --default-index https://pypi.org/simple
 
 echo "Generating JSON schema..."
 cargo dev generate-json-schema
@@ -31,7 +31,7 @@ echo "Checking crates.io publish setup..."
 crates_policies="$(mktemp -d)"
 trap 'rm -rf "$crates_policies"' EXIT
 git clone --depth=1 --quiet https://github.com/astral-sh/crates-policies.git "$crates_policies"
-uv run --no-config "$crates_policies/check.py" "$project_root"
+uv run --default-index https://pypi.org/simple "$crates_policies/check.py" "$project_root"
 
 echo "Creating release branch..."
 git checkout -b "release/$(uv version --short)"
