@@ -64,6 +64,7 @@ pub(crate) async fn pip_sync(
     link_mode: LinkMode,
     compile: bool,
     hash_checking: Option<HashCheckingMode>,
+    require_build_hashes: bool,
     index_locations: IndexLocations,
     index_strategy: IndexStrategy,
     torch_backend: Option<TorchMode>,
@@ -344,13 +345,15 @@ pub(crate) async fn pip_sync(
         }
     };
 
-    // Verify supplied build hashes unless hash verification was explicitly disabled.
-    let build_hasher = if hash_checking.is_some() {
-        HashStrategy::from_constraints(
-            &build_constraints,
-            Some(&marker_env),
-            HashCheckingMode::Verify,
-        )?
+    let build_hash_checking = if require_build_hashes {
+        Some(HashCheckingMode::Require)
+    } else if hash_checking.is_some() {
+        Some(HashCheckingMode::Verify)
+    } else {
+        None
+    };
+    let build_hasher = if let Some(build_hash_checking) = build_hash_checking {
+        HashStrategy::from_constraints(&build_constraints, Some(&marker_env), build_hash_checking)?
     } else {
         HashStrategy::default()
     };

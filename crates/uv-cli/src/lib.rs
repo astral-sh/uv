@@ -2013,6 +2013,10 @@ pub struct PipSyncArgs {
     #[command(flatten)]
     pub hash_checking: HashCheckingArgs,
 
+    /// Require hashes for all dependencies installed into isolated build environments.
+    #[arg(long, env = EnvVars::UV_REQUIRE_BUILD_HASHES, value_parser = clap::builder::BoolishValueParser::new())]
+    pub require_build_hashes: bool,
+
     /// The Python interpreter into which packages should be installed.
     ///
     /// By default, syncing requires a virtual environment. A path to an alternative Python can be
@@ -2366,6 +2370,10 @@ pub struct PipInstallArgs {
 
     #[command(flatten)]
     pub hash_checking: HashCheckingArgs,
+
+    /// Require hashes for all dependencies installed into isolated build environments.
+    #[arg(long, env = EnvVars::UV_REQUIRE_BUILD_HASHES, value_parser = clap::builder::BoolishValueParser::new())]
+    pub require_build_hashes: bool,
 
     /// The Python interpreter into which packages should be installed.
     ///
