@@ -696,19 +696,24 @@ impl<'lock> ExpectedPackageDependencies<'lock> {
         package: &'lock Package,
         activated_extras: BTreeSet<ExtraName>,
         workspace_root: &'lock Path,
+        declarations_preprocessed: bool,
     ) -> Self {
         let package_context = package
             .id
             .version
             .as_ref()
             .map(|version| (&package.id.name, version));
-        let declarations = overrides
-            .apply_for_package(package_context, declarations)
-            .filter(|requirement| {
-                !excludes.contains_for_package(package_context, &requirement.name)
-            })
-            .map(Cow::into_owned)
-            .collect::<BTreeSet<_>>();
+        let declarations = if declarations_preprocessed {
+            declarations.clone()
+        } else {
+            overrides
+                .apply_for_package(package_context, declarations)
+                .filter(|requirement| {
+                    !excludes.contains_for_package(package_context, &requirement.name)
+                })
+                .map(Cow::into_owned)
+                .collect::<BTreeSet<_>>()
+        };
         let dependency_groups = dependency_groups
             .iter()
             .map(|(group, requirements)| {
@@ -2127,8 +2132,26 @@ impl Lock {
 
         // Special-case: if the version is dynamic, compare the flattened requirements.
         let flattened = if package.is_dynamic() || missing_metadata {
+            let requirements = if missing_metadata {
+                let package_context = package
+                    .id
+                    .version
+                    .as_ref()
+                    .map(|version| (&package.id.name, version));
+                // The resolver applies overrides and exclusions before flattening recursive
+                // self-requirements.
+                overrides
+                    .apply_for_package(package_context, requires_dist.iter())
+                    .filter(|requirement| {
+                        !excludes.contains_for_package(package_context, &requirement.name)
+                    })
+                    .map(Cow::into_owned)
+                    .collect()
+            } else {
+                requires_dist.clone()
+            };
             Some(
-                FlatRequiresDist::from_requirements(requires_dist.clone(), &package.id.name)
+                FlatRequiresDist::from_requirements(requirements, &package.id.name)
                     .into_iter()
                     .map(|requirement| {
                         normalize_requirement(requirement, root, &self.requires_python)
@@ -2226,6 +2249,7 @@ impl Lock {
                 package,
                 package_activated_extras,
                 root,
+                missing_metadata,
             );
             match self.satisfied_no_metadata(
                 package,

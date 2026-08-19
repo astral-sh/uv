@@ -1,5 +1,7 @@
 use anyhow::Result;
 #[cfg(feature = "test-universal")]
+use anyhow::anyhow;
+#[cfg(feature = "test-universal")]
 use assert_cmd::assert::OutputAssertExt;
 use assert_fs::prelude::*;
 use indoc::{formatdoc, indoc};
@@ -19160,7 +19162,7 @@ fn lock_metadata_free_shared_dynamic_direct_source() -> Result<()> {
     Ok(())
 }
 
-/// Backend-only source trees can select direct sources without declaring PEP 621 dynamic fields.
+/// Backend-only sources apply scoped overrides before expanding requested local extras.
 #[cfg(feature = "test-universal")]
 #[test]
 fn lock_metadata_free_shared_backend_direct_source() -> Result<()> {
@@ -19177,6 +19179,11 @@ fn lock_metadata_free_shared_backend_direct_source() -> Result<()> {
         requires-python = ">=3.12"
         dependencies = ["httpx[http2]", "provider"]
 
+        [tool.uv]
+        override-dependencies = [
+            { package = { name = "child", version = "1.0.0" }, dependencies = ["child==1.0.0"] },
+        ]
+
         [tool.uv.sources]
         provider = { path = "provider" }
         "#})?;
@@ -19191,6 +19198,21 @@ fn lock_metadata_free_shared_backend_direct_source() -> Result<()> {
         "#})?;
     context
         .temp_dir
+        .child("child/pyproject.toml")
+        .write_str(&formatdoc! {r#"
+        [project]
+        name = "child"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+
+        [project.optional-dependencies]
+        direct = ["httpx @ {httpx_url}"]
+        recursive = ["child[direct]"]
+        "#,
+            httpx_url = server.file_url("httpx-1.0.0-py3-none-any.whl"),
+        })?;
+    context
+        .temp_dir
         .child("provider/backend.py")
         .write_str(&formatdoc! {r#"
         import pathlib
@@ -19203,11 +19225,12 @@ fn lock_metadata_free_shared_backend_direct_source() -> Result<()> {
                 "Name: provider\n"
                 "Version: 1.0.0\n"
                 "Requires-Python: >=3.12\n"
-                "Requires-Dist: httpx @ {httpx_url}\n"
+                "Requires-Dist: child[direct,recursive] @ {child_url}\n"
             )
             return dist_info.name
         "#,
-            httpx_url = server.file_url("httpx-1.0.0-py3-none-any.whl"),
+            child_url = Url::from_file_path(context.temp_dir.child("child").path())
+                .map_err(|()| anyhow!("failed to construct a file URL for the local child"))?,
         })?;
 
     uv_snapshot!(context.filters(), context.lock()
@@ -19217,20 +19240,20 @@ fn lock_metadata_free_shared_backend_direct_source() -> Result<()> {
         .arg(server.index_url()), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Resolved 4 packages in [TIME]
+    Resolved 5 packages in [TIME]
     ");
 
     uv_snapshot!(context.filters(), context.lock()
         .arg("--preview-features")
         .arg("lock-without-metadata")
-        .arg("--locked")
+        .arg("--check")
         .arg("--offline")
         .arg("--no-cache")
         .arg("--index-url")
         .arg(server.index_url()), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Resolved 4 packages in [TIME]
+    Resolved 5 packages in [TIME]
     ");
 
     Ok(())
