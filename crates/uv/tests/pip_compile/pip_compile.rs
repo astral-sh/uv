@@ -10853,21 +10853,19 @@ dev = [
 fn compile_pyproject_toml_recursive_extra_self_constraint() -> Result<()> {
     let context = uv_test::test_context!("3.12");
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
-    pyproject_toml.write_str(
-        r#"
-[project]
-name = "recursive-demo"
-version = "1.0.0"
-dependencies = [
-    "recursive-demo[inner]>=2; sys_platform == 'win32' or extra == 'middle'",
-]
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "recursive-demo"
+        version = "1.0.0"
+        dependencies = [
+            "recursive-demo[inner]>=2; sys_platform == 'win32' or extra == 'middle'",
+        ]
 
-[project.optional-dependencies]
-inner = []
-middle = []
-outer = ["recursive-demo[middle]; sys_platform == 'darwin'"]
-"#,
-    )?;
+        [project.optional-dependencies]
+        inner = []
+        middle = []
+        outer = ["recursive-demo[middle]; sys_platform == 'darwin'"]
+    "#})?;
     context
         .temp_dir
         .child("constraints.txt")
@@ -10910,19 +10908,17 @@ outer = ["recursive-demo[middle]; sys_platform == 'darwin'"]
 
     // Both recursive edges intersect Python >=3.12, but their conjunction only applies below
     // Python 3.11. The unreachable empty version range must not make resolution fail.
-    pyproject_toml.write_str(
-        r#"
-[project]
-name = "recursive-demo"
-version = "1.0.0"
-requires-python = ">=3.12"
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "recursive-demo"
+        version = "1.0.0"
+        requires-python = ">=3.12"
 
-[project.optional-dependencies]
-inner = []
-middle = ["recursive-demo[inner]>=2,<2; python_version < '3.13'"]
-outer = ["recursive-demo[middle]; python_version < '3.11' or python_version >= '3.13'"]
-"#,
-    )?;
+        [project.optional-dependencies]
+        inner = []
+        middle = ["recursive-demo[inner]>=2,<2; python_version < '3.13'"]
+        outer = ["recursive-demo[middle]; python_version < '3.11' or python_version >= '3.13'"]
+    "#})?;
 
     uv_snapshot!(context.filters(), context.pip_compile()
             .arg("requirements.in")
