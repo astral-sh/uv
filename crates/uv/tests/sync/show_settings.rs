@@ -463,6 +463,7 @@ fn pip_install_baseline() {
         overrides: [],
         excludes: [],
         build_constraints: [],
+        require_build_hashes: false,
         dry_run: Disabled,
         constraints_from_workspace: [],
         overrides_from_workspace: [],
