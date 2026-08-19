@@ -18,20 +18,17 @@ resolver = "benchmark.resolver:main"
 tools = "benchmark.tools:main"
 
 [build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
+requires = ["uv_build>=0.12.3,<0.13"]
+build-backend = "uv_build"
 
 [tool.uv]
 no-build = true
 no-binary-package = ["benchmark"]
 # Pin the isolated build environment for source-build exceptions.
 build-constraint-dependencies = [
-    "editables==0.6",
-    "hatchling==1.32.0",
-    "packaging==26.3",
-    "pathspec==1.1.1",
-    "pluggy==1.6.0",
-    "tomlkit==0.15.1",
-    "trove-classifiers==2026.6.1.19",
+    "uv-build==0.12.3",
 ]
 exclude-newer = "P7D"
+
+[tool.uv.build-backend]
+source-include = [".python-version", "README.md", "uv.lock"]
