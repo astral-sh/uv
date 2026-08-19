@@ -584,10 +584,24 @@ impl<'a> LockedDependencyBuilder<'a> {
                     .or_default()
                     .extend(requirement.extras.iter().cloned());
 
+                // Empty sections can preserve declarations without having had an edge in the
+                // resolution. Keep registry selections and recorded empty edges, but do not
+                // invent an incoming edge for a declared-only local extra.
                 let extras = requirement
                     .extras
                     .iter()
-                    .filter(|extra| dependency.optional_dependencies.contains_key(*extra))
+                    .filter(|extra| {
+                        (matches!(dependency.id.source, Source::Registry(_))
+                            && dependency.optional_dependencies.contains_key(*extra))
+                            || dependency.has_extra_payload(extra)
+                            || context
+                                .dependencies(expected.package)
+                                .iter()
+                                .any(|existing| {
+                                    existing.package_id == dependency.id
+                                        && existing.extra.contains(*extra)
+                                })
+                    })
                     .cloned()
                     .collect::<BTreeSet<_>>();
 
@@ -1304,7 +1318,21 @@ impl Lock {
     #[must_use]
     pub fn without_package_metadata(mut self) -> Self {
         self.revision = METADATA_FREE_REVISION;
+        let workspace_root = self.root().map(|package| package.id.clone());
         for package in &mut self.packages {
+            for extra in &package.metadata.provides_extra {
+                package
+                    .optional_dependencies
+                    .entry(extra.clone())
+                    .or_default();
+            }
+            if self.manifest.members.contains(&package.id.name)
+                || workspace_root.as_ref().is_some_and(|id| id == &package.id)
+            {
+                for group in package.metadata.dependency_groups.keys() {
+                    package.dependency_groups.entry(group.clone()).or_default();
+                }
+            }
             package.metadata = PackageMetadata::default();
         }
         self
@@ -4502,6 +4530,13 @@ impl Package {
     /// Returns the extras the package provides, if any.
     pub fn provides_extras(&self) -> &[ExtraName] {
         &self.metadata.provides_extra
+    }
+
+    /// Return whether a declared extra has any resolved dependency edges.
+    fn has_extra_payload(&self, extra: &ExtraName) -> bool {
+        self.optional_dependencies
+            .get(extra)
+            .is_some_and(|dependencies| !dependencies.is_empty())
     }
 
     /// Returns the dependency groups the package provides, if any.

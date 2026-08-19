@@ -17873,6 +17873,12 @@ fn lock_writes_without_package_metadata() -> Result<()> {
     name = "project"
     version = "0.1.0"
     source = { virtual = "." }
+
+    [package.optional-dependencies]
+    feature = []
+
+    [package.dev-dependencies]
+    dev = []
     "#);
 
     uv_snapshot!(context.filters(), context.lock().arg("--preview-features").arg("lock-without-metadata").arg("--check").arg("--offline"), @"
@@ -18361,18 +18367,19 @@ fn lock_regenerates_incompatible_self_requirement() -> Result<()> {
     Ok(())
 }
 
-/// An activated empty extra must be refreshed if it gains dependencies.
+/// An activated empty extra remains fresh until it gains dependencies.
 #[cfg(feature = "test-universal")]
 #[test]
 fn lock_regenerates_activated_empty_extra() -> Result<()> {
     let context = uv_test::test_context!("3.12");
+    let server = PackseServer::new("extras/lock-without-metadata.toml");
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {r#"
         [project]
         name = "project"
         version = "0.1.0"
         requires-python = ">=3.12"
-        dependencies = ["dependency", "z-activator"]
+        dependencies = ["dependency", "z-activator", "six"]
 
         [tool.uv.sources]
         dependency = { path = "dependency" }
@@ -18414,10 +18421,38 @@ fn lock_regenerates_activated_empty_extra() -> Result<()> {
         requires-python = ">=3.12"
         "#})?;
 
-    uv_snapshot!(context.filters(), context.lock().arg("--offline"), @"
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("lock-without-metadata")
+        .arg("--index-url")
+        .arg(server.index_url()), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Resolved 3 packages in [TIME]
+    Resolved 4 packages in [TIME]
+    ");
+
+    // An unchanged lock must not resolve the registry dependency again.
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("lock-without-metadata")
+        .arg("--check")
+        .arg("--offline")
+        .arg("--no-cache")
+        .arg("--index-url")
+        .arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    ");
+
+    // Restore a standard lock before removing just the dependency's declaration metadata.
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--offline")
+        .arg("--index-url")
+        .arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
     ");
 
     let mut lock = context.read("uv.lock").parse::<toml_edit::DocumentMut>()?;
@@ -18446,10 +18481,16 @@ fn lock_regenerates_activated_empty_extra() -> Result<()> {
         leaf = { path = "../leaf" }
         "#})?;
 
-    uv_snapshot!(context.filters(), context.lock().arg("--preview-features").arg("lock-without-metadata").arg("--locked").arg("--offline"), @"
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("lock-without-metadata")
+        .arg("--locked")
+        .arg("--offline")
+        .arg("--index-url")
+        .arg(server.index_url()), @"
     exit_code: 1 (failure)
     ----- stderr -----
-    Resolved 4 packages in [TIME]
+    Resolved 5 packages in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
 
     hint: To update the lockfile, run `uv lock`.
