@@ -4653,6 +4653,41 @@ fn add_lower_bound_existing() -> Result<()> {
         );
     });
 
+    // A redundant marker can reuse a metadata-free lock without populating the in-memory
+    // metadata cache. Adding the lower bound must still be able to invalidate that cache.
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("lock-without-metadata")
+        .arg("--upgrade"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    ");
+
+    let lock = context.read("uv.lock").parse::<toml_edit::DocumentMut>()?;
+    assert_eq!(lock["revision"].as_integer(), Some(4));
+
+    uv_snapshot!(context.filters(), context.add()
+        .arg("--preview-features")
+        .arg("lock-without-metadata")
+        .arg("--no-sync")
+        .arg("anyio; python_version >= '3.12'"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    ");
+
+    assert_snapshot!(context.read("pyproject.toml"), @r#"
+    [project]
+    name = "project"
+    version = "0.1.0"
+    requires-python = ">=3.12"
+    dependencies = [
+        "anyio",
+        "anyio>=4.3.0 ; python_full_version >= '3.12'",
+    ]
+    "#);
+
     Ok(())
 }
 
