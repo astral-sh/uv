@@ -10878,12 +10878,12 @@ fn lock_git_poetry_path_dependency() -> Result<()> {
     Ok(())
 }
 
-/// Lock a Git repository with generated metadata that references an archive within the repository.
+/// Sync a Git repository with generated metadata that references an archive within the repository.
 ///
 /// See: <https://github.com/astral-sh/uv/issues/15417>
 #[test]
 #[cfg(feature = "test-git")]
-fn lock_git_metadata_archive_dependency() -> Result<()> {
+fn sync_git_metadata_archive_dependency() -> Result<()> {
     let context = uv_test::test_context!("3.13");
 
     let repository = context.temp_dir.child("repository");
@@ -10955,19 +10955,28 @@ fn lock_git_metadata_archive_dependency() -> Result<()> {
         root = {{ git = "{repository_url}", subdirectory = "root" }}
     "#})?;
 
-    uv_snapshot!(context.filters(), context.lock().arg("--no-cache"), @"
-    exit_code: 0 (success)
+    let mut filters = context.filters();
+    filters.push((r"@[0-9a-f]{40}", "@[COMMIT]"));
+    filters.push((r"#[0-9a-f]{40}", "#[COMMIT]"));
+
+    // A fresh sync should install the repository-relative archive, but resolves it relative to the
+    // downstream project instead. See astral-sh/uv#21244.
+    uv_snapshot!(filters, context.sync().arg("--no-cache"), @"
+    exit_code: 1 (failure)
     ----- stderr -----
     Resolved 3 packages in [TIME]
+      × Failed to download `basic-package @ git+file://[TEMP_DIR]/repository/@[COMMIT]#path=[TEMP_DIR]/root/archives/basic_package-0.1.0-py3-none-any.whl`
+      ├─▶ Failed to read from the distribution cache
+      ╰─▶ failed to query metadata of file `[TEMP_DIR]/root/archives/basic_package-0.1.0-py3-none-any.whl`: No such file or directory (os error 2)
+
+    hint: `basic-package` (v0.1.0) was included because `project` (v0.1.0) depends on `root` (v0.1.0) which depends on `basic-package`
     ");
 
     let lock = context.read("uv.lock");
-    let mut filters = context.filters();
-    filters.push((r"#[0-9a-f]{40}", "#[COMMIT]"));
 
     insta::with_settings!(
         {
-            filters => filters,
+            filters => filters.clone(),
         },
         {
             assert_snapshot!(
@@ -11009,6 +11018,16 @@ fn lock_git_metadata_archive_dependency() -> Result<()> {
             );
         }
     );
+
+    uv_snapshot!(filters, context.sync().arg("--no-cache"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + basic-package==0.1.0 (from git+file://[TEMP_DIR]/repository/@[COMMIT]#path=root/archives/basic_package-0.1.0-py3-none-any.whl)
+     + root==0.1.0 (from git+file://[TEMP_DIR]/repository/@[COMMIT]#subdirectory=root)
+    ");
 
     Ok(())
 }
