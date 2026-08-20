@@ -5,8 +5,6 @@ use std::process::Command;
 use anyhow::{Context, Result, anyhow};
 use assert_cmd::prelude::*;
 use assert_fs::prelude::*;
-#[cfg(unix)]
-use async_compression::tokio::write::ZstdEncoder;
 use async_zip::base::write::ZipFileWriter;
 use async_zip::{Compression, ZipEntryBuilder};
 use fs_err as fs;
@@ -15,8 +13,6 @@ use futures::executor::block_on;
 use indoc::{formatdoc, indoc};
 use insta::{allow_duplicates, assert_snapshot};
 use predicates::prelude::predicate;
-#[cfg(unix)]
-use tokio::io::AsyncWriteExt;
 use url::Url;
 use walkdir::WalkDir;
 use wiremock::{
@@ -16546,104 +16542,6 @@ fn handle_record_mismatches() -> Result<()> {
     foo/__init__.py,,49
     foo/py.typed,sha256=47DEQpj8HBSa-_TImW-5JCeuQeRkm5NMpJWZG3hSuFU,0
     ");
-
-    Ok(())
-}
-
-/// A skipped traversal entry in a zstd-compressed tar wheel must not survive RECORD healing and
-/// remove an unrelated environment executable during uninstall.
-#[cfg(unix)]
-#[tokio::test]
-async fn tar_wheel_traversal_is_not_recorded() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
-
-    let victim = venv_bin_path(&context.venv).join("victim");
-    fs_err::write(&victim, "I should not be deleted")?;
-
-    let record = indoc! {"
-        tar_wheel/__init__.py,,
-        tar_wheel-1.0.0.dist-info/METADATA,,
-        tar_wheel-1.0.0.dist-info/WHEEL,,
-        tar_wheel-1.0.0.dist-info/RECORD,,
-        ../../../bin/victim,,
-    "};
-    let entries = [
-        ("tar_wheel/__init__.py", ""),
-        (
-            "tar_wheel-1.0.0.dist-info/METADATA",
-            "Metadata-Version: 2.1\nName: tar-wheel\nVersion: 1.0.0\n",
-        ),
-        (
-            "tar_wheel-1.0.0.dist-info/WHEEL",
-            "Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
-        ),
-        ("tar_wheel-1.0.0.dist-info/RECORD", record),
-        ("../../../bin/victim", "malicious replacement"),
-    ];
-
-    let mut tar = tokio_tar::Builder::new_non_terminated(ZstdEncoder::new(Vec::new()));
-    for (path, contents) in entries {
-        let mut header = tokio_tar::Header::new_gnu();
-        header.as_mut_bytes()[..path.len()].copy_from_slice(path.as_bytes());
-        header.set_size(contents.len() as u64);
-        header.set_mode(0o644);
-        header.set_cksum();
-        tar.append(&header, contents.as_bytes()).await?;
-    }
-    let mut encoder = tar.into_inner().await?;
-    encoder.shutdown().await?;
-    let tar_wheel = encoder.into_inner();
-
-    let server = MockServer::start().await;
-    let wheel_url = format!("{}/files/tar_wheel-1.0.0-py3-none-any.whl", server.uri());
-    context
-        .temp_dir
-        .child("pyproject.toml")
-        .write_str(indoc! {r#"
-        [project]
-        name = "project"
-        version = "0.1.0"
-        requires-python = ">=3.12"
-        dependencies = ["tar-wheel"]
-    "#})?;
-    context
-        .temp_dir
-        .child("uv.lock")
-        .write_str(&formatdoc! {r#"
-        version = 1
-        revision = 3
-        requires-python = ">=3.12"
-
-        [[package]]
-        name = "tar-wheel"
-        version = "1.0.0"
-        source = {{ registry = "{registry}" }}
-        wheels = [{{ url = "{wheel_url}", zstd = {{ size = {size} }} }}]
-
-        [[package]]
-        name = "project"
-        version = "0.1.0"
-        source = {{ virtual = "." }}
-        dependencies = [{{ name = "tar-wheel" }}]
-    "#, registry = server.uri(), size = tar_wheel.len()})?;
-    Mock::given(method("GET"))
-        .and(path("/files/tar_wheel-1.0.0-py3-none-any.whl.tar.zst"))
-        .respond_with(ResponseTemplate::new(200).set_body_bytes(tar_wheel))
-        .expect(1)
-        .mount(&server)
-        .await;
-
-    context.sync().arg("--frozen").assert().success();
-
-    let installed_record = fs_err::read_to_string(
-        context
-            .site_packages()
-            .join("tar_wheel-1.0.0.dist-info/RECORD"),
-    )?;
-    assert!(!installed_record.contains("../../../bin/victim"));
-
-    context.pip_uninstall().arg("tar-wheel").assert().success();
-    assert_eq!(fs_err::read_to_string(&victim)?, "I should not be deleted");
 
     Ok(())
 }

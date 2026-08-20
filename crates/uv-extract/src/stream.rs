@@ -762,7 +762,7 @@ async fn untar_gz<R: tokio::io::AsyncRead + Unpin>(
 /// This is useful for unpacking files as they're being downloaded.
 ///
 /// Returns the list of unpacked files and their sizes.
-pub async fn untar_zst<R: tokio::io::AsyncRead + Unpin>(
+async fn untar_zst<R: tokio::io::AsyncRead + Unpin>(
     reader: R,
     target: impl AsRef<Path>,
 ) -> Result<Vec<(PathBuf, u64)>, Error> {
