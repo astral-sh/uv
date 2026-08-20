@@ -510,7 +510,7 @@ impl ToolLock {
         let requires_python =
             RequiresPython::greater_than_equal_version(&interpreter.python_minor_version());
         let Self { root, lock } = self;
-        let validated = ValidatedLock::validate(
+        let validated = Box::pin(ValidatedLock::validate(
             lock,
             &root,
             &BTreeMap::new(),
@@ -536,7 +536,7 @@ impl ToolLock {
             &database,
             preview,
             printer,
-        )
+        ))
         .await?;
         let satisfied = validated.is_satisfied();
         let usable = validated.is_usable();
