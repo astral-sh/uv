@@ -2675,7 +2675,7 @@ impl Lock {
         self
     }
 
-    /// Omit package metadata except for URL and Git dependencies.
+    /// Omit package metadata except for remote URL dependencies.
     ///
     /// Local declarations can be reread from disk. Remote URL declarations remain in the lockfile
     /// so freshness checks can determine offline whether a URL is requested or the URL dependency
