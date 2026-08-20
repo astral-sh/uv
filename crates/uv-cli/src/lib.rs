@@ -1768,8 +1768,8 @@ pub struct PipCompileArgs {
 
     /// Include the build dependencies of any source distributions in the output.
     ///
-    /// When generating hashes, only include hashes for compatible wheels if the selected version
-    /// has one. Source distribution hashes are included only when a package must be built.
+    /// Combine with `--only-binary :if-available:` to omit source distribution hashes when the
+    /// selected version has a compatible wheel.
     ///
     /// This option is experimental and may change without warning.
     #[arg(long, overrides_with("no_include_build_dependencies"))]

@@ -751,7 +751,6 @@ pub(crate) async fn pip_compile(
             // direct requirements in the next pass.
             build_dispatch.take_build_requirements().await;
         }
-
     }
 
     let output_build_options = only_binary_if_available.then(|| {
