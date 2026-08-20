@@ -133,8 +133,7 @@ pub struct BuildDispatch<'a> {
     workspace_cache: WorkspaceCache,
     concurrency: Concurrency,
     preview: Preview,
-    capture_build_requirements: bool,
-    build_requirements: Mutex<Vec<Requirement>>,
+    build_requirements: Option<Mutex<Vec<Requirement>>>,
 }
 
 impl<'a> BuildDispatch<'a> {
@@ -189,21 +188,26 @@ impl<'a> BuildDispatch<'a> {
             workspace_cache,
             concurrency,
             preview,
-            capture_build_requirements: false,
-            build_requirements: Mutex::new(Vec::new()),
+            build_requirements: None,
         }
     }
 
-    /// Capture requirements discovered while resolving isolated build environments.
+    /// Capture declared and backend-discovered [`Requirement`]s and applicable build constraints
+    /// while resolving isolated build environments.
     #[must_use]
     pub fn with_build_requirement_capture(mut self, capture: bool) -> Self {
-        self.capture_build_requirements = capture;
+        self.build_requirements = capture.then(|| Mutex::new(Vec::new()));
         self
     }
 
-    /// Return and clear the build requirements captured since the previous call.
+    /// Drain captured [`Requirement`]s so builds for rejected resolver candidates can be discarded
+    /// before probing the selected distributions.
     pub async fn take_build_requirements(&self) -> Vec<Requirement> {
-        std::mem::take(&mut *self.build_requirements.lock().await)
+        if let Some(build_requirements) = &self.build_requirements {
+            std::mem::take(&mut *build_requirements.lock().await)
+        } else {
+            Vec::new()
+        }
     }
 
     /// Set the environment variables to be used when building a source distribution.
@@ -368,8 +372,8 @@ impl BuildContext for BuildDispatch<'_> {
                     .join(", ")
             )
         })?);
-        if self.capture_build_requirements {
-            let mut build_requirements = self.build_requirements.lock().await;
+        if let Some(build_requirements) = &self.build_requirements {
+            let mut build_requirements = build_requirements.lock().await;
             build_requirements.extend(requirements.iter().cloned());
             build_requirements.extend(
                 resolution

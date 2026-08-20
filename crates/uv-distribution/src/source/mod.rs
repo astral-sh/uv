@@ -240,7 +240,8 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         }
     }
 
-    /// Resolve the build environment even when static or cached metadata is available.
+    /// Run build setup and backend requirement hooks even when source metadata is static or
+    /// cached.
     #[must_use]
     pub(crate) fn with_build_requirements(self) -> Self {
         Self {
@@ -803,15 +804,13 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         let dynamic =
             match StaticMetadata::read(source, source_dist_entry.path(), subdirectory).await? {
                 StaticMetadata::Some(metadata) => {
-                    if self.resolve_build_requirements {
-                        self.setup_build_environment(
-                            source,
-                            source_dist_entry.path(),
-                            subdirectory,
-                            NoSources::None,
-                        )
-                        .await?;
-                    }
+                    self.probe_build_requirements(
+                        source,
+                        source_dist_entry.path(),
+                        subdirectory,
+                        &NoSources::None,
+                    )
+                    .await?;
                     return Ok(ArchiveMetadata {
                         metadata: Metadata::from_metadata23(metadata),
                         hashes: revision.into_hashes(),
@@ -827,15 +826,13 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             Ok(Some(metadata)) => {
                 if metadata.matches(source.name(), source.version()) {
                     debug!("Using cached metadata for: {source}");
-                    if self.resolve_build_requirements {
-                        self.setup_build_environment(
-                            source,
-                            source_dist_entry.path(),
-                            subdirectory,
-                            NoSources::None,
-                        )
-                        .await?;
-                    }
+                    self.probe_build_requirements(
+                        source,
+                        source_dist_entry.path(),
+                        subdirectory,
+                        &NoSources::None,
+                    )
+                    .await?;
                     return Ok(ArchiveMetadata {
                         metadata: Metadata::from_metadata23(metadata.into()),
                         hashes: revision.into_hashes(),
@@ -1221,15 +1218,8 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         // If the metadata is static, return it.
         let dynamic = match StaticMetadata::read(source, source_entry.path(), None).await? {
             StaticMetadata::Some(metadata) => {
-                if self.resolve_build_requirements {
-                    self.setup_build_environment(
-                        source,
-                        source_entry.path(),
-                        None,
-                        NoSources::None,
-                    )
+                self.probe_build_requirements(source, source_entry.path(), None, &NoSources::None)
                     .await?;
-                }
                 return Ok(ArchiveMetadata {
                     metadata: Metadata::from_metadata23(metadata),
                     hashes: revision.into_hashes(),
@@ -1245,15 +1235,13 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             Ok(Some(metadata)) => {
                 if metadata.matches(source.name(), source.version()) {
                     debug!("Using cached metadata for: {source}");
-                    if self.resolve_build_requirements {
-                        self.setup_build_environment(
-                            source,
-                            source_entry.path(),
-                            None,
-                            NoSources::None,
-                        )
-                        .await?;
-                    }
+                    self.probe_build_requirements(
+                        source,
+                        source_entry.path(),
+                        None,
+                        &NoSources::None,
+                    )
+                    .await?;
                     return Ok(ArchiveMetadata {
                         metadata: Metadata::from_metadata23(metadata.into()),
                         hashes: revision.into_hashes(),
@@ -1547,15 +1535,13 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         // If the metadata is static, return it.
         let dynamic = match StaticMetadata::read(source, resource.install_path, None).await? {
             StaticMetadata::Some(metadata) => {
-                if self.resolve_build_requirements {
-                    self.setup_build_environment(
-                        source,
-                        resource.install_path,
-                        None,
-                        self.build_context.sources().clone(),
-                    )
-                    .await?;
-                }
+                self.probe_build_requirements(
+                    source,
+                    resource.install_path,
+                    None,
+                    self.build_context.sources(),
+                )
+                .await?;
                 return Ok(ArchiveMetadata::from(
                     Metadata::from_workspace(
                         metadata,
@@ -1602,15 +1588,13 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             Ok(Some(metadata)) => {
                 if metadata.matches(source.name(), source.version()) {
                     debug!("Using cached metadata for: {source}");
-                    if self.resolve_build_requirements {
-                        self.setup_build_environment(
-                            source,
-                            resource.install_path,
-                            None,
-                            self.build_context.sources().clone(),
-                        )
-                        .await?;
-                    }
+                    self.probe_build_requirements(
+                        source,
+                        resource.install_path,
+                        None,
+                        self.build_context.sources(),
+                    )
+                    .await?;
 
                     // If necessary, mark the metadata as dynamic.
                     let metadata = if dynamic {
@@ -2064,15 +2048,8 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         // If the metadata is static, return it.
         let dynamic = match StaticMetadata::read(source, source_entry.path(), None).await? {
             StaticMetadata::Some(metadata) => {
-                if self.resolve_build_requirements {
-                    self.setup_build_environment(
-                        source,
-                        source_entry.path(),
-                        None,
-                        NoSources::None,
-                    )
+                self.probe_build_requirements(source, source_entry.path(), None, &NoSources::None)
                     .await?;
-                }
                 return Ok(ArchiveMetadata {
                     metadata: Metadata::from_metadata23(metadata),
                     hashes: revision.into_hashes(),
@@ -2088,15 +2065,13 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             Ok(Some(metadata)) => {
                 if metadata.matches(source.name(), source.version()) {
                     debug!("Using cached metadata for: {source}");
-                    if self.resolve_build_requirements {
-                        self.setup_build_environment(
-                            source,
-                            source_entry.path(),
-                            None,
-                            NoSources::None,
-                        )
-                        .await?;
-                    }
+                    self.probe_build_requirements(
+                        source,
+                        source_entry.path(),
+                        None,
+                        &NoSources::None,
+                    )
+                    .await?;
                     return Ok(ArchiveMetadata {
                         metadata: Metadata::from_metadata23(metadata.into()),
                         hashes: revision.into_hashes(),
@@ -2443,15 +2418,13 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         let dynamic =
             match StaticMetadata::read(source, fetch.path(), resource.subdirectory).await? {
                 StaticMetadata::Some(metadata) => {
-                    if self.resolve_build_requirements {
-                        self.setup_build_environment(
-                            source,
-                            fetch.path(),
-                            resource.subdirectory,
-                            self.build_context.sources().clone(),
-                        )
-                        .await?;
-                    }
+                    self.probe_build_requirements(
+                        source,
+                        fetch.path(),
+                        resource.subdirectory,
+                        self.build_context.sources(),
+                    )
+                    .await?;
                     return Ok(ArchiveMetadata::from(
                         Metadata::from_workspace(
                             metadata,
@@ -2485,15 +2458,13 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 Ok(Some(metadata)) => {
                     if metadata.matches(source.name(), source.version()) {
                         debug!("Using cached metadata for: {source}");
-                        if self.resolve_build_requirements {
-                            self.setup_build_environment(
-                                source,
-                                fetch.path(),
-                                resource.subdirectory,
-                                self.build_context.sources().clone(),
-                            )
-                            .await?;
-                        }
+                        self.probe_build_requirements(
+                            source,
+                            fetch.path(),
+                            resource.subdirectory,
+                            self.build_context.sources(),
+                        )
+                        .await?;
 
                         let git_member = GitWorkspaceMember {
                             fetch_root: fetch.path(),
@@ -3254,7 +3225,24 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         Ok((disk_filename, filename, metadata))
     }
 
-    /// Set up a source distribution's complete build environment, including backend hooks.
+    /// Run build setup for static or cached metadata when requirement probing is enabled.
+    async fn probe_build_requirements(
+        &self,
+        source: &BuildableSource<'_>,
+        source_root: &Path,
+        subdirectory: Option<&Path>,
+        no_sources: &NoSources,
+    ) -> Result<(), Error> {
+        if self.resolve_build_requirements {
+            self.setup_build_environment(source, source_root, subdirectory, no_sources.clone())
+                .await?;
+        }
+        Ok(())
+    }
+
+    /// Initialize a [`BuildableSource`]'s isolated environment and run backend requirement hooks.
+    ///
+    /// Returns the initialized builder so metadata preparation can reuse the same environment.
     async fn setup_build_environment(
         &self,
         source: &BuildableSource<'_>,

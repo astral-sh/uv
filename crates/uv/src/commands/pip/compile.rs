@@ -693,19 +693,20 @@ pub(crate) async fn pip_compile(
                     .await?;
             }
 
-            let build_requirements = build_dispatch
-                .take_build_requirements()
-                .await
-                .into_iter()
-                .filter(|requirement| seen_requirements.insert(requirement.clone()))
-                .map(UnresolvedRequirementSpecification::from)
-                .collect::<Vec<_>>();
+            let previous_len = requirements.len();
+            requirements.extend(
+                build_dispatch
+                    .take_build_requirements()
+                    .await
+                    .into_iter()
+                    .filter(|requirement| seen_requirements.insert(requirement.clone()))
+                    .map(UnresolvedRequirementSpecification::from),
+            );
 
-            if build_requirements.is_empty() {
+            if requirements.len() == previous_len {
                 break;
             }
 
-            requirements.extend(build_requirements);
             resolution = match operations::resolve(
                 requirements.clone(),
                 constraints.clone(),
