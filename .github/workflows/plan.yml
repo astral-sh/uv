@@ -15,6 +15,9 @@ on:
       test-code:
         description: "Whether code tests should run"
         value: ${{ jobs.plan.outputs.test-code }}
+      collect-coverage:
+        description: "Whether code coverage should be collected"
+        value: ${{ jobs.plan.outputs.collect-coverage }}
       review-security:
         description: "Whether the security review should run"
         value: ${{ jobs.plan.outputs.review-security }}
@@ -72,6 +75,7 @@ jobs:
     runs-on: depot-ubuntu-24.04
     outputs:
       test-code: ${{ steps.plan.outputs.test_code }}
+      collect-coverage: ${{ steps.plan.outputs.collect_coverage }}
       review-security: ${{ steps.plan.outputs.review_security }}
       check-schema: ${{ steps.plan.outputs.check_schema }}
       build-release-binaries: ${{ steps.plan.outputs.build_release_binaries }}
@@ -166,6 +170,7 @@ jobs:
 
           # Decisions
           [[ ! $has_skip_label && ($any_code_changed || $on_main_branch) ]] && test_code=1
+          [[ "$GITHUB_EVENT_NAME" == "push" && $on_main_branch ]] && collect_coverage=1
           [[ $any_code_changed ]] && review_security=1
           [[ $schema_changed ]] && check_schema=1
           [[ ! $has_skip_label && ! $has_build_skip_label && ! $has_build_skip_release_label && ($release_build_changed || $has_build_release_label) ]] && build_release_binaries=1
@@ -187,6 +192,7 @@ jobs:
           out() { [[ "$2" ]] && echo "$1=true" || echo "$1=false"; }
           {
             out test_code               "$test_code"
+            out collect_coverage        "$collect_coverage"
             out review_security         "$review_security"
             out check_schema            "$check_schema"
             out build_release_binaries  "$build_release_binaries"

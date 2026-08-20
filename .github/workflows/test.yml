@@ -9,6 +9,10 @@ on:
         required: false
         type: string
         default: "false"
+      collect-coverage:
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -17,9 +21,12 @@ env:
   CARGO_INCREMENTAL: 0
   CARGO_NET_RETRY: 10
   CARGO_TERM_COLOR: always
+  # Aborting test processes prevents LLVM from flushing coverage on Windows.
+  CARGO_UNSTABLE_PANIC_ABORT_TESTS: ${{ !inputs.collect-coverage }}
   PYTHON_VERSION: "3.12"
   RUSTC_BOOTSTRAP: 1
   RUSTUP_MAX_RETRIES: 10
+  TEST_CARGO_PROFILE: ${{ inputs.collect-coverage && 'fast-build' || 'fast-build-nightly' }}
 
 jobs:
   # We use the large GitHub actions runners
@@ -27,7 +34,7 @@ jobs:
   # See: https://docs.github.com/en/actions/using-github-hosted-runners/about-larger-runners/about-larger-runners#about-ubuntu-and-windows-larger-runners
 
   cargo-test-linux:
-    timeout-minutes: 10
+    timeout-minutes: ${{ inputs.collect-coverage && 20 || 10 }}
     runs-on: depot-ubuntu-24.04-16
     name: "cargo test on linux"
     steps:
@@ -56,6 +63,10 @@ jobs:
       - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
         with:
           version: "0.12.5"
+
+      - name: "Install LLVM tools"
+        if: ${{ inputs.collect-coverage }}
+        run: rustup component add llvm-tools
 
       - name: "Install required Python versions"
         run: uv python install
@@ -119,20 +130,35 @@ jobs:
           INSTA_UPDATE: new
           INSTA_PENDING_DIR: ${{ github.workspace }}/pending-snapshots
         run: |
-          cargo nextest run \
-            --cargo-profile fast-build-nightly \
-            -Z panic-abort-tests \
+          if ${{ inputs.collect-coverage }}; then
+            command=(dev coverage --id "$GITHUB_SHA" --)
+          else
+            command=(nextest run)
+          fi
+
+          cargo "${command[@]}" \
+            --cargo-profile "$TEST_CARGO_PROFILE" \
             -Z checksum-freshness \
             --features test-python-patch,test-universal,native-auth,secret-service \
             --workspace \
             --profile ci-linux
+
+      - name: "Upload LCOV coverage report"
+        if: ${{ inputs.collect-coverage }}
+        id: upload-coverage
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: coverage-linux-${{ github.sha }}
+          path: target/coverage/lcov/${{ github.sha }}.lcov
+          if-no-files-found: error
+          retention-days: 14
 
       - name: "Prune superseded workspace artifacts"
         if: ${{ inputs.save-rust-cache == 'true' && steps.rust-cache.outputs.cache-hit != 'true' }}
         run: python3 scripts/prune_cargo_workspace_cache.py target/fast-build-nightly "$RUNNER_TEMP/uv-cargo-cache-marker"
 
       - name: "Upload pending snapshots"
-        if: ${{ failure() }}
+        if: ${{ failure() && !inputs.collect-coverage }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: pending-snapshots-linux
@@ -142,7 +168,7 @@ jobs:
           retention-days: 14
 
       - name: "Upload JUnit results"
-        if: always()
+        if: ${{ always() && !inputs.collect-coverage }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: junit-results-linux
@@ -151,8 +177,7 @@ jobs:
           retention-days: 14
 
   cargo-test-macos:
-    timeout-minutes: 20
-    # Only run macOS tests on main without opt-in
+    timeout-minutes: ${{ inputs.collect-coverage && 30 || 20 }}
     if: ${{ inputs.test-macos == 'true' }}
     runs-on: namespace-profile-macos-15
     name: "cargo test on macos"
@@ -175,6 +200,10 @@ jobs:
       - name: "Record Cargo cache freshness"
         if: ${{ inputs.save-rust-cache == 'true' && steps.rust-cache.outputs.cache-hit != 'true' }}
         run: touch "$RUNNER_TEMP/uv-cargo-cache-marker"
+
+      - name: "Install LLVM tools"
+        if: ${{ inputs.collect-coverage }}
+        run: rustup component add llvm-tools
 
       - name: "Create HFS+ disk image (no reflink support)"
         run: |
@@ -219,21 +248,36 @@ jobs:
           INSTA_UPDATE: new
           INSTA_PENDING_DIR: ${{ github.workspace }}/pending-snapshots
         run: |
-          cargo nextest run \
-            --cargo-profile fast-build-nightly \
-            -Z panic-abort-tests \
+          if ${{ inputs.collect-coverage }}; then
+            command=(dev coverage --id "$GITHUB_SHA" --)
+          else
+            command=(nextest run)
+          fi
+
+          cargo "${command[@]}" \
+            --cargo-profile "$TEST_CARGO_PROFILE" \
             -Z checksum-freshness \
             --no-default-features \
             --features test-python,test-python-managed,test-pypi,test-git,test-git-lfs,performance,test-crates-io,native-auth,apple-native \
             --workspace \
             --profile ci-macos
 
+      - name: "Upload LCOV coverage report"
+        if: ${{ inputs.collect-coverage }}
+        id: upload-coverage
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: coverage-macos-${{ github.sha }}
+          path: target/coverage/lcov/${{ github.sha }}.lcov
+          if-no-files-found: error
+          retention-days: 14
+
       - name: "Prune superseded workspace artifacts"
         if: ${{ inputs.save-rust-cache == 'true' && steps.rust-cache.outputs.cache-hit != 'true' }}
         run: python3 scripts/prune_cargo_workspace_cache.py target/fast-build-nightly "$RUNNER_TEMP/uv-cargo-cache-marker"
 
       - name: "Upload pending snapshots"
-        if: ${{ failure() }}
+        if: ${{ failure() && !inputs.collect-coverage }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: pending-snapshots-macos
@@ -243,7 +287,7 @@ jobs:
           retention-days: 14
 
       - name: "Upload JUnit results"
-        if: always()
+        if: ${{ always() && !inputs.collect-coverage }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: junit-results-macos
@@ -252,7 +296,7 @@ jobs:
           retention-days: 14
 
   cargo-test-windows:
-    timeout-minutes: 15
+    timeout-minutes: ${{ inputs.collect-coverage && 30 || 15 }}
     runs-on: namespace-profile-windows-2022-x86-64-16x32
     name: "cargo test on windows ${{ matrix.partition }} of 3"
     strategy:
@@ -298,6 +342,11 @@ jobs:
         if: ${{ inputs.save-rust-cache == 'true' && steps.rust-cache.outputs.cache-hit != 'true' }}
         run: New-Item -ItemType File -Path "$env:RUNNER_TEMP/uv-cargo-cache-marker"
 
+      - name: "Install LLVM tools"
+        if: ${{ inputs.collect-coverage }}
+        working-directory: ${{ env.UV_WORKSPACE }}
+        run: rustup component add llvm-tools
+
       - name: "Create NTFS test directory (low hardlink limit)"
         run: New-Item -Path "C:\uv" -ItemType Directory -Force
 
@@ -329,9 +378,14 @@ jobs:
           INSTA_PENDING_DIR: ${{ github.workspace }}/pending-snapshots
         shell: bash
         run: |
-          cargo nextest run \
-            --cargo-profile fast-build-nightly \
-            -Z panic-abort-tests \
+          if ${{ inputs.collect-coverage }}; then
+            command=(dev coverage --id "$GITHUB_SHA" --)
+          else
+            command=(nextest run)
+          fi
+
+          cargo "${command[@]}" \
+            --cargo-profile "$TEST_CARGO_PROFILE" \
             -Z checksum-freshness \
             --no-default-features \
             --features test-python,test-pypi,test-python-managed,test-windows-registry,native-auth,windows-native \
@@ -339,13 +393,23 @@ jobs:
             --profile ci-windows \
             --partition hash:${{ matrix.partition }}/3
 
+      - name: "Upload LCOV coverage report"
+        if: ${{ inputs.collect-coverage }}
+        id: upload-coverage
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: coverage-windows-${{ matrix.partition }}-${{ github.sha }}
+          path: ${{ env.UV_WORKSPACE }}/target/coverage/lcov/${{ github.sha }}.lcov
+          if-no-files-found: error
+          retention-days: 14
+
       - name: "Prune superseded workspace artifacts"
         if: ${{ inputs.save-rust-cache == 'true' && steps.rust-cache.outputs.cache-hit != 'true' }}
         working-directory: ${{ env.UV_WORKSPACE }}
         run: python scripts/prune_cargo_workspace_cache.py target/fast-build-nightly "$env:RUNNER_TEMP/uv-cargo-cache-marker"
 
       - name: "Upload pending snapshots"
-        if: ${{ failure() }}
+        if: ${{ failure() && !inputs.collect-coverage }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: pending-snapshots-windows-${{ matrix.partition }}
@@ -355,7 +419,7 @@ jobs:
           retention-days: 14
 
       - name: "Upload JUnit results"
-        if: always()
+        if: ${{ always() && !inputs.collect-coverage }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: junit-results-windows-${{ matrix.partition }}
