@@ -1182,7 +1182,7 @@ async fn handle_response(
         ));
     }
 
-    // Try to parse as RFC 9457 Problem Details (e.g., from pyx).
+    // Try to parse as RFC 9457 Problem Details.
     if content_type.as_deref() == Some(uv_client::ProblemDetails::CONTENT_TYPE)
         && let Some(problem) =
             uv_client::ProblemDetails::try_from_response_body(upload_error.as_bytes())
@@ -2099,7 +2099,7 @@ mod tests {
         );
     }
 
-    /// pyx returns `application/problem+json` with RFC 9457 Problem Details.
+    /// Handle `application/problem+json` errors with RFC 9457 Problem Details.
     #[tokio::test]
     async fn upload_error_problem_details() {
         let mock_server = MockServer::start().await;
