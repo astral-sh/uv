@@ -3801,7 +3801,12 @@ impl Lock {
         }
 
         Ok(SatisfiesResult::Satisfied)
-    }
+                return Ok(SatisfiesResult::MismatchedPackageDependencies(
+                    &package.id.name,
+                    package.id.version.as_ref(),
+                    generated,
+                    actual,
+                ));
 
     fn record_index(
         index: &IndexMetadata,
