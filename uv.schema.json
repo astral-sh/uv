@@ -1827,7 +1827,7 @@
             "lock-without-metadata",
             "tar-codec",
             "index-by-name",
-            "binary-policy-hashes"
+            "artifact-hash-filtering"
           ]
         },
         {

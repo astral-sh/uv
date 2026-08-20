@@ -334,7 +334,7 @@ pub enum PreviewFeature {
     /// Allows selecting configured package indexes by name with `--index` and `--default-index`.
     IndexByName,
     /// Restricts generated requirement hashes to artifacts allowed by binary and build policies.
-    BinaryPolicyHashes,
+    ArtifactHashFiltering,
 }
 
 impl Display for PreviewFeature {

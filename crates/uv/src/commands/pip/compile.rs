@@ -608,7 +608,7 @@ pub(crate) async fn pip_compile(
         }
     };
 
-    if generate_hashes && preview.is_enabled(PreviewFeature::BinaryPolicyHashes) {
+    if generate_hashes && preview.is_enabled(PreviewFeature::ArtifactHashFiltering) {
         resolution.retain_allowed_distribution_hashes(&build_options);
     }
 
