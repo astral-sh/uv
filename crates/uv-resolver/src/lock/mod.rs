@@ -4194,20 +4194,24 @@ impl Lock {
         if !root_requirements.is_empty() {
             for requirement in root_requirements {
                 for package in self.packages_for_name(&requirement.name) {
-                    if !package.id.source.is_source_tree()
-                        || allow_missing_package_metadata
-                            && (!Self::package_satisfies_requirement(package, &requirement, root)?
-                                || matches!(
-                                    requirement.source,
-                                    RequirementSource::Registry { index: None, .. }
-                                ) && !dependency_sources
-                                    .package_markers
-                                    .get(&package.id)
-                                    .is_some_and(|marker| {
-                                        !marker.and(requirement.marker).is_false()
-                                    }))
-                    {
+                    if !package.id.source.is_source_tree() {
                         continue;
+                    }
+                    if allow_missing_package_metadata {
+                        if !Self::package_satisfies_requirement(package, &requirement, root)? {
+                            continue;
+                        }
+                        let is_bare_registry_requirement = matches!(
+                            requirement.source,
+                            RequirementSource::Registry { index: None, .. }
+                        );
+                        let source_is_reachable = dependency_sources
+                            .package_markers
+                            .get(&package.id)
+                            .is_some_and(|marker| !marker.and(requirement.marker).is_false());
+                        if is_bare_registry_requirement && !source_is_reachable {
+                            continue;
+                        }
                     }
 
                     let marker = if package.fork_markers.is_empty() {
@@ -4890,29 +4894,38 @@ impl Lock {
                             requirement_context.requirement_marker(requirement.marker);
                         for dependency in self.packages_for_name(&requirement.name) {
                             if !Self::package_satisfies_requirement(dependency, &requirement, root)?
-                                // A bare registry declaration cannot authorize a stale external
-                                // tree or archive merely because an inherited edge points there.
-                                || matches!(
-                                    requirement.source,
-                                    RequirementSource::Registry { index: None, .. }
-                                ) && (dependency.id.source.is_source_tree()
-                                    && !self.is_workspace_package(dependency)
-                                    || matches!(dependency.id.source, Source::Path(..))
-                                    || matches!(package.id.source, Source::Registry(..))
-                                        && !matches!(dependency.id.source, Source::Registry(..)))
-                                    && !Self::constraint_selects_source(
-                                        dependency,
-                                        marker
-                                            .and(requirement_context.conflict_marker(
-                                                &package.id.name,
-                                                &self.conflicts,
-                                            ))
-                                            .and(requirement_marker),
-                                        source_requirements,
-                                        root,
-                                    )?
                             {
                                 continue;
+                            }
+                            // A bare registry declaration cannot authorize a stale external tree
+                            // or archive merely because an inherited edge points there.
+                            let is_bare_registry_requirement = matches!(
+                                requirement.source,
+                                RequirementSource::Registry { index: None, .. }
+                            );
+                            let inherited_source_tree = dependency.id.source.is_source_tree()
+                                && !self.is_workspace_package(dependency);
+                            let local_archive = matches!(dependency.id.source, Source::Path(..));
+                            let registry_external_source =
+                                matches!(package.id.source, Source::Registry(..))
+                                    && !matches!(dependency.id.source, Source::Registry(..));
+                            let external_source_requires_constraint =
+                                inherited_source_tree || local_archive || registry_external_source;
+                            if is_bare_registry_requirement && external_source_requires_constraint {
+                                let source_marker = marker
+                                    .and(
+                                        requirement_context
+                                            .conflict_marker(&package.id.name, &self.conflicts),
+                                    )
+                                    .and(requirement_marker);
+                                if !Self::constraint_selects_source(
+                                    dependency,
+                                    source_marker,
+                                    source_requirements,
+                                    root,
+                                )? {
+                                    continue;
+                                }
                             }
                             for requested_extra in
                                 iter::once(None).chain(requirement.extras.iter().map(Some))
