@@ -303,6 +303,10 @@ pub fn human_readable_bytes(bytes: u64) -> impl fmt::Display {
     const UNITS: [&str; 7] = ["B", "KiB", "MiB", "GiB", "TiB", "PiB", "EiB"];
 
     fmt::from_fn(move |formatter| {
+        if bytes < 1024 {
+            return write!(formatter, "{bytes}B");
+        }
+
         let rounding_margin = formatter
             .precision()
             .and_then(|precision| i32::try_from(precision).ok())
@@ -341,7 +345,7 @@ mod tests {
             "1023.9501953125KiB"
         );
 
-        assert_eq!(format!("{:.2}", human_readable_bytes(1023)), "1023.00B");
+        assert_eq!(format!("{:.2}", human_readable_bytes(1023)), "1023B");
         assert_eq!(format!("{:.0}", human_readable_bytes(MIB - 513)), "1023KiB");
         assert_eq!(format!("{:.0}", human_readable_bytes(MIB - 512)), "1MiB");
         assert_eq!(
