@@ -50,7 +50,7 @@ use uv_resolver::{
 use uv_scripts::Pep723ItemRef;
 use uv_settings::PythonInstallMirrors;
 use uv_static::EnvVars;
-use uv_torch::{TorchSource, TorchStrategy};
+use uv_torch::TorchStrategy;
 use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy, SourceTreeEditablePolicy};
 use uv_warnings::{warn_user, warn_user_once};
 use uv_workspace::dependency_groups::DependencyGroupError;
@@ -2369,16 +2369,8 @@ pub(crate) async fn resolve_names(
     // Determine the PyTorch backend.
     let torch_backend = torch_backend
         .map(|mode| {
-            let source = if uv_auth::PyxTokenStore::from_settings()
-                .is_ok_and(|store| store.has_credentials())
-            {
-                TorchSource::Pyx
-            } else {
-                TorchSource::default()
-            };
             TorchStrategy::from_mode(
                 mode,
-                source,
                 interpreter.platform().os(),
                 cuda_driver_version.clone(),
                 *amd_gpu_architecture,
@@ -2600,16 +2592,8 @@ pub(crate) async fn resolve_environment(
     // Determine the PyTorch backend.
     let torch_backend = torch_backend
         .map(|mode| {
-            let source = if uv_auth::PyxTokenStore::from_settings()
-                .is_ok_and(|store| store.has_credentials())
-            {
-                TorchSource::Pyx
-            } else {
-                TorchSource::default()
-            };
             TorchStrategy::from_mode(
                 mode,
-                source,
                 python_platform
                     .map(|t| t.platform())
                     .as_ref()
@@ -3043,16 +3027,8 @@ pub(crate) async fn update_environment(
     // Determine the PyTorch backend.
     let torch_backend = torch_backend
         .map(|mode| {
-            let source = if uv_auth::PyxTokenStore::from_settings()
-                .is_ok_and(|store| store.has_credentials())
-            {
-                TorchSource::Pyx
-            } else {
-                TorchSource::default()
-            };
             TorchStrategy::from_mode(
                 mode,
-                source,
                 python_platform
                     .map(|t| t.platform())
                     .as_ref()
