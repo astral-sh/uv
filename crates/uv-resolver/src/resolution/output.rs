@@ -616,6 +616,12 @@ impl ResolverOutput {
         self.base_dists().next().is_none()
     }
 
+    /// Return the selected distribution for each package in the resolution.
+    pub fn distributions(&self) -> impl Iterator<Item = &ResolvedDist> {
+        self.base_dists()
+            .map(|(_, distribution)| &distribution.dist)
+    }
+
     /// Return packages whose source fallback can be omitted because their wheels provide coverage.
     ///
     /// Concrete resolutions inspect compatible wheel tags. Universal resolutions use the same

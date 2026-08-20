@@ -10,6 +10,7 @@ use futures::FutureExt;
 use itertools::Itertools;
 use rustc_hash::FxHashMap;
 use thiserror::Error;
+use tokio::sync::Mutex;
 use tracing::{debug, instrument, trace};
 
 use uv_build_backend::check_direct_build;
@@ -132,6 +133,7 @@ pub struct BuildDispatch<'a> {
     workspace_cache: WorkspaceCache,
     concurrency: Concurrency,
     preview: Preview,
+    build_requirements: Option<Mutex<Vec<Requirement>>>,
 }
 
 impl<'a> BuildDispatch<'a> {
@@ -186,6 +188,25 @@ impl<'a> BuildDispatch<'a> {
             workspace_cache,
             concurrency,
             preview,
+            build_requirements: None,
+        }
+    }
+
+    /// Capture declared and backend-discovered [`Requirement`]s and applicable build constraints
+    /// while resolving isolated build environments.
+    #[must_use]
+    pub fn with_build_requirement_capture(mut self, capture: bool) -> Self {
+        self.build_requirements = capture.then(|| Mutex::new(Vec::new()));
+        self
+    }
+
+    /// Drain captured [`Requirement`]s so builds for rejected resolver candidates can be discarded
+    /// before probing the selected distributions.
+    pub async fn take_build_requirements(&self) -> Vec<Requirement> {
+        if let Some(build_requirements) = &self.build_requirements {
+            std::mem::take(&mut *build_requirements.lock().await)
+        } else {
+            Vec::new()
         }
     }
 
@@ -351,6 +372,17 @@ impl BuildContext for BuildDispatch<'_> {
                     .join(", ")
             )
         })?);
+        if let Some(build_requirements) = &self.build_requirements {
+            let mut build_requirements = build_requirements.lock().await;
+            build_requirements.extend(requirements.iter().cloned());
+            build_requirements.extend(
+                resolution
+                    .distributions()
+                    .filter_map(|distribution| self.constraints.get(distribution.name()))
+                    .flatten()
+                    .cloned(),
+            );
+        }
         Ok(ResolvedRequirements::new(resolution, hasher))
     }
 
