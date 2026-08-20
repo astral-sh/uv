@@ -118,18 +118,6 @@ impl IndexUrl {
         }
     }
 
-    /// Return the URL with any password removed, retaining the username.
-    pub(crate) fn without_password(&self) -> Cow<'_, DisplaySafeUrl> {
-        let url = self.url();
-        if url.password().is_none() {
-            Cow::Borrowed(url)
-        } else {
-            let mut url = url.clone();
-            let _ = url.set_password(None);
-            Cow::Owned(url)
-        }
-    }
-
     /// Warn user if the given URL was provided as an ambiguous relative path.
     ///
     /// This is a temporary warning. Ambiguous values will not be
@@ -311,7 +299,7 @@ impl IndexLocations {
 }
 
 /// Returns `true` if two [`IndexUrl`]s refer to the same index.
-fn is_same_index(a: &IndexUrl, b: &IndexUrl) -> bool {
+pub(crate) fn is_same_index(a: &IndexUrl, b: &IndexUrl) -> bool {
     RealmRef::from(&**b.url()) == RealmRef::from(&**a.url())
         && CanonicalUrl::new(a.url().clone()) == CanonicalUrl::new(b.url().clone())
 }
