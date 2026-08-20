@@ -3761,7 +3761,12 @@ impl Lock {
                 && !expected.provides_extra.contains(extra)
             {
                 if missing_metadata {
-                    return Ok(mismatch(Vec::new(), context.dependencies(package)));
+                    return Ok(SatisfiesResult::MismatchedPackageDependencies(
+                        &package.id.name,
+                        package.id.version.as_ref(),
+                        Vec::new(),
+                        context.dependencies(package),
+                    ));
                 }
                 continue;
             }
