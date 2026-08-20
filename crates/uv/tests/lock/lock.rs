@@ -1,5 +1,4 @@
 use anyhow::Result;
-#[cfg(feature = "test-universal")]
 use assert_cmd::assert::OutputAssertExt;
 use assert_fs::prelude::*;
 use indoc::{formatdoc, indoc};
@@ -8298,6 +8297,71 @@ fn lock_relative_and_absolute_paths() -> Result<()> {
     Ok(())
 }
 
+/// Check path spelling for editable and non-editable sources in separate marker branches.
+#[test]
+fn lock_relative_and_absolute_paths_disjoint_markers() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let child = context.temp_dir.child("child");
+    child.child("src/child/__init__.py").touch()?;
+    child.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "child"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+    "#})?;
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&formatdoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["child"]
+
+        [tool.uv.sources]
+        child = [
+            {{ path = "child", editable = true, marker = "sys_platform == 'darwin'" }},
+            {{ path = '{}', editable = false, marker = "sys_platform != 'darwin'" }},
+        ]
+    "#,
+            child.path().display()
+        })?;
+
+    context.lock().assert().success();
+
+    let lock = context.read("uv.lock");
+    let sources = lock
+        .lines()
+        .filter(|line| line.contains("directory = ") || line.contains("editable = "))
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    // Each branch keeps its own path spelling in packages, dependencies, and metadata.
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(sources, @r#"
+        source = { directory = "[TEMP_DIR]/child" }
+        source = { editable = "child" }
+            { name = "child", version = "0.1.0", source = { directory = "[TEMP_DIR]/child" }, marker = "sys_platform != 'darwin'" },
+            { name = "child", version = "0.1.0", source = { editable = "child" }, marker = "sys_platform == 'darwin'" },
+            { name = "child", marker = "sys_platform != 'darwin'", directory = "[TEMP_DIR]/child" },
+            { name = "child", marker = "sys_platform == 'darwin'", editable = "child" },
+        "#);
+    });
+
+    context.lock().arg("--check").assert().success();
+
+    Ok(())
+}
+
 /// Check PEP 508 URL handling when they contain variables
 #[cfg(feature = "test-universal")]
 #[test]
@@ -16104,19 +16168,23 @@ fn check_unformatted_lock() -> Result<()> {
 fn normalize_false_marker_dependency_groups() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
+    let local = context.temp_dir.child("local");
+    local.create_dir_all()?;
+    let local_url = Url::from_file_path(local.path())
+        .map_err(|()| anyhow::anyhow!("local path is not a valid file URL"))?;
+
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
-    pyproject_toml.write_str(
-        r#"
+    pyproject_toml.write_str(&formatdoc! {r#"
         [project]
         name = "project"
         version = "0.1.0"
         requires-python = ">=3.11"
         [dependency-groups]
         dev = [
-            "pytest;python_full_version>'3.8' and python_full_version<'3.6'"
+            "pytest;python_full_version>'3.8' and python_full_version<'3.6'",
+            "local @ {local_url} ; python_full_version>'3.8' and python_full_version<'3.6'",
         ]
-        "#,
-    )?;
+    "#})?;
 
     uv_snapshot!(context.filters(), context.lock(), @"
     exit_code: 0 (success)
@@ -16152,7 +16220,10 @@ fn normalize_false_marker_dependency_groups() -> Result<()> {
         [package.metadata]
 
         [package.metadata.requires-dev]
-        dev = [{ name = "pytest", marker = "python_version < '0'" }]
+        dev = [
+            { name = "local", marker = "python_version < '0'", directory = "[TEMP_DIR]/local" },
+            { name = "pytest", marker = "python_version < '0'" },
+        ]
         "#
         );
     });
