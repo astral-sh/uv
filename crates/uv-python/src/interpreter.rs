@@ -31,7 +31,6 @@ use uv_static::EnvVars;
 
 use crate::implementation::LenientImplementationName;
 use crate::managed::ManagedPythonInstallations;
-use crate::pointer_size::PointerSize;
 use crate::{
     Prefix, PyVenvConfiguration, PythonInstallationKey, PythonVariant, PythonVersion, Target,
     VersionRequest, VirtualEnvironment,
@@ -60,7 +59,6 @@ pub struct Interpreter {
     tags: OnceLock<Tags>,
     target: Option<Target>,
     prefix: Option<Prefix>,
-    pointer_size: PointerSize,
     gil_disabled: bool,
     real_executable: PathBuf,
     debug_enabled: bool,
@@ -85,7 +83,6 @@ impl Interpreter {
             virtualenv: info.virtualenv,
             manylinux_compatible: info.manylinux_compatible,
             sys_prefix: info.sys_prefix,
-            pointer_size: info.pointer_size,
             gil_disabled: info.gil_disabled,
             debug_enabled: info.debug_enabled,
             sys_base_prefix: info.sys_base_prefix,
@@ -536,11 +533,6 @@ impl Interpreter {
         self.manylinux_compatible
     }
 
-    /// Return the [`PointerSize`] of the Python interpreter (i.e., 32- vs. 64-bit).
-    pub fn pointer_size(&self) -> PointerSize {
-        self.pointer_size
-    }
-
     /// Return whether this is a Python 3.13+ freethreading Python, as specified by the sysconfig var
     /// `Py_GIL_DISABLED`.
     ///
@@ -966,7 +958,6 @@ struct InterpreterInfo {
     stdlib: PathBuf,
     extension_suffixes: Vec<Box<str>>,
     standalone: bool,
-    pointer_size: PointerSize,
     gil_disabled: bool,
     debug_enabled: bool,
 }
@@ -1427,7 +1418,6 @@ mod tests {
                 "purelib": "lib/python3.12/site-packages",
                 "scripts": "bin"
             },
-            "pointer_size": "64",
             "gil_disabled": true,
             "debug_enabled": false
         }
