@@ -2845,6 +2845,33 @@ mod tests {
     }
 
     #[test]
+    fn formats_mixed_package_terms() {
+        let fixture = FormatterFixture::new();
+        let formatter = fixture.formatter();
+        let package = |name: &str| PubGrubPackage::base(name.parse().expect("valid package name"));
+
+        let terms = Map::from_iter([
+            (
+                package("a"),
+                Term::Positive(Range::singleton(Version::new([1]))),
+            ),
+            (
+                package("b"),
+                Term::Negative(Range::singleton(Version::new([2]))),
+            ),
+            (
+                package("c"),
+                Term::Negative(Range::strictly_lower_than(Version::new([3]))),
+            ),
+        ]);
+
+        insta::assert_snapshot!(
+            formatter.format_terms(&terms),
+            @"a==1, b!=2, c>=3 are incompatible"
+        );
+    }
+
+    #[test]
     fn iterative_reporter_matches_pubgrub_for_shared_nodes() {
         let fixture = FormatterFixture::new();
         let formatter = fixture.formatter();
