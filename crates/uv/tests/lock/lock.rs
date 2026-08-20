@@ -3617,7 +3617,7 @@ fn lock_conflicting_project_basic1() -> Result<()> {
 
     let missing_conflict_marker = lock_without_metadata
         .to_string()
-        .replace(", marker = \"extra == 'project-7-project'\"", "");
+        .replace(r#", marker = "extra == 'project-7-project'""#, "");
     context
         .temp_dir
         .child("uv.lock")
