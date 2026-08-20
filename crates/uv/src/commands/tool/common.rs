@@ -463,7 +463,7 @@ impl ToolLock {
             .index_strategy(*index_strategy)
             .build_options(build_options.clone())
             .build();
-        let hasher = HashStrategy::Generate(HashGeneration::Url);
+        let hasher = HashStrategy::generate(HashGeneration::Url);
         let build_hasher = HashStrategy::default();
 
         let flat_index = {

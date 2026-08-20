@@ -643,7 +643,7 @@ async fn build_package(
             hash_checking,
         )?
     } else {
-        HashStrategy::None
+        HashStrategy::default()
     };
 
     let build_constraints = Constraints::from_requirements(

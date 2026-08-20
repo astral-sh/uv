@@ -2659,7 +2659,7 @@ pub(crate) async fn resolve_environment(
     let groups = BTreeMap::new();
     let hasher = match resolution_scope {
         EnvironmentResolution::Specific => HashStrategy::default(),
-        EnvironmentResolution::Universal => HashStrategy::Generate(HashGeneration::Url),
+        EnvironmentResolution::Universal => HashStrategy::generate(HashGeneration::Url),
     };
     let build_hasher = HashStrategy::default();
 

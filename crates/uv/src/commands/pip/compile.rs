@@ -414,9 +414,9 @@ pub(crate) async fn pip_compile(
     // Generate, but don't enforce hashes for the requirements. PEP 751 _requires_ a hash to be
     // present, but otherwise, we omit them by default.
     let hasher = if generate_hashes || matches!(format, PipCompileFormat::PylockToml) {
-        HashStrategy::Generate(HashGeneration::All)
+        HashStrategy::generate(HashGeneration::All)
     } else {
-        HashStrategy::None
+        HashStrategy::default()
     };
 
     // Incorporate any index locations from the provided sources.
@@ -516,7 +516,7 @@ pub(crate) async fn pip_compile(
     };
 
     // Don't enforce hashes in `pip compile`.
-    let build_hashes = HashStrategy::None;
+    let build_hashes = HashStrategy::default();
     let build_constraints = Constraints::from_requirements(
         build_constraints
             .iter()
