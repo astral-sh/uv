@@ -9235,8 +9235,8 @@ fn lock_metadata_free_new_extra_marker() -> Result<()> {
     // The old extra selection is empty only on PyPy. A new incoming edge must not
     // infer that it is also empty in the group's CPython environment.
     pyproject_toml.write_str(&pyproject.replace(
-        "dev = [\"psycopg\"]",
-        "dev = [\"psycopg\", \"psycopg[binary] ; implementation_name == 'cpython'\"]",
+        r#"dev = ["psycopg"]"#,
+        r#"dev = ["psycopg", "psycopg[binary] ; implementation_name == 'cpython']"#,
     ))?;
 
     uv_snapshot!(context.filters(), context.lock()
