@@ -10,11 +10,11 @@ use petgraph::{
 };
 use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
 
-use uv_configuration::{Constraints, Overrides};
+use uv_configuration::{BuildOptions, Constraints, Overrides};
 use uv_distribution::Metadata;
 use uv_distribution_types::{
-    Dist, DistributionId, Edge, Identifier, IndexUrl, Name, Node, Requirement, RequiresPython,
-    ResolutionDiagnostic, ResolvedDist,
+    BuiltDist, Dist, DistributionId, Edge, Identifier, IndexUrl, Name, Node, Requirement,
+    RequiresPython, ResolutionDiagnostic, ResolvedDist, SourceDist,
 };
 use uv_git::GitResolver;
 use uv_normalize::{ExtraName, GroupName, PackageName};
@@ -611,6 +611,50 @@ impl ResolverOutput {
     /// Return `true` if there are no packages in the graph.
     pub fn is_empty(&self) -> bool {
         self.base_dists().next().is_none()
+    }
+
+    /// Retain registry hashes only for artifacts permitted by package-specific build options.
+    ///
+    /// All available wheel hashes remain eligible when source builds are disabled so the
+    /// resulting requirements can still be installed on other supported platforms.
+    pub fn retain_allowed_distribution_hashes(&mut self, build_options: &BuildOptions) {
+        for node in self.graph.node_weights_mut() {
+            let ResolutionGraphNode::Dist(distribution) = node else {
+                continue;
+            };
+            let ResolvedDist::Installable { dist, .. } = &distribution.dist else {
+                continue;
+            };
+            let allowed_hashes = match dist.as_ref() {
+                Dist::Built(BuiltDist::Registry(dist))
+                    if build_options.no_build_package(&distribution.name) =>
+                {
+                    dist.wheels
+                        .iter()
+                        .flat_map(|wheel| wheel.file.hashes.iter())
+                        .collect::<FxHashSet<_>>()
+                }
+                Dist::Source(SourceDist::Registry(source))
+                    if build_options.no_binary_package(&distribution.name) =>
+                {
+                    source.file.hashes.iter().collect::<FxHashSet<_>>()
+                }
+                _ => continue,
+            };
+            if allowed_hashes.is_empty() {
+                continue;
+            }
+
+            let hashes = distribution
+                .hashes
+                .iter()
+                .filter(|hash| allowed_hashes.contains(hash))
+                .cloned()
+                .collect::<Vec<_>>();
+            if !hashes.is_empty() {
+                distribution.hashes = HashDigests::from(hashes);
+            }
+        }
     }
 
     /// Returns `true` if the graph contains the given package.

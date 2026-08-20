@@ -333,6 +333,8 @@ pub enum PreviewFeature {
     TarCodec,
     /// Allows selecting configured package indexes by name with `--index` and `--default-index`.
     IndexByName,
+    /// Restricts generated requirement hashes to artifacts allowed by binary and build policies.
+    BinaryPolicyHashes,
 }
 
 impl Display for PreviewFeature {
