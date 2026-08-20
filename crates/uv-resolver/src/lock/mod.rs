@@ -1975,6 +1975,8 @@ impl<'lock> ExpectedPackageDependencies<'lock> {
 
         let package = self.lock.find_by_id(package_id);
         if Lock::has_source_forks(self.lock.packages_for_name(&package.id.name)) {
+            // Source forks can carry different extra payloads, so conservatively compare the
+            // incoming edge in every environment.
             return MarkerTree::TRUE;
         }
 
@@ -1982,6 +1984,8 @@ impl<'lock> ExpectedPackageDependencies<'lock> {
             !self.lock.conflicts.contains(&package.id.name, extra)
                 || !package.has_extra_payload(extra)
         }) {
+            // Only conflicting extras with dependency payloads can be narrowed to the
+            // environments of those payloads; otherwise compare the full incoming edge.
             return MarkerTree::TRUE;
         }
 
