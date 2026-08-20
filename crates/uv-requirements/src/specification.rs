@@ -38,7 +38,7 @@ use url::Url;
 use uv_cache_key::CanonicalUrl;
 use uv_client::BaseClientBuilder;
 use uv_configuration::{
-    DependencyGroups, ExcludeDependency, NoBinary, NoBuild, Override, PackageOverride,
+    DependencyExclusion, DependencyGroups, DependencyModifiers, NoBinary, NoBuild,
 };
 use uv_distribution_types::{Index, Requirement};
 use uv_distribution_types::{
@@ -50,7 +50,7 @@ use uv_normalize::{ExtraName, PackageName, PipGroupName};
 use uv_pypi_types::PyProjectToml;
 use uv_redacted::DisplaySafeUrl;
 use uv_requirements_txt::{RequirementsTxt, RequirementsTxtRequirement, SourceCache};
-use uv_scripts::{OverrideDependency, Pep723Metadata};
+use uv_scripts::{Pep723Metadata, UnresolvedDependencyOverride};
 use uv_warnings::warn_user;
 
 use crate::{RequirementsSource, SourceTree};
@@ -65,10 +65,8 @@ pub struct RequirementsSpecification {
     pub constraints: Vec<NameRequirementSpecification>,
     /// The overrides for the project.
     pub overrides: Vec<UnresolvedRequirementSpecification>,
-    /// The overrides that have already been lowered to named requirements.
-    pub override_dependencies: Vec<Override<Requirement>>,
-    /// The excludes for the project.
-    pub excludes: Vec<ExcludeDependency>,
+    /// The modifiers that have already been lowered to named requirements.
+    pub modifiers: DependencyModifiers,
     /// The `pylock.toml` file from which to extract the resolution.
     pub pylock: Option<PathBuf>,
     /// The source trees from which to extract requirements.
@@ -104,7 +102,7 @@ impl RequirementsSpecification {
     }
 
     /// Create a [`RequirementsSpecification`] from PEP 723 script metadata.
-    fn from_pep723_metadata(metadata: &Pep723Metadata) -> Self {
+    fn from_pep723_metadata(metadata: &Pep723Metadata) -> Result<Self> {
         let requirements = metadata
             .dependencies
             .as_ref()
@@ -136,32 +134,21 @@ impl RequirementsSpecification {
                 })
                 .unwrap_or_default();
 
-            let override_dependencies = tool_uv
-                .override_dependencies
-                .as_ref()
-                .into_iter()
-                .flatten()
-                .map(|dependency| match dependency {
-                    OverrideDependency::Requirement(requirement) => {
-                        Override::Requirement(Requirement::from(requirement.clone()))
-                    }
-                    OverrideDependency::Package(package) => Override::Package(PackageOverride {
-                        package: package.package.clone(),
-                        dependencies: package
-                            .dependencies
-                            .iter()
-                            .cloned()
-                            .map(Requirement::from)
-                            .collect(),
-                    }),
-                })
-                .collect();
+            let modifiers = DependencyModifiers::from_parts(
+                tool_uv
+                    .override_dependencies
+                    .as_ref()
+                    .into_iter()
+                    .flatten()
+                    .cloned()
+                    .map(UnresolvedDependencyOverride::into_resolved),
+                tool_uv.exclude_dependencies.clone().unwrap_or_default(),
+            )?;
 
-            Self {
+            Ok(Self {
                 requirements,
                 constraints,
-                override_dependencies,
-                excludes: tool_uv.exclude_dependencies.clone().unwrap_or_default(),
+                modifiers,
                 index_url: tool_uv
                     .top_level
                     .index_url
@@ -199,12 +186,12 @@ impl RequirementsSpecification {
                         .unwrap_or_default(),
                 ),
                 ..Self::default()
-            }
+            })
         } else {
-            Self {
+            Ok(Self {
                 requirements,
                 ..Self::default()
-            }
+            })
         }
     }
 
@@ -330,7 +317,7 @@ impl RequirementsSpecification {
                     Err(err) => return Err(err.into()),
                 };
 
-                Self::from_pep723_metadata(&metadata)
+                Self::from_pep723_metadata(&metadata)?
             }
             RequirementsSource::SetupPy(path) => {
                 if !path.is_file() {
@@ -379,7 +366,7 @@ impl RequirementsSpecification {
 
                 // Detect if it's a PEP 723 script.
                 if let Some(metadata) = Pep723Metadata::parse(content.as_bytes())? {
-                    Self::from_pep723_metadata(&metadata)
+                    Self::from_pep723_metadata(&metadata)?
                 } else {
                     // If it's not a PEP 723 script, assume it's a `requirements.txt` file.
                     let requirements_txt =
@@ -552,9 +539,7 @@ impl RequirementsSpecification {
             spec.requirements.extend(source.requirements);
             spec.constraints.extend(source.constraints);
             spec.overrides.extend(source.overrides);
-            spec.override_dependencies
-                .extend(source.override_dependencies);
-            spec.excludes.extend(source.excludes);
+            spec.modifiers.extend(source.modifiers)?;
             spec.extras.extend(source.extras);
             spec.source_trees.extend(source.source_trees);
 
@@ -640,8 +625,8 @@ impl RequirementsSpecification {
             let source = Self::from_source_with_cache(source, client_builder, &mut cache).await?;
             spec.overrides.extend(source.requirements);
             spec.overrides.extend(source.overrides);
-            spec.override_dependencies
-                .extend(source.override_dependencies);
+            spec.modifiers
+                .extend_overrides(source.modifiers.override_entries().cloned())?;
 
             if let Some(index_url) = source.index_url {
                 if let Some(existing) = spec.index_url
@@ -668,8 +653,8 @@ impl RequirementsSpecification {
             for req_spec in source.requirements {
                 match req_spec.requirement {
                     UnresolvedRequirement::Named(requirement) => {
-                        spec.excludes
-                            .push(ExcludeDependency::Dependency(requirement.name));
+                        spec.modifiers
+                            .extend_exclusions([DependencyExclusion::Dependency(requirement.name)]);
                     }
                     UnresolvedRequirement::Unnamed(requirement) => {
                         return Err(anyhow::anyhow!(
@@ -678,7 +663,8 @@ impl RequirementsSpecification {
                     }
                 }
             }
-            spec.excludes.extend(source.excludes);
+            spec.modifiers
+                .extend_exclusions(source.modifiers.exclusion_entries().cloned());
         }
 
         Ok(spec)
@@ -699,13 +685,12 @@ impl RequirementsSpecification {
         Self::from_sources(requirements, &[], &[], &[], None, client_builder).await
     }
 
-    /// Initialize a [`RequirementsSpecification`] from a list of [`Requirement`], including
-    /// constraints, overrides, and excludes.
-    pub fn from_excludes(
+    /// Initialize a [`RequirementsSpecification`] from requirements, constraints, and dependency
+    /// modifiers.
+    pub fn from_resolved(
         requirements: Vec<Requirement>,
         constraints: Vec<Requirement>,
-        overrides: Vec<Requirement>,
-        excludes: Vec<ExcludeDependency>,
+        modifiers: DependencyModifiers,
     ) -> Self {
         Self {
             requirements: requirements
@@ -716,11 +701,7 @@ impl RequirementsSpecification {
                 .into_iter()
                 .map(NameRequirementSpecification::from)
                 .collect(),
-            overrides: overrides
-                .into_iter()
-                .map(UnresolvedRequirementSpecification::from)
-                .collect(),
-            excludes,
+            modifiers,
             ..Self::default()
         }
     }

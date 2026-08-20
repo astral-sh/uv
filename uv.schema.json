@@ -1243,25 +1243,8 @@
         "$ref": "#/definitions/ConfigSettings"
       }
     },
-    "PackageExclusion": {
-      "description": "A set of exclusions that applies to the dependencies of a specific package version.",
-      "type": "object",
-      "properties": {
-        "dependencies": {
-          "type": "array",
-          "items": {
-            "$ref": "#/definitions/PackageName"
-          }
-        },
-        "package": {
-          "$ref": "#/definitions/PackageExclusionTarget"
-        }
-      },
-      "additionalProperties": false,
-      "required": ["package", "dependencies"]
-    },
-    "PackageExclusionTarget": {
-      "description": "The package and optional version selected by a [`PackageExclusion`].",
+    "PackageDependencyModifierTarget": {
+      "description": "The package and optional version selected by a dependency modifier.",
       "type": "object",
       "properties": {
         "name": {
@@ -1274,6 +1257,23 @@
       },
       "additionalProperties": false,
       "required": ["name"]
+    },
+    "PackageExclusion": {
+      "description": "A set of exclusions that applies to the dependencies of a specific package version.",
+      "type": "object",
+      "properties": {
+        "dependencies": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/PackageName"
+          }
+        },
+        "package": {
+          "$ref": "#/definitions/PackageDependencyModifierTarget"
+        }
+      },
+      "additionalProperties": false,
+      "required": ["package", "dependencies"]
     },
     "PackageName": {
       "description": "The normalized name of a package.\n\nConverts the name to lowercase and collapses runs of `-`, `_`, and `.` down to a single `-`.\nFor example, `---`, `.`, and `__` are all converted to a single `-`.\n\nSee: <https://packaging.python.org/en/latest/specifications/name-normalization/>",
@@ -1295,26 +1295,11 @@
           }
         },
         "package": {
-          "$ref": "#/definitions/PackageOverrideTarget"
+          "$ref": "#/definitions/PackageDependencyModifierTarget"
         }
       },
       "additionalProperties": false,
       "required": ["package", "dependencies"]
-    },
-    "PackageOverrideTarget": {
-      "description": "The package and optional version selected by a [`PackageOverride`].",
-      "type": "object",
-      "properties": {
-        "name": {
-          "$ref": "#/definitions/PackageName"
-        },
-        "version": {
-          "description": "PEP 440-style package version, e.g., `1.2.3`",
-          "type": ["string", "null"]
-        }
-      },
-      "additionalProperties": false,
-      "required": ["name"]
     },
     "PipGroupName": {
       "description": "The pip-compatible variant of a [`GroupName`].\n\nEither <groupname> or <path>:<groupname>.\nIf <path> is omitted it defaults to \"pyproject.toml\".",

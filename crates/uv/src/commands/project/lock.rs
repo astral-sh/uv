@@ -12,8 +12,8 @@ use tracing::debug;
 use uv_cache::{Cache, Refresh};
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
-    Concurrency, Constraints, DependencyGroupsWithDefaults, DryRun, ExcludeDependency,
-    ExtrasSpecification, Override, PackageOverride, Reinstall, Upgrade,
+    Concurrency, Constraints, DependencyGroupsWithDefaults, DependencyModifiers,
+    DependencyOverride, DryRun, ExtrasSpecification, PackageOverride, Reinstall, Upgrade,
 };
 use uv_dispatch::BuildDispatch;
 use uv_distribution::{DistributionDatabase, LoweredExtraBuildDependencies};
@@ -42,6 +42,7 @@ use uv_types::{
     BuildContext, BuildIsolation, EmptyInstalledPackages, HashStrategy, SourceTreeEditablePolicy,
 };
 use uv_warnings::{warn_user, warn_user_once};
+use uv_workspace::pyproject::UnresolvedDependencyOverride;
 use uv_workspace::{
     DiscoveryOptions, Editability, VirtualProject, WorkspaceCache, WorkspaceMember,
 };
@@ -556,7 +557,7 @@ async fn do_lock(
     let required_members = target.required_members();
     let requirements = target.requirements();
     let overrides = target.overrides();
-    let excludes = target.exclude_dependencies();
+    let exclusions = target.exclude_dependencies();
     let constraints = target.constraints();
     let build_constraints = target.build_constraints();
     let dependency_groups = target.dependency_groups()?;
@@ -577,11 +578,11 @@ async fn do_lock(
         let mut lowered_overrides = Vec::new();
         for entry in overrides {
             match entry {
-                Override::Requirement(requirement) => {
+                UnresolvedDependencyOverride::Requirement(requirement) => {
                     lowered_overrides.extend(
                         target
                             .lower(
-                                vec![requirement],
+                                vec![*requirement],
                                 index_locations,
                                 sources,
                                 cache,
@@ -590,11 +591,11 @@ async fn do_lock(
                             )
                             .await?
                             .into_iter()
-                            .map(Override::Requirement),
+                            .map(DependencyOverride::requirement),
                     );
                 }
-                Override::Package(package) => {
-                    lowered_overrides.push(Override::Package(PackageOverride {
+                UnresolvedDependencyOverride::Package(package) => {
+                    lowered_overrides.push(DependencyOverride::Package(PackageOverride {
                         package: package.package,
                         dependencies: target
                             .lower(
@@ -613,6 +614,8 @@ async fn do_lock(
         }
         lowered_overrides
     };
+    let modifiers = DependencyModifiers::from_parts(overrides, exclusions)
+        .map_err(|error| ProjectError::Operation(error.into()))?;
     let constraints = target
         .lower(
             constraints,
@@ -918,7 +921,7 @@ async fn do_lock(
 
     // If any of the resolution-determining settings changed, invalidate the lock.
     let existing_lock = if let Some(existing_lock) = existing_lock {
-        match ValidatedLock::validate(
+        match Box::pin(ValidatedLock::validate(
             existing_lock,
             target.install_path(),
             packages,
@@ -927,8 +930,7 @@ async fn do_lock(
             &requirements,
             &dependency_groups,
             &constraints,
-            &overrides,
-            &excludes,
+            &modifiers,
             &build_constraints,
             &conflicts,
             environments,
@@ -945,7 +947,7 @@ async fn do_lock(
             &database,
             preview,
             printer,
-        )
+        ))
         .await
         {
             Ok(result) => Some(result),
@@ -1058,8 +1060,7 @@ async fn do_lock(
                     .chain(external)
                     .collect(),
                 Vec::new(),
-                overrides.clone(),
-                excludes.clone(),
+                modifiers.clone(),
                 source_trees,
                 // The root is always null in workspaces, it "depends on" the projects
                 None,
@@ -1097,8 +1098,7 @@ async fn do_lock(
                 members,
                 requirements,
                 constraints,
-                overrides,
-                excludes.clone(),
+                modifiers,
                 build_constraints,
                 dependency_groups,
                 dependency_metadata.values().cloned(),
@@ -1162,8 +1162,7 @@ impl ValidatedLock {
         requirements: &[Requirement],
         dependency_groups: &BTreeMap<GroupName, Vec<Requirement>>,
         constraints: &[Requirement],
-        overrides: &[Override<Requirement>],
-        excludes: &[ExcludeDependency],
+        modifiers: &DependencyModifiers,
         build_constraints: &[Requirement],
         conflicts: &Conflicts,
         environments: Option<&SupportedEnvironments>,
@@ -1378,8 +1377,7 @@ impl ValidatedLock {
                 required_members,
                 requirements,
                 constraints,
-                overrides,
-                excludes,
+                modifiers,
                 build_constraints,
                 dependency_groups,
                 dependency_metadata,
@@ -1467,16 +1465,9 @@ impl ValidatedLock {
                 );
                 Ok(Self::Preferable(lock))
             }
-            SatisfiesResult::MismatchedOverrides(expected, actual) => {
+            SatisfiesResult::MismatchedDependencyModifiers(expected, actual) => {
                 debug!(
-                    "Resolving despite existing lockfile due to mismatched overrides:\n  Requested: {:?}\n  Existing: {:?}",
-                    expected, actual
-                );
-                Ok(Self::Preferable(lock))
-            }
-            SatisfiesResult::MismatchedExcludes(expected, actual) => {
-                debug!(
-                    "Resolving despite existing lockfile due to mismatched excludes:\n  Requested: {:?}\n  Existing: {:?}",
+                    "Resolving despite existing lockfile due to mismatched dependency modifiers:\n  Requested: {:?}\n  Existing: {:?}",
                     expected, actual
                 );
                 Ok(Self::Preferable(lock))

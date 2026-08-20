@@ -15,7 +15,7 @@ use uv_cache::{Cache, Refresh};
 use uv_cache_info::Timestamp;
 use uv_cli::ExternalCommand;
 use uv_client::{BaseClientBuilder, RegistryClientBuilder};
-use uv_configuration::{Concurrency, Constraints, GitLfsSetting, TargetTriple};
+use uv_configuration::{Concurrency, Constraints, DependencyOverride, GitLfsSetting, TargetTriple};
 use uv_distribution::LoweredExtraBuildDependencies;
 use uv_distribution_types::InstalledDist;
 use uv_distribution_types::{
@@ -964,8 +964,6 @@ async fn get_or_create_environment(
         client_builder,
     )
     .await?;
-    let exclusions = uv_configuration::Excludes::from_entries(spec.excludes.iter().cloned());
-
     // Resolve the `--from` and `--with` requirements.
     let requirements = {
         let mut requirements = Vec::with_capacity(1 + with.len());
@@ -1015,6 +1013,15 @@ async fn get_or_create_environment(
         lfs,
     )
     .await?;
+    let mut modifiers = spec.modifiers.clone();
+    modifiers
+        .extend_overrides(
+            overrides
+                .iter()
+                .cloned()
+                .map(DependencyOverride::requirement),
+        )
+        .map_err(|error| ProjectError::Operation(error.into()))?;
 
     // Check if the tool is already installed in a compatible environment.
     if !isolated && !request.is_latest() {
@@ -1067,8 +1074,7 @@ async fn get_or_create_environment(
                         site_packages.satisfies_requirements(
                             requirements.iter(),
                             constraints.iter().chain(latest.iter()),
-                            &uv_configuration::Overrides::from_requirements(overrides.clone()),
-                            &exclusions,
+                            &modifiers,
                             InstallationStrategy::Permissive,
                             &markers,
                             &tags,
