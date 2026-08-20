@@ -3387,6 +3387,8 @@ impl PipCompileSettings {
             no_system,
             generate_hashes,
             no_generate_hashes,
+            include_build_dependencies,
+            no_include_build_dependencies,
             no_build,
             build,
             no_binary,
@@ -3508,6 +3510,11 @@ impl PipCompileSettings {
                     no_header: flag(no_header, header, "header")?,
                     custom_compile_command,
                     generate_hashes: flag(generate_hashes, no_generate_hashes, "generate-hashes")?,
+                    include_build_dependencies: flag(
+                        include_build_dependencies,
+                        no_include_build_dependencies,
+                        "include-build-dependencies",
+                    )?,
                     python_version,
                     python_platform,
                     universal: flag(universal, no_universal, "universal")?,
@@ -4680,6 +4687,7 @@ pub(crate) struct PipSettings {
     pub(crate) no_header: bool,
     pub(crate) custom_compile_command: Option<String>,
     pub(crate) generate_hashes: bool,
+    pub(crate) include_build_dependencies: bool,
     pub(crate) config_setting: ConfigSettings,
     pub(crate) config_settings_package: PackageConfigSettings,
     pub(crate) python_version: Option<PythonVersion>,
@@ -4757,6 +4765,7 @@ impl PipSettings {
             no_header,
             custom_compile_command,
             generate_hashes,
+            include_build_dependencies,
             config_settings,
             config_settings_package,
             python_version,
@@ -4945,6 +4954,10 @@ impl PipSettings {
             generate_hashes: args
                 .generate_hashes
                 .combine(generate_hashes)
+                .unwrap_or_default(),
+            include_build_dependencies: args
+                .include_build_dependencies
+                .combine(include_build_dependencies)
                 .unwrap_or_default(),
             allow_empty_requirements: args
                 .allow_empty_requirements

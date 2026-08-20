@@ -172,6 +172,21 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         }
     }
 
+    /// Resolve the complete build environment for a source distribution, including backend hooks.
+    #[instrument(skip_all, fields(%source))]
+    pub async fn resolve_build_requirements(
+        &self,
+        source: &SourceDist,
+        hashes: HashPolicy<'_>,
+    ) -> Result<(), Error> {
+        SourceDistributionBuilder::new(self.build_context)
+            .with_build_requirements()
+            .download_and_build_metadata(&BuildableSource::Dist(source), hashes, &self.client)
+            .boxed_local()
+            .await?;
+        Ok(())
+    }
+
     /// Fetch a wheel from the cache or download it from the index.
     ///
     /// While hashes will be generated in all cases, hash-checking is _not_ enforced and should

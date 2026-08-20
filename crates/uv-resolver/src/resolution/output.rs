@@ -13,13 +13,14 @@ use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
 use uv_configuration::{Constraints, Overrides};
 use uv_distribution::Metadata;
 use uv_distribution_types::{
-    Dist, DistributionId, Edge, Identifier, IndexUrl, Name, Node, Requirement, RequiresPython,
-    ResolutionDiagnostic, ResolvedDist,
+    BuiltDist, Dist, DistributionId, Edge, Identifier, IndexUrl, Name, Node, Requirement,
+    RequiresPython, ResolutionDiagnostic, ResolvedDist, SourceDist,
 };
 use uv_git::GitResolver;
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::{Version, VersionSpecifier};
 use uv_pep508::{MarkerEnvironment, MarkerTree, MarkerTreeKind};
+use uv_platform_tags::Tags;
 use uv_pypi_types::{Conflicts, HashDigests, ParsedUrlError, VerbatimParsedUrl, Yanked};
 
 use crate::graph_ops::{marker_reachability, simplify_conflict_markers};
@@ -611,6 +612,41 @@ impl ResolverOutput {
     /// Return `true` if there are no packages in the graph.
     pub fn is_empty(&self) -> bool {
         self.base_dists().next().is_none()
+    }
+
+    /// Return the selected distribution for each package in the resolution.
+    pub fn distributions(&self) -> impl Iterator<Item = &ResolvedDist> {
+        self.base_dists()
+            .map(|(_, distribution)| &distribution.dist)
+    }
+
+    /// Restrict registry hashes to the selected artifact kind for the target environment.
+    pub fn retain_selected_distribution_hashes(&mut self, tags: &Tags) {
+        for node in self.graph.node_weights_mut() {
+            let ResolutionGraphNode::Dist(distribution) = node else {
+                continue;
+            };
+            let ResolvedDist::Installable { dist, .. } = &distribution.dist else {
+                continue;
+            };
+
+            let mut hashes = match dist.as_ref() {
+                Dist::Built(BuiltDist::Registry(wheels)) => wheels
+                    .wheels
+                    .iter()
+                    .filter(|wheel| wheel.filename.is_compatible(tags))
+                    .flat_map(|wheel| wheel.file.hashes.iter().cloned())
+                    .collect::<Vec<_>>(),
+                Dist::Source(SourceDist::Registry(source)) => source.file.hashes.to_vec(),
+                _ => continue,
+            };
+
+            if !hashes.is_empty() {
+                hashes.sort_unstable();
+                hashes.dedup();
+                distribution.hashes = HashDigests::from(hashes);
+            }
+        }
     }
 
     /// Returns `true` if the graph contains the given package.

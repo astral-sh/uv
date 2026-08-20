@@ -352,16 +352,24 @@ pub(crate) async fn pip_sync(
         }
     };
 
-    // Enforce (but never require) the build constraints, if `--require-hashes` or `--verify-hashes`
-    // is provided. _Requiring_ hashes would be too strict, and would break with pip.
+    // Require hashes for isolated build dependencies when hash checking is required and the user
+    // explicitly supplied build constraints. Preserve compatibility when no build constraints are
+    // available to provide those hashes.
     let build_hasher = if hash_checking.is_some() {
+        let build_hash_checking = if hash_checking.is_some_and(|mode| mode.is_require())
+            && !build_constraints.is_empty()
+        {
+            HashCheckingMode::Require
+        } else {
+            HashCheckingMode::Verify
+        };
         HashStrategy::from_requirements(
             std::iter::empty(),
             build_constraints
                 .iter()
                 .map(|entry| (&entry.requirement, entry.hashes.as_slice())),
             Some(&marker_env),
-            HashCheckingMode::Verify,
+            build_hash_checking,
         )?
     } else {
         HashStrategy::None

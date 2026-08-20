@@ -3470,6 +3470,35 @@ fn require_hashes_source_no_binary() -> Result<()> {
     Ok(())
 }
 
+/// Require hashes for build dependencies when explicit build constraints are available.
+#[test]
+fn require_hashes_build_dependencies_with_constraints() -> Result<()> {
+    let server = PackseServer::new("simple/single-package.toml");
+    let context = uv_test::test_context!("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str(
+        "a==1.0.0 --hash=sha256:957f99ff1d65ce0d7883d50f4e67ed8d4b42e76d2c2b5e62384ff0ba538647b5",
+    )?;
+
+    uv_snapshot!(context.pip_sync()
+        .arg("--index-url").arg(server.index_url())
+        .arg("requirements.txt")
+        .arg("--no-binary").arg("a")
+        .arg("--build-constraint").arg("requirements.txt")
+        .arg("--require-hashes"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+      × Failed to download and build `a==1.0.0`
+      ├─▶ Failed to resolve requirements from `build-system.requires`
+      ├─▶ No solution found when resolving: `hatchling`
+      ╰─▶ In `--require-hashes` mode, all requirements must be pinned upfront with `==`, but found: `hatchling`
+    ");
+
+    Ok(())
+}
+
 /// Include the hash for _just_ the source distribution, with `--binary-only`.
 #[test]
 fn require_hashes_source_only_binary() -> Result<()> {
