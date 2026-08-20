@@ -523,7 +523,7 @@ fn clean_handles_verbatim_paths() -> Result<()> {
     DEBUG Searching for user configuration in: `[UV_USER_CONFIG_DIR]/uv.toml`
     DEBUG uv [VERSION] ([COMMIT] DATE)
     Clearing cache at: [CACHE_DIR]/
-    Removed 2 files
+    Removed 2 files (0B)
     ");
 
     Ok(())

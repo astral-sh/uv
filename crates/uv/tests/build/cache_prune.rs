@@ -124,7 +124,7 @@ fn prune_stale_directory() -> Result<()> {
     DEBUG uv [VERSION] ([COMMIT] DATE)
     Pruning cache at: [CACHE_DIR]/
     DEBUG Removing dangling cache bucket: [CACHE_DIR]/simple-v4
-    Removed 1 directory
+    Removed 1 directory (0B)
     ");
 
     Ok(())
@@ -282,7 +282,7 @@ async fn prune_force() -> Result<()> {
     DEBUG Cache is currently in use, proceeding due to `--force`
     Pruning cache at: [CACHE_DIR]/
     DEBUG Removing dangling cache bucket: [CACHE_DIR]/simple-v4
-    Removed 1 directory
+    Removed 1 directory (0B)
     ");
 
     Ok(())
