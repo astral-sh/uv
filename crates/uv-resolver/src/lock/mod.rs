@@ -4795,29 +4795,32 @@ impl Lock {
             // Refresh source trees only after their exact path becomes reachable. Archives,
             // backend-only trees, and remote providers remain opaque until a refreshed
             // declaration selects their exact source in the second phase.
-            let refreshed_source_tree =
-                if let Some(source_tree) = package.id.source.as_source_tree() {
-                    Self::source_tree_requires_dist_cached(
-                        source_tree,
-                        root,
-                        package,
-                        database,
-                        source_tree_metadata,
-                    )
-                    .await?
-                } else if matches!(
+            let refreshed_source_tree = if let Some(source_tree) =
+                package.id.source.as_source_tree()
+            {
+                Self::source_tree_requires_dist_cached(
+                    source_tree,
+                    root,
+                    package,
+                    database,
+                    source_tree_metadata,
+                )
+                .await?
+            } else {
+                let is_opaque_source = matches!(
                     package.id.source,
                     Source::Path(..) | Source::Direct(..) | Source::Git(..)
-                ) || matches!(package.id.source, Source::Registry(..))
+                );
+                let registry_has_declarations = matches!(package.id.source, Source::Registry(..))
                     && (configured_metadata.is_some()
                         || source_requirements.iter().any(|constraint| {
                             !matches!(constraint.source, RequirementSource::Registry { .. })
-                        }))
-                {
-                    None
-                } else {
+                        }));
+                if !is_opaque_source && !registry_has_declarations {
                     continue;
-                };
+                }
+                None
+            };
             if refreshed_source_tree
                 .as_ref()
                 .and_then(|metadata| metadata.version.as_ref())
