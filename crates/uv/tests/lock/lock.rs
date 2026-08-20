@@ -18659,7 +18659,7 @@ fn lock_regenerates_dependencies_without_metadata() -> Result<()> {
     ");
 
     pyproject_toml.write_str(&original_pyproject.replace(
-        "feature = [\"six<2\", \"httpx[http2]>=1 ; sys_platform != 'win32'\", \"excluded\", \"scoped-excluded\"]",
+        r#"feature = ["six<2", "httpx[http2]>=1 ; sys_platform != 'win32'", "excluded", "scoped-excluded"]"#,
         "feature = []",
     ))?;
     uv_snapshot!(context.filters(), context.lock()
@@ -18677,7 +18677,7 @@ fn lock_regenerates_dependencies_without_metadata() -> Result<()> {
     ");
 
     pyproject_toml.write_str(&original_pyproject.replace(
-        "dev = [\"six>=2\", \"httpx[http2]==1.0.0 ; sys_platform == 'win32'\", \"excluded\", \"scoped-excluded\"]",
+        r#"dev = ["six>=2", "httpx[http2]==1.0.0 ; sys_platform == 'win32'", "excluded", "scoped-excluded"]"#,
         "dev = []",
     ))?;
     uv_snapshot!(context.filters(), context.lock()
