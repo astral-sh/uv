@@ -20301,7 +20301,6 @@ fn lock_regenerates_marker_specific_requested_extras() -> Result<()> {
     Resolved 3 packages in [TIME]
     ");
 
-    let mut lock = context.read("uv.lock").parse::<toml_edit::DocumentMut>()?;
     let lockfile = context.temp_dir.child("uv.lock");
     uv_snapshot!(context.filters(), context.lock()
         .arg("--preview-features")
@@ -20316,31 +20315,56 @@ fn lock_regenerates_marker_specific_requested_extras() -> Result<()> {
     Resolved 3 packages in [TIME]
     ");
 
-    let Some(packages) = lock["package"].as_array_of_tables_mut() else {
-        anyhow::bail!("lockfile did not contain a package array");
-    };
-    let Some(project) = packages
-        .iter_mut()
-        .find(|package| package["name"].as_str() == Some("project"))
-    else {
-        anyhow::bail!("lockfile did not contain the project package");
-    };
-    let Some(dependencies) = project["dependencies"].as_array_mut() else {
-        anyhow::bail!("project did not contain a dependency array");
-    };
-    let Some(dependency) = dependencies.iter_mut().find(|dependency| {
-        dependency
-            .as_inline_table()
-            .and_then(|dependency| dependency.get("extra"))
-            .is_some()
-    }) else {
-        anyhow::bail!("project did not contain a dependency requesting an extra");
-    };
-    let Some(dependency) = dependency.as_inline_table_mut() else {
-        anyhow::bail!("dependency was not an inline table");
-    };
-    dependency.insert("marker", toml_edit::Value::from("sys_platform == 'linux'"));
-    lockfile.write_str(&lock.to_string())?;
+    lockfile.write_str(&formatdoc! {r#"
+        version = 1
+        revision = 4
+        requires-python = ">=3.12"
+        resolution-markers = [
+            "sys_platform != 'win32'",
+            "sys_platform == 'win32'",
+        ]
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[package]]
+        name = "h2"
+        version = "1.0.0"
+        source = {{ registry = "{index_url}" }}
+        sdist = {{ url = "{h2_sdist_url}", hash = "sha256:c9b6a98f440bb83af4268095ee1e253e837c2177ec2eaa46f780cc7c71a75f6d", upload-time = "2024-03-24T00:00:00Z" }}
+        wheels = [
+            {{ url = "{h2_wheel_url}", hash = "sha256:33a63cbe8d76a8ee81d34a146d0140aaa55d29187aef7f00e5e8a922e03c7bde", upload-time = "2024-03-24T00:00:00Z" }},
+        ]
+
+        [[package]]
+        name = "httpx"
+        version = "1.0.0"
+        source = {{ registry = "{index_url}" }}
+        sdist = {{ url = "{httpx_sdist_url}", hash = "sha256:2d661cd788ac8c83adf4ea0638035919251271d5508a63e6650448605dcd4a1b", upload-time = "2024-03-24T00:00:00Z" }}
+        wheels = [
+            {{ url = "{httpx_wheel_url}", hash = "sha256:4154c3c1f739176378d6865841d67718bc624c0f2f0ccf87364c8141a0c93603", upload-time = "2024-03-24T00:00:00Z" }},
+        ]
+
+        [package.optional-dependencies]
+        http2 = [
+            {{ name = "h2" }},
+        ]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = {{ virtual = "." }}
+        dependencies = [
+            {{ name = "httpx" }},
+            {{ name = "httpx", extra = ["http2"], marker = "sys_platform == 'linux'" }},
+        ]
+        "#,
+        index_url = server.index_url(),
+        h2_sdist_url = server.file_url("h2-1.0.0.tar.gz"),
+        h2_wheel_url = server.file_url("h2-1.0.0-py3-none-any.whl"),
+        httpx_sdist_url = server.file_url("httpx-1.0.0.tar.gz"),
+        httpx_wheel_url = server.file_url("httpx-1.0.0-py3-none-any.whl"),
+    })?;
 
     uv_snapshot!(context.filters(), context.lock()
         .arg("--preview-features")
