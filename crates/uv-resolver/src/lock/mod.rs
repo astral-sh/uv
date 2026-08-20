@@ -3523,6 +3523,8 @@ pub struct ResolverManifest {
     dependency_metadata: BTreeSet<StaticMetadata>,
 }
 
+/// Custom `Debug` to show dependency modifiers as flattened, deterministically ordered fields in
+/// lock deserialization snapshots.
 impl Debug for ResolverManifest {
     fn fmt(&self, formatter: &mut Formatter<'_>) -> std::fmt::Result {
         formatter

@@ -156,6 +156,7 @@ struct DependencyModifierEntries {
     exclusions: Vec<DependencyExclusion>,
 }
 
+/// Custom `Debug` to hide the derived index from `--show-settings` output.
 impl fmt::Debug for DependencyModifiers {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter
