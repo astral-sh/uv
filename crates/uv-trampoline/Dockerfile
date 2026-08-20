@@ -53,7 +53,7 @@ ARG CARGO_XWIN_VERSION
 ARG XWIN_SDK_VERSION
 ARG XWIN_CRT_VERSION
 
-RUN cargo install cargo-xwin@${CARGO_XWIN_VERSION}
+RUN cargo install --locked cargo-xwin@${CARGO_XWIN_VERSION}
 
 RUN cargo xwin cache xwin \
       --xwin-sdk-version ${XWIN_SDK_VERSION} \
