@@ -11235,19 +11235,16 @@ fn url_hash_mismatch() -> Result<()> {
 
     // Running `uv sync` should fail.
     uv_snapshot!(context.filters(), context.sync(), @"
-    exit_code: 1 (failure)
+    exit_code: 2 (failure)
     ----- stderr -----
-    Resolved 2 packages in [TIME]
-      × Failed to download and build `iniconfig @ https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz`
-      ╰─▶ Hash mismatch for `iniconfig @ https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz`
+    error: Failed to generate package metadata for `iniconfig==2.0.0 @ direct+https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz`
+      Caused by: Hash mismatch for `iniconfig @ https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz`
 
-          Expected:
-            sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b4
+        Expected:
+          sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b4
 
-          Computed:
-            sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3
-
-    hint: `iniconfig` was included because `project` (v0.1.0) depends on `iniconfig`
+        Computed:
+          sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3
     ");
 
     Ok(())
@@ -11304,21 +11301,18 @@ fn path_hash_mismatch() -> Result<()> {
         requires-dist = [{ name = "iniconfig", path = "iniconfig-2.0.0.tar.gz" }]
     "#})?;
 
-    // Running `uv sync` should fail.
+    // Reject the archive while validating lockfile metadata, before it can be built.
     uv_snapshot!(context.filters(), context.sync(), @"
-    exit_code: 1 (failure)
+    exit_code: 2 (failure)
     ----- stderr -----
-    Resolved 2 packages in [TIME]
-      × Failed to build `iniconfig @ file://[TEMP_DIR]/iniconfig-2.0.0.tar.gz`
-      ╰─▶ Hash mismatch for `iniconfig @ file://[TEMP_DIR]/iniconfig-2.0.0.tar.gz`
+    error: Failed to generate package metadata for `iniconfig==2.0.0 @ path+iniconfig-2.0.0.tar.gz`
+      Caused by: Hash mismatch for `iniconfig @ file://[TEMP_DIR]/iniconfig-2.0.0.tar.gz`
 
-          Expected:
-            sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b4
+        Expected:
+          sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b4
 
-          Computed:
-            sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3
-
-    hint: `iniconfig` was included because `project` (v0.1.0) depends on `iniconfig`
+        Computed:
+          sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3
     ");
 
     Ok(())

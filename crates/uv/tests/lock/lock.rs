@@ -2,12 +2,20 @@ use anyhow::Result;
 #[cfg(feature = "test-universal")]
 use assert_cmd::assert::OutputAssertExt;
 use assert_fs::prelude::*;
+#[cfg(feature = "test-universal")]
+use async_zip::base::write::ZipFileWriter;
+#[cfg(feature = "test-universal")]
+use async_zip::{Compression, ZipEntryBuilder};
 use indoc::{formatdoc, indoc};
 use insta::assert_snapshot;
 #[cfg(feature = "test-universal")]
 use serde_json::json;
 #[cfg(feature = "test-universal")]
+use sha2::{Digest, Sha256};
+#[cfg(feature = "test-universal")]
 use url::Url;
+#[cfg(feature = "test-universal")]
+use walkdir::WalkDir;
 #[cfg(feature = "test-universal")]
 use wiremock::{
     Mock, MockServer, ResponseTemplate,
@@ -17,6 +25,8 @@ use wiremock::{
 use uv_fs::Simplified;
 #[cfg(feature = "test-universal")]
 use uv_static::EnvVars;
+#[cfg(feature = "test-universal")]
+use uv_test::archive::write_tar_gz;
 #[cfg(feature = "test-universal")]
 use uv_test::packse::PackseServer;
 use uv_test::uv_snapshot;
@@ -1488,6 +1498,1173 @@ fn lock_sdist_url() -> Result<()> {
     Checked 1 package in [TIME]
     ");
 
+    Ok(())
+}
+
+/// Create a deterministic source archive with an in-tree backend and configurable metadata hook.
+#[cfg(feature = "test-universal")]
+fn locked_source_archive(side_effect: &str, subdirectory: &str) -> Result<Vec<u8>> {
+    let pyproject = indoc! {r#"
+        [build-system]
+        requires = []
+        build-backend = "backend"
+        backend-path = ["."]
+    "#};
+    let backend = formatdoc! {r#"
+        import os
+        from pathlib import Path
+
+        def prepare_metadata_for_build_wheel(metadata_directory, config_settings=None):
+            {side_effect}
+            dist_info = Path(metadata_directory) / "demo_pkg-1.0.0.dist-info"
+            dist_info.mkdir()
+            (dist_info / "METADATA").write_text(
+                "Metadata-Version: 2.2\nName: demo-pkg\nVersion: 1.0.0\n"
+            )
+            return dist_info.name
+    "#};
+    let mut archive = Vec::new();
+    write_tar_gz(
+        &mut archive,
+        &[
+            (
+                &format!("demo_pkg-1.0.0/{subdirectory}pyproject.toml"),
+                pyproject,
+            ),
+            (
+                &format!("demo_pkg-1.0.0/{subdirectory}backend.py"),
+                backend.as_str(),
+            ),
+        ],
+    )?;
+    Ok(archive)
+}
+
+/// Create a deterministic wheel whose module can be imported by a source build backend.
+#[cfg(feature = "test-universal")]
+async fn locked_build_dependency_wheel(module: &str) -> Result<Vec<u8>> {
+    let mut writer = ZipFileWriter::new(Vec::new());
+    for (name, contents) in [
+        ("review_dep.py", module),
+        (
+            "review_dep-1.0.0.dist-info/METADATA",
+            "Metadata-Version: 2.2\nName: review-dep\nVersion: 1.0.0\n",
+        ),
+        (
+            "review_dep-1.0.0.dist-info/WHEEL",
+            "Wheel-Version: 1.0\nGenerator: uv-test\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
+        ),
+        (
+            "review_dep-1.0.0.dist-info/RECORD",
+            "review_dep.py,,\nreview_dep-1.0.0.dist-info/METADATA,,\nreview_dep-1.0.0.dist-info/WHEEL,,\nreview_dep-1.0.0.dist-info/RECORD,,\n",
+        ),
+    ] {
+        writer
+            .write_entry_whole(
+                ZipEntryBuilder::new(name.into(), Compression::Stored),
+                contents.as_bytes(),
+            )
+            .await?;
+    }
+    Ok(writer.close().await?)
+}
+
+/// A known locked build dependency must be verified before its code enters an isolated build.
+#[cfg(feature = "test-universal")]
+#[tokio::test]
+async fn lock_sdist_url_locked_build_dependency_hash_mismatch() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let server = MockServer::start().await;
+    let archive_path = "/files/demo_pkg-1.0.0.tar.gz";
+    let archive_url = format!("{}{archive_path}", server.uri());
+    let wheel_path = "/files/review_dep-1.0.0-py3-none-any.whl";
+    let sentinel = context.temp_dir.child("backend-executed");
+    let trusted = locked_build_dependency_wheel("pass\n").await?;
+    let replacement = locked_build_dependency_wheel(indoc! {r#"
+        import os
+        from pathlib import Path
+        Path(os.environ["UV_LOCK_TEST_SENTINEL"]).write_text("executed\n")
+    "#})
+    .await?;
+    let trusted_digest = hex::encode(Sha256::digest(&trusted));
+    let mut source = Vec::new();
+    write_tar_gz(
+        &mut source,
+        &[
+            (
+                "demo_pkg-1.0.0/pyproject.toml",
+                indoc! {r#"
+            [build-system]
+            requires = ["review-dep==1.0.0"]
+            build-backend = "backend"
+            backend-path = ["."]
+        "#},
+            ),
+            (
+                "demo_pkg-1.0.0/backend.py",
+                indoc! {r#"
+            from pathlib import Path
+
+            def prepare_metadata_for_build_wheel(metadata_directory, config_settings=None):
+                import review_dep
+                dist_info = Path(metadata_directory) / "demo_pkg-1.0.0.dist-info"
+                dist_info.mkdir()
+                (dist_info / "METADATA").write_text(
+                    "Metadata-Version: 2.2\nName: demo-pkg\nVersion: 1.0.0\n"
+                )
+                return dist_info.name
+        "#},
+            ),
+        ],
+    )?;
+
+    let simple_index = json!({
+        "meta": { "api-version": "1.0" },
+        "name": "review-dep",
+        "files": [{
+            "filename": "review_dep-1.0.0-py3-none-any.whl",
+            "url": format!("{}{wheel_path}", server.uri()),
+            "hashes": { "sha256": trusted_digest },
+            "core-metadata": true,
+            "upload-time": "2024-01-01T00:00:00Z",
+        }],
+    });
+    Mock::given(method("GET"))
+        .and(path("/simple/review-dep/"))
+        .respond_with(ResponseTemplate::new(200).set_body_raw(
+            simple_index.to_string(),
+            "application/vnd.pypi.simple.v1+json",
+        ))
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path(format!("{wheel_path}.metadata")))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_string("Metadata-Version: 2.2\nName: review-dep\nVersion: 1.0.0\n"),
+        )
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path(archive_path))
+        .respond_with(ResponseTemplate::new(200).set_body_bytes(source))
+        .mount(&server)
+        .await;
+    let trusted_wheel = Mock::given(method("GET"))
+        .and(path(wheel_path))
+        .respond_with(ResponseTemplate::new(200).set_body_bytes(trusted))
+        .mount_as_scoped(&server)
+        .await;
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&formatdoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["demo-pkg @ {archive_url}", "review-dep==1.0.0"]
+
+        [[tool.uv.index]]
+        url = "{}/simple"
+        default = true
+    "#, server.uri()})?;
+    uv_snapshot!(context.filters(), context.lock().arg("--no-cache"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+    let locked = context.read("uv.lock");
+    assert!(locked.contains(&trusted_digest));
+
+    drop(trusted_wheel);
+    Mock::given(method("GET"))
+        .and(path(wheel_path))
+        .respond_with(ResponseTemplate::new(200).set_body_bytes(replacement))
+        .mount(&server)
+        .await;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--no-cache")
+        .env("UV_LOCK_TEST_SENTINEL", sentinel.path()), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Failed to generate package metadata for `demo-pkg==1.0.0 @ direct+http://[LOCALHOST]/files/demo_pkg-1.0.0.tar.gz`
+      Caused by: Failed to install requirements from `build-system.requires`
+      Caused by: Failed to download `review-dep==1.0.0`
+      Caused by: Hash mismatch for `review-dep==1.0.0`
+
+        Expected:
+          sha256:53a42340ae36747fb1471f9b4b7958be1f6e2e5fc234f931aafa3e454fd31dfb
+
+        Computed:
+          sha256:1aa0f7263e4991934282ab8912e95fdd34f24459d7c4f8b845c2281a04c89807
+    ");
+    assert!(
+        !sentinel.exists(),
+        "the locked build dependency was executed"
+    );
+
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--refresh").arg("--no-cache")
+        .env("UV_LOCK_TEST_SENTINEL", sentinel.path()), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+      × Failed to download and build `demo-pkg @ http://[LOCALHOST]/files/demo_pkg-1.0.0.tar.gz`
+      ├─▶ Failed to install requirements from `build-system.requires`
+      ├─▶ Failed to download `review-dep==1.0.0`
+      ╰─▶ Hash mismatch for `review-dep==1.0.0`
+
+          Expected:
+            sha256:53a42340ae36747fb1471f9b4b7958be1f6e2e5fc234f931aafa3e454fd31dfb
+
+          Computed:
+            sha256:1aa0f7263e4991934282ab8912e95fdd34f24459d7c4f8b845c2281a04c89807
+    ");
+    assert!(
+        !sentinel.exists(),
+        "the refreshed build dependency was executed"
+    );
+
+    uv_snapshot!(context.filters(), context.sync().arg("--no-cache")
+        .env("UV_LOCK_TEST_SENTINEL", sentinel.path()), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Failed to generate package metadata for `demo-pkg==1.0.0 @ direct+http://[LOCALHOST]/files/demo_pkg-1.0.0.tar.gz`
+      Caused by: Failed to install requirements from `build-system.requires`
+      Caused by: Failed to download `review-dep==1.0.0`
+      Caused by: Hash mismatch for `review-dep==1.0.0`
+
+        Expected:
+          sha256:53a42340ae36747fb1471f9b4b7958be1f6e2e5fc234f931aafa3e454fd31dfb
+
+        Computed:
+          sha256:1aa0f7263e4991934282ab8912e95fdd34f24459d7c4f8b845c2281a04c89807
+    ");
+    assert!(
+        !sentinel.exists(),
+        "the default synced build dependency was executed"
+    );
+    assert_eq!(context.read("uv.lock"), locked);
+
+    // Explicitly unlocked resolution retains its existing update policy.
+    uv_snapshot!(context.filters(), context.lock().arg("--upgrade").arg("--no-cache")
+        .env("UV_LOCK_TEST_SENTINEL", sentinel.path()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+    assert!(
+        sentinel.exists(),
+        "the upgraded build dependency was not executed"
+    );
+    Ok(())
+}
+
+/// Validate a locked source archive before invoking its potentially untrusted build backend.
+#[cfg(feature = "test-universal")]
+#[tokio::test]
+async fn lock_sdist_url_locked_hash_mismatch() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let server = MockServer::start().await;
+    let archive_path = "/files/demo_pkg-1.0.0.tar.gz";
+    let archive_url = format!("{}{archive_path}", server.uri());
+    let sentinel = context.temp_dir.child("backend-executed");
+
+    let trusted_archive = locked_source_archive("pass", "")?;
+    let replacement_archive = locked_source_archive(
+        r#"Path(os.environ["UV_LOCK_TEST_SENTINEL"]).write_text("executed\n")"#,
+        "",
+    )?;
+
+    Mock::given(method("GET"))
+        .and(path(archive_path))
+        .respond_with(ResponseTemplate::new(200).set_body_bytes(trusted_archive))
+        .mount(&server)
+        .await;
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&formatdoc! {r#"
+            [project]
+            name = "project"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+            dependencies = ["demo-pkg @ {archive_url}"]
+        "#})?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--no-cache"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(context.read("uv.lock"), @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[package]]
+        name = "demo-pkg"
+        version = "1.0.0"
+        source = { url = "http://[LOCALHOST]/files/demo_pkg-1.0.0.tar.gz" }
+        sdist = { hash = "sha256:1dfac3679ac5fa004e73685633ee28fa14c8e678efd1ff17f8f0ec1db53b9482" }
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "demo-pkg" },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "demo-pkg", url = "http://[LOCALHOST]/files/demo_pkg-1.0.0.tar.gz" }]
+        "#);
+    });
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--locked")
+        .arg("--refresh")
+        .arg("--no-cache"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+    assert!(!sentinel.exists(), "the trusted backend created a sentinel");
+
+    server.reset().await;
+    Mock::given(method("GET"))
+        .and(path(archive_path))
+        .respond_with(ResponseTemplate::new(200).set_body_bytes(replacement_archive))
+        .mount(&server)
+        .await;
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--locked")
+        .arg("--no-cache")
+        .env("UV_LOCK_TEST_SENTINEL", sentinel.path()), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Failed to generate package metadata for `demo-pkg==1.0.0 @ direct+http://[LOCALHOST]/files/demo_pkg-1.0.0.tar.gz`
+      Caused by: Hash mismatch for `demo-pkg @ http://[LOCALHOST]/files/demo_pkg-1.0.0.tar.gz`
+
+        Expected:
+          sha256:1dfac3679ac5fa004e73685633ee28fa14c8e678efd1ff17f8f0ec1db53b9482
+
+        Computed:
+          sha256:e43644c723229183647d3074ca0dea53264c065e0d09ff59fb47c659dfb345bb
+    ");
+    assert!(!sentinel.exists(), "the locked build backend was executed");
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--locked")
+        .arg("--refresh")
+        .arg("--no-cache")
+        .env("UV_LOCK_TEST_SENTINEL", sentinel.path()), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+      × Failed to download and build `demo-pkg @ http://[LOCALHOST]/files/demo_pkg-1.0.0.tar.gz`
+      ╰─▶ Hash mismatch for `demo-pkg @ http://[LOCALHOST]/files/demo_pkg-1.0.0.tar.gz`
+
+          Expected:
+            sha256:1dfac3679ac5fa004e73685633ee28fa14c8e678efd1ff17f8f0ec1db53b9482
+
+          Computed:
+            sha256:e43644c723229183647d3074ca0dea53264c065e0d09ff59fb47c659dfb345bb
+    ");
+    assert!(
+        !sentinel.exists(),
+        "the refreshed locked build backend was executed"
+    );
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--locked")
+        .arg("--upgrade-package")
+        .arg("demo-pkg")
+        .arg("--no-cache")
+        .env("UV_LOCK_TEST_SENTINEL", sentinel.path()), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+      × Failed to download and build `demo-pkg @ http://[LOCALHOST]/files/demo_pkg-1.0.0.tar.gz`
+      ╰─▶ Hash mismatch for `demo-pkg @ http://[LOCALHOST]/files/demo_pkg-1.0.0.tar.gz`
+
+          Expected:
+            sha256:1dfac3679ac5fa004e73685633ee28fa14c8e678efd1ff17f8f0ec1db53b9482
+
+          Computed:
+            sha256:e43644c723229183647d3074ca0dea53264c065e0d09ff59fb47c659dfb345bb
+    ");
+    assert!(
+        !sentinel.exists(),
+        "the upgraded locked build backend was executed"
+    );
+
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--no-cache")
+        .env("UV_LOCK_TEST_SENTINEL", sentinel.path()), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Failed to generate package metadata for `demo-pkg==1.0.0 @ direct+http://[LOCALHOST]/files/demo_pkg-1.0.0.tar.gz`
+      Caused by: Hash mismatch for `demo-pkg @ http://[LOCALHOST]/files/demo_pkg-1.0.0.tar.gz`
+
+        Expected:
+          sha256:1dfac3679ac5fa004e73685633ee28fa14c8e678efd1ff17f8f0ec1db53b9482
+
+        Computed:
+          sha256:e43644c723229183647d3074ca0dea53264c065e0d09ff59fb47c659dfb345bb
+    ");
+    assert!(
+        !sentinel.exists(),
+        "the default synced build backend was executed"
+    );
+
+    // An explicitly requested upgrade is allowed to replace the trusted lockfile hash.
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--upgrade-package")
+        .arg("demo-pkg")
+        .arg("--no-cache")
+        .env("UV_LOCK_TEST_SENTINEL", sentinel.path()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+    assert!(
+        sentinel.exists(),
+        "the upgraded build backend was not executed"
+    );
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(context.read("uv.lock"), @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[package]]
+        name = "demo-pkg"
+        version = "1.0.0"
+        source = { url = "http://[LOCALHOST]/files/demo_pkg-1.0.0.tar.gz" }
+        sdist = { hash = "sha256:e43644c723229183647d3074ca0dea53264c065e0d09ff59fb47c659dfb345bb" }
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "demo-pkg" },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "demo-pkg", url = "http://[LOCALHOST]/files/demo_pkg-1.0.0.tar.gz" }]
+        "#);
+    });
+
+    Ok(())
+}
+
+/// A changed index hash must not replace the trusted lockfile hash.
+#[cfg(feature = "test-universal")]
+#[tokio::test]
+async fn lock_sdist_registry_changed_index_locked_hash_mismatch() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let server = MockServer::start().await;
+    let archive_path = "/files/demo_pkg-1.0.0.tar.gz";
+    let archive_url = format!("{}{archive_path}", server.uri());
+    let sentinel = context.temp_dir.child("backend-executed");
+    let trusted_archive = locked_source_archive("pass", "")?;
+    let replacement_archive = locked_source_archive(
+        r#"Path(os.environ["UV_LOCK_TEST_SENTINEL"]).write_text("executed\n")"#,
+        "",
+    )?;
+    let trusted_digest = hex::encode(Sha256::digest(&trusted_archive));
+
+    let mut simple_index = json!({
+        "meta": { "api-version": "1.0" },
+        "name": "demo-pkg",
+        "files": [{
+            "filename": "demo_pkg-1.0.0.tar.gz",
+            "url": archive_url,
+            "hashes": { "sha256": trusted_digest },
+            "upload-time": "2024-01-01T00:00:00Z",
+        }],
+    });
+    Mock::given(method("GET"))
+        .and(path("/simple/demo-pkg/"))
+        .respond_with(ResponseTemplate::new(200).set_body_raw(
+            simple_index.to_string(),
+            "application/vnd.pypi.simple.v1+json",
+        ))
+        .mount(&server)
+        .await;
+
+    Mock::given(method("GET"))
+        .and(path(archive_path))
+        .respond_with(ResponseTemplate::new(200).set_body_bytes(trusted_archive))
+        .mount(&server)
+        .await;
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(&formatdoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["demo-pkg==1.0.0"]
+
+        [[tool.uv.index]]
+        url = "{}/simple"
+        default = true
+    "#, server.uri()})?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--no-cache"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+    let locked = context.read("uv.lock");
+
+    server.reset().await;
+    simple_index["files"][0]["hashes"] =
+        json!({ "sha256": hex::encode(Sha256::digest(&replacement_archive)) });
+    Mock::given(method("GET"))
+        .and(path("/simple/demo-pkg/"))
+        .respond_with(ResponseTemplate::new(200).set_body_raw(
+            simple_index.to_string(),
+            "application/vnd.pypi.simple.v1+json",
+        ))
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path(archive_path))
+        .respond_with(ResponseTemplate::new(200).set_body_bytes(replacement_archive))
+        .mount(&server)
+        .await;
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--locked")
+        .arg("--refresh")
+        .env("UV_LOCK_TEST_SENTINEL", sentinel.path()), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+      × Failed to download and build `demo-pkg==1.0.0`
+      ╰─▶ Hash mismatch for `demo-pkg==1.0.0`
+
+          Expected:
+            sha256:1dfac3679ac5fa004e73685633ee28fa14c8e678efd1ff17f8f0ec1db53b9482
+
+          Computed:
+            sha256:e43644c723229183647d3074ca0dea53264c065e0d09ff59fb47c659dfb345bb
+
+    hint: `demo-pkg` (v1.0.0) was included because `project` (v0.1.0) depends on `demo-pkg==1.0.0`
+    ");
+    assert!(
+        !sentinel.exists(),
+        "the replaced build backend was executed"
+    );
+    assert_eq!(context.read("uv.lock"), locked);
+
+    Ok(())
+}
+
+/// Omitting an index hash must not disable lockfile hash verification.
+#[cfg(feature = "test-universal")]
+#[tokio::test]
+async fn lock_sdist_registry_missing_index_locked_hash_mismatch() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let server = MockServer::start().await;
+    let archive_path = "/files/demo_pkg-1.0.0.tar.gz";
+    let archive_url = format!("{}{archive_path}", server.uri());
+    let sentinel = context.temp_dir.child("backend-executed");
+    let trusted_archive = locked_source_archive("pass", "")?;
+    let replacement_archive = locked_source_archive(
+        r#"Path(os.environ["UV_LOCK_TEST_SENTINEL"]).write_text("executed\n")"#,
+        "",
+    )?;
+    let trusted_digest = hex::encode(Sha256::digest(&trusted_archive));
+
+    let mut simple_index = json!({
+        "meta": { "api-version": "1.0" },
+        "name": "demo-pkg",
+        "files": [{
+            "filename": "demo_pkg-1.0.0.tar.gz",
+            "url": archive_url,
+            "hashes": { "sha256": trusted_digest },
+            "upload-time": "2024-01-01T00:00:00Z",
+        }],
+    });
+    Mock::given(method("GET"))
+        .and(path("/simple/demo-pkg/"))
+        .respond_with(ResponseTemplate::new(200).set_body_raw(
+            simple_index.to_string(),
+            "application/vnd.pypi.simple.v1+json",
+        ))
+        .mount(&server)
+        .await;
+
+    Mock::given(method("GET"))
+        .and(path(archive_path))
+        .respond_with(ResponseTemplate::new(200).set_body_bytes(trusted_archive))
+        .mount(&server)
+        .await;
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(&formatdoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["demo-pkg==1.0.0"]
+
+        [[tool.uv.index]]
+        url = "{}/simple"
+        default = true
+    "#, server.uri()})?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--no-cache"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+    let locked = context.read("uv.lock");
+
+    server.reset().await;
+    simple_index["files"][0]["hashes"] = json!({});
+    Mock::given(method("GET"))
+        .and(path("/simple/demo-pkg/"))
+        .respond_with(ResponseTemplate::new(200).set_body_raw(
+            simple_index.to_string(),
+            "application/vnd.pypi.simple.v1+json",
+        ))
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path(archive_path))
+        .respond_with(ResponseTemplate::new(200).set_body_bytes(replacement_archive))
+        .mount(&server)
+        .await;
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--locked")
+        .arg("--refresh")
+        .env("UV_LOCK_TEST_SENTINEL", sentinel.path()), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+      × Failed to download and build `demo-pkg==1.0.0`
+      ╰─▶ Hash mismatch for `demo-pkg==1.0.0`
+
+          Expected:
+            sha256:1dfac3679ac5fa004e73685633ee28fa14c8e678efd1ff17f8f0ec1db53b9482
+
+          Computed:
+            sha256:e43644c723229183647d3074ca0dea53264c065e0d09ff59fb47c659dfb345bb
+
+    hint: `demo-pkg` (v1.0.0) was included because `project` (v0.1.0) depends on `demo-pkg==1.0.0`
+    ");
+    assert!(
+        !sentinel.exists(),
+        "the replaced build backend was executed"
+    );
+    assert_eq!(context.read("uv.lock"), locked);
+
+    Ok(())
+}
+
+/// A root subdirectory must retain the archive's trusted hash after lockfile normalization.
+#[cfg(feature = "test-universal")]
+#[tokio::test]
+async fn lock_sdist_url_root_subdirectory_locked_hash_mismatch() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let server = MockServer::start().await;
+    let archive_path = "/files/demo_pkg-1.0.0.tar.gz";
+    let archive_url = format!("{}{archive_path}", server.uri());
+    let sentinel = context.temp_dir.child("backend-executed");
+    let trusted_archive = locked_source_archive("pass", "")?;
+    let replacement_archive = locked_source_archive(
+        r#"Path(os.environ["UV_LOCK_TEST_SENTINEL"]).write_text("executed\n")"#,
+        "",
+    )?;
+
+    Mock::given(method("GET"))
+        .and(path(archive_path))
+        .respond_with(ResponseTemplate::new(200).set_body_bytes(trusted_archive))
+        .mount(&server)
+        .await;
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(&formatdoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["demo-pkg @ {archive_url}#subdirectory=."]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--no-cache"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+    let locked = context.read("uv.lock");
+
+    server.reset().await;
+    Mock::given(method("GET"))
+        .and(path(archive_path))
+        .respond_with(ResponseTemplate::new(200).set_body_bytes(replacement_archive))
+        .mount(&server)
+        .await;
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--locked")
+        .arg("--refresh")
+        .env("UV_LOCK_TEST_SENTINEL", sentinel.path()), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+      × Failed to download and build `demo-pkg @ http://[LOCALHOST]/files/demo_pkg-1.0.0.tar.gz#subdirectory=.`
+      ╰─▶ Hash mismatch for `demo-pkg @ http://[LOCALHOST]/files/demo_pkg-1.0.0.tar.gz#subdirectory=.`
+
+          Expected:
+            sha256:1dfac3679ac5fa004e73685633ee28fa14c8e678efd1ff17f8f0ec1db53b9482
+
+          Computed:
+            sha256:e43644c723229183647d3074ca0dea53264c065e0d09ff59fb47c659dfb345bb
+    ");
+    assert!(
+        !sentinel.exists(),
+        "the replaced build backend was executed"
+    );
+    assert_eq!(context.read("uv.lock"), locked);
+
+    Ok(())
+}
+
+/// A rejected source archive must not be persisted to the cache.
+#[cfg(feature = "test-universal")]
+#[tokio::test]
+async fn lock_sdist_url_rejected_archive_not_cached() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let server = MockServer::start().await;
+    let archive_path = "/files/demo_pkg-1.0.0.tar.gz";
+    let archive_url = format!("{}{archive_path}", server.uri());
+    let sentinel = context.temp_dir.child("backend-executed");
+    let trusted_archive = locked_source_archive("pass", "")?;
+    let replacement_archive = locked_source_archive(
+        r#"Path(os.environ["UV_LOCK_TEST_SENTINEL"]).write_text("executed\n")"#,
+        "",
+    )?;
+    let malformed_archive = b"not an archive";
+
+    Mock::given(method("GET"))
+        .and(path(archive_path))
+        .respond_with(ResponseTemplate::new(200).set_body_bytes(trusted_archive))
+        .mount(&server)
+        .await;
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(&formatdoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["demo-pkg @ {archive_url}"]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--no-cache"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+    let locked = context.read("uv.lock");
+
+    server.reset().await;
+    Mock::given(method("GET"))
+        .and(path(archive_path))
+        .respond_with(ResponseTemplate::new(200).set_body_bytes(replacement_archive))
+        .mount(&server)
+        .await;
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--locked")
+        .arg("--refresh")
+        .env("UV_LOCK_TEST_SENTINEL", sentinel.path()), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+      × Failed to download and build `demo-pkg @ http://[LOCALHOST]/files/demo_pkg-1.0.0.tar.gz`
+      ╰─▶ Hash mismatch for `demo-pkg @ http://[LOCALHOST]/files/demo_pkg-1.0.0.tar.gz`
+
+          Expected:
+            sha256:1dfac3679ac5fa004e73685633ee28fa14c8e678efd1ff17f8f0ec1db53b9482
+
+          Computed:
+            sha256:e43644c723229183647d3074ca0dea53264c065e0d09ff59fb47c659dfb345bb
+    ");
+    assert!(
+        !sentinel.exists(),
+        "the replaced build backend was executed"
+    );
+    assert_eq!(context.read("uv.lock"), locked);
+    for entry in WalkDir::new(context.cache_dir.path()) {
+        let entry = entry?;
+        assert_ne!(
+            entry.file_name(),
+            "backend.py",
+            "the rejected archive was retained in the cache"
+        );
+        assert_ne!(
+            entry.file_name(),
+            "revision.http",
+            "the rejected archive was persisted to the cache"
+        );
+    }
+
+    // Malformed replacements fail immediately during extraction, before cache persistence.
+    server.reset().await;
+    Mock::given(method("GET"))
+        .and(path(archive_path))
+        .respond_with(ResponseTemplate::new(200).set_body_bytes(malformed_archive))
+        .mount(&server)
+        .await;
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--locked")
+        .arg("--refresh")
+        .env("UV_LOCK_TEST_SENTINEL", sentinel.path()), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+      × Failed to download and build `demo-pkg @ http://[LOCALHOST]/files/demo_pkg-1.0.0.tar.gz`
+      ├─▶ Failed to extract archive: demo-pkg @ http://[LOCALHOST]/files/demo_pkg-1.0.0.tar.gz
+      ├─▶ I/O operation failed during extraction
+      ╰─▶ Invalid gzip header
+    ");
+    assert!(
+        !sentinel.exists(),
+        "the replaced build backend was executed"
+    );
+    assert_eq!(context.read("uv.lock"), locked);
+    for entry in WalkDir::new(context.cache_dir.path()) {
+        let entry = entry?;
+        assert_ne!(
+            entry.file_name(),
+            "backend.py",
+            "the rejected archive was retained in the cache"
+        );
+        assert_ne!(
+            entry.file_name(),
+            "revision.http",
+            "the rejected archive was persisted to the cache"
+        );
+    }
+
+    Ok(())
+}
+
+/// Equivalent subdirectory spellings must retain the hash of an already-locked archive.
+#[cfg(feature = "test-universal")]
+#[tokio::test]
+async fn lock_sdist_url_equivalent_subdirectory_locked_hash_mismatch() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let server = MockServer::start().await;
+    let archive_path = "/files/demo_pkg-1.0.0.tar.gz";
+    let archive_url = format!("{}{archive_path}", server.uri());
+    let sentinel = context.temp_dir.child("backend-executed");
+    let trusted_archive = locked_source_archive("pass", "nested/")?;
+    let replacement_archive = locked_source_archive(
+        r#"Path(os.environ["UV_LOCK_TEST_SENTINEL"]).write_text("executed\n")"#,
+        "nested/",
+    )?;
+
+    Mock::given(method("GET"))
+        .and(path(archive_path))
+        .respond_with(ResponseTemplate::new(200).set_body_bytes(trusted_archive))
+        .mount(&server)
+        .await;
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(&formatdoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["demo-pkg @ {archive_url}#subdirectory=nested"]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--no-cache"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+    let locked = context.read("uv.lock");
+
+    // Change only the spelling of the already-locked source directory.
+    pyproject_toml.write_str(
+        &context
+            .read("pyproject.toml")
+            .replace("#subdirectory=nested", "#subdirectory=nested/../nested"),
+    )?;
+
+    server.reset().await;
+    Mock::given(method("GET"))
+        .and(path(archive_path))
+        .respond_with(ResponseTemplate::new(200).set_body_bytes(replacement_archive))
+        .mount(&server)
+        .await;
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--locked")
+        .arg("--refresh")
+        .env("UV_LOCK_TEST_SENTINEL", sentinel.path()), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+      × Failed to download and build `demo-pkg @ http://[LOCALHOST]/files/demo_pkg-1.0.0.tar.gz#subdirectory=nested/../nested`
+      ╰─▶ Hash mismatch for `demo-pkg @ http://[LOCALHOST]/files/demo_pkg-1.0.0.tar.gz#subdirectory=nested/../nested`
+
+          Expected:
+            sha256:9778361e4988b87e11cafe08e7593b194f7b078d4c52bdc8333870072ffe0f2b
+
+          Computed:
+            sha256:aadb46dc857a7e2c2417efd8e86b3cd665eacae2127b49d9de14800f2ac5b7ef
+    ");
+    assert!(
+        !sentinel.exists(),
+        "the replaced build backend was executed"
+    );
+    assert_eq!(context.read("uv.lock"), locked);
+
+    Ok(())
+}
+
+/// Existing-lock validation and locked resolution must verify local source archives.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_sdist_path_locked_hash_mismatch() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let archive = context.temp_dir.child("demo_pkg-1.0.0.tar.gz");
+    let sentinel = context.temp_dir.child("backend-executed");
+    let trusted = locked_source_archive("pass", "")?;
+    let replacement = locked_source_archive(
+        r#"Path(os.environ["UV_LOCK_TEST_SENTINEL"]).write_text("executed\n")"#,
+        "",
+    )?;
+
+    archive.write_binary(&trusted)?;
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["demo-pkg"]
+
+        [tool.uv.sources]
+        demo-pkg = { path = "demo_pkg-1.0.0.tar.gz" }
+    "#})?;
+    uv_snapshot!(context.filters(), context.lock().arg("--no-cache"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+    let locked = context.read("uv.lock");
+
+    archive.write_binary(&replacement)?;
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--no-cache")
+        .env("UV_LOCK_TEST_SENTINEL", sentinel.path()), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Failed to generate package metadata for `demo-pkg==1.0.0 @ path+demo_pkg-1.0.0.tar.gz`
+      Caused by: Hash mismatch for `demo-pkg @ file://[TEMP_DIR]/demo_pkg-1.0.0.tar.gz`
+
+        Expected:
+          sha256:1dfac3679ac5fa004e73685633ee28fa14c8e678efd1ff17f8f0ec1db53b9482
+
+        Computed:
+          sha256:e43644c723229183647d3074ca0dea53264c065e0d09ff59fb47c659dfb345bb
+    ");
+    assert!(!sentinel.exists(), "the locked backend was executed");
+
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--refresh").arg("--no-cache")
+        .env("UV_LOCK_TEST_SENTINEL", sentinel.path()), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+      × Failed to build `demo-pkg @ file://[TEMP_DIR]/demo_pkg-1.0.0.tar.gz`
+      ╰─▶ Hash mismatch for `demo-pkg @ file://[TEMP_DIR]/demo_pkg-1.0.0.tar.gz`
+
+          Expected:
+            sha256:1dfac3679ac5fa004e73685633ee28fa14c8e678efd1ff17f8f0ec1db53b9482
+
+          Computed:
+            sha256:e43644c723229183647d3074ca0dea53264c065e0d09ff59fb47c659dfb345bb
+    ");
+    assert!(!sentinel.exists(), "the refreshed backend was executed");
+
+    assert_eq!(context.read("uv.lock"), locked);
+
+    // An explicitly unlocked upgrade can accept new archive contents.
+    uv_snapshot!(context.filters(), context.lock().arg("--upgrade-package").arg("demo-pkg").arg("--no-cache")
+        .env("UV_LOCK_TEST_SENTINEL", sentinel.path()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+    assert!(sentinel.exists(), "the upgraded backend was not executed");
+    assert_ne!(context.read("uv.lock"), locked);
+    Ok(())
+}
+
+/// A frozen sync must reject a replaced local archive before persisting it to the cache.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_sdist_path_rejected_archive_not_cached() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let archive = context.temp_dir.child("demo_pkg-1.0.0.tar.gz");
+    let sentinel = context.temp_dir.child("backend-executed");
+    let trusted = locked_source_archive("pass", "")?;
+    let replacement = locked_source_archive(
+        r#"Path(os.environ["UV_LOCK_TEST_SENTINEL"]).write_text("executed\n")"#,
+        "",
+    )?;
+
+    archive.write_binary(&trusted)?;
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["demo-pkg"]
+
+        [tool.uv.sources]
+        demo-pkg = { path = "demo_pkg-1.0.0.tar.gz" }
+    "#})?;
+    uv_snapshot!(context.filters(), context.lock().arg("--no-cache"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+    let locked = context.read("uv.lock");
+
+    archive.write_binary(&replacement)?;
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen")
+        .env("UV_LOCK_TEST_SENTINEL", sentinel.path()), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+      × Failed to build `demo-pkg @ file://[TEMP_DIR]/demo_pkg-1.0.0.tar.gz`
+      ╰─▶ Hash mismatch for `demo-pkg @ file://[TEMP_DIR]/demo_pkg-1.0.0.tar.gz`
+
+          Expected:
+            sha256:1dfac3679ac5fa004e73685633ee28fa14c8e678efd1ff17f8f0ec1db53b9482
+
+          Computed:
+            sha256:e43644c723229183647d3074ca0dea53264c065e0d09ff59fb47c659dfb345bb
+
+    hint: `demo-pkg` was included because `project` (v0.1.0) depends on `demo-pkg`
+    ");
+    assert!(
+        !sentinel.exists(),
+        "the replacement build backend was executed"
+    );
+    assert_eq!(context.read("uv.lock"), locked);
+    for entry in WalkDir::new(context.cache_dir.path()) {
+        assert_ne!(
+            entry?.file_name(),
+            "backend.py",
+            "the rejected archive was retained in the cache"
+        );
+    }
+    Ok(())
+}
+
+/// Reusing a pruned source revision must not populate it with different archive contents.
+#[cfg(feature = "test-universal")]
+#[tokio::test]
+async fn lock_sdist_url_cache_heal_hash_mismatch() -> Result<()> {
+    let context = uv_test::test_context!("3.12")
+        .with_filtered_file_counts()
+        .with_filtered_sizes_and_units();
+    let server = MockServer::start().await;
+    let archive_path = "/files/demo_pkg-1.0.0.tar.gz";
+    let archive_url = format!("{}{archive_path}", server.uri());
+    let sentinel = context.temp_dir.child("backend-executed");
+    let trusted = locked_source_archive("pass", "")?;
+    let replacement = locked_source_archive(
+        r#"Path(os.environ["UV_LOCK_TEST_SENTINEL"]).write_text("executed\n")"#,
+        "",
+    )?;
+    Mock::given(method("GET"))
+        .and(path(archive_path))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .insert_header("cache-control", "max-age=31536000")
+                .set_body_bytes(trusted),
+        )
+        .mount(&server)
+        .await;
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&formatdoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["demo-pkg @ {archive_url}"]
+    "#})?;
+    uv_snapshot!(context.filters(), context.lock(), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    // Pruning retains the revision and metadata, but removes the extracted source tree.
+    uv_snapshot!(context.filters(), context.prune().arg("--ci"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Pruning cache at: [CACHE_DIR]/
+    Removed [N] files ([SIZE])
+    ");
+
+    server.reset().await;
+    Mock::given(method("GET"))
+        .and(path(archive_path))
+        .respond_with(ResponseTemplate::new(200).set_body_bytes(replacement))
+        .mount(&server)
+        .await;
+
+    // Installation must repair the source tree before it can build a wheel. The cached revision's
+    // hashes still apply, even though this command does not use the lockfile.
+    uv_snapshot!(context.filters(), context.pip_install().arg(&archive_url)
+        .env_remove(EnvVars::RUST_LOG)
+        .env("UV_LOCK_TEST_SENTINEL", sentinel.path()), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+      × Failed to download and build `demo-pkg @ http://[LOCALHOST]/files/demo_pkg-1.0.0.tar.gz`
+      ╰─▶ Attempted to re-extract the source distribution for `demo-pkg @ http://[LOCALHOST]/files/demo_pkg-1.0.0.tar.gz`, but the sha256 hash didn't match. Run `uv cache clean` to clear the cache.
+    ");
+    assert!(
+        !sentinel.exists(),
+        "the replacement build backend was executed"
+    );
+    for entry in WalkDir::new(context.cache_dir.path()) {
+        assert_ne!(
+            entry?.file_name(),
+            "backend.py",
+            "cache repair retained the replacement"
+        );
+    }
     Ok(())
 }
 
@@ -25469,10 +26646,12 @@ fn lock_strip_fragment() -> Result<()> {
     Resolved 2 packages in [TIME]
     ");
 
-    // Install from the lockfile.
+    // Locked validation can read only the wheel metadata. Install from the fragment-free URL in
+    // the lockfile, preparing the wheel if it was only cached under the original URL.
     uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @"
     exit_code: 0 (success)
     ----- stderr -----
+    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + iniconfig==2.0.0 (from https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl)
     ");
