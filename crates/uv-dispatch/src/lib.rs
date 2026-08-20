@@ -26,7 +26,7 @@ use uv_distribution_filename::DistFilename;
 use uv_distribution_types::{
     CachedDist, ConfigSettings, DependencyMetadata, ExtraBuildRequires, ExtraBuildVariables,
     Identifier, IndexCapabilities, IndexLocations, IsBuildBackendError, Name,
-    PackageConfigSettings, Requirement, Resolution, SourceDist, VersionOrUrlRef,
+    PackageConfigSettings, Requirement, Resolution, SourceDist, VersionId, VersionOrUrlRef,
 };
 use uv_git::GitResolver;
 use uv_installer::{InstallationStrategy, Installer, Plan, Planner, Preparer, SitePackages};
@@ -633,6 +633,20 @@ impl BuildContext for BuildDispatch<'_> {
         let identifier = version_id.unwrap_or_else(|| &source_tree_str);
         if let Err(reason) = check_direct_build(&source_tree, uv_version::version()) {
             trace!("Requirements for direct build not matched because {reason}");
+            return Ok(None);
+        }
+
+        let backend_hash_required = match self.hasher {
+            HashStrategy::Require(_) => true,
+            HashStrategy::Verify(hashes) => hashes.keys().any(|version_id| {
+                matches!(version_id, VersionId::NameVersion(name, _) if name.as_str() == "uv-build")
+            }),
+            HashStrategy::None | HashStrategy::Generate(_) => false,
+        };
+        if backend_hash_required {
+            debug!(
+                "Not using `uv_build` direct build for {identifier} because backend hashes must be validated"
+            );
             return Ok(None);
         }
 

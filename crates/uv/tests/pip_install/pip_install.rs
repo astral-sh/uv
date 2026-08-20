@@ -34,6 +34,7 @@ use uv_static::EnvVars;
 use uv_test::decode_token;
 use uv_test::find_links::FindLinksServer;
 use uv_test::packse::PackseServer;
+use uv_test::packse::scenario::Scenario;
 use uv_test::{
     DEFAULT_PYTHON_VERSION, TestContext, apply_filters, download_to_disk, get_bin, uv_snapshot,
     venv_bin_path,
@@ -8362,6 +8363,83 @@ fn require_hashes_build_dependencies_with_unhashed_constraints() -> Result<()> {
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + a==1.0.0
+    ");
+
+    Ok(())
+}
+
+/// Do not bypass build dependency hash policies when using the bundled `uv_build` backend.
+#[test]
+fn require_hashes_build_dependencies_uv_build() -> Result<()> {
+    let scenario = toml::from_str::<Scenario>(indoc! {r#"
+        name = "hashed-uv-build"
+
+        [root]
+
+        [expected]
+        satisfiable = true
+
+        [packages.uv-build.versions."0.11.33"]
+        sdist = false
+    "#})?;
+    let server = PackseServer::from_scenario(&scenario);
+    let context = uv_test::test_context!("3.12");
+
+    let project = context.temp_dir.child("project");
+    project.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+    "#})?;
+    project.child("src/project/__init__.py").touch()?;
+
+    let build_constraints = context.temp_dir.child("build-constraints.txt");
+    build_constraints.write_str(indoc! {r"
+        uv-build==0.11.33 --hash=sha256:0000000000000000000000000000000000000000000000000000000000000000
+    "})?;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--index-url").arg(server.index_url())
+        .arg("./project")
+        .arg("--build-constraint").arg("build-constraints.txt")
+        .arg("--verify-hashes"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+      × Failed to build `project @ file://[TEMP_DIR]/project`
+      ├─▶ Failed to install requirements from `build-system.requires`
+      ├─▶ Failed to download `uv-build==0.11.33`
+      ╰─▶ Hash mismatch for `uv-build==0.11.33`
+
+          Expected:
+            sha256:0000000000000000000000000000000000000000000000000000000000000000
+
+          Computed:
+            sha256:1363fabb2ea7d3cb26a54fc0b1cfd2cd0666aef542f5bf8b255eb1329ee0a4ba
+    ");
+
+    build_constraints.write_str(indoc! {r"
+        flit-core==3.9.0 --hash=sha256:0000000000000000000000000000000000000000000000000000000000000000
+    "})?;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--index-url").arg(server.index_url())
+        .arg("./project")
+        .arg("--build-constraint").arg("build-constraints.txt")
+        .arg("--verify-hashes")
+        .env(EnvVars::UV_PREVIEW_FEATURES, "build-constraint-hashes"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+      × Failed to build `project @ file://[TEMP_DIR]/project`
+      ├─▶ Failed to resolve requirements from `build-system.requires`
+      ├─▶ No solution found when resolving: `uv-build>=0.7, <10000`
+      ╰─▶ In `--require-hashes` mode, all requirements must be pinned upfront with `==`, but found: `uv-build`
     ");
 
     Ok(())
