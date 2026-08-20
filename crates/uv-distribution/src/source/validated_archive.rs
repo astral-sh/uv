@@ -4,13 +4,14 @@ use std::path::Path;
 use futures::TryStreamExt;
 use reqwest::Response;
 use tempfile::TempDir;
+use tokio::io::AsyncRead;
 use tokio_util::compat::FuturesAsyncReadCompatExt;
-use tracing::{debug, info_span, warn};
+use tracing::{Span, debug, info_span, warn};
 
 use uv_cache::{Cache, CacheBucket};
 use uv_distribution_filename::SourceDistExtension;
 use uv_distribution_types::{BuildableSource, RemoteSource, SourceDist};
-use uv_extract::hash::Hasher;
+use uv_extract::hash::{HashReader, Hasher};
 use uv_fs::rename_with_retry;
 use uv_pypi_types::{HashAlgorithm, HashDigest};
 
@@ -33,7 +34,11 @@ pub(super) struct SourceArchiveMetadata {
     pub(super) size: u64,
 }
 
-/// Preserve the existing persistence behavior for HTTP and local archives.
+/// Controls cache-rename collisions and cleanup of non-singular archives.
+///
+/// HTTP archives accept [`ErrorKind::AlreadyExists`] and use [`TempDir::keep`] when the archive
+/// contains multiple top-level entries. Local archives accept [`ErrorKind::DirectoryNotEmpty`] and
+/// retain automatic temporary-directory cleanup.
 enum ArchiveOrigin {
     Http,
     Local,
@@ -56,21 +61,6 @@ impl ValidatedSourceArchive {
             .map_err(std::io::Error::other)
             .into_async_read();
 
-        // Create a hasher for each hash algorithm.
-        let mut hashers = algorithms
-            .iter()
-            .copied()
-            .map(Hasher::from)
-            .collect::<Vec<_>>();
-        let mut hasher = uv_extract::hash::HashReader::new(reader.compat(), &mut hashers);
-
-        // Download and unzip the source distribution into a temporary directory.
-        let span = info_span!("download_source_dist", source_dist = %source);
-        uv_extract::stream::archive(&mut hasher, ext, temp_dir.path())
-            .await
-            .map_err(|err| Error::Extract(source.to_string(), err))?;
-        drop(span);
-
         let expected_size = match source {
             BuildableSource::Dist(SourceDist::Registry(dist)) if dist.size_is_authoritative => {
                 dist.size()
@@ -78,29 +68,17 @@ impl ValidatedSourceArchive {
             BuildableSource::Dist(SourceDist::DirectUrl(dist)) => dist.size(),
             _ => None,
         };
-
-        // If necessary, exhaust the reader to compute the hash or validate the archive size.
-        if !algorithms.is_empty() || expected_size.is_some() {
-            hasher.finish().await.map_err(Error::HashExhaustion)?;
-        }
-        if let Some(expected) = expected_size
-            && hasher.bytes_read() != expected
-        {
-            return Err(Error::MismatchedSize {
-                distribution: source.to_string(),
-                expected,
-                actual: hasher.bytes_read(),
-            });
-        }
-
-        let size = hasher.bytes_read();
-        let hashes = hashers.into_iter().map(HashDigest::from).collect();
-
-        Ok(Self {
-            staging_dir: temp_dir,
-            metadata: SourceArchiveMetadata { hashes, size },
-            origin: ArchiveOrigin::Http,
-        })
+        Self::extract(
+            reader.compat(),
+            ext,
+            temp_dir,
+            algorithms,
+            ArchiveOrigin::Http,
+            expected_size,
+            |_| source.to_string(),
+            || Some(info_span!("download_source_dist", source_dist = %source)),
+        )
+        .await
     }
 
     /// Extract a local source archive and compute its requested hashes.
@@ -117,32 +95,65 @@ impl ValidatedSourceArchive {
         let reader = fs_err::tokio::File::open(&path)
             .await
             .map_err(Error::CacheRead)?;
+        Self::extract(
+            reader,
+            ext,
+            temp_dir,
+            algorithms,
+            ArchiveOrigin::Local,
+            None,
+            |path| path.to_string_lossy().into_owned(),
+            || None,
+        )
+        .await
+    }
 
+    /// Extract into private staging and complete the requested checks before constructing a value.
+    async fn extract(
+        reader: impl AsyncRead + Unpin,
+        ext: SourceDistExtension,
+        staging_dir: TempDir,
+        algorithms: &[HashAlgorithm],
+        origin: ArchiveOrigin,
+        expected_size: Option<u64>,
+        error_context: impl Fn(&Path) -> String,
+        make_span: impl FnOnce() -> Option<Span>,
+    ) -> Result<Self, Error> {
         // Create a hasher for each hash algorithm.
         let mut hashers = algorithms
             .iter()
             .copied()
             .map(Hasher::from)
             .collect::<Vec<_>>();
-        let mut hasher = uv_extract::hash::HashReader::new(reader, &mut hashers);
+        let mut hasher = HashReader::new(reader, &mut hashers);
 
-        // Unzip the archive into a temporary directory.
-        uv_extract::stream::archive(&mut hasher, ext, &temp_dir.path())
+        let span = make_span();
+        uv_extract::stream::archive(&mut hasher, ext, staging_dir.path())
             .await
-            .map_err(|err| Error::Extract(temp_dir.path().to_string_lossy().into_owned(), err))?;
+            .map_err(|err| Error::Extract(error_context(staging_dir.path()), err))?;
+        drop(span);
 
-        // If necessary, exhaust the reader to compute the hash.
-        if !algorithms.is_empty() {
+        // If necessary, exhaust the reader to compute hashes or validate the archive size.
+        if !algorithms.is_empty() || expected_size.is_some() {
             hasher.finish().await.map_err(Error::HashExhaustion)?;
+        }
+        if let Some(expected) = expected_size
+            && hasher.bytes_read() != expected
+        {
+            return Err(Error::MismatchedSize {
+                distribution: error_context(staging_dir.path()),
+                expected,
+                actual: hasher.bytes_read(),
+            });
         }
 
         let size = hasher.bytes_read();
         let hashes = hashers.into_iter().map(HashDigest::from).collect();
 
         Ok(Self {
-            staging_dir: temp_dir,
+            staging_dir,
             metadata: SourceArchiveMetadata { hashes, size },
-            origin: ArchiveOrigin::Local,
+            origin,
         })
     }
 
@@ -187,5 +198,84 @@ impl ValidatedSourceArchive {
         }
 
         Ok(metadata)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::cell::Cell;
+
+    use anyhow::Result;
+
+    use uv_distribution_filename::LegacySourceDistExtension;
+
+    use super::*;
+
+    // Two zero-filled records form an empty, valid tar archive.
+    const EMPTY_TAR: &[u8] = &[0; 1024];
+    const TAR: SourceDistExtension = SourceDistExtension::Legacy(LegacySourceDistExtension::Tar);
+
+    async fn extract(
+        bytes: &[u8],
+        trailing_read: &Cell<bool>,
+        algorithms: &[HashAlgorithm],
+        expected_size: Option<u64>,
+    ) -> Result<ValidatedSourceArchive, Error> {
+        let reader = futures::stream::iter([
+            Ok(bytes),
+            Err(std::io::Error::other("unexpected trailing read")),
+        ])
+        .inspect_err(|_| trailing_read.set(true))
+        .into_async_read()
+        .compat();
+        let staging_dir = tempfile::tempdir().map_err(Error::CacheWrite)?;
+        ValidatedSourceArchive::extract(
+            reader,
+            TAR,
+            staging_dir,
+            algorithms,
+            ArchiveOrigin::Http,
+            expected_size,
+            |_| "source.tar".to_owned(),
+            || None,
+        )
+        .await
+    }
+
+    #[tokio::test]
+    async fn reader_is_exhausted_only_for_hashes_or_size() -> Result<()> {
+        let _preview = uv_preview::test::with_features(&[]);
+        let trailing_read = Cell::new(false);
+        extract(EMPTY_TAR, &trailing_read, &[], None).await?;
+        assert!(!trailing_read.get());
+
+        for (algorithms, size) in [
+            (&[HashAlgorithm::Sha256][..], None),
+            (&[][..], Some(EMPTY_TAR.len() as u64)),
+        ] {
+            assert!(matches!(
+                extract(EMPTY_TAR, &trailing_read, algorithms, size).await,
+                Err(Error::HashExhaustion(_))
+            ));
+            assert!(trailing_read.replace(false));
+        }
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn parser_error_precedes_trailing_read() {
+        let _preview = uv_preview::test::with_features(&[]);
+        let trailing_read = Cell::new(false);
+        assert!(matches!(
+            extract(
+                &[0xff; 512],
+                &trailing_read,
+                &[HashAlgorithm::Sha256],
+                Some(1)
+            )
+            .await,
+            Err(Error::Extract(_, _))
+        ));
+        assert!(!trailing_read.get());
     }
 }
