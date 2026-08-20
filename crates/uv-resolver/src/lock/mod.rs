@@ -655,11 +655,13 @@ impl<'a> LockedDependencyBuilder<'a> {
                     )),
                 )
             });
-            let parent_has_selected_conflict = matches!(context, DependencyContext::Group(_))
-                || matches!(context, DependencyContext::Extra(_))
-                    && context
-                        .selected_conflict(&expected.package.id.name, &expected.lock.conflicts)
-                        .is_some();
+            let parent_has_selected_conflict = match context {
+                DependencyContext::Production => false,
+                DependencyContext::Extra(_) => context
+                    .selected_conflict(&expected.package.id.name, &expected.lock.conflicts)
+                    .is_some(),
+                DependencyContext::Group(_) => true,
+            };
             let selected_context_has_project_compatible_alternative = parent_has_selected_conflict
                 && requirement.extras.iter().any(|extra| {
                     expected
@@ -1049,16 +1051,23 @@ impl<'a> LockedDependencyBuilder<'a> {
                                         )
                                     })
                                 });
-                            if alternative == extra
-                                || matches!(context, DependencyContext::Extra(parent_extra)
+                            let selected_by_current_parent = matches!(
+                                context,
+                                DependencyContext::Extra(parent_extra)
                                     if expected.activated_extras.contains_key(parent_extra)
-                                        && !externally_selected_alternative)
-                                || !dependency.optional_dependencies.contains_key(alternative)
-                                    && !externally_selected_alternative
-                                || !expected.lock.conflicts.iter().any(|conflicts| {
-                                    conflicts.contains(&dependency.id.name, extra)
-                                        && conflicts.contains(&dependency.id.name, alternative)
-                                })
+                                        && !externally_selected_alternative
+                            );
+                            let empty_unselected_alternative =
+                                !dependency.optional_dependencies.contains_key(alternative)
+                                    && !externally_selected_alternative;
+                            let extras_conflict = expected.lock.conflicts.iter().any(|conflicts| {
+                                conflicts.contains(&dependency.id.name, extra)
+                                    && conflicts.contains(&dependency.id.name, alternative)
+                            });
+                            if alternative == extra
+                                || selected_by_current_parent
+                                || empty_unselected_alternative
+                                || !extras_conflict
                             {
                                 continue;
                             }
@@ -1332,16 +1341,16 @@ impl<'a> LockedDependencyBuilder<'a> {
         if !matches!(context, DependencyContext::Extra(_)) {
             return false;
         }
-        if expected
+        let is_root_package = expected
             .lock
             .root()
-            .is_some_and(|root| root.id == expected.package.id)
-            && (expected
-                .lock
-                .conflicts
-                .contains(&package_id.name, ConflictKindRef::Project)
-                || expected.has_local_conflicting_extra(&package_id.name, extras))
-        {
+            .is_some_and(|root| root.id == expected.package.id);
+        let has_conflicting_selection = expected
+            .lock
+            .conflicts
+            .contains(&package_id.name, ConflictKindRef::Project)
+            || expected.has_local_conflicting_extra(&package_id.name, extras);
+        if is_root_package && has_conflicting_selection {
             return false;
         }
 
@@ -1731,9 +1740,9 @@ impl<'lock> ExpectedPackageDependencies<'lock> {
         let selected = context.selected_conflict(&self.package.id.name, &self.lock.conflicts);
         let has_source_forks =
             Lock::has_source_forks(self.lock.packages_for_name(&requirement.name));
-        if conflicts.peek().is_none()
-            && (selected.is_none() || requirement.extras.is_empty() && !has_source_forks)
-        {
+        let selected_conflict_is_relevant =
+            selected.is_some() && (!requirement.extras.is_empty() || has_source_forks);
+        if conflicts.peek().is_none() && !selected_conflict_is_relevant {
             return None;
         }
         let mut marker = UniversalMarker::TRUE;
