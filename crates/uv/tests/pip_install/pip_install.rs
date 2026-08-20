@@ -13875,10 +13875,23 @@ fn reject_reserved_wheel_data_script_name() -> Result<()> {
         "python"
     };
     let scripts = if cfg!(windows) { "Scripts" } else { "bin" };
+    let executables = [
+        "python",
+        "python.py",
+        "Python.exe",
+        "python.EXE",
+        "Python.PY",
+    ]
+    .into_iter()
+    .chain(
+        cfg!(windows)
+            .then_some(["python.bat", "Python.CMD", "python.CuStOm"])
+            .into_iter()
+            .flatten(),
+    );
 
     allow_duplicates! {
-        for data_path in ["python", "python.py", "Python.exe", "python.EXE", "Python.PY"]
-            .into_iter()
+        for data_path in executables
             .flat_map(|executable| {
                 [
                     format!("foo-0.1.0.data/scripts/{executable}"),
@@ -13887,7 +13900,7 @@ fn reject_reserved_wheel_data_script_name() -> Result<()> {
             })
         {
             let context = uv_test::test_context!("3.12").with_filter((
-                r"got: `(?:Python\.(?:exe|PY)|python(?:\.EXE|\.py)?)`",
+                r"got: `(?i:python(?:\.[a-z]+)?)`",
                 "got: `python`",
             ));
             let wheel = context.temp_dir.join("foo-0.1.0-py3-none-any.whl");
@@ -13919,7 +13932,10 @@ fn reject_reserved_wheel_data_script_name() -> Result<()> {
             }
             fs_err::write(&wheel, block_on(writer.close())?)?;
 
-            uv_snapshot!(context.filters(), context.pip_install().arg(&wheel), @"
+            let mut command = context.pip_install();
+            command.arg(&wheel);
+
+            uv_snapshot!(context.filters(), command, @"
         exit_code: 2 (failure)
         ----- stderr -----
         Resolved 1 package in [TIME]
