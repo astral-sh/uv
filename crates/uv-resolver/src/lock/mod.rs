@@ -1358,11 +1358,11 @@ impl Lock {
         &self.packages
     }
 
-    /// Return trusted artifact hashes for an existing-lock resolution.
-    pub fn resolution_hashes(
-        &self,
-        root: &Path,
-    ) -> Result<FxHashMap<VersionId, Vec<HashDigest>>, LockError> {
+    /// Return a [`HashStrategy`] that verifies artifacts recorded in this lockfile.
+    ///
+    /// Artifacts absent from the lockfile do not require hashes. This strategy does not generate
+    /// hashes for those artifacts.
+    pub fn hash_strategy(&self, root: &Path) -> Result<HashStrategy, LockError> {
         let mut hashes: FxHashMap<VersionId, Vec<HashDigest>> = FxHashMap::default();
 
         for package in &self.packages {
@@ -1400,7 +1400,11 @@ impl Lock {
             }
         }
 
-        Ok(hashes)
+        if hashes.is_empty() {
+            Ok(HashStrategy::default())
+        } else {
+            Ok(HashStrategy::verify(Arc::new(hashes)))
+        }
     }
 
     /// Return whether every registry artifact in the lockfile has a hash using its index's
@@ -8097,7 +8101,7 @@ mod tests {
     }
 
     #[test]
-    fn resolution_hashes_include_direct_and_local_wheels() {
+    fn hash_strategy_includes_direct_and_local_wheels() {
         let lock: Lock = toml::from_str(
             r#"
 version = 1
@@ -8119,20 +8123,29 @@ wheels = [{ filename = "local-1.0.0-py3-none-any.whl", hash = "sha256:53a42340ae
         )
         .expect("valid lock");
         let root = std::env::current_dir().expect("current directory");
-        let hashes = lock.resolution_hashes(&root).expect("valid source paths");
+        let hasher = lock.hash_strategy(&root).expect("valid source paths");
         let digest = HashDigest::from_str(
             "sha256:53a42340ae36747fb1471f9b4b7958be1f6e2e5fc234f931aafa3e454fd31dfb",
         )
         .expect("valid digest");
-        let remote = VersionId::from_url(
-            &"https://example.com/remote-1.0.0-py3-none-any.whl"
-                .parse()
-                .expect("valid URL"),
+        let remote = "https://example.com/remote-1.0.0-py3-none-any.whl"
+            .parse()
+            .expect("valid URL");
+        let local = DisplaySafeUrl::from_file_path(root.join("local-1.0.0-py3-none-any.whl"))
+            .expect("valid file URL");
+        let unknown = "https://example.com/unknown-1.0.0-py3-none-any.whl"
+            .parse()
+            .expect("valid URL");
+        assert_eq!(hasher.generation(), None);
+        assert_eq!(
+            hasher.get_url(&remote),
+            HashPolicy::All(slice::from_ref(&digest))
         );
-        let local = VersionId::from_path(&root.join("local-1.0.0-py3-none-any.whl"));
-        assert_eq!(hashes.len(), 2);
-        assert_eq!(hashes.get(&remote), Some(&vec![digest.clone()]));
-        assert_eq!(hashes.get(&local), Some(&vec![digest]));
+        assert_eq!(
+            hasher.get_url(&local),
+            HashPolicy::All(slice::from_ref(&digest))
+        );
+        assert_eq!(hasher.get_url(&unknown), HashPolicy::None);
     }
 
     #[test]
