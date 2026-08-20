@@ -1769,6 +1769,8 @@ pub struct PipCompileArgs {
     ///
     /// When generating hashes, only include hashes for compatible wheels if the selected version
     /// has one. Source distribution hashes are included only when a package must be built.
+    ///
+    /// This option is experimental and may change without warning.
     #[arg(long, overrides_with("no_include_build_dependencies"))]
     pub include_build_dependencies: bool,
 

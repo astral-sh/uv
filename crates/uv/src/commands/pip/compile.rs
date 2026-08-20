@@ -30,7 +30,7 @@ use uv_git::ResolvedRepositoryReference;
 use uv_install_wheel::LinkMode;
 use uv_normalize::PackageName;
 use uv_pep440::Version;
-use uv_preview::Preview;
+use uv_preview::{Preview, PreviewFeature};
 use uv_pypi_types::{Conflicts, SupportedEnvironments};
 use uv_python::{
     EnvironmentPreference, PythonDownloads, PythonEnvironment, PythonInstallation,
@@ -161,6 +161,12 @@ pub(crate) async fn pip_compile(
         return Err(anyhow!(
             "`--include-build-dependencies` is only supported for `requirements.txt` output"
         ));
+    }
+    if include_build_dependencies && !preview.is_enabled(PreviewFeature::IncludeBuildDependencies) {
+        warn_user!(
+            "The `--include-build-dependencies` option is experimental and may change without warning. Pass `--preview-features {}` to disable this warning.",
+            PreviewFeature::IncludeBuildDependencies
+        );
     }
 
     // If the user is exporting to PEP 751, ensure the filename matches the specification.

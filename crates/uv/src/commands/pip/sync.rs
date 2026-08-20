@@ -352,12 +352,13 @@ pub(crate) async fn pip_sync(
         }
     };
 
-    // Require hashes for isolated build dependencies when hash checking is required and the user
-    // explicitly supplied build constraints. Preserve compatibility when no build constraints are
-    // available to provide those hashes.
+    // With the preview feature enabled, require hashes for isolated build dependencies whenever
+    // build constraints provide hashes. Otherwise, preserve the existing verification behavior.
     let build_hasher = if hash_checking.is_some() {
-        let build_hash_checking = if hash_checking.is_some_and(|mode| mode.is_require())
-            && !build_constraints.is_empty()
+        let build_hash_checking = if preview.is_enabled(PreviewFeature::BuildConstraintHashes)
+            && build_constraints
+                .iter()
+                .any(|constraint| !constraint.hashes.is_empty())
         {
             HashCheckingMode::Require
         } else {

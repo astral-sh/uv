@@ -111,6 +111,7 @@ mod tests {
         - `audit-command`: Allows using `uv audit` and `uv tool audit`.
         - `auth-helper`: Allows using `uv auth helper` as a credential helper for external tools.
         - `azure-endpoint`: Allows signing requests to Azure Blob Storage endpoints with Azure credentials.
+        - `build-constraint-hashes`: Requires hashes for isolated build dependencies when build constraints contain hashes.
         - `cache-physical-space`: Reports the physical disk space reclaimed by cache cleanup, accounting for hardlinks and copy-on-write clones.
         - `cache-size`: Allows using `uv cache size`.
         - `centralized-project-envs`: Stores [project virtual environments](./projects/layout.md#centralized-project-environments)
@@ -122,6 +123,7 @@ mod tests {
         - `extra-build-dependencies`: Allows specifying additional dependencies for package builds.
         - `format-command`: Allows using `uv format`.
         - `gcs-endpoint`: Allows signing requests to configured Google Cloud Storage endpoints.
+        - `include-build-dependencies`: Allows including build dependencies in `uv pip compile` output.
         - `index-by-name`: Allows selecting configured package indexes by name with `--index` and `--default-index`.
         - `index-exclude-newer`: Allows setting `exclude-newer` on configured package indexes.
         - `index-hash-algorithm`: Allows requiring a hash algorithm for configured package indexes.

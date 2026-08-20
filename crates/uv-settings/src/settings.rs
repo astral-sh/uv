@@ -1870,6 +1870,8 @@ pub struct PipOptions {
     ///
     /// When generating hashes, source distribution hashes are omitted for packages with compatible
     /// wheels.
+    ///
+    /// This option is experimental and may change without warning.
     #[option(
         default = "false",
         value_type = "bool",
