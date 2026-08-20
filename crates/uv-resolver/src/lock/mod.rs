@@ -3807,6 +3807,11 @@ impl Lock {
                     generated,
                     actual,
                 ));
+            }
+        }
+
+        Ok(SatisfiesResult::Satisfied)
+    }
 
     fn record_index(
         index: &IndexMetadata,
