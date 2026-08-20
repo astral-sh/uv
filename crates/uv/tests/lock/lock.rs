@@ -8695,6 +8695,178 @@ fn lock_relative_transitive_workspace_paths() -> Result<()> {
     Ok(())
 }
 
+/// Check local archive paths when a dependency reports equivalent absolute file URLs.
+///
+/// Note: Currently broken.
+/// See: <https://github.com/astral-sh/uv/issues/20477>
+#[test]
+fn lock_relative_transitive_archive_paths() -> Result<()> {
+    let context = uv_test::test_context!("3.13").with_exclude_newer("2026-07-10T00:00:00Z");
+
+    let wheel = context.temp_dir.child("wheels/ok-1.0.0-py3-none-any.whl");
+    context.temp_dir.child("wheels").create_dir_all()?;
+    fs_err::copy(
+        context
+            .workspace_root
+            .join("test/links/ok-1.0.0-py3-none-any.whl"),
+        wheel.path(),
+    )?;
+    let wheel_url = Url::from_file_path(wheel.path())
+        .map_err(|()| anyhow::anyhow!("wheel path is not a valid file URL"))?;
+
+    let source_archive = context
+        .temp_dir
+        .child("archives/basic_package-0.1.0.tar.gz");
+    context.temp_dir.child("archives").create_dir_all()?;
+    fs_err::copy(
+        context
+            .workspace_root
+            .join("test/links/basic_package-0.1.0.tar.gz"),
+        source_archive.path(),
+    )?;
+    let source_archive_url = Url::from_file_path(source_archive.path())
+        .map_err(|()| anyhow::anyhow!("source archive path is not a valid file URL"))?;
+
+    let project = context.temp_dir.child("project");
+    project.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.13"
+        dependencies = ["parent", "ok", "basic-package"]
+
+        [tool.uv.sources]
+        parent = { path = "../parent", editable = true }
+        ok = { path = "../wheels/ok-1.0.0-py3-none-any.whl" }
+        basic-package = { path = "../archives/basic_package-0.1.0.tar.gz" }
+    "#})?;
+
+    let parent = context.temp_dir.child("parent");
+    parent.child("parent/__init__.py").touch()?;
+    parent.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "parent"
+        version = "0.1.0"
+        requires-python = ">=3.13"
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+    "#})?;
+
+    context
+        .lock()
+        .current_dir(project.path())
+        .assert()
+        .success();
+
+    let lock = context.read("project/uv.lock");
+
+    parent.child("pyproject.toml").write_str(&formatdoc! {r#"
+        [project]
+        name = "parent"
+        version = "0.1.0"
+        requires-python = ">=3.13"
+        dependencies = [
+            "ok @ {wheel_url}",
+            "basic-package @ {source_archive_url}",
+        ]
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+    "#})?;
+
+    context
+        .lock()
+        .current_dir(project.path())
+        .assert()
+        .success();
+
+    // Root-selected wheel and sdist paths must stay relative in packages and metadata.
+    let new_lock = context.read("project/uv.lock");
+    let diff = diff_snapshot(&lock, &new_lock, 3);
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(diff, @r#"
+        --- old
+        +++ new
+        @@ -8,13 +8,13 @@
+         [[package]]
+         name = "basic-package"
+         version = "0.1.0"
+        -source = { path = "../archives/basic_package-0.1.0.tar.gz" }
+        +source = { path = "[TEMP_DIR]/archives/basic_package-0.1.0.tar.gz" }
+         sdist = { hash = "sha256:af478ff91ec60856c99a540b8df13d756513bebb65bc301fb27e0d1f974532b4" }
+
+         [[package]]
+         name = "ok"
+         version = "1.0.0"
+        -source = { path = "../wheels/ok-1.0.0-py3-none-any.whl" }
+        +source = { path = "[TEMP_DIR]/wheels/ok-1.0.0-py3-none-any.whl" }
+         wheels = [
+             { filename = "ok-1.0.0-py3-none-any.whl", hash = "sha256:79f0b33e6ce1e09eaa1784c8eee275dfe84d215d9c65c652f07c18e85fdaac5f" },
+         ]
+        @@ -23,6 +23,16 @@
+         name = "parent"
+         version = "0.1.0"
+         source = { editable = "../parent" }
+        +dependencies = [
+        +    { name = "basic-package" },
+        +    { name = "ok" },
+        +]
+        +
+        +[package.metadata]
+        +requires-dist = [
+        +    { name = "basic-package", path = "[TEMP_DIR]/archives/basic_package-0.1.0.tar.gz" },
+        +    { name = "ok", path = "[TEMP_DIR]/wheels/ok-1.0.0-py3-none-any.whl" },
+        +]
+
+         [[package]]
+         name = "project"
+        "#);
+    });
+
+    project.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.13"
+        dependencies = ["parent"]
+
+        [tool.uv.sources]
+        parent = { path = "../parent", editable = true }
+    "#})?;
+
+    context
+        .lock()
+        .current_dir(project.path())
+        .assert()
+        .success();
+
+    let backend_only_lock = context.read("project/uv.lock");
+    let archive_paths = backend_only_lock
+        .lines()
+        .filter(|line| line.contains("path = "))
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    // Metadata-only wheel and sdist paths must be relative in packages and requirements.
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(archive_paths, @r#"
+        source = { path = "[TEMP_DIR]/archives/basic_package-0.1.0.tar.gz" }
+        source = { path = "[TEMP_DIR]/wheels/ok-1.0.0-py3-none-any.whl" }
+            { name = "basic-package", path = "[TEMP_DIR]/archives/basic_package-0.1.0.tar.gz" },
+            { name = "ok", path = "[TEMP_DIR]/wheels/ok-1.0.0-py3-none-any.whl" },
+        "#);
+    });
+
+    Ok(())
+}
+
 /// Check PEP 508 URL handling when they contain variables
 #[cfg(feature = "test-universal")]
 #[test]
