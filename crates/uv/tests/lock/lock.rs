@@ -18694,7 +18694,7 @@ fn lock_regenerates_dependencies_without_metadata() -> Result<()> {
     hint: To update the lockfile, run `uv lock`.
     ");
 
-    pyproject_toml.write_str(&original_pyproject.replace("\"urllib3==1.0.0\",", ""))?;
+    pyproject_toml.write_str(&original_pyproject.replace(r#""urllib3==1.0.0","#, ""))?;
     uv_snapshot!(context.filters(), context.lock()
         .arg("--preview-features")
         .arg("lock-without-metadata")
