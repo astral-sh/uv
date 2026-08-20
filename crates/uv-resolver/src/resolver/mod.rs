@@ -2948,8 +2948,6 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
 
 /// All known versions for each package, from the version maps and the installed packages,
 /// used to keep the version sets in the partial solution minimal.
-///
-/// Per fork, since the index for a package can differ between forks.
 #[derive(Clone, Default)]
 struct KnownVersions(FxHashMap<PackageName, Arc<[Version]>>);
 
@@ -3060,6 +3058,9 @@ pub(crate) struct ForkState {
     pre_visited: FxHashMap<Id<PubGrubPackage>, Range<Version>>,
     /// The last version selected for each package and range in a specific environment.
     selected_versions: FxHashMap<Id<PubGrubPackage>, (Range<Version>, Version)>,
+    /// A cache for parsed version maps.
+    ///
+    /// Per fork, since the index for a package can differ between forks.
     known_versions: KnownVersions,
     /// The marker expression that created this state.
     ///
