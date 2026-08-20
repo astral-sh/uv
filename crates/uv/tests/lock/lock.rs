@@ -8890,6 +8890,301 @@ fn lock_relative_transitive_archive_paths() -> Result<()> {
     Ok(())
 }
 
+/// Preserve local path intent across configured, workspace, and backend metadata.
+///
+/// Note: Currently broken: configured paths are overridden and inactive paths stay absolute.
+#[test]
+fn lock_relative_inactive_dependency_metadata_paths() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let child = context.temp_dir.child("child");
+    child.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "child"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+    "#})?;
+    let child_url = Url::from_file_path(child.path())
+        .map_err(|()| anyhow::anyhow!("child path is not a valid file URL"))?;
+
+    let active_child = context.temp_dir.child("active-child");
+    active_child.child("active_child/__init__.py").touch()?;
+    active_child.child("pyproject.toml").write_str(indoc! {r#"
+            [project]
+            name = "active-child"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+
+            [build-system]
+            requires = ["hatchling"]
+            build-backend = "hatchling.build"
+        "#})?;
+    let active_child_url = Url::from_file_path(active_child.path())
+        .map_err(|()| anyhow::anyhow!("active child path is not a valid file URL"))?;
+
+    let relative_child = context.temp_dir.child("relative-child");
+    relative_child.child("relative_child/__init__.py").touch()?;
+    relative_child
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+            [project]
+            name = "relative-child"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+
+            [build-system]
+            requires = ["hatchling"]
+            build-backend = "hatchling.build"
+        "#})?;
+    let relative_child_url = Url::from_file_path(relative_child.path())
+        .map_err(|()| anyhow::anyhow!("relative child path is not a valid file URL"))?;
+    let relative_child_alias = context.temp_dir.child("relative-child-alias");
+    create_symlink(relative_child.path(), relative_child_alias.path())?;
+    let relative_child_alias_url = Url::from_file_path(relative_child_alias.path())
+        .map_err(|()| anyhow::anyhow!("relative child alias is not a valid file URL"))?;
+
+    // Discover the ordinary parent through configured metadata to keep the baseline deterministic.
+    let parent = context.temp_dir.child("parent");
+    let parent_url = Url::from_file_path(parent.path())
+        .map_err(|()| anyhow::anyhow!("parent path is not a valid file URL"))?;
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&formatdoc! {r#"
+            [project]
+            name = "project"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+            dependencies = [
+                "authored-parent",
+                "member",
+            ]
+
+            [tool.uv.workspace]
+            members = ["member"]
+
+            [tool.uv.sources]
+            authored-parent = {{ path = "authored-parent" }}
+            member = {{ workspace = true }}
+
+            [[tool.uv.dependency-metadata]]
+            name = "authored-parent"
+            version = "0.1.0"
+            requires-dist = [
+                "active-child @ {active_child_url}",
+                "child @ {child_url}; python_version < '0'",
+                "parent @ {parent_url}",
+                "relative-child @ ${{UV_TEST_CONFIGURED_CHILD_URL}}",
+            ]
+        "#})?;
+
+    context
+        .temp_dir
+        .child("authored-parent/pyproject.toml")
+        .write_str(indoc! {r#"
+            [project]
+            name = "authored-parent"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+            dynamic = ["dependencies"]
+        "#})?;
+
+    let member = context.temp_dir.child("member");
+    member.child("member/__init__.py").touch()?;
+    member.child("pyproject.toml").write_str(&formatdoc! {r#"
+        [project]
+        name = "member"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["child @ {child_url}; python_version < '0'"]
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+    "#})?;
+
+    parent.child("parent/__init__.py").touch()?;
+    parent.child("pyproject.toml").write_str(&formatdoc! {r#"
+        [project]
+        name = "parent"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["relative-child @ {relative_child_alias_url}"]
+
+        [project.optional-dependencies]
+        unused = ["child @ {child_url}"]
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+    "#})?;
+
+    context
+        .lock()
+        .env("UV_TEST_CONFIGURED_CHILD_URL", relative_child_url.as_str())
+        .assert()
+        .success();
+
+    let lock = context.read("uv.lock");
+    let source_paths = lock
+        .lines()
+        .skip_while(|line| *line != "[[package]]")
+        .filter(|line| {
+            line.starts_with("name = ")
+                || line.starts_with("source = ")
+                || *line == "[package.metadata]"
+                || line.contains("directory = ")
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    // Preserve configured and workspace paths while making backend paths and aliases relative.
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(source_paths, @r#"
+        name = "active-child"
+        source = { directory = "[TEMP_DIR]/active-child" }
+        name = "authored-parent"
+        source = { directory = "authored-parent" }
+        [package.metadata]
+            { name = "active-child", directory = "[TEMP_DIR]/active-child" },
+            { name = "child", marker = "python_full_version < '0'", directory = "[TEMP_DIR]/child" },
+            { name = "parent", directory = "[TEMP_DIR]/parent" },
+            { name = "relative-child", directory = "relative-child" },
+        name = "member"
+        source = { editable = "member" }
+        [package.metadata]
+        requires-dist = [{ name = "child", marker = "python_full_version < '0'", directory = "[TEMP_DIR]/child" }]
+        name = "parent"
+        source = { directory = "[TEMP_DIR]/parent" }
+        [package.metadata]
+            { name = "child", marker = "extra == 'unused'", directory = "[TEMP_DIR]/child" },
+            { name = "relative-child", directory = "[TEMP_DIR]/relative-child-alias" },
+        name = "project"
+        source = { virtual = "." }
+        [package.metadata]
+            { name = "authored-parent", directory = "authored-parent" },
+        name = "relative-child"
+        source = { directory = "[TEMP_DIR]/relative-child-alias" }
+        "#);
+    });
+
+    Ok(())
+}
+
+/// Ignored metadata overrides must not make backend paths appear user-authored.
+///
+/// Note: Currently broken: backend paths stay absolute when configured metadata is ignored.
+#[test]
+fn lock_ignored_dependency_metadata_paths() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let active_child = context.temp_dir.child("active-child");
+    active_child.child("src/active_child/__init__.py").touch()?;
+    active_child.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "active-child"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+    "#})?;
+    let inactive_child = context.temp_dir.child("inactive-child");
+    inactive_child
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "inactive-child"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+    "#})?;
+    let active_child_url = Url::from_file_path(active_child.path())
+        .map_err(|()| anyhow::anyhow!("active child path is not a valid file URL"))?;
+    let inactive_child_url = Url::from_file_path(inactive_child.path())
+        .map_err(|()| anyhow::anyhow!("inactive child path is not a valid file URL"))?;
+
+    let parent = context.temp_dir.child("parent");
+    parent.child("src/parent/__init__.py").touch()?;
+    parent.child("pyproject.toml").write_str(&formatdoc! {r#"
+        [project]
+        name = "parent"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "active-child @ {active_child_url}",
+            "inactive-child @ {inactive_child_url}; python_version < '0'",
+        ]
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+    "#})?;
+
+    let project = indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["parent"]
+
+        [tool.uv.sources]
+        parent = { path = "parent" }
+    "#};
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(&formatdoc! {r#"
+        {project}
+
+        [[tool.uv.dependency-metadata]]
+        name = "parent"
+        requires-dist = []
+    "#})?;
+
+    let child_paths = |lock: &str| {
+        lock.lines()
+            .filter(|line| line.contains("directory = ") && line.contains("child"))
+            .collect::<Vec<_>>()
+            .join("\n")
+    };
+
+    context.lock().assert().success();
+    let paths = child_paths(&context.read("uv.lock"));
+
+    // Active and inactive backend paths stay relative when metadata overrides are ignored.
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(paths, @r#"
+        source = { directory = "[TEMP_DIR]/active-child" }
+            { name = "active-child", directory = "[TEMP_DIR]/active-child" },
+            { name = "inactive-child", marker = "python_full_version < '0'", directory = "[TEMP_DIR]/inactive-child" },
+        "#);
+    });
+
+    // Multiple entries are also unusable before the directory's version is known.
+    pyproject_toml.write_str(&formatdoc! {r#"
+        {project}
+
+        [[tool.uv.dependency-metadata]]
+        name = "parent"
+        version = "0.1.0"
+        requires-dist = []
+
+        [[tool.uv.dependency-metadata]]
+        name = "parent"
+        version = "0.2.0"
+        requires-dist = []
+    "#})?;
+    fs_err::remove_file(context.temp_dir.child("uv.lock").path())?;
+    context.lock().assert().success();
+    assert_eq!(paths, child_paths(&context.read("uv.lock")));
+
+    Ok(())
+}
+
 /// Check PEP 508 URL handling when they contain variables
 #[cfg(feature = "test-universal")]
 #[test]
