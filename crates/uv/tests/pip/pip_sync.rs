@@ -3470,7 +3470,7 @@ fn require_hashes_source_no_binary() -> Result<()> {
     Ok(())
 }
 
-/// Require hashes for build dependencies when explicit build constraints are available.
+/// Require hashes for build dependencies when hashed build constraints and preview are enabled.
 #[test]
 fn require_hashes_build_dependencies_with_constraints() -> Result<()> {
     let server = PackseServer::new("simple/single-package.toml");
@@ -3486,7 +3486,7 @@ fn require_hashes_build_dependencies_with_constraints() -> Result<()> {
         .arg("requirements.txt")
         .arg("--no-binary").arg("a")
         .arg("--build-constraint").arg("requirements.txt")
-        .arg("--require-hashes"), @"
+        .env(EnvVars::UV_PREVIEW_FEATURES, "build-constraint-hashes"), @"
     exit_code: 1 (failure)
     ----- stderr -----
     Resolved 1 package in [TIME]
@@ -3494,6 +3494,21 @@ fn require_hashes_build_dependencies_with_constraints() -> Result<()> {
       ├─▶ Failed to resolve requirements from `build-system.requires`
       ├─▶ No solution found when resolving: `hatchling`
       ╰─▶ In `--require-hashes` mode, all requirements must be pinned upfront with `==`, but found: `hatchling`
+    ");
+
+    // Without the preview feature, hashed build constraints retain their existing behavior.
+    uv_snapshot!(context.pip_sync()
+        .arg("--index-url").arg(server.index_url())
+        .arg("requirements.txt")
+        .arg("--no-binary").arg("a")
+        .arg("--build-constraint").arg("requirements.txt")
+        .arg("--require-hashes"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + a==1.0.0
     ");
 
     Ok(())

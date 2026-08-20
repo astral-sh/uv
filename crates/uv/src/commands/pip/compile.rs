@@ -169,6 +169,12 @@ pub(crate) async fn pip_compile(
             "`--include-build-dependencies` is only supported for `requirements.txt` output"
         ));
     }
+    if include_build_dependencies && !preview.is_enabled(PreviewFeature::IncludeBuildDependencies) {
+        warn_user!(
+            "The `--include-build-dependencies` option is experimental and may change without warning. Pass `--preview-features {}` to disable this warning.",
+            PreviewFeature::IncludeBuildDependencies
+        );
+    }
 
     // If the user is exporting to PEP 751, ensure the filename matches the specification.
     if matches!(format, PipCompileFormat::PylockToml) {

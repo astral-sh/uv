@@ -241,6 +241,10 @@ pub enum PreviewFeature {
     PackageConflicts,
     /// Allows specifying additional dependencies for package builds.
     ExtraBuildDependencies,
+    /// Allows including build dependencies in `uv pip compile` output.
+    IncludeBuildDependencies,
+    /// Requires hashes for isolated build dependencies when build constraints contain hashes.
+    BuildConstraintHashes,
     /// Warns when multiple packages would install conflicting Python modules into the same
     /// environment.
     DetectModuleConflicts,
