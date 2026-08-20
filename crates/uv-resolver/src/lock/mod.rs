@@ -2203,25 +2203,14 @@ impl<'lock> ExpectedPackageDependencies<'lock> {
         } else {
             activation.combined()
         };
-        for (
-            (
-                (generated_id, generated_extras),
-                DependencyMarkers {
-                    marker: generated_marker,
-                    forbidden_conflict,
-                    ..
-                },
-            ),
-            (
-                (actual_id, actual_extras),
-                DependencyMarkers {
-                    marker: actual_marker,
-                    raw_conflict: actual_conflict,
-                    ..
-                },
-            ),
-        ) in generated_comparable.iter().zip(&actual_comparable)
-        {
+        for (generated_entry, actual_entry) in generated_comparable.iter().zip(&actual_comparable) {
+            let ((generated_id, generated_extras), generated_markers) = generated_entry;
+            let ((actual_id, actual_extras), actual_markers) = actual_entry;
+            let generated_marker = &generated_markers.marker;
+            let forbidden_conflict = &generated_markers.forbidden_conflict;
+            let actual_marker = &actual_markers.marker;
+            let actual_conflict = &actual_markers.raw_conflict;
+
             if generated_id != actual_id || generated_extras != actual_extras {
                 return false;
             }
