@@ -264,13 +264,12 @@ impl ProgressReporter {
             // If the file is larger than 1MB, show a message to indicate that this may take
             // a while keeping the log concise.
             if multi_progress.is_hidden() && !*HAS_UV_TEST_NO_CLI_PROGRESS && size > 1024 * 1024 {
-                let (bytes, unit) = human_readable_bytes(size);
                 let _ = writeln!(
                     self.printer.stderr(),
                     "{} {} {}",
                     direction.as_str().bold().cyan(),
                     name,
-                    format!("({bytes:.1}{unit})").dimmed()
+                    format!("({:.1})", human_readable_bytes(size)).dimmed()
                 );
             }
             progress.set_message(name);
