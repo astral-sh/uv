@@ -48,7 +48,7 @@ use url::Url;
 #[cfg(feature = "http")]
 use uv_client::{BaseClient, ClientBuildError};
 use uv_client::{BaseClientBuilder, Connectivity};
-use uv_configuration::{NoBinary, NoBuild, PackageNameSpecifier};
+use uv_configuration::{NoBinary, NoBuild, OnlyBinarySpecifier, PackageNameSpecifier};
 use uv_distribution_types::{
     Requirement, UnresolvedRequirement, UnresolvedRequirementSpecification,
 };
@@ -879,7 +879,7 @@ fn parse_entry(
             .flatten()
             .map(Cow::Owned)
             .unwrap_or(Cow::Borrowed(given));
-        let specifier = PackageNameSpecifier::from_str(given.as_ref()).map_err(|err| {
+        let specifier = OnlyBinarySpecifier::from_str(given.as_ref()).map_err(|err| {
             RequirementsTxtParserError::NoBinary {
                 source: err,
                 specifier: given.to_string(),
@@ -887,7 +887,7 @@ fn parse_entry(
                 end: s.cursor(),
             }
         })?;
-        RequirementsTxtStatement::OnlyBinary(NoBuild::from_pip_arg(specifier))
+        RequirementsTxtStatement::OnlyBinary(NoBuild::from_pip_args([specifier], false))
     } else if s.at(char::is_ascii_alphanumeric) || s.at(|char| matches!(char, '.' | '/' | '$')) {
         let source = if requirements_txt == Path::new("-") {
             None

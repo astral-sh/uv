@@ -1225,6 +1225,11 @@
         }
       ]
     },
+    "OnlyBinarySpecifier": {
+      "description": "The name of a package, `:all:`, `:none:`, or `:if-available:` to require wheels when they are available.",
+      "type": "string",
+      "pattern": "^(:none:|:all:|:if-available:|([a-zA-Z0-9]|[a-zA-Z0-9][a-zA-Z0-9._-]*[a-zA-Z0-9]))$"
+    },
     "Override": {
       "description": "An override, either global or scoped to a specific package version.",
       "anyOf": [
@@ -1616,10 +1621,10 @@
           "type": ["boolean", "null"]
         },
         "only-binary": {
-          "description": "Only use pre-built wheels; don't build source distributions.\n\nWhen enabled, uv will reuse cached wheels from previously built source distributions, but\noperations that require building a source distribution for the given packages will exit\nwith an error. uv may still build editable requirements, and their build backends may run\narbitrary Python code.\n\nMultiple packages may be provided. Disable binaries for all packages with `:all:`.\nClear previously specified packages with `:none:`.",
+          "description": "Only use pre-built wheels; don't build source distributions.\n\nWhen enabled, uv will reuse cached wheels from previously built source distributions, but\noperations that require building a source distribution for the given packages will exit\nwith an error. uv may still build editable requirements, and their build backends may run\narbitrary Python code.\n\nMultiple packages may be provided. Require wheels for all packages with `:all:`, use wheels\nwhen the selected version has them with `:if-available:`, or clear previous selections with\n`:none:`.",
           "type": ["array", "null"],
           "items": {
-            "$ref": "#/definitions/PackageNameSpecifier"
+            "$ref": "#/definitions/OnlyBinarySpecifier"
           }
         },
         "output-file": {
@@ -1827,7 +1832,8 @@
             "lock-without-metadata",
             "tar-codec",
             "index-by-name",
-            "artifact-hash-filtering"
+            "artifact-hash-filtering",
+            "only-binary-if-available"
           ]
         },
         {

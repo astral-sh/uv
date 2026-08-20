@@ -1,7 +1,7 @@
 use uv_normalize::PackageName;
 pub use uv_pypi_types::BuildKind;
 
-use crate::{PackageNameSpecifier, PackageNameSpecifiers};
+use crate::{OnlyBinarySpecifier, PackageNameSpecifier, PackageNameSpecifiers};
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum BuildOutput {
@@ -209,11 +209,18 @@ impl NoBuild {
     }
 
     /// Determine the build strategy to use for the given arguments from the pip CLI.
-    pub fn from_pip_args(only_binary: Vec<PackageNameSpecifier>, no_build: bool) -> Self {
+    pub fn from_pip_args(
+        only_binary: impl IntoIterator<Item = impl Into<OnlyBinarySpecifier>>,
+        no_build: bool,
+    ) -> Self {
         if no_build {
             Self::All
         } else {
-            let combined = PackageNameSpecifiers::from_iter(only_binary.into_iter());
+            let combined = PackageNameSpecifiers::from_iter(
+                only_binary
+                    .into_iter()
+                    .filter_map(|specifier| specifier.into().into_package_specifier()),
+            );
             match combined {
                 PackageNameSpecifiers::All => Self::All,
                 PackageNameSpecifiers::None => Self::None,

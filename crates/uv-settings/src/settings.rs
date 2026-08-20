@@ -6,8 +6,9 @@ use serde::{Deserialize, Serialize};
 
 use uv_cache_info::CacheKey;
 use uv_configuration::{
-    BuildIsolation, ExcludeDependency, IndexStrategy, KeyringProviderType, PackageNameSpecifier,
-    ProxyUrl, Reinstall, RequiredVersion, TargetTriple, TrustedHost, TrustedPublishing, Upgrade,
+    BuildIsolation, ExcludeDependency, IndexStrategy, KeyringProviderType, OnlyBinarySpecifier,
+    PackageNameSpecifier, ProxyUrl, Reinstall, RequiredVersion, TargetTriple, TrustedHost,
+    TrustedPublishing, Upgrade,
 };
 use uv_distribution_types::{
     ConfigSettings, ExtraBuildVariables, Index, IndexLocations, IndexUrl, IndexUrlError, Origin,
@@ -1587,8 +1588,9 @@ pub struct PipOptions {
     /// with an error. uv may still build editable requirements, and their build backends may run
     /// arbitrary Python code.
     ///
-    /// Multiple packages may be provided. Disable binaries for all packages with `:all:`.
-    /// Clear previously specified packages with `:none:`.
+    /// Multiple packages may be provided. Require wheels for all packages with `:all:`, use wheels
+    /// when the selected version has them with `:if-available:`, or clear previous selections with
+    /// `:none:`.
     #[option(
         default = "[]",
         value_type = "list[str]",
@@ -1596,7 +1598,7 @@ pub struct PipOptions {
             only-binary = ["ruff"]
         "#
     )]
-    pub only_binary: Option<Vec<PackageNameSpecifier>>,
+    pub only_binary: Option<Vec<OnlyBinarySpecifier>>,
     /// Disable isolation when building source distributions.
     ///
     /// Assumes that build dependencies specified by [PEP 518](https://peps.python.org/pep-0518/)

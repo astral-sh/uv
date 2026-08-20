@@ -36,9 +36,10 @@ use uv_client::{Certificates, Connectivity};
 use uv_configuration::{
     BuildIsolation, BuildOptions, Concurrency, DependencyGroups, DevMode, DryRun, EditableMode,
     EnvFile, ExcludeDependency, ExportFormat, ExtrasSpecification, GitLfsSetting, HashCheckingMode,
-    IndexStrategy, InstallOptions, KeyringProviderType, NoBinary, NoBuild, NoSources, Override,
-    PackageOverride, PipCompileFormat, ProjectBuildBackend, ProxyUrl, Reinstall, RequiredVersion,
-    TargetTriple, TrustedHost, TrustedPublishing, Upgrade, VersionControlSystem,
+    IndexStrategy, InstallOptions, KeyringProviderType, NoBinary, NoBuild, NoSources,
+    OnlyBinarySpecifier, Override, PackageNameSpecifier, PackageOverride, PipCompileFormat,
+    ProjectBuildBackend, ProxyUrl, Reinstall, RequiredVersion, TargetTriple, TrustedHost,
+    TrustedPublishing, Upgrade, VersionControlSystem,
 };
 use uv_distribution_types::{
     ConfigSettings, DependencyMetadata, ExtraBuildVariables, Index, IndexLocations, IndexUrl,
@@ -3334,6 +3335,7 @@ fn workspace_overrides(filesystem: Option<&FilesystemOptions>) -> Vec<Override<R
 #[derive(Debug, Clone)]
 pub(crate) struct PipCompileSettings {
     pub(crate) format: Option<PipCompileFormat>,
+    pub(crate) only_binary_if_available: bool,
     pub(crate) src_file: Vec<PathBuf>,
     pub(crate) constraints: Vec<PathBuf>,
     pub(crate) overrides: Vec<PathBuf>,
@@ -3464,8 +3466,27 @@ impl PipCompileSettings {
             SupportedEnvironments::default()
         };
 
+        let only_binary_if_available = only_binary
+            .clone()
+            .combine(
+                filesystem
+                    .as_ref()
+                    .and_then(|configuration| configuration.pip.as_ref())
+                    .and_then(|pip| pip.only_binary.clone()),
+            )
+            .unwrap_or_default()
+            .into_iter()
+            .fold(false, |enabled, specifier| match specifier {
+                OnlyBinarySpecifier::IfAvailable => true,
+                OnlyBinarySpecifier::Package(
+                    PackageNameSpecifier::None | PackageNameSpecifier::All,
+                ) => false,
+                OnlyBinarySpecifier::Package(PackageNameSpecifier::Package(_)) => enabled,
+            });
+
         Ok(Self {
             format,
+            only_binary_if_available,
             src_file,
             constraints: constraints
                 .into_iter()

@@ -1,4 +1,3 @@
-#[cfg(feature = "schemars")]
 use std::borrow::Cow;
 use std::str::FromStr;
 
@@ -115,5 +114,67 @@ impl PackageNameSpecifiers {
         } else {
             Self::Packages(packages)
         }
+    }
+}
+
+/// A package selector for `--only-binary`, including conditional wheel-only selection.
+#[derive(Debug, Clone)]
+pub enum OnlyBinarySpecifier {
+    /// Apply an existing package, `:all:`, or `:none:` selector.
+    Package(PackageNameSpecifier),
+    /// Require wheels only when the selected version provides compatible wheels.
+    IfAvailable,
+}
+
+impl OnlyBinarySpecifier {
+    /// Return the underlying package selector, if this is not a conditional selector.
+    pub fn into_package_specifier(self) -> Option<PackageNameSpecifier> {
+        match self {
+            Self::Package(specifier) => Some(specifier),
+            Self::IfAvailable => None,
+        }
+    }
+}
+
+impl From<PackageNameSpecifier> for OnlyBinarySpecifier {
+    fn from(specifier: PackageNameSpecifier) -> Self {
+        Self::Package(specifier)
+    }
+}
+
+impl FromStr for OnlyBinarySpecifier {
+    type Err = uv_normalize::InvalidNameError;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        if value == ":if-available:" {
+            Ok(Self::IfAvailable)
+        } else {
+            PackageNameSpecifier::from_str(value).map(Self::Package)
+        }
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for OnlyBinarySpecifier {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let value = <Cow<'de, str> as serde::Deserialize>::deserialize(deserializer)?;
+        Self::from_str(&value).map_err(serde::de::Error::custom)
+    }
+}
+
+#[cfg(feature = "schemars")]
+impl schemars::JsonSchema for OnlyBinarySpecifier {
+    fn schema_name() -> Cow<'static, str> {
+        Cow::Borrowed("OnlyBinarySpecifier")
+    }
+
+    fn json_schema(_generator: &mut schemars::generate::SchemaGenerator) -> schemars::Schema {
+        schemars::json_schema!({
+            "type": "string",
+            "pattern": r"^(:none:|:all:|:if-available:|([a-zA-Z0-9]|[a-zA-Z0-9][a-zA-Z0-9._-]*[a-zA-Z0-9]))$",
+            "description": "The name of a package, `:all:`, `:none:`, or `:if-available:` to require wheels when they are available.",
+        })
     }
 }
