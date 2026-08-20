@@ -2247,19 +2247,19 @@ impl<'lock> ExpectedPackageDependencies<'lock> {
             ) {
                 return false;
             }
-            if !has_source_forks
-                && (!marker_is_unreachable(
+            let payload_markers_match = has_source_forks
+                || marker_is_unreachable(
                     &self.lock.requires_python,
                     generated_marker
                         .and(actual_marker.negate())
                         .and(payload_marker),
-                ) || !marker_is_unreachable(
+                ) && marker_is_unreachable(
                     &self.lock.requires_python,
                     actual_marker
                         .and(generated_marker.negate())
                         .and(payload_marker),
-                ))
-            {
+                );
+            if !payload_markers_match {
                 return false;
             }
 
