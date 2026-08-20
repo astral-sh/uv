@@ -420,7 +420,7 @@ impl<'lock> InstallTarget<'lock> {
 
                 let metadata_free_lock = lock.supports_missing_package_metadata();
                 let roots = self.roots().collect::<FxHashSet<_>>();
-                // Revision 4 records even empty extras in the resolved dependency table. Read
+                // Revision 1.4 records even empty extras in the resolved dependency table. Read
                 // only the lockfile so frozen installs cannot select newly declared extras.
                 let known_extras = lock
                     .packages()
@@ -497,8 +497,8 @@ impl<'lock> InstallTarget<'lock> {
                     .iter()
                     .filter(|package| roots.contains(package.name()))
                     .flat_map(|package| {
-                        // Revision 4 retains empty groups as resolved dependency table entries.
-                        // Do not admit groups added to the workspace after the lock was written.
+                        // Revision 1.4 retains empty groups as resolved dependency table entries.
+                        // Reject groups added to the workspace after the lock was written.
                         package
                             .dependency_groups()
                             .keys()
