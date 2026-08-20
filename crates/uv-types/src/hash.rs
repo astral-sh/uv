@@ -58,7 +58,7 @@ impl HashStrategy {
 
     /// Set verification independently of hash generation.
     #[must_use]
-    pub fn with_verification(mut self, verification: HashVerification) -> Self {
+    fn with_verification(mut self, verification: HashVerification) -> Self {
         self.verification = verification;
         self
     }
