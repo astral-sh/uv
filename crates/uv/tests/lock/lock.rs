@@ -18249,7 +18249,7 @@ fn lock_metadata_free_many_conflicts() -> Result<()> {
     let project_conflicts = (1..=24)
         .map(|conflict_number| {
             format!(
-                "  [{{ extra = \"a{conflict_number}\" }}, {{ extra = \"b{conflict_number}\" }}],"
+                r#"  [{{ extra = "a{conflict_number}" }}, {{ extra = "b{conflict_number}" }}],"#
             )
         })
         .collect::<Vec<_>>()
@@ -18257,7 +18257,7 @@ fn lock_metadata_free_many_conflicts() -> Result<()> {
     let lock_conflicts = (1..=24)
         .map(|conflict_number| {
             format!(
-                "[{{ package = \"project\", extra = \"a{conflict_number}\" }}, {{ package = \"project\", extra = \"b{conflict_number}\" }}]"
+                r#"[{{ package = "project", extra = "a{conflict_number}" }}, {{ package = "project", extra = "b{conflict_number}" }}]"#
             )
         })
         .collect::<Vec<_>>()
