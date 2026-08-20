@@ -17524,8 +17524,6 @@ fn pep_751_compile_path_sdist() -> Result<()> {
 }
 
 /// Preserve local path intent when compiling PEP 751 lockfiles.
-///
-/// Note: Currently broken: backend-only paths are written as absolute.
 #[cfg(feature = "test-universal")]
 #[test]
 fn pep_751_compile_backend_only_relative_path() -> Result<()> {
@@ -17593,7 +17591,19 @@ fn pep_751_compile_backend_only_relative_path() -> Result<()> {
     insta::with_settings!({
         filters => context.filters(),
     }, {
-        insta::assert_snapshot!(diff, @"");
+        insta::assert_snapshot!(diff, @r#"
+        --- old
+        +++ new
+        @@ -6,7 +6,7 @@
+
+         [[packages]]
+         name = "child"
+        -directory = { path = "child" }
+        +directory = { path = "[TEMP_DIR]/child" }
+
+         [[packages]]
+         name = "parent"
+        "#);
     });
 
     Ok(())

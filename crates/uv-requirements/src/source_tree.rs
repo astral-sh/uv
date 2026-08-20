@@ -241,6 +241,7 @@ impl<'a, Context: BuildContext> SourceTreeResolver<'a, Context> {
             }
         };
 
-        Ok(RequiresDist::from(metadata))
+        // This source tree was requested as an input, so preserve its authored path spelling.
+        Ok(RequiresDist::from(metadata.with_force_relative(false)))
     }
 }
