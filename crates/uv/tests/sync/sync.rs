@@ -10884,7 +10884,9 @@ fn lock_git_poetry_path_dependency() -> Result<()> {
 #[test]
 #[cfg(feature = "test-git")]
 fn sync_git_metadata_archive_dependency() -> Result<()> {
-    let context = uv_test::test_context!("3.13");
+    let context = uv_test::test_context!("3.13")
+        .with_filter((r"@[0-9a-f]{40}", "@[COMMIT]"))
+        .with_filter((r"#[0-9a-f]{40}", "#[COMMIT]"));
 
     let repository = context.temp_dir.child("repository");
     repository.child("root").create_dir_all()?;
@@ -10955,13 +10957,9 @@ fn sync_git_metadata_archive_dependency() -> Result<()> {
         root = {{ git = "{repository_url}", subdirectory = "root" }}
     "#})?;
 
-    let mut filters = context.filters();
-    filters.push((r"@[0-9a-f]{40}", "@[COMMIT]"));
-    filters.push((r"#[0-9a-f]{40}", "#[COMMIT]"));
-
     // A fresh sync should install the repository-relative archive, but resolves it relative to the
     // downstream project instead. See astral-sh/uv#21244.
-    uv_snapshot!(filters, context.sync().arg("--no-cache"), @"
+    uv_snapshot!(context.filters(), context.sync().arg("--no-cache"), @"
     exit_code: 1 (failure)
     ----- stderr -----
     Resolved 3 packages in [TIME]
@@ -10976,7 +10974,7 @@ fn sync_git_metadata_archive_dependency() -> Result<()> {
 
     insta::with_settings!(
         {
-            filters => filters.clone(),
+            filters => context.filters(),
         },
         {
             assert_snapshot!(
@@ -11019,7 +11017,7 @@ fn sync_git_metadata_archive_dependency() -> Result<()> {
         }
     );
 
-    uv_snapshot!(filters, context.sync().arg("--no-cache"), @"
+    uv_snapshot!(context.filters(), context.sync().arg("--no-cache"), @"
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 3 packages in [TIME]
