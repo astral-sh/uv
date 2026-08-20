@@ -22,7 +22,7 @@ use uv_dispatch::{BuildDispatch, SharedState};
 use uv_distribution::{DistributionDatabase, LoweredExtraBuildDependencies};
 use uv_distribution_types::{
     ConfigSettings, DependencyMetadata, Dist, ExtraBuildVariables, HashGeneration, Identifier,
-    Index, IndexLocations, NameRequirementSpecification, Origin, PackageConfigSettings,
+    Index, IndexLocations, Name, NameRequirementSpecification, Origin, PackageConfigSettings,
     Requirement, RequiresPython, ResolvedDist, UnresolvedRequirementSpecification, Verbatim,
 };
 use uv_fs::{CWD, Simplified};
@@ -155,11 +155,6 @@ pub(crate) async fn pip_compile(
     if include_build_dependencies && universal {
         return Err(anyhow!(
             "`--include-build-dependencies` is not supported with `--universal`"
-        ));
-    }
-    if include_build_dependencies && matches!(format, PipCompileFormat::PylockToml) {
-        return Err(anyhow!(
-            "`--include-build-dependencies` is only supported for `requirements.txt` output"
         ));
     }
     if include_build_dependencies && !preview.is_enabled(PreviewFeature::IncludeBuildDependencies) {
@@ -901,13 +896,32 @@ pub(crate) async fn pip_compile(
                 &*CWD
             };
 
+            // Do not add source fallbacks for packages whose selected artifact is a wheel.
+            let selected_build_options = include_build_dependencies.then(|| {
+                let wheel_packages = resolution
+                    .distributions()
+                    .filter_map(|distribution| {
+                        let ResolvedDist::Installable { dist, .. } = distribution else {
+                            return None;
+                        };
+                        let Dist::Built(dist) = dist.as_ref() else {
+                            return None;
+                        };
+                        Some(dist.name().clone())
+                    })
+                    .collect();
+                build_options
+                    .clone()
+                    .combine(NoBinary::None, NoBuild::Packages(wheel_packages))
+            });
+
             // Convert the resolution to a `pylock.toml` file.
             let export = PylockToml::from_resolution(
                 &resolution,
                 &no_emit_packages,
                 install_path,
                 tags.as_deref(),
-                &build_options,
+                selected_build_options.as_ref().unwrap_or(&build_options),
             )?;
             write!(writer, "{}", export.to_toml()?)?;
         }
