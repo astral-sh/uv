@@ -81,6 +81,7 @@ fn pip_compile_baseline() {
     }
     PipCompileSettings {
         format: None,
+        artifact_policy: None,
         src_file: [
             "requirements.in",
         ],

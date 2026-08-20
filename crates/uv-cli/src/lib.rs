@@ -15,8 +15,9 @@ use uv_audit::VulnerabilityServiceFormat;
 use uv_auth::Service;
 use uv_cache::CacheArgs;
 use uv_configuration::{
-    ExportFormat, IndexStrategy, KeyringProviderType, PackageNameSpecifier, PipCompileFormat,
-    ProjectBuildBackend, TargetTriple, TrustedHost, TrustedPublishing, VersionControlSystem,
+    ArtifactPolicy, ExportFormat, IndexStrategy, KeyringProviderType, PackageNameSpecifier,
+    PipCompileFormat, ProjectBuildBackend, TargetTriple, TrustedHost, TrustedPublishing,
+    VersionControlSystem,
 };
 use uv_distribution_types::{
     ConfigSettingEntry, ConfigSettingPackageEntry, Index, IndexName, IndexSourceError, IndexUrl,
@@ -1776,6 +1777,15 @@ pub struct PipCompileArgs {
 
     #[arg(long, overrides_with("include_build_dependencies"), hide = true)]
     pub no_include_build_dependencies: bool,
+
+    /// Control which distribution artifacts and hashes are included in the output.
+    ///
+    /// By default, all available artifacts are included, unless build dependencies are included,
+    /// in which case source distributions are retained only when they are necessary.
+    ///
+    /// This option is experimental and may change without warning.
+    #[arg(long, value_enum)]
+    pub artifact_policy: Option<ArtifactPolicy>,
 
     /// Don't build source distributions.
     ///

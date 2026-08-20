@@ -812,6 +812,7 @@ async fn run_with_workspace_cache(
                 args.settings.upgrade,
                 args.settings.generate_hashes,
                 args.settings.include_build_dependencies,
+                args.artifact_policy,
                 args.settings.no_emit_package,
                 args.settings.no_strip_extras,
                 args.settings.no_strip_markers,

@@ -34,11 +34,12 @@ use uv_cli::{
 };
 use uv_client::{Certificates, Connectivity};
 use uv_configuration::{
-    BuildIsolation, BuildOptions, Concurrency, DependencyGroups, DevMode, DryRun, EditableMode,
-    EnvFile, ExcludeDependency, ExportFormat, ExtrasSpecification, GitLfsSetting, HashCheckingMode,
-    IndexStrategy, InstallOptions, KeyringProviderType, NoBinary, NoBuild, NoSources, Override,
-    PackageOverride, PipCompileFormat, ProjectBuildBackend, ProxyUrl, Reinstall, RequiredVersion,
-    TargetTriple, TrustedHost, TrustedPublishing, Upgrade, VersionControlSystem,
+    ArtifactPolicy, BuildIsolation, BuildOptions, Concurrency, DependencyGroups, DevMode, DryRun,
+    EditableMode, EnvFile, ExcludeDependency, ExportFormat, ExtrasSpecification, GitLfsSetting,
+    HashCheckingMode, IndexStrategy, InstallOptions, KeyringProviderType, NoBinary, NoBuild,
+    NoSources, Override, PackageOverride, PipCompileFormat, ProjectBuildBackend, ProxyUrl,
+    Reinstall, RequiredVersion, TargetTriple, TrustedHost, TrustedPublishing, Upgrade,
+    VersionControlSystem,
 };
 use uv_distribution_types::{
     ConfigSettings, DependencyMetadata, ExtraBuildVariables, Index, IndexLocations, IndexUrl,
@@ -3334,6 +3335,7 @@ fn workspace_overrides(filesystem: Option<&FilesystemOptions>) -> Vec<Override<R
 #[derive(Debug, Clone)]
 pub(crate) struct PipCompileSettings {
     pub(crate) format: Option<PipCompileFormat>,
+    pub(crate) artifact_policy: Option<ArtifactPolicy>,
     pub(crate) src_file: Vec<PathBuf>,
     pub(crate) constraints: Vec<PathBuf>,
     pub(crate) overrides: Vec<PathBuf>,
@@ -3389,6 +3391,7 @@ impl PipCompileSettings {
             no_generate_hashes,
             include_build_dependencies,
             no_include_build_dependencies,
+            artifact_policy,
             no_build,
             build,
             no_binary,
@@ -3466,8 +3469,16 @@ impl PipCompileSettings {
             SupportedEnvironments::default()
         };
 
+        let artifact_policy = artifact_policy.or_else(|| {
+            filesystem
+                .as_ref()
+                .and_then(|configuration| configuration.pip.as_ref())
+                .and_then(|pip| pip.artifact_policy)
+        });
+
         Ok(Self {
             format,
+            artifact_policy,
             src_file,
             constraints: constraints
                 .into_iter()
@@ -4766,6 +4777,7 @@ impl PipSettings {
             custom_compile_command,
             generate_hashes,
             include_build_dependencies,
+            artifact_policy: _,
             config_settings,
             config_settings_package,
             python_version,

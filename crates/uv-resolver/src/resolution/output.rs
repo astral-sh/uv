@@ -10,18 +10,20 @@ use petgraph::{
 };
 use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
 
-use uv_configuration::{Constraints, Overrides};
+use uv_configuration::{ArtifactPolicy, BuildOptions, Constraints, Overrides};
 use uv_distribution::Metadata;
 use uv_distribution_types::{
     BuiltDist, Dist, DistributionId, Edge, Identifier, IndexUrl, Name, Node, Requirement,
-    RequiresPython, ResolutionDiagnostic, ResolvedDist, SourceDist,
+    RequiresPython, ResolutionDiagnostic, ResolvedDist, SourceDist, implied_markers,
 };
 use uv_git::GitResolver;
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::{Version, VersionSpecifier};
 use uv_pep508::{MarkerEnvironment, MarkerTree, MarkerTreeKind};
 use uv_platform_tags::Tags;
-use uv_pypi_types::{Conflicts, HashDigests, ParsedUrlError, VerbatimParsedUrl, Yanked};
+use uv_pypi_types::{
+    Conflicts, HashDigests, ParsedUrlError, SupportedEnvironments, VerbatimParsedUrl, Yanked,
+};
 
 use crate::graph_ops::{marker_reachability, simplify_conflict_markers};
 use crate::pins::FilePins;
@@ -620,11 +622,97 @@ impl ResolverOutput {
             .map(|(_, distribution)| &distribution.dist)
     }
 
-    /// Restrict registry hashes to the artifacts selected for the target [`Tags`].
+    /// Return packages whose source distributions should be excluded by [`ArtifactPolicy`].
     ///
-    /// Compatible wheels retain wheel hashes; selected source distributions retain source-archive
-    /// hashes. Existing hashes are preserved when index metadata does not provide artifact hashes.
-    pub fn retain_selected_distribution_hashes(&mut self, tags: &Tags) {
+    /// Universal resolutions approximate wheel coverage using the same marker-based heuristic as
+    /// required environments. A package keeps its source distribution when any selected version
+    /// still needs it.
+    pub fn excluded_source_packages(
+        &self,
+        policy: ArtifactPolicy,
+        tags: Option<&Tags>,
+        environments: &SupportedEnvironments,
+        build_options: &BuildOptions,
+    ) -> FxHashSet<PackageName> {
+        if policy == ArtifactPolicy::All {
+            return FxHashSet::default();
+        }
+
+        let mut include_sources = FxHashMap::default();
+        for (_, distribution) in self.base_dists() {
+            let ResolvedDist::Installable { dist, .. } = &distribution.dist else {
+                continue;
+            };
+
+            let (wheels, has_source) = match dist.as_ref() {
+                Dist::Built(BuiltDist::Registry(dist)) => {
+                    (dist.wheels.as_slice(), dist.sdist.is_some())
+                }
+                Dist::Source(SourceDist::Registry(dist)) => (dist.wheels.as_slice(), true),
+                Dist::Built(_) => continue,
+                Dist::Source(_) => (&[][..], true),
+            };
+            if !has_source {
+                continue;
+            }
+
+            let include_source = match policy {
+                ArtifactPolicy::All => true,
+                ArtifactPolicy::WheelsOnly => false,
+                ArtifactPolicy::SourceOnly => wheels.is_empty(),
+                ArtifactPolicy::NecessarySdists => {
+                    if build_options.no_binary_package(&distribution.name) {
+                        true
+                    } else if let Some(tags) = tags {
+                        !wheels
+                            .iter()
+                            .any(|wheel| wheel.filename.is_compatible(tags))
+                    } else {
+                        let wheel_coverage =
+                            wheels.iter().fold(MarkerTree::FALSE, |marker, wheel| {
+                                marker.or(implied_markers(&wheel.filename))
+                            });
+                        let package_marker = distribution
+                            .marker
+                            .pep508()
+                            .and(self.requires_python.to_marker_tree());
+
+                        if environments.is_empty() {
+                            !package_marker.and(wheel_coverage.negate()).is_false()
+                        } else {
+                            environments
+                                .iter()
+                                .copied()
+                                .map(|environment| environment.and(package_marker))
+                                .filter(|environment| !environment.is_false())
+                                .any(|environment| wheel_coverage.is_disjoint(environment))
+                        }
+                    }
+                }
+            };
+
+            include_sources
+                .entry(distribution.name.clone())
+                .and_modify(|existing| *existing |= include_source)
+                .or_insert(include_source);
+        }
+
+        include_sources
+            .into_iter()
+            .filter_map(|(name, include_source)| (!include_source).then_some(name))
+            .collect()
+    }
+
+    /// Restrict registry hashes to wheels and source archives retained by the artifact policy.
+    ///
+    /// Concrete resolutions retain only compatible wheel hashes. Existing hashes are preserved
+    /// when index metadata does not provide hashes for the retained artifacts.
+    pub fn retain_distribution_artifact_hashes(
+        &mut self,
+        tags: Option<&Tags>,
+        excluded_sources: &FxHashSet<PackageName>,
+        build_options: &BuildOptions,
+    ) {
         for node in self.graph.node_weights_mut() {
             let ResolutionGraphNode::Dist(distribution) = node else {
                 continue;
@@ -633,16 +721,28 @@ impl ResolverOutput {
                 continue;
             };
 
-            let mut hashes = match dist.as_ref() {
-                Dist::Built(BuiltDist::Registry(wheels)) => wheels
-                    .wheels
-                    .iter()
-                    .filter(|wheel| wheel.filename.is_compatible(tags))
-                    .flat_map(|wheel| wheel.file.hashes.iter().cloned())
-                    .collect::<Vec<_>>(),
-                Dist::Source(SourceDist::Registry(source)) => source.file.hashes.to_vec(),
+            let (wheels, source) = match dist.as_ref() {
+                Dist::Built(BuiltDist::Registry(dist)) => {
+                    (dist.wheels.as_slice(), dist.sdist.as_ref())
+                }
+                Dist::Source(SourceDist::Registry(source)) => {
+                    (source.wheels.as_slice(), Some(source))
+                }
                 _ => continue,
             };
+
+            let mut hashes = wheels
+                .iter()
+                .filter(|_| !build_options.no_binary_package(&distribution.name))
+                .filter(|wheel| tags.is_none_or(|tags| wheel.filename.is_compatible(tags)))
+                .flat_map(|wheel| wheel.file.hashes.iter().cloned())
+                .collect::<Vec<_>>();
+            if !excluded_sources.contains(&distribution.name)
+                && !build_options.no_build_package(&distribution.name)
+                && let Some(source) = source
+            {
+                hashes.extend(source.file.hashes.iter().cloned());
+            }
 
             if !hashes.is_empty() {
                 hashes.sort_unstable();

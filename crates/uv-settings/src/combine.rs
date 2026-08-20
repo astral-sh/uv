@@ -4,8 +4,8 @@ use std::{collections::BTreeMap, num::NonZeroUsize};
 use url::Url;
 
 use uv_configuration::{
-    BuildIsolation, ExportFormat, IndexStrategy, KeyringProviderType, NoSources, ProxyUrl,
-    Reinstall, RequiredVersion, TargetTriple, TrustedPublishing, Upgrade,
+    ArtifactPolicy, BuildIsolation, ExportFormat, IndexStrategy, KeyringProviderType, NoSources,
+    ProxyUrl, Reinstall, RequiredVersion, TargetTriple, TrustedPublishing, Upgrade,
 };
 use uv_distribution_types::{
     ConfigSettings, ExtraBuildVariables, Index, IndexUrl, PackageConfigSettings, PipExtraIndex,
@@ -93,6 +93,7 @@ macro_rules! impl_combine_or {
 
 impl_combine_or!(AddBoundsKind);
 impl_combine_or!(AnnotationStyle);
+impl_combine_or!(ArtifactPolicy);
 impl_combine_or!(ExcludeNewer);
 impl_combine_or!(ExcludeNewerOverride);
 impl_combine_or!(ExcludeNewerValue);

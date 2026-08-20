@@ -1,3 +1,4 @@
+pub use artifact_policy::*;
 pub use authentication::*;
 pub use build_options::*;
 pub use concurrency::*;
@@ -25,6 +26,7 @@ pub use trusted_host::*;
 pub use trusted_publishing::*;
 pub use vcs::*;
 
+mod artifact_policy;
 mod authentication;
 mod build_options;
 mod concurrency;

@@ -14,16 +14,18 @@ use tracing::debug;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
-    BuildIsolation, BuildOptions, Concurrency, Constraints, ExcludeDependency, ExtrasSpecification,
-    IndexStrategy, NoBinary, NoBuild, NoSources, Override, PipCompileFormat, Reinstall, Upgrade,
+    ArtifactPolicy, BuildIsolation, BuildOptions, Concurrency, Constraints, ExcludeDependency,
+    ExtrasSpecification, IndexStrategy, NoBinary, NoBuild, NoSources, Override, PipCompileFormat,
+    Reinstall, Upgrade,
 };
 use uv_configuration::{KeyringProviderType, TargetTriple};
 use uv_dispatch::{BuildDispatch, SharedState};
 use uv_distribution::{DistributionDatabase, LoweredExtraBuildDependencies};
 use uv_distribution_types::{
-    ConfigSettings, DependencyMetadata, Dist, ExtraBuildVariables, HashGeneration, Identifier,
-    Index, IndexLocations, Name, NameRequirementSpecification, Origin, PackageConfigSettings,
-    Requirement, RequiresPython, ResolvedDist, UnresolvedRequirementSpecification, Verbatim,
+    BuiltDist, ConfigSettings, DependencyMetadata, Dist, ExtraBuildVariables, HashGeneration,
+    Identifier, Index, IndexLocations, Name, NameRequirementSpecification, Origin,
+    PackageConfigSettings, Requirement, RequiresPython, ResolvedDist, SourceDist,
+    UnresolvedRequirementSpecification, Verbatim,
 };
 use uv_fs::{CWD, Simplified};
 use uv_git::ResolvedRepositoryReference;
@@ -84,6 +86,7 @@ pub(crate) async fn pip_compile(
     upgrade: Upgrade,
     generate_hashes: bool,
     include_build_dependencies: bool,
+    artifact_policy: Option<ArtifactPolicy>,
     no_emit_packages: Vec<PackageName>,
     include_extras: bool,
     include_markers: bool,
@@ -163,6 +166,17 @@ pub(crate) async fn pip_compile(
             PreviewFeature::IncludeBuildDependencies
         );
     }
+    if artifact_policy.is_some() && !preview.is_enabled(PreviewFeature::IncludeBuildDependencies) {
+        warn_user!(
+            "The `--artifact-policy` option is experimental and may change without warning. Pass `--preview-features {}` to disable this warning.",
+            PreviewFeature::IncludeBuildDependencies
+        );
+    }
+    let artifact_policy = artifact_policy.unwrap_or(if include_build_dependencies {
+        ArtifactPolicy::NecessarySdists
+    } else {
+        ArtifactPolicy::All
+    });
 
     // If the user is exporting to PEP 751, ensure the filename matches the specification.
     if matches!(format, PipCompileFormat::PylockToml) {
@@ -578,7 +592,7 @@ pub(crate) async fn pip_compile(
         .index_strategy(index_strategy)
         .torch_backend(torch_backend)
         .build_options(build_options.clone())
-        .artifact_environments(artifact_environments)
+        .artifact_environments(artifact_environments.clone())
         .build();
 
     // Save the original inputs so discovered build requirements can be resolved together with the
@@ -665,19 +679,35 @@ pub(crate) async fn pip_compile(
         let mut seen_requirements = FxHashSet::default();
 
         loop {
+            let excluded_sources = resolution.excluded_source_packages(
+                artifact_policy,
+                tags.as_deref(),
+                &artifact_environments,
+                &build_options,
+            );
             for distribution in resolution.distributions() {
                 let ResolvedDist::Installable { dist, .. } = distribution else {
                     continue;
                 };
-                let Dist::Source(source) = dist.as_ref() else {
+                if excluded_sources.contains(dist.name()) {
                     continue;
+                }
+                let source = match dist.as_ref() {
+                    Dist::Source(source) => source.clone(),
+                    Dist::Built(BuiltDist::Registry(dist)) => {
+                        let Some(source) = dist.sdist.as_ref() else {
+                            continue;
+                        };
+                        SourceDist::Registry(source.clone())
+                    }
+                    Dist::Built(_) => continue,
                 };
                 if !seen_distributions.insert(source.distribution_id()) {
                     continue;
                 }
 
                 database
-                    .resolve_build_requirements(source, hasher.get(source))
+                    .resolve_build_requirements(&source, hasher.get(&source))
                     .await?;
             }
 
@@ -739,10 +769,37 @@ pub(crate) async fn pip_compile(
             // direct requirements in the next pass.
             build_dispatch.take_build_requirements().await;
         }
+    }
 
-        if generate_hashes && let Some(tags) = tags.as_deref() {
-            resolution.retain_selected_distribution_hashes(tags);
+    let excluded_sources = resolution.excluded_source_packages(
+        artifact_policy,
+        tags.as_deref(),
+        &artifact_environments,
+        &build_options,
+    );
+    for distribution in resolution.distributions() {
+        let ResolvedDist::Installable { dist, .. } = distribution else {
+            continue;
+        };
+        let Dist::Source(source) = dist.as_ref() else {
+            continue;
+        };
+        if excluded_sources.contains(dist.name())
+            && (tags.is_some()
+                || !matches!(source, SourceDist::Registry(source) if !source.wheels.is_empty()))
+        {
+            return Err(anyhow!(
+                "The selected source distribution for `{}` is excluded by the artifact policy",
+                dist.name()
+            ));
         }
+    }
+    if generate_hashes && artifact_policy != ArtifactPolicy::All {
+        resolution.retain_distribution_artifact_hashes(
+            tags.as_deref(),
+            &excluded_sources,
+            &build_options,
+        );
     }
 
     // Write the resolved dependencies to the output channel.
@@ -896,23 +953,12 @@ pub(crate) async fn pip_compile(
                 &*CWD
             };
 
-            // Do not add source fallbacks for packages whose selected artifact is a wheel.
-            let selected_build_options = include_build_dependencies.then(|| {
-                let wheel_packages = resolution
-                    .distributions()
-                    .filter_map(|distribution| {
-                        let ResolvedDist::Installable { dist, .. } = distribution else {
-                            return None;
-                        };
-                        let Dist::Built(dist) = dist.as_ref() else {
-                            return None;
-                        };
-                        Some(dist.name().clone())
-                    })
-                    .collect();
-                build_options
-                    .clone()
-                    .combine(NoBinary::None, NoBuild::Packages(wheel_packages))
+            // Do not add source fallbacks excluded by the selected artifact policy.
+            let selected_build_options = (!excluded_sources.is_empty()).then(|| {
+                build_options.clone().combine(
+                    NoBinary::None,
+                    NoBuild::Packages(excluded_sources.into_iter().collect()),
+                )
             });
 
             // Convert the resolution to a `pylock.toml` file.
