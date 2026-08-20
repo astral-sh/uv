@@ -1667,7 +1667,7 @@ impl<'lock> ExpectedPackageDependencies<'lock> {
             .source
             .version_specifiers()
             .zip(package.id.version.as_ref())
-            // Dynamic workspace packages intentionally omit their locked version.
+            // Projects with dynamic version omit this check.
             .is_none_or(|(specifiers, version)| specifiers.contains(version));
 
         Ok((!source_marker.is_false() && version_matches).then_some(source_marker))
