@@ -2033,8 +2033,11 @@ impl<'lock> ExpectedPackageDependencies<'lock> {
         payload_marker
     }
 
-    /// Compare dependency edges in their reachable PEP 508 environment and conflict world.
-    fn comparable_dependencies(
+    /// Normalize reachable dependency edges for semantic comparison.
+    ///
+    /// Returns edges keyed by package and requested extras, combining their markers, forbidden
+    /// conflict alternatives, and original conflict markers.
+    fn normalize_dependency_edges(
         &self,
         dependencies: &[Dependency],
         context: DependencyContext<'_>,
@@ -2203,9 +2206,9 @@ impl<'lock> ExpectedPackageDependencies<'lock> {
             ),
         );
         let generated_comparable =
-            self.comparable_dependencies(generated, context, activation, conflicts);
+            self.normalize_dependency_edges(generated, context, activation, conflicts);
         let actual_comparable =
-            self.comparable_dependencies(actual, context, activation, conflicts);
+            self.normalize_dependency_edges(actual, context, activation, conflicts);
         if generated_comparable.len() != actual_comparable.len() {
             return false;
         }
