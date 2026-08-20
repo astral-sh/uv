@@ -1,5 +1,5 @@
 use std::env;
-use std::fmt::{Display, Formatter};
+use std::fmt::Display;
 use std::io::{self, Read};
 use std::path::{Path, PathBuf};
 
@@ -15,7 +15,7 @@ use uv_fs::Simplified;
 use uv_static::EnvVars;
 use uv_warnings::warn_user_once;
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 enum CertificateSource {
     CertFileArg(PathBuf),
     SslCertFile(PathBuf),
@@ -36,28 +36,6 @@ impl CertificateSource {
             Self::CertFileArg(path) | Self::SslCertFile(path) | Self::SslCertDir(path) => path,
         }
     }
-}
-
-#[derive(Debug, Clone)]
-struct DiagnosticCertificate(CertificateDer<'static>);
-
-impl DiagnosticCertificate {
-    fn parse(&self) -> Option<X509Certificate<'_>> {
-        match X509Certificate::from_der(self.0.as_ref()) {
-            Ok((_, certificate)) => Some(certificate),
-            Err(err) => {
-                debug!("Failed to parse certificate for improved validation message: {err:?}");
-                None
-            }
-        }
-    }
-}
-
-#[derive(Debug)]
-struct InvalidCertificateWarning {
-    source: CertificateSource,
-    certificate: DiagnosticCertificate,
-    reason: InvalidCertificateReason,
 }
 
 #[derive(Debug)]
@@ -103,16 +81,6 @@ impl InvalidCertificateReason {
     }
 }
 
-impl InvalidCertificateWarning {
-    fn new(source: CertificateSource, cert: &CertificateDer<'_>, error: WebPkiError) -> Self {
-        Self {
-            source,
-            certificate: DiagnosticCertificate(cert.clone().into_owned()),
-            reason: InvalidCertificateReason::from_webpki_error(error),
-        }
-    }
-}
-
 fn format_invalid_certificate_detail(
     reason: &InvalidCertificateReason,
     certificate: Option<&X509Certificate<'_>>,
@@ -129,15 +97,28 @@ fn format_invalid_certificate_detail(
     }
 }
 
-impl Display for InvalidCertificateWarning {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+fn invalid_certificate_warning<'a>(
+    source: &'a CertificateSource,
+    certificate: &'a CertificateDer<'_>,
+    error: WebPkiError,
+) -> impl Display + 'a {
+    let reason = InvalidCertificateReason::from_webpki_error(error);
+    let parsed_certificate = match X509Certificate::from_der(certificate.as_ref()) {
+        Ok((_, certificate)) => Some(certificate),
+        Err(err) => {
+            debug!("Failed to parse certificate for improved validation message: {err:?}");
+            None
+        }
+    };
+
+    std::fmt::from_fn(move |f| {
         write!(
             f,
             "certificate in `{}` (from `{}`) ",
-            self.source.path().simplified_display(),
-            self.source.description()
+            source.path().simplified_display(),
+            source.description()
         )?;
-        match &self.reason {
+        match &reason {
             InvalidCertificateReason::UnsupportedCriticalExtension => {
                 write!(f, "uses an unsupported critical extension")?;
             }
@@ -146,14 +127,13 @@ impl Display for InvalidCertificateWarning {
             }
         }
 
-        let parsed_certificate = self.certificate.parse();
         if let Some(certificate) = parsed_certificate.as_ref() {
             let subject = certificate.subject();
             if subject.iter_attributes().next().is_some() {
                 // Avoid rendering empty subject DNs.
                 write!(f, " on certificate `{subject}`")?;
             }
-            if let InvalidCertificateReason::UnsupportedCriticalExtension = &self.reason {
+            if let InvalidCertificateReason::UnsupportedCriticalExtension = &reason {
                 let critical_extensions = certificate
                     .iter_extensions()
                     .filter(|extension| extension.critical)
@@ -175,10 +155,10 @@ impl Display for InvalidCertificateWarning {
         }
 
         let detailed_reason =
-            format_invalid_certificate_detail(&self.reason, parsed_certificate.as_ref())
-                .or_else(|| self.reason.message().map(str::to_owned))
+            format_invalid_certificate_detail(&reason, parsed_certificate.as_ref())
+                .or_else(|| reason.message().map(str::to_owned))
                 .or_else(|| {
-                    if let InvalidCertificateReason::Other(error) = &self.reason {
+                    if let InvalidCertificateReason::Other(error) = &reason {
                         Some(format!("{error:?}"))
                     } else {
                         None
@@ -189,7 +169,7 @@ impl Display for InvalidCertificateWarning {
         }
 
         Ok(())
-    }
+    })
 }
 
 /// A collection of TLS certificates in DER form.
@@ -414,8 +394,10 @@ impl Certificates {
     fn filter_invalid(mut self, source: &CertificateSource) -> Self {
         self.0.retain(|cert| {
             if let Err(error) = anchor_from_trusted_cert(cert) {
-                let warning = InvalidCertificateWarning::new((*source).clone(), cert, error);
-                warn!("Ignoring invalid certificate: {warning}");
+                warn!(
+                    "Ignoring invalid certificate: {}",
+                    invalid_certificate_warning(source, cert, error)
+                );
                 return false;
             }
 
