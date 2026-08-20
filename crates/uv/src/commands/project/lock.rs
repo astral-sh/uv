@@ -39,8 +39,7 @@ use uv_resolver::{
 use uv_scripts::Pep723Script;
 use uv_settings::PythonInstallMirrors;
 use uv_types::{
-    BuildContext, BuildIsolation, EmptyInstalledPackages, HashStrategy, HashVerification,
-    SourceTreeEditablePolicy,
+    BuildContext, BuildIsolation, EmptyInstalledPackages, HashStrategy, SourceTreeEditablePolicy,
 };
 use uv_warnings::{warn_user, warn_user_once};
 use uv_workspace::{
@@ -839,29 +838,23 @@ async fn do_lock(
         .build_options(build_options.clone())
         .artifact_environments(artifact_environments.clone())
         .build();
-    let locked_verification = if let Some(existing_lock) = existing_lock.as_ref() {
-        let hashes = existing_lock.resolution_hashes(target.install_path())?;
-        if hashes.is_empty() {
-            HashVerification::None
-        } else {
-            HashVerification::IfPresent(Arc::new(hashes))
-        }
+    // Checking an existing lockfile may build metadata and install build dependencies. Verify any
+    // artifacts recorded in that lockfile, including for an ordinary unlocked command.
+    let locked_build_hasher = if let Some(existing_lock) = existing_lock.as_ref() {
+        existing_lock.hash_strategy(target.install_path())?
     } else {
-        HashVerification::None
+        HashStrategy::default()
     };
-    let hasher = HashStrategy::generate(HashGeneration::Url).with_verification(
-        if matches!(mode, LockMode::Locked(..)) {
-            locked_verification.clone()
-        } else {
-            HashVerification::None
-        },
-    );
-
-    // Metadata validation can execute build dependencies even when the command is not locked.
-    // Keep the old lock's hashes during validation, but preserve unlocked update behavior when
-    // falling back to a fresh resolution.
-    let validation_build_hasher = HashStrategy::default().with_verification(locked_verification);
-    let build_hasher = HashStrategy::default().with_verification(hasher.verification().clone());
+    // A fresh resolution retains those hashes under `--locked`, but an explicitly unlocked update
+    // must be able to replace them. Build dependencies follow the same choice without generating
+    // hashes for artifacts absent from the lockfile.
+    let resolution_build_hasher = if matches!(mode, LockMode::Locked(..)) {
+        locked_build_hasher.clone()
+    } else {
+        HashStrategy::default()
+    };
+    let hasher = HashStrategy::generate(HashGeneration::Url)
+        .with_verification(resolution_build_hasher.verification().clone());
 
     // TODO(charlie): These are all default values. We should consider whether we want to make them
     // optional on the downstream APIs.
@@ -908,7 +901,9 @@ async fn do_lock(
     // Convert to the `Constraints` format.
     let dispatch_constraints = Constraints::from_requirements(build_constraints.iter().cloned());
 
-    // Create separate build contexts for existing-lock validation and fresh resolution.
+    // Create at most two build contexts: one while checking the existing lockfile, and another
+    // only if a fresh resolution is needed. They may enforce different hashes, so each gets a
+    // fresh in-memory index and in-flight cache.
     let make_build_dispatch = |build_hasher| {
         BuildDispatch::new(
             &client,
@@ -939,7 +934,7 @@ async fn do_lock(
 
     // If any of the resolution-determining settings changed, invalidate the lock.
     let existing_lock = if let Some(existing_lock) = existing_lock {
-        let validation_build_dispatch = make_build_dispatch(&validation_build_hasher);
+        let validation_build_dispatch = make_build_dispatch(&locked_build_hasher);
         let database = DistributionDatabase::new(
             &client,
             &validation_build_dispatch,
@@ -1011,7 +1006,7 @@ async fn do_lock(
         // The lockfile did not contain enough information to obtain a resolution, fallback
         // to a fresh resolve.
         _ => {
-            let build_dispatch = make_build_dispatch(&build_hasher);
+            let build_dispatch = make_build_dispatch(&resolution_build_hasher);
             let database = DistributionDatabase::new(
                 &client,
                 &build_dispatch,
