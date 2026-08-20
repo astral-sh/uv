@@ -211,6 +211,7 @@ pub(crate) struct SourceDistributionBuilder<'a, T: BuildContext> {
     build_context: &'a T,
     build_stack: Option<&'a BuildStack>,
     reporter: Option<Arc<dyn Reporter>>,
+    resolve_build_requirements: bool,
 }
 
 /// The name of the file that contains the revision ID for a remote distribution, encoded via `MsgPack`.
@@ -235,6 +236,16 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             build_context,
             build_stack: None,
             reporter: None,
+            resolve_build_requirements: false,
+        }
+    }
+
+    /// Resolve the build environment even when static or cached metadata is available.
+    #[must_use]
+    pub(crate) fn with_build_requirements(self) -> Self {
+        Self {
+            resolve_build_requirements: true,
+            ..self
         }
     }
 
@@ -792,6 +803,15 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         let dynamic =
             match StaticMetadata::read(source, source_dist_entry.path(), subdirectory).await? {
                 StaticMetadata::Some(metadata) => {
+                    if self.resolve_build_requirements {
+                        self.setup_build_environment(
+                            source,
+                            source_dist_entry.path(),
+                            subdirectory,
+                            NoSources::None,
+                        )
+                        .await?;
+                    }
                     return Ok(ArchiveMetadata {
                         metadata: Metadata::from_metadata23(metadata),
                         hashes: revision.into_hashes(),
@@ -807,6 +827,15 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             Ok(Some(metadata)) => {
                 if metadata.matches(source.name(), source.version()) {
                     debug!("Using cached metadata for: {source}");
+                    if self.resolve_build_requirements {
+                        self.setup_build_environment(
+                            source,
+                            source_dist_entry.path(),
+                            subdirectory,
+                            NoSources::None,
+                        )
+                        .await?;
+                    }
                     return Ok(ArchiveMetadata {
                         metadata: Metadata::from_metadata23(metadata.into()),
                         hashes: revision.into_hashes(),
@@ -1192,6 +1221,15 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         // If the metadata is static, return it.
         let dynamic = match StaticMetadata::read(source, source_entry.path(), None).await? {
             StaticMetadata::Some(metadata) => {
+                if self.resolve_build_requirements {
+                    self.setup_build_environment(
+                        source,
+                        source_entry.path(),
+                        None,
+                        NoSources::None,
+                    )
+                    .await?;
+                }
                 return Ok(ArchiveMetadata {
                     metadata: Metadata::from_metadata23(metadata),
                     hashes: revision.into_hashes(),
@@ -1207,6 +1245,15 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             Ok(Some(metadata)) => {
                 if metadata.matches(source.name(), source.version()) {
                     debug!("Using cached metadata for: {source}");
+                    if self.resolve_build_requirements {
+                        self.setup_build_environment(
+                            source,
+                            source_entry.path(),
+                            None,
+                            NoSources::None,
+                        )
+                        .await?;
+                    }
                     return Ok(ArchiveMetadata {
                         metadata: Metadata::from_metadata23(metadata.into()),
                         hashes: revision.into_hashes(),
@@ -1500,6 +1547,15 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         // If the metadata is static, return it.
         let dynamic = match StaticMetadata::read(source, resource.install_path, None).await? {
             StaticMetadata::Some(metadata) => {
+                if self.resolve_build_requirements {
+                    self.setup_build_environment(
+                        source,
+                        resource.install_path,
+                        None,
+                        self.build_context.sources().clone(),
+                    )
+                    .await?;
+                }
                 return Ok(ArchiveMetadata::from(
                     Metadata::from_workspace(
                         metadata,
@@ -1546,6 +1602,15 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             Ok(Some(metadata)) => {
                 if metadata.matches(source.name(), source.version()) {
                     debug!("Using cached metadata for: {source}");
+                    if self.resolve_build_requirements {
+                        self.setup_build_environment(
+                            source,
+                            resource.install_path,
+                            None,
+                            self.build_context.sources().clone(),
+                        )
+                        .await?;
+                    }
 
                     // If necessary, mark the metadata as dynamic.
                     let metadata = if dynamic {
@@ -1999,6 +2064,15 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         // If the metadata is static, return it.
         let dynamic = match StaticMetadata::read(source, source_entry.path(), None).await? {
             StaticMetadata::Some(metadata) => {
+                if self.resolve_build_requirements {
+                    self.setup_build_environment(
+                        source,
+                        source_entry.path(),
+                        None,
+                        NoSources::None,
+                    )
+                    .await?;
+                }
                 return Ok(ArchiveMetadata {
                     metadata: Metadata::from_metadata23(metadata),
                     hashes: revision.into_hashes(),
@@ -2014,6 +2088,15 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             Ok(Some(metadata)) => {
                 if metadata.matches(source.name(), source.version()) {
                     debug!("Using cached metadata for: {source}");
+                    if self.resolve_build_requirements {
+                        self.setup_build_environment(
+                            source,
+                            source_entry.path(),
+                            None,
+                            NoSources::None,
+                        )
+                        .await?;
+                    }
                     return Ok(ArchiveMetadata {
                         metadata: Metadata::from_metadata23(metadata.into()),
                         hashes: revision.into_hashes(),
@@ -2289,10 +2372,12 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                                     debug!(
                                         "Found static metadata via GitHub fast path for: {source}"
                                     );
-                                    return Ok(ArchiveMetadata {
-                                        metadata: Metadata::from_metadata23(metadata),
-                                        hashes: HashDigests::empty(),
-                                    });
+                                    if !self.resolve_build_requirements {
+                                        return Ok(ArchiveMetadata {
+                                            metadata: Metadata::from_metadata23(metadata),
+                                            hashes: HashDigests::empty(),
+                                        });
+                                    }
                                 }
                                 Err(err) => {
                                     debug!(
@@ -2358,6 +2443,15 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         let dynamic =
             match StaticMetadata::read(source, fetch.path(), resource.subdirectory).await? {
                 StaticMetadata::Some(metadata) => {
+                    if self.resolve_build_requirements {
+                        self.setup_build_environment(
+                            source,
+                            fetch.path(),
+                            resource.subdirectory,
+                            self.build_context.sources().clone(),
+                        )
+                        .await?;
+                    }
                     return Ok(ArchiveMetadata::from(
                         Metadata::from_workspace(
                             metadata,
@@ -2391,6 +2485,15 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 Ok(Some(metadata)) => {
                     if metadata.matches(source.name(), source.version()) {
                         debug!("Using cached metadata for: {source}");
+                        if self.resolve_build_requirements {
+                            self.setup_build_environment(
+                                source,
+                                fetch.path(),
+                                resource.subdirectory,
+                                self.build_context.sources().clone(),
+                            )
+                            .await?;
+                        }
 
                         let git_member = GitWorkspaceMember {
                             fetch_root: fetch.path(),
@@ -3151,6 +3254,47 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         Ok((disk_filename, filename, metadata))
     }
 
+    /// Set up a source distribution's complete build environment, including backend hooks.
+    async fn setup_build_environment(
+        &self,
+        source: &BuildableSource<'_>,
+        source_root: &Path,
+        subdirectory: Option<&Path>,
+        no_sources: NoSources,
+    ) -> Result<T::SourceDistBuilder, Error> {
+        let build_kind = if source.is_editable() {
+            BuildKind::Editable
+        } else {
+            BuildKind::Wheel
+        };
+        let install_path = if let Some(subdirectory) = subdirectory {
+            source_root.join(subdirectory)
+        } else {
+            source_root.to_path_buf()
+        };
+        let stop_discovery_at = Self::stop_discovery_at(source, source_root);
+
+        self.build_context
+            .setup_build(
+                source_root,
+                subdirectory,
+                &install_path,
+                stop_discovery_at,
+                Some(&source.to_string()),
+                source.as_dist(),
+                &no_sources,
+                build_kind,
+                if uv_flags::contains(uv_flags::EnvironmentFlags::HIDE_BUILD_OUTPUT) {
+                    BuildOutput::Quiet
+                } else {
+                    BuildOutput::Debug
+                },
+                self.build_stack.cloned().unwrap_or_default(),
+            )
+            .await
+            .map_err(|err| Error::Build(err.into()))
+    }
+
     /// Build the metadata for a source distribution.
     #[instrument(skip_all, fields(dist = %source))]
     async fn build_metadata(
@@ -3221,35 +3365,10 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             BuildKind::Wheel
         };
 
-        let install_path = if let Some(subdirectory) = subdirectory {
-            source_root.join(subdirectory)
-        } else {
-            source_root.to_path_buf()
-        };
-
-        let stop_discovery_at = Self::stop_discovery_at(source, source_root);
-
         // Set up the builder.
         let mut builder = self
-            .build_context
-            .setup_build(
-                source_root,
-                subdirectory,
-                &install_path,
-                stop_discovery_at,
-                Some(&source.to_string()),
-                source.as_dist(),
-                &no_sources,
-                build_kind,
-                if uv_flags::contains(uv_flags::EnvironmentFlags::HIDE_BUILD_OUTPUT) {
-                    BuildOutput::Quiet
-                } else {
-                    BuildOutput::Debug
-                },
-                self.build_stack.cloned().unwrap_or_default(),
-            )
-            .await
-            .map_err(|err| Error::Build(err.into()))?;
+            .setup_build_environment(source, source_root, subdirectory, no_sources.clone())
+            .await?;
 
         // Build the metadata.
         let dist_info = builder.metadata().await.map_err(Error::Build)?;

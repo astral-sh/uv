@@ -10,6 +10,7 @@ use futures::FutureExt;
 use itertools::Itertools;
 use rustc_hash::FxHashMap;
 use thiserror::Error;
+use tokio::sync::Mutex;
 use tracing::{debug, instrument, trace};
 
 use uv_build_backend::check_direct_build;
@@ -132,6 +133,8 @@ pub struct BuildDispatch<'a> {
     workspace_cache: WorkspaceCache,
     concurrency: Concurrency,
     preview: Preview,
+    capture_build_requirements: bool,
+    build_requirements: Mutex<Vec<Requirement>>,
 }
 
 impl<'a> BuildDispatch<'a> {
@@ -186,7 +189,21 @@ impl<'a> BuildDispatch<'a> {
             workspace_cache,
             concurrency,
             preview,
+            capture_build_requirements: false,
+            build_requirements: Mutex::new(Vec::new()),
         }
+    }
+
+    /// Capture requirements discovered while resolving isolated build environments.
+    #[must_use]
+    pub fn with_build_requirement_capture(mut self, capture: bool) -> Self {
+        self.capture_build_requirements = capture;
+        self
+    }
+
+    /// Return and clear the build requirements captured since the previous call.
+    pub async fn take_build_requirements(&self) -> Vec<Requirement> {
+        std::mem::take(&mut *self.build_requirements.lock().await)
     }
 
     /// Set the environment variables to be used when building a source distribution.
@@ -351,6 +368,17 @@ impl BuildContext for BuildDispatch<'_> {
                     .join(", ")
             )
         })?);
+        if self.capture_build_requirements {
+            let mut build_requirements = self.build_requirements.lock().await;
+            build_requirements.extend(requirements.iter().cloned());
+            build_requirements.extend(
+                resolution
+                    .distributions()
+                    .filter_map(|distribution| self.constraints.get(distribution.name()))
+                    .flatten()
+                    .cloned(),
+            );
+        }
         Ok(ResolvedRequirements::new(resolution, hasher))
     }
 
