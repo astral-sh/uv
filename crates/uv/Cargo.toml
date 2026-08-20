@@ -157,6 +157,9 @@ tokio-stream = { workspace = true }
 tokio-util = { workspace = true }
 wiremock = { workspace = true }
 
+[target.'cfg(target_os = "macos")'.dev-dependencies]
+nix = { workspace = true, features = ["fs"] }
+
 [target.'cfg(unix)'.dependencies]
 nix = { workspace = true }
 uv-unix = { workspace = true }
