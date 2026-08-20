@@ -92,7 +92,7 @@ pub(crate) fn resolve_pylock_toml(
     let hasher = if let Some(hash_checking) = hash_checking {
         HashStrategy::from_resolution(&resolution, hash_checking)?
     } else {
-        HashStrategy::None
+        HashStrategy::default()
     };
 
     Ok((resolution, hasher))

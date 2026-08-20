@@ -835,7 +835,7 @@ async fn do_lock(
         .build_options(build_options.clone())
         .artifact_environments(artifact_environments.clone())
         .build();
-    let hasher = HashStrategy::Generate(HashGeneration::Url);
+    let hasher = HashStrategy::generate(HashGeneration::Url);
 
     // TODO(charlie): These are all default values. We should consider whether we want to make them
     // optional on the downstream APIs.
