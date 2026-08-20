@@ -2154,6 +2154,17 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                             }
                         }
                     };
+                    // Filter out unreachable unsatisfiable requirements before they reach the
+                    // unsatisfiability check.
+                    let applicable_marker = requirement
+                        .marker
+                        .simplify_extras(slice::from_ref(&extra))
+                        .simplify_not_extras_with(|candidate| candidate != &extra);
+                    if python_marker.is_disjoint(applicable_marker)
+                        || !env.included_by_marker(applicable_marker)
+                    {
+                        continue;
+                    }
                     if name == Some(&requirement.name) {
                         // Add each transitively included extra.
                         queue.extend(
@@ -2163,10 +2174,10 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                 .cloned()
                                 .map(|extra| (extra, requirement.marker)),
                         );
-                    } else {
-                        // Add the requirements for that extra.
-                        requirements.push(Cow::Owned(requirement));
                     }
+
+                    // Retain the requirement, including any recursively reached self-constraint.
+                    requirements.push(Cow::Owned(requirement));
                 }
             }
 
@@ -2175,7 +2186,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             // transitively expanding `project[bar]`.
             let mut self_constraints = vec![];
             for req in &requirements {
-                if name == Some(&req.name) && !req.source.is_empty() {
+                if name == Some(&req.name) && !req.extras.is_empty() && !req.source.is_empty() {
                     self_constraints.push(Requirement {
                         name: req.name.clone(),
                         extras: Box::new([]),
