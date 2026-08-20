@@ -4964,38 +4964,32 @@ impl Source {
     }
 
     fn from_git_path_built_dist(git_dist: &GitPathBuiltDist) -> Self {
+        let path = git_dist.install_path.clone();
         Self::Git(
-            UrlString::from(locked_git_url(
-                &git_dist.git,
-                None,
-                Some(git_dist.install_path.as_path()),
-            )),
+            UrlString::from(locked_git_url(&git_dist.git, None, Some(&path))),
             GitSource {
                 kind: GitSourceKind::from(git_dist.git.reference().clone()),
                 precise: git_dist.git.precise().unwrap_or_else(|| {
                     panic!("Git distribution is missing a precise hash: {git_dist}")
                 }),
                 subdirectory: None,
-                path: Some(git_dist.install_path.clone()),
+                path: Some(path),
                 lfs: git_dist.git.lfs(),
             },
         )
     }
 
     fn from_git_path_source_dist(git_dist: &GitPathSourceDist) -> Self {
+        let path = git_dist.install_path.clone();
         Self::Git(
-            UrlString::from(locked_git_url(
-                &git_dist.git,
-                None,
-                Some(git_dist.install_path.as_path()),
-            )),
+            UrlString::from(locked_git_url(&git_dist.git, None, Some(&path))),
             GitSource {
                 kind: GitSourceKind::from(git_dist.git.reference().clone()),
                 precise: git_dist.git.precise().unwrap_or_else(|| {
                     panic!("Git distribution is missing a precise hash: {git_dist}")
                 }),
                 subdirectory: None,
-                path: Some(git_dist.install_path.clone()),
+                path: Some(path),
                 lfs: git_dist.git.lfs(),
             },
         )
