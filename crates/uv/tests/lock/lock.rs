@@ -20128,7 +20128,8 @@ fn lock_metadata_free_shared_static_metadata_direct_source() -> Result<()> {
     let pyproject = fs_err::read_to_string(pyproject_toml.path())?;
     pyproject_toml.write_str(&pyproject.replace(
         &format!(
-            "six = {{ url = \"{}\" }}\n",
+            r#"six = {{ url = "{}" }}
+"#,
             server.file_url("six-1.0.0-py3-none-any.whl")
         ),
         "",
