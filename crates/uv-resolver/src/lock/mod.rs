@@ -1679,7 +1679,10 @@ impl<'lock> ExpectedPackageDependencies<'lock> {
             // Projects with dynamic version omit this check.
             .is_none_or(|(specifiers, version)| specifiers.contains(version));
 
-        Ok((!source_marker.is_false() && version_matches).then_some(source_marker))
+        if source_marker.is_false() || !version_matches {
+            return Ok(None);
+        }
+        Ok(Some(source_marker))
     }
 
     /// Include recorded sections so removing their dependency edges invalidates the lock.
