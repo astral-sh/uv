@@ -128,7 +128,7 @@ pub enum OnlyBinarySpecifier {
 
 impl OnlyBinarySpecifier {
     /// Return the underlying package selector, if this is not a conditional selector.
-    pub fn into_package_specifier(self) -> Option<PackageNameSpecifier> {
+    pub(crate) fn into_package_specifier(self) -> Option<PackageNameSpecifier> {
         match self {
             Self::Package(specifier) => Some(specifier),
             Self::IfAvailable => None,

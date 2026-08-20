@@ -229,11 +229,6 @@ impl NoBuild {
         }
     }
 
-    /// Determine the build strategy to use for the given argument from the pip CLI.
-    pub fn from_pip_arg(no_build: PackageNameSpecifier) -> Self {
-        Self::from_pip_args(vec![no_build], false)
-    }
-
     /// Combine a set of [`NoBuild`] values.
     #[must_use]
     pub fn combine(self, other: Self) -> Self {
