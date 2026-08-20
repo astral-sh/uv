@@ -30,7 +30,7 @@ use uv_git::ResolvedRepositoryReference;
 use uv_install_wheel::LinkMode;
 use uv_normalize::PackageName;
 use uv_pep440::Version;
-use uv_preview::Preview;
+use uv_preview::{Preview, PreviewFeature};
 use uv_pypi_types::{Conflicts, SupportedEnvironments};
 use uv_python::{
     EnvironmentPreference, PythonDownloads, PythonEnvironment, PythonInstallation,
@@ -568,7 +568,7 @@ pub(crate) async fn pip_compile(
         .build();
 
     // Resolve the requirements.
-    let resolution = match operations::resolve(
+    let mut resolution = match operations::resolve(
         requirements,
         constraints,
         overrides,
@@ -607,6 +607,10 @@ pub(crate) async fn pip_compile(
                 .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
         }
     };
+
+    if generate_hashes && preview.is_enabled(PreviewFeature::ArtifactHashFiltering) {
+        resolution.retain_allowed_distribution_hashes(&build_options);
+    }
 
     // Write the resolved dependencies to the output channel.
     let mut writer = OutputWriter::new(!quiet || output_file.is_none(), output_file);
