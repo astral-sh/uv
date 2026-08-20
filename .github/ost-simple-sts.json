@@ -1,6 +1,12 @@
 {
   "version": 2,
   "repositories": {
+    "actionlint": {
+      "name": "astral-sh/actionlint",
+      "id": 1339782727,
+      "oidc_subject": "immutable",
+      "owner_id": 115962839
+    },
     "uv": {
       "name": "astral-sh/uv",
       "id": 699532645,
@@ -23,6 +29,14 @@
     "automations": 146796415
   },
   "rules": [
+    {
+      "caller": "actionlint",
+      "environment": "release",
+      "caller_workflow": "release.yml",
+      "on": ["workflow_dispatch"],
+      "permissions": { "contents": "write", "workflows": "write" },
+      "target": "actionlint"
+    },
     {
       "caller": "uv",
       "environment": "release",
