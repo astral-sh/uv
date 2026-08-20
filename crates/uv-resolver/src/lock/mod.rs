@@ -3801,11 +3801,6 @@ impl Lock {
             let actual = context.dependencies(package);
             if !complete || !expected.dependencies_match(&generated, actual, parent_marker, context)
             {
-                return Ok(mismatch(generated, actual));
-            }
-        }
-
-        Ok(SatisfiesResult::Satisfied)
                 return Ok(SatisfiesResult::MismatchedPackageDependencies(
                     &package.id.name,
                     package.id.version.as_ref(),
