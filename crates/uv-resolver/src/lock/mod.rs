@@ -2223,17 +2223,18 @@ impl<'lock> ExpectedPackageDependencies<'lock> {
                 activation,
                 generated_marker.or(*actual_marker).without_extras(),
             );
-            if !marker_is_unreachable(
+            let base_markers_match = marker_is_unreachable(
                 &self.lock.requires_python,
                 generated_marker
                     .without_extras()
                     .and(actual_marker.without_extras().negate()),
-            ) || !marker_is_unreachable(
+            ) && marker_is_unreachable(
                 &self.lock.requires_python,
                 actual_marker
                     .without_extras()
                     .and(generated_marker.without_extras().negate()),
-            ) {
+            );
+            if !base_markers_match {
                 return false;
             }
             let payload_markers_match = has_source_forks
@@ -2252,48 +2253,49 @@ impl<'lock> ExpectedPackageDependencies<'lock> {
                 return false;
             }
 
-            if !forbidden_conflict.is_false() {
-                let mut forbidden = UniversalMarker::from_combined(
-                    actual_conflict
-                        .and(*forbidden_conflict)
-                        .and(forbidden_environment),
-                );
-                if matches!(context, DependencyContext::Production) && actual_conflict.is_true() {
-                    let actual_raw_marker = actual
-                        .iter()
-                        .filter(|dependency| {
-                            &dependency.package_id == actual_id
-                                && &dependency.extra == actual_extras
-                        })
-                        .fold(MarkerTree::FALSE, |marker, dependency| {
-                            marker.or(dependency.complexified_marker.combined())
-                        });
-                    forbidden.and(UniversalMarker::from_combined(actual_raw_marker));
-                    forbidden.and(UniversalMarker::from_combined(generated_marker.negate()));
-                    forbidden.and(UniversalMarker::new(
-                        MarkerTree::TRUE,
-                        ConflictMarker::from_relevant_conflicts(&self.lock.conflicts, [forbidden]),
-                    ));
-                } else {
-                    forbidden.and(UniversalMarker::from_combined(
-                        actual_marker.and(generated_marker.negate()),
-                    ));
-                    forbidden.and(UniversalMarker::new(
-                        MarkerTree::TRUE,
-                        ConflictMarker::from_relevant_conflicts(
-                            &self.lock.conflicts,
-                            [
-                                forbidden,
-                                activation,
-                                UniversalMarker::from_combined(*generated_marker),
-                                UniversalMarker::from_combined(*actual_marker),
-                            ],
-                        ),
-                    ));
-                }
-                if !marker_is_unreachable(&self.lock.requires_python, forbidden.combined()) {
-                    return false;
-                }
+            if forbidden_conflict.is_false() {
+                continue;
+            }
+
+            let mut forbidden = UniversalMarker::from_combined(
+                actual_conflict
+                    .and(*forbidden_conflict)
+                    .and(forbidden_environment),
+            );
+            if matches!(context, DependencyContext::Production) && actual_conflict.is_true() {
+                let actual_raw_marker = actual
+                    .iter()
+                    .filter(|dependency| {
+                        &dependency.package_id == actual_id && &dependency.extra == actual_extras
+                    })
+                    .fold(MarkerTree::FALSE, |marker, dependency| {
+                        marker.or(dependency.complexified_marker.combined())
+                    });
+                forbidden.and(UniversalMarker::from_combined(actual_raw_marker));
+                forbidden.and(UniversalMarker::from_combined(generated_marker.negate()));
+                forbidden.and(UniversalMarker::new(
+                    MarkerTree::TRUE,
+                    ConflictMarker::from_relevant_conflicts(&self.lock.conflicts, [forbidden]),
+                ));
+            } else {
+                forbidden.and(UniversalMarker::from_combined(
+                    actual_marker.and(generated_marker.negate()),
+                ));
+                forbidden.and(UniversalMarker::new(
+                    MarkerTree::TRUE,
+                    ConflictMarker::from_relevant_conflicts(
+                        &self.lock.conflicts,
+                        [
+                            forbidden,
+                            activation,
+                            UniversalMarker::from_combined(*generated_marker),
+                            UniversalMarker::from_combined(*actual_marker),
+                        ],
+                    ),
+                ));
+            }
+            if !marker_is_unreachable(&self.lock.requires_python, forbidden.combined()) {
+                return false;
             }
         }
 
