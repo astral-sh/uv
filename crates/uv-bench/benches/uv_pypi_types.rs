@@ -3,7 +3,7 @@ use std::hint::black_box;
 use criterion::{
     BenchmarkId, Criterion, Throughput, criterion_group, criterion_main, measurement::WallTime,
 };
-use uv_pypi_types::{PypiSimpleDetail, PyxSimpleDetail};
+use uv_pypi_types::PypiSimpleDetail;
 
 fn simple_api_fixture(file_count: usize) -> serde_json::Value {
     let files = (0..file_count)
@@ -51,8 +51,6 @@ fn deserialize_simple_api(criterion: &mut Criterion<WallTime>) {
     for file_count in [32, 4096] {
         let fixture = simple_api_fixture(file_count);
         let json = serde_json::to_vec(&fixture).expect("benchmark input should serialize");
-        let messagepack =
-            rmp_serde::to_vec_named(&fixture).expect("benchmark input should serialize");
 
         group.throughput(Throughput::Bytes(json.len() as u64));
 
@@ -62,30 +60,6 @@ fn deserialize_simple_api(criterion: &mut Criterion<WallTime>) {
             |benchmark, json| {
                 benchmark.iter(|| {
                     serde_json::from_slice::<PypiSimpleDetail>(black_box(json))
-                        .expect("benchmark input should be valid")
-                });
-            },
-        );
-
-        group.bench_with_input(
-            BenchmarkId::new("pyx_json", file_count),
-            &json,
-            |benchmark, json| {
-                benchmark.iter(|| {
-                    serde_json::from_slice::<PyxSimpleDetail>(black_box(json))
-                        .expect("benchmark input should be valid")
-                });
-            },
-        );
-
-        group.throughput(Throughput::Bytes(messagepack.len() as u64));
-
-        group.bench_with_input(
-            BenchmarkId::new("pyx_messagepack", file_count),
-            &messagepack,
-            |benchmark, messagepack| {
-                benchmark.iter(|| {
-                    rmp_serde::from_slice::<PyxSimpleDetail>(black_box(messagepack))
                         .expect("benchmark input should be valid")
                 });
             },
