@@ -33,6 +33,8 @@ pub struct VerbatimUrl {
     /// Given value is a [`Pep508Url`] which contained variable references which were successfully
     /// expanded.
     expanded: bool,
+    /// Whether this URL should be represented by a relative path regardless of its input.
+    force_relative: bool,
 }
 
 impl Debug for VerbatimUrl {
@@ -55,6 +57,7 @@ impl Debug for VerbatimUrl {
             .field("url", &self.url)
             .field("given", &given)
             .field("expanded", &self.expanded)
+            .field("force_relative", &self.force_relative)
             .finish()
     }
 }
@@ -84,6 +87,7 @@ impl VerbatimUrl {
             url,
             given: None,
             expanded: false,
+            force_relative: false,
         }
     }
 
@@ -96,6 +100,7 @@ impl VerbatimUrl {
             url,
             given: None,
             expanded: false,
+            force_relative: false,
         })
     }
 
@@ -169,6 +174,7 @@ impl VerbatimUrl {
             url,
             given: None,
             expanded: false,
+            force_relative: false,
         })
     }
 
@@ -210,6 +216,7 @@ impl VerbatimUrl {
             url,
             given: None,
             expanded: false,
+            force_relative: false,
         })
     }
 
@@ -234,6 +241,7 @@ impl VerbatimUrl {
             url,
             given: None,
             expanded: false,
+            force_relative: false,
         })
     }
 
@@ -256,6 +264,22 @@ impl VerbatimUrl {
         }
     }
 
+    /// Set whether this URL should be represented by a relative path regardless of its input.
+    ///
+    /// When `false`, preserve the original input's path preference.
+    #[must_use]
+    pub fn with_force_relative(self, force_relative: bool) -> Self {
+        Self {
+            force_relative,
+            ..self
+        }
+    }
+
+    /// Return whether this URL is forced to prefer a relative path.
+    pub fn force_relative(&self) -> bool {
+        self.force_relative
+    }
+
     /// Return the original string as given by the user, if available.
     pub fn given(&self) -> Option<&str> {
         self.given.as_deref()
@@ -270,7 +294,7 @@ impl VerbatimUrl {
         let Some(given) = &self.given else {
             return true;
         };
-        if self.expanded {
+        if self.expanded || self.force_relative {
             return true;
         }
 
@@ -746,6 +770,18 @@ mod tests {
     use insta::assert_snapshot;
 
     use super::*;
+
+    #[test]
+    fn forced_relative_overrides_absolute_spelling() -> Result<(), VerbatimUrlError> {
+        let absolute: VerbatimUrl = "file:///path/to/distribution".parse()?;
+        let relative = absolute.clone().with_force_relative(true);
+
+        assert!(relative.prefers_relative());
+        assert_eq!(absolute, relative);
+        assert!(!relative.with_force_relative(false).prefers_relative());
+
+        Ok(())
+    }
 
     #[test]
     fn scheme() {
