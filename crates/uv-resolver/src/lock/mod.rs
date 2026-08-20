@@ -3756,14 +3756,6 @@ impl Lock {
             }
         }
 
-        let mismatch = |expected, actual| {
-            SatisfiesResult::MismatchedPackageDependencies(
-                &package.id.name,
-                package.id.version.as_ref(),
-                expected,
-                actual,
-            )
-        };
         for context in expected.contexts() {
             if let DependencyContext::Extra(extra) = context
                 && !expected.provides_extra.contains(extra)
