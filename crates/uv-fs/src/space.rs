@@ -28,8 +28,8 @@ pub enum PhysicalSpaceError {
     UnmeasurableFile(#[from] io::Error),
 }
 
-/// Return whether the current platform can identify individual files' physical storage.
-pub const fn supports_physical_space() -> bool {
+/// Return whether the current platform supports fine-grained space accounting.
+pub const fn supports_fine_grained_accounting() -> bool {
     cfg!(any(
         target_os = "linux",
         target_os = "macos",
