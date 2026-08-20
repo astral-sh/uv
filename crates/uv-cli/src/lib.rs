@@ -5339,7 +5339,7 @@ pub enum AuthCommand {
     ///
     /// Credentials are only stored in this directory when the plaintext backend is used, as
     /// opposed to the native backend, which uses the system keyring.
-    Dir(AuthDirArgs),
+    Dir,
     /// Act as a credential helper for external tools.
     ///
     /// Implements the Bazel credential helper protocol to provide credentials
@@ -6650,13 +6650,6 @@ pub struct AuthTokenArgs {
         env = EnvVars::UV_KEYRING_PROVIDER,
     )]
     pub keyring_provider: Option<KeyringProviderType>,
-}
-
-#[derive(Args)]
-pub struct AuthDirArgs {
-    /// The domain or URL of the service to lookup.
-    #[arg(value_hint = ValueHint::Url)]
-    pub service: Option<Service>,
 }
 
 #[derive(Args)]
