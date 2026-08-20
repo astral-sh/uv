@@ -6,7 +6,7 @@ use console::Term;
 use owo_colors::OwoColorize;
 use tokio::sync::Semaphore;
 use tracing::{debug, info, trace};
-use uv_auth::{Credentials, PyxTokenStore};
+use uv_auth::Credentials;
 use uv_cache::Cache;
 use uv_client::{
     AuthIntegration, BaseClient, BaseClientBuilder, RedirectPolicy, RegistryClientBuilder,
@@ -15,10 +15,9 @@ use uv_configuration::{KeyringProviderType, TrustedPublishing};
 use uv_distribution_filename::DistFilename;
 use uv_distribution_types::{IndexCapabilities, IndexLocations, IndexUrl};
 use uv_errors::{ErrorOptions, Hints, write_error_chain_with_options};
-use uv_preview::{Preview, PreviewFeature};
 use uv_publish::{
     CheckUrlClient, FormMetadata, PublishError, TrustedPublishResult, check_trusted_publishing,
-    group_files_for_publishing, upload, upload_two_phase,
+    group_files_for_publishing, upload,
 };
 use uv_redacted::DisplaySafeUrl;
 use uv_settings::EnvironmentOptions;
@@ -42,24 +41,12 @@ pub(crate) async fn publish(
     index_locations: IndexLocations,
     dry_run: bool,
     no_attestations: bool,
-    direct: bool,
-    preview: Preview,
     cache: &Cache,
     printer: Printer,
 ) -> Result<ExitStatus> {
     if client_builder.is_offline() {
         bail!("Unable to publish files in offline mode");
     }
-
-    if direct && !preview.is_enabled(PreviewFeature::DirectPublish) {
-        warn_user_once!(
-            "The `--direct` option is experimental and may change without warning. \
-            Pass `--preview-features {}` to disable this warning.",
-            PreviewFeature::DirectPublish
-        );
-    }
-
-    let token_store = PyxTokenStore::from_settings()?;
 
     let (publish_url, check_url) = if let Some(index_name) = index {
         // If the user provided an index by name, look it up.
@@ -91,14 +78,8 @@ pub(crate) async fn publish(
             .clone()
             .with_context(|| format!("Index is missing a publish URL: `{index_name}`"))?;
 
-        // pyx has the same behavior as PyPI where uploads of identical
-        // files + contents are idempotent, so we don't need to pre-check.
-        if token_store.is_known_url(&publish_url) {
-            (publish_url, None)
-        } else {
-            let check_url = index.url.clone();
-            (publish_url, Some(check_url))
-        }
+        let check_url = index.url.clone();
+        (publish_url, Some(check_url))
     } else {
         (publish_url, check_url)
     };
@@ -156,15 +137,6 @@ pub(crate) async fn publish(
         .auth_integration(AuthIntegration::NoAuthMiddleware)
         .client_name("oidc")
         .build()?;
-    // For S3 uploads, we roll our own retry loop, use upload timeouts, and no auth middleware.
-    let s3_client = client_builder
-        .clone()
-        .retries(0)
-        .auth_integration(AuthIntegration::NoAuthMiddleware)
-        .read_timeout(environment.http_read_timeout_upload)
-        .connect_timeout(environment.http_connect_timeout)
-        .client_name("s3")
-        .build()?;
 
     let retry_policy = client_builder.retry_policy();
     // We're only checking a single URL and one at a time, so 1 permit is sufficient
@@ -177,7 +149,6 @@ pub(crate) async fn publish(
         password,
         trusted_publishing,
         keyring_provider,
-        &token_store,
         &oidc_client,
         check_url.as_ref(),
         Prompt::Enabled,
@@ -292,6 +263,10 @@ pub(crate) async fn publish(
                 }
             };
 
+        if dry_run {
+            continue;
+        }
+
         writeln!(
             printer.stderr(),
             "{} {} {}",
@@ -300,105 +275,18 @@ pub(crate) async fn publish(
             format!("({bytes:.1}{unit})").dimmed()
         )?;
 
-        let uploaded = if direct {
-            if dry_run {
-                // For dry run, call validate since we won't call reserve.
-                match uv_publish::validate(
-                    &group.file,
-                    &form_metadata,
-                    &group.raw_filename,
-                    &publish_url,
-                    &token_store,
-                    &upload_client,
-                    &credentials,
-                )
-                .await
-                {
-                    Ok(should_upload) => {
-                        if !should_upload {
-                            writeln!(
-                                printer.stderr(),
-                                "{}",
-                                "File already exists, skipping".dimmed()
-                            )?;
-                        }
-                    }
-                    Err(err) => {
-                        let err: anyhow::Error = err.into();
-                        write_error_chain_with_options(
-                            err.as_ref(),
-                            Hints::none(),
-                            ErrorOptions::default().with_stream(printer.stderr()),
-                        )?;
-                        error_count += 1;
-                    }
-                }
-                continue;
-            }
-
-            debug!("Using two-phase upload (direct mode)");
-            upload_two_phase(
-                &group,
-                &form_metadata,
-                &publish_url,
-                &upload_client,
-                &s3_client,
-                retry_policy,
-                &credentials,
-                reporter.clone(),
-            )
-            .await?
-        } else {
-            // Run validation checks on the file, but don't upload it (if possible).
-            match uv_publish::validate(
-                &group.file,
-                &form_metadata,
-                &group.raw_filename,
-                &publish_url,
-                &token_store,
-                &upload_client,
-                &credentials,
-            )
-            .await
-            {
-                Ok(should_upload) => {
-                    if dry_run {
-                        continue;
-                    }
-
-                    // If validation indicates the file already exists, skip the upload.
-                    if !should_upload {
-                        false
-                    } else {
-                        upload(
-                            &group,
-                            &form_metadata,
-                            &publish_url,
-                            &upload_client,
-                            retry_policy,
-                            &credentials,
-                            check_url_client.as_ref(),
-                            &download_concurrency,
-                            reporter.clone(),
-                        )
-                        .await? // Filename and/or URL are already attached, if applicable.
-                    }
-                }
-                Err(err) => {
-                    if dry_run {
-                        let err: anyhow::Error = err.into();
-                        write_error_chain_with_options(
-                            err.as_ref(),
-                            Hints::none(),
-                            ErrorOptions::default().with_stream(printer.stderr()),
-                        )?;
-                        error_count += 1;
-                        continue;
-                    }
-                    return Err(err.into());
-                }
-            }
-        };
+        let uploaded = upload(
+            &group,
+            &form_metadata,
+            &publish_url,
+            &upload_client,
+            retry_policy,
+            &credentials,
+            check_url_client.as_ref(),
+            &download_concurrency,
+            reporter.clone(),
+        )
+        .await?;
         info!("Upload succeeded");
 
         if !uploaded {
@@ -464,7 +352,6 @@ async fn gather_credentials(
     mut password: Option<String>,
     trusted_publishing: TrustedPublishing,
     keyring_provider: KeyringProviderType,
-    token_store: &PyxTokenStore,
     oidc_client: &BaseClient,
     check_url: Option<&IndexUrl>,
     prompt: Prompt,
@@ -496,7 +383,6 @@ async fn gather_credentials(
         username.as_deref(),
         password.as_deref(),
         keyring_provider,
-        token_store,
         trusted_publishing,
         &publish_url,
         oidc_client,
@@ -506,20 +392,13 @@ async fn gather_credentials(
     let (username, mut password) =
         if let TrustedPublishResult::Configured(password) = &trusted_publishing_token {
             (Some("__token__".to_string()), Some(password.to_string()))
-        } else {
-            if username.is_none() && password.is_none() {
-                // Skip prompting for pyx URLs; the auth middleware will handle authentication.
-                if token_store.is_known_url(&publish_url) {
-                    (None, None)
-                } else {
-                    match prompt {
-                        Prompt::Enabled => prompt_username_and_password()?,
-                        Prompt::Disabled => (None, None),
-                    }
-                }
-            } else {
-                (username, password)
+        } else if username.is_none() && password.is_none() {
+            match prompt {
+                Prompt::Enabled => prompt_username_and_password()?,
+                Prompt::Disabled => (None, None),
             }
+        } else {
+            (username, password)
         };
 
     if password.is_some() && username.is_none() {
@@ -533,29 +412,27 @@ async fn gather_credentials(
     if username.is_none()
         && password.is_none()
         && keyring_provider == KeyringProviderType::Disabled
-        && !token_store.is_known_url(&publish_url)
+        && let TrustedPublishResult::Ignored(err) = trusted_publishing_token
     {
-        if let TrustedPublishResult::Ignored(err) = trusted_publishing_token {
-            // The user has configured something incorrectly:
-            // * The user forgot to configure credentials.
-            // * The user forgot to forward the secrets as env vars (or used the wrong ones).
-            // * The trusted publishing configuration is wrong.
-            writeln!(
-                printer.stderr(),
-                "Note: Neither credentials nor keyring are configured, and there was an error \
-                fetching the trusted publishing token. If you don't want to use trusted \
-                publishing, you can ignore this error, but you need to provide credentials."
-            )?;
+        // The user has configured something incorrectly:
+        // * The user forgot to configure credentials.
+        // * The user forgot to forward the secrets as env vars (or used the wrong ones).
+        // * The trusted publishing configuration is wrong.
+        writeln!(
+            printer.stderr(),
+            "Note: Neither credentials nor keyring are configured, and there was an error \
+            fetching the trusted publishing token. If you don't want to use trusted \
+            publishing, you can ignore this error, but you need to provide credentials."
+        )?;
 
-            trace!("Error trace: {err:?}");
-            write_error_chain_with_options(
-                anyhow::Error::from(err)
-                    .context("Trusted publishing failed")
-                    .as_ref(),
-                Hints::none(),
-                ErrorOptions::default().with_stream(printer.stderr()),
-            )?;
-        }
+        trace!("Error trace: {err:?}");
+        write_error_chain_with_options(
+            anyhow::Error::from(err)
+                .context("Trusted publishing failed")
+                .as_ref(),
+            Hints::none(),
+            ErrorOptions::default().with_stream(printer.stderr()),
+        )?;
     }
 
     // If applicable, fetch the password from the keyring eagerly to avoid user confusion about
@@ -620,14 +497,12 @@ mod tests {
         password: Option<String>,
     ) -> Result<(DisplaySafeUrl, Credentials)> {
         let client = BaseClientBuilder::default().build()?;
-        let token_store = PyxTokenStore::from_settings()?;
         gather_credentials(
             url,
             username,
             password,
             TrustedPublishing::Never,
             KeyringProviderType::Disabled,
-            &token_store,
             &client,
             None,
             Prompt::Disabled,

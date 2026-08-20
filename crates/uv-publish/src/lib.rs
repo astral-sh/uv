@@ -24,7 +24,7 @@ use tokio_util::io::ReaderStream;
 use tracing::{Level, debug, enabled, trace, warn};
 use url::Url;
 
-use uv_auth::{Credentials, PyxTokenStore, Realm};
+use uv_auth::{Credentials, Realm};
 use uv_cache::{Cache, Refresh};
 use uv_client::{
     BaseClient, ClientBuildError, DEFAULT_MAX_REDIRECTS, MetadataFormat, OwnedArchive,
@@ -42,7 +42,6 @@ use uv_redacted::{DisplaySafeUrl, DisplaySafeUrlError};
 use uv_warnings::warn_user;
 
 use crate::trusted_publishing::pypi::PyPIPublishingService;
-use crate::trusted_publishing::pyx::PyxPublishingService;
 use crate::trusted_publishing::{
     TrustedPublishingError, TrustedPublishingService, TrustedPublishingToken,
 };
@@ -64,12 +63,6 @@ pub enum PublishError {
     PublishPrepare(PathBuf, #[source] Box<PublishPrepareError>),
     #[error("Failed to publish `{}` to {}", _0.user_display(), _1)]
     PublishSend(
-        PathBuf,
-        Box<DisplaySafeUrl>,
-        #[source] Box<PublishSendError>,
-    ),
-    #[error("Validation failed for `{}` on {}", _0.user_display(), _1)]
-    Validate(
         PathBuf,
         Box<DisplaySafeUrl>,
         #[source] Box<PublishSendError>,
@@ -96,12 +89,6 @@ pub enum PublishError {
     MissingHash(Box<DistFilename>),
     #[error(transparent)]
     RetryParsing(#[from] RetryParsingError),
-    #[error("Failed to reserve upload slot for `{}`", _0.user_display())]
-    Reserve(PathBuf, #[source] Box<PublishSendError>),
-    #[error("Failed to upload to S3 for `{}`", _0.user_display())]
-    S3Upload(PathBuf, #[source] Box<PublishSendError>),
-    #[error("Failed to finalize upload for `{}`", _0.user_display())]
-    Finalize(PathBuf, #[source] Box<PublishSendError>),
 }
 
 /// Failure to get the metadata for a specific file.
@@ -420,7 +407,6 @@ pub async fn check_trusted_publishing(
     username: Option<&str>,
     password: Option<&str>,
     keyring_provider: KeyringProviderType,
-    token_store: &PyxTokenStore,
     trusted_publishing: TrustedPublishing,
     registry: &DisplaySafeUrl,
     client: &BaseClient,
@@ -438,17 +424,9 @@ pub async fn check_trusted_publishing(
             debug!("Attempting to get a token for trusted publishing");
 
             // Attempt to get a token for trusted publishing.
-            let token = if token_store.is_known_url(registry) {
-                debug!("Using trusted publishing flow for pyx");
-                PyxPublishingService::new(registry, client)
-                    .get_token()
-                    .await
-            } else {
-                debug!("Using trusted publishing flow for PyPI");
-                PyPIPublishingService::new(registry, client)
-                    .get_token()
-                    .await
-            };
+            let token = PyPIPublishingService::new(registry, client)
+                .get_token()
+                .await;
 
             match token {
                 // Success: we have a token for trusted publishing.
@@ -479,19 +457,10 @@ pub async fn check_trusted_publishing(
             }
 
             // Attempt to get a token for trusted publishing.
-            let token = if token_store.is_known_url(registry) {
-                debug!("Using trusted publishing flow for pyx");
-                PyxPublishingService::new(registry, client)
-                    .get_token()
-                    .await
-                    .map_err(Box::new)?
-            } else {
-                debug!("Using trusted publishing flow for PyPI");
-                PyPIPublishingService::new(registry, client)
-                    .get_token()
-                    .await
-                    .map_err(Box::new)?
-            };
+            let token = PyPIPublishingService::new(registry, client)
+                .get_token()
+                .await
+                .map_err(Box::new)?;
 
             let Some(token) = token else {
                 return Err(PublishError::TrustedPublishing(
@@ -653,300 +622,6 @@ pub async fn upload(
             }
         };
     }
-}
-
-/// Validate a distribution before uploading.
-///
-/// Returns `true` if the file should be uploaded, `false` if it already exists on the server.
-pub async fn validate(
-    file: &Path,
-    form_metadata: &FormMetadata,
-    raw_filename: &str,
-    registry: &DisplaySafeUrl,
-    store: &PyxTokenStore,
-    client: &BaseClient,
-    credentials: &Credentials,
-) -> Result<bool, PublishError> {
-    if store.is_known_url(registry) {
-        debug!("Performing validation request for {registry}");
-
-        let mut validation_url = registry.clone();
-        validation_url
-            .path_segments_mut()
-            .expect("URL must have path segments")
-            .push("validate");
-
-        let request = build_metadata_request(
-            raw_filename,
-            &validation_url,
-            client,
-            credentials,
-            form_metadata,
-        );
-
-        let response = request.send().await.map_err(|err| {
-            PublishError::Validate(
-                file.to_path_buf(),
-                registry.clone().into(),
-                PublishSendError::ReqwestMiddleware(err).into(),
-            )
-        })?;
-
-        let status_code = response.status();
-        debug!("Response code for {validation_url}: {status_code}");
-
-        if status_code.is_success() {
-            #[derive(Deserialize)]
-            struct ValidateResponse {
-                exists: bool,
-            }
-
-            // Check if the file already exists.
-            match response.text().await {
-                Ok(body) => {
-                    trace!("Response content for {validation_url}: {body}");
-                    if let Ok(response) = serde_json::from_str::<ValidateResponse>(&body) {
-                        if response.exists {
-                            debug!("File already uploaded: {raw_filename}");
-                            return Ok(false);
-                        }
-                    }
-                }
-                Err(err) => {
-                    trace!("Failed to read response content for {validation_url}: {err}");
-                }
-            }
-            return Ok(true);
-        }
-
-        // Handle error response.
-        handle_response(&validation_url, response)
-            .await
-            .map_err(|err| {
-                PublishError::Validate(file.to_path_buf(), registry.clone().into(), err.into())
-            })?;
-
-        Ok(true)
-    } else {
-        debug!("Skipping validation request for unsupported publish URL: {registry}");
-        Ok(true)
-    }
-}
-
-/// Upload a file using the two-phase upload protocol for pyx.
-///
-/// This is a more efficient upload method that:
-/// 1. Reserves an upload slot and gets a pre-signed S3 URL.
-/// 2. Uploads the file directly to S3.
-/// 3. Finalizes the upload with the registry.
-///
-/// Returns `true` if the file was newly uploaded and `false` if it already existed.
-pub async fn upload_two_phase(
-    group: &UploadDistribution,
-    form_metadata: &FormMetadata,
-    registry: &DisplaySafeUrl,
-    client: &BaseClient,
-    s3_client: &BaseClient,
-    retry_policy: ExponentialBackoff,
-    credentials: &Credentials,
-    reporter: Arc<impl Reporter>,
-) -> Result<bool, PublishError> {
-    #[derive(Debug, Deserialize)]
-    struct ReserveResponse {
-        upload_url: Option<String>,
-        upload_headers: Option<FxHashMap<String, String>>,
-    }
-
-    // Step 1: Reserve an upload slot.
-    let mut reserve_url = registry.clone();
-    reserve_url
-        .path_segments_mut()
-        .expect("URL must have path segments")
-        .push("reserve");
-
-    debug!("Reserving upload slot at {reserve_url}");
-
-    let reserve_request = build_metadata_request(
-        &group.raw_filename,
-        &reserve_url,
-        client,
-        credentials,
-        form_metadata,
-    );
-
-    let response = reserve_request.send().await.map_err(|err| {
-        PublishError::Reserve(
-            group.file.clone(),
-            PublishSendError::ReqwestMiddleware(err).into(),
-        )
-    })?;
-
-    let status = response.status();
-
-    let reserve_response: ReserveResponse = match status {
-        StatusCode::OK => {
-            debug!("File already uploaded: {}", group.raw_filename);
-            return Ok(false);
-        }
-        StatusCode::CREATED => {
-            let body = response.text().await.map_err(|err| {
-                PublishError::Reserve(
-                    group.file.clone(),
-                    PublishSendError::StatusNoBody(status, err).into(),
-                )
-            })?;
-            serde_json::from_str(&body).map_err(|_| {
-                PublishError::Reserve(
-                    group.file.clone(),
-                    PublishSendError::Status(status, format!("Invalid JSON response: {body}"))
-                        .into(),
-                )
-            })?
-        }
-        _ => {
-            let body = response.text().await.unwrap_or_default();
-            return Err(PublishError::Reserve(
-                group.file.clone(),
-                PublishSendError::Status(status, body).into(),
-            ));
-        }
-    };
-
-    // Step 2: Upload the file directly to S3 (if needed).
-    // When upload_url is None, the file already exists on S3 with the correct hash.
-    if let Some(upload_url) = reserve_response.upload_url {
-        let s3_url = DisplaySafeUrl::parse(&upload_url).map_err(|_| {
-            PublishError::S3Upload(
-                group.file.clone(),
-                PublishSendError::Status(
-                    StatusCode::BAD_REQUEST,
-                    "Invalid S3 URL in reserve response".to_string(),
-                )
-                .into(),
-            )
-        })?;
-
-        debug!("Got pre-signed URL for upload: {s3_url}");
-
-        // Use a custom retry loop since streaming uploads can't be retried by the middleware.
-        let file_size = fs_err::tokio::metadata(&group.file)
-            .await
-            .map_err(|err| {
-                PublishError::PublishPrepare(
-                    group.file.clone(),
-                    Box::new(PublishPrepareError::Io(err)),
-                )
-            })?
-            .len();
-
-        let mut retry_state = RetryState::start(retry_policy, s3_url.clone());
-        loop {
-            let file = File::open(&group.file).await.map_err(|err| {
-                PublishError::PublishPrepare(
-                    group.file.clone(),
-                    Box::new(PublishPrepareError::Io(err)),
-                )
-            })?;
-
-            let idx = reporter.on_upload_start(&group.filename.to_string(), Some(file_size));
-            let reporter_clone = reporter.clone();
-            let reader = ProgressReader::new(file, move |read| {
-                reporter_clone.on_upload_progress(idx, read as u64);
-            });
-            let file_reader = Body::wrap_stream(ReaderStream::new(reader));
-
-            let mut request = s3_client
-                .for_host(&s3_url)
-                .raw_client()
-                .put(Url::from(s3_url.clone()))
-                .header(reqwest::header::CONTENT_TYPE, "application/octet-stream")
-                .header(reqwest::header::CONTENT_LENGTH, file_size);
-
-            // Add any required headers from the reserve response (e.g., x-amz-tagging).
-            if let Some(headers) = &reserve_response.upload_headers {
-                for (key, value) in headers {
-                    request = request.header(key, value);
-                }
-            }
-
-            let result = request.body(file_reader).send().await;
-
-            let response = match result {
-                Ok(response) => {
-                    reporter.on_upload_complete(idx);
-                    response
-                }
-                Err(err) => {
-                    let middleware_retries =
-                        if let Some(RetryError::WithRetries { retries, .. }) =
-                            (&err as &dyn std::error::Error).downcast_ref::<RetryError>()
-                        {
-                            *retries
-                        } else {
-                            0
-                        };
-                    if let Some(backoff) = retry_state.should_retry(&err, middleware_retries) {
-                        retry_state.sleep_backoff(backoff).await;
-                        continue;
-                    }
-                    return Err(PublishError::S3Upload(
-                        group.file.clone(),
-                        PublishSendError::ReqwestMiddleware(err).into(),
-                    ));
-                }
-            };
-
-            if response.status().is_success() {
-                break;
-            }
-
-            let status = response.status();
-            let body = response.text().await.unwrap_or_default();
-            return Err(PublishError::S3Upload(
-                group.file.clone(),
-                PublishSendError::Status(status, format!("S3 upload failed: {body}")).into(),
-            ));
-        }
-
-        debug!("S3 upload complete for {}", group.raw_filename);
-    } else {
-        debug!(
-            "File already exists on S3, skipping upload: {}",
-            group.raw_filename
-        );
-    }
-
-    // Step 3: Finalize the upload.
-    let mut finalize_url = registry.clone();
-    finalize_url
-        .path_segments_mut()
-        .expect("URL must have path segments")
-        .push("finalize");
-
-    debug!("Finalizing upload at {finalize_url}");
-
-    let finalize_request = build_metadata_request(
-        &group.raw_filename,
-        &finalize_url,
-        client,
-        credentials,
-        form_metadata,
-    );
-
-    let response = finalize_request.send().await.map_err(|err| {
-        PublishError::Finalize(
-            group.file.clone(),
-            PublishSendError::ReqwestMiddleware(err).into(),
-        )
-    })?;
-
-    handle_response(&finalize_url, response)
-        .await
-        .map_err(|err| PublishError::Finalize(group.file.clone(), err.into()))?;
-
-    debug!("Upload finalized for {}", group.raw_filename);
-
-    Ok(true)
 }
 
 /// Check whether we should skip the upload of a file because it already exists on the index.
@@ -1454,61 +1129,6 @@ async fn build_upload_request<'a>(
     }
 
     Ok((request, idx))
-}
-
-/// Build a request with form metadata but without the file content.
-fn build_metadata_request<'a>(
-    raw_filename: &str,
-    registry: &DisplaySafeUrl,
-    client: &'a BaseClient,
-    credentials: &Credentials,
-    form_metadata: &FormMetadata,
-) -> RequestBuilder<'a> {
-    let mut form = reqwest::multipart::Form::new();
-    for (key, value) in form_metadata.iter() {
-        form = form.text(*key, value.clone());
-    }
-    form = form.text("filename", raw_filename.to_owned());
-
-    // If we have a username but no password, attach the username to the URL so the authentication
-    // middleware can find the matching password.
-    let url = if let Some(username) = credentials
-        .username()
-        .filter(|_| credentials.password().is_none())
-    {
-        let mut url = registry.clone();
-        let _ = url.set_username(username);
-        url
-    } else {
-        registry.clone()
-    };
-
-    let mut request = client
-        .for_host(&url)
-        .post(Url::from(url))
-        .multipart(form)
-        // Ask PyPI for a structured error messages instead of HTML-markup error messages.
-        // For other registries, we ask them to return plain text over HTML. See
-        // [`PublishSendError::extract_remote_error`].
-        .header(
-            reqwest::header::ACCEPT,
-            "application/json;q=0.9, text/plain;q=0.8, text/html;q=0.7",
-        );
-
-    match credentials {
-        Credentials::Basic { password, .. } => {
-            if password.is_some() {
-                debug!("Using HTTP Basic authentication");
-                request = request.header(AUTHORIZATION, credentials.to_header_value());
-            }
-        }
-        Credentials::Bearer { .. } => {
-            debug!("Using Bearer token authentication");
-            request = request.header(AUTHORIZATION, credentials.to_header_value());
-        }
-    }
-
-    request
 }
 
 /// Log response information and map response to an error variant if not successful.
