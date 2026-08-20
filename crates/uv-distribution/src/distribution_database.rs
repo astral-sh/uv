@@ -172,7 +172,10 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         }
     }
 
-    /// Resolve the complete build environment for a source distribution, including backend hooks.
+    /// Resolve a selected [`SourceDist`]'s complete isolated build environment.
+    ///
+    /// Runs backend requirement hooks even when static or cached metadata would otherwise bypass
+    /// build setup.
     #[instrument(skip_all, fields(%source))]
     pub async fn resolve_build_requirements(
         &self,

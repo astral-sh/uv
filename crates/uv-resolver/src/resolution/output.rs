@@ -620,7 +620,10 @@ impl ResolverOutput {
             .map(|(_, distribution)| &distribution.dist)
     }
 
-    /// Restrict registry hashes to the selected artifact kind for the target environment.
+    /// Restrict registry hashes to the artifacts selected for the target [`Tags`].
+    ///
+    /// Compatible wheels retain wheel hashes; selected source distributions retain source-archive
+    /// hashes. Existing hashes are preserved when index metadata does not provide artifact hashes.
     pub fn retain_selected_distribution_hashes(&mut self, tags: &Tags) {
         for node in self.graph.node_weights_mut() {
             let ResolutionGraphNode::Dist(distribution) = node else {
