@@ -5,7 +5,6 @@ use indoc::{formatdoc, indoc};
 use insta::assert_snapshot;
 #[cfg(feature = "test-universal")]
 use serde_json::json;
-#[cfg(feature = "test-universal")]
 use url::Url;
 #[cfg(feature = "test-universal")]
 use wiremock::{
@@ -13,14 +12,14 @@ use wiremock::{
     matchers::{method, path},
 };
 
-use uv_fs::Simplified;
+use uv_fs::{Simplified, create_symlink};
 #[cfg(feature = "test-universal")]
 use uv_static::EnvVars;
 #[cfg(feature = "test-universal")]
 use uv_test::packse::PackseServer;
-use uv_test::uv_snapshot;
 #[cfg(all(feature = "test-universal", feature = "test-git"))]
 use uv_test::{READ_ONLY_GITHUB_TOKEN, decode_token};
+use uv_test::{diff_snapshot, uv_snapshot};
 #[cfg(feature = "test-universal")]
 use uv_test::{download_to_disk, venv_bin_path};
 
@@ -8381,6 +8380,340 @@ fn lock_relative_and_absolute_paths_disjoint_markers() -> Result<()> {
     });
 
     context.lock().arg("--check").assert().success();
+
+    Ok(())
+}
+
+/// Poetry's generated URLs must not override authored relative or absolute source paths.
+///
+/// Note: Currently broken.
+/// See: <https://github.com/astral-sh/uv/issues/20477>
+#[test]
+fn lock_relative_transitive_poetry_paths() -> Result<()> {
+    let context = uv_test::test_context!("3.12").with_exclude_newer("2026-07-10T00:00:00Z");
+
+    let absolute_child = context.temp_dir.child("absolute-child");
+    let editable_child = context.temp_dir.child("editable-child");
+    let project = context.temp_dir.child("project");
+    project.child("pyproject.toml").write_str(&formatdoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["parent", "editable-child", "absolute-child"]
+
+        [tool.uv.sources]
+        parent = {{ path = "../parent", editable = true }}
+        editable-child = {{ path = "../editable-child", editable = true }}
+        absolute-child = {{ path = '{}' }}
+    "#,
+        absolute_child.path().display()
+    })?;
+
+    let parent = context.temp_dir.child("parent");
+    parent.child("parent/__init__.py").touch()?;
+    parent.child("pyproject.toml").write_str(indoc! {r#"
+        [tool.poetry]
+        name = "parent"
+        version = "0.1.0"
+        description = ""
+        packages = [{ include = "parent" }]
+
+        [tool.poetry.dependencies]
+        python = ">=3.12,<3.13"
+
+        [build-system]
+        requires = ["poetry-core"]
+        build-backend = "poetry.core.masonry.api"
+    "#})?;
+
+    absolute_child.child("absolute_child/__init__.py").touch()?;
+    absolute_child
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+            [project]
+            name = "absolute-child"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+
+            [build-system]
+            requires = ["hatchling"]
+            build-backend = "hatchling.build"
+        "#})?;
+
+    editable_child.child("editable_child/__init__.py").touch()?;
+    editable_child
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+            [project]
+            name = "editable-child"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+
+            [build-system]
+            requires = ["hatchling"]
+            build-backend = "hatchling.build"
+        "#})?;
+
+    context
+        .lock()
+        .current_dir(project.path())
+        .assert()
+        .success();
+
+    let lock = context.read("project/uv.lock");
+
+    parent.child("pyproject.toml").write_str(indoc! {r#"
+        [tool.poetry]
+        name = "parent"
+        version = "0.1.0"
+        description = ""
+        packages = [{ include = "parent" }]
+
+        [tool.poetry.dependencies]
+        python = ">=3.12,<3.13"
+        editable-child = { path = "../editable-child", develop = true }
+        absolute-child = { path = "../absolute-child" }
+
+        [build-system]
+        requires = ["poetry-core"]
+        build-backend = "poetry.core.masonry.api"
+    "#})?;
+
+    context
+        .lock()
+        .current_dir(project.path())
+        .assert()
+        .success();
+
+    // The root's sources must stay unchanged; Poetry's requirement paths should be relative.
+    let new_lock = context.read("project/uv.lock");
+    let diff = diff_snapshot(&lock, &new_lock, 3);
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(diff, @r#"
+        --- old
+        +++ new
+        @@ -13,12 +13,22 @@
+         [[package]]
+         name = "editable-child"
+         version = "0.1.0"
+        -source = { editable = "../editable-child" }
+        +source = { editable = "[TEMP_DIR]/editable-child" }
+
+         [[package]]
+         name = "parent"
+         version = "0.1.0"
+         source = { editable = "../parent" }
+        +dependencies = [
+        +    { name = "absolute-child" },
+        +    { name = "editable-child" },
+        +]
+        +
+        +[package.metadata]
+        +requires-dist = [
+        +    { name = "absolute-child", directory = "[TEMP_DIR]/absolute-child" },
+        +    { name = "editable-child", directory = "[TEMP_DIR]/editable-child" },
+        +]
+
+         [[package]]
+         name = "project"
+        "#);
+    });
+
+    // Cached Poetry metadata must preserve the same paths when the lockfile is recreated.
+    fs_err::remove_file(project.child("uv.lock").path())?;
+    context
+        .lock()
+        .current_dir(project.path())
+        .assert()
+        .success();
+    assert_eq!(new_lock, context.read("project/uv.lock"));
+
+    project.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["parent"]
+
+        [tool.uv.sources]
+        parent = { path = "../parent", editable = true }
+    "#})?;
+
+    context
+        .lock()
+        .current_dir(project.path())
+        .assert()
+        .success();
+
+    // Without direct sources, both children should use relative, non-editable paths.
+    let backend_only_lock = context.read("project/uv.lock");
+    let diff = diff_snapshot(&new_lock, &backend_only_lock, 3);
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(diff, @r#"
+        --- old
+        +++ new
+        @@ -13,7 +13,7 @@
+         [[package]]
+         name = "editable-child"
+         version = "0.1.0"
+        -source = { editable = "[TEMP_DIR]/editable-child" }
+        +source = { directory = "[TEMP_DIR]/editable-child" }
+
+         [[package]]
+         name = "parent"
+        @@ -35,14 +35,8 @@
+         version = "0.1.0"
+         source = { virtual = "." }
+         dependencies = [
+        -    { name = "absolute-child" },
+        -    { name = "editable-child" },
+             { name = "parent" },
+         ]
+
+         [package.metadata]
+        -requires-dist = [
+        -    { name = "absolute-child", directory = "[TEMP_DIR]/absolute-child" },
+        -    { name = "editable-child", editable = "../editable-child" },
+        -    { name = "parent", editable = "../parent" },
+        -]
+        +requires-dist = [{ name = "parent", editable = "../parent" }]
+        "#);
+    });
+
+    Ok(())
+}
+
+/// Check workspace paths when a dependency reports an equivalent absolute file URL.
+///
+/// Note: Currently broken.
+/// See: <https://github.com/astral-sh/uv/issues/20477>
+#[test]
+fn lock_relative_transitive_workspace_paths() -> Result<()> {
+    let context = uv_test::test_context!("3.12").with_exclude_newer("2026-07-10T00:00:00Z");
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [tool.uv.workspace]
+        members = ["member"]
+
+        [tool.uv.sources]
+        parent = { path = "parent", editable = true }
+        directory-child = { path = "directory-child" }
+    "#})?;
+
+    let member = context.temp_dir.child("member");
+    member.child("member/__init__.py").touch()?;
+    member.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "member"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["parent", "directory-child"]
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+    "#})?;
+
+    let directory_child = context.temp_dir.child("directory-child");
+
+    let parent = context.temp_dir.child("parent");
+    parent.child("parent/__init__.py").touch()?;
+    parent.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "parent"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+    "#})?;
+
+    directory_child
+        .child("directory_child/__init__.py")
+        .touch()?;
+    directory_child
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+            [project]
+            name = "directory-child"
+            version = "0.1.0"
+
+            [build-system]
+            requires = ["hatchling"]
+            build-backend = "hatchling.build"
+        "#})?;
+
+    context.lock().assert().success();
+
+    let lock = context.read("uv.lock");
+
+    let directory_child_alias = context.temp_dir.child("directory-child-alias");
+    create_symlink(directory_child.path(), directory_child_alias.path())?;
+    let directory_child_url = Url::from_file_path(directory_child_alias.path())
+        .map_err(|()| anyhow::anyhow!("directory child path is not a valid file URL"))?;
+
+    parent.child("pyproject.toml").write_str(&formatdoc! {r#"
+        [project]
+        name = "parent"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["directory-child @ {directory_child_url}"]
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+    "#})?;
+
+    context.lock().assert().success();
+
+    // Keep the workspace path and the parent's metadata alias relative to the lockfile.
+    let new_lock = context.read("uv.lock");
+    let diff = diff_snapshot(&lock, &new_lock, 3);
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(diff, @r#"
+        --- old
+        +++ new
+        @@ -13,7 +13,7 @@
+         [[package]]
+         name = "directory-child"
+         version = "0.1.0"
+        -source = { directory = "directory-child" }
+        +source = { directory = "[TEMP_DIR]/directory-child-alias" }
+
+         [[package]]
+         name = "member"
+        @@ -34,3 +34,9 @@
+         name = "parent"
+         version = "0.1.0"
+         source = { editable = "parent" }
+        +dependencies = [
+        +    { name = "directory-child" },
+        +]
+        +
+        +[package.metadata]
+        +requires-dist = [{ name = "directory-child", directory = "[TEMP_DIR]/directory-child-alias" }]
+        "#);
+    });
+
+    // The recorded alias must still match the parent's unchanged metadata.
+    context
+        .lock()
+        .arg("--check")
+        .arg("--offline")
+        .arg("--no-cache")
+        .assert()
+        .success();
 
     Ok(())
 }
