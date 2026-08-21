@@ -311,14 +311,16 @@ mod tests {
 
         let archive = extract(&cache, &bytes[..], NO_VALIDATION).await?;
         let staging_dir = archive.staging_dir.path().to_path_buf();
-        let target = cache.root().join("persisted");
-        fs_err::write(&target, b"existing")?;
+        // A file in place of the parent directory makes cache creation fail on every platform.
+        let parent = cache.root().join("not-a-directory");
+        fs_err::write(&parent, b"existing")?;
+        let target = parent.join("persisted");
         assert!(matches!(
             archive.persist(&target).await,
             Err(Error::CacheWrite(_))
         ));
         assert!(!staging_dir.exists());
-        assert_eq!(fs_err::read(target)?, b"existing");
+        assert_eq!(fs_err::read(parent)?, b"existing");
         Ok(())
     }
 }
