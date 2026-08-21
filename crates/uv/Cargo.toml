@@ -135,8 +135,6 @@ uv-test = { workspace = true }
 
 assert_cmd = { workspace = true }
 assert_fs = { workspace = true }
-astral-tokio-tar = { workspace = true }
-async-compression = { workspace = true, features = ["zstd"] }
 backon = { workspace = true }
 byteorder = { workspace = true }
 bytes = { workspace = true }

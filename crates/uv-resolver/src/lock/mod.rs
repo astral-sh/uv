@@ -1373,13 +1373,10 @@ impl Lock {
                 |hash: Option<&Hash>| hash.is_none_or(|hash| hash.0.algorithm != algorithm);
 
             if package.sdist.iter().any(|sdist| mismatched(sdist.hash()))
-                || package.wheels.iter().any(|wheel| {
-                    mismatched(wheel.hash.as_ref())
-                        || wheel
-                            .zstd
-                            .as_ref()
-                            .is_some_and(|zstd| mismatched(zstd.hash.as_ref()))
-                })
+                || package
+                    .wheels
+                    .iter()
+                    .any(|wheel| mismatched(wheel.hash.as_ref()))
             {
                 return Ok(false);
             }
@@ -3875,14 +3872,7 @@ impl Package {
             if let Some(best_wheel_index) = self.find_best_wheel(tag_policy) {
                 let hashes = {
                     let wheel = &self.wheels[best_wheel_index];
-                    HashDigests::from(
-                        wheel
-                            .hash
-                            .iter()
-                            .chain(wheel.zstd.iter().flat_map(|z| z.hash.iter()))
-                            .map(|h| h.0.clone())
-                            .collect::<Vec<_>>(),
-                    )
+                    HashDigests::from(wheel.hash.iter().map(|h| h.0.clone()).collect::<Vec<_>>())
                 };
 
                 let dist = match &self.id.source {
@@ -4468,9 +4458,6 @@ impl Package {
         }
         for wheel in &self.wheels {
             hashes.extend(wheel.hash.as_ref().map(|h| h.0.clone()));
-            if let Some(zstd) = wheel.zstd.as_ref() {
-                hashes.extend(zstd.hash.as_ref().map(|h| h.0.clone()));
-            }
         }
         HashDigests::from(hashes)
     }
@@ -5908,12 +5895,6 @@ fn locked_git_url(
     url
 }
 
-#[derive(Clone, Debug, serde::Deserialize, PartialEq, Eq)]
-struct ZstdWheel {
-    hash: Option<Hash>,
-    size: Option<u64>,
-}
-
 /// Inspired by: <https://discuss.python.org/t/lock-files-again-but-this-time-w-sdists/46593>
 #[derive(Clone, Debug, serde::Deserialize, PartialEq, Eq)]
 #[serde(try_from = "WheelWire")]
@@ -5944,8 +5925,6 @@ struct Wheel {
     /// deserialization time. Not being able to extract a wheel filename from a
     /// wheel URL is thus a deserialization error.
     filename: WheelFilename,
-    /// The zstandard-compressed wheel metadata, if any.
-    zstd: Option<ZstdWheel>,
 }
 
 impl Wheel {
@@ -6076,26 +6055,12 @@ impl Wheel {
             .map(Timestamp::from_millisecond)
             .transpose()
             .map_err(LockErrorKind::InvalidTimestamp)?;
-        let zstd = if let Some(zstd) = wheel.file.zstd.as_ref() {
-            Some(ZstdWheel {
-                hash: select_registry_hash(
-                    &zstd.hashes,
-                    &wheel.index,
-                    index_locations,
-                    wheel.file.filename.as_ref(),
-                )?,
-                size: zstd.size,
-            })
-        } else {
-            None
-        };
         Ok(Self {
             url,
             hash,
             size,
             upload_time,
             filename,
-            zstd,
         })
     }
 
@@ -6108,7 +6073,6 @@ impl Wheel {
             size: None,
             upload_time: None,
             filename: direct_dist.filename.clone(),
-            zstd: None,
         }
     }
 
@@ -6121,7 +6085,6 @@ impl Wheel {
             size: None,
             upload_time: None,
             filename: path_dist.filename.clone(),
-            zstd: None,
         }
     }
 
@@ -6134,7 +6097,6 @@ impl Wheel {
             size: None,
             upload_time: None,
             filename: path_dist.filename.clone(),
-            zstd: None,
         }
     }
 
@@ -6168,14 +6130,7 @@ impl Wheel {
                     upload_time_utc_ms: self.upload_time.map(Timestamp::as_millisecond),
                     url: file_location,
                     yanked: None,
-                    zstd: self
-                        .zstd
-                        .as_ref()
-                        .map(|zstd| uv_distribution_types::Zstd {
-                            hashes: zstd.hash.iter().map(|h| h.0.clone()).collect(),
-                            size: zstd.size,
-                        })
-                        .map(Box::new),
+                    zstd: None,
                 });
                 let index = IndexUrl::from(VerbatimUrl::from_url(
                     url.to_url().map_err(LockErrorKind::InvalidUrl)?,
@@ -6219,14 +6174,7 @@ impl Wheel {
                     upload_time_utc_ms: self.upload_time.map(Timestamp::as_millisecond),
                     url: file_location,
                     yanked: None,
-                    zstd: self
-                        .zstd
-                        .as_ref()
-                        .map(|zstd| uv_distribution_types::Zstd {
-                            hashes: zstd.hash.iter().map(|h| h.0.clone()).collect(),
-                            size: zstd.size,
-                        })
-                        .map(Box::new),
+                    zstd: None,
                 });
                 let index = IndexUrl::from(
                     VerbatimUrl::from_absolute_path(root.join(index_path))
@@ -6243,6 +6191,7 @@ impl Wheel {
     }
 }
 
+/// Unknown fields, including deprecated pyx-specific zstd wheel metadata, are intentionally ignored.
 #[derive(Clone, Debug, serde::Deserialize)]
 #[serde(rename_all = "kebab-case")]
 struct WheelWire {
@@ -6264,9 +6213,6 @@ struct WheelWire {
     /// This is only present for wheels that come from registries.
     #[serde(alias = "upload_time")]
     upload_time: Option<Timestamp>,
-    /// The zstandard-compressed wheel metadata, if any.
-    #[serde(alias = "zstd")]
-    zstd: Option<ZstdWheel>,
 }
 
 #[derive(Clone, Debug, serde::Deserialize, PartialEq, Eq)]
@@ -6335,7 +6281,6 @@ impl TryFrom<WheelWire> for Wheel {
             hash: wire.hash,
             size: wire.size,
             upload_time: wire.upload_time,
-            zstd: wire.zstd,
             filename,
         })
     }

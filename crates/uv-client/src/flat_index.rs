@@ -299,7 +299,9 @@ impl<'a> FlatIndexClient<'a> {
     ) -> FlatIndexEntries {
         let entries = files
             .into_iter()
-            .filter_map(|file| {
+            .filter_map(|mut file| {
+                // Ignore deprecated pyx-specific zstd wheel metadata from an older cache entry.
+                file.zstd = None;
                 Some(FlatIndexEntry {
                     filename: DistFilename::try_from_normalized_filename(&file.filename)?,
                     file,
@@ -395,6 +397,32 @@ mod tests {
     use fs_err::File;
     use std::io::Write;
     use tempfile::tempdir;
+    use uv_distribution_types::Zstd;
+
+    /// Round-trip a synthetic cache entry containing deprecated pyx-specific zstd wheel metadata
+    /// and verify that the metadata is discarded before the file is used.
+    #[test]
+    fn cached_files_ignore_deprecated_zstd() -> Result<(), Box<dyn std::error::Error>> {
+        let url = DisplaySafeUrl::parse("https://example.com/flat/")?;
+        let mut files = FlatIndexClient::parse_html(
+            r#"<a href="example-1.0.0-py3-none-any.whl">example-1.0.0-py3-none-any.whl</a>"#,
+            &url,
+        )?;
+        assert_eq!(files.len(), 1);
+        assert!(files[0].zstd.is_none());
+        files[0].zstd = Some(Box::new(Zstd {
+            hashes: HashDigests::empty(),
+            size: Some(42),
+        }));
+
+        let archived = OwnedArchive::from_unarchived(&files)?;
+        let files = OwnedArchive::deserialize(&archived);
+        let entries =
+            FlatIndexClient::entries_from_files(files, &IndexUrl::parse(url.as_str(), None)?);
+        assert_eq!(entries.entries.len(), 1);
+        assert!(entries.entries[0].file.zstd.is_none());
+        Ok(())
+    }
 
     #[test]
     fn read_from_directory_sorts_distributions() {
