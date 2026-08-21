@@ -425,6 +425,7 @@ impl<'env> LockOperation<'env> {
                     target,
                     interpreter,
                     Some(existing),
+                    self.mode,
                     check_lockfile_contents,
                     self.constraints,
                     self.refresh,
@@ -478,6 +479,7 @@ impl<'env> LockOperation<'env> {
                     target,
                     interpreter,
                     existing,
+                    self.mode,
                     check_lockfile_contents,
                     self.constraints,
                     self.refresh,
@@ -511,6 +513,7 @@ async fn do_lock(
     target: LockTarget<'_>,
     interpreter: &Interpreter,
     existing_lock: Option<Lock>,
+    mode: LockMode<'_>,
     check_lockfile_contents: Option<String>,
     external: Vec<NameRequirementSpecification>,
     refresh: Option<&Refresh>,
@@ -835,11 +838,26 @@ async fn do_lock(
         .build_options(build_options.clone())
         .artifact_environments(artifact_environments.clone())
         .build();
-    let hasher = HashStrategy::generate(HashGeneration::Url);
+    // Checking an existing lockfile may build metadata and install build dependencies. Verify any
+    // artifacts recorded in that lockfile, including for an ordinary unlocked command.
+    let locked_build_hasher = if let Some(existing_lock) = existing_lock.as_ref() {
+        existing_lock.hash_strategy(target.install_path())?
+    } else {
+        HashStrategy::default()
+    };
+    // A fresh resolution retains those hashes under `--locked`, but an explicitly unlocked update
+    // must be able to replace them. Build dependencies follow the same choice without generating
+    // hashes for artifacts absent from the lockfile.
+    let resolution_build_hasher = if matches!(mode, LockMode::Locked(..)) {
+        locked_build_hasher.clone()
+    } else {
+        HashStrategy::default()
+    };
+    let hasher = HashStrategy::generate(HashGeneration::Url)
+        .with_verification(resolution_build_hasher.verification().clone());
 
     // TODO(charlie): These are all default values. We should consider whether we want to make them
     // optional on the downstream APIs.
-    let build_hasher = HashStrategy::default();
     let extras = ExtrasSpecification::default();
     let groups = BTreeMap::new();
 
@@ -883,41 +901,45 @@ async fn do_lock(
     // Convert to the `Constraints` format.
     let dispatch_constraints = Constraints::from_requirements(build_constraints.iter().cloned());
 
-    // Create a build dispatch.
-    let build_dispatch = BuildDispatch::new(
-        &client,
-        cache,
-        &dispatch_constraints,
-        interpreter,
-        index_locations,
-        &flat_index,
-        dependency_metadata,
-        state.fork().into_inner(),
-        *index_strategy,
-        config_setting,
-        config_settings_package,
-        build_isolation,
-        &extra_build_requires,
-        extra_build_variables,
-        *link_mode,
-        build_options,
-        &build_hasher,
-        exclude_newer.clone(),
-        sources.clone(),
-        SourceTreeEditablePolicy::Project,
-        workspace_cache.clone(),
-        concurrency.clone(),
-        preview,
-    );
-
-    let database = DistributionDatabase::new(
-        &client,
-        &build_dispatch,
-        concurrency.downloads_semaphore.clone(),
-    );
+    // Create at most two build contexts: one while checking the existing lockfile, and another
+    // only if a fresh resolution is needed. They may enforce different hashes, so each gets a
+    // fresh in-memory index and in-flight cache.
+    let make_build_dispatch = |build_hasher| {
+        BuildDispatch::new(
+            &client,
+            cache,
+            &dispatch_constraints,
+            interpreter,
+            index_locations,
+            &flat_index,
+            dependency_metadata,
+            state.fork().into_inner(),
+            *index_strategy,
+            config_setting,
+            config_settings_package,
+            build_isolation,
+            &extra_build_requires,
+            extra_build_variables,
+            *link_mode,
+            build_options,
+            build_hasher,
+            exclude_newer.clone(),
+            sources.clone(),
+            SourceTreeEditablePolicy::Project,
+            workspace_cache.clone(),
+            concurrency.clone(),
+            preview,
+        )
+    };
 
     // If any of the resolution-determining settings changed, invalidate the lock.
     let existing_lock = if let Some(existing_lock) = existing_lock {
+        let validation_build_dispatch = make_build_dispatch(&locked_build_hasher);
+        let database = DistributionDatabase::new(
+            &client,
+            &validation_build_dispatch,
+            concurrency.downloads_semaphore.clone(),
+        );
         match ValidatedLock::validate(
             existing_lock,
             target.install_path(),
@@ -984,6 +1006,13 @@ async fn do_lock(
         // The lockfile did not contain enough information to obtain a resolution, fallback
         // to a fresh resolve.
         _ => {
+            let build_dispatch = make_build_dispatch(&resolution_build_hasher);
+            let database = DistributionDatabase::new(
+                &client,
+                &build_dispatch,
+                concurrency.downloads_semaphore.clone(),
+            );
+
             // Determine whether we can reuse the existing package versions.
             let versions_lock = existing_lock.as_ref().and_then(|lock| match &lock {
                 ValidatedLock::Satisfies(lock) => Some(lock),
