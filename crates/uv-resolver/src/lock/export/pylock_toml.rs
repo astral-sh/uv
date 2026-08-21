@@ -473,7 +473,7 @@ impl<'lock> PylockToml {
                     let path = try_relative_to_if(
                         &dist.install_path,
                         install_path,
-                        !dist.url.was_given_absolute(),
+                        dist.url.prefers_relative(),
                     )
                     .map(Box::<Path>::from)
                     .unwrap_or_else(|_| dist.install_path.clone());
@@ -546,7 +546,7 @@ impl<'lock> PylockToml {
                     let path = try_relative_to_if(
                         &dist.install_path,
                         install_path,
-                        !dist.url.was_given_absolute(),
+                        dist.url.prefers_relative(),
                     )
                     .map(Box::<Path>::from)
                     .unwrap_or_else(|_| dist.install_path.clone());
@@ -575,7 +575,7 @@ impl<'lock> PylockToml {
                     let path = try_relative_to_if(
                         &dist.install_path,
                         install_path,
-                        !dist.url.was_given_absolute(),
+                        dist.url.prefers_relative(),
                     )
                     .map(Box::<Path>::from)
                     .unwrap_or_else(|_| dist.install_path.clone());

@@ -261,26 +261,26 @@ impl VerbatimUrl {
         self.given.as_deref()
     }
 
-    /// Returns `true` if the `given` input was an absolute path or file URL.
+    /// Return whether this URL should be represented by a relative path.
     ///
     /// If the URL was a PEP 508 URL which contained environment variable references which were
-    /// expanded. This function returns false to preserve existing usecases which may rely on
+    /// expanded, this function returns true to preserve existing usecases which may rely on
     /// things like `${PWD}` or `${PROJECT_ROOT}`.
-    pub fn was_given_absolute(&self) -> bool {
+    pub fn prefers_relative(&self) -> bool {
         let Some(given) = &self.given else {
-            return false;
+            return true;
         };
         if self.expanded {
-            return false;
+            return true;
         }
 
         if let Some((scheme, _)) = split_scheme(given)
             && let Some(parsed_scheme) = Scheme::parse(scheme)
         {
-            return parsed_scheme.is_file();
+            return !parsed_scheme.is_file();
         }
 
-        Path::new(given.as_str()).is_absolute()
+        !Path::new(given.as_str()).is_absolute()
     }
 
     /// Set the "given value contained variables which were expanded" flag.

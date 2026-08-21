@@ -747,7 +747,7 @@ impl RequirementSource {
                 ext,
                 url,
             } => Ok(Self::Path {
-                install_path: try_relative_to_if(&install_path, path, !url.was_given_absolute())?
+                install_path: try_relative_to_if(&install_path, path, url.prefers_relative())?
                     .into_boxed_path(),
                 ext,
                 url,
@@ -759,7 +759,7 @@ impl RequirementSource {
                 url,
                 ..
             } => Ok(Self::Directory {
-                install_path: try_relative_to_if(&install_path, path, !url.was_given_absolute())?
+                install_path: try_relative_to_if(&install_path, path, url.prefers_relative())?
                     .into_boxed_path(),
                 editable,
                 r#virtual,
