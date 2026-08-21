@@ -129,6 +129,10 @@ pub enum PylockTomlErrorKind {
     InvalidArtifactUrl(UrlString),
     #[error("Path must end in a valid wheel filename: `{0}`")]
     PathMissingFilename(Box<Path>),
+    #[error("Wheel filename `{0}` does not match package name `{1}`")]
+    WheelNameMismatch(WheelFilename, PackageName),
+    #[error("Wheel filename `{0}` does not match package version `{1}`")]
+    WheelVersionMismatch(WheelFilename, Version),
     #[error("Failed to convert path to URL")]
     PathToUrl,
     #[error("Failed to convert URL to path")]
@@ -1166,6 +1170,13 @@ impl<'lock> PylockToml {
                 _ => {}
             }
 
+            // Validate every active wheel before selecting the compatible candidate. Otherwise an
+            // incompatible or malformed wheel can be silently ignored when an sdist is present.
+            for wheel in package.wheels.iter().flatten() {
+                let filename = wheel.filename(&package.name)?;
+                validate_wheel_filename(&filename, &package.name, package.version.as_ref())?;
+            }
+
             let no_binary = build_options.no_binary_package(&package.name);
             let no_build = build_options.no_build_package(&package.name);
             let is_wheel = package
@@ -1184,6 +1195,7 @@ impl<'lock> PylockToml {
                     wheels: vec![best_wheel.to_registry_wheel(
                         install_path,
                         &package.name,
+                        package.version.as_ref(),
                         package.index.as_ref(),
                     )?],
                     best_wheel_index: 0,
@@ -1470,9 +1482,11 @@ impl PylockTomlWheel {
         &self,
         install_path: &Path,
         name: &PackageName,
+        version: Option<&Version>,
         index: Option<&DisplaySafeUrl>,
     ) -> Result<RegistryBuiltWheel, PylockTomlErrorKind> {
         let filename = self.filename(name)?.into_owned();
+        validate_wheel_filename(&filename, name, version)?;
 
         let file_url = if let Some(path) = self.path.as_ref() {
             let path = install_path.join(path);
@@ -1708,6 +1722,7 @@ impl PylockTomlArchive {
             match ext {
                 DistExtension::Wheel => {
                     let filename = WheelFilename::from_str(filename)?;
+                    validate_wheel_filename(&filename, name, version)?;
                     let install_path = install_path.join(path);
                     validate_path_size(&install_path, self.size)?;
                     let url = VerbatimUrl::from_absolute_path(&install_path)
@@ -1741,6 +1756,7 @@ impl PylockTomlArchive {
             match ext {
                 DistExtension::Wheel => {
                     let filename = WheelFilename::from_str(&filename)?;
+                    validate_wheel_filename(&filename, name, version)?;
                     Ok(Dist::Built(BuiltDist::DirectUrl(DirectUrlBuiltDist {
                         filename,
                         location: Box::new(url.clone()),
@@ -1788,6 +1804,30 @@ impl PylockTomlArchive {
             Err(PylockTomlErrorKind::ArchiveMissingPathUrl(name.clone()))
         }
     }
+}
+
+fn validate_wheel_filename(
+    filename: &WheelFilename,
+    name: &PackageName,
+    version: Option<&Version>,
+) -> Result<(), PylockTomlErrorKind> {
+    if filename.name != *name {
+        return Err(PylockTomlErrorKind::WheelNameMismatch(
+            filename.clone(),
+            name.clone(),
+        ));
+    }
+
+    if let Some(version) = version
+        && filename.version != *version
+    {
+        return Err(PylockTomlErrorKind::WheelVersionMismatch(
+            filename.clone(),
+            version.clone(),
+        ));
+    }
+
+    Ok(())
 }
 
 /// Convert a Jiff timestamp to a TOML datetime.

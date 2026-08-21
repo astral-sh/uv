@@ -13366,6 +13366,114 @@ fn pep_751_hash_mismatch() -> Result<()> {
 }
 
 #[test]
+fn pep_751_rejects_mismatched_wheel_identity() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pylock_toml = context.temp_dir.child("pylock.toml");
+    pylock_toml.write_str(
+        r#"
+        lock-version = "1.0"
+        created-by = "uv"
+
+        [[packages]]
+        name = "different"
+        version = "2.0.0"
+        wheels = [{ url = "https://example.com/iniconfig-2.0.0-py3-none-any.whl", hashes = { sha256 = "0000000000000000000000000000000000000000000000000000000000000000" } }]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--preview")
+        .arg("-r")
+        .arg("pylock.toml"), @r#"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Wheel filename `iniconfig-2.0.0-py3-none-any.whl` does not match package name `different`
+    "#);
+
+    pylock_toml.write_str(
+        r#"
+        lock-version = "1.0"
+        created-by = "uv"
+
+        [[packages]]
+        name = "iniconfig"
+        version = "1.0.0"
+        archive = { url = "https://example.com/iniconfig-2.0.0-py3-none-any.whl", hashes = { sha256 = "0000000000000000000000000000000000000000000000000000000000000000" } }
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--preview")
+        .arg("-r")
+        .arg("pylock.toml"), @r#"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Wheel filename `iniconfig-2.0.0-py3-none-any.whl` does not match package version `1.0.0`
+    "#);
+
+    // An incompatible wheel must still be validated before falling back to the sdist.
+    pylock_toml.write_str(
+        r#"
+        lock-version = "1.0"
+        created-by = "uv"
+
+        [[packages]]
+        name = "iniconfig"
+        version = "2.0.0"
+        sdist = { url = "https://example.com/iniconfig-2.0.0.tar.gz", hashes = { sha256 = "0000000000000000000000000000000000000000000000000000000000000000" } }
+        wheels = [{ url = "https://example.com/different-2.0.0-cp39-cp39-any.whl", hashes = { sha256 = "0000000000000000000000000000000000000000000000000000000000000000" } }]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--preview")
+        .arg("-r")
+        .arg("pylock.toml"), @r#"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Wheel filename `different-2.0.0-cp39-cp39-any.whl` does not match package name `iniconfig`
+    "#);
+
+    // A malformed wheel must not be ignored merely because an sdist is available.
+    pylock_toml.write_str(
+        r#"
+        lock-version = "1.0"
+        created-by = "uv"
+
+        [[packages]]
+        name = "iniconfig"
+        version = "2.0.0"
+        sdist = { url = "https://example.com/iniconfig-2.0.0.tar.gz", hashes = { sha256 = "0000000000000000000000000000000000000000000000000000000000000000" } }
+        wheels = [{ url = "https://example.com/invalid.whl", hashes = { sha256 = "0000000000000000000000000000000000000000000000000000000000000000" } }]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--preview")
+        .arg("-r")
+        .arg("pylock.toml"), @r#"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: The wheel filename "invalid.whl" is invalid: Must have a version
+    "#);
+
+    Ok(())
+}
+
+#[test]
 fn pep_751_mix() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
