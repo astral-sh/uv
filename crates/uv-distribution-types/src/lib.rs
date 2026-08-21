@@ -86,6 +86,7 @@ pub use crate::known_platform::*;
 pub use crate::origin::*;
 pub use crate::pip_index::*;
 pub use crate::prioritized_distribution::*;
+pub use crate::proxy_index::*;
 pub use crate::requested::*;
 pub use crate::requirement::*;
 pub use crate::requires_python::*;
@@ -119,6 +120,7 @@ mod known_platform;
 mod origin;
 mod pip_index;
 mod prioritized_distribution;
+mod proxy_index;
 mod requested;
 mod requirement;
 mod requires_python;
@@ -702,7 +704,7 @@ impl BuiltDist {
     }
 
     /// Returns the [`IndexUrl`], if the distribution is from a registry.
-    pub fn index(&self) -> Option<&IndexUrl> {
+    fn index(&self) -> Option<&IndexUrl> {
         match self {
             Self::Registry(registry) => Some(&registry.best_wheel().index),
             Self::DirectUrl(_) => None,
