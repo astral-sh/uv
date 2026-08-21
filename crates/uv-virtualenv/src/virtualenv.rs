@@ -633,6 +633,7 @@ pub(crate) fn create(
         root: location,
         executable,
         base_executable: base_python,
+        portable: false,
     })
 }
 
