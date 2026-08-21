@@ -635,7 +635,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 // commits.
                 self.builder.resolve_revision(source, &self.client).await?;
 
-                return Ok(ArchiveMetadata::from_metadata23(metadata.clone()));
+                return Ok(ArchiveMetadata::from_metadata23(metadata));
             }
         }
 
