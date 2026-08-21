@@ -16629,39 +16629,36 @@ async fn tar_wheel_traversal_is_not_recorded() -> Result<()> {
 
     let server = MockServer::start().await;
     let wheel_url = format!("{}/files/tar_wheel-1.0.0-py3-none-any.whl", server.uri());
-    Mock::given(method("GET"))
-        .and(path("/tar-wheel/"))
-        .respond_with(ResponseTemplate::new(200).set_body_raw(
-            formatdoc! {r#"
-                {{
-                    "name": "tar-wheel",
-                    "files": [{{
-                        "filename": "tar_wheel-1.0.0-py3-none-any.whl",
-                        "url": "{wheel_url}",
-                        "hashes": {{}},
-                        "core-metadata": true,
-                        "upload-time": "2024-03-24T00:00:00Z",
-                        "zstd": {{
-                            "hashes": {{}},
-                            "size": {}
-                        }}
-                    }}]
-                }}
-            "#, tar_wheel.len()},
-            "application/vnd.pyx.simple.v1+json",
-        ))
-        .mount(&server)
-        .await;
-    Mock::given(method("GET"))
-        .and(path("/files/tar_wheel-1.0.0-py3-none-any.whl.metadata"))
-        .respond_with(ResponseTemplate::new(200).set_body_string(indoc! {"
-            Metadata-Version: 2.1
-            Name: tar-wheel
-            Version: 1.0.0
-        "}))
-        .expect(1)
-        .mount(&server)
-        .await;
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["tar-wheel"]
+    "#})?;
+    context
+        .temp_dir
+        .child("uv.lock")
+        .write_str(&formatdoc! {r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+
+        [[package]]
+        name = "tar-wheel"
+        version = "1.0.0"
+        source = {{ registry = "{registry}" }}
+        wheels = [{{ url = "{wheel_url}", zstd = {{ size = {size} }} }}]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = {{ virtual = "." }}
+        dependencies = [{{ name = "tar-wheel" }}]
+    "#, registry = server.uri(), size = tar_wheel.len()})?;
     Mock::given(method("GET"))
         .and(path("/files/tar_wheel-1.0.0-py3-none-any.whl.tar.zst"))
         .respond_with(ResponseTemplate::new(200).set_body_bytes(tar_wheel))
@@ -16669,13 +16666,7 @@ async fn tar_wheel_traversal_is_not_recorded() -> Result<()> {
         .mount(&server)
         .await;
 
-    context
-        .pip_install()
-        .arg("tar-wheel==1.0.0")
-        .arg("--default-index")
-        .arg(server.uri())
-        .assert()
-        .success();
+    context.sync().arg("--frozen").assert().success();
 
     let installed_record = fs_err::read_to_string(
         context
