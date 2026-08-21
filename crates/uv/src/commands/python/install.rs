@@ -37,7 +37,7 @@ use uv_python::{
 };
 use uv_shell::Shell;
 use uv_trampoline_builder::{Launcher, LauncherKind};
-use uv_warnings::warn_user;
+use uv_warnings::{warn_user, warn_user_once};
 
 use crate::commands::python::{ChangeEvent, ChangeEventKind};
 use crate::commands::reporters::PythonDownloadReporter;
@@ -1130,6 +1130,21 @@ fn create_bin_links(
                                     installation.key(),
                                 );
                             } else if default {
+                                // When the installation is upgradeable, the executables point at
+                                // the minor version link, which is shared with `existing`. The
+                                // link is rewritten to the same path, so it still resolves to
+                                // whichever patch the minor version link targets.
+                                if upgradeable
+                                    && existing.minor_version_key()
+                                        == installation.minor_version_key()
+                                {
+                                    warn_user_once!(
+                                        "`--default` will not switch the default executables from `{}` to `{}`; both are reached through the same {} link",
+                                        existing.key(),
+                                        installation.key(),
+                                        installation.minor_version_key(),
+                                    );
+                                }
                                 debug!(
                                     "Replacing existing executable for `{}` at `{}` with executable for `{}` since `--default` was requested`",
                                     existing.key(),
