@@ -726,6 +726,8 @@ fn serialize_metadata(metadata: &str) -> String {
 
 #[cfg(test)]
 mod tests {
+    use std::assert_matches;
+
     use crate::{Pep723Error, Pep723Script, ScriptTag, serialize_metadata};
     use std::str::FromStr;
 
@@ -737,10 +739,10 @@ mod tests {
         # ///
     "};
 
-        assert!(matches!(
+        assert_matches!(
             ScriptTag::parse(contents.as_bytes()),
             Err(Pep723Error::UnclosedBlock)
-        ));
+        );
     }
 
     #[test]
@@ -754,10 +756,10 @@ mod tests {
         # ]
     "};
 
-        assert!(matches!(
+        assert_matches!(
             ScriptTag::parse(contents.as_bytes()),
             Err(Pep723Error::UnclosedBlock)
-        ));
+        );
     }
 
     #[test]
@@ -765,10 +767,10 @@ mod tests {
         // Explicit string (not `indoc`) so the closing tag's trailing space is preserved.
         let contents = "# /// script\n# requires-python = '>=3.11'\n# /// \n";
 
-        assert!(matches!(
+        assert_matches!(
             ScriptTag::parse(contents.as_bytes()),
             Err(Pep723Error::UnclosedBlockTrailingContent)
-        ));
+        );
     }
 
     #[test]
@@ -779,10 +781,10 @@ mod tests {
             # /// unexpected
         "};
 
-        assert!(matches!(
+        assert_matches!(
             ScriptTag::parse(contents.as_bytes()),
             Err(Pep723Error::UnclosedBlockTrailingContent)
-        ));
+        );
     }
 
     #[test]

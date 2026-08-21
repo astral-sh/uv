@@ -985,6 +985,7 @@ fn tracing_url(request: &Request, credentials: Option<&Authentication>) -> Displ
 
 #[cfg(test)]
 mod tests {
+    use std::assert_matches;
     use std::io::Write;
 
     use http::Method;
@@ -1504,11 +1505,9 @@ mod tests {
 
         let mut url = base_url.clone();
         url.set_username("other_user").unwrap();
-        assert!(
-            matches!(
-                client.get(url).send().await,
-                Err(reqwest_middleware::Error::Middleware(_))
-            ),
+        assert_matches!(
+            client.get(url).send().await,
+            Err(reqwest_middleware::Error::Middleware(_)),
             "If the username does not match, a password should not be fetched, and the middleware should fail eagerly since `authenticate = always` is not satisfied"
         );
 
@@ -2421,10 +2420,10 @@ mod tests {
             .build();
 
         // Unauthenticated requests are not allowed.
-        assert!(matches!(
+        assert_matches!(
             client.get(server.uri()).send().await,
             Err(reqwest_middleware::Error::Middleware(_))
-        ));
+        );
 
         Ok(())
     }

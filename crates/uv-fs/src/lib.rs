@@ -332,6 +332,7 @@ pub fn remove_symlink(path: impl AsRef<Path>) -> io::Result<()> {
 
 #[cfg(all(test, windows))]
 mod windows_tests {
+    use std::assert_matches;
     use std::os::windows::ffi::OsStrExt;
 
     use super::*;
@@ -385,10 +386,10 @@ mod windows_tests {
 
         let err = create_junction(&target, &link).unwrap_err();
         assert_eq!(err.kind(), std::io::ErrorKind::InvalidFilename);
-        assert!(matches!(
+        assert_matches!(
             fs_err::symlink_metadata(&link),
             Err(err) if err.kind() == std::io::ErrorKind::NotFound
-        ));
+        );
         Ok(())
     }
 }
@@ -984,6 +985,8 @@ pub fn clear_virtualenv(location: &Path) -> io::Result<bool> {
 
 #[cfg(test)]
 mod tests {
+    use std::assert_matches;
+
     use super::*;
 
     #[test]
@@ -997,10 +1000,10 @@ mod tests {
         create_symlink(&target, &link)?;
         remove_symlink(&link)?;
 
-        assert!(matches!(
+        assert_matches!(
             fs_err::symlink_metadata(&link),
             Err(err) if err.kind() == io::ErrorKind::NotFound
-        ));
+        );
         assert_eq!(fs_err::read_to_string(target.join("file"))?, "content");
         Ok(())
     }
@@ -1017,10 +1020,10 @@ mod tests {
 
         remove_virtualenv(&environment)?;
 
-        assert!(matches!(
+        assert_matches!(
             fs_err::symlink_metadata(environment),
             Err(err) if err.kind() == io::ErrorKind::NotFound
-        ));
+        );
         assert!(marker.is_file());
         Ok(())
     }

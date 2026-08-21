@@ -922,6 +922,8 @@ where
 
 #[cfg(test)]
 mod tests {
+    use std::assert_matches;
+
     use serde_json::json;
     use std::io::Write;
     use uv_client::{BaseClientBuilder, fetch_with_url_fallback, retryable_on_request_failure};
@@ -1316,7 +1318,7 @@ mod tests {
                 .await
                 .expect_err("no matching version should not fall back to canonical manifest");
 
-        assert!(matches!(err, Error::NoMatchingVersion { .. }));
+        assert_matches!(err, Error::NoMatchingVersion { .. });
         assert_eq!(mirror_server.received_requests().await.unwrap().len(), 1);
         assert_eq!(canonical_server.received_requests().await.unwrap().len(), 0);
     }

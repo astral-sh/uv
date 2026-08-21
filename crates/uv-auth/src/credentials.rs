@@ -635,6 +635,7 @@ impl Authentication {
 
 #[cfg(test)]
 mod tests {
+    use std::assert_matches;
     use std::future::{self, Future};
 
     use insta::{assert_debug_snapshot, assert_snapshot};
@@ -675,7 +676,7 @@ mod tests {
     #[test]
     fn from_url_no_credentials() {
         let url = &Url::parse("https://example.com/simple/first/").unwrap();
-        assert!(matches!(Credentials::from_url(url), Ok(None)));
+        assert_matches!(Credentials::from_url(url), Ok(None));
     }
 
     #[test]

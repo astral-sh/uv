@@ -319,6 +319,8 @@ pub struct Zstd {
 
 #[cfg(test)]
 mod tests {
+    use std::assert_matches;
+
     use super::*;
 
     #[test]
@@ -355,7 +357,7 @@ mod tests {
         // Borrows a URL without a fragment
         let url = UrlString("https://example.com/path".into());
         assert_eq!(&*url.without_fragment(), &url);
-        assert!(matches!(url.without_fragment(), Cow::Borrowed(_)));
+        assert_matches!(url.without_fragment(), Cow::Borrowed(_));
 
         // Removes the fragment if present on the URL
         let url = UrlString("https://example.com/path?query#fragment".into());
@@ -363,6 +365,6 @@ mod tests {
             &*url.without_fragment(),
             &UrlString("https://example.com/path?query".into())
         );
-        assert!(matches!(url.without_fragment(), Cow::Owned(_)));
+        assert_matches!(url.without_fragment(), Cow::Owned(_));
     }
 }

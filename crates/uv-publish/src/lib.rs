@@ -1583,6 +1583,7 @@ async fn handle_response(
 
 #[cfg(test)]
 mod tests {
+    use std::assert_matches;
     use std::path::PathBuf;
     use std::sync::Arc;
 
@@ -1675,10 +1676,10 @@ mod tests {
 
         for features in TAR_BACKENDS {
             let _preview = uv_preview::test::with_features(features);
-            assert!(matches!(
+            assert_matches!(
                 source_dist_pkg_info(file.path()).await,
                 Err(PublishPrepareError::MissingPkgInfo)
-            ));
+            );
         }
     }
 
@@ -1692,11 +1693,11 @@ mod tests {
 
         for features in TAR_BACKENDS {
             let _preview = uv_preview::test::with_features(features);
-            assert!(matches!(
+            assert_matches!(
                 source_dist_pkg_info(file.path()).await,
                 Err(PublishPrepareError::MultiplePkgInfo(paths))
                     if paths == "example-1.0/PKG-INFO, other-1.0/PKG-INFO"
-            ));
+            );
         }
     }
 

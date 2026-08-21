@@ -493,6 +493,9 @@ where
 
 #[cfg(test)]
 mod tests {
+    #[cfg(unix)]
+    use std::assert_matches;
+
     use super::*;
     use std::cmp;
     use std::process::Command;
@@ -650,7 +653,7 @@ mod tests {
         fs_err::create_dir(root.join("dir2/inner"))?;
         symlink("../../dir1", root.join("dir2/inner/dir_link"))?;
         let error = super::dirhash_path(root).unwrap_err();
-        std::assert_matches!(error, super::DirhashError::SymlinkCycle { .. });
+        assert_matches!(error, super::DirhashError::SymlinkCycle { .. });
         Ok(())
     }
 

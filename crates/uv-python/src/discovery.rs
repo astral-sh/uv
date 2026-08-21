@@ -3837,6 +3837,7 @@ fn split_wheel_tag_release_version(version: Version) -> Version {
 
 #[cfg(test)]
 mod tests {
+    use std::assert_matches;
     use std::{cell::Cell, io, path::PathBuf, str::FromStr};
 
     use assert_fs::{TempDir, prelude::*};
@@ -3884,11 +3885,11 @@ mod tests {
 
         sort_installations_by_key(&mut installations, |key| *key);
 
-        assert!(matches!(
+        assert_matches!(
             &installations[..],
             [Ok(2), Ok(1), Err(noncritical), Err(critical), Ok(3)]
                 if !noncritical.is_critical() && critical.is_critical()
-        ));
+        );
     }
 
     #[test]
@@ -4381,11 +4382,9 @@ mod tests {
                 PythonVariant::Default
             )
         );
-        assert!(
-            matches!(
-                VersionRequest::from_str("3rc1"),
-                Err(Error::InvalidVersionRequest(_))
-            ),
+        assert_matches!(
+            VersionRequest::from_str("3rc1"),
+            Err(Error::InvalidVersionRequest(_)),
             "Pre-release version requests require a minor version"
         );
         assert_eq!(
@@ -4415,25 +4414,19 @@ mod tests {
                 PythonVariant::Default
             )
         );
-        assert!(
-            matches!(
-                VersionRequest::from_str("3.12-dev"),
-                Err(Error::InvalidVersionRequest(_))
-            ),
+        assert_matches!(
+            VersionRequest::from_str("3.12-dev"),
+            Err(Error::InvalidVersionRequest(_)),
             "Development version segments are not allowed"
         );
-        assert!(
-            matches!(
-                VersionRequest::from_str("3.12+local"),
-                Err(Error::InvalidVersionRequest(_))
-            ),
+        assert_matches!(
+            VersionRequest::from_str("3.12+local"),
+            Err(Error::InvalidVersionRequest(_)),
             "Local version segments are not allowed"
         );
-        assert!(
-            matches!(
-                VersionRequest::from_str("3.12.post0"),
-                Err(Error::InvalidVersionRequest(_))
-            ),
+        assert_matches!(
+            VersionRequest::from_str("3.12.post0"),
+            Err(Error::InvalidVersionRequest(_)),
             "Post version segments are not allowed"
         );
         assert!(
@@ -4476,14 +4469,14 @@ mod tests {
                 PythonVariant::Freethreaded
             )
         );
-        assert!(matches!(
+        assert_matches!(
             VersionRequest::from_str("3.13tt"),
             Err(Error::InvalidVersionRequest(_))
-        ));
-        assert!(matches!(
+        );
+        assert_matches!(
             VersionRequest::from_str("3.12²t"),
             Err(Error::InvalidVersionRequest(_))
-        ));
+        );
 
         // `==` specifiers are parsed as concrete version requests via `from_specifiers`
         assert_eq!(
@@ -4639,22 +4632,22 @@ mod tests {
 
     #[test]
     fn test_try_split_prefix_and_version() {
-        assert!(matches!(
+        assert_matches!(
             PythonRequest::try_split_prefix_and_version("prefix", "prefix"),
             Ok(None),
-        ));
-        assert!(matches!(
+        );
+        assert_matches!(
             PythonRequest::try_split_prefix_and_version("prefix", "prefix3"),
             Ok(Some(_)),
-        ));
-        assert!(matches!(
+        );
+        assert_matches!(
             PythonRequest::try_split_prefix_and_version("prefix", "prefix@3"),
             Ok(Some(_)),
-        ));
-        assert!(matches!(
+        );
+        assert_matches!(
             PythonRequest::try_split_prefix_and_version("prefix", "prefix3notaversion"),
             Ok(None),
-        ));
+        );
         // Version parsing errors are only raised if @ is present.
         assert!(
             PythonRequest::try_split_prefix_and_version("prefix", "prefix@3notaversion").is_err()

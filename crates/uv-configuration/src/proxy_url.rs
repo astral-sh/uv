@@ -139,6 +139,8 @@ impl schemars::JsonSchema for ProxyUrl {
 
 #[cfg(test)]
 mod tests {
+    use std::assert_matches;
+
     use super::*;
 
     #[test]
@@ -199,7 +201,7 @@ mod tests {
     #[test]
     fn parse_invalid_proxy_urls() {
         let result = "ftp://proxy.example.com:8080".parse::<ProxyUrl>();
-        assert!(matches!(result, Err(ProxyUrlError::InvalidScheme { .. })));
+        assert_matches!(result, Err(ProxyUrlError::InvalidScheme { .. }));
         insta::assert_snapshot!(
             result.unwrap_err().to_string(),
             @"invalid proxy URL scheme `ftp` in `ftp://proxy.example.com:8080/`: expected http, https, socks5, or socks5h"
@@ -207,7 +209,7 @@ mod tests {
 
         // Invalid URL (spaces are not allowed)
         let result = "not a url".parse::<ProxyUrl>();
-        assert!(matches!(result, Err(ProxyUrlError::InvalidUrl(_))));
+        assert_matches!(result, Err(ProxyUrlError::InvalidUrl(_)));
         insta::assert_snapshot!(
             result.unwrap_err().to_string(),
             @"invalid proxy URL: invalid international domain name"
@@ -215,14 +217,14 @@ mod tests {
 
         // Empty string
         let result = "".parse::<ProxyUrl>();
-        assert!(matches!(result, Err(ProxyUrlError::InvalidUrl(_))));
+        assert_matches!(result, Err(ProxyUrlError::InvalidUrl(_)));
         insta::assert_snapshot!(
             result.unwrap_err().to_string(),
             @"invalid proxy URL: empty host"
         );
 
         let result = "file:///path/to/file".parse::<ProxyUrl>();
-        assert!(matches!(result, Err(ProxyUrlError::InvalidScheme { .. })));
+        assert_matches!(result, Err(ProxyUrlError::InvalidScheme { .. }));
         insta::assert_snapshot!(
             result.unwrap_err().to_string(),
             @"invalid proxy URL scheme `file` in `file:///path/to/file`: expected http, https, socks5, or socks5h"

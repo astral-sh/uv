@@ -660,6 +660,8 @@ impl AsRef<Path> for PortablePathBuf {
 
 #[cfg(test)]
 mod tests {
+    use std::assert_matches;
+
     use super::*;
 
     #[test]
@@ -809,8 +811,9 @@ mod tests {
         // Verify the fast path: already-normalized inputs are returned borrowed.
         for already_normalized in ["foo/bar", "/a/b/c", "foo", "/", ""] {
             let path = Path::new(already_normalized);
-            assert!(
-                matches!(normalize_path(path), Cow::Borrowed(_)),
+            assert_matches!(
+                normalize_path(path),
+                Cow::Borrowed(_),
                 "expected borrowed for {already_normalized:?}"
             );
         }
