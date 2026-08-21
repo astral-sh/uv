@@ -1261,8 +1261,7 @@ fn read_environment_path_file(path: &Path) -> io::Result<PathBuf> {
 pub(crate) fn is_centralized_environment_reference(path: &Path, cache: &Cache) -> bool {
     is_centralized_environment_link(path, cache)
         || read_environment_path_file(path)
-            .ok()
-            .is_some_and(|target| is_centralized_environment_path(&target, cache))
+            .is_ok_and(|target| is_centralized_environment_path(&target, cache))
 }
 
 /// Return the centralized environment path for a given workspace and interpreter.
@@ -1495,8 +1494,7 @@ impl ProjectInterpreter {
             // A centralized path file is not a local environment; let initialization replace it.
             if !(environment_selection.is_default()
                 && read_environment_path_file(&project_environment_path)
-                    .ok()
-                    .is_some_and(|target| is_centralized_environment_path(&target, cache)))
+                    .is_ok_and(|target| is_centralized_environment_path(&target, cache)))
                 && let Some(environment) = discover_project_environment(
                     &project_environment_path,
                     python_request.as_ref(),
