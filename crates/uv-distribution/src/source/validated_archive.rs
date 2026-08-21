@@ -75,7 +75,7 @@ impl ValidatedSourceArchive {
             algorithms,
             ArchiveOrigin::Http,
             expected_size,
-            |_| source.to_string(),
+            source.to_string(),
             || Some(info_span!("download_source_dist", source_dist = %source)),
         )
         .await
@@ -95,6 +95,7 @@ impl ValidatedSourceArchive {
         let reader = fs_err::tokio::File::open(&path)
             .await
             .map_err(Error::CacheRead)?;
+        let error_context = temp_dir.path().to_string_lossy().into_owned();
         Self::extract(
             reader,
             ext,
@@ -102,7 +103,7 @@ impl ValidatedSourceArchive {
             algorithms,
             ArchiveOrigin::Local,
             None,
-            |path| path.to_string_lossy().into_owned(),
+            error_context,
             || None,
         )
         .await
@@ -116,7 +117,7 @@ impl ValidatedSourceArchive {
         algorithms: &[HashAlgorithm],
         origin: ArchiveOrigin,
         expected_size: Option<u64>,
-        error_context: impl Fn(&Path) -> String,
+        error_context: String,
         make_span: impl FnOnce() -> Option<Span>,
     ) -> Result<Self, Error> {
         // Create a hasher for each hash algorithm.
@@ -128,9 +129,9 @@ impl ValidatedSourceArchive {
         let mut hasher = HashReader::new(reader, &mut hashers);
 
         let span = make_span();
-        uv_extract::stream::archive(&mut hasher, ext, staging_dir.path())
-            .await
-            .map_err(|err| Error::Extract(error_context(staging_dir.path()), err))?;
+        if let Err(err) = uv_extract::stream::archive(&mut hasher, ext, staging_dir.path()).await {
+            return Err(Error::Extract(error_context, err));
+        }
         drop(span);
 
         // If necessary, exhaust the reader to compute hashes or validate the archive size.
@@ -141,7 +142,7 @@ impl ValidatedSourceArchive {
             && hasher.bytes_read() != expected
         {
             return Err(Error::MismatchedSize {
-                distribution: error_context(staging_dir.path()),
+                distribution: error_context,
                 expected,
                 actual: hasher.bytes_read(),
             });
@@ -207,13 +208,7 @@ mod tests {
 
     use anyhow::Result;
 
-    use uv_distribution_filename::LegacySourceDistExtension;
-
     use super::*;
-
-    // Two zero-filled records form an empty, valid tar archive.
-    const EMPTY_TAR: &[u8] = &[0; 1024];
-    const TAR: SourceDistExtension = SourceDistExtension::Legacy(LegacySourceDistExtension::Tar);
 
     async fn extract(
         bytes: &[u8],
@@ -231,12 +226,12 @@ mod tests {
         let staging_dir = tempfile::tempdir().map_err(Error::CacheWrite)?;
         ValidatedSourceArchive::extract(
             reader,
-            TAR,
+            SourceDistExtension::TarGz,
             staging_dir,
             algorithms,
             ArchiveOrigin::Http,
             expected_size,
-            |_| "source.tar".to_owned(),
+            "source.tar.gz".to_owned(),
             || None,
         )
         .await
@@ -245,16 +240,20 @@ mod tests {
     #[tokio::test]
     async fn reader_is_exhausted_only_for_hashes_or_size() -> Result<()> {
         let _preview = uv_preview::test::with_features(&[]);
+        let bytes = fs_err::read(
+            Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("../../test/links/basic_package-0.1.0.tar.gz"),
+        )?;
         let trailing_read = Cell::new(false);
-        extract(EMPTY_TAR, &trailing_read, &[], None).await?;
+        extract(&bytes, &trailing_read, &[], None).await?;
         assert!(!trailing_read.get());
 
         for (algorithms, size) in [
             (&[HashAlgorithm::Sha256][..], None),
-            (&[][..], Some(EMPTY_TAR.len() as u64)),
+            (&[][..], Some(bytes.len() as u64)),
         ] {
             assert!(matches!(
-                extract(EMPTY_TAR, &trailing_read, algorithms, size).await,
+                extract(&bytes, &trailing_read, algorithms, size).await,
                 Err(Error::HashExhaustion(_))
             ));
             assert!(trailing_read.replace(false));
