@@ -25,8 +25,6 @@ use windows::core::{PSTR, s};
 
 use uv_windows::{Job, install_ctrl_handler};
 
-use uv_static::EnvVars;
-
 use crate::{error, format, warn};
 
 // https://learn.microsoft.com/en-us/windows/win32/menurc/resource-types
@@ -149,7 +147,7 @@ fn make_child_cmdline() -> CString {
                     // (in `launcher.c`). This allows virtual environments to
                     // be correctly detected when using trampolines. This
                     // environment variable is cleared by getpath.
-                    std::env::set_var(EnvVars::PYVENV_LAUNCHER, &executable_name);
+                    std::env::set_var("__PYVENV_LAUNCHER__", &executable_name);
                 }
             }
         }
