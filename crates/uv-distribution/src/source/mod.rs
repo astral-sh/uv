@@ -15,8 +15,9 @@ use std::str::FromStr;
 use std::sync::Arc;
 
 use fs_err::tokio as fs;
-use futures::FutureExt;
+use futures::{FutureExt, TryStreamExt};
 use reqwest::{Response, StatusCode};
+use tokio_util::compat::FuturesAsyncReadCompatExt;
 use tracing::{Instrument, debug, info_span, instrument, warn};
 use url::Url;
 
@@ -48,11 +49,10 @@ use uv_workspace::pyproject::ToolUvSources;
 
 use crate::distribution_database::ManagedClient;
 use crate::error::Error;
-use crate::hash::http_hash_algorithms;
 use crate::metadata::{ArchiveMetadata, GitWorkspaceMember, Metadata};
 use crate::source::built_wheel_metadata::{BuiltWheelFile, BuiltWheelMetadata};
 use crate::source::revision::Revision;
-use crate::source::validated_archive::ValidatedSourceArchive;
+use crate::source::validated_archive::{ArchiveValidation, ValidatedSourceArchive};
 use crate::{Reporter, RequiresDist};
 
 mod built_wheel_metadata;
@@ -982,9 +982,8 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 // Download the source distribution.
                 debug!("Downloading source distribution: {source}");
                 let entry = cache_shard.shard(revision.id()).entry(SOURCE);
-                let algorithms = http_hash_algorithms(hashes);
                 let (hashes, size) = self
-                    .download_archive(response, source, ext, entry.path(), &algorithms)
+                    .download_archive(response, source, ext, entry.path(), hashes, &[])
                     .await?;
 
                 Ok(revision
@@ -1350,9 +1349,15 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         // Unzip the archive to a temporary directory.
         debug!("Unpacking source distribution: {source}");
         let entry = cache_shard.shard(revision.id()).entry(SOURCE);
-        let algorithms = hashes.algorithms();
         let hashes = self
-            .persist_archive(&resource.path, resource.ext, entry.path(), &algorithms)
+            .persist_archive(
+                source,
+                &resource.path,
+                resource.ext,
+                entry.path(),
+                hashes,
+                &[],
+            )
             .await?;
 
         // Include the hashes and cache info in the revision.
@@ -1829,9 +1834,15 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         // Otherwise, we need to unzip the archive, or at least compute the hashes.
         debug!("Unpacking source distribution: {source}");
         let entry = cache_shard.entry(SOURCE);
-        let algorithms = hashes.algorithms();
         let hashes = self
-            .persist_archive(&install_path, resource.ext, entry.path(), &algorithms)
+            .persist_archive(
+                source,
+                &install_path,
+                resource.ext,
+                entry.path(),
+                hashes,
+                &[],
+            )
             .await?;
 
         // Persist the revision.
@@ -2708,25 +2719,16 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
     ) -> Result<Revision, Error> {
         warn!("Re-extracting missing source distribution: {source}");
 
-        // Take the union of the requested and existing hash algorithms.
-        let algorithms = {
-            let mut algorithms = hashes.algorithms();
-            for digest in revision.hashes() {
-                algorithms.push(digest.algorithm());
-            }
-            algorithms.sort();
-            algorithms.dedup();
-            algorithms
-        };
-
         let hashes = self
-            .persist_archive(&resource.path, resource.ext, entry.path(), &algorithms)
+            .persist_archive(
+                source,
+                &resource.path,
+                resource.ext,
+                entry.path(),
+                hashes,
+                revision.hashes(),
+            )
             .await?;
-        for existing in revision.hashes() {
-            if !hashes.contains(existing) {
-                return Err(Error::CacheHeal(source.to_string(), existing.algorithm()));
-            }
-        }
         Ok(revision.with_hashes(HashDigests::from(hashes)))
     }
 
@@ -2767,25 +2769,16 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
 
         let download = |response| {
             async {
-                // Take the union of the requested and existing hash algorithms.
-                let algorithms = {
-                    let mut algorithms = http_hash_algorithms(hashes);
-                    for digest in revision.hashes() {
-                        algorithms.push(digest.algorithm());
-                    }
-                    algorithms.sort();
-                    algorithms.dedup();
-                    algorithms
-                };
-
                 let (hashes, size) = self
-                    .download_archive(response, source, ext, entry.path(), &algorithms)
+                    .download_archive(
+                        response,
+                        source,
+                        ext,
+                        entry.path(),
+                        hashes,
+                        revision.hashes(),
+                    )
                     .await?;
-                for existing in revision.hashes() {
-                    if !hashes.contains(existing) {
-                        return Err(Error::CacheHeal(source.to_string(), existing.algorithm()));
-                    }
-                }
                 Ok(revision
                     .clone()
                     .with_hashes(HashDigests::from(hashes))
@@ -2820,15 +2813,34 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         source: &BuildableSource<'_>,
         ext: SourceDistExtension,
         target: &Path,
-        algorithms: &[HashAlgorithm],
+        hash_policy: HashPolicy<'_>,
+        existing_hashes: &[HashDigest],
     ) -> Result<(Vec<HashDigest>, u64), Error> {
-        let archive = ValidatedSourceArchive::extract_http(
-            response,
+        let reader = response
+            .bytes_stream()
+            .map_err(std::io::Error::other)
+            .into_async_read();
+        let expected_size = match source {
+            BuildableSource::Dist(SourceDist::Registry(dist)) if dist.size_is_authoritative => {
+                dist.size()
+            }
+            BuildableSource::Dist(SourceDist::DirectUrl(dist)) => dist.size(),
+            _ => None,
+        };
+
+        let archive = ValidatedSourceArchive::extract(
+            reader.compat(),
             source,
             ext,
             self.build_context.cache(),
-            algorithms,
+            ArchiveValidation {
+                extra_algorithms: &[HashAlgorithm::Sha256],
+                hash_policy,
+                existing_hashes,
+                expected_size,
+            },
         )
+        .instrument(info_span!("download_source_dist", source_dist = %source))
         .await?;
         let metadata = archive.persist(target).await?;
         Ok((metadata.hashes, metadata.size))
@@ -2837,16 +2849,28 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
     /// Extract, validate, and persist a local source archive into the cache.
     async fn persist_archive(
         &self,
+        source: &BuildableSource<'_>,
         path: &Path,
         ext: SourceDistExtension,
         target: &Path,
-        algorithms: &[HashAlgorithm],
+        hash_policy: HashPolicy<'_>,
+        existing_hashes: &[HashDigest],
     ) -> Result<Vec<HashDigest>, Error> {
-        let archive = ValidatedSourceArchive::extract_local(
-            path,
+        debug!("Unpacking for build: {}", path.display());
+        let reader = fs_err::tokio::File::open(path)
+            .await
+            .map_err(Error::CacheRead)?;
+        let archive = ValidatedSourceArchive::extract(
+            reader,
+            source,
             ext,
             self.build_context.cache(),
-            algorithms,
+            ArchiveValidation {
+                extra_algorithms: &[],
+                hash_policy,
+                existing_hashes,
+                expected_size: None,
+            },
         )
         .await?;
         Ok(archive.persist(target).await?.hashes)
