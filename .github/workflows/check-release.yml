@@ -6,6 +6,93 @@ env:
   CARGO_DIST_CHECKSUM: "cd355dab0b4c02fb59038fef87655550021d07f45f1d82f947a34ef98560abb8"
 
 jobs:
+  smoke-test-isolation:
+    name: "release smoke-test isolation"
+    timeout-minutes: 10
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: "Create artifacts"
+        run: |
+          mkdir smoke-test-artifacts
+          for file in uv.whl uv.tar.gz uv; do
+            printf 'original artifact\n' > "smoke-test-artifacts/$file"
+          done
+          sha256sum smoke-test-artifacts/* > "$RUNNER_TEMP/smoke-test-artifacts.sha256"
+          printf 'host only\n' > smoke-test-host-file
+      - name: "Attempt to modify artifacts"
+        uses: ./.github/actions/release-smoke-test
+        with:
+          image: alpine:3.12
+          artifacts: smoke-test-artifacts
+          run: |
+            test ! -e /var/run/docker.sock
+            test ! -e "${{ github.workspace }}/smoke-test-host-file"
+            test -z "${GITHUB_ENV:-}"
+            test -z "${ACTIONS_RUNTIME_TOKEN:-}"
+            for file in /dist/*; do
+              test "$(cat "$file")" = "original artifact"
+              if printf 'modified\n' > "$file"; then exit 1; fi
+              if rm "$file"; then exit 1; fi
+              if mv "$file" "$file.replaced"; then exit 1; fi
+            done
+            if touch /dist/injected.whl; then exit 1; fi
+            if printf 'modified\n' > /requirements.txt; then exit 1; fi
+            if printf 'modified\n' > /test/rust-toolchain.toml; then exit 1; fi
+            # Tests can still install and build in their own working directory.
+            mkdir build
+            cp /dist/uv build/uv
+            printf 'test copy\n' > build/uv
+      - name: "Reject a failed test command"
+        id: failed-command
+        continue-on-error: true
+        uses: ./.github/actions/release-smoke-test
+        with:
+          image: alpine:3.12
+          artifacts: smoke-test-artifacts
+          run: |
+            false
+            exit 0
+      - name: "Reject a mismatched pip wheel"
+        uses: ./.github/actions/release-smoke-test
+        with:
+          image: python:3.11-slim-bookworm
+          artifacts: smoke-test-artifacts
+          run: |
+            pip download --require-hashes --only-binary=:all: -r /requirements.txt -d wheels
+            pip install --no-index --find-links wheels --force-reinstall --require-hashes -r /requirements.txt
+            for wheel in wheels/pip-*.whl; do
+              printf 'modified\n' >> "$wheel"
+            done
+            if pip install --no-index --find-links wheels --force-reinstall --require-hashes -r /requirements.txt > pip-error.log 2>&1; then
+              exit 1
+            fi
+            cat pip-error.log
+            grep -q 'THESE PACKAGES DO NOT MATCH THE HASHES' pip-error.log
+      - name: "Reject an unavailable pip wheel"
+        uses: ./.github/actions/release-smoke-test
+        with:
+          image: python:3.11-slim-bookworm
+          artifacts: smoke-test-artifacts
+          run: |
+            if pip install --no-index --force-reinstall --require-hashes -r /requirements.txt > pip-error.log 2>&1; then
+              exit 1
+            fi
+            cat pip-error.log
+            grep -q 'No matching distribution found' pip-error.log
+      - name: "Verify isolation and failures"
+        env:
+          FAILED_COMMAND: ${{ steps.failed-command.outcome }}
+        run: |
+          test "$FAILED_COMMAND" = failure
+          sha256sum --check "$RUNNER_TEMP/smoke-test-artifacts.sha256"
+          test "$(find smoke-test-artifacts -type f | wc -l)" -eq 3
+          test "$(cat smoke-test-host-file)" = 'host only'
+
   dist-plan:
     name: "dist plan"
     runs-on: ubuntu-latest
