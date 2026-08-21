@@ -1741,9 +1741,11 @@ impl PylockTomlArchive {
             match ext {
                 DistExtension::Wheel => {
                     let filename = WheelFilename::from_str(&filename)?;
+                    let mut location = url.clone();
+                    location.set_fragment(None);
                     Ok(Dist::Built(BuiltDist::DirectUrl(DirectUrlBuiltDist {
                         filename,
-                        location: Box::new(url.clone()),
+                        location: Box::new(location),
                         url: VerbatimUrl::from_url(url.clone()),
                         size: self.size,
                     })))
