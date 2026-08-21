@@ -1,0 +1,271 @@
+# Exercise separated macOS signing and wheel assembly with the self-signed CI certificate.
+name: "Sign release binaries (test)"
+
+on:
+  workflow_call:
+
+permissions: {}
+
+env:
+  TARGET: aarch64-apple-darwin
+  ARTIFACT_SUFFIX: aarch64-apple-darwin
+
+jobs:
+  prepare-macos:
+    name: "prepare macOS signing inputs"
+    runs-on: depot-ubuntu-24.04-4
+    outputs:
+      manifest-sha256: ${{ steps.prepare.outputs.manifest-sha256 }}
+      tooling-sha256: ${{ steps.prepare.outputs.tooling-sha256 }}
+      unsigned-artifact: ${{ steps.unsigned.outputs.artifact-id }}
+      assembly-artifact: ${{ steps.assembly.outputs.artifact-id }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: "Build assembly tooling without signing credentials"
+        run: |
+          python3 -m unittest discover -s scripts -p test_macos_signing.py
+          cargo build --locked --package uv-dev --features dev
+          mkdir tools
+          cp target/debug/uv-dev scripts/macos_signing.py scripts/check_uv_wheel_contents.py tools/
+
+      - name: "Download unsigned wheels"
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: wheels_*-${{ env.ARTIFACT_SUFFIX }}
+          path: wheels
+          merge-multiple: true
+
+      - name: "Bind wheels and extract executable members"
+        id: prepare
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/macos_signing.py prepare
+          tar cf tooling.tar -C tools .
+          echo "tooling-sha256=$(shasum -a 256 tooling.tar | cut -d ' ' -f 1)" >> "$GITHUB_OUTPUT"
+
+      - name: "Upload unsigned executable wheel members"
+        id: unsigned
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: unsigned-macos-${{ github.run_id }}-${{ github.run_attempt }}-${{ env.TARGET }}
+          path: unsigned/*
+          if-no-files-found: error
+
+      - name: "Upload immutable assembly inputs"
+        id: assembly
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: assembly-macos-${{ github.run_id }}-${{ github.run_attempt }}-${{ env.TARGET }}
+          path: |
+            wheels
+            manifest.json
+            tooling.tar
+          if-no-files-found: error
+
+  sign-macos:
+    name: "sign macOS binaries"
+    needs: prepare-macos
+    runs-on: namespace-profile-macos-15
+    environment: release-test
+    outputs:
+      artifact: ${{ steps.upload.outputs.artifact-id }}
+      manifest-sha256: ${{ steps.manifest.outputs.manifest-sha256 }}
+    steps:
+      - name: "Download unsigned executable wheel members"
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          artifact-ids: ${{ needs.prepare-macos.outputs.unsigned-artifact }}
+          path: unsigned
+          merge-multiple: true
+
+      - name: "Verify signing inputs"
+        env:
+          INPUT_MANIFEST_SHA256: ${{ needs.prepare-macos.outputs.manifest-sha256 }}
+        run: |
+          set -euo pipefail
+          test "$(shasum -a 256 unsigned/manifest.json | cut -d ' ' -f 1)" = "$INPUT_MANIFEST_SHA256"
+          jq -e --arg repository "$GITHUB_REPOSITORY" --arg workflow "$GITHUB_WORKFLOW_REF" \
+            --arg workflow_sha "$GITHUB_WORKFLOW_SHA" --arg run "$GITHUB_RUN_ID" \
+            --arg attempt "$GITHUB_RUN_ATTEMPT" --arg source "$GITHUB_SHA" --arg target "$TARGET" \
+            '.schema == 1 and .context == {repository: $repository, workflow_ref: $workflow,
+            workflow_sha: $workflow_sha, run_id: $run, run_attempt: $attempt, source_sha: $source,
+            target: $target, signing_workflow: ".github/workflows/sign-release-binaries.yml"}
+            and ([.wheels[].replacements[]] | sort) == ["uv", "uv-build", "uvx"]' unsigned/manifest.json
+          for binary in uv uvx uv-build; do
+            expected=$(jq -r --arg binary "$binary" '.wheels[] | . as $wheel | .replacements | to_entries[] | select(.value == $binary) | $wheel.members[.key].sha256' unsigned/manifest.json)
+            test "$(shasum -a 256 "unsigned/$binary" | cut -d ' ' -f 1)" = "$expected"
+          done
+
+      - name: "Sign executable wheel members"
+        shell: bash
+        env:
+          CODESIGN_CERTIFICATE_MACOS: ${{ secrets.CODESIGN_CERTIFICATE_MACOS }}
+          CODESIGN_CERTIFICATE_PASSWORD: ${{ secrets.CODESIGN_CERTIFICATE_PASSWORD }}
+          CODESIGN_IDENTITY_MACOS: ${{ secrets.CODESIGN_IDENTITY_MACOS }}
+        run: |
+          set -euo pipefail
+
+          certificate="$RUNNER_TEMP/codesign-test.p12"
+          keychain="$RUNNER_TEMP/codesign-test.keychain-db"
+          keychain_password="$(uuidgen | tr -d '-')"
+          trap 'security delete-keychain "$keychain" >/dev/null 2>&1 || true; rm -f "$certificate"' EXIT
+
+          printf '%s' "$CODESIGN_CERTIFICATE_MACOS" | base64 --decode > "$certificate"
+          security create-keychain -p "$keychain_password" "$keychain"
+          security set-keychain-settings -t 21600 -u "$keychain"
+          security unlock-keychain -p "$keychain_password" "$keychain"
+          security import "$certificate" \
+            -k "$keychain" \
+            -P "$CODESIGN_CERTIFICATE_PASSWORD" \
+            -f pkcs12 \
+            -T /usr/bin/codesign \
+            -T /usr/bin/security >/dev/null
+          security set-key-partition-list \
+            -S apple-tool:,apple:,codesign: \
+            -s \
+            -k "$keychain_password" \
+            "$keychain" >/dev/null
+
+          existing_keychains=()
+          while IFS= read -r existing_keychain; do
+            existing_keychain="${existing_keychain#\"}"
+            existing_keychain="${existing_keychain%\"}"
+            existing_keychains+=("$existing_keychain")
+          done < <(security list-keychains -d user | sed -E 's/^[[:space:]]+//')
+          security list-keychains -d user -s "$keychain" "${existing_keychains[@]}"
+
+          mkdir -p signed
+          for binary in uv uvx uv-build; do
+            test -f "unsigned/$binary"
+            cp "unsigned/$binary" "signed/$binary"
+            codesign \
+              --force \
+              --keychain "$keychain" \
+              --sign "$CODESIGN_IDENTITY_MACOS" \
+              --options runtime \
+              --timestamp=none \
+              "signed/$binary"
+          done
+
+      - name: "Bind signed bytes and signing certificate"
+        id: manifest
+        run: |
+          set -euo pipefail
+          cp unsigned/manifest.json signed/manifest.json
+          for binary in uv uvx uv-build; do
+            codesign --verify --strict "signed/$binary"
+            codesign --display --extract-certificates="$RUNNER_TEMP/$binary-cert-" "signed/$binary"
+            certificate_sha256=$(shasum -a 256 "$RUNNER_TEMP/$binary-cert-0" | cut -d ' ' -f 1)
+            digest=$(shasum -a 256 "signed/$binary" | cut -d ' ' -f 1)
+            size=$(wc -c < "signed/$binary" | tr -d '[:space:]')
+            jq --arg binary "$binary" --arg digest "$digest" --argjson size "$size" --arg certificate "$certificate_sha256" \
+              'if .certificate_sha256 != null and .certificate_sha256 != $certificate then error("signing certificate mismatch") else
+              .certificate_sha256 = $certificate | .signed[$binary] = {sha256: $digest, size: $size} end' \
+              signed/manifest.json > signed/manifest.next
+            mv signed/manifest.next signed/manifest.json
+          done
+          echo "manifest-sha256=$(shasum -a 256 signed/manifest.json | cut -d ' ' -f 1)" >> "$GITHUB_OUTPUT"
+
+      - name: "Upload signed executable wheel members"
+        id: upload
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: signed-macos-${{ github.run_id }}-${{ github.run_attempt }}-${{ env.TARGET }}
+          path: signed/*
+          if-no-files-found: error
+
+  assemble-macos:
+    name: "assemble signed macOS artifacts"
+    needs: [prepare-macos, sign-macos]
+    runs-on: depot-ubuntu-24.04-4
+    outputs:
+      artifact: ${{ steps.upload.outputs.artifact-id }}
+      manifest-sha256: ${{ steps.assemble.outputs.manifest-sha256 }}
+    steps:
+      - name: "Download bound assembly inputs"
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          artifact-ids: ${{ needs.prepare-macos.outputs.assembly-artifact }}
+          merge-multiple: true
+
+      - name: "Download signed executable wheel members"
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          artifact-ids: ${{ needs.sign-macos.outputs.artifact }}
+          path: signed
+          merge-multiple: true
+
+      - name: "Assemble signed wheels and archive without a source checkout"
+        id: assemble
+        env:
+          TOOLING_SHA256: ${{ needs.prepare-macos.outputs.tooling-sha256 }}
+          INPUT_MANIFEST_SHA256: ${{ needs.prepare-macos.outputs.manifest-sha256 }}
+          SIGNED_MANIFEST_SHA256: ${{ needs.sign-macos.outputs.manifest-sha256 }}
+        run: |
+          set -euo pipefail
+          test "$(shasum -a 256 tooling.tar | cut -d ' ' -f 1)" = "$TOOLING_SHA256"
+          mkdir tools
+          tar xf tooling.tar -C tools
+          python3 tools/macos_signing.py assemble
+
+      - name: "Upload signed macOS artifacts"
+        id: upload
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: signed-macos-artifacts-${{ github.run_id }}-${{ github.run_attempt }}-${{ env.TARGET }}
+          path: dist
+          if-no-files-found: error
+
+  verify-macos:
+    name: "verify signed macOS artifacts"
+    needs: [prepare-macos, sign-macos, assemble-macos]
+    runs-on: namespace-profile-macos-15
+    steps:
+      - name: "Download original bindings and independent verification tooling"
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          artifact-ids: ${{ needs.prepare-macos.outputs.assembly-artifact }}
+          merge-multiple: true
+
+      - name: "Download signer bindings"
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          artifact-ids: ${{ needs.sign-macos.outputs.artifact }}
+          path: signed
+          merge-multiple: true
+
+      - name: "Download completed artifacts"
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          artifact-ids: ${{ needs.assemble-macos.outputs.artifact }}
+          path: dist
+          merge-multiple: true
+
+      - name: "Independently verify final wheels, members and signatures"
+        env:
+          TOOLING_SHA256: ${{ needs.prepare-macos.outputs.tooling-sha256 }}
+          INPUT_MANIFEST_SHA256: ${{ needs.prepare-macos.outputs.manifest-sha256 }}
+          SIGNED_MANIFEST_SHA256: ${{ needs.sign-macos.outputs.manifest-sha256 }}
+          FINAL_MANIFEST_SHA256: ${{ needs.assemble-macos.outputs.manifest-sha256 }}
+        run: |
+          set -euo pipefail
+          test "$(shasum -a 256 tooling.tar | cut -d ' ' -f 1)" = "$TOOLING_SHA256"
+          mkdir tools
+          tar xf tooling.tar -C tools
+          python3 tools/macos_signing.py verify
+          expected_certificate=$(jq -r .certificate_sha256 signed/manifest.json)
+          for binary in uv uvx uv-build; do
+            path="$RUNNER_TEMP/verified-binaries/$binary"
+            codesign --verify --strict --verbose=4 "$path"
+            details="$(codesign -dv --verbose=4 "$path" 2>&1)"
+            if grep -q 'Signature=adhoc' <<< "$details"; then
+              echo "Expected an identity signature on '$binary'." >&2
+              exit 1
+            fi
+            codesign --display --extract-certificates="$RUNNER_TEMP/verified-$binary-cert-" "$path"
+            test "$(shasum -a 256 "$RUNNER_TEMP/verified-$binary-cert-0" | cut -d ' ' -f 1)" = "$expected_certificate"
+          done
