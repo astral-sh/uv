@@ -1,10 +1,12 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
+use std::process::Command;
 
 use anyhow::Result;
 use assert_cmd::prelude::*;
 use assert_fs::prelude::*;
 use indoc::indoc;
 use predicates::prelude::*;
+use uv_cache::ARCHIVE_VERSION;
 use uv_cache_key::cache_digest;
 use uv_fs::{LockedFile, LockedFileMode};
 use uv_python::{PYTHON_VERSION_FILENAME, PYTHON_VERSIONS_FILENAME};
@@ -17,7 +19,7 @@ use std::{ffi::OsStr, os::unix::ffi::OsStrExt};
 #[cfg(windows)]
 use std::{ffi::OsString, os::windows::ffi::OsStringExt};
 
-use uv_test::{site_packages_path, uv_snapshot};
+use uv_test::{site_packages_path, uv_snapshot, venv_bin_path};
 
 #[test]
 fn create_venv() {
@@ -1739,6 +1741,410 @@ fn verify_pyvenv_cfg_relocatable() {
     activate_xsh.assert(predicates::str::contains(
         r#"self.embedded_virtual_prompt = b"r\xc3\xa9sum\xc3\xa9 \"quoted\"\\path\n".decode("utf-8")"#,
     ));
+}
+
+#[test]
+fn relocatable_portable_environment() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&[])
+        .with_filtered_python_keys()
+        .with_filtered_exe_suffix()
+        .with_filtered_latest_python_versions()
+        .with_managed_python_dirs()
+        .with_empty_python_install_mirror()
+        .with_python_download_cache();
+
+    context.python_install().arg("3.12").assert().success();
+    let pyvenv_cfg = context.venv.child("pyvenv.cfg");
+    uv_snapshot!(context.filters(), context
+        .venv()
+        .arg(context.venv.as_os_str())
+        .arg("--python")
+        .arg("3.12")
+        .arg("--relocatable")
+        .arg("--system-site-packages")
+        .arg("--preview-features")
+        .arg("portable-envs"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Using CPython 3.12.[LATEST]
+    warning: The `portable-envs` preview feature is ignored when using `--system-site-packages`
+    Creating virtual environment at: .venv
+    Activate with: source .venv/[BIN]/activate
+    ");
+
+    pyvenv_cfg.assert(predicates::str::contains("home = "));
+    pyvenv_cfg.assert(predicates::str::contains(
+        "include-system-site-packages = true",
+    ));
+
+    context
+        .venv()
+        .arg(context.venv.as_os_str())
+        .arg("--python")
+        .arg("3.12")
+        .arg("--relocatable")
+        .arg("--clear")
+        .arg("--preview-features")
+        .arg("portable-envs")
+        .assert()
+        .success();
+
+    pyvenv_cfg.assert(predicates::str::contains("relocatable = true"));
+    pyvenv_cfg.assert(predicates::str::contains("home = ").not());
+    pyvenv_cfg.assert(predicates::str::contains(
+        "include-system-site-packages = false",
+    ));
+
+    let stdlib = if cfg!(windows) {
+        context.venv.child("Lib")
+    } else {
+        context.venv.child("lib").child("python3.12")
+    };
+    stdlib.child("os.py").assert(predicates::path::is_file());
+    stdlib
+        .child("EXTERNALLY-MANAGED")
+        .assert(predicates::path::missing());
+
+    let scripts = venv_bin_path(&context.venv);
+    let pip = scripts.join(format!("pip{}", std::env::consts::EXE_SUFFIX));
+    assert!(!pip.exists());
+
+    context
+        .pip_install()
+        .arg("iniconfig")
+        .arg("wheel")
+        .assert()
+        .success();
+
+    #[cfg(windows)]
+    for name in ["python.exe", "pythonw.exe", "python3.dll", "python312.dll"] {
+        let destination = context.venv.child("Scripts").child(name);
+        if destination.path().is_file() {
+            destination.write_str("outdated")?;
+        }
+    }
+
+    context
+        .venv()
+        .arg(context.venv.as_os_str())
+        .arg("--python")
+        .arg("3.12")
+        .arg("--relocatable")
+        .arg("--allow-existing")
+        .arg("--seed")
+        .arg("--preview-features")
+        .arg("portable-envs")
+        .assert()
+        .success();
+
+    assert!(pip.is_file());
+
+    #[cfg(windows)]
+    for name in ["python.exe", "pythonw.exe", "python3.dll", "python312.dll"] {
+        let source = context.venv.child(name);
+        if source.path().is_file() {
+            let destination = context.venv.child("Scripts").child(name);
+            assert_eq!(
+                fs_err::read(source.path())?,
+                fs_err::read(destination.path())?
+            );
+        }
+    }
+
+    let nested = context.temp_dir.child("nested");
+    context
+        .venv()
+        .arg(nested.path())
+        .arg("--python")
+        .arg(context.interpreter())
+        .arg("--relocatable")
+        .arg("--preview-features")
+        .arg("portable-envs")
+        .assert()
+        .success();
+    nested
+        .child("pyvenv.cfg")
+        .assert(predicates::str::contains("home = "));
+    assert!(
+        !venv_bin_path(nested.path())
+            .join(format!("wheel{}", std::env::consts::EXE_SUFFIX))
+            .exists()
+    );
+
+    let relocated = context.temp_dir.child("relocated");
+    fs_err::rename(context.venv.path(), relocated.path())?;
+    fs_err::remove_dir_all(context.temp_dir.child("managed"))?;
+
+    let portable_environment_command = |environment: &Path| {
+        let python =
+            venv_bin_path(environment).join(format!("python{}", std::env::consts::EXE_SUFFIX));
+
+        let mut command = Command::new(python);
+        command.arg("-c").arg(indoc! {r##"
+            import iniconfig
+            import os
+            import shlex
+            import subprocess
+            import sys
+            import sysconfig
+
+            if os.name == "posix":
+                assert sysconfig.get_config_var("prefix") == sys.prefix
+                install = shlex.split(sysconfig.get_config_var("INSTALL"))[0]
+                assert os.path.basename(install) == "install", install
+                wasm_assets = sysconfig.get_config_var("WASM_ASSETS_DIR")
+                if wasm_assets is not None:
+                    assert wasm_assets == "./install", wasm_assets
+                for key in ("BINDIR", "LIBDIR", "INCLUDEPY", "LIBPL"):
+                    path = sysconfig.get_config_var(key)
+                    assert path.startswith(sys.prefix + os.sep), (key, path)
+                    assert os.path.exists(path), (key, path)
+
+                site_packages = sysconfig.get_path("platlib")
+                extension = os.path.join(
+                    site_packages,
+                    "_portable_extension" + sysconfig.get_config_var("EXT_SUFFIX"),
+                )
+                if not os.path.exists(extension):
+                    source = os.path.join(site_packages, "_portable_extension.c")
+                    with open(source, "w", encoding="utf-8") as file:
+                        file.write(
+                            "#include <Python.h>\n"
+                            "static PyModuleDef module = {"
+                            'PyModuleDef_HEAD_INIT, "_portable_extension", NULL, -1, NULL};\n'
+                            "PyMODINIT_FUNC PyInit__portable_extension(void) {"
+                            "return PyModule_Create(&module);}\n"
+                        )
+                    subprocess.run(
+                        [
+                            *shlex.split(sysconfig.get_config_var("LDSHARED")),
+                            "-I",
+                            sysconfig.get_path("include"),
+                            source,
+                            "-o",
+                            extension,
+                        ],
+                        check=True,
+                    )
+                __import__("_portable_extension")
+
+            if sys.platform == "darwin":
+                dylib = os.path.join(sys.prefix, "lib", "libpython3.12.dylib")
+                install_name = subprocess.check_output(
+                    ("otool", "-D", dylib), text=True
+                ).splitlines()[-1]
+                assert install_name == "@executable_path/../lib/libpython3.12.dylib"
+
+            scripts = os.path.dirname(sys.executable)
+            suffix = ".exe" if os.name == "nt" else ""
+            subprocess.run(
+                (os.path.join(scripts, f"pip{suffix}"), "--version"),
+                check=True,
+                stdout=subprocess.DEVNULL,
+            )
+            subprocess.run(
+                (os.path.join(scripts, f"wheel{suffix}"), "version"),
+                check=True,
+                stdout=subprocess.DEVNULL,
+            )
+
+            print("ok")
+        "##});
+        command
+    };
+
+    portable_environment_command(relocated.path())
+        .assert()
+        .success();
+
+    let archive = context.temp_dir.child("portable.tar");
+    let unpacked = context.temp_dir.child("unpacked");
+    let python =
+        venv_bin_path(relocated.path()).join(format!("python{}", std::env::consts::EXE_SUFFIX));
+    Command::new(python)
+        .arg("-c")
+        .arg(indoc! {r#"
+            import sys
+            import tarfile
+
+            with tarfile.open(sys.argv[1], "w") as archive:
+                archive.add(sys.argv[2], arcname="portable")
+            with tarfile.open(sys.argv[1]) as archive:
+                archive.extractall(sys.argv[3], filter="data")
+        "#})
+        .arg(archive.path())
+        .arg(relocated.path())
+        .arg(unpacked.path())
+        .assert()
+        .success();
+    fs_err::remove_dir_all(relocated.path())?;
+
+    uv_snapshot!(context.filters(), portable_environment_command(unpacked.child("portable").path()), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    ok
+    ");
+
+    Ok(())
+}
+
+#[test]
+fn relocatable_portable_environment_sync_python314() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&[])
+        .with_filtered_python_keys()
+        .with_filtered_exe_suffix()
+        .with_managed_python_dirs()
+        .with_empty_python_install_mirror()
+        .with_python_download_cache();
+
+    context.python_install().arg("3.14").assert().success();
+    let managed_python = context.python_find().arg("3.14").output()?;
+    assert!(managed_python.status.success());
+    let managed_python = std::str::from_utf8(&managed_python.stdout)?.trim();
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+            [project]
+            name = "project"
+            version = "0.1.0"
+            requires-python = ">=3.14"
+            dependencies = ["iniconfig"]
+        "#})?;
+    context
+        .venv()
+        .arg(context.venv.as_os_str())
+        .arg("--python")
+        .arg("3.14")
+        .arg("--relocatable")
+        .arg("--preview-features")
+        .arg("portable-envs")
+        .assert()
+        .success();
+
+    uv_snapshot!(context.filters(), context.sync(), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    ");
+
+    let marker = context.venv.child("portable-marker");
+    marker.write_str("")?;
+    // The copied interpreter is outside the managed installation directory. Its home-less
+    // pyvenv.cfg must preserve managed provenance so --managed-python reuses the environment.
+    context.sync().arg("--managed-python").assert().success();
+    marker.assert(predicates::path::is_file());
+
+    context
+        .sync()
+        .arg("--python")
+        .arg(managed_python)
+        .assert()
+        .success();
+    marker.assert(predicates::path::is_file());
+
+    let managed_build = Path::new(managed_python)
+        .ancestors()
+        .map(|parent| parent.join("BUILD"))
+        .find(|path| path.is_file())
+        .ok_or_else(|| anyhow::anyhow!("managed Python installation does not have a BUILD file"))?;
+    let managed_installation = managed_build
+        .parent()
+        .ok_or_else(|| anyhow::anyhow!("managed Python installation does not have a parent"))?;
+    fs_err::remove_file(&managed_build)?;
+    fs_err::remove_file(context.venv.join("BUILD"))?;
+    context
+        .sync()
+        .arg("--python")
+        .arg(managed_installation)
+        .assert()
+        .success();
+    marker.assert(predicates::path::is_file());
+
+    context
+        .run()
+        .env_remove(EnvVars::VIRTUAL_ENV)
+        .arg("--no-project")
+        .arg("--python")
+        .arg(managed_python)
+        .arg("--with")
+        .arg("iniconfig")
+        .arg("--preview-features")
+        .arg("portable-envs")
+        .arg("python")
+        .arg("-c")
+        .arg("import iniconfig")
+        .assert()
+        .success();
+
+    let archives = context
+        .cache_dir
+        .child(format!("archive-v{ARCHIVE_VERSION}"));
+    let mut found_cached_environment = false;
+    for entry in fs_err::read_dir(archives.path())? {
+        let root = entry?.path();
+        if root.join("pyvenv.cfg").is_file() {
+            let stdlib = if cfg!(windows) {
+                root.join("Lib")
+            } else {
+                root.join("lib").join("python3.14")
+            };
+            assert!(!stdlib.join("os.py").exists());
+            found_cached_environment = true;
+        }
+    }
+    assert!(found_cached_environment);
+
+    #[cfg(windows)]
+    {
+        context.python_install().arg("3.13t").assert().success();
+        let managed_freethreaded = context.python_find().arg("3.13t").output()?;
+        assert!(managed_freethreaded.status.success());
+        let managed_freethreaded =
+            PathBuf::from(std::str::from_utf8(&managed_freethreaded.stdout)?.trim());
+
+        for (standard, versioned) in [
+            ("python.exe", "python3.13t.exe"),
+            ("pythonw.exe", "pythonw3.13t.exe"),
+        ] {
+            let standard = managed_freethreaded.with_file_name(standard);
+            let versioned = managed_freethreaded.with_file_name(versioned);
+            if standard.is_file() && versioned.is_file() {
+                fs_err::remove_file(standard)?;
+            }
+        }
+
+        let freethreaded = context.temp_dir.child("portable-freethreaded");
+        context
+            .venv()
+            .arg(freethreaded.path())
+            .arg("--python")
+            .arg("3.13t")
+            .arg("--relocatable")
+            .arg("--preview-features")
+            .arg("portable-envs")
+            .assert()
+            .success();
+
+        let scripts = freethreaded.child("Scripts");
+        for name in [
+            "python.exe",
+            "pythonw.exe",
+            "python3.13t.exe",
+            "pythonw3.13t.exe",
+        ] {
+            scripts.child(name).assert(predicates::path::is_file());
+        }
+        Command::new(scripts.child("python.exe").path())
+            .arg("--version")
+            .assert()
+            .success();
+    }
+
+    Ok(())
 }
 
 /// With `UV_VENV_RELOCATABLE=1`, the virtual environment is relocatable.
