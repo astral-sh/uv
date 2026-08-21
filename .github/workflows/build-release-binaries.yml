@@ -589,6 +589,11 @@ jobs:
             scripts/install-cargo-extensions.sh
 
             if [[ "${{ matrix.platform.pgo }}" == "true" ]]; then
+                # GNU ld cannot resolve long-range calls in the instrumented ARM64 binary.
+                bundled_lld_dir="$(rustc --print sysroot)/lib/rustlib/${{ matrix.platform.target }}/bin/gcc-ld"
+                test -x "${bundled_lld_dir}/ld.lld"
+                export RUSTFLAGS="${RUSTFLAGS:+${RUSTFLAGS} }-C link-arg=-B${bundled_lld_dir} -C link-arg=-fuse-ld=lld"
+
                 rustup component add llvm-tools-preview
                 python${{ env.PYTHON_VERSION }} scripts/build_uv_pgo.py \
                     --target "${{ matrix.platform.target }}" \
