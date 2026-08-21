@@ -43,7 +43,8 @@ use crate::commands::pip::operations::{Changelog, report_interpreter};
 use crate::commands::project::{
     LinkErrorReporting, WorkspacePython, centralized_environment_root,
     centralized_environments_enabled, is_centralized_environment_reference,
-    lock_project_environment, update_project_environment_link, validate_project_requires_python,
+    lock_project_environment, project_environment_upgradeable, update_project_environment_link,
+    validate_project_requires_python,
 };
 use crate::commands::reporters::PythonDownloadReporter;
 use crate::printer::Printer;
@@ -179,9 +180,7 @@ pub(crate) async fn venv(
         python.into_interpreter()
     };
 
-    let upgradeable = python_request
-        .as_ref()
-        .is_none_or(|request| !request.includes_patch());
+    let upgradeable = project_environment_upgradeable(python_request.as_ref());
 
     // Determine the default path.
     let path = if let Some(workspace) = centralized_workspace {

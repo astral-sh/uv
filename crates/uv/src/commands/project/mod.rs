@@ -1265,6 +1265,11 @@ pub(crate) fn is_centralized_environment_reference(path: &Path, cache: &Cache) -
             .is_some_and(|target| is_centralized_environment_path(&target, cache))
 }
 
+/// Return whether a project environment can follow managed Python patch upgrades.
+pub(crate) fn project_environment_upgradeable(python_request: Option<&PythonRequest>) -> bool {
+    python_request.is_none_or(|request| !request.includes_patch())
+}
+
 /// Return the centralized environment path for a given workspace and interpreter.
 pub(crate) fn centralized_environment_root(
     workspace: &Workspace,
@@ -1454,9 +1459,7 @@ impl ProjectInterpreter {
 
         let environment_selection = workspace.environment_selection(active);
         let centralized = centralized_environments_enabled(&environment_selection, cache);
-        let upgradeable = python_request
-            .as_ref()
-            .is_none_or(|request| !request.includes_patch());
+        let upgradeable = project_environment_upgradeable(python_request.as_ref());
 
         // Prefer `.venv`'s interpreter to keep its compatible cached environment selected; derive
         // the cache root instead of trusting the link target.
@@ -1890,10 +1893,7 @@ impl ProjectEnvironment {
             config_discovery,
         )
         .await?;
-        let upgradeable = workspace_python
-            .python_request
-            .as_ref()
-            .is_none_or(|request| !request.includes_patch());
+        let upgradeable = project_environment_upgradeable(workspace_python.python_request.as_ref());
 
         match ProjectInterpreter::discover(
             workspace,
