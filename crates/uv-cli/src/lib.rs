@@ -1377,7 +1377,7 @@ impl UnresolvedIndex {
                 // Keep relative paths anchored to their configuration file without marking them
                 // as absolute when CLI settings are rebased or written back to a project.
                 if let IndexUrl::Path(url) = index.url()
-                    && !url.was_given_absolute()
+                    && url.prefer_relative()
                 {
                     index.url = IndexUrl::from(VerbatimUrl::from_url(index.raw_url().clone()));
                 }

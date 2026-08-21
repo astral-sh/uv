@@ -2322,7 +2322,7 @@ impl Lock {
             IndexUrl::Path(url) => {
                 if let Some(locals) = locals.as_mut()
                     && let Some(path) = url.to_file_path().ok().and_then(|path| {
-                        try_relative_to_if(&path, root, !url.was_given_absolute()).ok()
+                        try_relative_to_if(&path, root, url.prefer_relative()).ok()
                     })
                 {
                     locals.insert(path.into_boxed_path());
@@ -2627,7 +2627,7 @@ impl Lock {
                     IndexUrl::Pypi(_) | IndexUrl::Url(_) => None,
                     IndexUrl::Path(url) => {
                         let path = url.to_file_path().ok()?;
-                        let path = try_relative_to_if(&path, root, !url.was_given_absolute())
+                        let path = try_relative_to_if(&path, root, url.prefer_relative())
                             .ok()?
                             .into_boxed_path();
                         Some(path)
@@ -4910,7 +4910,7 @@ impl Source {
         let path = try_relative_to_if(
             &path_dist.install_path,
             root,
-            !path_dist.url.was_given_absolute(),
+            path_dist.url.prefer_relative(),
         )
         .map_err(LockErrorKind::DistributionRelativePath)?;
         Ok(Self::Path(path.into_boxed_path()))
@@ -4920,7 +4920,7 @@ impl Source {
         let path = try_relative_to_if(
             &path_dist.install_path,
             root,
-            !path_dist.url.was_given_absolute(),
+            path_dist.url.prefer_relative(),
         )
         .map_err(LockErrorKind::DistributionRelativePath)?;
         Ok(Self::Path(path.into_boxed_path()))
@@ -4933,7 +4933,7 @@ impl Source {
         let path = try_relative_to_if(
             &directory_dist.install_path,
             root,
-            !directory_dist.url.was_given_absolute(),
+            directory_dist.url.prefer_relative(),
         )
         .map_err(LockErrorKind::DistributionRelativePath)?;
         if directory_dist.editable.unwrap_or(false) {
@@ -4957,7 +4957,7 @@ impl Source {
                 let path = url
                     .to_file_path()
                     .map_err(|()| LockErrorKind::UrlToPath { url: url.to_url() })?;
-                let path = try_relative_to_if(&path, root, !url.was_given_absolute())
+                let path = try_relative_to_if(&path, root, url.prefer_relative())
                     .map_err(LockErrorKind::IndexRelativePath)?;
                 let source = RegistrySource::Path(path.into_boxed_path());
                 Ok(Self::Registry(source))
@@ -5726,7 +5726,7 @@ impl SourceDist {
                         .to_file_path()
                         .map_err(|()| LockErrorKind::UrlToPath { url })?;
                     let path =
-                        try_relative_to_if(&reg_dist_path, index_path, !path.was_given_absolute())
+                        try_relative_to_if(&reg_dist_path, index_path, path.prefer_relative())
                             .map_err(LockErrorKind::DistributionRelativePath)?
                             .into_boxed_path();
                     let size = reg_dist.file.size;
@@ -6049,10 +6049,9 @@ impl Wheel {
                     let wheel_path = wheel_url
                         .to_file_path()
                         .map_err(|()| LockErrorKind::UrlToPath { url: wheel_url })?;
-                    let path =
-                        try_relative_to_if(&wheel_path, index_path, !path.was_given_absolute())
-                            .map_err(LockErrorKind::DistributionRelativePath)?
-                            .into_boxed_path();
+                    let path = try_relative_to_if(&wheel_path, index_path, path.prefer_relative())
+                        .map_err(LockErrorKind::DistributionRelativePath)?
+                        .into_boxed_path();
                     WheelWireSource::Path { path }
                 } else {
                     let url = normalize_file_location(&wheel.file.url)

@@ -8385,7 +8385,6 @@ fn lock_relative_and_absolute_paths_disjoint_markers() -> Result<()> {
 
 /// Poetry's generated URLs must not override authored relative or absolute source paths.
 ///
-/// Note: Currently broken.
 /// See: <https://github.com/astral-sh/uv/issues/20477>
 #[test]
 fn lock_relative_transitive_poetry_paths() -> Result<()> {
@@ -8494,14 +8493,7 @@ fn lock_relative_transitive_poetry_paths() -> Result<()> {
         assert_snapshot!(diff, @r#"
         --- old
         +++ new
-        @@ -13,12 +13,22 @@
-         [[package]]
-         name = "editable-child"
-         version = "0.1.0"
-        -source = { editable = "../editable-child" }
-        +source = { editable = "[TEMP_DIR]/editable-child" }
-
-         [[package]]
+        @@ -19,6 +19,16 @@
          name = "parent"
          version = "0.1.0"
          source = { editable = "../parent" }
@@ -8512,8 +8504,8 @@ fn lock_relative_transitive_poetry_paths() -> Result<()> {
         +
         +[package.metadata]
         +requires-dist = [
-        +    { name = "absolute-child", directory = "[TEMP_DIR]/absolute-child" },
-        +    { name = "editable-child", directory = "[TEMP_DIR]/editable-child" },
+        +    { name = "absolute-child", directory = "../absolute-child" },
+        +    { name = "editable-child", directory = "../editable-child" },
         +]
 
          [[package]]
@@ -8556,12 +8548,18 @@ fn lock_relative_transitive_poetry_paths() -> Result<()> {
         assert_snapshot!(diff, @r#"
         --- old
         +++ new
-        @@ -13,7 +13,7 @@
+        @@ -8,12 +8,12 @@
+         [[package]]
+         name = "absolute-child"
+         version = "0.1.0"
+        -source = { directory = "[TEMP_DIR]/absolute-child" }
+        +source = { directory = "../absolute-child" }
+
          [[package]]
          name = "editable-child"
          version = "0.1.0"
-        -source = { editable = "[TEMP_DIR]/editable-child" }
-        +source = { directory = "[TEMP_DIR]/editable-child" }
+        -source = { editable = "../editable-child" }
+        +source = { directory = "../editable-child" }
 
          [[package]]
          name = "parent"
@@ -8589,7 +8587,6 @@ fn lock_relative_transitive_poetry_paths() -> Result<()> {
 
 /// Check workspace paths when a dependency reports an equivalent absolute file URL.
 ///
-/// Note: Currently broken.
 /// See: <https://github.com/astral-sh/uv/issues/20477>
 #[test]
 fn lock_relative_transitive_workspace_paths() -> Result<()> {
@@ -8683,15 +8680,6 @@ fn lock_relative_transitive_workspace_paths() -> Result<()> {
         assert_snapshot!(diff, @r#"
         --- old
         +++ new
-        @@ -13,7 +13,7 @@
-         [[package]]
-         name = "directory-child"
-         version = "0.1.0"
-        -source = { directory = "directory-child" }
-        +source = { directory = "[TEMP_DIR]/directory-child-alias" }
-
-         [[package]]
-         name = "member"
         @@ -34,3 +34,9 @@
          name = "parent"
          version = "0.1.0"
@@ -8701,7 +8689,7 @@ fn lock_relative_transitive_workspace_paths() -> Result<()> {
         +]
         +
         +[package.metadata]
-        +requires-dist = [{ name = "directory-child", directory = "[TEMP_DIR]/directory-child-alias" }]
+        +requires-dist = [{ name = "directory-child", directory = "directory-child-alias" }]
         "#);
     });
 
@@ -8719,7 +8707,6 @@ fn lock_relative_transitive_workspace_paths() -> Result<()> {
 
 /// Check local archive paths when a dependency reports equivalent absolute file URLs.
 ///
-/// Note: Currently broken.
 /// See: <https://github.com/astral-sh/uv/issues/20477>
 #[test]
 fn lock_relative_transitive_archive_paths() -> Result<()> {
@@ -8814,22 +8801,6 @@ fn lock_relative_transitive_archive_paths() -> Result<()> {
         assert_snapshot!(diff, @r#"
         --- old
         +++ new
-        @@ -8,13 +8,13 @@
-         [[package]]
-         name = "basic-package"
-         version = "0.1.0"
-        -source = { path = "../archives/basic_package-0.1.0.tar.gz" }
-        +source = { path = "[TEMP_DIR]/archives/basic_package-0.1.0.tar.gz" }
-         sdist = { hash = "sha256:af478ff91ec60856c99a540b8df13d756513bebb65bc301fb27e0d1f974532b4" }
-
-         [[package]]
-         name = "ok"
-         version = "1.0.0"
-        -source = { path = "../wheels/ok-1.0.0-py3-none-any.whl" }
-        +source = { path = "[TEMP_DIR]/wheels/ok-1.0.0-py3-none-any.whl" }
-         wheels = [
-             { filename = "ok-1.0.0-py3-none-any.whl", hash = "sha256:79f0b33e6ce1e09eaa1784c8eee275dfe84d215d9c65c652f07c18e85fdaac5f" },
-         ]
         @@ -23,6 +23,16 @@
          name = "parent"
          version = "0.1.0"
@@ -8841,8 +8812,8 @@ fn lock_relative_transitive_archive_paths() -> Result<()> {
         +
         +[package.metadata]
         +requires-dist = [
-        +    { name = "basic-package", path = "[TEMP_DIR]/archives/basic_package-0.1.0.tar.gz" },
-        +    { name = "ok", path = "[TEMP_DIR]/wheels/ok-1.0.0-py3-none-any.whl" },
+        +    { name = "basic-package", path = "../archives/basic_package-0.1.0.tar.gz" },
+        +    { name = "ok", path = "../wheels/ok-1.0.0-py3-none-any.whl" },
         +]
 
          [[package]]
@@ -8879,10 +8850,10 @@ fn lock_relative_transitive_archive_paths() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(archive_paths, @r#"
-        source = { path = "[TEMP_DIR]/archives/basic_package-0.1.0.tar.gz" }
-        source = { path = "[TEMP_DIR]/wheels/ok-1.0.0-py3-none-any.whl" }
-            { name = "basic-package", path = "[TEMP_DIR]/archives/basic_package-0.1.0.tar.gz" },
-            { name = "ok", path = "[TEMP_DIR]/wheels/ok-1.0.0-py3-none-any.whl" },
+        source = { path = "../archives/basic_package-0.1.0.tar.gz" }
+        source = { path = "../wheels/ok-1.0.0-py3-none-any.whl" }
+            { name = "basic-package", path = "../archives/basic_package-0.1.0.tar.gz" },
+            { name = "ok", path = "../wheels/ok-1.0.0-py3-none-any.whl" },
         "#);
     });
 
@@ -8890,8 +8861,6 @@ fn lock_relative_transitive_archive_paths() -> Result<()> {
 }
 
 /// Preserve local path intent across configured, workspace, and backend metadata.
-///
-/// Note: Currently broken: configured paths are overridden and inactive paths stay absolute.
 #[test]
 fn lock_relative_inactive_dependency_metadata_paths() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -9059,14 +9028,14 @@ fn lock_relative_inactive_dependency_metadata_paths() -> Result<()> {
         name = "parent"
         source = { directory = "[TEMP_DIR]/parent" }
         [package.metadata]
-            { name = "child", marker = "extra == 'unused'", directory = "[TEMP_DIR]/child" },
-            { name = "relative-child", directory = "[TEMP_DIR]/relative-child-alias" },
+            { name = "child", marker = "extra == 'unused'", directory = "child" },
+            { name = "relative-child", directory = "relative-child-alias" },
         name = "project"
         source = { virtual = "." }
         [package.metadata]
             { name = "authored-parent", directory = "authored-parent" },
         name = "relative-child"
-        source = { directory = "[TEMP_DIR]/relative-child-alias" }
+        source = { directory = "relative-child" }
         "#);
     });
 
@@ -9074,8 +9043,6 @@ fn lock_relative_inactive_dependency_metadata_paths() -> Result<()> {
 }
 
 /// Ignored metadata overrides must not make backend paths appear user-authored.
-///
-/// Note: Currently broken: backend paths stay absolute when configured metadata is ignored.
 #[test]
 fn lock_ignored_dependency_metadata_paths() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -9157,9 +9124,9 @@ fn lock_ignored_dependency_metadata_paths() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(paths, @r#"
-        source = { directory = "[TEMP_DIR]/active-child" }
-            { name = "active-child", directory = "[TEMP_DIR]/active-child" },
-            { name = "inactive-child", marker = "python_full_version < '0'", directory = "[TEMP_DIR]/inactive-child" },
+        source = { directory = "active-child" }
+            { name = "active-child", directory = "active-child" },
+            { name = "inactive-child", marker = "python_full_version < '0'", directory = "inactive-child" },
         "#);
     });
 
@@ -23486,7 +23453,7 @@ fn lock_explicit_default_index() -> Result<()> {
     DEBUG Found static `requires-dist` for: [TEMP_DIR]/
     DEBUG Resolving despite existing lockfile due to mismatched requirements for: `project==0.1.0`
       Requested: {Requirement { name: PackageName("anyio"), extras: [], groups: [], marker: true, source: Registry { specifier: VersionSpecifiers([]), index: None, conflict: None }, origin: None }}
-      Existing: {Requirement { name: PackageName("iniconfig"), extras: [], groups: [], marker: true, source: Registry { specifier: VersionSpecifiers([VersionSpecifier { operator: Equal, version: "2.0.0" }]), index: Some(IndexMetadata { url: Url(VerbatimUrl { url: DisplaySafeUrl { scheme: "https", cannot_be_a_base: false, username: "", password: None, host: Some(Domain("test.pypi.org")), port: None, path: "/simple", query: None, fragment: None }, given: None, expanded: false }), format: Simple }), conflict: None }, origin: None }}
+      Existing: {Requirement { name: PackageName("iniconfig"), extras: [], groups: [], marker: true, source: Registry { specifier: VersionSpecifiers([VersionSpecifier { operator: Equal, version: "2.0.0" }]), index: Some(IndexMetadata { url: Url(VerbatimUrl { url: DisplaySafeUrl { scheme: "https", cannot_be_a_base: false, username: "", password: None, host: Some(Domain("test.pypi.org")), port: None, path: "/simple", query: None, fragment: None }, given: None, expanded: false, force_relative: false }), format: Simple }), conflict: None }, origin: None }}
     DEBUG Found static `pyproject.toml` for: project @ file://[TEMP_DIR]/
     DEBUG Solving with installed Python version: 3.12.[X]
     DEBUG Solving with target Python version: >=3.12

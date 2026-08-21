@@ -1,5 +1,5 @@
 use std::borrow::Cow;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::{Display, Formatter};
 use std::sync::Arc;
 
@@ -123,6 +123,8 @@ impl ResolverOutput {
     /// Create a new [`ResolverOutput`] from the resolved PubGrub state.
     pub(crate) fn from_state(
         resolutions: &[Resolution],
+        project: Option<&PackageName>,
+        workspace_members: &BTreeSet<PackageName>,
         requirements: Vec<Requirement>,
         constraints: Constraints,
         overrides: Overrides,
@@ -162,6 +164,7 @@ impl ResolverOutput {
                     git,
                     package,
                     version,
+                    project == Some(&package.name) || workspace_members.contains(&package.name),
                 )?;
             }
         }
@@ -330,6 +333,7 @@ impl ResolverOutput {
         git: &GitResolver,
         package: &'a ResolutionPackage,
         version: &'a Version,
+        is_workspace_member: bool,
     ) -> Result<(), ResolveError> {
         let ResolutionPackage {
             name,
@@ -350,6 +354,13 @@ impl ResolverOutput {
             in_memory,
             git,
         )?;
+
+        // Restore authored paths on this resolution's copy, leaving shared metadata unchanged.
+        let metadata = if is_workspace_member {
+            metadata.map(|metadata| metadata.with_force_relative(false))
+        } else {
+            metadata
+        };
 
         if let Some(metadata) = metadata.as_ref() {
             // Validate the extra.
