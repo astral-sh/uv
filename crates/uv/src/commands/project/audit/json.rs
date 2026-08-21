@@ -1,7 +1,7 @@
 //! JSON layout models for `uv audit`.
 
 use serde::Serialize;
-use uv_normalize::PackageName;
+use uv_tool::ToolName;
 
 use super::AuditResults;
 
@@ -74,7 +74,7 @@ pub(crate) struct ToolReports {
 }
 
 impl ToolReports {
-    pub(crate) fn from_audits(audits: &[(PackageName, AuditResults)]) -> Self {
+    pub(crate) fn from_audits(audits: &[(ToolName, AuditResults)]) -> Self {
         let tools = audits
             .iter()
             .map(|(name, results)| {

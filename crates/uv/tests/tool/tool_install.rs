@@ -5291,6 +5291,125 @@ fn tool_install_constraints() -> Result<()> {
     Ok(())
 }
 
+#[test]
+fn tool_install_suffix() {
+    let context = uv_test::test_context!("3.12")
+        .with_filtered_counts()
+        .with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    // Install `ruff` with a custom suffix.
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("ruff==0.3.4")
+        .arg("--suffix")
+        .arg("-0.3.4")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + ruff==0.3.4
+    Installed 1 executable: ruff-0.3.4
+    ");
+
+    // Only the suffixed executable is installed.
+    assert!(
+        bin_dir
+            .join(format!("ruff-0.3.4{}", std::env::consts::EXE_SUFFIX))
+            .exists()
+    );
+    assert!(
+        !bin_dir
+            .join(format!("ruff{}", std::env::consts::EXE_SUFFIX))
+            .exists()
+    );
+
+    // The environment is stored under the suffixed name.
+    tool_dir.child("ruff-0.3.4").assert(predicate::path::is_dir());
+
+    // The receipt records the package and suffix.
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(fs_err::read_to_string(tool_dir.join("ruff-0.3.4").join("uv-receipt.toml")).unwrap(), @r#"
+        [tool]
+        package = "ruff"
+        suffix = "-0.3.4"
+        requirements = [{ name = "ruff" }]
+        entrypoints = [
+            { name = "ruff-0.3.4", install-path = "[TEMP_DIR]/bin/ruff-0.3.4", from = "ruff" },
+        ]
+
+        [tool.options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+        "#);
+    });
+
+    // A second installation of the same package under a different suffix coexists.
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("ruff==0.3.4")
+        .arg("--suffix")
+        .arg("-old")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + ruff==0.3.4
+    Installed 1 executable: ruff-old
+    ");
+
+    assert!(tool_dir.join("ruff-0.3.4").exists());
+    assert!(tool_dir.join("ruff-old").exists());
+
+    uv_snapshot!(context.filters(), context.tool_list()
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str()), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    ruff-0.3.4 v0.3.4
+    - ruff-0.3.4
+
+    ruff-old v0.3.4
+    - ruff-old
+    ");
+}
+
+#[test]
+fn tool_install_suffix_invalid() {
+    let context = uv_test::test_context!("3.12").with_filtered_exe_suffix();
+
+    // Empty suffixes are rejected.
+    context
+        .tool_install()
+        .arg("ruff==0.3.4")
+        .arg("--suffix")
+        .arg("")
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "A tool suffix cannot be empty",
+        ));
+
+    // Path separators are rejected.
+    context
+        .tool_install()
+        .arg("ruff==0.3.4")
+        .arg("--suffix")
+        .arg("../escape")
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "a suffix cannot contain path separators",
+        ));
+}
+
 /// Install a tool with `--overrides`.
 #[test]
 fn tool_install_overrides() -> Result<()> {
