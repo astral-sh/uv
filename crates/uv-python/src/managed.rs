@@ -609,7 +609,7 @@ impl ManagedPythonInstallation {
                         self.key.variant().executable_suffix(),
                         std::env::consts::DLL_SUFFIX
                     ));
-                    macos_dylib::patch_dylib_install_name(dylib_path)?;
+                    macos_dylib::patch_dylib_install_name(&dylib_path, &dylib_path)?;
                 }
             }
         }
