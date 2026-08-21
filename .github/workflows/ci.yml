@@ -284,13 +284,28 @@ jobs:
   required-checks-passed:
     name: "all required jobs passed"
     if: always()
+    # Every CI job is required except the advisory `review` and `bench` jobs.
+    # The planner checks this list in scripts/check_ci_required_jobs.py.
     needs:
+      - plan
       - check-fmt
       - check-lint
       - check-docs
+      - check-zizmor
+      - check-publish
+      - check-release
+      - check-lock
       - check-generated-files
       - test
+      - test-windows-trampolines
       - build-dev-binaries
+      - test-smoke
+      - test-integration
+      - test-system
+      - test-ecosystem
+      - build-release-binaries
+      - build-docker
+      - test-publish
     runs-on: ubuntu-slim
     steps:
       - name: "Check required jobs passed"
