@@ -20,7 +20,7 @@ use uv_fs::Simplified;
 use uv_fs::copy_dir_all;
 use uv_static::EnvVars;
 
-use uv_test::uv_snapshot;
+use uv_test::{uv_snapshot, venv_bin_path};
 
 #[cfg(feature = "test-git")]
 fn tool_install_git_path(bin_dir: &ChildPath) -> OsString {
@@ -5505,6 +5505,99 @@ async fn tool_install_credentials() {
         exclude-newer = "2025-01-18T00:00:00Z"
         "#);
     });
+}
+
+/// When upgrading from a legacy index URL, matching configured credentials should be preserved.
+#[tokio::test]
+async fn tool_install_index_url_username() -> Result<()> {
+    let keyring_context = uv_test::test_context!("3.12");
+
+    // Install our keyring plugin.
+    keyring_context
+        .pip_install()
+        .arg(
+            keyring_context
+                .workspace_root
+                .join("test")
+                .join("packages")
+                .join("keyring_test_plugin"),
+        )
+        .assert()
+        .success();
+
+    let proxy = crate::pypi_proxy::start().await;
+    let context = uv_test::test_context!("3.12")
+        .with_exclude_newer("2025-01-18T00:00:00Z")
+        .with_filtered_counts()
+        .with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+    let path = std::env::join_paths([venv_bin_path(&keyring_context.venv), bin_dir.to_path_buf()])?;
+
+    // Configure a legacy index URL with a username supplied to the keyring provider.
+    let uv_toml = context.temp_dir.child("uv.toml");
+    uv_toml.write_str(&format!(
+        indoc::indoc! {r#"
+        index-url = "{}"
+        keyring-provider = "subprocess"
+    "#},
+        proxy.username_url("public", "/basic-auth/simple")
+    ))?;
+
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("executable-application")
+        .arg("--config-file")
+        .arg(uv_toml.as_os_str())
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::KEYRING_TEST_CREDENTIALS, format!(r#"{{"{host}": {{"public": "heron"}}}}"#, host = proxy.host_port()))
+        .env(EnvVars::PATH, &path), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Keyring request for public@http://[LOCALHOST]/basic-auth/simple
+    Keyring request for public@[LOCALHOST]
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + executable-application==0.3.0
+    Installed 1 executable: app
+    ");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(fs_err::read_to_string(tool_dir.join("executable-application").join("uv-receipt.toml")).unwrap(), @r#"
+        [tool]
+        requirements = [{ name = "executable-application" }]
+        entrypoints = [
+            { name = "app", install-path = "[TEMP_DIR]/bin/app", from = "executable-application" },
+        ]
+
+        [tool.options]
+        index-url = "http://[LOCALHOST]/basic-auth/simple"
+        keyring-provider = "subprocess"
+        exclude-newer = "2025-01-18T00:00:00Z"
+        "#);
+    });
+
+    // The receipt URL is redacted, but the matching configured URL should restore the username
+    // so the keyring can authenticate the upgrade.
+    uv_snapshot!(context.filters(), context.tool_upgrade()
+        .arg("executable-application")
+        .arg("--config-file")
+        .arg(uv_toml.as_os_str())
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::KEYRING_TEST_CREDENTIALS, format!(r#"{{"{host}": {{"public": "heron"}}}}"#, host = proxy.host_port()))
+        .env(EnvVars::PATH, &path), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Keyring request for public@http://[LOCALHOST]/basic-auth/simple
+    Keyring request for public@[LOCALHOST]
+    Nothing to upgrade
+    ");
+
+    Ok(())
 }
 
 /// When installing from an authenticated index, the credentials should be omitted from the receipt.
