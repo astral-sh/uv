@@ -3635,6 +3635,43 @@ fn lock_conflicting_project_basic1() -> Result<()> {
     Ok(())
 }
 
+/// Selecting an extra always selects its package, so the conflict is impossible to satisfy.
+///
+/// Regression test for: <https://github.com/astral-sh/uv/issues/20694>
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_self_conflicting_extra() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "self-conflict"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [project.optional-dependencies]
+        foo = []
+
+        [tool.uv]
+        conflicts = [[
+            { package = "self-conflict" },
+            { package = "self-conflict", extra = "foo" },
+        ]]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Package `self-conflict` cannot conflict with its own extra `foo` because selecting the extra always selects the package
+    ");
+
+    assert!(!context.temp_dir.child("uv.lock").exists());
+
+    Ok(())
+}
+
 /// This tests a case where workspace members conflict with each other.
 #[cfg(feature = "test-universal")]
 #[test]
@@ -3901,10 +3938,6 @@ fn lock_conflicting_workspace_members_depends_direct_extra() -> Result<()> {
         conflicts = [
             [
                 { package = "example" },
-                # TODO(zanieb): Technically, we shouldn't need to include the extra in the list of
-                # conflicts however, the resolver forking algorithm is not currently sophisticated
-                # enough to pick this up by itself
-                { package = "example", extra = "foo"},
                 { package = "subexample" },
             ],
         ]
@@ -3959,7 +3992,6 @@ fn lock_conflicting_workspace_members_depends_direct_extra() -> Result<()> {
         revision = 3
         requires-python = ">=3.12"
         conflicts = [[
-            { package = "example", extra = "foo" },
             { package = "example" },
             { package = "subexample" },
         ]]
@@ -3978,7 +4010,7 @@ fn lock_conflicting_workspace_members_depends_direct_extra() -> Result<()> {
         version = "0.1.0"
         source = { editable = "." }
         dependencies = [
-            { name = "sortedcontainers", version = "2.3.0", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-7-example-foo' or extra == 'project-7-example'" },
+            { name = "sortedcontainers", version = "2.3.0", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'project-7-example'" },
         ]
 
         [package.metadata]
@@ -4011,7 +4043,7 @@ fn lock_conflicting_workspace_members_depends_direct_extra() -> Result<()> {
         version = "0.1.0"
         source = { editable = "subexample" }
         dependencies = [
-            { name = "sortedcontainers", version = "2.4.0", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'project-10-subexample' or (extra == 'extra-7-example-foo' and extra == 'project-7-example')" },
+            { name = "sortedcontainers", version = "2.4.0", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'project-10-subexample'" },
         ]
 
         [package.metadata]
@@ -4030,11 +4062,12 @@ fn lock_conflicting_workspace_members_depends_direct_extra() -> Result<()> {
      + sortedcontainers==2.3.0
     ");
 
-    // Attempt to install with the extra selected
+    // This succeeds, but should fail. The `foo` extra depends on `subexample`, which conflicts
+    // with `example`.
     uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--extra").arg("foo"), @"
-    exit_code: 2 (failure)
+    exit_code: 0 (success)
     ----- stderr -----
-    error: Extra `foo` and package `example` are incompatible with the declared conflicts: {`example[foo]`, example, subexample}
+    Checked 2 packages in [TIME]
     ");
 
     // Install just the child package
