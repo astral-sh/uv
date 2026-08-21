@@ -281,6 +281,8 @@ pub enum PreviewFeature {
     AdjustUlimit,
     /// Stops treating Conda environments named `base` or `root` as special.
     SpecialCondaEnvNames,
+    /// Creates self-contained environments by bundling managed Python installations.
+    PortableEnvs,
     /// Creates relocatable virtual environments by default.
     RelocatableEnvsDefault,
     /// Requires normalized distribution filenames when publishing, skipping files whose names are

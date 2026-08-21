@@ -310,7 +310,7 @@ impl Interpreter {
     /// Returns `true` if this interpreter is managed by uv.
     ///
     /// Returns `false` if we cannot determine the path of the uv managed Python interpreters.
-    pub(crate) fn is_managed(&self) -> bool {
+    pub fn is_managed(&self) -> bool {
         if let Ok(test_managed) =
             std::env::var(uv_static::EnvVars::UV_INTERNAL__TEST_PYTHON_MANAGED)
         {

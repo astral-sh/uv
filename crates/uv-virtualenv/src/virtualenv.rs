@@ -20,7 +20,8 @@ use uv_platform_tags::Os;
 use uv_preview::PreviewFeature;
 use uv_pypi_types::Scheme;
 use uv_python::managed::{
-    ManagedPythonInstallation, PythonExecutable, PythonMinorVersionLink, replace_link_to_executable,
+    ManagedPythonInstallation, PythonExecutable, PythonMinorVersionLink, link_python_installation,
+    patch_python_installation, replace_link_to_executable,
 };
 use uv_python::{Interpreter, VirtualEnvironment};
 use uv_shell::escape_posix_for_single_quotes;
@@ -195,6 +196,29 @@ pub(crate) fn create(
 
     // Use the absolute path for all further operations.
     let location = absolute;
+    let portable_environment = relocatable
+        && !matches!(
+            on_existing,
+            OnExisting::Remove(RemovalReason::TemporaryEnvironment)
+        )
+        && !system_site_packages
+        && ManagedPythonInstallation::try_from_interpreter(interpreter).is_some()
+        && interpreter.implementation_name() == "cpython"
+        && uv_preview::is_enabled(PreviewFeature::PortableEnvs);
+
+    if portable_environment {
+        let python_root = fs_err::canonicalize(interpreter.sys_base_prefix())?;
+        debug!(
+            "Creating portable environment by linking Python installation from `{}`",
+            python_root.display()
+        );
+        link_python_installation(
+            &python_root,
+            &location,
+            matches!(on_existing, OnExisting::Allow),
+        )?;
+        patch_python_installation(&location, interpreter)?;
+    }
 
     let bin_name = if cfg!(unix) {
         "bin"
@@ -212,7 +236,7 @@ pub(crate) fn create(
     fs_err::write(location.join(".gitignore"), "*")?;
 
     let mut using_minor_version_link = false;
-    let executable_target = if upgradeable {
+    let executable_target = if upgradeable && !portable_environment {
         if let Some(minor_version_link) =
             ManagedPythonInstallation::try_from_interpreter(interpreter)
                 .and_then(|installation| PythonMinorVersionLink::from_installation(&installation))
@@ -262,28 +286,42 @@ pub(crate) fn create(
 
     #[cfg(unix)]
     {
-        uv_fs::replace_symlink(&executable_target, &executable)?;
+        if portable_environment {
+            uv_fs::replace_symlink(
+                format!(
+                    "python{}.{}{}",
+                    interpreter.python_major(),
+                    interpreter.python_minor(),
+                    interpreter.variant().executable_suffix(),
+                ),
+                &executable,
+            )?;
+        } else {
+            uv_fs::replace_symlink(&executable_target, &executable)?;
+        }
         uv_fs::replace_symlink(
             "python",
             scripts.join(format!("python{}", interpreter.python_major())),
         )?;
-        uv_fs::replace_symlink(
-            "python",
-            scripts.join(format!(
-                "python{}.{}",
-                interpreter.python_major(),
-                interpreter.python_minor(),
-            )),
-        )?;
-        if interpreter.gil_disabled() {
+        if !portable_environment {
             uv_fs::replace_symlink(
                 "python",
                 scripts.join(format!(
-                    "python{}.{}t",
+                    "python{}.{}",
                     interpreter.python_major(),
                     interpreter.python_minor(),
                 )),
             )?;
+            if interpreter.gil_disabled() {
+                uv_fs::replace_symlink(
+                    "python",
+                    scripts.join(format!(
+                        "python{}.{}t",
+                        interpreter.python_major(),
+                        interpreter.python_minor(),
+                    )),
+                )?;
+            }
         }
 
         if interpreter.markers().implementation_name() == "pypy" {
@@ -303,7 +341,54 @@ pub(crate) fn create(
     // interpreters, this target path includes a minor version junction to enable
     // transparent upgrades.
     if cfg!(windows) {
-        if using_minor_version_link {
+        if portable_environment {
+            let root_python = location.join("python.exe");
+            let root_python = if root_python.exists() {
+                root_python
+            } else {
+                let executable_name = base_python.file_name().ok_or_else(|| {
+                    io::Error::new(
+                        io::ErrorKind::NotFound,
+                        "The Python interpreter needs to have a file name",
+                    )
+                })?;
+                location.join(executable_name)
+            };
+            fs_err::copy(&root_python, &executable)?;
+
+            if interpreter.gil_disabled() {
+                let executable_name = WindowsExecutable::PythonMajorMinort.exe(interpreter);
+                fs_err::copy(&root_python, scripts.join(executable_name))?;
+            }
+
+            let root_pythonw = location.join("pythonw.exe");
+            let root_pythonw = if root_pythonw.exists() {
+                Some(root_pythonw)
+            } else if interpreter.gil_disabled() {
+                let executable_name = WindowsExecutable::PythonwMajorMinort.exe(interpreter);
+                let root_pythonw = location.join(executable_name);
+                root_pythonw.exists().then_some(root_pythonw)
+            } else {
+                None
+            };
+            if let Some(root_pythonw) = root_pythonw {
+                let scripts_pythonw = scripts.join("pythonw.exe");
+                fs_err::copy(&root_pythonw, &scripts_pythonw)?;
+
+                if interpreter.gil_disabled() {
+                    let executable_name = WindowsExecutable::PythonwMajorMinort.exe(interpreter);
+                    fs_err::copy(&root_pythonw, scripts.join(executable_name))?;
+                }
+            }
+
+            for entry in fs_err::read_dir(&location)? {
+                let entry = entry?;
+                let name = entry.file_name();
+                if name.to_string_lossy().ends_with(".dll") {
+                    fs_err::copy(entry.path(), scripts.join(name))?;
+                }
+            }
+        } else if using_minor_version_link {
             let target = scripts.join(WindowsExecutable::Python.exe(interpreter));
             replace_link_to_executable(
                 target.as_path(),
@@ -539,11 +624,14 @@ pub(crate) fn create(
         fs_err::write(scripts.join(name), activator)?;
     }
 
-    let mut pyvenv_cfg_data: Vec<(String, String)> = vec![
-        (
+    let mut pyvenv_cfg_data: Vec<(String, String)> = Vec::new();
+    if !portable_environment {
+        pyvenv_cfg_data.push((
             "home".to_string(),
             python_home.simplified_display().to_string(),
-        ),
+        ));
+    }
+    pyvenv_cfg_data.extend([
         (
             "implementation".to_string(),
             interpreter
@@ -568,7 +656,7 @@ pub(crate) fn create(
                 "false".to_string()
             },
         ),
-    ];
+    ]);
 
     if relocatable {
         pyvenv_cfg_data.push(("relocatable".to_string(), "true".to_string()));
@@ -622,6 +710,12 @@ pub(crate) fn create(
         fs_err::write(site_packages.join("_virtualenv.pth"), "import _virtualenv")?;
     }
 
+    let base_executable = if portable_environment {
+        executable.clone()
+    } else {
+        base_python
+    };
+
     Ok(VirtualEnvironment {
         scheme: Scheme {
             purelib: location.join(&interpreter.virtualenv().purelib),
@@ -632,8 +726,8 @@ pub(crate) fn create(
         },
         root: location,
         executable,
-        base_executable: base_python,
-        portable: false,
+        base_executable,
+        portable: portable_environment,
     })
 }
 

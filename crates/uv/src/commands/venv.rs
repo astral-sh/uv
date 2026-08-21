@@ -22,7 +22,7 @@ use uv_distribution_types::{
 use uv_fs::Simplified;
 use uv_install_wheel::LinkMode;
 use uv_normalize::DefaultGroups;
-use uv_preview::Preview;
+use uv_preview::{Preview, PreviewFeature};
 use uv_python::{
     ConfigDiscovery, EnvironmentPreference, PythonDownloads, PythonInstallation, PythonPreference,
     PythonRequest,
@@ -180,7 +180,21 @@ pub(crate) async fn venv(
         python.into_interpreter()
     };
 
-    let upgradeable = project_environment_upgradeable(python_request.as_ref());
+    if system_site_packages
+        && relocatable
+        && interpreter.is_managed()
+        && interpreter.implementation_name() == "cpython"
+        && preview.is_enabled(PreviewFeature::PortableEnvs)
+    {
+        warn_user!(
+            "The `portable-envs` preview feature is ignored when using `--system-site-packages`"
+        );
+    }
+
+    let upgradeable = project_environment_upgradeable(
+        python_request.as_ref(),
+        Some(relocatable && !system_site_packages),
+    );
 
     // Determine the default path.
     let path = if let Some(workspace) = centralized_workspace {
