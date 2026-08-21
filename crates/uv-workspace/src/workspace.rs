@@ -1,5 +1,6 @@
 //! Resolve the current [`ProjectWorkspace`] or [`Workspace`].
 
+use std::assert_matches;
 use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet};
 use std::error::Error;
@@ -1056,10 +1057,10 @@ impl Workspace {
         if let Some(root_member) = current_project
             && !workspace_members.contains_key(&root_member.project.name)
         {
-            assert!(matches!(
+            assert_matches!(
                 options.members,
                 MemberDiscovery::None | MemberDiscovery::Ignore(_)
-            ));
+            );
             debug!(
                 "Adding current workspace member: `{}`",
                 root_member.root.simplified_display()

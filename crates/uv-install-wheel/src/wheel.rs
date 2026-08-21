@@ -1219,6 +1219,7 @@ impl RenameOrCopy {
 
 #[cfg(test)]
 mod test {
+    use std::assert_matches;
     use std::io::{Cursor, ErrorKind};
     use std::path::Path;
 
@@ -1317,10 +1318,10 @@ mod test {
             .err()
             .ok_or_else(|| anyhow::anyhow!("invalid UTF-8 should fail to parse"))?;
 
-        assert!(matches!(
+        assert_matches!(
             error,
             Error::Io(err) if err.kind() == ErrorKind::InvalidData
-        ));
+        );
 
         Ok(())
     }

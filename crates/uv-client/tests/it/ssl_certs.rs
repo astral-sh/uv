@@ -1,3 +1,4 @@
+use std::assert_matches;
 use std::io::Write;
 use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
@@ -324,8 +325,9 @@ impl TestClient {
     /// valid client certificate was presented.
     async fn expect_mtls_connect_fails(&self, cert: &TestCertificate) {
         self.expect_mtls_connect_fails_with_server_tls_error(cert, |server_tls_err| {
-            assert!(
-                matches!(server_tls_err, rustls::Error::NoCertificatesPresented),
+            assert_matches!(
+                server_tls_err,
+                rustls::Error::NoCertificatesPresented,
                 "expected NoCertificatesPresented, got: {server_tls_err}"
             );
         })
@@ -859,13 +861,11 @@ async fn test_mtls_with_wrong_client_cert() -> Result<()> {
         .ssl_cert_file(&server_cert.trust_path)
         .ssl_client_cert(&other_cert.client_cert_path)
         .expect_mtls_connect_fails_with_server_tls_error(&server_cert, |server_tls_err| {
-            assert!(
-                matches!(
-                    server_tls_err,
-                    rustls::Error::InvalidCertificate(
-                        rustls::CertificateError::BadSignature
-                            | rustls::CertificateError::UnknownIssuer
-                    )
+            assert_matches!(
+                server_tls_err,
+                rustls::Error::InvalidCertificate(
+                    rustls::CertificateError::BadSignature
+                        | rustls::CertificateError::UnknownIssuer
                 ),
                 "expected InvalidCertificate(BadSignature | UnknownIssuer), got: {server_tls_err}"
             );

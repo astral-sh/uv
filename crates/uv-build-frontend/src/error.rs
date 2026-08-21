@@ -450,6 +450,8 @@ impl Error {
 
 #[cfg(test)]
 mod test {
+    use std::assert_matches;
+
     use crate::{Error, PythonRunnerOutput};
     use indoc::indoc;
     use std::process::ExitStatus;
@@ -504,7 +506,7 @@ mod test {
             Some("pygraphviz-1.11"),
         );
 
-        assert!(matches!(err, Error::MissingHeader { .. }));
+        assert_matches!(err, Error::MissingHeader { .. });
         let formatted = format_error_with_hints(&err);
         insta::assert_snapshot!(formatted, @r#"
         Failed building wheel through setup.py (exit code: 0)
@@ -557,7 +559,7 @@ mod test {
             None,
             Some("pygraphviz-1.11"),
         );
-        assert!(matches!(err, Error::MissingHeader { .. }));
+        assert_matches!(err, Error::MissingHeader { .. });
         let formatted = format_error_with_hints(&err);
         insta::assert_snapshot!(formatted, @"
         Failed building wheel through setup.py (exit code: 0)
@@ -600,7 +602,7 @@ mod test {
             None,
             Some("pygraphviz-1.11"),
         );
-        assert!(matches!(err, Error::MissingHeader { .. }));
+        assert_matches!(err, Error::MissingHeader { .. });
         let formatted = format_error_with_hints(&err);
         insta::assert_snapshot!(formatted, @r#"
         Failed building wheel through setup.py (exit code: 0)
@@ -646,7 +648,7 @@ mod test {
             Some(&Version::new([1, 11])),
             Some("pygraphviz-1.11"),
         );
-        assert!(matches!(err, Error::MissingHeader { .. }));
+        assert_matches!(err, Error::MissingHeader { .. });
         let formatted = format_error_with_hints(&err);
         insta::assert_snapshot!(formatted, @"
         Failed building wheel through setup.py (exit code: 0)

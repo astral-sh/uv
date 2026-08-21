@@ -869,6 +869,7 @@ impl<'de> VariantAccess<'de> for InlineVariantAccess<'_, 'de> {
 
 #[cfg(test)]
 mod tests {
+    use std::assert_matches;
     use std::fmt::Write as _;
 
     use serde::Deserialize;
@@ -1032,13 +1033,13 @@ dev = [{ name = "dependency", specifier = ">=1" }]
         let input = CANONICAL_LOCK.replacen("version = 1", &format!("version = {version}"), 1);
         let error = Lock::from_toml(&input).expect_err("unsupported lock versions are rejected");
 
-        assert!(matches!(
+        assert_matches!(
             error,
             LockParseError::UnsupportedVersion {
                 supported: VERSION,
                 version: actual,
             } if actual == version
-        ));
+        );
     }
 
     #[test]
@@ -1050,14 +1051,14 @@ dev = [{ name = "dependency", specifier = ">=1" }]
         let error =
             Lock::from_toml(&input).expect_err("unparsable unsupported lock versions are rejected");
 
-        assert!(matches!(
+        assert_matches!(
             error,
             LockParseError::UnparsableVersion {
                 supported: VERSION,
                 version: actual,
                 ..
             } if actual == version
-        ));
+        );
     }
 
     #[test]
@@ -1066,16 +1067,14 @@ dev = [{ name = "dependency", specifier = ">=1" }]
             CANONICAL_LOCK.replace("requires-python = \">=3.12\"", "requires-python = '>=3.12'");
         let unsupported = from_str(&input).expect_err("literal strings require the TOML fallback");
 
-        assert!(
-            matches!(&unsupported, Error::Unsupported { offset, .. } if *offset > 0),
+        assert_matches!(&unsupported, Error::Unsupported { offset, .. } if *offset > 0,
             "unsupported syntax must retain its real byte offset: {unsupported}"
         );
 
         let input = CANONICAL_LOCK.replace("revision = 3", "revision = 03");
         let invalid = from_str(&input).expect_err("TOML rejects a leading zero");
 
-        assert!(
-            matches!(&invalid, Error::Invalid { offset, .. } if *offset > 0),
+        assert_matches!(&invalid, Error::Invalid { offset, .. } if *offset > 0,
             "invalid TOML scalars must retain their real byte offset: {invalid}"
         );
     }

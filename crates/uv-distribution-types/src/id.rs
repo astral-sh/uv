@@ -238,6 +238,7 @@ impl From<&Self> for ResourceId {
 
 #[cfg(test)]
 mod tests {
+    use std::assert_matches;
     use std::time::{SystemTime, UNIX_EPOCH};
 
     use fs_err as fs;
@@ -320,11 +321,8 @@ mod tests {
         let file_url = DisplaySafeUrl::from_file_path(&file).unwrap();
         let directory_url = DisplaySafeUrl::from_file_path(&directory).unwrap();
 
-        assert!(matches!(VersionId::from_url(&file_url), VersionId::Path(_)));
-        assert!(matches!(
-            VersionId::from_url(&directory_url),
-            VersionId::Directory(_)
-        ));
+        assert_matches!(VersionId::from_url(&file_url), VersionId::Path(_));
+        assert_matches!(VersionId::from_url(&directory_url), VersionId::Directory(_));
 
         fs::remove_file(file).unwrap();
         fs::remove_dir_all(root).unwrap();
@@ -335,6 +333,6 @@ mod tests {
         let url =
             DisplaySafeUrl::parse("git+ftp://example.com/pkg.git@main#subdirectory=foo").unwrap();
 
-        assert!(matches!(VersionId::from_url(&url), VersionId::Unknown(_)));
+        assert_matches!(VersionId::from_url(&url), VersionId::Unknown(_));
     }
 }

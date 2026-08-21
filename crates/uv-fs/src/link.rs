@@ -907,6 +907,8 @@ fn create_symlink(original: &Path, link: &Path) -> io::Result<()> {
 #[cfg(test)]
 #[expect(clippy::print_stderr)]
 mod tests {
+    use std::assert_matches;
+
     use super::*;
     use tempfile::TempDir;
 
@@ -1316,10 +1318,10 @@ mod tests {
         let result = link_dir(src_dir.path(), dst_dir.path(), &options).unwrap();
 
         // Should succeed with one of the valid modes
-        assert!(matches!(
+        assert_matches!(
             result,
             LinkMode::Clone | LinkMode::Hardlink | LinkMode::Copy
-        ));
+        );
         verify_test_tree(dst_dir.path());
     }
 
