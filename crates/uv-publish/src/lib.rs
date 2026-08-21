@@ -1292,14 +1292,14 @@ impl FormMetadata {
             ("sha256_digest", sha256_hash.digest.to_string()),
             ("blake2_256_digest", blake2b_hash.digest.to_string()),
             ("protocol_version", "1".to_string()),
-            ("metadata_version", metadata_version.clone()),
+            ("metadata_version", metadata_version),
             // Twine transforms the name with `re.sub("[^A-Za-z0-9.]+", "-", name)`
             // * <https://github.com/pypa/twine/issues/743>
             // * <https://github.com/pypa/twine/blob/5bf3f38ff3d8b2de47b7baa7b652c697d7a64776/twine/package.py#L57-L65>
             // warehouse seems to call `packaging.utils.canonicalize_name` nowadays and has a separate
             // `normalized_name`, so we'll start with this and we'll readjust if there are user reports.
-            ("name", name.clone()),
-            ("version", version.clone()),
+            ("name", name),
+            ("version", version),
             ("filetype", filename.filetype().to_string()),
         ];
 
@@ -1310,7 +1310,7 @@ impl FormMetadata {
         }
 
         let mut add_option = |name, value: Option<String>| {
-            if let Some(some) = value.clone() {
+            if let Some(some) = value {
                 form_metadata.push((name, some));
             }
         };
@@ -1333,8 +1333,8 @@ impl FormMetadata {
         form_metadata.push(("requires_python", requires_python.unwrap_or(String::new())));
 
         let mut add_vec = |name, values: Vec<String>| {
-            for i in values {
-                form_metadata.push((name, i.clone()));
+            for value in values {
+                form_metadata.push((name, value));
             }
         };
 
