@@ -30,7 +30,9 @@ use crate::implementation::ImplementationName;
 use crate::installation::{PythonInstallation, PythonInstallationKey};
 use crate::interpreter::Error as InterpreterError;
 use crate::interpreter::{StatusCodeError, UnexpectedResponseError};
-use crate::managed::{ManagedPythonInstallations, PythonMinorVersionLink};
+use crate::managed::{
+    ManagedPythonInstallation, ManagedPythonInstallations, PythonMinorVersionLink,
+};
 #[cfg(windows)]
 use crate::microsoft_store::find_microsoft_store_pythons;
 use crate::python_version::python_build_versions_from_env;
@@ -2187,6 +2189,42 @@ impl PythonRequest {
             path1 == path2 || is_same_file(path1, path2).unwrap_or(false)
         }
 
+        /// Returns `true` if a portable environment copied the requested managed installation.
+        fn is_same_portable_installation(
+            interpreter: &Interpreter,
+            requested_interpreter: impl FnOnce() -> Result<Interpreter, InterpreterError>,
+        ) -> bool {
+            if interpreter.sys_prefix() != interpreter.sys_base_prefix()
+                || !interpreter.is_virtualenv()
+                || !interpreter.is_managed()
+            {
+                return false;
+            }
+
+            let Ok(requested_interpreter) = requested_interpreter() else {
+                return false;
+            };
+            if requested_interpreter.is_virtualenv()
+                || interpreter.key() != requested_interpreter.key()
+            {
+                return false;
+            }
+            let Some(installation) =
+                ManagedPythonInstallation::try_from_interpreter(&requested_interpreter)
+            else {
+                return false;
+            };
+
+            match (
+                installation.build(),
+                fs_err::read_to_string(interpreter.sys_prefix().join("BUILD")),
+            ) {
+                (Some(build), Ok(portable_build)) => portable_build.trim() == build,
+                (None, Err(error)) => error.kind() == io::ErrorKind::NotFound,
+                _ => false,
+            }
+        }
+
         match self {
             Self::Default | Self::Any => true,
             Self::Version(version_request) => version_request.matches_interpreter(interpreter),
@@ -2197,6 +2235,10 @@ impl PythonRequest {
                         virtualenv_python_executable(directory).as_path(),
                         interpreter.sys_executable(),
                     )
+                    || is_same_portable_installation(interpreter, || {
+                        python_installation_from_directory(directory, cache)
+                            .map(PythonInstallation::into_interpreter)
+                    })
             }
             Self::File(file) => {
                 // The interpreter satisfies the request both if it is the venv...
@@ -2228,7 +2270,7 @@ impl PythonRequest {
                         }
                     }
                 }
-                false
+                is_same_portable_installation(interpreter, || Interpreter::query(file, cache))
             }
             Self::ExecutableName(name) => {
                 // First, see if we have a match in the venv ...
