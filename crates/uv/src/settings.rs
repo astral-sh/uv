@@ -747,7 +747,7 @@ impl RunSettings {
         } = args;
 
         let filesystem_install_mirrors = filesystem
-            .clone()
+            .as_ref()
             .map(|fs| fs.install_mirrors.clone())
             .unwrap_or_default();
 
@@ -1219,8 +1219,8 @@ impl ToolUpgradeSettings {
         );
         let filesystem = filesystem.map(FilesystemOptions::into_options);
         let filesystem_install_mirrors = filesystem
-            .clone()
-            .map(|options| options.install_mirrors)
+            .as_ref()
+            .map(|options| options.install_mirrors.clone())
             .unwrap_or_default();
         let top_level = ResolverInstallerOptions::from(
             filesystem
@@ -1905,7 +1905,7 @@ impl SyncSettings {
             output_format,
         } = args;
         let filesystem_install_mirrors = filesystem
-            .clone()
+            .as_ref()
             .map(|fs| fs.install_mirrors.clone())
             .unwrap_or_default();
 
@@ -2078,7 +2078,7 @@ impl LockSettings {
         } = args;
 
         let filesystem_install_mirrors = filesystem
-            .clone()
+            .as_ref()
             .map(|fs| fs.install_mirrors.clone())
             .unwrap_or_default();
 
@@ -2127,7 +2127,7 @@ impl UpgradeSettings {
         environment: EnvironmentOptions,
     ) -> Self {
         let filesystem_install_mirrors = filesystem
-            .clone()
+            .as_ref()
             .map(|fs| fs.install_mirrors.clone())
             .unwrap_or_default();
         let packages = args.packages;
@@ -2190,7 +2190,7 @@ impl MetadataSettings {
         } = *args;
 
         let filesystem_install_mirrors = filesystem
-            .clone()
+            .as_ref()
             .map(|fs| fs.install_mirrors.clone())
             .unwrap_or_default();
 
@@ -2562,7 +2562,7 @@ impl RemoveSettings {
         };
 
         let filesystem_install_mirrors = filesystem
-            .clone()
+            .as_ref()
             .map(|fs| fs.install_mirrors.clone())
             .unwrap_or_default();
 
@@ -2655,7 +2655,7 @@ impl VersionSettings {
         } = args;
 
         let filesystem_install_mirrors = filesystem
-            .clone()
+            .as_ref()
             .map(|fs| fs.install_mirrors.clone())
             .unwrap_or_default();
 
@@ -2756,7 +2756,7 @@ impl TreeSettings {
         } = args;
 
         let filesystem_install_mirrors = filesystem
-            .clone()
+            .as_ref()
             .map(|fs| fs.install_mirrors.clone())
             .unwrap_or_default();
 
@@ -2897,7 +2897,7 @@ impl ExportSettings {
             python,
         } = args;
         let filesystem_install_mirrors = filesystem
-            .clone()
+            .as_ref()
             .map(|fs| fs.install_mirrors.clone())
             .unwrap_or_default();
 
@@ -3101,7 +3101,7 @@ impl CheckSettings {
         } = args;
 
         let filesystem_install_mirrors = filesystem
-            .clone()
+            .as_ref()
             .map(|fs| fs.install_mirrors.clone())
             .unwrap_or_default();
 
@@ -3229,7 +3229,7 @@ impl AuditSettings {
         } = args;
 
         let filesystem_install_mirrors = filesystem
-            .clone()
+            .as_ref()
             .map(|fs| fs.install_mirrors.clone())
             .unwrap_or_default();
 

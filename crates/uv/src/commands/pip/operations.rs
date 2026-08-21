@@ -1057,9 +1057,7 @@ async fn execute_plan(
             PrepareReporter::from(printer).with_length(remote.len() as u64),
         ));
 
-        let wheels = preparer
-            .prepare(remote.clone(), in_flight, resolution)
-            .await?;
+        let wheels = preparer.prepare(remote, in_flight, resolution).await?;
 
         logger.on_prepare(
             wheels.len(),

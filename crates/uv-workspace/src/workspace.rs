@@ -1168,7 +1168,7 @@ impl Workspace {
         let mut exclusions = None;
 
         // Add all other workspace members.
-        for member_glob in workspace_definition.clone().members.unwrap_or_default() {
+        for member_glob in workspace_definition.members.as_deref().unwrap_or_default() {
             // Normalize the member glob to remove leading `./` and other relative path components
             let normalized_glob = normalize_path(Path::new(member_glob.as_str()));
             let absolute_glob = PathBuf::from(glob::Pattern::escape(
@@ -1195,9 +1195,8 @@ impl Workspace {
                 if !seen.insert(member_root.clone()) {
                     continue;
                 }
-                let member_root = std::path::absolute(&member_root)
-                    .map_err(WorkspaceErrorKind::Normalize)?
-                    .clone();
+                let member_root =
+                    std::path::absolute(&member_root).map_err(WorkspaceErrorKind::Normalize)?;
 
                 // If the directory is explicitly ignored, skip it.
                 let skip = match &options.members {
