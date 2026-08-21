@@ -2972,7 +2972,6 @@ mod test {
                 or (sys_platform != 'win32' and os_name == 'nt')",
             "(implementation_name == 'pypy' and sys_platform != 'win32') \
                 or (implementation_name != 'pypy' and sys_platform == 'win32') \
-                or (os_name != 'nt' and sys_platform == 'win32') \
                 or (os_name == 'nt' and sys_platform != 'win32')",
         );
 
@@ -3001,7 +3000,7 @@ mod test {
             "(os_name == 'Linux' and sys_platform == 'win32') \
                 or (os_name != 'Linux' and sys_platform == 'win32' and python_version == '3.7') \
                 or (os_name != 'Linux' and sys_platform == 'win32' and python_version == '3.8')",
-            "(python_full_version >= '3.7' and python_full_version < '3.9' and sys_platform == 'win32') or (os_name == 'Linux' and sys_platform == 'win32')",
+            "python_full_version >= '3.7' and python_full_version < '3.9' and os_name != 'Linux' and sys_platform == 'win32'",
         );
 
         assert_simplifies(
@@ -3194,6 +3193,131 @@ mod test {
         assert!(is_disjoint(
             "extra == 'x1' and extra != 'x2'",
             "extra == 'x2'"
+        ));
+    }
+
+    #[test]
+    fn test_python_implementation_disjointness() {
+        for (implementation_name, platform_python_implementation) in [
+            ("cpython", "CPython"),
+            ("pyston", "CPython"),
+            ("pypy", "PyPy"),
+        ] {
+            let is_bidirectional = implementation_name == "pypy";
+            let implementation_name = format!("implementation_name == '{implementation_name}'");
+            let platform_python_implementation =
+                format!("platform_python_implementation == '{platform_python_implementation}'");
+
+            assert!(!is_disjoint(
+                &implementation_name,
+                &platform_python_implementation
+            ));
+            assert!(is_disjoint(
+                &implementation_name,
+                platform_python_implementation.replace("==", "!=")
+            ));
+            if is_bidirectional {
+                assert!(is_disjoint(
+                    implementation_name.replace("==", "!="),
+                    &platform_python_implementation
+                ));
+            }
+        }
+
+        assert!(is_disjoint(
+            "implementation_name == 'pypy'",
+            "platform_python_implementation == 'CPython'"
+        ));
+        assert!(is_disjoint(
+            "implementation_name == 'cpython'",
+            "platform_python_implementation == 'PyPy'"
+        ));
+
+        // Implementation markers may be beneath other string variables in the decision tree.
+        assert!(is_disjoint(
+            "platform_machine == 'x86_64' and implementation_name == 'pypy'",
+            "platform_python_implementation == 'CPython'"
+        ));
+        assert!(is_disjoint(
+            "implementation_name == 'pypy'",
+            "platform_machine == 'x86_64' and platform_python_implementation == 'CPython'"
+        ));
+        assert!(is_disjoint(
+            "platform_machine == 'x86_64' and implementation_name == 'pypy'",
+            "platform_machine == 'x86_64' and platform_python_implementation == 'CPython'"
+        ));
+
+        assert!(!is_disjoint(
+            "implementation_name == 'pyston'",
+            "platform_python_implementation == 'CPython'"
+        ));
+        assert!(!is_disjoint(
+            "implementation_name != 'pyston'",
+            "platform_python_implementation == 'CPython'"
+        ));
+        assert!(!is_disjoint(
+            "implementation_name != 'cpython'",
+            "platform_python_implementation == 'CPython'"
+        ));
+
+        // Unknown implementations may use implementation-specific names, so do not
+        // infer a correspondence between their two marker values.
+        assert!(!is_disjoint(
+            "implementation_name == 'graalpy'",
+            "platform_python_implementation == 'GraalVM'"
+        ));
+        assert!(!is_disjoint(
+            "implementation_name == 'graalpy'",
+            "platform_python_implementation == 'Jython'"
+        ));
+    }
+
+    #[test]
+    fn test_unix_operating_system_disjointness() {
+        for sys_platform in [
+            "aix",
+            "android",
+            "cygwin",
+            "darwin",
+            "emscripten",
+            "ios",
+            "linux",
+            "wasi",
+        ] {
+            let marker = format!("sys_platform == '{sys_platform}'");
+            assert!(is_disjoint("os_name == 'nt'", &marker));
+            assert!(is_disjoint("os_name != 'posix'", &marker));
+            assert!(!is_disjoint("os_name == 'posix'", marker));
+        }
+
+        for platform_system in ["FreeBSD", "NetBSD", "OpenBSD", "SunOS", "iOS", "iPadOS"] {
+            let marker = format!("platform_system == '{platform_system}'");
+            assert!(is_disjoint("os_name == 'nt'", &marker));
+            assert!(is_disjoint("os_name != 'posix'", &marker));
+            assert!(!is_disjoint("os_name == 'posix'", marker));
+        }
+
+        for platform_system in ["iOS", "iPadOS"] {
+            let marker = format!("platform_system == '{platform_system}'");
+            assert!(is_disjoint(&marker, "sys_platform != 'ios'"));
+            assert!(!is_disjoint(marker, "sys_platform == 'ios'"));
+        }
+
+        assert!(!is_disjoint("os_name == 'nt'", "sys_platform == 'win32'"));
+        assert!(is_disjoint("os_name != 'nt'", "sys_platform == 'win32'"));
+        assert!(!is_disjoint(
+            "os_name != 'posix'",
+            "sys_platform == 'win32'"
+        ));
+        // IronPython can use `cli` on Windows, so the converse implication is not valid.
+        assert!(!is_disjoint("os_name == 'nt'", "sys_platform == 'cli'"));
+        assert!(!is_disjoint(
+            "os_name == 'java'",
+            "sys_platform == 'unidentified'"
+        ));
+        assert!(is_disjoint(
+            "implementation_name == 'cpython' and os_name == 'nt'",
+            "platform_python_implementation == 'CPython' and sys_platform == 'aix'"
         ));
     }
 

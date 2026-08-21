@@ -38,8 +38,9 @@ impl From<CanonicalMarkerValueVersion> for MarkerValueVersion {
 /// all ADDs, which is in turn used when translating the ADD to DNF. As such, modifying the ordering
 /// will modify the output of marker expressions.
 ///
-/// Critically, any variants that could be involved in a known-incompatible marker pair should
-/// be at the top of the ordering, i.e., given the maximum priority.
+/// Platform markers involved in known-incompatible marker pairs are placed at the top of the
+/// ordering. Python implementation markers retain their existing positions to preserve the
+/// serialization of marker expressions.
 #[derive(Copy, Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
 pub enum CanonicalMarkerValueString {
     /// `os_name`
@@ -68,7 +69,14 @@ impl CanonicalMarkerValueString {
     /// For example, `sys_platform == 'win32'` and `platform_system == 'Darwin'` are known to
     /// never be true at the same time.
     pub(crate) fn is_conflicting(self) -> bool {
-        self <= Self::PlatformSystem
+        matches!(
+            self,
+            Self::OsName
+                | Self::SysPlatform
+                | Self::PlatformSystem
+                | Self::PlatformPythonImplementation
+                | Self::ImplementationName
+        )
     }
 }
 

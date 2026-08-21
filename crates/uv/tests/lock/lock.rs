@@ -16303,6 +16303,283 @@ fn lock_impossible_platform_markers() -> Result<()> {
     Ok(())
 }
 
+/// Recognize that `implementation_name` and `platform_python_implementation` describe the
+/// same interpreter, while preserving their original marker spellings in the lockfile.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_python_implementation_markers() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.9"
+        dependencies = [
+            "ok==1.0.0 ; implementation_name == 'pypy'",
+            "ok==2.0.0 ; platform_python_implementation == 'CPython'",
+        ]
+        "#,
+    )?;
+
+    let find_links = context.workspace_root.join("test/links");
+    uv_snapshot!(context.filters(), context.lock().arg("--no-index").arg("--find-links").arg(&find_links), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline").arg("--no-cache").arg("--no-index").arg("--find-links").arg(&find_links), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(context.read("uv.lock"), @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.9"
+        resolution-markers = [
+            "implementation_name == 'pypy'",
+            "implementation_name != 'pypy' and platform_python_implementation == 'CPython'",
+            "implementation_name != 'pypy' and platform_python_implementation != 'CPython'",
+        ]
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[package]]
+        name = "ok"
+        version = "1.0.0"
+        source = { registry = "[WORKSPACE]/test/links" }
+        resolution-markers = [
+            "implementation_name == 'pypy'",
+        ]
+        wheels = [
+            { path = "[WORKSPACE]/test/links/ok-1.0.0-py3-none-any.whl" },
+        ]
+
+        [[package]]
+        name = "ok"
+        version = "2.0.0"
+        source = { registry = "[WORKSPACE]/test/links" }
+        resolution-markers = [
+            "implementation_name != 'pypy' and platform_python_implementation == 'CPython'",
+        ]
+        wheels = [
+            { path = "[WORKSPACE]/test/links/ok-2.0.0-py3-none-any.whl" },
+        ]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "ok", version = "1.0.0", source = { registry = "[WORKSPACE]/test/links" }, marker = "implementation_name == 'pypy'" },
+            { name = "ok", version = "2.0.0", source = { registry = "[WORKSPACE]/test/links" }, marker = "implementation_name != 'pypy' and platform_python_implementation == 'CPython'" },
+        ]
+
+        [package.metadata]
+        requires-dist = [
+            { name = "ok", marker = "platform_python_implementation == 'CPython'", specifier = "==2.0.0" },
+            { name = "ok", marker = "implementation_name == 'pypy'", specifier = "==1.0.0" },
+        ]
+        "#);
+    });
+
+    Ok(())
+}
+
+/// Pyston reports `CPython` as its platform implementation, despite having its own name.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_pyston_implementation_markers() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.9"
+        dependencies = [
+            "ok==1.0.0 ; implementation_name == 'pyston'",
+            "ok==2.0.0 ; platform_python_implementation == 'CPython'",
+        ]
+        "#,
+    )?;
+
+    let find_links = context.workspace_root.join("test/links");
+    uv_snapshot!(context.filters(), context.lock().arg("--no-index").arg("--find-links").arg(&find_links), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+      × No solution found when resolving dependencies for split (markers: implementation_name == 'pyston' and platform_python_implementation == 'CPython'):
+      ╰─▶ Because your project depends on ok{implementation_name == 'pyston'}==1.0.0 and ok{platform_python_implementation == 'CPython'}==2.0.0, we can conclude that your project's requirements are unsatisfiable.
+
+    hint: The resolution failed for an environment that is not the current one, consider limiting the environments with `tool.uv.environments`.
+    ");
+
+    Ok(())
+}
+
+/// Pyston cannot run in an environment whose platform implementation is not CPython.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_pyston_incompatible_platform_marker() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.9"
+        dependencies = [
+            "ok==1.0.0 ; implementation_name == 'pyston'",
+            "ok==2.0.0 ; platform_python_implementation != 'CPython'",
+        ]
+        "#,
+    )?;
+
+    let find_links = context.workspace_root.join("test/links");
+    uv_snapshot!(context.filters(), context.lock().arg("--no-index").arg("--find-links").arg(&find_links), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline").arg("--no-cache").arg("--no-index").arg("--find-links").arg(&find_links), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
+/// Recognize incompatible Windows and Unix-like operating-system markers across both platform
+/// marker names.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_unix_operating_system_markers() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.9"
+        dependencies = [
+            "ok==1.0.0 ; os_name == 'nt'",
+            "ok==1.0.0 ; os_name != 'posix'",
+            "ok==2.0.0 ; sys_platform == 'aix'",
+            "ok==2.0.0 ; sys_platform == 'android'",
+            "ok==2.0.0 ; sys_platform == 'cygwin'",
+            "ok==2.0.0 ; sys_platform == 'emscripten'",
+            "ok==2.0.0 ; sys_platform == 'wasi'",
+            "ok==2.0.0 ; platform_system == 'FreeBSD'",
+            "ok==2.0.0 ; platform_system == 'NetBSD'",
+            "ok==2.0.0 ; platform_system == 'OpenBSD'",
+            "ok==2.0.0 ; platform_system == 'SunOS'",
+            "ok==2.0.0 ; platform_system == 'iOS'",
+            "ok==2.0.0 ; platform_system == 'iPadOS'",
+        ]
+        "#,
+    )?;
+
+    let find_links = context.workspace_root.join("test/links");
+    uv_snapshot!(context.filters(), context.lock().arg("--no-index").arg("--find-links").arg(&find_links), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline").arg("--no-cache").arg("--no-index").arg("--find-links").arg(&find_links), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
+/// Windows platform markers imply the NT operating-system API, while preserving other runtimes.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_windows_operating_system_markers() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.9"
+        dependencies = [
+            "ok==1.0.0 ; sys_platform == 'win32'",
+            "ok==1.0.0 ; platform_system == 'Windows'",
+            "ok==2.0.0 ; os_name != 'nt'",
+        ]
+        "#,
+    )?;
+
+    let find_links = context.workspace_root.join("test/links");
+    uv_snapshot!(context.filters(), context.lock().arg("--no-index").arg("--find-links").arg(&find_links), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline").arg("--no-cache").arg("--no-index").arg("--find-links").arg(&find_links), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
+/// Both user-facing iOS platform names use the same `ios` value for `sys.platform`.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_ios_platform_system_markers() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.9"
+        dependencies = [
+            "ok==1.0.0 ; platform_system == 'iOS'",
+            "ok==1.0.0 ; platform_system == 'iPadOS'",
+            "ok==2.0.0 ; sys_platform != 'ios'",
+        ]
+        "#,
+    )?;
+
+    let find_links = context.workspace_root.join("test/links");
+    uv_snapshot!(context.filters(), context.lock().arg("--no-index").arg("--find-links").arg(&find_links), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline").arg("--no-cache").arg("--no-index").arg("--find-links").arg(&find_links), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
 /// Change indexes between locking operations.
 #[cfg(feature = "test-universal")]
 #[tokio::test]

@@ -382,10 +382,9 @@ impl InternerGuard<'_> {
 
         // Determine whether the conjunction _could_ contain a conflict.
         //
-        // As an optimization, we only have to perform this check at the top-level, since these
-        // variables are given higher priority in the tree. In other words, if they're present, they
-        // _must_ be at the top; and if they're not at the top, we know they aren't present in any
-        // children.
+        // Known-incompatible platform markers have the highest priority in the tree. Python
+        // implementation markers can occur lower in the ordering, where recursive conjunctions
+        // will apply the same check when both implementation variables are present.
         let conflicts = x.var.is_conflicting_variable() && y.var.is_conflicting_variable();
 
         // Perform Shannon Expansion of the higher order variable.
@@ -455,10 +454,9 @@ impl InternerGuard<'_> {
 
         // Determine whether the conjunction _could_ contain a conflict.
         //
-        // As an optimization, we only have to perform this check at the top-level, since these
-        // variables are given higher priority in the tree. In other words, if they're present, they
-        // _must_ be at the top; and if they're not at the top, we know they aren't present in any
-        // children.
+        // Known-incompatible platform markers have the highest priority in the tree. Python
+        // implementation markers can occur lower in the ordering, where recursive conjunctions
+        // will apply the same check when both implementation variables are present.
         if x.var.is_conflicting_variable() && y.var.is_conflicting_variable() {
             return self.and(xi, yi).is_false();
         }
@@ -469,14 +467,14 @@ impl InternerGuard<'_> {
             Ordering::Less => x
                 .children
                 .nodes()
-                .all(|x| self.disjointness(x.negate(xi), yi)),
+                .all(|x| self.is_disjoint(x.negate(xi), yi)),
             // Y is higher order than X, X must be disjoint with every child of Y.
             Ordering::Greater => y
                 .children
                 .nodes()
-                .all(|y| self.disjointness(y.negate(yi), xi)),
+                .all(|y| self.is_disjoint(y.negate(yi), xi)),
             // X and Y represent the same variable, their merged edges must be unsatisfiable.
-            Ordering::Equal => x.children.is_disjoint(xi, &y.children, yi, self),
+            Ordering::Equal => x.children.is_disjoint(xi, &y.children, yi, self, true),
         }
     }
 
@@ -520,7 +518,7 @@ impl InternerGuard<'_> {
                 .nodes()
                 .all(|y| self.disjointness(y.negate(yi), xi)),
             // X and Y represent the same variable, their merged edges must be unsatisfiable.
-            Ordering::Equal => x.children.is_disjoint(xi, &y.children, yi, self),
+            Ordering::Equal => x.children.is_disjoint(xi, &y.children, yi, self, false),
         }
     }
 
@@ -1098,16 +1096,89 @@ impl InternerGuard<'_> {
             operator: MarkerOperator::Equal,
             value: arcstr::literal!("wasi"),
         });
+        let implementation_name_cpython = self.expression(MarkerExpression::String {
+            key: MarkerValueString::ImplementationName,
+            operator: MarkerOperator::Equal,
+            value: arcstr::literal!("cpython"),
+        });
+        let implementation_name_pypy = self.expression(MarkerExpression::String {
+            key: MarkerValueString::ImplementationName,
+            operator: MarkerOperator::Equal,
+            value: arcstr::literal!("pypy"),
+        });
+        let implementation_name_pyston = self.expression(MarkerExpression::String {
+            key: MarkerValueString::ImplementationName,
+            operator: MarkerOperator::Equal,
+            value: arcstr::literal!("pyston"),
+        });
+        let platform_python_implementation_cpython = self.expression(MarkerExpression::String {
+            key: MarkerValueString::PlatformPythonImplementation,
+            operator: MarkerOperator::Equal,
+            value: arcstr::literal!("CPython"),
+        });
+        let platform_python_implementation_pypy = self.expression(MarkerExpression::String {
+            key: MarkerValueString::PlatformPythonImplementation,
+            operator: MarkerOperator::Equal,
+            value: arcstr::literal!("PyPy"),
+        });
 
-        // Pairs of `os_name` and `sys_platform` that are known to be incompatible.
+        // Unix-like Python platforms always use the `posix` operating system module.
         //
-        // For example: `os_name == 'nt' and sys_platform == 'darwin'`
-        let mut pairs = vec![
-            (os_name_nt, sys_platform_linux),
-            (os_name_nt, sys_platform_darwin),
-            (os_name_nt, sys_platform_ios),
-            (os_name_posix, sys_platform_win32),
-        ];
+        // For example: `os_name == 'nt' and sys_platform == 'aix'` and
+        // `os_name != 'posix' and platform_system == 'FreeBSD'` are impossible.
+        let mut pairs = vec![(os_name_nt.not(), sys_platform_win32)];
+        for sys_platform in [
+            sys_platform_aix,
+            sys_platform_android,
+            sys_platform_cygwin,
+            sys_platform_darwin,
+            sys_platform_emscripten,
+            sys_platform_ios,
+            sys_platform_linux,
+            sys_platform_wasi,
+        ] {
+            pairs.push((os_name_nt, sys_platform));
+            pairs.push((os_name_posix.not(), sys_platform));
+        }
+        for platform_system in [
+            platform_system_freebsd,
+            platform_system_netbsd,
+            platform_system_openbsd,
+            platform_system_sunos,
+            platform_system_ios,
+            platform_system_ipados,
+        ] {
+            pairs.push((os_name_nt, platform_system));
+            pairs.push((os_name_posix.not(), platform_system));
+        }
+
+        // iOS and iPadOS expose distinct user-facing platform names, but both use `ios` as
+        // their `sys.platform` value.
+        pairs.extend([
+            (platform_system_ios, sys_platform_ios.not()),
+            (platform_system_ipados, sys_platform_ios.not()),
+        ]);
+
+        // CPython and Pyston both report `CPython` through the platform API, while PyPy exposes
+        // its own identity through both marker names. Only PyPy has a bidirectional mapping.
+        pairs.extend([
+            (
+                implementation_name_cpython,
+                platform_python_implementation_cpython.not(),
+            ),
+            (
+                implementation_name_pyston,
+                platform_python_implementation_cpython.not(),
+            ),
+            (
+                implementation_name_pypy,
+                platform_python_implementation_pypy.not(),
+            ),
+            (
+                implementation_name_pypy.not(),
+                platform_python_implementation_pypy,
+            ),
+        ]);
 
         // Pairs of `platform_system` and `sys_platform` that are known to be incompatible.
         //
@@ -1587,14 +1658,29 @@ impl Edges {
         right_edges: &Self,
         right_parent: NodeId,
         interner: &mut InternerGuard<'_>,
+        known_exclusions: bool,
     ) -> bool {
         match (self, right_edges) {
             // For version or string variables, we have to split and check the overlapping ranges.
             (Self::Version { edges }, Self::Version { edges: right_edges }) => {
-                Self::is_disjoint_ranges(edges, parent, right_edges, right_parent, interner)
+                Self::is_disjoint_ranges(
+                    edges,
+                    parent,
+                    right_edges,
+                    right_parent,
+                    interner,
+                    known_exclusions,
+                )
             }
             (Self::String { edges }, Self::String { edges: right_edges }) => {
-                Self::is_disjoint_ranges(edges, parent, right_edges, right_parent, interner)
+                Self::is_disjoint_ranges(
+                    edges,
+                    parent,
+                    right_edges,
+                    right_parent,
+                    interner,
+                    known_exclusions,
+                )
             }
             // For boolean variables, we simply check the low and high edges.
             (
@@ -1604,8 +1690,13 @@ impl Edges {
                     low: right_low,
                 },
             ) => {
-                interner.disjointness(high.negate(parent), right_high.negate(right_parent))
-                    && interner.disjointness(low.negate(parent), right_low.negate(right_parent))
+                if known_exclusions {
+                    interner.is_disjoint(high.negate(parent), right_high.negate(right_parent))
+                        && interner.is_disjoint(low.negate(parent), right_low.negate(right_parent))
+                } else {
+                    interner.disjointness(high.negate(parent), right_high.negate(right_parent))
+                        && interner.disjointness(low.negate(parent), right_low.negate(right_parent))
+                }
             }
             _ => unreachable!("cannot merge two `Edges` of different types"),
         }
@@ -1618,6 +1709,7 @@ impl Edges {
         right_edges: &SmallVec<(Ranges<T>, NodeId)>,
         right_parent: NodeId,
         interner: &mut InternerGuard<'_>,
+        known_exclusions: bool,
     ) -> bool
     where
         T: Clone + Ord,
@@ -1631,10 +1723,18 @@ impl Edges {
                 }
 
                 // Ensure the intersection is disjoint.
-                if !interner.disjointness(
-                    left_child.negate(left_parent),
-                    right_child.negate(right_parent),
-                ) {
+                let disjoint = if known_exclusions {
+                    interner.is_disjoint(
+                        left_child.negate(left_parent),
+                        right_child.negate(right_parent),
+                    )
+                } else {
+                    interner.disjointness(
+                        left_child.negate(left_parent),
+                        right_child.negate(right_parent),
+                    )
+                };
+                if !disjoint {
                     return false;
                 }
             }
