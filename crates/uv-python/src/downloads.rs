@@ -1404,6 +1404,52 @@ impl ManagedPythonDownload {
             fs_err::tokio::remove_dir_all(&path).await?;
         }
 
+        // Finalize the installation on the extracted temp directory BEFORE
+        // renaming into place. This eliminates the race window: when the rename
+        // completes, the installation is already fully functional, so a
+        // concurrent `uv python find` will never see an incomplete installation.
+        let installation = ManagedPythonInstallation::new(extracted.clone(), self);
+        installation
+            .ensure_externally_managed()
+            .map_err(io::Error::other)?;
+        // Patch sysconfig with the final destination path, even though we
+        // operate on the temp staging directory. The `_sysconfigdata_` file
+        // replaces `/install` with `install_root`, and it must reference the
+        // final path so the installation is valid after rename.
+        // Only applicable on Unix, non-Windows, non-Emscripten, CPython.
+        if cfg!(unix) && !self.key.os().is_windows() {
+            if !self.key.os().is_emscripten() {
+                if matches!(
+                    self.key.implementation().as_ref(),
+                    LenientImplementationName::Known(ImplementationName::CPython)
+                ) {
+                    crate::sysconfig::update_sysconfig_at(
+                        &extracted,
+                        &path,
+                        self.key.major,
+                        self.key.minor,
+                        self.key.variant.lib_suffix(),
+                    )
+                    .map_err(io::Error::other)?;
+                }
+            }
+        }
+        installation
+            .ensure_canonical_executables()
+            .map_err(io::Error::other)?;
+        installation.ensure_build_file().map_err(io::Error::other)?;
+        // Only applicable on macOS for dylib install_name patching.
+        if cfg!(target_os = "macos") && self.key.os().is_like_darwin() {
+            if matches!(
+                self.key.implementation().as_ref(),
+                LenientImplementationName::Known(ImplementationName::CPython)
+            ) {
+                if let Err(e) = installation.ensure_dylib_patched() {
+                    e.warn_user(&installation);
+                }
+            }
+        }
+
         // Persist it to the target.
         debug!("Moving {} to {}", extracted.display(), path.user_display());
         rename_with_retry(extracted, &path)
