@@ -79,7 +79,9 @@ document$.subscribe(function () {
     "concepts/projects/#build-isolation":
       "concepts/projects/config/#build-isolation",
     "concepts/projects/dependencies/#dependency-specifiers-pep-508":
-      "concepts/projects/dependencies/#dependency-specifiers",
+      "reference/standards/#dependency-specifiers",
+    "concepts/projects/dependencies/#dependency-specifiers":
+      "reference/standards/#dependency-specifiers",
     "concepts/projects/dependencies/#importing-dependencies":
       "concepts/projects/dependencies/#importing-dependencies-from-requirements-files",
     "concepts/projects/layout/#pylock-toml":
