@@ -517,7 +517,7 @@ async fn execute_official_installer(
     modify_path: bool,
     target_version: &Pep440Version,
     astral_mirror_url: Option<&str>,
-) -> Result<(), AxoupdateError> {
+) -> Result<()> {
     let mut command = if cfg!(windows) {
         let mut command = Command::new("powershell");
         command.arg("-ExecutionPolicy").arg("ByPass");
@@ -577,7 +577,8 @@ async fn execute_official_installer(
         status: output.status.code(),
         stdout,
         stderr,
-    })
+    }
+    .into())
 }
 
 /// Read whether the existing standalone install opted out of PATH modification.
@@ -1168,16 +1169,16 @@ mod tests {
         )
         .await
         .expect_err("failing installer should return an error");
-        let AxoupdateError::InstallFailed {
+        let Some(AxoupdateError::InstallFailed {
             status,
             stdout,
             stderr,
-        } = err
+        }) = err.downcast_ref::<AxoupdateError>()
         else {
             panic!("expected InstallFailed error");
         };
 
-        assert_eq!(status, Some(23));
+        assert_eq!(*status, Some(23));
         assert_eq!(stdout.as_deref(), Some("hello from stdout\n"));
         assert_eq!(stderr.as_deref(), Some("hello from stderr\n"));
     }

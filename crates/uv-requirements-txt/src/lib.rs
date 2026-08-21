@@ -240,7 +240,7 @@ impl RequirementsTxt {
         )
         .await
         .map_err(|err| RequirementsTxtFileError {
-            file: requirements_txt.to_path_buf(),
+            file: requirements_txt.into(),
             error: err,
         })
     }
@@ -268,7 +268,7 @@ impl RequirementsTxt {
             #[cfg(not(feature = "http"))]
             {
                 return Err(RequirementsTxtFileError {
-                    file: requirements_txt.to_path_buf(),
+                    file: requirements_txt.into(),
                     error: RequirementsTxtParserError::Io(io::Error::new(
                         io::ErrorKind::InvalidInput,
                         "Remote file not supported without `http` feature",
@@ -280,7 +280,7 @@ impl RequirementsTxt {
             {
                 let url = requirements_txt.display().to_string();
                 let url = DisplaySafeUrl::parse(&url).map_err(|err| RequirementsTxtFileError {
-                    file: requirements_txt.to_path_buf(),
+                    file: requirements_txt.into(),
                     error: RequirementsTxtParserError::InvalidUrl(
                         requirements_txt.display().to_string(),
                         err,
@@ -290,7 +290,7 @@ impl RequirementsTxt {
                 // Avoid constructing a client if network is disabled already
                 if client_builder.is_offline() {
                     return Err(RequirementsTxtFileError {
-                        file: requirements_txt.to_path_buf(),
+                        file: requirements_txt.into(),
                         error: RequirementsTxtParserError::Io(io::Error::new(
                             io::ErrorKind::InvalidInput,
                             format!(
@@ -302,13 +302,13 @@ impl RequirementsTxt {
                 let client = client_builder
                     .build()
                     .map_err(|err| RequirementsTxtFileError {
-                        file: requirements_txt.to_path_buf(),
+                        file: requirements_txt.into(),
                         error: RequirementsTxtParserError::ClientBuild(url.clone(), Box::new(err)),
                     })?;
                 let content = read_url_to_string(&requirements_txt, client)
                     .await
                     .map_err(|err| RequirementsTxtFileError {
-                        file: requirements_txt.to_path_buf(),
+                        file: requirements_txt.into(),
                         error: err,
                     })?;
                 cache.insert(requirements_txt.to_path_buf(), content.clone());
@@ -319,7 +319,7 @@ impl RequirementsTxt {
             let content = uv_fs::read_to_string_transcode(&requirements_txt)
                 .await
                 .map_err(|err| RequirementsTxtFileError {
-                    file: requirements_txt.to_path_buf(),
+                    file: requirements_txt.into(),
                     error: RequirementsTxtParserError::Io(err),
                 })?;
             cache.insert(requirements_txt.to_path_buf(), content.clone());
@@ -338,7 +338,7 @@ impl RequirementsTxt {
         )
         .await
         .map_err(|err| RequirementsTxtFileError {
-            file: requirements_txt.to_path_buf(),
+            file: requirements_txt.into(),
             error: err,
         })?;
 
@@ -1141,7 +1141,7 @@ async fn read_url_to_string(
 /// Error parsing requirements.txt, wrapper with filename
 #[derive(Debug)]
 pub struct RequirementsTxtFileError {
-    file: PathBuf,
+    file: Box<Path>,
     error: RequirementsTxtParserError,
 }
 
