@@ -1292,20 +1292,13 @@ impl RemoteSource for GitPathSourceDist {
     fn filename(&self) -> Result<Cow<'_, str>, Error> {
         // The filename is the last segment of the URL, before any `@`.
         match self.url.filename()? {
-            Cow::Borrowed(filename) => {
-                if let Some((_, filename)) = filename.rsplit_once('@') {
-                    Ok(Cow::Borrowed(filename))
-                } else {
-                    Ok(Cow::Borrowed(filename))
-                }
+            Cow::Borrowed(filename) if let Some((_, suffix)) = filename.rsplit_once('@') => {
+                Ok(Cow::Borrowed(suffix))
             }
-            Cow::Owned(filename) => {
-                if let Some((_, filename)) = filename.rsplit_once('@') {
-                    Ok(Cow::Owned(filename.to_owned()))
-                } else {
-                    Ok(Cow::Owned(filename))
-                }
+            Cow::Owned(ref filename) if let Some((_, suffix)) = filename.rsplit_once('@') => {
+                Ok(Cow::Owned(suffix.to_owned()))
             }
+            filename => Ok(filename),
         }
     }
 
@@ -1318,20 +1311,13 @@ impl RemoteSource for GitDirectorySourceDist {
     fn filename(&self) -> Result<Cow<'_, str>, Error> {
         // The filename is the last segment of the URL, before any `@`.
         match self.url.filename()? {
-            Cow::Borrowed(filename) => {
-                if let Some((_, filename)) = filename.rsplit_once('@') {
-                    Ok(Cow::Borrowed(filename))
-                } else {
-                    Ok(Cow::Borrowed(filename))
-                }
+            Cow::Borrowed(filename) if let Some((_, suffix)) = filename.rsplit_once('@') => {
+                Ok(Cow::Borrowed(suffix))
             }
-            Cow::Owned(filename) => {
-                if let Some((_, filename)) = filename.rsplit_once('@') {
-                    Ok(Cow::Owned(filename.to_owned()))
-                } else {
-                    Ok(Cow::Owned(filename))
-                }
+            Cow::Owned(ref filename) if let Some((_, suffix)) = filename.rsplit_once('@') => {
+                Ok(Cow::Owned(suffix.to_owned()))
             }
+            filename => Ok(filename),
         }
     }
 
