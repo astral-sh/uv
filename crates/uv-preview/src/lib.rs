@@ -335,6 +335,8 @@ pub enum PreviewFeature {
     IndexByName,
     /// Restricts generated requirement hashes to artifacts allowed by binary and build policies.
     ArtifactHashFiltering,
+    /// Requires wheels only for selected package versions with sufficient wheel coverage.
+    OnlyBinaryIfAvailable,
 }
 
 impl Display for PreviewFeature {

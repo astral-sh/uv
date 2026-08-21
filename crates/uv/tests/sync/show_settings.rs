@@ -81,6 +81,7 @@ fn pip_compile_baseline() {
     }
     PipCompileSettings {
         format: None,
+        only_binary_if_available: false,
         src_file: [
             "requirements.in",
         ],
@@ -3785,6 +3786,7 @@ fn preview_features() {
     +            TarCodec,
     +            IndexByName,
     +            ArtifactHashFiltering,
+    +            OnlyBinaryIfAvailable,
     +        ],
          },
          python_preference: Managed,

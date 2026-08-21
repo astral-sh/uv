@@ -136,6 +136,7 @@ mod tests {
         - `native-auth`: Enables storage of credentials in a [system-native location](../concepts/authentication/http.md#the-uv-credentials-store).
         - `no-distutils-patch`: Stops installing the `_virtualenv.py` / `_virtualenv.pth` distutils configuration monkeypatch
           in virtual environments for Python 3.10 and later.
+        - `only-binary-if-available`: Requires wheels only for selected package versions with sufficient wheel coverage.
         - `package-conflicts`: Allows defining workspace conflicts at the package level.
         - `packaged-init`: Makes `uv init` create a packaged application with a `src/` layout, build system, and script
           entry point by default.

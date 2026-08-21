@@ -15,8 +15,9 @@ use uv_audit::VulnerabilityServiceFormat;
 use uv_auth::Service;
 use uv_cache::CacheArgs;
 use uv_configuration::{
-    ExportFormat, IndexStrategy, KeyringProviderType, PackageNameSpecifier, PipCompileFormat,
-    ProjectBuildBackend, TargetTriple, TrustedHost, TrustedPublishing, VersionControlSystem,
+    ExportFormat, IndexStrategy, KeyringProviderType, OnlyBinarySpecifier, PackageNameSpecifier,
+    PipCompileFormat, ProjectBuildBackend, TargetTriple, TrustedHost, TrustedPublishing,
+    VersionControlSystem,
 };
 use uv_distribution_types::{
     ConfigSettingEntry, ConfigSettingPackageEntry, Index, IndexName, IndexSourceError, IndexUrl,
@@ -1806,10 +1807,11 @@ pub struct PipCompileArgs {
     /// with an error. uv may still build editable requirements, and their build backends may run
     /// arbitrary Python code.
     ///
-    /// Multiple packages may be provided. Disable binaries for all packages with `:all:`.
-    /// Clear previously specified packages with `:none:`.
+    /// Multiple packages may be provided. Require wheels for all packages with `:all:`, use wheels
+    /// when the selected version has them with `:if-available:`, or clear previous selections with
+    /// `:none:`.
     #[arg(long, value_delimiter = ',', conflicts_with = "no_build")]
-    pub only_binary: Option<Vec<PackageNameSpecifier>>,
+    pub only_binary: Option<Vec<OnlyBinarySpecifier>>,
 
     /// The Python version to use for resolution.
     ///
@@ -2132,7 +2134,7 @@ pub struct PipSyncArgs {
     /// Multiple packages may be provided. Disable binaries for all packages with `:all:`. Clear
     /// previously specified packages with `:none:`.
     #[arg(long, value_delimiter = ',', conflicts_with = "no_build")]
-    pub only_binary: Option<Vec<PackageNameSpecifier>>,
+    pub only_binary: Option<Vec<OnlyBinarySpecifier>>,
 
     /// Allow sync of empty requirements, which will clear the environment of all packages.
     #[arg(long, overrides_with("no_allow_empty_requirements"))]
@@ -2479,7 +2481,7 @@ pub struct PipInstallArgs {
     /// Multiple packages may be provided. Disable binaries for all packages with `:all:`. Clear
     /// previously specified packages with `:none:`.
     #[arg(long, value_delimiter = ',', conflicts_with = "no_build")]
-    pub only_binary: Option<Vec<PackageNameSpecifier>>,
+    pub only_binary: Option<Vec<OnlyBinarySpecifier>>,
 
     /// The minimum Python version that should be supported by the requirements (e.g., `3.7` or
     /// `3.7.9`).
