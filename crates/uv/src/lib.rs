@@ -3156,6 +3156,11 @@ where
                     ExitStatus::Failure.into()
                 }
                 UvError::Argument(err) => {
+                    // Like Clap errors, argument errors remain visible with `-qq`.
+                    let printer = match printer {
+                        Printer::Silent => Printer::Quiet,
+                        printer => printer,
+                    };
                     commands::diagnostics::write_error_chain(&err, printer)
                         .expect("writing to stderr should not fail");
                     ExitStatus::Error.into()
