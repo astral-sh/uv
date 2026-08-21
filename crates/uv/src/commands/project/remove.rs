@@ -226,6 +226,10 @@ pub(crate) async fn remove(
         RemoveTarget::Project(project) => {
             if no_sync {
                 // Discover the interpreter.
+                // `--no-sync` does not touch the project environment. If the user did not pass
+                // `--active`/`--no-active`, treat a mismatched `VIRTUAL_ENV` as ignored without
+                // warning (see astral-sh/uv#7073).
+                let active = active.or(Some(false));
                 let workspace_python = WorkspacePython::from_request(
                     python.as_deref().map(PythonRequest::parse),
                     Some(project.workspace()),
