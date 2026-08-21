@@ -270,7 +270,7 @@ async fn finish_archive<W: AsyncWrite + Unpin>(writer: ZipFileWriter<W>) -> Resu
 /// records here; the ZIP library still validates all offsets, headers, sizes and ZIP64 binding.
 fn preflight_directory(file: &mut (impl Read + Seek)) -> Result<()> {
     let length = file.seek(SeekFrom::End(0))?;
-    let tail_size = length.min(22 + u64::from(u16::MAX)) as usize;
+    let tail_size = usize::try_from(length.min(22 + u64::from(u16::MAX)))?;
     ensure!(tail_size >= 22, "wheel has no ZIP end record");
     file.seek(SeekFrom::Start(length - tail_size as u64))?;
     let mut tail = vec![0; tail_size];
@@ -927,7 +927,7 @@ mod tests {
             if !dangling {
                 fs_err::write(&target, b"sentinel")?;
             }
-            std::os::unix::fs::symlink(&target, &args.output)?;
+            fs_err::os::unix::fs::symlink(&target, &args.output)?;
             assert!(wheel_replace(args).await.is_err());
             assert_eq!(
                 fs_err::read_link(directory.path().join("output.whl"))?,
@@ -1011,7 +1011,9 @@ mod tests {
             (
                 b"PK\x05\x06",
                 12,
-                (MAX_DIRECTORY_SIZE as u32 + 1).to_le_bytes().to_vec(),
+                u32::try_from(MAX_DIRECTORY_SIZE + 1)?
+                    .to_le_bytes()
+                    .to_vec(),
             ),
         ] {
             let directory = tempfile::tempdir()?;
