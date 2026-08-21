@@ -517,7 +517,7 @@ async fn execute_official_installer(
     modify_path: bool,
     target_version: &Pep440Version,
     astral_mirror_url: Option<&str>,
-) -> Result<()> {
+) -> Result<(), Box<AxoupdateError>> {
     let mut command = if cfg!(windows) {
         let mut command = Command::new("powershell");
         command.arg("-ExecutionPolicy").arg("ByPass");
@@ -528,11 +528,11 @@ async fn execute_official_installer(
     };
 
     let to_restore = if cfg!(windows) {
-        let old_path = std::env::current_exe()?;
+        let old_path = std::env::current_exe().map_err(AxoupdateError::from)?;
         let mut previous_path = old_path.as_os_str().to_os_string();
         previous_path.push(".previous.exe");
         let previous_path = PathBuf::from(previous_path);
-        fs_err::rename(&old_path, &previous_path)?;
+        fs_err::rename(&old_path, &previous_path).map_err(AxoupdateError::from)?;
         Some((previous_path, old_path))
     } else {
         None
@@ -556,7 +556,7 @@ async fn execute_official_installer(
 
     if let Some((previous_path, old_path)) = to_restore.as_ref() {
         if failed {
-            fs_err::rename(previous_path, old_path)?;
+            fs_err::rename(previous_path, old_path).map_err(AxoupdateError::from)?;
         } else {
             #[cfg(windows)]
             self_replace::self_delete_at(previous_path)
@@ -564,7 +564,7 @@ async fn execute_official_installer(
         }
     }
 
-    let output = result?;
+    let output = result.map_err(AxoupdateError::from)?;
     if output.status.success() {
         return Ok(());
     }
@@ -573,12 +573,11 @@ async fn execute_official_installer(
         (!output.stdout.is_empty()).then(|| String::from_utf8_lossy(&output.stdout).to_string());
     let stderr =
         (!output.stderr.is_empty()).then(|| String::from_utf8_lossy(&output.stderr).to_string());
-    Err(AxoupdateError::InstallFailed {
+    Err(Box::new(AxoupdateError::InstallFailed {
         status: output.status.code(),
         stdout,
         stderr,
-    }
-    .into())
+    }))
 }
 
 /// Read whether the existing standalone install opted out of PATH modification.
@@ -1169,16 +1168,16 @@ mod tests {
         )
         .await
         .expect_err("failing installer should return an error");
-        let Some(AxoupdateError::InstallFailed {
+        let AxoupdateError::InstallFailed {
             status,
             stdout,
             stderr,
-        }) = err.downcast_ref::<AxoupdateError>()
+        } = *err
         else {
             panic!("expected InstallFailed error");
         };
 
-        assert_eq!(*status, Some(23));
+        assert_eq!(status, Some(23));
         assert_eq!(stdout.as_deref(), Some("hello from stdout\n"));
         assert_eq!(stderr.as_deref(), Some("hello from stderr\n"));
     }
