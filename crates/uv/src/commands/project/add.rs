@@ -64,7 +64,7 @@ use crate::commands::project::{
 use crate::commands::reporters::{PythonDownloadReporter, ResolverReporter};
 use crate::commands::{ExitStatus, ScriptPath, diagnostics, project};
 use crate::printer::Printer;
-use crate::settings::{FrozenSource, LockCheck, ResolverInstallerSettings};
+use crate::settings::{FrozenSource, LockCheck, ResolverInstallerSettings, ResolverSettings};
 
 /// Add one or more packages to the project requirements.
 #[expect(clippy::fn_params_excessive_bools)]
@@ -348,6 +348,7 @@ pub(crate) async fn add(
     let RequirementsSpecification {
         requirements,
         constraints,
+        config_settings_package,
         ..
     } = RequirementsSpecification::from_sources(
         &requirements,
@@ -358,6 +359,20 @@ pub(crate) async fn add(
         &client_builder,
     )
     .await?;
+
+    // `uv add` stores per-requirement build settings in `[tool.uv.config-settings-package]`.
+    // Since that table cannot store markers, settings from marked requirements apply everywhere.
+    let config_settings_package = config_settings_package.evaluate(None);
+    let settings = ResolverInstallerSettings {
+        resolver: ResolverSettings {
+            config_settings_package: settings
+                .resolver
+                .config_settings_package
+                .merge(config_settings_package.clone()),
+            ..settings.resolver
+        },
+        ..settings
+    };
 
     // Initialize any shared state.
     let state = PlatformState::default();
@@ -557,9 +572,16 @@ pub(crate) async fn add(
         }
     };
 
-    // If workspace mode is enabled, add any members to the `workspace` section of the
-    // `pyproject.toml` file.
-    if use_workspace {
+    // Package-specific build settings are workspace settings and belong in the root project.
+    let config_settings_in_workspace = matches!(
+        &target,
+        AddTarget::Project(project, _)
+            if project.workspace().install_path() != project.root()
+                && !config_settings_package.is_empty()
+    );
+
+    // Update workspace members and package-specific build settings in the root `pyproject.toml`.
+    if use_workspace || config_settings_in_workspace {
         let AddTarget::Project(project, python_target) = target else {
             unreachable!("`--workspace` and `--script` are conflicting options");
         };
@@ -605,6 +627,13 @@ pub(crate) async fn add(
                     relative_path.user_display().cyan()
                 )?;
             }
+        }
+
+        if config_settings_in_workspace {
+            for (package, config_settings) in config_settings_package.iter() {
+                toml.add_config_settings_package(package, config_settings)?;
+            }
+            modified = true;
         }
 
         // If we modified the workspace root, we need to reload it entirely, since this can impact
@@ -655,6 +684,12 @@ pub(crate) async fn add(
         index,
         &mut toml,
     )?;
+
+    if !config_settings_in_workspace {
+        for (package, config_settings) in config_settings_package.iter() {
+            toml.add_config_settings_package(package, config_settings)?;
+        }
+    }
 
     // If no requirements were added but a dependency group or optional dependency was specified,
     // ensure the group/extra exists. This handles the case where `uv add -r requirements.txt
