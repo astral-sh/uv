@@ -143,7 +143,7 @@ jobs:
             [[ "$file" =~ ^crates/uv-publish/ || "$file" =~ ^scripts/publish/ || "$file" == "crates/uv/src/commands/publish.rs" ]] && publish_code_changed=1
             [[ "$file" == ".github/workflows/test-windows-trampolines.yml" ]] && trampoline_workflow_changed=1
             [[ "$file" =~ ^crates/uv-trampoline/ || "$file" =~ ^crates/uv-trampoline-builder/ ]] && trampoline_code_changed=1
-            [[ "$file" =~ ^crates/uv-trampoline/.*\.rs$ || "$file" =~ ^crates/uv-trampoline-builder/trampolines/ ]] && trampoline_repro_changed=1
+            [[ "$file" == "crates/uv-trampoline/rust-toolchain.toml" || "$file" =~ ^crates/uv-trampoline/.*\.rs$ || "$file" =~ ^crates/uv-trampoline-builder/trampolines/ ]] && trampoline_repro_changed=1
             [[ "$file" == "scripts/build-trampolines.sh" || "$file" == "scripts/build-trampolines-in-docker.sh" ]] && trampoline_build_scripts_changed=1
             [[ "$file" == "scripts/build-trampolines.sh" || "$file" == "scripts/build-trampolines-in-docker.sh" || "$file" == "scripts/check-trampoline-version-consistency.py" ]] && trampoline_scripts_changed=1
             [[ "$file" =~ ^crates/uv-build/ ]] && uv_build_changed=1
