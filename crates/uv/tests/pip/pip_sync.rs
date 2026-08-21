@@ -3537,7 +3537,7 @@ fn require_hashes_wrong_algorithm() -> Result<()> {
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt
-        .write_str("anyio==4.0.0 --hash=sha512:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f")?;
+        .write_str("anyio==4.0.0 --hash=sha512:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5fcfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f")?;
 
     uv_snapshot!(context.pip_sync()
         .arg("requirements.txt")
@@ -3549,7 +3549,7 @@ fn require_hashes_wrong_algorithm() -> Result<()> {
       ╰─▶ Hash mismatch for `anyio==4.0.0`
 
           Expected:
-            sha512:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
+            sha512:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5fcfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
 
           Computed:
             sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
@@ -4309,10 +4309,10 @@ fn require_hashes_at_least_one() -> Result<()> {
     error: `md5` hashes are insecure and cannot be used with `--require-hashes` but no other hashes are available for: anyio==4.0.0
     ");
 
-    // Request `anyio` with a `sha256` hash.
+    // Request `anyio` with an uppercase `sha256` hash.
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt
-        .write_str("anyio==4.0.0 --hash=sha256:f7ed51751b2c2add651e5747c891b47e26d2a21be5d32d9311dfe9692f3e5d7a")?;
+        .write_str("anyio==4.0.0 --hash=sha256:F7ED51751B2C2ADD651E5747C891B47E26D2A21BE5D32D9311DFE9692F3E5D7A")?;
 
     uv_snapshot!(context.pip_sync()
         .arg("requirements.txt")
@@ -4370,7 +4370,7 @@ fn require_hashes_at_least_one() -> Result<()> {
     // This should be true even if the second hash is wrong.
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt
-        .write_str("anyio==4.0.0 --hash=sha256:f7ed51751b2c2add651e5747c891b47e26d2a21be5d32d9311dfe9692f3e5d7a --hash=md5:1234")?;
+        .write_str("anyio==4.0.0 --hash=sha256:f7ed51751b2c2add651e5747c891b47e26d2a21be5d32d9311dfe9692f3e5d7a --hash=md5:12341234123412341234123412341234")?;
 
     uv_snapshot!(context.pip_sync()
         .arg("requirements.txt")
@@ -4434,7 +4434,9 @@ fn require_hashes_find_links_no_hash() -> Result<()> {
 
     // Second, use an incorrect hash.
     let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.write_str("basic-package==0.1.0 --hash=sha256:123")?;
+    requirements_txt.write_str(
+        "basic-package==0.1.0 --hash=sha256:0000000000000000000000000000000000000000000000000000000000000000",
+    )?;
 
     uv_snapshot!(context.pip_sync()
         .arg("requirements.txt")
@@ -4451,7 +4453,7 @@ fn require_hashes_find_links_no_hash() -> Result<()> {
       ╰─▶ Hash mismatch for `basic-package==0.1.0`
 
           Expected:
-            sha256:123
+            sha256:0000000000000000000000000000000000000000000000000000000000000000
 
           Computed:
             sha256:7b6229db79b5800e4e98a351b5628c1c8a944533a2d428aeeaa7275a30d4ea82
@@ -4549,7 +4551,9 @@ fn require_hashes_find_links_invalid_hash() -> Result<()> {
 
     // First, request some other hash.
     let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.write_str("example-a-961b4c22==1.0.0 --hash=sha256:123")?;
+    requirements_txt.write_str(
+        "example-a-961b4c22==1.0.0 --hash=sha256:0000000000000000000000000000000000000000000000000000000000000000",
+    )?;
 
     uv_snapshot!(context.pip_sync()
         .arg("requirements.txt")
@@ -4564,7 +4568,7 @@ fn require_hashes_find_links_invalid_hash() -> Result<()> {
       ╰─▶ Hash mismatch for `example-a-961b4c22==1.0.0`
 
           Expected:
-            sha256:123
+            sha256:0000000000000000000000000000000000000000000000000000000000000000
 
           Computed:
             sha256:5d69f0b590514103234f0c3526563856f04d044d8d0ea1073a843ae429b3187e
@@ -4730,7 +4734,9 @@ fn require_hashes_registry_invalid_hash() -> Result<()> {
 
     // First, request some other hash.
     let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.write_str("example-a-961b4c22==1.0.0 --hash=sha256:123")?;
+    requirements_txt.write_str(
+        "example-a-961b4c22==1.0.0 --hash=sha256:0000000000000000000000000000000000000000000000000000000000000000",
+    )?;
 
     uv_snapshot!(context.pip_sync()
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
@@ -4746,7 +4752,7 @@ fn require_hashes_registry_invalid_hash() -> Result<()> {
       ╰─▶ Hash mismatch for `example-a-961b4c22==1.0.0`
 
           Expected:
-            sha256:123
+            sha256:0000000000000000000000000000000000000000000000000000000000000000
 
           Computed:
             sha256:5d69f0b590514103234f0c3526563856f04d044d8d0ea1073a843ae429b3187e
@@ -4927,6 +4933,26 @@ fn require_hashes_url_invalid() -> Result<()> {
             sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374
     "
     );
+
+    Ok(())
+}
+
+/// Reject malformed URL hashes without downloading the distribution.
+#[test]
+fn require_hashes_url_malformed() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str(
+        "iniconfig @ https://files.pythonhosted.org/packages/iniconfig-2.0.0-py3-none-any.whl#subdirectory=src&sha256=123",
+    )?;
+
+    uv_snapshot!(context.pip_sync()
+        .arg("requirements.txt")
+        .arg("--require-hashes"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Invalid hash digest length (expected 64 hexadecimal characters, found 3)
+    ");
 
     Ok(())
 }
