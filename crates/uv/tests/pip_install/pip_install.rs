@@ -3291,6 +3291,38 @@ fn install_git_private_https_pat_and_username() {
     context.assert_installed("uv_private_pypackage", "0.1.0");
 }
 
+/// Install a package from a private GitHub repository using a credential helper
+#[test]
+#[cfg(feature = "test-git")]
+fn install_git_private_https_credential_helper() -> Result<()> {
+    let context = uv_test::test_context!(DEFAULT_PYTHON_VERSION);
+    let token = decode_token(uv_test::READ_ONLY_GITHUB_TOKEN);
+    let user = "astral-test-bot";
+
+    context.home_dir.child(".gitconfig").write_str(indoc! {r"
+        [credential]
+            helper =
+            helper = store
+    "})?;
+    context
+        .home_dir
+        .child(".git-credentials")
+        .write_str(&format!("https://{user}:{token}@github.com\n"))?;
+
+    uv_snapshot!(context.filters(), context.pip_install().arg(format!("uv-private-pypackage @ git+https://{user}@github.com/astral-test/uv-private-pypackage")), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + uv-private-pypackage==0.1.0 (from git+https://****@github.com/astral-test/uv-private-pypackage@d780faf0ac91257d4d5a4f0c5a0e4509608c0071)
+    ");
+
+    context.assert_installed("uv_private_pypackage", "0.1.0");
+
+    Ok(())
+}
+
 /// Install a package from a private GitHub repository using a PAT
 #[test]
 #[cfg(all(not(windows), feature = "test-git"))]
