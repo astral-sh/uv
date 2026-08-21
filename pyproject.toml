@@ -109,7 +109,10 @@ docs = [
   "mdformat-admon>=2.0.2",
 ]
 docker = [
-  "cargo-zigbuild>=0.19.8",
+  # `cargo-zigbuild` 0.23 filters Rust 1.98's Cortex-A53 mitigation flag, which Zig rejects.
+  # See https://github.com/rust-lang/rust/pull/155453 and
+  # https://github.com/rust-cross/cargo-zigbuild/issues/451.
+  "cargo-zigbuild>=0.23.0",
 ]
 release = [
   "rooster==0.1.1",

@@ -58,15 +58,8 @@ RUN cargo install \
   --version 0.7.4 \
   cargo-auditable
 
-# Zig does not support the Cortex-A53 erratum mitigation flag added in Rust 1.98.
-# Use `rust-lld` for the ARM64 final link and explicitly retain the mitigation.
-# See https://github.com/rust-lang/rust/pull/155453 and
-# https://github.com/rust-cross/cargo-zigbuild/issues/451.
 RUN case "${TARGETPLATFORM}" in \
-  "linux/arm64") \
-    export JEMALLOC_SYS_WITH_LG_PAGE=16; \
-    export CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER=rust-lld; \
-    export CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_RUSTFLAGS="-C linker-flavor=ld.lld -C link-arg=--fix-cortex-a53-843419";; \
+  "linux/arm64") export JEMALLOC_SYS_WITH_LG_PAGE=16;; \
   esac && \
   cargo auditable zigbuild --bin uv --bin uvx --target $(cat rust_target.txt) --release
 RUN cp target/$(cat rust_target.txt)/release/uv /uv \
