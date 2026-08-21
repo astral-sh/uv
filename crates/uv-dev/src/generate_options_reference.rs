@@ -233,6 +233,11 @@ fn emit_field(
         output.push_str(&format!(
             "{header_level} [`{name}`](#{anchor}) {{: #{anchor} }}\n"
         ));
+
+        // Keep the old top-level configuration anchor for backwards compatibility.
+        if matches!(section, Some(OptionType::Configuration)) {
+            output.push_str(&format!("<span id=\"{name}\"></span>\n"));
+        }
     } else {
         output.push_str(&format!(
             "{header_level} [`{name}`](#{anchor}) {{: #{anchor} }}\n"
