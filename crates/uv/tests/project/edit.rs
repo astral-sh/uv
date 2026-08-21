@@ -4384,6 +4384,35 @@ fn add_no_sync() -> Result<()> {
     Ok(())
 }
 
+/// `--no-sync` should not warn about a mismatched `VIRTUAL_ENV` (astral-sh/uv#7073).
+#[test]
+fn add_no_sync_ignores_virtual_env_warning() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    fs_err::remove_dir_all(&context.venv)?;
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.add()
+        .arg("anyio==3.7.0")
+        .arg("--no-sync")
+        .env(EnvVars::VIRTUAL_ENV, "foo"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Resolved 4 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
 #[test]
 fn add_reject_multiple_git_ref_flags() {
     let context = uv_test::test_context!("3.12");
