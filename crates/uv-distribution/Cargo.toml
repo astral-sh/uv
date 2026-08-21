@@ -62,6 +62,8 @@ url = { workspace = true }
 walkdir = { workspace = true }
 
 [dev-dependencies]
+uv-preview = { workspace = true, features = ["testing"] }
+
 indoc = { workspace = true }
 insta = { workspace = true }
 
