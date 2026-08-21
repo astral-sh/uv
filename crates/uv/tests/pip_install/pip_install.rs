@@ -11,6 +11,8 @@ use async_zip::base::write::ZipFileWriter;
 use async_zip::{Compression, ZipEntryBuilder};
 use fs_err as fs;
 use fs_err::File;
+#[cfg(unix)]
+use fs_err::os::unix::fs::symlink;
 use futures::executor::block_on;
 use indoc::{formatdoc, indoc};
 use insta::{allow_duplicates, assert_snapshot};
@@ -9913,6 +9915,37 @@ fn install_relocatable() -> Result<()> {
             .success()
             .stdout(predicate::str::contains("Hello world!"));
     }
+
+    Ok(())
+}
+
+#[cfg(unix)]
+#[test]
+fn install_script_with_symlinked_lib() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let lib = context.venv.join("lib");
+    let usr = context.venv.join("usr");
+    fs::create_dir_all(&usr)?;
+    fs::rename(&lib, usr.join("lib"))?;
+    symlink("usr/lib", &lib)?;
+    fs::create_dir_all(usr.join("bin"))?;
+
+    // Installing should write the launcher to `bin`; instead, it is misplaced and the install
+    // fails because the relative path from `site-packages` follows the symlink. See
+    // astral-sh/uv#21255.
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg(context.workspace_root.join("test/packages/black_editable")), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    error: Failed to install: black-0.1.0-py3-none-any.whl (black==0.1.0 (from file://[WORKSPACE]/test/packages/black_editable))
+      Caused by: failed to query metadata of file `[VENV]/bin/black`: No such file or directory (os error 2)
+    ");
+
+    assert!(!context.venv.join("bin/black").exists());
+    assert!(context.venv.join("usr/bin/black").exists());
 
     Ok(())
 }
