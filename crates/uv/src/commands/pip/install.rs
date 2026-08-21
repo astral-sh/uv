@@ -407,7 +407,7 @@ pub(crate) async fn pip_install(
             hash_checking,
         )?
     } else {
-        HashStrategy::None
+        HashStrategy::default()
     };
 
     // Incorporate any index locations from the provided sources.
@@ -492,7 +492,7 @@ pub(crate) async fn pip_install(
             HashCheckingMode::Verify,
         )?
     } else {
-        HashStrategy::None
+        HashStrategy::default()
     };
     let build_constraints = Constraints::from_requirements(
         build_constraints

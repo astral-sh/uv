@@ -308,7 +308,7 @@ pub(crate) async fn venv(
             FlatIndex::from_entries(
                 entries,
                 Some(tags),
-                &HashStrategy::None,
+                &HashStrategy::default(),
                 &BuildOptions::new(NoBinary::None, NoBuild::All),
             )
         };
