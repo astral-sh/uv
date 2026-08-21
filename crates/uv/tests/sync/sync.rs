@@ -10957,17 +10957,15 @@ fn sync_git_metadata_archive_dependency() -> Result<()> {
         root = {{ git = "{repository_url}", subdirectory = "root" }}
     "#})?;
 
-    // A fresh sync should install the repository-relative archive, but resolves it relative to the
-    // downstream project instead. See astral-sh/uv#21244.
+    // A fresh sync should install the repository-relative archive. See astral-sh/uv#21244.
     uv_snapshot!(context.filters(), context.sync().arg("--no-cache"), @"
-    exit_code: 1 (failure)
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 3 packages in [TIME]
-      × Failed to download `basic-package @ git+file://[TEMP_DIR]/repository/@[COMMIT]#path=[TEMP_DIR]/root/archives/basic_package-0.1.0-py3-none-any.whl`
-      ├─▶ Failed to read from the distribution cache
-      ╰─▶ failed to query metadata of file `[TEMP_DIR]/root/archives/basic_package-0.1.0-py3-none-any.whl`: No such file or directory (os error 2)
-
-    hint: `basic-package` (v0.1.0) was included because `project` (v0.1.0) depends on `root` (v0.1.0) which depends on `basic-package`
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + basic-package==0.1.0 (from git+file://[TEMP_DIR]/repository/@[COMMIT]#path=root/archives/basic_package-0.1.0-py3-none-any.whl)
+     + root==0.1.0 (from git+file://[TEMP_DIR]/repository/@[COMMIT]#subdirectory=root)
     ");
 
     let lock = context.read("uv.lock");
@@ -11021,10 +11019,7 @@ fn sync_git_metadata_archive_dependency() -> Result<()> {
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    Prepared 2 packages in [TIME]
-    Installed 2 packages in [TIME]
-     + basic-package==0.1.0 (from git+file://[TEMP_DIR]/repository/@[COMMIT]#path=root/archives/basic_package-0.1.0-py3-none-any.whl)
-     + root==0.1.0 (from git+file://[TEMP_DIR]/repository/@[COMMIT]#subdirectory=root)
+    Checked 2 packages in [TIME]
     ");
 
     Ok(())

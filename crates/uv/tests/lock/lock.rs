@@ -997,10 +997,14 @@ fn lock_sdist_git_archive() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.sync(), @r###"
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + iniconfig==2.0.0 (from git+https://github.com/astral-sh/archive-in-git-test@bb7ce6abf9f90544767701de5b7b0c7802dc642b#path=archives/iniconfig-2.0.0.tar.gz)
+     + project==0.1.0 (from file://[TEMP_DIR]/)
     "###);
 
     let lock = context.read("uv.lock");
@@ -1044,14 +1048,11 @@ fn lock_sdist_git_archive() -> Result<()> {
     Resolved 2 packages in [TIME]
     "###);
 
-    // Install from the lockfile.
+    // Verify the installed packages against the lockfile.
     uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
     exit_code: 0 (success)
     ----- stderr -----
-    Prepared 2 packages in [TIME]
-    Installed 2 packages in [TIME]
-     + iniconfig==2.0.0 (from git+https://github.com/astral-sh/archive-in-git-test@bb7ce6abf9f90544767701de5b7b0c7802dc642b#path=archives/iniconfig-2.0.0.tar.gz)
-     + project==0.1.0 (from file://[TEMP_DIR]/)
+    Checked 2 packages in [TIME]
     "###);
 
     // Re-install from the lockfile.

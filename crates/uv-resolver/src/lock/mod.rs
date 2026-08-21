@@ -38,9 +38,7 @@ use uv_distribution_types::{
     RequirementSource, RequiresPython, ResolvedDist, SimplifiedMarkerTree, StaticMetadata,
     ToUrlError, UrlString,
 };
-use uv_fs::{
-    PortablePath, PortablePathBuf, Simplified, normalize_path, relative_to, try_relative_to_if,
-};
+use uv_fs::{PortablePath, PortablePathBuf, Simplified, normalize_path, try_relative_to_if};
 use uv_git::{RepositoryReference, ResolvedRepositoryReference};
 use uv_git_types::{GitLfs, GitOid, GitReference, GitUrl, GitUrlParseError};
 use uv_normalize::{ExtraName, GroupName, PackageName};
@@ -4846,7 +4844,7 @@ impl Source {
             BuiltDist::Registry(ref reg_dist) => Self::from_registry_built_dist(reg_dist, root),
             BuiltDist::DirectUrl(ref direct_dist) => Ok(Self::from_direct_built_dist(direct_dist)),
             BuiltDist::Path(ref path_dist) => Self::from_path_built_dist(path_dist, root),
-            BuiltDist::GitPath(ref git_dist) => Self::from_git_path_built_dist(git_dist, root),
+            BuiltDist::GitPath(ref git_dist) => Ok(Self::from_git_path_built_dist(git_dist)),
         }
     }
 
@@ -4865,7 +4863,7 @@ impl Source {
                 Ok(Self::from_git_directory_source_dist(git_dist))
             }
             uv_distribution_types::SourceDist::GitPath(ref git_dist) => {
-                Self::from_git_path_source_dist(git_dist, root)
+                Ok(Self::from_git_path_source_dist(git_dist))
             }
             uv_distribution_types::SourceDist::Path(ref path_dist) => {
                 Self::from_path_source_dist(path_dist, root)
@@ -4965,19 +4963,10 @@ impl Source {
         }
     }
 
-    fn from_git_path_built_dist(
-        git_dist: &GitPathBuiltDist,
-        root: &Path,
-    ) -> Result<Self, LockError> {
-        let path = relative_to(&git_dist.install_path, root)
-            .or_else(|_| std::path::absolute(&git_dist.install_path))
-            .map_err(LockErrorKind::DistributionRelativePath)?;
-        Ok(Self::Git(
-            UrlString::from(locked_git_url(
-                &git_dist.git,
-                None,
-                Some(git_dist.install_path.as_path()),
-            )),
+    fn from_git_path_built_dist(git_dist: &GitPathBuiltDist) -> Self {
+        let path = git_dist.install_path.clone();
+        Self::Git(
+            UrlString::from(locked_git_url(&git_dist.git, None, Some(&path))),
             GitSource {
                 kind: GitSourceKind::from(git_dist.git.reference().clone()),
                 precise: git_dist.git.precise().unwrap_or_else(|| {
@@ -4987,22 +4976,13 @@ impl Source {
                 path: Some(path),
                 lfs: git_dist.git.lfs(),
             },
-        ))
+        )
     }
 
-    fn from_git_path_source_dist(
-        git_dist: &GitPathSourceDist,
-        root: &Path,
-    ) -> Result<Self, LockError> {
-        let path = relative_to(&git_dist.install_path, root)
-            .or_else(|_| std::path::absolute(&git_dist.install_path))
-            .map_err(LockErrorKind::DistributionRelativePath)?;
-        Ok(Self::Git(
-            UrlString::from(locked_git_url(
-                &git_dist.git,
-                None,
-                Some(git_dist.install_path.as_path()),
-            )),
+    fn from_git_path_source_dist(git_dist: &GitPathSourceDist) -> Self {
+        let path = git_dist.install_path.clone();
+        Self::Git(
+            UrlString::from(locked_git_url(&git_dist.git, None, Some(&path))),
             GitSource {
                 kind: GitSourceKind::from(git_dist.git.reference().clone()),
                 precise: git_dist.git.precise().unwrap_or_else(|| {
@@ -5012,7 +4992,7 @@ impl Source {
                 path: Some(path),
                 lfs: git_dist.git.lfs(),
             },
-        ))
+        )
     }
 
     fn from_git_directory_source_dist(git_dist: &GitDirectorySourceDist) -> Self {
