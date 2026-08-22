@@ -2196,6 +2196,7 @@ fn resolve_both() -> anyhow::Result<()> {
                  {},
              ),
     ...
+             reinstall: None,
          },
      }
     +
@@ -2329,6 +2330,7 @@ fn resolve_both_special_fields() -> anyhow::Result<()> {
                  {},
              ),
     ...
+             reinstall: None,
          },
      }
     +
@@ -3326,6 +3328,7 @@ fn index_by_name() -> anyhow::Result<()> {
         .arg("--index")
         .arg("internal"), @"
     ...
+             reinstall: None,
          },
      }
     +
@@ -3392,6 +3395,7 @@ fn index_by_name_with_matching_path() -> anyhow::Result<()> {
                                  expanded: false,
                              },
     ...
+             reinstall: None,
          },
      }
     +
@@ -5161,7 +5165,6 @@ fn build_isolation_override() -> anyhow::Result<()> {
         .arg("requirements.in")
         .arg("--no-build-isolation-package").arg("numpy"), @r#"
     ...
-             torch_backend: None,
              torch_backend_index: None,
              cuda_driver_version: None,
              amd_gpu_architecture: None,
@@ -5190,7 +5193,6 @@ fn build_isolation_override() -> anyhow::Result<()> {
             .arg("requirements.in")
             .arg("--no-build-isolation-package").arg("numpy"), @r#"
     ...
-             torch_backend: None,
              torch_backend_index: None,
              cuda_driver_version: None,
              amd_gpu_architecture: None,
