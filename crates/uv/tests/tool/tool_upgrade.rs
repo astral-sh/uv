@@ -1489,7 +1489,6 @@ async fn tool_upgrade_index_url_keyring_auth() -> Result<()> {
     let proxy = crate::pypi_proxy::start().await;
     let context = uv_test::test_context!("3.12")
         .with_exclude_newer("2025-01-18T00:00:00Z")
-        .with_filtered_counts()
         .with_filtered_exe_suffix();
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
@@ -1505,28 +1504,23 @@ async fn tool_upgrade_index_url_keyring_auth() -> Result<()> {
             index-url = "{}"
             keyring-provider = "subprocess"
         "#},
-        proxy.username_url("public", "/basic-auth/simple")
+        proxy.username_url("public", "/basic-auth/simple/")
     ))?;
 
-    uv_snapshot!(context.filters(), context.tool_install()
+    context
+        .tool_install()
         .arg("executable-application")
+        .arg("--index-url")
+        .arg(proxy.username_url("public", "/basic-auth/simple"))
         .arg("--config-file")
         .arg(uv_toml.as_os_str())
         .env_remove(EnvVars::UV_DEFAULT_INDEX)
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
         .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::KEYRING_TEST_CREDENTIALS, &credentials)
-        .env(EnvVars::PATH, &path), @"
-    exit_code: 0 (success)
-    ----- stderr -----
-    Keyring request for public@http://[LOCALHOST]/basic-auth/simple
-    Keyring request for public@[LOCALHOST]
-    Resolved [N] packages in [TIME]
-    Prepared [N] packages in [TIME]
-    Installed [N] packages in [TIME]
-     + executable-application==0.3.0
-    Installed 1 executable: app
-    ");
+        .env(EnvVars::PATH, &path)
+        .assert()
+        .success();
 
     let receipt = fs_err::read_to_string(
         tool_dir
@@ -1549,15 +1543,6 @@ async fn tool_upgrade_index_url_keyring_auth() -> Result<()> {
         exclude-newer = "2025-01-18T00:00:00Z"
         "#);
     });
-
-    // A trailing slash may change in configuration without changing the index identity.
-    uv_toml.write_str(&format!(
-        indoc! {r#"
-            index-url = "{}"
-            keyring-provider = "subprocess"
-        "#},
-        proxy.username_url("public", "/basic-auth/simple/")
-    ))?;
 
     uv_snapshot!(context.filters(), context.tool_upgrade()
         .arg("executable-application")

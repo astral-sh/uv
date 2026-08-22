@@ -336,7 +336,7 @@ async fn upgrade_tool(
             && CanonicalUrl::new(stored.raw_url().clone())
                 == CanonicalUrl::new(configured.raw_url().clone())
         {
-            receipt.indexes.index_url = filesystem.indexes.index_url.clone();
+            receipt.indexes.index_url = Some(configured.into());
         }
     }
 
