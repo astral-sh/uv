@@ -1550,6 +1550,15 @@ async fn tool_upgrade_index_url_keyring_auth() -> Result<()> {
         "#);
     });
 
+    // A trailing slash may change in configuration without changing the index identity.
+    uv_toml.write_str(&format!(
+        indoc! {r#"
+            index-url = "{}"
+            keyring-provider = "subprocess"
+        "#},
+        proxy.username_url("public", "/basic-auth/simple/")
+    ))?;
+
     uv_snapshot!(context.filters(), context.tool_upgrade()
         .arg("executable-application")
         .arg("--config-file")
@@ -1561,7 +1570,7 @@ async fn tool_upgrade_index_url_keyring_auth() -> Result<()> {
         .env(EnvVars::PATH, &path), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Keyring request for public@http://[LOCALHOST]/basic-auth/simple
+    Keyring request for public@http://[LOCALHOST]/basic-auth/simple/
     Keyring request for public@[LOCALHOST]
     Nothing to upgrade
     ");

@@ -7,6 +7,7 @@ use std::str::FromStr;
 use tracing::{debug, trace};
 
 use uv_cache::Cache;
+use uv_cache_key::CanonicalUrl;
 use uv_client::BaseClientBuilder;
 use uv_configuration::{Concurrency, Constraints, DryRun, HashCheckingMode, TargetTriple};
 use uv_distribution::LoweredExtraBuildDependencies;
@@ -332,7 +333,8 @@ async fn upgrade_tool(
             && stored.raw_url().password().is_none()
             && (!configured.raw_url().username().is_empty()
                 || configured.raw_url().password().is_some())
-            && stored.url().without_credentials() == configured.url().without_credentials()
+            && CanonicalUrl::new(stored.raw_url().clone())
+                == CanonicalUrl::new(configured.raw_url().clone())
         {
             receipt.indexes.index_url = filesystem.indexes.index_url.clone();
         }
