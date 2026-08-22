@@ -19,7 +19,7 @@ use uv_configuration::{KeyringProviderType, TargetTriple};
 use uv_dispatch::{BuildDispatch, SharedState};
 use uv_distribution::LoweredExtraBuildDependencies;
 use uv_distribution_types::{
-    ConfigSettings, DependencyMetadata, ExtraBuildVariables, Index, IndexLocations, Name,
+    ConfigSettings, DependencyMetadata, ExtraBuildVariables, Index, IndexLocations, IndexUrl, Name,
     NameRequirementSpecification, Origin, PackageConfigSettings, Requirement, Resolution,
 };
 use uv_fs::Simplified;
@@ -96,6 +96,7 @@ pub(crate) async fn pip_install(
     index_locations: IndexLocations,
     index_strategy: IndexStrategy,
     torch_backend: Option<TorchMode>,
+    torch_backend_index: Option<IndexUrl>,
     cuda_driver_version: Option<Version>,
     amd_gpu_architecture: Option<AmdGpuArchitecture>,
     dependency_metadata: DependencyMetadata,
@@ -446,6 +447,7 @@ pub(crate) async fn pip_install(
                     .os(),
                 cuda_driver_version,
                 amd_gpu_architecture,
+                torch_backend_index.as_ref(),
             )
         })
         .transpose()?;

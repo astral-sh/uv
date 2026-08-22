@@ -716,6 +716,7 @@ pub(crate) async fn do_sync<'a>(
                 resolution: ResolutionMode::default(),
                 sources: sources.clone(),
                 torch_backend: None,
+                torch_backend_index: None,
                 cuda_driver_version: None,
                 amd_gpu_architecture: None,
                 upgrade: Upgrade::default(),

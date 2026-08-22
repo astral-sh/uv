@@ -907,6 +907,7 @@ impl ToolRunSettings {
             python,
             python_platform,
             torch_backend,
+            torch_backend_index,
             generate_shell_completion: _,
         } = args;
 
@@ -964,6 +965,8 @@ impl ToolRunSettings {
         if torch_backend.is_some() {
             settings.resolver.torch_backend = torch_backend;
         }
+        settings.resolver.torch_backend_index =
+            torch_backend_index.or(environment.torch_backend_index.clone());
         let lfs = GitLfsSetting::new(lfs.then_some(true), environment.lfs);
 
         // Resolve flags from CLI and environment variables.
@@ -1066,6 +1069,7 @@ impl ToolInstallSettings {
             python,
             python_platform,
             torch_backend,
+            torch_backend_index,
         } = args;
 
         let filesystem_options = filesystem.map(FilesystemOptions::into_options);
@@ -1096,6 +1100,8 @@ impl ToolInstallSettings {
         if torch_backend.is_some() {
             settings.resolver.torch_backend = torch_backend;
         }
+        settings.resolver.torch_backend_index =
+            torch_backend_index.or(environment.torch_backend_index.clone());
         let lfs = GitLfsSetting::new(lfs.then_some(true), environment.lfs);
 
         Ok(Self {
@@ -3354,7 +3360,7 @@ impl PipCompileSettings {
     pub(crate) fn resolve(
         args: PipCompileArgs,
         filesystem: Option<FilesystemOptions>,
-        environment: EnvironmentOptions,
+        environment: &EnvironmentOptions,
     ) -> anyhow::Result<Self> {
         let PipCompileArgs {
             src_file,
@@ -3407,6 +3413,7 @@ impl PipCompileSettings {
             emit_index_annotation,
             no_emit_index_annotation,
             torch_backend,
+            torch_backend_index,
             compat_args: _,
         } = args;
 
@@ -3533,6 +3540,7 @@ impl PipCompileSettings {
                     torch_backend,
                     ..resolver.into_pip_options(configured_indexes(filesystem.as_ref()))?
                 },
+                torch_backend_index,
                 filesystem,
                 environment,
             ),
@@ -3556,7 +3564,7 @@ impl PipSyncSettings {
     pub(crate) fn resolve(
         args: Box<PipSyncArgs>,
         filesystem: Option<FilesystemOptions>,
-        environment: EnvironmentOptions,
+        environment: &EnvironmentOptions,
     ) -> anyhow::Result<Self> {
         let PipSyncArgs {
             src_file,
@@ -3594,6 +3602,7 @@ impl PipSyncSettings {
             no_strict,
             dry_run,
             torch_backend,
+            torch_backend_index,
             compat_args: _,
         } = *args;
 
@@ -3639,6 +3648,7 @@ impl PipSyncSettings {
                     torch_backend,
                     ..installer.into_pip_options(configured_indexes(filesystem.as_ref()))?
                 },
+                torch_backend_index,
                 filesystem,
                 environment,
             ),
@@ -3672,7 +3682,7 @@ impl PipInstallSettings {
     pub(crate) fn resolve(
         args: PipInstallArgs,
         filesystem: Option<FilesystemOptions>,
-        environment: EnvironmentOptions,
+        environment: &EnvironmentOptions,
     ) -> anyhow::Result<Self> {
         let PipInstallArgs {
             package,
@@ -3718,6 +3728,7 @@ impl PipInstallSettings {
             no_strict,
             dry_run,
             torch_backend,
+            torch_backend_index,
             compat_args: _,
         } = args;
 
@@ -3825,6 +3836,7 @@ impl PipInstallSettings {
                     torch_backend,
                     ..installer.into_pip_options(configured_indexes(filesystem.as_ref()))?
                 },
+                torch_backend_index,
                 filesystem,
                 environment,
             ),
@@ -3846,7 +3858,7 @@ impl PipUninstallSettings {
     pub(crate) fn resolve(
         args: PipUninstallArgs,
         filesystem: Option<FilesystemOptions>,
-        environment: EnvironmentOptions,
+        environment: &EnvironmentOptions,
     ) -> anyhow::Result<Self> {
         let PipUninstallArgs {
             package,
@@ -3881,6 +3893,7 @@ impl PipUninstallSettings {
                     keyring_provider,
                     ..PipOptions::default()
                 },
+                None,
                 filesystem,
                 environment,
             ),
@@ -3902,7 +3915,7 @@ impl PipFreezeSettings {
     pub(crate) fn resolve(
         args: PipFreezeArgs,
         filesystem: Option<FilesystemOptions>,
-        environment: EnvironmentOptions,
+        environment: &EnvironmentOptions,
     ) -> anyhow::Result<Self> {
         let PipFreezeArgs {
             exclude_editable,
@@ -3931,6 +3944,7 @@ impl PipFreezeSettings {
                     prefix,
                     ..PipOptions::default()
                 },
+                None,
                 filesystem,
                 environment,
             ),
@@ -3953,7 +3967,7 @@ impl PipListSettings {
     pub(crate) fn resolve(
         args: PipListArgs,
         filesystem: Option<FilesystemOptions>,
-        environment: EnvironmentOptions,
+        environment: &EnvironmentOptions,
     ) -> anyhow::Result<Self> {
         let PipListArgs {
             editable,
@@ -3987,6 +4001,7 @@ impl PipListSettings {
                     prefix,
                     ..fetch.into_pip_options(configured_indexes(filesystem.as_ref()))?
                 },
+                None,
                 filesystem,
                 environment,
             ),
@@ -4007,7 +4022,7 @@ impl PipShowSettings {
     pub(crate) fn resolve(
         args: PipShowArgs,
         filesystem: Option<FilesystemOptions>,
-        environment: EnvironmentOptions,
+        environment: &EnvironmentOptions,
     ) -> anyhow::Result<Self> {
         let PipShowArgs {
             package,
@@ -4034,6 +4049,7 @@ impl PipShowSettings {
                     prefix,
                     ..PipOptions::default()
                 },
+                None,
                 filesystem,
                 environment,
             ),
@@ -4059,7 +4075,7 @@ impl PipTreeSettings {
     pub(crate) fn resolve(
         args: PipTreeArgs,
         filesystem: Option<FilesystemOptions>,
-        environment: EnvironmentOptions,
+        environment: &EnvironmentOptions,
     ) -> anyhow::Result<Self> {
         let PipTreeArgs {
             show_version_specifiers,
@@ -4088,6 +4104,7 @@ impl PipTreeSettings {
                     strict: flag(strict, no_strict, "strict")?,
                     ..fetch.into_pip_options(configured_indexes(filesystem.as_ref()))?
                 },
+                None,
                 filesystem,
                 environment,
             ),
@@ -4106,7 +4123,7 @@ impl PipCheckSettings {
     pub(crate) fn resolve(
         args: PipCheckArgs,
         filesystem: Option<FilesystemOptions>,
-        environment: EnvironmentOptions,
+        environment: &EnvironmentOptions,
     ) -> anyhow::Result<Self> {
         let PipCheckArgs {
             python,
@@ -4125,6 +4142,7 @@ impl PipCheckSettings {
                     python_platform,
                     ..PipOptions::default()
                 },
+                None,
                 filesystem,
                 environment,
             ),
@@ -4262,7 +4280,7 @@ impl VenvSettings {
     pub(crate) fn resolve(
         args: VenvArgs,
         filesystem: Option<FilesystemOptions>,
-        environment: EnvironmentOptions,
+        environment: &EnvironmentOptions,
     ) -> anyhow::Result<Self> {
         let VenvArgs {
             python,
@@ -4339,6 +4357,7 @@ impl VenvSettings {
                     link_mode,
                     ..index_args.into_pip_options(configured_indexes(filesystem.as_ref()))?
                 },
+                None,
                 filesystem,
                 environment,
             ),
@@ -4392,6 +4411,7 @@ pub(crate) struct ResolverSettings {
     pub(crate) resolution: ResolutionMode,
     pub(crate) sources: NoSources,
     pub(crate) torch_backend: Option<TorchMode>,
+    pub(crate) torch_backend_index: Option<IndexUrl>,
     pub(crate) cuda_driver_version: Option<Version>,
     pub(crate) amd_gpu_architecture: Option<AmdGpuArchitecture>,
     pub(crate) upgrade: Upgrade,
@@ -4466,6 +4486,7 @@ impl ResolverSettings {
         ));
 
         Self {
+            torch_backend_index: environment.torch_backend_index.clone(),
             cuda_driver_version: environment.cuda_driver_version.clone(),
             amd_gpu_architecture: environment.amd_gpu_architecture,
             ..Self::from(options)
@@ -4504,6 +4525,7 @@ impl From<ResolverOptions> for ResolverSettings {
             ),
             link_mode: value.link_mode.unwrap_or_default(),
             torch_backend: value.torch_backend,
+            torch_backend_index: None,
             cuda_driver_version: None,
             amd_gpu_architecture: None,
             sources: NoSources::from_args(
@@ -4563,6 +4585,7 @@ impl ResolverInstallerSettings {
         let base = Self::from(options);
         Self {
             resolver: ResolverSettings {
+                torch_backend_index: environment.torch_backend_index.clone(),
                 cuda_driver_version: environment.cuda_driver_version.clone(),
                 amd_gpu_architecture: environment.amd_gpu_architecture,
                 ..base.resolver
@@ -4632,6 +4655,7 @@ impl From<ResolverInstallerOptions> for ResolverInstallerSettings {
                     value.no_sources_package.unwrap_or_default(),
                 ),
                 torch_backend: value.torch_backend,
+                torch_backend_index: None,
                 cuda_driver_version: None,
                 amd_gpu_architecture: None,
                 upgrade: value.upgrade.unwrap_or_default(),
@@ -4660,6 +4684,7 @@ pub(crate) struct PipSettings {
     pub(crate) index_strategy: IndexStrategy,
     pub(crate) keyring_provider: KeyringProviderType,
     pub(crate) torch_backend: Option<TorchMode>,
+    pub(crate) torch_backend_index: Option<IndexUrl>,
     pub(crate) cuda_driver_version: Option<Version>,
     pub(crate) amd_gpu_architecture: Option<AmdGpuArchitecture>,
     pub(crate) build_isolation: BuildIsolation,
@@ -4705,8 +4730,9 @@ impl PipSettings {
     /// Resolve the [`PipSettings`] from the CLI and filesystem configuration.
     fn combine(
         args: PipOptions,
+        torch_backend_index: Option<IndexUrl>,
         filesystem: Option<FilesystemOptions>,
-        environment: EnvironmentOptions,
+        environment: &EnvironmentOptions,
     ) -> Self {
         let Options {
             top_level,
@@ -4976,6 +5002,7 @@ impl PipSettings {
                 .combine(config_settings_package)
                 .unwrap_or_default(),
             torch_backend: args.torch_backend.combine(torch_backend),
+            torch_backend_index: torch_backend_index.or(environment.torch_backend_index.clone()),
             cuda_driver_version: environment.cuda_driver_version.clone(),
             amd_gpu_architecture: environment.amd_gpu_architecture,
             python_version: args.python_version.combine(python_version),
@@ -5078,6 +5105,7 @@ impl PipSettings {
             ),
             install_mirrors: environment
                 .install_mirrors
+                .clone()
                 .combine(filesystem_install_mirrors),
         }
     }
