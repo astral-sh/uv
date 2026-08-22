@@ -12,12 +12,115 @@ use assert_fs::{
 use indoc::indoc;
 use predicates::prelude::predicate;
 use tracing::debug;
-use uv_test::{LATEST_PYTHON_3_12, uv_snapshot};
+#[cfg(unix)]
+use wiremock::{
+    Mock, MockServer, ResponseTemplate,
+    matchers::{method, path},
+};
 
 use uv_fs::Simplified;
+#[cfg(unix)]
+use uv_platform::Platform;
 use uv_python::managed::platform_key_from_env;
 use uv_static::EnvVars;
+#[cfg(unix)]
+use uv_test::archive::write_tar_gz_with_executables;
+use uv_test::{LATEST_PYTHON_3_12, uv_snapshot};
 use walkdir::WalkDir;
+
+/// Install a minimal Python distribution from a local mirror without downloading a real build.
+#[cfg(unix)]
+#[tokio::test]
+async fn python_install_from_mirror() -> anyhow::Result<()> {
+    let context = uv_test::test_context!("3.12")
+        .with_filtered_python_keys()
+        .with_filtered_exe_suffix()
+        .with_managed_python_dirs()
+        .with_filter((
+            r"warning: Failed to patch the install name of the dynamic library for .* native extensions\.\n",
+            "",
+        ));
+
+    let platform = Platform::from_env()?;
+    let platform_key = platform_key_from_env()?;
+    let installation_key = format!("cpython-3.12.0-{platform_key}");
+    let filename = format!("{installation_key}-install_only.tar.gz");
+
+    // The stub delegates interpreter queries to the test Python while keeping the archive small.
+    let interpreter = context
+        .interpreter()
+        .to_string_lossy()
+        .replace('\'', "'\"'\"'");
+    let executable = format!("#!/bin/sh\nexec '{interpreter}' \"$@\"\n");
+    let sysconfig = b"# system configuration generated and used by the sysconfig module\nbuild_time_vars = {}\n";
+    let mut archive = Vec::new();
+    write_tar_gz_with_executables(
+        &mut archive,
+        &[
+            ("python/bin/python3.12", executable.as_bytes(), true),
+            (
+                "python/lib/python3.12/_sysconfigdata_stub.py",
+                sysconfig,
+                false,
+            ),
+        ],
+    )?;
+
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path(format!("/20240814/{filename}")))
+        .respond_with(ResponseTemplate::new(200).set_body_bytes(archive))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let downloads = serde_json::json!({
+        installation_key: {
+            "name": "cpython",
+            "arch": {
+                "family": platform.arch.family().to_string(),
+                "variant": null
+            },
+            "os": platform.os.to_string(),
+            "libc": platform.libc.to_string(),
+            "major": 3,
+            "minor": 12,
+            "patch": 0,
+            "prerelease": "",
+            "url": format!(
+                "https://github.com/astral-sh/python-build-standalone/releases/download/20240814/{filename}"
+            ),
+            "sha256": null,
+            "variant": null,
+            "build": "test"
+        }
+    });
+    let downloads_path = context.temp_dir.child("python-downloads.json");
+    downloads_path.write_str(&serde_json::to_string(&downloads)?)?;
+
+    uv_snapshot!(context.filters(), context
+        .python_install()
+        .arg("3.12.0")
+        .arg("--python-downloads-json-url")
+        .arg(downloads_path.path())
+        .env(EnvVars::UV_PYTHON_INSTALL_MIRROR, server.uri()), @r#"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Installed Python 3.12.[X] in [TIME]
+     + cpython-3.12.[X]-[PLATFORM] (python3.12)
+    "#);
+
+    let installed_python = context.bin_dir.child("python3.12");
+    installed_python.assert(predicate::path::exists());
+    uv_snapshot!(context.filters(), Command::new(installed_python.path())
+        .arg("-c")
+        .arg("print('hello from mirror')"), @r#"
+    exit_code: 0 (success)
+    ----- stdout -----
+    hello from mirror
+    "#);
+    Ok(())
+}
 
 #[test]
 fn python_install() {
