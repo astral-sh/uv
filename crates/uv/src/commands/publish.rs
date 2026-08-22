@@ -251,15 +251,14 @@ pub(crate) async fn publish(
             }
         }
 
-        let size = fs_err::metadata(&group.file)?.len();
-        let (bytes, unit) = human_readable_bytes(size);
+        let bytes = human_readable_bytes(fs_err::metadata(&group.file)?.len());
         if dry_run {
             writeln!(
                 printer.stderr(),
                 "{} {} {}",
                 "Checking".bold().cyan(),
                 group.filename,
-                format!("({bytes:.1}{unit})").dimmed()
+                format!("({bytes:.1})").dimmed()
             )?;
         } else {
             writeln!(
@@ -267,7 +266,7 @@ pub(crate) async fn publish(
                 "{} {} {}",
                 "Hashing".bold().green(),
                 group.filename,
-                format!("({bytes:.1}{unit})").dimmed()
+                format!("({bytes:.1})").dimmed()
             )?;
         }
 
@@ -297,7 +296,7 @@ pub(crate) async fn publish(
             "{} {} {}",
             "Uploading".bold().green(),
             group.filename,
-            format!("({bytes:.1}{unit})").dimmed()
+            format!("({bytes:.1})").dimmed()
         )?;
 
         let uploaded = if direct {

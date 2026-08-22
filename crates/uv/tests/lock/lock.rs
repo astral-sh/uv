@@ -286,6 +286,49 @@ fn lock_sdist_registry() -> Result<()> {
     Ok(())
 }
 
+/// Reject a locked Git source when its exact revision differs from the pinned commit.
+#[cfg(all(feature = "test-universal", feature = "test-git"))]
+#[test]
+fn lock_rejects_mismatched_exact_git_revision() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+    "#})?;
+
+    context.temp_dir.child("uv.lock").write_str(indoc! {r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+
+        [[package]]
+        name = "example"
+        version = "1.0.0"
+        source = { git = "https://git:secret-token@example.com/pkg.git?rev=0dacfd662c64cb4ceb16e6cf65a157a8b715b979#b270df1a2fb5d012294e9aaf05e7e0bab1e6a389" }
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--locked")
+        .arg("--offline"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Failed to parse `uv.lock`
+      Caused by: TOML parse error at line 5, column 1
+          |
+        5 | [[package]]
+          | ^^^^^^^^^^^
+        Exact Git revision `0dacfd662c64cb4ceb16e6cf65a157a8b715b979` does not match precise commit `b270df1a2fb5d012294e9aaf05e7e0bab1e6a389` for `https://git:****@example.com/pkg.git`
+    ");
+
+    Ok(())
+}
+
 /// Lock a Git requirement using `tool.uv.sources`.
 #[cfg(all(feature = "test-universal", feature = "test-git"))]
 #[test]
@@ -954,10 +997,14 @@ fn lock_sdist_git_archive() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.sync(), @r###"
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + iniconfig==2.0.0 (from git+https://github.com/astral-sh/archive-in-git-test@bb7ce6abf9f90544767701de5b7b0c7802dc642b#path=archives/iniconfig-2.0.0.tar.gz)
+     + project==0.1.0 (from file://[TEMP_DIR]/)
     "###);
 
     let lock = context.read("uv.lock");
@@ -1001,14 +1048,11 @@ fn lock_sdist_git_archive() -> Result<()> {
     Resolved 2 packages in [TIME]
     "###);
 
-    // Install from the lockfile.
+    // Verify the installed packages against the lockfile.
     uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
     exit_code: 0 (success)
     ----- stderr -----
-    Prepared 2 packages in [TIME]
-    Installed 2 packages in [TIME]
-     + iniconfig==2.0.0 (from git+https://github.com/astral-sh/archive-in-git-test@bb7ce6abf9f90544767701de5b7b0c7802dc642b#path=archives/iniconfig-2.0.0.tar.gz)
-     + project==0.1.0 (from file://[TEMP_DIR]/)
+    Checked 2 packages in [TIME]
     "###);
 
     // Re-install from the lockfile.
@@ -3560,7 +3604,10 @@ fn lock_conflicting_project_basic1() -> Result<()> {
         .child("uv.lock")
         .write_str(&lock_without_metadata.to_string())?;
 
-    uv_snapshot!(context.filters(), context.lock().arg("--preview-features").arg("package-conflicts,lock-without-metadata").arg("--locked"), @"
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("package-conflicts,lock-without-metadata")
+        .arg("--locked"), @"
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 3 packages in [TIME]
@@ -3574,7 +3621,10 @@ fn lock_conflicting_project_basic1() -> Result<()> {
         .child("uv.lock")
         .write_str(&missing_conflict_marker)?;
 
-    uv_snapshot!(context.filters(), context.lock().arg("--preview-features").arg("package-conflicts,lock-without-metadata").arg("--locked"), @"
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("package-conflicts,lock-without-metadata")
+        .arg("--locked"), @"
     exit_code: 1 (failure)
     ----- stderr -----
     Resolved 3 packages in [TIME]
@@ -4016,7 +4066,11 @@ fn lock_conflicting_workspace_members_depends_direct_extra() -> Result<()> {
         .child("uv.lock")
         .write_str(&lock.to_string())?;
 
-    uv_snapshot!(context.filters(), context.lock().arg("--preview-features").arg("package-conflicts,lock-without-metadata").arg("--locked").arg("--offline"), @"
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("package-conflicts,lock-without-metadata")
+        .arg("--locked")
+        .arg("--offline"), @"
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 4 packages in [TIME]
@@ -4329,7 +4383,11 @@ fn lock_conflicting_workspace_members_depends_transitive_extra() -> Result<()> {
         .child("uv.lock")
         .write_str(&lock.to_string())?;
 
-    uv_snapshot!(context.filters(), context.lock().arg("--preview-features").arg("package-conflicts,lock-without-metadata").arg("--locked").arg("--offline"), @"
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("package-conflicts,lock-without-metadata")
+        .arg("--locked")
+        .arg("--offline"), @"
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 5 packages in [TIME]
@@ -4707,7 +4765,11 @@ fn lock_conflicting_mixed() -> Result<()> {
         .child("uv.lock")
         .write_str(&lock.to_string())?;
 
-    uv_snapshot!(context.filters(), context.lock().arg("--preview-features").arg("lock-without-metadata").arg("--locked").arg("--offline"), @"
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("lock-without-metadata")
+        .arg("--locked")
+        .arg("--offline"), @"
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 3 packages in [TIME]
@@ -5242,7 +5304,11 @@ fn lock_check_refresh_workspace_conflicts() -> Result<()> {
         .child("uv.lock")
         .write_str(&lock.to_string())?;
 
-    uv_snapshot!(context.filters(), context.lock().arg("--preview-features").arg("lock-without-metadata").arg("--locked").arg("--offline"), @"
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("lock-without-metadata")
+        .arg("--locked")
+        .arg("--offline"), @"
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 4 packages in [TIME]
@@ -17854,7 +17920,10 @@ fn lock_writes_without_package_metadata() -> Result<()> {
         dev = []
         "#})?;
 
-    uv_snapshot!(context.filters(), context.lock().arg("--preview-features").arg("lock-without-metadata").arg("--offline"), @"
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("lock-without-metadata")
+        .arg("--offline"), @"
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
@@ -17875,7 +17944,11 @@ fn lock_writes_without_package_metadata() -> Result<()> {
     source = { virtual = "." }
     "#);
 
-    uv_snapshot!(context.filters(), context.lock().arg("--preview-features").arg("lock-without-metadata").arg("--check").arg("--offline"), @"
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("lock-without-metadata")
+        .arg("--check")
+        .arg("--offline"), @"
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
@@ -17898,14 +17971,21 @@ fn lock_writes_without_package_metadata() -> Result<()> {
             .all(|package| package.get("metadata").is_some())
     );
 
-    uv_snapshot!(context.filters(), context.lock().arg("--preview-features").arg("lock-without-metadata").arg("--check").arg("--offline"), @"
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("lock-without-metadata")
+        .arg("--check")
+        .arg("--offline"), @"
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     ");
     assert_eq!(context.read("uv.lock"), standard_lock);
 
-    uv_snapshot!(context.filters(), context.lock().arg("--preview-features").arg("lock-without-metadata").arg("--offline"), @"
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("lock-without-metadata")
+        .arg("--offline"), @"
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
@@ -18002,7 +18082,11 @@ fn lock_metadata_free_many_conflicts() -> Result<()> {
         dependencies = [{{ name = "dep" }}]
         "#})?;
 
-    uv_snapshot!(context.filters(), context.lock().arg("--preview-features").arg("package-conflicts,lock-without-metadata").arg("--locked").arg("--offline"), @"
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("package-conflicts,lock-without-metadata")
+        .arg("--locked")
+        .arg("--offline"), @"
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
@@ -18170,7 +18254,11 @@ fn lock_regenerates_dependencies_without_metadata() -> Result<()> {
         exclude-dependencies = ["urllib3"]
         "#})?;
 
-    uv_snapshot!(context.filters(), context.lock().arg("--preview-features").arg("lock-without-metadata").arg("--index-url").arg(server.index_url()), @"
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("lock-without-metadata")
+        .arg("--index-url")
+        .arg(server.index_url()), @"
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 10 packages in [TIME]
@@ -18211,7 +18299,12 @@ fn lock_regenerates_dependencies_without_metadata() -> Result<()> {
     hint: To update the lockfile, run `uv lock`.
     ");
 
-    uv_snapshot!(context.filters(), context.lock().arg("--preview-features").arg("lock-without-metadata").arg("--locked").arg("--index-url").arg(server.index_url()), @"
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("lock-without-metadata")
+        .arg("--locked")
+        .arg("--index-url")
+        .arg(server.index_url()), @"
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 10 packages in [TIME]
@@ -18220,7 +18313,12 @@ fn lock_regenerates_dependencies_without_metadata() -> Result<()> {
     // Compatible declarations generate the same resolved dependency edges.
     // That is a change from lockfiles with metadata, which would (unnecessarily) error here.
     pyproject_toml.write_str(&original_pyproject.replace("tqdm>1", "tqdm>0"))?;
-    uv_snapshot!(context.filters(), context.lock().arg("--preview-features").arg("lock-without-metadata").arg("--locked").arg("--index-url").arg(server.index_url()), @"
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("lock-without-metadata")
+        .arg("--locked")
+        .arg("--index-url")
+        .arg(server.index_url()), @"
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 10 packages in [TIME]
@@ -18228,7 +18326,12 @@ fn lock_regenerates_dependencies_without_metadata() -> Result<()> {
 
     // Removing production requirements must not retain optional or group edges.
     pyproject_toml.write_str(&original_pyproject.replace("    \"httpx\",\n", ""))?;
-    uv_snapshot!(context.filters(), context.lock().arg("--preview-features").arg("lock-without-metadata").arg("--locked").arg("--index-url").arg(server.index_url()), @"
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("lock-without-metadata")
+        .arg("--locked")
+        .arg("--index-url")
+        .arg(server.index_url()), @"
     exit_code: 1 (failure)
     ----- stderr -----
     Resolved 10 packages in [TIME]
@@ -18298,7 +18401,8 @@ fn lock_regenerates_incompatible_self_requirement() -> Result<()> {
     "#};
     pyproject_toml.write_str(original_pyproject)?;
 
-    uv_snapshot!(context.filters(), context.lock().arg("--offline"), @"
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--offline"), @"
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
@@ -18314,7 +18418,11 @@ fn lock_regenerates_incompatible_self_requirement() -> Result<()> {
         {original_pyproject}
         dependencies = ["project>=0.1.0"]
         "#})?;
-    uv_snapshot!(context.filters(), context.lock().arg("--preview-features").arg("lock-without-metadata").arg("--locked").arg("--offline"), @"
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("lock-without-metadata")
+        .arg("--locked")
+        .arg("--offline"), @"
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
@@ -18324,7 +18432,11 @@ fn lock_regenerates_incompatible_self_requirement() -> Result<()> {
         {original_pyproject}
         dependencies = ["project>=2.0.0 ; python_version < '3.0'"]
         "#})?;
-    uv_snapshot!(context.filters(), context.lock().arg("--preview-features").arg("lock-without-metadata").arg("--locked").arg("--offline"), @"
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("lock-without-metadata")
+        .arg("--locked")
+        .arg("--offline"), @"
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
@@ -18334,7 +18446,11 @@ fn lock_regenerates_incompatible_self_requirement() -> Result<()> {
         {original_pyproject}
         dependencies = ["project>=2.0.0"]
         "#})?;
-    uv_snapshot!(context.filters(), context.lock().arg("--preview-features").arg("lock-without-metadata").arg("--locked").arg("--offline"), @"
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("lock-without-metadata")
+        .arg("--locked")
+        .arg("--offline"), @"
     exit_code: 1 (failure)
     ----- stderr -----
       × No solution found when resolving dependencies:
@@ -18349,7 +18465,11 @@ fn lock_regenerates_incompatible_self_requirement() -> Result<()> {
         [project.optional-dependencies]
         feature = ["project>=2.0.0"]
         "#})?;
-    uv_snapshot!(context.filters(), context.lock().arg("--preview-features").arg("lock-without-metadata").arg("--locked").arg("--offline"), @"
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("lock-without-metadata")
+        .arg("--locked")
+        .arg("--offline"), @"
     exit_code: 1 (failure)
     ----- stderr -----
       × No solution found when resolving dependencies:
@@ -18446,7 +18566,11 @@ fn lock_regenerates_activated_empty_extra() -> Result<()> {
         leaf = { path = "../leaf" }
         "#})?;
 
-    uv_snapshot!(context.filters(), context.lock().arg("--preview-features").arg("lock-without-metadata").arg("--locked").arg("--offline"), @"
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("lock-without-metadata")
+        .arg("--locked")
+        .arg("--offline"), @"
     exit_code: 1 (failure)
     ----- stderr -----
     Resolved 4 packages in [TIME]
@@ -18488,7 +18612,8 @@ fn lock_metadata_free_frozen_filtered_dependency_selections() -> Result<()> {
         exclude-dependencies = ["excluded-dependency"]
         "#})?;
 
-    uv_snapshot!(context.filters(), context.lock().arg("--offline"), @"
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--offline"), @"
     exit_code: 0 (success)
     ----- stderr -----
     warning: The `tool.uv.dev-dependencies` field (used in `pyproject.toml`) is deprecated and will be removed in a future release; use `dependency-groups.dev` instead
@@ -18585,7 +18710,10 @@ fn lock_metadata_free_frozen_preserves_recorded_selections() -> Result<()> {
 
     pyproject_toml.write_str(&original_pyproject.replace("original =", "added ="))?;
 
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--extra").arg("original"), @"
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--frozen")
+        .arg("--extra")
+        .arg("original"), @"
     exit_code: 0 (success)
     ----- stderr -----
     Prepared 1 package in [TIME]
@@ -18670,7 +18798,11 @@ fn lock_regenerates_marker_specific_local_extra() -> Result<()> {
         .child("uv.lock")
         .write_str(&lock.to_string())?;
 
-    uv_snapshot!(context.filters(), context.lock().arg("--preview-features").arg("lock-without-metadata").arg("--locked").arg("--offline"), @"
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("lock-without-metadata")
+        .arg("--locked")
+        .arg("--offline"), @"
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 3 packages in [TIME]
@@ -18730,7 +18862,11 @@ fn lock_regenerates_scoped_workspace_overrides() -> Result<()> {
         requires-python = ">=3.10"
         dependencies = ["anyio==4.3.0 ; sys_platform != 'win32'"]
         "#})?;
-    uv_snapshot!(context.filters(), context.lock().arg("--preview-features").arg("lock-without-metadata").arg("--index-url").arg(server.index_url()), @"
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("lock-without-metadata")
+        .arg("--index-url")
+        .arg(server.index_url()), @"
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 8 packages in [TIME]
@@ -18746,7 +18882,12 @@ fn lock_regenerates_scoped_workspace_overrides() -> Result<()> {
             .all(|package| package.get("metadata").is_none())
     );
 
-    uv_snapshot!(context.filters(), context.lock().arg("--preview-features").arg("lock-without-metadata").arg("--locked").arg("--index-url").arg(server.index_url()), @"
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("lock-without-metadata")
+        .arg("--locked")
+        .arg("--index-url")
+        .arg(server.index_url()), @"
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 8 packages in [TIME]
@@ -19531,7 +19672,11 @@ fn lock_regenerates_marker_specific_requested_extras() -> Result<()> {
             "httpx ; sys_platform == 'win32'",
         ]
         "#})?;
-    uv_snapshot!(context.filters(), context.lock().arg("--preview-features").arg("lock-without-metadata").arg("--index-url").arg(server.index_url()), @"
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("lock-without-metadata")
+        .arg("--index-url")
+        .arg(server.index_url()), @"
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 3 packages in [TIME]
@@ -19547,7 +19692,12 @@ fn lock_regenerates_marker_specific_requested_extras() -> Result<()> {
             .all(|package| package.get("metadata").is_none())
     );
     let lockfile = context.temp_dir.child("uv.lock");
-    uv_snapshot!(context.filters(), context.lock().arg("--preview-features").arg("lock-without-metadata").arg("--locked").arg("--index-url").arg(server.index_url()), @"
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("lock-without-metadata")
+        .arg("--locked")
+        .arg("--index-url")
+        .arg(server.index_url()), @"
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 3 packages in [TIME]
@@ -19572,7 +19722,12 @@ fn lock_regenerates_marker_specific_requested_extras() -> Result<()> {
     dependency.insert("marker", toml_edit::Value::from("sys_platform == 'linux'"));
     lockfile.write_str(&lock.to_string())?;
 
-    uv_snapshot!(context.filters(), context.lock().arg("--preview-features").arg("lock-without-metadata").arg("--locked").arg("--index-url").arg(server.index_url()), @"
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("lock-without-metadata")
+        .arg("--locked")
+        .arg("--index-url")
+        .arg(server.index_url()), @"
     exit_code: 1 (failure)
     ----- stderr -----
     Resolved 3 packages in [TIME]
@@ -27152,7 +27307,11 @@ fn lock_extra_marker_preserves_production_platform() -> Result<()> {
         .child("uv.lock")
         .write_str(&lock.to_string())?;
 
-    uv_snapshot!(context.filters(), context.lock().arg("--preview-features").arg("lock-without-metadata").arg("--locked").arg("--offline"), @"
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("lock-without-metadata")
+        .arg("--locked")
+        .arg("--offline"), @"
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
@@ -27752,7 +27911,11 @@ fn lock_group_include() -> Result<()> {
         .child("uv.lock")
         .write_str(&lock.to_string())?;
 
-    uv_snapshot!(context.filters(), context.lock().arg("--preview-features").arg("lock-without-metadata").arg("--locked").arg("--offline"), @"
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("lock-without-metadata")
+        .arg("--locked")
+        .arg("--offline"), @"
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 11 packages in [TIME]
@@ -27880,7 +28043,11 @@ fn lock_group_requires_python() -> Result<()> {
         .child("uv.lock")
         .write_str(&lock.to_string())?;
 
-    uv_snapshot!(context.filters(), context.lock().arg("--preview-features").arg("lock-without-metadata").arg("--locked").arg("--offline"), @"
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("lock-without-metadata")
+        .arg("--locked")
+        .arg("--offline"), @"
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 5 packages in [TIME]
@@ -28040,7 +28207,11 @@ fn lock_group_includes_requires_python() -> Result<()> {
         .child("uv.lock")
         .write_str(&lock.to_string())?;
 
-    uv_snapshot!(context.filters(), context.lock().arg("--preview-features").arg("lock-without-metadata").arg("--locked").arg("--offline"), @"
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("lock-without-metadata")
+        .arg("--locked")
+        .arg("--offline"), @"
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 5 packages in [TIME]
@@ -29203,7 +29374,11 @@ fn lock_dynamic_version_no_build() -> Result<()> {
             [package.dev-dependencies]
             dev = [{{ name = "project" }}]
             "#})?;
-    uv_snapshot!(context.filters(), context.lock().arg("--preview-features").arg("lock-without-metadata").arg("--locked").arg("--offline"), @"
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("lock-without-metadata")
+        .arg("--locked")
+        .arg("--offline"), @"
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
@@ -29717,7 +29892,11 @@ fn lock_dynamic_version_self_extra_hatchling() -> Result<()> {
         .child("uv.lock")
         .write_str(&lock.to_string())?;
 
-    uv_snapshot!(context.filters(), context.lock().arg("--preview-features").arg("lock-without-metadata").arg("--locked").arg("--offline"), @"
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("lock-without-metadata")
+        .arg("--locked")
+        .arg("--offline"), @"
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 5 packages in [TIME]
@@ -29881,7 +30060,11 @@ fn lock_dynamic_version_self_extra_setuptools() -> Result<()> {
         .child("uv.lock")
         .write_str(&lock.to_string())?;
 
-    uv_snapshot!(context.filters(), context.lock().arg("--preview-features").arg("lock-without-metadata").arg("--locked").arg("--offline"), @"
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("lock-without-metadata")
+        .arg("--locked")
+        .arg("--offline"), @"
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 5 packages in [TIME]
@@ -31068,7 +31251,11 @@ fn lock_recursive_extra() -> Result<()> {
         .child("uv.lock")
         .write_str(&lock.to_string())?;
 
-    uv_snapshot!(context.filters(), context.lock().arg("--preview-features").arg("lock-without-metadata").arg("--locked").arg("--offline"), @"
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("lock-without-metadata")
+        .arg("--locked")
+        .arg("--offline"), @"
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
@@ -36698,7 +36885,13 @@ async fn lock_path_dependency_explicit_index() -> Result<()> {
     let lock = lock_without_package_metadata(&fs_err::read_to_string(pkg_b.join("uv.lock"))?)?;
     fs_err::write(pkg_b.join("uv.lock"), lock.to_string())?;
 
-    uv_snapshot!(context.filters(), context.lock().arg("--preview-features").arg("lock-without-metadata").arg("--locked").arg("--default-index").arg("https://example.invalid/simple").current_dir(&pkg_b), @"
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("lock-without-metadata")
+        .arg("--locked")
+        .arg("--default-index")
+        .arg("https://example.invalid/simple")
+        .current_dir(&pkg_b), @"
     exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]

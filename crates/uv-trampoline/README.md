@@ -20,7 +20,7 @@ LLD and add the `rustup` targets:
 
 ```shell
 sudo apt install llvm clang lld
-cargo install cargo-xwin
+cargo install --locked cargo-xwin@0.21.4
 rustup toolchain install nightly-2025-11-02
 rustup component add rust-src --toolchain nightly-2025-11-02-x86_64-unknown-linux-gnu
 rustup target add --toolchain nightly-2025-11-02 i686-pc-windows-msvc
@@ -43,7 +43,7 @@ LLVM and add the `rustup` targets:
 
 ```shell
 brew install llvm
-cargo install cargo-xwin
+cargo install --locked cargo-xwin@0.21.4
 rustup toolchain install nightly-2025-11-02
 rustup component add rust-src --toolchain nightly-2025-11-02-aarch64-apple-darwin
 rustup target add --toolchain nightly-2025-11-02 i686-pc-windows-msvc

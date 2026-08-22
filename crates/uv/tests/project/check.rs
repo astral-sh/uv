@@ -2157,6 +2157,163 @@ fn check_script() -> Result<()> {
 
 #[test]
 #[cfg(feature = "test-pypi")]
+fn check_script_respects_exclude_newer_package_for_ty_selection() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let script = context.temp_dir.child("script.py");
+    script.write_str(indoc! {r#"
+        # /// script
+        # requires-python = ">=3.12"
+        # dependencies = []
+        #
+        # [tool.uv]
+        # exclude-newer = "2026-02-12T00:00:00Z"
+        # exclude-newer-package = { ty = false }
+        # ///
+
+        value: int = 1
+    "#})?;
+
+    // The package exemption takes precedence over the global cutoff; see astral-sh/uv#21211.
+    uv_snapshot!(
+        context.filters(),
+        context
+            .check()
+            .arg("--script")
+            .arg(script.path())
+            .arg("--ty-version")
+            .arg("<0.0.18")
+            .arg("--show-version")
+            .arg("--preview-features")
+            .arg("check-command")
+            .env_remove(EnvVars::UV_EXCLUDE_NEWER),
+        @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    All checks passed!
+
+    ----- stderr -----
+    Using ty 0.0.17
+    "
+    );
+
+    // A CLI package cutoff overrides the script exemption, even when it is stricter than the
+    // global cutoff.
+    uv_snapshot!(
+        context.filters(),
+        context
+            .check()
+            .arg("--script")
+            .arg(script.path())
+            .arg("--ty-version")
+            .arg("<0.0.18")
+            .arg("--show-version")
+            .arg("--preview-features")
+            .arg("check-command")
+            .arg("--exclude-newer")
+            .arg("2026-02-15T00:00:00Z")
+            .arg("--exclude-newer-package")
+            .arg("ty=2026-02-12T00:00:00Z"),
+        @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    All checks passed!
+
+    ----- stderr -----
+    Using ty 0.0.16
+    "
+    );
+
+    Ok(())
+}
+
+#[test]
+#[cfg(feature = "test-pypi")]
+fn check_respects_exclude_newer_package_for_ty_selection() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [tool.uv]
+        exclude-newer = "2026-02-12T00:00:00Z"
+        exclude-newer-package = { ty = "2026-02-15T00:00:00Z" }
+    "#})?;
+    context
+        .temp_dir
+        .child("main.py")
+        .write_str("value: int = 1\n")?;
+
+    let check = || {
+        let mut command = context.check();
+        command
+            .arg("--ty-version")
+            .arg("<0.0.18")
+            .arg("--show-version")
+            .arg("--preview-features")
+            .arg("check-command")
+            .env_remove(EnvVars::UV_EXCLUDE_NEWER);
+        command
+    };
+
+    // A package cutoff can permit a release newer than the global cutoff.
+    uv_snapshot!(context.filters(), check(), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    All checks passed!
+
+    ----- stderr -----
+    Using ty 0.0.17
+    ");
+
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [tool.uv]
+        exclude-newer = "2026-02-12T00:00:00Z"
+        exclude-newer-package = { ruff = false }
+    "#})?;
+
+    // An unrelated package exemption does not disable the global cutoff for ty.
+    uv_snapshot!(context.filters(), check(), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    All checks passed!
+
+    ----- stderr -----
+    Resolving despite existing lockfile due to removal of exclude newer for package `ty`
+    Using ty 0.0.16
+    ");
+
+    // Project checks also honor an explicit exemption supplied on the CLI.
+    uv_snapshot!(
+        context.filters(),
+        check().arg("--exclude-newer-package").arg("ty=false"),
+        @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    All checks passed!
+
+    ----- stderr -----
+    Resolving despite existing lockfile due to addition of exclude newer exclusion for package `ty`
+    Using ty 0.0.17
+    "
+    );
+
+    Ok(())
+}
+
+#[test]
+#[cfg(feature = "test-pypi")]
 fn check_script_uses_ty_version_from_forked_lock() -> Result<()> {
     let context =
         uv_test::test_context!("3.12").with_filter((r"ty 0\.0\.17(?: \([^)]*\))?", "ty 0.0.17"));

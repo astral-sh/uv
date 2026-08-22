@@ -19,6 +19,9 @@ concurrency:
   cancel-in-progress: true
 
 env:
+  ACTIONS_CACHE_MODE: none
+  # Build the AWS-LC version pinned in Cargo.lock, not a system installation.
+  AWS_LC_SYS_USE_SYSTEM: "0"
   PACKAGE_NAME: uv
   MODULE_NAME: uv
   PYTHON_VERSION: "3.11"
@@ -27,7 +30,8 @@ env:
   CARGO_TERM_COLOR: always
   RUSTUP_MAX_RETRIES: 10
 
-permissions: {}
+permissions:
+  contents: read
 
 jobs:
   sdist:
@@ -40,6 +44,7 @@ jobs:
 
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
+          cache: ""
           python-version: ${{ env.PYTHON_VERSION }}
 
       # uv
@@ -48,6 +53,7 @@ jobs:
       - name: "Build sdist"
         uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
         with:
+          sccache: false
           maturin-version: v1.14.1
           command: sdist
           args: --out dist
@@ -69,6 +75,7 @@ jobs:
       - name: "Build sdist uv-build"
         uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
         with:
+          sccache: false
           maturin-version: v1.14.1
           command: sdist
           args: --out crates/uv-build/dist -m crates/uv-build/Cargo.toml
@@ -95,6 +102,7 @@ jobs:
 
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
+          cache: ""
           python-version: ${{ env.PYTHON_VERSION }}
           architecture: x64
       - name: "Prep README.md"
@@ -107,6 +115,7 @@ jobs:
       - name: "Build wheels - x86_64"
         uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
         with:
+          sccache: false
           maturin-version: v1.14.1
           target: x86_64
           args: --release --locked --out dist --features self-update --compatibility pypi
@@ -143,6 +152,7 @@ jobs:
       - name: "Build wheels uv-build - x86_64"
         uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
         with:
+          sccache: false
           maturin-version: v1.14.1
           target: x86_64
           args: --profile minimal-size --locked --out crates/uv-build/dist -m crates/uv-build/Cargo.toml --compatibility pypi
@@ -167,6 +177,7 @@ jobs:
 
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
+          cache: ""
           python-version: ${{ env.PYTHON_VERSION }}
           architecture: arm64
       - name: "Prep README.md"
@@ -175,10 +186,23 @@ jobs:
         shell: bash
         run: scripts/install-cargo-extensions.sh
 
+      - name: "Install LLVM profiling tools"
+        run: rustup component add llvm-tools-preview
+      - name: "Train PGO uv"
+        run: |
+          python scripts/build_uv_pgo.py \
+            --target aarch64-apple-darwin \
+            --target-dir "${{ github.workspace }}/target/uv-pgo" \
+            --train-only
+        env:
+          CARGO: ${{ github.workspace }}/scripts/cargo.sh
+          RUSTFLAGS: "-C linker=rust-lld -C linker-flavor=ld64.lld -C link-arg=--icf=safe"
+
       # uv
       - name: "Build wheels - aarch64"
         uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
         with:
+          sccache: false
           maturin-version: v1.14.1
           target: aarch64
           manylinux: 2_17
@@ -187,7 +211,9 @@ jobs:
           CARGO: ${{ github.workspace }}/scripts/cargo.sh
           # Use Rust's bundled Mach-O LLD, which supports ICF.
           # ICF reduces the macOS aarch64 uv binary size by ~1.4%.
-          RUSTFLAGS: "-C linker=rust-lld -C linker-flavor=ld64.lld -C link-arg=--icf=safe"
+          RUSTFLAGS: "-C linker=rust-lld -C linker-flavor=ld64.lld -C link-arg=--icf=safe -Cprofile-use=${{ github.workspace }}/target/uv-pgo/uv.profdata"
+          CFLAGS: "-fno-profile-generate -fno-profile-use"
+          CXXFLAGS: "-fno-profile-generate -fno-profile-use"
       - name: "Test wheel - aarch64"
         run: |
           pip install ${PACKAGE_NAME} --no-index --find-links dist/ --force-reinstall
@@ -222,6 +248,7 @@ jobs:
       - name: "Build wheels uv-build - aarch64"
         uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
         with:
+          sccache: false
           maturin-version: v1.14.1
           target: aarch64
           args: --profile minimal-size --locked --out crates/uv-build/dist -m crates/uv-build/Cargo.toml --compatibility pypi
@@ -263,6 +290,7 @@ jobs:
 
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
+          cache: ""
           python-version: ${{ env.PYTHON_VERSION }}
           architecture: ${{ matrix.platform.arch }}
       - name: "Prep README.md"
@@ -278,10 +306,27 @@ jobs:
         run: |
           winget install NASM.NASM --accept-source-agreements --accept-package-agreements
           echo "C:\Program Files\NASM" | Out-File -FilePath $env:GITHUB_PATH -Append
+      - name: "Install LLVM profiling tools"
+        if: ${{ matrix.platform.target == 'x86_64-pc-windows-msvc' }}
+        run: rustup component add llvm-tools-preview
+      - name: "Train PGO uv"
+        if: ${{ matrix.platform.target == 'x86_64-pc-windows-msvc' }}
+        shell: bash
+        run: |
+          export RUSTFLAGS="${RUSTFLAGS:+${RUSTFLAGS} }-C target-feature=+crt-static"
+
+          python scripts/build_uv_pgo.py \
+            --target "${{ matrix.platform.target }}" \
+            --target-dir "${{ github.workspace }}/target/uv-pgo" \
+            --train-only
+        env:
+          CARGO: ${{ github.workspace }}/scripts/cargo.cmd
+          AWS_LC_SYS_PREBUILT_NASM: "0"
       # uv
       - name: "Build wheels"
         uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
         with:
+          sccache: false
           maturin-version: v1.14.1
           target: ${{ matrix.platform.target }}
           args: --release --locked --out dist --features self-update,windows-gui-bin --compatibility pypi
@@ -289,6 +334,23 @@ jobs:
           CARGO: ${{ github.workspace }}/scripts/cargo.cmd
           # Disable prebuilt NASM objects so we always compile assembly from source.
           AWS_LC_SYS_PREBUILT_NASM: "0"
+          # Target-specific flags preserve the static CRT configured in .cargo/config.toml.
+          CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_RUSTFLAGS: ${{ matrix.platform.target == 'x86_64-pc-windows-msvc' && format('-Cprofile-use={0}/target/uv-pgo/uv.profdata', github.workspace) || '' }}
+      - name: "Verify static Windows runtime"
+        if: ${{ matrix.platform.target == 'x86_64-pc-windows-msvc' }}
+        shell: bash
+        run: |
+          LLVM_READOBJ="$(rustc --print sysroot)/lib/rustlib/${{ matrix.platform.target }}/bin/llvm-readobj.exe"
+
+          for binary in uv uvx uvw; do
+            IMPORTS_FILE="$RUNNER_TEMP/${binary}-coff-imports.txt"
+            "$LLVM_READOBJ" --coff-imports "target/${{ matrix.platform.target }}/release/${binary}.exe" > "$IMPORTS_FILE"
+
+            if grep -Eiq 'vcruntime[[:digit:]_]*\.dll|ucrtbase\.dll|api-ms-win-crt-' "$IMPORTS_FILE"; then
+              echo "$binary must not dynamically link the Visual C++ runtime" >&2
+              exit 1
+            fi
+          done
       - name: "Test wheel"
         shell: bash
         run: |
@@ -324,6 +386,7 @@ jobs:
       - name: "Build wheels uv-build"
         uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
         with:
+          sccache: false
           maturin-version: v1.14.1
           target: ${{ matrix.platform.target }}
           args: --profile minimal-size --locked --out crates/uv-build/dist -m crates/uv-build/Cargo.toml --compatibility pypi
@@ -356,6 +419,7 @@ jobs:
 
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
+          cache: ""
           python-version: ${{ env.PYTHON_VERSION }}
           architecture: x64
       - name: "Prep README.md"
@@ -365,6 +429,7 @@ jobs:
       - name: "Build wheels"
         uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
         with:
+          sccache: false
           maturin-version: v1.14.1
           target: ${{ matrix.target }}
           # Generally, we try to build in a target docker container. In this case however, a
@@ -372,7 +437,7 @@ jobs:
           # from 64-bit version of the container, breaking the pattern from other builds.
           container: quay.io/pypa/manylinux2014
           manylinux: 2_17
-          docker-options: -e CARGO
+          docker-options: -e CARGO -e AWS_LC_SYS_USE_SYSTEM
           args: --release --locked --out dist --features self-update --compatibility pypi
           before-script-linux: |
             # Install the 32-bit cross target on 64-bit (noop if we're already on 64-bit)
@@ -396,6 +461,16 @@ jobs:
             fi
             # Install cargo extensions as a static musl binary so it runs in any container.
             scripts/install-cargo-extensions.sh
+
+            if [[ "${{ matrix.target }}" == "x86_64-unknown-linux-gnu" ]]; then
+                rustup component add llvm-tools-preview
+                python${{ env.PYTHON_VERSION }} scripts/build_uv_pgo.py \
+                    --target "${{ matrix.target }}" \
+                    --target-dir "$PWD/target/uv-pgo" \
+                    --train-only
+
+                export RUSTFLAGS="${RUSTFLAGS:+${RUSTFLAGS} }-Cprofile-use=$PWD/target/uv-pgo/uv.profdata"
+            fi
         env:
           CC: ${{ matrix.cc }}
           CARGO: ${{ github.workspace }}/scripts/cargo.sh
@@ -436,10 +511,11 @@ jobs:
       - name: "Build wheels uv-build"
         uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
         with:
+          sccache: false
           maturin-version: v1.14.1
           target: ${{ matrix.target }}
           manylinux: 2_17
-          docker-options: -e CARGO
+          docker-options: -e CARGO -e AWS_LC_SYS_USE_SYSTEM
           args: --profile minimal-size --locked --out crates/uv-build/dist -m crates/uv-build/Cargo.toml --compatibility pypi
           before-script-linux: |
             scripts/install-cargo-extensions.sh
@@ -459,13 +535,16 @@ jobs:
 
   linux-arm:
     name: ${{ matrix.platform.target }}
-    runs-on: depot-ubuntu-24.04-8
-    timeout-minutes: 30
+    runs-on: ${{ matrix.platform.runner }}
+    timeout-minutes: ${{ matrix.platform.pgo && 60 || 30 }}
     strategy:
       matrix:
         platform:
+          # PGO requires a native runner; the 32-bit ARM targets are cross-compiled.
           - target: aarch64-unknown-linux-gnu
             arch: aarch64
+            runner: depot-ubuntu-24.04-arm-8
+            pgo: true
             # see https://github.com/astral-sh/ruff/issues/3791
             # and https://github.com/gnzlbg/jemallocator/issues/170#issuecomment-1503228963
             maturin_docker_options: -e JEMALLOC_SYS_WITH_LG_PAGE=16
@@ -473,9 +552,13 @@ jobs:
             manylinux: 2_28
           - target: armv7-unknown-linux-gnueabihf
             arch: armv7
+            runner: depot-ubuntu-24.04-8
+            pgo: false
             manylinux: 2_17
           - target: arm-unknown-linux-musleabihf
             arch: arm
+            runner: depot-ubuntu-24.04-8
+            pgo: false
             # Special case: armv6l is linux_armv6l, no manylinux or musllinux.
             # "auto" instead of "off" to get the cross container
             manylinux: auto
@@ -487,6 +570,7 @@ jobs:
 
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
+          cache: ""
           python-version: ${{ env.PYTHON_VERSION }}
       - name: "Prep README.md"
         run: python scripts/transform_readme.py --target pypi
@@ -495,13 +579,29 @@ jobs:
       - name: "Build wheels"
         uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
         with:
+          sccache: false
           maturin-version: v1.14.1
           target: ${{ matrix.platform.target }}
           manylinux: ${{ matrix.platform.manylinux }}
-          docker-options: -e CARGO ${{ matrix.platform.maturin_docker_options }}
+          docker-options: -e CARGO -e AWS_LC_SYS_USE_SYSTEM ${{ matrix.platform.maturin_docker_options }}
           args: --release --locked --out dist --features self-update --compatibility pypi
           before-script-linux: |
             scripts/install-cargo-extensions.sh
+
+            if [[ "${{ matrix.platform.pgo }}" == "true" ]]; then
+                # GNU ld cannot resolve long-range calls in the instrumented ARM64 binary.
+                bundled_lld_dir="$(rustc --print sysroot)/lib/rustlib/${{ matrix.platform.target }}/bin/gcc-ld"
+                test -x "${bundled_lld_dir}/ld.lld"
+                export RUSTFLAGS="${RUSTFLAGS:+${RUSTFLAGS} }-C link-arg=-B${bundled_lld_dir} -C link-arg=-fuse-ld=lld"
+
+                rustup component add llvm-tools-preview
+                python${{ env.PYTHON_VERSION }} scripts/build_uv_pgo.py \
+                    --target "${{ matrix.platform.target }}" \
+                    --target-dir "$PWD/target/uv-pgo" \
+                    --train-only
+
+                export RUSTFLAGS="${RUSTFLAGS:+${RUSTFLAGS} }-Cprofile-use=$PWD/target/uv-pgo/uv.profdata"
+            fi
         env:
           CARGO: ${{ github.workspace }}/scripts/cargo.sh
       - uses: uraimo/run-on-arch-action@f9b26e3a1a408d5fd530d20c17b9f3f4428ff8d9 # v3.1.0
@@ -552,10 +652,11 @@ jobs:
       - name: "Build wheels uv-build"
         uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
         with:
+          sccache: false
           maturin-version: v1.14.1
           target: ${{ matrix.platform.target }}
           manylinux: ${{ matrix.platform.manylinux }}
-          docker-options: -e CARGO ${{ matrix.platform.maturin_docker_options }}
+          docker-options: -e CARGO -e AWS_LC_SYS_USE_SYSTEM ${{ matrix.platform.maturin_docker_options }}
           args: --profile minimal-size --locked --out crates/uv-build/dist -m crates/uv-build/Cargo.toml --compatibility pypi
           before-script-linux: |
             scripts/install-cargo-extensions.sh
@@ -602,6 +703,7 @@ jobs:
 
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
+          cache: ""
           python-version: ${{ env.PYTHON_VERSION }}
       - name: "Prep README.md"
         run: python scripts/transform_readme.py --target pypi
@@ -610,10 +712,11 @@ jobs:
       - name: "Build wheels"
         uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
         with:
+          sccache: false
           maturin-version: v1.14.1
           target: ${{ matrix.platform.target }}
           manylinux: 2_17
-          docker-options: -e CARGO ${{ matrix.platform.maturin_docker_options }}
+          docker-options: -e CARGO -e AWS_LC_SYS_USE_SYSTEM ${{ matrix.platform.maturin_docker_options }}
           args: --release --locked --out dist --features self-update --compatibility pypi
           rust-toolchain: ${{ matrix.platform.toolchain || null }}
           before-script-linux: |
@@ -672,10 +775,11 @@ jobs:
       - name: "Build wheels uv-build"
         uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
         with:
+          sccache: false
           maturin-version: v1.14.1
           target: ${{ matrix.platform.target }}
           manylinux: 2_17
-          docker-options: -e CARGO ${{ matrix.platform.maturin_docker_options }}
+          docker-options: -e CARGO -e AWS_LC_SYS_USE_SYSTEM ${{ matrix.platform.maturin_docker_options }}
           args: --profile minimal-size --locked --out crates/uv-build/dist -m crates/uv-build/Cargo.toml --compatibility pypi
           before-script-linux: |
             scripts/install-cargo-extensions.sh
@@ -714,7 +818,10 @@ jobs:
           - target: powerpc64le-unknown-linux-gnu
             arch: ppc64le
             # see https://github.com/astral-sh/uv/issues/6528
-            maturin_docker_options: -e JEMALLOC_SYS_WITH_LG_PAGE=16
+            # Older PowerPC build images lack AT_HWCAP2 in their glibc headers.
+            # Use the Linux ABI value until bundled AWS-LC includes:
+            # https://github.com/aws/aws-lc/pull/3429
+            maturin_docker_options: -e JEMALLOC_SYS_WITH_LG_PAGE=16 -e AWS_LC_SYS_CFLAGS_powerpc64le_unknown_linux_gnu=-DAT_HWCAP2=26
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -723,6 +830,7 @@ jobs:
 
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
+          cache: ""
           python-version: ${{ env.PYTHON_VERSION }}
       - name: "Prep README.md"
         run: python scripts/transform_readme.py --target pypi
@@ -731,10 +839,11 @@ jobs:
       - name: "Build wheels"
         uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
         with:
+          sccache: false
           maturin-version: v1.14.1
           target: ${{ matrix.platform.target }}
           manylinux: 2_17
-          docker-options: -e CARGO ${{ matrix.platform.maturin_docker_options }}
+          docker-options: -e CARGO -e AWS_LC_SYS_USE_SYSTEM ${{ matrix.platform.maturin_docker_options }}
           args: --release --locked --out dist --features self-update --compatibility pypi
           before-script-linux: |
             if command -v yum &> /dev/null; then
@@ -792,10 +901,11 @@ jobs:
       - name: "Build wheels uv-build"
         uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
         with:
+          sccache: false
           maturin-version: v1.14.1
           target: ${{ matrix.platform.target }}
           manylinux: 2_17
-          docker-options: -e CARGO ${{ matrix.platform.maturin_docker_options }}
+          docker-options: -e CARGO -e AWS_LC_SYS_USE_SYSTEM ${{ matrix.platform.maturin_docker_options }}
           args: --profile minimal-size --locked --out crates/uv-build/dist -m crates/uv-build/Cargo.toml --compatibility pypi
           before-script-linux: |
             if command -v yum &> /dev/null; then
@@ -832,6 +942,7 @@ jobs:
 
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
+          cache: ""
           python-version: ${{ env.PYTHON_VERSION }}
       - name: "Prep README.md"
         run: python scripts/transform_readme.py --target pypi
@@ -840,10 +951,11 @@ jobs:
       - name: "Build wheels"
         uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
         with:
+          sccache: false
           maturin-version: v1.14.1
           target: ${{ matrix.platform.target }}
           manylinux: 2_31
-          docker-options: -e CARGO ${{ matrix.platform.maturin_docker_options }}
+          docker-options: -e CARGO -e AWS_LC_SYS_USE_SYSTEM ${{ matrix.platform.maturin_docker_options }}
           args: --release --locked --out dist --features self-update --compatibility pypi
           before-script-linux: |
             scripts/install-cargo-extensions.sh
@@ -898,10 +1010,11 @@ jobs:
       - name: "Build wheels uv-build"
         uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
         with:
+          sccache: false
           maturin-version: v1.14.1
           target: ${{ matrix.platform.target }}
           manylinux: 2_31
-          docker-options: -e CARGO ${{ matrix.platform.maturin_docker_options }}
+          docker-options: -e CARGO -e AWS_LC_SYS_USE_SYSTEM ${{ matrix.platform.maturin_docker_options }}
           args: --profile minimal-size --locked --out crates/uv-build/dist -m crates/uv-build/Cargo.toml --compatibility pypi
           before-script-linux: |
             scripts/install-cargo-extensions.sh
@@ -946,6 +1059,7 @@ jobs:
 
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
+          cache: ""
           python-version: ${{ env.PYTHON_VERSION }}
           architecture: x64
       - name: "Prep README.md"
@@ -955,10 +1069,11 @@ jobs:
       - name: "Build wheels"
         uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
         with:
+          sccache: false
           maturin-version: v1.14.1
           target: ${{ matrix.target }}
           manylinux: musllinux_1_1
-          docker-options: -e CARGO
+          docker-options: -e CARGO -e AWS_LC_SYS_USE_SYSTEM
           args: --release --locked --out dist --features self-update --compatibility pypi
           before-script-linux: |
             scripts/install-cargo-extensions.sh
@@ -1007,10 +1122,11 @@ jobs:
       - name: "Build wheels uv-build"
         uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
         with:
+          sccache: false
           maturin-version: v1.14.1
           target: ${{ matrix.target }}
           manylinux: musllinux_1_1
-          docker-options: -e CARGO
+          docker-options: -e CARGO -e AWS_LC_SYS_USE_SYSTEM
           args: --profile minimal-size --locked --out crates/uv-build/dist -m crates/uv-build/Cargo.toml --compatibility pypi
           before-script-linux: |
             scripts/install-cargo-extensions.sh
@@ -1058,6 +1174,7 @@ jobs:
 
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
+          cache: ""
           python-version: ${{ env.PYTHON_VERSION }}
       - name: "Prep README.md"
         run: python scripts/transform_readme.py --target pypi
@@ -1066,12 +1183,13 @@ jobs:
       - name: "Build wheels"
         uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
         with:
+          sccache: false
           maturin-version: v1.14.1
           target: ${{ matrix.platform.target }}
           manylinux: musllinux_1_1
           # Tag the musl builds as manylinux 2_17 fallback cause the aarch64 build only support 2_28
           args: --release --locked --out dist --features self-update --compatibility ${{ matrix.platform.arch == 'riscv64' && '2_31' || '2_17'}} --compatibility pypi
-          docker-options: -e CARGO ${{ matrix.platform.maturin_docker_options }}
+          docker-options: -e CARGO -e AWS_LC_SYS_USE_SYSTEM ${{ matrix.platform.maturin_docker_options }}
           rust-toolchain: ${{ matrix.platform.toolchain || null }}
           before-script-linux: |
             scripts/install-cargo-extensions.sh
@@ -1144,11 +1262,12 @@ jobs:
       - name: "Build wheels"
         uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
         with:
+          sccache: false
           maturin-version: v1.14.1
           target: ${{ matrix.platform.target }}
           manylinux: musllinux_1_1
           args: --profile minimal-size --locked ${{ matrix.platform.arch == 'aarch64' && '--compatibility 2_17' || ''}} --out crates/uv-build/dist -m crates/uv-build/Cargo.toml --compatibility pypi
-          docker-options: -e CARGO ${{ matrix.platform.maturin_docker_options }}
+          docker-options: -e CARGO -e AWS_LC_SYS_USE_SYSTEM ${{ matrix.platform.maturin_docker_options }}
           rust-toolchain: ${{ matrix.platform.toolchain || null }}
           before-script-linux: |
             scripts/install-cargo-extensions.sh
@@ -1213,7 +1332,9 @@ jobs:
         with:
           persist-credentials: false
       - name: "Install uv"
-        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          enable-cache: false
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           pattern: wheels_*-*

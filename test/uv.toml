@@ -1,0 +1,2 @@
+# Package fixtures must not inherit the repository's tooling build policy.
+no-build = false

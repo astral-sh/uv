@@ -3789,6 +3789,7 @@ fn preview_features() {
     +            LockWithoutMetadata,
     +            TarCodec,
     +            IndexByName,
+    +            ArtifactHashFiltering,
     +        ],
          },
          python_preference: Managed,

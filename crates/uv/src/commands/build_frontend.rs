@@ -78,7 +78,7 @@ pub(crate) enum Error {
     #[error(transparent)]
     BuildFrontend(#[from] uv_build_frontend::Error),
     #[error(transparent)]
-    Project(#[from] ProjectError),
+    Project(#[from] Box<ProjectError>),
     #[error("Failed to write message")]
     Fmt(#[from] fmt::Error),
     #[error("Can't use `--force-pep517` with `--list`")]
@@ -100,6 +100,12 @@ pub(crate) enum Error {
     NameMismatch(PackageName, PackageName),
     #[error("The source distribution declares version {0}, but the wheel declares version {1}")]
     VersionMismatch(Version, Version),
+}
+
+impl From<ProjectError> for Error {
+    fn from(error: ProjectError) -> Self {
+        Self::Project(Box::new(error))
+    }
 }
 
 impl Hint for Error {

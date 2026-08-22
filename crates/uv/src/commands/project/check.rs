@@ -734,8 +734,7 @@ pub(crate) async fn check(
     let exclude_newer = settings
         .resolver
         .exclude_newer
-        .global
-        .map(|value| value.timestamp());
+        .exclude_newer_package_for_index(&PackageName::from_str("ty")?, None);
 
     ty::run(
         ty_version,

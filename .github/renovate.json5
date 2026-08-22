@@ -7,7 +7,7 @@
   ],
   labels: ["internal", "build:skip-docker", "build:skip-release"],
   schedule: ["* 0-3 * * 1"],
-  enabledManagers: ["github-actions", "pre-commit", "cargo", "custom.regex"],
+  enabledManagers: ["github-actions", "cargo", "custom.regex"],
   cargo: {
     managerFilePatterns: ["/^Cargo\\.toml$/", "/^crates/.*Cargo\\.toml$/"],
   },
@@ -76,11 +76,6 @@
       matchFileNames: [".github/workflows/test-system.yml"],
       extends: ["schedule:monthly"],
       description: "Monthly update of test-system.yml dependencies",
-    },
-    {
-      groupName: "pre-commit dependencies",
-      matchManagers: ["pre-commit"],
-      description: "Weekly update of pre-commit dependencies",
     },
     {
       groupName: "Rust dev-dependencies",

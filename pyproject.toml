@@ -109,13 +109,25 @@ docs = [
   "mdformat-admon>=2.0.2",
 ]
 docker = [
-  "cargo-zigbuild>=0.19.8",
+  # `cargo-zigbuild` 0.23 filters Rust 1.98's Cortex-A53 mitigation flag, which Zig rejects.
+  # See:
+  # - https://github.com/rust-lang/rust/pull/155453
+  # - https://github.com/rust-cross/cargo-zigbuild/issues/451
+  "cargo-zigbuild>=0.23.0",
 ]
 release = [
   "rooster==0.1.1",
 ]
+check = [
+    "ruff>=0.16.2",
+    "ty>=0.0.69",
+    "typos>=1.49.0",
+    "validate-pyproject[all,store]>=0.25",
+]
 
 [tool.uv]
+no-build = true
+exclude-newer = "P7D"
 cache-keys = [
     { file = "pyproject.toml" },
     { file = "Cargo.toml" },

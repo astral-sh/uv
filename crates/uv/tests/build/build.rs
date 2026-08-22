@@ -2098,6 +2098,47 @@ fn build_fast_path() -> Result<()> {
     Ok(())
 }
 
+/// Warn about an unbounded build backend only when producing a source distribution.
+#[test]
+fn build_fast_path_unbounded_backend() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let filters = context
+        .filters()
+        .into_iter()
+        .chain([(r"such as `<\d+\.\d+`", "such as `<[NEXT_BREAKING]`")])
+        .collect::<Vec<_>>();
+    let project = context.temp_dir.child("project");
+
+    project.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["uv-build"]
+        build-backend = "uv_build"
+    "#})?;
+    project.child("src/project/__init__.py").touch()?;
+
+    uv_snapshot!(&filters, context.build().arg("project").arg("--wheel"), @r"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Building wheel...
+    Successfully built project/dist/project-0.1.0-py3-none-any.whl
+    ");
+
+    uv_snapshot!(&filters, context.build().arg("project").arg("--sdist"), @r#"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Building source distribution...
+    warning: `build_system.requires = ["uv-build"]` is missing an upper bound on the `uv_build` version such as `<[NEXT_BREAKING]`. Without bounding the `uv_build` version, the source distribution will break when a future, breaking version of `uv_build` is released.
+    Successfully built project/dist/project-0.1.0.tar.gz
+    "#);
+
+    Ok(())
+}
+
 /// Only mention the bundled build backend when verbose logging is enabled.
 #[test]
 fn build_fast_path_verbose() -> Result<()> {

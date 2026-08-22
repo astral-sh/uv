@@ -11,6 +11,9 @@ Example usage:
 #     "httpx",
 #     "tqdm",
 # ]
+# [tool.uv]
+# no-build = true
+# exclude-newer = "P7D"
 # ///
 
 from __future__ import annotations

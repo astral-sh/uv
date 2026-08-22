@@ -8,6 +8,10 @@
     "uv-dev": {
       "name": "astral-sh/uv-dev",
       "id": 1302176231
+    },
+    "uv-security": {
+      "name": "astral-sh/uv-security",
+      "id": 1333576902
     }
   },
   "rules": [
@@ -58,7 +62,17 @@
     {
       "repository": "uv-dev",
       "on": {
-        "pull_request": ["ready_for_review", "synchronize"]
+        "pull_request": ["ready_for_review"]
+      },
+      "workflow": "promote-pull-request.yml"
+    },
+    {
+      "repository": "uv-security",
+      "on": {
+        "pull_request": ["ready_for_review"]
+      },
+      "conditions": {
+        "/sender/type": "User"
       },
       "workflow": "promote-pull-request.yml"
     },
@@ -71,7 +85,11 @@
         "/changes/base/ref/from": { "exists": true }
       },
       "allow_draft": true,
-      "workflow": "pull-request-conflicts.yml"
+      "workflow": "pull-request-conflicts.yml",
+      "inputs": {
+        "base_previous_ref": "/changes/base/ref/from",
+        "base_previous_sha": "/changes/base/sha/from"
+      }
     },
     {
       "repository": "uv",

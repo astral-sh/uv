@@ -51,4 +51,5 @@ include = [
 ]
 
 [tool.uv]
+no-build = true
 managed = false

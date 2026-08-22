@@ -1932,6 +1932,7 @@ impl Connectivity {
 
 #[cfg(test)]
 mod tests {
+    use std::assert_matches;
     use std::str::FromStr;
 
     use tokio::sync::Semaphore;
@@ -1996,10 +1997,10 @@ mod tests {
             .await
             .expect_err("index lookup should be disabled");
 
-        assert!(matches!(
+        assert_matches!(
             error.kind(),
             crate::ErrorKind::NoIndex(error_package) if error_package == package
-        ));
+        );
         Ok(())
     }
 

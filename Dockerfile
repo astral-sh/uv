@@ -46,6 +46,8 @@ RUN rustup toolchain install
 RUN rustup target add $(cat rust_target.txt)
 
 # Build
+# Build the AWS-LC version pinned in Cargo.lock, not a system installation.
+ENV AWS_LC_SYS_USE_SYSTEM=0
 COPY crates crates
 COPY ./Cargo.toml Cargo.toml
 COPY ./Cargo.lock Cargo.lock

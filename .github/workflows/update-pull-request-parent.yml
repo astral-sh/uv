@@ -1,0 +1,129 @@
+name: Update pull request parent
+
+on:
+  workflow_call:
+    inputs:
+      number:
+        required: true
+        type: string
+      base-ref:
+        required: true
+        type: string
+      base-sha:
+        required: true
+        type: string
+      base-previous-sha:
+        required: true
+        type: string
+      parent-merge-sha:
+        required: true
+        type: string
+      head-ref:
+        required: true
+        type: string
+      head-sha:
+        required: true
+        type: string
+    outputs:
+      outcome:
+        description: "Whether the parent update was clean, conflicted, or empty"
+        value: ${{ jobs.update.outputs.outcome }}
+      head_sha:
+        description: "The cleanly rebased candidate head"
+        value: ${{ jobs.update.outputs.head_sha }}
+      rejection_reason:
+        description: "Why a source or parent revision could not be used"
+        value: ${{ jobs.update.outputs.rejection_reason }}
+
+permissions: {}
+
+jobs:
+  update:
+    name: "Update parent of pull request #${{ inputs.number }}"
+    if: github.repository == 'astral-sh/uv-dev' || github.repository == 'astral-sh/uv-security'
+    runs-on: ubuntu-slim
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    outputs:
+      outcome: ${{ steps.update.outputs.outcome }}
+      head_sha: ${{ steps.update.outputs.head_sha }}
+      rejection_reason: ${{ steps.update.outputs.rejection_reason }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Rebase child commits without conflict resolution
+        id: update
+        env:
+          BASE_REF: ${{ inputs.base-ref }}
+          BASE_SHA: ${{ inputs.base-sha }}
+          BASE_PREVIOUS_SHA: ${{ inputs.base-previous-sha }}
+          PARENT_MERGE_SHA: ${{ inputs.parent-merge-sha }}
+          HEAD_REF: ${{ inputs.head-ref }}
+          HEAD_SHA: ${{ inputs.head-sha }}
+          GH_TOKEN: ${{ github.token }}
+          GIT_CONFIG_GLOBAL: /dev/null
+          GIT_CONFIG_NOSYSTEM: "1"
+          GIT_EDITOR: "true"
+        run: |
+          git check-ref-format "refs/heads/$BASE_REF"
+          git check-ref-format "refs/heads/$HEAD_REF"
+          for sha in "$BASE_SHA" "$BASE_PREVIOUS_SHA" "$PARENT_MERGE_SHA" "$HEAD_SHA"; do
+            if ! [[ "$sha" =~ ^[0-9a-f]{40}$ ]]; then
+              echo "The parent-update context contains an invalid commit SHA." >&2
+              exit 1
+            fi
+          done
+
+          git -c credential.helper= -c 'credential.helper=!gh auth git-credential' fetch \
+            --no-tags "https://github.com/$GITHUB_REPOSITORY.git" "refs/heads/$HEAD_REF"
+          if [ "$(git rev-parse 'FETCH_HEAD^{commit}')" != "$HEAD_SHA" ] || [ "$(git rev-parse --verify "refs/remotes/origin/$BASE_REF^{commit}")" != "$BASE_SHA" ]; then
+            echo "rejection_reason=The source or destination changed before its parent update." >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if ! git merge-base --is-ancestor "$BASE_PREVIOUS_SHA" "$HEAD_SHA" || ! git merge-base --is-ancestor "$PARENT_MERGE_SHA" "$BASE_SHA"; then
+            echo "rejection_reason=The source or destination does not contain the verified parent revision." >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          git checkout --detach "$HEAD_SHA"
+          git config user.name "astral-automations-bot[bot]"
+          git config user.email "305554984+astral-automations-bot[bot]@users.noreply.github.com"
+
+          if ! git -c core.hooksPath=/dev/null -c commit.gpgsign=false rebase --committer-date-is-author-date --onto "$BASE_SHA" "$BASE_PREVIOUS_SHA"; then
+            if { [ -d "$(git rev-parse --git-path rebase-merge)" ] || [ -d "$(git rev-parse --git-path rebase-apply)" ]; } && [ -n "$(git ls-files --unmerged)" ]; then
+              git -c core.hooksPath=/dev/null rebase --abort
+              echo "outcome=conflicts" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            echo "Git failed without leaving merge conflicts." >&2
+            exit 1
+          fi
+
+          git merge-base --is-ancestor "$BASE_SHA" HEAD
+          git diff --check "$BASE_SHA...HEAD"
+          if [ -n "$(git status --porcelain)" ]; then
+            echo "The parent update left a dirty worktree." >&2
+            exit 1
+          fi
+          if [ "$(git rev-parse HEAD)" = "$BASE_SHA" ]; then
+            echo "outcome=empty" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          git bundle create "$RUNNER_TEMP/updated-parent.bundle" "$BASE_SHA..HEAD"
+          {
+            echo "outcome=clean"
+            echo "head_sha=$(git rev-parse HEAD)"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Upload updated parent candidate
+        if: steps.update.outputs.outcome == 'clean'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: updated-pull-request-parent-${{ inputs.number }}-${{ inputs.head-sha }}
+          path: ${{ runner.temp }}/updated-parent.bundle
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 1

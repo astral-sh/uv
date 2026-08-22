@@ -1856,6 +1856,7 @@ async fn read_url(
 
 #[cfg(test)]
 mod tests {
+    use std::assert_matches;
     use std::collections::HashSet;
 
     use crate::PythonVariant;
@@ -2001,7 +2002,7 @@ mod tests {
     fn test_python_download_request_from_str_too_many_parts() {
         let result = PythonDownloadRequest::from_str("cpython-3.12-linux-x86_64-gnu-extra");
 
-        assert!(matches!(result, Err(Error::TooManyParts(_))));
+        assert_matches!(result, Err(Error::TooManyParts(_)));
     }
 
     /// We don't allow an empty request.
@@ -2009,7 +2010,7 @@ mod tests {
     fn test_python_download_request_from_str_empty() {
         let result = PythonDownloadRequest::from_str("");
 
-        assert!(matches!(result, Err(Error::EmptyRequest)), "{result:?}");
+        assert_matches!(result, Err(Error::EmptyRequest));
     }
 
     /// Parse a request with all "any" segments.
@@ -2052,10 +2053,7 @@ mod tests {
     fn test_python_download_request_from_str_invalid_leading_segment() {
         let result = PythonDownloadRequest::from_str("foobar-3.14-windows");
 
-        assert!(
-            matches!(result, Err(Error::ImplementationError(_))),
-            "{result:?}"
-        );
+        assert_matches!(result, Err(Error::ImplementationError(_)));
     }
 
     /// Parse a request with segments in an invalid order.
@@ -2063,10 +2061,7 @@ mod tests {
     fn test_python_download_request_from_str_out_of_order() {
         let result = PythonDownloadRequest::from_str("3.12-cpython");
 
-        assert!(
-            matches!(result, Err(Error::InvalidRequestPlatform(_))),
-            "{result:?}"
-        );
+        assert_matches!(result, Err(Error::InvalidRequestPlatform(_)));
     }
 
     /// Parse a request with too many "any" segments.
@@ -2074,7 +2069,7 @@ mod tests {
     fn test_python_download_request_from_str_too_many_any() {
         let result = PythonDownloadRequest::from_str("any-any-any-any-any-any");
 
-        assert!(matches!(result, Err(Error::TooManyParts(_))));
+        assert_matches!(result, Err(Error::TooManyParts(_)));
     }
 
     /// Test that build filtering works correctly

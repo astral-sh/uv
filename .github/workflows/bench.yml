@@ -44,8 +44,9 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libsasl2-dev libldap2-dev libkrb5-dev
           cargo run --bin uv -- venv --cache-dir .cache
-          cargo run --bin uv -- pip compile test/requirements/jupyter.in --universal --exclude-newer 2024-08-08 --cache-dir .cache
-          cargo run --bin uv -- pip compile test/requirements/airflow.in --universal --exclude-newer 2024-08-08 --cache-dir .cache
+          # Resolve benchmark fixtures without the repository's tooling build policy.
+          cargo run --bin uv -- --config-file test/uv.toml pip compile test/requirements/jupyter.in --universal --exclude-newer 2024-08-08 --cache-dir .cache
+          cargo run --bin uv -- --config-file test/uv.toml pip compile test/requirements/airflow.in --universal --exclude-newer 2024-08-08 --cache-dir .cache
 
       - name: "Build benchmarks"
         run: cargo codspeed build -m walltime --profile profiling -p uv-bench --bench uv --bench workspace_discovery
@@ -98,7 +99,7 @@ jobs:
     name: "simulated"
     runs-on: depot-ubuntu-24.04-4
     if: ${{ github.repository == 'astral-sh/uv' }}
-    timeout-minutes: 20
+    timeout-minutes: 30
     steps:
       - name: "Checkout Branch"
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -122,8 +123,9 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libsasl2-dev libldap2-dev libkrb5-dev
           cargo run --bin uv -- venv --cache-dir .cache
-          cargo run --bin uv -- pip compile test/requirements/jupyter.in --universal --exclude-newer 2024-08-08 --cache-dir .cache
-          cargo run --bin uv -- pip compile test/requirements/airflow.in --universal --exclude-newer 2024-08-08 --cache-dir .cache
+          # Resolve benchmark fixtures without the repository's tooling build policy.
+          cargo run --bin uv -- --config-file test/uv.toml pip compile test/requirements/jupyter.in --universal --exclude-newer 2024-08-08 --cache-dir .cache
+          cargo run --bin uv -- --config-file test/uv.toml pip compile test/requirements/airflow.in --universal --exclude-newer 2024-08-08 --cache-dir .cache
 
       - name: "Build benchmarks"
         run: cargo codspeed build --profile profiling -p uv-bench

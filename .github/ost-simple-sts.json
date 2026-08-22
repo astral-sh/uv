@@ -11,6 +11,12 @@
       "id": 1302176231,
       "oidc_subject": "immutable",
       "owner_id": 115962839
+    },
+    "uv-security": {
+      "name": "astral-sh/uv-security",
+      "id": 1333576902,
+      "oidc_subject": "immutable",
+      "owner_id": 115962839
     }
   },
   "installations": {
@@ -44,6 +50,19 @@
         "workflows": "write"
       },
       "targets": ["uv", "uv-dev"],
+      "installation": "automations"
+    },
+    {
+      "caller": "uv-security",
+      "environment": "automations",
+      "caller_workflow": "promote-pull-request.yml",
+      "on": ["workflow_dispatch"],
+      "permissions": {
+        "contents": "write",
+        "pull_requests": "write",
+        "workflows": "write"
+      },
+      "targets": ["uv", "uv-security"],
       "installation": "automations"
     },
     {
@@ -104,6 +123,14 @@
       "on": ["push", "workflow_dispatch"],
       "permissions": { "contents": "write", "workflows": "write" },
       "target": "uv-dev"
+    },
+    {
+      "caller": "uv",
+      "environment": "automations",
+      "caller_workflow": "sync-uv-security.yml",
+      "on": ["push", "workflow_dispatch"],
+      "permissions": { "contents": "write", "workflows": "write" },
+      "target": "uv-security"
     },
     {
       "caller": "uv",

@@ -1113,6 +1113,7 @@ fn relax_requirement(
 
 #[cfg(test)]
 mod tests {
+    use std::assert_matches;
     use std::collections::BTreeSet;
     use std::str::FromStr;
 
@@ -1241,14 +1242,14 @@ mod tests {
         let error = propose_specifiers(&requirement, &resolved_versions(&["2.4"]))
             .expect_err("rewritten requirement must admit the resolved version");
 
-        assert!(matches!(
+        assert_matches!(
             &error,
             ProposeRequirementError::Unrepresentable {
                 package,
                 resolved_versions: actual_resolved_versions,
             } if package.as_ref() == "requests"
                 && *actual_resolved_versions == resolved_versions(&["2.4"])
-        ));
+        );
         assert_eq!(
             error.to_string(),
             "Dependency `requests` resolved to `2.4` which cannot be represented by the upgraded requirement; this is not supported yet"
@@ -1301,14 +1302,14 @@ mod tests {
         let error = propose_specifiers(&requirement, &resolved_versions(&["1.5.0", "2.4.0"]))
             .expect_err("wildcard cannot admit versions from different major lines");
 
-        assert!(matches!(
+        assert_matches!(
             &error,
             ProposeRequirementError::Unrepresentable {
                 package,
                 resolved_versions: actual_resolved_versions,
             } if package.as_ref() == "requests"
                 && *actual_resolved_versions == resolved_versions(&["1.5.0", "2.4.0"])
-        ));
+        );
         assert_eq!(
             error.to_string(),
             "Dependency `requests` resolved to `1.5.0`, `2.4.0` which cannot be represented by the upgraded requirement; this is not supported yet"

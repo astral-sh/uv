@@ -1953,6 +1953,8 @@ fn simplify_range(
 
 #[cfg(test)]
 mod tests {
+    use std::assert_matches;
+
     use super::*;
     use crate::resolver::UnavailableVersion;
 
@@ -2159,10 +2161,7 @@ mod tests {
             cause2: Arc::new(cause2),
         });
 
-        assert!(matches!(
-            collapse_unavailable_versions(tree),
-            ErrorTree::Derived(_)
-        ));
+        assert_matches!(collapse_unavailable_versions(tree), ErrorTree::Derived(_));
     }
 
     #[test]

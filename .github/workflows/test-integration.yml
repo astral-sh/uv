@@ -6,7 +6,8 @@ on:
         required: true
         type: string
 
-permissions: {}
+permissions:
+  contents: read
 
 env:
   CARGO_INCREMENTAL: 0
@@ -711,9 +712,14 @@ jobs:
 
       - name: "Create Pyodide virtual environment"
         run: |
-          ./uv venv -p $PYODIDE_PYTHON venv-pyodide
-          source ./venv-pyodide/bin/activate
-          ./uv pip install --extra-index-url=$PYODIDE_INDEX --no-build numpy
+          # The bundled Pyodide index does not include upload dates, so run outside the
+          # repository to avoid applying its exclude-newer setting.
+          PYODIDE_VENV="$RUNNER_TEMP/venv-pyodide"
+          ./uv venv -p "$PYODIDE_PYTHON" "$PYODIDE_VENV"
+          source "$PYODIDE_VENV/bin/activate"
+          ./uv --directory "$RUNNER_TEMP" pip install \
+            --extra-index-url="$PYODIDE_INDEX" \
+            --no-build numpy
           python -c 'import numpy'
 
       - name: "Install Pyodide with uv python"
@@ -1011,10 +1017,9 @@ jobs:
         run: ./uv run --locked --python "${PYTHON_VERSION}" --no-build --script scripts/registries-test.py --uv ./uv --color always --all --auth-method env
         env:
           RUST_LOG: uv=debug
-          # Temporarily disabled because Artifactory credentials need rotation.
-          # UV_TEST_ARTIFACTORY_TOKEN: ${{ secrets.UV_TEST_ARTIFACTORY_TOKEN }}
-          # UV_TEST_ARTIFACTORY_URL: ${{ secrets.UV_TEST_ARTIFACTORY_URL }}
-          # UV_TEST_ARTIFACTORY_USERNAME: ${{ secrets.UV_TEST_ARTIFACTORY_USERNAME }}
+          UV_TEST_ARTIFACTORY_TOKEN: ${{ secrets.UV_TEST_ARTIFACTORY_TOKEN }}
+          UV_TEST_ARTIFACTORY_URL: ${{ secrets.UV_TEST_ARTIFACTORY_URL }}
+          UV_TEST_ARTIFACTORY_USERNAME: ${{ secrets.UV_TEST_ARTIFACTORY_USERNAME }}
           UV_TEST_AWS_URL: ${{ secrets.UV_TEST_AWS_URL }}
           UV_TEST_AWS_USERNAME: aws
           UV_TEST_AZURE_TOKEN: ${{ secrets.UV_TEST_AZURE_TOKEN }}
@@ -1036,10 +1041,9 @@ jobs:
         run: ./uv run --locked --python "${PYTHON_VERSION}" --no-build --script scripts/registries-test.py --uv ./uv --color always --all --auth-method text-store
         env:
           RUST_LOG: uv=debug
-          # Temporarily disabled because Artifactory credentials need rotation.
-          # UV_TEST_ARTIFACTORY_TOKEN: ${{ secrets.UV_TEST_ARTIFACTORY_TOKEN }}
-          # UV_TEST_ARTIFACTORY_URL: ${{ secrets.UV_TEST_ARTIFACTORY_URL }}
-          # UV_TEST_ARTIFACTORY_USERNAME: ${{ secrets.UV_TEST_ARTIFACTORY_USERNAME }}
+          UV_TEST_ARTIFACTORY_TOKEN: ${{ secrets.UV_TEST_ARTIFACTORY_TOKEN }}
+          UV_TEST_ARTIFACTORY_URL: ${{ secrets.UV_TEST_ARTIFACTORY_URL }}
+          UV_TEST_ARTIFACTORY_USERNAME: ${{ secrets.UV_TEST_ARTIFACTORY_USERNAME }}
           UV_TEST_AWS_URL: ${{ secrets.UV_TEST_AWS_URL }}
           UV_TEST_AWS_USERNAME: aws
           UV_TEST_AZURE_TOKEN: ${{ secrets.UV_TEST_AZURE_TOKEN }}
@@ -1081,6 +1085,9 @@ jobs:
           chmod +x ./uvx
 
       - name: "Test uv_build package"
+        env:
+          # This test intentionally builds and installs source distributions.
+          UV_NO_CONFIG: "1"
         run: |
           # Build the Python package, which is not covered by uv's integration tests since they can't depend on having
           # a Python package (only the binary itself is built before running Rust's tests)

@@ -6,7 +6,8 @@ on:
   pull_request:
   workflow_dispatch:
 
-permissions: {}
+permissions:
+  contents: read
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref_name }}-${{ github.event.pull_request.number || github.sha }}
@@ -113,6 +114,7 @@ jobs:
     uses: $/.github/workflows/test-integration.yml
     secrets: inherit
     permissions:
+      contents: read
       id-token: write
     with:
       sha: ${{ github.sha }}
@@ -247,20 +249,10 @@ jobs:
           fi
           GITLAB_PYPI_OIDC_TOKEN=$(cat "${pypi_id_token_file}")
 
-          # we expect ./gitlab-artifacts/*/artifacts/pyx-id-token to exist
-          pyx_id_token_file=$(find ./gitlab-artifacts -type f -name pyx-id-token | head -n 1)
-          if [ -z "${pyx_id_token_file}" ]; then
-            echo "No pyx-id-token file found in GitLab artifacts"
-            exit 1
-          fi
-          GITLAB_PYX_OIDC_TOKEN=$(cat "${pyx_id_token_file}")
-
           # Add secret masks for the tokens.
           echo "::add-mask::$GITLAB_PYPI_OIDC_TOKEN"
-          echo "::add-mask::$GITLAB_PYX_OIDC_TOKEN"
 
           echo "GITLAB_PYPI_OIDC_TOKEN=${GITLAB_PYPI_OIDC_TOKEN}" >> "${GITHUB_OUTPUT}"
-          echo "GITLAB_PYX_OIDC_TOKEN=${GITLAB_PYX_OIDC_TOKEN}" >> "${GITHUB_OUTPUT}"
 
       - name: "Add password to keyring"
         run: |
@@ -286,10 +278,8 @@ jobs:
           UV_TEST_PUBLISH_GITLAB_PAT: ${{ secrets.UV_TEST_PUBLISH_GITLAB_PAT }}
           UV_TEST_PUBLISH_CODEBERG_TOKEN: ${{ secrets.UV_TEST_PUBLISH_CODEBERG_TOKEN }}
           UV_TEST_PUBLISH_CLOUDSMITH_TOKEN: ${{ secrets.UV_TEST_PUBLISH_CLOUDSMITH_TOKEN }}
-          UV_TEST_PUBLISH_PYX_TOKEN: ${{ secrets.UV_TEST_PUBLISH_PYX_TOKEN }}
           UV_TEST_PUBLISH_PYTHON_VERSION: ${{ env.PYTHON_VERSION }}
           UV_TEST_PUBLISH_GITLAB_PYPI_OIDC_TOKEN: ${{ steps.load-gitlab-oidc-token.outputs.GITLAB_PYPI_OIDC_TOKEN }}
-          UV_TEST_PUBLISH_GITLAB_PYX_OIDC_TOKEN: ${{ steps.load-gitlab-oidc-token.outputs.GITLAB_PYX_OIDC_TOKEN }}
 
   required-checks-passed:
     name: "all required jobs passed"

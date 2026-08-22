@@ -5,6 +5,9 @@
 # dependencies = [
 #     "blake3>=1.0.9",
 # ]
+# [tool.uv]
+# no-build = true
+# exclude-newer = "P7D"
 # ///
 
 """Independent Python implementation of ``uv_extract::dirhash``.
