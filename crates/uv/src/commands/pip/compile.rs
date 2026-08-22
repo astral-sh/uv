@@ -456,9 +456,7 @@ pub(crate) async fn pip_compile(
                     .os(),
                 cuda_driver_version,
                 amd_gpu_architecture,
-                torch_backend_index
-                    .as_ref()
-                    .map(|index| index.url().as_str()),
+                torch_backend_index.as_ref(),
             )
         })
         .transpose()?;

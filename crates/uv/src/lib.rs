@@ -744,7 +744,7 @@ async fn run_with_workspace_cache(
             args.compat_args.validate()?;
 
             // Resolve the settings from the command-line arguments and workspace configuration.
-            let args = PipCompileSettings::resolve(args, filesystem, environment)?;
+            let args = PipCompileSettings::resolve(args, filesystem, &environment)?;
             show_settings!(args);
 
             // Check for conflicts between offline and refresh.
@@ -825,7 +825,7 @@ async fn run_with_workspace_cache(
                 args.settings.index_locations,
                 args.settings.index_strategy,
                 args.settings.torch_backend,
-                args.torch_backend_index,
+                args.settings.torch_backend_index,
                 args.settings.cuda_driver_version,
                 args.settings.amd_gpu_architecture,
                 args.settings.dependency_metadata,
@@ -865,7 +865,7 @@ async fn run_with_workspace_cache(
             args.compat_args.validate()?;
 
             // Resolve the settings from the command-line arguments and workspace configuration.
-            let args = PipSyncSettings::resolve(args, filesystem, environment)?;
+            let args = PipSyncSettings::resolve(args, filesystem, &environment)?;
             show_settings!(args);
 
             // Check for conflicts between offline and refresh.
@@ -913,7 +913,7 @@ async fn run_with_workspace_cache(
                 args.settings.index_locations,
                 args.settings.index_strategy,
                 args.settings.torch_backend,
-                args.torch_backend_index,
+                args.settings.torch_backend_index,
                 args.settings.cuda_driver_version,
                 args.settings.amd_gpu_architecture,
                 args.settings.dependency_metadata,
@@ -956,7 +956,7 @@ async fn run_with_workspace_cache(
             args.compat_args.validate()?;
 
             // Resolve the settings from the command-line arguments and workspace configuration.
-            let mut args = PipInstallSettings::resolve(args, filesystem, environment)?;
+            let mut args = PipInstallSettings::resolve(args, filesystem, &environment)?;
             show_settings!(args);
 
             let mut requirements = Vec::with_capacity(
@@ -1073,7 +1073,7 @@ async fn run_with_workspace_cache(
                 args.settings.index_locations,
                 args.settings.index_strategy,
                 args.settings.torch_backend,
-                args.torch_backend_index,
+                args.settings.torch_backend_index,
                 args.settings.cuda_driver_version,
                 args.settings.amd_gpu_architecture,
                 args.settings.dependency_metadata,
@@ -1120,7 +1120,7 @@ async fn run_with_workspace_cache(
             args.compat_args.validate()?;
 
             // Resolve the settings from the command-line arguments and workspace configuration.
-            let args = PipUninstallSettings::resolve(args, filesystem, environment)?;
+            let args = PipUninstallSettings::resolve(args, filesystem, &environment)?;
             show_settings!(args);
 
             // Initialize the cache.
@@ -1156,7 +1156,7 @@ async fn run_with_workspace_cache(
             ..
         }) => {
             // Resolve the settings from the command-line arguments and workspace configuration.
-            let args = PipFreezeSettings::resolve(args, filesystem, environment)?;
+            let args = PipFreezeSettings::resolve(args, filesystem, &environment)?;
             show_settings!(args);
 
             // Initialize the cache.
@@ -1183,7 +1183,7 @@ async fn run_with_workspace_cache(
             args.compat_args.validate()?;
 
             // Resolve the settings from the command-line arguments and workspace configuration.
-            let args = PipListSettings::resolve(args, filesystem, environment)?;
+            let args = PipListSettings::resolve(args, filesystem, &environment)?;
             show_settings!(args);
 
             // Initialize the cache.
@@ -1217,7 +1217,7 @@ async fn run_with_workspace_cache(
             ..
         }) => {
             // Resolve the settings from the command-line arguments and workspace configuration.
-            let args = PipShowSettings::resolve(args, filesystem, environment)?;
+            let args = PipShowSettings::resolve(args, filesystem, &environment)?;
             show_settings!(args);
 
             // Initialize the cache.
@@ -1241,7 +1241,7 @@ async fn run_with_workspace_cache(
             ..
         }) => {
             // Resolve the settings from the command-line arguments and workspace configuration.
-            let args = PipTreeSettings::resolve(args, filesystem, environment)?;
+            let args = PipTreeSettings::resolve(args, filesystem, &environment)?;
 
             // Initialize the cache.
             let cache = cache.init().await?;
@@ -1275,7 +1275,7 @@ async fn run_with_workspace_cache(
             ..
         }) => {
             // Resolve the settings from the command-line arguments and workspace configuration.
-            let args = PipCheckSettings::resolve(args, filesystem, environment)?;
+            let args = PipCheckSettings::resolve(args, filesystem, &environment)?;
             show_settings!(args);
 
             // Initialize the cache.
@@ -1393,7 +1393,7 @@ async fn run_with_workspace_cache(
             }
 
             // Resolve the settings from the command-line arguments and workspace configuration.
-            let args = settings::VenvSettings::resolve(args, filesystem, environment)?;
+            let args = settings::VenvSettings::resolve(args, filesystem, &environment)?;
             show_settings!(args);
 
             // Check for conflicts between offline and refresh.

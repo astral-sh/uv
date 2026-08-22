@@ -48,6 +48,30 @@ fn sync() -> Result<()> {
     Ok(())
 }
 
+#[test]
+fn sync_rejects_invalid_torch_backend_index() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.sync()
+        .env(EnvVars::UV_TORCH_BACKEND, "cpu")
+        .env(EnvVars::UV_TORCH_BACKEND_INDEX, "http://[::1"), @r#"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Failed to parse environment variable `UV_TORCH_BACKEND_INDEX` with invalid value `http://[::1`: invalid IPv6 address
+    "#);
+
+    Ok(())
+}
+
 /// With `relocatable-envs-default`, project environments are relocatable by default.
 #[test]
 fn sync_relocatable_envs_default() -> Result<()> {

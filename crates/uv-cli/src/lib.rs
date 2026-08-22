@@ -1926,12 +1926,7 @@ pub struct PipCompileArgs {
     /// The base URL to which uv appends the backend selected by `--torch-backend`.
     ///
     /// This option is in preview and may change in any future release.
-    #[arg(
-        long,
-        env = EnvVars::UV_TORCH_BACKEND_INDEX,
-        hide_env_values = true,
-        value_hint = ValueHint::Url
-    )]
+    #[arg(long, value_hint = ValueHint::Url)]
     pub torch_backend_index: Option<IndexUrl>,
 
     #[command(flatten)]
@@ -2214,12 +2209,7 @@ pub struct PipSyncArgs {
     /// The base URL to which uv appends the backend selected by `--torch-backend`.
     ///
     /// This option is in preview and may change in any future release.
-    #[arg(
-        long,
-        env = EnvVars::UV_TORCH_BACKEND_INDEX,
-        hide_env_values = true,
-        value_hint = ValueHint::Url
-    )]
+    #[arg(long, value_hint = ValueHint::Url)]
     pub torch_backend_index: Option<IndexUrl>,
 
     #[command(flatten)]
@@ -2577,12 +2567,7 @@ pub struct PipInstallArgs {
     /// The base URL to which uv appends the backend selected by `--torch-backend`.
     ///
     /// This option is in preview and may change in any future release.
-    #[arg(
-        long,
-        env = EnvVars::UV_TORCH_BACKEND_INDEX,
-        hide_env_values = true,
-        value_hint = ValueHint::Url
-    )]
+    #[arg(long, value_hint = ValueHint::Url)]
     pub torch_backend_index: Option<IndexUrl>,
 
     #[command(flatten)]
@@ -5660,12 +5645,7 @@ pub struct ToolRunArgs {
     /// The base URL to which uv appends the backend selected by `--torch-backend`.
     ///
     /// This option is in preview and may change in any future release.
-    #[arg(
-        long,
-        env = EnvVars::UV_TORCH_BACKEND_INDEX,
-        hide_env_values = true,
-        value_hint = ValueHint::Url
-    )]
+    #[arg(long, value_hint = ValueHint::Url)]
     pub torch_backend_index: Option<IndexUrl>,
 
     #[arg(long, hide = true)]
@@ -5864,12 +5844,7 @@ pub struct ToolInstallArgs {
     /// The base URL to which uv appends the backend selected by `--torch-backend`.
     ///
     /// This option is in preview and may change in any future release.
-    #[arg(
-        long,
-        env = EnvVars::UV_TORCH_BACKEND_INDEX,
-        hide_env_values = true,
-        value_hint = ValueHint::Url
-    )]
+    #[arg(long, value_hint = ValueHint::Url)]
     pub torch_backend_index: Option<IndexUrl>,
 }
 

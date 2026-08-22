@@ -2371,7 +2371,7 @@ pub(crate) async fn resolve_names(
     let client_builder = client_builder.clone().keyring(*keyring_provider);
 
     // Determine the PyTorch backend.
-    let torch_backend = torch_backend
+    let torch_backend = match torch_backend
         .map(|mode| {
             let source = if uv_auth::PyxTokenStore::from_settings()
                 .is_ok_and(|store| store.has_credentials())
@@ -2386,16 +2386,15 @@ pub(crate) async fn resolve_names(
                 interpreter.platform().os(),
                 cuda_driver_version.clone(),
                 *amd_gpu_architecture,
-                torch_backend_index
-                    .as_ref()
-                    .map(|index| index.url().as_str()),
+                torch_backend_index.as_ref(),
             )
         })
         .transpose()
-        .ok()
-        .flatten();
-
-    // Initialize the registry client.
+    {
+        Ok(torch_backend) => torch_backend,
+        Err(TorchStrategyError::Accelerator(_)) => None,
+        Err(error) => return Err(std::io::Error::other(error).into()),
+    };
     let client = RegistryClientBuilder::new(client_builder, cache.clone())
         .index_locations(index_locations.clone())
         .index_strategy(*index_strategy)
@@ -2625,9 +2624,7 @@ pub(crate) async fn resolve_environment(
                     .os(),
                 cuda_driver_version.clone(),
                 *amd_gpu_architecture,
-                torch_backend_index
-                    .as_ref()
-                    .map(|index| index.url().as_str()),
+                torch_backend_index.as_ref(),
             )
         })
         .transpose()?;
@@ -3072,9 +3069,7 @@ pub(crate) async fn update_environment(
                     .os(),
                 cuda_driver_version.clone(),
                 *amd_gpu_architecture,
-                torch_backend_index
-                    .as_ref()
-                    .map(|index| index.url().as_str()),
+                torch_backend_index.as_ref(),
             )
         })
         .transpose()?;

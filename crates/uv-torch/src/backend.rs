@@ -46,9 +46,9 @@ use uv_distribution_types::{IndexUrl, IndexUrlError};
 use uv_normalize::PackageName;
 use uv_pep440::Version;
 use uv_platform_tags::Os;
-use uv_static::EnvVars;
 
 use crate::accelerator::{Accelerator, AcceleratorError, AmdGpuArchitecture};
+use uv_static::EnvVars;
 
 /// The strategy to use when determining the appropriate PyTorch index.
 #[derive(Debug, Copy, Clone, Eq, PartialEq, serde::Deserialize, serde::Serialize)]
@@ -252,22 +252,17 @@ impl TorchStrategy {
     ///
     /// The `cuda_driver_version` and `amd_gpu_architecture` overrides, if provided, take
     /// precedence over system detection and correspond to the `UV_CUDA_DRIVER_VERSION` and
-    /// `UV_AMD_GPU_ARCHITECTURE` environment variables respectively. When
-    /// `UV_TORCH_BACKEND_INDEX` is set, uv appends the selected backend to its base URL.
+    /// `UV_AMD_GPU_ARCHITECTURE` environment variables respectively. When a PyTorch index base is
+    /// configured, uv appends the selected backend to it.
     pub fn from_mode(
         mode: TorchMode,
         source: TorchSource,
         os: &Os,
         cuda_driver_version: Option<Version>,
         amd_gpu_architecture: Option<AmdGpuArchitecture>,
-        configured_index_base: Option<&str>,
+        configured_index_base: Option<&IndexUrl>,
     ) -> Result<Self, TorchStrategyError> {
-        let index_base = configured_index_base.map(Cow::Borrowed).or_else(|| {
-            std::env::var(EnvVars::UV_TORCH_BACKEND_INDEX)
-                .ok()
-                .map(Cow::Owned)
-        });
-        let index_base = index_base.as_deref();
+        let index_base = configured_index_base.map(|index| index.url().as_str());
 
         match mode {
             TorchMode::Auto => {
