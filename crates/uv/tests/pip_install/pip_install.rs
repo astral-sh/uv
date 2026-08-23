@@ -14384,6 +14384,25 @@ fn conflicting_flags_clap_bug() {
     );
 }
 
+/// Test that we name the flags the user actually passed when the negative flag is not spelled
+/// `--no-{name}`.
+#[test]
+fn conflicting_flags_clap_bug_mismatched_names() {
+    let context = uv_test::test_context!("3.12");
+
+    uv_snapshot!(context.filters(), context.command()
+        .arg("pip")
+        .arg("--allow-python-downloads")
+        .arg("install")
+        .arg("--no-python-downloads")
+        .arg("tqdm"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: `--allow-python-downloads` and `--no-python-downloads` cannot be used together. Boolean flags on different levels are currently not supported (https://github.com/clap-rs/clap/issues/6049)
+    "
+    );
+}
+
 /// Test that conflicting global arguments retain their color styling.
 #[test]
 fn conflicting_flags_clap_bug_color() -> Result<()> {

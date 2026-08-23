@@ -28,8 +28,8 @@ use uv_cli::{
     HashCheckingArgs, PackageExcludeNewerArgs, PublishArgs, PythonDirArgs, RegistryClientArgs,
     ResolverArgs, ResolverInstallerArgs, ToolUpgradeArgs,
     options::{
-        Flag, FlagSource, IntoPipOptions, check_conflicts, flag, resolve_flag, resolve_flag_pair,
-        resolver_installer_options, resolver_options,
+        Flag, FlagSource, IntoPipOptions, check_conflicts, flag, flag_with_names, resolve_flag,
+        resolve_flag_pair, resolver_installer_options, resolver_options,
     },
 };
 use uv_client::{Certificates, Connectivity};
@@ -139,10 +139,11 @@ impl GlobalSettings {
             show_settings: args.show_settings,
             preview: resolve_preview(args, workspace, environment)?,
             python_preference,
-            python_downloads: flag(
+            python_downloads: flag_with_names(
                 args.allow_python_downloads,
                 args.no_python_downloads,
-                "python-downloads",
+                "allow-python-downloads",
+                "no-python-downloads",
             )?
             .map(PythonDownloads::from)
             .combine(env(env::UV_PYTHON_DOWNLOADS))
@@ -516,7 +517,7 @@ impl InitSettings {
         let package = flag(
             package || build_backend.is_some(),
             no_package || r#virtual,
-            "virtual",
+            "package",
         )?;
 
         let kind = if script {
@@ -810,7 +811,8 @@ impl RunSettings {
                 flag(editable.into(), no_editable.into(), "editable")?,
                 no_editable_package,
             ),
-            modifications: if flag(exact, inexact, "inexact")?.unwrap_or(false) {
+            modifications: if flag_with_names(exact, inexact, "exact", "inexact")?.unwrap_or(false)
+            {
                 Modifications::Exact
             } else {
                 Modifications::Sufficient
@@ -2026,7 +2028,7 @@ impl SyncSettings {
                 no_install_package,
                 only_install_package,
             ),
-            modifications: if flag(exact, inexact, "inexact")?.unwrap_or(true) {
+            modifications: if flag_with_names(exact, inexact, "exact", "inexact")?.unwrap_or(true) {
                 Modifications::Exact
             } else {
                 Modifications::Sufficient
@@ -3785,7 +3787,8 @@ impl PipInstallSettings {
             overrides_from_workspace,
             excludes_from_workspace,
             build_constraints_from_workspace,
-            modifications: if flag(exact, inexact, "inexact")?.unwrap_or(false) {
+            modifications: if flag_with_names(exact, inexact, "exact", "inexact")?.unwrap_or(false)
+            {
                 Modifications::Exact
             } else {
                 Modifications::Sufficient
@@ -3974,7 +3977,7 @@ impl PipListSettings {
         } = args;
 
         Ok(Self {
-            editable: flag(editable, exclude_editable, "exclude-editable")?,
+            editable: flag_with_names(editable, exclude_editable, "editable", "exclude-editable")?,
             exclude: exclude.into_iter().collect(),
             format,
             outdated: flag(outdated, no_outdated, "outdated")?.unwrap_or(false),
