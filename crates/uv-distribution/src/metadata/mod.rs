@@ -150,7 +150,8 @@ impl Metadata {
 pub struct ArchiveMetadata {
     /// The [`Metadata`] for the underlying distribution.
     pub metadata: Metadata,
-    /// The hashes of the source or built archive.
+    /// The hashes of the source or built archive, either computed or declared by its URL.
+    /// These do not establish that a cached artifact has been validated.
     pub hashes: HashDigests,
 }
 
