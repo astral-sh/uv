@@ -11003,7 +11003,7 @@ async fn direct_url_hash_cache_metadata() -> Result<()> {
         .respond_with(
             ResponseTemplate::new(200)
                 .insert_header("cache-control", "max-age=3600")
-                .set_body_bytes(changed),
+                .set_body_bytes(changed.clone()),
         )
         .mount(&server)
         .await;
@@ -11050,6 +11050,59 @@ async fn direct_url_hash_cache_metadata() -> Result<()> {
         .arg("--target").arg("constrained")
         .arg("--offline").arg("--require-hashes")
         .arg("-r").arg("requirements.txt"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: .venv/[BIN]/[PYTHON]
+      × No solution found when resolving dependencies:
+      ╰─▶ Because cache-missing-dependency was not found in the cache and ok==1.0.0 depends on cache-missing-dependency==1.0, we can conclude that ok==1.0.0 cannot be used.
+          And because only ok==1.0.0 is available and you require ok, we can conclude that your requirements are unsatisfiable.
+
+    hint: Packages were unavailable because the network was disabled. When the network is disabled, registry packages may only be read from the cache.
+    ");
+
+    // A third revision is not cached under any hash. Refresh it before resolving dependencies,
+    // rather than resolving the original metadata and only refreshing during installation.
+    let Some(prefix) = changed.strip_suffix(&[0, 0]) else {
+        anyhow::bail!("Expected a wheel without a ZIP comment");
+    };
+    let mut refreshed = prefix.to_vec();
+    let comment = b"Third revision";
+    refreshed.extend_from_slice(&u16::try_from(comment.len())?.to_le_bytes());
+    refreshed.extend_from_slice(comment);
+    let hash = hex::encode(Sha256::digest(&refreshed));
+    server.reset().await;
+    Mock::given(method("GET"))
+        .and(path(format!("/{filename}")))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .insert_header("cache-control", "max-age=3600")
+                .set_body_bytes(refreshed),
+        )
+        .expect(1)
+        .mount(&server)
+        .await;
+    context
+        .temp_dir
+        .child("requirements.txt")
+        .write_str(&format!("ok @ {url} --hash=sha256:{hash}"))?;
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--target").arg("refreshed")
+        .arg("--no-index").arg("--require-hashes")
+        .arg("-r").arg("requirements.txt"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: .venv/[BIN]/[PYTHON]
+      × No solution found when resolving dependencies:
+      ╰─▶ Because cache-missing-dependency was not found in the provided package locations and ok==1.0.0 depends on cache-missing-dependency==1.0, we can conclude that ok==1.0.0 cannot be used.
+          And because only ok==1.0.0 is available and you require ok, we can conclude that your requirements are unsatisfiable.
+
+    hint: Packages were unavailable because index lookups were disabled and no additional package locations were provided (try: `--find-links <uri>`)
+    ");
+
+    // The refreshed HTTP archive also determines metadata for subsequent unconstrained requests.
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--target").arg("refreshed-again")
+        .arg("--offline").arg(&url), @"
     exit_code: 1 (failure)
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: .venv/[BIN]/[PYTHON]

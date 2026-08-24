@@ -4,9 +4,14 @@ use anyhow::Result;
 use assert_cmd::prelude::*;
 use assert_fs::fixture::ChildPath;
 use assert_fs::prelude::*;
+use async_zip::base::write::ZipFileWriter;
+use async_zip::{Compression, ZipEntryBuilder};
 use fs_err as fs;
+use futures::io::AsyncWriteExt;
 use indoc::{formatdoc, indoc};
+use insta::allow_duplicates;
 use predicates::Predicate;
+use sha2::{Digest, Sha256};
 use url::Url;
 use wiremock::matchers::{method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
@@ -5776,6 +5781,139 @@ fn pep_751_validates_cached_remote_archive_size() -> Result<()> {
     Ok(())
 }
 
+/// Changed integrity constraints refresh an otherwise fresh HTTP response, but never retry a
+/// freshly downloaded wheel that fails validation.
+#[tokio::test]
+async fn direct_url_wheel_cache_refresh() -> Result<()> {
+    let filename = "ok-1.0.0-py3-none-any.whl";
+    for (validate_hashes, streaming_supported) in
+        [(true, true), (false, true), (true, false), (false, false)]
+    {
+        let context = uv_test::test_context!("3.12");
+        let server = MockServer::start().await;
+        let url = format!("{}/{filename}", server.uri());
+        let mut writer = ZipFileWriter::new(Vec::new());
+        for (name, contents) in [
+            ("ok/__init__.py", ""),
+            (
+                "ok-1.0.0.dist-info/METADATA",
+                "Metadata-Version: 2.1\nName: ok\nVersion: 1.0.0\n",
+            ),
+            (
+                "ok-1.0.0.dist-info/WHEEL",
+                "Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
+            ),
+            (
+                "ok-1.0.0.dist-info/RECORD",
+                "ok/__init__.py,,\nok-1.0.0.dist-info/METADATA,,\nok-1.0.0.dist-info/WHEEL,,\nok-1.0.0.dist-info/RECORD,,\n",
+            ),
+        ] {
+            let entry = ZipEntryBuilder::new(name.into(), Compression::Stored);
+            if streaming_supported {
+                writer.write_entry_whole(entry, contents.as_bytes()).await?;
+            } else {
+                // Stored entries with data descriptors require the full-download fallback.
+                let mut entry_writer = writer.write_entry_stream(entry).await?;
+                entry_writer.write_all(contents.as_bytes()).await?;
+                entry_writer.close().await?;
+            }
+        }
+        let original = writer.close().await?;
+        let expected_requests = if streaming_supported { 1 } else { 2 };
+        let original_hash = hex::encode(Sha256::digest(&original));
+
+        // Adding a ZIP comment changes both the hash and size without changing the wheel contents.
+        let Some(prefix) = original.strip_suffix(&[0, 0]) else {
+            anyhow::bail!("Expected a wheel without a ZIP comment");
+        };
+        let mut changed = prefix.to_vec();
+        let comment = b"Updated wheel";
+        changed.extend_from_slice(&u16::try_from(comment.len())?.to_le_bytes());
+        changed.extend_from_slice(comment);
+        let changed_hash = hex::encode(Sha256::digest(&changed));
+
+        let pylock = context.temp_dir.child("pylock.toml");
+        let write_lock = |hash: &str, size: usize| {
+            let size = if validate_hashes {
+                String::new()
+            } else {
+                format!("size = {size}, ")
+            };
+            pylock.write_str(&formatdoc! {r#"
+                lock-version = "1.0"
+                created-by = "uv"
+
+                [[packages]]
+                name = "ok"
+                version = "1.0.0"
+                archive = {{ url = "{url}", {size}hashes = {{ sha256 = "{hash}" }} }}
+            "#})
+        };
+        let sync = || {
+            let mut command = context.pip_sync();
+            command.arg("--preview").arg("pylock.toml");
+            if !validate_hashes {
+                command.arg("--no-verify-hashes");
+            }
+            command
+        };
+        write_lock(&original_hash, original.len())?;
+        Mock::given(method("GET"))
+            .and(path(format!("/{filename}")))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .insert_header("cache-control", "max-age=3600")
+                    .set_body_bytes(original),
+            )
+            .expect(expected_requests)
+            .mount(&server)
+            .await;
+        sync().assert().success();
+        context.pip_uninstall().arg("ok").assert().success();
+        server.verify().await;
+        server.reset().await;
+
+        write_lock(&changed_hash, changed.len())?;
+        Mock::given(method("GET"))
+            .and(path(format!("/{filename}")))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .insert_header("cache-control", "max-age=3600")
+                    .set_body_bytes(changed.clone()),
+            )
+            .expect(expected_requests)
+            .mount(&server)
+            .await;
+
+        // Offline mode cannot fetch the new revision. Online mode must refresh it, falling back
+        // to a full download when streaming is unsupported.
+        sync().arg("--offline").assert().failure();
+        allow_duplicates! {
+            uv_snapshot!(context.filters(), sync(), @"
+            exit_code: 0 (success)
+            ----- stderr -----
+            Prepared 1 package in [TIME]
+            Installed 1 package in [TIME]
+             + ok==1.0.0 (from http://[LOCALHOST]/ok-1.0.0-py3-none-any.whl)
+            ");
+        }
+        context.pip_uninstall().arg("ok").assert().success();
+        server.verify().await;
+        server.reset().await;
+
+        // Fresh integrity mismatches must not retry beyond the streaming fallback, if needed.
+        write_lock(&"0".repeat(64), changed.len() + 1)?;
+        Mock::given(method("GET"))
+            .and(path(format!("/{filename}")))
+            .respond_with(ResponseTemplate::new(200).set_body_bytes(changed))
+            .expect(expected_requests)
+            .mount(&server)
+            .await;
+        sync().arg("--no-cache").assert().failure();
+    }
+    Ok(())
+}
+
 /// A dangling HTTP pointer is a cache miss, not an installable wheel.
 #[test]
 fn direct_url_missing_cached_archive() -> Result<()> {
@@ -5803,7 +5941,6 @@ fn direct_url_missing_cached_archive() -> Result<()> {
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + a==1.0.0 (from http://[LOCALHOST]/files/a-1.0.0-py3-none-any.whl)
     ");

@@ -3,6 +3,7 @@ use std::io;
 use std::path::Path;
 use std::pin::Pin;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::task::{Context, Poll};
 
 use futures::{FutureExt, TryStreamExt};
@@ -111,8 +112,8 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
     ///
     /// Returns a wheel that's compliant with the given platform tags.
     ///
-    /// While hashes will be generated in some cases, hash-checking is only enforced for source
-    /// distributions, and should be enforced by the caller for wheels.
+    /// Hash-checking is enforced for source distributions. Callers must still validate wheels
+    /// before installation, since their metadata may be fetched without the archive.
     #[instrument(skip_all, fields(%dist))]
     pub async fn get_or_build_wheel(
         &self,
@@ -529,8 +530,8 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
 
     /// Fetch wheel metadata, along with any hashes requested for resolution.
     ///
-    /// Declared URL hashes can avoid downloading the wheel to compute a hash. Hash-checking is
-    /// _not_ enforced here; callers must enforce it when retrieving the wheel for installation.
+    /// Declared URL hashes can avoid downloading the wheel to compute a hash. Metadata-only
+    /// responses are not hash-checked; callers must validate the wheel before installation.
     async fn get_wheel_metadata(
         &self,
         dist: &BuiltDist,
@@ -589,29 +590,54 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             });
         }
 
-        // When installation can reuse an archive by hash, resolution must read that archive's
-        // metadata too, not metadata from another revision at the same URL.
+        // When installation can reuse an archive, resolution must read that archive's metadata
+        // too, not metadata from another revision at the same URL.
         if let BuiltDist::DirectUrl(wheel) = dist
             && (!self
                 .build_context
                 .cache()
                 .must_revalidate_package(wheel.name())
                 || self.client.unmanaged.connectivity() == Connectivity::Offline)
-            && let Some(pointer) = HttpArchivePointer::read_from_hashes(
-                self.build_context.cache(),
-                &wheel.url,
-                &wheel.filename,
-                declared_hashes
-                    .as_ref()
-                    .map_or(hash_policy, |hashes| HashPolicy::All(hashes.as_slice())),
-                wheel.size,
-            )?
         {
-            let wheel = pointer.into_wheel(self.build_context.cache(), dist);
-            return Ok(ArchiveMetadata {
-                metadata: Metadata::from_metadata23(wheel.metadata()?),
-                hashes: declared_hashes.unwrap_or(wheel.hashes),
-            });
+            let cache = self.build_context.cache();
+            let cache_hash_policy = declared_hashes
+                .as_ref()
+                .map_or(hash_policy, |hashes| HashPolicy::All(hashes.as_slice()));
+            let cached_wheel = if let Some(pointer) =
+                HttpArchivePointer::read_from_direct_url(cache, wheel, cache_hash_policy)?
+            {
+                Some(pointer.into_wheel(cache, dist))
+            } else {
+                let http_entry = cache.entry(
+                    CacheBucket::Wheels,
+                    WheelCache::Url(&wheel.url).wheel_dir(wheel.name().as_ref()),
+                    format!("{}.http", wheel.filename.cache_key()),
+                );
+                if HttpArchivePointer::read_from(&http_entry)?.is_some() {
+                    // The cached archive no longer satisfies this request. Refresh it before
+                    // resolving dependencies, not only when the installer retrieves the wheel.
+                    Some(
+                        self.get_wheel(dist, cache_hash_policy)
+                            .boxed_local()
+                            .await?,
+                    )
+                } else {
+                    None
+                }
+            };
+            if let Some(wheel) = cached_wheel {
+                if !wheel.satisfies(cache_hash_policy) {
+                    return Err(Error::hash_mismatch(
+                        dist.to_string(),
+                        cache_hash_policy.digests(),
+                        wheel.hashes(),
+                    ));
+                }
+                return Ok(ArchiveMetadata {
+                    metadata: Metadata::from_metadata23(wheel.metadata()?),
+                    hashes: declared_hashes.unwrap_or(wheel.hashes),
+                });
+            }
         }
 
         let result = self
@@ -753,6 +779,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         // Create an entry for the HTTP cache.
         let http_entry = wheel_entry.with_file(format!("{}.http", filename.cache_key()));
 
+        let downloaded = AtomicBool::new(false);
         let download = |response: reqwest::Response| {
             async {
                 let progress_size = size.or_else(|| content_length(&response));
@@ -837,6 +864,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                     reporter.on_download_complete(dist.name(), progress);
                 }
 
+                downloaded.store(true, Ordering::Relaxed);
                 Ok(Archive::new(
                     id,
                     hashers.into_iter().map(HashDigest::from).collect(),
@@ -886,8 +914,15 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 CachedClientError::Client(err) => Error::Client(err),
             })?;
 
+        // A cached direct URL response can be HTTP-fresh but refer to older contents. When
+        // online, refresh it if the integrity constraints changed. Do not retry a fresh download
+        // that fails validation, or turn an offline integrity error into a network request.
+        let refresh_mismatched = matches!(dist, BuiltDist::DirectUrl(_))
+            && self.client.unmanaged.connectivity() == Connectivity::Online
+            && !downloaded.load(Ordering::Relaxed);
         if let (Some(expected), Some(actual)) = (expected_size, archive.size)
             && expected != actual
+            && !refresh_mismatched
         {
             return Err(Error::MismatchedSize {
                 distribution: dist.to_string(),
@@ -896,11 +931,15 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             });
         }
 
-        // If the archive is missing the required hashes or size, or has since been removed, force a refresh.
-        let archive = Some(archive)
-            .filter(|archive| archive.has_digests(hashes))
-            .filter(|archive| archive.exists(self.build_context.cache()))
-            .filter(|archive| expected_size.is_none() || archive.size.is_some());
+        let archive = Some(archive).filter(|archive| {
+            if refresh_mismatched {
+                archive.is_usable(self.build_context.cache(), filename, hashes, expected_size)
+            } else {
+                archive.has_digests(hashes)
+                    && archive.exists(self.build_context.cache())
+                    && (expected_size.is_none() || archive.size.is_some())
+            }
+        });
 
         let archive = if let Some(archive) = archive {
             archive
@@ -955,6 +994,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         // Create an entry for the HTTP cache.
         let http_entry = wheel_entry.with_file(format!("{}.http", filename.cache_key()));
 
+        let downloaded = AtomicBool::new(false);
         let download = |response: reqwest::Response| {
             async {
                 let progress_size = size.or_else(|| content_length(&response));
@@ -1048,6 +1088,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                     reporter.on_download_complete(dist.name(), progress);
                 }
 
+                downloaded.store(true, Ordering::Relaxed);
                 Ok(Archive::new(
                     id,
                     hashes,
@@ -1097,8 +1138,15 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 CachedClientError::Client(err) => Error::Client(err),
             })?;
 
+        // A cached direct URL response can be HTTP-fresh but refer to older contents. When
+        // online, refresh it if the integrity constraints changed. Do not retry a fresh download
+        // that fails validation, or turn an offline integrity error into a network request.
+        let refresh_mismatched = matches!(dist, BuiltDist::DirectUrl(_))
+            && self.client.unmanaged.connectivity() == Connectivity::Online
+            && !downloaded.load(Ordering::Relaxed);
         if let (Some(expected), Some(actual)) = (expected_size, archive.size)
             && expected != actual
+            && !refresh_mismatched
         {
             return Err(Error::MismatchedSize {
                 distribution: dist.to_string(),
@@ -1107,11 +1155,15 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             });
         }
 
-        // If the archive is missing the required hashes or size, or has since been removed, force a refresh.
-        let archive = Some(archive)
-            .filter(|archive| archive.has_digests(hashes))
-            .filter(|archive| archive.exists(self.build_context.cache()))
-            .filter(|archive| expected_size.is_none() || archive.size.is_some());
+        let archive = Some(archive).filter(|archive| {
+            if refresh_mismatched {
+                archive.is_usable(self.build_context.cache(), filename, hashes, expected_size)
+            } else {
+                archive.has_digests(hashes)
+                    && archive.exists(self.build_context.cache())
+                    && (expected_size.is_none() || archive.size.is_some())
+            }
+        });
 
         let archive = if let Some(archive) = archive {
             archive
