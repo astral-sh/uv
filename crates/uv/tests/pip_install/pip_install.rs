@@ -11069,19 +11069,20 @@ async fn direct_url_hash_cache_metadata() -> Result<()> {
     let filename = "ok-1.0.0-py3-none-any.whl";
     let url = format!("{}/{filename}", server.uri());
     let original = fs_err::read(context.workspace_root.join("test/links").join(filename))?;
+    let serve = |wheel| {
+        Mock::given(method("GET"))
+            .and(path(format!("/{filename}")))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .insert_header("cache-control", "max-age=3600")
+                    .set_body_bytes(wheel),
+            )
+    };
     Mock::given(method("HEAD"))
         .respond_with(ResponseTemplate::new(405))
         .mount(&server)
         .await;
-    Mock::given(method("GET"))
-        .and(path(format!("/{filename}")))
-        .respond_with(
-            ResponseTemplate::new(200)
-                .insert_header("cache-control", "max-age=3600")
-                .set_body_bytes(original),
-        )
-        .mount(&server)
-        .await;
+    serve(original).mount(&server).await;
     context
         .pip_install()
         .arg("--target")
@@ -11092,40 +11093,24 @@ async fn direct_url_hash_cache_metadata() -> Result<()> {
     server.reset().await;
 
     // Publish different metadata at the same wheel URL, selected by a new hash.
-    let mut writer = ZipFileWriter::new(Vec::new());
-    for (name, contents) in [
-        ("ok/__init__.py", ""),
-        (
-            "ok-1.0.0.dist-info/METADATA",
-            "Metadata-Version: 2.1\nName: ok\nVersion: 1.0.0\nRequires-Dist: cache-missing-dependency==1.0\n",
-        ),
-        (
-            "ok-1.0.0.dist-info/WHEEL",
-            "Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
-        ),
-        (
-            "ok-1.0.0.dist-info/RECORD",
-            "ok/__init__.py,,\nok-1.0.0.dist-info/METADATA,,\nok-1.0.0.dist-info/WHEEL,,\nok-1.0.0.dist-info/RECORD,,\n",
-        ),
-    ] {
-        let entry = ZipEntryBuilder::new(name.into(), Compression::Stored);
-        writer.write_entry_whole(entry, contents.as_bytes()).await?;
-    }
-    let changed = writer.close().await?;
+    let wheel_with_dependency = |dependency: &str| -> Result<Vec<u8>> {
+        let (_, wheel) = generate_wheel(
+            &"ok".parse()?,
+            &"1.0.0".parse()?,
+            &[dependency.parse()?],
+            &BTreeMap::new(),
+            None,
+            "py3-none-any",
+        );
+        Ok(wheel)
+    };
+    let changed = wheel_with_dependency("cache-missing-dependency==1.0")?;
     let hash = hex::encode(Sha256::digest(&changed));
     Mock::given(method("HEAD"))
         .respond_with(ResponseTemplate::new(405))
         .mount(&server)
         .await;
-    Mock::given(method("GET"))
-        .and(path(format!("/{filename}")))
-        .respond_with(
-            ResponseTemplate::new(200)
-                .insert_header("cache-control", "max-age=3600")
-                .set_body_bytes(changed.clone()),
-        )
-        .mount(&server)
-        .await;
+    serve(changed).mount(&server).await;
     context
         .pip_install()
         .arg("--target")
@@ -11147,17 +11132,10 @@ async fn direct_url_hash_cache_metadata() -> Result<()> {
     Installed 1 package in [TIME]
      + ok==1.0.0 (from http://[LOCALHOST]/ok-1.0.0-py3-none-any.whl)
     ");
+    let metadata = "ok-1.0.0.dist-info/METADATA";
     assert_eq!(
-        fs_err::read(
-            context
-                .temp_dir
-                .join("original/ok-1.0.0.dist-info/METADATA")
-        )?,
-        fs_err::read(
-            context
-                .temp_dir
-                .join("original-again/ok-1.0.0.dist-info/METADATA")
-        )?,
+        fs_err::read(context.temp_dir.join("original").join(metadata))?,
+        fs_err::read(context.temp_dir.join("original-again").join(metadata))?,
     );
 
     // A hash constraint without a fragment selects the new archive AND its new metadata.
@@ -11181,25 +11159,10 @@ async fn direct_url_hash_cache_metadata() -> Result<()> {
 
     // A third revision is not cached under any hash. Refresh it before resolving dependencies,
     // rather than resolving the original metadata and only refreshing during installation.
-    let Some(prefix) = changed.strip_suffix(&[0, 0]) else {
-        anyhow::bail!("Expected a wheel without a ZIP comment");
-    };
-    let mut refreshed = prefix.to_vec();
-    let comment = b"Third revision";
-    refreshed.extend_from_slice(&u16::try_from(comment.len())?.to_le_bytes());
-    refreshed.extend_from_slice(comment);
+    let refreshed = wheel_with_dependency("cache-missing-dependency==2.0")?;
     let hash = hex::encode(Sha256::digest(&refreshed));
     server.reset().await;
-    Mock::given(method("GET"))
-        .and(path(format!("/{filename}")))
-        .respond_with(
-            ResponseTemplate::new(200)
-                .insert_header("cache-control", "max-age=3600")
-                .set_body_bytes(refreshed),
-        )
-        .expect(1)
-        .mount(&server)
-        .await;
+    serve(refreshed).expect(1).mount(&server).await;
     context
         .temp_dir
         .child("requirements.txt")
@@ -11212,7 +11175,7 @@ async fn direct_url_hash_cache_metadata() -> Result<()> {
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: .venv/[BIN]/[PYTHON]
       × No solution found when resolving dependencies:
-      ╰─▶ Because cache-missing-dependency was not found in the provided package locations and ok==1.0.0 depends on cache-missing-dependency==1.0, we can conclude that ok==1.0.0 cannot be used.
+      ╰─▶ Because cache-missing-dependency was not found in the provided package locations and ok==1.0.0 depends on cache-missing-dependency==2.0, we can conclude that ok==1.0.0 cannot be used.
           And because only ok==1.0.0 is available and you require ok, we can conclude that your requirements are unsatisfiable.
 
     hint: Packages were unavailable because index lookups were disabled and no additional package locations were provided (try: `--find-links <uri>`)
@@ -11226,7 +11189,7 @@ async fn direct_url_hash_cache_metadata() -> Result<()> {
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: .venv/[BIN]/[PYTHON]
       × No solution found when resolving dependencies:
-      ╰─▶ Because cache-missing-dependency was not found in the cache and ok==1.0.0 depends on cache-missing-dependency==1.0, we can conclude that ok==1.0.0 cannot be used.
+      ╰─▶ Because cache-missing-dependency was not found in the cache and ok==1.0.0 depends on cache-missing-dependency==2.0, we can conclude that ok==1.0.0 cannot be used.
           And because only ok==1.0.0 is available and you require ok, we can conclude that your requirements are unsatisfiable.
 
     hint: Packages were unavailable because the network was disabled. When the network is disabled, registry packages may only be read from the cache.
