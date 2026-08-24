@@ -2,6 +2,7 @@ use std::path::{Path, PathBuf};
 
 use uv_cache_key::{CanonicalUrl, cache_digest};
 use uv_distribution_types::IndexUrl;
+use uv_pypi_types::HashDigest;
 use uv_redacted::DisplaySafeUrl;
 
 /// Cache wheels and their metadata, both from remote wheels and built from source distributions.
@@ -29,45 +30,47 @@ impl WheelCache<'_> {
             Self::Index(IndexUrl::Pypi(_)) => WheelCacheKind::Pypi.root(),
             Self::Index(url) => WheelCacheKind::Index
                 .root()
-                .join(cache_digest(&CanonicalUrl::new(url.url().clone()))),
-            Self::Url(url) => WheelCacheKind::Url
-                .root()
-                .join(cache_digest(&CanonicalUrl::new((*url).clone()))),
-            Self::Path(url) => WheelCacheKind::Path
-                .root()
-                .join(cache_digest(&CanonicalUrl::new((*url).clone()))),
-            Self::Editable(url) => WheelCacheKind::Editable
-                .root()
-                .join(cache_digest(&CanonicalUrl::new((*url).clone()))),
+                .join(revision_digest(url.url())),
+            Self::Url(url) => WheelCacheKind::Url.root().join(revision_digest(url)),
+            Self::Path(url) => WheelCacheKind::Path.root().join(revision_digest(url)),
+            Self::Editable(url) => WheelCacheKind::Editable.root().join(revision_digest(url)),
             Self::Git(url, sha) => WheelCacheKind::Git
                 .root()
-                .join(cache_digest(&CanonicalUrl::new((*url).clone())))
+                .join(revision_digest(url))
                 .join(sha),
         }
     }
 
-    /// A subdirectory for downloaded wheels belonging to a specific package.
-    ///
-    /// URL fragments do not identify different wheel bytes. Expected hashes are checked against
-    /// the computed hashes in the cached archive, rather than being part of its location.
+    /// A subdirectory for wheels and metadata belonging to a specific package and URL revision.
     pub fn wheel_dir(&self, package_name: impl AsRef<Path>) -> PathBuf {
-        match self {
-            Self::Url(url) => {
-                let mut url = (*url).clone();
-                url.set_fragment(None);
-                WheelCache::Url(&url).root().join(package_name)
-            }
-            _ => self.root().join(package_name),
-        }
-    }
-
-    /// A subdirectory for wheel metadata belonging to a specific package.
-    ///
-    /// Unlike downloaded archives, metadata cannot be checked against an archive's hash. Retain
-    /// the URL fragment so a changed hash cannot reuse metadata for a previous artifact.
-    pub fn metadata_dir(&self, package_name: impl AsRef<Path>) -> PathBuf {
         self.root().join(package_name)
     }
+
+    /// A shared cache location for a URL wheel with a computed hash.
+    ///
+    /// Unlike HTTP responses, downloaded archives can be shared across hash declarations by
+    /// checking their computed digests. Keep unknown and source-selecting fragments in the key.
+    pub fn url_hash_dir(
+        url: &DisplaySafeUrl,
+        package_name: impl AsRef<Path>,
+        hash: &HashDigest,
+    ) -> PathBuf {
+        WheelCacheKind::Url
+            .root()
+            .join(cache_digest(&CanonicalUrl::new(url.clone())))
+            .join(package_name)
+            .join("hashes")
+            .join(cache_digest(&hash.to_string()))
+    }
+}
+
+/// Identify a URL revision, retaining hash declarations that cannot be checked against metadata.
+fn revision_digest(url: &DisplaySafeUrl) -> String {
+    // Metadata and source builds are not interchangeable across expected hashes. Keep a separate
+    // revision for each declaration, preserving the existing on-disk keys.
+    let mut revision = DisplaySafeUrl::from(CanonicalUrl::new(url.clone()));
+    revision.set_fragment(url.fragment());
+    cache_digest(&revision.as_str())
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -111,21 +114,28 @@ impl AsRef<Path> for WheelCacheKind {
 
 #[cfg(test)]
 mod tests {
+    use uv_cache_key::cache_digest;
+    use uv_pypi_types::{HashAlgorithm, HashDigest};
     use uv_redacted::{DisplaySafeUrl, DisplaySafeUrlError};
 
-    use super::WheelCache;
+    use super::{WheelCache, revision_digest};
 
     #[test]
     fn archive_and_metadata_url_identity() -> Result<(), DisplaySafeUrlError> {
         let plain = DisplaySafeUrl::parse("https://example.org/pkg.whl")?;
         let hashed = DisplaySafeUrl::parse("https://example.org/pkg.whl#sha256=abc")?;
-        assert_eq!(
+        assert_ne!(
             WheelCache::Url(&plain).wheel_dir("pkg"),
             WheelCache::Url(&hashed).wheel_dir("pkg"),
         );
-        assert_ne!(
-            WheelCache::Url(&plain).metadata_dir("pkg"),
-            WheelCache::Url(&hashed).metadata_dir("pkg"),
+        assert_eq!(revision_digest(&hashed), cache_digest(&hashed.as_str()));
+        let hash = HashDigest {
+            algorithm: HashAlgorithm::Sha256,
+            digest: "abc".into(),
+        };
+        assert_eq!(
+            WheelCache::url_hash_dir(&plain, "pkg", &hash),
+            WheelCache::url_hash_dir(&hashed, "pkg", &hash),
         );
 
         let first = DisplaySafeUrl::parse("https://example.org/pkg.tar.gz#subdirectory=first")?;
