@@ -46,8 +46,26 @@ impl WheelCache<'_> {
         }
     }
 
-    /// A subdirectory in a bucket for wheels for a specific package.
+    /// A subdirectory for downloaded wheels belonging to a specific package.
+    ///
+    /// URL fragments do not identify different wheel bytes. Expected hashes are checked against
+    /// the computed hashes in the cached archive, rather than being part of its location.
     pub fn wheel_dir(&self, package_name: impl AsRef<Path>) -> PathBuf {
+        match self {
+            Self::Url(url) => {
+                let mut url = (*url).clone();
+                url.set_fragment(None);
+                WheelCache::Url(&url).root().join(package_name)
+            }
+            _ => self.root().join(package_name),
+        }
+    }
+
+    /// A subdirectory for wheel metadata belonging to a specific package.
+    ///
+    /// Unlike downloaded archives, metadata cannot be checked against an archive's hash. Retain
+    /// the URL fragment so a changed hash cannot reuse metadata for a previous artifact.
+    pub fn metadata_dir(&self, package_name: impl AsRef<Path>) -> PathBuf {
         self.root().join(package_name)
     }
 }
@@ -88,5 +106,34 @@ impl WheelCacheKind {
 impl AsRef<Path> for WheelCacheKind {
     fn as_ref(&self) -> &Path {
         self.to_str().as_ref()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use uv_redacted::{DisplaySafeUrl, DisplaySafeUrlError};
+
+    use super::WheelCache;
+
+    #[test]
+    fn archive_and_metadata_url_identity() -> Result<(), DisplaySafeUrlError> {
+        let plain = DisplaySafeUrl::parse("https://example.org/pkg.whl")?;
+        let hashed = DisplaySafeUrl::parse("https://example.org/pkg.whl#sha256=abc")?;
+        assert_eq!(
+            WheelCache::Url(&plain).wheel_dir("pkg"),
+            WheelCache::Url(&hashed).wheel_dir("pkg"),
+        );
+        assert_ne!(
+            WheelCache::Url(&plain).metadata_dir("pkg"),
+            WheelCache::Url(&hashed).metadata_dir("pkg"),
+        );
+
+        let first = DisplaySafeUrl::parse("https://example.org/pkg.tar.gz#subdirectory=first")?;
+        let second = DisplaySafeUrl::parse("https://example.org/pkg.tar.gz#subdirectory=second")?;
+        assert_ne!(
+            WheelCache::Url(&first).root(),
+            WheelCache::Url(&second).root()
+        );
+        Ok(())
     }
 }
