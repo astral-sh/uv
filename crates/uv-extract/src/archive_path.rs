@@ -1,5 +1,7 @@
 use std::path::{Component, Path, PathBuf};
 
+use crate::validate_archive_member_name;
+
 /// A normalized, relative path that is safe to extract from an archive.
 #[derive(Debug, Clone, Eq, Hash, PartialEq)]
 pub(crate) struct SanitizedArchivePath(PathBuf);
@@ -9,9 +11,8 @@ impl SanitizedArchivePath {
     ///
     /// See: <https://docs.rs/zip/latest/zip/read/struct.ZipFile.html#method.enclosed_name>
     pub(crate) fn from_archive_member(file_name: &str) -> Option<Self> {
-        if file_name.contains('\0') {
-            return None;
-        }
+        validate_archive_member_name(file_name).ok()?;
+
         let mut path = PathBuf::new();
         for component in Path::new(file_name).components() {
             match component {
@@ -80,9 +81,16 @@ mod tests {
             SanitizedArchivePath::from_archive_member("/module.py"),
             None
         );
-        assert_eq!(
-            SanitizedArchivePath::from_archive_member("module\0.py"),
-            None
-        );
+    }
+
+    #[test]
+    fn archive_member_path_rejects_invalid_names() {
+        for file_name in ["", "module\0.py", "module\n.py", "module\t.py"] {
+            assert_eq!(
+                SanitizedArchivePath::from_archive_member(file_name),
+                None,
+                "archive member name should be rejected: {file_name:?}"
+            );
+        }
     }
 }
