@@ -394,6 +394,42 @@ impl Version {
         Release { inner }
     }
 
+    /// Returns the major release number (first release segment), if any.
+    #[inline]
+    pub fn major(&self) -> Option<u64> {
+        self.release().first().copied()
+    }
+
+    /// Returns the minor release number (second release segment), if any.
+    #[inline]
+    pub fn minor(&self) -> Option<u64> {
+        self.release().get(1).copied()
+    }
+
+    /// Returns the patch/micro release number (third release segment), if any.
+    #[inline]
+    pub fn patch(&self) -> Option<u64> {
+        self.release().get(2).copied()
+    }
+
+    /// Returns `true` if this version is a pre-release (has an alpha, beta, rc, or dev component).
+    #[inline]
+    pub fn is_prerelease(&self) -> bool {
+        self.pre().is_some() || self.dev().is_some()
+    }
+
+    /// Returns `true` if this version is a post-release.
+    #[inline]
+    pub fn is_postrelease(&self) -> bool {
+        self.post().is_some()
+    }
+
+    /// Returns `true` if this version is a dev-release.
+    #[inline]
+    pub fn is_devrelease(&self) -> bool {
+        self.dev().is_some()
+    }
+
     /// Returns the pre-release part of this version, if it exists.
     #[inline]
     pub fn pre(&self) -> Option<Prerelease> {

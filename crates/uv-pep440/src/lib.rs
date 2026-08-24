@@ -59,4 +59,39 @@ mod tests {
         let version_specifiers = VersionSpecifiers::from_str(">=1.16, <2.0").unwrap();
         assert!(version_specifiers.contains(&version));
     }
+
+    #[test]
+    fn test_version_helpers() {
+        let v = Version::from_str("3.11.4").unwrap();
+        assert_eq!(v.major(), Some(3));
+        assert_eq!(v.minor(), Some(11));
+        assert_eq!(v.patch(), Some(4));
+        assert!(v.is_stable());
+        assert!(!v.is_prerelease());
+        assert!(!v.is_postrelease());
+        assert!(!v.is_devrelease());
+
+        let v_pre = Version::from_str("3.12.0a1").unwrap();
+        assert_eq!(v_pre.major(), Some(3));
+        assert_eq!(v_pre.minor(), Some(12));
+        assert_eq!(v_pre.patch(), Some(0));
+        assert!(!v_pre.is_stable());
+        assert!(v_pre.is_prerelease());
+        assert!(!v_pre.is_postrelease());
+        assert!(!v_pre.is_devrelease());
+
+        let v_post = Version::from_str("1.0.post1").unwrap();
+        assert!(v_post.is_postrelease());
+        assert!(!v_post.is_prerelease());
+
+        let v_dev = Version::from_str("2.0.dev0").unwrap();
+        assert!(v_dev.is_devrelease());
+        assert!(v_dev.is_prerelease());
+        assert!(!v_dev.is_stable());
+
+        let v_single = Version::from_str("42").unwrap();
+        assert_eq!(v_single.major(), Some(42));
+        assert_eq!(v_single.minor(), None);
+        assert_eq!(v_single.patch(), None);
+    }
 }

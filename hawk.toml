@@ -27,6 +27,54 @@ package = "uv-redacted"
 
 [[override]]
 lint = "hawk::unnecessary_public"
+crate = "uv_pep440"
+item = "version::Version::major"
+kind = "inherent_method"
+level = "expect"
+reason = "retained for downstream uv-pep440 consumers"
+
+[[override]]
+lint = "hawk::unnecessary_public"
+crate = "uv_pep440"
+item = "version::Version::minor"
+kind = "inherent_method"
+level = "expect"
+reason = "retained for downstream uv-pep440 consumers"
+
+[[override]]
+lint = "hawk::unnecessary_public"
+crate = "uv_pep440"
+item = "version::Version::patch"
+kind = "inherent_method"
+level = "expect"
+reason = "retained for downstream uv-pep440 consumers"
+
+[[override]]
+lint = "hawk::unnecessary_public"
+crate = "uv_pep440"
+item = "version::Version::is_prerelease"
+kind = "inherent_method"
+level = "expect"
+reason = "retained for downstream uv-pep440 consumers"
+
+[[override]]
+lint = "hawk::unnecessary_public"
+crate = "uv_pep440"
+item = "version::Version::is_postrelease"
+kind = "inherent_method"
+level = "expect"
+reason = "retained for downstream uv-pep440 consumers"
+
+[[override]]
+lint = "hawk::unnecessary_public"
+crate = "uv_pep440"
+item = "version::Version::is_devrelease"
+kind = "inherent_method"
+level = "expect"
+reason = "retained for downstream uv-pep440 consumers"
+
+[[override]]
+lint = "hawk::unnecessary_public"
 crate = "uv_client"
 item = "base_client::BaseClientBuilder::<'a>::custom_client"
 kind = "inherent_method"
