@@ -3,6 +3,7 @@ use std::io;
 use std::path::Path;
 use std::pin::Pin;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::task::{Context, Poll};
 
 use futures::{FutureExt, TryStreamExt};
@@ -181,6 +182,17 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         dist: &BuiltDist,
         hashes: HashPolicy<'_>,
     ) -> Result<LocalWheel, Error> {
+        // When generating hashes, compute the URL's declared algorithms too, and refresh cached
+        // archives that do not match the declaration. Validation of downloaded bytes is still
+        // the caller's responsibility.
+        let declared_hashes = match (hashes, dist) {
+            (HashPolicy::Generate(_), BuiltDist::DirectUrl(dist)) => parse_url_hashes(&dist.url),
+            _ => None,
+        };
+        let hashes = declared_hashes
+            .as_ref()
+            .map_or(hashes, |hashes| HashPolicy::All(hashes.as_slice()));
+
         match dist {
             BuiltDist::Registry(wheels) => {
                 let wheel = wheels.best_wheel();
@@ -727,8 +739,10 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         // Create an entry for the HTTP cache.
         let http_entry = wheel_entry.with_file(format!("{}.http", filename.cache_key()));
 
+        let downloaded = AtomicBool::new(false);
         let download = |response: reqwest::Response| {
             async {
+                downloaded.store(true, Ordering::Relaxed);
                 let progress_size = size.or_else(|| content_length(&response));
 
                 let progress = self.reporter.as_ref().map(|reporter| {
@@ -860,19 +874,15 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 CachedClientError::Client(err) => Error::Client(err),
             })?;
 
-        if let (Some(expected), Some(actual)) = (expected_size, archive.size)
-            && expected != actual
-        {
-            return Err(Error::MismatchedSize {
-                distribution: dist.to_string(),
-                expected,
-                actual,
-            });
-        }
-
-        // If the archive is missing the required hashes or size, or has since been removed, force a refresh.
+        // Refresh incomplete or missing archives, and cached URL wheels that do not match the
+        // expected hashes. Fresh downloads are validated by the caller, without another retry.
         let archive = Some(archive)
             .filter(|archive| archive.has_digests(hashes))
+            .filter(|archive| {
+                !matches!(dist, BuiltDist::DirectUrl(_))
+                    || downloaded.load(Ordering::Relaxed)
+                    || archive.satisfies(hashes)
+            })
             .filter(|archive| archive.exists(self.build_context.cache()))
             .filter(|archive| expected_size.is_none() || archive.size.is_some());
 
@@ -897,6 +907,16 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 })
                 .await?
         };
+
+        if let (Some(expected), Some(actual)) = (expected_size, archive.size)
+            && expected != actual
+        {
+            return Err(Error::MismatchedSize {
+                distribution: dist.to_string(),
+                expected,
+                actual,
+            });
+        }
 
         Ok(archive)
     }
@@ -929,8 +949,10 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         // Create an entry for the HTTP cache.
         let http_entry = wheel_entry.with_file(format!("{}.http", filename.cache_key()));
 
+        let downloaded = AtomicBool::new(false);
         let download = |response: reqwest::Response| {
             async {
+                downloaded.store(true, Ordering::Relaxed);
                 let progress_size = size.or_else(|| content_length(&response));
 
                 let progress = self.reporter.as_ref().map(|reporter| {
@@ -1071,19 +1093,15 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 CachedClientError::Client(err) => Error::Client(err),
             })?;
 
-        if let (Some(expected), Some(actual)) = (expected_size, archive.size)
-            && expected != actual
-        {
-            return Err(Error::MismatchedSize {
-                distribution: dist.to_string(),
-                expected,
-                actual,
-            });
-        }
-
-        // If the archive is missing the required hashes or size, or has since been removed, force a refresh.
+        // Refresh incomplete or missing archives, and cached URL wheels that do not match the
+        // expected hashes. Fresh downloads are validated by the caller, without another retry.
         let archive = Some(archive)
             .filter(|archive| archive.has_digests(hashes))
+            .filter(|archive| {
+                !matches!(dist, BuiltDist::DirectUrl(_))
+                    || downloaded.load(Ordering::Relaxed)
+                    || archive.satisfies(hashes)
+            })
             .filter(|archive| archive.exists(self.build_context.cache()))
             .filter(|archive| expected_size.is_none() || archive.size.is_some());
 
@@ -1108,6 +1126,16 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 })
                 .await?
         };
+
+        if let (Some(expected), Some(actual)) = (expected_size, archive.size)
+            && expected != actual
+        {
+            return Err(Error::MismatchedSize {
+                distribution: dist.to_string(),
+                expected,
+                actual,
+            });
+        }
 
         Ok(archive)
     }
@@ -1289,7 +1317,10 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
     }
 
     /// Returns a GET [`reqwest::Request`] for the given URL.
-    fn request(&self, url: DisplaySafeUrl) -> Result<reqwest::Request, reqwest::Error> {
+    fn request(&self, mut url: DisplaySafeUrl) -> Result<reqwest::Request, reqwest::Error> {
+        // Match the fragment-free archive cache key. Fragments are not sent to the server, and
+        // must not cause the HTTP cache policy to reject an otherwise identical request.
+        url.set_fragment(None);
         self.client
             .unmanaged
             .uncached_client(&url)
