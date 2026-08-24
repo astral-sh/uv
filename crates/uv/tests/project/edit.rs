@@ -9868,6 +9868,10 @@ fn add_warn_index_url() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
     warning: Indexes specified via `--extra-index-url` will not be persisted to the `pyproject.toml` file; use `--index` instead.
+
+    hint: The lockfile needs to be updated because the requirements for `project` have changed:
+      Added: `iniconfig`
+    hint: To update the lockfile, run `uv lock`.
     error: Failed to add dependencies
       cause: No solution found when resolving dependencies
       cause: Because only idna==2.7 is available and your project depends on idna>=3.6, we can conclude that your project's requirements are unsatisfiable.
