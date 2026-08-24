@@ -274,7 +274,7 @@ pub struct DirectUrlBuiltDist {
     /// We require that wheel urls end in the full wheel filename, e.g.
     /// `https://example.org/packages/flask-3.0.0-py3-none-any.whl`
     pub filename: WheelFilename,
-    /// The URL without the subdirectory fragment.
+    /// The URL without fragments (which are not used in comparisons)
     pub location: Box<DisplaySafeUrl>,
     /// The URL as it was provided by the user.
     pub url: VerbatimUrl,
