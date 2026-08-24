@@ -16,8 +16,9 @@ use url::Url;
 use wiremock::matchers::{method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
-use uv_cache::{Cache, CacheBucket};
+use uv_cache::{Cache, CacheBucket, WheelCache};
 use uv_fs::{Simplified, copy_dir_all};
+use uv_redacted::DisplaySafeUrl;
 use uv_static::EnvVars;
 use uv_test::find_links::FindLinksServer;
 use uv_test::packse::PackseServer;
@@ -5898,36 +5899,47 @@ async fn direct_url_wheel_cache_refresh() -> Result<()> {
     Ok(())
 }
 
-/// A dangling HTTP pointer is a cache miss, not an installable wheel.
+/// Missing archives and corrupt HTTP pointers should recover through a fresh download.
 #[test]
-fn direct_url_missing_cached_archive() -> Result<()> {
+fn direct_url_invalid_cache() -> Result<()> {
     let server = PackseServer::new("simple/single-package.toml");
     let context = uv_test::test_context!("3.12");
+    let url = DisplaySafeUrl::parse(&server.file_url("a-1.0.0-py3-none-any.whl"))?;
     context
         .temp_dir
         .child("requirements.txt")
-        .write_str(&format!(
-            "a @ {}",
-            server.file_url("a-1.0.0-py3-none-any.whl"),
-        ))?;
+        .write_str(&format!("a @ {url}"))?;
     context
         .pip_sync()
         .arg("requirements.txt")
         .assert()
         .success();
-    context.pip_uninstall().arg("a").assert().success();
-
-    // Keep both the HTTP pointer and hash index, but remove the referenced archive.
     let cache = Cache::from_path(context.cache_dir.path());
-    fs::remove_dir_all(cache.bucket(CacheBucket::Archive))?;
+    let http_entry = cache.entry(
+        CacheBucket::Wheels,
+        WheelCache::Url(&url).wheel_dir("a"),
+        "1.0.0-py3-none-any.http",
+    );
 
-    uv_snapshot!(context.filters(), context.pip_sync().arg("requirements.txt"), @"
-    exit_code: 0 (success)
-    ----- stderr -----
-    Resolved 1 package in [TIME]
-    Installed 1 package in [TIME]
-     + a==1.0.0 (from http://[LOCALHOST]/files/a-1.0.0-py3-none-any.whl)
-    ");
+    for corrupt_pointer in [false, true] {
+        context.pip_uninstall().arg("a").assert().success();
+        if corrupt_pointer {
+            assert!(http_entry.path().is_file());
+            fs::write(http_entry.path(), b"truncated")?;
+        } else {
+            // Keep the pointers, but remove the referenced archive.
+            fs::remove_dir_all(cache.bucket(CacheBucket::Archive))?;
+        }
+        allow_duplicates! {
+            uv_snapshot!(context.filters(), context.pip_sync().arg("requirements.txt"), @"
+            exit_code: 0 (success)
+            ----- stderr -----
+            Resolved 1 package in [TIME]
+            Installed 1 package in [TIME]
+             + a==1.0.0 (from http://[LOCALHOST]/files/a-1.0.0-py3-none-any.whl)
+            ");
+        }
+    }
 
     Ok(())
 }

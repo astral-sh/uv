@@ -10,7 +10,7 @@ use futures::{FutureExt, TryStreamExt};
 use tokio::io::{AsyncRead, AsyncSeekExt, ReadBuf};
 use tokio::sync::Semaphore;
 use tokio_util::compat::FuturesAsyncReadCompatExt;
-use tracing::{Instrument, info_span, instrument, warn};
+use tracing::{Instrument, debug, info_span, instrument, warn};
 use url::Url;
 
 use uv_cache::{ArchiveId, Cache, CacheBucket, CacheEntry, WheelCache};
@@ -306,7 +306,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                         &wheel.filename,
                         hashes,
                         wheel.size,
-                    )?
+                    )
                 {
                     return Ok(pointer.into_wheel(cache, dist));
                 }
@@ -604,7 +604,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 .as_ref()
                 .map_or(hash_policy, |hashes| HashPolicy::All(hashes.as_slice()));
             let cached_wheel = if let Some(pointer) =
-                HttpArchivePointer::read_from_direct_url(cache, wheel, cache_hash_policy)?
+                HttpArchivePointer::read_from_direct_url(cache, wheel, cache_hash_policy)
             {
                 Some(pointer.into_wheel(cache, dist))
             } else {
@@ -613,9 +613,10 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                     WheelCache::Url(&wheel.url).wheel_dir(wheel.name().as_ref()),
                     format!("{}.http", wheel.filename.cache_key()),
                 );
-                if HttpArchivePointer::read_from(&http_entry)?.is_some() {
-                    // The cached archive no longer satisfies this request. Refresh it before
-                    // resolving dependencies, not only when the installer retrieves the wheel.
+                if http_entry.path().try_exists().map_err(Error::CacheRead)? {
+                    // The cached pointer is corrupt or its archive no longer satisfies this
+                    // request. Recover it before resolving dependencies, not only when the
+                    // installer retrieves the wheel.
                     Some(
                         self.get_wheel(dist, cache_hash_policy)
                             .boxed_local()
@@ -1512,55 +1513,76 @@ impl HttpArchivePointer {
     /// Find downloaded URL wheel contents that satisfy the complete hash policy.
     ///
     /// Only computed hashes populate this index. HTTP metadata and mutable URL responses are not
-    /// shared, and a matching index key alone is not sufficient to accept an archive.
+    /// shared, and a matching index key alone is not sufficient to accept an archive. Unreadable
+    /// entries are ignored so that other cached archives or a fresh download can be used instead.
     pub fn read_from_hashes(
         cache: &Cache,
         url: &DisplaySafeUrl,
         filename: &WheelFilename,
         hashes: HashPolicy<'_>,
         size: Option<u64>,
-    ) -> Result<Option<Self>, Error> {
+    ) -> Option<Self> {
         for hash in hashes.digests() {
             let entry = cache.entry(
                 CacheBucket::Wheels,
                 WheelCache::url_hash_dir(url, filename.name.as_ref(), hash),
                 format!("{}.msgpack", filename.cache_key()),
             );
-            let archive = match fs_err::read(entry.path()) {
-                Ok(data) => rmp_serde::from_slice::<Archive>(&data)?,
-                Err(err) if err.kind() == io::ErrorKind::NotFound => continue,
-                Err(err) => return Err(Error::CacheRead(err)),
+            let archive = match fs_err::read(entry.path())
+                .map_err(Error::CacheRead)
+                .and_then(|data| {
+                    rmp_serde::from_slice::<Archive>(&data).map_err(Error::CacheDecode)
+                }) {
+                Ok(archive) => archive,
+                Err(Error::CacheRead(err)) if err.kind() == io::ErrorKind::NotFound => continue,
+                Err(err) => {
+                    debug!(
+                        "Failed to read cached URL wheel at {}: {err}",
+                        entry.path().display()
+                    );
+                    continue;
+                }
             };
             if archive.is_usable(cache, filename, hashes, size) {
-                return Ok(Some(Self { archive }));
+                return Some(Self { archive });
             }
         }
-        Ok(None)
+        None
     }
 
     /// Find a URL wheel whose hashes, size, filename, and archive are valid for this request.
     ///
     /// Prefer the shared hash index, then check the URL's HTTP response with the same constraints.
+    /// Unreadable entries are treated as cache misses, allowing the HTTP client to recover them.
     pub fn read_from_direct_url(
         cache: &Cache,
         wheel: &DirectUrlBuiltDist,
         hashes: HashPolicy<'_>,
-    ) -> Result<Option<Self>, Error> {
+    ) -> Option<Self> {
         if let Some(pointer) =
-            Self::read_from_hashes(cache, &wheel.url, &wheel.filename, hashes, wheel.size)?
+            Self::read_from_hashes(cache, &wheel.url, &wheel.filename, hashes, wheel.size)
         {
-            return Ok(Some(pointer));
+            return Some(pointer);
         }
         let entry = cache.entry(
             CacheBucket::Wheels,
             WheelCache::Url(&wheel.url).wheel_dir(wheel.name().as_ref()),
             format!("{}.http", wheel.filename.cache_key()),
         );
-        Ok(Self::read_from(&entry)?.filter(|pointer| {
-            pointer
-                .archive
-                .is_usable(cache, &wheel.filename, hashes, wheel.size)
-        }))
+        match Self::read_from(&entry) {
+            Ok(pointer) => pointer.filter(|pointer| {
+                pointer
+                    .archive
+                    .is_usable(cache, &wheel.filename, hashes, wheel.size)
+            }),
+            Err(err) => {
+                debug!(
+                    "Failed to read cached URL wheel at {}: {err}",
+                    entry.path().display()
+                );
+                None
+            }
+        }
     }
 
     /// Index an archive by its computed digests without replacing any URL response or metadata.
