@@ -3,7 +3,6 @@ use std::io;
 use std::path::Path;
 use std::pin::Pin;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::task::{Context, Poll};
 
 use futures::{FutureExt, TryStreamExt};
@@ -13,7 +12,7 @@ use tokio_util::compat::FuturesAsyncReadCompatExt;
 use tracing::{Instrument, info_span, instrument, warn};
 use url::Url;
 
-use uv_cache::{ArchiveId, CacheBucket, CacheEntry, WheelCache};
+use uv_cache::{ArchiveId, Cache, CacheBucket, CacheEntry, WheelCache};
 use uv_cache_info::{CacheInfo, Timestamp};
 use uv_client::{
     CacheControl, CachedClientError, Connectivity, DataWithCachePolicy, RegistryClient,
@@ -182,9 +181,8 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         dist: &BuiltDist,
         hashes: HashPolicy<'_>,
     ) -> Result<LocalWheel, Error> {
-        // When generating hashes, compute the URL's declared algorithms too, and refresh cached
-        // archives that do not match the declaration. Validation of downloaded bytes is still
-        // the caller's responsibility.
+        // When generating hashes, compute the URL's declared algorithms too, so the downloaded
+        // archive can be reused by those digests. Validation remains the caller's responsibility.
         let declared_hashes = match (hashes, dist) {
             (HashPolicy::Generate(_), BuiltDist::DirectUrl(dist)) => parse_url_hashes(&dist.url),
             _ => None,
@@ -296,15 +294,27 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             }
 
             BuiltDist::DirectUrl(wheel) => {
-                // Create a cache entry for the wheel.
-                let wheel_entry = self.build_context.cache().entry(
+                let cache = self.build_context.cache();
+                // A matching computed hash identifies immutable contents, even when the URL's
+                // declaration differs (or was moved into the lockfile).
+                if (!cache.must_revalidate_package(wheel.name())
+                    || self.client.unmanaged.connectivity() == Connectivity::Offline)
+                    && let Some(pointer) = HttpArchivePointer::read_from_hashes(
+                        cache,
+                        &wheel.url,
+                        &wheel.filename,
+                        hashes,
+                        wheel.size,
+                    )?
+                {
+                    return Ok(pointer.into_wheel(cache, dist));
+                }
+                let wheel_entry = cache.entry(
                     CacheBucket::Wheels,
                     WheelCache::Url(&wheel.url).wheel_dir(wheel.name().as_ref()),
                     wheel.filename.cache_key(),
                 );
-
-                // Download and unzip.
-                match self
+                let archive = match self
                     .stream_wheel(
                         wheel.url.raw().clone(),
                         None,
@@ -317,18 +327,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                     )
                     .await
                 {
-                    Ok(archive) => Ok(LocalWheel {
-                        dist: Dist::Built(dist.clone()),
-                        archive: self
-                            .build_context
-                            .cache()
-                            .archive(&archive.id)
-                            .into_boxed_path(),
-                        hashes: archive.hashes,
-                        filename: wheel.filename.clone(),
-                        cache: CacheInfo::default(),
-                        build: None,
-                    }),
+                    Ok(archive) => archive,
                     Err(Error::Extract(name, err)) => {
                         if err.is_http_streaming_unsupported() {
                             warn!(
@@ -339,36 +338,26 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                         } else {
                             return Err(Error::Extract(name, err));
                         }
-
-                        // If the request failed because streaming was unsupported or failed,
-                        // download the wheel directly.
-                        let archive = self
-                            .download_wheel(
-                                wheel.url.raw().clone(),
-                                None,
-                                &wheel.filename,
-                                WheelExtension::Whl,
-                                wheel.size,
-                                &wheel_entry,
-                                dist,
-                                hashes,
-                            )
-                            .await?;
-                        Ok(LocalWheel {
-                            dist: Dist::Built(dist.clone()),
-                            archive: self
-                                .build_context
-                                .cache()
-                                .archive(&archive.id)
-                                .into_boxed_path(),
-                            hashes: archive.hashes,
-                            filename: wheel.filename.clone(),
-                            cache: CacheInfo::default(),
-                            build: None,
-                        })
+                        self.download_wheel(
+                            wheel.url.raw().clone(),
+                            None,
+                            &wheel.filename,
+                            WheelExtension::Whl,
+                            wheel.size,
+                            &wheel_entry,
+                            dist,
+                            hashes,
+                        )
+                        .await?
                     }
-                    Err(err) => Err(err),
-                }
+                    Err(err) => return Err(err),
+                };
+                let pointer = HttpArchivePointer { archive };
+                pointer
+                    .write_hashes(cache, &wheel.url)
+                    .boxed_local()
+                    .await?;
+                Ok(pointer.into_wheel(cache, dist))
             }
 
             BuiltDist::GitPath(wheel) => {
@@ -570,7 +559,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         // Fetch the entire wheel only when we need to compute a hash for resolution.
         // TODO(charlie): Request the hashes via a separate method, to reduce the coupling in this API.
         if compute_hashes {
-            let wheel = self.get_wheel(dist, hash_policy).await?;
+            let wheel = self.get_wheel(dist, hash_policy).boxed_local().await?;
             // If the metadata was provided by the user directly, prefer it.
             let metadata = if let Some(metadata) = self
                 .build_context
@@ -597,6 +586,31 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             return Ok(ArchiveMetadata {
                 metadata: Metadata::from_metadata23(metadata),
                 hashes: declared_hashes.unwrap_or_else(HashDigests::empty),
+            });
+        }
+
+        // When installation can reuse an archive by hash, resolution must read that archive's
+        // metadata too, not metadata from another revision at the same URL.
+        if let BuiltDist::DirectUrl(wheel) = dist
+            && (!self
+                .build_context
+                .cache()
+                .must_revalidate_package(wheel.name())
+                || self.client.unmanaged.connectivity() == Connectivity::Offline)
+            && let Some(pointer) = HttpArchivePointer::read_from_hashes(
+                self.build_context.cache(),
+                &wheel.url,
+                &wheel.filename,
+                declared_hashes
+                    .as_ref()
+                    .map_or(hash_policy, |hashes| HashPolicy::All(hashes.as_slice())),
+                wheel.size,
+            )?
+        {
+            let wheel = pointer.into_wheel(self.build_context.cache(), dist);
+            return Ok(ArchiveMetadata {
+                metadata: Metadata::from_metadata23(wheel.metadata()?),
+                hashes: declared_hashes.unwrap_or(wheel.hashes),
             });
         }
 
@@ -629,7 +643,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
 
                 // If the request failed due to an error that could be resolved by
                 // downloading the wheel directly, try that.
-                let wheel = self.get_wheel(dist, hash_policy).await?;
+                let wheel = self.get_wheel(dist, hash_policy).boxed_local().await?;
                 let metadata = wheel.metadata()?;
                 let hashes = declared_hashes.unwrap_or(wheel.hashes);
                 Ok(ArchiveMetadata {
@@ -739,10 +753,8 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         // Create an entry for the HTTP cache.
         let http_entry = wheel_entry.with_file(format!("{}.http", filename.cache_key()));
 
-        let downloaded = AtomicBool::new(false);
         let download = |response: reqwest::Response| {
             async {
-                downloaded.store(true, Ordering::Relaxed);
                 let progress_size = size.or_else(|| content_length(&response));
 
                 let progress = self.reporter.as_ref().map(|reporter| {
@@ -874,15 +886,19 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 CachedClientError::Client(err) => Error::Client(err),
             })?;
 
-        // Refresh incomplete or missing archives, and cached URL wheels that do not match the
-        // expected hashes. Fresh downloads are validated by the caller, without another retry.
+        if let (Some(expected), Some(actual)) = (expected_size, archive.size)
+            && expected != actual
+        {
+            return Err(Error::MismatchedSize {
+                distribution: dist.to_string(),
+                expected,
+                actual,
+            });
+        }
+
+        // If the archive is missing the required hashes or size, or has since been removed, force a refresh.
         let archive = Some(archive)
             .filter(|archive| archive.has_digests(hashes))
-            .filter(|archive| {
-                !matches!(dist, BuiltDist::DirectUrl(_))
-                    || downloaded.load(Ordering::Relaxed)
-                    || archive.satisfies(hashes)
-            })
             .filter(|archive| archive.exists(self.build_context.cache()))
             .filter(|archive| expected_size.is_none() || archive.size.is_some());
 
@@ -907,16 +923,6 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 })
                 .await?
         };
-
-        if let (Some(expected), Some(actual)) = (expected_size, archive.size)
-            && expected != actual
-        {
-            return Err(Error::MismatchedSize {
-                distribution: dist.to_string(),
-                expected,
-                actual,
-            });
-        }
 
         Ok(archive)
     }
@@ -949,10 +955,8 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         // Create an entry for the HTTP cache.
         let http_entry = wheel_entry.with_file(format!("{}.http", filename.cache_key()));
 
-        let downloaded = AtomicBool::new(false);
         let download = |response: reqwest::Response| {
             async {
-                downloaded.store(true, Ordering::Relaxed);
                 let progress_size = size.or_else(|| content_length(&response));
 
                 let progress = self.reporter.as_ref().map(|reporter| {
@@ -1093,15 +1097,19 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 CachedClientError::Client(err) => Error::Client(err),
             })?;
 
-        // Refresh incomplete or missing archives, and cached URL wheels that do not match the
-        // expected hashes. Fresh downloads are validated by the caller, without another retry.
+        if let (Some(expected), Some(actual)) = (expected_size, archive.size)
+            && expected != actual
+        {
+            return Err(Error::MismatchedSize {
+                distribution: dist.to_string(),
+                expected,
+                actual,
+            });
+        }
+
+        // If the archive is missing the required hashes or size, or has since been removed, force a refresh.
         let archive = Some(archive)
             .filter(|archive| archive.has_digests(hashes))
-            .filter(|archive| {
-                !matches!(dist, BuiltDist::DirectUrl(_))
-                    || downloaded.load(Ordering::Relaxed)
-                    || archive.satisfies(hashes)
-            })
             .filter(|archive| archive.exists(self.build_context.cache()))
             .filter(|archive| expected_size.is_none() || archive.size.is_some());
 
@@ -1126,16 +1134,6 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 })
                 .await?
         };
-
-        if let (Some(expected), Some(actual)) = (expected_size, archive.size)
-            && expected != actual
-        {
-            return Err(Error::MismatchedSize {
-                distribution: dist.to_string(),
-                expected,
-                actual,
-            });
-        }
 
         Ok(archive)
     }
@@ -1317,10 +1315,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
     }
 
     /// Returns a GET [`reqwest::Request`] for the given URL.
-    fn request(&self, mut url: DisplaySafeUrl) -> Result<reqwest::Request, reqwest::Error> {
-        // Match the fragment-free archive cache key. Fragments are not sent to the server, and
-        // must not cause the HTTP cache policy to reject an otherwise identical request.
-        url.set_fragment(None);
+    fn request(&self, url: DisplaySafeUrl) -> Result<reqwest::Request, reqwest::Error> {
         self.client
             .unmanaged
             .uncached_client(&url)
@@ -1428,15 +1423,27 @@ where
     }
 }
 
-/// A pointer to an archive in the cache, fetched from an HTTP archive.
+/// A pointer to a downloaded HTTP archive in the cache.
 ///
-/// Encoded with `MsgPack`, and represented on disk by a `.http` file.
+/// Stored with its HTTP policy in a `.http` file, or indexed by computed hashes as `MsgPack`.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct HttpArchivePointer {
     archive: Archive,
 }
 
 impl HttpArchivePointer {
+    /// Attach a cached archive to the requested distribution without changing its contents.
+    fn into_wheel(self, cache: &Cache, dist: &BuiltDist) -> LocalWheel {
+        LocalWheel {
+            dist: Dist::Built(dist.clone()),
+            archive: cache.archive(&self.archive.id).into_boxed_path(),
+            hashes: self.archive.hashes,
+            filename: self.archive.filename,
+            cache: CacheInfo::default(),
+            build: None,
+        }
+    }
+
     /// Read an [`HttpArchivePointer`] from the cache.
     pub fn read_from(path: impl AsRef<Path>) -> Result<Option<Self>, Error> {
         match fs_err::File::open(path.as_ref()) {
@@ -1448,6 +1455,67 @@ impl HttpArchivePointer {
             Err(err) if err.kind() == io::ErrorKind::NotFound => Ok(None),
             Err(err) => Err(Error::CacheRead(err)),
         }
+    }
+
+    /// Find downloaded URL wheel contents that satisfy the complete hash policy.
+    ///
+    /// Only computed hashes populate this index. HTTP metadata and mutable URL responses are not
+    /// shared, and a matching index key alone is not sufficient to accept an archive.
+    pub fn read_from_hashes(
+        cache: &Cache,
+        url: &DisplaySafeUrl,
+        filename: &WheelFilename,
+        hashes: HashPolicy<'_>,
+        size: Option<u64>,
+    ) -> Result<Option<Self>, Error> {
+        for hash in hashes.digests() {
+            let entry = cache.entry(
+                CacheBucket::Wheels,
+                WheelCache::url_hash_dir(url, filename.name.as_ref(), hash),
+                format!("{}.msgpack", filename.cache_key()),
+            );
+            let archive = match fs_err::read(entry.path()) {
+                Ok(data) => rmp_serde::from_slice::<Archive>(&data)?,
+                Err(err) if err.kind() == io::ErrorKind::NotFound => continue,
+                Err(err) => return Err(Error::CacheRead(err)),
+            };
+            if archive.filename == *filename
+                && archive.satisfies(hashes)
+                && archive.exists(cache)
+                && size.is_none_or(|size| archive.size == Some(size))
+            {
+                return Ok(Some(Self { archive }));
+            }
+        }
+        Ok(None)
+    }
+
+    /// Index an archive by its computed digests without replacing any URL response or metadata.
+    async fn write_hashes(&self, cache: &Cache, url: &DisplaySafeUrl) -> Result<(), Error> {
+        let data = rmp_serde::to_vec(&self.archive)?;
+        for hash in self.archive.hashes.iter() {
+            let entry = cache.entry(
+                CacheBucket::Wheels,
+                WheelCache::url_hash_dir(url, self.archive.filename.name.as_ref(), hash),
+                self.archive.filename.cache_key(),
+            );
+            // Keep the archive reference and pointer consistent when different declarations
+            // download the same contents concurrently.
+            let lock_entry = entry.with_file(format!("{}.lock", self.archive.filename.cache_key()));
+            let _lock = lock_entry.lock().await.map_err(Error::CacheLock)?;
+            cache
+                .link(&self.archive.id, entry.path())
+                .map_err(Error::CacheWrite)?;
+            write_atomic(
+                entry
+                    .with_file(format!("{}.msgpack", self.archive.filename.cache_key()))
+                    .path(),
+                &data,
+            )
+            .await
+            .map_err(Error::CacheWrite)?;
+        }
+        Ok(())
     }
 
     /// Return the [`Archive`] from the pointer.

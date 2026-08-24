@@ -433,8 +433,23 @@ impl<'a> Planner<'a> {
                         )
                         .entry(format!("{}.http", wheel.filename.cache_key()));
 
-                    // Read the HTTP pointer.
-                    match HttpArchivePointer::read_from(&cache_entry) {
+                    // Prefer contents identified by the lockfile or URL hashes. Otherwise, use
+                    // the HTTP response for this specific URL declaration.
+                    let pointer = HttpArchivePointer::read_from_hashes(
+                        cache,
+                        &wheel.url,
+                        &wheel.filename,
+                        hasher.get(dist.as_ref()),
+                        wheel.size,
+                    )
+                    .and_then(|pointer| {
+                        if pointer.is_some() {
+                            Ok(pointer)
+                        } else {
+                            HttpArchivePointer::read_from(&cache_entry)
+                        }
+                    });
+                    match pointer {
                         Ok(Some(pointer)) => {
                             let cache_info = pointer.to_cache_info();
                             let build_info = pointer.to_build_info();

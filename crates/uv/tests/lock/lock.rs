@@ -1532,6 +1532,7 @@ async fn lock_wheel_url_hash_cache() -> Result<()> {
      + basic-package==0.1.0 (from http://[LOCALHOST]/basic_package-0.1.0-py3-none-any.whl)
      + ok==1.0.0 (from http://[LOCALHOST]/ok-1.0.0-py3-none-any.whl)
     ");
+    let original_lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
     server.verify().await;
     server.reset().await;
 
@@ -1577,6 +1578,25 @@ async fn lock_wheel_url_hash_cache() -> Result<()> {
     ----- stderr -----
     Resolved 3 packages in [TIME]
     ");
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--frozen")
+        .arg("--offline")
+        .arg("--reinstall-package")
+        .arg("basic-package"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     ~ basic-package==0.1.0 (from http://[LOCALHOST]/basic_package-0.1.0-py3-none-any.whl)
+    ");
+
+    // The newer wheel must not hide the older revision, including after cache pruning.
+    context.prune().assert().success();
+    context
+        .temp_dir
+        .child("uv.lock")
+        .write_str(&original_lock)?;
     uv_snapshot!(context.filters(), context.sync()
         .arg("--frozen")
         .arg("--offline")

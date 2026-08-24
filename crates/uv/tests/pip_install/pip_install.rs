@@ -17,6 +17,7 @@ use futures::executor::block_on;
 use indoc::{formatdoc, indoc};
 use insta::{allow_duplicates, assert_snapshot};
 use predicates::prelude::predicate;
+use sha2::{Digest, Sha256};
 #[cfg(unix)]
 use tokio::io::AsyncWriteExt;
 use url::Url;
@@ -10935,6 +10936,129 @@ fn static_metadata_source_tree() -> Result<()> {
     "
     );
 
+    Ok(())
+}
+
+/// Cached metadata and wheel contents must come from the same URL revision.
+#[tokio::test]
+async fn direct_url_hash_cache_metadata() -> Result<()> {
+    let context = uv_test::test_context!("3.12")
+        .with_filtered_python_names()
+        .with_filtered_virtualenv_bin()
+        .with_filtered_exe_suffix();
+    let server = MockServer::start().await;
+    let filename = "ok-1.0.0-py3-none-any.whl";
+    let url = format!("{}/{filename}", server.uri());
+    let original = fs_err::read(context.workspace_root.join("test/links").join(filename))?;
+    Mock::given(method("HEAD"))
+        .respond_with(ResponseTemplate::new(405))
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path(format!("/{filename}")))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .insert_header("cache-control", "max-age=3600")
+                .set_body_bytes(original),
+        )
+        .mount(&server)
+        .await;
+    context
+        .pip_install()
+        .arg("--target")
+        .arg("original")
+        .arg(&url)
+        .assert()
+        .success();
+    server.reset().await;
+
+    // Publish different metadata at the same wheel URL, selected by a new hash.
+    let mut writer = ZipFileWriter::new(Vec::new());
+    for (name, contents) in [
+        ("ok/__init__.py", ""),
+        (
+            "ok-1.0.0.dist-info/METADATA",
+            "Metadata-Version: 2.1\nName: ok\nVersion: 1.0.0\nRequires-Dist: cache-missing-dependency==1.0\n",
+        ),
+        (
+            "ok-1.0.0.dist-info/WHEEL",
+            "Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
+        ),
+        (
+            "ok-1.0.0.dist-info/RECORD",
+            "ok/__init__.py,,\nok-1.0.0.dist-info/METADATA,,\nok-1.0.0.dist-info/WHEEL,,\nok-1.0.0.dist-info/RECORD,,\n",
+        ),
+    ] {
+        let entry = ZipEntryBuilder::new(name.into(), Compression::Stored);
+        writer.write_entry_whole(entry, contents.as_bytes()).await?;
+    }
+    let changed = writer.close().await?;
+    let hash = hex::encode(Sha256::digest(&changed));
+    Mock::given(method("HEAD"))
+        .respond_with(ResponseTemplate::new(405))
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path(format!("/{filename}")))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .insert_header("cache-control", "max-age=3600")
+                .set_body_bytes(changed),
+        )
+        .mount(&server)
+        .await;
+    context
+        .pip_install()
+        .arg("--target")
+        .arg("changed")
+        .arg("--no-deps")
+        .arg(format!("{url}#sha256={hash}"))
+        .assert()
+        .success();
+
+    // The unconstrained URL still resolves and installs the original wheel, not the new bytes
+    // with their additional dependency silently omitted.
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--target").arg("original-again")
+        .arg("--offline").arg(&url), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: .venv/[BIN]/[PYTHON]
+    Resolved 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + ok==1.0.0 (from http://[LOCALHOST]/ok-1.0.0-py3-none-any.whl)
+    ");
+    assert_eq!(
+        fs_err::read(
+            context
+                .temp_dir
+                .join("original/ok-1.0.0.dist-info/METADATA")
+        )?,
+        fs_err::read(
+            context
+                .temp_dir
+                .join("original-again/ok-1.0.0.dist-info/METADATA")
+        )?,
+    );
+
+    // A hash constraint without a fragment selects the new archive AND its new metadata.
+    context
+        .temp_dir
+        .child("requirements.txt")
+        .write_str(&format!("ok @ {url} --hash=sha256:{hash}"))?;
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--target").arg("constrained")
+        .arg("--offline").arg("--require-hashes")
+        .arg("-r").arg("requirements.txt"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: .venv/[BIN]/[PYTHON]
+      × No solution found when resolving dependencies:
+      ╰─▶ Because cache-missing-dependency was not found in the cache and ok==1.0.0 depends on cache-missing-dependency==1.0, we can conclude that ok==1.0.0 cannot be used.
+          And because only ok==1.0.0 is available and you require ok, we can conclude that your requirements are unsatisfiable.
+
+    hint: Packages were unavailable because the network was disabled. When the network is disabled, registry packages may only be read from the cache.
+    ");
     Ok(())
 }
 
