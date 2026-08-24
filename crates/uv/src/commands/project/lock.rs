@@ -32,7 +32,9 @@ use uv_python::{
     ConfigDiscovery, Interpreter, PythonDownloads, PythonEnvironment, PythonPreference,
     PythonRequest,
 };
-use uv_requirements::{ExtrasResolver, LockedRequirements, read_lock_requirements};
+use uv_requirements::{
+    Error as RequirementsError, ExtrasResolver, LockedRequirements, read_lock_requirements,
+};
 use uv_resolver::{
     FlatIndex, InMemoryIndex, Lock, Options, OptionsBuilder, Package, PythonRequirement,
     ResolverEnvironment, ResolverManifest, SatisfiesResult, UniversalMarker,
@@ -48,6 +50,7 @@ use uv_workspace::{
 };
 
 use crate::commands::pip::loggers::{DefaultResolveLogger, ResolveLogger, SummaryResolveLogger};
+use crate::commands::pip::operations::Error as OperationError;
 use crate::commands::project::lock_target::{LockTarget, find_lock_format_error};
 use crate::commands::project::{
     MissingLockfileSource, ProjectEnvironmentPolicy, ProjectError, ProjectInterpreter,
@@ -427,6 +430,7 @@ impl<'env> LockOperation<'env> {
                     interpreter,
                     Some(existing),
                     check_lockfile_contents,
+                    true,
                     self.constraints,
                     self.refresh,
                     self.settings,
@@ -480,6 +484,7 @@ impl<'env> LockOperation<'env> {
                     interpreter,
                     existing,
                     check_lockfile_contents,
+                    false,
                     self.constraints,
                     self.refresh,
                     self.settings,
@@ -513,6 +518,7 @@ async fn do_lock(
     interpreter: &Interpreter,
     existing_lock: Option<Lock>,
     check_lockfile_contents: Option<String>,
+    lock_check: bool,
     external: Vec<NameRequirementSpecification>,
     refresh: Option<&Refresh>,
     settings: &ResolverSettings,
@@ -1035,20 +1041,29 @@ async fn do_lock(
                     }),
             );
 
+            // A metadata failure can hide why a lock check needed to resolve in the first place.
+            // Do not suggest updating the lockfile during an update or for resolver conflicts.
+            let report_mismatch = |err: &RequirementsError| {
+                if lock_check
+                    && matches!(
+                        err,
+                        RequirementsError::Dist(..) | RequirementsError::Distribution(_)
+                    )
+                    && let Some(ValidatedLock::Preferable(_, Some(reason))) = &existing_lock
+                {
+                    let mut hints = Hints::from(reason.as_str());
+                    hints.push("To update the lockfile, run `uv lock`.".to_string());
+                    let _ = writeln!(printer.stderr(), "{hints}");
+                }
+            };
+
             // Resolve the requirements.
             let (resolution, _) = pip::operations::resolve(
                 ExtrasResolver::new(&hasher, state.index(), database)
                     .with_reporter(Arc::new(ResolverReporter::from(printer)))
                     .resolve(target.members_requirements())
                     .await
-                    .inspect_err(|_| {
-                        // Keep the original error, but explain why the lockfile could not be reused.
-                        if let Some(ValidatedLock::Preferable(_, Some(reason))) = &existing_lock {
-                            let mut hints = Hints::from(reason.as_str());
-                            hints.push("To update the lockfile, run `uv lock`.".to_string());
-                            let _ = writeln!(printer.stderr(), "{hints}");
-                        }
-                    })
+                    .inspect_err(report_mismatch)
                     .map_err(|err| ProjectError::Operation(err.into()))?
                     .into_iter()
                     .chain(target.group_requirements())
@@ -1095,11 +1110,9 @@ async fn do_lock(
                 printer,
             )
             .await
-            .inspect_err(|_| {
-                if let Some(ValidatedLock::Preferable(_, Some(reason))) = &existing_lock {
-                    let mut hints = Hints::from(reason.as_str());
-                    hints.push("To update the lockfile, run `uv lock`.".to_string());
-                    let _ = writeln!(printer.stderr(), "{hints}");
+            .inspect_err(|err| {
+                if let OperationError::Requirements(err) = err {
+                    report_mismatch(err);
                 }
             })?;
 
@@ -1161,8 +1174,8 @@ pub(crate) enum ValidatedLock {
     /// though the forks should be ignored.
     Versions(Lock),
     /// An existing lockfile was provided, and the locked versions and forks should be preferred if
-    /// possible, but resolution is still required. If a requirements mismatch is known, report it
-    /// when resolution fails.
+    /// possible, but resolution is still required. Retain known requirement mismatches for
+    /// lock-check diagnostics.
     Preferable(Lock, Option<String>),
     /// An existing lockfile was provided, and it satisfies the workspace requirements.
     Satisfies(Lock),

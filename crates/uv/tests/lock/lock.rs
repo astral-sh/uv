@@ -1260,6 +1260,14 @@ fn lock_check_offline_workspace_requirements() -> Result<()> {
 
     member.write_str(&fs_err::read_to_string(&member)?.replace(">=0.1.0", ">=1.0.0"))?;
 
+    // Updating a lockfile must not suggest running the same command again.
+    uv_snapshot!(context.filters(), context.lock().arg("--offline").arg("--no-cache"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+      × Failed to download `a @ http://[LOCALHOST]/files/a-1.0.0-py3-none-any.whl`
+      ╰─▶ Network connectivity is disabled, but the requested data wasn't found in the cache for: `http://[LOCALHOST]/files/a-1.0.0-py3-none-any.whl`
+    ");
+
     uv_snapshot!(context.filters(), context.lock().arg("--check").arg("--offline").arg("--no-cache"), @"
     exit_code: 1 (failure)
     ----- stderr -----
@@ -1279,6 +1287,52 @@ fn lock_check_offline_workspace_requirements() -> Result<()> {
     ----- stderr -----
     Resolved 3 packages in [TIME]
     ");
+
+    Ok(())
+}
+
+/// Conflicting requirements need to be fixed before the lockfile can be updated.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_conflicting_requirements_no_update_hint() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let server = PackseServer::new("simple/single-package.toml");
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["a==1.0.0"]
+        "#
+    })?;
+
+    context
+        .lock()
+        .arg("--default-index")
+        .arg(server.index_url())
+        .assert()
+        .success();
+    let lock = context.read("uv.lock");
+    pyproject_toml.write_str(
+        &fs_err::read_to_string(&pyproject_toml)?
+            .replace("[\"a==1.0.0\"]", "[\"a==1.0.0\", \"a==2.0.0\"]"),
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--default-index").arg(server.index_url()), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because your project depends on a==1.0.0 and a==2.0.0, we can conclude that your project's requirements are unsatisfiable.
+    ");
+
+    uv_snapshot!(context.filters(), context.lock().arg("--check").arg("--default-index").arg(server.index_url()), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because your project depends on a==1.0.0 and a==2.0.0, we can conclude that your project's requirements are unsatisfiable.
+    ");
+    assert_eq!(context.read("uv.lock"), lock);
 
     Ok(())
 }
@@ -14929,11 +14983,6 @@ fn lock_editable() -> Result<()> {
     uv_snapshot!(context.filters(), context.lock(), @"
     exit_code: 1 (failure)
     ----- stderr -----
-
-    hint: The lockfile needs to be updated because the requirements for `leaf` have changed:
-      Added: `library @ file://[TEMP_DIR]/library`
-      Removed: `library @ file://[TEMP_DIR]/library`
-    hint: To update the lockfile, run `uv lock`.
       × Failed to resolve dependencies for `workspace` (v0.1.0)
       ╰─▶ Requirements contain conflicting URLs for package `library` in all marker environments:
           - file://[TEMP_DIR]/library
@@ -22548,11 +22597,6 @@ fn lock_explicit_default_index() -> Result<()> {
     DEBUG Recording unit propagation conflict of anyio from incompatibility of (project)
     DEBUG Searching for a compatible version of project @ file://[TEMP_DIR]/ (<0.1.0 | >0.1.0)
     DEBUG No compatible version found for: project
-
-    hint: The lockfile needs to be updated because the requirements for `project` have changed:
-      Added: `anyio`
-      Removed: `iniconfig==2.0.0 (index: https://test.pypi.org/simple)`
-    hint: To update the lockfile, run `uv lock`.
       × No solution found when resolving dependencies:
       ╰─▶ Because anyio was not found in the package registry and your project depends on anyio, we can conclude that your project's requirements are unsatisfiable.
     "#);
