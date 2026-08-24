@@ -14,13 +14,16 @@ use uv_configuration::{BuildOptions, Constraints, Overrides};
 use uv_distribution::Metadata;
 use uv_distribution_types::{
     BuiltDist, Dist, DistributionId, Edge, Identifier, IndexUrl, Name, Node, Requirement,
-    RequiresPython, ResolutionDiagnostic, ResolvedDist, SourceDist,
+    RequiresPython, ResolutionDiagnostic, ResolvedDist, SourceDist, implied_markers,
 };
 use uv_git::GitResolver;
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::{Version, VersionSpecifier};
 use uv_pep508::{MarkerEnvironment, MarkerTree, MarkerTreeKind};
-use uv_pypi_types::{Conflicts, HashDigests, ParsedUrlError, VerbatimParsedUrl, Yanked};
+use uv_platform_tags::Tags;
+use uv_pypi_types::{
+    Conflicts, HashDigests, ParsedUrlError, SupportedEnvironments, VerbatimParsedUrl, Yanked,
+};
 
 use crate::graph_ops::{marker_reachability, simplify_conflict_markers};
 use crate::pins::FilePins;
@@ -611,6 +614,69 @@ impl ResolverOutput {
     /// Return `true` if there are no packages in the graph.
     pub fn is_empty(&self) -> bool {
         self.base_dists().next().is_none()
+    }
+
+    /// Return packages whose source fallback can be omitted because their wheels provide coverage.
+    ///
+    /// Concrete resolutions inspect compatible wheel tags. Universal resolutions use the same
+    /// marker-based wheel-coverage heuristic as required environments.
+    pub fn packages_with_available_wheels(
+        &self,
+        tags: Option<&Tags>,
+        environments: &SupportedEnvironments,
+        build_options: &BuildOptions,
+    ) -> Vec<PackageName> {
+        let mut available = FxHashMap::default();
+        for (_, distribution) in self.base_dists() {
+            if build_options.no_binary_package(&distribution.name) {
+                continue;
+            }
+            let ResolvedDist::Installable { dist, .. } = &distribution.dist else {
+                continue;
+            };
+            let wheels = match dist.as_ref() {
+                Dist::Built(BuiltDist::Registry(dist)) if dist.sdist.is_some() => {
+                    dist.wheels.as_slice()
+                }
+                Dist::Source(SourceDist::Registry(dist)) => dist.wheels.as_slice(),
+                _ => continue,
+            };
+
+            let covered = if let Some(tags) = tags {
+                wheels
+                    .iter()
+                    .any(|wheel| wheel.filename.is_compatible(tags))
+            } else {
+                let wheel_coverage = wheels.iter().fold(MarkerTree::FALSE, |marker, wheel| {
+                    marker.or(implied_markers(&wheel.filename))
+                });
+                let package_marker = distribution
+                    .marker
+                    .pep508()
+                    .and(self.requires_python.to_marker_tree());
+
+                if environments.is_empty() {
+                    package_marker.and(wheel_coverage.negate()).is_false()
+                } else {
+                    environments
+                        .iter()
+                        .copied()
+                        .map(|environment| environment.and(package_marker))
+                        .filter(|environment| !environment.is_false())
+                        .all(|environment| !wheel_coverage.is_disjoint(environment))
+                }
+            };
+
+            available
+                .entry(distribution.name.clone())
+                .and_modify(|existing| *existing &= covered)
+                .or_insert(covered);
+        }
+
+        available
+            .into_iter()
+            .filter_map(|(name, covered)| covered.then_some(name))
+            .collect()
     }
 
     /// Retain registry hashes only for artifacts permitted by package-specific build options.
