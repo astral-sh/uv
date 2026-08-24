@@ -19,7 +19,7 @@ use uv_client::{
 };
 use uv_distribution_filename::WheelFilename;
 use uv_distribution_types::{
-    BuildInfo, BuildableSource, BuiltDist, Dist, DistRef, File, HashPolicy, Hashed, IndexUrl,
+    BuildInfo, BuildableSource, BuiltDist, Dist, DistHashPolicy, DistRef, File, Hashed, IndexUrl,
     InstalledDist, Name, SourceDist, ToUrlError,
 };
 use uv_extract::hash::Hasher;
@@ -118,7 +118,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         &self,
         dist: &Dist,
         tags: &Tags,
-        hashes: HashPolicy<'_>,
+        hashes: DistHashPolicy<'_>,
     ) -> Result<LocalWheel, Error> {
         match dist {
             Dist::Built(built) => self.get_wheel(built, hashes).await,
@@ -161,7 +161,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
     pub async fn get_or_build_wheel_metadata(
         &self,
         dist: &Dist,
-        hashes: HashPolicy<'_>,
+        hashes: DistHashPolicy<'_>,
     ) -> Result<ArchiveMetadata, Error> {
         match dist {
             Dist::Built(built) => self.get_wheel_metadata(built, hashes).await,
@@ -179,7 +179,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
     async fn get_wheel(
         &self,
         dist: &BuiltDist,
-        hashes: HashPolicy<'_>,
+        hashes: DistHashPolicy<'_>,
     ) -> Result<LocalWheel, Error> {
         match dist {
             BuiltDist::Registry(wheels) => {
@@ -434,7 +434,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         &self,
         dist: &SourceDist,
         tags: &Tags,
-        hashes: HashPolicy<'_>,
+        hashes: DistHashPolicy<'_>,
     ) -> Result<LocalWheel, Error> {
         let built_wheel = self
             .builder
@@ -533,23 +533,24 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
     async fn get_wheel_metadata(
         &self,
         dist: &BuiltDist,
-        hashes: HashPolicy<'_>,
+        hashes: DistHashPolicy<'_>,
     ) -> Result<ArchiveMetadata, Error> {
-        // If hash generation is enabled, and the distribution isn't hosted on a registry, get the
-        // entire wheel to ensure that the hashes are included in the response. If the distribution
-        // is hosted on an index, the hashes will be included in the simple metadata response.
+        // If hashes are requested during resolution, and the distribution isn't hosted on a
+        // registry, get the entire wheel to ensure that hashes are included in the response. If
+        // the distribution is hosted on an index, hashes are included in the simple metadata
+        // response.
         // For hash _validation_, callers are expected to enforce the policy when retrieving the
         // wheel.
         //
         // Historically, for `uv pip compile --universal`, we also generate hashes for
         // registry-based distributions when the relevant registry doesn't provide them. This was
-        // motivated by `--find-links`. We continue that behavior (under `HashGeneration::All`) for
-        // backwards compatibility, but it's a little dubious, since we're only hashing _one_
+        // motivated by `--find-links`. We continue that behavior when missing registry hashes are
+        // computed for backwards compatibility, but it's a little dubious, since we're hashing one
         // distribution here (as opposed to hashing all distributions for the version), and it may
         // not even be a compatible distribution!
         //
         // TODO(charlie): Request the hashes via a separate method, to reduce the coupling in this API.
-        if hashes.is_generate(dist) {
+        if hashes.needs_inclusion(dist) {
             let wheel = self.get_wheel(dist, hashes).await?;
             // If the metadata was provided by the user directly, prefer it.
             let metadata = if let Some(metadata) = self
@@ -622,7 +623,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
     pub async fn build_wheel_metadata(
         &self,
         source: &BuildableSource<'_>,
-        hashes: HashPolicy<'_>,
+        hashes: DistHashPolicy<'_>,
     ) -> Result<ArchiveMetadata, Error> {
         // If the metadata was provided by the user directly, prefer it.
         if let Some(dist) = source.as_dist() {
@@ -673,7 +674,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         size: Option<u64>,
         wheel_entry: &CacheEntry,
         dist: &BuiltDist,
-        hashes: HashPolicy<'_>,
+        hashes: DistHashPolicy<'_>,
     ) -> Result<Archive, Error> {
         let expected_size = match dist {
             BuiltDist::Registry(dist) if dist.best_wheel().size_is_authoritative => size,
@@ -875,7 +876,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         size: Option<u64>,
         wheel_entry: &CacheEntry,
         dist: &BuiltDist,
-        hashes: HashPolicy<'_>,
+        hashes: DistHashPolicy<'_>,
     ) -> Result<Archive, Error> {
         let expected_size = match dist {
             BuiltDist::Registry(dist) if dist.best_wheel().size_is_authoritative => size,
@@ -1084,7 +1085,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         extension: WheelExtension,
         wheel_entry: CacheEntry,
         dist: &BuiltDist,
-        hashes: HashPolicy<'_>,
+        hashes: DistHashPolicy<'_>,
     ) -> Result<LocalWheel, Error> {
         #[cfg(windows)]
         let _lock = {

@@ -21,9 +21,9 @@ use uv_configuration::{KeyringProviderType, TargetTriple};
 use uv_dispatch::{BuildDispatch, SharedState};
 use uv_distribution::LoweredExtraBuildDependencies;
 use uv_distribution_types::{
-    ConfigSettings, DependencyMetadata, ExtraBuildVariables, HashGeneration, Index, IndexLocations,
-    NameRequirementSpecification, Origin, PackageConfigSettings, Requirement, RequiresPython,
-    Verbatim,
+    ConfigSettings, DependencyMetadata, ExtraBuildVariables, HashInclusion, Index, IndexLocations,
+    MissingRegistryHash, NameRequirementSpecification, Origin, PackageConfigSettings, Requirement,
+    RequiresPython, Verbatim,
 };
 use uv_fs::{CWD, Simplified};
 use uv_git::ResolvedRepositoryReference;
@@ -411,10 +411,10 @@ pub(crate) async fn pip_compile(
         (Some(tags), ResolverEnvironment::specific(marker_env))
     };
 
-    // Generate, but don't enforce hashes for the requirements. PEP 751 _requires_ a hash to be
+    // Include, but don't enforce hashes for the requirements. PEP 751 _requires_ a hash to be
     // present, but otherwise, we omit them by default.
     let hasher = if generate_hashes || matches!(format, PipCompileFormat::PylockToml) {
-        HashStrategy::generate(HashGeneration::All)
+        HashStrategy::include(HashInclusion::new(MissingRegistryHash::Compute))
     } else {
         HashStrategy::default()
     };
