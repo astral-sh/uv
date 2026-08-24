@@ -1,7 +1,7 @@
 use std::collections::{BTreeMap, HashMap};
 use std::fmt::Display;
 use std::io;
-use std::io::{BufReader, Read, Write};
+use std::io::{BufRead, BufReader, Read, Write};
 use std::path::{Path, PathBuf};
 
 use data_encoding::BASE64URL_NOPAD;
@@ -139,6 +139,77 @@ fn format_shebang(executable: impl AsRef<Path>, os_name: &str, relocatable: bool
     }
 
     format!("#!{executable}")
+}
+
+/// Return whether a line contains a Python source encoding declaration as defined by PEP 263.
+fn is_python_source_encoding(line: &[u8]) -> bool {
+    let line = line
+        .iter()
+        .position(|byte| !matches!(byte, b' ' | b'\t' | 0x0c))
+        .map_or(&[][..], |index| &line[index..]);
+    if !line.starts_with(b"#") {
+        return false;
+    }
+
+    line.windows(b"coding".len())
+        .enumerate()
+        .any(|(index, window)| {
+            if window != b"coding" {
+                return false;
+            }
+            let Some(delimiter) = line.get(index + b"coding".len()) else {
+                return false;
+            };
+            if !matches!(delimiter, b':' | b'=') {
+                return false;
+            }
+            line[index + b"coding".len() + 1..]
+                .iter()
+                .find(|byte| !matches!(byte, b' ' | b'\t'))
+                .is_some_and(|byte| {
+                    byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.')
+                })
+        })
+}
+
+/// Ensure that a Python source encoding declaration is also a POSIX shell comment.
+fn make_python_source_encoding_shell_safe(line: &mut Vec<u8>) {
+    if line
+        .iter()
+        .take_while(|byte| matches!(byte, b' ' | b'\t' | 0x0c))
+        .any(|byte| *byte == 0x0c)
+    {
+        line.insert(0, b'#');
+    }
+}
+
+/// Read one line without decoding it, preserving LF, CRLF, and CR line endings.
+fn read_line_bytes(reader: &mut impl BufRead, line: &mut Vec<u8>) -> io::Result<()> {
+    loop {
+        let available = reader.fill_buf()?;
+        if available.is_empty() {
+            return Ok(());
+        }
+
+        if let Some(index) = available
+            .iter()
+            .position(|byte| matches!(byte, b'\n' | b'\r'))
+        {
+            let terminator = available[index];
+            line.extend_from_slice(&available[..=index]);
+            reader.consume(index + 1);
+
+            if terminator == b'\r' && reader.fill_buf()?.first() == Some(&b'\n') {
+                line.push(b'\n');
+                reader.consume(1);
+            }
+            return Ok(());
+        }
+
+        let length = available.len();
+        line.extend_from_slice(available);
+        reader.consume(length);
+    }
 }
 
 /// Returns a [`PathBuf`] to `python[w].exe` for script execution.
@@ -551,7 +622,7 @@ fn install_script(
         })?;
 
     let path = file.path();
-    let mut script = File::open(&path)?;
+    let mut script = BufReader::new(File::open(&path)?);
 
     // https://sphinx-locales.github.io/peps/pep-0427/#recommended-installer-features
     // > In wheel, scripts are packaged in {distribution}-{version}.data/scripts/.
@@ -579,6 +650,9 @@ fn install_script(
             match script.read_exact(&mut byte) {
                 Ok(()) => {
                     if byte[0] == b'\n' || byte[0] == b'\r' {
+                        if byte[0] == b'\r' && script.fill_buf()?.first() == Some(&b'\n') {
+                            script.consume(1);
+                        }
                         break;
                     }
 
@@ -598,6 +672,21 @@ fn install_script(
         let mut start = format_shebang(&executable, &layout.os_name, relocatable)
             .as_bytes()
             .to_vec();
+        let mut following_line = Vec::new();
+
+        // PEP 263 requires source encoding declarations to appear on the first or second line.
+        // Keep a declaration from the original second line directly after the `#!/bin/sh` line.
+        if start.starts_with(b"#!/bin/sh\n") {
+            read_line_bytes(&mut script, &mut following_line)?;
+            if is_python_source_encoding(&following_line) {
+                make_python_source_encoding_shell_safe(&mut following_line);
+                if !following_line.ends_with(b"\n") {
+                    following_line.push(b'\n');
+                }
+                let insert_at = b"#!/bin/sh\n".len();
+                start.splice(insert_at..insert_at, following_line.drain(..));
+            }
+        }
 
         // Use appropriate line ending for the platform.
         if layout.os_name == "nt" {
@@ -605,6 +694,7 @@ fn install_script(
         } else {
             start.push(b'\n');
         }
+        start.extend_from_slice(&following_line);
 
         let mut target = uv_fs::tempfile_in(&layout.scheme.scripts)?;
         let size_and_encoded_hash = copy_and_hash(&mut start.chain(script), &mut target)?;
@@ -1220,7 +1310,7 @@ impl RenameOrCopy {
 #[cfg(test)]
 mod test {
     use std::assert_matches;
-    use std::io::{Cursor, ErrorKind};
+    use std::io::{BufReader, Cursor, ErrorKind, Read};
     use std::path::Path;
 
     use anyhow::Result;
@@ -1229,7 +1319,9 @@ mod test {
 
     use super::{
         Error, RecordEntry, Script, WheelFile, format_shebang, get_script_executable,
-        parse_email_message_file, parse_scripts, read_record, write_installer_metadata,
+        is_python_source_encoding, make_python_source_encoding_shell_safe,
+        parse_email_message_file, parse_scripts, read_line_bytes, read_record,
+        write_installer_metadata,
     };
 
     #[test]
@@ -1444,6 +1536,87 @@ mod test {
             format_shebang(executable, os_name, false),
             "#!/bin/sh\n'''exec' '/usr/bin/path/to/a/very/long/executable/executable/executable/executable/executable/executable/executable/executable/name/python3' \"$0\" \"$@\"\n' '''"
         );
+    }
+
+    #[test]
+    fn test_python_source_encoding() {
+        for line in [
+            b"# coding=windows-1252\n".as_slice(),
+            b"# -*- coding: utf-8 -*-\r\n".as_slice(),
+            b" \t\x0c# comment; coding: latin-1\r".as_slice(),
+            b"# coding: cp1252\nprint(\"\x80\")".as_slice(),
+        ] {
+            assert!(is_python_source_encoding(line), "{line:?}");
+        }
+
+        for line in [
+            b"coding=utf-8\n".as_slice(),
+            b"# Coding=utf-8\n".as_slice(),
+            b"# coding = utf-8\n".as_slice(),
+            b"# coding:\n".as_slice(),
+            b"print('# coding=utf-8')\n".as_slice(),
+        ] {
+            assert!(!is_python_source_encoding(line), "{line:?}");
+        }
+    }
+
+    #[test]
+    fn test_make_python_source_encoding_shell_safe() {
+        for (input, expected) in [
+            (
+                b"\x0c# coding=windows-1252\n".as_slice(),
+                b"#\x0c# coding=windows-1252\n".as_slice(),
+            ),
+            (
+                b" \t\x0c# coding=windows-1252\r\n".as_slice(),
+                b"# \t\x0c# coding=windows-1252\r\n".as_slice(),
+            ),
+            (
+                b" # coding=windows-1252\n".as_slice(),
+                b" # coding=windows-1252\n".as_slice(),
+            ),
+            (
+                b"\t# coding=windows-1252\r".as_slice(),
+                b"\t# coding=windows-1252\r".as_slice(),
+            ),
+        ] {
+            let mut line = input.to_vec();
+            make_python_source_encoding_shell_safe(&mut line);
+            assert_eq!(line, expected);
+        }
+    }
+
+    #[test]
+    fn test_read_line_bytes() -> Result<()> {
+        for (input, expected_line, expected_rest) in [
+            (
+                b"line\nrest".as_slice(),
+                b"line\n".as_slice(),
+                b"rest".as_slice(),
+            ),
+            (
+                b"line\r\nrest".as_slice(),
+                b"line\r\n".as_slice(),
+                b"rest".as_slice(),
+            ),
+            (
+                b"line\rrest".as_slice(),
+                b"line\r".as_slice(),
+                b"rest".as_slice(),
+            ),
+            (b"line".as_slice(), b"line".as_slice(), b"".as_slice()),
+            (b"".as_slice(), b"".as_slice(), b"".as_slice()),
+        ] {
+            let mut reader = BufReader::with_capacity(1, Cursor::new(input));
+            let mut line = Vec::new();
+            read_line_bytes(&mut reader, &mut line)?;
+            assert_eq!(line, expected_line);
+
+            let mut rest = Vec::new();
+            reader.read_to_end(&mut rest)?;
+            assert_eq!(rest, expected_rest);
+        }
+        Ok(())
     }
 
     #[test]
