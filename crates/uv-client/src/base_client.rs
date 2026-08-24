@@ -1061,7 +1061,12 @@ fn request_into_redirect(
         {
             let _ = redirect_url.set_username("");
             let _ = redirect_url.set_password(None);
-            headers.insert(AUTHORIZATION, credentials.to_header_value());
+            headers.insert(
+                AUTHORIZATION,
+                credentials
+                    .to_header_value()
+                    .map_err(reqwest_middleware::Error::middleware)?,
+            );
         }
     }
 
