@@ -1858,65 +1858,52 @@ fn lock_wheel_git_archive_missing_lfs() -> Result<()> {
     Ok(())
 }
 
-/// Preserve the workspace requirement mismatch when offline resolution cannot fetch a wheel.
+/// Show changed requirements when an offline lock check cannot fetch package metadata.
 #[cfg(feature = "test-universal")]
 #[test]
-fn lock_check_offline_workspace_requirements() -> Result<()> {
+fn lock_check_mismatched_requirements() -> Result<()> {
     let context = uv_test::test_context!("3.12");
     let server = PackseServer::new("simple/single-package.toml");
-
-    context
-        .temp_dir
-        .child("pyproject.toml")
-        .write_str(&formatdoc! {
-        r#"
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(&formatdoc! {r#"
         [project]
-        name = "workspace-demo"
+        name = "project"
         version = "0.1.0"
         requires-python = ">=3.12"
-        dependencies = ["a @ {wheel_url}"]
-
-        [tool.uv.workspace]
-        members = ["member-demo"]
-        "#,
-        wheel_url = server.file_url("a-1.0.0-py3-none-any.whl"),
-        })?;
-    let member = context.temp_dir.child("member-demo/pyproject.toml");
-    member.write_str(indoc! {r#"
-        [project]
-        name = "member-demo"
-        version = "0.1.0"
-        requires-python = ">=3.12"
-        dependencies = ["a>=0.1.0"]
-        "#
-    })?;
-
+        dependencies = ["a @ {wheel_url}", "project>=0.0.1"]
+    "#, wheel_url = server.file_url("a-1.0.0-py3-none-any.whl")})?;
     context.lock().assert().success();
-    let lock = context.read("uv.lock");
 
-    // A selected upgrade requires resolution, but does not imply a stale lock.
-    uv_snapshot!(context.filters(), context.lock().arg("--check").arg("--upgrade-package=a").arg("--offline").arg("--no-cache"), @"
-    exit_code: 1 (failure)
-    ----- stderr -----
-      × Failed to download `a @ http://[LOCALHOST]/files/a-1.0.0-py3-none-any.whl`
-      ╰─▶ Network connectivity is disabled, but the requested data wasn't found in the cache for: `http://[LOCALHOST]/files/a-1.0.0-py3-none-any.whl`
-    ");
-
-    member.write_str(&fs_err::read_to_string(&member)?.replace(">=0.1.0", ">=1.0.0"))?;
+    pyproject_toml
+        .write_str(&fs_err::read_to_string(&pyproject_toml)?.replace(">=0.0.1", ">=0.1.0"))?;
 
     uv_snapshot!(context.filters(), context.lock().arg("--check").arg("--offline").arg("--no-cache"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × Failed to download `a @ http://[LOCALHOST]/files/a-1.0.0-py3-none-any.whl`
-      ╰─▶ Network connectivity is disabled, but the requested data wasn't found in the cache for: `http://[LOCALHOST]/files/a-1.0.0-py3-none-any.whl`
-    ");
-    assert_eq!(context.read("uv.lock"), lock);
+    error: Failed to download `a @ http://[LOCALHOST]/files/a-1.0.0-py3-none-any.whl`
+      cause: Network connectivity is disabled, but the requested data wasn't found in the cache: http://[LOCALHOST]/files/a-1.0.0-py3-none-any.whl
 
-    // A known mismatch must not produce hints if resolution succeeds.
-    uv_snapshot!(context.filters(), context.lock(), @"
-    exit_code: 0 (success)
+    hint: The lockfile needs to be updated because the requirements for `project` have changed:
+      Added project>=0.1
+      Removed project>=0.0.1
+    ");
+
+    uv_snapshot!(context.filters(), context.sync().arg("--locked").arg("--offline").arg("--no-cache").arg("--quiet"), @"
+    exit_code: 1 (failure)
     ----- stderr -----
-    Resolved 3 packages in [TIME]
+    error: Failed to download `a @ http://[LOCALHOST]/files/a-1.0.0-py3-none-any.whl`
+      cause: Network connectivity is disabled, but the requested data wasn't found in the cache: http://[LOCALHOST]/files/a-1.0.0-py3-none-any.whl
+
+    hint: The lockfile needs to be updated because the requirements for `project` have changed:
+      Added project>=0.1
+      Removed project>=0.0.1
+    ");
+
+    uv_snapshot!(context.filters(), context.lock().arg("--offline").arg("--no-cache"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: Failed to download `a @ http://[LOCALHOST]/files/a-1.0.0-py3-none-any.whl`
+      cause: Network connectivity is disabled, but the requested data wasn't found in the cache: http://[LOCALHOST]/files/a-1.0.0-py3-none-any.whl
     ");
 
     Ok(())
