@@ -17,6 +17,7 @@ permissions: {}
 env:
   UV_REPOSITORY_ID: "699532645"
   AUTOMATIONS_BOT_ID: "305554984"
+  UV_SECURITY_PUBLISH_LABEL: "bot:promote"
 
 concurrency:
   group: promote-pull-request-${{ inputs.pull_request }}
@@ -128,6 +129,10 @@ jobs:
           echo "approval_id=$(jq --raw-output '.id' <<< "$approval")" >> "$GITHUB_OUTPUT"
 
           if [ "$GITHUB_REPOSITORY" = "astral-sh/uv-security" ]; then
+            if ! jq --exit-status --arg label "$UV_SECURITY_PUBLISH_LABEL" \
+              '.labels | any(.name == $label)' <<< "$source_pull_request" > /dev/null; then
+              reject "The private pull request requires the $UV_SECURITY_PUBLISH_LABEL label."
+            fi
             promoter_permission=$(gh api --method GET "repos/$GITHUB_REPOSITORY/collaborators/$promoter/permission")
             if ! jq --exit-status \
               '.permission == "admin" or .permission == "maintain" or .permission == "write"' \
@@ -465,6 +470,10 @@ jobs:
           fi
 
           if [ "$GITHUB_REPOSITORY" = "astral-sh/uv-security" ]; then
+            if ! jq --exit-status --arg label "$UV_SECURITY_PUBLISH_LABEL" \
+              '.labels | any(.name == $label)' <<< "$source_pull_request" > /dev/null; then
+              reject "The private pull request requires the $UV_SECURITY_PUBLISH_LABEL label."
+            fi
             promoter_permission=$(gh api --method GET "repos/$GITHUB_REPOSITORY/collaborators/$PROMOTER/permission")
             if ! jq --exit-status \
               '.permission == "admin" or .permission == "maintain" or .permission == "write"' \
@@ -567,6 +576,10 @@ jobs:
                   '.state == "open" and (.draft | not) and .base.ref == $base_ref and .base.sha == $base_head and .head.ref == $head_ref and .base.repo.id == $repository_id and .head.repo.id == $repository_id' \
                   <<< "$current_pull_request" > /dev/null; then
                   reject "The private pull request or its approval changed before publication."
+                fi
+                if ! jq --exit-status --arg label "$UV_SECURITY_PUBLISH_LABEL" \
+                  '.labels | any(.name == $label)' <<< "$current_pull_request" > /dev/null; then
+                  reject "The private pull request requires the $UV_SECURITY_PUBLISH_LABEL label."
                 fi
 
                 promotion_git push --force-with-lease="refs/heads/$HEAD_REF:" \
