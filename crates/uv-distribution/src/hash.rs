@@ -2,10 +2,12 @@ use uv_distribution_types::HashPolicy;
 use uv_pypi_types::{HashAlgorithm, HashDigests, Hashes};
 use uv_redacted::DisplaySafeUrl;
 
-/// Return URL-provided hashes that can be reused instead of generating a hash.
+/// Parse declared URL hashes that can be reused instead of computing a hash.
+///
+/// These declarations do not establish that an artifact has been downloaded or validated.
 ///
 /// Ignore MD5, which cannot satisfy `--require-hashes`.
-pub(crate) fn url_hashes(url: &DisplaySafeUrl) -> Option<HashDigests> {
+pub(crate) fn parse_url_hashes(url: &DisplaySafeUrl) -> Option<HashDigests> {
     let hashes = url
         .fragment()?
         .split('&')
