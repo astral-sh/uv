@@ -121,10 +121,6 @@ async fn add_package_native_auth_realm() -> Result<()> {
         .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-
-    hint: The lockfile needs to be updated because the requirements for `foo` have changed:
-      Added: `iniconfig`
-    hint: To update the lockfile, run `uv lock`.
     error: Failed to add dependencies
       cause: No solution found when resolving dependencies
       cause: Because iniconfig was not found in the package registry and your project depends on iniconfig, we can conclude that your project's requirements are unsatisfiable.
@@ -225,10 +221,6 @@ async fn add_package_native_auth() -> Result<()> {
         .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-
-    hint: The lockfile needs to be updated because the requirements for `foo` have changed:
-      Added: `iniconfig`
-    hint: To update the lockfile, run `uv lock`.
     error: Failed to add dependencies
       cause: No solution found when resolving dependencies
       cause: Because iniconfig was not found in the package registry and your project depends on iniconfig, we can conclude that your project's requirements are unsatisfiable.
