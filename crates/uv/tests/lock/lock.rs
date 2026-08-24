@@ -1263,6 +1263,11 @@ fn lock_check_offline_workspace_requirements() -> Result<()> {
     uv_snapshot!(context.filters(), context.lock().arg("--check").arg("--offline").arg("--no-cache"), @"
     exit_code: 1 (failure)
     ----- stderr -----
+
+    hint: The lockfile needs to be updated because the requirements for `member-demo` have changed:
+      Added: `a>=1.0.0`
+      Removed: `a>=0.1.0`
+    hint: To update the lockfile, run `uv lock`.
       × Failed to download `a @ http://[LOCALHOST]/files/a-1.0.0-py3-none-any.whl`
       ╰─▶ Network connectivity is disabled, but the requested data wasn't found in the cache for: `http://[LOCALHOST]/files/a-1.0.0-py3-none-any.whl`
     ");
