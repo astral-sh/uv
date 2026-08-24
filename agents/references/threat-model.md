@@ -153,16 +153,18 @@ dispatches are restricted to trusted uv maintainers.
 - **High:** A complete, demonstrated path from independent attacker input crosses a stated integrity
   or privilege boundary, grants material new power, and causes substantial confidentiality or
   integrity harm. It cannot depend on a trusted maintainer selecting malicious input, trust-root
-  compromise, or power the attacker already has. Examples: execute attacker bytes instead of a
-  documented full 40-hex immutable Git pin, or automatically run mutable third-party code in a
-  scheduled workflow with repository-write, publishing, or equivalent credentials.
+  compromise, or power the attacker already has. Examples: bypass a trusted required hash to
+  substitute attacker-controlled bytes that uv builds, installs, or executes; execute attacker bytes
+  instead of a documented full 40-hex immutable Git pin; or automatically run mutable third-party
+  code in a scheduled workflow with repository-write, publishing, or equivalent credentials. A hash
+  bypass that meets these criteria can qualify as High without a separate privileged consumer or
+  credential.
 - **Medium:** A real but limited boundary crossing, an uncommon realistic setup, limited credential
   or filesystem effect, reliable resource exhaustion from remote data that has no authority under a
   locked operation, or premature execution that violates an effective explicit policy. Examples:
-  loss of a trusted required hash in an explicitly run tool environment; collision between an
-  abbreviated or undocumented legacy Git pin and a mutable ref; or shell injection that waits for
-  explicit activation-script sourcing. These become High only when a separate privileged consumer,
-  credential, or authoritative output materially increases impact.
+  collision between an abbreviated or undocumented legacy Git pin and a mutable ref; or shell
+  injection that waits for explicit activation-script sourcing. These become High only when a
+  separate privileged consumer, credential, or authoritative output materially increases impact.
 - **Low:** A narrow safety gap, rare reuse of one cache entry across independently authorized
   identities, limited disclosure, or a robustness problem across a real but weak boundary.
 - **Informational:** A genuine **security** concern with no or negligible current impact.
