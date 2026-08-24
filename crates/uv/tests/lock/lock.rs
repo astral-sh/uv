@@ -14929,6 +14929,11 @@ fn lock_editable() -> Result<()> {
     uv_snapshot!(context.filters(), context.lock(), @"
     exit_code: 1 (failure)
     ----- stderr -----
+
+    hint: The lockfile needs to be updated because the requirements for `leaf` have changed:
+      Added: `library @ file://[TEMP_DIR]/library`
+      Removed: `library @ file://[TEMP_DIR]/library`
+    hint: To update the lockfile, run `uv lock`.
       × Failed to resolve dependencies for `workspace` (v0.1.0)
       ╰─▶ Requirements contain conflicting URLs for package `library` in all marker environments:
           - file://[TEMP_DIR]/library
@@ -22543,6 +22548,11 @@ fn lock_explicit_default_index() -> Result<()> {
     DEBUG Recording unit propagation conflict of anyio from incompatibility of (project)
     DEBUG Searching for a compatible version of project @ file://[TEMP_DIR]/ (<0.1.0 | >0.1.0)
     DEBUG No compatible version found for: project
+
+    hint: The lockfile needs to be updated because the requirements for `project` have changed:
+      Added: `anyio`
+      Removed: `iniconfig==2.0.0 (index: https://test.pypi.org/simple)`
+    hint: To update the lockfile, run `uv lock`.
       × No solution found when resolving dependencies:
       ╰─▶ Because anyio was not found in the package registry and your project depends on anyio, we can conclude that your project's requirements are unsatisfiable.
     "#);

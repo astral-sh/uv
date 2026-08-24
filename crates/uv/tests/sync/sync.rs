@@ -10642,6 +10642,11 @@ fn mismatched_name_cached_wheel() -> Result<()> {
     uv_snapshot!(context.filters(), context.sync(), @"
     exit_code: 1 (failure)
     ----- stderr -----
+
+    hint: The lockfile needs to be updated because the requirements for `project` have changed:
+      Added: `foo @ https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz`
+      Removed: `iniconfig @ https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz`
+    hint: To update the lockfile, run `uv lock`.
       × Failed to download and build `foo @ https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz`
       ╰─▶ Package metadata name `iniconfig` does not match given name `foo`
     ");
