@@ -11,6 +11,7 @@ use url::Url;
 use wiremock::matchers::{method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
+use uv_cache::{Cache, CacheBucket};
 use uv_fs::{Simplified, copy_dir_all};
 use uv_static::EnvVars;
 use uv_test::find_links::FindLinksServer;
@@ -5758,6 +5759,54 @@ fn pep_751_validates_cached_remote_archive_size() -> Result<()> {
       × Failed to download `a @ http://[LOCALHOST]/files/a-1.0.0-py3-none-any.whl`
       ╰─▶ Size mismatch for `a @ http://[LOCALHOST]/files/a-1.0.0-py3-none-any.whl`: expected 1 bytes, but downloaded 921 bytes
     "#);
+
+    // A normal cache hit must enforce the same size check, without bypassing the planner via
+    // `--reinstall`.
+    context.pip_uninstall().arg("a").assert().success();
+    uv_snapshot!(context.filters(), context.pip_sync()
+        .arg("--preview")
+        .arg("--offline")
+        .arg("pylock.toml"), @r#"
+    exit_code: 1 (failure)
+    ----- stderr -----
+      × Failed to download `a @ http://[LOCALHOST]/files/a-1.0.0-py3-none-any.whl`
+      ╰─▶ Size mismatch for `a @ http://[LOCALHOST]/files/a-1.0.0-py3-none-any.whl`: expected 1 bytes, but downloaded 921 bytes
+    "#);
+
+    Ok(())
+}
+
+/// A dangling HTTP pointer is a cache miss, not an installable wheel.
+#[test]
+fn direct_url_missing_cached_archive() -> Result<()> {
+    let server = PackseServer::new("simple/single-package.toml");
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("requirements.txt")
+        .write_str(&format!(
+            "a @ {}",
+            server.file_url("a-1.0.0-py3-none-any.whl"),
+        ))?;
+    context
+        .pip_sync()
+        .arg("requirements.txt")
+        .assert()
+        .success();
+    context.pip_uninstall().arg("a").assert().success();
+
+    // Keep both the HTTP pointer and hash index, but remove the referenced archive.
+    let cache = Cache::from_path(context.cache_dir.path());
+    fs::remove_dir_all(cache.bucket(CacheBucket::Archive))?;
+
+    uv_snapshot!(context.filters(), context.pip_sync().arg("requirements.txt"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + a==1.0.0 (from http://[LOCALHOST]/files/a-1.0.0-py3-none-any.whl)
+    ");
 
     Ok(())
 }

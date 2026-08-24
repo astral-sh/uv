@@ -1,7 +1,7 @@
 use serde::ser::SerializeMap;
 use uv_cache::{ARCHIVE_VERSION, ArchiveId, Cache};
 use uv_distribution_filename::WheelFilename;
-use uv_distribution_types::Hashed;
+use uv_distribution_types::{HashPolicy, Hashed};
 use uv_pypi_types::{HashDigest, HashDigests};
 
 /// An archive (unzipped wheel) that exists in the local cache.
@@ -57,6 +57,20 @@ impl Archive {
     /// Returns `true` if the archive exists in the cache.
     pub(crate) fn exists(&self, cache: &Cache) -> bool {
         self.version == ARCHIVE_VERSION && cache.archive(&self.id).exists()
+    }
+
+    /// Return whether these cached contents satisfy the requested wheel's integrity constraints.
+    pub(crate) fn is_usable(
+        &self,
+        cache: &Cache,
+        filename: &WheelFilename,
+        hashes: HashPolicy<'_>,
+        size: Option<u64>,
+    ) -> bool {
+        self.filename == *filename
+            && self.satisfies(hashes)
+            && self.exists(cache)
+            && size.is_none_or(|size| self.size == Some(size))
     }
 }
 

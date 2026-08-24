@@ -19,8 +19,8 @@ use uv_client::{
 };
 use uv_distribution_filename::WheelFilename;
 use uv_distribution_types::{
-    BuildInfo, BuildableSource, BuiltDist, Dist, DistRef, File, HashGeneration, HashPolicy, Hashed,
-    IndexUrl, InstalledDist, Name, SourceDist, SourceUrl, ToUrlError,
+    BuildInfo, BuildableSource, BuiltDist, DirectUrlBuiltDist, Dist, DistRef, File, HashGeneration,
+    HashPolicy, Hashed, IndexUrl, InstalledDist, Name, SourceDist, SourceUrl, ToUrlError,
 };
 use uv_extract::hash::Hasher;
 use uv_fs::write_atomic;
@@ -1479,15 +1479,36 @@ impl HttpArchivePointer {
                 Err(err) if err.kind() == io::ErrorKind::NotFound => continue,
                 Err(err) => return Err(Error::CacheRead(err)),
             };
-            if archive.filename == *filename
-                && archive.satisfies(hashes)
-                && archive.exists(cache)
-                && size.is_none_or(|size| archive.size == Some(size))
-            {
+            if archive.is_usable(cache, filename, hashes, size) {
                 return Ok(Some(Self { archive }));
             }
         }
         Ok(None)
+    }
+
+    /// Find a URL wheel whose hashes, size, filename, and archive are valid for this request.
+    ///
+    /// Prefer the shared hash index, then check the URL's HTTP response with the same constraints.
+    pub fn read_from_direct_url(
+        cache: &Cache,
+        wheel: &DirectUrlBuiltDist,
+        hashes: HashPolicy<'_>,
+    ) -> Result<Option<Self>, Error> {
+        if let Some(pointer) =
+            Self::read_from_hashes(cache, &wheel.url, &wheel.filename, hashes, wheel.size)?
+        {
+            return Ok(Some(pointer));
+        }
+        let entry = cache.entry(
+            CacheBucket::Wheels,
+            WheelCache::Url(&wheel.url).wheel_dir(wheel.name().as_ref()),
+            format!("{}.http", wheel.filename.cache_key()),
+        );
+        Ok(Self::read_from(&entry)?.filter(|pointer| {
+            pointer
+                .archive
+                .is_usable(cache, &wheel.filename, hashes, wheel.size)
+        }))
     }
 
     /// Index an archive by its computed digests without replacing any URL response or metadata.
