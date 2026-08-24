@@ -87,9 +87,9 @@ impl Hashed for Revision {
 
 /// A unique identifier for a revision of a source distribution.
 ///
-/// Note: for compatibility with the existing `sdists-v9` bucket, this is a newtype around a
+/// Note: for compatibility with the existing `sdists-v10` bucket, this is a newtype around a
 /// `String` rather than a newtype around `uv_fastid::Id`. In the future, we may want to bump
-/// to `sdists-v10` and switch to using `uv_fastid::Id` directly.
+/// to `sdists-v11` and switch to using `uv_fastid::Id` directly.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub(crate) struct RevisionId(String);
 
@@ -142,10 +142,15 @@ mod tests {
 
     #[test]
     fn round_trip_current_revision() {
-        let original = Revision::new();
+        let original = Revision::new().with_hashes(HashDigests::from(
+            "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+                .parse::<HashDigest>()
+                .expect("valid SHA-256 digest"),
+        ));
         let bytes = rmp_serde::to_vec(&original).expect("serialize revision");
         let parsed: Revision = rmp_serde::from_slice(&bytes).expect("deserialize revision");
         assert_eq!(parsed.id().as_str(), original.id().as_str());
+        assert_eq!(parsed.hashes(), original.hashes());
     }
 
     #[test]

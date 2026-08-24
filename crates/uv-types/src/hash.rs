@@ -183,7 +183,8 @@ impl HashStrategy {
                 .iter()
                 .map(|digest| HashDigest::from_str(digest))
                 .collect::<Result<Vec<_>, _>>()?;
-            if let Some(fragment_hashes) = requirement.hashes().map(HashDigests::from) {
+            if let Some(fragment_hashes) = requirement.hashes()? {
+                let fragment_hashes = HashDigests::from(fragment_hashes);
                 merge_digests(&mut digests, fragment_hashes.iter(), requirement)?;
             }
 
@@ -234,7 +235,8 @@ impl HashStrategy {
                 .iter()
                 .map(|digest| HashDigest::from_str(digest))
                 .collect::<Result<Vec<_>, _>>()?;
-            if let Some(fragment_hashes) = requirement.hashes().map(HashDigests::from) {
+            if let Some(fragment_hashes) = requirement.hashes()? {
+                let fragment_hashes = HashDigests::from(fragment_hashes);
                 merge_digests(&mut digests, fragment_hashes.iter(), requirement)?;
             }
 
@@ -347,7 +349,7 @@ impl HashStrategy {
         let mut hashes = None;
 
         for requirement in requirements {
-            let Some((id, digests)) = Self::requirement_hashes(requirement) else {
+            let Some((id, digests)) = Self::requirement_hashes(requirement)? else {
                 continue;
             };
             let current = hashes.as_ref().unwrap_or(existing);
@@ -368,14 +370,21 @@ impl HashStrategy {
     }
 
     /// Extract the archive URL hash target and digests for a requirement, if any.
-    fn requirement_hashes(requirement: &Requirement) -> Option<(VersionId, Vec<HashDigest>)> {
-        let mut digests = HashDigests::from(requirement.hashes()?).to_vec();
+    fn requirement_hashes(
+        requirement: &Requirement,
+    ) -> Result<Option<(VersionId, Vec<HashDigest>)>, HashStrategyError> {
+        let Some(hashes) = requirement.hashes()? else {
+            return Ok(None);
+        };
+        let mut digests = HashDigests::from(hashes).to_vec();
         if digests.is_empty() {
-            return None;
+            return Ok(None);
         }
         digests.sort_unstable();
-        let id = Self::pin(requirement)?;
-        Some((id, digests))
+        let Some(id) = Self::pin(requirement) else {
+            return Ok(None);
+        };
+        Ok(Some((id, digests)))
     }
 
     /// Pin a [`Requirement`] to a [`VersionId`], if possible.
@@ -471,7 +480,7 @@ fn merge_digests<'a>(
     for digest in incoming {
         match existing
             .iter()
-            .find(|candidate| candidate.algorithm == digest.algorithm)
+            .find(|candidate| candidate.algorithm() == digest.algorithm())
         {
             Some(candidate) if candidate == digest => {}
             Some(conflict) => {
@@ -552,7 +561,7 @@ mod tests {
     #[test]
     fn from_requirements_merges_direct_url_hashes_across_fragments() {
         let first = UnresolvedRequirement::Named(requirement(
-            "https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl#sha256=cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f",
+            "https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl#sha256=CFDB2B588B9FC25EDE96D8DB56ED50848B0B649DCA3DD1DF0B11F683BB9E0B5F",
         ));
         let second = UnresolvedRequirement::Named(requirement(
             "https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl#sha512=f30761c1e8725b49c498273b90dba4b05c0fd157811994c806183062cb6647e773364ce45f0e1ff0b10e32fe6d0232ea5ad39476ccf37109d6b49603a09c11c2",

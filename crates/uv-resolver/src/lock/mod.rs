@@ -51,8 +51,8 @@ use uv_platform_tags::{
 };
 use uv_preview::PreviewFeature;
 use uv_pypi_types::{
-    ConflictItem, ConflictKindRef, Conflicts, HashAlgorithm, HashDigest, HashDigests, Hashes,
-    ParsedArchiveUrl, ParsedGitDirectoryUrl, ParsedGitPathUrl, PyProjectToml,
+    ConflictItem, ConflictKindRef, Conflicts, HashAlgorithm, HashDigest, HashDigests, HashError,
+    Hashes, ParsedArchiveUrl, ParsedGitDirectoryUrl, ParsedGitPathUrl, PyProjectToml,
 };
 use uv_redacted::{DisplaySafeUrl, DisplaySafeUrlError};
 use uv_small_str::SmallString;
@@ -1368,7 +1368,7 @@ impl Lock {
             warn_index_hash_algorithm_preview();
 
             let mismatched =
-                |hash: Option<&Hash>| hash.is_none_or(|hash| hash.0.algorithm != algorithm);
+                |hash: Option<&Hash>| hash.is_none_or(|hash| hash.0.algorithm() != algorithm);
 
             if package.sdist.iter().any(|sdist| mismatched(sdist.hash()))
                 || package.wheels.iter().any(|wheel| {
@@ -6471,7 +6471,7 @@ fn select_registry_hash(
 
     hashes
         .iter()
-        .find(|hash| hash.algorithm == algorithm)
+        .find(|hash| hash.algorithm() == algorithm)
         .cloned()
         .map(Hash::from)
         .map(Some)
@@ -6496,25 +6496,16 @@ fn warn_index_hash_algorithm_preview() {
 }
 
 impl FromStr for Hash {
-    type Err = HashParseError;
+    type Err = HashError;
 
-    fn from_str(s: &str) -> Result<Self, HashParseError> {
-        let (algorithm, digest) = s.split_once(':').ok_or(HashParseError(
-            "expected '{algorithm}:{digest}', but found no ':' in hash digest",
-        ))?;
-        let algorithm = algorithm
-            .parse()
-            .map_err(|_| HashParseError("unrecognized hash algorithm"))?;
-        Ok(Self(HashDigest {
-            algorithm,
-            digest: digest.into(),
-        }))
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        HashDigest::from_str(s).map(Self)
     }
 }
 
 impl Display for Hash {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "{}:{}", self.0.algorithm, self.0.digest)
+        write!(f, "{}:{}", self.0.algorithm(), self.0.digest())
     }
 }
 
@@ -6543,43 +6534,7 @@ impl<'de> serde::Deserialize<'de> for Hash {
 
 impl From<Hash> for Hashes {
     fn from(value: Hash) -> Self {
-        match value.0.algorithm {
-            HashAlgorithm::Md5 => Self {
-                md5: Some(value.0.digest),
-                sha256: None,
-                sha384: None,
-                sha512: None,
-                blake2b: None,
-            },
-            HashAlgorithm::Sha256 => Self {
-                md5: None,
-                sha256: Some(value.0.digest),
-                sha384: None,
-                sha512: None,
-                blake2b: None,
-            },
-            HashAlgorithm::Sha384 => Self {
-                md5: None,
-                sha256: None,
-                sha384: Some(value.0.digest),
-                sha512: None,
-                blake2b: None,
-            },
-            HashAlgorithm::Sha512 => Self {
-                md5: None,
-                sha256: None,
-                sha384: None,
-                sha512: Some(value.0.digest),
-                blake2b: None,
-            },
-            HashAlgorithm::Blake2b => Self {
-                md5: None,
-                sha256: None,
-                sha384: None,
-                sha512: None,
-                blake2b: Some(value.0.digest),
-            },
-        }
+        Self::from(value.0)
     }
 }
 
@@ -7621,18 +7576,6 @@ enum SourceParseError {
         /// The source string given.
         given: String,
     },
-}
-
-/// An error that occurs when a hash digest could not be parsed.
-#[derive(Clone, Debug, Eq, PartialEq)]
-struct HashParseError(&'static str);
-
-impl std::error::Error for HashParseError {}
-
-impl Display for HashParseError {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        Display::fmt(self.0, f)
-    }
 }
 
 /// Return the PEP 508 marker space covered by the resolution.

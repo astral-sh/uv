@@ -21,6 +21,7 @@ use uv_fs::{
 };
 use uv_platform::{Error as PlatformError, Os};
 use uv_platform::{LibcDetectionError, Platform};
+use uv_pypi_types::Digest;
 use uv_state::{StateBucket, StateStore};
 use uv_static::EnvVars;
 use uv_trampoline_builder::{Launcher, LauncherKind, WindowMode, windows_python_launcher};
@@ -307,7 +308,7 @@ pub struct ManagedPythonInstallation {
     /// The SHA256 of the Python archive at the URL.
     ///
     /// Empty when self was constructed from a path.
-    sha256: Option<Cow<'static, str>>,
+    sha256: Option<Digest<32>>,
     /// The build version of the Python installation.
     ///
     /// Empty when self was constructed from a path without a BUILD file.
@@ -698,7 +699,7 @@ impl ManagedPythonInstallation {
 
     #[cfg(windows)]
     pub(crate) fn sha256(&self) -> Option<&str> {
-        self.sha256.as_deref()
+        self.sha256.as_ref().map(Digest::as_str)
     }
 }
 

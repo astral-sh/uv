@@ -18,7 +18,7 @@ use uv_redacted::{DisplaySafeUrl, DisplaySafeUrlError};
 use crate::{IndexMetadata, IndexUrl};
 
 use uv_pypi_types::{
-    ConflictItem, Hashes, ParsedArchiveUrl, ParsedDirectoryUrl, ParsedGitDirectoryUrl,
+    ConflictItem, HashError, Hashes, ParsedArchiveUrl, ParsedDirectoryUrl, ParsedGitDirectoryUrl,
     ParsedGitPathUrl, ParsedPathUrl, ParsedUrl, ParsedUrlError, VerbatimParsedUrl,
 };
 
@@ -91,16 +91,16 @@ impl Requirement {
     }
 
     /// Return the hashes of the requirement, as specified in the URL fragment.
-    pub fn hashes(&self) -> Option<Hashes> {
+    pub fn hashes(&self) -> Result<Option<Hashes>, HashError> {
         let (RequirementSource::Url { ref url, .. } | RequirementSource::Path { ref url, .. }) =
             self.source
         else {
-            return None;
+            return Ok(None);
         };
-        let fragment = url.fragment()?;
-        fragment
-            .split('&')
-            .find_map(|fragment| Hashes::parse_fragment(fragment).ok())
+        let Some(fragment) = url.fragment() else {
+            return Ok(None);
+        };
+        Hashes::parse_url_fragment(fragment)
     }
 
     /// Set the source file containing the requirement.

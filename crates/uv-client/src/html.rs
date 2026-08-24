@@ -241,6 +241,10 @@ impl SimpleDetailHTML {
                                 return Err(HashError::UnsupportedHashAlgorithm(fragment).into());
                             }
                         }
+                        Err(
+                            err @ (HashError::InvalidDigestLength { .. }
+                            | HashError::InvalidDigestCharacters(_)),
+                        ) => return Err(err.into()),
                     }
                 },
             )
@@ -490,7 +494,7 @@ mod tests {
 <html>
 <body>
 <h1>Links for jinja2</h1>
-<a href="/whl/Jinja2-3.1.2-py3-none-any.whl#md5=6088930bfe239f0e6710546ab9c19c9ef35e29792895fed6e6e31a023a182a61">Jinja2-3.1.2-py3-none-any.whl</a><br/>
+<a href="/whl/Jinja2-3.1.2-py3-none-any.whl#md5=6088930bfe239f0e6710546ab9c19c9e">Jinja2-3.1.2-py3-none-any.whl</a><br/>
 </body>
 </html>
 <!--TIMESTAMP 1703347410-->
@@ -526,7 +530,7 @@ mod tests {
                     filename: "Jinja2-3.1.2-py3-none-any.whl",
                     hashes: Hashes {
                         md5: Some(
-                            "6088930bfe239f0e6710546ab9c19c9ef35e29792895fed6e6e31a023a182a61",
+                            "6088930bfe239f0e6710546ab9c19c9e",
                         ),
                         sha256: None,
                         sha384: None,
@@ -542,6 +546,22 @@ mod tests {
             ],
         }
         "#);
+    }
+
+    #[test]
+    fn reject_invalid_hashes() {
+        let text = r#"
+<!DOCTYPE html>
+<html>
+<body>
+<a href="/whl/Jinja2-3.1.0-py3-none-any.whl#sha256=short">Jinja2-3.1.0-py3-none-any.whl</a>
+</body>
+</html>
+"#;
+        let base = DisplaySafeUrl::parse("https://download.pytorch.org/whl/jinja2/")
+            .expect("valid base URL");
+        let error = SimpleDetailHTML::parse(text, &base).expect_err("invalid digest length");
+        insta::assert_snapshot!(error, @"Invalid hash digest length (expected 64 hexadecimal characters, found 5)");
     }
 
     #[test]

@@ -26,6 +26,7 @@ use wiremock::{
     matchers::{basic_auth, method, path},
 };
 
+use uv_cache::CacheBucket;
 use uv_fs::{PortablePath, Simplified};
 use uv_static::EnvVars;
 use uv_test::archive::write_tar_gz;
@@ -91,6 +92,12 @@ fn install_wheel_cache_incompatible_with_older_uv() -> Result<()> {
             write_many_files_wheel(&wheel, 1)?;
 
             context.pip_install().arg(&wheel).assert().success();
+            // Expose the current archive metadata to older versions, despite the wheel cache bump.
+            fs::rename(
+                context.cache_dir.child(CacheBucket::Wheels.to_string()),
+                // NOTE: Update this cache bucket version as necessary.
+                context.cache_dir.child("wheels-v6"),
+            )?;
             context.venv().arg("--clear").assert().success();
 
             // New cache entries should not make older uv versions fail; see astral-sh/uv#20949.
@@ -12810,6 +12817,43 @@ fn pep_751_install_invalid_artifact_urls() -> Result<()> {
     error: Invalid artifact URL: `data:application/octet-stream,ignored`
     "
     );
+
+    Ok(())
+}
+
+#[test]
+fn pep_751_install_invalid_hashes() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let pylock_toml = context.temp_dir.child("pylock.toml");
+
+    pylock_toml.write_str(
+        r#"
+        lock-version = "1.0"
+        created-by = "uv"
+        requires-python = ">=3.12"
+
+        [[packages]]
+        name = "foo"
+        version = "1.0.0"
+        wheels = [{ name = "foo-1.0.0-py3-none-any.whl", url = "https://example.com/foo-1.0.0-py3-none-any.whl", hashes = { sha256 = "short" } }]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--preview")
+        .arg("--offline")
+        .arg("--dry-run")
+        .arg("-r")
+        .arg("pylock.toml"), @r###"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Not a valid `pylock.toml` file: pylock.toml
+      Caused by: TOML parse error at line 9, column 134
+          |
+        9 |         wheels = [{ name = "foo-1.0.0-py3-none-any.whl", url = "https://example.com/foo-1.0.0-py3-none-any.whl", hashes = { sha256 = "short" } }]
+          |                                                                                                                                      ^^^^^^^
+        Invalid hash digest length (expected 64 hexadecimal characters, found 5)
+    "###);
 
     Ok(())
 }
