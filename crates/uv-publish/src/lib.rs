@@ -9,7 +9,7 @@ use fs_err::tokio::File;
 use futures::TryStreamExt;
 use glob::{GlobError, PatternError, glob};
 use itertools::Itertools;
-use reqwest::header::{AUTHORIZATION, LOCATION, ToStrError};
+use reqwest::header::{AUTHORIZATION, InvalidHeaderValue, LOCATION, ToStrError};
 use reqwest::multipart::Part;
 use reqwest::{Body, Response, StatusCode};
 use reqwest_retry::RetryError;
@@ -109,6 +109,8 @@ pub enum PublishError {
 pub enum PublishPrepareError {
     #[error(transparent)]
     Io(#[from] io::Error),
+    #[error("Invalid authorization header")]
+    InvalidHeaderValue(#[from] InvalidHeaderValue),
     #[error("Failed to read metadata")]
     Metadata(#[from] uv_metadata::Error),
     #[error("Failed to read metadata")]
@@ -682,7 +684,8 @@ pub async fn validate(
             client,
             credentials,
             form_metadata,
-        );
+        )
+        .map_err(|err| PublishError::PublishPrepare(file.to_path_buf(), err.into()))?;
 
         let response = request.send().await.map_err(|err| {
             PublishError::Validate(
@@ -772,7 +775,8 @@ pub async fn upload_two_phase(
         client,
         credentials,
         form_metadata,
-    );
+    )
+    .map_err(|err| PublishError::PublishPrepare(group.file.clone(), err.into()))?;
 
     let response = reserve_request.send().await.map_err(|err| {
         PublishError::Reserve(
@@ -931,7 +935,8 @@ pub async fn upload_two_phase(
         client,
         credentials,
         form_metadata,
-    );
+    )
+    .map_err(|err| PublishError::PublishPrepare(group.file.clone(), err.into()))?;
 
     let response = finalize_request.send().await.map_err(|err| {
         PublishError::Finalize(
@@ -1444,12 +1449,12 @@ async fn build_upload_request<'a>(
         Credentials::Basic { password, .. } => {
             if password.is_some() {
                 debug!("Using HTTP Basic authentication");
-                request = request.header(AUTHORIZATION, credentials.to_header_value());
+                request = request.header(AUTHORIZATION, credentials.to_header_value()?);
             }
         }
         Credentials::Bearer { .. } => {
             debug!("Using Bearer token authentication");
-            request = request.header(AUTHORIZATION, credentials.to_header_value());
+            request = request.header(AUTHORIZATION, credentials.to_header_value()?);
         }
     }
 
@@ -1463,7 +1468,7 @@ fn build_metadata_request<'a>(
     client: &'a BaseClient,
     credentials: &Credentials,
     form_metadata: &FormMetadata,
-) -> RequestBuilder<'a> {
+) -> Result<RequestBuilder<'a>, PublishPrepareError> {
     let mut form = reqwest::multipart::Form::new();
     for (key, value) in form_metadata.iter() {
         form = form.text(*key, value.clone());
@@ -1499,16 +1504,16 @@ fn build_metadata_request<'a>(
         Credentials::Basic { password, .. } => {
             if password.is_some() {
                 debug!("Using HTTP Basic authentication");
-                request = request.header(AUTHORIZATION, credentials.to_header_value());
+                request = request.header(AUTHORIZATION, credentials.to_header_value()?);
             }
         }
         Credentials::Bearer { .. } => {
             debug!("Using Bearer token authentication");
-            request = request.header(AUTHORIZATION, credentials.to_header_value());
+            request = request.header(AUTHORIZATION, credentials.to_header_value()?);
         }
     }
 
-    request
+    Ok(request)
 }
 
 /// Log response information and map response to an error variant if not successful.

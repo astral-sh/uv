@@ -1779,6 +1779,30 @@ fn bazel_helper_token() {
     );
 }
 
+#[test]
+fn bazel_helper_invalid_bearer_token() {
+    let context = uv_test::test_context_with_versions!(&[]);
+
+    allow_duplicates! {
+        for env_var in [EnvVars::PYX_AUTH_TOKEN, EnvVars::UV_AUTH_TOKEN] {
+            uv_snapshot!(context.filters(), context.auth_helper()
+                .arg("--protocol=bazel")
+                .arg("get")
+                .arg("--offline")
+                .env(EnvVars::UV_PREVIEW_FEATURES, "auth-helper")
+                .env(env_var, "secret\nvalue"),
+                input=r#"{"uri":"https://api.pyx.dev"}"#,
+                @"
+            exit_code: 2 (failure)
+            ----- stderr -----
+            error: Invalid authorization header
+              Caused by: failed to parse header value
+            "
+            );
+        }
+    }
+}
+
 /// Test credential helper with no credentials found
 #[test]
 fn bazel_helper_no_credentials() {
