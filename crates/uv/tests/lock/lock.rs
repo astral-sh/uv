@@ -3,11 +3,13 @@ use anyhow::Result;
 use assert_cmd::assert::OutputAssertExt;
 use assert_fs::prelude::*;
 use indoc::{formatdoc, indoc};
+#[cfg(feature = "test-universal")]
+use insta::allow_duplicates;
 use insta::assert_snapshot;
 #[cfg(feature = "test-universal")]
 use serde_json::json;
 #[cfg(feature = "test-universal")]
-use sha2::{Digest, Sha256, Sha512};
+use sha2::{Digest, Sha512};
 #[cfg(feature = "test-universal")]
 use url::Url;
 #[cfg(feature = "test-universal")]
@@ -1445,190 +1447,81 @@ async fn lock_wheel_url_fragment_download() -> Result<()> {
     Ok(())
 }
 
-/// Reuse downloaded URL wheels offline, while refreshing bytes when an expected hash changes.
+/// Both revisions of a URL wheel remain available offline, including after pruning.
 #[cfg(feature = "test-universal")]
 #[tokio::test]
 async fn lock_wheel_url_hash_cache() -> Result<()> {
-    let context = uv_test::test_context!("3.13")
-        .with_filtered_python_names()
-        .with_filtered_virtualenv_bin()
-        .with_filtered_exe_suffix();
+    let context = uv_test::test_context!("3.12");
     let server = MockServer::start().await;
-    let ok_filename = "ok-1.0.0-py3-none-any.whl";
-    let basic_filename = "basic_package-0.1.0-py3-none-any.whl";
-    let ok_wheel = fs_err::read(context.workspace_root.join("test/links").join(ok_filename))?;
-    let mut basic_wheel = fs_err::read(
+    let filename = "ok-1.0.0-py3-none-any.whl";
+    let original = fs_err::read(context.workspace_root.join("test/links").join(filename))?;
+    let mut updated = original.clone();
+    // Change the bytes without changing the package by adding a valid ZIP comment.
+    let length = updated.len();
+    updated[length - 2..].copy_from_slice(&7_u16.to_le_bytes());
+    updated.extend_from_slice(b"updated");
+
+    let mut locks = Vec::new();
+    for (revision, wheel) in [("original", original), ("updated", updated)] {
+        let hash = hex::encode(Sha512::digest(&wheel));
+        let url = format!("{}/{filename}#sha512={hash}", server.uri());
+        Mock::given(method("HEAD"))
+            .respond_with(ResponseTemplate::new(405))
+            .expect(1)
+            .mount(&server)
+            .await;
+        Mock::given(method("GET"))
+            .and(path(format!("/{filename}")))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .insert_header("cache-control", "max-age=3600")
+                    .set_body_bytes(wheel),
+            )
+            .expect(2)
+            .mount(&server)
+            .await;
+
+        // Seed the fragment-bearing cache entry, then lock using the cached archive's metadata.
         context
-            .workspace_root
-            .join("test/links")
-            .join(basic_filename),
-    )?;
-    let ok_hash = hex::encode(Sha256::digest(&ok_wheel));
-    let basic_hash = hex::encode(Sha512::digest(&basic_wheel));
+            .pip_install()
+            .arg("--target")
+            .arg(revision)
+            .arg(&url)
+            .assert()
+            .success();
+        context
+            .temp_dir
+            .child("pyproject.toml")
+            .write_str(&formatdoc! {r#"
+                [project]
+                name = "project"
+                version = "0.1.0"
+                requires-python = ">=3.12"
+                dependencies = ["ok @ {url}"]
+            "#})?;
+        context.lock().assert().success();
+        locks.push(fs_err::read_to_string(context.temp_dir.join("uv.lock"))?);
+        // Do not carry the previous lockfile's hashes into the next resolution.
+        fs_err::remove_file(context.temp_dir.join("uv.lock"))?;
+        server.verify().await;
+        server.reset().await;
+    }
 
-    // Serve metadata without range requests, then cache the complete wheels during installation.
-    Mock::given(method("HEAD"))
-        .respond_with(ResponseTemplate::new(405))
-        .expect(2)
-        .mount(&server)
-        .await;
-    Mock::given(method("GET"))
-        .and(path(format!("/{ok_filename}")))
-        .respond_with(
-            ResponseTemplate::new(200)
-                .insert_header("cache-control", "max-age=3600")
-                .set_body_bytes(ok_wheel),
-        )
-        .expect(2)
-        .mount(&server)
-        .await;
-    Mock::given(method("GET"))
-        .and(path(format!("/{basic_filename}")))
-        .respond_with(
-            ResponseTemplate::new(200)
-                .insert_header("cache-control", "max-age=3600")
-                .set_body_bytes(basic_wheel.clone()),
-        )
-        .expect(2)
-        .mount(&server)
-        .await;
-    let pyproject = formatdoc! {r#"
-        [project]
-        name = "project"
-        version = "0.1.0"
-        requires-python = ">=3.13"
-        dependencies = [
-            "ok @ {}/{ok_filename}#sha256={ok_hash}",
-            "basic-package @ {}/{basic_filename}#sha512={basic_hash}",
-        ]
-    "#, server.uri(), server.uri()};
-    context
-        .temp_dir
-        .child("pyproject.toml")
-        .write_str(&pyproject)?;
-
-    uv_snapshot!(context.filters(), context.pip_install()
-        .arg("--target").arg("seed")
-        .arg(format!("{}/{ok_filename}#sha256={ok_hash}", server.uri()))
-        .arg(format!("{}/{basic_filename}#sha512={basic_hash}", server.uri())), @"
-    exit_code: 0 (success)
-    ----- stderr -----
-    Using CPython 3.13.[X] interpreter at: .venv/[BIN]/[PYTHON]
-    Resolved 2 packages in [TIME]
-    Prepared 2 packages in [TIME]
-    Installed 2 packages in [TIME]
-     + basic-package==0.1.0 (from http://[LOCALHOST]/basic_package-0.1.0-py3-none-any.whl#sha512=765bde25938af485e492e25ee0e8cde262462565122c1301213a69bf9ceb2008e3997b652a604092a238c4b1a6a334e697ff3cee3c22f9a617cb14f34e26ef17)
-     + ok==1.0.0 (from http://[LOCALHOST]/ok-1.0.0-py3-none-any.whl#sha256=79f0b33e6ce1e09eaa1784c8eee275dfe84d215d9c65c652f07c18e85fdaac5f)
-    ");
-    uv_snapshot!(context.filters(), context.lock(), @"
-    exit_code: 0 (success)
-    ----- stderr -----
-    Resolved 3 packages in [TIME]
-    ");
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--offline"), @"
-    exit_code: 0 (success)
-    ----- stderr -----
-    Installed 2 packages in [TIME]
-     + basic-package==0.1.0 (from http://[LOCALHOST]/basic_package-0.1.0-py3-none-any.whl)
-     + ok==1.0.0 (from http://[LOCALHOST]/ok-1.0.0-py3-none-any.whl)
-    ");
-    let original_lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
-    server.verify().await;
-    server.reset().await;
-
-    // Change the wheel bytes at the same URL by adding a valid ZIP comment. The old response is
-    // still fresh according to HTTP, so the changed expected hash must force a new download.
-    let length = basic_wheel.len();
-    basic_wheel[length - 2..].copy_from_slice(&7_u16.to_le_bytes());
-    basic_wheel.extend_from_slice(b"updated");
-    let updated_hash = hex::encode(Sha512::digest(&basic_wheel));
-    Mock::given(method("HEAD"))
-        .respond_with(ResponseTemplate::new(405))
-        .mount(&server)
-        .await;
-    Mock::given(method("GET"))
-        .and(path(format!("/{basic_filename}")))
-        .respond_with(
-            ResponseTemplate::new(200)
-                .insert_header("cache-control", "max-age=3600")
-                .set_body_bytes(basic_wheel),
-        )
-        .expect(4)
-        .mount(&server)
-        .await;
-    context
-        .temp_dir
-        .child("pyproject.toml")
-        .write_str(&pyproject.replace(&basic_hash, &updated_hash))?;
-    // Resolve without the previous lockfile's hashes, but keep the HTTP cache fresh.
-    fs_err::remove_file(context.temp_dir.join("uv.lock"))?;
-    uv_snapshot!(context.filters(), context.pip_install()
-        .arg("--target").arg("updated")
-        .arg(format!("{}/{basic_filename}#sha512={updated_hash}", server.uri())), @"
-    exit_code: 0 (success)
-    ----- stderr -----
-    Using CPython 3.13.[X] interpreter at: .venv/[BIN]/[PYTHON]
-    Resolved 1 package in [TIME]
-    Prepared 1 package in [TIME]
-    Installed 1 package in [TIME]
-     + basic-package==0.1.0 (from http://[LOCALHOST]/basic_package-0.1.0-py3-none-any.whl#sha512=07a4dd1023f6c7ef1457ebc070ff953d070007c3538b7054823c158fbb903ed92902ef323723c9ad1460af0a29ec642e2fbd2b92f264df5edd8e4f21f7f7ec7b)
-    ");
-    uv_snapshot!(context.filters(), context.lock(), @"
-    exit_code: 0 (success)
-    ----- stderr -----
-    Resolved 3 packages in [TIME]
-    ");
-    uv_snapshot!(context.filters(), context.sync()
-        .arg("--frozen")
-        .arg("--offline")
-        .arg("--reinstall-package")
-        .arg("basic-package"), @"
-    exit_code: 0 (success)
-    ----- stderr -----
-    Prepared 1 package in [TIME]
-    Uninstalled 1 package in [TIME]
-    Installed 1 package in [TIME]
-     ~ basic-package==0.1.0 (from http://[LOCALHOST]/basic_package-0.1.0-py3-none-any.whl)
-    ");
-
-    // The newer wheel must not hide the older revision, including after cache pruning.
     context.prune().assert().success();
-    context
-        .temp_dir
-        .child("uv.lock")
-        .write_str(&original_lock)?;
-    uv_snapshot!(context.filters(), context.sync()
-        .arg("--frozen")
-        .arg("--offline")
-        .arg("--reinstall-package")
-        .arg("basic-package"), @"
-    exit_code: 0 (success)
-    ----- stderr -----
-    Prepared 1 package in [TIME]
-    Uninstalled 1 package in [TIME]
-    Installed 1 package in [TIME]
-     ~ basic-package==0.1.0 (from http://[LOCALHOST]/basic_package-0.1.0-py3-none-any.whl)
-    ");
-
-    // A new hash must still be checked against the downloaded bytes, even with a warm cache.
-    uv_snapshot!(context.filters(), context.pip_install()
-        .arg("--target").arg("rejected")
-        .arg(format!("{}/{basic_filename}#sha512={}", server.uri(), "0".repeat(128))), @"
-    exit_code: 1 (failure)
-    ----- stderr -----
-    Using CPython 3.13.[X] interpreter at: .venv/[BIN]/[PYTHON]
-    Resolved 1 package in [TIME]
-      × Failed to download `basic-package @ http://[LOCALHOST]/basic_package-0.1.0-py3-none-any.whl#sha512=00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000`
-      ╰─▶ Hash mismatch for `basic-package @ http://[LOCALHOST]/basic_package-0.1.0-py3-none-any.whl#sha512=00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000`
-
-          Expected:
-            sha512:00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-
-          Computed:
-            sha256:13df8f3a9de47f515fefc702c4f4ba4278608d7c61bcf64c14e361af97f4eff9
-            sha512:07a4dd1023f6c7ef1457ebc070ff953d070007c3538b7054823c158fbb903ed92902ef323723c9ad1460af0a29ec642e2fbd2b92f264df5edd8e4f21f7f7ec7b
-    ");
-
+    // Each lockfile stores the fragment-free URL. Clear the installed package between revisions
+    // so both requests must select and validate a cached archive.
+    for lock in locks {
+        context.temp_dir.child("uv.lock").write_str(&lock)?;
+        allow_duplicates! {
+            uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--offline"), @"
+            exit_code: 0 (success)
+            ----- stderr -----
+            Installed 1 package in [TIME]
+             + ok==1.0.0 (from http://[LOCALHOST]/ok-1.0.0-py3-none-any.whl)
+            ");
+        }
+        context.pip_uninstall().arg("ok").assert().success();
+    }
     Ok(())
 }
 

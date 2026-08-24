@@ -5792,45 +5792,52 @@ async fn direct_url_wheel_cache_refresh() -> Result<()> {
         let context = uv_test::test_context!("3.12");
         let server = MockServer::start().await;
         let url = format!("{}/{filename}", server.uri());
-        let mut writer = ZipFileWriter::new(Vec::new());
-        for (name, contents) in [
-            ("ok/__init__.py", ""),
-            (
-                "ok-1.0.0.dist-info/METADATA",
-                "Metadata-Version: 2.1\nName: ok\nVersion: 1.0.0\n",
-            ),
-            (
-                "ok-1.0.0.dist-info/WHEEL",
-                "Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
-            ),
-            (
-                "ok-1.0.0.dist-info/RECORD",
-                "ok/__init__.py,,\nok-1.0.0.dist-info/METADATA,,\nok-1.0.0.dist-info/WHEEL,,\nok-1.0.0.dist-info/RECORD,,\n",
-            ),
-        ] {
-            let entry = ZipEntryBuilder::new(name.into(), Compression::Stored);
-            if streaming_supported {
-                writer.write_entry_whole(entry, contents.as_bytes()).await?;
-            } else {
-                // Stored entries with data descriptors require the full-download fallback.
-                let mut entry_writer = writer.write_entry_stream(entry).await?;
-                entry_writer.write_all(contents.as_bytes()).await?;
-                entry_writer.close().await?;
+        let wheel = async |comment: &str| -> Result<Vec<u8>> {
+            let mut writer = ZipFileWriter::new(Vec::new());
+            writer.comment(comment.to_owned());
+            for (name, contents) in [
+                ("ok/__init__.py", ""),
+                (
+                    "ok-1.0.0.dist-info/METADATA",
+                    "Metadata-Version: 2.1\nName: ok\nVersion: 1.0.0\n",
+                ),
+                (
+                    "ok-1.0.0.dist-info/WHEEL",
+                    "Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
+                ),
+                (
+                    "ok-1.0.0.dist-info/RECORD",
+                    "ok/__init__.py,,\nok-1.0.0.dist-info/METADATA,,\nok-1.0.0.dist-info/WHEEL,,\nok-1.0.0.dist-info/RECORD,,\n",
+                ),
+            ] {
+                let entry = ZipEntryBuilder::new(name.into(), Compression::Stored);
+                if streaming_supported {
+                    writer.write_entry_whole(entry, contents.as_bytes()).await?;
+                } else {
+                    // Stored entries with data descriptors require the full-download fallback.
+                    let mut entry_writer = writer.write_entry_stream(entry).await?;
+                    entry_writer.write_all(contents.as_bytes()).await?;
+                    entry_writer.close().await?;
+                }
             }
-        }
-        let original = writer.close().await?;
-        let expected_requests = if streaming_supported { 1 } else { 2 };
-        let original_hash = hex::encode(Sha256::digest(&original));
-
-        // Adding a ZIP comment changes both the hash and size without changing the wheel contents.
-        let Some(prefix) = original.strip_suffix(&[0, 0]) else {
-            anyhow::bail!("Expected a wheel without a ZIP comment");
+            Ok(writer.close().await?)
         };
-        let mut changed = prefix.to_vec();
-        let comment = b"Updated wheel";
-        changed.extend_from_slice(&u16::try_from(comment.len())?.to_le_bytes());
-        changed.extend_from_slice(comment);
+        // ZIP comments change the hash and size without changing the installed contents.
+        let original = wheel("").await?;
+        let changed = wheel("Updated wheel").await?;
+        let original_hash = hex::encode(Sha256::digest(&original));
         let changed_hash = hex::encode(Sha256::digest(&changed));
+        let expected_requests = if streaming_supported { 1 } else { 2 };
+        let serve = |wheel| {
+            Mock::given(method("GET"))
+                .and(path(format!("/{filename}")))
+                .respond_with(
+                    ResponseTemplate::new(200)
+                        .insert_header("cache-control", "max-age=3600")
+                        .set_body_bytes(wheel),
+                )
+                .expect(expected_requests)
+        };
 
         let pylock = context.temp_dir.child("pylock.toml");
         let write_lock = |hash: &str, size: usize| {
@@ -5858,32 +5865,14 @@ async fn direct_url_wheel_cache_refresh() -> Result<()> {
             command
         };
         write_lock(&original_hash, original.len())?;
-        Mock::given(method("GET"))
-            .and(path(format!("/{filename}")))
-            .respond_with(
-                ResponseTemplate::new(200)
-                    .insert_header("cache-control", "max-age=3600")
-                    .set_body_bytes(original),
-            )
-            .expect(expected_requests)
-            .mount(&server)
-            .await;
+        serve(original).mount(&server).await;
         sync().assert().success();
         context.pip_uninstall().arg("ok").assert().success();
         server.verify().await;
         server.reset().await;
 
         write_lock(&changed_hash, changed.len())?;
-        Mock::given(method("GET"))
-            .and(path(format!("/{filename}")))
-            .respond_with(
-                ResponseTemplate::new(200)
-                    .insert_header("cache-control", "max-age=3600")
-                    .set_body_bytes(changed.clone()),
-            )
-            .expect(expected_requests)
-            .mount(&server)
-            .await;
+        serve(changed.clone()).mount(&server).await;
 
         // Offline mode cannot fetch the new revision. Online mode must refresh it, falling back
         // to a full download when streaming is unsupported.
@@ -5903,12 +5892,7 @@ async fn direct_url_wheel_cache_refresh() -> Result<()> {
 
         // Fresh integrity mismatches must not retry beyond the streaming fallback, if needed.
         write_lock(&"0".repeat(64), changed.len() + 1)?;
-        Mock::given(method("GET"))
-            .and(path(format!("/{filename}")))
-            .respond_with(ResponseTemplate::new(200).set_body_bytes(changed))
-            .expect(expected_requests)
-            .mount(&server)
-            .await;
+        serve(changed).mount(&server).await;
         sync().arg("--no-cache").assert().failure();
     }
     Ok(())
