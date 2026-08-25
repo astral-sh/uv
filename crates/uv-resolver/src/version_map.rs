@@ -11,9 +11,9 @@ use uv_client::{FlatIndexEntry, OwnedArchive, SimpleDetailMetadata, VersionFiles
 use uv_configuration::BuildOptions;
 use uv_distribution_filename::{DistFilename, SourceDistFilename, WheelFilename};
 use uv_distribution_types::{
-    File, FileLocation, HashComparison, IncompatibleSource, IncompatibleWheel, IndexRoute,
-    IndexUrl, PrioritizedDist, ProxyIndexError, RegistryBuiltWheel, RegistrySourceDist,
-    RequiresPython, SourceDistCompatibility, WheelCompatibility,
+    HashComparison, IncompatibleSource, IncompatibleWheel, IndexRoute, IndexUrl, PrioritizedDist,
+    ProxyIndexError, RegistryBuiltWheel, RegistrySourceDist, RequiresPython,
+    SourceDistCompatibility, WheelCompatibility,
 };
 use uv_normalize::PackageName;
 use uv_pep440::Version;
@@ -666,7 +666,7 @@ impl VersionMapLazy {
             )
             .expect("archived version files always deserializes");
             let mut priority_dist = init.cloned().unwrap_or_default();
-            for (filename, mut file) in files.all(&self.package_name) {
+            for (filename, file) in files.all(&self.package_name) {
                 // Support resolving as if it were an earlier timestamp, at least as long files have
                 // upload time information.
                 let (excluded, upload_time) = if let Some(included_version_cutoff) =
@@ -736,19 +736,22 @@ impl VersionMapLazy {
                     }
                 };
 
-                if let Err(error) = canonicalize_registry_file(&mut file, &self.index_route) {
-                    // Files that cannot be selected do not need a valid proxy artifact URL.
-                    if !candidate.is_compatible() {
-                        continue;
-                    }
+                let file = match self.index_route.canonicalize_file(file) {
+                    Ok(file) => file,
+                    Err(error) => {
+                        // Files that cannot be selected do not need a valid proxy artifact URL.
+                        if !candidate.is_compatible() {
+                            continue;
+                        }
 
-                    if let Some(flat) = init {
-                        return Some(flat.clone());
-                    }
+                        if let Some(flat) = init {
+                            return Some(flat.clone());
+                        }
 
-                    let _ = self.proxy_mapping_error.set(error);
-                    return None;
-                }
+                        let _ = self.proxy_mapping_error.set(error);
+                        return None;
+                    }
+                };
 
                 match candidate {
                     RegistryFileCandidate::Wheel(filename, compatibility) => {
@@ -910,20 +913,6 @@ impl VersionMapLazy {
     }
 }
 
-/// Replace a proxy file URL with the corresponding canonical URL.
-fn canonicalize_registry_file(
-    file: &mut File,
-    index_route: &IndexRoute,
-) -> Result<(), ProxyIndexError> {
-    if index_route.is_proxy() {
-        let physical_url = file.url.to_url()?;
-        let canonical_url = index_route.to_canonical_url(&physical_url)?;
-        file.url = FileLocation::AbsoluteUrl(canonical_url.into());
-    }
-
-    Ok(())
-}
-
 /// Represents a possibly initialized [`PrioritizedDist`] for a package version.
 #[derive(Debug)]
 struct LazyPrioritizedDist {
@@ -980,12 +969,12 @@ impl<'a> RangeBounds<Version> for BoundingRange<'a> {
 mod tests {
     use std::str::FromStr;
 
-    use uv_distribution_types::{Index, IndexLocations, IndexName};
+    use uv_distribution_types::{File, FileLocation, Index, IndexLocations, IndexName};
     use uv_pypi_types::HashDigests;
     use uv_redacted::DisplaySafeUrl;
     use uv_small_str::SmallString;
 
-    use super::{File, FileLocation, IndexRoute, IndexUrl, canonicalize_registry_file};
+    use super::{IndexRoute, IndexUrl};
 
     fn proxy_route() -> Result<IndexRoute, Box<dyn std::error::Error>> {
         let canonical = IndexUrl::from_str("https://canonical.example.com/simple/")?;
@@ -1044,39 +1033,35 @@ mod tests {
     #[test]
     fn canonicalize_proxy_wheel_uses_implicit_pypi_artifact_base()
     -> Result<(), Box<dyn std::error::Error>> {
-        let mut file = registry_file(
+        let file = registry_file(
             "https://proxy.example.com/files/example-1.0.0-py3-none-any.whl",
             "example-1.0.0-py3-none-any.whl",
         );
-        let mut expected = file.clone();
-        expected.url = FileLocation::AbsoluteUrl(
-            DisplaySafeUrl::parse(
-                "https://files.pythonhosted.org/packages/example-1.0.0-py3-none-any.whl",
-            )?
-            .into(),
-        );
+        let expected = DisplaySafeUrl::parse(
+            "https://files.pythonhosted.org/packages/example-1.0.0-py3-none-any.whl",
+        )?;
 
-        canonicalize_registry_file(&mut file, &implicit_pypi_proxy_route()?)?;
+        let file = implicit_pypi_proxy_route()?.canonicalize_file(file)?;
 
-        assert_eq!(file, expected);
+        assert_eq!(file.url.to_url()?, expected);
         Ok(())
     }
 
     #[test]
     fn canonicalize_proxy_source_preserves_metadata() -> Result<(), Box<dyn std::error::Error>> {
-        let mut file = registry_file(
+        let file = registry_file(
             "https://proxy.example.com/files/example-1.0.0.tar.gz",
             "example-1.0.0.tar.gz",
         );
-        let mut expected = file.clone();
-        expected.url = FileLocation::AbsoluteUrl(
-            DisplaySafeUrl::parse("https://canonical.example.com/packages/example-1.0.0.tar.gz")?
-                .into(),
-        );
+        let expected =
+            DisplaySafeUrl::parse("https://canonical.example.com/packages/example-1.0.0.tar.gz")?;
 
-        canonicalize_registry_file(&mut file, &proxy_route()?)?;
+        let file = proxy_route()?.canonicalize_file(file)?;
 
-        assert_eq!(file, expected);
+        assert_eq!(file.url.to_url()?, expected);
+        assert!(file.dist_info_metadata);
+        assert_eq!(file.size, Some(123));
+        assert_eq!(file.upload_time_utc_ms, Some(456));
         Ok(())
     }
 }

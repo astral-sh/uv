@@ -232,7 +232,6 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                     .index_locations()
                     .proxy_route_for(&wheel.index);
                 let index = route.map_or(&wheel.index, |route| route.effective_url());
-                let mut url = wheel.file.url.to_url()?;
                 let size = wheel.file.size;
                 let hashes = if route.is_some() {
                     let cache_verification = if wheel.file.hashes.is_empty() {
@@ -244,11 +243,13 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 } else {
                     ArtifactHashPolicy::from(hashes)
                 };
-                if let Some(route) = route {
-                    url = route.to_proxy_url(&url).map_err(|error| {
-                        Error::Client(ClientErrorKind::ProxyIndex(error).into())
-                    })?;
-                }
+                let url = if let Some(route) = route {
+                    route
+                        .artifact_url_for_request(&wheel.file.url)
+                        .map_err(|error| Error::Client(ClientErrorKind::ProxyIndex(error).into()))?
+                } else {
+                    wheel.file.url.to_url()?
+                };
 
                 // Create a cache entry for the wheel.
                 let wheel_entry = self.build_context.cache().entry(

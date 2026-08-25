@@ -905,7 +905,13 @@ impl RegistryClient {
 
                 let wheel = wheels.best_wheel();
 
-                let url = wheel.file.url.to_url().map_err(ErrorKind::InvalidUrl)?;
+                let url = if let Some(route) = self.indexes.proxy_route_for(&wheel.index) {
+                    route
+                        .artifact_url_for_request(&wheel.file.url)
+                        .map_err(ErrorKind::ProxyIndex)?
+                } else {
+                    wheel.file.url.to_url().map_err(ErrorKind::InvalidUrl)?
+                };
                 let location = if url.scheme() == "file" {
                     let path = url
                         .to_file_path()
@@ -935,7 +941,7 @@ impl RegistryClient {
                         })?
                     }
                     WheelLocation::Url(url) => {
-                        self.wheel_metadata_registry(wheel, &url, capabilities)
+                        self.wheel_metadata_registry(wheel, url, capabilities)
                             .await?
                     }
                 }
@@ -1025,11 +1031,13 @@ impl RegistryClient {
         Ok(metadata)
     }
 
-    /// Fetch wheel metadata through the index's configured proxy, if any.
+    /// Fetch registry wheel metadata from the request URL prepared by [`Self::wheel_metadata`].
+    ///
+    /// The URL has already been parsed and routed through the configured proxy, if any.
     async fn wheel_metadata_registry(
         &self,
         wheel: &RegistryBuiltWheel,
-        url: &DisplaySafeUrl,
+        url: DisplaySafeUrl,
         capabilities: &IndexCapabilities,
     ) -> Result<ResolutionMetadata, Error> {
         let RegistryBuiltWheel {
@@ -1038,13 +1046,7 @@ impl RegistryClient {
             index,
             ..
         } = wheel;
-        let route = self.indexes.proxy_route_for(index);
-        let effective_index = route.map_or(index, |route| route.effective_url());
-        let url = if let Some(route) = route {
-            route.to_proxy_url(url).map_err(ErrorKind::ProxyIndex)?
-        } else {
-            url.clone()
-        };
+        let effective_index = self.indexes.effective_url(index);
 
         // If the metadata file is available at its own url (PEP 658), download it from there.
         if file.dist_info_metadata {
@@ -1825,8 +1827,8 @@ mod tests {
     };
     use uv_cache::Cache;
     use uv_distribution_types::{
-        File, FileLocation, Index, IndexCapabilities, IndexFormat, IndexLocations,
-        IndexMetadataRef, IndexName, IndexUrl, ToUrlError, Zstd,
+        CanonicalArtifactUrl, File, FileLocation, Index, IndexCapabilities, IndexFormat,
+        IndexLocations, IndexMetadataRef, IndexName, IndexUrl, ToUrlError, Zstd,
     };
     use uv_small_str::SmallString;
     use wiremock::matchers::{basic_auth, method, path, path_regex};
@@ -2145,7 +2147,8 @@ mod tests {
                 .index_locations()
                 .proxy_route_for(&canonical)
                 .ok_or("missing proxy route")?;
-            let physical_artifact = route.to_proxy_url(&canonical_artifact)?;
+            let physical_artifact = route
+                .artifact_url_for_request(&CanonicalArtifactUrl::from_url(canonical_artifact))?;
 
             let response = client
                 .uncached_client(&physical_artifact)

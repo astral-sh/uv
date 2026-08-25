@@ -12,7 +12,8 @@ use uv_redacted::DisplaySafeUrl;
 
 use crate::index_url::PYPI_ARTIFACT_BASE_URL;
 use crate::{
-    Index, IndexFormat, IndexLocations, IndexName, IndexStatusCodeStrategy, IndexUrl, ToUrlError,
+    CanonicalArtifactUrl, File, Index, IndexFormat, IndexLocations, IndexName,
+    IndexStatusCodeStrategy, IndexUrl, RegistryFile, ToUrlError,
 };
 
 /// An invalid proxy index configuration.
@@ -105,19 +106,179 @@ pub enum ProxyIndexError {
     InvalidArtifactUrl(#[from] ToUrlError),
 }
 
+/// A URL that is safe to use as a reversible route prefix.
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct UrlPrefix(DisplaySafeUrl);
+
+impl UrlPrefix {
+    fn new(url: DisplaySafeUrl) -> Result<Self, ProxyIndexConfigError> {
+        if !matches!(url.scheme(), "http" | "https") {
+            return Err(ProxyIndexConfigError::InvalidMapping {
+                url: Box::new(url),
+                reason: "index and artifact base URLs must use HTTP or HTTPS",
+            });
+        }
+
+        if url.query().is_some() || url.fragment().is_some() {
+            return Err(ProxyIndexConfigError::InvalidMapping {
+                url: Box::new(url),
+                reason: "index and artifact base URLs cannot contain queries or fragments",
+            });
+        }
+
+        for segment in url.path().split('/') {
+            let Ok(decoded) = percent_encoding::percent_decode_str(segment).decode_utf8() else {
+                return Err(ProxyIndexConfigError::InvalidMapping {
+                    url: Box::new(url),
+                    reason: "index and artifact base URLs must contain valid UTF-8 path segments",
+                });
+            };
+
+            if matches!(decoded.as_ref(), "." | "..")
+                || decoded.contains('/')
+                || decoded.contains('\\')
+                || decoded.contains('\0')
+            {
+                return Err(ProxyIndexConfigError::InvalidMapping {
+                    url: Box::new(url),
+                    reason: "index and artifact base URLs cannot contain path traversal or encoded separators",
+                });
+            }
+        }
+
+        Ok(Self(url))
+    }
+
+    fn as_url(&self) -> &DisplaySafeUrl {
+        &self.0
+    }
+
+    fn path_suffix<'a>(&self, url: &'a DisplaySafeUrl) -> Option<&'a str> {
+        if RealmRef::from(&**url) != RealmRef::from(&*self.0) {
+            return None;
+        }
+
+        let prefix_path = self.0.path().trim_end_matches('/');
+        let candidate_path = url.path();
+        if candidate_path == prefix_path {
+            return Some("");
+        }
+
+        candidate_path
+            .strip_prefix(prefix_path)
+            .and_then(|suffix| suffix.strip_prefix('/'))
+    }
+}
+
+/// A package index URL that is safe to use as a route prefix.
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct IndexUrlPrefix(IndexUrl);
+
+impl IndexUrlPrefix {
+    fn new(url: IndexUrl) -> Result<Self, ProxyIndexConfigError> {
+        UrlPrefix::new(url.url().clone())?;
+        Ok(Self(url))
+    }
+
+    fn as_index_url(&self) -> &IndexUrl {
+        &self.0
+    }
+
+    fn into_index_url(self) -> IndexUrl {
+        self.0
+    }
+}
+
+/// An artifact URL prefix safe to use when constructing canonical lockfile URLs.
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct CanonicalArtifactUrlPrefix(UrlPrefix);
+
+impl CanonicalArtifactUrlPrefix {
+    fn new(url: DisplaySafeUrl) -> Result<Self, ProxyIndexConfigError> {
+        let prefix = UrlPrefix::new(url)?;
+        if !prefix.as_url().username().is_empty() || prefix.as_url().password().is_some() {
+            return Err(ProxyIndexConfigError::InvalidMapping {
+                url: Box::new(prefix.0),
+                reason: "canonical URL prefixes cannot contain credentials",
+            });
+        }
+
+        Ok(Self(prefix))
+    }
+
+    fn as_prefix(&self) -> &UrlPrefix {
+        &self.0
+    }
+}
+
 /// The original and proxy base URLs for package downloads.
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct ArtifactUrlMapping {
-    canonical: DisplaySafeUrl,
-    proxy: DisplaySafeUrl,
+    canonical: CanonicalArtifactUrlPrefix,
+    proxy: UrlPrefix,
+}
+
+impl ArtifactUrlMapping {
+    fn new(canonical: CanonicalArtifactUrlPrefix, proxy: UrlPrefix) -> Self {
+        Self { canonical, proxy }
+    }
+
+    /// Translate a canonical artifact URL to its configured proxy URL.
+    fn to_proxy(&self, url: &CanonicalArtifactUrl) -> Result<DisplaySafeUrl, ProxyIndexError> {
+        Self::rewrite(&url.to_url()?, self.canonical.as_prefix(), &self.proxy)
+    }
+
+    /// Translate a proxy artifact URL to its configured canonical URL.
+    fn to_canonical(&self, url: &DisplaySafeUrl) -> Result<DisplaySafeUrl, ProxyIndexError> {
+        Self::rewrite(url, &self.proxy, self.canonical.as_prefix())
+    }
+
+    fn rewrite(
+        url: &DisplaySafeUrl,
+        prefix: &UrlPrefix,
+        target: &UrlPrefix,
+    ) -> Result<DisplaySafeUrl, ProxyIndexError> {
+        let Some(suffix) = prefix.path_suffix(url) else {
+            return Err(ProxyIndexError::UnmappedUrl {
+                url: Box::new(url.clone()),
+            });
+        };
+
+        let mut rewritten = target.as_url().clone();
+        let target_path = target.as_url().path().trim_end_matches('/');
+        if suffix.is_empty() {
+            if prefix.as_url().path().ends_with('/') && !target.as_url().path().ends_with('/') {
+                rewritten.set_path(&format!("{target_path}/"));
+            }
+        } else {
+            rewritten.set_path(&format!("{target_path}/{suffix}"));
+        }
+        rewritten.set_query(url.query());
+        rewritten.set_fragment(url.fragment());
+        Ok(rewritten)
+    }
 }
 
 /// A proxy endpoint, its request policy, and its validated artifact URL mapping.
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct ProxyRoute {
-    url: IndexUrl,
+    url: IndexUrlPrefix,
     artifact_mapping: ArtifactUrlMapping,
     request_policy: IndexRequestPolicy,
+}
+
+impl ProxyRoute {
+    fn new(
+        url: IndexUrlPrefix,
+        artifact_mapping: ArtifactUrlMapping,
+        request_policy: IndexRequestPolicy,
+    ) -> Self {
+        Self {
+            url,
+            artifact_mapping,
+            request_policy,
+        }
+    }
 }
 
 /// The request policy for an effective package index.
@@ -162,66 +323,43 @@ impl IndexRoute {
     pub fn effective_url(&self) -> &IndexUrl {
         self.proxy
             .as_ref()
-            .map_or(&self.canonical, |proxy| &proxy.url)
+            .map_or(&self.canonical, |proxy| proxy.url.as_index_url())
     }
 
     /// Return whether this index is routed through a configured proxy.
-    pub fn is_proxy(&self) -> bool {
+    #[cfg(test)]
+    fn is_proxy(&self) -> bool {
         self.proxy.is_some()
     }
 
-    /// Translate a canonical artifact URL to its configured physical proxy URL.
-    pub fn to_proxy_url(&self, url: &DisplaySafeUrl) -> Result<DisplaySafeUrl, ProxyIndexError> {
-        self.rewrite_artifact_url(url, MappingDirection::ToProxy)
-    }
-
-    /// Translate a physical proxy artifact URL to its configured canonical URL.
-    pub fn to_canonical_url(
+    /// Return the artifact URL to use for requests.
+    ///
+    /// This translates the canonical artifact URL through the configured proxy, or returns it
+    /// unchanged when no proxy is configured.
+    pub fn artifact_url_for_request(
         &self,
-        url: &DisplaySafeUrl,
+        canonical_url: &CanonicalArtifactUrl,
     ) -> Result<DisplaySafeUrl, ProxyIndexError> {
-        self.rewrite_artifact_url(url, MappingDirection::ToCanonical)
-    }
-
-    fn rewrite_artifact_url(
-        &self,
-        url: &DisplaySafeUrl,
-        direction: MappingDirection,
-    ) -> Result<DisplaySafeUrl, ProxyIndexError> {
-        let Some(proxy) = &self.proxy else {
-            return Ok(url.clone());
-        };
-
-        let mapping = &proxy.artifact_mapping;
-        let (prefix, target) = match direction {
-            MappingDirection::ToProxy => (&mapping.canonical, &mapping.proxy),
-            MappingDirection::ToCanonical => (&mapping.proxy, &mapping.canonical),
-        };
-        let Some(suffix) = path_suffix(url, prefix) else {
-            return Err(ProxyIndexError::UnmappedUrl {
-                url: Box::new(url.clone()),
-            });
-        };
-
-        let mut rewritten = target.clone();
-        let target_path = target.path().trim_end_matches('/');
-        if suffix.is_empty() {
-            if prefix.path().ends_with('/') && !target.path().ends_with('/') {
-                rewritten.set_path(&format!("{target_path}/"));
-            }
+        if let Some(proxy) = &self.proxy {
+            proxy.artifact_mapping.to_proxy(canonical_url)
         } else {
-            rewritten.set_path(&format!("{target_path}/{suffix}"));
+            Ok(canonical_url.to_url()?)
         }
-        rewritten.set_query(url.query());
-        rewritten.set_fragment(url.fragment());
-        Ok(rewritten)
     }
-}
 
-#[derive(Debug, Clone, Copy)]
-enum MappingDirection {
-    ToProxy,
-    ToCanonical,
+    /// Resolve a Simple API file into the canonical namespace used for identity and persistence.
+    ///
+    /// On a proxy route, relative locations are resolved against the Simple API response URL before
+    /// translation. The returned file cannot be confused with unresolved response metadata.
+    pub fn canonicalize_file(&self, file: File) -> Result<RegistryFile, ProxyIndexError> {
+        if let Some(proxy) = &self.proxy {
+            let effective_url = file.url.to_url()?;
+            let canonical_url = proxy.artifact_mapping.to_canonical(&effective_url)?;
+            Ok(file.map_url(|_| CanonicalArtifactUrl::from_url(canonical_url)))
+        } else {
+            Ok(file.map_url(CanonicalArtifactUrl::from_location))
+        }
+    }
 }
 
 impl IndexLocations {
@@ -357,31 +495,25 @@ pub(crate) fn build_routes(
             });
         }
 
-        let canonical_url = canonical.url.url();
-        let physical_url = proxy.url.url();
-        validate_prefix(canonical_url)?;
-        validate_prefix(physical_url)?;
+        let canonical_url = IndexUrlPrefix::new(canonical.url.clone())?;
+        let proxy_url = IndexUrlPrefix::new(proxy.url.clone())?;
+        let physical_url = proxy_url.as_index_url().url();
 
-        let canonical_artifact_base = artifact_base(canonical)?;
-        let physical_artifact_base = proxy.artifact_base_url.clone().ok_or_else(|| {
+        let canonical_artifact_base = CanonicalArtifactUrlPrefix::new(artifact_base(canonical)?)?;
+        let proxy_artifact_base = proxy.artifact_base_url.clone().ok_or_else(|| {
             ProxyIndexConfigError::MissingProxyArtifactBase {
                 index: Box::new(physical_url.clone()),
             }
         })?;
-        validate_prefix(&canonical_artifact_base)?;
-        validate_prefix(&physical_artifact_base)?;
-        validate_canonical_prefix(&canonical_artifact_base)?;
+        let proxy_artifact_base = UrlPrefix::new(proxy_artifact_base)?;
+        let artifact_mapping =
+            ArtifactUrlMapping::new(canonical_artifact_base, proxy_artifact_base);
+        let proxy_route =
+            ProxyRoute::new(proxy_url, artifact_mapping, IndexRequestPolicy::from(proxy));
 
         routes.push(IndexRoute {
-            canonical: canonical.url.clone(),
-            proxy: Some(Arc::new(ProxyRoute {
-                url: proxy.url.clone(),
-                artifact_mapping: ArtifactUrlMapping {
-                    canonical: canonical_artifact_base,
-                    proxy: physical_artifact_base,
-                },
-                request_policy: IndexRequestPolicy::from(proxy),
-            })),
+            canonical: canonical_url.into_index_url(),
+            proxy: Some(Arc::new(proxy_route)),
         });
     }
 
@@ -417,74 +549,11 @@ fn artifact_base(index: &Index) -> Result<DisplaySafeUrl, ProxyIndexConfigError>
     })
 }
 
-fn path_suffix<'a>(url: &'a DisplaySafeUrl, prefix: &DisplaySafeUrl) -> Option<&'a str> {
-    if RealmRef::from(&**url) != RealmRef::from(&**prefix) {
-        return None;
-    }
-
-    let prefix_path = prefix.path().trim_end_matches('/');
-    let candidate_path = url.path();
-    if candidate_path == prefix_path {
-        return Some("");
-    }
-
-    candidate_path
-        .strip_prefix(prefix_path)
-        .and_then(|suffix| suffix.strip_prefix('/'))
-}
-
-fn validate_canonical_prefix(url: &DisplaySafeUrl) -> Result<(), ProxyIndexConfigError> {
-    if !url.username().is_empty() || url.password().is_some() {
-        return Err(ProxyIndexConfigError::InvalidMapping {
-            url: Box::new(url.clone()),
-            reason: "canonical URL prefixes cannot contain credentials",
-        });
-    }
-
-    Ok(())
-}
-
-fn validate_prefix(url: &DisplaySafeUrl) -> Result<(), ProxyIndexConfigError> {
-    if !matches!(url.scheme(), "http" | "https") {
-        return Err(ProxyIndexConfigError::InvalidMapping {
-            url: Box::new(url.clone()),
-            reason: "index and artifact base URLs must use HTTP or HTTPS",
-        });
-    }
-
-    if url.query().is_some() || url.fragment().is_some() {
-        return Err(ProxyIndexConfigError::InvalidMapping {
-            url: Box::new(url.clone()),
-            reason: "index and artifact base URLs cannot contain queries or fragments",
-        });
-    }
-
-    for segment in url.path().split('/') {
-        let Ok(decoded) = percent_encoding::percent_decode_str(segment).decode_utf8() else {
-            return Err(ProxyIndexConfigError::InvalidMapping {
-                url: Box::new(url.clone()),
-                reason: "index and artifact base URLs must contain valid UTF-8 path segments",
-            });
-        };
-
-        if matches!(decoded.as_ref(), "." | "..")
-            || decoded.contains('/')
-            || decoded.contains('\\')
-            || decoded.contains('\0')
-        {
-            return Err(ProxyIndexConfigError::InvalidMapping {
-                url: Box::new(url.clone()),
-                reason: "index and artifact base URLs cannot contain path traversal or encoded separators",
-            });
-        }
-    }
-
-    Ok(())
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use uv_pypi_types::HashDigests;
+    use uv_small_str::SmallString;
 
     type TestResult = Result<(), Box<dyn std::error::Error>>;
 
@@ -494,6 +563,24 @@ mod tests {
 
     fn index_url(value: &str) -> Result<IndexUrl, Box<dyn std::error::Error>> {
         Ok(IndexUrl::from(VerbatimUrl::from_url(url(value)?)))
+    }
+
+    fn as_canonical(url: DisplaySafeUrl) -> CanonicalArtifactUrl {
+        CanonicalArtifactUrl::from_url(url)
+    }
+
+    fn response_file(url: DisplaySafeUrl) -> File {
+        File {
+            dist_info_metadata: false,
+            filename: SmallString::from("package.whl"),
+            hashes: HashDigests::empty(),
+            requires_python: None,
+            size: None,
+            upload_time_utc_ms: None,
+            url: crate::FileLocation::AbsoluteUrl(url.into()),
+            yanked: None,
+            zstd: None,
+        }
     }
 
     fn named_index(
@@ -650,8 +737,9 @@ mod tests {
         assert_eq!(route.canonical, flat);
         assert_eq!(route.effective_url(), &flat);
         let artifact = url("https://flat.example.com/packages/package.whl?download=1#sha256=abc")?;
-        assert_eq!(route.to_proxy_url(&artifact)?, artifact);
-        assert_eq!(route.to_canonical_url(&artifact)?, artifact);
+        let file = route.canonicalize_file(response_file(artifact.clone()))?;
+        assert_eq!(file.url.to_url()?, artifact.clone());
+        assert_eq!(route.artifact_url_for_request(&file.url)?, artifact);
         Ok(())
     }
 
@@ -668,9 +756,11 @@ mod tests {
             "https://proxy.example.com/files/example%20project/package%2B1.whl?download=1#sha256=abc",
         )?;
 
-        let physical = route.to_proxy_url(&canonical)?;
-        assert_eq!(physical, expected);
-        assert_eq!(route.to_canonical_url(&physical)?, canonical);
+        let canonical = as_canonical(canonical);
+        let effective = route.artifact_url_for_request(&canonical)?;
+        assert_eq!(effective, expected);
+        let canonicalized = route.canonicalize_file(response_file(effective))?;
+        assert_eq!(canonicalized.url, canonical);
         Ok(())
     }
 
@@ -685,12 +775,14 @@ mod tests {
             "https://unmapped.example.com/files/package.whl",
         ] {
             assert!(matches!(
-                route.to_proxy_url(&url(artifact)?),
+                route.artifact_url_for_request(&as_canonical(url(artifact)?)),
                 Err(ProxyIndexError::UnmappedUrl { .. })
             ));
         }
         assert!(matches!(
-            route.to_canonical_url(&url("https://proxy.example.com/unknown/package.whl")?),
+            route.canonicalize_file(response_file(url(
+                "https://proxy.example.com/unknown/package.whl"
+            )?)),
             Err(ProxyIndexError::UnmappedUrl { .. })
         ));
         Ok(())
@@ -718,12 +810,17 @@ mod tests {
 
         assert_eq!(route.canonical.url().username(), "canonical-user");
         assert_eq!(route.canonical.url().password(), Some("canonical-secret"));
+        let canonical_artifact = as_canonical(canonical_artifact);
         assert_eq!(
-            route.to_proxy_url(&canonical_artifact)?,
+            route.artifact_url_for_request(&canonical_artifact)?,
             url("https://proxy.example.com/files/package.whl")?
         );
         assert_eq!(
-            route.to_canonical_url(&url("https://proxy.example.com/files/package.whl")?)?,
+            route
+                .canonicalize_file(response_file(url(
+                    "https://proxy.example.com/files/package.whl"
+                )?))?
+                .url,
             canonical_artifact,
         );
         Ok(())
@@ -901,8 +998,9 @@ mod tests {
         let route = locations
             .proxy_route_for(&index_url("https://pypi.org/simple/")?)
             .ok_or("missing proxy route")?;
-        let canonical_artifact = url("https://files.pythonhosted.org/packages/package.whl")?;
-        let physical_artifact = route.to_proxy_url(&canonical_artifact)?;
+        let canonical_artifact =
+            as_canonical(url("https://files.pythonhosted.org/packages/package.whl")?);
+        let physical_artifact = route.artifact_url_for_request(&canonical_artifact)?;
 
         assert_eq!(route.effective_url().url().username(), "user");
         assert_eq!(route.effective_url().url().password(), Some("secret"));
