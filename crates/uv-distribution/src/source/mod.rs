@@ -306,12 +306,13 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                         .join(dist.version.to_string()),
                 );
 
-                let mut url = dist.file.url.to_url()?;
-                if let Some(route) = route {
-                    url = route
-                        .to_proxy_url(&url)
-                        .map_err(|err| Error::Client(ClientErrorKind::ProxyIndex(err).into()))?;
-                }
+                let url = if let Some(route) = route {
+                    route
+                        .artifact_url_for_request(&dist.file.url)
+                        .map_err(|err| Error::Client(ClientErrorKind::ProxyIndex(err).into()))?
+                } else {
+                    dist.file.url.to_url()?
+                };
 
                 // If the URL is a file URL, use the local path directly.
                 if url.scheme() == "file" {
@@ -487,12 +488,13 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                         .join(dist.version.to_string()),
                 );
 
-                let mut url = dist.file.url.to_url()?;
-                if let Some(route) = route {
-                    url = route
-                        .to_proxy_url(&url)
-                        .map_err(|err| Error::Client(ClientErrorKind::ProxyIndex(err).into()))?;
-                }
+                let url = if let Some(route) = route {
+                    route
+                        .artifact_url_for_request(&dist.file.url)
+                        .map_err(|err| Error::Client(ClientErrorKind::ProxyIndex(err).into()))?
+                } else {
+                    dist.file.url.to_url()?
+                };
 
                 // If the URL is a file URL, use the local path directly.
                 if url.scheme() == "file" {
