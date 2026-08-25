@@ -109,8 +109,8 @@ fn build_basic() -> Result<()> {
       Caused by: [TEMP_DIR]/ does not appear to be a Python project, as neither `pyproject.toml` nor `setup.py` are present in the directory
     ");
 
-    // Build to a specified path.
-    uv_snapshot!(context.filters(), context.build().arg("--out-dir").arg("out").current_dir(project.path()), @"
+    // Build to a specified path, even if builds are disabled for the project by name.
+    uv_snapshot!(context.filters(), context.build().arg("--out-dir").arg("out").arg("--no-build-package").arg("project").current_dir(project.path()), @"
     exit_code: 0 (success)
     ----- stderr -----
     Building source distribution...
@@ -125,6 +125,27 @@ fn build_basic() -> Result<()> {
         .assert(predicate::path::is_file());
     project
         .child("out")
+        .child("project-0.1.0-py3-none-any.whl")
+        .assert(predicate::path::is_file());
+
+    // A global build restriction still allows explicitly building the project and its sdist.
+    project.child("uv.toml").write_str("no-build = true\n")?;
+
+    uv_snapshot!(context.filters(), context.build().current_dir(project.path()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Building source distribution...
+    Building wheel from source distribution...
+    Successfully built dist/project-0.1.0.tar.gz
+    Successfully built dist/project-0.1.0-py3-none-any.whl
+    ");
+
+    project
+        .child("dist")
+        .child("project-0.1.0.tar.gz")
+        .assert(predicate::path::is_file());
+    project
+        .child("dist")
         .child("project-0.1.0-py3-none-any.whl")
         .assert(predicate::path::is_file());
 
@@ -402,8 +423,8 @@ fn build_wheel() -> Result<()> {
         .touch()?;
     project.child("README").touch()?;
 
-    // Build the specified path.
-    uv_snapshot!(context.filters(), context.build().arg("--wheel").current_dir(&project), @"
+    // Explicit wheel builds are allowed even when dependency builds are disabled.
+    uv_snapshot!(context.filters(), context.build().arg("--wheel").arg("--no-build").current_dir(&project), @"
     exit_code: 0 (success)
     ----- stderr -----
     Building wheel...
@@ -533,8 +554,8 @@ fn build_wheel_from_sdist() -> Result<()> {
       Caused by: Building an `--sdist` from a source distribution is not supported
     ");
 
-    // Build the wheel from the sdist.
-    uv_snapshot!(context.filters(), context.build().arg("./dist/project-0.1.0.tar.gz").arg("--wheel").current_dir(&project), @"
+    // Explicit wheel builds from an sdist are allowed even when dependency builds are disabled.
+    uv_snapshot!(context.filters(), context.build().arg("./dist/project-0.1.0.tar.gz").arg("--wheel").arg("--no-build").current_dir(&project), @"
     exit_code: 0 (success)
     ----- stderr -----
     Building wheel from source distribution...
@@ -1807,6 +1828,35 @@ fn build_tool_uv_sources() -> Result<()> {
         .child("__init__.py")
         .touch()?;
     project.child("README").touch()?;
+
+    // Build restrictions still apply to dependencies. Check before building the backend so a
+    // cached wheel cannot make these commands succeed.
+    uv_snapshot!(context.filters(), context.build().arg("--no-build").current_dir(project.path()), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    Building source distribution...
+    error: Failed to build `[TEMP_DIR]/project`
+      Caused by: Failed to install requirements from `build-system.requires`
+      Caused by: Building source distributions is disabled, but attempted to build `backend`
+    ");
+
+    uv_snapshot!(context.filters(), context.build().arg("--no-build-package").arg("backend").current_dir(project.path()), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    Building source distribution...
+    error: Failed to build `[TEMP_DIR]/project`
+      Caused by: Failed to install requirements from `build-system.requires`
+      Caused by: Building source distributions is disabled, but attempted to build `backend`
+    ");
+
+    project
+        .child("dist")
+        .child("project-0.1.0.tar.gz")
+        .assert(predicate::path::missing());
+    project
+        .child("dist")
+        .child("project-0.1.0-py3-none-any.whl")
+        .assert(predicate::path::missing());
 
     uv_snapshot!(context.filters(), context.build().current_dir(project.path()), @"
     exit_code: 0 (success)

@@ -23,9 +23,9 @@ use uv_distribution_filename::{
 };
 use uv_distribution_types::{
     BuiltDist, DirectUrlBuiltDist, DirectUrlSourceDist, DirectorySourceDist, Dist, Edge,
-    FileLocation, GitDirectorySourceDist, IndexUrl, Name, Node, PathBuiltDist, PathSourceDist,
-    RegistryBuiltDist, RegistryBuiltWheel, RegistrySourceDist, RemoteSource, RequiresPython,
-    Resolution, ResolvedDist, SourceDist, ToUrlError, UrlString,
+    FileLocation, FirstParty, GitDirectorySourceDist, IndexUrl, Name, Node, PathBuiltDist,
+    PathSourceDist, RegistryBuiltDist, RegistryBuiltWheel, RegistrySourceDist, RemoteSource,
+    RequiresPython, Resolution, ResolvedDist, SourceDist, ToUrlError, UrlString,
 };
 use uv_fs::{PortablePathBuf, normalize_path, try_relative_to_if};
 use uv_git::{RepositoryReference, ResolvedRepositoryReference};
@@ -825,7 +825,7 @@ impl<'lock> PylockToml {
             };
 
             // Extract the source distribution from the lockfile entry.
-            let sdist = package.to_source_dist(target.install_path())?;
+            let sdist = package.to_source_dist(target.install_path(), FirstParty::No)?;
 
             // Extract some common fields from the source distribution.
             let size = package
@@ -1542,6 +1542,7 @@ impl PylockTomlDirectory {
             install_path: path.into_owned().into_boxed_path(),
             editable: self.editable,
             r#virtual: Some(false),
+            first_party: FirstParty::No,
             url,
         })
     }

@@ -49,11 +49,6 @@ pub enum Error {
     MissingHeader(#[from] Box<MissingHeaderError>),
     #[error("Failed to build PATH for build script")]
     BuildScriptPath(#[source] env::JoinPathsError),
-    // For the convenience of typing `setup_build` properly.
-    #[error("Building source distributions for `{0}` is disabled")]
-    NoSourceDistBuild(PackageName),
-    #[error("Building source distributions is disabled")]
-    NoSourceDistBuilds,
     #[error("Cyclic build dependency detected for `{0}`")]
     CyclicBuildDependency(PackageName),
     #[error(
@@ -75,8 +70,6 @@ impl IsBuildBackendError for Error {
             | Self::RequirementsResolve(_, _)
             | Self::RequirementsInstall(_, _)
             | Self::Virtualenv(_)
-            | Self::NoSourceDistBuild(_)
-            | Self::NoSourceDistBuilds
             | Self::CyclicBuildDependency(_)
             | Self::UnmatchedRuntime(_, _) => false,
             Self::CommandFailed(_, _)

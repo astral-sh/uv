@@ -5891,9 +5891,10 @@ fn no_install_package() -> Result<()> {
     Ok(())
 }
 
-/// Ensure that `--no-build` isn't enforced for projects that aren't installed in the first place.
+/// Ensure that `--no-build` allows first-party projects and that `--no-install-project` still
+/// skips them.
 #[test]
-fn no_install_project_no_build() -> Result<()> {
+fn project_no_build() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
@@ -5910,29 +5911,36 @@ fn no_install_project_no_build() -> Result<()> {
         build-backend = "uv_build"
         "#,
     )?;
+    context
+        .temp_dir
+        .child("src")
+        .child("project")
+        .child("__init__.py")
+        .touch()?;
 
     // Generate a lockfile.
     context.lock().assert().success();
 
-    // `--no-build` should raise an error, since we try to install the project.
+    // `--no-build` should allow building the first-party project.
     uv_snapshot!(context.filters(), context.sync().arg("--no-build"), @"
-    exit_code: 2 (failure)
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    error: Distribution `project==0.1.0 @ editable+.` can't be installed because it is marked as `--no-build` but has no binary distribution
+    Prepared 4 packages in [TIME]
+    Installed 4 packages in [TIME]
+     + anyio==3.7.0
+     + idna==3.6
+     + project==0.1.0 (from file://[TEMP_DIR]/)
+     + sniffio==1.3.1
     ");
 
-    // But it's fine to combine `--no-install-project` with `--no-build`. We shouldn't error, since
-    // we aren't building the project.
+    // `--no-install-project` should still skip the project.
     uv_snapshot!(context.filters(), context.sync().arg("--no-install-project").arg("--no-build").arg("--locked"), @"
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    Prepared 3 packages in [TIME]
-    Installed 3 packages in [TIME]
-     + anyio==3.7.0
-     + idna==3.6
-     + sniffio==1.3.1
+    Uninstalled 1 package in [TIME]
+     - project==0.1.0 (from file://[TEMP_DIR]/)
     ");
 
     Ok(())
@@ -7850,6 +7858,50 @@ fn no_build_error() -> Result<()> {
 }
 
 #[test]
+fn no_build_path_dependency() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let child = context.temp_dir.child("child");
+    child.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "child"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+    "#})?;
+    child.child("src/child/__init__.py").touch()?;
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+            [project]
+            name = "project"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+            dependencies = ["child"]
+
+            [tool.uv.sources]
+            child = { path = "child" }
+        "#})?;
+
+    context.lock().assert().success();
+
+    // Path dependencies are not first-party unless they are workspace members.
+    uv_snapshot!(context.filters(), context.sync().arg("--no-build"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    error: Distribution `child==0.1.0 @ directory+child` can't be installed because it is marked as `--no-build` but has no binary distribution
+    ");
+
+    Ok(())
+}
+
+#[test]
 fn sync_wheel_url_source_error() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
@@ -8306,7 +8358,8 @@ fn sync_no_editable() -> Result<()> {
     let init = src.child("__init__.py");
     init.touch()?;
 
-    uv_snapshot!(context.filters(), context.sync().arg("--no-editable"), @"
+    // `--no-build` should allow building first-party workspace packages in non-editable mode.
+    uv_snapshot!(context.filters(), context.sync().arg("--no-editable").arg("--no-build"), @"
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]

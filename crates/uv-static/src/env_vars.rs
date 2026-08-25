@@ -312,13 +312,15 @@ impl EnvVars {
     #[attr_added_in("0.5.30")]
     pub const UV_NO_BINARY_PACKAGE: &'static str = "UV_NO_BINARY_PACKAGE";
 
-    /// Equivalent to the `--no-build` command-line argument. If set, uv will not build
-    /// source distributions.
+    /// Equivalent to the `--no-build` command-line argument. If set, uv will not build source
+    /// distributions. First-party packages, such as projects in the workspace, will still be
+    /// built.
     #[attr_added_in("0.1.40")]
     pub const UV_NO_BUILD: &'static str = "UV_NO_BUILD";
 
-    /// Equivalent to the `--no-build-package` command line argument. If set, uv will
-    /// not build source distributions for the given space-delimited list of packages.
+    /// Equivalent to the `--no-build-package` command line argument. If set, uv will not build
+    /// source distributions for the given space-delimited list of packages. First-party packages,
+    /// such as projects in the workspace, will still be built.
     #[attr_added_in("0.6.5")]
     pub const UV_NO_BUILD_PACKAGE: &'static str = "UV_NO_BUILD_PACKAGE";
 

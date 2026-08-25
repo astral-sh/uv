@@ -2889,8 +2889,8 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .build_options()
             .no_build_requirement(source.name())
         {
-            if source.is_editable() {
-                debug!("Allowing build for editable source distribution: {source}");
+            if source.is_editable() || source.is_first_party() {
+                debug!("Allowing build for first-party or editable source distribution: {source}");
             } else {
                 return Err(Error::NoBuild);
             }
