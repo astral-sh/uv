@@ -3,10 +3,10 @@ use std::path::{Component, Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
-/// The archive-metadata-local manifest that maps payloads to shared archive-file objects.
+/// The per-archive manifest that maps payloads to shared file objects.
 const ARCHIVE_FILE_MANIFEST: &str = "manifest.json";
 
-/// A manifest for payloads stored in the content-addressed archive-file bucket.
+/// A manifest for payloads stored in the content-addressed files bucket.
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ArchiveFileManifest {
@@ -85,7 +85,7 @@ impl ArchiveFileManifest {
     }
 }
 
-/// A single archive file stored in the archive-file bucket.
+/// A single archive file stored in the files bucket.
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ArchiveFileManifestEntry {
@@ -104,7 +104,7 @@ impl ArchiveFileManifestEntry {
         &self.path
     }
 
-    /// Return the archive-file-bucket-relative object path.
+    /// Return the files-bucket-relative object path.
     pub fn object(&self) -> &Path {
         &self.object
     }
