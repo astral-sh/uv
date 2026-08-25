@@ -45,16 +45,43 @@ pub struct ExtractedFile {
     path: SanitizedArchivePath,
     size: u64,
     digest: blake3::Hash,
+    executable: bool,
 }
 
 impl ExtractedFile {
-    pub(crate) fn new(path: SanitizedArchivePath, size: u64, digest: blake3::Hash) -> Self {
-        Self { path, size, digest }
+    pub(crate) fn new(
+        path: SanitizedArchivePath,
+        size: u64,
+        digest: blake3::Hash,
+        executable: bool,
+    ) -> Self {
+        let executable = executable
+            || (cfg!(windows)
+                && path
+                    .as_path()
+                    .extension()
+                    .is_some_and(|extension| extension.eq_ignore_ascii_case("exe")));
+        Self {
+            path,
+            size,
+            digest,
+            executable,
+        }
     }
 
     /// Return the path of the extracted file within the archive.
     pub fn path(&self) -> &Path {
         self.path.as_path()
+    }
+
+    /// Return the uncompressed size of the extracted file.
+    pub fn size(&self) -> u64 {
+        self.size
+    }
+
+    /// Return whether the archive marks this file executable, or it is a Windows executable.
+    pub fn is_executable(&self) -> bool {
+        self.executable
     }
 
     /// Return the hex-encoded content digest of the extracted file.
@@ -138,8 +165,8 @@ mod tests {
 
         let tree = directory_tree_from_extracted(
             &[
-                ExtractedFile::new(a, 5, blake3::hash(b"hello")),
-                ExtractedFile::new(c, 7, blake3::hash(b"goodbye")),
+                ExtractedFile::new(a, 5, blake3::hash(b"hello"), false),
+                ExtractedFile::new(c, 7, blake3::hash(b"goodbye"), false),
             ],
             [&directory],
         )
@@ -154,6 +181,20 @@ mod tests {
                 .bytes()
                 .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit())
         );
+        Ok(())
+    }
+
+    #[test]
+    fn extracted_file_executable_status() -> Result<(), Error> {
+        for (name, executable, expected) in [
+            ("tool", true, true),
+            ("data", false, false),
+            ("tool.EXE", false, cfg!(windows)),
+        ] {
+            let path = SanitizedArchivePath::from_archive_member(name)?.expect("valid path");
+            let file = ExtractedFile::new(path, 1, blake3::hash(b"x"), executable);
+            assert_eq!(file.is_executable(), expected);
+        }
         Ok(())
     }
 

@@ -61,7 +61,6 @@ pub fn install_wheel<Cache: serde::Serialize, Build: serde::Serialize>(
     installer: Option<&str>,
     installer_metadata: bool,
     archive_metadata: Option<&Path>,
-    archive_files: Option<&Path>,
     link_mode: Option<LinkMode>,
     state: &InstallState,
 ) -> Result<(), Error> {
@@ -97,7 +96,6 @@ pub fn install_wheel<Cache: serde::Serialize, Build: serde::Serialize>(
         site_packages,
         &validated_wheel,
         archive_metadata,
-        archive_files,
         state,
         filename,
     )?;
