@@ -1243,26 +1243,34 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         let id = match tree {
             Some(tree) => {
                 let digest = DirectoryDigest::from(tree.hash());
-                let id = ArchiveId::from_digest(digest.into());
-                cache.persist_with_id(temp_dir, target, id).await
+                ArchiveId::from_digest(digest.into())
             }
-            None => cache.persist(temp_dir.keep(), target).await,
-        }
-        .map_err(Error::CacheWrite)?;
+            None => ArchiveId::default(),
+        };
 
-        if let Some(extracted_files) = extracted_files {
+        let temp_dir = if let Some(extracted_files) = extracted_files {
             let cache = cache.clone();
             let archive_id = id.clone();
             tokio::task::spawn_blocking(move || {
-                let archive = cache.archive(&archive_id);
                 let archive_metadata = cache.archive_metadata(&archive_id);
-                persist_binary_archive_files(&cache, &archive, &archive_metadata, &extracted_files)
-                    .map_err(Error::CacheWrite)
+                persist_binary_archive_files(
+                    &cache,
+                    temp_dir.path(),
+                    &archive_metadata,
+                    &extracted_files,
+                )
+                .map_err(Error::CacheWrite)?;
+                Ok::<_, Error>(temp_dir)
             })
-            .await??;
-        }
+            .await??
+        } else {
+            temp_dir
+        };
 
-        Ok(id)
+        cache
+            .persist_with_id(temp_dir, target, id)
+            .await
+            .map_err(Error::CacheWrite)
     }
 
     /// Returns a GET [`reqwest::Request`] for the given URL.
@@ -1634,11 +1642,12 @@ mod tests {
     use super::*;
 
     #[test]
-    fn persist_binary_archive_files_sparsifies_published_manifest() -> io::Result<()> {
+    fn persist_binary_archive_files_sparsifies_unpublished_archive() -> io::Result<()> {
         let cache = Cache::temp()?;
+        let archive_id = ArchiveId::default();
         let temp_dir = tempfile::tempdir()?;
         let archive = temp_dir.path().join("archive");
-        let archive_metadata = temp_dir.path().join("archive-metadata");
+        let archive_metadata = cache.archive_metadata(&archive_id);
         let archive_file = archive.join("package/native.so");
         fs_err::create_dir_all(archive_file.parent().expect("archive file has a parent"))?;
         fs_err::write(&archive_file, "binary contents")?;
@@ -1648,6 +1657,7 @@ mod tests {
         )]);
         manifest.write_to_metadata(&archive_metadata)?;
 
+        assert!(!cache.archive(&archive_id).exists());
         persist_binary_archive_files(&cache, &archive, &archive_metadata, &[])?;
 
         assert_eq!(
@@ -1655,6 +1665,7 @@ mod tests {
             Some(manifest)
         );
         assert!(!archive_file.exists());
+        assert!(!cache.archive(&archive_id).exists());
         Ok(())
     }
 
