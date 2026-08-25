@@ -14,7 +14,7 @@ use wiremock::{
 
 use uv_static::EnvVars;
 
-use uv_test::uv_snapshot;
+use uv_test::{uv_snapshot, venv_bin_path};
 
 #[test]
 fn tool_upgrade_empty() {
@@ -1466,6 +1466,101 @@ fn tool_upgrade_excludes() {
      + babel==2.9.1
     Installed 1 executable: pybabel
     ");
+}
+
+/// Reuse the configured index username when the tool receipt has stripped its credentials.
+///
+/// See: <https://github.com/astral-sh/uv/issues/21216>
+#[tokio::test]
+async fn tool_upgrade_index_url_keyring_auth() -> Result<()> {
+    let keyring_context = uv_test::test_context!("3.12");
+    keyring_context
+        .pip_install()
+        .arg(
+            keyring_context
+                .workspace_root
+                .join("test")
+                .join("packages")
+                .join("keyring_test_plugin"),
+        )
+        .assert()
+        .success();
+
+    let proxy = crate::pypi_proxy::start().await;
+    let context = uv_test::test_context!("3.12")
+        .with_exclude_newer("2025-01-18T00:00:00Z")
+        .with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+    let path = std::env::join_paths([venv_bin_path(&keyring_context.venv), bin_dir.to_path_buf()])?;
+    let credentials = format!(
+        r#"{{"{host}": {{"public": "heron"}}}}"#,
+        host = proxy.host_port()
+    );
+
+    let uv_toml = context.temp_dir.child("uv.toml");
+    uv_toml.write_str(&format!(
+        indoc! {r#"
+            index-url = "{}"
+            keyring-provider = "subprocess"
+        "#},
+        proxy.username_url("public", "/basic-auth/simple/")
+    ))?;
+
+    context
+        .tool_install()
+        .arg("executable-application")
+        .arg("--index-url")
+        .arg(proxy.username_url("public", "/basic-auth/simple"))
+        .arg("--config-file")
+        .arg(uv_toml.as_os_str())
+        .env_remove(EnvVars::UV_DEFAULT_INDEX)
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::KEYRING_TEST_CREDENTIALS, &credentials)
+        .env(EnvVars::PATH, &path)
+        .assert()
+        .success();
+
+    let receipt = fs_err::read_to_string(
+        tool_dir
+            .join("executable-application")
+            .join("uv-receipt.toml"),
+    )?;
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(receipt, @r#"
+        [tool]
+        requirements = [{ name = "executable-application" }]
+        entrypoints = [
+            { name = "app", install-path = "[TEMP_DIR]/bin/app", from = "executable-application" },
+        ]
+
+        [tool.options]
+        index-url = "http://[LOCALHOST]/basic-auth/simple"
+        keyring-provider = "subprocess"
+        exclude-newer = "2025-01-18T00:00:00Z"
+        "#);
+    });
+
+    uv_snapshot!(context.filters(), context.tool_upgrade()
+        .arg("executable-application")
+        .arg("--config-file")
+        .arg(uv_toml.as_os_str())
+        .env_remove(EnvVars::UV_DEFAULT_INDEX)
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::KEYRING_TEST_CREDENTIALS, &credentials)
+        .env(EnvVars::PATH, &path), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Keyring request for public@http://[LOCALHOST]/basic-auth/simple/
+    Keyring request for public@[LOCALHOST]
+    Nothing to upgrade
+    ");
+
+    Ok(())
 }
 
 /// When upgrading a tool from an authenticated index with invalid credentials,
