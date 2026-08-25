@@ -329,7 +329,82 @@ Python version instead.
 Python download metadata can label artifacts with build variants such as `pgo+lto` or a
 provider-defined tag such as `custom`. Select them explicitly with requests like `3.13+pgo+lto` or
 `3.13+custom`. Runtime and build variants can be composed, as in `3.13+freethreaded+custom`.
-Unqualified requests continue to select the default artifact from the download metadata.
+Explicit build variant requests match the same set of tags, regardless of order. For example,
+`3.13+custom+pgo+lto` matches a build labeled `lto+pgo+custom`, but `3.13+custom` does not match
+that build. Unqualified requests continue to select the default artifact from the download metadata.
+
+### Hosting a custom build variant
+
+To offer a custom build alongside the existing Python downloads, host its archive and add an entry
+to a remotely hosted copy of uv's Python downloads JSON. The configured JSON replaces uv's bundled
+catalog, so retain every existing entry that should remain available.
+
+For example, add an entry like this to the catalog:
+
+```json title="python-downloads.json"
+{
+  "version": 1,
+  "downloads": {
+    "cpython-3.13.7+custom-linux-x86_64-gnu": {
+      "name": "cpython",
+      "arch": {
+        "family": "x86_64",
+        "variant": null
+      },
+      "os": "linux",
+      "libc": "gnu",
+      "major": 3,
+      "minor": 13,
+      "patch": 7,
+      "prerelease": "",
+      "url": "https://example.com/python/cpython-3.13.7-custom.tar.gz",
+      "sha256": "<sha256-of-archive>",
+      "variant": null,
+      "build_variant": "custom",
+      "default": false,
+      "build": "20260825"
+    }
+  }
+}
+```
+
+The `build_variant` is the name used after `+` in Python requests. Setting `default` to `false`
+keeps the existing default build selected for an unqualified request like `3.13`. A catalog should
+contain only one default for each Python version, runtime variant, and platform combination. The
+versioned envelope ensures clients that do not understand build variants reject the catalog.
+
+Configure the remote catalog in `uv.toml`:
+
+```toml title="uv.toml"
+python-downloads-json-url = "https://example.com/python/python-downloads.json"
+```
+
+The custom build can then be listed, installed, and discovered explicitly:
+
+```console
+$ uv python list 3.13+custom --only-downloads --show-urls
+$ uv python install 3.13+custom
+$ uv python find 3.13+custom
+```
+
+Use [`UV_PYTHON_BUILD`](../reference/environment.md#uv_python_build) to select a particular revision
+without changing the variant identity:
+
+```console
+$ UV_PYTHON_BUILD=20260825 uv python install 3.13+custom
+```
+
+`UV_PYTHON_BUILD` applies to requests with an explicit build variant, including optimization
+variants such as `3.13+pgo+lto`. For CPython requests without a build variant, such as `3.13` or
+`3.13+freethreaded`, use
+[`UV_PYTHON_CPYTHON_BUILD`](../reference/environment.md#uv_python_cpython_build) to select a build
+revision.
+
+Build variants use ordinary executable names. Pass `--default` when the selected build should own
+the `python`, `python3`, and versioned aliases in uv's executable directory.
+
+For a custom free-threaded build, set `variant` to `freethreaded` and use a composed request such as
+`3.13+freethreaded+custom`.
 
 ## Free-threaded Python
 
