@@ -9,8 +9,7 @@ Released on 2026-08-25.
 
 ### Python
 
-- Refresh managed CPython builds to the 20260825 python-build-standalone release ([#21295](https://github.com/astral-sh/uv/pull/21295))
-- Add Python 3.15 release-candidate Docker images ([#21293](https://github.com/astral-sh/uv/pull/21293))
+- Refresh managed CPython builds with OpenSSL 3.5.8 and libffi 3.4.8 from python-build-standalone 20260825 ([#21295](https://github.com/astral-sh/uv/pull/21295))
 - Update the Pyodide 3.14.2 cross-build environment to 314.0.5 ([#21174](https://github.com/astral-sh/uv/pull/21174))
 
 ### Enhancements
@@ -50,6 +49,7 @@ Released on 2026-08-25.
 
 ### Other changes
 
+- Add Python 3.15 release-candidate Docker images ([#21293](https://github.com/astral-sh/uv/pull/21293))
 - Raise the minimum supported Rust version to 1.96 and update the repository toolchain to Rust 1.98 ([#21258](https://github.com/astral-sh/uv/pull/21258))
 
 ## 0.12.5
