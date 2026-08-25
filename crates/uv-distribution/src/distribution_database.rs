@@ -1315,7 +1315,7 @@ impl ExtractedWheelManifest {
     {
         if content_addressed {
             let (extracted_files, tree) =
-                uv_extract::stream::unzip_and_hash(reader, target, true).await?;
+                uv_extract::stream::unzip_and_hash(reader, target).await?;
             Ok(Self::with_extracted_files(extracted_files, tree))
         } else {
             let files = uv_extract::stream::unzip(reader, target).await?;

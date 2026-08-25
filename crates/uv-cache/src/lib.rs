@@ -11,6 +11,7 @@ use tracing::{debug, trace, warn};
 
 use uv_cache_info::Timestamp;
 use uv_fs::{LockedFile, LockedFileError, LockedFileMode, Simplified, cachedir, directories};
+use uv_install_wheel::ArchiveFileManifest;
 use uv_normalize::PackageName;
 use uv_pypi_types::ResolutionMetadata;
 
@@ -34,17 +35,6 @@ mod wheel;
 ///
 /// Must be kept in-sync with the version in [`CacheBucket::to_str`].
 pub const ARCHIVE_VERSION: u8 = 0;
-
-#[derive(serde::Deserialize)]
-struct ArchiveFileManifest {
-    version: u8,
-    files: Vec<ArchiveFileManifestEntry>,
-}
-
-#[derive(serde::Deserialize)]
-struct ArchiveFileManifestEntry {
-    object: PathBuf,
-}
 
 /// Error locking a cache entry or shard
 #[derive(Debug, thiserror::Error)]
@@ -734,33 +724,10 @@ impl Cache {
 
         let mut references = FxHashSet::default();
         for entry in fs_err::read_dir(root)? {
-            let manifest = entry?.path().join("manifest.json");
-            let contents = match fs_err::read(manifest) {
-                Ok(contents) => contents,
-                Err(err) if err.kind() == io::ErrorKind::NotFound => continue,
-                Err(err) => return Err(err),
-            };
-            let manifest: ArchiveFileManifest = serde_json::from_slice(&contents)
-                .map_err(|err| io::Error::new(io::ErrorKind::InvalidData, err))?;
-            if manifest.version != 1 {
-                return Err(io::Error::new(
-                    io::ErrorKind::InvalidData,
-                    "archive file manifest has an unsupported version",
-                ));
-            }
-            for entry in manifest.files {
-                if entry.object.as_os_str().is_empty()
-                    || !entry
-                        .object
-                        .components()
-                        .all(|component| matches!(component, std::path::Component::Normal(_)))
-                {
-                    return Err(io::Error::new(
-                        io::ErrorKind::InvalidData,
-                        "archive file manifest contains an invalid object path",
-                    ));
+            if let Some(manifest) = ArchiveFileManifest::read_from_metadata(&entry?.path())? {
+                for entry in manifest.files() {
+                    references.insert(entry.object().to_path_buf());
                 }
-                references.insert(entry.object);
             }
         }
 
