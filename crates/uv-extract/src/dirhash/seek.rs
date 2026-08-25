@@ -1,6 +1,7 @@
 //! Directory hashing while extracting seekable ZIP archives.
 
 use std::path::{Path, PathBuf};
+use std::pin::pin;
 use std::sync::Mutex;
 
 use crate::vendor::CloneableSeekableReader;
@@ -284,13 +285,14 @@ where
     let size = entry.uncompressed_size();
     let writer = buffered_file_writer(outfile, size);
 
-    // Keep the hashing state out of the future moved into `block_on` for ordinary extraction.
+    // Keep the hashing state out of ordinary extraction, and pin both futures here to avoid
+    // moving their large state into `block_on`.
     let (copied, computed_crc32, digest) = if hash_contents {
         let (copied, computed_crc32, digest) =
-            block_on(copy_and_hash_entry(archive, file_number, writer))?;
+            block_on(pin!(copy_and_hash_entry(archive, file_number, writer)))?;
         (copied, computed_crc32, Some(digest))
     } else {
-        let (copied, computed_crc32) = block_on(copy_entry(archive, file_number, writer))?;
+        let (copied, computed_crc32) = block_on(pin!(copy_entry(archive, file_number, writer)))?;
         (copied, computed_crc32, None)
     };
     validate_file_entry(
