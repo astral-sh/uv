@@ -41,11 +41,15 @@ fn clean_all() -> Result<()> {
     Ok(())
 }
 
-/// `cache clean` should report physical space for hardlinks only when the preview is enabled.
+/// Cache cleanup should count hardlinked storage only when its final link is removed.
 #[cfg(unix)]
 #[test]
 fn clean_all_hardlinked_file() -> Result<()> {
     let context = uv_test::test_context!("3.12").with_filtered_counts();
+
+    // Remove unrelated cache entries so the retained hardlink is the only cached data.
+    context.clean().assert().success();
+    context.cache_dir.create_dir_all()?;
 
     // Keep the retained hardlink beside the cache so both entries share a filesystem.
     let retained = context.cache_dir.path().with_file_name("retained.bin");
@@ -58,11 +62,12 @@ fn clean_all_hardlinked_file() -> Result<()> {
     let cached = context.cache_dir.child("hardlinked.bin");
     fs_err::hard_link(&retained, &cached)?;
 
+    // Counting the externally retained hardlink would incorrectly report 1.0MiB.
     uv_snapshot!(context.filters(), context.clean(), @"
     exit_code: 0 (success)
     ----- stderr -----
     Clearing cache at: [CACHE_DIR]/
-    Removed [N] files (1.0MiB)
+    Removed [N] files (0B)
     ");
 
     context.cache_dir.create_dir_all()?;
@@ -85,6 +90,7 @@ fn clean_all_hardlinked_file() -> Result<()> {
         .sync_all()?;
     fs_err::hard_link(&cached, context.cache_dir.child("second-hardlink.bin"))?;
 
+    // Counting each hardlink separately would incorrectly report 2.0MiB.
     uv_snapshot!(context.filters(), context.clean().arg("--preview-features").arg("cache-physical-space"), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -523,7 +529,7 @@ fn clean_handles_verbatim_paths() -> Result<()> {
     DEBUG Searching for user configuration in: `[UV_USER_CONFIG_DIR]/uv.toml`
     DEBUG uv [VERSION] ([COMMIT] DATE)
     Clearing cache at: [CACHE_DIR]/
-    Removed 2 files
+    Removed 2 files (0B)
     ");
 
     Ok(())
