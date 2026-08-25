@@ -20,11 +20,6 @@ impl ArchiveFileManifest {
         Self { version: 1, files }
     }
 
-    /// Return whether the manifest contains no files.
-    fn is_empty(&self) -> bool {
-        self.files.is_empty()
-    }
-
     /// Return the manifest entries.
     pub fn files(&self) -> &[ArchiveFileManifestEntry] {
         &self.files
@@ -43,10 +38,10 @@ impl ArchiveFileManifest {
         Ok(Some(manifest))
     }
 
-    /// Write the manifest to an archive metadata directory.
+    /// Atomically publish a nonempty manifest, or remove the sidecar when it has no entries.
     pub fn write_to_metadata(&self, metadata: &Path) -> Result<(), io::Error> {
         let path = metadata.join(ARCHIVE_FILE_MANIFEST);
-        if self.is_empty() {
+        if self.files.is_empty() {
             match fs_err::remove_file(path) {
                 Ok(()) => {}
                 Err(err) if err.kind() == io::ErrorKind::NotFound => {}

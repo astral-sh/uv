@@ -36,7 +36,7 @@ impl ArchiveId {
 }
 
 impl ArchiveFileId {
-    /// Generate a content-addressed identifier for an extracted file.
+    /// Generate an object identifier sharded by the first two characters of its content digest.
     pub fn from_content_digest(digest: &str) -> Self {
         let shard = digest.get(..2).unwrap_or(digest);
         Self(PathBuf::from(shard).join(digest))
