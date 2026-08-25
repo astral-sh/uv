@@ -111,9 +111,8 @@ pub trait BuildContext {
     /// Return a reference to any pre-defined static metadata.
     fn dependency_metadata(&self) -> &DependencyMetadata;
 
-    /// Whether source distribution building or pre-built wheels is disabled.
+    /// Whether building source distributions or installing pre-built wheels is disabled.
     ///
-    /// This [`BuildContext::setup_build`] calls will fail if builds are disabled.
     /// This method exists to avoid fetching source distributions if we know we can't build them.
     fn build_options(&self) -> &BuildOptions;
 
@@ -166,6 +165,9 @@ pub trait BuildContext {
     /// `uv_build::SourceBuild::setup`.
     ///
     /// For PEP 517 builds, this calls `get_requires_for_build_wheel`.
+    ///
+    /// Callers are responsible for enforcing [`BuildOptions`] for the source distribution itself.
+    /// Build dependencies are still resolved and installed using [`Self::build_options`].
     ///
     /// `version_id` is for error reporting only.
     /// `dist` is for safety checks and may be null for editable builds.

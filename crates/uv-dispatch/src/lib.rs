@@ -510,22 +510,6 @@ impl BuildContext for BuildDispatch<'_> {
                 VersionOrUrlRef::Url(_) => None,
             });
 
-        // Note we can only prevent builds by name for packages with names
-        // unless all builds are disabled.
-        if self
-            .build_options
-            .no_build_requirement(dist_name)
-            // We always allow editable builds
-            && !matches!(build_kind, BuildKind::Editable)
-        {
-            let err = if let Some(dist) = dist {
-                uv_build_frontend::Error::NoSourceDistBuild(dist.name().clone())
-            } else {
-                uv_build_frontend::Error::NoSourceDistBuilds
-            };
-            return Err(err);
-        }
-
         // Push the current distribution onto the build stack, to prevent cyclic dependencies.
         if let Some(dist) = dist {
             build_stack.insert(dist.distribution_id());

@@ -39,6 +39,9 @@ You can limit `uv build` to building a source distribution with `uv build --sdis
 distribution with `uv build --wheel`, or build both distributions from source with
 `uv build --sdist --wheel`.
 
+The `--no-build` and `--no-build-package` settings apply to build dependencies, not to the project
+or source distribution explicitly selected for building.
+
 ## Build constraints
 
 `uv build` accepts `--build-constraint`, which can be used to constrain the versions of any build
