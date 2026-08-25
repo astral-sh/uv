@@ -9,7 +9,7 @@ Released on 2026-08-25.
 
 ### Python
 
-- Refresh managed CPython builds with OpenSSL 3.5.8 and libffi 3.4.8 from python-build-standalone 20260825 ([#21295](https://github.com/astral-sh/uv/pull/21295))
+- Update CPython to use OpenSSL 3.5.8 and libffi 3.4.8 [#21295](https://github.com/astral-sh/uv/pull/21295))
 - Update the Pyodide 3.14.2 cross-build environment to 314.0.5 ([#21174](https://github.com/astral-sh/uv/pull/21174))
 
 ### Enhancements
