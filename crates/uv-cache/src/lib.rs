@@ -331,12 +331,12 @@ impl Cache {
 
     /// Return the metadata directory for an archive in the cache.
     pub fn archive_metadata(&self, id: &ArchiveId) -> PathBuf {
-        self.bucket(CacheBucket::ArchiveMetadata).join(id)
+        self.bucket(CacheBucket::Manifests).join(id)
     }
 
     /// Return the path to an archive file in the cache.
     pub fn archive_file(&self, id: &ArchiveFileId) -> PathBuf {
-        self.bucket(CacheBucket::ArchiveFiles).join(id)
+        self.bucket(CacheBucket::Files).join(id)
     }
 
     /// Create a temporary directory to be used as a Python virtual environment.
@@ -655,7 +655,7 @@ impl Cache {
 
     /// Remove archive metadata for archives that no longer exist.
     fn prune_archive_metadata(&self) -> Result<Removal, io::Error> {
-        let root = self.bucket(CacheBucket::ArchiveMetadata);
+        let root = self.bucket(CacheBucket::Manifests);
         if !root.exists() {
             return Ok(self.removal());
         }
@@ -677,7 +677,7 @@ impl Cache {
 
     /// Remove unreferenced archive-file objects after stale archive metadata has been pruned.
     fn prune_archive_files(&self) -> Result<Removal, io::Error> {
-        let root = self.bucket(CacheBucket::ArchiveFiles);
+        let root = self.bucket(CacheBucket::Files);
         if !root.exists() {
             return Ok(self.removal());
         }
@@ -717,7 +717,7 @@ impl Cache {
 
     /// Collect validated object paths from the remaining versioned archive manifests.
     fn find_archive_file_references(&self) -> Result<FxHashSet<PathBuf>, io::Error> {
-        let root = self.bucket(CacheBucket::ArchiveMetadata);
+        let root = self.bucket(CacheBucket::Manifests);
         if !root.exists() {
             return Ok(FxHashSet::default());
         }
@@ -1338,10 +1338,10 @@ pub enum CacheBucket {
     /// that cache entries can be atomically replaced and removed, as storing directories in the
     /// other buckets directly would make atomic operations impossible.
     Archive,
-    /// Metadata sidecars for archives in [`CacheBucket::Archive`].
-    ArchiveMetadata,
+    /// Manifests of shared files for archives in [`CacheBucket::Archive`].
+    Manifests,
     /// Content-addressed files that are hardlinked into cached archives.
-    ArchiveFiles,
+    Files,
     /// Ephemeral virtual environments used to execute PEP 517 builds and other operations.
     Builds,
     /// Reusable virtual environments for Python tools and projects.
@@ -1377,8 +1377,8 @@ impl CacheBucket {
             // Note that when bumping this, you'll also need to bump
             // `ARCHIVE_VERSION` in `crates/uv-cache/src/lib.rs`.
             Self::Archive => "archive-v0",
-            Self::ArchiveMetadata => "archive-metadata-v0",
-            Self::ArchiveFiles => "archive-files-v0",
+            Self::Manifests => "manifests-v0",
+            Self::Files => "files-v0",
             Self::Builds => "builds-v0",
             Self::Environments => "environments-v2",
             Self::Python => "python-v0",
@@ -1488,8 +1488,8 @@ impl CacheBucket {
             Self::Git
             | Self::Interpreter
             | Self::Archive
-            | Self::ArchiveMetadata
-            | Self::ArchiveFiles
+            | Self::Manifests
+            | Self::Files
             | Self::Builds
             | Self::Environments
             | Self::Python
@@ -1511,8 +1511,8 @@ impl CacheBucket {
             Self::Interpreter,
             Self::Simple,
             Self::Archive,
-            Self::ArchiveMetadata,
-            Self::ArchiveFiles,
+            Self::Manifests,
+            Self::Files,
             Self::Builds,
             Self::Environments,
             Self::Python,
