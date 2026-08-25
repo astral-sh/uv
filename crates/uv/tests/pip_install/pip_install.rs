@@ -16578,8 +16578,8 @@ async fn binary_payloads_stay_in_archive_without_preview() -> Result<()> {
             ");
         }
 
-        assert!(!context.cache_dir.child("archive-files-v0").exists());
-        assert!(!context.cache_dir.child("archive-metadata-v0").exists());
+        assert!(!context.cache_dir.child("files-v0").exists());
+        assert!(!context.cache_dir.child("manifests-v0").exists());
         let archive_files = cache_files(context.cache_dir.child("archive-v0").path())?;
         let archive_binary = archive_files
             .iter()
@@ -16627,7 +16627,7 @@ async fn binary_payload_selection() -> Result<()> {
             ");
         }
 
-        let manifests = cache_files(context.cache_dir.child("archive-metadata-v0").path())?;
+        let manifests = cache_files(context.cache_dir.child("manifests-v0").path())?;
         assert_eq!(manifests.len(), 1);
         let metadata = manifests[0].parent().context("manifest has no parent")?;
         let manifest = ArchiveFileManifest::read_from_metadata(metadata)?
@@ -16654,7 +16654,7 @@ async fn binary_payload_selection() -> Result<()> {
         assert_eq!(paths, expected);
         // Identical contents still need separate executable and non-executable objects.
         assert_eq!(
-            cache_files(context.cache_dir.child("archive-files-v0").path())?.len(),
+            cache_files(context.cache_dir.child("files-v0").path())?.len(),
             2
         );
         let archive_id = metadata.file_name().context("manifest has no archive ID")?;
@@ -16664,10 +16664,7 @@ async fn binary_payload_selection() -> Result<()> {
                 .child("archive-v0")
                 .join(archive_id)
                 .join(entry.path());
-            let object = context
-                .cache_dir
-                .child("archive-files-v0")
-                .join(entry.object());
+            let object = context.cache_dir.child("files-v0").join(entry.object());
             assert_eq!(
                 uv_fs::is_same_file_allow_missing(&archived, &object),
                 Some(true)
@@ -16697,11 +16694,11 @@ fn binary_payloads_use_archive_file_store() -> Result<()> {
      + binary-payload==0.1.0 (from file://[TEMP_DIR]/binary_payload-0.1.0-py3-none-any.whl)
     ");
 
-    let archive_file_root = context.cache_dir.child("archive-files-v0");
+    let archive_file_root = context.cache_dir.child("files-v0");
     let archive_files = cache_files(archive_file_root.path())?;
     assert_eq!(archive_files.len(), 2);
 
-    let archive_metadata_root = context.cache_dir.child("archive-metadata-v0");
+    let archive_metadata_root = context.cache_dir.child("manifests-v0");
     let manifests = cache_files(archive_metadata_root.path())?;
     assert_eq!(manifests.len(), 1);
     let archive_id = manifests[0]
@@ -16898,7 +16895,7 @@ fn binary_payload_copy_fallback_uses_archive_file_store() -> Result<()> {
      + binary-payload==0.1.0 (from file://[TEMP_DIR]/binary_payload-0.1.0-py3-none-any.whl)
     ");
 
-    let archive_files = cache_files(context.cache_dir.child("archive-files-v0").path())?;
+    let archive_files = cache_files(context.cache_dir.child("files-v0").path())?;
     assert_eq!(archive_files.len(), 2);
 
     let target = context.temp_dir.child("fallback-target");
