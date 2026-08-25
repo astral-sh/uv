@@ -16731,6 +16731,34 @@ fn binary_payloads_use_archive_file_store() -> Result<()> {
         fs_err::read(archive_file)?,
     );
 
+    // Installation and pruning must reject unsupported manifest versions consistently.
+    let mut manifest = manifest;
+    manifest["version"] = serde_json::json!(2);
+    fs_err::write(&manifests[0], serde_json::to_vec(&manifest)?)?;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--preview-features")
+        .arg("content-addressed-cache")
+        .arg("--target")
+        .arg(context.temp_dir.child("invalid-target").path())
+        .arg(&wheel), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: .venv/[BIN]/[PYTHON]
+    Resolved 1 package in [TIME]
+    error: Failed to install: binary_payload-0.1.0-py3-none-any.whl (binary-payload==0.1.0 (from file://[TEMP_DIR]/binary_payload-0.1.0-py3-none-any.whl))
+      Caused by: archive file manifest has an unsupported version
+    ");
+
+    uv_snapshot!(context.filters(), context.prune(), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    Pruning cache at: [CACHE_DIR]/
+    error: Failed to prune cache at: [CACHE_DIR]/
+      Caused by: archive file manifest has an unsupported version
+    ");
+    assert!(archive_file.exists());
+
     Ok(())
 }
 
