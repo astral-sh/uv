@@ -1232,6 +1232,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
     ///
     /// A hash tree makes identical extracted trees converge on one archive entry. Without one,
     /// persistence retains the existing behavior of assigning a unique archive ID.
+    /// Binary payloads and their manifest are finalized before the archive becomes visible.
     async fn persist_extracted_wheel(
         &self,
         temp_dir: tempfile::TempDir,
@@ -1333,6 +1334,7 @@ impl ExtractedWheelManifest {
         ))
     }
 
+    /// Derive wheel-record entries while retaining per-file digests for shared binary objects.
     fn with_extracted_files(
         extracted_files: Vec<ExtractedFile>,
         tree: Option<DirhashTree>,
@@ -1378,6 +1380,9 @@ impl ExtractedWheelManifest {
     }
 }
 
+/// Move native-library payloads into shared storage before publishing their sparse archive.
+///
+/// Reuse an existing manifest when another writer has already prepared the same archive identity.
 fn persist_binary_archive_files(
     cache: &Cache,
     archive: &Path,
@@ -1386,11 +1391,10 @@ fn persist_binary_archive_files(
 ) -> io::Result<()> {
     if let Some(manifest) = ArchiveFileManifest::read_from_metadata(archive_metadata)? {
         for entry in manifest.files() {
-            let extracted_file = archive.join(entry.path());
-            match fs_err::remove_file(extracted_file) {
-                Ok(()) => {}
-                Err(err) if err.kind() == io::ErrorKind::NotFound => {}
-                Err(err) => return Err(err),
+            if let Err(err) = fs_err::remove_file(archive.join(entry.path()))
+                && err.kind() != io::ErrorKind::NotFound
+            {
+                return Err(err);
             }
         }
         return Ok(());
@@ -1398,16 +1402,9 @@ fn persist_binary_archive_files(
 
     let mut entries = Vec::new();
 
-    for file in files {
-        if !is_binary_payload(file.path()) {
-            continue;
-        }
-
-        let digest = file.digest_hex();
-        let id = ArchiveFileId::from_content_digest(&digest);
-        let archive_file = cache.archive_file(&id);
-        let extracted_file = archive.join(file.path());
-        persist_archive_file(&extracted_file, &archive_file)?;
+    for file in files.iter().filter(|file| is_binary_payload(file.path())) {
+        let id = ArchiveFileId::from_content_digest(&file.digest_hex());
+        persist_archive_file(&archive.join(file.path()), &cache.archive_file(&id))?;
         entries.push(ArchiveFileManifestEntry::new(
             file.path().to_path_buf(),
             id.as_ref().to_path_buf(),
@@ -1417,6 +1414,7 @@ fn persist_binary_archive_files(
     ArchiveFileManifest::new(entries).write_to_metadata(archive_metadata)
 }
 
+/// Recognize native libraries, including versioned Unix shared objects like `libfoo.so.1`.
 fn is_binary_payload(path: &Path) -> bool {
     let Some(file_name) = path.file_name().and_then(|file_name| file_name.to_str()) else {
         return false;
@@ -1431,10 +1429,12 @@ fn is_binary_payload(path: &Path) -> bool {
     is_binary_extension || file_name.to_ascii_lowercase().contains(".so.")
 }
 
+/// Publish a shared object, tolerating competing writers and filesystems without hardlinks.
 fn persist_archive_file(src: &Path, dst: &Path) -> io::Result<()> {
     persist_archive_file_with(src, dst, |src, dst| fs_err::hard_link(src, dst))
 }
 
+/// Persist an object with an injectable hardlink operation for exercising copy fallbacks.
 fn persist_archive_file_with(
     src: &Path,
     dst: &Path,
@@ -1456,10 +1456,10 @@ fn persist_archive_file_with(
         }
     }
 
-    match fs_err::remove_file(src) {
-        Ok(()) => {}
-        Err(err) if err.kind() == io::ErrorKind::NotFound => {}
-        Err(err) => return Err(err),
+    if let Err(err) = fs_err::remove_file(src)
+        && err.kind() != io::ErrorKind::NotFound
+    {
+        return Err(err);
     }
 
     Ok(())

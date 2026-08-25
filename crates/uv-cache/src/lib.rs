@@ -685,7 +685,7 @@ impl Cache {
         Ok(summary)
     }
 
-    /// Remove archive file objects that are no longer referenced by an archive manifest.
+    /// Remove unreferenced archive-file objects after stale archive metadata has been pruned.
     fn prune_archive_files(&self) -> Result<Removal, io::Error> {
         let root = self.bucket(CacheBucket::ArchiveFiles);
         if !root.exists() {
@@ -725,7 +725,7 @@ impl Cache {
         Ok(summary)
     }
 
-    /// Return the archive file objects referenced by archive manifests.
+    /// Collect validated object paths from the remaining versioned archive manifests.
     fn find_archive_file_references(&self) -> Result<FxHashSet<PathBuf>, io::Error> {
         let root = self.bucket(CacheBucket::ArchiveMetadata);
         if !root.exists() {

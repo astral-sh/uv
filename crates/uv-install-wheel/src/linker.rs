@@ -75,7 +75,7 @@ impl InstallState {
             .insert((wheel.clone(), absolute.to_path_buf()));
     }
 
-    /// Register an installed file stored in the shared archive-file bucket.
+    /// Track a shared payload so collision detection also sees files omitted from cached archives.
     fn register_archive_file_path(&self, relative: &Path, absolute: &Path, wheel: &WheelFilename) {
         debug_assert!(!relative.is_absolute());
         debug_assert!(absolute.is_absolute());
@@ -327,7 +327,12 @@ pub(crate) fn link_wheel_files(
 ) -> Result<(), Error> {
     let wheel = wheel.as_path();
     let site_packages = site_packages.as_ref();
-    let archive_file_manifest = read_archive_file_manifest(wheel, archive_metadata)?;
+    let archive_file_manifest =
+        if let (Some(archive_metadata), Some(archive_id)) = (archive_metadata, wheel.file_name()) {
+            ArchiveFileManifest::read_from_metadata(&archive_metadata.join(archive_id))?
+        } else {
+            None
+        };
     register_installed_paths(wheel, state, filename)?;
     // Preserve the existing directory-linking default for ordinary wheel files.
     let directory_link_mode = link_mode.unwrap_or_default();
@@ -348,7 +353,6 @@ pub(crate) fn link_wheel_files(
             archive_files,
             archive_file_manifest,
             archive_file_link_mode(link_mode, used_link_mode),
-            state.copy_locks(),
             state,
             filename,
         )?;
@@ -367,6 +371,7 @@ pub(crate) fn link_wheel_files(
     Ok(())
 }
 
+/// Hardlink shared payloads by default while preserving explicit modes and directory fallbacks.
 fn archive_file_link_mode(
     requested_link_mode: Option<LinkMode>,
     used_link_mode: LinkMode,
@@ -378,35 +383,17 @@ fn archive_file_link_mode(
     }
 }
 
-/// Read the archive-file manifest for a cached archive directory.
-fn read_archive_file_manifest(
-    wheel: &Path,
-    archive_metadata: Option<&Path>,
-) -> Result<Option<ArchiveFileManifest>, Error> {
-    let Some(archive_metadata) = archive_metadata else {
-        return Ok(None);
-    };
-    let Some(archive_id) = wheel.file_name() else {
-        return Ok(None);
-    };
-
-    Ok(ArchiveFileManifest::read_from_metadata(
-        &archive_metadata.join(archive_id),
-    )?)
-}
-
 /// Replace installed payloads with links to their shared archive-file objects.
 fn link_archive_file_manifest_entries(
     site_packages: &Path,
     archive_files: &Path,
     archive_file_manifest: &ArchiveFileManifest,
     link_mode: LinkMode,
-    copy_locks: &CopyLocks,
     state: &InstallState,
     filename: &WheelFilename,
 ) -> Result<(), Error> {
     let options = LinkOptions::new(link_mode)
-        .with_copy_locks(copy_locks)
+        .with_copy_locks(state.copy_locks())
         .with_on_existing_directory(OnExistingDirectory::Merge);
 
     for entry in archive_file_manifest.files() {
