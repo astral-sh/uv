@@ -117,6 +117,7 @@ fn encode_digest(digest: &blake3::Hash) -> String {
 
 #[cfg(test)]
 mod tests {
+    use crate::Error;
     use crate::archive_path::SanitizedArchivePath;
 
     use super::{
@@ -125,10 +126,10 @@ mod tests {
     };
 
     #[test]
-    fn directory_digest_uses_shared_dirhash_scheme() {
-        let a = SanitizedArchivePath::from_archive_member("a.txt").expect("valid path");
-        let c = SanitizedArchivePath::from_archive_member("b/c.txt").expect("valid path");
-        let directory = SanitizedArchivePath::from_archive_member("b/d").expect("valid path");
+    fn directory_digest_uses_shared_dirhash_scheme() -> Result<(), Error> {
+        let a = SanitizedArchivePath::from_archive_member("a.txt")?.expect("valid path");
+        let c = SanitizedArchivePath::from_archive_member("b/c.txt")?.expect("valid path");
+        let directory = SanitizedArchivePath::from_archive_member("b/d")?.expect("valid path");
 
         let tree = directory_tree_from_extracted(
             &[
@@ -148,14 +149,16 @@ mod tests {
                 .bytes()
                 .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit())
         );
+        Ok(())
     }
 
     #[test]
-    fn digest_path_uses_normalized_archive_path() {
-        let path = SanitizedArchivePath::from_archive_member("example/../package/./data.txt");
+    fn digest_path_uses_normalized_archive_path() -> Result<(), Error> {
+        let path = SanitizedArchivePath::from_archive_member("example/../package/./data.txt")?;
         assert_eq!(
             path.as_ref().map(digest_path).as_deref(),
             Some("package/data.txt")
         );
+        Ok(())
     }
 }

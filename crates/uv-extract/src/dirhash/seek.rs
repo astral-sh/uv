@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
 use crate::vendor::CloneableSeekableReader;
-use crate::{Error, insecure_no_validate, validate_archive_member_name};
+use crate::{Error, insecure_no_validate};
 use async_zip::StoredZipEntry;
 use async_zip::base::read::seek::ZipFileReader;
 use async_zip::error::ZipError;
@@ -145,7 +145,7 @@ fn validate_unique_output_paths(entries: &[StoredZipEntry]) -> Result<(), Error>
     let mut paths = FxHashSet::default();
     for (file_number, entry) in entries.iter().enumerate() {
         let file_name = entry_file_name(entry, file_number)?;
-        let Some(path) = SanitizedArchivePath::from_archive_member(file_name) else {
+        let Ok(Some(path)) = SanitizedArchivePath::from_archive_member(file_name) else {
             continue;
         };
         if !paths.insert(path.clone()) {
@@ -171,13 +171,12 @@ where
 {
     let entry = archive.file().entries()[file_number].clone();
     let file_name = entry_file_name(&entry, file_number)?;
-    if let Err(err) = validate_archive_member_name(file_name) {
-        if !skip_validation {
-            return Err(err);
-        }
-    }
-
-    let Some(enclosed_name) = SanitizedArchivePath::from_archive_member(file_name) else {
+    let enclosed_name = match SanitizedArchivePath::from_archive_member(file_name) {
+        Ok(path) => path,
+        Err(_) if skip_validation => None,
+        Err(err) => return Err(err),
+    };
+    let Some(enclosed_name) = enclosed_name else {
         warn!("Skipping unsafe file name: {file_name}");
         return Ok(None);
     };

@@ -18,7 +18,7 @@ use uv_preview::PreviewFeature;
 
 use crate::archive_path::SanitizedArchivePath;
 use crate::dirhash::{DirhashTree, ExtractedFile, blake3_copy, directory_tree_from_extracted};
-use crate::{Error, insecure_no_validate, validate_archive_member_name};
+use crate::{Error, insecure_no_validate};
 
 const DEFAULT_BUF_SIZE: usize = 128 * 1024;
 
@@ -121,15 +121,13 @@ async fn unzip_inner<R: tokio::io::AsyncRead + Unpin>(
             Err(err) => return Err(err.into()),
         };
 
-        // Apply sanity checks to the file names in local headers.
-        if let Err(e) = validate_archive_member_name(path) {
-            if !skip_validation {
-                return Err(e);
-            }
-        }
-
-        // Sanitize the file name to prevent directory traversal attacks.
-        let Some(relpath) = SanitizedArchivePath::from_archive_member(path) else {
+        // Validate and sanitize the file name to prevent directory traversal attacks.
+        let relpath = match SanitizedArchivePath::from_archive_member(path) {
+            Ok(path) => path,
+            Err(_) if skip_validation => None,
+            Err(err) => return Err(err),
+        };
+        let Some(relpath) = relpath else {
             warn!("Skipping unsafe file name: {path}");
 
             // Close current file prior to proceeding, as per:
@@ -434,15 +432,13 @@ async fn unzip_inner<R: tokio::io::AsyncRead + Unpin>(
                     Err(err) => return Err(err.into()),
                 };
 
-                // Apply sanity checks to the file names in CD headers.
-                if let Err(e) = validate_archive_member_name(path) {
-                    if !skip_validation {
-                        return Err(e);
-                    }
-                }
-
-                // Sanitize the file name to prevent directory traversal attacks.
-                let Some(relpath) = SanitizedArchivePath::from_archive_member(path) else {
+                // Validate and sanitize the file name to prevent directory traversal attacks.
+                let relpath = match SanitizedArchivePath::from_archive_member(path) {
+                    Ok(path) => path,
+                    Err(_) if skip_validation => None,
+                    Err(err) => return Err(err),
+                };
+                let Some(relpath) = relpath else {
                     continue;
                 };
                 let is_dir = entry.dir()?;
