@@ -69,9 +69,7 @@ pub async fn unzip<R: tokio::io::AsyncRead + Unpin>(
     reader: R,
     target: impl AsRef<Path>,
 ) -> Result<Vec<(PathBuf, u64)>, Error> {
-    Ok(Box::pin(unzip_inner(reader, target, false, false))
-        .await?
-        .files)
+    Ok(Box::pin(unzip_inner(reader, target, false)).await?.files)
 }
 
 /// Unpack a `.zip` archive into the target directory while computing a hash tree of the extracted
@@ -79,16 +77,13 @@ pub async fn unzip<R: tokio::io::AsyncRead + Unpin>(
 ///
 /// The tree includes regular-file paths, contents, and empty directories. ZIP entries are never
 /// followed as symlinks; non-directory entries are materialized and hashed as regular files.
-/// Set `reject_duplicate_paths` when the directory digest will identify a cached archive;
-/// otherwise, retain the usual duplicate-entry validation while still hashing individual files.
 ///
 /// See [`unzip`] for details.
 pub async fn unzip_and_hash<R: tokio::io::AsyncRead + Unpin>(
     reader: R,
     target: impl AsRef<Path>,
-    reject_duplicate_paths: bool,
 ) -> Result<(Vec<ExtractedFile>, DirhashTree), Error> {
-    let output = Box::pin(unzip_inner(reader, target, true, reject_duplicate_paths)).await?;
+    let output = Box::pin(unzip_inner(reader, target, true)).await?;
     let Some(tree) = output.tree else {
         return Err(Error::Io(std::io::Error::other(
             "streaming ZIP hash tree was not computed",
@@ -101,7 +96,6 @@ async fn unzip_inner<R: tokio::io::AsyncRead + Unpin>(
     reader: R,
     target: impl AsRef<Path>,
     hash_contents: bool,
-    reject_duplicate_paths: bool,
 ) -> Result<UnzipOutput, Error> {
     // Determine whether ZIP validation is disabled.
     let skip_validation = insecure_no_validate();
@@ -146,7 +140,7 @@ async fn unzip_inner<R: tokio::io::AsyncRead + Unpin>(
 
             continue;
         };
-        if reject_duplicate_paths && !output_paths.insert(relpath.clone()) {
+        if hash_contents && !output_paths.insert(relpath.clone()) {
             return Err(Error::DuplicateOutputPath {
                 path: relpath.into_path_buf(),
             });

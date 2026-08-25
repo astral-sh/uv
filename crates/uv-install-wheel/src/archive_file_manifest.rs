@@ -1,5 +1,5 @@
 use std::io;
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
@@ -25,7 +25,7 @@ impl ArchiveFileManifest {
         &self.files
     }
 
-    /// Read the manifest from an archive metadata directory, if present.
+    /// Read the manifest from an archive metadata directory, validating its version and paths.
     pub fn read_from_metadata(metadata: &Path) -> Result<Option<Self>, io::Error> {
         let path = metadata.join(ARCHIVE_FILE_MANIFEST);
         let contents = match fs_err::read(path) {
@@ -33,8 +33,27 @@ impl ArchiveFileManifest {
             Err(err) if err.kind() == io::ErrorKind::NotFound => return Ok(None),
             Err(err) => return Err(err),
         };
-        let manifest = serde_json::from_slice(&contents)
+        let manifest: Self = serde_json::from_slice(&contents)
             .map_err(|err| io::Error::new(io::ErrorKind::InvalidData, err))?;
+        if manifest.version != 1 {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "archive file manifest has an unsupported version",
+            ));
+        }
+        for entry in &manifest.files {
+            for path in [&entry.path, &entry.object] {
+                if !is_relative_path(path) {
+                    return Err(io::Error::new(
+                        io::ErrorKind::InvalidData,
+                        format!(
+                            "archive file manifest contains an unsafe path: {}",
+                            path.display()
+                        ),
+                    ));
+                }
+            }
+        }
         Ok(Some(manifest))
     }
 
@@ -86,7 +105,42 @@ impl ArchiveFileManifestEntry {
     }
 
     /// Return the archive-file-bucket-relative object path.
-    pub(crate) fn object(&self) -> &Path {
+    pub fn object(&self) -> &Path {
         &self.object
+    }
+}
+
+/// Return whether a path can be joined below a trusted root.
+fn is_relative_path(path: &Path) -> bool {
+    !path.as_os_str().is_empty()
+        && path
+            .components()
+            .all(|component| matches!(component, Component::Normal(_)))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn read_manifest_rejects_unsafe_paths() -> anyhow::Result<()> {
+        let metadata = assert_fs::TempDir::new()?;
+        for field in ["path", "object"] {
+            for path in ["", ".", "..", "../outside", "/outside"] {
+                let mut manifest = serde_json::json!({
+                    "version": 1,
+                    "files": [{"path": "package/native.so", "object": "ab/abcdef"}],
+                });
+                manifest["files"][0][field] = path.into();
+                fs_err::write(
+                    metadata.join(ARCHIVE_FILE_MANIFEST),
+                    serde_json::to_vec(&manifest)?,
+                )?;
+                let error = ArchiveFileManifest::read_from_metadata(metadata.path())
+                    .expect_err("manifest paths must stay below their trusted roots");
+                assert_eq!(error.kind(), io::ErrorKind::InvalidData);
+            }
+        }
+        Ok(())
     }
 }
