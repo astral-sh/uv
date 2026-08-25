@@ -1040,79 +1040,103 @@ impl MarkerTree {
         extras: ExtrasEnvironment,
         reporter: &mut impl Reporter,
     ) -> bool {
-        match self.kind() {
-            MarkerTreeKind::True => return true,
-            MarkerTreeKind::False => return false,
-            MarkerTreeKind::Version(marker) => {
-                for (range, tree) in marker.edges() {
-                    if range.contains(env.get_version(marker.key())) {
-                        return tree.evaluate_reporter_impl(env, extras, reporter);
-                    }
-                }
-            }
-            MarkerTreeKind::String(marker) => {
-                for (range, tree) in marker.children() {
-                    let l_string = env.get_string(marker.key());
+        let mut current = self.0;
 
-                    if matches!(
-                        marker.key(),
-                        CanonicalMarkerValueString::PlatformRelease
-                            | CanonicalMarkerValueString::PlatformVersion
-                    ) && range.as_singleton().is_none()
-                        && let Some((start, end)) = range.bounding_range()
-                    {
-                        if let Bound::Included(value) | Bound::Excluded(value) = start {
-                            reporter.report(
-                                MarkerWarningKind::LexicographicComparison,
-                                format!("Comparing {l_string} and {value} lexicographically"),
-                            );
+        loop {
+            if current.is_true() {
+                return true;
+            }
+            if current.is_false() {
+                return false;
+            }
+
+            let node = INTERNER.shared.node(current);
+            current = match (&node.var, &node.children) {
+                (Variable::Version(key), Edges::Version { edges }) => {
+                    let version = env.get_version(*key);
+                    let Some((_, child)) = edges.iter().find(|(range, _)| range.contains(version))
+                    else {
+                        return false;
+                    };
+                    child.negate(current)
+                }
+                (Variable::String(key), Edges::String { edges }) => {
+                    let value = env.get_string(*key);
+                    let mut child = None;
+
+                    for (range, candidate) in edges {
+                        if matches!(
+                            key,
+                            CanonicalMarkerValueString::PlatformRelease
+                                | CanonicalMarkerValueString::PlatformVersion
+                        ) && range.as_singleton().is_none()
+                            && let Some((start, end)) = range.bounding_range()
+                        {
+                            if let Bound::Included(bound) | Bound::Excluded(bound) = start {
+                                reporter.report(
+                                    MarkerWarningKind::LexicographicComparison,
+                                    format!("Comparing {value} and {bound} lexicographically"),
+                                );
+                            }
+
+                            if let Bound::Included(bound) | Bound::Excluded(bound) = end {
+                                reporter.report(
+                                    MarkerWarningKind::LexicographicComparison,
+                                    format!("Comparing {value} and {bound} lexicographically"),
+                                );
+                            }
                         }
 
-                        if let Bound::Included(value) | Bound::Excluded(value) = end {
-                            reporter.report(
-                                MarkerWarningKind::LexicographicComparison,
-                                format!("Comparing {l_string} and {value} lexicographically"),
-                            );
+                        if range.contains(value) {
+                            child = Some(*candidate);
+                            break;
                         }
                     }
 
-                    if range.contains(l_string) {
-                        return tree.evaluate_reporter_impl(env, extras, reporter);
-                    }
+                    let Some(child) = child else {
+                        return false;
+                    };
+                    child.negate(current)
                 }
-            }
-            MarkerTreeKind::In(marker) => {
-                return marker
-                    .edge(marker.value().contains(env.get_string(marker.key())))
-                    .evaluate_reporter_impl(env, extras, reporter);
-            }
-            MarkerTreeKind::Contains(marker) => {
-                return marker
-                    .edge(env.get_string(marker.key()).contains(marker.value()))
-                    .evaluate_reporter_impl(env, extras, reporter);
-            }
-            MarkerTreeKind::Extra(marker) => {
-                return marker
-                    .edge(extras.extra().contains(marker.name().extra()))
-                    .evaluate_reporter_impl(env, extras, reporter);
-            }
-            MarkerTreeKind::List(marker) => {
-                let edge = match marker.pair() {
-                    CanonicalMarkerListPair::Extras(extra) => extras.extras().contains(extra),
-                    CanonicalMarkerListPair::DependencyGroup(dependency_group) => {
-                        extras.dependency_groups().contains(dependency_group)
-                    }
-                    // Invalid marker expression
-                    CanonicalMarkerListPair::Arbitrary { .. } => return false,
-                };
-
-                return marker
-                    .edge(edge)
-                    .evaluate_reporter_impl(env, extras, reporter);
-            }
+                (Variable::In { key, value }, Edges::Boolean { high, low }) => {
+                    let child = if value.contains(env.get_string(*key)) {
+                        high
+                    } else {
+                        low
+                    };
+                    child.negate(current)
+                }
+                (Variable::Contains { key, value }, Edges::Boolean { high, low }) => {
+                    let child = if env.get_string(*key).contains(value.as_str()) {
+                        high
+                    } else {
+                        low
+                    };
+                    child.negate(current)
+                }
+                (Variable::Extra(name), Edges::Boolean { high, low }) => {
+                    let child = if extras.extra().contains(name.extra()) {
+                        high
+                    } else {
+                        low
+                    };
+                    child.negate(current)
+                }
+                (Variable::List(pair), Edges::Boolean { high, low }) => {
+                    let edge = match pair {
+                        CanonicalMarkerListPair::Extras(extra) => extras.extras().contains(extra),
+                        CanonicalMarkerListPair::DependencyGroup(dependency_group) => {
+                            extras.dependency_groups().contains(dependency_group)
+                        }
+                        // Invalid marker expression
+                        CanonicalMarkerListPair::Arbitrary { .. } => return false,
+                    };
+                    let child = if edge { high } else { low };
+                    child.negate(current)
+                }
+                _ => return false,
+            };
         }
-
-        false
     }
 
     /// Checks if the requirement should be activated with the given set of active extras without evaluating
@@ -1584,15 +1608,6 @@ impl InMarkerTree<'_> {
     pub fn children(&self) -> impl Iterator<Item = (bool, MarkerTree)> {
         [(true, MarkerTree(self.high)), (false, MarkerTree(self.low))].into_iter()
     }
-
-    /// Returns the subtree associated with the given edge value.
-    fn edge(&self, value: bool) -> MarkerTree {
-        if value {
-            MarkerTree(self.high)
-        } else {
-            MarkerTree(self.low)
-        }
-    }
 }
 
 impl PartialOrd for InMarkerTree<'_> {
@@ -1633,15 +1648,6 @@ impl ContainsMarkerTree<'_> {
     /// The edges of this node, corresponding to the boolean evaluation of the expression.
     pub fn children(&self) -> impl Iterator<Item = (bool, MarkerTree)> {
         [(true, MarkerTree(self.high)), (false, MarkerTree(self.low))].into_iter()
-    }
-
-    /// Returns the subtree associated with the given edge value.
-    fn edge(&self, value: bool) -> MarkerTree {
-        if value {
-            MarkerTree(self.high)
-        } else {
-            MarkerTree(self.low)
-        }
     }
 }
 
