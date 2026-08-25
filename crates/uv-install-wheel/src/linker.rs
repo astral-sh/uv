@@ -1,6 +1,6 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::io;
-use std::path::{Component, Path, PathBuf};
+use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::time::SystemTime;
 
@@ -397,13 +397,6 @@ fn link_archive_file_manifest_entries(
         .with_on_existing_directory(OnExistingDirectory::Merge);
 
     for entry in archive_file_manifest.files() {
-        if !is_relative_path(entry.path()) || !is_relative_path(entry.object()) {
-            return Err(Error::InvalidWheel(format!(
-                "archive-file manifest contains an unsafe path: {}",
-                entry.path().display()
-            )));
-        }
-
         let source = archive_files.join(entry.object());
         let target = site_packages.join(entry.path());
         if let Some(parent) = target.parent() {
@@ -415,14 +408,6 @@ fn link_archive_file_manifest_entries(
     }
 
     Ok(())
-}
-
-/// Return whether a path can be joined below a trusted root.
-fn is_relative_path(path: &Path) -> bool {
-    !path.as_os_str().is_empty()
-        && path
-            .components()
-            .all(|component| matches!(component, Component::Normal(_)))
 }
 
 /// Update the mtime of the site-packages directory to the current time.
