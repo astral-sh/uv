@@ -3735,6 +3735,15 @@ fn preview_features() {
 
     let preview = diff_uv_snapshot!(context.filters(), &baseline, add_shared_args(context.version()).arg("--show-settings").arg("--preview"), @"
     ...
+         network_settings: NetworkSettings {
+             connectivity: Online,
+             offline: Disabled,
+    -        system_certs: false,
+    +        system_certs: true,
+             custom_certificates: [CERTIFICATES],
+             http_proxy: None,
+             https_proxy: None,
+    ...
          },
          show_settings: true,
          preview: Preview {
@@ -3785,6 +3794,7 @@ fn preview_features() {
     +            TarCodec,
     +            IndexByName,
     +            ArtifactHashFiltering,
+    +            SystemCertsDefault,
     +        ],
          },
          python_preference: Managed,
@@ -4736,6 +4746,93 @@ fn system_certs_config_aliases() -> anyhow::Result<()> {
     );
 
     Ok(())
+}
+
+/// Verify that `--preview-features system-certs-default` enables system certificates by default,
+/// and that explicit CLI flags still override it.
+#[test]
+#[cfg_attr(
+    windows,
+    ignore = "Configuration tests are not yet supported on Windows"
+)]
+fn system_certs_default_preview_feature() {
+    let context = uv_test::test_context!("3.12");
+
+    let baseline = capture_uv_snapshot!(
+        context.filters(),
+        add_shared_args(context.version()).arg("--show-settings")
+    );
+
+    // With the preview feature enabled, system_certs defaults to true.
+    let preview = diff_uv_snapshot!(context.filters(), &baseline, add_shared_args(context.version())
+        .arg("--show-settings")
+        .arg("--preview-features")
+        .arg("system-certs-default"), @"
+    ...
+         network_settings: NetworkSettings {
+             connectivity: Online,
+             offline: Disabled,
+    -        system_certs: false,
+    +        system_certs: true,
+             custom_certificates: [CERTIFICATES],
+             http_proxy: None,
+             https_proxy: None,
+    ...
+         },
+         show_settings: true,
+         preview: Preview {
+    -        flags: [],
+    +        flags: [
+    +            SystemCertsDefault,
+    +        ],
+         },
+         python_preference: Managed,
+         python_downloads: Automatic,
+    ...
+    "
+    );
+
+    // Explicit `--no-system-certs` overrides the preview feature default.
+    let disabled = diff_uv_snapshot!(context.filters(), &preview, add_shared_args(context.version())
+        .arg("--show-settings")
+        .arg("--preview-features")
+        .arg("system-certs-default")
+        .arg("--no-system-certs"), @"
+    ...
+         network_settings: NetworkSettings {
+             connectivity: Online,
+             offline: Disabled,
+    -        system_certs: true,
+    +        system_certs: false,
+             custom_certificates: [CERTIFICATES],
+             http_proxy: None,
+             https_proxy: None,
+    ...
+    "
+    );
+
+    // Environment variables should still be able to disable system certificates.
+    diff_uv_snapshot!(context.filters(), &disabled, add_shared_args(context.version())
+        .arg("--show-settings")
+        .arg("--preview-features")
+        .arg("system-certs-default")
+        .env(EnvVars::UV_SYSTEM_CERTS, "false"), @"");
+
+    // The deprecated alias should behave the same way.
+    diff_uv_snapshot!(context.filters(), &disabled, add_shared_args(context.version())
+        .arg("--show-settings")
+        .arg("--preview-features")
+        .arg("system-certs-default")
+        .env(EnvVars::UV_NATIVE_TLS, "false"), @"
+    ...
+             malware_check_url: None,
+         },
+     }
+    +
+    +----- stderr -----
+    +warning: The `UV_NATIVE_TLS` environment variable is deprecated and will be removed in a future release. Use `UV_SYSTEM_CERTS` instead.
+    ...
+    ");
 }
 
 /// Track the interactions between `upgrade` and `upgrade-package` across the `uv pip` CLI and a

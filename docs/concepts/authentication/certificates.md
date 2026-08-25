@@ -26,9 +26,18 @@ To use system certificates, pass the [`--system-certs`](../../reference/cli.md#u
 [`UV_SYSTEM_CERTS`](../../reference/environment.md#uv_system_certs) environment variable to `true`,
 or set [`system-certs = true`](../../reference/settings.md#system-certs) in `uv.toml`.
 
+To enable system certificates by default, enable the
+[`system-certs-default`](../preview.md#available-preview-features) preview feature.
+
 When using system certificates, certificate verification is performed by
 [`rustls-platform-verifier`](https://github.com/rustls/rustls-platform-verifier), which delegates to
 the operating system's certificate verifier.
+
+On Linux, the platform verifier discovers CA bundles from the filesystem (via `rustls-native-certs`
+/ `openssl-probe`). uv always merges the bundled Mozilla root certificates alongside the platform
+verifier, so connectivity still works in minimal environments where the system CA bundle is absent
+(e.g., scratch containers). On macOS and Windows, the platform's built-in trust store is always
+available, so no additional roots are merged.
 
 ## Custom certificates
 

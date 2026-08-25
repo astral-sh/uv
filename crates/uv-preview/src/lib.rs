@@ -335,6 +335,8 @@ pub enum PreviewFeature {
     IndexByName,
     /// Restricts generated requirement hashes to artifacts allowed by binary and build policies.
     ArtifactHashFiltering,
+    /// Enables [system certificates](../concepts/authentication/certificates.md) by default.
+    SystemCertsDefault,
 }
 
 impl Display for PreviewFeature {
