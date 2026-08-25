@@ -5,7 +5,6 @@ use std::path::Path;
 use std::str::FromStr;
 use std::sync::{Arc, LazyLock, RwLock};
 
-use http::StatusCode;
 use itertools::Either;
 use rustc_hash::{FxHashMap, FxHashSet};
 use thiserror::Error;
@@ -17,7 +16,7 @@ use uv_pypi_types::HashAlgorithm;
 use uv_redacted::DisplaySafeUrl;
 use uv_warnings::warn_user;
 
-use crate::{ExcludeNewerOverride, Index, IndexStatusCodeStrategy, Verbatim};
+use crate::{ExcludeNewerOverride, Index, IndexRoute, ProxyIndexConfigError, Verbatim};
 
 pub static PYPI_URL: LazyLock<DisplaySafeUrl> =
     LazyLock::new(|| DisplaySafeUrl::parse("https://pypi.org/simple").unwrap());
@@ -274,12 +273,49 @@ impl Deref for IndexUrl {
 ///
 /// This type merges the legacy `--index-url`, `--extra-index-url`, and `--find-links` options,
 /// along with the uv-specific `--index` and `--default-index`.
-#[derive(Default, Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-#[serde(rename_all = "kebab-case", deny_unknown_fields)]
+#[derive(Default, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(
+    rename_all = "kebab-case",
+    deny_unknown_fields,
+    try_from = "IndexLocationsWire"
+)]
 pub struct IndexLocations {
     indexes: Vec<Index>,
     flat_index: Vec<Index>,
     no_index: bool,
+    #[serde(skip)]
+    pub(crate) routes: Vec<IndexRoute>,
+}
+
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "kebab-case", deny_unknown_fields)]
+struct IndexLocationsWire {
+    indexes: Vec<Index>,
+    flat_index: Vec<Index>,
+    no_index: bool,
+}
+
+#[expect(
+    clippy::missing_fields_in_debug,
+    reason = "routes are derived from the displayed index configuration"
+)]
+impl std::fmt::Debug for IndexLocations {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("IndexLocations")
+            .field("indexes", &self.indexes)
+            .field("flat_index", &self.flat_index)
+            .field("no_index", &self.no_index)
+            .finish()
+    }
+}
+
+impl TryFrom<IndexLocationsWire> for IndexLocations {
+    type Error = ProxyIndexConfigError;
+
+    fn try_from(wire: IndexLocationsWire) -> Result<Self, Self::Error> {
+        Self::new(wire.indexes, wire.flat_index, wire.no_index)
+    }
 }
 
 /// Exclude proxy [`Index`] entries, preserving iteration order and duplicate definitions.
@@ -291,12 +327,19 @@ fn non_proxy_indexes<'a>(
 
 impl IndexLocations {
     /// Determine the index URLs to use for fetching packages.
-    pub fn new(indexes: Vec<Index>, flat_index: Vec<Index>, no_index: bool) -> Self {
-        Self {
+    pub fn new(
+        indexes: Vec<Index>,
+        flat_index: Vec<Index>,
+        no_index: bool,
+    ) -> Result<Self, ProxyIndexConfigError> {
+        let mut locations = Self {
             indexes,
             flat_index,
             no_index,
-        }
+            routes: Vec::new(),
+        };
+        locations.routes = crate::proxy_index::build_routes(&locations)?;
+        Ok(locations)
     }
 
     /// Return configured package indexes in declaration order, excluding proxy indexes.
@@ -329,13 +372,17 @@ impl IndexLocations {
     /// have `no_index` set.
     ///
     /// If the current index location has an `index` set, it will be preserved.
-    #[must_use]
-    pub fn combine(self, indexes: Vec<Index>, flat_index: Vec<Index>, no_index: bool) -> Self {
-        Self {
-            indexes: self.indexes.into_iter().chain(indexes).collect(),
-            flat_index: self.flat_index.into_iter().chain(flat_index).collect(),
-            no_index: self.no_index || no_index,
-        }
+    pub fn combine(
+        self,
+        indexes: Vec<Index>,
+        flat_index: Vec<Index>,
+        no_index: bool,
+    ) -> Result<Self, ProxyIndexConfigError> {
+        Self::new(
+            self.indexes.into_iter().chain(indexes).collect(),
+            self.flat_index.into_iter().chain(flat_index).collect(),
+            self.no_index || no_index,
+        )
     }
 
     /// Returns `true` if no index configuration is set, i.e., the [`IndexLocations`] matches the
@@ -508,45 +555,19 @@ impl<'a> IndexLocations {
     }
 
     /// Return the configured index matching the given URL.
-    fn index_for_url(&self, url: &IndexUrl) -> Option<&Index> {
+    pub(crate) fn index_for_url(&self, url: &IndexUrl) -> Option<&Index> {
         self.indexes
             .iter()
             .find(|index| index.url().is_same_index(url))
     }
 
-    /// Return the [`IndexStatusCodeStrategy`] for an [`IndexUrl`].
-    pub fn status_code_strategy_for(&self, url: &IndexUrl) -> IndexStatusCodeStrategy {
-        self.index_for_url(url).map_or(
-            IndexStatusCodeStrategy::Default,
-            Index::status_code_strategy,
-        )
-    }
-
-    /// Return whether the given status code is explicitly ignored for an [`IndexUrl`].
-    pub fn ignores_error_code_for(&self, url: &IndexUrl, status_code: StatusCode) -> bool {
-        self.index_for_url(url)
-            .is_some_and(|index| index.ignores_error_code(status_code))
-    }
-
-    /// Return the Simple API cache control header for an [`IndexUrl`], if configured.
-    pub fn simple_api_cache_control_for(&self, url: &IndexUrl) -> Option<http::HeaderValue> {
-        self.index_for_url(url)
-            .and_then(Index::simple_api_cache_control)
-    }
-
-    /// Return the artifact cache control header for an [`IndexUrl`], if configured.
-    pub fn artifact_cache_control_for(&self, url: &IndexUrl) -> Option<http::HeaderValue> {
-        self.index_for_url(url)
-            .and_then(Index::artifact_cache_control)
-    }
-
-    /// Return the hash algorithm required for distributions resolved from a given index.
+    /// Return the hash algorithm required for distributions resolved from a canonical index.
     pub fn hash_algorithm_for(&self, url: &IndexUrl) -> Option<HashAlgorithm> {
         self.index_for_url(url)
             .and_then(|index| index.hash_algorithm.map(HashAlgorithm::from))
     }
 
-    /// Return the `exclude-newer` setting for a given index, if the index is configured.
+    /// Return the `exclude-newer` setting for a canonical index, if it is configured.
     pub fn exclude_newer_for(&self, url: &IndexUrl) -> Option<&ExcludeNewerOverride> {
         self.index_for_url(url).and_then(Index::exclude_newer)
     }
@@ -709,7 +730,7 @@ mod tests {
             "https://proxy.example.com/files/",
         )?;
         let physical_url = proxy.url.clone();
-        let locations = IndexLocations::new(vec![proxy], Vec::new(), false);
+        let locations = IndexLocations::new(vec![proxy], Vec::new(), false)?;
 
         assert_eq!(locations.configured_indexes().count(), 0);
         assert_eq!(locations.configured_indexes_and_proxies().count(), 1);
@@ -766,7 +787,7 @@ mod tests {
             "https://proxy.example.com/simple/",
             "https://proxy.example.com/files/",
         )?;
-        let locations = IndexLocations::new(vec![proxy], Vec::new(), true);
+        let locations = IndexLocations::new(vec![proxy], Vec::new(), true)?;
 
         assert!(locations.default_index().is_none());
         assert_eq!(locations.configured_indexes().count(), 0);
@@ -829,7 +850,7 @@ mod tests {
             vec![first, shadowed, explicit, shadowed_implicit, default],
             vec![],
             false,
-        );
+        )?;
 
         assert_eq!(
             index_urls(locations.simple_indexes()),
@@ -871,7 +892,7 @@ mod tests {
         let first = Index::from_str("https://first.example.com/simple")?;
         let repeated = Index::from_str("https://first.example.com/simple")?;
         let last = Index::from_str("https://last.example.com/simple")?;
-        let locations = IndexLocations::new(vec![first, repeated, last], vec![], false);
+        let locations = IndexLocations::new(vec![first, repeated, last], vec![], false)?;
         let expected = [
             "https://first.example.com/simple",
             "https://first.example.com/simple",
@@ -898,7 +919,7 @@ mod tests {
         let first = Index::from_str("shared=https://first.example.com/simple")?;
         let mut shadowed = Index::from_str("shared=https://shadowed.example.com/simple")?;
         shadowed.default = true;
-        let locations = IndexLocations::new(vec![first, shadowed], vec![], false);
+        let locations = IndexLocations::new(vec![first, shadowed], vec![], false)?;
 
         assert_eq!(
             index_urls(locations.default_index()),
@@ -916,21 +937,22 @@ mod tests {
     }
 
     #[test]
-    fn fetch_indexes_deduplicates_raw_urls() {
+    fn fetch_indexes_deduplicates_raw_urls() -> Result<(), Box<dyn Error>> {
         let url = IndexUrl::from_str("https://index.example.com/simple").unwrap();
         let mut first = Index::from(url.clone());
         first.name = Some(IndexName::from_str("first").unwrap());
         let mut second = Index::from(url);
         second.name = Some(IndexName::from_str("second").unwrap());
         second.default = true;
-        let locations = IndexLocations::new(vec![first, second], Vec::new(), false);
+        let locations = IndexLocations::new(vec![first, second], Vec::new(), false)?;
 
         assert_eq!(locations.indexes().count(), 2);
         assert_eq!(locations.fetch_indexes().count(), 1);
+        Ok(())
     }
 
     #[test]
-    fn test_cache_control_lookup() {
+    fn test_cache_control_lookup() -> Result<(), Box<dyn Error>> {
         use std::str::FromStr;
 
         use crate::IndexFormat;
@@ -974,7 +996,7 @@ mod tests {
             },
         ];
 
-        let index_locations = IndexLocations::new(indexes, Vec::new(), false);
+        let index_locations = IndexLocations::new(indexes, Vec::new(), false)?;
 
         let url1 = IndexUrl::from_str("https://index1.example.com/simple").unwrap();
         assert_eq!(
@@ -993,10 +1015,11 @@ mod tests {
         let url3 = IndexUrl::from_str("https://index3.example.com/simple").unwrap();
         assert_eq!(index_locations.simple_api_cache_control_for(&url3), None);
         assert_eq!(index_locations.artifact_cache_control_for(&url3), None);
+        Ok(())
     }
 
     #[test]
-    fn test_pytorch_default_cache_control() {
+    fn test_pytorch_default_cache_control() -> Result<(), Box<dyn Error>> {
         // Test that PyTorch indexes get default cache control from the getter methods
         let indexes = vec![Index {
             name: Some(IndexName::from_str("pytorch").unwrap()),
@@ -1015,10 +1038,9 @@ mod tests {
             exclude_newer: None,
         }];
 
-        let index_locations = IndexLocations::new(indexes, Vec::new(), false);
+        let index_locations = IndexLocations::new(indexes, Vec::new(), false)?;
 
         let pytorch_url = IndexUrl::from_str("https://download.pytorch.org/whl/cu118").unwrap();
-
         assert_eq!(
             index_locations.simple_api_cache_control_for(&pytorch_url),
             None
@@ -1029,10 +1051,11 @@ mod tests {
                 "max-age=365000000, immutable, public",
             ))
         );
+        Ok(())
     }
 
     #[test]
-    fn test_pytorch_user_override_cache_control() {
+    fn test_pytorch_user_override_cache_control() -> Result<(), Box<dyn Error>> {
         // Test that user-specified cache control overrides PyTorch defaults
         let indexes = vec![Index {
             name: Some(IndexName::from_str("pytorch").unwrap()),
@@ -1054,10 +1077,9 @@ mod tests {
             exclude_newer: None,
         }];
 
-        let index_locations = IndexLocations::new(indexes, Vec::new(), false);
+        let index_locations = IndexLocations::new(indexes, Vec::new(), false)?;
 
         let pytorch_url = IndexUrl::from_str("https://download.pytorch.org/whl/cu118").unwrap();
-
         assert_eq!(
             index_locations.simple_api_cache_control_for(&pytorch_url),
             Some(HeaderValue::from_static("no-cache"))
@@ -1066,10 +1088,11 @@ mod tests {
             index_locations.artifact_cache_control_for(&pytorch_url),
             Some(HeaderValue::from_static("max-age=3600"))
         );
+        Ok(())
     }
 
     #[test]
-    fn test_nvidia_default_cache_control() {
+    fn test_nvidia_default_cache_control() -> Result<(), Box<dyn Error>> {
         // Test that NVIDIA indexes get default cache control from the getter methods
         let indexes = vec![Index {
             name: Some(IndexName::from_str("nvidia").unwrap()),
@@ -1088,10 +1111,9 @@ mod tests {
             exclude_newer: None,
         }];
 
-        let index_locations = IndexLocations::new(indexes, Vec::new(), false);
+        let index_locations = IndexLocations::new(indexes, Vec::new(), false)?;
 
         let nvidia_url = IndexUrl::from_str("https://pypi.nvidia.com").unwrap();
-
         assert_eq!(
             index_locations.simple_api_cache_control_for(&nvidia_url),
             None
@@ -1102,5 +1124,6 @@ mod tests {
                 "max-age=365000000, immutable, public",
             ))
         );
+        Ok(())
     }
 }

@@ -9,8 +9,7 @@ use uv_distribution_filename::WheelFilename;
 use uv_distribution_types::{
     BuildInfo, BuildVariables, CachedRegistryDist, ConfigSettings, ExtraBuildRequirement,
     ExtraBuildRequires, ExtraBuildVariables, HashPolicy, Hashed, Index, IndexFormat,
-    IndexLocations, IndexRoutes, IndexUrl, PackageConfigSettings, RegistryBuiltDist,
-    RegistrySourceDist,
+    IndexLocations, IndexUrl, PackageConfigSettings, RegistryBuiltDist, RegistrySourceDist,
 };
 use uv_fs::{directories, files};
 use uv_normalize::PackageName;
@@ -91,7 +90,6 @@ pub struct RegistryWheelIndex<'a> {
     cache: &'a Cache,
     tags: &'a Tags,
     index_locations: &'a IndexLocations,
-    routes: Option<IndexRoutes>,
     hasher: &'a HashStrategy,
     index: FxHashMap<&'a PackageName, Vec<IndexEntry<'a>>>,
     config_settings: &'a ConfigSettings,
@@ -116,7 +114,6 @@ impl<'a> RegistryWheelIndex<'a> {
             cache,
             tags,
             index_locations,
-            routes: IndexRoutes::try_from(index_locations).ok(),
             hasher,
             config_settings,
             config_settings_package,
@@ -134,10 +131,7 @@ impl<'a> RegistryWheelIndex<'a> {
         no_binary: bool,
     ) -> Option<&CachedRegistryDist> {
         let wheel = distribution.best_wheel();
-        let is_proxy = self
-            .routes
-            .as_ref()
-            .is_some_and(|routes| routes.route_for(&wheel.index).is_proxy());
+        let is_proxy = self.index_locations.proxy_route_for(&wheel.index).is_some();
 
         self.get(&wheel.filename.name).find_map(|entry| {
             if !entry.matches_wheel(&wheel.index, &wheel.filename, no_build, no_binary) {
@@ -168,9 +162,9 @@ impl<'a> RegistryWheelIndex<'a> {
         no_binary: bool,
     ) -> Option<&CachedRegistryDist> {
         let is_proxy = self
-            .routes
-            .as_ref()
-            .is_some_and(|routes| routes.route_for(&source.index).is_proxy());
+            .index_locations
+            .proxy_route_for(&source.index)
+            .is_some();
 
         self.get(&source.name).find_map(|entry| {
             if !entry.matches_source(
@@ -220,7 +214,6 @@ impl<'a> RegistryWheelIndex<'a> {
                 self.cache,
                 self.tags,
                 self.index_locations,
-                self.routes.as_ref(),
                 self.hasher,
                 self.config_settings,
                 self.config_settings_package,
@@ -236,17 +229,12 @@ impl<'a> RegistryWheelIndex<'a> {
         cache: &Cache,
         tags: &Tags,
         index_locations: &'index IndexLocations,
-        routes: Option<&IndexRoutes>,
         hasher: &HashStrategy,
         config_settings: &ConfigSettings,
         config_settings_package: &PackageConfigSettings,
         extra_build_requires: &ExtraBuildRequires,
         extra_build_variables: &ExtraBuildVariables,
     ) -> Vec<IndexEntry<'index>> {
-        let Some(routes) = routes else {
-            return Vec::new();
-        };
-
         let mut entries = vec![];
 
         let mut seen = FxHashSet::default();
@@ -255,9 +243,8 @@ impl<'a> RegistryWheelIndex<'a> {
                 continue;
             }
 
-            let route = routes.route_for(index.url());
             let index_url = match index.format {
-                IndexFormat::Simple => route.effective_url(),
+                IndexFormat::Simple => index_locations.effective_url(index.url()),
                 IndexFormat::Flat => index.url(),
             };
 

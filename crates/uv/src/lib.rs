@@ -2039,7 +2039,7 @@ async fn run_with_workspace_cache(
             }
 
             // Resolve the settings from the command-line arguments and workspace configuration.
-            let args = PublishSettings::resolve(args, filesystem);
+            let args = PublishSettings::resolve(args, filesystem)?;
             show_settings!(args);
 
             let PublishSettings {
@@ -2490,7 +2490,7 @@ async fn run_project(
         }
         ProjectCommand::Upgrade(args) => {
             // Resolve the settings from the command-line arguments and workspace configuration.
-            let args = settings::UpgradeSettings::resolve(args, filesystem, environment);
+            let args = settings::UpgradeSettings::resolve(args, filesystem, environment)?;
             show_settings!(args);
 
             // Initialize the cache.

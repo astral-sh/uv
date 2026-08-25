@@ -226,10 +226,15 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         match dist {
             BuiltDist::Registry(wheels) => {
                 let wheel = wheels.best_wheel();
-                let route = self.client.unmanaged.routes().route_for(&wheel.index);
-                let url = wheel.file.url.to_url()?;
+                let route = self
+                    .client
+                    .unmanaged
+                    .index_locations()
+                    .proxy_route_for(&wheel.index);
+                let index = route.map_or(&wheel.index, |route| route.effective_url());
+                let mut url = wheel.file.url.to_url()?;
                 let size = wheel.file.size;
-                let hashes = if route.is_proxy() {
+                let hashes = if route.is_some() {
                     let cache_verification = if wheel.file.hashes.is_empty() {
                         hashes
                     } else {
@@ -239,14 +244,16 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 } else {
                     ArtifactHashPolicy::from(hashes)
                 };
-                let url = route
-                    .to_proxy_url(&url)
-                    .map_err(|error| Error::Client(ClientErrorKind::ProxyIndex(error).into()))?;
+                if let Some(route) = route {
+                    url = route.to_proxy_url(&url).map_err(|error| {
+                        Error::Client(ClientErrorKind::ProxyIndex(error).into())
+                    })?;
+                }
 
                 // Create a cache entry for the wheel.
                 let wheel_entry = self.build_context.cache().entry(
                     CacheBucket::Wheels,
-                    WheelCache::Index(route.effective_url()).wheel_dir(wheel.name().as_ref()),
+                    WheelCache::Index(index).wheel_dir(wheel.name().as_ref()),
                     wheel.filename.cache_key(),
                 );
 
@@ -264,7 +271,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 match self
                     .stream_wheel(
                         url.clone(),
-                        Some(route.effective_url()),
+                        Some(index),
                         &wheel.filename,
                         size,
                         &wheel_entry,
@@ -301,7 +308,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                         let archive = self
                             .download_wheel(
                                 url,
-                                Some(route.effective_url()),
+                                Some(index),
                                 &wheel.filename,
                                 size,
                                 &wheel_entry,

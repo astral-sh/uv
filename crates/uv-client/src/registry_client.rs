@@ -21,8 +21,8 @@ use uv_configuration::KeyringProviderType;
 use uv_distribution_filename::{DistFilename, WheelFilename};
 use uv_distribution_types::{
     BuiltDist, File, FileLocation, IndexCapabilities, IndexFormat, IndexLocations,
-    IndexMetadataRef, IndexRoutes, IndexStatusCodeDecision, IndexStatusCodeStrategy, IndexUrl,
-    Name, RegistryBuiltWheel, Zstd,
+    IndexMetadataRef, IndexStatusCodeDecision, IndexStatusCodeStrategy, IndexUrl, Name,
+    RegistryBuiltWheel, Zstd,
 };
 use uv_git::{GIT_LFS, GitError, GitHttpSettings, GitResolver, Reporter};
 use uv_metadata::{read_metadata_async_seek, read_metadata_async_stream};
@@ -155,15 +155,13 @@ impl<'a> RegistryClientBuilder<'a> {
         self,
         existing: Option<&BaseClient>,
     ) -> Result<RegistryClient, ClientBuildError> {
-        let routes = IndexRoutes::try_from(&self.index_locations)?;
-
         // Cache explicitly configured credentials for indexes and proxy artifact hosts.
         for index in self
             .index_locations
             .known_indexes()
             .chain(self.index_locations.proxy_indexes())
         {
-            if routes.route_for(index.url()).is_proxy() {
+            if self.index_locations.proxy_route_for(index.url()).is_some() {
                 continue;
             }
 
@@ -210,7 +208,6 @@ impl<'a> RegistryClientBuilder<'a> {
 
         Ok(RegistryClient {
             indexes: self.index_locations,
-            routes,
             index_strategy: self.index_strategy,
             torch_backend: self.torch_backend,
             cache: self.cache,
@@ -228,8 +225,6 @@ impl<'a> RegistryClientBuilder<'a> {
 pub struct RegistryClient {
     /// The indexes to use for fetching packages.
     indexes: IndexLocations,
-    /// Validated routes from canonical registry indexes to physical endpoints.
-    routes: IndexRoutes,
     /// The strategy to use when fetching across multiple indexes.
     index_strategy: IndexStrategy,
     /// The strategy to use when selecting a PyTorch backend, if any.
@@ -278,9 +273,9 @@ pub enum MetadataFormat {
 }
 
 impl RegistryClient {
-    /// Return the validated routes for the configured registry indexes.
-    pub fn routes(&self) -> &IndexRoutes {
-        &self.routes
+    /// Return the configured package index locations.
+    pub fn index_locations(&self) -> &IndexLocations {
+        &self.indexes
     }
 
     /// Return the [`CachedClient`] used by this client.
@@ -379,13 +374,12 @@ impl RegistryClient {
                     let _permit = download_concurrency.acquire().await;
                     match index.format {
                         IndexFormat::Simple => {
-                            let route = self.routes.route_for(index.url);
                             let status_code_strategy =
-                                self.indexes.status_code_strategy_for(route.effective_url());
+                                self.indexes.status_code_strategy_for(index.url);
                             match self
                                 .simple_detail_single_index(
                                     package_name,
-                                    route.effective_url(),
+                                    self.indexes.effective_url(index.url),
                                     capabilities,
                                     &status_code_strategy,
                                 )
@@ -425,14 +419,13 @@ impl RegistryClient {
                         let _permit = download_concurrency.acquire().await;
                         match index.format {
                             IndexFormat::Simple => {
-                                let route = self.routes.route_for(index.url);
                                 // For unsafe matches, ignore authentication failures.
                                 let status_code_strategy =
                                     IndexStatusCodeStrategy::ignore_authentication_error_codes();
                                 let metadata = match self
                                     .simple_detail_single_index(
                                         package_name,
-                                        route.effective_url(),
+                                        self.indexes.effective_url(index.url),
                                         capabilities,
                                         &status_code_strategy,
                                     )
@@ -1045,9 +1038,13 @@ impl RegistryClient {
             index,
             ..
         } = wheel;
-        let route = self.routes.route_for(index);
-        let index = route.effective_url();
-        let url = route.to_proxy_url(url).map_err(ErrorKind::ProxyIndex)?;
+        let route = self.indexes.proxy_route_for(index);
+        let effective_index = route.map_or(index, |route| route.effective_url());
+        let url = if let Some(route) = route {
+            route.to_proxy_url(url).map_err(ErrorKind::ProxyIndex)?
+        } else {
+            url.clone()
+        };
 
         // If the metadata file is available at its own url (PEP 658), download it from there.
         if file.dist_info_metadata {
@@ -1057,7 +1054,7 @@ impl RegistryClient {
 
             let cache_entry = self.cache.entry(
                 CacheBucket::Wheels,
-                WheelCache::Index(index).wheel_dir(filename.name.as_ref()),
+                WheelCache::Index(effective_index).wheel_dir(filename.name.as_ref()),
                 format!("{}.msgpack", filename.cache_key()),
             );
             let cache_control = match self.connectivity {
@@ -1114,8 +1111,8 @@ impl RegistryClient {
             self.wheel_metadata_no_pep658(
                 filename,
                 &url,
-                Some(index),
-                WheelCache::Index(index),
+                Some(effective_index),
+                WheelCache::Index(effective_index),
                 capabilities,
             )
             .await
@@ -1857,7 +1854,7 @@ mod tests {
     fn no_index_client(flat_indexes: Vec<Index>) -> Result<RegistryClient, Error> {
         Ok(
             RegistryClientBuilder::new(BaseClientBuilder::default(), Cache::temp()?)
-                .index_locations(IndexLocations::new(vec![], flat_indexes, true))
+                .index_locations(IndexLocations::new(vec![], flat_indexes, true)?)
                 .build()?,
         )
     }
@@ -1925,7 +1922,7 @@ mod tests {
             vec![canonical_index, proxy_index],
             vec![],
             false,
-        ))
+        )?)
     }
 
     fn simple_response(body: impl Into<String>) -> ResponseTemplate {
@@ -1984,7 +1981,7 @@ mod tests {
             BaseClientBuilder::default().connectivity(Connectivity::Offline),
             Cache::temp()?,
         )
-        .index_locations(IndexLocations::new(vec![], vec![flat_index], true))
+        .index_locations(IndexLocations::new(vec![], vec![flat_index], true)?)
         .torch_backend(Some(TorchStrategy::Backend {
             backend: TorchBackend::Cpu,
         }))
@@ -2140,11 +2137,14 @@ mod tests {
             proxy_index.authenticate = auth_policy;
             proxy_index.artifact_base_url = Some(DisplaySafeUrl::from_url(artifact_base_url));
 
-            let locations = IndexLocations::new(vec![canonical_index, proxy_index], vec![], false);
+            let locations = IndexLocations::new(vec![canonical_index, proxy_index], vec![], false)?;
             let client = RegistryClientBuilder::new(BaseClientBuilder::default(), Cache::temp()?)
                 .index_locations(locations)
                 .build()?;
-            let route = client.routes().route_for(&canonical);
+            let route = client
+                .index_locations()
+                .proxy_route_for(&canonical)
+                .ok_or("missing proxy route")?;
             let physical_artifact = route.to_proxy_url(&canonical_artifact)?;
 
             let response = client
@@ -2266,7 +2266,7 @@ mod tests {
                     vec![canonical_index, proxy_index],
                     vec![],
                     false,
-                ))
+                )?)
                 .build()?;
 
             client

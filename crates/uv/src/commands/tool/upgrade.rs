@@ -347,7 +347,7 @@ async fn upgrade_tool(
 
     // Resolve the appropriate settings, preferring: CLI > receipt > user.
     let options = args.clone().combine(receipt.combine(filesystem.clone()));
-    let settings = ResolverInstallerSettings::from(options.clone());
+    let settings = ResolverInstallerSettings::try_from(options.clone())?;
 
     let build_constraint_requirements = existing_tool_receipt.build_constraints().to_vec();
     let build_constraints =

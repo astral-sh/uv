@@ -267,20 +267,27 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
     ) -> Result<BuiltWheelMetadata, Error> {
         let built_wheel_metadata = match &source {
             BuildableSource::Dist(SourceDist::Registry(dist)) => {
-                let route = client.unmanaged.routes().route_for(&dist.index);
+                let route = client
+                    .unmanaged
+                    .index_locations()
+                    .proxy_route_for(&dist.index);
+                let index = route.map_or(&dist.index, |route| route.effective_url());
 
                 // For registry source distributions, shard by package, then version, for
                 // convenience in debugging.
                 let cache_shard = self.build_context.cache().shard(
                     CacheBucket::SourceDistributions,
-                    WheelCache::Index(route.effective_url())
+                    WheelCache::Index(index)
                         .wheel_dir(dist.name.as_ref())
                         .join(dist.version.to_string()),
                 );
 
-                let url = route
-                    .to_proxy_url(&dist.file.url.to_url()?)
-                    .map_err(|err| Error::Client(ClientErrorKind::ProxyIndex(err).into()))?;
+                let mut url = dist.file.url.to_url()?;
+                if let Some(route) = route {
+                    url = route
+                        .to_proxy_url(&url)
+                        .map_err(|err| Error::Client(ClientErrorKind::ProxyIndex(err).into()))?;
+                }
 
                 // If the URL is a file URL, use the local path directly.
                 if url.scheme() == "file" {
@@ -306,14 +313,14 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 self.url(
                     source,
                     &url,
-                    Some(route.effective_url()),
+                    Some(index),
                     &cache_shard,
                     None,
                     dist.ext,
                     tags,
                     ArtifactHashPolicy::new(
                         hashes,
-                        if route.is_proxy() && !dist.file.hashes.is_empty() {
+                        if route.is_some() && !dist.file.hashes.is_empty() {
                             HashPolicy::Any(dist.file.hashes.as_slice())
                         } else {
                             HashPolicy::None
@@ -442,19 +449,26 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
     ) -> Result<ArchiveMetadata, Error> {
         let metadata = match &source {
             BuildableSource::Dist(SourceDist::Registry(dist)) => {
-                let route = client.unmanaged.routes().route_for(&dist.index);
+                let route = client
+                    .unmanaged
+                    .index_locations()
+                    .proxy_route_for(&dist.index);
+                let index = route.map_or(&dist.index, |route| route.effective_url());
 
                 // For registry source distributions, shard by package, then version.
                 let cache_shard = self.build_context.cache().shard(
                     CacheBucket::SourceDistributions,
-                    WheelCache::Index(route.effective_url())
+                    WheelCache::Index(index)
                         .wheel_dir(dist.name.as_ref())
                         .join(dist.version.to_string()),
                 );
 
-                let url = route
-                    .to_proxy_url(&dist.file.url.to_url()?)
-                    .map_err(|err| Error::Client(ClientErrorKind::ProxyIndex(err).into()))?;
+                let mut url = dist.file.url.to_url()?;
+                if let Some(route) = route {
+                    url = route
+                        .to_proxy_url(&url)
+                        .map_err(|err| Error::Client(ClientErrorKind::ProxyIndex(err).into()))?;
+                }
 
                 // If the URL is a file URL, use the local path directly.
                 if url.scheme() == "file" {
@@ -479,13 +493,13 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 self.url_metadata(
                     source,
                     &url,
-                    Some(route.effective_url()),
+                    Some(index),
                     &cache_shard,
                     None,
                     dist.ext,
                     ArtifactHashPolicy::new(
                         hashes,
-                        if route.is_proxy() && !dist.file.hashes.is_empty() {
+                        if route.is_some() && !dist.file.hashes.is_empty() {
                             HashPolicy::Any(dist.file.hashes.as_slice())
                         } else {
                             HashPolicy::None

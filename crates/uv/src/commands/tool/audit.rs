@@ -194,9 +194,9 @@ pub(crate) async fn audit(
             }
         };
 
-        let settings = ResolverInstallerSettings::from(
+        let settings = ResolverInstallerSettings::try_from(
             ResolverInstallerOptions::from(tool.options().clone()).combine(filesystem.clone()),
-        );
+        )?;
         let outcome = audit_lock(
             &lock,
             &root,

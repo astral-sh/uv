@@ -887,7 +887,7 @@ mod tests {
     use super::*;
     use http::HeaderValue;
 
-    use crate::{IndexLocations, IndexRoutes, ProxyIndexError};
+    use crate::{IndexLocations, ProxyIndexConfigError};
 
     #[test]
     fn test_proxy_index_serialization_redacts_artifact_credentials()
@@ -967,11 +967,10 @@ mod tests {
             );
 
             let index: Index = toml::from_str(&configuration)?;
-            let locations = IndexLocations::new(vec![index], Vec::new(), false);
             assert!(
                 matches!(
-                    IndexRoutes::try_from(&locations),
-                    Err(ProxyIndexError::InvalidMapping { .. })
+                    IndexLocations::new(vec![index], Vec::new(), false),
+                    Err(ProxyIndexConfigError::InvalidMapping { .. })
                 ),
                 "unsafe artifact base was accepted: {path}"
             );

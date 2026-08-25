@@ -980,7 +980,7 @@ impl<'a> RangeBounds<Version> for BoundingRange<'a> {
 mod tests {
     use std::str::FromStr;
 
-    use uv_distribution_types::{Index, IndexLocations, IndexName, IndexRoutes};
+    use uv_distribution_types::{Index, IndexLocations, IndexName};
     use uv_pypi_types::HashDigests;
     use uv_redacted::DisplaySafeUrl;
     use uv_small_str::SmallString;
@@ -1005,9 +1005,9 @@ mod tests {
             Some(DisplaySafeUrl::parse("https://proxy.example.com/files/")?);
 
         let locations =
-            IndexLocations::new(vec![canonical_index, physical_index], Vec::new(), false);
+            IndexLocations::new(vec![canonical_index, physical_index], Vec::new(), false)?;
 
-        Ok(IndexRoutes::try_from(&locations)?.route_for(&canonical))
+        Ok(locations.route_for(&canonical))
     }
 
     fn implicit_pypi_proxy_route() -> Result<IndexRoute, Box<dyn std::error::Error>> {
@@ -1020,9 +1020,9 @@ mod tests {
         physical_index.artifact_base_url =
             Some(DisplaySafeUrl::parse("https://proxy.example.com/files/")?);
 
-        let locations = IndexLocations::new(vec![physical_index], Vec::new(), false);
+        let locations = IndexLocations::new(vec![physical_index], Vec::new(), false)?;
 
-        Ok(IndexRoutes::try_from(&locations)?.route_for(&canonical))
+        Ok(locations.route_for(&canonical))
     }
 
     fn registry_file(url: &str, filename: &str) -> File {

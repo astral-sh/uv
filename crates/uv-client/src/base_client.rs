@@ -24,7 +24,7 @@ use url::Url;
 use uv_auth::{AuthMiddleware, Credentials, CredentialsCache, CredentialsFromUrlError, Indexes};
 use uv_configuration::ProxyUrlKind;
 use uv_configuration::{Concurrency, KeyringProviderType, ProxyUrl, TrustedHost};
-use uv_distribution_types::{IndexCredentialsError, ProxyIndexError};
+use uv_distribution_types::IndexCredentialsError;
 use uv_git::GitHttpSettings;
 use uv_pep508::MarkerEnvironment;
 use uv_platform_tags::Platform;
@@ -69,8 +69,6 @@ pub enum ClientBuildError {
     Credentials(#[from] CredentialsFromUrlError),
     #[error(transparent)]
     IndexCredentials(#[from] IndexCredentialsError),
-    #[error(transparent)]
-    ProxyIndex(#[from] ProxyIndexError),
 }
 
 /// Selectively skip parts or the entire auth middleware.

@@ -130,9 +130,9 @@ pub(crate) async fn list(
                 let filesystem = filesystem.clone();
                 async move {
                     let capabilities = IndexCapabilities::default();
-                    let settings = ResolverInstallerSettings::from(args.combine(
+                    let settings = ResolverInstallerSettings::try_from(args.combine(
                         ResolverInstallerOptions::from(tool.options().clone()).combine(filesystem),
-                    ));
+                    ))?;
                     let interpreter = tool_env.environment().interpreter();
 
                     let client = RegistryClientBuilder::new(

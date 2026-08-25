@@ -424,7 +424,7 @@ pub(crate) async fn pip_install(
             .map(|index| index.with_origin(Origin::RequirementsTxt))
             .collect(),
         no_index,
-    );
+    )?;
 
     // Determine the PyTorch backend.
     let torch_backend = torch_backend
