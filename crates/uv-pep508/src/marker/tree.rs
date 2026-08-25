@@ -471,6 +471,14 @@ pub enum MarkerValueExtra {
 }
 
 impl MarkerValueExtra {
+    /// Returns the [`ExtraName`] for this value, if it is a valid extra.
+    pub fn as_extra(&self) -> Option<&ExtraName> {
+        match self {
+            Self::Extra(extra) => Some(extra),
+            Self::Arbitrary(_) => None,
+        }
+    }
+
     /// Convert the [`MarkerValueExtra`] to an [`ExtraName`], if possible.
     fn into_extra(self) -> Option<ExtraName> {
         match self {
@@ -1473,13 +1481,6 @@ impl MarkerTree {
             Variable::Extra(name) => is_extra(name.extra()).then_some(false),
             _ => None,
         }))
-    }
-
-    /// Replaces every extra variable with the marker returned by `replacement`.
-    #[must_use]
-    pub fn substitute_extras(self, mut replacement: impl FnMut(&ExtraName) -> Self) -> Self {
-        let mut interner = INTERNER.lock();
-        Self(interner.substitute_extras(self.0, &mut |name| replacement(name.extra()).0))
     }
 }
 
