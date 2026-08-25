@@ -284,8 +284,15 @@ where
     let size = entry.uncompressed_size();
     let writer = buffered_file_writer(outfile, size);
 
-    let (copied, computed_crc32, digest) =
-        block_on(copy_entry(archive, file_number, writer, hash_contents))?;
+    // Keep the hashing state out of the future moved into `block_on` for ordinary extraction.
+    let (copied, computed_crc32, digest) = if hash_contents {
+        let (copied, computed_crc32, digest) =
+            block_on(copy_and_hash_entry(archive, file_number, writer))?;
+        (copied, computed_crc32, Some(digest))
+    } else {
+        let (copied, computed_crc32) = block_on(copy_entry(archive, file_number, writer))?;
+        (copied, computed_crc32, None)
+    };
     validate_file_entry(
         enclosed_name.as_path(),
         copied,
@@ -374,25 +381,17 @@ fn directory_lock_error() -> Error {
     Error::Io(std::io::Error::other("directory set lock poisoned"))
 }
 
-/// Copy an entry, optionally hashing the same uncompressed bytes written to disk.
+/// Copy an entry without computing a content digest.
 async fn copy_entry<R>(
     archive: &mut ZipFileReader<AllowStdIo<R>>,
     file_number: usize,
     writer: std::io::BufWriter<fs_err::File>,
-    hash_contents: bool,
-) -> Result<(u64, u32, Option<blake3::Hash>), Error>
+) -> Result<(u64, u32), Error>
 where
     R: std::io::BufRead + std::io::Seek + Unpin,
 {
     let mut file = archive.reader_with_entry(file_number).await?;
     let mut writer = AllowStdIo::new(writer);
-
-    if hash_contents {
-        let (copied, digest) = blake3_copy((&mut file).compat(), (&mut writer).compat_write())
-            .await
-            .map_err(Error::io_or_zip)?;
-        return Ok((copied, file.compute_hash(), Some(digest)));
-    }
 
     let mut copied = 0;
     let mut buffer = vec![0; 128 * 1024];
@@ -405,5 +404,22 @@ where
         copied += read as u64;
     }
     writer.flush().await.map_err(Error::Io)?;
-    Ok((copied, file.compute_hash(), None))
+    Ok((copied, file.compute_hash()))
+}
+
+/// Copy an entry while hashing the same uncompressed bytes written to disk.
+async fn copy_and_hash_entry<R>(
+    archive: &mut ZipFileReader<AllowStdIo<R>>,
+    file_number: usize,
+    writer: std::io::BufWriter<fs_err::File>,
+) -> Result<(u64, u32, blake3::Hash), Error>
+where
+    R: std::io::BufRead + std::io::Seek + Unpin,
+{
+    let mut file = archive.reader_with_entry(file_number).await?;
+    let mut writer = AllowStdIo::new(writer);
+    let (copied, digest) = blake3_copy((&mut file).compat(), (&mut writer).compat_write())
+        .await
+        .map_err(Error::io_or_zip)?;
+    Ok((copied, file.compute_hash(), digest))
 }

@@ -15,8 +15,22 @@ impl SanitizedArchivePath {
     pub(crate) fn from_archive_member(file_name: &str) -> Result<Option<Self>, Error> {
         validate_archive_member_name(file_name)?;
 
-        let mut path = PathBuf::new();
-        for component in Path::new(file_name).components() {
+        let source = Path::new(file_name);
+        // Avoid rebuilding paths that are already normalized. Counting separators also detects
+        // repeated separators and `.` components that `components()` would otherwise skip.
+        let normalized_length = source.components().try_fold(0, |length, component| {
+            if let Component::Normal(component) = component {
+                Some(length + component.len() + 1)
+            } else {
+                None
+            }
+        });
+        if normalized_length == Some(file_name.len() + 1) {
+            return Ok(Some(Self(source.to_path_buf())));
+        }
+
+        let mut path = PathBuf::with_capacity(file_name.len());
+        for component in source.components() {
             match component {
                 Component::Prefix(_) | Component::RootDir => return Ok(None),
                 Component::ParentDir => {
@@ -49,7 +63,7 @@ impl SanitizedArchivePath {
 
 #[cfg(test)]
 mod tests {
-    use std::path::Path;
+    use std::path::MAIN_SEPARATOR;
 
     use crate::Error;
 
@@ -57,18 +71,24 @@ mod tests {
 
     #[test]
     fn archive_member_path_normalizes_safe_paths() -> Result<(), Error> {
-        assert_eq!(
-            SanitizedArchivePath::from_archive_member("package/../module.py")?
-                .as_ref()
-                .map(SanitizedArchivePath::as_path),
-            Some(Path::new("module.py"))
-        );
-        assert_eq!(
-            SanitizedArchivePath::from_archive_member("package/./subdir//module.py")?
-                .as_ref()
-                .map(SanitizedArchivePath::as_path),
-            Some(Path::new("package/subdir/module.py"))
-        );
+        for (file_name, expected) in [
+            ("module.py", "module.py"),
+            ("package/module.py", "package/module.py"),
+            ("package/../module.py", "module.py"),
+            ("package/./subdir//module.py", "package/subdir/module.py"),
+            ("./package/module.py", "package/module.py"),
+            ("package//subdir/", "package/subdir"),
+            ("package/module.py/.", "package/module.py"),
+        ] {
+            let path = SanitizedArchivePath::from_archive_member(file_name)?.expect("valid path");
+            assert_eq!(
+                path.as_path()
+                    .to_string_lossy()
+                    .replace(MAIN_SEPARATOR, "/"),
+                expected,
+                "archive member: {file_name:?}"
+            );
+        }
         Ok(())
     }
 
