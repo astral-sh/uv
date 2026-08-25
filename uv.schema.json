@@ -348,7 +348,7 @@
       }
     },
     "no-build": {
-      "description": "Don't build source distributions.\n\nWhen enabled, uv will reuse cached wheels from previously built source distributions, but\noperations that require building a source distribution will exit with an error. uv may\nstill build editable requirements, and their build backends may run arbitrary Python code.",
+      "description": "Don't build source distributions.\n\nWhen enabled, uv will reuse cached wheels from previously built source distributions, but\noperations that require building a source distribution will exit with an error. The project\nor source distribution provided to `uv build` will still be built. uv may also still build\neditable requirements, and their build backends may run arbitrary Python code.",
       "type": ["boolean", "null"]
     },
     "no-build-isolation": {
@@ -363,7 +363,7 @@
       }
     },
     "no-build-package": {
-      "description": "Don't build source distributions for a specific package.",
+      "description": "Don't build source distributions for a specific package.\n\nThe project or source distribution provided to `uv build` will still be built.",
       "type": ["array", "null"],
       "items": {
         "$ref": "#/definitions/PackageName"

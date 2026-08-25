@@ -7158,8 +7158,9 @@ pub struct BuildOptionsArgs {
     /// Don't build source distributions.
     ///
     /// When enabled, uv will reuse cached wheels from previously built source distributions, but
-    /// operations that require building a source distribution will exit with an error. uv may
-    /// still build editable requirements, and their build backends may run arbitrary Python code.
+    /// operations that require building a source distribution will exit with an error. The project
+    /// or source distribution provided to `uv build` will still be built. uv may also still build
+    /// editable requirements, and their build backends may run arbitrary Python code.
     #[arg(
         long,
         env = EnvVars::UV_NO_BUILD,
@@ -7178,6 +7179,8 @@ pub struct BuildOptionsArgs {
     build: bool,
 
     /// Don't build source distributions for a specific package [env: `UV_NO_BUILD_PACKAGE`=]
+    ///
+    /// The project or source distribution provided to `uv build` will still be built.
     #[arg(
         long,
         help_heading = "Build options",
