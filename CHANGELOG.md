@@ -10,8 +10,6 @@ Released on 2026-08-25.
 ### Python
 
 - Update CPython to use OpenSSL 3.5.8 and libffi 3.4.8 [#21295](https://github.com/astral-sh/uv/pull/21295))
-- Update the Pyodide 3.14.2 cross-build environment to 314.0.5 ([#21174](https://github.com/astral-sh/uv/pull/21174))
-
 ### Enhancements
 
 - Report cache-cleaning space savings from filesystem block allocation and avoid double-counting hard links ([#21261](https://github.com/astral-sh/uv/pull/21261))
