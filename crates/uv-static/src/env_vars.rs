@@ -677,6 +677,13 @@ impl EnvVars {
     #[attr_added_in("0.11.22")]
     pub const UV_INTERNAL__BUILD_DIR: &'static str = "UV_INTERNAL__BUILD_DIR";
 
+    /// Minimum uncompressed file size in bytes for shared archive storage, defaulting to 1 MiB.
+    /// Executables are eligible regardless of size. Requires content-addressed-cache preview.
+    #[attr_hidden]
+    #[attr_added_in("0.12.7")]
+    pub const UV_INTERNAL__ARCHIVE_FILE_MIN_SIZE: &'static str =
+        "UV_INTERNAL__ARCHIVE_FILE_MIN_SIZE";
+
     /// Used to force showing the derivation tree during resolver error reporting.
     #[attr_hidden]
     #[attr_added_in("0.3.0")]

@@ -175,7 +175,6 @@ fn install(
     // Initialize the threadpool with the user settings.
     initialize_rayon_once();
     let archive_metadata = cache.map(|cache| cache.bucket(CacheBucket::ArchiveMetadata));
-    let archive_files = cache.map(|cache| cache.bucket(CacheBucket::ArchiveFiles));
     let state = uv_install_wheel::InstallState::new(preview);
     wheels.par_iter().try_for_each(|wheel| {
         uv_install_wheel::install_wheel(
@@ -196,7 +195,6 @@ fn install(
             installer_name,
             installer_metadata,
             archive_metadata.as_deref(),
-            archive_files.as_deref(),
             link_mode,
             &state,
         )

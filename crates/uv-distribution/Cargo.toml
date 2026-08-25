@@ -40,6 +40,7 @@ uv-preview = { workspace = true }
 uv-pypi-types = { workspace = true }
 uv-python = { workspace = true }
 uv-redacted = { workspace = true }
+uv-static = { workspace = true }
 uv-types = { workspace = true }
 uv-workspace = { workspace = true }
 
