@@ -49,6 +49,7 @@ use std::str::FromStr;
 use memchr::memchr3;
 use url::Url;
 
+use uv_cache_key::{CanonicalUrl, RepositoryUrl};
 use uv_distribution_filename::{
     DistExtension, SourceDistExtension, SourceDistFilename, WheelFilename,
 };
@@ -1428,11 +1429,14 @@ impl RemoteSource for Dist {
 
 impl Identifier for DisplaySafeUrl {
     fn distribution_id(&self) -> DistributionId {
-        DistributionId::Url(uv_cache_key::CanonicalUrl::new(self.clone()))
+        DistributionId::Url(
+            CanonicalUrl::new(self.clone()),
+            self.fragment().map(str::to_owned),
+        )
     }
 
     fn resource_id(&self) -> ResourceId {
-        ResourceId::Url(uv_cache_key::RepositoryUrl::new(self.clone()))
+        ResourceId::Url(RepositoryUrl::new(self.clone()))
     }
 }
 

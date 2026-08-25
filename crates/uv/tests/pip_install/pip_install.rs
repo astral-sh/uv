@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::fmt::Write;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -17,6 +18,7 @@ use futures::executor::block_on;
 use indoc::{formatdoc, indoc};
 use insta::{allow_duplicates, assert_snapshot};
 use predicates::prelude::predicate;
+use sha2::{Digest, Sha256};
 #[cfg(unix)]
 use tokio::io::AsyncWriteExt;
 use url::Url;
@@ -26,13 +28,16 @@ use wiremock::{
     matchers::{basic_auth, method, path},
 };
 
+use uv_cache::{Cache, CacheBucket, WheelCache};
 use uv_fs::{PortablePath, Simplified};
+use uv_pypi_types::HashDigest;
+use uv_redacted::DisplaySafeUrl;
 use uv_static::EnvVars;
 use uv_test::archive::write_tar_gz;
 #[cfg(feature = "test-git")]
 use uv_test::decode_token;
 use uv_test::find_links::FindLinksServer;
-use uv_test::packse::PackseServer;
+use uv_test::packse::{PackseServer, generate_wheel};
 use uv_test::{
     DEFAULT_PYTHON_VERSION, TestContext, apply_filters, download_to_disk, get_bin, uv_snapshot,
     venv_bin_path,
@@ -10935,6 +10940,181 @@ fn static_metadata_source_tree() -> Result<()> {
     "
     );
 
+    Ok(())
+}
+
+/// Cached metadata and wheel contents must come from the same URL revision.
+#[tokio::test]
+async fn direct_url_hash_cache_metadata() -> Result<()> {
+    let context = uv_test::test_context!("3.12")
+        .with_filtered_python_names()
+        .with_filtered_virtualenv_bin()
+        .with_filtered_exe_suffix();
+    let server = MockServer::start().await;
+    let filename = "ok-1.0.0-py3-none-any.whl";
+    let url = format!("{}/{filename}", server.uri());
+    let original = fs_err::read(context.workspace_root.join("test/links").join(filename))?;
+    let original_hash =
+        format!("sha256:{}", hex::encode(Sha256::digest(&original))).parse::<HashDigest>()?;
+    let serve = |wheel| {
+        Mock::given(method("GET"))
+            .and(path(format!("/{filename}")))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .insert_header("cache-control", "max-age=3600")
+                    .set_body_bytes(wheel),
+            )
+    };
+    Mock::given(method("HEAD"))
+        .respond_with(ResponseTemplate::new(405))
+        .mount(&server)
+        .await;
+    serve(original).mount(&server).await;
+    context
+        .pip_install()
+        .arg("--target")
+        .arg("original")
+        .arg(&url)
+        .assert()
+        .success();
+
+    // A corrupt hash-index entry must not hide a valid HTTP archive, even offline.
+    let cache = Cache::from_path(context.cache_dir.path());
+    let cache_url = DisplaySafeUrl::parse(&url)?;
+    let hash_entry = cache.entry(
+        CacheBucket::Wheels,
+        WheelCache::url_hash_dir(&cache_url, "ok", &original_hash),
+        "1.0.0-py3-none-any.msgpack",
+    );
+    assert!(hash_entry.path().is_file());
+    fs_err::write(hash_entry.path(), b"truncated")?;
+    context
+        .temp_dir
+        .child("requirements.txt")
+        .write_str(&format!("ok @ {url} --hash={original_hash}"))?;
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--target").arg("recovered")
+        .arg("--offline").arg("--require-hashes")
+        .arg("-r").arg("requirements.txt"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: .venv/[BIN]/[PYTHON]
+    Resolved 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + ok==1.0.0 (from http://[LOCALHOST]/ok-1.0.0-py3-none-any.whl)
+    ");
+    server.reset().await;
+
+    // Publish different metadata at the same wheel URL, selected by a new hash.
+    let wheel_with_dependency = |dependency: &str| -> Result<Vec<u8>> {
+        let (_, wheel) = generate_wheel(
+            &"ok".parse()?,
+            &"1.0.0".parse()?,
+            &[dependency.parse()?],
+            &BTreeMap::new(),
+            None,
+            "py3-none-any",
+        );
+        Ok(wheel)
+    };
+    let changed = wheel_with_dependency("cache-missing-dependency==1.0")?;
+    let hash = hex::encode(Sha256::digest(&changed));
+    Mock::given(method("HEAD"))
+        .respond_with(ResponseTemplate::new(405))
+        .mount(&server)
+        .await;
+    serve(changed).mount(&server).await;
+    context
+        .pip_install()
+        .arg("--target")
+        .arg("changed")
+        .arg("--no-deps")
+        .arg(format!("{url}#sha256={hash}"))
+        .assert()
+        .success();
+
+    // The unconstrained URL still resolves and installs the original wheel, not the new bytes
+    // with their additional dependency silently omitted.
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--target").arg("original-again")
+        .arg("--offline").arg(&url), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: .venv/[BIN]/[PYTHON]
+    Resolved 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + ok==1.0.0 (from http://[LOCALHOST]/ok-1.0.0-py3-none-any.whl)
+    ");
+    let metadata = "ok-1.0.0.dist-info/METADATA";
+    assert_eq!(
+        fs_err::read(context.temp_dir.join("original").join(metadata))?,
+        fs_err::read(context.temp_dir.join("original-again").join(metadata))?,
+    );
+
+    // A hash constraint without a fragment selects the new archive AND its new metadata.
+    context
+        .temp_dir
+        .child("requirements.txt")
+        .write_str(&format!("ok @ {url} --hash=sha256:{hash}"))?;
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--target").arg("constrained")
+        .arg("--offline").arg("--require-hashes")
+        .arg("-r").arg("requirements.txt"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: .venv/[BIN]/[PYTHON]
+      × No solution found when resolving dependencies:
+      ╰─▶ Because cache-missing-dependency was not found in the cache and ok==1.0.0 depends on cache-missing-dependency==1.0, we can conclude that ok==1.0.0 cannot be used.
+          And because only ok==1.0.0 is available and you require ok, we can conclude that your requirements are unsatisfiable.
+
+    hint: Packages were unavailable because the network was disabled. When the network is disabled, registry packages may only be read from the cache.
+    ");
+
+    // A third revision is not cached under any hash. Refresh it before resolving dependencies,
+    // rather than resolving the original metadata and only refreshing during installation.
+    // A broken HTTP pointer must take the same recovery path, without reusing stale metadata.
+    let http_entry = cache.entry(
+        CacheBucket::Wheels,
+        WheelCache::Url(&cache_url).wheel_dir("ok"),
+        "1.0.0-py3-none-any.http",
+    );
+    assert!(http_entry.path().is_file());
+    fs_err::write(http_entry.path(), b"truncated")?;
+    let refreshed = wheel_with_dependency("cache-missing-dependency==2.0")?;
+    let hash = hex::encode(Sha256::digest(&refreshed));
+    server.reset().await;
+    serve(refreshed).expect(1).mount(&server).await;
+    context
+        .temp_dir
+        .child("requirements.txt")
+        .write_str(&format!("ok @ {url} --hash=sha256:{hash}"))?;
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--target").arg("refreshed")
+        .arg("--no-index").arg("--require-hashes")
+        .arg("-r").arg("requirements.txt"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: .venv/[BIN]/[PYTHON]
+      × No solution found when resolving dependencies:
+      ╰─▶ Because cache-missing-dependency was not found in the provided package locations and ok==1.0.0 depends on cache-missing-dependency==2.0, we can conclude that ok==1.0.0 cannot be used.
+          And because only ok==1.0.0 is available and you require ok, we can conclude that your requirements are unsatisfiable.
+
+    hint: Packages were unavailable because index lookups were disabled and no additional package locations were provided (try: `--find-links <uri>`)
+    ");
+
+    // The refreshed HTTP archive also determines metadata for subsequent unconstrained requests.
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--target").arg("refreshed-again")
+        .arg("--offline").arg(&url), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: .venv/[BIN]/[PYTHON]
+      × No solution found when resolving dependencies:
+      ╰─▶ Because cache-missing-dependency was not found in the cache and ok==1.0.0 depends on cache-missing-dependency==2.0, we can conclude that ok==1.0.0 cannot be used.
+          And because only ok==1.0.0 is available and you require ok, we can conclude that your requirements are unsatisfiable.
+
+    hint: Packages were unavailable because the network was disabled. When the network is disabled, registry packages may only be read from the cache.
+    ");
     Ok(())
 }
 

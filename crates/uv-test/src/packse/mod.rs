@@ -11,6 +11,7 @@ mod wheel;
 use std::path::{Path, PathBuf};
 
 pub use server::PackseServer;
+pub use wheel::generate_wheel;
 
 fn workspace_root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))

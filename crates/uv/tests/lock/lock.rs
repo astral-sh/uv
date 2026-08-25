@@ -3,9 +3,13 @@ use anyhow::Result;
 use assert_cmd::assert::OutputAssertExt;
 use assert_fs::prelude::*;
 use indoc::{formatdoc, indoc};
+#[cfg(feature = "test-universal")]
+use insta::allow_duplicates;
 use insta::assert_snapshot;
 #[cfg(feature = "test-universal")]
 use serde_json::json;
+#[cfg(feature = "test-universal")]
+use sha2::{Digest, Sha512};
 #[cfg(feature = "test-universal")]
 use url::Url;
 #[cfg(feature = "test-universal")]
@@ -1395,6 +1399,129 @@ fn lock_wheel_url() -> Result<()> {
     Checked 3 packages in [TIME]
     ");
 
+    Ok(())
+}
+
+/// Reuse a wheel downloaded during locking under the fragment-free URL in the lockfile.
+#[cfg(feature = "test-universal")]
+#[tokio::test]
+async fn lock_wheel_url_fragment_download() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let server = MockServer::start().await;
+    let filename = "ok-1.0.0-py3-none-any.whl";
+    let wheel = fs_err::read(context.workspace_root.join("test/links").join(filename))?;
+    Mock::given(method("GET"))
+        .and(path(format!("/{filename}")))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .insert_header("cache-control", "max-age=3600")
+                .set_body_bytes(wheel),
+        )
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    // MD5 cannot be reused for hash generation, so locking must download the wheel to compute
+    // SHA-256. Stronger URL hashes can avoid downloading the archive altogether.
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(&formatdoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["ok @ {}/{filename}#md5=88d6d524262f256596aa7f663c88038b"]
+    "#, server.uri()})?;
+
+    uv_snapshot!(context.filters(), context.lock(), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Installed 1 package in [TIME]
+     + ok==1.0.0 (from http://[LOCALHOST]/ok-1.0.0-py3-none-any.whl)
+    ");
+
+    Ok(())
+}
+
+/// Both revisions of a URL wheel remain available offline, including after pruning.
+#[cfg(feature = "test-universal")]
+#[tokio::test]
+async fn lock_wheel_url_hash_cache() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let server = MockServer::start().await;
+    let filename = "ok-1.0.0-py3-none-any.whl";
+    let original = fs_err::read(context.workspace_root.join("test/links").join(filename))?;
+    let mut updated = original.clone();
+    // Change the bytes without changing the package by adding a valid ZIP comment.
+    let length = updated.len();
+    updated[length - 2..].copy_from_slice(&7_u16.to_le_bytes());
+    updated.extend_from_slice(b"updated");
+
+    let mut locks = Vec::new();
+    for (revision, wheel) in [("original", original), ("updated", updated)] {
+        let hash = hex::encode(Sha512::digest(&wheel));
+        let url = format!("{}/{filename}#sha512={hash}", server.uri());
+        Mock::given(method("HEAD"))
+            .respond_with(ResponseTemplate::new(405))
+            .expect(1)
+            .mount(&server)
+            .await;
+        Mock::given(method("GET"))
+            .and(path(format!("/{filename}")))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .insert_header("cache-control", "max-age=3600")
+                    .set_body_bytes(wheel),
+            )
+            .expect(2)
+            .mount(&server)
+            .await;
+
+        // Seed the fragment-bearing cache entry, then lock using the cached archive's metadata.
+        context
+            .pip_install()
+            .arg("--target")
+            .arg(revision)
+            .arg(&url)
+            .assert()
+            .success();
+        context
+            .temp_dir
+            .child("pyproject.toml")
+            .write_str(&formatdoc! {r#"
+                [project]
+                name = "project"
+                version = "0.1.0"
+                requires-python = ">=3.12"
+                dependencies = ["ok @ {url}"]
+            "#})?;
+        context.lock().assert().success();
+        locks.push(fs_err::read_to_string(context.temp_dir.join("uv.lock"))?);
+        // Do not carry the previous lockfile's hashes into the next resolution.
+        fs_err::remove_file(context.temp_dir.join("uv.lock"))?;
+        server.verify().await;
+        server.reset().await;
+    }
+
+    context.prune().assert().success();
+    // Each lockfile stores the fragment-free URL. Clear the installed package between revisions
+    // so both requests must select and validate a cached archive.
+    for lock in locks {
+        context.temp_dir.child("uv.lock").write_str(&lock)?;
+        allow_duplicates! {
+            uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--offline"), @"
+            exit_code: 0 (success)
+            ----- stderr -----
+            Installed 1 package in [TIME]
+             + ok==1.0.0 (from http://[LOCALHOST]/ok-1.0.0-py3-none-any.whl)
+            ");
+        }
+        context.pip_uninstall().arg("ok").assert().success();
+    }
     Ok(())
 }
 

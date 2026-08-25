@@ -424,48 +424,29 @@ impl<'a> Planner<'a> {
                         );
                     }
 
-                    // Find the exact wheel from the cache, since we know the filename in
-                    // advance.
-                    let cache_entry = cache
-                        .shard(
-                            CacheBucket::Wheels,
-                            WheelCache::Url(&wheel.url).wheel_dir(wheel.name().as_ref()),
-                        )
-                        .entry(format!("{}.http", wheel.filename.cache_key()));
+                    if let Some(pointer) = HttpArchivePointer::read_from_direct_url(
+                        cache,
+                        wheel,
+                        hasher.get(dist.as_ref()),
+                    ) {
+                        let cache_info = pointer.to_cache_info();
+                        let build_info = pointer.to_build_info();
+                        let archive = pointer.into_archive();
+                        let cached_dist = CachedDirectUrlDist {
+                            filename: wheel.filename.clone(),
+                            url: VerbatimParsedUrl {
+                                parsed_url: wheel.to_parsed_url(),
+                                verbatim: wheel.url.clone(),
+                            },
+                            hashes: archive.hashes,
+                            cache_info,
+                            build_info,
+                            path: cache.archive(&archive.id).into_boxed_path(),
+                        };
 
-                    // Read the HTTP pointer.
-                    match HttpArchivePointer::read_from(&cache_entry) {
-                        Ok(Some(pointer)) => {
-                            let cache_info = pointer.to_cache_info();
-                            let build_info = pointer.to_build_info();
-                            let archive = pointer.into_archive();
-                            if archive.satisfies(hasher.get(dist.as_ref())) {
-                                let cached_dist = CachedDirectUrlDist {
-                                    filename: wheel.filename.clone(),
-                                    url: VerbatimParsedUrl {
-                                        parsed_url: wheel.to_parsed_url(),
-                                        verbatim: wheel.url.clone(),
-                                    },
-                                    hashes: archive.hashes,
-                                    cache_info,
-                                    build_info,
-                                    path: cache.archive(&archive.id).into_boxed_path(),
-                                };
-
-                                debug!("URL wheel requirement already cached: {cached_dist}");
-                                cached.push(CachedDist::Url(cached_dist));
-                                continue;
-                            }
-                            debug!(
-                                "Cached URL wheel requirement does not match expected hash policy for: {wheel}"
-                            );
-                        }
-                        Ok(None) => {}
-                        Err(err) => {
-                            debug!(
-                                "Failed to deserialize cached URL wheel requirement for: {wheel} ({err})"
-                            );
-                        }
+                        debug!("URL wheel requirement already cached: {cached_dist}");
+                        cached.push(CachedDist::Url(cached_dist));
+                        continue;
                     }
                 }
                 Dist::Built(BuiltDist::Path(wheel)) => {
