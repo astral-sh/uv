@@ -16553,7 +16553,7 @@ async fn binary_payloads_stay_in_archive_without_preview() -> Result<()> {
             .with_filter((r" \(from (?:file|http)://.*\)", " (from [WHEEL_URL])"));
         let wheel = binary_payload_wheel(&context)?;
         let mut command = context.pip_install();
-        command.env(EnvVars::UV_INTERNAL__ARCHIVE_FILE_MIN_SIZE, "invalid");
+        command.env(EnvVars::UV_ARCHIVE_FILE_MIN_SIZE, "invalid");
         if streaming {
             Mock::given(method("GET"))
                 .and(path("/binary_payload-0.1.0-py3-none-any.whl"))
@@ -16630,10 +16630,7 @@ async fn archive_file_size_cutoff() -> Result<()> {
             let mut command = context.pip_install();
             command.args(["--preview-features", "content-addressed-cache"]);
             if let Some(cutoff) = cutoff {
-                command.env(
-                    EnvVars::UV_INTERNAL__ARCHIVE_FILE_MIN_SIZE,
-                    cutoff.to_string(),
-                );
+                command.env(EnvVars::UV_ARCHIVE_FILE_MIN_SIZE, cutoff.to_string());
             }
             if streaming {
                 Mock::given(method("GET"))
@@ -16705,7 +16702,7 @@ fn archive_file_size_cutoff_invalid() -> Result<()> {
     let context = uv_test::test_context!("3.12");
     let wheel = binary_payload_wheel(&context)?;
     uv_snapshot!(context.filters(), context.pip_install()
-        .env(EnvVars::UV_INTERNAL__ARCHIVE_FILE_MIN_SIZE, "invalid")
+        .env(EnvVars::UV_ARCHIVE_FILE_MIN_SIZE, "invalid")
         .args(["--preview-features", "content-addressed-cache"])
         .arg(&wheel), @"
     exit_code: 1 (failure)
@@ -16713,7 +16710,7 @@ fn archive_file_size_cutoff_invalid() -> Result<()> {
     Resolved 1 package in [TIME]
       × Failed to read `binary-payload @ file://[TEMP_DIR]/binary_payload-0.1.0-py3-none-any.whl`
       ├─▶ Failed to write to the distribution cache
-      ╰─▶ UV_INTERNAL__ARCHIVE_FILE_MIN_SIZE must be an integer number of bytes: invalid digit found in string
+      ╰─▶ UV_ARCHIVE_FILE_MIN_SIZE must be an integer number of bytes: invalid digit found in string
     ");
     Ok(())
 }

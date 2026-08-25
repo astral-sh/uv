@@ -1428,13 +1428,13 @@ fn persist_archive_files(
 
 /// Read the experimental size cutoff only when publishing a content-addressed archive.
 fn archive_file_min_size() -> io::Result<u64> {
-    match env::var(EnvVars::UV_INTERNAL__ARCHIVE_FILE_MIN_SIZE) {
+    match env::var(EnvVars::UV_ARCHIVE_FILE_MIN_SIZE) {
         Ok(value) => value.parse().map_err(|err| {
             io::Error::new(
                 io::ErrorKind::InvalidInput,
                 format!(
                     "{} must be an integer number of bytes: {err}",
-                    EnvVars::UV_INTERNAL__ARCHIVE_FILE_MIN_SIZE,
+                    EnvVars::UV_ARCHIVE_FILE_MIN_SIZE,
                 ),
             )
         }),
