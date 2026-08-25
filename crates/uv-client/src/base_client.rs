@@ -24,7 +24,7 @@ use uv_auth::{
 };
 use uv_configuration::ProxyUrlKind;
 use uv_configuration::{Concurrency, KeyringProviderType, ProxyUrl, TrustedHost};
-use uv_distribution_types::{IndexCredentialsError, ProxyIndexError};
+use uv_distribution_types::IndexCredentialsError;
 use uv_git::GitHttpSettings;
 use uv_pep508::MarkerEnvironment;
 use uv_platform_tags::Platform;
@@ -71,15 +71,13 @@ pub enum ClientBuildError {
     Credentials(#[from] CredentialsFromUrlError),
     #[error(transparent)]
     IndexCredentials(#[from] IndexCredentialsError),
-    #[error(transparent)]
-    ProxyIndex(#[from] ProxyIndexError),
 }
 
 impl ClientBuildError {
     /// Return whether this is an expected user-facing failure.
     pub fn is_user_failure(&self) -> bool {
         match self {
-            Self::Credentials(_) | Self::IndexCredentials(_) | Self::ProxyIndex(_) => true,
+            Self::Credentials(_) | Self::IndexCredentials(_) => true,
             Self::Reqwest(_) => false,
         }
     }

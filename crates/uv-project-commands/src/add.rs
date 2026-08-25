@@ -752,7 +752,7 @@ pub async fn add(
             EditTarget::Script(script) => script.path.parent().expect("script path has no parent"),
             EditTarget::Project(project) => project.root(),
         };
-        let locations = IndexLocations::new(indexes, Vec::new(), false);
+        let locations = IndexLocations::new(indexes, Vec::new(), false)?;
         let mut indexes = locations.defined_indexes().collect::<Vec<_>>();
         indexes.reverse();
         for index in indexes {
