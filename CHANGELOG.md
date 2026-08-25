@@ -3,6 +3,78 @@
 <!-- prettier-ignore-start -->
 
 
+## 0.12.6
+
+Released on 2026-08-25.
+
+### Enhancements
+
+- Add exact sync support to workspace metadata ([#21117](https://github.com/astral-sh/uv/pull/21117))
+- Only warn about unbounded build backends for source distributions ([#21078](https://github.com/astral-sh/uv/pull/21078))
+- Uniformly print human readable sizes below 1024 bytes without a fractional part ([#21237](https://github.com/astral-sh/uv/pull/21237))
+
+### Performance
+
+- Avoid re-encoding activated conflict items per dependency ([#21148](https://github.com/astral-sh/uv/pull/21148))
+
+### Bug fixes
+
+- Consistently use creation time for directory `cache-keys` entries regardless of libc ([#21137](https://github.com/astral-sh/uv/pull/21137))
+- Do not treat a URL ending in `.py` as a script path ([#21144](https://github.com/astral-sh/uv/pull/21144))
+- Fix human-readable size rounding at unit boundaries ([#21136](https://github.com/astral-sh/uv/pull/21136))
+- Fix recursive extras with mixed production markers ([#21181](https://github.com/astral-sh/uv/pull/21181))
+- Keep the virtual-environment hint when the interpreter is not in `bin` ([#21146](https://github.com/astral-sh/uv/pull/21146))
+- Preserve transitive self-constraints in recursive extras ([#21209](https://github.com/astral-sh/uv/pull/21209))
+- Return errors for invalid bearer authorization headers ([#21282](https://github.com/astral-sh/uv/pull/21282))
+- Use bundled LLD for the ARM64 manylinux PGO build ([#21268](https://github.com/astral-sh/uv/pull/21268))
+
+### Other changes
+
+- Add regression test for uv#21211 ([#21214](https://github.com/astral-sh/uv/pull/21214))
+- Add regression test for uv#21244 ([#21245](https://github.com/astral-sh/uv/pull/21245))
+- Add regression test for uv#21255 ([#21257](https://github.com/astral-sh/uv/pull/21257))
+- Allow automated fixes after regression-test updates ([#21220](https://github.com/astral-sh/uv/pull/21220))
+- Allow more time for simulated benchmarks ([#21205](https://github.com/astral-sh/uv/pull/21205))
+- Check trampoline reproducibility after toolchain changes ([#21269](https://github.com/astral-sh/uv/pull/21269))
+- Clarify severity calibration in threat model ([#21283](https://github.com/astral-sh/uv/pull/21283))
+- Disable pyx integration tests ([#21166](https://github.com/astral-sh/uv/pull/21166))
+- Document manual maintenance of the release workflow ([#21200](https://github.com/astral-sh/uv/pull/21200))
+- Enable PGO for Linux ARM64 uv releases ([#21004](https://github.com/astral-sh/uv/pull/21004))
+- Enable PGO for Linux x86-64 uv releases ([#21001](https://github.com/astral-sh/uv/pull/21001))
+- Enable PGO for Windows x86-64 uv releases ([#21003](https://github.com/astral-sh/uv/pull/21003))
+- Enable PGO for macOS ARM64 uv releases ([#21002](https://github.com/astral-sh/uv/pull/21002))
+- Ensure full Git commit pins resolve to the requested commit ([#21224](https://github.com/astral-sh/uv/pull/21224))
+- Fix riscv64 musl TLS segfaults by updating aws-lc-rs ([#21158](https://github.com/astral-sh/uv/pull/21158))
+- Give automated bug fixes a writable Cargo cache ([#21219](https://github.com/astral-sh/uv/pull/21219))
+- Grant CI workflows read-only repository access ([#21171](https://github.com/astral-sh/uv/pull/21171))
+- Limit CI planner checkout depth ([#21291](https://github.com/astral-sh/uv/pull/21291))
+- Preserve repository-relative Git archive paths during sync ([#21264](https://github.com/astral-sh/uv/pull/21264))
+- Reactivate artifactory registry test ([#21202](https://github.com/astral-sh/uv/pull/21202))
+- Recover rejected stacked pull request promotions ([#21189](https://github.com/astral-sh/uv/pull/21189))
+- Remove contributor pre-commit configuration ([#21197](https://github.com/astral-sh/uv/pull/21197))
+- Repair trampoline generation and regenerate executables ([#21270](https://github.com/astral-sh/uv/pull/21270))
+- Represent validated source archives before persistence ([#21246](https://github.com/astral-sh/uv/pull/21246))
+- Require `bot:promote` for uv-security PR promotion ([#21286](https://github.com/astral-sh/uv/pull/21286))
+- Require wheels for PEP 723 script dependencies ([#21201](https://github.com/astral-sh/uv/pull/21201))
+- Require wheels for Python tooling dependencies ([#21195](https://github.com/astral-sh/uv/pull/21195))
+- Respect binary policies in generated hashes ([#21235](https://github.com/astral-sh/uv/pull/21235))
+- Respect package-specific cutoffs when selecting `ty` ([#21227](https://github.com/astral-sh/uv/pull/21227))
+- Restore NumPy in the smoke tests ([#21207](https://github.com/astral-sh/uv/pull/21207))
+- Separate hash generation policy from verification policy ([#21247](https://github.com/astral-sh/uv/pull/21247))
+- Sync `uv-security` from public `main` ([#21192](https://github.com/astral-sh/uv/pull/21192))
+- Sync latest Python releases ([#21174](https://github.com/astral-sh/uv/pull/21174))
+- Sync latest Python releases ([#21295](https://github.com/astral-sh/uv/pull/21295))
+- Try APT fallback mirrors sooner in ARMv7 setup ([#21206](https://github.com/astral-sh/uv/pull/21206))
+- Try APT fallback mirrors sooner in Linux CI ([#21198](https://github.com/astral-sh/uv/pull/21198))
+- Update Rust to 1.98 and MSRV to 1.96 ([#21258](https://github.com/astral-sh/uv/pull/21258))
+- Update cargo-zigbuild for Rust 1.98 Docker builds ([#21263](https://github.com/astral-sh/uv/pull/21263))
+- Upgrade Hawk to 0.1.13 ([#21266](https://github.com/astral-sh/uv/pull/21266))
+- Use Rust 1.96 pattern assertions and update remaining toolchains ([#21260](https://github.com/astral-sh/uv/pull/21260))
+- Use an explicit PyPI index during release preparation ([#21228](https://github.com/astral-sh/uv/pull/21228))
+- Use fixture configuration when priming benchmark caches ([#21203](https://github.com/astral-sh/uv/pull/21203))
+- Use the versions bot's ruleset bypass when merging ([#21212](https://github.com/astral-sh/uv/pull/21212))
+- Use uv_build for the benchmark package ([#21215](https://github.com/astral-sh/uv/pull/21215))
+
 ## 0.12.5
 
 Released on 2026-08-14.
