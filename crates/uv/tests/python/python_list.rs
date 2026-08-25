@@ -600,6 +600,25 @@ async fn python_list_remote_python_downloads_json_url() -> Result<()> {
             "sha256": "6ae8fa44cb2edf4ab49cff1820b53c40c10349c0f39e11b8cd76ce7f3e7e1def",
             "variant": "freethreaded",
             "build": "20250317"
+        },
+        "cpython-3.12.9+custom-linux-x86_64-gnu": {
+            "name": "cpython",
+            "arch": {
+                "family": "x86_64",
+                "variant": null
+            },
+            "os": "linux",
+            "libc": "gnu",
+            "major": 3,
+            "minor": 12,
+            "patch": 9,
+            "prerelease": "",
+            "url": "https://custom.com/cpython-3.12.9+custom-linux-x86_64-gnu.tar.gz",
+            "sha256": "7f3d0e0d0ff7e70e8df69c81f1b4bd0a7a9e8ea3b6d4c7a6c13c2b6f6bc0a4f2",
+            "variant": null,
+            "build_variant": "custom",
+            "default": false,
+            "build": "20250317"
         }
     }
     "#;
@@ -627,6 +646,44 @@ async fn python_list_remote_python_downloads_json_url() -> Result<()> {
         .mount(&server)
         .await;
 
+    Mock::given(method("GET"))
+        .and(path("/invalid-default"))
+        .respond_with(ResponseTemplate::new(200).set_body_raw(
+            remote_json.replace(r#""default": false"#, r#""default": "false""#),
+            "application/json",
+        ))
+        .mount(&server)
+        .await;
+
+    let versioned_json = format!(r#"{{"version": 1, "downloads": {remote_json}}}"#);
+    Mock::given(method("GET"))
+        .and(path("/versioned-invalid-default"))
+        .respond_with(ResponseTemplate::new(200).set_body_raw(
+            versioned_json.replace(r#""default": false"#, r#""default": "false""#),
+            "application/json",
+        ))
+        .mount(&server)
+        .await;
+
+    Mock::given(method("GET"))
+        .and(path("/versioned-invalid-build-variant"))
+        .respond_with(ResponseTemplate::new(200).set_body_raw(
+            versioned_json.replace(r#""build_variant": "custom""#, r#""build_variant": 42"#),
+            "application/json",
+        ))
+        .mount(&server)
+        .await;
+
+    // Future schema versions need not use the version-1 payload shape.
+    Mock::given(method("GET"))
+        .and(path("/unsupported-version"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_raw(r#"{"version": 2, "artifacts": []}"#, "application/json"),
+        )
+        .mount(&server)
+        .await;
+
     // Test showing all interpreters from the remote JSON URL
     uv_snapshot!(context
         .python_list()
@@ -640,6 +697,7 @@ async fn python_list_remote_python_downloads_json_url() -> Result<()> {
     ----- stdout -----
     cpython-3.14.0-macos-aarch64-none                    https://custom.com/cpython-3.14.0-darwin-aarch64-none.tar.gz
     cpython-3.13.2+freethreaded-linux-powerpc64le-gnu    https://custom.com/ccpython-3.13.2+freethreaded-linux-powerpc64le-gnu.tar.gz
+    cpython-3.12.9+custom-linux-x86_64-gnu               https://custom.com/cpython-3.12.9+custom-linux-x86_64-gnu.tar.gz
     ");
 
     // test invalid URL path
@@ -674,6 +732,46 @@ async fn python_list_remote_python_downloads_json_url() -> Result<()> {
     ----- stderr -----
     error: Unable to parse the JSON Python download list at http://[LOCALHOST]/invalid-hash
       cause: Invalid hash digest length (expected 64 hexadecimal characters, found 5) at line 16 column 29
+    ");
+
+    // Invalid build metadata must be rejected.
+    uv_snapshot!(context.filters(), context
+        .python_list()
+        .env_remove(EnvVars::UV_PYTHON_DOWNLOADS)
+        .arg("--python-downloads-json-url").arg(format!("{}/invalid-default", server.uri())), @r#"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Unable to parse the JSON Python download list at http://[LOCALHOST]/invalid-default
+      cause: invalid type: string "false", expected a boolean at line 53 column 30
+    "#);
+
+    uv_snapshot!(context.filters(), context
+        .python_list()
+        .env_remove(EnvVars::UV_PYTHON_DOWNLOADS)
+        .arg("--python-downloads-json-url").arg(format!("{}/versioned-invalid-default", server.uri())), @r#"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Unable to parse the JSON Python download list at http://[LOCALHOST]/versioned-invalid-default
+      cause: invalid type: string "false", expected a boolean at line 53 column 30
+    "#);
+
+    uv_snapshot!(context.filters(), context
+        .python_list()
+        .env_remove(EnvVars::UV_PYTHON_DOWNLOADS)
+        .arg("--python-downloads-json-url").arg(format!("{}/versioned-invalid-build-variant", server.uri())), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Unable to parse the JSON Python download list at http://[LOCALHOST]/versioned-invalid-build-variant
+      cause: invalid type: integer `42`, expected a string at line 52 column 31
+    ");
+
+    uv_snapshot!(context.filters(), context
+        .python_list()
+        .env_remove(EnvVars::UV_PYTHON_DOWNLOADS)
+        .arg("--python-downloads-json-url").arg(format!("{}/unsupported-version", server.uri())), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: This version of uv is too old to support the JSON Python download list at http://[LOCALHOST]/unsupported-version
     ");
 
     Ok(())
