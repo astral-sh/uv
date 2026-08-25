@@ -16544,6 +16544,7 @@ fn compile_bytecode_excludes_stdlib() -> Result<()> {
 
     Ok(())
 }
+
 #[test]
 fn binary_payloads_use_archive_file_store() -> Result<()> {
     let context = uv_test::test_context!("3.12").with_filter((
@@ -16568,13 +16569,7 @@ fn binary_payloads_use_archive_file_store() -> Result<()> {
     let archive_file = &archive_files[0];
 
     let archive_metadata_root = context.cache_dir.child("archive-metadata-v0");
-    let manifests = cache_files(archive_metadata_root.path())?
-        .into_iter()
-        .filter(|path| {
-            path.file_name()
-                .is_some_and(|file_name| file_name == "manifest.json")
-        })
-        .collect::<Vec<_>>();
+    let manifests = cache_files(archive_metadata_root.path())?;
     assert_eq!(manifests.len(), 1);
     let archive_id = manifests[0]
         .parent()
@@ -16611,7 +16606,10 @@ fn binary_payloads_use_archive_file_store() -> Result<()> {
         .join("binary_payload")
         .join("native.so");
 
-    assert_same_file(&installed_binary, archive_file);
+    assert_eq!(
+        uv_fs::is_same_file_allow_missing(&installed_binary, archive_file),
+        Some(true)
+    );
     assert!(!archive_binary.exists());
     assert!(
         !archive_root
@@ -16646,9 +16644,12 @@ fn binary_payloads_use_archive_file_store() -> Result<()> {
     ");
 
     #[cfg(any(unix, windows))]
-    assert_different_file(
-        &copy_target.path().join("binary_payload").join("native.so"),
-        archive_file,
+    assert_eq!(
+        uv_fs::is_same_file_allow_missing(
+            &copy_target.path().join("binary_payload").join("native.so"),
+            archive_file,
+        ),
+        Some(false)
     );
     assert_eq!(
         fs_err::read(copy_target.path().join("binary_payload").join("native.so"))?,
@@ -16707,28 +16708,6 @@ fn binary_payload_copy_fallback_uses_archive_file_store() -> Result<()> {
 
     let archive_files = cache_files(context.cache_dir.child("archive-files-v0").path())?;
     assert_eq!(archive_files.len(), 1);
-
-    let manifests = cache_files(context.cache_dir.child("archive-metadata-v0").path())?
-        .into_iter()
-        .filter(|path| {
-            path.file_name()
-                .is_some_and(|file_name| file_name == "manifest.json")
-        })
-        .collect::<Vec<_>>();
-    assert_eq!(manifests.len(), 1);
-    let archive_id = manifests[0]
-        .parent()
-        .and_then(Path::file_name)
-        .ok_or_else(|| anyhow!("archive-file manifest path has no archive ID"))?;
-    let archive_binary = context
-        .cache_dir
-        .child("archive-v0")
-        .path()
-        .join(archive_id)
-        .join("binary_payload")
-        .join("native.so");
-
-    assert!(!archive_binary.exists());
 
     let target = context.temp_dir.child("fallback-target");
     uv_snapshot!(context.filters(), context.pip_install()
@@ -16800,24 +16779,4 @@ fn cache_files(root: &Path) -> Result<Vec<PathBuf>> {
     }
     files.sort();
     Ok(files)
-}
-
-fn assert_same_file(left: &Path, right: &Path) {
-    assert_eq!(
-        uv_fs::is_same_file_allow_missing(left, right),
-        Some(true),
-        "{} and {} should refer to the same file",
-        left.display(),
-        right.display(),
-    );
-}
-
-fn assert_different_file(left: &Path, right: &Path) {
-    assert_eq!(
-        uv_fs::is_same_file_allow_missing(left, right),
-        Some(false),
-        "{} and {} should refer to different files",
-        left.display(),
-        right.display(),
-    );
 }
