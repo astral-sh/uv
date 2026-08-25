@@ -5,6 +5,7 @@ use uv_pep440::{Version, VersionPattern, VersionSpecifier};
 
 use crate::cursor::Cursor;
 use crate::marker::MarkerValueExtra;
+use crate::marker::algebra::INTERNER;
 use crate::marker::lowering::CanonicalMarkerListPair;
 use crate::marker::tree::{ContainerOperator, MarkerValueList};
 use crate::{
@@ -577,15 +578,17 @@ fn parse_extra_expr(
 /// ```
 fn parse_marker_expr<T: Pep508Url>(
     cursor: &mut Cursor,
+    parsed: &mut ParsedMarkers,
     reporter: &mut impl Reporter,
-) -> Result<Option<MarkerTree>, Pep508Error<T>> {
+) -> Result<Option<ParsedMarkerId>, Pep508Error<T>> {
     cursor.eat_whitespace();
     if let Some(start_pos) = cursor.eat_char('(') {
-        let marker = parse_marker_or(cursor, reporter)?;
+        let marker = parse_marker_or(cursor, parsed, reporter)?;
         cursor.next_expect_char(')', start_pos)?;
         Ok(marker)
     } else {
-        Ok(parse_marker_key_op_value(cursor, reporter)?.map(MarkerTree::expression))
+        Ok(parse_marker_key_op_value(cursor, reporter)?
+            .map(|expression| parsed.push(ParsedMarker::Expression(expression))))
     }
 }
 
@@ -595,9 +598,17 @@ fn parse_marker_expr<T: Pep508Url>(
 /// ```
 fn parse_marker_and<T: Pep508Url>(
     cursor: &mut Cursor,
+    parsed: &mut ParsedMarkers,
     reporter: &mut impl Reporter,
-) -> Result<Option<MarkerTree>, Pep508Error<T>> {
-    parse_marker_op(cursor, "and", MarkerTree::and, parse_marker_expr, reporter)
+) -> Result<Option<ParsedMarkerId>, Pep508Error<T>> {
+    parse_marker_op(
+        cursor,
+        parsed,
+        "and",
+        ParsedMarker::And,
+        parse_marker_expr,
+        reporter,
+    )
 }
 
 /// ```text
@@ -606,34 +617,89 @@ fn parse_marker_and<T: Pep508Url>(
 /// ```
 fn parse_marker_or<T: Pep508Url>(
     cursor: &mut Cursor,
+    parsed: &mut ParsedMarkers,
     reporter: &mut impl Reporter,
-) -> Result<Option<MarkerTree>, Pep508Error<T>> {
+) -> Result<Option<ParsedMarkerId>, Pep508Error<T>> {
     parse_marker_op(
         cursor,
+        parsed,
         "or",
-        MarkerTree::or,
-        |cursor, reporter| parse_marker_and(cursor, reporter),
+        ParsedMarker::Or,
+        parse_marker_and,
         reporter,
     )
+}
+
+#[derive(Clone, Copy)]
+struct ParsedMarkerId(usize);
+
+enum ParsedMarker {
+    Expression(MarkerExpression),
+    And(ParsedMarkerId, ParsedMarkerId),
+    Or(ParsedMarkerId, ParsedMarkerId),
+}
+
+#[derive(Default)]
+struct ParsedMarkers {
+    nodes: Vec<ParsedMarker>,
+}
+
+impl ParsedMarkers {
+    fn push(&mut self, marker: ParsedMarker) -> ParsedMarkerId {
+        let id = ParsedMarkerId(self.nodes.len());
+        self.nodes.push(marker);
+        id
+    }
+
+    fn lower(self, root: ParsedMarkerId) -> Option<MarkerTree> {
+        let mut interner = INTERNER.lock();
+        let mut lowered = Vec::with_capacity(self.nodes.len());
+
+        for marker in self.nodes {
+            let marker = match marker {
+                ParsedMarker::Expression(expression) => {
+                    MarkerTree::expression_with_interner(expression, &mut interner)
+                }
+                ParsedMarker::And(left, right) => MarkerTree::and_with_interner(
+                    *lowered.get(left.0)?,
+                    *lowered.get(right.0)?,
+                    &mut interner,
+                ),
+                ParsedMarker::Or(left, right) => MarkerTree::or_with_interner(
+                    *lowered.get(left.0)?,
+                    *lowered.get(right.0)?,
+                    &mut interner,
+                ),
+            };
+            lowered.push(marker);
+        }
+
+        lowered.get(root.0).copied()
+    }
 }
 
 /// Parses both `marker_and` and `marker_or`
 #[expect(clippy::type_complexity)]
 fn parse_marker_op<T: Pep508Url, R: Reporter>(
     cursor: &mut Cursor,
+    parsed: &mut ParsedMarkers,
     op: &str,
-    apply: fn(MarkerTree, MarkerTree) -> MarkerTree,
-    parse_inner: fn(&mut Cursor, &mut R) -> Result<Option<MarkerTree>, Pep508Error<T>>,
+    apply: fn(ParsedMarkerId, ParsedMarkerId) -> ParsedMarker,
+    parse_inner: fn(
+        &mut Cursor,
+        &mut ParsedMarkers,
+        &mut R,
+    ) -> Result<Option<ParsedMarkerId>, Pep508Error<T>>,
     reporter: &mut R,
-) -> Result<Option<MarkerTree>, Pep508Error<T>> {
+) -> Result<Option<ParsedMarkerId>, Pep508Error<T>> {
     let mut tree = None;
 
     // marker_and or marker_expr
-    let first_element = parse_inner(cursor, reporter)?;
+    let first_element = parse_inner(cursor, parsed, reporter)?;
 
     if let Some(expression) = first_element {
         tree = Some(match tree {
-            Some(tree) => apply(tree, expression),
+            Some(tree) => parsed.push(apply(tree, expression)),
             None => expression,
         });
     }
@@ -647,9 +713,9 @@ fn parse_marker_op<T: Pep508Url, R: Reporter>(
             value if value == op => {
                 cursor.take_while(|c| !c.is_whitespace());
 
-                if let Some(expression) = parse_inner(cursor, reporter)? {
+                if let Some(expression) = parse_inner(cursor, parsed, reporter)? {
                     tree = Some(match tree {
-                        Some(tree) => apply(tree, expression),
+                        Some(tree) => parsed.push(apply(tree, expression)),
                         None => expression,
                     });
                 }
@@ -666,7 +732,8 @@ pub(crate) fn parse_markers_cursor<T: Pep508Url>(
     cursor: &mut Cursor,
     reporter: &mut impl Reporter,
 ) -> Result<Option<MarkerTree>, Pep508Error<T>> {
-    let marker = parse_marker_or(cursor, reporter)?;
+    let mut parsed = ParsedMarkers::default();
+    let marker = parse_marker_or(cursor, &mut parsed, reporter)?;
     cursor.eat_whitespace();
     if let Some((pos, unexpected)) = cursor.next() {
         // If we're here, both parse_marker_or and parse_marker_and returned because the next
@@ -682,7 +749,7 @@ pub(crate) fn parse_markers_cursor<T: Pep508Url>(
         });
     }
 
-    Ok(marker)
+    Ok(marker.and_then(|root| parsed.lower(root)))
 }
 
 /// Parses markers such as `python_version < '3.8'` or
