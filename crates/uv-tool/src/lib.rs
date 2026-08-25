@@ -63,10 +63,9 @@ impl ToolName {
         // allowed here and warned about at the CLI layer instead.
         if name.is_empty()
             || matches!(name.as_str(), "." | "..")
-            || name.bytes().any(|character| {
-                character.is_ascii_control()
-                    || matches!(character, b'/' | b'\\')
-            })
+            || name
+                .bytes()
+                .any(|character| character.is_ascii_control() || matches!(character, b'/' | b'\\'))
         {
             return Err(InvalidToolNameError::invalid(&name));
         }

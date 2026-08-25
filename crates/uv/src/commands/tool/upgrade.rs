@@ -82,8 +82,7 @@ pub(crate) async fn upgrade(
                 .collect::<Vec<_>>();
             let mut map = BTreeMap::new();
             for request in names {
-                if let Some((name, specifier)) = split_upgrade_request(&request, &installed_names)
-                {
+                if let Some((name, specifier)) = split_upgrade_request(&request, &installed_names) {
                     let constraints = map.entry(name.clone()).or_insert_with(Vec::new);
                     if !specifier.is_empty()
                         && let Ok(Some(tool)) = installed_tools.get_tool_receipt(name)

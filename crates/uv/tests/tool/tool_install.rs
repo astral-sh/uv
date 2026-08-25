@@ -5329,7 +5329,9 @@ fn tool_install_suffix() {
     );
 
     // The environment is stored under the suffixed name.
-    tool_dir.child("ruff-0.3.4").assert(predicate::path::is_dir());
+    tool_dir
+        .child("ruff-0.3.4")
+        .assert(predicate::path::is_dir());
 
     // The receipt records the package and suffix.
     insta::with_settings!({
@@ -5339,7 +5341,7 @@ fn tool_install_suffix() {
         [tool]
         package = "ruff"
         suffix = "-0.3.4"
-        requirements = [{ name = "ruff" }]
+        requirements = [{ name = "ruff", specifier = "==0.3.4" }]
         entrypoints = [
             { name = "ruff-0.3.4", install-path = "[TEMP_DIR]/bin/ruff-0.3.4", from = "ruff" },
         ]
@@ -5360,7 +5362,6 @@ fn tool_install_suffix() {
     exit_code: 0 (success)
     ----- stderr -----
     Resolved [N] packages in [TIME]
-    Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
      + ruff==0.3.4
     Installed 1 executable: ruff-old
@@ -5375,7 +5376,6 @@ fn tool_install_suffix() {
     ----- stdout -----
     ruff-0.3.4 v0.3.4
     - ruff-0.3.4
-
     ruff-old v0.3.4
     - ruff-old
     ");
@@ -5393,9 +5393,7 @@ fn tool_install_suffix_invalid() {
         .arg("")
         .assert()
         .failure()
-        .stderr(predicate::str::contains(
-            "A tool suffix cannot be empty",
-        ));
+        .stderr(predicate::str::contains("A tool suffix cannot be empty"));
 
     // Path separators are rejected.
     context
