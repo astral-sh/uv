@@ -18,6 +18,10 @@ use uv_fs::Simplified;
 use uv_python::managed::platform_key_from_env;
 use uv_static::EnvVars;
 use walkdir::WalkDir;
+use wiremock::{
+    Mock, MockServer, ResponseTemplate,
+    matchers::{method, path},
+};
 
 #[test]
 fn python_install() {
@@ -121,6 +125,120 @@ fn python_install() {
 
     // The executable should be removed
     bin_python.assert(predicate::path::missing());
+}
+
+#[tokio::test]
+#[cfg(feature = "test-python-managed")]
+async fn python_install_build_variant() {
+    let context = uv_test::test_context_with_versions!(&[])
+        .with_filtered_python_keys()
+        .with_filtered_python_sources()
+        .with_filtered_python_install_bin()
+        .with_filtered_python_names()
+        .with_filtered_exe_suffix()
+        .with_managed_python_dirs();
+
+    context.python_install().arg("3.13").assert().success();
+
+    let managed_dir = context.temp_dir.child("managed");
+    let default_path = fs_err::read_dir(managed_dir.path())
+        .unwrap()
+        .filter_map(Result::ok)
+        .find(|entry| {
+            entry
+                .file_name()
+                .to_string_lossy()
+                .starts_with("cpython-3.13.")
+        })
+        .unwrap()
+        .path();
+    let default_name = default_path.file_name().unwrap().to_str().unwrap();
+    let key = default_name
+        .parse::<uv_python::PythonInstallationKey>()
+        .unwrap();
+    let platform = platform_key_from_env().unwrap();
+    let version = default_name.strip_suffix(&format!("-{platform}")).unwrap();
+    let custom_name = format!("{version}+custom-{platform}");
+    let custom_path = managed_dir.join(&custom_name);
+    fs_err::rename(&default_path, &custom_path).unwrap();
+
+    let arch = key.arch().to_string();
+    let (arch_family, arch_variant) = arch
+        .rsplit_once('_')
+        .map_or((arch.as_str(), None), |(family, variant)| {
+            (family, Some(variant))
+        });
+
+    let server = MockServer::start().await;
+    let metadata = serde_json::json!({
+        (custom_name): {
+            "name": "cpython",
+            "arch": {
+                "family": arch_family,
+                "variant": arch_variant
+            },
+            "os": key.os().to_string(),
+            "libc": key.libc().to_string(),
+            "major": key.major(),
+            "minor": key.minor(),
+            "patch": key.version().patch().unwrap_or_default(),
+            "prerelease": "",
+            "url": "https://custom.example/cpython.tar.gz",
+            "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+            "variant": null,
+            "build_variant": "custom",
+            "default": false,
+            "build": null
+        }
+    });
+    Mock::given(method("GET"))
+        .and(path("/metadata"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(metadata))
+        .mount(&server)
+        .await;
+
+    context
+        .python_install()
+        .arg("3.13+custom")
+        .arg("--default")
+        .arg("--python-downloads-json-url")
+        .arg(format!("{}/metadata", server.uri()))
+        .assert()
+        .success();
+
+    context
+        .bin_dir
+        .child(format!("python3.13{}", std::env::consts::EXE_SUFFIX))
+        .assert(predicate::path::exists());
+    context
+        .bin_dir
+        .child(format!("python3.13+custom{}", std::env::consts::EXE_SUFFIX))
+        .assert(predicate::path::missing());
+
+    uv_snapshot!(context.filters(), context.python_find().arg("3.13+custom"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    [TEMP_DIR]/managed/cpython-3.13+custom-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
+    ");
+
+    // Discover a composite build using the same tags in any order.
+    let optimized_name = format!("{version}+custom+pgo+lto-{platform}");
+    let optimized_path = managed_dir.join(&optimized_name);
+    fs_err::rename(&custom_path, &optimized_path)
+        .expect("Failed to move the installation to a composite build variant");
+    let context = context.with_filtered_latest_python_versions();
+
+    uv_snapshot!(context.filters(), context.python_find().arg("3.13+custom+pgo+lto"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    [TEMP_DIR]/managed/cpython-3.13.[LATEST]+custom+pgo+lto-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
+    ");
+
+    uv_snapshot!(context.filters(), context.python_find().arg("3.13+lto+pgo+custom"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    [TEMP_DIR]/managed/cpython-3.13.[LATEST]+custom+pgo+lto-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
+    ");
 }
 
 #[test]

@@ -395,6 +395,22 @@ fn python_pin_no_python() {
     ");
 }
 
+/// Build variants can be pinned without first resolving an interpreter.
+#[cfg(unix)]
+#[test]
+fn python_pin_build_variant() {
+    let context = uv_test::test_context_with_versions!(&[]);
+
+    uv_snapshot!(context.filters(), context.python_pin().arg("3.13+custom"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    Pinned `.python-version` to `3.13+custom`
+
+    ----- stderr -----
+    warning: No interpreter found for Python 3.13+custom in managed installations or search path
+    ");
+}
+
 #[test]
 fn python_pin_compatible_with_requires_python() -> Result<()> {
     let context =

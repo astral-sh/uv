@@ -48,7 +48,7 @@ use crate::implementation::{
 use crate::installation::PythonInstallationKey;
 use crate::managed::ManagedPythonInstallation;
 use crate::python_version::{BuildVersionError, python_build_version_from_env};
-use crate::{Interpreter, PythonRequest, PythonVersion, VersionRequest};
+use crate::{Interpreter, PythonRequest, PythonVersion, VariantRequest, VersionRequest};
 use crate::{LenientPythonBuildVariant, PythonVariant};
 
 #[derive(Error, Debug)]
@@ -585,8 +585,8 @@ impl PythonDownloadRequest {
             ) {
                 return false;
             }
-            if let Some(variant) = version.variant()
-                && variant != key.variant
+            if let Some(variants) = version.variants()
+                && !variants.matches_download_key(key)
             {
                 return false;
             }
@@ -698,7 +698,7 @@ impl TryFrom<&PythonInstallationKey> for PythonDownloadRequest {
             Some(VersionRequest::MajorMinor(
                 key.major(),
                 key.minor(),
-                *key.variant(),
+                VariantRequest::new(*key.variant(), key.build_variant().cloned()),
             )),
             Some(implementation),
             Some(ArchRequest::Explicit(*key.arch())),
@@ -713,7 +713,12 @@ impl From<&ManagedPythonInstallation> for PythonDownloadRequest {
     fn from(installation: &ManagedPythonInstallation) -> Self {
         let key = installation.key();
         Self::new(
-            Some(VersionRequest::from(&key.version())),
+            Some(
+                VersionRequest::from(&key.version()).with_variants(VariantRequest::new(
+                    *key.variant(),
+                    key.build_variant().cloned(),
+                )),
+            ),
             match &key.implementation {
                 LenientImplementationName::Known(implementation) => Some(*implementation),
                 LenientImplementationName::Unknown(name) => unreachable!(
@@ -1022,17 +1027,26 @@ impl ManagedPythonDownloadList {
     /// If there is no stable version matching the request, a compatible pre-release version will
     /// be searched for — even if a pre-release was not explicitly requested.
     pub fn find(&self, request: &PythonDownloadRequest) -> Result<&ManagedPythonDownload, Error> {
-        if let Some(download) = self
-            .iter_matching(request)
-            .find(|download| download.is_default())
-        {
+        let explicit_build_variant = request
+            .version
+            .as_ref()
+            .and_then(VersionRequest::variants)
+            .is_some_and(|variants| variants.build().is_some());
+        let find = |request| {
+            if explicit_build_variant {
+                self.iter_matching(request).next()
+            } else {
+                self.iter_matching(request)
+                    .find(|download| download.is_default())
+            }
+        };
+
+        if let Some(download) = find(request) {
             return Ok(download);
         }
 
         if !request.allows_prereleases()
-            && let Some(download) = self
-                .iter_matching(&request.clone().with_prereleases(true))
-                .find(|download| download.is_default())
+            && let Some(download) = find(&request.clone().with_prereleases(true))
         {
             return Ok(download);
         }
@@ -2056,6 +2070,13 @@ mod tests {
                 PythonBuildVariant::PgoLto
             ))
         );
+
+        let request = PythonDownloadRequest::default()
+            .with_version(VersionRequest::from_str("3.13+custom").unwrap());
+        assert_eq!(
+            downloads.find(&request).unwrap().key().build_variant(),
+            Some(&LenientPythonBuildVariant::Unknown("custom".to_string()))
+        );
     }
 
     /// Parse a request with all of its fields.
@@ -2324,7 +2345,7 @@ mod tests {
                 3,
                 13,
                 1,
-                PythonVariant::Default,
+                PythonVariant::Default.into(),
             ))
             .with_os(Os::from_str("linux").unwrap())
             .with_arch(Arch::from_str("x86_64").unwrap())
@@ -2356,7 +2377,7 @@ mod tests {
                 3,
                 13,
                 0,
-                PythonVariant::Freethreaded,
+                PythonVariant::Freethreaded.into(),
             ))
             .with_os(Os::from_str("linux").unwrap())
             .with_arch(Arch::from_str("x86_64").unwrap())
@@ -2388,7 +2409,7 @@ mod tests {
                 3,
                 12,
                 4,
-                PythonVariant::Default,
+                PythonVariant::Default.into(),
             ))
             .with_os(Os::from_str("linux").unwrap())
             .with_arch(Arch::from_str("aarch64").unwrap())
@@ -2420,7 +2441,7 @@ mod tests {
                 3,
                 10,
                 5,
-                PythonVariant::Default,
+                PythonVariant::Default.into(),
             ))
             .with_os(Os::from_str("linux").unwrap())
             .with_arch(Arch::from_str("x86_64").unwrap())
@@ -2461,7 +2482,11 @@ mod tests {
     #[test]
     fn simplified_display_omits_environment_arch() {
         let mut request = PythonDownloadRequest::default()
-            .with_version(VersionRequest::MajorMinor(3, 12, PythonVariant::Default))
+            .with_version(VersionRequest::MajorMinor(
+                3,
+                12,
+                PythonVariant::Default.into(),
+            ))
             .with_os(Os::from_str("linux").unwrap())
             .with_libc(Libc::from_str("gnu").unwrap());
 
