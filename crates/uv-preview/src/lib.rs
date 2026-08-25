@@ -335,6 +335,8 @@ pub enum PreviewFeature {
     IndexByName,
     /// Restricts generated requirement hashes to artifacts allowed by binary and build policies.
     ArtifactHashFiltering,
+    /// Enables content-addressed wheel archives in the cache.
+    ContentAddressedCache,
 }
 
 impl Display for PreviewFeature {
