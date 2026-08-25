@@ -12,7 +12,7 @@ use version_ranges::Ranges;
 use uv_normalize::{ExtraName, GroupName};
 use uv_pep440::{Version, VersionParseError, VersionSpecifier};
 
-use super::algebra::{Edges, INTERNER, InternerGuard, NodeId, Variable};
+use super::algebra::{Edges, INTERNER, NodeId, Variable};
 use super::simplify;
 #[cfg(test)]
 use crate::Pep508ErrorSource;
@@ -812,13 +812,6 @@ impl MarkerTree {
         Self(INTERNER.lock().expression(expr))
     }
 
-    pub(crate) fn expression_with_interner(
-        expr: MarkerExpression,
-        interner: &mut InternerGuard<'_>,
-    ) -> Self {
-        Self(interner.expression(expr))
-    }
-
     /// Whether the marker always evaluates to `true`.
     ///
     /// If this method returns `true`, it is definitively known that the marker will
@@ -855,13 +848,6 @@ impl MarkerTree {
         Self(INTERNER.lock().and_nontrivial(self.0, tree.0))
     }
 
-    pub(crate) fn and_with_interner(self, tree: Self, interner: &mut InternerGuard<'_>) -> Self {
-        if let Some(node) = self.0.and_trivial(tree.0) {
-            return Self(node);
-        }
-        Self(interner.and_nontrivial(self.0, tree.0))
-    }
-
     /// Returns a new marker tree that combines this one with the given one via a disjunction.
     #[must_use]
     pub fn or(self, tree: Self) -> Self {
@@ -869,13 +855,6 @@ impl MarkerTree {
             return Self(node);
         }
         Self(INTERNER.lock().or_nontrivial(self.0, tree.0))
-    }
-
-    pub(crate) fn or_with_interner(self, tree: Self, interner: &mut InternerGuard<'_>) -> Self {
-        if let Some(node) = self.0.or_trivial(tree.0) {
-            return Self(node);
-        }
-        Self(interner.or_nontrivial(self.0, tree.0))
     }
 
     /// Returns a marker equivalent to the implication of this one and the given consequent.
