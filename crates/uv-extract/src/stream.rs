@@ -508,6 +508,9 @@ async fn unzip_inner<R: tokio::io::AsyncRead + Unpin>(
                                     relpath.clone(),
                                     local_header.uncompressed_size,
                                     digest,
+                                    entry
+                                        .unix_permissions()
+                                        .is_some_and(|mode| mode & 0o111 != 0),
                                 ));
                             }
                         }

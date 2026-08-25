@@ -1,3 +1,4 @@
+use std::env;
 use std::fmt::Display;
 use std::future::Future;
 use std::io;
@@ -33,6 +34,7 @@ use uv_preview::PreviewFeature;
 use uv_pypi_types::{HashDigest, HashDigests, PyProjectToml};
 use uv_python::PythonVariant;
 use uv_redacted::DisplaySafeUrl;
+use uv_static::EnvVars;
 use uv_types::{BuildContext, BuildStack};
 
 use crate::archive::Archive;
@@ -1232,7 +1234,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
     ///
     /// A hash tree makes identical extracted trees converge on one archive entry. Without one,
     /// persistence retains the existing behavior of assigning a unique archive ID.
-    /// Binary payloads and their manifest are finalized before the archive becomes visible.
+    /// Shared files and their manifest are finalized before the archive becomes visible.
     async fn persist_extracted_wheel(
         &self,
         temp_dir: tempfile::TempDir,
@@ -1250,15 +1252,17 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         };
 
         let temp_dir = if let Some(extracted_files) = extracted_files {
+            let minimum_size = archive_file_min_size().map_err(Error::CacheWrite)?;
             let cache = cache.clone();
             let archive_id = id.clone();
             tokio::task::spawn_blocking(move || {
                 let archive_metadata = cache.archive_metadata(&archive_id);
-                persist_binary_archive_files(
+                persist_archive_files(
                     &cache,
                     temp_dir.path(),
                     &archive_metadata,
                     &extracted_files,
+                    minimum_size,
                 )
                 .map_err(Error::CacheWrite)?;
                 Ok::<_, Error>(temp_dir)
@@ -1338,7 +1342,7 @@ impl ExtractedWheelManifest {
         }
     }
 
-    /// Derive wheel-record entries while retaining per-file digests for shared binary objects.
+    /// Derive wheel-record entries while retaining per-file digests for shared objects.
     fn with_extracted_files(extracted_files: Vec<ExtractedFile>, tree: DirhashTree) -> Self {
         Self {
             files: extracted_files
@@ -1381,30 +1385,37 @@ impl ExtractedWheelManifest {
     }
 }
 
-/// Move native-library payloads into shared storage before publishing their sparse archive.
+/// Share executable and large files while keeping the unpublished archive complete.
 ///
 /// Reuse an existing manifest when another writer has already prepared the same archive identity.
-fn persist_binary_archive_files(
+fn persist_archive_files(
     cache: &Cache,
     archive: &Path,
     archive_metadata: &Path,
     files: &[ExtractedFile],
+    minimum_size: u64,
 ) -> io::Result<()> {
     if let Some(manifest) = ArchiveFileManifest::read_from_metadata(archive_metadata)? {
         for entry in manifest.files() {
-            if let Err(err) = fs_err::remove_file(archive.join(entry.path()))
-                && err.kind() != io::ErrorKind::NotFound
-            {
-                return Err(err);
-            }
+            persist_archive_file(
+                &archive.join(entry.path()),
+                &cache.bucket(CacheBucket::ArchiveFiles).join(entry.object()),
+            )?;
         }
         return Ok(());
     }
 
     let mut entries = Vec::new();
 
-    for file in files.iter().filter(|file| is_binary_payload(file.path())) {
-        let id = ArchiveFileId::from_content_digest(&file.digest_hex());
+    // Keep installer metadata private, including RECORD, which may have been healed after hashing.
+    for file in files.iter().filter(|file| {
+        !file.path().components().any(|component| {
+            Path::new(component.as_os_str())
+                .extension()
+                .is_some_and(|extension| extension == "dist-info")
+        }) && (file.is_executable() || file.size() >= minimum_size)
+    }) {
+        let id = ArchiveFileId::from_content_digest(&file.digest_hex(), file.is_executable());
         persist_archive_file(&archive.join(file.path()), &cache.archive_file(&id))?;
         entries.push(ArchiveFileManifestEntry::new(
             file.path().to_path_buf(),
@@ -1415,22 +1426,24 @@ fn persist_binary_archive_files(
     ArchiveFileManifest::new(entries).write_to_metadata(archive_metadata)
 }
 
-/// Recognize native libraries, including versioned Unix shared objects like `libfoo.so.1`.
-fn is_binary_payload(path: &Path) -> bool {
-    let Some(file_name) = path.file_name().and_then(|file_name| file_name.to_str()) else {
-        return false;
-    };
-    let is_binary_extension = path.extension().is_some_and(|extension| {
-        extension.eq_ignore_ascii_case("so")
-            || extension.eq_ignore_ascii_case("pyd")
-            || extension.eq_ignore_ascii_case("dll")
-            || extension.eq_ignore_ascii_case("dylib")
-    });
-
-    is_binary_extension || file_name.to_ascii_lowercase().contains(".so.")
+/// Read the experimental size cutoff only when publishing a content-addressed archive.
+fn archive_file_min_size() -> io::Result<u64> {
+    match env::var(EnvVars::UV_INTERNAL__ARCHIVE_FILE_MIN_SIZE) {
+        Ok(value) => value.parse().map_err(|err| {
+            io::Error::new(
+                io::ErrorKind::InvalidInput,
+                format!(
+                    "{} must be an integer number of bytes: {err}",
+                    EnvVars::UV_INTERNAL__ARCHIVE_FILE_MIN_SIZE,
+                ),
+            )
+        }),
+        Err(env::VarError::NotPresent) => Ok(1024 * 1024),
+        Err(err) => Err(io::Error::new(io::ErrorKind::InvalidInput, err)),
+    }
 }
 
-/// Publish a shared object, tolerating competing writers and filesystems without hardlinks.
+/// Publish a shared object and retain a hardlink in the archive, with a copy fallback.
 fn persist_archive_file(src: &Path, dst: &Path) -> io::Result<()> {
     persist_archive_file_with(src, dst, |src, dst| fs_err::hard_link(src, dst))
 }
@@ -1439,7 +1452,7 @@ fn persist_archive_file(src: &Path, dst: &Path) -> io::Result<()> {
 fn persist_archive_file_with(
     src: &Path,
     dst: &Path,
-    hard_link: impl FnOnce(&Path, &Path) -> io::Result<()>,
+    hard_link: impl Fn(&Path, &Path) -> io::Result<()>,
 ) -> io::Result<()> {
     let Some(parent) = dst.parent() else {
         return Err(io::Error::new(
@@ -1451,19 +1464,20 @@ fn persist_archive_file_with(
 
     if !dst.try_exists()? {
         match hard_link(src, dst) {
-            Ok(()) => {}
+            Ok(()) => return Ok(()),
             Err(_) if dst.try_exists()? => {}
-            Err(_) => uv_fs::copy_atomic_sync(src, dst)?,
+            Err(_) => return uv_fs::copy_atomic_sync(src, dst),
         }
     }
 
+    // This archive is still private, so it is safe to replace its extracted copy before publication.
     if let Err(err) = fs_err::remove_file(src)
         && err.kind() != io::ErrorKind::NotFound
     {
         return Err(err);
     }
 
-    Ok(())
+    hard_link(dst, src).or_else(|_| uv_fs::copy_atomic_sync(dst, src))
 }
 
 /// A wrapper around `RegistryClient` that manages a concurrency limit.
@@ -1643,7 +1657,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn persist_binary_archive_files_sparsifies_unpublished_archive() -> io::Result<()> {
+    fn persist_archive_files_keeps_unpublished_archive_complete() -> io::Result<()> {
         let cache = Cache::temp()?;
         let archive_id = ArchiveId::default();
         let temp_dir = tempfile::tempdir()?;
@@ -1657,21 +1671,27 @@ mod tests {
             PathBuf::from("ab/abcdef"),
         )]);
         manifest.write_to_metadata(&archive_metadata)?;
+        let object = cache.bucket(CacheBucket::ArchiveFiles).join("ab/abcdef");
+        fs_err::create_dir_all(object.parent().expect("object has a parent"))?;
+        fs_err::write(&object, "binary contents")?;
 
         assert!(!cache.archive(&archive_id).exists());
-        persist_binary_archive_files(&cache, &archive, &archive_metadata, &[])?;
+        persist_archive_files(&cache, &archive, &archive_metadata, &[], 1024 * 1024)?;
 
         assert_eq!(
             ArchiveFileManifest::read_from_metadata(&archive_metadata)?,
             Some(manifest)
         );
-        assert!(!archive_file.exists());
+        assert_eq!(
+            uv_fs::is_same_file_allow_missing(&archive_file, &object),
+            Some(true)
+        );
         assert!(!cache.archive(&archive_id).exists());
         Ok(())
     }
 
     #[test]
-    fn persist_archive_file_accepts_missing_source_for_existing_object() -> io::Result<()> {
+    fn persist_archive_file_restores_missing_source_from_existing_object() -> io::Result<()> {
         let temp_dir = tempfile::tempdir()?;
         let archive_dir = temp_dir.path().join("archive/package");
         let archive_files_dir = temp_dir.path().join("archive-files");
@@ -1683,7 +1703,7 @@ mod tests {
 
         persist_archive_file(&src, &dst)?;
 
-        assert!(!src.exists());
+        assert_eq!(uv_fs::is_same_file_allow_missing(&src, &dst), Some(true));
         assert_eq!(fs_err::read(&dst)?, b"binary contents");
         Ok(())
     }
@@ -1705,13 +1725,13 @@ mod tests {
             ))
         })?;
 
-        assert!(!src.exists());
+        assert_eq!(fs_err::read(&src)?, b"binary contents");
         assert_eq!(fs_err::read(&dst)?, b"binary contents");
         Ok(())
     }
 
     #[test]
-    fn persist_archive_file_removes_source_for_existing_object() -> io::Result<()> {
+    fn persist_archive_file_relinks_source_to_existing_object() -> io::Result<()> {
         let temp_dir = tempfile::tempdir()?;
         let archive_dir = temp_dir.path().join("archive/package");
         let archive_files_dir = temp_dir.path().join("archive-files");
@@ -1724,7 +1744,7 @@ mod tests {
 
         persist_archive_file(&src, &dst)?;
 
-        assert!(!src.exists());
+        assert_eq!(uv_fs::is_same_file_allow_missing(&src, &dst), Some(true));
         assert_eq!(fs_err::read(&dst)?, b"binary contents");
         Ok(())
     }

@@ -36,10 +36,11 @@ impl ArchiveId {
 }
 
 impl ArchiveFileId {
-    /// Generate an object identifier sharded by the first two characters of its content digest.
-    pub fn from_content_digest(digest: &str) -> Self {
+    /// Identify an object's contents and executable status, sharded by its content digest.
+    pub fn from_content_digest(digest: &str, executable: bool) -> Self {
         let shard = digest.get(..2).unwrap_or(digest);
-        Self(PathBuf::from(shard).join(digest))
+        let mode = if executable { "x" } else { "n" };
+        Self(PathBuf::from(shard).join(format!("{digest}-{mode}")))
     }
 }
 

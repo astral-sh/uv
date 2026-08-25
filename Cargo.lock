@@ -6596,6 +6596,7 @@ dependencies = [
  "uv-pypi-types",
  "uv-python",
  "uv-redacted",
+ "uv-static",
  "uv-types",
  "uv-workspace",
  "walkdir",

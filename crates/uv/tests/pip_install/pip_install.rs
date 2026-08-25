@@ -24,7 +24,7 @@ use wiremock::{
 
 use uv_extract::dirhash::{DirectoryDigest, ExtractedFile, dirhash_path};
 use uv_fs::{PortablePath, Simplified};
-use uv_install_wheel::validate_and_heal_record;
+use uv_install_wheel::{ArchiveFileManifest, ArchiveFileManifestEntry, validate_and_heal_record};
 use uv_static::EnvVars;
 use uv_test::archive::write_tar_gz;
 #[cfg(feature = "test-git")]
@@ -16553,6 +16553,7 @@ async fn binary_payloads_stay_in_archive_without_preview() -> Result<()> {
             .with_filter((r" \(from (?:file|http)://.*\)", " (from [WHEEL_URL])"));
         let wheel = binary_payload_wheel(&context)?;
         let mut command = context.pip_install();
+        command.env(EnvVars::UV_INTERNAL__ARCHIVE_FILE_MIN_SIZE, "invalid");
         if streaming {
             Mock::given(method("GET"))
                 .and(path("/binary_payload-0.1.0-py3-none-any.whl"))
@@ -16591,6 +16592,129 @@ async fn binary_payloads_stay_in_archive_without_preview() -> Result<()> {
             BINARY_PAYLOAD_CONTENTS,
         );
     }
+    Ok(())
+}
+
+#[tokio::test]
+async fn archive_file_size_cutoff() -> Result<()> {
+    let server = MockServer::start().await;
+    for streaming in [false, true] {
+        for (cutoff, expected, objects) in [
+            (None, vec!["native.so"], 1),
+            (
+                Some(0),
+                vec![
+                    "__init__.py",
+                    "duplicate.dat",
+                    "duplicate.txt",
+                    "module.py",
+                    "native.so",
+                ],
+                4,
+            ),
+            (
+                Some(21),
+                vec!["duplicate.dat", "duplicate.txt", "module.py", "native.so"],
+                3,
+            ),
+            (
+                Some(22),
+                vec!["duplicate.dat", "duplicate.txt", "native.so"],
+                2,
+            ),
+            (Some(u64::MAX), vec!["native.so"], 1),
+        ] {
+            let context = uv_test::test_context!("3.12")
+                .with_filter((r" \(from (?:file|http)://.*\)", " (from [WHEEL_URL])"));
+            let wheel = binary_payload_wheel(&context)?;
+            let mut command = context.pip_install();
+            command.args(["--preview-features", "content-addressed-cache"]);
+            if let Some(cutoff) = cutoff {
+                command.env(
+                    EnvVars::UV_INTERNAL__ARCHIVE_FILE_MIN_SIZE,
+                    cutoff.to_string(),
+                );
+            }
+            if streaming {
+                Mock::given(method("GET"))
+                    .and(path("/binary_payload-0.1.0-py3-none-any.whl"))
+                    .respond_with(ResponseTemplate::new(200).set_body_bytes(fs_err::read(&wheel)?))
+                    .mount(&server)
+                    .await;
+                command.arg(format!(
+                    "{}/binary_payload-0.1.0-py3-none-any.whl",
+                    server.uri()
+                ));
+            } else {
+                command.arg(&wheel);
+            }
+            allow_duplicates! {
+                uv_snapshot!(context.filters(), command, @"
+                exit_code: 0 (success)
+                ----- stderr -----
+                Resolved 1 package in [TIME]
+                Prepared 1 package in [TIME]
+                Installed 1 package in [TIME]
+                 + binary-payload==0.1.0 (from [WHEEL_URL])
+                ");
+            }
+
+            let manifests = cache_files(context.cache_dir.child("archive-metadata-v0").path())?;
+            assert_eq!(manifests.len(), 1);
+            let metadata = manifests[0].parent().context("manifest has no parent")?;
+            let manifest = ArchiveFileManifest::read_from_metadata(metadata)?
+                .context("archive has no manifest")?;
+            let mut paths = manifest
+                .files()
+                .iter()
+                .map(ArchiveFileManifestEntry::path)
+                .collect::<Vec<_>>();
+            paths.sort();
+            let expected = expected
+                .into_iter()
+                .map(|name| Path::new("binary_payload").join(name))
+                .collect::<Vec<_>>();
+            assert_eq!(paths, expected);
+            assert_eq!(
+                cache_files(context.cache_dir.child("archive-files-v0").path())?.len(),
+                objects
+            );
+            let archive_id = metadata.file_name().context("manifest has no archive ID")?;
+            for entry in manifest.files() {
+                let archived = context
+                    .cache_dir
+                    .child("archive-v0")
+                    .join(archive_id)
+                    .join(entry.path());
+                let object = context
+                    .cache_dir
+                    .child("archive-files-v0")
+                    .join(entry.object());
+                assert_eq!(
+                    uv_fs::is_same_file_allow_missing(&archived, &object),
+                    Some(true)
+                );
+            }
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn archive_file_size_cutoff_invalid() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let wheel = binary_payload_wheel(&context)?;
+    uv_snapshot!(context.filters(), context.pip_install()
+        .env(EnvVars::UV_INTERNAL__ARCHIVE_FILE_MIN_SIZE, "invalid")
+        .args(["--preview-features", "content-addressed-cache"])
+        .arg(&wheel), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+      × Failed to read `binary-payload @ file://[TEMP_DIR]/binary_payload-0.1.0-py3-none-any.whl`
+      ├─▶ Failed to write to the distribution cache
+      ╰─▶ UV_INTERNAL__ARCHIVE_FILE_MIN_SIZE must be an integer number of bytes: invalid digit found in string
+    ");
     Ok(())
 }
 
@@ -16661,7 +16785,10 @@ fn binary_payloads_use_archive_file_store() -> Result<()> {
         uv_fs::is_same_file_allow_missing(&installed_binary, archive_file),
         Some(true)
     );
-    assert!(!archive_binary.exists());
+    assert_eq!(
+        uv_fs::is_same_file_allow_missing(&archive_binary, archive_file),
+        Some(true)
+    );
     assert!(
         !archive_root
             .path()
@@ -16730,6 +16857,27 @@ fn binary_payloads_use_archive_file_store() -> Result<()> {
         fs_err::read(clone_target.path().join("binary_payload").join("native.so"))?,
         fs_err::read(archive_file)?,
     );
+
+    // Archive hardlinks keep the wheel installable even if the shared object is removed.
+    fs_err::remove_file(archive_file)?;
+    let retained_target = context.temp_dir.child("retained-target");
+    uv_snapshot!(context.filters(), context.pip_install()
+        .args(["--preview-features", "content-addressed-cache"])
+        .arg("--target")
+        .arg(retained_target.path())
+        .arg(&wheel), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: .venv/[BIN]/[PYTHON]
+    Resolved 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + binary-payload==0.1.0 (from file://[TEMP_DIR]/binary_payload-0.1.0-py3-none-any.whl)
+    ");
+    assert_eq!(
+        fs_err::read(retained_target.join("binary_payload/native.so"))?,
+        BINARY_PAYLOAD_CONTENTS
+    );
+    fs_err::hard_link(&archive_binary, archive_file)?;
 
     // Installation and pruning must reject unsupported manifest versions consistently.
     let mut manifest = manifest;
@@ -16829,6 +16977,8 @@ fn binary_payload_wheel(context: &TestContext) -> Result<PathBuf> {
     const RECORD: &[u8] = b"binary_payload/__init__.py,,\n\
 binary_payload/module.py,,\n\
 binary_payload/native.so,,\n\
+binary_payload/duplicate.dat,,\n\
+binary_payload/duplicate.txt,,\n\
 binary_payload-0.1.0.dist-info/METADATA,,\n\
 binary_payload-0.1.0.dist-info/WHEEL,,\n\
 binary_payload-0.1.0.dist-info/RECORD,,\n";
@@ -16844,11 +16994,19 @@ binary_payload-0.1.0.dist-info/RECORD,,\n";
             b"VALUE = 'not binary'\n" as &[u8],
         ),
         ("binary_payload/native.so", BINARY_PAYLOAD_CONTENTS),
+        ("binary_payload/duplicate.dat", BINARY_PAYLOAD_CONTENTS),
+        ("binary_payload/duplicate.txt", BINARY_PAYLOAD_CONTENTS),
         ("binary_payload-0.1.0.dist-info/METADATA", METADATA),
         ("binary_payload-0.1.0.dist-info/WHEEL", WHEEL),
         ("binary_payload-0.1.0.dist-info/RECORD", RECORD),
     ] {
-        let entry = ZipEntryBuilder::new(name.into(), Compression::Stored);
+        let entry = ZipEntryBuilder::new(name.into(), Compression::Stored).unix_permissions(
+            if name == "binary_payload/native.so" {
+                0o755
+            } else {
+                0o644
+            },
+        );
         block_on(writer.write_entry_whole(entry, contents))?;
     }
     fs_err::write(&wheel, block_on(writer.close())?)?;
