@@ -549,6 +549,41 @@ impl InternerGuard<'_> {
         self.create_node(node.var.clone(), children)
     }
 
+    /// Substitute each extra variable with the marker returned by `replacement`.
+    pub(crate) fn substitute_extras(
+        &mut self,
+        node_id: NodeId,
+        replacement: &mut impl FnMut(&CanonicalMarkerValueExtra) -> NodeId,
+    ) -> NodeId {
+        if matches!(node_id, NodeId::TRUE | NodeId::FALSE) {
+            return node_id;
+        }
+
+        let node = self.shared.node(node_id);
+        if let (Variable::Extra(name), Edges::Boolean { high, low }) = (&node.var, &node.children) {
+            let name = name.clone();
+            let high = high.negate(node_id);
+            let low = low.negate(node_id);
+            let extra = replacement(&name);
+            if extra.is_true() {
+                return self.substitute_extras(high, replacement);
+            }
+            if extra.is_false() {
+                return self.substitute_extras(low, replacement);
+            }
+            let high = self.substitute_extras(high, replacement);
+            let low = self.substitute_extras(low, replacement);
+            let high = self.and(extra, high);
+            let low = self.and(extra.not(), low);
+            return self.or(high, low);
+        }
+
+        let var = node.var.clone();
+        let children = node.children.clone();
+        let children = children.map(node_id, |node| self.substitute_extras(node, replacement));
+        self.create_node(var, children)
+    }
+
     /// Restrict a marker by assuming that another marker is true.
     ///
     /// The returned marker is equivalent to `value` wherever `assumption` is true. Its value
