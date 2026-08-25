@@ -32,11 +32,11 @@ use uv_distribution_filename::{
 };
 use uv_distribution_types::{
     BuiltDist, DependencyMetadata, DirectUrlBuiltDist, DirectUrlSourceDist, DirectorySourceDist,
-    Dist, FileLocation, GitDirectorySourceDist, GitPathBuiltDist, GitPathSourceDist, Identifier,
-    IndexLocations, IndexMetadata, IndexUrl, Name, PYPI_URL, PathBuiltDist, PathSourceDist,
-    RegistryBuiltDist, RegistryBuiltWheel, RegistrySourceDist, RemoteSource, Requirement,
-    RequirementSource, RequiresPython, ResolvedDist, SimplifiedMarkerTree, StaticMetadata,
-    ToUrlError, UrlString,
+    Dist, FileLocation, FirstParty, GitDirectorySourceDist, GitPathBuiltDist, GitPathSourceDist,
+    Identifier, IndexLocations, IndexMetadata, IndexUrl, Name, PYPI_URL, PathBuiltDist,
+    PathSourceDist, RegistryBuiltDist, RegistryBuiltWheel, RegistrySourceDist, RemoteSource,
+    Requirement, RequirementSource, RequiresPython, ResolvedDist, SimplifiedMarkerTree,
+    StaticMetadata, ToUrlError, UrlString,
 };
 use uv_fs::{PortablePath, PortablePathBuf, Simplified, normalize_path, try_relative_to_if};
 use uv_git::{RepositoryReference, ResolvedRepositoryReference};
@@ -1434,6 +1434,12 @@ impl Lock {
     /// Returns the workspace members that were used to generate this lock.
     pub fn members(&self) -> &BTreeSet<PackageName> {
         &self.manifest.members
+    }
+
+    /// Returns `true` if the package is a workspace member.
+    fn is_workspace_member(&self, package: &Package) -> bool {
+        self.members().contains(&package.id.name)
+            || self.members().is_empty() && self.root().is_some_and(|root| root.id == package.id)
     }
 
     /// Returns the root requirements that were used to generate this lock.
@@ -3181,8 +3187,13 @@ impl Lock {
         index: &InMemoryIndex,
         database: &DistributionDatabase<'_, Context>,
     ) -> Result<DistributionMetadata, LockError> {
-        let HashedDist { dist, .. } =
-            package.to_dist(root, TagPolicy::Preferred(tags), build_options, markers)?;
+        let HashedDist { dist, .. } = package.to_dist(
+            root,
+            TagPolicy::Preferred(tags),
+            build_options,
+            markers,
+            FirstParty::No,
+        )?;
         let id = dist.distribution_id();
         if let Some(archive) = index
             .distributions()
@@ -3865,6 +3876,7 @@ impl Package {
         tag_policy: TagPolicy<'_>,
         build_options: &BuildOptions,
         markers: &MarkerEnvironment,
+        first_party: FirstParty,
     ) -> Result<HashedDist, LockError> {
         let no_binary = build_options.no_binary_package(&self.id.name);
         let no_build = build_options.no_build_package(&self.id.name);
@@ -3995,11 +4007,11 @@ impl Package {
             }
         }
 
-        if let Some(sdist) = self.to_source_dist(workspace_root)? {
-            // Even with `--no-build`, allow virtual packages. (In the future, we may want to allow
-            // any local source tree, or at least editable source trees, which we allow in
-            // `uv pip`.)
-            if !no_build || sdist.is_virtual() {
+        if let Some(sdist) = self.to_source_dist(workspace_root, first_party)? {
+            // Even with `--no-build`, allow virtual packages and first-party workspace members. In
+            // the future, we may want to allow any local source tree, or at least editable source
+            // trees, as we do in `uv pip`.
+            if !no_build || sdist.is_virtual() || sdist.is_first_party() {
                 let hashes = self
                     .sdist
                     .as_ref()
@@ -4072,6 +4084,7 @@ impl Package {
     fn to_source_dist(
         &self,
         workspace_root: &Path,
+        first_party: FirstParty,
     ) -> Result<Option<uv_distribution_types::SourceDist>, LockError> {
         let sdist = match &self.id.source {
             Source::Path(path) => {
@@ -4111,6 +4124,7 @@ impl Package {
                     install_path: install_path.into_boxed_path(),
                     editable: Some(false),
                     r#virtual: Some(false),
+                    first_party,
                 };
                 uv_distribution_types::SourceDist::Directory(dir_dist)
             }
@@ -4123,6 +4137,7 @@ impl Package {
                     install_path: install_path.into_boxed_path(),
                     editable: Some(true),
                     r#virtual: Some(false),
+                    first_party,
                 };
                 uv_distribution_types::SourceDist::Directory(dir_dist)
             }
@@ -4135,6 +4150,7 @@ impl Package {
                     install_path: install_path.into_boxed_path(),
                     editable: Some(false),
                     r#virtual: Some(true),
+                    first_party,
                 };
                 uv_distribution_types::SourceDist::Directory(dir_dist)
             }

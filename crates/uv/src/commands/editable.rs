@@ -21,6 +21,7 @@ pub(crate) fn apply_editable_mode(
             install_path,
             editable: current_editable,
             r#virtual,
+            first_party,
             url,
         })) = dist.as_ref()
         else {
@@ -38,6 +39,7 @@ pub(crate) fn apply_editable_mode(
                 install_path: install_path.clone(),
                 editable: Some(editable),
                 r#virtual: *r#virtual,
+                first_party: *first_party,
                 url: url.clone(),
             }))),
             version: version.clone(),

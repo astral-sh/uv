@@ -1250,8 +1250,8 @@ pub struct ResolverInstallerSchema {
     /// Don't build source distributions.
     ///
     /// When enabled, uv will reuse cached wheels from previously built source distributions, but
-    /// operations that require building a source distribution will exit with an error. The project
-    /// or source distribution provided to `uv build` will still be built. uv may also still build
+    /// operations that require building a source distribution will exit with an error. First-party
+    /// packages, such as projects in the workspace, will still be built. uv will also still build
     /// editable requirements, and their build backends may run arbitrary Python code.
     #[option(
         default = "false",
@@ -1263,7 +1263,7 @@ pub struct ResolverInstallerSchema {
     pub no_build: Option<bool>,
     /// Don't build source distributions for a specific package.
     ///
-    /// The project or source distribution provided to `uv build` will still be built.
+    /// First-party packages, such as projects in the workspace, will still be built.
     #[option(
         default = "[]",
         value_type = "list[str]",
