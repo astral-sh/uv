@@ -38,6 +38,7 @@ use uv_redacted::SafeUrl;
 use uv_small_str::SmallString;
 use uv_torch::TorchStrategy;
 
+use self::artifact_request_url::ArtifactRequestUrl;
 use crate::base_client::{BaseClientBuilder, ClientBuildError, ExtraMiddleware, RedirectPolicy};
 use crate::cached_client::CacheControl;
 use crate::flat_index::FlatIndexEntry;
@@ -48,6 +49,8 @@ use crate::{
     BaseClient, CachedClient, Error, ErrorKind, FlatIndexClient, RedirectClientWithMiddleware,
     RetryState,
 };
+
+mod artifact_request_url;
 
 /// A builder for an [`RegistryClient`].
 #[derive(Debug, Clone)]
@@ -960,16 +963,17 @@ impl RegistryClient {
                     /// A local file path.
                     Path(PathBuf),
                     /// A remote URL.
-                    Url(SafeUrl),
+                    Url(ArtifactRequestUrl),
                 }
 
                 let wheel = wheels.best_wheel();
 
-                let url = wheel.file.url.to_url().map_err(ErrorKind::InvalidUrl)?;
-                let location = if url.scheme() == "file" {
+                let url = ArtifactRequestUrl::for_wheel(wheel, &self.indexes)?;
+                let location = if url.as_url().scheme() == "file" {
                     let path = url
+                        .as_url()
                         .to_file_path()
-                        .map_err(|()| ErrorKind::NonFileUrl(url.clone()))?;
+                        .map_err(|()| ErrorKind::NonFileUrl(url.into_url()))?;
                     WheelLocation::Path(path)
                 } else {
                     WheelLocation::Url(url)
@@ -981,7 +985,7 @@ impl RegistryClient {
                             .await?
                     }
                     WheelLocation::Url(url) => {
-                        self.wheel_metadata_registry(wheel, &url, capabilities)
+                        self.wheel_metadata_registry(wheel, url, capabilities)
                             .await?
                     }
                 }
@@ -1078,11 +1082,11 @@ impl RegistryClient {
         .map_err(|err| ErrorKind::Io(err.into()))?
     }
 
-    /// Fetch wheel metadata through the index's configured proxy, if any.
+    /// Fetch registry wheel metadata from its prepared request URL.
     async fn wheel_metadata_registry(
         &self,
         wheel: &RegistryBuiltWheel,
-        url: &SafeUrl,
+        url: ArtifactRequestUrl,
         capabilities: &IndexCapabilities,
     ) -> Result<ResolutionMetadata, Error> {
         let RegistryBuiltWheel {
@@ -1091,13 +1095,8 @@ impl RegistryClient {
             index,
             ..
         } = wheel;
-        let route = self.indexes.proxy_route_for(index);
-        let effective_index = route.map_or(index, |route| route.effective_url());
-        let url = if let Some(route) = route {
-            route.to_proxy_url(url).map_err(ErrorKind::ProxyIndex)?
-        } else {
-            url.clone()
-        };
+        let effective_index = self.indexes.effective_url(index);
+        let url = url.into_url();
 
         // If the metadata file is available at its own url (PEP 658), download it from there.
         if let Some(hashes) = &file.dist_info_metadata {
@@ -1877,8 +1876,8 @@ mod tests {
     };
     use uv_cache::Cache;
     use uv_distribution_types::{
-        FileLocation, Index, IndexCapabilities, IndexFormat, IndexLocations, IndexMetadataRef,
-        IndexName, IndexUrl, ToUrlError, VariantsJsonFilename,
+        CanonicalArtifactUrl, FileLocation, Index, IndexCapabilities, IndexFormat, IndexLocations,
+        IndexMetadataRef, IndexName, IndexUrl, ToUrlError, VariantsJsonFilename,
     };
     use uv_small_str::SmallString;
     use wiremock::matchers::{basic_auth, method, path, path_regex};
@@ -2197,7 +2196,8 @@ mod tests {
                 .index_locations()
                 .proxy_route_for(&canonical)
                 .ok_or("missing proxy route")?;
-            let physical_artifact = route.to_proxy_url(&canonical_artifact)?;
+            let physical_artifact = route
+                .artifact_url_for_request(&CanonicalArtifactUrl::from_url(canonical_artifact))?;
 
             let response = client
                 .uncached_client(&physical_artifact)

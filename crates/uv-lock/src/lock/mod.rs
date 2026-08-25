@@ -34,13 +34,13 @@ use uv_distribution_filename::{
     BuildTag, DistExtension, ExtensionError, SourceDistExtension, WheelFilename,
 };
 use uv_distribution_types::{
-    ArchiveHashPolicy, BuiltDist, DependencyMetadata, DirectUrlBuiltDist, DirectUrlSourceDist,
-    DirectorySourceDist, Dist, ExcludeNewerOverride, ExcludeNewerSpan, ExcludeNewerValue,
-    FileLocation, FirstParty, GitDirectorySourceDist, GitPathBuiltDist, GitPathSourceDist,
-    HashValidation, Identifier, IndexLocations, IndexMetadata, IndexUrl, MetadataHashPolicy,
-    MinimumLibcVersion, Name, NameRequirementSpecification, PYPI_URL, PathBuiltDist,
-    PathSourceDist, ProxyIndexError, RegistryBuiltDist, RegistryBuiltWheel, RegistrySourceDist,
-    RemoteSource, Requirement, RequirementSource, RequiresPython, ResolvedDist,
+    ArchiveHashPolicy, BuiltDist, CanonicalArtifactUrl, DependencyMetadata, DirectUrlBuiltDist,
+    DirectUrlSourceDist, DirectorySourceDist, Dist, ExcludeNewerOverride, ExcludeNewerSpan,
+    ExcludeNewerValue, FileLocation, FirstParty, GitDirectorySourceDist, GitPathBuiltDist,
+    GitPathSourceDist, HashValidation, Identifier, IndexLocations, IndexMetadata, IndexUrl,
+    MetadataHashPolicy, MinimumLibcVersion, Name, NameRequirementSpecification, PYPI_URL,
+    PathBuiltDist, PathSourceDist, ProxyIndexError, RegistryBuiltDist, RegistryBuiltWheel,
+    RegistrySourceDist, RemoteSource, Requirement, RequirementSource, RequiresPython, ResolvedDist,
     SimplifiedMarkerTree, StaticMetadata, ToUrlError, UrlString, VersionId,
 };
 use uv_fs::{PortablePath, PortablePathBuf, Simplified, normalize_path, try_relative_to_if};
@@ -7140,7 +7140,9 @@ impl Package {
                     requires_python: None,
                     size: sdist.size(),
                     upload_time_utc_ms: sdist.upload_time().map(Timestamp::as_millisecond),
-                    url: FileLocation::AbsoluteUrl(file_url.clone()),
+                    url: CanonicalArtifactUrl::from_location(FileLocation::AbsoluteUrl(
+                        file_url.clone(),
+                    )),
                     yanked: None,
                 });
 
@@ -7214,7 +7216,7 @@ impl Package {
                     requires_python: None,
                     size: sdist.size(),
                     upload_time_utc_ms: sdist.upload_time().map(Timestamp::as_millisecond),
-                    url: file_url,
+                    url: CanonicalArtifactUrl::from_location(file_url),
                     yanked: None,
                 });
 
@@ -8616,7 +8618,7 @@ impl SourceDist {
 
         match &reg_dist.index {
             IndexUrl::Pypi(_) | IndexUrl::Url(_) => {
-                let url = normalize_file_location(&reg_dist.file.url)
+                let url = normalize_file_location(reg_dist.file.url.location())
                     .map_err(LockErrorKind::InvalidUrl)
                     .map_err(LockError::from)?;
                 let size = reg_dist.file.size;
@@ -8669,7 +8671,7 @@ impl SourceDist {
                         },
                     }))
                 } else {
-                    let url = normalize_file_location(&reg_dist.file.url)
+                    let url = normalize_file_location(reg_dist.file.url.location())
                         .map_err(LockErrorKind::InvalidUrl)
                         .map_err(LockError::from)?;
                     let size = reg_dist.file.size;
@@ -8950,7 +8952,7 @@ impl Wheel {
     ) -> Result<Self, LockError> {
         let url = match &wheel.index {
             IndexUrl::Pypi(_) | IndexUrl::Url(_) => {
-                let url = normalize_file_location(&wheel.file.url)
+                let url = normalize_file_location(wheel.file.url.location())
                     .map_err(LockErrorKind::InvalidUrl)
                     .map_err(LockError::from)?;
                 WheelWireSource::Url { url }
@@ -8970,7 +8972,7 @@ impl Wheel {
                         .into_boxed_path();
                     WheelWireSource::Path { path }
                 } else {
-                    let url = normalize_file_location(&wheel.file.url)
+                    let url = normalize_file_location(wheel.file.url.location())
                         .map_err(LockErrorKind::InvalidUrl)
                         .map_err(LockError::from)?;
                     WheelWireSource::Url { url }
@@ -9064,7 +9066,7 @@ impl Wheel {
                     requires_python: None,
                     size: self.size,
                     upload_time_utc_ms: self.upload_time.map(Timestamp::as_millisecond),
-                    url: file_location,
+                    url: CanonicalArtifactUrl::from_location(file_location),
                     yanked: None,
                 });
                 let index = IndexUrl::from(VerbatimUrl::from_url(
@@ -9106,7 +9108,7 @@ impl Wheel {
                     requires_python: None,
                     size: self.size,
                     upload_time_utc_ms: self.upload_time.map(Timestamp::as_millisecond),
-                    url: file_location,
+                    url: CanonicalArtifactUrl::from_location(file_location),
                     yanked: None,
                 });
                 let index = IndexUrl::from(

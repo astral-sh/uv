@@ -1,6 +1,6 @@
 use std::fmt::Display;
 
-use uv_distribution_types::{ArchiveHashPolicy, File, Hashed};
+use uv_distribution_types::{ArchiveHashPolicy, Hashed, RegistryFile};
 use uv_pypi_types::{HashAlgorithm, HashDigest};
 
 use crate::Error;
@@ -31,7 +31,7 @@ impl<'a> ArtifactHashPolicy<'a> {
     pub(crate) fn for_registry_source(
         required: ArchiveHashPolicy<'a>,
         is_proxy: bool,
-        file: &'a File,
+        file: &'a RegistryFile,
     ) -> Self {
         let cache_verification = if is_proxy && !file.hashes.is_empty() {
             ArchiveHashPolicy::Any(file.hashes.as_slice())
