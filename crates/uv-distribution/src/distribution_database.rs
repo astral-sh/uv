@@ -1389,7 +1389,7 @@ fn persist_archive_files(
         for entry in manifest.files() {
             persist_archive_file(
                 &archive.join(entry.path()),
-                &cache.bucket(CacheBucket::ArchiveFiles).join(entry.object()),
+                &cache.bucket(CacheBucket::Files).join(entry.object()),
             )?;
         }
         return Ok(());
@@ -1659,7 +1659,7 @@ mod tests {
             PathBuf::from("ab/abcdef"),
         )]);
         manifest.write_to_metadata(&archive_metadata)?;
-        let object = cache.bucket(CacheBucket::ArchiveFiles).join("ab/abcdef");
+        let object = cache.bucket(CacheBucket::Files).join("ab/abcdef");
         fs_err::create_dir_all(object.parent().expect("object has a parent"))?;
         fs_err::write(&object, "binary contents")?;
 
