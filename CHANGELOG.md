@@ -3,6 +3,53 @@
 <!-- prettier-ignore-start -->
 
 
+## 0.12.6
+
+Released on 2026-08-25.
+
+### Python
+
+- Update CPython to use OpenSSL 3.5.8 and libffi 3.4.8 [#21295](https://github.com/astral-sh/uv/pull/21295))
+### Enhancements
+
+- Report cache-cleaning space savings from filesystem block allocation and avoid double-counting hard links ([#21261](https://github.com/astral-sh/uv/pull/21261))
+- Limit warnings about unbounded `uv_build` requirements to source-distribution builds ([#21078](https://github.com/astral-sh/uv/pull/21078))
+- Display byte counts below 1 KiB without a fractional part ([#21237](https://github.com/astral-sh/uv/pull/21237))
+
+### Preview features
+
+- Add `uv workspace metadata --sync --exact` to remove packages outside the selected resolution ([#21117](https://github.com/astral-sh/uv/pull/21117))
+- Add the `artifact-hash-filtering` preview feature to make `uv pip compile --generate-hashes` honor `--only-binary` and `--no-binary` ([#21235](https://github.com/astral-sh/uv/pull/21235))
+- Respect package-specific `exclude-newer` cutoffs when `uv check` selects its `ty` executable ([#21227](https://github.com/astral-sh/uv/pull/21227))
+- Preserve virtual-environment hints from `tar-codec` source-distribution errors when the base interpreter is outside a `bin` directory ([#21146](https://github.com/astral-sh/uv/pull/21146))
+
+### Performance
+
+- Enable profile-guided optimization for Linux x86-64 release binaries ([#21001](https://github.com/astral-sh/uv/pull/21001))
+- Enable profile-guided optimization for Windows x86-64 release binaries ([#21003](https://github.com/astral-sh/uv/pull/21003))
+- Enable profile-guided optimization for macOS ARM64 release binaries ([#21002](https://github.com/astral-sh/uv/pull/21002))
+- Enable profile-guided optimization for Linux ARM64 release binaries ([#21004](https://github.com/astral-sh/uv/pull/21004))
+- Speed up syncing projects with many activated conflict items by reusing their encoded representation ([#21148](https://github.com/astral-sh/uv/pull/21148))
+
+### Bug fixes
+
+- Allow explicit `uv build` and non-editable first-party workspace packages when `no-build` is enabled ([#21294](https://github.com/astral-sh/uv/pull/21294))
+- Reuse configured index credentials during `uv tool upgrade` when the tool receipt references the same index ([#21275](https://github.com/astral-sh/uv/pull/21275))
+- Ensure full 40-character Git commit pins resolve to the requested object instead of a SHA-named branch ([#21224](https://github.com/astral-sh/uv/pull/21224))
+- Prevent TLS segfaults in riscv64 musl release binaries ([#21158](https://github.com/astral-sh/uv/pull/21158))
+- Preserve dependencies selected by recursive extras when markers mix production and extra conditions ([#21181](https://github.com/astral-sh/uv/pull/21181))
+- Preserve version constraints from transitively referenced recursive extras ([#21209](https://github.com/astral-sh/uv/pull/21209))
+- Resolve repository-relative Git archive dependencies inside the checkout during the initial `uv sync` ([#21264](https://github.com/astral-sh/uv/pull/21264))
+- Return an error instead of panicking when a bearer token cannot be encoded as an HTTP header ([#21282](https://github.com/astral-sh/uv/pull/21282))
+- Do not misclassify package URLs ending in `.py` as local script paths ([#21144](https://github.com/astral-sh/uv/pull/21144))
+- Use directory creation times consistently across libc implementations for directory `cache-keys` entries ([#21137](https://github.com/astral-sh/uv/pull/21137))
+- Promote human-readable sizes to the next unit at rounding boundaries ([#21136](https://github.com/astral-sh/uv/pull/21136))
+
+### Other changes
+
+- Add Python 3.15 release-candidate Docker images ([#21293](https://github.com/astral-sh/uv/pull/21293))
+- Raise the minimum supported Rust version to 1.96 and update the repository toolchain to Rust 1.98 ([#21258](https://github.com/astral-sh/uv/pull/21258))
+
 ## 0.12.5
 
 Released on 2026-08-14.
