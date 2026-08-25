@@ -359,14 +359,32 @@ impl ManagedPythonInstallation {
     ///
     /// Returns `None` if the interpreter is not a managed installation.
     pub fn try_from_interpreter(interpreter: &Interpreter) -> Option<Self> {
+        let path = Self::path_from_interpreter(interpreter)?;
+        Self::from_path(path).ok()
+    }
+
+    /// Return the managed installation key for an interpreter, if it is installed in the managed
+    /// Python directory.
+    pub(crate) fn key_from_interpreter(interpreter: &Interpreter) -> Option<PythonInstallationKey> {
+        let path = Self::path_from_interpreter(interpreter)?;
+        PythonInstallationKey::from_str(path.file_name()?.to_str()?).ok()
+    }
+
+    /// Return the managed installation path for an interpreter, if it is installed in the managed
+    /// Python directory.
+    fn path_from_interpreter(interpreter: &Interpreter) -> Option<PathBuf> {
         let managed_root = ManagedPythonInstallations::from_settings(None).ok()?;
         let root = managed_root.absolute_root().ok()?;
 
+        Self::path_from_base_prefix(root, interpreter.sys_base_prefix())
+    }
+
+    fn path_from_base_prefix(root: PathBuf, sys_base_prefix: &Path) -> Option<PathBuf> {
         // Canonicalize both paths to handle Windows path format differences
         // (e.g., \\?\ prefix, different casing, junction vs actual path).
         // Fall back to the original path if canonicalization fails (e.g., target doesn't exist).
-        let sys_base_prefix = dunce::canonicalize(interpreter.sys_base_prefix())
-            .unwrap_or_else(|_| interpreter.sys_base_prefix().to_path_buf());
+        let sys_base_prefix =
+            dunce::canonicalize(sys_base_prefix).unwrap_or_else(|_| sys_base_prefix.to_path_buf());
         let root = dunce::canonicalize(&root).unwrap_or(root);
 
         // Verify the interpreter's base prefix is within the managed root
@@ -375,12 +393,11 @@ impl ManagedPythonInstallation {
         let first_component = suffix.components().next()?;
         let name = first_component.as_os_str().to_str()?;
 
-        // Verify it's a valid installation key
+        // Verify it's a valid installation key.
         PythonInstallationKey::from_str(name).ok()?;
 
-        // Construct the installation from the path within the managed root
-        let path = root.join(name);
-        Self::from_path(path).ok()
+        // Construct the installation path within the managed root.
+        Some(root.join(name))
     }
 
     /// The path to this managed installation's Python executable.
@@ -656,6 +673,11 @@ impl ManagedPythonInstallation {
         }
         // Require a matching variant
         if self.key.variant != other.key.variant {
+            return false;
+        }
+        // Build variants are separate installation identities. Selecting which identity owns the
+        // ordinary executable names is handled explicitly by installation options.
+        if self.key.build_variant() != other.key.build_variant() {
             return false;
         }
         // Require matching minor version
@@ -1050,6 +1072,20 @@ mod tests {
     }
 
     #[test]
+    fn path_from_base_prefix_preserves_build_variant() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let root = temp_dir.path().join("python");
+        let installation = root.join("cpython-3.13.0+pgo+lto-linux-x86_64-gnu");
+        let base_prefix = installation.join("lib").join("python3.13");
+        fs::create_dir_all(&base_prefix).unwrap();
+
+        assert_eq!(
+            ManagedPythonInstallation::path_from_base_prefix(root, &base_prefix).unwrap(),
+            dunce::canonicalize(installation).unwrap()
+        );
+    }
+
+    #[test]
     fn test_is_upgrade_of_patch_version() {
         let older = create_test_installation(
             ImplementationName::CPython,
@@ -1152,6 +1188,26 @@ mod tests {
         // Different variants should not be upgrades
         assert!(!freethreaded.is_upgrade_of(&default));
         assert!(!default.is_upgrade_of(&freethreaded));
+    }
+
+    #[test]
+    fn test_is_upgrade_of_different_build_variant() {
+        let default = create_test_installation(
+            ImplementationName::CPython,
+            3,
+            10,
+            8,
+            None,
+            PythonVariant::Default,
+            None,
+        );
+        let mut custom = default.clone();
+        custom.key = custom
+            .key
+            .with_build_variant(crate::LenientPythonBuildVariant::from_str("custom").unwrap());
+
+        assert!(!custom.is_upgrade_of(&default));
+        assert!(!default.is_upgrade_of(&custom));
     }
 
     #[test]

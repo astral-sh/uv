@@ -18,7 +18,7 @@ use uv_platform::{Arch, Libc, Os, Platform};
 
 use crate::discovery::{
     EnvironmentPreference, PythonRequest, VersionRequest, find_best_python_installation,
-    find_python_installation,
+    find_python_installation, parse_python_variants,
 };
 use crate::downloads::{
     DownloadResult, ManagedPythonDownload, ManagedPythonDownloadList, PythonDownloadRequest,
@@ -27,8 +27,8 @@ use crate::downloads::{
 use crate::implementation::LenientImplementationName;
 use crate::managed::{ManagedPythonInstallation, ManagedPythonInstallations};
 use crate::{
-    Error, ImplementationName, Interpreter, MissingPythonHint, PythonDownloads, PythonPreference,
-    PythonSource, PythonVariant, PythonVersion, downloads,
+    Error, ImplementationName, Interpreter, LenientPythonBuildVariant, MissingPythonHint,
+    PythonDownloads, PythonPreference, PythonSource, PythonVariant, PythonVersion, downloads,
 };
 
 /// A Python interpreter and accompanying tools.
@@ -37,14 +37,18 @@ pub struct PythonInstallation {
     // Public in the crate for test assertions
     pub(crate) source: PythonSource,
     pub(crate) interpreter: Interpreter,
+    key: PythonInstallationKey,
 }
 
 impl PythonInstallation {
     /// Create a new [`PythonInstallation`] from a source and interpreter.
     pub fn new(source: PythonSource, interpreter: Interpreter) -> Self {
+        let key = ManagedPythonInstallation::key_from_interpreter(&interpreter)
+            .unwrap_or_else(|| interpreter.key());
         Self {
             source,
             interpreter,
+            key,
         }
     }
 
@@ -372,10 +376,10 @@ impl PythonInstallation {
             e.warn_user(&installed);
         }
 
-        Ok(Self {
-            source: PythonSource::Managed,
-            interpreter: Interpreter::query(installed.executable(false), cache)?,
-        })
+        Ok(Self::new(
+            PythonSource::Managed,
+            Interpreter::query(installed.executable(false), cache)?,
+        ))
     }
 
     /// Return the [`PythonSource`] of the Python installation, indicating where it was found.
@@ -383,8 +387,8 @@ impl PythonInstallation {
         &self.source
     }
 
-    pub fn key(&self) -> PythonInstallationKey {
-        self.interpreter.key()
+    pub fn key(&self) -> &PythonInstallationKey {
+        &self.key
     }
 
     /// Return the Python [`Version`] of the Python installation as reported by its interpreter.
@@ -562,6 +566,7 @@ pub struct PythonInstallationKey {
     pub(super) prerelease: Option<Prerelease>,
     pub(super) platform: Platform,
     pub(super) variant: PythonVariant,
+    pub(super) build_variant: Option<LenientPythonBuildVariant>,
 }
 
 impl PythonInstallationKey {
@@ -582,6 +587,7 @@ impl PythonInstallationKey {
             prerelease,
             platform,
             variant,
+            build_variant: None,
         }
     }
 
@@ -599,7 +605,15 @@ impl PythonInstallationKey {
             prerelease: version.pre(),
             platform,
             variant,
+            build_variant: None,
         }
+    }
+
+    /// Return a new installation key with the given build variant.
+    #[must_use]
+    pub(crate) fn with_build_variant(mut self, build_variant: LenientPythonBuildVariant) -> Self {
+        self.build_variant = Some(build_variant);
+        self
     }
 
     pub fn implementation(&self) -> Cow<'_, LenientImplementationName> {
@@ -627,6 +641,24 @@ impl PythonInstallationKey {
     #[cfg(windows)]
     pub(crate) fn sys_version(&self) -> String {
         format!("{}.{}.{}", self.major, self.minor, self.patch)
+    }
+
+    /// Return a registry tag that distinguishes runtime and build variants.
+    #[cfg(windows)]
+    pub(crate) fn registry_tag(&self) -> String {
+        // Preserve the runtime suffix used by older uv versions so registry cleanup recognizes
+        // their registrations as belonging to installations that are still present.
+        let mut tag = format!(
+            "{}{}{}",
+            self.implementation().pretty(),
+            self.version(),
+            self.variant.executable_suffix(),
+        );
+        if let Some(build_variant) = &self.build_variant {
+            tag.push('+');
+            tag.push_str(&build_variant.to_string());
+        }
+        tag
     }
 
     pub fn major(&self) -> u8 {
@@ -661,6 +693,26 @@ impl PythonInstallationKey {
         &self.variant
     }
 
+    pub(crate) fn build_variant(&self) -> Option<&LenientPythonBuildVariant> {
+        self.build_variant.as_ref()
+    }
+
+    fn executable_name_variant_suffix(&self) -> String {
+        self.variant.executable_suffix().to_string()
+    }
+
+    fn display_variant_suffix(&self) -> String {
+        let mut suffix = match self.variant {
+            PythonVariant::Default => String::new(),
+            _ => format!("+{}", self.variant),
+        };
+        if let Some(build_variant) = &self.build_variant {
+            suffix.push('+');
+            suffix.push_str(&build_variant.to_string());
+        }
+        suffix
+    }
+
     /// Return a canonical name for a minor versioned executable.
     pub fn executable_name_minor(&self) -> String {
         format!(
@@ -668,7 +720,7 @@ impl PythonInstallationKey {
             name = self.implementation().executable_install_name(),
             maj = self.major,
             min = self.minor,
-            var = self.variant.executable_suffix(),
+            var = self.executable_name_variant_suffix(),
             exe = std::env::consts::EXE_SUFFIX
         )
     }
@@ -679,7 +731,7 @@ impl PythonInstallationKey {
             "{name}{maj}{var}{exe}",
             name = self.implementation().executable_install_name(),
             maj = self.major,
-            var = self.variant.executable_suffix(),
+            var = self.executable_name_variant_suffix(),
             exe = std::env::consts::EXE_SUFFIX
         )
     }
@@ -689,7 +741,7 @@ impl PythonInstallationKey {
         format!(
             "{name}{var}{exe}",
             name = self.implementation().executable_install_name(),
-            var = self.variant.executable_suffix(),
+            var = self.executable_name_variant_suffix(),
             exe = std::env::consts::EXE_SUFFIX
         )
     }
@@ -697,10 +749,7 @@ impl PythonInstallationKey {
 
 impl fmt::Display for PythonInstallationKey {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let variant = match self.variant {
-            PythonVariant::Default => String::new(),
-            _ => format!("+{}", self.variant),
-        };
+        let variant = self.display_variant_suffix();
         write!(
             f,
             "{}-{}.{}.{}{}{}-{}",
@@ -746,17 +795,17 @@ impl FromStr for PythonInstallationKey {
 
         let implementation = LenientImplementationName::from(*implementation_str);
 
-        let (version, variant) = match version_str.split_once('+') {
+        let (version, variant, build_variant) = match version_str.split_once('+') {
             Some((version, variant)) => {
-                let variant = PythonVariant::from_str(variant).map_err(|()| {
+                let (variant, build_variant) = parse_python_variants(variant).map_err(|()| {
                     PythonInstallationKeyError::ParseError(
                         key.to_string(),
-                        format!("invalid Python variant: {variant}"),
+                        format!("invalid Python variants: {variant}"),
                     )
                 })?;
-                (version, variant)
+                (version, variant, build_variant)
             }
-            None => (*version_str, PythonVariant::Default),
+            None => (*version_str, PythonVariant::Default, None),
         };
 
         let version = PythonVersion::from_str(version).map_err(|err| {
@@ -773,15 +822,11 @@ impl FromStr for PythonInstallationKey {
             )
         })?;
 
-        Ok(Self {
-            implementation,
-            major: version.major(),
-            minor: version.minor(),
-            patch: version.patch().unwrap_or_default(),
-            prerelease: version.pre(),
-            platform,
-            variant,
-        })
+        let mut key = Self::new_from_version(implementation, &version, platform, variant);
+        if let Some(build_variant) = build_variant {
+            key = key.with_build_variant(build_variant);
+        }
+        Ok(key)
     }
 }
 
@@ -800,6 +845,8 @@ impl Ord for PythonInstallationKey {
             .then_with(|| self.platform.cmp(&other.platform).reverse())
             // Python variants are sorted in preferred order, with `Default` first
             .then_with(|| self.variant.cmp(&other.variant).reverse())
+            // Untagged builds are preferred over explicitly named build variants
+            .then_with(|| self.build_variant.cmp(&other.build_variant).reverse())
     }
 }
 
@@ -844,10 +891,7 @@ impl fmt::Display for PythonInstallationMinorVersionKey {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         // Display every field on the wrapped key except the patch
         // and prerelease (with special formatting for the variant).
-        let variant = match self.0.variant {
-            PythonVariant::Default => String::new(),
-            _ => format!("+{}", self.0.variant),
-        };
+        let variant = self.0.display_variant_suffix();
         write!(
             f,
             "{}-{}.{}{}-{}",
@@ -865,6 +909,7 @@ impl fmt::Debug for PythonInstallationMinorVersionKey {
             .field("major", &self.0.major)
             .field("minor", &self.0.minor)
             .field("variant", &self.0.variant)
+            .field("build_variant", &self.0.build_variant)
             .field("os", &self.0.platform.os)
             .field("arch", &self.0.platform.arch)
             .field("libc", &self.0.platform.libc)
@@ -881,6 +926,7 @@ impl PartialEq for PythonInstallationMinorVersionKey {
             && self.0.minor == other.0.minor
             && self.0.platform == other.0.platform
             && self.0.variant == other.0.variant
+            && self.0.build_variant == other.0.build_variant
     }
 }
 
@@ -893,6 +939,7 @@ impl Hash for PythonInstallationMinorVersionKey {
         self.0.minor.hash(state);
         self.0.platform.hash(state);
         self.0.variant.hash(state);
+        self.0.build_variant.hash(state);
     }
 }
 
@@ -912,6 +959,35 @@ impl From<PythonInstallationKey> for PythonInstallationMinorVersionKey {
 mod tests {
     use super::*;
     use uv_platform::ArchVariant;
+
+    #[cfg(windows)]
+    #[test]
+    fn test_python_installation_key_registry_tag() -> Result<(), PythonInstallationKeyError> {
+        // Keep the registry names written by older uv versions, including when build variants
+        // are added alongside existing installations.
+        for (variants, expected) in [
+            ("", "CPython3.13.7"),
+            ("+gil", "CPython3.13.7"),
+            ("+debug", "CPython3.13.7d"),
+            ("+gil+debug", "CPython3.13.7d"),
+            ("+freethreaded", "CPython3.13.7t"),
+            ("+freethreaded+debug", "CPython3.13.7td"),
+            ("+custom", "CPython3.13.7+custom"),
+            ("+gil+custom", "CPython3.13.7+custom"),
+            ("+debug+custom", "CPython3.13.7d+custom"),
+            ("+gil+debug+custom", "CPython3.13.7d+custom"),
+            ("+freethreaded+custom", "CPython3.13.7t+custom"),
+            ("+freethreaded+debug+custom", "CPython3.13.7td+custom"),
+            ("+pgo+lto", "CPython3.13.7+pgo+lto"),
+            ("+freethreaded+pgo+lto", "CPython3.13.7t+pgo+lto"),
+        ] {
+            let key = PythonInstallationKey::from_str(&format!(
+                "cpython-3.13.7{variants}-windows-x86_64-none"
+            ))?;
+            assert_eq!(key.registry_tag(), expected);
+        }
+        Ok(())
+    }
 
     #[test]
     fn test_python_installation_key_from_str() {
@@ -983,6 +1059,17 @@ mod tests {
         );
         assert_eq!(key.platform.libc, Libc::None);
 
+        // Test with separate Python and build variants
+        let key = PythonInstallationKey::from_str(
+            "cpython-3.13.0+freethreaded+pgo+lto-macos-aarch64-none",
+        )
+        .unwrap();
+        assert_eq!(key.variant, PythonVariant::Freethreaded);
+        assert_eq!(
+            key.build_variant,
+            Some(LenientPythonBuildVariant::from_str("pgo+lto").unwrap())
+        );
+
         // Test error cases
         assert!(PythonInstallationKey::from_str("cpython-3.12.0-linux-x86_64").is_err());
         assert!(PythonInstallationKey::from_str("cpython-3.12.0").is_err());
@@ -999,6 +1086,7 @@ mod tests {
             prerelease: None,
             platform: Platform::from_str("linux-x86_64-gnu").unwrap(),
             variant: PythonVariant::Default,
+            build_variant: None,
         };
         assert_eq!(key.to_string(), "cpython-3.12.0-linux-x86_64-gnu");
 
@@ -1010,10 +1098,30 @@ mod tests {
             prerelease: None,
             platform: Platform::from_str("macos-aarch64-none").unwrap(),
             variant: PythonVariant::Freethreaded,
+            build_variant: None,
         };
         assert_eq!(
             key_with_variant.to_string(),
             "cpython-3.13.0+freethreaded-macos-aarch64-none"
+        );
+
+        let key_with_build_variant = PythonInstallationKey {
+            implementation: LenientImplementationName::from("cpython"),
+            major: 3,
+            minor: 13,
+            patch: 0,
+            prerelease: None,
+            platform: Platform::from_str("linux-x86_64-gnu").unwrap(),
+            variant: PythonVariant::Default,
+            build_variant: Some(LenientPythonBuildVariant::from_str("pgo+lto").unwrap()),
+        };
+        assert_eq!(
+            key_with_build_variant.to_string(),
+            "cpython-3.13.0+pgo+lto-linux-x86_64-gnu"
+        );
+        assert_eq!(
+            key_with_build_variant.executable_name_minor(),
+            format!("python3.13{}", std::env::consts::EXE_SUFFIX)
         );
     }
 }
