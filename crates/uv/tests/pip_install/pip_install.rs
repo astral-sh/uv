@@ -16545,6 +16545,55 @@ fn compile_bytecode_excludes_stdlib() -> Result<()> {
     Ok(())
 }
 
+#[tokio::test]
+async fn binary_payloads_stay_in_archive_without_preview() -> Result<()> {
+    let server = MockServer::start().await;
+    for streaming in [false, true] {
+        let context = uv_test::test_context!("3.12")
+            .with_filter((r" \(from (?:file|http)://.*\)", " (from [WHEEL_URL])"));
+        let wheel = binary_payload_wheel(&context)?;
+        let mut command = context.pip_install();
+        if streaming {
+            Mock::given(method("GET"))
+                .and(path("/binary_payload-0.1.0-py3-none-any.whl"))
+                .respond_with(ResponseTemplate::new(200).set_body_bytes(fs_err::read(&wheel)?))
+                .mount(&server)
+                .await;
+            command.arg(format!(
+                "{}/binary_payload-0.1.0-py3-none-any.whl",
+                server.uri()
+            ));
+        } else {
+            command.arg(&wheel);
+        }
+
+        allow_duplicates! {
+            uv_snapshot!(context.filters(), command, @"
+            exit_code: 0 (success)
+            ----- stderr -----
+            Resolved 1 package in [TIME]
+            Prepared 1 package in [TIME]
+            Installed 1 package in [TIME]
+             + binary-payload==0.1.0 (from [WHEEL_URL])
+            ");
+        }
+
+        assert!(!context.cache_dir.child("archive-files-v0").exists());
+        assert!(!context.cache_dir.child("archive-metadata-v0").exists());
+        let archive_files = cache_files(context.cache_dir.child("archive-v0").path())?;
+        let archive_binary = archive_files
+            .iter()
+            .find(|path| path.ends_with("binary_payload/native.so"))
+            .context("binary payload is missing from the archive")?;
+        assert_eq!(fs_err::read(archive_binary)?, BINARY_PAYLOAD_CONTENTS);
+        assert_eq!(
+            fs_err::read(context.site_packages().join("binary_payload/native.so"))?,
+            BINARY_PAYLOAD_CONTENTS,
+        );
+    }
+    Ok(())
+}
+
 #[test]
 fn binary_payloads_use_archive_file_store() -> Result<()> {
     let context = uv_test::test_context!("3.12").with_filter((
@@ -16554,6 +16603,8 @@ fn binary_payloads_use_archive_file_store() -> Result<()> {
     let wheel = binary_payload_wheel(&context)?;
 
     uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--preview-features")
+        .arg("content-addressed-cache")
         .arg(&wheel), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -16630,6 +16681,8 @@ fn binary_payloads_use_archive_file_store() -> Result<()> {
 
     let copy_target = context.temp_dir.child("copy-target");
     uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--preview-features")
+        .arg("content-addressed-cache")
         .arg("--target")
         .arg(copy_target.path())
         .arg("--link-mode")
@@ -16658,6 +16711,8 @@ fn binary_payloads_use_archive_file_store() -> Result<()> {
 
     let clone_target = context.temp_dir.child("clone-target");
     uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--preview-features")
+        .arg("content-addressed-cache")
         .arg("--target")
         .arg(clone_target.path())
         .arg("--link-mode")
@@ -16694,6 +16749,8 @@ fn binary_payload_copy_fallback_uses_archive_file_store() -> Result<()> {
     let wheel = binary_payload_wheel(&context)?;
 
     uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--preview-features")
+        .arg("content-addressed-cache")
         .arg(&wheel), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -16711,6 +16768,8 @@ fn binary_payload_copy_fallback_uses_archive_file_store() -> Result<()> {
 
     let target = context.temp_dir.child("fallback-target");
     uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--preview-features")
+        .arg("content-addressed-cache")
         .arg("--target")
         .arg(target.path())
         .arg(&wheel), @"

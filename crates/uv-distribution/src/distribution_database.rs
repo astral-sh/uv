@@ -1304,7 +1304,7 @@ struct ExtractedWheelManifest {
 }
 
 impl ExtractedWheelManifest {
-    /// Extract a wheel from a streaming reader, retaining its per-file digests.
+    /// Extract a wheel from a streaming reader, optionally retaining its per-file digests.
     async fn extract_streaming<R>(
         reader: R,
         target: &Path,
@@ -1313,39 +1313,40 @@ impl ExtractedWheelManifest {
     where
         R: AsyncRead + Unpin,
     {
-        let (extracted_files, tree) =
-            uv_extract::stream::unzip_and_hash(reader, target, content_addressed).await?;
-        Ok(Self::with_extracted_files(
-            extracted_files,
-            content_addressed.then_some(tree),
-        ))
+        if content_addressed {
+            let (extracted_files, tree) =
+                uv_extract::stream::unzip_and_hash(reader, target, true).await?;
+            Ok(Self::with_extracted_files(extracted_files, tree))
+        } else {
+            let files = uv_extract::stream::unzip(reader, target).await?;
+            Ok(Self::without_tree(files))
+        }
     }
 
-    /// Extract a wheel from a seekable file, retaining its per-file digests.
+    /// Extract a wheel from a seekable file, optionally retaining its per-file digests.
     fn extract_seekable(
         reader: fs_err::File,
         target: &Path,
         content_addressed: bool,
     ) -> Result<Self, uv_extract::Error> {
-        let (extracted_files, tree) = uv_extract::unzip_and_hash(reader, target)?;
-        Ok(Self::with_extracted_files(
-            extracted_files,
-            content_addressed.then_some(tree),
-        ))
+        if content_addressed {
+            let (extracted_files, tree) = uv_extract::unzip_and_hash(reader, target)?;
+            Ok(Self::with_extracted_files(extracted_files, tree))
+        } else {
+            let files = uv_extract::unzip(reader, target)?;
+            Ok(Self::without_tree(files))
+        }
     }
 
     /// Derive wheel-record entries while retaining per-file digests for shared binary objects.
-    fn with_extracted_files(
-        extracted_files: Vec<ExtractedFile>,
-        tree: Option<DirhashTree>,
-    ) -> Self {
+    fn with_extracted_files(extracted_files: Vec<ExtractedFile>, tree: DirhashTree) -> Self {
         Self {
             files: extracted_files
                 .iter()
                 .map(ExtractedFile::to_record)
                 .collect(),
             extracted_files: Some(extracted_files),
-            tree,
+            tree: Some(tree),
         }
     }
 
