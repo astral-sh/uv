@@ -63,6 +63,8 @@ And the following derived images are available:
     - `ghcr.io/astral-sh/uv:python3.11-dhi`
     - `ghcr.io/astral-sh/uv:python3.10-dhi`
 - Based on `python3.x-alpine`:
+    - `ghcr.io/astral-sh/uv:python3.15-rc-alpine`
+    - `ghcr.io/astral-sh/uv:python3.15-rc-alpine3.23`
     - `ghcr.io/astral-sh/uv:python3.14-alpine`
     - `ghcr.io/astral-sh/uv:python3.14-alpine3.23`
     - `ghcr.io/astral-sh/uv:python3.13-alpine`
@@ -76,6 +78,7 @@ And the following derived images are available:
     - `ghcr.io/astral-sh/uv:python3.9-alpine`
     - `ghcr.io/astral-sh/uv:python3.9-alpine3.22`
 - Based on `python3.x-trixie`:
+    - `ghcr.io/astral-sh/uv:python3.15-rc-trixie`
     - `ghcr.io/astral-sh/uv:python3.14-trixie`
     - `ghcr.io/astral-sh/uv:python3.13-trixie`
     - `ghcr.io/astral-sh/uv:python3.12-trixie`
@@ -83,6 +86,7 @@ And the following derived images are available:
     - `ghcr.io/astral-sh/uv:python3.10-trixie`
     - `ghcr.io/astral-sh/uv:python3.9-trixie`
 - Based on `python3.x-slim-trixie`:
+    - `ghcr.io/astral-sh/uv:python3.15-rc-trixie-slim`
     - `ghcr.io/astral-sh/uv:python3.14-trixie-slim`
     - `ghcr.io/astral-sh/uv:python3.13-trixie-slim`
     - `ghcr.io/astral-sh/uv:python3.12-trixie-slim`
