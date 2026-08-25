@@ -1,4 +1,3 @@
-use std::env;
 use std::fmt::Display;
 use std::future::Future;
 use std::io;
@@ -34,7 +33,6 @@ use uv_preview::PreviewFeature;
 use uv_pypi_types::{HashDigest, HashDigests, PyProjectToml};
 use uv_python::PythonVariant;
 use uv_redacted::DisplaySafeUrl;
-use uv_static::EnvVars;
 use uv_types::{BuildContext, BuildStack};
 
 use crate::archive::Archive;
@@ -1252,19 +1250,12 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         };
 
         let temp_dir = if let Some(extracted_files) = extracted_files {
-            let minimum_size = archive_file_min_size().map_err(Error::CacheWrite)?;
             let cache = cache.clone();
             let archive_id = id.clone();
             tokio::task::spawn_blocking(move || {
                 let archive_metadata = cache.archive_metadata(&archive_id);
-                persist_archive_files(
-                    &cache,
-                    temp_dir.path(),
-                    &archive_metadata,
-                    &extracted_files,
-                    minimum_size,
-                )
-                .map_err(Error::CacheWrite)?;
+                persist_archive_files(&cache, temp_dir.path(), &archive_metadata, &extracted_files)
+                    .map_err(Error::CacheWrite)?;
                 Ok::<_, Error>(temp_dir)
             })
             .await??
@@ -1385,7 +1376,7 @@ impl ExtractedWheelManifest {
     }
 }
 
-/// Share executable and large files while keeping the unpublished archive complete.
+/// Share executables and native libraries while keeping the unpublished archive complete.
 ///
 /// Reuse an existing manifest when another writer has already prepared the same archive identity.
 fn persist_archive_files(
@@ -1393,7 +1384,6 @@ fn persist_archive_files(
     archive: &Path,
     archive_metadata: &Path,
     files: &[ExtractedFile],
-    minimum_size: u64,
 ) -> io::Result<()> {
     if let Some(manifest) = ArchiveFileManifest::read_from_metadata(archive_metadata)? {
         for entry in manifest.files() {
@@ -1413,7 +1403,7 @@ fn persist_archive_files(
             Path::new(component.as_os_str())
                 .extension()
                 .is_some_and(|extension| extension == "dist-info")
-        }) && (file.is_executable() || file.size() >= minimum_size)
+        }) && (file.is_executable() || is_shared_library(file.path()))
     }) {
         let id = ArchiveFileId::from_content_digest(&file.digest_hex(), file.is_executable());
         persist_archive_file(&archive.join(file.path()), &cache.archive_file(&id))?;
@@ -1426,21 +1416,19 @@ fn persist_archive_files(
     ArchiveFileManifest::new(entries).write_to_metadata(archive_metadata)
 }
 
-/// Read the experimental size cutoff only when publishing a content-addressed archive.
-fn archive_file_min_size() -> io::Result<u64> {
-    match env::var(EnvVars::UV_ARCHIVE_FILE_MIN_SIZE) {
-        Ok(value) => value.parse().map_err(|err| {
-            io::Error::new(
-                io::ErrorKind::InvalidInput,
-                format!(
-                    "{} must be an integer number of bytes: {err}",
-                    EnvVars::UV_ARCHIVE_FILE_MIN_SIZE,
-                ),
-            )
-        }),
-        Err(env::VarError::NotPresent) => Ok(1024 * 1024),
-        Err(err) => Err(io::Error::new(io::ErrorKind::InvalidInput, err)),
-    }
+/// Recognize native libraries, including versioned Unix shared objects like `libfoo.so.1`.
+fn is_shared_library(path: &Path) -> bool {
+    path.extension().is_some_and(|extension| {
+        extension.eq_ignore_ascii_case("so")
+            || extension.eq_ignore_ascii_case("dylib")
+            || extension.eq_ignore_ascii_case("dll")
+            || extension.eq_ignore_ascii_case("pyd")
+    }) || path.file_name().is_some_and(|file_name| {
+        file_name
+            .as_encoded_bytes()
+            .windows(4)
+            .any(|part| part.eq_ignore_ascii_case(b".so."))
+    })
 }
 
 /// Publish a shared object and retain a hardlink in the archive, with a copy fallback.
@@ -1676,7 +1664,7 @@ mod tests {
         fs_err::write(&object, "binary contents")?;
 
         assert!(!cache.archive(&archive_id).exists());
-        persist_archive_files(&cache, &archive, &archive_metadata, &[], 1024 * 1024)?;
+        persist_archive_files(&cache, &archive, &archive_metadata, &[])?;
 
         assert_eq!(
             ArchiveFileManifest::read_from_metadata(&archive_metadata)?,

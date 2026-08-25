@@ -68,16 +68,6 @@ impl EnvVars {
     #[attr_added_in("0.0.5")]
     pub const UV_CACHE_DIR: &'static str = "UV_CACHE_DIR";
 
-    /// Minimum uncompressed file size, in bytes, to deduplicate across cached wheel archives.
-    ///
-    /// Defaults to `1048576` (1 MiB). Set to `0` to include all eligible files. Executable files
-    /// are included regardless of size; `.dist-info` metadata is always excluded.
-    ///
-    /// Only used when the `content-addressed-cache` preview feature is enabled. Changing this
-    /// value does not affect already-cached archives.
-    #[attr_added_in("next release")]
-    pub const UV_ARCHIVE_FILE_MIN_SIZE: &'static str = "UV_ARCHIVE_FILE_MIN_SIZE";
-
     /// The directory for storage of credentials when using a plain text backend.
     #[attr_added_in("0.8.15")]
     pub const UV_CREDENTIALS_DIR: &'static str = "UV_CREDENTIALS_DIR";

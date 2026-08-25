@@ -74,11 +74,6 @@ impl ExtractedFile {
         self.path.as_path()
     }
 
-    /// Return the uncompressed size of the extracted file.
-    pub fn size(&self) -> u64 {
-        self.size
-    }
-
     /// Return whether the archive marks this file executable, or it is a Windows executable.
     pub fn is_executable(&self) -> bool {
         self.executable
