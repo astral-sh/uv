@@ -3785,6 +3785,7 @@ fn preview_features() {
     +            TarCodec,
     +            IndexByName,
     +            ArtifactHashFiltering,
+    +            ContentAddressedCache,
     +        ],
          },
          python_preference: Managed,
