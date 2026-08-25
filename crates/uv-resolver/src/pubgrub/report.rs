@@ -15,7 +15,7 @@ use rustc_hash::FxHashMap;
 use uv_configuration::{IndexStrategy, NoBinary, NoBuild};
 use uv_distribution_types::{
     IncompatibleDist, IncompatibleSource, IncompatibleWheel, Index, IndexCapabilities,
-    IndexLocations, IndexMetadata, IndexRoutes, IndexUrl, RequiresPython,
+    IndexLocations, IndexMetadata, IndexUrl, RequiresPython,
 };
 use uv_normalize::PackageName;
 use uv_pep440::{Version, VersionSpecifier, VersionSpecifiers};
@@ -742,8 +742,6 @@ impl PubGrubReportFormatter<'_> {
         inherited_exclude_newer_ranges: &FxHashMap<PackageName, Range<Version>>,
         output_hints: &mut IndexSet<PubGrubHint>,
     ) {
-        let index_routes = IndexRoutes::try_from(index_locations).ok();
-
         // Check for disjoint target hints (only applicable to universal resolution).
         if let Some(markers) = env.fork_markers() {
             // TODO(konsti): This is a crude approximation to telling the user the difference
@@ -796,7 +794,6 @@ impl PubGrubReportFormatter<'_> {
                             self.included_versions.get(name),
                             selector,
                             index_locations,
-                            index_routes.as_ref(),
                             index_capabilities,
                             available_indexes,
                             unavailable_packages,
@@ -864,7 +861,6 @@ impl PubGrubReportFormatter<'_> {
                             self.included_versions.get(name),
                             selector,
                             index_locations,
-                            index_routes.as_ref(),
                             index_capabilities,
                             available_indexes,
                             unavailable_packages,
@@ -1203,7 +1199,6 @@ impl PubGrubReportFormatter<'_> {
         listed: Option<&BTreeSet<Version>>,
         selector: &CandidateSelector,
         index_locations: &IndexLocations,
-        index_routes: Option<&IndexRoutes>,
         index_capabilities: &IndexCapabilities,
         available_indexes: &FxHashMap<PackageName, BTreeSet<IndexUrl>>,
         unavailable_packages: &FxHashMap<PackageName, UnavailablePackage>,
@@ -1322,20 +1317,16 @@ impl PubGrubReportFormatter<'_> {
         }
 
         // Add hints due to an index or its proxy returning an authentication error.
-        if let Some(index_routes) = index_routes {
-            Self::authentication_hints(
-                index_locations,
-                index_routes,
-                index_capabilities,
-                available_indexes,
-                hints,
-            );
-        }
+        Self::authentication_hints(
+            index_locations,
+            index_capabilities,
+            available_indexes,
+            hints,
+        );
     }
 
     fn authentication_hints(
         index_locations: &IndexLocations,
-        index_routes: &IndexRoutes,
         index_capabilities: &IndexCapabilities,
         available_indexes: &FxHashMap<PackageName, BTreeSet<IndexUrl>>,
         hints: &mut IndexSet<PubGrubHint>,
@@ -1343,16 +1334,18 @@ impl PubGrubReportFormatter<'_> {
         let mut indexes = BTreeMap::<IndexUrl, bool>::new();
 
         for index in index_locations.allowed_indexes() {
-            let route = index_routes.route_for(&index.url);
-            indexes.entry(route.effective_url().clone()).or_default();
+            indexes
+                .entry(index_locations.effective_url(&index.url).clone())
+                .or_default();
         }
-        for route in index_routes.proxy_routes() {
+        for route in index_locations.proxy_routes() {
             indexes.entry(route.effective_url().clone()).or_default();
         }
 
         for canonical in available_indexes.values().flatten() {
-            let route = index_routes.route_for(canonical);
-            if let Some(any_successful_response) = indexes.get_mut(route.effective_url()) {
+            if let Some(any_successful_response) =
+                indexes.get_mut(index_locations.effective_url(canonical))
+            {
                 *any_successful_response = true;
             }
         }
@@ -2930,18 +2923,12 @@ mod tests {
             vec![first_index, first_proxy, second_index, second_proxy],
             Vec::new(),
             false,
-        );
-        let index_routes = IndexRoutes::try_from(&index_locations)?;
+        )?;
 
-        assert_eq!(index_routes.proxy_routes().count(), 2);
+        assert_eq!(index_locations.proxy_routes().count(), 2);
+        assert_eq!(index_locations.effective_url(&first_canonical), &physical);
         assert_eq!(
-            index_routes.route_for(&first_canonical).effective_url(),
-            &physical
-        );
-        assert_eq!(
-            index_routes
-                .route_for(&redacted_second_canonical)
-                .effective_url(),
+            index_locations.effective_url(&redacted_second_canonical),
             &physical
         );
 
@@ -2976,7 +2963,6 @@ mod tests {
 
         PubGrubReportFormatter::authentication_hints(
             &index_locations,
-            &index_routes,
             &index_capabilities,
             &available_indexes,
             &mut hints,
@@ -3039,8 +3025,7 @@ mod tests {
         proxy.proxy_for = Some(IndexName::from_str("pypi")?);
         proxy.artifact_base_url = Some(DisplaySafeUrl::parse("https://proxy.example.com/files/")?);
 
-        let index_locations = IndexLocations::new(vec![proxy], Vec::new(), true);
-        let index_routes = IndexRoutes::try_from(&index_locations)?;
+        let index_locations = IndexLocations::new(vec![proxy], Vec::new(), true)?;
         let index_capabilities = IndexCapabilities::default();
         let _ = IndexStatusCodeStrategy::Default.handle_status_code(
             StatusCode::UNAUTHORIZED,
@@ -3051,7 +3036,6 @@ mod tests {
         let mut hints = IndexSet::new();
         PubGrubReportFormatter::authentication_hints(
             &index_locations,
-            &index_routes,
             &index_capabilities,
             &FxHashMap::default(),
             &mut hints,

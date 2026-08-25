@@ -14,7 +14,8 @@ use uv_configuration::{
 use uv_distribution_types::{
     ConfigSettings, ExcludeNewerOverride, ExcludeNewerSpan, ExcludeNewerValue, ExtraBuildVariables,
     Index, IndexLocations, IndexUrl, IndexUrlError, MinimumLibcVersion, Origin,
-    PackageConfigSettings, PipExtraIndex, PipFindLinks, PipIndex, StaticMetadata,
+    PackageConfigSettings, PipExtraIndex, PipFindLinks, PipIndex, ProxyIndexConfigError,
+    StaticMetadata,
 };
 use uv_install_wheel::LinkMode;
 use uv_macros::{CombineOptions, OptionsMetadata};
@@ -605,8 +606,10 @@ impl IndexOptions {
     }
 }
 
-impl From<IndexOptions> for IndexLocations {
-    fn from(value: IndexOptions) -> Self {
+impl TryFrom<IndexOptions> for IndexLocations {
+    type Error = ProxyIndexConfigError;
+
+    fn try_from(value: IndexOptions) -> Result<Self, Self::Error> {
         let IndexOptions {
             index,
             index_url,

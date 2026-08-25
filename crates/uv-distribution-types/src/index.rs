@@ -786,7 +786,7 @@ impl<'a> From<&'a IndexUrl> for IndexMetadataRef<'a> {
 struct IndexWire {
     name: Option<IndexName>,
     url: IndexUrl,
-    #[serde(default, deserialize_with = "deserialize_artifact_base_url")]
+    #[serde(default)]
     artifact_base_url: Option<DisplaySafeUrl>,
     #[serde(default)]
     proxy_for: Option<IndexName>,
@@ -822,18 +822,6 @@ where
         .as_ref()
         .map(DisplaySafeUrl::without_credentials)
         .serialize(serializer)
-}
-
-/// Deserializes an artifact base URL while rejecting ambiguous credentials.
-fn deserialize_artifact_base_url<'de, D>(
-    deserializer: D,
-) -> Result<Option<DisplaySafeUrl>, D::Error>
-where
-    D: serde::Deserializer<'de>,
-{
-    Option::<String>::deserialize(deserializer)?
-        .map(|value| DisplaySafeUrl::parse(&value).map_err(serde::de::Error::custom))
-        .transpose()
 }
 
 impl<'de> Deserialize<'de> for Index {
@@ -887,7 +875,7 @@ mod tests {
     use super::*;
     use http::HeaderValue;
 
-    use crate::{IndexLocations, IndexRoutes, ProxyIndexError};
+    use crate::{IndexLocations, ProxyIndexConfigError};
 
     #[test]
     fn test_proxy_index_serialization_redacts_artifact_credentials()
@@ -954,6 +942,27 @@ mod tests {
     }
 
     #[test]
+    fn test_index_allows_colons_and_at_signs_in_artifact_paths()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let index: Index = toml::from_str(
+            r#"
+            name = "socket"
+            url = "https://proxy.example.com/simple/"
+            artifact-base-url = "https://proxy.example.com/files/project:build@nightly/"
+            proxy-for = "pypi"
+            "#,
+        )?;
+
+        assert_eq!(
+            index.artifact_base_url.as_ref().map(|url| url.as_str()),
+            Some("https://proxy.example.com/files/project:build@nightly/")
+        );
+        IndexLocations::new(vec![index], Vec::new(), false)?;
+
+        Ok(())
+    }
+
+    #[test]
     fn test_index_rejects_unsafe_normalized_artifact_base_paths()
     -> Result<(), Box<dyn std::error::Error>> {
         for path in [
@@ -967,11 +976,10 @@ mod tests {
             );
 
             let index: Index = toml::from_str(&configuration)?;
-            let locations = IndexLocations::new(vec![index], Vec::new(), false);
             assert!(
                 matches!(
-                    IndexRoutes::try_from(&locations),
-                    Err(ProxyIndexError::InvalidMapping { .. })
+                    IndexLocations::new(vec![index], Vec::new(), false),
+                    Err(ProxyIndexConfigError::InvalidMapping { .. })
                 ),
                 "unsafe artifact base was accepted: {path}"
             );

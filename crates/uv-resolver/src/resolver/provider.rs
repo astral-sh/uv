@@ -8,8 +8,8 @@ use uv_client::MetadataFormat;
 use uv_configuration::BuildOptions;
 use uv_distribution::{DistributionDatabase, Reporter};
 use uv_distribution_types::{
-    Dist, IndexCapabilities, IndexLocations, IndexMetadata, IndexMetadataRef, IndexRoutes,
-    IndexUrl, InstalledDist, MinimumLibcVersion, RequestedDist, RequiresPython,
+    Dist, IndexCapabilities, IndexLocations, IndexMetadata, IndexMetadataRef, IndexUrl,
+    InstalledDist, MinimumLibcVersion, RequestedDist, RequiresPython,
 };
 use uv_normalize::PackageName;
 use uv_platform_tags::Tags;
@@ -41,13 +41,9 @@ pub enum VersionsResponse {
 fn ignores_metadata_error(
     index: Option<&IndexUrl>,
     index_locations: &IndexLocations,
-    index_routes: &IndexRoutes,
     status: StatusCode,
 ) -> bool {
-    index.is_some_and(|index| {
-        let route = index_routes.route_for(index);
-        index_locations.ignores_error_code_for(route.effective_url(), status)
-    })
+    index.is_some_and(|index| index_locations.ignores_error_code(index, status))
 }
 
 pub trait ResolverProvider {
@@ -195,7 +191,11 @@ impl<Context: BuildContext> ResolverProvider for DefaultResolverProvider<'_, Con
                             MetadataFormat::Simple(metadata) => VersionMap::from_simple_metadata(
                                 metadata,
                                 package_name,
-                                self.fetcher.client().unmanaged.routes().route_for(index),
+                                self.fetcher
+                                    .client()
+                                    .unmanaged
+                                    .index_locations()
+                                    .route_for(index),
                                 self.tags.clone(),
                                 self.requires_python.clone(),
                                 self.allowed_yanks.clone(),
@@ -274,12 +274,7 @@ impl<Context: BuildContext> ResolverProvider for DefaultResolverProvider<'_, Con
                         }
                         uv_client::ErrorKind::WrappedReqwestError(url, err) => {
                             let Some(status) = err.status().filter(|status| {
-                                ignores_metadata_error(
-                                    dist.index(),
-                                    self.index_locations,
-                                    self.fetcher.client().unmanaged.routes(),
-                                    *status,
-                                )
+                                ignores_metadata_error(dist.index(), self.index_locations, *status)
                             }) else {
                                 return Err(uv_client::Error::new(
                                     uv_client::ErrorKind::WrappedReqwestError(url, err),
@@ -354,7 +349,7 @@ mod tests {
     use uv_distribution_types::{Index, IndexName, SerializableStatusCode};
     use uv_redacted::DisplaySafeUrl;
 
-    use super::{IndexLocations, IndexRoutes, IndexUrl, StatusCode, ignores_metadata_error};
+    use super::{IndexLocations, IndexUrl, StatusCode, ignores_metadata_error};
 
     #[test]
     fn ignored_metadata_error_uses_physical_proxy_index() -> Result<(), Box<dyn std::error::Error>>
@@ -391,37 +386,31 @@ mod tests {
             vec![canonical_index, physical_index, direct_index],
             Vec::new(),
             false,
-        );
-        let routes = IndexRoutes::try_from(&locations)?;
+        )?;
 
         assert!(ignores_metadata_error(
             Some(&canonical),
             &locations,
-            &routes,
             StatusCode::UNAUTHORIZED,
         ));
         assert!(!ignores_metadata_error(
             Some(&canonical),
             &locations,
-            &routes,
             StatusCode::FORBIDDEN,
         ));
         assert!(ignores_metadata_error(
             Some(&direct),
             &locations,
-            &routes,
             StatusCode::FORBIDDEN,
         ));
         assert!(!ignores_metadata_error(
             Some(&direct),
             &locations,
-            &routes,
             StatusCode::UNAUTHORIZED,
         ));
         assert!(!ignores_metadata_error(
             None,
             &locations,
-            &routes,
             StatusCode::UNAUTHORIZED,
         ));
 
@@ -443,19 +432,16 @@ mod tests {
             SerializableStatusCode,
         >(serde_json::json!(401))?]);
 
-        let locations = IndexLocations::new(vec![physical_index], Vec::new(), false);
-        let routes = IndexRoutes::try_from(&locations)?;
+        let locations = IndexLocations::new(vec![physical_index], Vec::new(), false)?;
 
         assert!(ignores_metadata_error(
             Some(&canonical),
             &locations,
-            &routes,
             StatusCode::UNAUTHORIZED,
         ));
         assert!(!ignores_metadata_error(
             Some(&canonical),
             &locations,
-            &routes,
             StatusCode::FORBIDDEN,
         ));
 
