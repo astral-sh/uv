@@ -10,10 +10,12 @@ Released on 2026-08-25.
 ### Python
 
 - Refresh managed CPython builds to the 20260825 python-build-standalone release ([#21295](https://github.com/astral-sh/uv/pull/21295))
+- Add Python 3.15 release-candidate Docker images ([#21293](https://github.com/astral-sh/uv/pull/21293))
 - Update the Pyodide 3.14.2 cross-build environment to 314.0.5 ([#21174](https://github.com/astral-sh/uv/pull/21174))
 
 ### Enhancements
 
+- Report cache-cleaning space savings from filesystem block allocation and avoid double-counting hard links ([#21261](https://github.com/astral-sh/uv/pull/21261))
 - Limit warnings about unbounded `uv_build` requirements to source-distribution builds ([#21078](https://github.com/astral-sh/uv/pull/21078))
 - Display byte counts below 1 KiB without a fractional part ([#21237](https://github.com/astral-sh/uv/pull/21237))
 
@@ -34,6 +36,8 @@ Released on 2026-08-25.
 
 ### Bug fixes
 
+- Allow explicit `uv build` and non-editable first-party workspace packages when `no-build` is enabled ([#21294](https://github.com/astral-sh/uv/pull/21294))
+- Reuse configured index credentials during `uv tool upgrade` when the tool receipt references the same index ([#21275](https://github.com/astral-sh/uv/pull/21275))
 - Ensure full 40-character Git commit pins resolve to the requested object instead of a SHA-named branch ([#21224](https://github.com/astral-sh/uv/pull/21224))
 - Prevent TLS segfaults in riscv64 musl release binaries ([#21158](https://github.com/astral-sh/uv/pull/21158))
 - Preserve dependencies selected by recursive extras when markers mix production and extra conditions ([#21181](https://github.com/astral-sh/uv/pull/21181))
