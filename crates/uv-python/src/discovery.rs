@@ -2543,8 +2543,7 @@ impl PythonRequest {
     }
 
     /// Return owned runtime and build variants carried by this request, if any.
-    #[cfg(test)]
-    fn variants(&self) -> Option<VariantRequest> {
+    pub fn variants(&self) -> Option<VariantRequest> {
         match self {
             Self::Version(version) | Self::ImplementationVersion(_, version) => version.variants(),
             Self::Key(request) => request.version().and_then(VersionRequest::variants),
