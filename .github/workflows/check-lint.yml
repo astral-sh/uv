@@ -179,7 +179,9 @@ jobs:
   shear:
     name: "cargo shear"
     timeout-minutes: 10
-    runs-on: ubuntu-slim
+    # NOTE: `cargo shear` needs `cargo metadata`, so we don't use `ubuntu-slim` here
+    # as it doesn't include the Rust toolchain.
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
