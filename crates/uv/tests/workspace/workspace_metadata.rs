@@ -1,18 +1,23 @@
 use std::path::Path;
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use assert_cmd::assert::OutputAssertExt;
 use assert_fs::fixture::{FileWriteStr, PathChild, PathCreateDir};
 use async_zip::base::write::ZipFileWriter;
 use async_zip::{Compression, ZipEntryBuilder};
 use futures::executor::block_on;
 use indoc::{formatdoc, indoc};
+#[cfg(unix)]
+use insta::allow_duplicates;
 use url::Url;
 use walkdir::WalkDir;
 
-use uv_cache::CacheBucket;
+use uv_cache::{Cache, CacheBucket};
+use uv_python::PythonEnvironment;
 use uv_static::EnvVars;
-use uv_test::{copy_dir_ignore, uv_snapshot};
+#[cfg(unix)]
+use uv_test::venv_bin_path;
+use uv_test::{copy_dir_ignore, site_packages_path, uv_snapshot};
 
 fn write_wheel(
     path: &Path,
@@ -465,22 +470,49 @@ fn workspace_metadata_script_includes_existing_environment() -> Result<()> {
 #[test]
 fn workspace_metadata_script_sync_caches_interpreter() -> Result<()> {
     let context = uv_test::test_context_with_versions!(&["3.12"]);
+    let wheel = context
+        .temp_dir
+        .child("startup_probe-0.1.0-py3-none-any.whl");
+    write_wheel(
+        wheel.path(),
+        "startup-probe",
+        "startup_probe-0.1.0",
+        &[(
+            "sitecustomize.py",
+            indoc! {r#"
+                from pathlib import Path
+
+                Path(__file__).with_name("interpreter-started").touch()
+            "#},
+        )],
+    )?;
     let script = context.temp_dir.child("script.py");
     script.write_str(indoc! {r#"
         # /// script
         # requires-python = ">=3.12"
-        # dependencies = []
+        # dependencies = ["startup-probe"]
+        # [tool.uv.sources]
+        # startup-probe = { path = "startup_probe-0.1.0-py3-none-any.whl" }
         # ///
         "#
     })?;
 
-    context
+    let prepared = context
         .workspace_metadata()
         .arg("--script")
         .arg(script.path())
         .arg("--sync")
         .assert()
         .success();
+    let metadata: serde_json::Value = serde_json::from_slice(&prepared.get_output().stdout)?;
+    let root = metadata["environment"]["root"]
+        .as_str()
+        .context("Missing environment root")?;
+    let startup_marker =
+        site_packages_path(Path::new(root), "python3.12").join("interpreter-started");
+
+    // Priming the cache must not run the newly prepared interpreter.
+    assert!(!startup_marker.exists());
 
     let interpreter_cache = context
         .cache_dir
@@ -506,6 +538,67 @@ fn workspace_metadata_script_sync_caches_interpreter() -> Result<()> {
 
     // Reusing the environment should neither add nor rewrite interpreter cache entries.
     assert_eq!(cache_entries()?, prepared_cache);
+    assert!(!startup_marker.exists());
+
+    // Compare all inferred interpreter metadata with a query of the actual venv Python.
+    let cache = Cache::from_path(context.cache_dir.path().to_path_buf())
+        .init_no_wait()?
+        .context("Interpreter cache is locked")?;
+    let fresh_cache = Cache::temp()?
+        .init_no_wait()?
+        .context("Fresh interpreter cache is locked")?;
+    let cached = PythonEnvironment::from_root(root, &cache)?;
+    assert!(!startup_marker.exists());
+    let queried = PythonEnvironment::from_root(root, &fresh_cache)?;
+    assert!(startup_marker.is_file());
+    assert_eq!(format!("{cached:?}"), format!("{queried:?}"));
+
+    Ok(())
+}
+
+#[test]
+#[cfg(unix)]
+fn workspace_metadata_script_sync_launcher_override() -> Result<()> {
+    for variable in [EnvVars::PYTHONEXECUTABLE, EnvVars::PYVENV_LAUNCHER] {
+        let context = uv_test::test_context!("3.12");
+        let override_python = venv_bin_path(&context.venv).join("python3");
+        let script = context.temp_dir.child("script.py");
+        script.write_str(indoc! {r#"
+            # /// script
+            # requires-python = ">=3.12"
+            # dependencies = []
+            # ///
+            "#
+        })?;
+
+        let prepared = context
+            .workspace_metadata()
+            .arg("--script")
+            .arg(script.path())
+            .arg("--sync")
+            .env(variable, &override_python)
+            .assert()
+            .success();
+        let metadata: serde_json::Value = serde_json::from_slice(&prepared.get_output().stdout)?;
+        let root = metadata["environment"]["root"]
+            .as_str()
+            .context("Missing environment root")?;
+        assert_ne!(Path::new(root), context.venv.path());
+
+        // Inferred metadata for the script environment must not hide the launcher override.
+        // Both a fresh query and a cached query should report the overridden environment.
+        allow_duplicates! {
+            for _ in 0..2 {
+                uv_snapshot!(context.filters(), context.python_find()
+                    .arg(root)
+                    .env(variable, &override_python), @"
+                exit_code: 0 (success)
+                ----- stdout -----
+                [VENV]/bin/python3
+                ");
+            }
+        }
+    }
 
     Ok(())
 }
