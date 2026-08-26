@@ -138,7 +138,7 @@ cache-keys = [
 exclude-newer = "P7D"
 
 [tool.uv.exclude-newer-package]
-astral-dev-toolchain-cargo-shear = "2026-08-26"
+astral-dev-toolchain-cargo-shear = "2026-08-27T04:00:00Z"
 
 [tool.uv.dependency-groups]
 docs = { requires-python = ">=3.12" }
