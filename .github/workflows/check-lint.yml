@@ -32,7 +32,7 @@ jobs:
         uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
         with:
           version: "0.12.5"
-      - run: uv run --only-group=check ruff check .
+      - run: uv run --only-group check ruff check .
 
   ty:
     timeout-minutes: 10
@@ -46,7 +46,7 @@ jobs:
         with:
           version: "0.12.5"
       # `uv check` checks the entire repository; keep this scoped to the Python package.
-      - run: uv run --only-group=check ty check python/uv
+      - run: uv run --only-group check ty check python/uv
       - name: "Check scrolls"
         env:
           # TODO: Remove once ty infers Python versions from script environments instead of the root project.
@@ -188,7 +188,7 @@ jobs:
         uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
         with:
           version: "0.12.5"
-      - run: uv run --only-group=check cargo-shear --deny-warnings
+      - run: uv run --only-group check cargo-shear --deny-warnings
 
   typos:
     name: "check for typos"
@@ -201,4 +201,4 @@ jobs:
         uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
         with:
           version: "0.12.5"
-      - run: uv run --only-group=check typos
+      - run: uv run --only-group check typos
