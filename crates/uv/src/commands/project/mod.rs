@@ -50,7 +50,7 @@ use uv_resolver::{
 use uv_scripts::Pep723ItemRef;
 use uv_settings::PythonInstallMirrors;
 use uv_static::EnvVars;
-use uv_torch::{TorchSource, TorchStrategy};
+use uv_torch::{TorchSource, TorchStrategy, TorchStrategyError};
 use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy, SourceTreeEditablePolicy};
 use uv_warnings::{warn_user, warn_user_once};
 use uv_workspace::dependency_groups::DependencyGroupError;
@@ -377,6 +377,9 @@ pub(crate) enum ProjectError {
 
     #[error(transparent)]
     Accelerator(#[from] uv_torch::AcceleratorError),
+
+    #[error(transparent)]
+    TorchStrategy(#[from] TorchStrategyError),
 
     #[error(transparent)]
     Anyhow(#[from] anyhow::Error),
@@ -2354,6 +2357,7 @@ pub(crate) async fn resolve_names(
                 resolution: _,
                 sources,
                 torch_backend,
+                torch_backend_index,
                 cuda_driver_version,
                 amd_gpu_architecture,
                 upgrade: _,
@@ -2365,7 +2369,7 @@ pub(crate) async fn resolve_names(
     let client_builder = client_builder.clone().keyring(*keyring_provider);
 
     // Determine the PyTorch backend.
-    let torch_backend = torch_backend
+    let torch_backend = match torch_backend
         .map(|mode| {
             let source = if uv_auth::PyxTokenStore::from_settings()
                 .is_ok_and(|store| store.has_credentials())
@@ -2380,13 +2384,15 @@ pub(crate) async fn resolve_names(
                 interpreter.platform().os(),
                 cuda_driver_version.clone(),
                 *amd_gpu_architecture,
+                torch_backend_index.as_ref(),
             )
         })
         .transpose()
-        .ok()
-        .flatten();
-
-    // Initialize the registry client.
+    {
+        Ok(torch_backend) => torch_backend,
+        Err(TorchStrategyError::Accelerator(_)) => None,
+        Err(error) => return Err(std::io::Error::other(error).into()),
+    };
     let client = RegistryClientBuilder::new(client_builder, cache.clone())
         .index_locations(index_locations.clone())
         .index_strategy(*index_strategy)
@@ -2552,6 +2558,7 @@ pub(crate) async fn resolve_environment(
         build_options,
         sources,
         torch_backend,
+        torch_backend_index,
         cuda_driver_version,
         amd_gpu_architecture,
     } = settings;
@@ -2615,6 +2622,7 @@ pub(crate) async fn resolve_environment(
                     .os(),
                 cuda_driver_version.clone(),
                 *amd_gpu_architecture,
+                torch_backend_index.as_ref(),
             )
         })
         .transpose()?;
@@ -2963,6 +2971,7 @@ pub(crate) async fn update_environment(
                 resolution,
                 sources,
                 torch_backend,
+                torch_backend_index,
                 cuda_driver_version,
                 amd_gpu_architecture,
                 upgrade,
@@ -3058,6 +3067,7 @@ pub(crate) async fn update_environment(
                     .os(),
                 cuda_driver_version.clone(),
                 *amd_gpu_architecture,
+                torch_backend_index.as_ref(),
             )
         })
         .transpose()?;

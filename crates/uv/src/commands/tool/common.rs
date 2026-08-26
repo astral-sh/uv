@@ -428,6 +428,7 @@ impl ToolLock {
             build_options,
             sources,
             torch_backend: _,
+            torch_backend_index: _,
             cuda_driver_version: _,
             amd_gpu_architecture: _,
         } = settings;

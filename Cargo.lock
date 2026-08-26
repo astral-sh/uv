@@ -7614,7 +7614,6 @@ name = "uv-torch"
 version = "0.0.73"
 dependencies = [
  "clap",
- "either",
  "fs-err",
  "schemars",
  "serde",
