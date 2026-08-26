@@ -1,11 +1,12 @@
 use uv_pypi_types::{HashAlgorithm, HashDigest};
 
+/// The normalized hash policy for a single distribution.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum HashPolicy<'a> {
+pub enum DistHashPolicy<'a> {
     /// No hash policy is specified.
     None,
-    /// Hashes should be generated (specifically, a SHA-256 hash), but not validated.
-    Generate(HashGeneration),
+    /// A hash should be included, but not validated.
+    Include,
     /// Hashes should be validated against a pre-defined list of hashes, and any matching digest is
     /// sufficient. If necessary, hashes should be generated so as to ensure that the archive is
     /// valid.
@@ -15,7 +16,7 @@ pub enum HashPolicy<'a> {
     All(&'a [HashDigest]),
 }
 
-impl HashPolicy<'_> {
+impl DistHashPolicy<'_> {
     /// Returns `true` if the hash policy is `None`.
     pub fn is_none(&self) -> bool {
         matches!(self, Self::None)
@@ -26,24 +27,16 @@ impl HashPolicy<'_> {
         matches!(self, Self::Any(_) | Self::All(_))
     }
 
-    /// Returns `true` if the hash policy indicates that hashes should be generated.
-    pub fn is_generate(&self, dist: &crate::BuiltDist) -> bool {
-        match self {
-            Self::Generate(HashGeneration::Url) => dist.file().is_none(),
-            Self::Generate(HashGeneration::All) => {
-                dist.file().is_none_or(|file| file.hashes.is_empty())
-            }
-            Self::Any(_) => false,
-            Self::All(_) => false,
-            Self::None => false,
-        }
+    /// Returns `true` if a hash needs to be supplied for the distribution.
+    pub fn needs_inclusion(&self, dist: &crate::BuiltDist) -> bool {
+        matches!(self, Self::Include) && dist.file().is_none_or(|file| file.hashes.is_empty())
     }
 
     /// Return the algorithms used in the hash policy.
     pub fn algorithms(&self) -> Vec<HashAlgorithm> {
         match self {
             Self::None => vec![],
-            Self::Generate(_) => vec![HashAlgorithm::Sha256],
+            Self::Include => vec![HashAlgorithm::Sha256],
             Self::Any(hashes) | Self::All(hashes) => {
                 let mut algorithms = hashes.iter().map(HashDigest::algorithm).collect::<Vec<_>>();
                 algorithms.sort();
@@ -57,7 +50,7 @@ impl HashPolicy<'_> {
     pub fn digests(&self) -> &[HashDigest] {
         match self {
             Self::None => &[],
-            Self::Generate(_) => &[],
+            Self::Include => &[],
             Self::Any(hashes) | Self::All(hashes) => hashes,
         }
     }
@@ -66,7 +59,7 @@ impl HashPolicy<'_> {
     pub fn matches(&self, hashes: &[HashDigest]) -> bool {
         match self {
             Self::None => true,
-            Self::Generate(_) => hashes
+            Self::Include => hashes
                 .iter()
                 .any(|hash| hash.algorithm == HashAlgorithm::Sha256),
             Self::Any(required) => {
@@ -82,7 +75,7 @@ impl HashPolicy<'_> {
     fn has_required_algorithms(&self, hashes: &[HashDigest]) -> bool {
         match self {
             Self::None => true,
-            Self::Generate(_) => hashes
+            Self::Include => hashes
                 .iter()
                 .any(|hash| hash.algorithm == HashAlgorithm::Sha256),
             Self::Any(required) => {
@@ -103,14 +96,31 @@ impl HashPolicy<'_> {
     }
 }
 
-/// The context in which hashes should be generated.
+/// How to include distribution hashes in a resolution.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum HashGeneration {
-    /// Generate hashes for direct URL distributions.
-    Url,
-    /// Generate hashes for direct URL distributions, along with any distributions that are hosted
-    /// on a registry that does _not_ provide hashes.
-    All,
+pub struct HashInclusion {
+    missing_registry: MissingRegistryHash,
+}
+
+impl HashInclusion {
+    /// Create a hash inclusion policy with the given behavior for missing registry hashes.
+    pub const fn new(missing_registry: MissingRegistryHash) -> Self {
+        Self { missing_registry }
+    }
+
+    /// Return the behavior for missing registry hashes.
+    pub const fn missing_registry(self) -> MissingRegistryHash {
+        self.missing_registry
+    }
+}
+
+/// How to handle a registry distribution when its index metadata does not provide a hash.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MissingRegistryHash {
+    /// Do not download the distribution solely to compute a hash.
+    Skip,
+    /// Download the distribution and compute a hash.
+    Compute,
 }
 
 pub trait Hashed {
@@ -118,12 +128,12 @@ pub trait Hashed {
     fn hashes(&self) -> &[HashDigest];
 
     /// Returns `true` if the archive satisfies the given hash policy.
-    fn satisfies(&self, hashes: HashPolicy) -> bool {
+    fn satisfies(&self, hashes: DistHashPolicy) -> bool {
         hashes.matches(self.hashes())
     }
 
     /// Returns `true` if the archive includes the algorithms required by the given hash policy.
-    fn has_digests(&self, hashes: HashPolicy) -> bool {
+    fn has_digests(&self, hashes: DistHashPolicy) -> bool {
         hashes.has_required_algorithms(self.hashes())
     }
 }
@@ -146,7 +156,7 @@ mod tests {
 
     use uv_pypi_types::HashDigest;
 
-    use super::HashPolicy;
+    use super::DistHashPolicy;
 
     #[test]
     fn validate_all_requires_every_digest() {
@@ -163,7 +173,7 @@ mod tests {
         )
         .unwrap();
 
-        let policy = HashPolicy::All(&[sha256.clone(), sha512.clone()]);
+        let policy = DistHashPolicy::All(&[sha256.clone(), sha512.clone()]);
         assert!(policy.matches(&[sha256.clone(), sha512]));
         assert!(!policy.matches(std::slice::from_ref(&sha256)));
         assert!(!policy.matches(&[sha256, wrong_sha512]));
@@ -184,7 +194,7 @@ mod tests {
         )
         .unwrap();
 
-        let policy = HashPolicy::Any(&[sha256.clone(), sha512]);
+        let policy = DistHashPolicy::Any(&[sha256.clone(), sha512]);
         assert!(policy.matches(&[sha256]));
         assert!(!policy.matches(&[wrong_sha512]));
     }

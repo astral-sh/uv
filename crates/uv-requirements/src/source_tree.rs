@@ -10,7 +10,7 @@ use uv_configuration::ExtrasSpecification;
 use uv_distribution::{DistributionDatabase, FlatRequiresDist, Reporter, RequiresDist};
 use uv_distribution_types::Requirement;
 use uv_distribution_types::{
-    BuildableSource, DirectorySourceUrl, HashGeneration, HashPolicy, Identifier, SourceUrl,
+    BuildableSource, DirectorySourceUrl, DistHashPolicy, Identifier, SourceUrl,
 };
 use uv_fs::Simplified;
 use uv_normalize::{ExtraName, PackageName};
@@ -212,13 +212,11 @@ impl<'a, Context: BuildContext> SourceTreeResolver<'a, Context> {
                     path.user_display()
                 ));
             }
-            HashVerification::IfPresent(_) => {
-                HashPolicy::Generate(self.hasher.generation().unwrap_or(HashGeneration::All))
-            }
+            HashVerification::IfPresent(_) => DistHashPolicy::Include,
             HashVerification::None => self
                 .hasher
-                .generation()
-                .map_or(HashPolicy::None, HashPolicy::Generate),
+                .inclusion()
+                .map_or(DistHashPolicy::None, |_| DistHashPolicy::Include),
         };
 
         // Fetch the metadata for the distribution.
