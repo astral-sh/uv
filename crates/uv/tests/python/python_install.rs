@@ -215,6 +215,30 @@ async fn mount_python_build_variant_catalog(
 #[cfg(feature = "test-python-managed")]
 async fn python_install_build_variant() -> anyhow::Result<()> {
     let (context, stock) = python_build_variant_context()?;
+    let context = context
+        .with_filtered_latest_python_versions()
+        .with_filtered_centralized_environment_hashes();
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.13"
+        dependencies = []
+        "#,
+    )?;
+    context
+        .sync()
+        .arg("--preview-features")
+        .arg("centralized-project-envs")
+        .arg("--python")
+        .arg("3.13")
+        .assert()
+        .success();
+    let stock_environment = fs_err::canonicalize(&context.venv)?;
+    context.venv.child("stock-marker").touch()?;
+
     let managed_dir = context.temp_dir.child("managed");
     let stock_name = stock.key().to_string();
     let platform = platform_key_from_env()?;
@@ -223,7 +247,8 @@ async fn python_install_build_variant() -> anyhow::Result<()> {
         .context("Missing platform suffix")?;
     let custom_name = format!("{version}+custom-{platform}");
     let custom_path = managed_dir.join(&custom_name);
-    fs_err::rename(stock.path(), &custom_path)?;
+    // Keep the stock installation available so its existing environment remains usable.
+    copy_dir_all(stock.path(), &custom_path)?;
     let key = stock.key();
     let arch = key.arch().to_string();
     let arch_family = key.arch().family().to_string();
@@ -261,6 +286,7 @@ async fn python_install_build_variant() -> anyhow::Result<()> {
         .python_install()
         .arg("3.13+custom")
         .arg("--default")
+        .arg("--force")
         .arg("--python-downloads-json-url")
         .arg(format!("{}/metadata", server.uri()))
         .assert()
@@ -280,6 +306,114 @@ async fn python_install_build_variant() -> anyhow::Result<()> {
     ----- stdout -----
     [TEMP_DIR]/managed/cpython-3.13+custom-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
     ");
+
+    // The existing stock environment must still run before testing build compatibility.
+    let base_prefix =
+        "import sys; from pathlib import Path; print(Path(sys.base_prefix).resolve().as_posix())";
+    assert!(context.interpreter().is_file());
+    uv_snapshot!(context.filters(), context.python_command().arg("-c").arg(base_prefix), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    [TEMP_DIR]/managed/cpython-3.13.[LATEST]-[PLATFORM]
+    ");
+
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--preview-features")
+        .arg("centralized-project-envs")
+        .arg("--python")
+        .arg("3.13+custom"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Using CPython 3.13.[LATEST]
+    Creating virtual environment `project-cp3.13-[HASH]`
+    Resolved 1 package in [TIME]
+    Checked in [TIME]
+    ");
+    let custom_environment = fs_err::canonicalize(&context.venv)?;
+    assert_ne!(stock_environment, custom_environment);
+    assert!(stock_environment.join("stock-marker").is_file());
+    context.venv.child("custom-marker").touch()?;
+
+    uv_snapshot!(context.filters(), context.python_command().arg("-c").arg(base_prefix), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    [TEMP_DIR]/managed/cpython-3.13.[LATEST]+custom-[PLATFORM]
+    ");
+
+    // Running with the same build reuses the custom environment.
+    uv_snapshot!(context.filters(), context.run()
+        .arg("--preview-features")
+        .arg("centralized-project-envs")
+        .arg("--python")
+        .arg("3.13+custom")
+        .arg("python")
+        .arg("-c")
+        .arg(base_prefix), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    [TEMP_DIR]/managed/cpython-3.13.[LATEST]+custom-[PLATFORM]
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Checked in [TIME]
+    ");
+    assert_eq!(custom_environment, fs_err::canonicalize(&context.venv)?);
+    context
+        .venv
+        .child("custom-marker")
+        .assert(predicate::path::exists());
+
+    // Select the stock executable explicitly: an unqualified version can reuse custom builds.
+    let stock_python = if cfg!(windows) {
+        stock.path().join("python.exe")
+    } else {
+        stock.path().join("bin/python3.13")
+    };
+    uv_snapshot!(context.filters(), context.run()
+        .arg("--preview-features")
+        .arg("centralized-project-envs")
+        .arg("--python")
+        .arg(stock_python)
+        .arg("python")
+        .arg("-c")
+        .arg(base_prefix), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    [TEMP_DIR]/managed/cpython-3.13.[LATEST]-[PLATFORM]
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Checked in [TIME]
+    ");
+    assert_eq!(stock_environment, fs_err::canonicalize(&context.venv)?);
+    context
+        .venv
+        .child("stock-marker")
+        .assert(predicate::path::exists());
+    assert!(custom_environment.join("custom-marker").is_file());
+
+    // `uv run` must also switch a healthy stock environment to the requested custom build.
+    uv_snapshot!(context.filters(), context.run()
+        .arg("--preview-features")
+        .arg("centralized-project-envs")
+        .arg("--python")
+        .arg("3.13+custom")
+        .arg("python")
+        .arg("-c")
+        .arg(base_prefix), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    [TEMP_DIR]/managed/cpython-3.13.[LATEST]+custom-[PLATFORM]
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Checked in [TIME]
+    ");
+    assert_eq!(custom_environment, fs_err::canonicalize(&context.venv)?);
+    context
+        .venv
+        .child("custom-marker")
+        .assert(predicate::path::exists());
 
     Ok(())
 }

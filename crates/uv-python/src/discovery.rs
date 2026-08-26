@@ -29,7 +29,9 @@ use crate::implementation::ImplementationName;
 use crate::installation::{PythonInstallation, PythonInstallationKey};
 use crate::interpreter::Error as InterpreterError;
 use crate::interpreter::{StatusCodeError, UnexpectedResponseError};
-use crate::managed::{ManagedPythonInstallations, PythonMinorVersionLink};
+use crate::managed::{
+    ManagedPythonInstallation, ManagedPythonInstallations, PythonMinorVersionLink,
+};
 #[cfg(windows)]
 use crate::microsoft_store::find_microsoft_store_pythons;
 use crate::python_version::python_build_versions_from_env;
@@ -2374,7 +2376,9 @@ impl PythonRequest {
 
         match self {
             Self::Default | Self::Any => true,
-            Self::Version(version_request) => version_request.matches_interpreter(interpreter),
+            Self::Version(version_request) => {
+                version_request.matches_interpreter_with_key(interpreter)
+            }
             Self::Directory(directory) => {
                 // `sys.prefix` points to the environment root or `sys.executable` is the same
                 is_same_executable(directory, interpreter.sys_prefix())
@@ -2448,7 +2452,7 @@ impl PythonRequest {
                 .implementation_name()
                 .eq_ignore_ascii_case(implementation.long_name()),
             Self::ImplementationVersion(implementation, version) => {
-                version.matches_interpreter(interpreter)
+                version.matches_interpreter_with_key(interpreter)
                     && interpreter
                         .implementation_name()
                         .eq_ignore_ascii_case(implementation.long_name())
@@ -3319,13 +3323,20 @@ impl VersionRequest {
             && request.matches_interpreter(&installation.interpreter)
     }
 
+    /// Check if an interpreter and its managed installation identity match the request.
+    pub(crate) fn matches_interpreter_with_key(&self, interpreter: &Interpreter) -> bool {
+        let key = ManagedPythonInstallation::key_from_interpreter(interpreter)
+            .unwrap_or_else(|| interpreter.key());
+        self.matches_installation_key(&key) && self.matches_interpreter(interpreter)
+    }
+
     fn matches_build_variant(&self, key: &PythonInstallationKey) -> bool {
         self.variants()
             .is_none_or(|variants| variants.matches_build_variant(key))
     }
 
     /// Check if a interpreter matches the request.
-    pub(crate) fn matches_interpreter(&self, interpreter: &Interpreter) -> bool {
+    fn matches_interpreter(&self, interpreter: &Interpreter) -> bool {
         match self {
             Self::Any => true,
             // Do not use free-threaded interpreters by default

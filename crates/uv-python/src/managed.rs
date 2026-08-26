@@ -369,7 +369,9 @@ impl ManagedPythonInstallation {
 
     /// Return the managed installation key for an interpreter, if it is installed in the managed
     /// Python directory.
-    pub(crate) fn key_from_interpreter(interpreter: &Interpreter) -> Option<PythonInstallationKey> {
+    ///
+    /// The key is derived from the installation directory name, without reading the `BUILD` file.
+    pub fn key_from_interpreter(interpreter: &Interpreter) -> Option<PythonInstallationKey> {
         Self::path_and_key_from_interpreter(interpreter).map(|(_, key)| key)
     }
 

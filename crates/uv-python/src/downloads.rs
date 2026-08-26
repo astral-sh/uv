@@ -653,7 +653,7 @@ impl PythonDownloadRequest {
     pub(crate) fn satisfied_by_interpreter(&self, interpreter: &Interpreter) -> bool {
         let executable = interpreter.sys_executable().display();
         if let Some(version) = self.version()
-            && !version.matches_interpreter(interpreter)
+            && !version.matches_interpreter_with_key(interpreter)
         {
             let interpreter_version = interpreter.python_version();
             debug!(

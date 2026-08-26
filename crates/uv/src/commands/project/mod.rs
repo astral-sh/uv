@@ -1246,12 +1246,17 @@ pub(crate) fn centralized_environment_root(
 ) -> PathBuf {
     let workspace_path = fs_err::canonicalize(workspace.install_path())
         .unwrap_or_else(|_| workspace.install_path().clone());
-    let interpreter_key = interpreter.key();
+    let managed_installation = ManagedPythonInstallation::try_from_interpreter(interpreter);
+    let interpreter_key = managed_installation
+        .as_ref()
+        .map(|installation| installation.key().clone())
+        .or_else(|| ManagedPythonInstallation::key_from_interpreter(interpreter))
+        .unwrap_or_else(|| interpreter.key());
     // Use the workspace path to isolate projects and the interpreter key to maximize intra-project
     // environment re-use while avoiding clashes with incompatible environments. Ignoring the patch
     // version allows upgradeable managed environments to be re-used after an upgrade.
     let (digest, python_version) = if upgradeable
-        && let Some(installation) = ManagedPythonInstallation::try_from_interpreter(interpreter)
+        && let Some(installation) = managed_installation
         && PythonMinorVersionLink::from_installation(&installation)
             .is_some_and(|link| link.exists())
     {
