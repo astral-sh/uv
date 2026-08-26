@@ -409,6 +409,38 @@ async fn python_install_build_variant() -> anyhow::Result<()> {
     [TEMP_DIR]/managed/cpython-3.13+custom-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
     ");
 
+    fs_err::write(custom_path.join("BUILD"), "custom-build")?;
+    let find_dir = context.home_dir.child("find");
+    find_dir.create_dir_all()?;
+    context
+        .python_find()
+        .current_dir(find_dir.path())
+        .arg("3.13+custom")
+        .env(EnvVars::UV_PYTHON_BUILD, "custom-build")
+        .assert()
+        .success();
+    context
+        .python_find()
+        .current_dir(find_dir.path())
+        .arg("3.13+custom")
+        .env(EnvVars::UV_PYTHON_BUILD, "missing-build")
+        .assert()
+        .failure();
+    context
+        .python_find()
+        .current_dir(find_dir.path())
+        .arg("3.13")
+        .env(EnvVars::UV_PYTHON_BUILD, "missing-build")
+        .assert()
+        .success();
+    context
+        .python_find()
+        .current_dir(find_dir.path())
+        .arg("3.13+custom")
+        .env(EnvVars::UV_PYTHON_CPYTHON_BUILD, "missing-build")
+        .assert()
+        .success();
+
     Ok(())
 }
 

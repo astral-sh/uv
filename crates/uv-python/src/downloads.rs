@@ -48,7 +48,9 @@ use crate::implementation::{
 };
 use crate::installation::{PythonInstallation, PythonInstallationKey};
 use crate::managed::ManagedPythonInstallation;
-use crate::python_version::{BuildVersionError, python_build_version_from_env};
+use crate::python_version::{
+    BuildVersionError, python_build_variant_version_from_env, python_build_version_from_env,
+};
 use crate::{Interpreter, PythonRequest, PythonVersion, VariantRequest, VersionRequest};
 use crate::{LenientPythonBuildVariant, PythonVariant};
 
@@ -443,7 +445,16 @@ impl PythonDownloadRequest {
             return Ok(self);
         };
 
-        self.build = python_build_version_from_env(implementation)?;
+        self.build = if self
+            .version
+            .as_ref()
+            .and_then(VersionRequest::variants)
+            .is_some_and(|variants| variants.build().is_some())
+        {
+            python_build_variant_version_from_env()?
+        } else {
+            python_build_version_from_env(implementation)?
+        };
         Ok(self)
     }
 
@@ -2412,6 +2423,30 @@ mod tests {
                 14
             );
         }
+    }
+
+    #[test]
+    fn build_variant_version_pin_is_scoped() {
+        temp_env::with_vars(
+            [
+                (EnvVars::UV_PYTHON_BUILD, Some("custom-build")),
+                (EnvVars::UV_PYTHON_CPYTHON_BUILD, Some("stock-build")),
+            ],
+            || {
+                let mut custom =
+                    PythonDownloadRequest::from_request(&PythonRequest::parse("3.13+custom"))
+                        .unwrap();
+                custom.implementation = Some(ImplementationName::CPython);
+                let custom = custom.fill_build_from_env().unwrap();
+                assert_eq!(custom.build.as_deref(), Some("custom-build"));
+
+                let mut stock =
+                    PythonDownloadRequest::from_request(&PythonRequest::parse("3.13")).unwrap();
+                stock.implementation = Some(ImplementationName::CPython);
+                let stock = stock.fill_build_from_env().unwrap();
+                assert_eq!(stock.build.as_deref(), Some("stock-build"));
+            },
+        );
     }
 
     /// Parse a request with all of its fields.

@@ -228,6 +228,15 @@ pub(crate) fn python_build_version_from_env(
 ) -> Result<Option<String>, BuildVersionError> {
     let variable = python_build_version_variable(implementation);
 
+    build_version_from_env(variable)
+}
+
+/// Get the build version for an explicitly requested build variant.
+pub(crate) fn python_build_variant_version_from_env() -> Result<Option<String>, BuildVersionError> {
+    build_version_from_env(EnvVars::UV_PYTHON_BUILD)
+}
+
+fn build_version_from_env(variable: &'static str) -> Result<Option<String>, BuildVersionError> {
     let Some(build_os) = env::var_os(variable) else {
         return Ok(None);
     };

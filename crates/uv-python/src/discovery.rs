@@ -5,6 +5,7 @@ use rustc_hash::{FxBuildHasher, FxHashSet};
 use same_file::is_same_file;
 use std::borrow::Cow;
 use std::cmp::Reverse;
+use std::collections::BTreeMap;
 use std::env::consts::EXE_SUFFIX;
 use std::fmt::{self, Debug, Formatter};
 use std::{env, io, iter};
@@ -34,7 +35,9 @@ use crate::managed::{
 };
 #[cfg(windows)]
 use crate::microsoft_store::find_microsoft_store_pythons;
-use crate::python_version::python_build_versions_from_env;
+use crate::python_version::{
+    python_build_variant_version_from_env, python_build_versions_from_env,
+};
 use crate::virtualenv::Error as VirtualEnvError;
 use crate::virtualenv::{
     CondaEnvironmentKind, conda_environment_from_env, virtualenv_from_env,
@@ -510,7 +513,19 @@ fn python_executables_from_installed<'a>(
                     installations.sort_by(|left, right| download_list.compare_installations(left.key(), right.key()));
                 }
 
-                let build_versions = python_build_versions_from_env()?;
+                let has_build_variant = version
+                    .variants()
+                    .is_some_and(|variants| variants.build().is_some());
+                let build_variant_version = if has_build_variant {
+                    python_build_variant_version_from_env()?
+                } else {
+                    None
+                };
+                let build_versions = if has_build_variant {
+                    BTreeMap::new()
+                } else {
+                    python_build_versions_from_env()?
+                };
 
                 // Check that the Python version and platform satisfy the request to avoid
                 // unnecessary interpreter queries later
@@ -526,7 +541,10 @@ fn python_executables_from_installed<'a>(
                             return false;
                         }
 
-                        if let Some(requested_build) = build_versions.get(&installation.implementation()) {
+                        if let Some(requested_build) = build_variant_version
+                            .as_ref()
+                            .or_else(|| build_versions.get(&installation.implementation()))
+                        {
                             let Some(installation_build) = installation.build() else {
                                 debug!(
                                     "Skipping managed installation `{installation}`: a build version was requested but is not recorded for this installation"
