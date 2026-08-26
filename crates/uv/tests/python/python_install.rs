@@ -11,11 +11,13 @@ use assert_fs::{
     prelude::{FileTouch, FileWriteStr, PathChild, PathCreateDir},
 };
 use indoc::indoc;
+use insta::allow_duplicates;
 use predicates::prelude::predicate;
 use tracing::debug;
 use uv_test::{LATEST_PYTHON_3_12, TestContext, uv_snapshot};
 
 use uv_fs::{Simplified, copy_dir_all};
+use uv_python::PythonInstallationKey;
 use uv_python::managed::{
     ManagedPythonInstallation, ManagedPythonInstallations, platform_key_from_env,
 };
@@ -1504,6 +1506,232 @@ fn python_uninstall_prerelease_build_variant() -> anyhow::Result<()> {
      - cpython-3.14.0rc1+custom+pgo+lto-[PLATFORM]
     ");
     optimized.assert(predicate::path::missing());
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn python_reinstall_build_variant() -> anyhow::Result<()> {
+    for target in [Some("3.13+custom+pgo"), Some("3.13+pgo+custom"), None] {
+        let context = uv_test::test_context_with_versions!(&[])
+            .with_managed_python_dirs()
+            .with_http_retries("0");
+        let platform = platform_key_from_env()?;
+        let installed_key = format!("cpython-3.13.7+custom+pgo-{platform}");
+        let key = installed_key.parse::<PythonInstallationKey>()?;
+        context
+            .temp_dir
+            .child("managed")
+            .child(&installed_key)
+            .create_dir_all()?;
+
+        let server = MockServer::start().await;
+        let entry = |build_variant: &str, archive: &str| {
+            serde_json::json!({
+                "name": "cpython",
+                "arch": { "family": key.arch().family().to_string(), "variant": null },
+                "os": key.os().to_string(),
+                "libc": key.libc().to_string(),
+                "major": 3,
+                "minor": 13,
+                "patch": 7,
+                "prerelease": "",
+                "url": format!("{}/{archive}", server.uri()),
+                "sha256": null,
+                "variant": null,
+                "build_variant": build_variant,
+                "default": false,
+                "build": null
+            })
+        };
+        let metadata = serde_json::json!({
+            "version": 1,
+            "downloads": {
+                (installed_key): entry("custom+pgo", "custom-pgo.tar.gz"),
+                (format!("cpython-3.13.7+custom+lto+pgo-{platform}")):
+                    entry("custom+lto+pgo", "custom-lto-pgo.tar.gz")
+            }
+        });
+        Mock::given(method("GET"))
+            .and(path("/metadata"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(metadata))
+            .mount(&server)
+            .await;
+
+        // Archives return 404 so we can check which build was selected without downloading Python.
+        context
+            .python_install()
+            .arg("--reinstall")
+            .args(target)
+            .arg("--python-downloads-json-url")
+            .arg(format!("{}/metadata", server.uri()))
+            .assert()
+            .failure();
+
+        let requests = server
+            .received_requests()
+            .await
+            .expect("Request recording is enabled");
+        allow_duplicates! {
+            insta::assert_debug_snapshot!(
+                requests.iter().map(|request| request.url.path()).collect::<Vec<_>>(), @r#"
+            [
+                "/metadata",
+                "/custom-pgo.tar.gz",
+            ]
+            "#);
+        }
+    }
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn python_reinstall_exact_key() -> anyhow::Result<()> {
+    for exact in [true, false] {
+        let context = uv_test::test_context_with_versions!(&[])
+            .with_managed_python_dirs()
+            .with_http_retries("0");
+        let platform = platform_key_from_env()?;
+        let stock_key = format!("cpython-3.13.7-{platform}");
+        let custom_key = format!("cpython-3.13.7+custom-{platform}");
+        let key = stock_key.parse::<PythonInstallationKey>()?;
+        for installed_key in [&stock_key, &custom_key] {
+            context
+                .temp_dir
+                .child("managed")
+                .child(installed_key)
+                .create_dir_all()?;
+        }
+
+        let server = MockServer::start().await;
+        let entry = |build_variant: Option<&str>, archive: &str| {
+            serde_json::json!({
+                "name": "cpython",
+                "arch": { "family": key.arch().family().to_string(), "variant": null },
+                "os": key.os().to_string(),
+                "libc": key.libc().to_string(),
+                "major": 3,
+                "minor": 13,
+                "patch": 7,
+                "prerelease": "",
+                "url": format!("{}/{archive}", server.uri()),
+                "sha256": null,
+                "variant": null,
+                "build_variant": build_variant,
+                "default": build_variant.is_none(),
+                "build": null
+            })
+        };
+        let metadata = serde_json::json!({
+            "version": 1,
+            "downloads": {
+                (stock_key.clone()): entry(None, "stock.tar.gz"),
+                (custom_key): entry(Some("custom"), "custom.tar.gz")
+            }
+        });
+        Mock::given(method("GET"))
+            .and(path("/metadata"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(metadata))
+            .mount(&server)
+            .await;
+
+        // Archives return 404 so the request log identifies every selected build.
+        context
+            .python_install()
+            .arg("--reinstall")
+            .arg(if exact { stock_key.as_str() } else { "3.13.7" })
+            .arg("--python-downloads-json-url")
+            .arg(format!("{}/metadata", server.uri()))
+            .assert()
+            .failure();
+
+        let requests = server
+            .received_requests()
+            .await
+            .context("Missing request log")?;
+        let mut request_paths: Vec<_> = requests.iter().map(|request| request.url.path()).collect();
+        request_paths.sort_unstable();
+        if exact {
+            // A full stock key must not select the custom installation.
+            insta::assert_debug_snapshot!(request_paths, @r#"
+            [
+                "/metadata",
+                "/stock.tar.gz",
+            ]
+            "#);
+        } else {
+            // Filling platform fields must not turn a version request into an exact key.
+            insta::assert_debug_snapshot!(request_paths, @r#"
+            [
+                "/custom.tar.gz",
+                "/metadata",
+                "/stock.tar.gz",
+            ]
+            "#);
+        }
+    }
+
+    Ok(())
+}
+
+#[test]
+fn python_reinstall_missing_build_variant() -> anyhow::Result<()> {
+    let context = uv_test::test_context_with_versions!(&[])
+        .with_filtered_python_keys()
+        .with_filtered_exe_suffix()
+        .with_managed_python_dirs();
+
+    context.python_install().arg("3.13.7").assert().success();
+
+    let platform = platform_key_from_env()?;
+    let stock_key = format!("cpython-3.13.7-{platform}");
+    let stock = context.temp_dir.child("managed").child(&stock_key);
+    let stock_marker = stock.child("marker");
+    stock_marker.touch()?;
+
+    // This installed build is absent from the download catalog.
+    let custom = context
+        .temp_dir
+        .child("managed")
+        .child(format!("cpython-3.13.7+custom-{platform}"));
+    custom.create_dir_all()?;
+    let custom_marker = custom.child("marker");
+    custom_marker.touch()?;
+
+    // Skip the unavailable build and reinstall the available build.
+    uv_snapshot!(context.filters(), context.python_install().arg("--reinstall"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    warning: Failed to create reinstall request for existing installation `cpython-3.13.7+custom-[PLATFORM]`: No download found for request: cpython-3.13.7+custom-[PLATFORM]
+    Installed Python 3.13.7 in [TIME]
+     ~ cpython-3.13.7-[PLATFORM] (python3.13)
+    ");
+    stock.assert(predicate::path::exists());
+    stock_marker.assert(predicate::path::missing());
+    custom_marker.assert(predicate::path::exists());
+
+    // An explicit request for the unavailable build must still fail.
+    uv_snapshot!(context.filters(), context.python_install().arg("--reinstall").arg("3.13.7+custom"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: No download found for request: cpython-3.13.7+custom-[PLATFORM]
+    ");
+    custom_marker.assert(predicate::path::exists());
+
+    context
+        .python_uninstall()
+        .arg(&stock_key)
+        .assert()
+        .success();
+
+    // If every installed build is unavailable, warn and leave them installed.
+    uv_snapshot!(context.filters(), context.python_install().arg("--reinstall"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    warning: Failed to create reinstall request for existing installation `cpython-3.13.7+custom-[PLATFORM]`: No download found for request: cpython-3.13.7+custom-[PLATFORM]
+    ");
+    custom_marker.assert(predicate::path::exists());
 
     Ok(())
 }
