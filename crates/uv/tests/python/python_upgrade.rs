@@ -668,7 +668,7 @@ fn python_upgrade_build_version() {
      ~ cpython-3.12.[LATEST]-[PLATFORM]
     ");
 
-    assert_eq!(
+    assert_ne!(
         filetime::FileTime::from_last_modification_time(
             &fs_err::metadata(&python_executable).unwrap()
         ),
