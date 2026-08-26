@@ -595,6 +595,36 @@ impl PythonDownloadRequest {
         true
     }
 
+    /// Whether this request names a complete managed installation identity.
+    pub fn is_exact_installation_key(&self) -> bool {
+        self.implementation.is_some()
+            && self.version.as_ref().is_some_and(|version| match version {
+                // A prerelease without an explicit patch selects patch zero.
+                VersionRequest::MajorMinorPatch(..)
+                | VersionRequest::MajorMinorPrerelease(..)
+                | VersionRequest::MajorMinorPatchPrerelease(..) => true,
+                VersionRequest::Any
+                | VersionRequest::Default
+                | VersionRequest::Major(..)
+                | VersionRequest::MajorMinor(..)
+                | VersionRequest::Range(..) => false,
+            })
+            && matches!(self.arch, Some(ArchRequest::Explicit(_)))
+            && self.os.is_some()
+            && self.libc.is_some()
+    }
+
+    /// Whether this exact request is satisfied by an installation key.
+    pub fn satisfied_by_exact_key(&self, key: &PythonInstallationKey) -> bool {
+        if !self.is_exact_installation_key() || !self.satisfied_by_key(key) {
+            return false;
+        }
+        self.version
+            .as_ref()
+            .and_then(VersionRequest::variants)
+            .is_some_and(|variants| variants.build() == key.build_variant())
+    }
+
     /// Whether this request is satisfied by a Python download.
     fn satisfied_by_download(&self, download: &ManagedPythonDownload) -> bool {
         // First check the key
@@ -2410,6 +2440,19 @@ mod tests {
             request.libc,
             Some(Libc::Some(target_lexicon::Environment::Gnu))
         );
+    }
+
+    #[test]
+    fn exact_installation_key_distinguishes_build_variants() {
+        let request = PythonDownloadRequest::from_str("cpython-3.12.0-linux-x86_64-gnu").unwrap();
+        let stock = PythonInstallationKey::from_str("cpython-3.12.0-linux-x86_64-gnu").unwrap();
+        let custom =
+            PythonInstallationKey::from_str("cpython-3.12.0+custom-linux-x86_64-gnu").unwrap();
+
+        assert!(request.satisfied_by_key(&stock));
+        assert!(request.satisfied_by_key(&custom));
+        assert!(request.satisfied_by_exact_key(&stock));
+        assert!(!request.satisfied_by_exact_key(&custom));
     }
 
     /// Parse a request with `any` in various positions.
