@@ -6,7 +6,9 @@ use uv_cache::{Cache, Refresh};
 use uv_client::BaseClientBuilder;
 use uv_configuration::{Concurrency, DependencyGroupsWithDefaults, DryRun};
 use uv_preview::{Preview, PreviewFeature};
-use uv_python::{ConfigDiscovery, PythonDownloads, PythonPreference, PythonRequest};
+use uv_python::{
+    ConfigDiscovery, PythonDownloads, PythonEnvironment, PythonPreference, PythonRequest,
+};
 use uv_resolver::Metadata;
 use uv_scripts::Pep723Script;
 use uv_settings::{MalwareCheckSettings, PythonInstallMirrors};
@@ -245,6 +247,11 @@ pub(crate) async fn metadata(
                 )
                 .await
                 .context("Failed to collect module owners")?;
+                if sync.is_some() {
+                    // Newly created environments inherit interpreter information without caching
+                    // it. Reopen the environment to cache the executable used by later discovery.
+                    PythonEnvironment::from_root(environment.root(), cache)?;
+                }
                 export = export
                     .with_environment(&environment)
                     .with_module_owners(module_owners);

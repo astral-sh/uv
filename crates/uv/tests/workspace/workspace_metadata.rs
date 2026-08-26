@@ -8,7 +8,9 @@ use async_zip::{Compression, ZipEntryBuilder};
 use futures::executor::block_on;
 use indoc::{formatdoc, indoc};
 use url::Url;
+use walkdir::WalkDir;
 
+use uv_cache::CacheBucket;
 use uv_static::EnvVars;
 use uv_test::{copy_dir_ignore, uv_snapshot};
 
@@ -456,6 +458,54 @@ fn workspace_metadata_script_includes_existing_environment() -> Result<()> {
         }
         "#);
     });
+
+    Ok(())
+}
+
+#[test]
+fn workspace_metadata_script_sync_caches_interpreter() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&["3.12"]);
+    let script = context.temp_dir.child("script.py");
+    script.write_str(indoc! {r#"
+        # /// script
+        # requires-python = ">=3.12"
+        # dependencies = []
+        # ///
+        "#
+    })?;
+
+    context
+        .workspace_metadata()
+        .arg("--script")
+        .arg(script.path())
+        .arg("--sync")
+        .assert()
+        .success();
+
+    let interpreter_cache = context
+        .cache_dir
+        .child(CacheBucket::Interpreter.to_string());
+    let cache_entries = || {
+        WalkDir::new(&interpreter_cache)
+            .sort_by_file_name()
+            .into_iter()
+            .map(|entry| {
+                let entry = entry?;
+                Ok((entry.path().to_path_buf(), entry.metadata()?.modified()?))
+            })
+            .collect::<Result<Vec<_>>>()
+    };
+    let prepared_cache = cache_entries()?;
+
+    context
+        .workspace_metadata()
+        .arg("--script")
+        .arg(script.path())
+        .assert()
+        .success();
+
+    // Reusing the environment should neither add nor rewrite interpreter cache entries.
+    assert_eq!(cache_entries()?, prepared_cache);
 
     Ok(())
 }
