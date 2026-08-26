@@ -46,8 +46,9 @@ pub struct PypiFile {
 #[derive(Deserialize)]
 #[serde(field_identifier, rename_all = "kebab-case")]
 enum FileField {
-    #[serde(alias = "dist-info-metadata", alias = "data-dist-info-metadata")]
     CoreMetadata,
+    #[serde(alias = "data-dist-info-metadata")]
+    DistInfoMetadata,
     Filename,
     Hashes,
     RequiresPython,
@@ -215,6 +216,7 @@ impl<'de> Visitor<'de> for PypiFileVisitor<'_> {
         M: MapAccess<'de>,
     {
         let mut core_metadata = None;
+        let mut dist_info_metadata = None;
         let mut filename = None;
         let mut hashes = None;
         let mut requires_python = None;
@@ -227,6 +229,11 @@ impl<'de> Visitor<'de> for PypiFileVisitor<'_> {
             match key {
                 FileField::CoreMetadata if core_metadata.is_none() => {
                     core_metadata = access.next_value()?;
+                }
+                FileField::DistInfoMetadata
+                    if core_metadata.is_none() && dist_info_metadata.is_none() =>
+                {
+                    dist_info_metadata = access.next_value()?;
                 }
                 FileField::Filename => filename = Some(access.next_value()?),
                 FileField::Hashes => hashes = Some(access.next_value()?),
@@ -245,7 +252,7 @@ impl<'de> Visitor<'de> for PypiFileVisitor<'_> {
         }
 
         Ok(PypiFile {
-            core_metadata,
+            core_metadata: core_metadata.or(dist_info_metadata),
             filename: filename.ok_or_else(|| serde::de::Error::missing_field("filename"))?,
             hashes: hashes.ok_or_else(|| serde::de::Error::missing_field("hashes"))?,
             requires_python,
@@ -788,7 +795,48 @@ pub enum HashError {
 
 #[cfg(test)]
 mod tests {
-    use crate::{HashError, Hashes};
+    use crate::{CoreMetadata, HashError, Hashes, PypiFile};
+
+    #[test]
+    fn pypi_core_metadata_precedence() -> Result<(), serde_json::Error> {
+        const SHA256: &str = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+
+        for metadata_fields in [
+            format!(r#""dist-info-metadata": true, "core-metadata": {{"sha256": "{SHA256}"}}"#),
+            format!(r#""core-metadata": {{"sha256": "{SHA256}"}}, "dist-info-metadata": true"#),
+            format!(
+                r#""core-metadata": {{"sha256": "{SHA256}"}}, "dist-info-metadata": "ignored""#
+            ),
+            format!(
+                r#""data-dist-info-metadata": true, "core-metadata": {{"sha256": "{SHA256}"}}"#
+            ),
+        ] {
+            // Use raw JSON to control field order.
+            let document = format!(
+                r#"{{"filename": "example-1.0-py3-none-any.whl", "hashes": {{}}, "url": "example.whl", {metadata_fields}}}"#
+            );
+            let pypi_file: PypiFile = serde_json::from_str(&document)?;
+
+            assert!(matches!(
+                pypi_file.core_metadata,
+                Some(CoreMetadata::Hashes(hashes)) if hashes.sha256.as_deref() == Some(SHA256)
+            ));
+        }
+
+        for alias in ["dist-info-metadata", "data-dist-info-metadata"] {
+            let document = format!(
+                r#"{{"filename": "example-1.0-py3-none-any.whl", "hashes": {{}}, "url": "example.whl", "{alias}": true}}"#
+            );
+            let pypi_file: PypiFile = serde_json::from_str(&document)?;
+
+            assert!(matches!(
+                pypi_file.core_metadata,
+                Some(CoreMetadata::Bool(true))
+            ));
+        }
+
+        Ok(())
+    }
 
     #[test]
     fn parse_hashes() -> Result<(), HashError> {
