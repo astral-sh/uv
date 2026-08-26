@@ -32,6 +32,7 @@ use uv_static::EnvVars;
 use crate::implementation::LenientImplementationName;
 use crate::managed::ManagedPythonInstallations;
 use crate::pointer_size::PointerSize;
+use crate::virtualenv::virtualenv_python_executable;
 use crate::{
     Prefix, PyVenvConfiguration, PythonInstallationKey, PythonVariant, PythonVersion, Target,
     VersionRequest, VirtualEnvironment,
@@ -106,7 +107,7 @@ impl Interpreter {
     pub fn clear_cache(executable: impl AsRef<Path>, cache: &Cache) -> Result<(), Error> {
         let absolute = std::path::absolute(executable.as_ref())?;
         let canonical = canonicalize_executable(&absolute)?;
-        let cache_entry = InterpreterInfo::cache_entry(&absolute, &canonical, cache);
+        let cache_entry = InterpreterInfo::cache_entry(&absolute, &canonical, cache)?;
 
         match fs::remove_file(cache_entry.path()) {
             Ok(()) => Ok(()),
@@ -115,9 +116,54 @@ impl Interpreter {
         }
     }
 
+    /// Cache the metadata for this environment's Python without querying it.
+    ///
+    /// Uses the executable selected by virtual environment discovery, which may be a different
+    /// alias from the executable used to create the environment.
+    pub fn cache_virtualenv(&self, cache: &Cache) -> Result<(), Error> {
+        // Launcher overrides can change `sys.executable` and `sys.prefix`, while
+        // `sys._base_executable` isn't affected. Instead of trying to stitch together this edge
+        // case, query the actual metadata on the next run.
+        if env::var_os(EnvVars::PYTHONEXECUTABLE).is_some()
+            || env::var_os(EnvVars::PYVENV_LAUNCHER).is_some()
+        {
+            return Ok(());
+        }
+
+        let info = InterpreterInfo::from_virtualenv(self)?;
+        info.cache(cache)
+    }
+
     /// Return a new [`Interpreter`] with the given virtual environment root.
     #[must_use]
     pub fn with_virtualenv(self, virtualenv: VirtualEnvironment) -> Self {
+        // Match `site.getsitepackages()` for the new environment instead of retaining the
+        // parent interpreter's site-packages paths.
+        // Note: This is not `sys.path`, but a distinct list.
+        let mut site_packages = if self.markers.os_name() == "nt" {
+            vec![virtualenv.root.clone(), virtualenv.scheme.purelib.clone()]
+        } else if virtualenv.scheme.platlib == virtualenv.scheme.purelib {
+            vec![virtualenv.scheme.purelib.clone()]
+        } else {
+            vec![
+                virtualenv.scheme.platlib.clone(),
+                virtualenv.scheme.purelib.clone(),
+            ]
+        };
+        if self.markers.os_name() != "nt" {
+            // Some distributions add import paths that are not part of the installation scheme,
+            // e.g., Debian's `dist-packages`. Build those paths as relative to the new environment,
+            // excluding paths outside the parent's prefix (such as an existing venv's system site
+            // packages).
+            for path in &self.site_packages {
+                if let Ok(relative) = path.strip_prefix(&self.sys_prefix) {
+                    let path = virtualenv.root.join(relative);
+                    if !site_packages.contains(&path) {
+                        site_packages.push(path);
+                    }
+                }
+            }
+        }
         Self {
             scheme: virtualenv.scheme,
             sys_base_executable: Some(virtualenv.base_executable),
@@ -125,7 +171,7 @@ impl Interpreter {
             sys_prefix: virtualenv.root,
             target: None,
             prefix: None,
-            site_packages: vec![],
+            site_packages,
             ..self
         }
     }
@@ -972,6 +1018,57 @@ struct InterpreterInfo {
 }
 
 impl InterpreterInfo {
+    /// Build metadata for virtual environment discovery without querying Python or using the cache.
+    fn from_virtualenv(interpreter: &Interpreter) -> Result<Self, Error> {
+        let executable = virtualenv_python_executable(interpreter.sys_prefix());
+        let mut scheme = interpreter.scheme.clone();
+        // Joining the empty relative data path adds a trailing separator that sysconfig omits.
+        scheme.data = scheme.data.components().collect();
+        Ok(Self {
+            platform: interpreter.platform.clone(),
+            markers: (*interpreter.markers).clone(),
+            scheme,
+            virtualenv: interpreter.virtualenv.clone(),
+            manylinux_compatible: interpreter.manylinux_compatible,
+            sys_prefix: interpreter.sys_prefix.clone(),
+            // These fields are unused by `Interpreter`, but retained in the cache format.
+            sys_base_exec_prefix: PathBuf::new(),
+            sys_path: Vec::new(),
+            sys_base_prefix: interpreter.sys_base_prefix.clone(),
+            sys_base_executable: interpreter.sys_base_executable.clone(),
+            sys_executable: std::path::absolute(executable)?,
+            site_packages: interpreter.site_packages.clone(),
+            stdlib: interpreter.stdlib.clone(),
+            extension_suffixes: interpreter.extension_suffixes.clone(),
+            standalone: interpreter.standalone,
+            pointer_size: interpreter.pointer_size,
+            gil_disabled: interpreter.gil_disabled,
+            debug_enabled: interpreter.debug_enabled,
+        })
+    }
+
+    /// Cache already prepared metadata for this executable.
+    fn cache(&self, cache: &Cache) -> Result<(), Error> {
+        let absolute = std::path::absolute(&self.sys_executable)?;
+        let canonical = canonicalize_executable(&absolute)?;
+        let cache_entry = Self::cache_entry(&absolute, &canonical, cache)?;
+        let modified = Timestamp::from_path(&canonical)?;
+        self.write_cache(&cache_entry, modified)
+    }
+
+    /// Write interpreter metadata using the same format for queried and inferred interpreters.
+    fn write_cache(&self, cache_entry: &CacheEntry, modified: Timestamp) -> Result<(), Error> {
+        fs::create_dir_all(cache_entry.dir())?;
+        write_atomic_sync(
+            cache_entry.path(),
+            rmp_serde::to_vec(&CachedByTimestamp {
+                timestamp: modified,
+                data: self,
+            })?,
+        )?;
+        Ok(())
+    }
+
     /// Return the resolved [`InterpreterInfo`] for the given Python executable.
     fn query(interpreter: &Path, cache: &Cache) -> Result<Self, Error> {
         let tempdir = tempfile::tempdir_in(cache.root())?;
@@ -1093,7 +1190,11 @@ impl InterpreterInfo {
                 err,
                 path: interpreter.to_path_buf(),
             }),
-            InterpreterInfoResult::Success(data) => Ok(*data),
+            InterpreterInfoResult::Success(mut data) => {
+                // CPython can report a relative executable when a launcher override is relative.
+                data.sys_executable = std::path::absolute(&data.sys_executable)?;
+                Ok(*data)
+            }
         }
     }
 
@@ -1132,11 +1233,24 @@ impl InterpreterInfo {
     }
 
     /// Return the cache entry for an interpreter's absolute and canonical executable paths.
-    fn cache_entry(absolute: &Path, canonical: &Path, cache: &Cache) -> CacheEntry {
+    fn cache_entry(absolute: &Path, canonical: &Path, cache: &Cache) -> Result<CacheEntry, Error> {
         let python_executable = env::var_os(EnvVars::PYTHONEXECUTABLE).map(PathBuf::from);
         let pyvenv_launcher = env::var_os(EnvVars::PYVENV_LAUNCHER).map(PathBuf::from);
+        let key = cache_digest(&(absolute, canonical, &python_executable, &pyvenv_launcher));
+        // Keep the original values: relative and absolute overrides can behave differently in
+        // CPython. Relative overrides also depend on the working directory, including an empty
+        // `__PYVENV_LAUNCHER__` consumed by `site.py` on older macOS Pythons.
+        let key = if python_executable
+            .iter()
+            .chain(pyvenv_launcher.iter())
+            .any(|path| path.is_relative())
+        {
+            cache_digest(&(key, env::current_dir()?))
+        } else {
+            key
+        };
 
-        cache.entry(
+        let entry = cache.entry(
             CacheBucket::Interpreter,
             // Shard interpreter metadata by host architecture, operating system, and version, to
             // invalidate the cache (e.g.) on OS upgrades.
@@ -1159,11 +1273,9 @@ impl InterpreterInfo {
             //
             // Launcher overrides can also change the reported executable and virtual environment
             // without changing either executable path.
-            format!(
-                "{}.msgpack",
-                cache_digest(&(absolute, canonical, &python_executable, &pyvenv_launcher))
-            ),
-        )
+            format!("{key}.msgpack"),
+        );
+        Ok(entry)
     }
 
     /// A wrapper around [`markers::query_interpreter_info`] to cache the computed markers.
@@ -1199,7 +1311,7 @@ impl InterpreterInfo {
         };
 
         let canonical = canonicalize_executable(&absolute).map_err(handle_io_error)?;
-        let cache_entry = Self::cache_entry(&absolute, &canonical, cache);
+        let cache_entry = Self::cache_entry(&absolute, &canonical, cache)?;
 
         // We check the timestamp of the canonicalized executable to check if an underlying
         // interpreter has been modified.
@@ -1248,14 +1360,7 @@ impl InterpreterInfo {
         // If `executable` is a pyenv shim, a bash script that redirects to the activated
         // python executable at another path, we're not allowed to cache the interpreter info.
         if is_same_file(executable, &info.sys_executable).unwrap_or(false) {
-            fs::create_dir_all(cache_entry.dir())?;
-            write_atomic_sync(
-                cache_entry.path(),
-                rmp_serde::to_vec(&CachedByTimestamp {
-                    timestamp: modified,
-                    data: &info,
-                })?,
-            )?;
+            info.write_cache(&cache_entry, modified)?;
         }
 
         Ok(info)
