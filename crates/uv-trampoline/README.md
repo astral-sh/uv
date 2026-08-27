@@ -15,48 +15,44 @@ The other build options exist for local development.
 
 ### Cross-compiling from Linux
 
-Install [cargo xwin](https://github.com/rust-cross/cargo-xwin). Use your package manager to install
-LLD and add the `rustup` targets:
+Use your package manager to install LLD and add the `rustup` targets:
 
 ```shell
 sudo apt install llvm clang lld
-cargo install --locked cargo-xwin@0.21.4
-rustup toolchain install nightly-2025-11-02
-rustup component add rust-src --toolchain nightly-2025-11-02-x86_64-unknown-linux-gnu
-rustup target add --toolchain nightly-2025-11-02 i686-pc-windows-msvc
-rustup target add --toolchain nightly-2025-11-02 x86_64-pc-windows-msvc
-rustup target add --toolchain nightly-2025-11-02 aarch64-pc-windows-msvc
+rustup toolchain install nightly-2026-03-11
+rustup component add rust-src --toolchain nightly-2026-03-11-x86_64-unknown-linux-gnu
+rustup target add --toolchain nightly-2026-03-11 i686-pc-windows-msvc
+rustup target add --toolchain nightly-2026-03-11 x86_64-pc-windows-msvc
+rustup target add --toolchain nightly-2026-03-11 aarch64-pc-windows-msvc
 ```
 
 Then, build the trampolines for all supported architectures:
 
 ```shell
-cargo +nightly-2025-11-02 xwin build --xwin-arch x86 --release --target i686-pc-windows-msvc
-cargo +nightly-2025-11-02 xwin build --release --target x86_64-pc-windows-msvc
-cargo +nightly-2025-11-02 xwin build --release --target aarch64-pc-windows-msvc
+uv run --only-group=xwin cargo +nightly-2026-03-11 xwin build --xwin-arch x86 --release --target i686-pc-windows-msvc
+uv run --only-group=xwin cargo +nightly-2026-03-11 xwin build --release --target x86_64-pc-windows-msvc
+uv run --only-group=xwin cargo +nightly-2026-03-11 xwin build --release --target aarch64-pc-windows-msvc
 ```
 
 ### Cross-compiling from macOS
 
-Install [cargo xwin](https://github.com/rust-cross/cargo-xwin). Use your package manager to install
-LLVM and add the `rustup` targets:
+Use your package manager to install LLVM and add the `rustup` targets:
 
 ```shell
 brew install llvm
-cargo install --locked cargo-xwin@0.21.4
-rustup toolchain install nightly-2025-11-02
-rustup component add rust-src --toolchain nightly-2025-11-02-aarch64-apple-darwin
-rustup target add --toolchain nightly-2025-11-02 i686-pc-windows-msvc
-rustup target add --toolchain nightly-2025-11-02 x86_64-pc-windows-msvc
-rustup target add --toolchain nightly-2025-11-02 aarch64-pc-windows-msvc
+rustup toolchain install nightly-2026-03-11
+rustup component add rust-src --toolchain nightly-2026-03-11-aarch64-apple-darwin
+rustup target add --toolchain nightly-2026-03-11 i686-pc-windows-msvc
+rustup target add --toolchain nightly-2026-03-11 x86_64-pc-windows-msvc
+rustup target add --toolchain nightly-2026-03-11 aarch64-pc-windows-msvc
 ```
 
 Then, build the trampolines for all supported architectures:
 
 ```shell
-cargo +nightly-2025-11-02 xwin build --xwin-arch x86 --release --target i686-pc-windows-msvc
-cargo +nightly-2025-11-02 xwin build --release --target x86_64-pc-windows-msvc
-cargo +nightly-2025-11-02 xwin build --release --target aarch64-pc-windows-msvc
+uv run --only-group=xwin cargo +nightly-2026-03-11 xwin build --xwin-arch x86 --release --target i686-pc-windows-msvc
+uv run --only-group=xwin cargo +nightly-2026-03-11 xwin build --release --target x86_64-pc-windows-msvc
+uv run --only-group=xwin cargo +nightly-2026-03-11 xwin build --release --target aarch64-pc-windows-msvc
 ```
 
 ### Updating the prebuilt executables
