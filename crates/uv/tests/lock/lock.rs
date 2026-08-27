@@ -1574,7 +1574,10 @@ async fn locked_build_dependency_wheel(module: &str) -> Result<Vec<u8>> {
 #[cfg(feature = "test-universal")]
 #[tokio::test]
 async fn lock_sdist_url_locked_build_dependency_hash_mismatch() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
+    let context = uv_test::test_context!("3.12")
+        .with_filtered_python_names()
+        .with_filtered_virtualenv_bin()
+        .with_filtered_exe_suffix();
     let server = MockServer::start().await;
     let archive_path = "/files/demo_pkg-1.0.0.tar.gz";
     let archive_url = format!("{}{archive_path}", server.uri());
@@ -1716,10 +1719,14 @@ async fn lock_sdist_url_locked_build_dependency_hash_mismatch() -> Result<()> {
     fs_err::remove_file(&sentinel)?;
 
     drop(trusted_wheel);
-    Mock::given(method("GET"))
+    let replacement_wheel = Mock::given(method("GET"))
         .and(path(wheel_path))
-        .respond_with(ResponseTemplate::new(200).set_body_bytes(replacement))
-        .mount(&server)
+        .respond_with(
+            ResponseTemplate::new(200)
+                .insert_header("cache-control", "max-age=31536000")
+                .set_body_bytes(replacement),
+        )
+        .mount_as_scoped(&server)
         .await;
 
     uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--no-cache")
@@ -1806,6 +1813,51 @@ async fn lock_sdist_url_locked_build_dependency_hash_mismatch() -> Result<()> {
         "the frozen synced build dependency was executed"
     );
     assert_eq!(context.read("uv.lock"), locked);
+
+    // Seed the shared wheel cache without applying the lockfile's hashes or installing the extra.
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("review-dep==1.0.0")
+        .arg("--index-url").arg(format!("{}/simple", server.uri()))
+        .arg("--target").arg(context.temp_dir.child("cache-seed").path()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: .venv/[BIN]/[PYTHON]
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + review-dep==1.0.0
+    ");
+    assert!(!sentinel.exists());
+
+    // A hash mismatch without another wheel download must come from the cached replacement.
+    let request_count = replacement_wheel.received_requests().await.len();
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen")
+        .arg("--reinstall-package").arg("demo-pkg")
+        .env("UV_LOCK_TEST_SENTINEL", sentinel.path()), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+      × Failed to download and build `demo-pkg @ http://[LOCALHOST]/files/demo_pkg-1.0.0.tar.gz`
+      ├─▶ Failed to install requirements from `build-system.requires`
+      ├─▶ Failed to download `review-dep==1.0.0`
+      ╰─▶ Hash mismatch for `review-dep==1.0.0`
+
+          Expected:
+            sha256:53a42340ae36747fb1471f9b4b7958be1f6e2e5fc234f931aafa3e454fd31dfb
+
+          Computed:
+            sha256:1aa0f7263e4991934282ab8912e95fdd34f24459d7c4f8b845c2281a04c89807
+
+    hint: `demo-pkg` was included because `project` (v0.1.0) depends on `demo-pkg`
+    ");
+    assert!(
+        !sentinel.exists(),
+        "the cached build dependency was executed"
+    );
+    assert_eq!(context.read("uv.lock"), locked);
+    assert_eq!(
+        replacement_wheel.received_requests().await.len(),
+        request_count
+    );
 
     // Explicitly unlocked resolution retains its existing update policy.
     uv_snapshot!(context.filters(), context.lock().arg("--upgrade").arg("--no-cache")
