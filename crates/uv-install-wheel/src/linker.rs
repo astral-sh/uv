@@ -11,11 +11,10 @@ use tracing::{debug, instrument};
 
 use uv_distribution_filename::WheelFilename;
 use uv_fs::Simplified;
-use uv_fs::link::{CopyLocks, LinkOptions, OnExistingDirectory, link_dir, link_file};
+use uv_fs::link::{CopyLocks, LinkOptions, OnExistingDirectory, link_dir};
 use uv_preview::{Preview, PreviewFeature};
 use uv_warnings::warn_user;
 
-use crate::ArchiveFileManifest;
 use crate::Error;
 use crate::wheel::ValidatedWheel;
 
@@ -252,45 +251,23 @@ impl InstallState {
 /// Extract a wheel by linking all of its files into site packages.
 #[instrument(skip_all)]
 pub(crate) fn link_wheel_files(
-    link_mode: Option<LinkMode>,
+    link_mode: LinkMode,
     site_packages: impl AsRef<Path>,
     wheel: &ValidatedWheel<'_>,
-    archive_metadata: Option<&Path>,
     state: &InstallState,
     filename: &WheelFilename,
 ) -> Result<(), Error> {
     let wheel = wheel.as_path();
     let site_packages = site_packages.as_ref();
-    let archive_file_manifest =
-        if let (Some(archive_metadata), Some(archive_id)) = (archive_metadata, wheel.file_name()) {
-            ArchiveFileManifest::read_from_metadata(&archive_metadata.join(archive_id))?
-        } else {
-            None
-        };
     register_installed_paths(wheel, state, filename)?;
-    // Preserve the existing directory-linking default for ordinary wheel files.
-    let directory_link_mode = link_mode.unwrap_or_default();
 
     // The `RECORD` file is modified during installation, so it needs a real
     // copy rather than a link back to the cache.
-    let options = LinkOptions::new(directory_link_mode)
+    let options = LinkOptions::new(link_mode)
         .with_mutable_copy_filter(|p: &Path| p.ends_with("RECORD"))
         .with_copy_locks(state.copy_locks())
         .with_on_existing_directory(OnExistingDirectory::Merge);
     let used_link_mode = link_dir(wheel, site_packages, &options)?;
-
-    let shared_link_mode = archive_file_link_mode(link_mode, used_link_mode);
-    if shared_link_mode != used_link_mode
-        && let Some(archive_file_manifest) = archive_file_manifest.as_ref()
-    {
-        link_archive_file_manifest_entries(
-            site_packages,
-            wheel,
-            archive_file_manifest,
-            shared_link_mode,
-            state,
-        )?;
-    }
 
     if used_link_mode == LinkMode::Clone {
         // The directory mtime is not updated when cloning and the mtime is
@@ -300,43 +277,6 @@ pub(crate) fn link_wheel_files(
         //
         // <https://github.com/python/cpython/blob/8336cb2b6f428246803b02a4e97fce49d0bb1e09/Lib/importlib/_bootstrap_external.py#L1601>
         update_site_packages_mtime(site_packages);
-    }
-
-    Ok(())
-}
-
-/// Hardlink shared payloads by default while preserving explicit modes and directory fallbacks.
-fn archive_file_link_mode(
-    requested_link_mode: Option<LinkMode>,
-    used_link_mode: LinkMode,
-) -> LinkMode {
-    if requested_link_mode.is_none() && used_link_mode == LinkMode::Clone {
-        LinkMode::Hardlink
-    } else {
-        used_link_mode
-    }
-}
-
-/// Replace cloned payloads with hardlinks to the complete cached archive.
-fn link_archive_file_manifest_entries(
-    site_packages: &Path,
-    wheel: &Path,
-    archive_file_manifest: &ArchiveFileManifest,
-    link_mode: LinkMode,
-    state: &InstallState,
-) -> Result<(), Error> {
-    let options = LinkOptions::new(link_mode)
-        .with_copy_locks(state.copy_locks())
-        .with_on_existing_directory(OnExistingDirectory::Merge);
-
-    for entry in archive_file_manifest.files() {
-        let source = wheel.join(entry.path());
-        let target = site_packages.join(entry.path());
-        if let Some(parent) = target.parent() {
-            fs::create_dir_all(parent)?;
-        }
-
-        link_file(&source, &target, &options)?;
     }
 
     Ok(())
@@ -374,26 +314,4 @@ fn register_installed_paths(
         state.register_installed_path(&relative, &path, filename);
     }
     Ok(())
-}
-
-#[cfg(test)]
-mod tests {
-    use super::{LinkMode, archive_file_link_mode};
-
-    #[test]
-    fn archive_file_link_mode_uses_hardlinks_after_default_clone() {
-        assert_eq!(
-            archive_file_link_mode(None, LinkMode::Clone),
-            LinkMode::Hardlink
-        );
-        assert_eq!(
-            archive_file_link_mode(Some(LinkMode::Clone), LinkMode::Clone),
-            LinkMode::Clone
-        );
-    }
-
-    #[test]
-    fn archive_file_link_mode_preserves_copy_fallback() {
-        assert_eq!(archive_file_link_mode(None, LinkMode::Copy), LinkMode::Copy);
-    }
 }

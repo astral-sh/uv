@@ -27,7 +27,7 @@ use uv_extract::dirhash::{DirectoryDigest, DirhashTree, ExtractedFile, dirhash_p
 use uv_extract::hash::Hasher;
 use uv_fs::{PortablePath, write_atomic};
 use uv_git::{GIT_LFS, GitError};
-use uv_install_wheel::{ArchiveFileManifest, ArchiveFileManifestEntry, validate_and_heal_record};
+use uv_install_wheel::validate_and_heal_record;
 use uv_platform_tags::Tags;
 use uv_preview::PreviewFeature;
 use uv_pypi_types::{HashDigest, HashDigests, PyProjectToml};
@@ -1232,7 +1232,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
     ///
     /// A hash tree makes identical extracted trees converge on one archive entry. Without one,
     /// persistence retains the existing behavior of assigning a unique archive ID.
-    /// Shared files and their manifest are finalized before the archive becomes visible.
+    /// Shared files are finalized before the archive becomes visible.
     async fn persist_extracted_wheel(
         &self,
         temp_dir: tempfile::TempDir,
@@ -1251,10 +1251,8 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
 
         let temp_dir = if let Some(extracted_files) = extracted_files {
             let cache = cache.clone();
-            let archive_id = id.clone();
             tokio::task::spawn_blocking(move || {
-                let archive_metadata = cache.archive_metadata(&archive_id);
-                persist_archive_files(&cache, temp_dir.path(), &archive_metadata, &extracted_files)
+                persist_archive_files(&cache, temp_dir.path(), &extracted_files)
                     .map_err(Error::CacheWrite)?;
                 Ok::<_, Error>(temp_dir)
             })
@@ -1377,26 +1375,7 @@ impl ExtractedWheelManifest {
 }
 
 /// Share executables and native libraries while keeping the unpublished archive complete.
-///
-/// Reuse an existing manifest when another writer has already prepared the same archive identity.
-fn persist_archive_files(
-    cache: &Cache,
-    archive: &Path,
-    archive_metadata: &Path,
-    files: &[ExtractedFile],
-) -> io::Result<()> {
-    if let Some(manifest) = ArchiveFileManifest::read_from_metadata(archive_metadata)? {
-        for entry in manifest.files() {
-            persist_archive_file(
-                &archive.join(entry.path()),
-                &cache.bucket(CacheBucket::Files).join(entry.object()),
-            )?;
-        }
-        return Ok(());
-    }
-
-    let mut entries = Vec::new();
-
+fn persist_archive_files(cache: &Cache, archive: &Path, files: &[ExtractedFile]) -> io::Result<()> {
     // Keep installer metadata private, including RECORD, which may have been healed after hashing.
     for file in files.iter().filter(|file| {
         !file.path().components().any(|component| {
@@ -1407,13 +1386,9 @@ fn persist_archive_files(
     }) {
         let id = ArchiveFileId::from_content_digest(&file.digest_hex(), file.is_executable());
         persist_archive_file(&archive.join(file.path()), &cache.archive_file(&id))?;
-        entries.push(ArchiveFileManifestEntry::new(
-            file.path().to_path_buf(),
-            id.as_ref().to_path_buf(),
-        ));
     }
 
-    ArchiveFileManifest::new(entries).write_to_metadata(archive_metadata)
+    Ok(())
 }
 
 /// Recognize native libraries, including versioned Unix shared objects like `libfoo.so.1`.
@@ -1643,40 +1618,6 @@ impl PathArchivePointer {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn persist_archive_files_keeps_unpublished_archive_complete() -> io::Result<()> {
-        let cache = Cache::temp()?;
-        let archive_id = ArchiveId::default();
-        let temp_dir = tempfile::tempdir()?;
-        let archive = temp_dir.path().join("archive");
-        let archive_metadata = cache.archive_metadata(&archive_id);
-        let archive_file = archive.join("package/native.so");
-        fs_err::create_dir_all(archive_file.parent().expect("archive file has a parent"))?;
-        fs_err::write(&archive_file, "binary contents")?;
-        let manifest = ArchiveFileManifest::new(vec![ArchiveFileManifestEntry::new(
-            PathBuf::from("package/native.so"),
-            PathBuf::from("ab/abcdef"),
-        )]);
-        manifest.write_to_metadata(&archive_metadata)?;
-        let object = cache.bucket(CacheBucket::Files).join("ab/abcdef");
-        fs_err::create_dir_all(object.parent().expect("object has a parent"))?;
-        fs_err::write(&object, "binary contents")?;
-
-        assert!(!cache.archive(&archive_id).exists());
-        persist_archive_files(&cache, &archive, &archive_metadata, &[])?;
-
-        assert_eq!(
-            ArchiveFileManifest::read_from_metadata(&archive_metadata)?,
-            Some(manifest)
-        );
-        assert_eq!(
-            uv_fs::is_same_file_allow_missing(&archive_file, &object),
-            Some(true)
-        );
-        assert!(!cache.archive(&archive_id).exists());
-        Ok(())
-    }
 
     #[test]
     fn persist_archive_file_restores_missing_source_from_existing_object() -> io::Result<()> {

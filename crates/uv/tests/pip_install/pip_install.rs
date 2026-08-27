@@ -24,7 +24,7 @@ use wiremock::{
 
 use uv_extract::dirhash::{DirectoryDigest, ExtractedFile, dirhash_path};
 use uv_fs::{PortablePath, Simplified};
-use uv_install_wheel::{ArchiveFileManifest, ArchiveFileManifestEntry, validate_and_heal_record};
+use uv_install_wheel::validate_and_heal_record;
 use uv_static::EnvVars;
 use uv_test::archive::write_tar_gz;
 #[cfg(feature = "test-git")]
@@ -16579,7 +16579,6 @@ async fn binary_payloads_stay_in_archive_without_preview() -> Result<()> {
         }
 
         assert!(!context.cache_dir.child("files-v0").exists());
-        assert!(!context.cache_dir.child("manifests-v0").exists());
         let archive_files = cache_files(context.cache_dir.child("archive-v0").path())?;
         let archive_binary = archive_files
             .iter()
@@ -16627,17 +16626,23 @@ async fn binary_payload_selection() -> Result<()> {
             ");
         }
 
-        let manifests = cache_files(context.cache_dir.child("manifests-v0").path())?;
-        assert_eq!(manifests.len(), 1);
-        let metadata = manifests[0].parent().context("manifest has no parent")?;
-        let manifest = ArchiveFileManifest::read_from_metadata(metadata)?
-            .context("archive has no manifest")?;
-        let mut paths = manifest
-            .files()
-            .iter()
-            .map(ArchiveFileManifestEntry::path)
-            .collect::<Vec<_>>();
-        paths.sort();
+        let objects = cache_files(context.cache_dir.child("files-v0").path())?;
+        // Identical contents still need separate executable and non-executable objects.
+        assert_eq!(objects.len(), 2);
+        let archive = fs_err::read_dir(context.cache_dir.child("archive-v0").path())?
+            .next()
+            .transpose()?
+            .context("missing cached archive")?
+            .path();
+        let paths = cache_files(&archive)?
+            .into_iter()
+            .filter(|path| {
+                objects
+                    .iter()
+                    .any(|object| uv_fs::is_same_file_allow_missing(path, object) == Some(true))
+            })
+            .map(|path| path.strip_prefix(&archive).map(Path::to_path_buf))
+            .collect::<Result<Vec<_>, _>>()?;
         let expected = [
             "native.DLL",
             "native.dylib",
@@ -16652,39 +16657,23 @@ async fn binary_payload_selection() -> Result<()> {
         .map(|name| Path::new("binary_payload").join(name))
         .collect::<Vec<_>>();
         assert_eq!(paths, expected);
-        // Identical contents still need separate executable and non-executable objects.
-        assert_eq!(
-            cache_files(context.cache_dir.child("files-v0").path())?.len(),
-            2
-        );
-        let archive_id = metadata.file_name().context("manifest has no archive ID")?;
-        for entry in manifest.files() {
-            let archived = context
-                .cache_dir
-                .child("archive-v0")
-                .join(archive_id)
-                .join(entry.path());
-            let object = context.cache_dir.child("files-v0").join(entry.object());
-            assert_eq!(
-                uv_fs::is_same_file_allow_missing(&archived, &object),
-                Some(true)
-            );
-        }
     }
     Ok(())
 }
 
 #[test]
 fn binary_payloads_use_archive_file_store() -> Result<()> {
-    let context = uv_test::test_context!("3.12").with_filter((
-        r"\.venv[\\/](?:bin[\\/]python3|Scripts[\\/]python\.exe)",
-        ".venv/[BIN]/[PYTHON]",
-    ));
+    let context = uv_test::test_context!("3.12")
+        .with_filtered_file_counts()
+        .with_filtered_sizes_and_units()
+        .with_filter((
+            r"\.venv[\\/](?:bin[\\/]python3|Scripts[\\/]python\.exe)",
+            ".venv/[BIN]/[PYTHON]",
+        ));
     let wheel = binary_payload_wheel(&context)?;
 
     uv_snapshot!(context.filters(), context.pip_install()
-        .arg("--preview-features")
-        .arg("content-addressed-cache")
+        .args(["--preview-features", "content-addressed-cache", "--link-mode", "copy"])
         .arg(&wheel), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -16694,133 +16683,33 @@ fn binary_payloads_use_archive_file_store() -> Result<()> {
      + binary-payload==0.1.0 (from file://[TEMP_DIR]/binary_payload-0.1.0-py3-none-any.whl)
     ");
 
-    let archive_file_root = context.cache_dir.child("files-v0");
-    let archive_files = cache_files(archive_file_root.path())?;
-    assert_eq!(archive_files.len(), 2);
-
-    let archive_metadata_root = context.cache_dir.child("manifests-v0");
-    let manifests = cache_files(archive_metadata_root.path())?;
-    assert_eq!(manifests.len(), 1);
-    let archive_id = manifests[0]
-        .parent()
-        .and_then(Path::file_name)
-        .ok_or_else(|| anyhow!("archive-file manifest path has no archive ID"))?;
-
-    let manifest = fs_err::read_to_string(&manifests[0])?;
-    let manifest: serde_json::Value = serde_json::from_str(&manifest)?;
-    let files = manifest["files"]
-        .as_array()
-        .ok_or_else(|| anyhow!("archive-file manifest is missing a files array"))?;
-    let file = files
+    let objects = cache_files(context.cache_dir.child("files-v0").path())?;
+    let archive = fs_err::read_dir(context.cache_dir.child("archive-v0").path())?
+        .next()
+        .transpose()?
+        .context("missing cached archive")?
+        .path();
+    let archive_binary = archive.join("binary_payload/native.so");
+    let object = objects
         .iter()
-        .find(|file| {
-            file["path"]
-                .as_str()
-                .is_some_and(|path| Path::new(path) == Path::new("binary_payload/native.so"))
-        })
-        .context("archive-file manifest is missing native.so")?;
-    let manifest_object = file["object"]
-        .as_str()
-        .ok_or_else(|| anyhow!("archive-file manifest entry is missing an object"))?;
-    assert_eq!(Path::new(manifest_object).components().count(), 2);
-    let archive_file = &archive_file_root.path().join(manifest_object);
-    assert!(archive_files.contains(archive_file));
+        .find(|object| uv_fs::is_same_file_allow_missing(&archive_binary, object) == Some(true))
+        .context("missing shared binary payload")?;
 
-    let archive_root = context.cache_dir.child("archive-v0");
-    let archive_binary = archive_root
-        .path()
-        .join(archive_id)
-        .join("binary_payload")
-        .join("native.so");
-    let installed_binary = context
-        .site_packages()
-        .join("binary_payload")
-        .join("native.so");
-
-    assert_eq!(
-        uv_fs::is_same_file_allow_missing(&installed_binary, archive_file),
-        Some(true)
-    );
-    assert_eq!(
-        uv_fs::is_same_file_allow_missing(&archive_binary, archive_file),
-        Some(true)
-    );
-    assert!(
-        !archive_root
-            .path()
-            .join(archive_id)
-            .join("manifest.json")
-            .exists()
-    );
-
-    fs_err::remove_file(&installed_binary)?;
     uv_snapshot!(context.filters(), context.prune(), @"
     exit_code: 0 (success)
     ----- stderr -----
     Pruning cache at: [CACHE_DIR]/
     No unused entries found
     ");
-    assert!(archive_file.exists());
+    assert!(object.exists());
 
-    let copy_target = context.temp_dir.child("copy-target");
+    // The archive remains complete even if its file-store entry is removed.
+    fs_err::remove_file(object)?;
+    let target = context.temp_dir.child("retained-target");
     uv_snapshot!(context.filters(), context.pip_install()
-        .arg("--preview-features")
-        .arg("content-addressed-cache")
+        .args(["--preview-features", "content-addressed-cache", "--link-mode", "copy"])
         .arg("--target")
-        .arg(copy_target.path())
-        .arg("--link-mode")
-        .arg("copy")
-        .arg(&wheel), @"
-    exit_code: 0 (success)
-    ----- stderr -----
-    Using CPython 3.12.[X] interpreter at: .venv/[BIN]/[PYTHON]
-    Resolved 1 package in [TIME]
-    Installed 1 package in [TIME]
-     + binary-payload==0.1.0 (from file://[TEMP_DIR]/binary_payload-0.1.0-py3-none-any.whl)
-    ");
-
-    #[cfg(any(unix, windows))]
-    assert_eq!(
-        uv_fs::is_same_file_allow_missing(
-            &copy_target.path().join("binary_payload").join("native.so"),
-            archive_file,
-        ),
-        Some(false)
-    );
-    assert_eq!(
-        fs_err::read(copy_target.path().join("binary_payload").join("native.so"))?,
-        BINARY_PAYLOAD_CONTENTS,
-    );
-
-    let clone_target = context.temp_dir.child("clone-target");
-    uv_snapshot!(context.filters(), context.pip_install()
-        .arg("--preview-features")
-        .arg("content-addressed-cache")
-        .arg("--target")
-        .arg(clone_target.path())
-        .arg("--link-mode")
-        .arg("clone")
-        .arg(&wheel), @"
-    exit_code: 0 (success)
-    ----- stderr -----
-    Using CPython 3.12.[X] interpreter at: .venv/[BIN]/[PYTHON]
-    Resolved 1 package in [TIME]
-    Installed 1 package in [TIME]
-     + binary-payload==0.1.0 (from file://[TEMP_DIR]/binary_payload-0.1.0-py3-none-any.whl)
-    ");
-
-    assert_eq!(
-        fs_err::read(clone_target.path().join("binary_payload").join("native.so"))?,
-        fs_err::read(archive_file)?,
-    );
-
-    // Archive hardlinks keep the wheel installable even if the shared object is removed.
-    fs_err::remove_file(archive_file)?;
-    let retained_target = context.temp_dir.child("retained-target");
-    uv_snapshot!(context.filters(), context.pip_install()
-        .args(["--preview-features", "content-addressed-cache"])
-        .arg("--target")
-        .arg(retained_target.path())
+        .arg(target.path())
         .arg(&wheel), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -16830,38 +16719,34 @@ fn binary_payloads_use_archive_file_store() -> Result<()> {
      + binary-payload==0.1.0 (from file://[TEMP_DIR]/binary_payload-0.1.0-py3-none-any.whl)
     ");
     assert_eq!(
-        fs_err::read(retained_target.join("binary_payload/native.so"))?,
+        fs_err::read(target.join("binary_payload/native.so"))?,
         BINARY_PAYLOAD_CONTENTS
     );
-    fs_err::hard_link(&archive_binary, archive_file)?;
+    fs_err::hard_link(&archive_binary, object)?;
 
-    // Installation and pruning must reject unsupported manifest versions consistently.
-    let mut manifest = manifest;
-    manifest["version"] = serde_json::json!(2);
-    fs_err::write(&manifests[0], serde_json::to_vec(&manifest)?)?;
-
-    uv_snapshot!(context.filters(), context.pip_install()
-        .arg("--preview-features")
-        .arg("content-addressed-cache")
-        .arg("--target")
-        .arg(context.temp_dir.child("invalid-target").path())
-        .arg(&wheel), @"
-    exit_code: 2 (failure)
+    // Links outside the cache also keep objects alive after their archives are removed.
+    let retained_binary = context.temp_dir.child("retained-native.so");
+    fs_err::hard_link(object, &retained_binary)?;
+    uv_snapshot!(context.filters(), context.clean().arg("binary-payload"), @"
+    exit_code: 0 (success)
     ----- stderr -----
-    Using CPython 3.12.[X] interpreter at: .venv/[BIN]/[PYTHON]
-    Resolved 1 package in [TIME]
-    error: Failed to install: binary_payload-0.1.0-py3-none-any.whl (binary-payload==0.1.0 (from file://[TEMP_DIR]/binary_payload-0.1.0-py3-none-any.whl))
-      Caused by: archive file manifest has an unsupported version
+    Removed [N] files ([SIZE])
     ");
+    assert!(!archive.exists());
+    assert_eq!(
+        cache_files(context.cache_dir.child("files-v0").path())?,
+        vec![object.clone()]
+    );
+    assert_eq!(fs_err::read(&retained_binary)?, BINARY_PAYLOAD_CONTENTS);
 
+    fs_err::remove_file(&retained_binary)?;
     uv_snapshot!(context.filters(), context.prune(), @"
-    exit_code: 2 (failure)
+    exit_code: 0 (success)
     ----- stderr -----
     Pruning cache at: [CACHE_DIR]/
-    error: Failed to prune cache at: [CACHE_DIR]/
-      Caused by: archive file manifest has an unsupported version
+    Removed [N] files ([SIZE])
     ");
-    assert!(archive_file.exists());
+    assert!(cache_files(context.cache_dir.child("files-v0").path())?.is_empty());
 
     Ok(())
 }

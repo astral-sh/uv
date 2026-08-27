@@ -6262,7 +6262,6 @@ dependencies = [
  "uv-distribution-types",
  "uv-fastid",
  "uv-fs",
- "uv-install-wheel",
  "uv-normalize",
  "uv-pypi-types",
  "uv-redacted",
