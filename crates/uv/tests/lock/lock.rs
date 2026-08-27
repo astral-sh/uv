@@ -1499,7 +1499,7 @@ fn lock_sdist_url() -> Result<()> {
     Ok(())
 }
 
-/// Create a deterministic source archive with an in-tree backend and configurable metadata hook.
+/// Create a deterministic source archive with an in-tree backend and a side effect on import.
 #[cfg(feature = "test-universal")]
 fn locked_source_archive(side_effect: &str, subdirectory: &str) -> Result<Vec<u8>> {
     let pyproject = indoc! {r#"
@@ -1512,8 +1512,9 @@ fn locked_source_archive(side_effect: &str, subdirectory: &str) -> Result<Vec<u8
         import os
         from pathlib import Path
 
+        {side_effect}
+
         def prepare_metadata_for_build_wheel(metadata_directory, config_settings=None):
-            {side_effect}
             dist_info = Path(metadata_directory) / "demo_pkg-1.0.0.dist-info"
             dist_info.mkdir()
             (dist_info / "METADATA").write_text(
@@ -1571,7 +1572,10 @@ async fn locked_build_dependency_wheel(module: &str) -> Result<Vec<u8>> {
 #[cfg(feature = "test-universal")]
 #[tokio::test]
 async fn lock_sdist_url_locked_build_dependency_hash_mismatch() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
+    let context = uv_test::test_context!("3.12")
+        .with_filtered_python_names()
+        .with_filtered_virtualenv_bin()
+        .with_filtered_exe_suffix();
     let server = MockServer::start().await;
     let archive_path = "/files/demo_pkg-1.0.0.tar.gz";
     let archive_url = format!("{}{archive_path}", server.uri());
@@ -1601,7 +1605,9 @@ async fn lock_sdist_url_locked_build_dependency_hash_mismatch() -> Result<()> {
             (
                 "demo_pkg-1.0.0/backend.py",
                 indoc! {r#"
+            import os
             from pathlib import Path
+            from zipfile import ZipFile
 
             def prepare_metadata_for_build_wheel(metadata_directory, config_settings=None):
                 import review_dep
@@ -1611,6 +1617,18 @@ async fn lock_sdist_url_locked_build_dependency_hash_mismatch() -> Result<()> {
                     "Metadata-Version: 2.2\nName: demo-pkg\nVersion: 1.0.0\n"
                 )
                 return dist_info.name
+
+            def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
+                import review_dep
+                Path(os.environ["UV_LOCK_TEST_SENTINEL"]).touch()
+                filename = "demo_pkg-1.0.0-py3-none-any.whl"
+                dist_info = "demo_pkg-1.0.0.dist-info"
+                with ZipFile(Path(wheel_directory) / filename, "w") as wheel:
+                    wheel.writestr("demo_pkg.py", "__version__ = '1.0.0'\n")
+                    wheel.writestr(f"{dist_info}/METADATA", "Metadata-Version: 2.2\nName: demo-pkg\nVersion: 1.0.0\n")
+                    wheel.writestr(f"{dist_info}/WHEEL", "Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n")
+                    wheel.writestr(f"{dist_info}/RECORD", f"demo_pkg.py,,\n{dist_info}/METADATA,,\n{dist_info}/WHEEL,,\n{dist_info}/RECORD,,\n")
+                return filename
         "#},
             ),
         ],
@@ -1650,7 +1668,7 @@ async fn lock_sdist_url_locked_build_dependency_hash_mismatch() -> Result<()> {
         .await;
     let trusted_wheel = Mock::given(method("GET"))
         .and(path(wheel_path))
-        .respond_with(ResponseTemplate::new(200).set_body_bytes(trusted))
+        .respond_with(ResponseTemplate::new(200).set_body_bytes(trusted.clone()))
         .mount_as_scoped(&server)
         .await;
 
@@ -1662,7 +1680,10 @@ async fn lock_sdist_url_locked_build_dependency_hash_mismatch() -> Result<()> {
         name = "project"
         version = "0.1.0"
         requires-python = ">=3.12"
-        dependencies = ["demo-pkg @ {archive_url}", "review-dep==1.0.0"]
+        dependencies = ["demo-pkg @ {archive_url}"]
+
+        [project.optional-dependencies]
+        build = ["review-dep==1.0.0"]
 
         [[tool.uv.index]]
         url = "{}/simple"
@@ -1675,12 +1696,72 @@ async fn lock_sdist_url_locked_build_dependency_hash_mismatch() -> Result<()> {
     ");
     let locked = context.read("uv.lock");
     assert!(locked.contains(&trusted_digest));
+    assert!(!sentinel.exists(), "locking built a wheel");
+
+    // Build successfully with the trusted wheel, without installing the extra in the main environment.
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--no-cache")
+        .env("UV_LOCK_TEST_SENTINEL", sentinel.path()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + demo-pkg==1.0.0 (from http://[LOCALHOST]/files/demo_pkg-1.0.0.tar.gz)
+    ");
+    sentinel.assert("");
+    context.assert_installed("demo_pkg", "1.0.0");
+    context
+        .assert_command(
+            "from importlib.util import find_spec; assert find_spec('review_dep') is None",
+        )
+        .success();
+    fs_err::remove_file(&sentinel)?;
+
+    // Prefer a locked wheel over a higher build tag whose advertised hash is not in the lockfile.
+    let trusted_wheel_path = "/files/review_dep-1.0.0-1-py3-none-any.whl";
+    let replacement_wheel_path = "/files/review_dep-1.0.0-2-py3-none-any.whl";
+    let replacement_digest = hex::encode(Sha256::digest(&replacement));
+    Mock::given(path("/links"))
+        .respond_with(ResponseTemplate::new(200).set_body_raw(
+            formatdoc! {r#"
+                <a href="{trusted_wheel_path}#sha256={trusted_digest}">review_dep-1.0.0-1-py3-none-any.whl</a>
+                <a href="{replacement_wheel_path}#sha256={replacement_digest}">review_dep-1.0.0-2-py3-none-any.whl</a>
+            "#},
+            "text/html",
+        ))
+        .mount(&server)
+        .await;
+    Mock::given(path(trusted_wheel_path))
+        .respond_with(ResponseTemplate::new(200).set_body_bytes(trusted))
+        .mount(&server)
+        .await;
+    Mock::given(path(replacement_wheel_path))
+        .respond_with(ResponseTemplate::new(200).set_body_bytes(replacement.clone()))
+        .mount(&server)
+        .await;
+
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--no-cache").arg("--reinstall")
+        .arg("--no-index").arg("--find-links").arg(format!("{}/links", server.uri()))
+        .env("UV_LOCK_TEST_SENTINEL", sentinel.path()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     ~ demo-pkg==1.0.0 (from http://[LOCALHOST]/files/demo_pkg-1.0.0.tar.gz)
+    ");
+    sentinel.assert("");
+    assert_eq!(context.read("uv.lock"), locked);
+    fs_err::remove_file(&sentinel)?;
 
     drop(trusted_wheel);
-    Mock::given(method("GET"))
+    let replacement_wheel = Mock::given(method("GET"))
         .and(path(wheel_path))
-        .respond_with(ResponseTemplate::new(200).set_body_bytes(replacement))
-        .mount(&server)
+        .respond_with(
+            ResponseTemplate::new(200)
+                .insert_header("cache-control", "max-age=31536000")
+                .set_body_bytes(replacement),
+        )
+        .mount_as_scoped(&server)
         .await;
 
     uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--no-cache")
@@ -1743,6 +1824,75 @@ async fn lock_sdist_url_locked_build_dependency_hash_mismatch() -> Result<()> {
         "the default synced build dependency was executed"
     );
     assert_eq!(context.read("uv.lock"), locked);
+
+    // Skip metadata validation and force a fresh installation build from the unchanged source.
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--no-cache").arg("--reinstall")
+        .env("UV_LOCK_TEST_SENTINEL", sentinel.path()), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+      × Failed to download and build `demo-pkg @ http://[LOCALHOST]/files/demo_pkg-1.0.0.tar.gz`
+      ├─▶ Failed to install requirements from `build-system.requires`
+      ├─▶ Failed to download `review-dep==1.0.0`
+      ╰─▶ Hash mismatch for `review-dep==1.0.0`
+
+          Expected:
+            sha256:53a42340ae36747fb1471f9b4b7958be1f6e2e5fc234f931aafa3e454fd31dfb
+
+          Computed:
+            sha256:1aa0f7263e4991934282ab8912e95fdd34f24459d7c4f8b845c2281a04c89807
+
+    hint: `demo-pkg` was included because `project` (v0.1.0) depends on `demo-pkg`
+    ");
+    assert!(
+        !sentinel.exists(),
+        "the frozen synced build dependency was executed"
+    );
+    assert_eq!(context.read("uv.lock"), locked);
+
+    // Seed the shared wheel cache without applying the lockfile's hashes or installing the extra.
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("review-dep==1.0.0")
+        .arg("--index-url").arg(format!("{}/simple", server.uri()))
+        .arg("--target").arg(context.temp_dir.child("cache-seed").path()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: .venv/[BIN]/[PYTHON]
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + review-dep==1.0.0
+    ");
+    assert!(!sentinel.exists());
+
+    // A hash mismatch without another wheel download must come from the cached replacement.
+    let request_count = replacement_wheel.received_requests().await.len();
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen")
+        .arg("--reinstall-package").arg("demo-pkg")
+        .env("UV_LOCK_TEST_SENTINEL", sentinel.path()), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+      × Failed to download and build `demo-pkg @ http://[LOCALHOST]/files/demo_pkg-1.0.0.tar.gz`
+      ├─▶ Failed to install requirements from `build-system.requires`
+      ├─▶ Failed to download `review-dep==1.0.0`
+      ╰─▶ Hash mismatch for `review-dep==1.0.0`
+
+          Expected:
+            sha256:53a42340ae36747fb1471f9b4b7958be1f6e2e5fc234f931aafa3e454fd31dfb
+
+          Computed:
+            sha256:1aa0f7263e4991934282ab8912e95fdd34f24459d7c4f8b845c2281a04c89807
+
+    hint: `demo-pkg` was included because `project` (v0.1.0) depends on `demo-pkg`
+    ");
+    assert!(
+        !sentinel.exists(),
+        "the cached build dependency was executed"
+    );
+    assert_eq!(context.read("uv.lock"), locked);
+    assert_eq!(
+        replacement_wheel.received_requests().await.len(),
+        request_count
+    );
 
     // Explicitly unlocked resolution retains its existing update policy.
     uv_snapshot!(context.filters(), context.lock().arg("--upgrade").arg("--no-cache")
@@ -1812,7 +1962,7 @@ async fn lock_sdist_url_locked_hash_mismatch() -> Result<()> {
         name = "demo-pkg"
         version = "1.0.0"
         source = { url = "http://[LOCALHOST]/files/demo_pkg-1.0.0.tar.gz" }
-        sdist = { hash = "sha256:1dfac3679ac5fa004e73685633ee28fa14c8e678efd1ff17f8f0ec1db53b9482" }
+        sdist = { hash = "sha256:93703857ad8ea956f6661f1d78d445be4340afa15f8b87bf1f3a79621068847f" }
 
         [[package]]
         name = "project"
@@ -1854,10 +2004,10 @@ async fn lock_sdist_url_locked_hash_mismatch() -> Result<()> {
       Caused by: Hash mismatch for `demo-pkg @ http://[LOCALHOST]/files/demo_pkg-1.0.0.tar.gz`
 
         Expected:
-          sha256:1dfac3679ac5fa004e73685633ee28fa14c8e678efd1ff17f8f0ec1db53b9482
+          sha256:93703857ad8ea956f6661f1d78d445be4340afa15f8b87bf1f3a79621068847f
 
         Computed:
-          sha256:e43644c723229183647d3074ca0dea53264c065e0d09ff59fb47c659dfb345bb
+          sha256:883b65920e21bce11c2697819dab77eb70e18d810b2746f49e46155d6ca527bc
     ");
     assert!(!sentinel.exists(), "the locked build backend was executed");
 
@@ -1872,10 +2022,10 @@ async fn lock_sdist_url_locked_hash_mismatch() -> Result<()> {
       ╰─▶ Hash mismatch for `demo-pkg @ http://[LOCALHOST]/files/demo_pkg-1.0.0.tar.gz`
 
           Expected:
-            sha256:1dfac3679ac5fa004e73685633ee28fa14c8e678efd1ff17f8f0ec1db53b9482
+            sha256:93703857ad8ea956f6661f1d78d445be4340afa15f8b87bf1f3a79621068847f
 
           Computed:
-            sha256:e43644c723229183647d3074ca0dea53264c065e0d09ff59fb47c659dfb345bb
+            sha256:883b65920e21bce11c2697819dab77eb70e18d810b2746f49e46155d6ca527bc
     ");
     assert!(
         !sentinel.exists(),
@@ -1894,10 +2044,10 @@ async fn lock_sdist_url_locked_hash_mismatch() -> Result<()> {
       ╰─▶ Hash mismatch for `demo-pkg @ http://[LOCALHOST]/files/demo_pkg-1.0.0.tar.gz`
 
           Expected:
-            sha256:1dfac3679ac5fa004e73685633ee28fa14c8e678efd1ff17f8f0ec1db53b9482
+            sha256:93703857ad8ea956f6661f1d78d445be4340afa15f8b87bf1f3a79621068847f
 
           Computed:
-            sha256:e43644c723229183647d3074ca0dea53264c065e0d09ff59fb47c659dfb345bb
+            sha256:883b65920e21bce11c2697819dab77eb70e18d810b2746f49e46155d6ca527bc
     ");
     assert!(
         !sentinel.exists(),
@@ -1913,10 +2063,10 @@ async fn lock_sdist_url_locked_hash_mismatch() -> Result<()> {
       Caused by: Hash mismatch for `demo-pkg @ http://[LOCALHOST]/files/demo_pkg-1.0.0.tar.gz`
 
         Expected:
-          sha256:1dfac3679ac5fa004e73685633ee28fa14c8e678efd1ff17f8f0ec1db53b9482
+          sha256:93703857ad8ea956f6661f1d78d445be4340afa15f8b87bf1f3a79621068847f
 
         Computed:
-          sha256:e43644c723229183647d3074ca0dea53264c065e0d09ff59fb47c659dfb345bb
+          sha256:883b65920e21bce11c2697819dab77eb70e18d810b2746f49e46155d6ca527bc
     ");
     assert!(
         !sentinel.exists(),
@@ -1953,7 +2103,7 @@ async fn lock_sdist_url_locked_hash_mismatch() -> Result<()> {
         name = "demo-pkg"
         version = "1.0.0"
         source = { url = "http://[LOCALHOST]/files/demo_pkg-1.0.0.tar.gz" }
-        sdist = { hash = "sha256:e43644c723229183647d3074ca0dea53264c065e0d09ff59fb47c659dfb345bb" }
+        sdist = { hash = "sha256:883b65920e21bce11c2697819dab77eb70e18d810b2746f49e46155d6ca527bc" }
 
         [[package]]
         name = "project"
@@ -2059,10 +2209,10 @@ async fn lock_sdist_registry_changed_index_locked_hash_mismatch() -> Result<()> 
       ╰─▶ Hash mismatch for `demo-pkg==1.0.0`
 
           Expected:
-            sha256:1dfac3679ac5fa004e73685633ee28fa14c8e678efd1ff17f8f0ec1db53b9482
+            sha256:93703857ad8ea956f6661f1d78d445be4340afa15f8b87bf1f3a79621068847f
 
           Computed:
-            sha256:e43644c723229183647d3074ca0dea53264c065e0d09ff59fb47c659dfb345bb
+            sha256:883b65920e21bce11c2697819dab77eb70e18d810b2746f49e46155d6ca527bc
 
     hint: `demo-pkg` (v1.0.0) was included because `project` (v0.1.0) depends on `demo-pkg==1.0.0`
     ");
@@ -2162,10 +2312,10 @@ async fn lock_sdist_registry_missing_index_locked_hash_mismatch() -> Result<()> 
       ╰─▶ Hash mismatch for `demo-pkg==1.0.0`
 
           Expected:
-            sha256:1dfac3679ac5fa004e73685633ee28fa14c8e678efd1ff17f8f0ec1db53b9482
+            sha256:93703857ad8ea956f6661f1d78d445be4340afa15f8b87bf1f3a79621068847f
 
           Computed:
-            sha256:e43644c723229183647d3074ca0dea53264c065e0d09ff59fb47c659dfb345bb
+            sha256:883b65920e21bce11c2697819dab77eb70e18d810b2746f49e46155d6ca527bc
 
     hint: `demo-pkg` (v1.0.0) was included because `project` (v0.1.0) depends on `demo-pkg==1.0.0`
     ");
@@ -2232,10 +2382,10 @@ async fn lock_sdist_url_root_subdirectory_locked_hash_mismatch() -> Result<()> {
       ╰─▶ Hash mismatch for `demo-pkg @ http://[LOCALHOST]/files/demo_pkg-1.0.0.tar.gz#subdirectory=.`
 
           Expected:
-            sha256:1dfac3679ac5fa004e73685633ee28fa14c8e678efd1ff17f8f0ec1db53b9482
+            sha256:93703857ad8ea956f6661f1d78d445be4340afa15f8b87bf1f3a79621068847f
 
           Computed:
-            sha256:e43644c723229183647d3074ca0dea53264c065e0d09ff59fb47c659dfb345bb
+            sha256:883b65920e21bce11c2697819dab77eb70e18d810b2746f49e46155d6ca527bc
     ");
     assert!(
         !sentinel.exists(),
@@ -2301,10 +2451,10 @@ async fn lock_sdist_url_rejected_archive_not_cached() -> Result<()> {
       ╰─▶ Hash mismatch for `demo-pkg @ http://[LOCALHOST]/files/demo_pkg-1.0.0.tar.gz`
 
           Expected:
-            sha256:1dfac3679ac5fa004e73685633ee28fa14c8e678efd1ff17f8f0ec1db53b9482
+            sha256:93703857ad8ea956f6661f1d78d445be4340afa15f8b87bf1f3a79621068847f
 
           Computed:
-            sha256:e43644c723229183647d3074ca0dea53264c065e0d09ff59fb47c659dfb345bb
+            sha256:883b65920e21bce11c2697819dab77eb70e18d810b2746f49e46155d6ca527bc
     ");
     assert!(
         !sentinel.exists(),
@@ -2427,10 +2577,10 @@ async fn lock_sdist_url_equivalent_subdirectory_locked_hash_mismatch() -> Result
       ╰─▶ Hash mismatch for `demo-pkg @ http://[LOCALHOST]/files/demo_pkg-1.0.0.tar.gz#subdirectory=nested/../nested`
 
           Expected:
-            sha256:9778361e4988b87e11cafe08e7593b194f7b078d4c52bdc8333870072ffe0f2b
+            sha256:09c631b3e8d48a04c4d7e3bc64d61dbc10a6b89131dffadd885eccb3ffa5e455
 
           Computed:
-            sha256:aadb46dc857a7e2c2417efd8e86b3cd665eacae2127b49d9de14800f2ac5b7ef
+            sha256:4d8741dcbddac394ac2680d99589d36c9d8fd7b3b19665531de9cc02550ec5eb
     ");
     assert!(
         !sentinel.exists(),
@@ -2484,10 +2634,10 @@ fn lock_sdist_path_locked_hash_mismatch() -> Result<()> {
       Caused by: Hash mismatch for `demo-pkg @ file://[TEMP_DIR]/demo_pkg-1.0.0.tar.gz`
 
         Expected:
-          sha256:1dfac3679ac5fa004e73685633ee28fa14c8e678efd1ff17f8f0ec1db53b9482
+          sha256:93703857ad8ea956f6661f1d78d445be4340afa15f8b87bf1f3a79621068847f
 
         Computed:
-          sha256:e43644c723229183647d3074ca0dea53264c065e0d09ff59fb47c659dfb345bb
+          sha256:883b65920e21bce11c2697819dab77eb70e18d810b2746f49e46155d6ca527bc
     ");
     assert!(!sentinel.exists(), "the locked backend was executed");
 
@@ -2499,10 +2649,10 @@ fn lock_sdist_path_locked_hash_mismatch() -> Result<()> {
       ╰─▶ Hash mismatch for `demo-pkg @ file://[TEMP_DIR]/demo_pkg-1.0.0.tar.gz`
 
           Expected:
-            sha256:1dfac3679ac5fa004e73685633ee28fa14c8e678efd1ff17f8f0ec1db53b9482
+            sha256:93703857ad8ea956f6661f1d78d445be4340afa15f8b87bf1f3a79621068847f
 
           Computed:
-            sha256:e43644c723229183647d3074ca0dea53264c065e0d09ff59fb47c659dfb345bb
+            sha256:883b65920e21bce11c2697819dab77eb70e18d810b2746f49e46155d6ca527bc
     ");
     assert!(!sentinel.exists(), "the refreshed backend was executed");
 
@@ -2563,10 +2713,10 @@ fn lock_sdist_path_rejected_archive_not_cached() -> Result<()> {
       ╰─▶ Hash mismatch for `demo-pkg @ file://[TEMP_DIR]/demo_pkg-1.0.0.tar.gz`
 
           Expected:
-            sha256:1dfac3679ac5fa004e73685633ee28fa14c8e678efd1ff17f8f0ec1db53b9482
+            sha256:93703857ad8ea956f6661f1d78d445be4340afa15f8b87bf1f3a79621068847f
 
           Computed:
-            sha256:e43644c723229183647d3074ca0dea53264c065e0d09ff59fb47c659dfb345bb
+            sha256:883b65920e21bce11c2697819dab77eb70e18d810b2746f49e46155d6ca527bc
 
     hint: `demo-pkg` was included because `project` (v0.1.0) depends on `demo-pkg`
     ");
