@@ -60,8 +60,7 @@ pub fn install_wheel<Cache: serde::Serialize, Build: serde::Serialize>(
     build_info: Option<&Build>,
     installer: Option<&str>,
     installer_metadata: bool,
-    archive_metadata: Option<&Path>,
-    link_mode: Option<LinkMode>,
+    link_mode: LinkMode,
     state: &InstallState,
 ) -> Result<(), Error> {
     let wheel = wheel.as_ref();
@@ -91,14 +90,7 @@ pub fn install_wheel<Cache: serde::Serialize, Build: serde::Serialize>(
     // > 1.d Else unpack archive into platlib (site-packages).
     let validated_wheel = ValidatedWheel::new(layout, wheel, &dist_info_prefix)?;
     trace!(?name, "Extracting wheel files");
-    link_wheel_files(
-        link_mode,
-        site_packages,
-        &validated_wheel,
-        archive_metadata,
-        state,
-        filename,
-    )?;
+    link_wheel_files(link_mode, site_packages, &validated_wheel, state, filename)?;
     trace!(?name, "Extracted wheel files");
 
     // Read the RECORD file.

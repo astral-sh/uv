@@ -59,7 +59,7 @@ pub(crate) async fn pip_sync(
     extras: &ExtrasSpecification,
     groups: &GroupsSpecification,
     reinstall: Reinstall,
-    link_mode: Option<LinkMode>,
+    link_mode: LinkMode,
     compile: bool,
     hash_checking: Option<HashCheckingMode>,
     index_locations: IndexLocations,

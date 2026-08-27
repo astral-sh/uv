@@ -22,7 +22,6 @@ uv-dirs = { workspace = true }
 uv-distribution-types = { workspace = true }
 uv-fastid = { workspace = true, features = ["serde"] }
 uv-fs = { workspace = true, features = ["tokio"] }
-uv-install-wheel = { workspace = true }
 uv-normalize = { workspace = true }
 uv-pypi-types = { workspace = true }
 uv-redacted = { workspace = true }
