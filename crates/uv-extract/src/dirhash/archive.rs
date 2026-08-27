@@ -116,9 +116,9 @@ impl HashedFile {
         self.digest.to_hex().to_string()
     }
 
-    /// Return the extracted file's path and size without its hashing metadata.
-    pub fn to_unhashed(&self) -> UnhashedFile {
-        UnhashedFile::new(self.path.to_path_buf(), self.size)
+    /// Return the size of the extracted file in bytes.
+    pub fn size(&self) -> u64 {
+        self.size
     }
 }
 
