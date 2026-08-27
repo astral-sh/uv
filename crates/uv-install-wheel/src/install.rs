@@ -60,7 +60,7 @@ pub fn install_wheel<Cache: serde::Serialize, Build: serde::Serialize>(
     build_info: Option<&Build>,
     installer: Option<&str>,
     installer_metadata: bool,
-    link_mode: LinkMode,
+    link_mode: Option<LinkMode>,
     state: &InstallState,
 ) -> Result<(), Error> {
     let wheel = wheel.as_ref();

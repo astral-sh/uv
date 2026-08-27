@@ -21,7 +21,7 @@ use uv_client::{BaseClientBuilder, Connectivity, RegistryClientBuilder};
 use uv_distribution_filename::{SourceDistExtension, WheelFilename};
 use uv_distribution_types::Requirement;
 use uv_extract::dirhash::UnhashedFile;
-use uv_install_wheel::{InstallState, Layout, LinkMode};
+use uv_install_wheel::{InstallState, Layout};
 use uv_preview::{MaybePreviewFeature, Preview, PreviewFeature};
 use uv_pypi_types::Scheme;
 use uv_python::PythonEnvironment;
@@ -230,7 +230,7 @@ fn install_wheel_many_files(c: &mut Criterion<WallTime>) {
                     None::<&()>,
                     Some("uv"),
                     true,
-                    LinkMode::default(),
+                    None,
                     &state,
                 )
                 .expect("Failed to install wheel");
@@ -530,7 +530,7 @@ mod resolver {
             build_isolation,
             &extra_build_requires,
             &extra_build_variables,
-            LinkMode::default(),
+            Some(LinkMode::default()),
             &build_options,
             &hashes,
             exclude_newer,

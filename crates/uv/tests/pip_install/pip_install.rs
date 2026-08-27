@@ -16754,6 +16754,80 @@ fn binary_payloads_use_archive_file_store() -> Result<()> {
     Ok(())
 }
 
+#[cfg(target_os = "macos")]
+#[test]
+fn binary_payloads_default_to_hardlinks() -> Result<()> {
+    for preview in [false, true] {
+        for link_mode in [None, Some("clone"), Some("copy"), Some("hardlink")] {
+            let context = uv_test::test_context!("3.12");
+            let wheel = binary_payload_wheel(&context)?;
+            let mut command = context.pip_install();
+            if preview {
+                command.args(["--preview-features", "content-addressed-cache"]);
+            }
+            if let Some(link_mode) = link_mode {
+                command.args(["--link-mode", link_mode]);
+            }
+            command.arg(&wheel);
+
+            allow_duplicates! {
+                uv_snapshot!(context.filters(), command, @"
+                exit_code: 0 (success)
+                ----- stderr -----
+                Resolved 1 package in [TIME]
+                Prepared 1 package in [TIME]
+                Installed 1 package in [TIME]
+                 + binary-payload==0.1.0 (from file://[TEMP_DIR]/binary_payload-0.1.0-py3-none-any.whl)
+                ");
+            }
+
+            let archive = fs_err::read_dir(context.cache_dir.child("archive-v0").path())?
+                .next()
+                .transpose()?
+                .context("missing cached archive")?
+                .path();
+            for filename in [
+                "native.so",
+                "plain.so",
+                "versioned.so.1",
+                "versioned.so.1.2",
+                "native.dylib",
+                "native.DLL",
+                "native.pyd",
+                "tool",
+            ] {
+                let path = Path::new("binary_payload").join(filename);
+                assert_eq!(
+                    uv_fs::is_same_file_allow_missing(
+                        &archive.join(&path),
+                        &context.site_packages().join(&path),
+                    ),
+                    Some(matches!(link_mode, None | Some("hardlink"))),
+                    "{filename}, link_mode={link_mode:?}, preview={preview}",
+                );
+            }
+
+            for path in [
+                "binary_payload/module.py",
+                "binary_payload/large.dat",
+                "binary_payload-0.1.0.dist-info/ignored.so",
+                "binary_payload-0.1.0.dist-info/RECORD",
+            ] {
+                assert_eq!(
+                    uv_fs::is_same_file_allow_missing(
+                        &archive.join(path),
+                        &context.site_packages().join(path),
+                    ),
+                    Some(link_mode == Some("hardlink") && !path.ends_with("RECORD")),
+                    "{path}, link_mode={link_mode:?}, preview={preview}",
+                );
+            }
+        }
+    }
+
+    Ok(())
+}
+
 /// Requires `UV_INTERNAL__TEST_ALT_FS`.
 #[test]
 fn binary_payload_copy_fallback_uses_archive_file_store() -> Result<()> {

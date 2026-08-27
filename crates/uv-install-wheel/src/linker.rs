@@ -8,10 +8,12 @@ use fs_err as fs;
 use itertools::Itertools;
 use rustc_hash::FxHashMap;
 use tracing::{debug, instrument};
+use walkdir::WalkDir;
 
 use uv_distribution_filename::WheelFilename;
-use uv_fs::Simplified;
-use uv_fs::link::{CopyLocks, LinkOptions, OnExistingDirectory, link_dir};
+use uv_fs::link::{CopyLocks, LinkError, LinkOptions, OnExistingDirectory, link_dir, link_file};
+use uv_fs::which::is_executable;
+use uv_fs::{Simplified, is_shared_library};
 use uv_preview::{Preview, PreviewFeature};
 use uv_warnings::warn_user;
 
@@ -251,7 +253,7 @@ impl InstallState {
 /// Extract a wheel by linking all of its files into site packages.
 #[instrument(skip_all)]
 pub(crate) fn link_wheel_files(
-    link_mode: LinkMode,
+    link_mode: Option<LinkMode>,
     site_packages: impl AsRef<Path>,
     wheel: &ValidatedWheel<'_>,
     state: &InstallState,
@@ -263,11 +265,15 @@ pub(crate) fn link_wheel_files(
 
     // The `RECORD` file is modified during installation, so it needs a real
     // copy rather than a link back to the cache.
-    let options = LinkOptions::new(link_mode)
+    let options = LinkOptions::new(link_mode.unwrap_or_default())
         .with_mutable_copy_filter(|p: &Path| p.ends_with("RECORD"))
         .with_copy_locks(state.copy_locks())
         .with_on_existing_directory(OnExistingDirectory::Merge);
     let used_link_mode = link_dir(wheel, site_packages, &options)?;
+
+    if link_mode.is_none() && used_link_mode == LinkMode::Clone {
+        hardlink_binary_files(wheel, site_packages, state)?;
+    }
 
     if used_link_mode == LinkMode::Clone {
         // The directory mtime is not updated when cloning and the mtime is
@@ -277,6 +283,38 @@ pub(crate) fn link_wheel_files(
         //
         // <https://github.com/python/cpython/blob/8336cb2b6f428246803b02a4e97fce49d0bb1e09/Lib/importlib/_bootstrap_external.py#L1601>
         update_site_packages_mtime(site_packages);
+    }
+
+    Ok(())
+}
+
+/// Share executable and native-library inodes while leaving ordinary files cloned.
+fn hardlink_binary_files(
+    wheel: &Path,
+    site_packages: &Path,
+    state: &InstallState,
+) -> Result<(), Error> {
+    let options = LinkOptions::new(LinkMode::Hardlink)
+        .with_copy_locks(state.copy_locks())
+        .with_on_existing_directory(OnExistingDirectory::Merge);
+
+    // Keep installer metadata private, including RECORD, which is rewritten during installation.
+    for entry in WalkDir::new(wheel).into_iter().filter_entry(|entry| {
+        !entry.file_type().is_dir()
+            || entry
+                .path()
+                .extension()
+                .is_none_or(|extension| extension != "dist-info")
+    }) {
+        let entry = entry.map_err(|err| LinkError::WalkDir {
+            path: wheel.to_path_buf(),
+            err,
+        })?;
+        let source = entry.path();
+        if entry.file_type().is_file() && (is_shared_library(source) || is_executable(source)) {
+            let relative = source.strip_prefix(wheel).map_err(io::Error::other)?;
+            link_file(source, &site_packages.join(relative), &options)?;
+        }
     }
 
     Ok(())

@@ -15,7 +15,7 @@ use uv_python::PythonEnvironment;
 
 pub struct Installer<'a> {
     venv: &'a PythonEnvironment,
-    link_mode: LinkMode,
+    link_mode: Option<LinkMode>,
     cache: Option<&'a Cache>,
     reporter: Option<Arc<dyn Reporter>>,
     /// The name of the [`Installer`].
@@ -31,7 +31,7 @@ impl<'a> Installer<'a> {
     pub fn new(venv: &'a PythonEnvironment, preview: Preview) -> Self {
         Self {
             venv,
-            link_mode: LinkMode::default(),
+            link_mode: None,
             cache: None,
             reporter: None,
             name: Some("uv".to_string()),
@@ -40,9 +40,9 @@ impl<'a> Installer<'a> {
         }
     }
 
-    /// Set the [`LinkMode`][`uv_install_wheel::LinkMode`] to use for this installer.
+    /// Set an explicit [`LinkMode`], or use the defaults for each file when no mode is given.
     #[must_use]
-    pub fn with_link_mode(self, link_mode: LinkMode) -> Self {
+    pub fn with_link_mode(self, link_mode: Option<LinkMode>) -> Self {
         Self { link_mode, ..self }
     }
 
@@ -95,12 +95,12 @@ impl<'a> Installer<'a> {
             preview,
         } = self;
 
-        if cache.is_some_and(Cache::is_temporary) {
-            if link_mode.is_symlink() {
-                return Err(anyhow::anyhow!(
-                    "Symlink-based installation is not supported with `--no-cache`. The created environment will be rendered unusable by the removal of the cache."
-                ));
-            }
+        if cache.is_some_and(Cache::is_temporary)
+            && link_mode.is_some_and(|link_mode| link_mode.is_symlink())
+        {
+            return Err(anyhow::anyhow!(
+                "Symlink-based installation is not supported with `--no-cache`. The created environment will be rendered unusable by the removal of the cache."
+            ));
         }
 
         let (tx, rx) = oneshot::channel();
@@ -133,12 +133,14 @@ impl<'a> Installer<'a> {
     /// Install a set of wheels into a Python virtual environment synchronously.
     #[instrument(skip_all, fields(num_wheels = %wheels.len()))]
     pub fn install_blocking(self, wheels: Vec<CachedDist>) -> Result<Vec<CachedDist>> {
-        if self.cache.is_some_and(Cache::is_temporary) {
-            if self.link_mode.is_symlink() {
-                return Err(anyhow::anyhow!(
-                    "Symlink-based installation is not supported with `--no-cache`. The created environment will be rendered unusable by the removal of the cache."
-                ));
-            }
+        if self.cache.is_some_and(Cache::is_temporary)
+            && self
+                .link_mode
+                .is_some_and(|link_mode| link_mode.is_symlink())
+        {
+            return Err(anyhow::anyhow!(
+                "Symlink-based installation is not supported with `--no-cache`. The created environment will be rendered unusable by the removal of the cache."
+            ));
         }
 
         install(
@@ -160,7 +162,7 @@ fn install(
     wheels: Vec<CachedDist>,
     layout: &Layout,
     installer_name: Option<&str>,
-    link_mode: LinkMode,
+    link_mode: Option<LinkMode>,
     reporter: Option<&Arc<dyn Reporter>>,
     relocatable: bool,
     installer_metadata: bool,
