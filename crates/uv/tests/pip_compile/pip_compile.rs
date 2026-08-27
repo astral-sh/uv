@@ -14,6 +14,8 @@ use http::StatusCode;
 #[cfg(feature = "test-universal")]
 use indoc::formatdoc;
 use indoc::indoc;
+#[cfg(feature = "test-universal")]
+use insta::allow_duplicates;
 use url::Url;
 use wiremock::matchers::{method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
@@ -13831,6 +13833,82 @@ fn python_platform() -> Result<()> {
     );
 
     Ok(())
+}
+
+/// Cross-resolve Linux wheels and platform markers for additional architectures.
+#[test]
+#[cfg(feature = "test-universal")]
+fn python_platform_linux_architectures() -> Result<()> {
+    allow_duplicates! {
+        for (target, architecture, manylinux_minor) in [
+            ("s390x-unknown-linux-gnu", "s390x", 28),
+            ("powerpc64le-unknown-linux-gnu", "ppc64le", 28),
+            ("loongarch64-unknown-linux-gnu", "loongarch64", 36),
+            ("s390x-manylinux2014", "s390x", 17),
+            ("manylinux2014_s390x", "s390x", 17),
+            ("s390x-manylinux_2_17", "s390x", 17),
+            ("manylinux_2_17_s390x", "s390x", 17),
+            ("s390x-manylinux_2_28", "s390x", 28),
+            ("manylinux_2_28_s390x", "s390x", 28),
+            ("ppc64le-manylinux2014", "ppc64le", 17),
+            ("manylinux2014_ppc64le", "ppc64le", 17),
+            ("ppc64le-manylinux_2_17", "ppc64le", 17),
+            ("manylinux_2_17_ppc64le", "ppc64le", 17),
+            ("ppc64le-manylinux_2_28", "ppc64le", 28),
+            ("manylinux_2_28_ppc64le", "ppc64le", 28),
+            ("loongarch64-manylinux_2_36", "loongarch64", 36),
+            ("manylinux_2_36_loongarch64", "loongarch64", 36),
+        ] {
+            let context = uv_test::test_context!("3.12");
+            let scenario = toml::from_str::<Scenario>(&formatdoc! {r#"
+                name = "linux-architectures"
+
+                [root]
+
+                [expected]
+                satisfiable = true
+
+                [packages.a.versions."1.0.0"]
+                sdist = false
+                wheel_tags = ["cp312-cp312-manylinux_2_{manylinux_minor}_{architecture}"]
+                requires = ["b ; platform_machine == '{architecture}' and sys_platform == 'linux' and platform_system == 'Linux' and os_name == 'posix'"]
+
+                [packages.a.versions."2.0.0"]
+                sdist = false
+                wheel_tags = ["cp312-cp312-manylinux_2_{newer_minor}_{architecture}"]
+
+                [packages.a.versions."3.0.0"]
+                sdist = false
+                wheel_tags = ["cp312-cp312-manylinux_2_17_x86_64"]
+
+                [packages.b.versions."1.0.0"]
+            "#, newer_minor = manylinux_minor + 1})?;
+            let server = PackseServer::from_scenario(&scenario);
+            context.temp_dir.child("requirements.in").write_str("a")?;
+
+            uv_snapshot!(context.filters(), context.pip_compile()
+                .arg("requirements.in")
+                .arg("--index-url")
+                .arg(server.index_url())
+                .arg("--only-binary")
+                .arg(":all:")
+                .arg("--no-header")
+                .arg("--python-platform")
+                .arg(target), @"
+            exit_code: 0 (success)
+            ----- stdout -----
+            a==1.0.0
+                # via -r requirements.in
+            b==1.0.0
+                # via a
+
+            ----- stderr -----
+            Resolved 2 packages in [TIME]
+            ");
+        }
+
+        Ok(())
+    }
 }
 
 /// Resolve a specific source distribution via a Git HTTPS dependency.
