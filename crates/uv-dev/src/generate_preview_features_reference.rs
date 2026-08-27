@@ -113,6 +113,7 @@ mod tests {
         - `auth-helper`: Allows using `uv auth helper` as a credential helper for external tools.
         - `azure-endpoint`: Allows signing requests to Azure Blob Storage endpoints with Azure credentials.
         - `batch-export`: Allows using `uv export --batch`.
+        - `build-dependency-hashes`: Allows requiring hashes for build dependencies.
         - `cache-physical-space`: Reports the physical disk space reclaimed by cache cleanup, accounting for hardlinks and copy-on-write clones.
         - `cache-size`: Allows using `uv cache size`.
         - `centralized-project-envs`: Stores [project virtual environments](./projects/layout.md#centralized-project-environments)

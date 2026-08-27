@@ -3815,6 +3815,7 @@ fn preview_features() {
     +            MissingExcludeNewerPackageLock,
     +            BatchExport,
     +            MinimumLibcVersion,
+    +            BuildDependencyHashes,
     +        ],
          },
          python_preference: Managed,
