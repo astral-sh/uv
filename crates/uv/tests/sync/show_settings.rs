@@ -3818,6 +3818,7 @@ fn preview_features() {
     +            IndexByName,
     +            ArtifactHashFiltering,
     +            ContentAddressedCache,
+    +            ProxyIndex,
     +        ],
          },
          python_preference: Managed,
