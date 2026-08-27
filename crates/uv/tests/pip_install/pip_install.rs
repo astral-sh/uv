@@ -8390,7 +8390,9 @@ fn require_hashes_build_dependencies() -> Result<()> {
         .arg("--no-binary").arg("a")
         .arg("-r")
         .arg("requirements.txt")
-        .arg("--require-hashes"), @"
+        .arg("--require-hashes")
+        .arg("--require-build-hashes")
+        .arg("--no-require-build-hashes"), @"
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]

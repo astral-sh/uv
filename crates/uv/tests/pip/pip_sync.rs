@@ -5347,7 +5347,9 @@ fn compatible_build_constraint() -> Result<()> {
     uv_snapshot!(context.pip_sync()
         .arg("requirements.txt")
         .arg("--build-constraint")
-        .arg("build_constraints.txt"), @"
+        .arg("build_constraints.txt")
+        .arg("--require-build-hashes")
+        .arg("--no-require-build-hashes"), @"
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]

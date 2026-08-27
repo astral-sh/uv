@@ -3696,6 +3696,7 @@ impl PipSyncSettings {
             constraints,
             build_constraints,
             require_build_hashes,
+            no_require_build_hashes,
             extra,
             all_extras,
             no_all_extras,
@@ -3741,7 +3742,12 @@ impl PipSyncSettings {
                 .into_iter()
                 .filter_map(Maybe::into_option)
                 .collect(),
-            require_build_hashes,
+            require_build_hashes: flag(
+                require_build_hashes,
+                no_require_build_hashes,
+                "require-build-hashes",
+            )?
+            .unwrap_or(false),
             dry_run: DryRun::from_args(dry_run),
             refresh: Refresh::try_from(refresh)?,
             settings: PipSettings::combine(
@@ -3821,6 +3827,7 @@ impl PipInstallSettings {
             excludes,
             build_constraints,
             require_build_hashes,
+            no_require_build_hashes,
             extra,
             all_extras,
             no_all_extras,
@@ -3917,7 +3924,12 @@ impl PipInstallSettings {
                 .into_iter()
                 .filter_map(Maybe::into_option)
                 .collect(),
-            require_build_hashes,
+            require_build_hashes: flag(
+                require_build_hashes,
+                no_require_build_hashes,
+                "require-build-hashes",
+            )?
+            .unwrap_or(false),
             dry_run: DryRun::from_args(dry_run),
             constraints_from_workspace,
             overrides_from_workspace,
