@@ -3817,6 +3817,7 @@ fn preview_features() {
     +            BatchExport,
     +            MinimumLibcVersion,
     +            BuildDependencyCheck,
+    +            BuildDependencyHashes,
     +            BuildLazyImports,
     +        ],
          },
