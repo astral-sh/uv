@@ -1,0 +1,39 @@
+# Test the replacement API key with the same Codex action used by other automations.
+name: "Test OpenAI API key"
+
+on:
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  test-api-key:
+    if: github.repository == 'astral-sh/uv-dev'
+    runs-on: ubuntu-latest
+    environment: automations
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: "Test NEW_OPENAI_API_KEY with Codex"
+        uses: openai/codex-action@52fe01ec70a42f454c9d2ebd47598f9fd6893d56 # v1.11
+        with:
+          openai-api-key: ${{ secrets.NEW_OPENAI_API_KEY }}
+          codex-version: "0.146.0"
+          model: gpt-5.6-sol
+          effort: low
+          permission-profile: ":read-only"
+          safety-strategy: drop-sudo
+          prompt: "Read pyproject.toml and report the project name and version. Do not modify files."
+
+      - name: "Upload Codex thread"
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: codex-thread-test-api-key-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ~/.codex/sessions
+          if-no-files-found: warn
