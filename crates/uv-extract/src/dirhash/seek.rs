@@ -17,7 +17,9 @@ use tokio_util::compat::{FuturesAsyncReadCompatExt, FuturesAsyncWriteCompatExt};
 use tracing::warn;
 use uv_configuration::initialize_rayon_once;
 
-use super::{DirhashTree, ExtractedFile, blake3_copy, directory_tree_from_extracted};
+use super::{
+    DirhashTree, HashedFile, UnhashedFile, UnzipOutput, blake3_copy, directory_tree_from_extracted,
+};
 use crate::archive_path::SanitizedArchivePath;
 
 /// A successfully extracted file, or an explicit directory that can affect the digest.
@@ -31,15 +33,14 @@ enum ExtractedEntry {
     Directory(SanitizedArchivePath),
 }
 
-struct UnzipOutput {
-    files: Vec<(PathBuf, u64)>,
-    extracted_files: Vec<ExtractedFile>,
-    tree: Option<DirhashTree>,
-}
-
 /// Unzip a `.zip` archive into the target directory.
-pub(crate) fn unzip(reader: fs_err::File, target: &Path) -> Result<Vec<(PathBuf, u64)>, Error> {
-    Ok(unzip_inner(reader, target, false)?.files)
+pub(crate) fn unzip(reader: fs_err::File, target: &Path) -> Result<Vec<UnhashedFile>, Error> {
+    let UnzipOutput::Unhashed(files) = unzip_inner(reader, target, false)? else {
+        return Err(Error::Io(std::io::Error::other(
+            "seekable ZIP hash tree was unexpectedly computed",
+        )));
+    };
+    Ok(files)
 }
 
 /// Unzip a `.zip` archive into the target directory while computing a hash tree of the extracted
@@ -50,14 +51,13 @@ pub(crate) fn unzip(reader: fs_err::File, target: &Path) -> Result<Vec<(PathBuf,
 pub(crate) fn unzip_and_hash(
     reader: fs_err::File,
     target: &Path,
-) -> Result<(Vec<ExtractedFile>, DirhashTree), Error> {
-    let output = unzip_inner(reader, target, true)?;
-    let Some(tree) = output.tree else {
+) -> Result<(Vec<HashedFile>, DirhashTree), Error> {
+    let UnzipOutput::Hashed { files, tree } = unzip_inner(reader, target, true)? else {
         return Err(Error::Io(std::io::Error::other(
             "seekable ZIP hash tree was not computed",
         )));
     };
-    Ok((output.extracted_files, tree))
+    Ok((files, tree))
 }
 
 fn unzip_inner(
@@ -99,17 +99,13 @@ fn unzip_inner(
             .map(extract)
             .filter_map(|result| match result {
                 Ok(Some(ExtractedEntry::File { path, size, .. })) => {
-                    Some(Ok((path.into_path_buf(), size)))
+                    Some(Ok(UnhashedFile::new(path.into_path_buf(), size)))
                 }
                 Ok(Some(ExtractedEntry::Directory(_)) | None) => None,
                 Err(err) => Some(Err(err)),
             })
             .collect::<Result<_, Error>>()?;
-        return Ok(UnzipOutput {
-            files,
-            extracted_files: Vec::new(),
-            tree: None,
-        });
+        return Ok(UnzipOutput::Unhashed(files));
     }
 
     let extracted = (0..archive.file().entries().len())
@@ -119,7 +115,7 @@ fn unzip_inner(
         .filter_map(Result::transpose)
         .collect::<Result<Vec<_>, Error>>()?;
 
-    let mut extracted_files = Vec::with_capacity(extracted.len());
+    let mut hashed_files = Vec::with_capacity(extracted.len());
     let mut digest_directories = FxHashSet::default();
     for extracted in extracted {
         match extracted {
@@ -130,7 +126,7 @@ fn unzip_inner(
                 executable,
             } => {
                 if let Some(digest) = digest {
-                    extracted_files.push(ExtractedFile::new(path, size, digest, executable));
+                    hashed_files.push(HashedFile::new(path, size, digest, executable));
                 }
             }
             ExtractedEntry::Directory(path) => {
@@ -138,11 +134,10 @@ fn unzip_inner(
             }
         }
     }
-    let tree = directory_tree_from_extracted(&extracted_files, &digest_directories)?;
-    Ok(UnzipOutput {
-        files: Vec::new(),
-        extracted_files,
-        tree: Some(tree),
+    let tree = directory_tree_from_extracted(&hashed_files, &digest_directories)?;
+    Ok(UnzipOutput::Hashed {
+        files: hashed_files,
+        tree,
     })
 }
 

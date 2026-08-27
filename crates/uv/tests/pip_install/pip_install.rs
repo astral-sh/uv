@@ -22,7 +22,7 @@ use wiremock::{
     matchers::{basic_auth, method, path},
 };
 
-use uv_extract::dirhash::{DirectoryDigest, ExtractedFile, dirhash_path};
+use uv_extract::dirhash::{DirectoryDigest, HashedFile, dirhash_path};
 use uv_fs::{PortablePath, Simplified};
 use uv_install_wheel::validate_and_heal_record;
 use uv_static::EnvVars;
@@ -16427,14 +16427,21 @@ fn handle_record_mismatches() -> Result<()> {
 
     // Healing changes the extracted tree, so the archive ID must reflect the repaired RECORD.
     let extracted = context.temp_dir.join("foo-extracted");
-    let (extracted_files, unhealed_tree) =
+    let (hashed_files, unhealed_tree) =
         uv_extract::unzip_and_hash(File::open(&repacked_wheel)?, &extracted)?;
-    let files = extracted_files
+    let files = hashed_files
         .iter()
-        .map(ExtractedFile::to_record)
+        .map(HashedFile::to_unhashed)
         .collect::<Vec<_>>();
     let unhealed_digest = DirectoryDigest::from(unhealed_tree.hash());
-    assert!(validate_and_heal_record(&extracted, files.iter(), "foo")?.is_some());
+    assert!(
+        validate_and_heal_record(
+            &extracted,
+            files.iter().map(|file| (file.path(), file.size())),
+            "foo",
+        )?
+        .is_some()
+    );
     let healed_digest = DirectoryDigest::from(dirhash_path(&extracted)?);
     assert_ne!(unhealed_digest, healed_digest);
 
