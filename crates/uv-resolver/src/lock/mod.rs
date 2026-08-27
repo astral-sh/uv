@@ -1380,7 +1380,10 @@ impl Lock {
                     VersionId::from_path(&absolute_path(root, path)?),
                     package.hashes(),
                 ),
-                _ => continue,
+                Source::Git(..)
+                | Source::Directory(_)
+                | Source::Editable(_)
+                | Source::Virtual(_) => continue,
             };
             if package_hashes.is_empty() {
                 continue;
