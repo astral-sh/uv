@@ -625,8 +625,10 @@ jobs:
 
           upstream_number=$(jq --exit-status --raw-output '.number | select(type == "number")' <<< "$upstream_pull_request")
 
-          if jq --exit-status '.labels | length > 0' <<< "$source_pull_request" > /dev/null; then
-            jq '{labels: [.labels[].name]}' <<< "$source_pull_request" |
+          if jq --exit-status --arg label "$UV_SECURITY_PUBLISH_LABEL" \
+            '.labels | any(.name != $label)' <<< "$source_pull_request" > /dev/null; then
+            jq --arg label "$UV_SECURITY_PUBLISH_LABEL" \
+              '{labels: [.labels[].name | select(. != $label)]}' <<< "$source_pull_request" |
               gh api \
                 --method POST \
                 "repos/astral-sh/uv/issues/$upstream_number/labels" \
