@@ -48,6 +48,7 @@ either = { workspace = true }
 fs-err = { workspace = true }
 futures = { workspace = true }
 owo-colors = { workspace = true }
+rayon = { workspace = true }
 reqwest = { workspace = true }
 reqwest-middleware = { workspace = true }
 rmp-serde = { workspace = true }
