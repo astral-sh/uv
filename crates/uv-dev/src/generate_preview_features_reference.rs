@@ -152,6 +152,7 @@ mod tests {
         - <a id="project-directory-must-exist" href="#project-directory-must-exist"><code>project-directory-must-exist</code></a>: Rejects an invalid `--project` path instead of warning and continuing. Except for `uv init`,
           the path must already exist as a directory or point to a `pyproject.toml` file. This feature
           takes effect before configuration is loaded.
+        - <a id="proxy-index" href="#proxy-index"><code>proxy-index</code></a>: Allows using [proxy indexes](./indexes.md#proxy-indexes).
         - <a id="publish-require-normalized" href="#publish-require-normalized"><code>publish-require-normalized</code></a>: Requires normalized distribution filenames when publishing, skipping files whose names are
           not normalized.
         - <a id="pylock" href="#pylock"><code>pylock</code></a>: Allows installing from `pylock.toml` files.
