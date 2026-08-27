@@ -1217,7 +1217,6 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
     ///
     /// A hash tree makes identical extracted trees converge on one archive entry. Without one,
     /// persistence retains the existing behavior of assigning a unique archive ID.
-    /// Shared files are finalized before the archive becomes visible.
     async fn persist_extracted_wheel(
         &self,
         temp_dir: tempfile::TempDir,
