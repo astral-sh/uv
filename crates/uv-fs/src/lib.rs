@@ -37,6 +37,21 @@ mod read;
 mod space;
 pub mod which;
 
+/// Recognize native libraries, including versioned Unix shared objects like `libfoo.so.1`.
+pub fn is_shared_library(path: &Path) -> bool {
+    path.extension().is_some_and(|extension| {
+        extension.eq_ignore_ascii_case("so")
+            || extension.eq_ignore_ascii_case("dylib")
+            || extension.eq_ignore_ascii_case("dll")
+            || extension.eq_ignore_ascii_case("pyd")
+    }) || path.file_name().is_some_and(|file_name| {
+        file_name
+            .as_encoded_bytes()
+            .windows(4)
+            .any(|part| part.eq_ignore_ascii_case(b".so."))
+    })
+}
+
 /// Return the number of hardlinks to a file.
 #[cfg(unix)]
 pub fn hardlink_count(path: &Path) -> io::Result<u64> {

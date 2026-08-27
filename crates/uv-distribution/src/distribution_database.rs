@@ -26,7 +26,7 @@ use uv_distribution_types::{
 };
 use uv_extract::dirhash::{DirectoryDigest, DirhashTree, HashedFile, UnhashedFile, dirhash_path};
 use uv_extract::hash::Hasher;
-use uv_fs::{PortablePath, write_atomic};
+use uv_fs::{PortablePath, is_shared_library, write_atomic};
 use uv_git::{GIT_LFS, GitError};
 use uv_install_wheel::validate_and_heal_record;
 use uv_platform_tags::Tags;
@@ -1370,21 +1370,6 @@ fn persist_archive_files(cache: &Cache, archive: &Path, files: &[HashedFile]) ->
     }
 
     Ok(())
-}
-
-/// Recognize native libraries, including versioned Unix shared objects like `libfoo.so.1`.
-fn is_shared_library(path: &Path) -> bool {
-    path.extension().is_some_and(|extension| {
-        extension.eq_ignore_ascii_case("so")
-            || extension.eq_ignore_ascii_case("dylib")
-            || extension.eq_ignore_ascii_case("dll")
-            || extension.eq_ignore_ascii_case("pyd")
-    }) || path.file_name().is_some_and(|file_name| {
-        file_name
-            .as_encoded_bytes()
-            .windows(4)
-            .any(|part| part.eq_ignore_ascii_case(b".so."))
-    })
 }
 
 /// Publish a shared object and retain a hardlink in the archive, with a copy fallback.

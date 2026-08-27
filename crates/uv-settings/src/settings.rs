@@ -1155,6 +1155,7 @@ pub struct ResolverInstallerSchema {
     ///
     /// Defaults to `clone` (also known as Copy-on-Write) on macOS and Linux, and `hardlink` on
     /// Windows.
+    /// Executables and native libraries use hardlinks unless a link mode is explicitly selected.
     ///
     /// WARNING: The use of symlink link mode is discouraged, as they create tight coupling between
     /// the cache and the target environment. For example, clearing the cache (`uv cache clean`)
@@ -2047,6 +2048,7 @@ pub struct PipOptions {
     ///
     /// Defaults to `clone` (also known as Copy-on-Write) on macOS and Linux, and `hardlink` on
     /// Windows.
+    /// Executables and native libraries use hardlinks unless a link mode is explicitly selected.
     ///
     /// WARNING: The use of symlink link mode is discouraged, as they create tight coupling between
     /// the cache and the target environment. For example, clearing the cache (`uv cache clean`)
