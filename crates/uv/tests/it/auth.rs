@@ -1780,27 +1780,34 @@ fn bazel_helper_token() {
 }
 
 #[test]
-fn bazel_helper_invalid_bearer_token() {
+fn bazel_helper_invalid_bearer_token() -> Result<()> {
     let context = uv_test::test_context_with_versions!(&[]);
+    context
+        .temp_dir
+        .child("credentials.toml")
+        .write_str(indoc::indoc! { r#"
+            [[credential]]
+            service = "https://example.com"
+            scheme = "bearer"
+            token = "secret\nvalue"
+        "# })?;
 
-    allow_duplicates! {
-        for env_var in [EnvVars::PYX_AUTH_TOKEN, EnvVars::UV_AUTH_TOKEN] {
-            uv_snapshot!(context.filters(), context.auth_helper()
-                .arg("--protocol=bazel")
-                .arg("get")
-                .arg("--offline")
-                .env(EnvVars::UV_PREVIEW_FEATURES, "auth-helper")
-                .env(env_var, "secret\nvalue"),
-                input=r#"{"uri":"https://api.pyx.dev"}"#,
-                @"
-            exit_code: 2 (failure)
-            ----- stderr -----
-            error: Invalid authorization header
-              Caused by: failed to parse header value
-            "
-            );
-        }
-    }
+    uv_snapshot!(context.filters(), context.auth_helper()
+        .arg("--protocol=bazel")
+        .arg("get")
+        .arg("--offline")
+        .env(EnvVars::UV_PREVIEW_FEATURES, "auth-helper")
+        .env(EnvVars::UV_CREDENTIALS_DIR, context.temp_dir.as_os_str()),
+        input=r#"{"uri":"https://example.com"}"#,
+        @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Invalid authorization header
+      Caused by: failed to parse header value
+    "
+    );
+
+    Ok(())
 }
 
 /// Test credential helper with no credentials found
