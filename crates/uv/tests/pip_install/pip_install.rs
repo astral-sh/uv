@@ -16608,8 +16608,9 @@ async fn binary_payloads_stay_in_archive_without_preview() -> Result<()> {
 #[tokio::test]
 async fn all_files_use_archive_file_store() -> Result<()> {
     let server = MockServer::start().await;
-    for streaming in [false, true] {
+    for (streaming, concurrent_installs) in [(false, "1"), (false, "4"), (true, "1"), (true, "4")] {
         let context = uv_test::test_context!("3.12")
+            .with_concurrent_installs(concurrent_installs)
             .with_filter((r" \(from (?:file|http)://.*\)", " (from [WHEEL_URL])"));
         let wheel = binary_payload_wheel(&context)?;
         let mut command = context.pip_install();
