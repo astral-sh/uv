@@ -32,7 +32,7 @@ jobs:
         uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
         with:
           version: "0.12.5"
-      - run: uv run --only-group=check ruff check .
+      - run: uv run --only-group check ruff check .
 
   ty:
     timeout-minutes: 10
@@ -46,7 +46,7 @@ jobs:
         with:
           version: "0.12.5"
       # `uv check` checks the entire repository; keep this scoped to the Python package.
-      - run: uv run --only-group=check ty check python/uv
+      - run: uv run --only-group check ty check python/uv
       - name: "Check scrolls"
         env:
           # TODO: Remove once ty infers Python versions from script environments instead of the root project.
@@ -179,21 +179,28 @@ jobs:
   shear:
     name: "cargo shear"
     timeout-minutes: 10
+    # NOTE: `cargo shear` needs `cargo metadata`, so we don't use `ubuntu-slim` here
+    # as it doesn't include the Rust toolchain.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - name: "Install cargo shear"
-        uses: taiki-e/install-action@6c6fd71fe4fb72c3697d269963d0e15df8adedad # v2.85.10
+      - name: "Install uv"
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
         with:
-          tool: cargo-shear@1.12.4
-      - run: cargo shear --deny-warnings
+          version: "0.12.5"
+      - run: uv run --only-group check cargo-shear --deny-warnings
 
   typos:
+    name: "check for typos"
     runs-on: ubuntu-slim
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: crate-ci/typos@bee27e3a4fd1ea2111cf90ab89cd076c870fce14 # v1.48.0
+      - name: "Install uv"
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          version: "0.12.5"
+      - run: uv run --only-group check typos

@@ -6,6 +6,9 @@ requires-python = ">=3.11"
 exclude-newer = "0001-01-01T00:00:00Z" # This has no effect and is included for backwards compatibility when using relative exclude-newer values.
 exclude-newer-span = "P7D"
 
+[options.exclude-newer-package]
+astral-dev-toolchain-cargo-shear = "2026-08-27T04:00:00Z"
+
 [manifest]
 requirements = [{ name = "rich", specifier = "==13.7.1" }]
 
