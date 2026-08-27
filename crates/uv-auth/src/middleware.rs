@@ -465,15 +465,9 @@ impl Middleware for AuthMiddleware {
             let response = next.clone().run(request, extensions).await?;
 
             // If we don't fail with authorization related codes or authentication policy is
-            // Never, return the response. Azure Storage reports an anonymous request to a private
-            // endpoint as a conflict instead of an authorization error.
-            let is_azure_endpoint = if response.status() == StatusCode::CONFLICT {
-                AzureEndpointProvider::is_azure_endpoint(retry_request.url(), self.preview)
-                    .map_err(Error::Middleware)?
-            } else {
-                false
-            };
-            if !response_requires_authentication(&response, is_azure_endpoint)
+            // Never, return the response.
+            if !response_requires_authentication(&response, retry_request.url(), self.preview)
+                .map_err(Error::Middleware)?
                 || matches!(auth_policy, AuthPolicy::Never)
             {
                 return Ok(response);
@@ -977,12 +971,25 @@ impl AuthMiddleware {
 }
 
 /// Returns `true` when an unauthenticated response should trigger credential discovery.
-fn response_requires_authentication(response: &Response, is_azure_endpoint: bool) -> bool {
-    matches!(
+fn response_requires_authentication(
+    response: &Response,
+    url: &url::Url,
+    preview: Preview,
+) -> anyhow::Result<bool> {
+    if matches!(
         response.status(),
         StatusCode::FORBIDDEN | StatusCode::NOT_FOUND | StatusCode::UNAUTHORIZED
-    ) || (is_azure_endpoint
-        && response.status() == StatusCode::CONFLICT
+    ) {
+        return Ok(true);
+    }
+
+    if response.status() != StatusCode::CONFLICT {
+        return Ok(false);
+    }
+
+    // Azure Storage reports an anonymous request to a private endpoint as a conflict instead of an
+    // authorization error.
+    Ok(AzureEndpointProvider::is_azure_endpoint(url, preview)?
         && response
             .headers()
             .get("x-ms-error-code")
@@ -1024,14 +1031,20 @@ mod tests {
     type Error = Box<dyn std::error::Error>;
 
     #[test]
-    fn test_response_requires_authentication() {
+    fn test_response_requires_authentication() -> Result<(), Error> {
+        let url = Url::parse("https://example.com")?;
+
         let response = Response::from(
             http::Response::builder()
                 .status(401)
                 .body(Vec::new())
                 .unwrap(),
         );
-        assert!(response_requires_authentication(&response, false));
+        assert!(response_requires_authentication(
+            &response,
+            &url,
+            Preview::default()
+        )?);
 
         let response = Response::from(
             http::Response::builder()
@@ -1040,8 +1053,11 @@ mod tests {
                 .body(Vec::new())
                 .unwrap(),
         );
-        assert!(response_requires_authentication(&response, true));
-        assert!(!response_requires_authentication(&response, false));
+        assert!(!response_requires_authentication(
+            &response,
+            &url,
+            Preview::default()
+        )?);
 
         let response = Response::from(
             http::Response::builder()
@@ -1050,7 +1066,13 @@ mod tests {
                 .body(Vec::new())
                 .unwrap(),
         );
-        assert!(!response_requires_authentication(&response, true));
+        assert!(!response_requires_authentication(
+            &response,
+            &url,
+            Preview::default()
+        )?);
+
+        Ok(())
     }
 
     async fn start_test_server(username: &'static str, password: &'static str) -> MockServer {
