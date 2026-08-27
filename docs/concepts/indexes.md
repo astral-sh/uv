@@ -57,6 +57,8 @@ With `--preview-features index-by-name`, configured index names take precedence 
 !!! note
 
     Proxy indexes are in [preview](./preview.md) and may change in future releases.
+    Pass `--preview-features proxy-index` or set
+    `preview-features = ["proxy-index"]` in your uv configuration to silence the preview warning.
 
 Proxy indexes route package resolution and downloads through an alternative registry without
 changing the upstream index and package download URLs recorded in lockfiles.

@@ -209,6 +209,9 @@ impl ProxyConfiguration<'_> {
                 requires-python = ">=3.12"
                 dependencies = ["{dependency}"]
 
+                [tool.uv]
+                preview-features = ["proxy-index"]
+
                 [[tool.uv.index]]
                 name = "canonical"
                 url = "{canonical_index_url}/simple/"
@@ -243,6 +246,9 @@ fn write_implicit_pypi_configuration(
             version = "0.1.0"
             requires-python = ">=3.12"
             dependencies = ["{dependency}"]
+
+            [tool.uv]
+            preview-features = ["proxy-index"]
 
             [[tool.uv.index]]
             name = "socket"
@@ -510,9 +516,10 @@ async fn proxy_index_implicitly_routes_pypi_without_a_second_resolution_index() 
         "basic-package==0.1.0",
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @"
+    uv_snapshot!(context.filters(), context.lock().arg("--no-preview"), @"
     exit_code: 0 (success)
     ----- stderr -----
+    warning: Proxy indexes are experimental and may change without warning. Pass `--preview-features proxy-index` to disable this warning.
     Resolved 2 packages in [TIME]
     ");
 
@@ -1017,7 +1024,7 @@ async fn proxy_index_pip_compile_pylock_preserves_canonical_artifact_and_hash() 
     uv_snapshot!(context.filters(), context
         .pip_sync()
         .arg("--preview-features")
-        .arg("pylock")
+        .arg("pylock,proxy-index")
         .arg("pylock.toml"), @"
     exit_code: 0 (success)
     ----- stderr -----

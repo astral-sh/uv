@@ -4062,6 +4062,7 @@ fn preview_features() {
     +            BuildLazyImports,
     +            BuildDependencyHashes,
     +            WheelVariants,
+    +            ProxyIndex,
     +        ],
          },
          python_preference: Managed,

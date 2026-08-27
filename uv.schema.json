@@ -1922,7 +1922,8 @@
             "build-dependency-check",
             "build-lazy-imports",
             "build-dependency-hashes",
-            "wheel-variants"
+            "wheel-variants",
+            "proxy-index"
           ]
         },
         {
