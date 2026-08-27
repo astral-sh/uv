@@ -26,19 +26,6 @@ impl HashPolicy<'_> {
         matches!(self, Self::Any(_) | Self::All(_))
     }
 
-    /// Returns `true` if the hash policy indicates that hashes should be generated.
-    pub fn is_generate(&self, dist: &crate::BuiltDist) -> bool {
-        match self {
-            Self::Generate(HashGeneration::Url) => dist.file().is_none(),
-            Self::Generate(HashGeneration::All) => {
-                dist.file().is_none_or(|file| file.hashes.is_empty())
-            }
-            Self::Any(_) => false,
-            Self::All(_) => false,
-            Self::None => false,
-        }
-    }
-
     /// Return the algorithms used in the hash policy.
     pub fn algorithms(&self) -> Vec<HashAlgorithm> {
         match self {
@@ -103,13 +90,14 @@ impl HashPolicy<'_> {
     }
 }
 
-/// The context in which hashes should be generated.
+/// Which distributions should have hashes supplied during resolution.
+///
+/// Reuse declared hashes when available; otherwise, compute a SHA-256 hash from the archive.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum HashGeneration {
-    /// Generate hashes for direct URL distributions.
+    /// Supply hashes for non-registry distributions. Registry hashes come from index metadata.
     Url,
-    /// Generate hashes for direct URL distributions, along with any distributions that are hosted
-    /// on a registry that does _not_ provide hashes.
+    /// Also compute missing registry hashes when the index metadata does not provide them.
     All,
 }
 

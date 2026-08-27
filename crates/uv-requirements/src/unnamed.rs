@@ -261,7 +261,7 @@ impl<'a, Context: BuildContext> NamedRequirementsResolver<'a, Context> {
                     DistExtension::Wheel => unreachable!(),
                 };
                 SourceUrl::Direct(DirectSourceUrl {
-                    url: &parsed_archive_url.url,
+                    url: &requirement.url.verbatim,
                     subdirectory: parsed_archive_url.subdirectory.as_deref(),
                     ext,
                 })
