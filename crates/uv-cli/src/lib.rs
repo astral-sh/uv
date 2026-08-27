@@ -2018,7 +2018,7 @@ pub struct PipSyncArgs {
     pub hash_checking: HashCheckingArgs,
 
     /// Require hashes for all dependencies installed into isolated build environments.
-    #[arg(long, env = EnvVars::UV_REQUIRE_BUILD_HASHES, value_parser = clap::builder::BoolishValueParser::new())]
+    #[arg(long, env = EnvVars::UV_PIP_REQUIRE_BUILD_HASHES, value_parser = clap::builder::BoolishValueParser::new())]
     pub require_build_hashes: bool,
 
     /// The Python interpreter into which packages should be installed.
@@ -2369,7 +2369,7 @@ pub struct PipInstallArgs {
     pub hash_checking: HashCheckingArgs,
 
     /// Require hashes for all dependencies installed into isolated build environments.
-    #[arg(long, env = EnvVars::UV_REQUIRE_BUILD_HASHES, value_parser = clap::builder::BoolishValueParser::new())]
+    #[arg(long, env = EnvVars::UV_PIP_REQUIRE_BUILD_HASHES, value_parser = clap::builder::BoolishValueParser::new())]
     pub require_build_hashes: bool,
 
     /// The Python interpreter into which packages should be installed.

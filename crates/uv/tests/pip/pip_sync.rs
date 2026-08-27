@@ -5336,7 +5336,7 @@ fn compatible_build_constraint() -> Result<()> {
         .arg("requirements.txt")
         .arg("--build-constraint")
         .arg("build_constraints.txt")
-        .arg("--require-build-hashes"), @r"
+        .env(EnvVars::UV_PIP_REQUIRE_BUILD_HASHES, "true"), @r"
     exit_code: 2 (failure)
     ----- stderr -----
     error: In `--require-hashes` mode, all requirements must have their versions pinned with `==`, but found: setuptools>=40
