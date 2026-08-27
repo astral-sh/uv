@@ -2510,6 +2510,56 @@
           "const": "s390x-manylinux_2_28"
         },
         {
+          "description": "An s390x target for the `manylinux_2_31` platform.",
+          "type": "string",
+          "const": "s390x-manylinux_2_31"
+        },
+        {
+          "description": "An s390x target for the `manylinux_2_32` platform.",
+          "type": "string",
+          "const": "s390x-manylinux_2_32"
+        },
+        {
+          "description": "An s390x target for the `manylinux_2_33` platform.",
+          "type": "string",
+          "const": "s390x-manylinux_2_33"
+        },
+        {
+          "description": "An s390x target for the `manylinux_2_34` platform.",
+          "type": "string",
+          "const": "s390x-manylinux_2_34"
+        },
+        {
+          "description": "An s390x target for the `manylinux_2_35` platform.",
+          "type": "string",
+          "const": "s390x-manylinux_2_35"
+        },
+        {
+          "description": "An s390x target for the `manylinux_2_36` platform.",
+          "type": "string",
+          "const": "s390x-manylinux_2_36"
+        },
+        {
+          "description": "An s390x target for the `manylinux_2_37` platform.",
+          "type": "string",
+          "const": "s390x-manylinux_2_37"
+        },
+        {
+          "description": "An s390x target for the `manylinux_2_38` platform.",
+          "type": "string",
+          "const": "s390x-manylinux_2_38"
+        },
+        {
+          "description": "An s390x target for the `manylinux_2_39` platform.",
+          "type": "string",
+          "const": "s390x-manylinux_2_39"
+        },
+        {
+          "description": "An s390x target for the `manylinux_2_40` platform.",
+          "type": "string",
+          "const": "s390x-manylinux_2_40"
+        },
+        {
           "description": "A little-endian `PowerPC64` target for the `manylinux2014` platform. Equivalent to `ppc64le-manylinux_2_17`.",
           "type": "string",
           "const": "ppc64le-manylinux2014"
@@ -2525,9 +2575,79 @@
           "const": "ppc64le-manylinux_2_28"
         },
         {
+          "description": "A little-endian `PowerPC64` target for the `manylinux_2_31` platform.",
+          "type": "string",
+          "const": "ppc64le-manylinux_2_31"
+        },
+        {
+          "description": "A little-endian `PowerPC64` target for the `manylinux_2_32` platform.",
+          "type": "string",
+          "const": "ppc64le-manylinux_2_32"
+        },
+        {
+          "description": "A little-endian `PowerPC64` target for the `manylinux_2_33` platform.",
+          "type": "string",
+          "const": "ppc64le-manylinux_2_33"
+        },
+        {
+          "description": "A little-endian `PowerPC64` target for the `manylinux_2_34` platform.",
+          "type": "string",
+          "const": "ppc64le-manylinux_2_34"
+        },
+        {
+          "description": "A little-endian `PowerPC64` target for the `manylinux_2_35` platform.",
+          "type": "string",
+          "const": "ppc64le-manylinux_2_35"
+        },
+        {
+          "description": "A little-endian `PowerPC64` target for the `manylinux_2_36` platform.",
+          "type": "string",
+          "const": "ppc64le-manylinux_2_36"
+        },
+        {
+          "description": "A little-endian `PowerPC64` target for the `manylinux_2_37` platform.",
+          "type": "string",
+          "const": "ppc64le-manylinux_2_37"
+        },
+        {
+          "description": "A little-endian `PowerPC64` target for the `manylinux_2_38` platform.",
+          "type": "string",
+          "const": "ppc64le-manylinux_2_38"
+        },
+        {
+          "description": "A little-endian `PowerPC64` target for the `manylinux_2_39` platform.",
+          "type": "string",
+          "const": "ppc64le-manylinux_2_39"
+        },
+        {
+          "description": "A little-endian `PowerPC64` target for the `manylinux_2_40` platform.",
+          "type": "string",
+          "const": "ppc64le-manylinux_2_40"
+        },
+        {
           "description": "A `LoongArch64` target for the `manylinux_2_36` platform.",
           "type": "string",
           "const": "loongarch64-manylinux_2_36"
+        },
+        {
+          "description": "A `LoongArch64` target for the `manylinux_2_37` platform.",
+          "type": "string",
+          "const": "loongarch64-manylinux_2_37"
+        },
+        {
+          "description": "A `LoongArch64` target for the `manylinux_2_38` platform.",
+          "type": "string",
+          "const": "loongarch64-manylinux_2_38"
+        },
+        {
+          "description": "A `LoongArch64` target for the `manylinux_2_39` platform.",
+          "type": "string",
+          "const": "loongarch64-manylinux_2_39"
+        },
+        {
+          "description": "A `LoongArch64` target for the `manylinux_2_40` platform.",
+          "type": "string",
+          "const": "loongarch64-manylinux_2_40"
         },
         {
           "description": "An ARM64 Android target.\n\nBy default uses Android API level 24, but respects\nthe `ANDROID_API_LEVEL` environment variable if set.",

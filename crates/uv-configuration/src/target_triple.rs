@@ -81,16 +81,19 @@ pub enum TargetTriple {
     /// An s390x Linux target. Equivalent to `s390x-manylinux_2_28`.
     #[cfg_attr(feature = "clap", value(name = "s390x-unknown-linux-gnu"))]
     #[serde(rename = "s390x-unknown-linux-gnu")]
+    #[cfg_attr(feature = "clap", value(hide = true))]
     S390XUnknownLinuxGnu,
 
     /// A little-endian `PowerPC64` Linux target. Equivalent to `ppc64le-manylinux_2_28`.
     #[cfg_attr(feature = "clap", value(name = "powerpc64le-unknown-linux-gnu"))]
     #[serde(rename = "powerpc64le-unknown-linux-gnu")]
+    #[cfg_attr(feature = "clap", value(hide = true))]
     Powerpc64LeUnknownLinuxGnu,
 
     /// A `LoongArch64` Linux target. Equivalent to `loongarch64-manylinux_2_36`.
     #[cfg_attr(feature = "clap", value(name = "loongarch64-unknown-linux-gnu"))]
     #[serde(rename = "loongarch64-unknown-linux-gnu")]
+    #[cfg_attr(feature = "clap", value(hide = true))]
     LoongArch64UnknownLinuxGnu,
 
     /// A RISCV64 Linux target.
@@ -364,6 +367,7 @@ pub enum TargetTriple {
     )]
     #[serde(rename = "s390x-manylinux2014")]
     #[serde(alias = "manylinux2014_s390x")]
+    #[cfg_attr(feature = "clap", value(hide = true))]
     S390XManylinux2014,
 
     /// An s390x target for the `manylinux_2_17` platform.
@@ -373,6 +377,7 @@ pub enum TargetTriple {
     )]
     #[serde(rename = "s390x-manylinux_2_17")]
     #[serde(alias = "manylinux_2_17_s390x")]
+    #[cfg_attr(feature = "clap", value(hide = true))]
     S390XManylinux217,
 
     /// An s390x target for the `manylinux_2_28` platform.
@@ -382,7 +387,108 @@ pub enum TargetTriple {
     )]
     #[serde(rename = "s390x-manylinux_2_28")]
     #[serde(alias = "manylinux_2_28_s390x")]
+    #[cfg_attr(feature = "clap", value(hide = true))]
     S390XManylinux228,
+
+    /// An s390x target for the `manylinux_2_31` platform.
+    #[cfg_attr(
+        feature = "clap",
+        value(name = "s390x-manylinux_2_31", alias = "manylinux_2_31_s390x")
+    )]
+    #[serde(rename = "s390x-manylinux_2_31")]
+    #[serde(alias = "manylinux_2_31_s390x")]
+    #[cfg_attr(feature = "clap", value(hide = true))]
+    S390XManylinux231,
+
+    /// An s390x target for the `manylinux_2_32` platform.
+    #[cfg_attr(
+        feature = "clap",
+        value(name = "s390x-manylinux_2_32", alias = "manylinux_2_32_s390x")
+    )]
+    #[serde(rename = "s390x-manylinux_2_32")]
+    #[serde(alias = "manylinux_2_32_s390x")]
+    #[cfg_attr(feature = "clap", value(hide = true))]
+    S390XManylinux232,
+
+    /// An s390x target for the `manylinux_2_33` platform.
+    #[cfg_attr(
+        feature = "clap",
+        value(name = "s390x-manylinux_2_33", alias = "manylinux_2_33_s390x")
+    )]
+    #[serde(rename = "s390x-manylinux_2_33")]
+    #[serde(alias = "manylinux_2_33_s390x")]
+    #[cfg_attr(feature = "clap", value(hide = true))]
+    S390XManylinux233,
+
+    /// An s390x target for the `manylinux_2_34` platform.
+    #[cfg_attr(
+        feature = "clap",
+        value(name = "s390x-manylinux_2_34", alias = "manylinux_2_34_s390x")
+    )]
+    #[serde(rename = "s390x-manylinux_2_34")]
+    #[serde(alias = "manylinux_2_34_s390x")]
+    #[cfg_attr(feature = "clap", value(hide = true))]
+    S390XManylinux234,
+
+    /// An s390x target for the `manylinux_2_35` platform.
+    #[cfg_attr(
+        feature = "clap",
+        value(name = "s390x-manylinux_2_35", alias = "manylinux_2_35_s390x")
+    )]
+    #[serde(rename = "s390x-manylinux_2_35")]
+    #[serde(alias = "manylinux_2_35_s390x")]
+    #[cfg_attr(feature = "clap", value(hide = true))]
+    S390XManylinux235,
+
+    /// An s390x target for the `manylinux_2_36` platform.
+    #[cfg_attr(
+        feature = "clap",
+        value(name = "s390x-manylinux_2_36", alias = "manylinux_2_36_s390x")
+    )]
+    #[serde(rename = "s390x-manylinux_2_36")]
+    #[serde(alias = "manylinux_2_36_s390x")]
+    #[cfg_attr(feature = "clap", value(hide = true))]
+    S390XManylinux236,
+
+    /// An s390x target for the `manylinux_2_37` platform.
+    #[cfg_attr(
+        feature = "clap",
+        value(name = "s390x-manylinux_2_37", alias = "manylinux_2_37_s390x")
+    )]
+    #[serde(rename = "s390x-manylinux_2_37")]
+    #[serde(alias = "manylinux_2_37_s390x")]
+    #[cfg_attr(feature = "clap", value(hide = true))]
+    S390XManylinux237,
+
+    /// An s390x target for the `manylinux_2_38` platform.
+    #[cfg_attr(
+        feature = "clap",
+        value(name = "s390x-manylinux_2_38", alias = "manylinux_2_38_s390x")
+    )]
+    #[serde(rename = "s390x-manylinux_2_38")]
+    #[serde(alias = "manylinux_2_38_s390x")]
+    #[cfg_attr(feature = "clap", value(hide = true))]
+    S390XManylinux238,
+
+    /// An s390x target for the `manylinux_2_39` platform.
+    #[cfg_attr(
+        feature = "clap",
+        value(name = "s390x-manylinux_2_39", alias = "manylinux_2_39_s390x")
+    )]
+    #[serde(rename = "s390x-manylinux_2_39")]
+    #[serde(alias = "manylinux_2_39_s390x")]
+    #[cfg_attr(feature = "clap", value(hide = true))]
+    S390XManylinux239,
+
+    /// An s390x target for the `manylinux_2_40` platform.
+    #[cfg_attr(
+        feature = "clap",
+        value(name = "s390x-manylinux_2_40", alias = "manylinux_2_40_s390x")
+    )]
+    #[serde(rename = "s390x-manylinux_2_40")]
+    #[serde(alias = "manylinux_2_40_s390x")]
+    #[cfg_attr(feature = "clap", value(hide = true))]
+    S390XManylinux240,
 
     /// A little-endian `PowerPC64` target for the `manylinux2014` platform. Equivalent to `ppc64le-manylinux_2_17`.
     #[cfg_attr(
@@ -391,6 +497,7 @@ pub enum TargetTriple {
     )]
     #[serde(rename = "ppc64le-manylinux2014")]
     #[serde(alias = "manylinux2014_ppc64le")]
+    #[cfg_attr(feature = "clap", value(hide = true))]
     Powerpc64LeManylinux2014,
 
     /// A little-endian `PowerPC64` target for the `manylinux_2_17` platform.
@@ -400,6 +507,7 @@ pub enum TargetTriple {
     )]
     #[serde(rename = "ppc64le-manylinux_2_17")]
     #[serde(alias = "manylinux_2_17_ppc64le")]
+    #[cfg_attr(feature = "clap", value(hide = true))]
     Powerpc64LeManylinux217,
 
     /// A little-endian `PowerPC64` target for the `manylinux_2_28` platform.
@@ -409,7 +517,108 @@ pub enum TargetTriple {
     )]
     #[serde(rename = "ppc64le-manylinux_2_28")]
     #[serde(alias = "manylinux_2_28_ppc64le")]
+    #[cfg_attr(feature = "clap", value(hide = true))]
     Powerpc64LeManylinux228,
+
+    /// A little-endian `PowerPC64` target for the `manylinux_2_31` platform.
+    #[cfg_attr(
+        feature = "clap",
+        value(name = "ppc64le-manylinux_2_31", alias = "manylinux_2_31_ppc64le")
+    )]
+    #[serde(rename = "ppc64le-manylinux_2_31")]
+    #[serde(alias = "manylinux_2_31_ppc64le")]
+    #[cfg_attr(feature = "clap", value(hide = true))]
+    Powerpc64LeManylinux231,
+
+    /// A little-endian `PowerPC64` target for the `manylinux_2_32` platform.
+    #[cfg_attr(
+        feature = "clap",
+        value(name = "ppc64le-manylinux_2_32", alias = "manylinux_2_32_ppc64le")
+    )]
+    #[serde(rename = "ppc64le-manylinux_2_32")]
+    #[serde(alias = "manylinux_2_32_ppc64le")]
+    #[cfg_attr(feature = "clap", value(hide = true))]
+    Powerpc64LeManylinux232,
+
+    /// A little-endian `PowerPC64` target for the `manylinux_2_33` platform.
+    #[cfg_attr(
+        feature = "clap",
+        value(name = "ppc64le-manylinux_2_33", alias = "manylinux_2_33_ppc64le")
+    )]
+    #[serde(rename = "ppc64le-manylinux_2_33")]
+    #[serde(alias = "manylinux_2_33_ppc64le")]
+    #[cfg_attr(feature = "clap", value(hide = true))]
+    Powerpc64LeManylinux233,
+
+    /// A little-endian `PowerPC64` target for the `manylinux_2_34` platform.
+    #[cfg_attr(
+        feature = "clap",
+        value(name = "ppc64le-manylinux_2_34", alias = "manylinux_2_34_ppc64le")
+    )]
+    #[serde(rename = "ppc64le-manylinux_2_34")]
+    #[serde(alias = "manylinux_2_34_ppc64le")]
+    #[cfg_attr(feature = "clap", value(hide = true))]
+    Powerpc64LeManylinux234,
+
+    /// A little-endian `PowerPC64` target for the `manylinux_2_35` platform.
+    #[cfg_attr(
+        feature = "clap",
+        value(name = "ppc64le-manylinux_2_35", alias = "manylinux_2_35_ppc64le")
+    )]
+    #[serde(rename = "ppc64le-manylinux_2_35")]
+    #[serde(alias = "manylinux_2_35_ppc64le")]
+    #[cfg_attr(feature = "clap", value(hide = true))]
+    Powerpc64LeManylinux235,
+
+    /// A little-endian `PowerPC64` target for the `manylinux_2_36` platform.
+    #[cfg_attr(
+        feature = "clap",
+        value(name = "ppc64le-manylinux_2_36", alias = "manylinux_2_36_ppc64le")
+    )]
+    #[serde(rename = "ppc64le-manylinux_2_36")]
+    #[serde(alias = "manylinux_2_36_ppc64le")]
+    #[cfg_attr(feature = "clap", value(hide = true))]
+    Powerpc64LeManylinux236,
+
+    /// A little-endian `PowerPC64` target for the `manylinux_2_37` platform.
+    #[cfg_attr(
+        feature = "clap",
+        value(name = "ppc64le-manylinux_2_37", alias = "manylinux_2_37_ppc64le")
+    )]
+    #[serde(rename = "ppc64le-manylinux_2_37")]
+    #[serde(alias = "manylinux_2_37_ppc64le")]
+    #[cfg_attr(feature = "clap", value(hide = true))]
+    Powerpc64LeManylinux237,
+
+    /// A little-endian `PowerPC64` target for the `manylinux_2_38` platform.
+    #[cfg_attr(
+        feature = "clap",
+        value(name = "ppc64le-manylinux_2_38", alias = "manylinux_2_38_ppc64le")
+    )]
+    #[serde(rename = "ppc64le-manylinux_2_38")]
+    #[serde(alias = "manylinux_2_38_ppc64le")]
+    #[cfg_attr(feature = "clap", value(hide = true))]
+    Powerpc64LeManylinux238,
+
+    /// A little-endian `PowerPC64` target for the `manylinux_2_39` platform.
+    #[cfg_attr(
+        feature = "clap",
+        value(name = "ppc64le-manylinux_2_39", alias = "manylinux_2_39_ppc64le")
+    )]
+    #[serde(rename = "ppc64le-manylinux_2_39")]
+    #[serde(alias = "manylinux_2_39_ppc64le")]
+    #[cfg_attr(feature = "clap", value(hide = true))]
+    Powerpc64LeManylinux239,
+
+    /// A little-endian `PowerPC64` target for the `manylinux_2_40` platform.
+    #[cfg_attr(
+        feature = "clap",
+        value(name = "ppc64le-manylinux_2_40", alias = "manylinux_2_40_ppc64le")
+    )]
+    #[serde(rename = "ppc64le-manylinux_2_40")]
+    #[serde(alias = "manylinux_2_40_ppc64le")]
+    #[cfg_attr(feature = "clap", value(hide = true))]
+    Powerpc64LeManylinux240,
 
     /// A `LoongArch64` target for the `manylinux_2_36` platform.
     #[cfg_attr(
@@ -421,7 +630,60 @@ pub enum TargetTriple {
     )]
     #[serde(rename = "loongarch64-manylinux_2_36")]
     #[serde(alias = "manylinux_2_36_loongarch64")]
+    #[cfg_attr(feature = "clap", value(hide = true))]
     LoongArch64Manylinux236,
+
+    /// A `LoongArch64` target for the `manylinux_2_37` platform.
+    #[cfg_attr(
+        feature = "clap",
+        value(
+            name = "loongarch64-manylinux_2_37",
+            alias = "manylinux_2_37_loongarch64"
+        )
+    )]
+    #[serde(rename = "loongarch64-manylinux_2_37")]
+    #[serde(alias = "manylinux_2_37_loongarch64")]
+    #[cfg_attr(feature = "clap", value(hide = true))]
+    LoongArch64Manylinux237,
+
+    /// A `LoongArch64` target for the `manylinux_2_38` platform.
+    #[cfg_attr(
+        feature = "clap",
+        value(
+            name = "loongarch64-manylinux_2_38",
+            alias = "manylinux_2_38_loongarch64"
+        )
+    )]
+    #[serde(rename = "loongarch64-manylinux_2_38")]
+    #[serde(alias = "manylinux_2_38_loongarch64")]
+    #[cfg_attr(feature = "clap", value(hide = true))]
+    LoongArch64Manylinux238,
+
+    /// A `LoongArch64` target for the `manylinux_2_39` platform.
+    #[cfg_attr(
+        feature = "clap",
+        value(
+            name = "loongarch64-manylinux_2_39",
+            alias = "manylinux_2_39_loongarch64"
+        )
+    )]
+    #[serde(rename = "loongarch64-manylinux_2_39")]
+    #[serde(alias = "manylinux_2_39_loongarch64")]
+    #[cfg_attr(feature = "clap", value(hide = true))]
+    LoongArch64Manylinux239,
+
+    /// A `LoongArch64` target for the `manylinux_2_40` platform.
+    #[cfg_attr(
+        feature = "clap",
+        value(
+            name = "loongarch64-manylinux_2_40",
+            alias = "manylinux_2_40_loongarch64"
+        )
+    )]
+    #[serde(rename = "loongarch64-manylinux_2_40")]
+    #[serde(alias = "manylinux_2_40_loongarch64")]
+    #[cfg_attr(feature = "clap", value(hide = true))]
+    LoongArch64Manylinux240,
 
     /// An ARM64 Android target.
     ///
@@ -746,6 +1008,76 @@ impl TargetTriple {
                 },
                 Arch::S390X,
             ),
+            Self::S390XManylinux231 => Platform::new(
+                Os::Manylinux {
+                    major: 2,
+                    minor: 31,
+                },
+                Arch::S390X,
+            ),
+            Self::S390XManylinux232 => Platform::new(
+                Os::Manylinux {
+                    major: 2,
+                    minor: 32,
+                },
+                Arch::S390X,
+            ),
+            Self::S390XManylinux233 => Platform::new(
+                Os::Manylinux {
+                    major: 2,
+                    minor: 33,
+                },
+                Arch::S390X,
+            ),
+            Self::S390XManylinux234 => Platform::new(
+                Os::Manylinux {
+                    major: 2,
+                    minor: 34,
+                },
+                Arch::S390X,
+            ),
+            Self::S390XManylinux235 => Platform::new(
+                Os::Manylinux {
+                    major: 2,
+                    minor: 35,
+                },
+                Arch::S390X,
+            ),
+            Self::S390XManylinux236 => Platform::new(
+                Os::Manylinux {
+                    major: 2,
+                    minor: 36,
+                },
+                Arch::S390X,
+            ),
+            Self::S390XManylinux237 => Platform::new(
+                Os::Manylinux {
+                    major: 2,
+                    minor: 37,
+                },
+                Arch::S390X,
+            ),
+            Self::S390XManylinux238 => Platform::new(
+                Os::Manylinux {
+                    major: 2,
+                    minor: 38,
+                },
+                Arch::S390X,
+            ),
+            Self::S390XManylinux239 => Platform::new(
+                Os::Manylinux {
+                    major: 2,
+                    minor: 39,
+                },
+                Arch::S390X,
+            ),
+            Self::S390XManylinux240 => Platform::new(
+                Os::Manylinux {
+                    major: 2,
+                    minor: 40,
+                },
+                Arch::S390X,
+            ),
             Self::Powerpc64LeManylinux2014 => Platform::new(
                 Os::Manylinux {
                     major: 2,
@@ -767,10 +1099,108 @@ impl TargetTriple {
                 },
                 Arch::Powerpc64Le,
             ),
+            Self::Powerpc64LeManylinux231 => Platform::new(
+                Os::Manylinux {
+                    major: 2,
+                    minor: 31,
+                },
+                Arch::Powerpc64Le,
+            ),
+            Self::Powerpc64LeManylinux232 => Platform::new(
+                Os::Manylinux {
+                    major: 2,
+                    minor: 32,
+                },
+                Arch::Powerpc64Le,
+            ),
+            Self::Powerpc64LeManylinux233 => Platform::new(
+                Os::Manylinux {
+                    major: 2,
+                    minor: 33,
+                },
+                Arch::Powerpc64Le,
+            ),
+            Self::Powerpc64LeManylinux234 => Platform::new(
+                Os::Manylinux {
+                    major: 2,
+                    minor: 34,
+                },
+                Arch::Powerpc64Le,
+            ),
+            Self::Powerpc64LeManylinux235 => Platform::new(
+                Os::Manylinux {
+                    major: 2,
+                    minor: 35,
+                },
+                Arch::Powerpc64Le,
+            ),
+            Self::Powerpc64LeManylinux236 => Platform::new(
+                Os::Manylinux {
+                    major: 2,
+                    minor: 36,
+                },
+                Arch::Powerpc64Le,
+            ),
+            Self::Powerpc64LeManylinux237 => Platform::new(
+                Os::Manylinux {
+                    major: 2,
+                    minor: 37,
+                },
+                Arch::Powerpc64Le,
+            ),
+            Self::Powerpc64LeManylinux238 => Platform::new(
+                Os::Manylinux {
+                    major: 2,
+                    minor: 38,
+                },
+                Arch::Powerpc64Le,
+            ),
+            Self::Powerpc64LeManylinux239 => Platform::new(
+                Os::Manylinux {
+                    major: 2,
+                    minor: 39,
+                },
+                Arch::Powerpc64Le,
+            ),
+            Self::Powerpc64LeManylinux240 => Platform::new(
+                Os::Manylinux {
+                    major: 2,
+                    minor: 40,
+                },
+                Arch::Powerpc64Le,
+            ),
             Self::LoongArch64Manylinux236 => Platform::new(
                 Os::Manylinux {
                     major: 2,
                     minor: 36,
+                },
+                Arch::LoongArch64,
+            ),
+            Self::LoongArch64Manylinux237 => Platform::new(
+                Os::Manylinux {
+                    major: 2,
+                    minor: 37,
+                },
+                Arch::LoongArch64,
+            ),
+            Self::LoongArch64Manylinux238 => Platform::new(
+                Os::Manylinux {
+                    major: 2,
+                    minor: 38,
+                },
+                Arch::LoongArch64,
+            ),
+            Self::LoongArch64Manylinux239 => Platform::new(
+                Os::Manylinux {
+                    major: 2,
+                    minor: 39,
+                },
+                Arch::LoongArch64,
+            ),
+            Self::LoongArch64Manylinux240 => Platform::new(
+                Os::Manylinux {
+                    major: 2,
+                    minor: 40,
                 },
                 Arch::LoongArch64,
             ),
@@ -892,10 +1322,34 @@ impl TargetTriple {
             Self::S390XManylinux2014 => "s390x",
             Self::S390XManylinux217 => "s390x",
             Self::S390XManylinux228 => "s390x",
+            Self::S390XManylinux231 => "s390x",
+            Self::S390XManylinux232 => "s390x",
+            Self::S390XManylinux233 => "s390x",
+            Self::S390XManylinux234 => "s390x",
+            Self::S390XManylinux235 => "s390x",
+            Self::S390XManylinux236 => "s390x",
+            Self::S390XManylinux237 => "s390x",
+            Self::S390XManylinux238 => "s390x",
+            Self::S390XManylinux239 => "s390x",
+            Self::S390XManylinux240 => "s390x",
             Self::Powerpc64LeManylinux2014 => "ppc64le",
             Self::Powerpc64LeManylinux217 => "ppc64le",
             Self::Powerpc64LeManylinux228 => "ppc64le",
+            Self::Powerpc64LeManylinux231 => "ppc64le",
+            Self::Powerpc64LeManylinux232 => "ppc64le",
+            Self::Powerpc64LeManylinux233 => "ppc64le",
+            Self::Powerpc64LeManylinux234 => "ppc64le",
+            Self::Powerpc64LeManylinux235 => "ppc64le",
+            Self::Powerpc64LeManylinux236 => "ppc64le",
+            Self::Powerpc64LeManylinux237 => "ppc64le",
+            Self::Powerpc64LeManylinux238 => "ppc64le",
+            Self::Powerpc64LeManylinux239 => "ppc64le",
+            Self::Powerpc64LeManylinux240 => "ppc64le",
             Self::LoongArch64Manylinux236 => "loongarch64",
+            Self::LoongArch64Manylinux237 => "loongarch64",
+            Self::LoongArch64Manylinux238 => "loongarch64",
+            Self::LoongArch64Manylinux239 => "loongarch64",
+            Self::LoongArch64Manylinux240 => "loongarch64",
             Self::Aarch64LinuxAndroid => "aarch64",
             Self::X8664LinuxAndroid => "x86_64",
             Self::Wasm32Pyodide2024 => "wasm32",
@@ -951,10 +1405,34 @@ impl TargetTriple {
             Self::S390XManylinux2014 => "Linux",
             Self::S390XManylinux217 => "Linux",
             Self::S390XManylinux228 => "Linux",
+            Self::S390XManylinux231 => "Linux",
+            Self::S390XManylinux232 => "Linux",
+            Self::S390XManylinux233 => "Linux",
+            Self::S390XManylinux234 => "Linux",
+            Self::S390XManylinux235 => "Linux",
+            Self::S390XManylinux236 => "Linux",
+            Self::S390XManylinux237 => "Linux",
+            Self::S390XManylinux238 => "Linux",
+            Self::S390XManylinux239 => "Linux",
+            Self::S390XManylinux240 => "Linux",
             Self::Powerpc64LeManylinux2014 => "Linux",
             Self::Powerpc64LeManylinux217 => "Linux",
             Self::Powerpc64LeManylinux228 => "Linux",
+            Self::Powerpc64LeManylinux231 => "Linux",
+            Self::Powerpc64LeManylinux232 => "Linux",
+            Self::Powerpc64LeManylinux233 => "Linux",
+            Self::Powerpc64LeManylinux234 => "Linux",
+            Self::Powerpc64LeManylinux235 => "Linux",
+            Self::Powerpc64LeManylinux236 => "Linux",
+            Self::Powerpc64LeManylinux237 => "Linux",
+            Self::Powerpc64LeManylinux238 => "Linux",
+            Self::Powerpc64LeManylinux239 => "Linux",
+            Self::Powerpc64LeManylinux240 => "Linux",
             Self::LoongArch64Manylinux236 => "Linux",
+            Self::LoongArch64Manylinux237 => "Linux",
+            Self::LoongArch64Manylinux238 => "Linux",
+            Self::LoongArch64Manylinux239 => "Linux",
+            Self::LoongArch64Manylinux240 => "Linux",
             Self::Aarch64LinuxAndroid => "Android",
             Self::X8664LinuxAndroid => "Android",
             Self::Wasm32Pyodide2024 => "Emscripten",
@@ -1010,10 +1488,34 @@ impl TargetTriple {
             Self::S390XManylinux2014 => "",
             Self::S390XManylinux217 => "",
             Self::S390XManylinux228 => "",
+            Self::S390XManylinux231 => "",
+            Self::S390XManylinux232 => "",
+            Self::S390XManylinux233 => "",
+            Self::S390XManylinux234 => "",
+            Self::S390XManylinux235 => "",
+            Self::S390XManylinux236 => "",
+            Self::S390XManylinux237 => "",
+            Self::S390XManylinux238 => "",
+            Self::S390XManylinux239 => "",
+            Self::S390XManylinux240 => "",
             Self::Powerpc64LeManylinux2014 => "",
             Self::Powerpc64LeManylinux217 => "",
             Self::Powerpc64LeManylinux228 => "",
+            Self::Powerpc64LeManylinux231 => "",
+            Self::Powerpc64LeManylinux232 => "",
+            Self::Powerpc64LeManylinux233 => "",
+            Self::Powerpc64LeManylinux234 => "",
+            Self::Powerpc64LeManylinux235 => "",
+            Self::Powerpc64LeManylinux236 => "",
+            Self::Powerpc64LeManylinux237 => "",
+            Self::Powerpc64LeManylinux238 => "",
+            Self::Powerpc64LeManylinux239 => "",
+            Self::Powerpc64LeManylinux240 => "",
             Self::LoongArch64Manylinux236 => "",
+            Self::LoongArch64Manylinux237 => "",
+            Self::LoongArch64Manylinux238 => "",
+            Self::LoongArch64Manylinux239 => "",
+            Self::LoongArch64Manylinux240 => "",
             Self::Aarch64LinuxAndroid => "",
             Self::X8664LinuxAndroid => "",
             // This is the value Emscripten gives for its version:
@@ -1072,10 +1574,34 @@ impl TargetTriple {
             Self::S390XManylinux2014 => "",
             Self::S390XManylinux217 => "",
             Self::S390XManylinux228 => "",
+            Self::S390XManylinux231 => "",
+            Self::S390XManylinux232 => "",
+            Self::S390XManylinux233 => "",
+            Self::S390XManylinux234 => "",
+            Self::S390XManylinux235 => "",
+            Self::S390XManylinux236 => "",
+            Self::S390XManylinux237 => "",
+            Self::S390XManylinux238 => "",
+            Self::S390XManylinux239 => "",
+            Self::S390XManylinux240 => "",
             Self::Powerpc64LeManylinux2014 => "",
             Self::Powerpc64LeManylinux217 => "",
             Self::Powerpc64LeManylinux228 => "",
+            Self::Powerpc64LeManylinux231 => "",
+            Self::Powerpc64LeManylinux232 => "",
+            Self::Powerpc64LeManylinux233 => "",
+            Self::Powerpc64LeManylinux234 => "",
+            Self::Powerpc64LeManylinux235 => "",
+            Self::Powerpc64LeManylinux236 => "",
+            Self::Powerpc64LeManylinux237 => "",
+            Self::Powerpc64LeManylinux238 => "",
+            Self::Powerpc64LeManylinux239 => "",
+            Self::Powerpc64LeManylinux240 => "",
             Self::LoongArch64Manylinux236 => "",
+            Self::LoongArch64Manylinux237 => "",
+            Self::LoongArch64Manylinux238 => "",
+            Self::LoongArch64Manylinux239 => "",
+            Self::LoongArch64Manylinux240 => "",
             Self::Aarch64LinuxAndroid => "",
             Self::X8664LinuxAndroid => "",
             // This is the Emscripten compiler version for Pyodide 2024.
@@ -1134,10 +1660,34 @@ impl TargetTriple {
             Self::S390XManylinux2014 => "posix",
             Self::S390XManylinux217 => "posix",
             Self::S390XManylinux228 => "posix",
+            Self::S390XManylinux231 => "posix",
+            Self::S390XManylinux232 => "posix",
+            Self::S390XManylinux233 => "posix",
+            Self::S390XManylinux234 => "posix",
+            Self::S390XManylinux235 => "posix",
+            Self::S390XManylinux236 => "posix",
+            Self::S390XManylinux237 => "posix",
+            Self::S390XManylinux238 => "posix",
+            Self::S390XManylinux239 => "posix",
+            Self::S390XManylinux240 => "posix",
             Self::Powerpc64LeManylinux2014 => "posix",
             Self::Powerpc64LeManylinux217 => "posix",
             Self::Powerpc64LeManylinux228 => "posix",
+            Self::Powerpc64LeManylinux231 => "posix",
+            Self::Powerpc64LeManylinux232 => "posix",
+            Self::Powerpc64LeManylinux233 => "posix",
+            Self::Powerpc64LeManylinux234 => "posix",
+            Self::Powerpc64LeManylinux235 => "posix",
+            Self::Powerpc64LeManylinux236 => "posix",
+            Self::Powerpc64LeManylinux237 => "posix",
+            Self::Powerpc64LeManylinux238 => "posix",
+            Self::Powerpc64LeManylinux239 => "posix",
+            Self::Powerpc64LeManylinux240 => "posix",
             Self::LoongArch64Manylinux236 => "posix",
+            Self::LoongArch64Manylinux237 => "posix",
+            Self::LoongArch64Manylinux238 => "posix",
+            Self::LoongArch64Manylinux239 => "posix",
+            Self::LoongArch64Manylinux240 => "posix",
             Self::Aarch64LinuxAndroid => "posix",
             Self::X8664LinuxAndroid => "posix",
             Self::Wasm32Pyodide2024 => "posix",
@@ -1193,10 +1743,34 @@ impl TargetTriple {
             Self::S390XManylinux2014 => "linux",
             Self::S390XManylinux217 => "linux",
             Self::S390XManylinux228 => "linux",
+            Self::S390XManylinux231 => "linux",
+            Self::S390XManylinux232 => "linux",
+            Self::S390XManylinux233 => "linux",
+            Self::S390XManylinux234 => "linux",
+            Self::S390XManylinux235 => "linux",
+            Self::S390XManylinux236 => "linux",
+            Self::S390XManylinux237 => "linux",
+            Self::S390XManylinux238 => "linux",
+            Self::S390XManylinux239 => "linux",
+            Self::S390XManylinux240 => "linux",
             Self::Powerpc64LeManylinux2014 => "linux",
             Self::Powerpc64LeManylinux217 => "linux",
             Self::Powerpc64LeManylinux228 => "linux",
+            Self::Powerpc64LeManylinux231 => "linux",
+            Self::Powerpc64LeManylinux232 => "linux",
+            Self::Powerpc64LeManylinux233 => "linux",
+            Self::Powerpc64LeManylinux234 => "linux",
+            Self::Powerpc64LeManylinux235 => "linux",
+            Self::Powerpc64LeManylinux236 => "linux",
+            Self::Powerpc64LeManylinux237 => "linux",
+            Self::Powerpc64LeManylinux238 => "linux",
+            Self::Powerpc64LeManylinux239 => "linux",
+            Self::Powerpc64LeManylinux240 => "linux",
             Self::LoongArch64Manylinux236 => "linux",
+            Self::LoongArch64Manylinux237 => "linux",
+            Self::LoongArch64Manylinux238 => "linux",
+            Self::LoongArch64Manylinux239 => "linux",
+            Self::LoongArch64Manylinux240 => "linux",
             Self::Aarch64LinuxAndroid => "android",
             Self::X8664LinuxAndroid => "android",
             Self::Wasm32Pyodide2024 => "emscripten",
@@ -1252,10 +1826,34 @@ impl TargetTriple {
             Self::S390XManylinux2014 => true,
             Self::S390XManylinux217 => true,
             Self::S390XManylinux228 => true,
+            Self::S390XManylinux231 => true,
+            Self::S390XManylinux232 => true,
+            Self::S390XManylinux233 => true,
+            Self::S390XManylinux234 => true,
+            Self::S390XManylinux235 => true,
+            Self::S390XManylinux236 => true,
+            Self::S390XManylinux237 => true,
+            Self::S390XManylinux238 => true,
+            Self::S390XManylinux239 => true,
+            Self::S390XManylinux240 => true,
             Self::Powerpc64LeManylinux2014 => true,
             Self::Powerpc64LeManylinux217 => true,
             Self::Powerpc64LeManylinux228 => true,
+            Self::Powerpc64LeManylinux231 => true,
+            Self::Powerpc64LeManylinux232 => true,
+            Self::Powerpc64LeManylinux233 => true,
+            Self::Powerpc64LeManylinux234 => true,
+            Self::Powerpc64LeManylinux235 => true,
+            Self::Powerpc64LeManylinux236 => true,
+            Self::Powerpc64LeManylinux237 => true,
+            Self::Powerpc64LeManylinux238 => true,
+            Self::Powerpc64LeManylinux239 => true,
+            Self::Powerpc64LeManylinux240 => true,
             Self::LoongArch64Manylinux236 => true,
+            Self::LoongArch64Manylinux237 => true,
+            Self::LoongArch64Manylinux238 => true,
+            Self::LoongArch64Manylinux239 => true,
+            Self::LoongArch64Manylinux240 => true,
             Self::Aarch64LinuxAndroid => false,
             Self::X8664LinuxAndroid => false,
             Self::Wasm32Pyodide2024 => false,
