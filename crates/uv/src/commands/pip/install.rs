@@ -172,6 +172,13 @@ pub(crate) async fn pip_install(
 
     let hash_checking = HashCheckingMode::from_requirements_txt(hash_checking, require_hashes);
 
+    if require_build_hashes && !preview.is_enabled(PreviewFeature::BuildDependencyHashes) {
+        warn_user!(
+            "The `--require-build-hashes` option is experimental and may change without warning. Pass `--preview-features {}` to disable this warning.",
+            PreviewFeature::BuildDependencyHashes
+        );
+    }
+
     if pylock.is_some() {
         if !preview.is_enabled(PreviewFeature::Pylock) {
             warn_user!(
