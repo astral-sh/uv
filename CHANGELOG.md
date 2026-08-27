@@ -3,6 +3,31 @@
 <!-- prettier-ignore-start -->
 
 
+## 0.12.7
+
+Released on 2026-08-27.
+
+### Python
+
+- Replace managed Python installations when upgrading to a newer build of the same version ([#21323](https://github.com/astral-sh/uv/pull/21323))
+
+### Enhancements
+
+- Support Linux `s390x`, `ppc64le`, and `loongarch64` targets for cross-platform dependency resolution ([#21313](https://github.com/astral-sh/uv/pull/21313))
+- Retry downloads with configured credentials when Azure Storage denies anonymous access to an endpoint configured via `UV_AZURE_ENDPOINT_URL` ([#21318](https://github.com/astral-sh/uv/pull/21318))
+
+### Preview features
+
+- Use content-based directory hashes to deduplicate extracted wheels in the cache with the `content-addressed-cache` preview feature ([#19693](https://github.com/astral-sh/uv/pull/19693))
+
+### Bug fixes
+
+- Reject source archives with hash mismatches before persisting their extracted contents to the cache ([#21248](https://github.com/astral-sh/uv/pull/21248))
+
+### Other changes
+
+- remove pyx specific features ([#21182](https://github.com/astral-sh/uv/pull/21182), [#21183](https://github.com/astral-sh/uv/pull/21183), [#21184](https://github.com/astral-sh/uv/pull/21184), [#21185](https://github.com/astral-sh/uv/pull/21185), [#21186](https://github.com/astral-sh/uv/pull/21186))
+
 ## 0.12.6
 
 Released on 2026-08-25.
