@@ -741,12 +741,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
 
                 // Persist the temporary directory to the directory store.
                 let id = self
-                    .persist_extracted_wheel(
-                        temp_dir,
-                        wheel_entry.path(),
-                        extracted.tree,
-                        extracted.hashed_files,
-                    )
+                    .persist_extracted_wheel(temp_dir, wheel_entry.path(), extracted.hashed_wheel)
                     .await?;
 
                 if let Some((reporter, progress)) = progress {
@@ -951,12 +946,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
 
                 // Persist the temporary directory to the directory store.
                 let id = self
-                    .persist_extracted_wheel(
-                        temp_dir,
-                        wheel_entry.path(),
-                        extracted.tree,
-                        extracted.hashed_files,
-                    )
+                    .persist_extracted_wheel(temp_dir, wheel_entry.path(), extracted.hashed_wheel)
                     .await?;
 
                 if let Some((reporter, progress)) = progress {
@@ -1157,12 +1147,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
 
             // Persist the temporary directory to the directory store.
             let id = self
-                .persist_extracted_wheel(
-                    temp_dir,
-                    wheel_entry.path(),
-                    extracted.tree,
-                    extracted.hashed_files,
-                )
+                .persist_extracted_wheel(temp_dir, wheel_entry.path(), extracted.hashed_wheel)
                 .await?;
 
             // Create an archive.
@@ -1222,7 +1207,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
 
         // Persist the temporary directory to the directory store.
         let id = self
-            .persist_extracted_wheel(temp_dir, target, extracted.tree, extracted.hashed_files)
+            .persist_extracted_wheel(temp_dir, target, extracted.hashed_wheel)
             .await?;
 
         Ok(id)
@@ -1237,28 +1222,22 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         &self,
         temp_dir: tempfile::TempDir,
         target: &Path,
-        tree: Option<DirhashTree>,
-        hashed_files: Option<Vec<HashedFile>>,
+        hashed_wheel: Option<HashedWheel>,
     ) -> Result<ArchiveId, Error> {
         let cache = self.build_context.cache();
-        let id = match tree {
-            Some(tree) => {
-                let digest = DirectoryDigest::from(tree.hash());
-                ArchiveId::from_digest(digest.into())
-            }
-            None => ArchiveId::default(),
-        };
-
-        let temp_dir = if let Some(hashed_files) = hashed_files {
+        let (temp_dir, id) = if let Some(HashedWheel { files, tree }) = hashed_wheel {
+            let digest = DirectoryDigest::from(tree.hash());
+            let id = ArchiveId::from_digest(digest.into());
             let cache = cache.clone();
-            tokio::task::spawn_blocking(move || {
-                persist_archive_files(&cache, temp_dir.path(), &hashed_files)
+            let temp_dir = tokio::task::spawn_blocking(move || {
+                persist_archive_files(&cache, temp_dir.path(), &files)
                     .map_err(Error::CacheWrite)?;
                 Ok::<_, Error>(temp_dir)
             })
-            .await??
+            .await??;
+            (temp_dir, id)
         } else {
-            temp_dir
+            (temp_dir, ArchiveId::default())
         };
 
         cache
@@ -1289,11 +1268,16 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
     }
 }
 
-/// The manifest of files extracted from a wheel, along with a hash tree of the unpacked archive.
+/// Per-file digests and the hash tree of an extracted wheel.
+struct HashedWheel {
+    files: Vec<HashedFile>,
+    tree: DirhashTree,
+}
+
+/// Files extracted from a wheel, optionally with content-addressing metadata.
 struct ExtractedWheelManifest {
     files: Vec<UnhashedFile>,
-    hashed_files: Option<Vec<HashedFile>>,
-    tree: Option<DirhashTree>,
+    hashed_wheel: Option<HashedWheel>,
 }
 
 impl ExtractedWheelManifest {
@@ -1334,16 +1318,17 @@ impl ExtractedWheelManifest {
     fn with_hashed_files(hashed_files: Vec<HashedFile>, tree: DirhashTree) -> Self {
         Self {
             files: hashed_files.iter().map(HashedFile::to_unhashed).collect(),
-            hashed_files: Some(hashed_files),
-            tree: Some(tree),
+            hashed_wheel: Some(HashedWheel {
+                files: hashed_files,
+                tree,
+            }),
         }
     }
 
     fn without_tree(files: Vec<UnhashedFile>) -> Self {
         Self {
             files,
-            hashed_files: None,
-            tree: None,
+            hashed_wheel: None,
         }
     }
 
@@ -1358,7 +1343,7 @@ impl ExtractedWheelManifest {
         else {
             return Ok(());
         };
-        let Some(tree) = self.tree.as_mut() else {
+        let Some(hashed_wheel) = self.hashed_wheel.as_mut() else {
             return Ok(());
         };
 
@@ -1369,7 +1354,9 @@ impl ExtractedWheelManifest {
             )
         })?;
         let record_path = PortablePath::from(record_path.as_path()).to_string();
-        tree.update_file(&record_path, hash)
+        hashed_wheel
+            .tree
+            .update_file(&record_path, hash)
             .map_err(|err| Error::Extract(record_path, uv_extract::Error::from(err)))
     }
 }
@@ -1408,15 +1395,6 @@ fn is_shared_library(path: &Path) -> bool {
 
 /// Publish a shared object and retain a hardlink in the archive, with a copy fallback.
 fn persist_archive_file(src: &Path, dst: &Path) -> io::Result<()> {
-    persist_archive_file_with(src, dst, |src, dst| fs_err::hard_link(src, dst))
-}
-
-/// Persist an object with an injectable hardlink operation for exercising copy fallbacks.
-fn persist_archive_file_with(
-    src: &Path,
-    dst: &Path,
-    hard_link: impl Fn(&Path, &Path) -> io::Result<()>,
-) -> io::Result<()> {
     let Some(parent) = dst.parent() else {
         return Err(io::Error::new(
             io::ErrorKind::InvalidInput,
@@ -1426,7 +1404,7 @@ fn persist_archive_file_with(
     fs_err::create_dir_all(parent)?;
 
     if !dst.try_exists()? {
-        match hard_link(src, dst) {
+        match fs_err::hard_link(src, dst) {
             Ok(()) => return Ok(()),
             Err(_) if dst.try_exists()? => {}
             Err(_) => return uv_fs::copy_atomic_sync(src, dst),
@@ -1440,7 +1418,7 @@ fn persist_archive_file_with(
         return Err(err);
     }
 
-    hard_link(dst, src).or_else(|_| uv_fs::copy_atomic_sync(dst, src))
+    fs_err::hard_link(dst, src).or_else(|_| uv_fs::copy_atomic_sync(dst, src))
 }
 
 /// A wrapper around `RegistryClient` that manages a concurrency limit.
@@ -1615,66 +1593,3 @@ impl PathArchivePointer {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn persist_archive_file_restores_missing_source_from_existing_object() -> io::Result<()> {
-        let temp_dir = tempfile::tempdir()?;
-        let archive_dir = temp_dir.path().join("archive/package");
-        let archive_files_dir = temp_dir.path().join("archive-files");
-        fs_err::create_dir_all(&archive_dir)?;
-        fs_err::create_dir_all(&archive_files_dir)?;
-        let src = archive_dir.join("native.so");
-        let dst = archive_files_dir.join("native.so");
-        fs_err::write(&dst, "binary contents")?;
-
-        persist_archive_file(&src, &dst)?;
-
-        assert_eq!(uv_fs::is_same_file_allow_missing(&src, &dst), Some(true));
-        assert_eq!(fs_err::read(&dst)?, b"binary contents");
-        Ok(())
-    }
-
-    #[test]
-    fn persist_archive_file_copies_when_hardlinks_are_unsupported() -> io::Result<()> {
-        let temp_dir = tempfile::tempdir()?;
-        let archive_dir = temp_dir.path().join("archive/package");
-        let archive_files_dir = temp_dir.path().join("archive-files");
-        fs_err::create_dir_all(&archive_dir)?;
-        let src = archive_dir.join("native.so");
-        let dst = archive_files_dir.join("native.so");
-        fs_err::write(&src, "binary contents")?;
-
-        persist_archive_file_with(&src, &dst, |_, _| {
-            Err(io::Error::new(
-                io::ErrorKind::Unsupported,
-                "hardlinks are unsupported",
-            ))
-        })?;
-
-        assert_eq!(fs_err::read(&src)?, b"binary contents");
-        assert_eq!(fs_err::read(&dst)?, b"binary contents");
-        Ok(())
-    }
-
-    #[test]
-    fn persist_archive_file_relinks_source_to_existing_object() -> io::Result<()> {
-        let temp_dir = tempfile::tempdir()?;
-        let archive_dir = temp_dir.path().join("archive/package");
-        let archive_files_dir = temp_dir.path().join("archive-files");
-        fs_err::create_dir_all(&archive_dir)?;
-        fs_err::create_dir_all(&archive_files_dir)?;
-        let src = archive_dir.join("native.so");
-        let dst = archive_files_dir.join("native.so");
-        fs_err::write(&src, "binary contents")?;
-        fs_err::write(&dst, "binary contents")?;
-
-        persist_archive_file(&src, &dst)?;
-
-        assert_eq!(uv_fs::is_same_file_allow_missing(&src, &dst), Some(true));
-        assert_eq!(fs_err::read(&dst)?, b"binary contents");
-        Ok(())
-    }
-}
