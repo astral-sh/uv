@@ -145,7 +145,7 @@ impl EnvVars {
     /// will require every dependency installed into an isolated build environment to have a hash
     /// specified in a build constraints file.
     #[attr_added_in("0.12.0")]
-    pub const UV_REQUIRE_BUILD_HASHES: &'static str = "UV_REQUIRE_BUILD_HASHES";
+    pub const UV_PIP_REQUIRE_BUILD_HASHES: &'static str = "UV_PIP_REQUIRE_BUILD_HASHES";
 
     /// Require wheel metadata to be fetched with HTTP range requests when separate metadata is
     /// unavailable. If set to `true`, uv will fail instead of downloading the entire wheel.
