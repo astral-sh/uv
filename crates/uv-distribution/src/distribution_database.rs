@@ -1,3 +1,4 @@
+use std::cmp::Reverse;
 use std::fmt::Display;
 use std::future::Future;
 use std::io;
@@ -8,6 +9,9 @@ use std::task::{Context, Poll};
 
 use either::Either;
 use futures::{FutureExt, TryStreamExt};
+use rayon::in_place_scope;
+use rayon::prelude::*;
+use rustc_hash::FxHashMap;
 use tokio::io::{AsyncRead, AsyncSeekExt, ReadBuf};
 use tokio::sync::Semaphore;
 use tokio_util::compat::FuturesAsyncReadCompatExt;
@@ -19,6 +23,7 @@ use uv_cache_info::{CacheInfo, Timestamp};
 use uv_client::{
     CacheControl, CachedClientError, Connectivity, DataWithCachePolicy, RegistryClient,
 };
+use uv_configuration::initialize_rayon_once;
 use uv_distribution_filename::WheelFilename;
 use uv_distribution_types::{
     BuildInfo, BuildableSource, BuiltDist, Dist, DistRef, HashPolicy, Hashed, IndexUrl,
@@ -1364,30 +1369,60 @@ impl ExtractedWheel {
 
 /// Share every extracted file while keeping the unpublished archive complete.
 fn persist_archive_files(cache: &Cache, archive: &Path, files: &[HashedFile]) -> io::Result<()> {
-    for file in files {
-        let id = ArchiveFileId::from_content_digest(&file.digest_hex(), file.is_executable());
-        persist_archive_file(&archive.join(file.path()), &cache.archive_file(&id))?;
+    initialize_rayon_once();
+    let targets = files
+        .par_iter()
+        .map(|file| {
+            let id = ArchiveFileId::from_content_digest(&file.digest_hex(), file.is_executable());
+            (archive.join(file.path()), cache.archive_file(&id))
+        })
+        .collect::<Vec<_>>();
+
+    // Group files by shard so its directory is created once and its files are linked by the
+    // same worker, avoiding contention between workers on each shard directory.
+    let mut shards: FxHashMap<&Path, Vec<_>> = FxHashMap::default();
+    for (source, target) in &targets {
+        let Some(parent) = target.parent() else {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "archive file path must have a parent directory",
+            ));
+        };
+        shards.entry(parent).or_default().push((source, target));
     }
 
-    Ok(())
+    let mut shards = shards
+        .into_iter()
+        .map(|(parent, files)| (parent, files, Ok(())))
+        .collect::<Vec<_>>();
+    // Start larger shards first so their work can overlap the remaining directory creation.
+    shards.sort_unstable_by_key(|(_, files, _)| Reverse(files.len()));
+
+    // Creating shards concurrently contends on their shared parent. Keep creation on this
+    // thread, while workers link files in the shards that are already available.
+    in_place_scope(|scope| -> io::Result<()> {
+        for (parent, files, result) in &mut shards {
+            fs_err::create_dir_all(parent)?;
+            scope.spawn(move |_| {
+                *result = files
+                    .iter()
+                    .try_for_each(|(source, target)| persist_archive_file(source, target));
+            });
+        }
+        Ok(())
+    })?;
+
+    shards.into_iter().try_for_each(|(_, _, result)| result)
 }
 
 /// Publish a shared object and retain a hardlink in the archive, with a copy fallback.
 fn persist_archive_file(src: &Path, dst: &Path) -> io::Result<()> {
-    let Some(parent) = dst.parent() else {
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidInput,
-            "archive file path must have a parent directory",
-        ));
-    };
-    fs_err::create_dir_all(parent)?;
-
-    if !dst.try_exists()? {
-        match fs_err::hard_link(src, dst) {
-            Ok(()) => return Ok(()),
-            Err(_) if dst.try_exists()? => {}
-            Err(_) => return uv_fs::copy_atomic_sync(src, dst),
-        }
+    // The shard already exists, and most objects are new, so try linking before checking for an
+    // existing object. This avoids an extra filesystem lookup for every new object.
+    match fs_err::hard_link(src, dst) {
+        Ok(()) => return Ok(()),
+        Err(_) if dst.try_exists()? => {}
+        Err(_) => return uv_fs::copy_atomic_sync(src, dst),
     }
 
     // This archive is still private, so it is safe to replace its extracted copy before publication.
