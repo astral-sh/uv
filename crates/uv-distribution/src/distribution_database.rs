@@ -1,7 +1,7 @@
 use std::fmt::Display;
 use std::future::Future;
 use std::io;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll};
@@ -23,7 +23,7 @@ use uv_distribution_types::{
     BuildInfo, BuildableSource, BuiltDist, Dist, DistRef, HashPolicy, Hashed, IndexUrl,
     InstalledDist, Name, SourceDist,
 };
-use uv_extract::dirhash::{DirectoryDigest, DirhashTree, ExtractedFile, dirhash_path};
+use uv_extract::dirhash::{DirectoryDigest, DirhashTree, HashedFile, UnhashedFile, dirhash_path};
 use uv_extract::hash::Hasher;
 use uv_fs::{PortablePath, write_atomic};
 use uv_git::{GIT_LFS, GitError};
@@ -745,7 +745,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                         temp_dir,
                         wheel_entry.path(),
                         extracted.tree,
-                        extracted.extracted_files,
+                        extracted.hashed_files,
                     )
                     .await?;
 
@@ -955,7 +955,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                         temp_dir,
                         wheel_entry.path(),
                         extracted.tree,
-                        extracted.extracted_files,
+                        extracted.hashed_files,
                     )
                     .await?;
 
@@ -1161,7 +1161,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                     temp_dir,
                     wheel_entry.path(),
                     extracted.tree,
-                    extracted.extracted_files,
+                    extracted.hashed_files,
                 )
                 .await?;
 
@@ -1222,7 +1222,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
 
         // Persist the temporary directory to the directory store.
         let id = self
-            .persist_extracted_wheel(temp_dir, target, extracted.tree, extracted.extracted_files)
+            .persist_extracted_wheel(temp_dir, target, extracted.tree, extracted.hashed_files)
             .await?;
 
         Ok(id)
@@ -1238,7 +1238,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         temp_dir: tempfile::TempDir,
         target: &Path,
         tree: Option<DirhashTree>,
-        extracted_files: Option<Vec<ExtractedFile>>,
+        hashed_files: Option<Vec<HashedFile>>,
     ) -> Result<ArchiveId, Error> {
         let cache = self.build_context.cache();
         let id = match tree {
@@ -1249,10 +1249,10 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             None => ArchiveId::default(),
         };
 
-        let temp_dir = if let Some(extracted_files) = extracted_files {
+        let temp_dir = if let Some(hashed_files) = hashed_files {
             let cache = cache.clone();
             tokio::task::spawn_blocking(move || {
-                persist_archive_files(&cache, temp_dir.path(), &extracted_files)
+                persist_archive_files(&cache, temp_dir.path(), &hashed_files)
                     .map_err(Error::CacheWrite)?;
                 Ok::<_, Error>(temp_dir)
             })
@@ -1291,8 +1291,8 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
 
 /// The manifest of files extracted from a wheel, along with a hash tree of the unpacked archive.
 struct ExtractedWheelManifest {
-    files: Vec<(PathBuf, u64)>,
-    extracted_files: Option<Vec<ExtractedFile>>,
+    files: Vec<UnhashedFile>,
+    hashed_files: Option<Vec<HashedFile>>,
     tree: Option<DirhashTree>,
 }
 
@@ -1307,9 +1307,8 @@ impl ExtractedWheelManifest {
         R: AsyncRead + Unpin,
     {
         if content_addressed {
-            let (extracted_files, tree) =
-                uv_extract::stream::unzip_and_hash(reader, target).await?;
-            Ok(Self::with_extracted_files(extracted_files, tree))
+            let (hashed_files, tree) = uv_extract::stream::unzip_and_hash(reader, target).await?;
+            Ok(Self::with_hashed_files(hashed_files, tree))
         } else {
             let files = uv_extract::stream::unzip(reader, target).await?;
             Ok(Self::without_tree(files))
@@ -1323,8 +1322,8 @@ impl ExtractedWheelManifest {
         content_addressed: bool,
     ) -> Result<Self, uv_extract::Error> {
         if content_addressed {
-            let (extracted_files, tree) = uv_extract::unzip_and_hash(reader, target)?;
-            Ok(Self::with_extracted_files(extracted_files, tree))
+            let (hashed_files, tree) = uv_extract::unzip_and_hash(reader, target)?;
+            Ok(Self::with_hashed_files(hashed_files, tree))
         } else {
             let files = uv_extract::unzip(reader, target)?;
             Ok(Self::without_tree(files))
@@ -1332,29 +1331,30 @@ impl ExtractedWheelManifest {
     }
 
     /// Derive wheel-record entries while retaining per-file digests for shared objects.
-    fn with_extracted_files(extracted_files: Vec<ExtractedFile>, tree: DirhashTree) -> Self {
+    fn with_hashed_files(hashed_files: Vec<HashedFile>, tree: DirhashTree) -> Self {
         Self {
-            files: extracted_files
-                .iter()
-                .map(ExtractedFile::to_record)
-                .collect(),
-            extracted_files: Some(extracted_files),
+            files: hashed_files.iter().map(HashedFile::to_unhashed).collect(),
+            hashed_files: Some(hashed_files),
             tree: Some(tree),
         }
     }
 
-    fn without_tree(files: Vec<(PathBuf, u64)>) -> Self {
+    fn without_tree(files: Vec<UnhashedFile>) -> Self {
         Self {
             files,
-            extracted_files: None,
+            hashed_files: None,
             tree: None,
         }
     }
 
     /// Heal the wheel's `RECORD` and keep its hash tree consistent with the repaired contents.
     fn validate_and_heal_record(&mut self, root: &Path, dist: impl Display) -> Result<(), Error> {
-        let Some(record_path) = validate_and_heal_record(root, self.files.iter(), dist)
-            .map_err(Error::InstallWheelError)?
+        let Some(record_path) = validate_and_heal_record(
+            root,
+            self.files.iter().map(|file| (file.path(), file.size())),
+            dist,
+        )
+        .map_err(Error::InstallWheelError)?
         else {
             return Ok(());
         };
@@ -1375,7 +1375,7 @@ impl ExtractedWheelManifest {
 }
 
 /// Share executables and native libraries while keeping the unpublished archive complete.
-fn persist_archive_files(cache: &Cache, archive: &Path, files: &[ExtractedFile]) -> io::Result<()> {
+fn persist_archive_files(cache: &Cache, archive: &Path, files: &[HashedFile]) -> io::Result<()> {
     // Keep installer metadata private, including RECORD, which may have been healed after hashing.
     for file in files.iter().filter(|file| {
         !file.path().components().any(|component| {

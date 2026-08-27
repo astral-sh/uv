@@ -990,14 +990,11 @@ pub(crate) fn write_record(
 /// Returns the relative path to the `RECORD` file if it was rewritten.
 pub fn validate_and_heal_record<'a>(
     wheel_dir: &Path,
-    unpacked_wheel: impl IntoIterator<Item = &'a (PathBuf, u64)>,
+    unpacked_wheel: impl IntoIterator<Item = (&'a Path, u64)>,
     dist: impl Display,
 ) -> Result<Option<PathBuf>, Error> {
     // On the filesystem: The unpacked files of the wheel.
-    let mut files: BTreeMap<&Path, u64> = unpacked_wheel
-        .into_iter()
-        .map(|(path, size)| (path.as_path(), *size))
-        .collect();
+    let mut files: BTreeMap<&Path, u64> = unpacked_wheel.into_iter().collect();
 
     // In the record: The files we expect in the wheel.
     let dist_info_prefix = find_dist_info(wheel_dir)?;

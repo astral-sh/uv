@@ -4,7 +4,7 @@ extern crate uv_performance_memory_allocator;
 
 use std::fmt::Write;
 use std::hint::black_box;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::str::FromStr;
 
 use async_zip::base::write::ZipFileWriter;
@@ -20,6 +20,7 @@ use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity, RegistryClientBuilder};
 use uv_distribution_filename::{SourceDistExtension, WheelFilename};
 use uv_distribution_types::Requirement;
+use uv_extract::dirhash::UnhashedFile;
 use uv_install_wheel::{InstallState, Layout, LinkMode};
 use uv_preview::{MaybePreviewFeature, Preview, PreviewFeature};
 use uv_pypi_types::Scheme;
@@ -247,10 +248,14 @@ fn prepare_wheel(
     archive: fs_err::File,
     extracted_wheel: &Path,
     filename: &WheelFilename,
-) -> Vec<(PathBuf, u64)> {
+) -> Vec<UnhashedFile> {
     let files = uv_extract::unzip(archive, extracted_wheel).expect("Failed to extract wheel");
-    uv_install_wheel::validate_and_heal_record(extracted_wheel, files.iter(), filename)
-        .expect("Failed to validate wheel");
+    uv_install_wheel::validate_and_heal_record(
+        extracted_wheel,
+        files.iter().map(|file| (file.path(), file.size())),
+        filename,
+    )
+    .expect("Failed to validate wheel");
     files
 }
 
