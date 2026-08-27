@@ -144,6 +144,21 @@ impl HashStrategy {
         Ok(self)
     }
 
+    /// Return a [`HashStrategy`] augmented with archive URL hashes discovered in distribution
+    /// metadata.
+    ///
+    /// Required-hash verification is intentionally a closed set. In that mode, distribution
+    /// metadata cannot authorize a requirement that was absent from the input hash set.
+    pub fn augment_with_metadata_requirements<'a>(
+        self,
+        requirements: impl Iterator<Item = &'a Requirement>,
+    ) -> Result<Self, HashStrategyError> {
+        if matches!(&self.verification, HashVerification::Required(_)) {
+            return Ok(self);
+        }
+        self.augment_with_requirements(requirements)
+    }
+
     /// Generate the required hashes from a set of [`UnresolvedRequirement`] entries.
     ///
     /// When the environment is not given, this treats all marker expressions
@@ -642,6 +657,44 @@ mod tests {
         assert_eq!(strategy.get_package(&name, &version), HashPolicy::Any(&[]));
         assert!(!strategy.allows_url(&url));
         assert!(!strategy.allows_package(&name, &version));
+        Ok(())
+    }
+
+    #[test]
+    fn required_hashes_cannot_be_augmented_by_metadata_direct_url()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let trusted_url: DisplaySafeUrl = "https://example.com/anyio-4.0.0.tar.gz".parse()?;
+        let requirement = requirement(
+            "https://example.com/anyio-4.1.0.tar.gz#sha256=cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f",
+        );
+        let RequirementSource::Url {
+            location: discovered_url,
+            ..
+        } = &requirement.source
+        else {
+            unreachable!("expected direct URL requirement");
+        };
+        let digest = HashDigest::from_str(
+            "sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f",
+        )?;
+        let hashes =
+            FxHashMap::from_iter([(VersionId::from_url(&trusted_url), vec![digest.clone()])]);
+        let strategy = HashStrategy::require(Arc::new(hashes));
+        let augmented = strategy
+            .clone()
+            .augment_with_requirements(std::iter::once(&requirement))?;
+        let strategy =
+            strategy.augment_with_metadata_requirements(std::iter::once(&requirement))?;
+
+        assert!(augmented.allows_url(discovered_url));
+
+        assert_eq!(
+            strategy.get_url(&trusted_url),
+            HashPolicy::All(std::slice::from_ref(&digest))
+        );
+        assert!(strategy.allows_url(&trusted_url));
+        assert_eq!(strategy.get_url(discovered_url), HashPolicy::All(&[]));
+        assert!(!strategy.allows_url(discovered_url));
         Ok(())
     }
 }

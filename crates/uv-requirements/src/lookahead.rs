@@ -112,7 +112,7 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
 
             while let Some(result) = futures.next().await {
                 if let Some(lookahead) = result? {
-                    hasher = hasher.augment_with_requirements(
+                    hasher = hasher.augment_with_metadata_requirements(
                         lookahead.requirements().iter().filter(|requirement| {
                             !self.excludes.contains_for(
                                 lookahead.package(),

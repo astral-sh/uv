@@ -1579,11 +1579,17 @@ async fn build_transitive_url_build_requirement_hashes() -> Result<()> {
 
             return wheel_name
     "#})?;
+    // Include the transitive direct URL in the input hash set.
+    project.child("constraints.txt").write_str(&formatdoc! {r"
+        ok @ {ok_wheel_url}#sha256=79f0b33e6ce1e09eaa1784c8eee275dfe84d215d9c65c652f07c18e85fdaac5f
+    "})?;
     uv_snapshot!(
         &context.filters(),
         context
             .build()
             .arg("--wheel")
+            .arg("--build-constraint")
+            .arg("constraints.txt")
             .arg("--require-hashes")
             .current_dir(&project),
         @"
