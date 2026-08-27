@@ -14,12 +14,11 @@ Released on 2026-08-27.
 ### Enhancements
 
 - Support Linux `s390x`, `ppc64le`, and `loongarch64` targets for cross-platform dependency resolution ([#21313](https://github.com/astral-sh/uv/pull/21313))
+- Retry downloads with configured credentials when Azure Storage denies anonymous access to an endpoint configured via `UV_AZURE_ENDPOINT_URL` ([#21318](https://github.com/astral-sh/uv/pull/21318))
 
 ### Preview features
 
 - Use content-based directory hashes to deduplicate extracted wheels in the cache with the `content-addressed-cache` preview feature ([#19693](https://github.com/astral-sh/uv/pull/19693))
-- Retry downloads from private Azure Storage endpoints with configured credentials when anonymous access is denied ([#21318](https://github.com/astral-sh/uv/pull/21318))
-- Remove the `direct-publish` preview feature and other pyx-specific publishing support ([#21185](https://github.com/astral-sh/uv/pull/21185))
 
 ### Bug fixes
 
@@ -27,7 +26,7 @@ Released on 2026-08-27.
 
 ### Other changes
 
-- Remove pyx-specific authentication, PyTorch index selection, Simple API extensions, and `.whl.tar.zst` wheel archive support ([#21182](https://github.com/astral-sh/uv/pull/21182), [#21183](https://github.com/astral-sh/uv/pull/21183), [#21184](https://github.com/astral-sh/uv/pull/21184), [#21186](https://github.com/astral-sh/uv/pull/21186))
+- remove pyx specific features ([#21182](https://github.com/astral-sh/uv/pull/21182), [#21183](https://github.com/astral-sh/uv/pull/21183), [#21184](https://github.com/astral-sh/uv/pull/21184), [#21185](https://github.com/astral-sh/uv/pull/21185), [#21186](https://github.com/astral-sh/uv/pull/21186))
 
 ## 0.12.6
 
