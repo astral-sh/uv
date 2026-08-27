@@ -5339,6 +5339,7 @@ fn compatible_build_constraint() -> Result<()> {
         .env(EnvVars::UV_PIP_REQUIRE_BUILD_HASHES, "true"), @r"
     exit_code: 2 (failure)
     ----- stderr -----
+    warning: The `--require-build-hashes` option is experimental and may change without warning. Pass `--preview-features build-dependency-hashes` to disable this warning.
     error: In `--require-hashes` mode, all requirements must have their versions pinned with `==`, but found: setuptools>=40
     "
     );
