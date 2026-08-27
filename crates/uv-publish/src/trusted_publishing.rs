@@ -12,7 +12,6 @@ use uv_redacted::{DisplaySafeUrl, DisplaySafeUrlError};
 use uv_static::EnvVars;
 
 pub(crate) mod pypi;
-pub(crate) mod pyx;
 
 #[derive(Debug, Error)]
 pub enum TrustedPublishingError {
@@ -44,9 +43,6 @@ pub enum TrustedPublishingError {
         "Server returned error code {0}, and the OIDC has an unexpected format.\nResponse: {1}"
     )]
     InvalidOidcToken(StatusCode, String),
-    /// The user gave us a malformed upload URL for trusted publishing with pyx.
-    #[error("The upload URL `{0}` does not look like a valid pyx upload URL")]
-    InvalidPyxUploadUrl(DisplaySafeUrl),
 }
 
 #[derive(Deserialize)]

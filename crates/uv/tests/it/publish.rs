@@ -717,64 +717,6 @@ async fn gitlab_trusted_publishing_testpypi_id_token() {
     );
 }
 
-#[tokio::test]
-async fn direct_publish_redacts_presigned_upload_url() {
-    let context = uv_test::test_context!("3.12").with_filtered_sizes();
-    let server = MockServer::start().await;
-
-    let upload_url = format!(
-        "{}/s3/ok-1.0.0-py3-none-any.whl?X-Amz-Credential=credential&X-Amz-Signature=signature&X-Amz-Security-Token=token",
-        server.uri()
-    );
-
-    Mock::given(method("POST"))
-        .and(path("/upload/reserve"))
-        .respond_with(ResponseTemplate::new(201).set_body_json(json!({
-            "upload_url": upload_url,
-        })))
-        .mount(&server)
-        .await;
-    Mock::given(method("PUT"))
-        .and(path("/s3/ok-1.0.0-py3-none-any.whl"))
-        .respond_with(ResponseTemplate::new(200))
-        .mount(&server)
-        .await;
-    Mock::given(method("POST"))
-        .and(path("/upload/finalize"))
-        .respond_with(ResponseTemplate::new(200))
-        .mount(&server)
-        .await;
-
-    uv_snapshot!(context.filters(), context.publish()
-        .arg("--preview-features")
-        .arg("direct-publish")
-        .arg("--direct")
-        .arg("-u")
-        .arg("dummy")
-        .arg("-p")
-        .arg("dummy")
-        .arg("--publish-url")
-        .arg(format!("{}/upload", server.uri()))
-        .arg(dummy_wheel())
-        .env(EnvVars::RUST_LOG, "uv_publish=debug"), @"
-    exit_code: 0 (success)
-    ----- stderr -----
-    Publishing 1 file to http://[LOCALHOST]/upload
-    Hashing ok-1.0.0-py3-none-any.whl ([SIZE]B)
-    DEBUG Hashing [WORKSPACE]/test/links/ok-1.0.0-py3-none-any.whl
-    Uploading ok-1.0.0-py3-none-any.whl ([SIZE]B)
-    DEBUG Reserving upload slot at http://[LOCALHOST]/upload/reserve
-    DEBUG Using HTTP Basic authentication
-    DEBUG Got pre-signed URL for upload: http://[LOCALHOST]/s3/ok-1.0.0-py3-none-any.whl?X-Amz-Credential=****&X-Amz-Signature=****&X-Amz-Security-Token=****
-    DEBUG S3 upload complete for ok-1.0.0-py3-none-any.whl
-    DEBUG Finalizing upload at http://[LOCALHOST]/upload/finalize
-    DEBUG Using HTTP Basic authentication
-    DEBUG Response code for http://[LOCALHOST]/upload/finalize: 200 OK
-    DEBUG Upload finalized for ok-1.0.0-py3-none-any.whl
-    "
-    );
-}
-
 /// PyPI returns `application/json` errors with a `code` field.
 #[tokio::test]
 async fn upload_error_pypi_json() {
@@ -839,6 +781,33 @@ async fn upload_error_problem_details() {
     Uploading ok-1.0.0-py3-none-any.whl ([SIZE]B)
     error: Failed to publish `[WORKSPACE]/test/links/ok-1.0.0-py3-none-any.whl` to http://[LOCALHOST]/upload
       Caused by: Server returned status code 400 Bad Request. Server message: Bad Request, Missing required field `name`
+    "
+    );
+}
+
+/// A dry run checks valid distribution metadata without uploading the file.
+#[tokio::test]
+async fn dry_run_does_not_upload() {
+    let context = uv_test::test_context!("3.12").with_filtered_sizes();
+    let server = MockServer::start().await;
+
+    Mock::given(method("POST"))
+        .respond_with(ResponseTemplate::new(200))
+        .expect(0)
+        .mount(&server)
+        .await;
+
+    uv_snapshot!(context.filters(), context.publish()
+        .arg("--dry-run")
+        .arg("--publish-url")
+        .arg(format!("{}/upload", server.uri()))
+        .arg("--token")
+        .arg("dummy")
+        .arg(dummy_wheel()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Checking 1 file against http://[LOCALHOST]/upload
+    Checking ok-1.0.0-py3-none-any.whl ([SIZE]B)
     "
     );
 }

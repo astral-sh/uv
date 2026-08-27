@@ -5115,7 +5115,6 @@ pub(crate) struct PublishSettings {
     pub(crate) index: Option<String>,
     pub(crate) dry_run: bool,
     pub(crate) no_attestations: bool,
-    pub(crate) direct: bool,
 
     // Both CLI and configuration.
     pub(crate) publish_url: DisplaySafeUrl,
@@ -5136,7 +5135,6 @@ impl fmt::Debug for PublishSettings {
             .field("index", &self.index)
             .field("dry_run", &self.dry_run)
             .field("no_attestations", &self.no_attestations)
-            .field("direct", &self.direct)
             .field("publish_url", &self.publish_url)
             .field("trusted_publishing", &self.trusted_publishing)
             .field("keyring_provider", &self.keyring_provider)
@@ -5181,7 +5179,6 @@ impl PublishSettings {
             password,
             dry_run: args.dry_run,
             no_attestations: args.no_attestations,
-            direct: args.direct,
             publish_url: args
                 .publish_url
                 .combine(publish_url)
