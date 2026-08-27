@@ -1322,7 +1322,7 @@ impl ExtractedWheel {
         }
     }
 
-    /// Heal the wheel's `RECORD` and keep its hash tree consistent with the repaired contents.
+    /// Heal the wheel's `RECORD` and keep its file digest and hash tree consistent.
     fn validate_and_heal_record(&mut self, root: &Path, dist: impl Display) -> Result<(), Error> {
         let files = match self {
             Self::Unhashed(files) => {
@@ -1347,6 +1347,13 @@ impl ExtractedWheel {
                 uv_extract::Error::from(err),
             )
         })?;
+        if let Some(file) = hashed_wheel
+            .files
+            .iter_mut()
+            .find(|file| file.path() == record_path.as_path())
+        {
+            file.set_digest(hash);
+        }
         let record_path = PortablePath::from(record_path.as_path()).to_string();
         hashed_wheel
             .tree
@@ -1355,36 +1362,14 @@ impl ExtractedWheel {
     }
 }
 
-/// Share executables and native libraries while keeping the unpublished archive complete.
+/// Share every extracted file while keeping the unpublished archive complete.
 fn persist_archive_files(cache: &Cache, archive: &Path, files: &[HashedFile]) -> io::Result<()> {
-    // Keep installer metadata private, including RECORD, which may have been healed after hashing.
-    for file in files.iter().filter(|file| {
-        !file.path().components().any(|component| {
-            Path::new(component.as_os_str())
-                .extension()
-                .is_some_and(|extension| extension == "dist-info")
-        }) && (file.is_executable() || is_shared_library(file.path()))
-    }) {
+    for file in files {
         let id = ArchiveFileId::from_content_digest(&file.digest_hex(), file.is_executable());
         persist_archive_file(&archive.join(file.path()), &cache.archive_file(&id))?;
     }
 
     Ok(())
-}
-
-/// Recognize native libraries, including versioned Unix shared objects like `libfoo.so.1`.
-fn is_shared_library(path: &Path) -> bool {
-    path.extension().is_some_and(|extension| {
-        extension.eq_ignore_ascii_case("so")
-            || extension.eq_ignore_ascii_case("dylib")
-            || extension.eq_ignore_ascii_case("dll")
-            || extension.eq_ignore_ascii_case("pyd")
-    }) || path.file_name().is_some_and(|file_name| {
-        file_name
-            .as_encoded_bytes()
-            .windows(4)
-            .any(|part| part.eq_ignore_ascii_case(b".so."))
-    })
 }
 
 /// Publish a shared object and retain a hardlink in the archive, with a copy fallback.

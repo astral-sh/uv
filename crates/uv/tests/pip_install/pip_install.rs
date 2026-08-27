@@ -22,6 +22,7 @@ use wiremock::{
     matchers::{basic_auth, method, path},
 };
 
+use uv_cache::ArchiveFileId;
 use uv_extract::dirhash::{DirectoryDigest, dirhash_path};
 use uv_fs::{PortablePath, Simplified};
 use uv_install_wheel::validate_and_heal_record;
@@ -16447,6 +16448,7 @@ fn handle_record_mismatches() -> Result<()> {
         .arg("--offline")
         .arg("--preview-features")
         .arg("content-addressed-cache")
+        .args(["--link-mode", "hardlink"])
         .arg("foo"), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -16467,6 +16469,13 @@ fn handle_record_mismatches() -> Result<()> {
         .child("archive-v0")
         .child(healed_digest.as_str())
         .assert(predicate::path::exists());
+
+    // The file-store identity must also reflect healing, and installation must not mutate it.
+    let healed_record = extracted.join("foo-0.1.0.dist-info/RECORD");
+    let record_digest = dirhash_path(&healed_record)?;
+    let record_id = ArchiveFileId::from_content_digest(record_digest.to_hex().as_str(), false);
+    let shared_record = context.cache_dir.join("files-v0").join(record_id);
+    assert_eq!(fs_err::read(shared_record)?, fs_err::read(healed_record)?);
 
     // Read the healed RECORD.
     let installed_record =
@@ -16597,7 +16606,7 @@ async fn binary_payloads_stay_in_archive_without_preview() -> Result<()> {
 }
 
 #[tokio::test]
-async fn binary_payload_selection() -> Result<()> {
+async fn all_files_use_archive_file_store() -> Result<()> {
     let server = MockServer::start().await;
     for streaming in [false, true] {
         let context = uv_test::test_context!("3.12")
@@ -16631,35 +16640,23 @@ async fn binary_payload_selection() -> Result<()> {
 
         let objects = cache_files(context.cache_dir.child("files-v0").path())?;
         // Identical contents still need separate executable and non-executable objects.
-        assert_eq!(objects.len(), 2);
+        assert_eq!(objects.len(), 8);
         let archive = fs_err::read_dir(context.cache_dir.child("archive-v0").path())?
             .next()
             .transpose()?
             .context("missing cached archive")?
             .path();
-        let paths = cache_files(&archive)?
-            .into_iter()
+        let paths = cache_files(&archive)?;
+        let shared_paths = paths
+            .iter()
             .filter(|path| {
                 objects
                     .iter()
                     .any(|object| uv_fs::is_same_file_allow_missing(path, object) == Some(true))
             })
-            .map(|path| path.strip_prefix(&archive).map(Path::to_path_buf))
-            .collect::<Result<Vec<_>, _>>()?;
-        let expected = [
-            "native.DLL",
-            "native.dylib",
-            "native.pyd",
-            "native.so",
-            "plain.so",
-            "tool",
-            "versioned.so.1",
-            "versioned.so.1.2",
-        ]
-        .into_iter()
-        .map(|name| Path::new("binary_payload").join(name))
-        .collect::<Vec<_>>();
-        assert_eq!(paths, expected);
+            .cloned()
+            .collect::<Vec<_>>();
+        assert_eq!(shared_paths, paths);
     }
     Ok(())
 }
@@ -16784,7 +16781,7 @@ fn binary_payload_copy_fallback_uses_archive_file_store() -> Result<()> {
     ");
 
     let archive_files = cache_files(context.cache_dir.child("files-v0").path())?;
-    assert_eq!(archive_files.len(), 2);
+    assert_eq!(archive_files.len(), 8);
 
     let target = context.temp_dir.child("fallback-target");
     uv_snapshot!(context.filters(), context.pip_install()
