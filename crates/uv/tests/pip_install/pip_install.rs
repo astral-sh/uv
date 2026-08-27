@@ -22,7 +22,7 @@ use wiremock::{
     matchers::{basic_auth, method, path},
 };
 
-use uv_extract::dirhash::{DirectoryDigest, HashedFile, dirhash_path};
+use uv_extract::dirhash::{DirectoryDigest, dirhash_path};
 use uv_fs::{PortablePath, Simplified};
 use uv_install_wheel::validate_and_heal_record;
 use uv_static::EnvVars;
@@ -16429,15 +16429,11 @@ fn handle_record_mismatches() -> Result<()> {
     let extracted = context.temp_dir.join("foo-extracted");
     let (hashed_files, unhealed_tree) =
         uv_extract::unzip_and_hash(File::open(&repacked_wheel)?, &extracted)?;
-    let files = hashed_files
-        .iter()
-        .map(HashedFile::to_unhashed)
-        .collect::<Vec<_>>();
     let unhealed_digest = DirectoryDigest::from(unhealed_tree.hash());
     assert!(
         validate_and_heal_record(
             &extracted,
-            files.iter().map(|file| (file.path(), file.size())),
+            hashed_files.iter().map(|file| (file.path(), file.size())),
             "foo",
         )?
         .is_some()
