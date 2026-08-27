@@ -116,7 +116,7 @@ pub(crate) async fn pip_compile(
     exclude_newer: ExcludeNewer,
     sources: NoSources,
     annotation_style: AnnotationStyle,
-    link_mode: Option<LinkMode>,
+    link_mode: LinkMode,
     mut python: Option<String>,
     system: bool,
     python_preference: PythonPreference,

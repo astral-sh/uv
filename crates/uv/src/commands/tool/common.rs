@@ -494,7 +494,7 @@ impl ToolLock {
             build_isolation,
             &extra_build_requires,
             extra_build_variables,
-            link_mode.explicit(),
+            *link_mode,
             build_options,
             &build_hasher,
             exclude_newer.clone(),

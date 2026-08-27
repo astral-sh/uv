@@ -65,7 +65,7 @@ pub(crate) async fn collect_module_owners(
             extra_build_dependencies: &settings.extra_build_dependencies,
             extra_build_variables: &settings.extra_build_variables,
             exclude_newer: &settings.exclude_newer,
-            link_mode: settings.link_mode.explicit(),
+            link_mode: settings.link_mode,
             compile_bytecode: false,
             reinstall: &reinstall,
             build_options: &settings.build_options,
