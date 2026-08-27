@@ -2,6 +2,7 @@
 // https://github.com/rust-lang/rust/issues/64402
 extern crate uv_performance_memory_allocator;
 
+use std::env;
 use std::fmt::Write;
 use std::hint::black_box;
 use std::path::{Path, PathBuf};
@@ -31,6 +32,14 @@ const MANY_FILES_WHEEL_FILE_COUNT: usize = 10_000;
 const MANY_FILES_SDIST_TOP_LEVEL: &str = "manyfiles-0.0.0";
 const MANY_FILES_SDIST_FILE_COUNT: usize = 10_000;
 const SHA256_BENCHMARK_SIZE: usize = 1024 * 1024;
+
+fn is_codspeed_simulation() -> bool {
+    // CodSpeed reports Simulation as `instrumentation` in current versions.
+    matches!(
+        env::var("CODSPEED_RUNNER_MODE").as_deref(),
+        Ok("instrumentation" | "simulation")
+    )
+}
 
 fn hash_sha256(c: &mut Criterion<WallTime>) {
     let bytes = vec![0_u8; SHA256_BENCHMARK_SIZE];
@@ -154,6 +163,10 @@ fn unpack_sdist_many_files(c: &mut Criterion<WallTime>) {
 }
 
 fn unzip_wheel_many_files(c: &mut Criterion<WallTime>) {
+    if is_codspeed_simulation() {
+        return;
+    }
+
     let archive = create_many_files_wheel();
 
     c.bench_function("unzip_wheel_many_files", |b| {
@@ -175,6 +188,10 @@ fn unzip_wheel_many_files(c: &mut Criterion<WallTime>) {
 }
 
 fn prepare_wheel_many_files(c: &mut Criterion<WallTime>) {
+    if is_codspeed_simulation() {
+        return;
+    }
+
     let archive = create_many_files_wheel();
     let filename =
         WheelFilename::from_str(MANY_FILES_WHEEL_FILENAME).expect("Invalid wheel filename");
