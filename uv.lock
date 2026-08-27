@@ -1724,6 +1724,7 @@ source = { editable = "." }
 
 [package.dev-dependencies]
 check = [
+    { name = "pyyaml" },
     { name = "ruff" },
     { name = "ty" },
     { name = "typos" },
@@ -1751,6 +1752,7 @@ release = [
 
 [package.metadata.requires-dev]
 check = [
+    { name = "pyyaml", specifier = ">=6.0.2" },
     { name = "ruff", specifier = ">=0.16.2" },
     { name = "ty", specifier = ">=0.0.69" },
     { name = "typos", specifier = ">=1.49.0" },
