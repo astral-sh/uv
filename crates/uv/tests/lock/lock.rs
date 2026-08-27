@@ -1501,7 +1501,7 @@ fn lock_sdist_url() -> Result<()> {
     Ok(())
 }
 
-/// Create a deterministic source archive with an in-tree backend and configurable metadata hook.
+/// Create a deterministic source archive with an in-tree backend and a side effect on import.
 #[cfg(feature = "test-universal")]
 fn locked_source_archive(side_effect: &str, subdirectory: &str) -> Result<Vec<u8>> {
     let pyproject = indoc! {r#"
@@ -1514,8 +1514,9 @@ fn locked_source_archive(side_effect: &str, subdirectory: &str) -> Result<Vec<u8
         import os
         from pathlib import Path
 
+        {side_effect}
+
         def prepare_metadata_for_build_wheel(metadata_directory, config_settings=None):
-            {side_effect}
             dist_info = Path(metadata_directory) / "demo_pkg-1.0.0.dist-info"
             dist_info.mkdir()
             (dist_info / "METADATA").write_text(
@@ -1874,7 +1875,7 @@ async fn lock_sdist_url_locked_hash_mismatch() -> Result<()> {
         name = "demo-pkg"
         version = "1.0.0"
         source = { url = "http://[LOCALHOST]/files/demo_pkg-1.0.0.tar.gz" }
-        sdist = { hash = "sha256:1dfac3679ac5fa004e73685633ee28fa14c8e678efd1ff17f8f0ec1db53b9482" }
+        sdist = { hash = "sha256:93703857ad8ea956f6661f1d78d445be4340afa15f8b87bf1f3a79621068847f" }
 
         [[package]]
         name = "project"
@@ -1916,10 +1917,10 @@ async fn lock_sdist_url_locked_hash_mismatch() -> Result<()> {
       Caused by: Hash mismatch for `demo-pkg @ http://[LOCALHOST]/files/demo_pkg-1.0.0.tar.gz`
 
         Expected:
-          sha256:1dfac3679ac5fa004e73685633ee28fa14c8e678efd1ff17f8f0ec1db53b9482
+          sha256:93703857ad8ea956f6661f1d78d445be4340afa15f8b87bf1f3a79621068847f
 
         Computed:
-          sha256:e43644c723229183647d3074ca0dea53264c065e0d09ff59fb47c659dfb345bb
+          sha256:883b65920e21bce11c2697819dab77eb70e18d810b2746f49e46155d6ca527bc
     ");
     assert!(!sentinel.exists(), "the locked build backend was executed");
 
@@ -1934,10 +1935,10 @@ async fn lock_sdist_url_locked_hash_mismatch() -> Result<()> {
       ╰─▶ Hash mismatch for `demo-pkg @ http://[LOCALHOST]/files/demo_pkg-1.0.0.tar.gz`
 
           Expected:
-            sha256:1dfac3679ac5fa004e73685633ee28fa14c8e678efd1ff17f8f0ec1db53b9482
+            sha256:93703857ad8ea956f6661f1d78d445be4340afa15f8b87bf1f3a79621068847f
 
           Computed:
-            sha256:e43644c723229183647d3074ca0dea53264c065e0d09ff59fb47c659dfb345bb
+            sha256:883b65920e21bce11c2697819dab77eb70e18d810b2746f49e46155d6ca527bc
     ");
     assert!(
         !sentinel.exists(),
@@ -1956,10 +1957,10 @@ async fn lock_sdist_url_locked_hash_mismatch() -> Result<()> {
       ╰─▶ Hash mismatch for `demo-pkg @ http://[LOCALHOST]/files/demo_pkg-1.0.0.tar.gz`
 
           Expected:
-            sha256:1dfac3679ac5fa004e73685633ee28fa14c8e678efd1ff17f8f0ec1db53b9482
+            sha256:93703857ad8ea956f6661f1d78d445be4340afa15f8b87bf1f3a79621068847f
 
           Computed:
-            sha256:e43644c723229183647d3074ca0dea53264c065e0d09ff59fb47c659dfb345bb
+            sha256:883b65920e21bce11c2697819dab77eb70e18d810b2746f49e46155d6ca527bc
     ");
     assert!(
         !sentinel.exists(),
@@ -1975,10 +1976,10 @@ async fn lock_sdist_url_locked_hash_mismatch() -> Result<()> {
       Caused by: Hash mismatch for `demo-pkg @ http://[LOCALHOST]/files/demo_pkg-1.0.0.tar.gz`
 
         Expected:
-          sha256:1dfac3679ac5fa004e73685633ee28fa14c8e678efd1ff17f8f0ec1db53b9482
+          sha256:93703857ad8ea956f6661f1d78d445be4340afa15f8b87bf1f3a79621068847f
 
         Computed:
-          sha256:e43644c723229183647d3074ca0dea53264c065e0d09ff59fb47c659dfb345bb
+          sha256:883b65920e21bce11c2697819dab77eb70e18d810b2746f49e46155d6ca527bc
     ");
     assert!(
         !sentinel.exists(),
@@ -2015,7 +2016,7 @@ async fn lock_sdist_url_locked_hash_mismatch() -> Result<()> {
         name = "demo-pkg"
         version = "1.0.0"
         source = { url = "http://[LOCALHOST]/files/demo_pkg-1.0.0.tar.gz" }
-        sdist = { hash = "sha256:e43644c723229183647d3074ca0dea53264c065e0d09ff59fb47c659dfb345bb" }
+        sdist = { hash = "sha256:883b65920e21bce11c2697819dab77eb70e18d810b2746f49e46155d6ca527bc" }
 
         [[package]]
         name = "project"
@@ -2121,10 +2122,10 @@ async fn lock_sdist_registry_changed_index_locked_hash_mismatch() -> Result<()> 
       ╰─▶ Hash mismatch for `demo-pkg==1.0.0`
 
           Expected:
-            sha256:1dfac3679ac5fa004e73685633ee28fa14c8e678efd1ff17f8f0ec1db53b9482
+            sha256:93703857ad8ea956f6661f1d78d445be4340afa15f8b87bf1f3a79621068847f
 
           Computed:
-            sha256:e43644c723229183647d3074ca0dea53264c065e0d09ff59fb47c659dfb345bb
+            sha256:883b65920e21bce11c2697819dab77eb70e18d810b2746f49e46155d6ca527bc
 
     hint: `demo-pkg` (v1.0.0) was included because `project` (v0.1.0) depends on `demo-pkg==1.0.0`
     ");
@@ -2224,10 +2225,10 @@ async fn lock_sdist_registry_missing_index_locked_hash_mismatch() -> Result<()> 
       ╰─▶ Hash mismatch for `demo-pkg==1.0.0`
 
           Expected:
-            sha256:1dfac3679ac5fa004e73685633ee28fa14c8e678efd1ff17f8f0ec1db53b9482
+            sha256:93703857ad8ea956f6661f1d78d445be4340afa15f8b87bf1f3a79621068847f
 
           Computed:
-            sha256:e43644c723229183647d3074ca0dea53264c065e0d09ff59fb47c659dfb345bb
+            sha256:883b65920e21bce11c2697819dab77eb70e18d810b2746f49e46155d6ca527bc
 
     hint: `demo-pkg` (v1.0.0) was included because `project` (v0.1.0) depends on `demo-pkg==1.0.0`
     ");
@@ -2294,10 +2295,10 @@ async fn lock_sdist_url_root_subdirectory_locked_hash_mismatch() -> Result<()> {
       ╰─▶ Hash mismatch for `demo-pkg @ http://[LOCALHOST]/files/demo_pkg-1.0.0.tar.gz#subdirectory=.`
 
           Expected:
-            sha256:1dfac3679ac5fa004e73685633ee28fa14c8e678efd1ff17f8f0ec1db53b9482
+            sha256:93703857ad8ea956f6661f1d78d445be4340afa15f8b87bf1f3a79621068847f
 
           Computed:
-            sha256:e43644c723229183647d3074ca0dea53264c065e0d09ff59fb47c659dfb345bb
+            sha256:883b65920e21bce11c2697819dab77eb70e18d810b2746f49e46155d6ca527bc
     ");
     assert!(
         !sentinel.exists(),
@@ -2363,10 +2364,10 @@ async fn lock_sdist_url_rejected_archive_not_cached() -> Result<()> {
       ╰─▶ Hash mismatch for `demo-pkg @ http://[LOCALHOST]/files/demo_pkg-1.0.0.tar.gz`
 
           Expected:
-            sha256:1dfac3679ac5fa004e73685633ee28fa14c8e678efd1ff17f8f0ec1db53b9482
+            sha256:93703857ad8ea956f6661f1d78d445be4340afa15f8b87bf1f3a79621068847f
 
           Computed:
-            sha256:e43644c723229183647d3074ca0dea53264c065e0d09ff59fb47c659dfb345bb
+            sha256:883b65920e21bce11c2697819dab77eb70e18d810b2746f49e46155d6ca527bc
     ");
     assert!(
         !sentinel.exists(),
@@ -2489,10 +2490,10 @@ async fn lock_sdist_url_equivalent_subdirectory_locked_hash_mismatch() -> Result
       ╰─▶ Hash mismatch for `demo-pkg @ http://[LOCALHOST]/files/demo_pkg-1.0.0.tar.gz#subdirectory=nested/../nested`
 
           Expected:
-            sha256:9778361e4988b87e11cafe08e7593b194f7b078d4c52bdc8333870072ffe0f2b
+            sha256:09c631b3e8d48a04c4d7e3bc64d61dbc10a6b89131dffadd885eccb3ffa5e455
 
           Computed:
-            sha256:aadb46dc857a7e2c2417efd8e86b3cd665eacae2127b49d9de14800f2ac5b7ef
+            sha256:4d8741dcbddac394ac2680d99589d36c9d8fd7b3b19665531de9cc02550ec5eb
     ");
     assert!(
         !sentinel.exists(),
@@ -2546,10 +2547,10 @@ fn lock_sdist_path_locked_hash_mismatch() -> Result<()> {
       Caused by: Hash mismatch for `demo-pkg @ file://[TEMP_DIR]/demo_pkg-1.0.0.tar.gz`
 
         Expected:
-          sha256:1dfac3679ac5fa004e73685633ee28fa14c8e678efd1ff17f8f0ec1db53b9482
+          sha256:93703857ad8ea956f6661f1d78d445be4340afa15f8b87bf1f3a79621068847f
 
         Computed:
-          sha256:e43644c723229183647d3074ca0dea53264c065e0d09ff59fb47c659dfb345bb
+          sha256:883b65920e21bce11c2697819dab77eb70e18d810b2746f49e46155d6ca527bc
     ");
     assert!(!sentinel.exists(), "the locked backend was executed");
 
@@ -2561,10 +2562,10 @@ fn lock_sdist_path_locked_hash_mismatch() -> Result<()> {
       ╰─▶ Hash mismatch for `demo-pkg @ file://[TEMP_DIR]/demo_pkg-1.0.0.tar.gz`
 
           Expected:
-            sha256:1dfac3679ac5fa004e73685633ee28fa14c8e678efd1ff17f8f0ec1db53b9482
+            sha256:93703857ad8ea956f6661f1d78d445be4340afa15f8b87bf1f3a79621068847f
 
           Computed:
-            sha256:e43644c723229183647d3074ca0dea53264c065e0d09ff59fb47c659dfb345bb
+            sha256:883b65920e21bce11c2697819dab77eb70e18d810b2746f49e46155d6ca527bc
     ");
     assert!(!sentinel.exists(), "the refreshed backend was executed");
 
@@ -2625,10 +2626,10 @@ fn lock_sdist_path_rejected_archive_not_cached() -> Result<()> {
       ╰─▶ Hash mismatch for `demo-pkg @ file://[TEMP_DIR]/demo_pkg-1.0.0.tar.gz`
 
           Expected:
-            sha256:1dfac3679ac5fa004e73685633ee28fa14c8e678efd1ff17f8f0ec1db53b9482
+            sha256:93703857ad8ea956f6661f1d78d445be4340afa15f8b87bf1f3a79621068847f
 
           Computed:
-            sha256:e43644c723229183647d3074ca0dea53264c065e0d09ff59fb47c659dfb345bb
+            sha256:883b65920e21bce11c2697819dab77eb70e18d810b2746f49e46155d6ca527bc
 
     hint: `demo-pkg` was included because `project` (v0.1.0) depends on `demo-pkg`
     ");
