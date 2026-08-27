@@ -1670,7 +1670,7 @@ async fn lock_sdist_url_locked_build_dependency_hash_mismatch() -> Result<()> {
         .await;
     let trusted_wheel = Mock::given(method("GET"))
         .and(path(wheel_path))
-        .respond_with(ResponseTemplate::new(200).set_body_bytes(trusted))
+        .respond_with(ResponseTemplate::new(200).set_body_bytes(trusted.clone()))
         .mount_as_scoped(&server)
         .await;
 
@@ -1716,6 +1716,43 @@ async fn lock_sdist_url_locked_build_dependency_hash_mismatch() -> Result<()> {
             "from importlib.util import find_spec; assert find_spec('review_dep') is None",
         )
         .success();
+    fs_err::remove_file(&sentinel)?;
+
+    // Prefer a locked wheel over a higher build tag whose advertised hash is not in the lockfile.
+    let trusted_wheel_path = "/files/review_dep-1.0.0-1-py3-none-any.whl";
+    let replacement_wheel_path = "/files/review_dep-1.0.0-2-py3-none-any.whl";
+    let replacement_digest = hex::encode(Sha256::digest(&replacement));
+    Mock::given(path("/links"))
+        .respond_with(ResponseTemplate::new(200).set_body_raw(
+            formatdoc! {r#"
+                <a href="{trusted_wheel_path}#sha256={trusted_digest}">review_dep-1.0.0-1-py3-none-any.whl</a>
+                <a href="{replacement_wheel_path}#sha256={replacement_digest}">review_dep-1.0.0-2-py3-none-any.whl</a>
+            "#},
+            "text/html",
+        ))
+        .mount(&server)
+        .await;
+    Mock::given(path(trusted_wheel_path))
+        .respond_with(ResponseTemplate::new(200).set_body_bytes(trusted))
+        .mount(&server)
+        .await;
+    Mock::given(path(replacement_wheel_path))
+        .respond_with(ResponseTemplate::new(200).set_body_bytes(replacement.clone()))
+        .mount(&server)
+        .await;
+
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--no-cache").arg("--reinstall")
+        .arg("--no-index").arg("--find-links").arg(format!("{}/links", server.uri()))
+        .env("UV_LOCK_TEST_SENTINEL", sentinel.path()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     ~ demo-pkg==1.0.0 (from http://[LOCALHOST]/files/demo_pkg-1.0.0.tar.gz)
+    ");
+    sentinel.assert("");
+    assert_eq!(context.read("uv.lock"), locked);
     fs_err::remove_file(&sentinel)?;
 
     drop(trusted_wheel);
