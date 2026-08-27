@@ -18,7 +18,8 @@ use uv_preview::PreviewFeature;
 
 use crate::archive_path::SanitizedArchivePath;
 use crate::dirhash::{
-    DirhashTree, ExtractedFile, blake3_copy_with_buffer, directory_tree_from_extracted,
+    DirhashTree, HashedFile, UnhashedFile, UnzipOutput, blake3_copy_with_buffer,
+    directory_tree_from_extracted,
 };
 use crate::{Error, insecure_no_validate};
 
@@ -54,12 +55,6 @@ struct ComputedEntry {
     digest: Option<blake3::Hash>,
 }
 
-struct UnzipOutput {
-    files: Vec<(PathBuf, u64)>,
-    extracted_files: Vec<ExtractedFile>,
-    tree: Option<DirhashTree>,
-}
-
 /// Unpack a `.zip` archive into the target directory, without requiring `Seek`.
 ///
 /// This is useful for unzipping files as they're being downloaded. If the archive
@@ -70,8 +65,13 @@ struct UnzipOutput {
 pub async fn unzip<R: tokio::io::AsyncRead + Unpin>(
     reader: R,
     target: impl AsRef<Path>,
-) -> Result<Vec<(PathBuf, u64)>, Error> {
-    Ok(Box::pin(unzip_inner(reader, target, false)).await?.files)
+) -> Result<Vec<UnhashedFile>, Error> {
+    let UnzipOutput::Unhashed(files) = Box::pin(unzip_inner(reader, target, false)).await? else {
+        return Err(Error::Io(std::io::Error::other(
+            "streaming ZIP hash tree was unexpectedly computed",
+        )));
+    };
+    Ok(files)
 }
 
 /// Unpack a `.zip` archive into the target directory while computing a hash tree of the extracted
@@ -84,14 +84,14 @@ pub async fn unzip<R: tokio::io::AsyncRead + Unpin>(
 pub async fn unzip_and_hash<R: tokio::io::AsyncRead + Unpin>(
     reader: R,
     target: impl AsRef<Path>,
-) -> Result<(Vec<ExtractedFile>, DirhashTree), Error> {
-    let output = Box::pin(unzip_inner(reader, target, true)).await?;
-    let Some(tree) = output.tree else {
+) -> Result<(Vec<HashedFile>, DirhashTree), Error> {
+    let UnzipOutput::Hashed { files, tree } = Box::pin(unzip_inner(reader, target, true)).await?
+    else {
         return Err(Error::Io(std::io::Error::other(
             "streaming ZIP hash tree was not computed",
         )));
     };
-    Ok((output.extracted_files, tree))
+    Ok((files, tree))
 }
 
 async fn unzip_inner<R: tokio::io::AsyncRead + Unpin>(
@@ -110,7 +110,7 @@ async fn unzip_inner<R: tokio::io::AsyncRead + Unpin>(
     let mut local_headers = FxHashMap::default();
     let mut output_paths = FxHashSet::default();
     let mut files = Vec::new();
-    let mut extracted_files = Vec::new();
+    let mut hashed_files = Vec::new();
     let mut digest_directories = FxHashSet::default();
     let mut hash_buffer = Vec::new();
     let mut offset = 0;
@@ -505,18 +505,20 @@ async fn unzip_inner<R: tokio::io::AsyncRead + Unpin>(
                             if hash_contents {
                                 digest_directories.insert(relpath.clone());
                             }
+                        } else if let Some(digest) = local_header.digest {
+                            hashed_files.push(HashedFile::new(
+                                relpath.clone(),
+                                local_header.uncompressed_size,
+                                digest,
+                                entry
+                                    .unix_permissions()
+                                    .is_some_and(|mode| mode & 0o111 != 0),
+                            ));
                         } else {
-                            files.push((relpath.to_path_buf(), local_header.uncompressed_size));
-                            if let Some(digest) = local_header.digest {
-                                extracted_files.push(ExtractedFile::new(
-                                    relpath.clone(),
-                                    local_header.uncompressed_size,
-                                    digest,
-                                    entry
-                                        .unix_permissions()
-                                        .is_some_and(|mode| mode & 0o111 != 0),
-                                ));
-                            }
+                            files.push(UnhashedFile::new(
+                                relpath.to_path_buf(),
+                                local_header.uncompressed_size,
+                            ));
                         }
                     }
                     None => {
@@ -654,15 +656,15 @@ async fn unzip_inner<R: tokio::io::AsyncRead + Unpin>(
         }
     }
 
-    let tree = hash_contents
-        .then(|| directory_tree_from_extracted(&extracted_files, &digest_directories))
-        .transpose()?;
-
-    Ok(UnzipOutput {
-        files,
-        extracted_files,
-        tree,
-    })
+    if hash_contents {
+        let tree = directory_tree_from_extracted(&hashed_files, &digest_directories)?;
+        Ok(UnzipOutput::Hashed {
+            files: hashed_files,
+            tree,
+        })
+    } else {
+        Ok(UnzipOutput::Unhashed(files))
+    }
 }
 
 /// Unpack the given tar archive into the destination directory.
@@ -671,7 +673,7 @@ async fn unzip_inner<R: tokio::io::AsyncRead + Unpin>(
 async fn untar_in_tar_codec<R: tokio::io::AsyncRead + Unpin>(
     reader: R,
     dst: &Path,
-) -> Result<Vec<(PathBuf, u64)>, ExtractError<DecodeError>> {
+) -> Result<Vec<UnhashedFile>, ExtractError<DecodeError>> {
     let decode_policy = DecodePolicy::default().pax_policy(
         PaxDecodePolicy::default()
             // NOTE: We intentionally allow (ignore) `SCHILY.*` and `LIBARCHIVE.*`
@@ -700,11 +702,11 @@ async fn untar_in_tar_codec<R: tokio::io::AsyncRead + Unpin>(
 /// preserves the paths and declared sizes from the archive itself.
 struct RecordingArchive<'files, A> {
     archive: A,
-    files: &'files mut Vec<(PathBuf, u64)>,
+    files: &'files mut Vec<UnhashedFile>,
 }
 
 impl<'files, A> RecordingArchive<'files, A> {
-    fn new(archive: A, files: &'files mut Vec<(PathBuf, u64)>) -> Self {
+    fn new(archive: A, files: &'files mut Vec<UnhashedFile>) -> Self {
         Self { archive, files }
     }
 }
@@ -724,7 +726,7 @@ impl<A: Archive> Archive for RecordingArchive<'_, A> {
             warn!("Skipping symlink in tar archive: {}", metadata.path);
         }
         if let Some(Member::File { metadata, size, .. }) = &member {
-            files.push((PathBuf::from(&metadata.path), *size));
+            files.push(UnhashedFile::new(PathBuf::from(&metadata.path), *size));
         }
         Ok(member)
     }
@@ -749,7 +751,7 @@ fn tar_extract_policy() -> ExtractPolicy {
 async fn untar_in_tokio_tar(
     mut archive: tokio_tar::Archive<&'_ mut (dyn tokio::io::AsyncRead + Unpin)>,
     dst: &Path,
-) -> std::io::Result<Vec<(PathBuf, u64)>> {
+) -> std::io::Result<Vec<UnhashedFile>> {
     // Like `tokio-tar`, canonicalize the destination prior to unpacking.
     let dst = fs_err::tokio::canonicalize(dst).await?;
 
@@ -783,7 +785,7 @@ async fn untar_in_tokio_tar(
         if unpacked_at.is_some() && (entry_type.is_file() || entry_type.is_hard_link()) {
             let relpath = file.path()?.into_owned();
             let size = file.effective_size();
-            files.push((relpath, size));
+            files.push(UnhashedFile::new(relpath, size));
         }
 
         // Preserve the executable bit.
@@ -818,7 +820,7 @@ async fn untar_in_tokio_tar(
 async fn untar_in<R: tokio::io::AsyncRead + Unpin>(
     mut reader: R,
     dst: &Path,
-) -> Result<Vec<(PathBuf, u64)>, Error> {
+) -> Result<Vec<UnhashedFile>, Error> {
     if uv_preview::is_enabled(PreviewFeature::TarCodec) {
         untar_in_tar_codec(reader, dst).await.map_err(Error::from)
     } else {
@@ -842,7 +844,7 @@ async fn untar_in<R: tokio::io::AsyncRead + Unpin>(
 async fn untar_gz<R: tokio::io::AsyncRead + Unpin>(
     reader: R,
     target: impl AsRef<Path>,
-) -> Result<Vec<(PathBuf, u64)>, Error> {
+) -> Result<Vec<UnhashedFile>, Error> {
     let reader = tokio::io::BufReader::with_capacity(DEFAULT_BUF_SIZE, reader);
     let decompressed_bytes = async_compression::tokio::bufread::GzipDecoder::new(reader);
     untar_in(decompressed_bytes, target.as_ref()).await
@@ -856,7 +858,7 @@ async fn untar_gz<R: tokio::io::AsyncRead + Unpin>(
 async fn untar_zst<R: tokio::io::AsyncRead + Unpin>(
     reader: R,
     target: impl AsRef<Path>,
-) -> Result<Vec<(PathBuf, u64)>, Error> {
+) -> Result<Vec<UnhashedFile>, Error> {
     let reader = tokio::io::BufReader::with_capacity(DEFAULT_BUF_SIZE, reader);
     let decompressed_bytes = async_compression::tokio::bufread::ZstdDecoder::new(reader);
     untar_in(decompressed_bytes, target.as_ref()).await
@@ -870,7 +872,7 @@ async fn untar_zst<R: tokio::io::AsyncRead + Unpin>(
 async fn untar<R: tokio::io::AsyncRead + Unpin>(
     reader: R,
     target: impl AsRef<Path>,
-) -> Result<Vec<(PathBuf, u64)>, Error> {
+) -> Result<Vec<UnhashedFile>, Error> {
     let reader = tokio::io::BufReader::with_capacity(DEFAULT_BUF_SIZE, reader);
     untar_in(reader, target.as_ref()).await
 }
@@ -883,7 +885,7 @@ pub async fn archive<R: tokio::io::AsyncRead + Unpin>(
     reader: R,
     ext: SourceDistExtension,
     target: impl AsRef<Path>,
-) -> Result<Vec<(PathBuf, u64)>, Error> {
+) -> Result<Vec<UnhashedFile>, Error> {
     match ext {
         SourceDistExtension::Legacy(LegacySourceDistExtension::Zip) => unzip(reader, target).await,
         SourceDistExtension::Legacy(LegacySourceDistExtension::Tar) => untar(reader, target).await,
