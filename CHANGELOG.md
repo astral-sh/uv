@@ -3,6 +3,32 @@
 <!-- prettier-ignore-start -->
 
 
+## 0.12.7
+
+Released on 2026-08-27.
+
+### Enhancements
+
+- Add s390x, ppc64le, and loongarch64 Python platforms ([#21313](https://github.com/astral-sh/uv/pull/21313))
+- Content-address wheel archives with directory hashes ([#19693](https://github.com/astral-sh/uv/pull/19693))
+
+### Bug fixes
+
+- Replace Python installations during build upgrades ([#21323](https://github.com/astral-sh/uv/pull/21323))
+
+### Other changes
+
+- Add coverage for Python build upgrades ([#21320](https://github.com/astral-sh/uv/pull/21320))
+- Retry private Azure downloads with authentication ([#21318](https://github.com/astral-sh/uv/pull/21318))
+- Validate source archives before cache persistence ([#21248](https://github.com/astral-sh/uv/pull/21248))
+- de-pyx-ify malformed bearer token test ([#21326](https://github.com/astral-sh/uv/pull/21326))
+- remove pyx authentication ([#21186](https://github.com/astral-sh/uv/pull/21186))
+- remove pyx publication support ([#21185](https://github.com/astral-sh/uv/pull/21185))
+- remove pyx pytorch backend ([#21182](https://github.com/astral-sh/uv/pull/21182))
+- remove pyx simple api extensions ([#21183](https://github.com/astral-sh/uv/pull/21183))
+- remove references to pyx in RFC 9457 handling code ([#21187](https://github.com/astral-sh/uv/pull/21187))
+- remove support for pyx-specific .whl.tar.zst format ([#21184](https://github.com/astral-sh/uv/pull/21184))
+
 ## 0.12.6
 
 Released on 2026-08-25.
