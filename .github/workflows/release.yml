@@ -322,7 +322,7 @@ jobs:
     # `publish-crates` is intentionally not a dependency: it's not
     # critical to the release and isn't idempotent on retry.
     if: ${{ always() && needs.host.result == 'success' && needs.release-gate.result == 'success' && (needs.publish-pypi.result == 'skipped' || needs.publish-pypi.result == 'success') }}
-    runs-on: "depot-ubuntu-latest-4"
+    runs-on: "ubuntu-latest"
     environment:
       name: release
     permissions:
