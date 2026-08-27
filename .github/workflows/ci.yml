@@ -163,6 +163,8 @@ jobs:
     secrets: inherit
     with:
       save-rust-cache: ${{ needs.plan.outputs.save-rust-cache }}
+    permissions:
+      id-token: write
 
   # This job cannot be moved into a reusable workflow because it includes coverage for uploading
   # attestations and PyPI does not support attestations in reusable workflows.
