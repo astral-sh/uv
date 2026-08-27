@@ -2162,6 +2162,33 @@ mod test {
         let marker = MarkerTree::from_str("implementation_version not in \"2.4 3.8 4.0\"").unwrap();
         assert!(marker.evaluate(&env27, &[]));
         assert!(marker.evaluate(&env37, &[]));
+
+        // The reverse order (`"<value>" in <marker_var>` and `"<value>" not in <marker_var>`)
+        // should evaluate identically to the forward order.
+        // See: https://github.com/astral-sh/uv/issues/21309
+        let marker = MarkerTree::from_str("\"2.7 3.2 3.3\" in python_version").unwrap();
+        assert!(marker.evaluate(&env27, &[]));
+        assert!(!marker.evaluate(&env37, &[]));
+
+        let marker = MarkerTree::from_str("\"2.7 3.7\" in python_version").unwrap();
+        assert!(marker.evaluate(&env27, &[]));
+        assert!(marker.evaluate(&env37, &[]));
+
+        let marker = MarkerTree::from_str("\"2.4 3.8 4.0\" in python_version").unwrap();
+        assert!(!marker.evaluate(&env27, &[]));
+        assert!(!marker.evaluate(&env37, &[]));
+
+        let marker = MarkerTree::from_str("\"2.7 3.2 3.3\" not in python_version").unwrap();
+        assert!(!marker.evaluate(&env27, &[]));
+        assert!(marker.evaluate(&env37, &[]));
+
+        let marker = MarkerTree::from_str("\"2.7 3.7\" not in python_version").unwrap();
+        assert!(!marker.evaluate(&env27, &[]));
+        assert!(!marker.evaluate(&env37, &[]));
+
+        let marker = MarkerTree::from_str("\"2.4 3.8 4.0\" not in python_version").unwrap();
+        assert!(marker.evaluate(&env27, &[]));
+        assert!(marker.evaluate(&env37, &[]));
     }
 
     #[test]
@@ -2526,6 +2553,23 @@ mod test {
             "python_full_version >= '3.9' and python_full_version < '3.12'",
         );
 
+        // The reverse order (`"<value>" in <marker_var>`) is normalized identically to the
+        // forward order (`<marker_var> in "<value>"`).
+        // See: https://github.com/astral-sh/uv/issues/21309
+        assert_simplifies(
+            "'3.9.0' in python_version",
+            "python_full_version == '3.9.*'",
+        );
+        assert_true("'foo' in python_version");
+        assert_true("'3.9.*' in python_version");
+        assert_true("'3.9, 3.10' in python_version");
+        assert_true("'3.9,3.10' in python_version");
+        assert_true("'3.9 or 3.10' in python_version");
+        assert_simplifies(
+            "'3.9 3.10.0 3.11' in python_version",
+            "python_full_version >= '3.9' and python_full_version < '3.12'",
+        );
+
         assert_simplifies("python_version == '3.9'", "python_full_version == '3.9.*'");
         assert_simplifies(
             "python_version == '3.9.0'",
@@ -2557,6 +2601,21 @@ mod test {
             "implementation_version == '3.9' or implementation_version == '3.11'",
         );
 
+        // `in <version>` (reverse order)
+        // See: https://github.com/astral-sh/uv/issues/21309
+        assert_simplifies(
+            "'3.9 3.11' in python_version",
+            "python_full_version == '3.9.*' or python_full_version == '3.11.*'",
+        );
+        assert_simplifies(
+            "'3.9 3.10 3.11' in python_version",
+            "python_full_version >= '3.9' and python_full_version < '3.12'",
+        );
+        assert_simplifies(
+            "'3.9 3.11' in implementation_version",
+            "implementation_version == '3.9' or implementation_version == '3.11'",
+        );
+
         // '<version> not in'
         // e.g., when the range is not contiguous
         assert_simplifies(
@@ -2571,6 +2630,21 @@ mod test {
         // e.g., with `implementation_version` instead of `python_version`
         assert_simplifies(
             "implementation_version not in '3.9 3.11'",
+            "implementation_version != '3.9' and implementation_version != '3.11'",
+        );
+
+        // 'not in <version>' (reverse order)
+        // See: https://github.com/astral-sh/uv/issues/21309
+        assert_simplifies(
+            "'3.9 3.11' not in python_version",
+            "python_full_version < '3.9' or python_full_version == '3.10.*' or python_full_version >= '3.12'",
+        );
+        assert_simplifies(
+            "'3.9 3.10 3.11' not in python_version",
+            "python_full_version < '3.9' or python_full_version >= '3.12'",
+        );
+        assert_simplifies(
+            "'3.9 3.11' not in implementation_version",
             "implementation_version != '3.9' and implementation_version != '3.11'",
         );
 
