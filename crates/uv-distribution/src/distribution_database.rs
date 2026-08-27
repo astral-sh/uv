@@ -1327,7 +1327,7 @@ impl ExtractedWheel {
         }
     }
 
-    /// Heal the wheel's `RECORD` and keep its file digest and hash tree consistent.
+    /// Heal the wheel's `RECORD` and keep its hash tree consistent with the repaired contents.
     fn validate_and_heal_record(&mut self, root: &Path, dist: impl Display) -> Result<(), Error> {
         let files = match self {
             Self::Unhashed(files) => {
@@ -1352,13 +1352,6 @@ impl ExtractedWheel {
                 uv_extract::Error::from(err),
             )
         })?;
-        if let Some(file) = hashed_wheel
-            .files
-            .iter_mut()
-            .find(|file| file.path() == record_path.as_path())
-        {
-            file.set_digest(hash);
-        }
         let record_path = PortablePath::from(record_path.as_path()).to_string();
         hashed_wheel
             .tree
@@ -1367,11 +1360,13 @@ impl ExtractedWheel {
     }
 }
 
-/// Share every extracted file while keeping the unpublished archive complete.
+/// Share extracted files other than `RECORD` while keeping the unpublished archive complete.
 fn persist_archive_files(cache: &Cache, archive: &Path, files: &[HashedFile]) -> io::Result<()> {
     initialize_rayon_once();
     let targets = files
         .par_iter()
+        // Keep RECORD private, since it may have been healed after hashing.
+        .filter(|file| !file.path().ends_with("RECORD"))
         .map(|file| {
             let id = ArchiveFileId::from_content_digest(&file.digest_hex(), file.is_executable());
             (archive.join(file.path()), cache.archive_file(&id))

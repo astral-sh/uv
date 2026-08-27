@@ -22,7 +22,6 @@ use wiremock::{
     matchers::{basic_auth, method, path},
 };
 
-use uv_cache::ArchiveFileId;
 use uv_extract::dirhash::{DirectoryDigest, dirhash_path};
 use uv_fs::{PortablePath, Simplified};
 use uv_install_wheel::validate_and_heal_record;
@@ -16470,12 +16469,14 @@ fn handle_record_mismatches() -> Result<()> {
         .child(healed_digest.as_str())
         .assert(predicate::path::exists());
 
-    // The file-store identity must also reflect healing, and installation must not mutate it.
+    // Installation must not mutate the healed RECORD retained in the archive.
     let healed_record = extracted.join("foo-0.1.0.dist-info/RECORD");
-    let record_digest = dirhash_path(&healed_record)?;
-    let record_id = ArchiveFileId::from_content_digest(record_digest.to_hex().as_str(), false);
-    let shared_record = context.cache_dir.join("files-v0").join(record_id);
-    assert_eq!(fs_err::read(shared_record)?, fs_err::read(healed_record)?);
+    let cached_record = context
+        .cache_dir
+        .join("archive-v0")
+        .join(healed_digest.as_str())
+        .join("foo-0.1.0.dist-info/RECORD");
+    assert_eq!(fs_err::read(cached_record)?, fs_err::read(healed_record)?);
 
     // Read the healed RECORD.
     let installed_record =
@@ -16606,7 +16607,7 @@ async fn binary_payloads_stay_in_archive_without_preview() -> Result<()> {
 }
 
 #[tokio::test]
-async fn all_files_use_archive_file_store() -> Result<()> {
+async fn all_files_except_record_use_archive_file_store() -> Result<()> {
     let server = MockServer::start().await;
     for (streaming, concurrent_installs) in [(false, "1"), (false, "4"), (true, "1"), (true, "4")] {
         let context = uv_test::test_context!("3.12")
@@ -16641,7 +16642,7 @@ async fn all_files_use_archive_file_store() -> Result<()> {
 
         let objects = cache_files(context.cache_dir.child("files-v0").path())?;
         // Identical contents still need separate executable and non-executable objects.
-        assert_eq!(objects.len(), 8);
+        assert_eq!(objects.len(), 7);
         let archive = fs_err::read_dir(context.cache_dir.child("archive-v0").path())?
             .next()
             .transpose()?
@@ -16656,6 +16657,10 @@ async fn all_files_use_archive_file_store() -> Result<()> {
                     .any(|object| uv_fs::is_same_file_allow_missing(path, object) == Some(true))
             })
             .cloned()
+            .collect::<Vec<_>>();
+        let paths = paths
+            .into_iter()
+            .filter(|path| !path.ends_with("RECORD"))
             .collect::<Vec<_>>();
         assert_eq!(shared_paths, paths);
     }
@@ -16782,7 +16787,7 @@ fn binary_payload_copy_fallback_uses_archive_file_store() -> Result<()> {
     ");
 
     let archive_files = cache_files(context.cache_dir.child("files-v0").path())?;
-    assert_eq!(archive_files.len(), 8);
+    assert_eq!(archive_files.len(), 7);
 
     let target = context.temp_dir.child("fallback-target");
     uv_snapshot!(context.filters(), context.pip_install()

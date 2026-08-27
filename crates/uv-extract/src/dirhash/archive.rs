@@ -116,11 +116,6 @@ impl HashedFile {
         self.digest.to_hex().to_string()
     }
 
-    /// Update the digest after an extracted file has been repaired.
-    pub fn set_digest(&mut self, digest: blake3::Hash) {
-        self.digest = digest;
-    }
-
     /// Return the size of the extracted file in bytes.
     pub fn size(&self) -> u64 {
         self.size
