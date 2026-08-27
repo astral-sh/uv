@@ -66,6 +66,8 @@ jobs:
     runs-on: codspeed-macro
     needs: benchmarks-walltime-build
     timeout-minutes: 20
+    permissions:
+      id-token: write # for codspeed authentication
     steps:
       - name: "Checkout Branch"
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -93,13 +95,14 @@ jobs:
         with:
           run: cargo codspeed run
           mode: walltime
-          token: ${{ secrets.CODSPEED_TOKEN }}
 
   benchmarks-simulated:
     name: "simulated"
     runs-on: depot-ubuntu-24.04-4
     if: ${{ github.repository == 'astral-sh/uv' }}
     timeout-minutes: 30
+    permissions:
+      id-token: write # for codspeed authentication
     steps:
       - name: "Checkout Branch"
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -135,4 +138,3 @@ jobs:
         with:
           run: cargo codspeed run
           mode: simulation
-          token: ${{ secrets.CODSPEED_TOKEN }}
