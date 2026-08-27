@@ -135,4 +135,5 @@ jobs:
         with:
           run: cargo codspeed run
           mode: simulation
+          cycle-estimation: "false"
           token: ${{ secrets.CODSPEED_TOKEN }}
