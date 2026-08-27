@@ -382,7 +382,7 @@ impl Credentials {
     /// Attach the credentials to the given request.
     ///
     /// Any existing credentials will be overridden.
-    pub fn authenticate(&self, mut request: Request) -> Result<Request, InvalidHeaderValue> {
+    fn authenticate(&self, mut request: Request) -> Result<Request, InvalidHeaderValue> {
         request
             .headers_mut()
             .insert(reqwest::header::AUTHORIZATION, Self::to_header_value(self)?);
