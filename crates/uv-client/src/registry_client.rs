@@ -1940,7 +1940,7 @@ mod tests {
     use uv_normalize::PackageName;
     use uv_pypi_types::PypiSimpleDetail;
     use uv_redacted::DisplaySafeUrl;
-    use uv_torch::{TorchBackend, TorchSource, TorchStrategy};
+    use uv_torch::{TorchBackend, TorchStrategy};
 
     use crate::{
         BaseClientBuilder, Connectivity, RegistryClient, RegistryClientBuilder,
@@ -2067,7 +2067,6 @@ mod tests {
         .index_locations(IndexLocations::new(vec![], vec![flat_index], true))
         .torch_backend(Some(TorchStrategy::Backend {
             backend: TorchBackend::Cpu,
-            source: TorchSource::PyTorch,
         }))
         .build()?;
 
