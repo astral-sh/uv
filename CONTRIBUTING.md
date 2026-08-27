@@ -188,18 +188,16 @@ uv run --only-group=check cargo-shear
 
 ### Compiling for Windows from Unix
 
-To run clippy for a Windows target from Linux or macOS, you can use
-[cargo-xwin](https://github.com/rust-cross/cargo-xwin):
+To run clippy for a Windows target from Linux or macOS, you can use `cargo-xwin`. We provide a build
+of `cargo-xwin` as part of our development toolchain, but you'll need to install one or more Windows
+targets:
 
 ```shell
-# Install cargo-xwin
-cargo install --locked cargo-xwin@0.21.4
-
 # Add the Windows target
 rustup target add x86_64-pc-windows-msvc
 
 # Run clippy for Windows
-cargo xwin clippy --workspace --all-targets --all-features --locked -- -D warnings
+uv run --only-group=xwin cargo xwin clippy --workspace --all-targets --all-features --locked -- -D warnings
 ```
 
 ## Crate structure
