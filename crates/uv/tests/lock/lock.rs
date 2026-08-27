@@ -1603,7 +1603,9 @@ async fn lock_sdist_url_locked_build_dependency_hash_mismatch() -> Result<()> {
             (
                 "demo_pkg-1.0.0/backend.py",
                 indoc! {r#"
+            import os
             from pathlib import Path
+            from zipfile import ZipFile
 
             def prepare_metadata_for_build_wheel(metadata_directory, config_settings=None):
                 import review_dep
@@ -1613,6 +1615,18 @@ async fn lock_sdist_url_locked_build_dependency_hash_mismatch() -> Result<()> {
                     "Metadata-Version: 2.2\nName: demo-pkg\nVersion: 1.0.0\n"
                 )
                 return dist_info.name
+
+            def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
+                import review_dep
+                Path(os.environ["UV_LOCK_TEST_SENTINEL"]).touch()
+                filename = "demo_pkg-1.0.0-py3-none-any.whl"
+                dist_info = "demo_pkg-1.0.0.dist-info"
+                with ZipFile(Path(wheel_directory) / filename, "w") as wheel:
+                    wheel.writestr("demo_pkg.py", "__version__ = '1.0.0'\n")
+                    wheel.writestr(f"{dist_info}/METADATA", "Metadata-Version: 2.2\nName: demo-pkg\nVersion: 1.0.0\n")
+                    wheel.writestr(f"{dist_info}/WHEEL", "Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n")
+                    wheel.writestr(f"{dist_info}/RECORD", f"demo_pkg.py,,\n{dist_info}/METADATA,,\n{dist_info}/WHEEL,,\n{dist_info}/RECORD,,\n")
+                return filename
         "#},
             ),
         ],
@@ -1664,7 +1678,10 @@ async fn lock_sdist_url_locked_build_dependency_hash_mismatch() -> Result<()> {
         name = "project"
         version = "0.1.0"
         requires-python = ">=3.12"
-        dependencies = ["demo-pkg @ {archive_url}", "review-dep==1.0.0"]
+        dependencies = ["demo-pkg @ {archive_url}"]
+
+        [project.optional-dependencies]
+        build = ["review-dep==1.0.0"]
 
         [[tool.uv.index]]
         url = "{}/simple"
@@ -1677,6 +1694,25 @@ async fn lock_sdist_url_locked_build_dependency_hash_mismatch() -> Result<()> {
     ");
     let locked = context.read("uv.lock");
     assert!(locked.contains(&trusted_digest));
+    assert!(!sentinel.exists(), "locking built a wheel");
+
+    // Build successfully with the trusted wheel, without installing the extra in the main environment.
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--no-cache")
+        .env("UV_LOCK_TEST_SENTINEL", sentinel.path()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + demo-pkg==1.0.0 (from http://[LOCALHOST]/files/demo_pkg-1.0.0.tar.gz)
+    ");
+    sentinel.assert("");
+    context.assert_installed("demo_pkg", "1.0.0");
+    context
+        .assert_command(
+            "from importlib.util import find_spec; assert find_spec('review_dep') is None",
+        )
+        .success();
+    fs_err::remove_file(&sentinel)?;
 
     drop(trusted_wheel);
     Mock::given(method("GET"))
@@ -1743,6 +1779,30 @@ async fn lock_sdist_url_locked_build_dependency_hash_mismatch() -> Result<()> {
     assert!(
         !sentinel.exists(),
         "the default synced build dependency was executed"
+    );
+    assert_eq!(context.read("uv.lock"), locked);
+
+    // Skip metadata validation and force a fresh installation build from the unchanged source.
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--no-cache").arg("--reinstall")
+        .env("UV_LOCK_TEST_SENTINEL", sentinel.path()), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+      × Failed to download and build `demo-pkg @ http://[LOCALHOST]/files/demo_pkg-1.0.0.tar.gz`
+      ├─▶ Failed to install requirements from `build-system.requires`
+      ├─▶ Failed to download `review-dep==1.0.0`
+      ╰─▶ Hash mismatch for `review-dep==1.0.0`
+
+          Expected:
+            sha256:53a42340ae36747fb1471f9b4b7958be1f6e2e5fc234f931aafa3e454fd31dfb
+
+          Computed:
+            sha256:1aa0f7263e4991934282ab8912e95fdd34f24459d7c4f8b845c2281a04c89807
+
+    hint: `demo-pkg` was included because `project` (v0.1.0) depends on `demo-pkg`
+    ");
+    assert!(
+        !sentinel.exists(),
+        "the frozen synced build dependency was executed"
     );
     assert_eq!(context.read("uv.lock"), locked);
 
