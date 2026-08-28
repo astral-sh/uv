@@ -96,22 +96,41 @@ fn workspace_dir_nested_gitignored_project() -> Result<()> {
         "#,
     )?;
 
-    let mut filters = context.filters();
-    filters.push((r"thread 'main2' \(\d+\)", "thread 'main2'"));
-    filters.push((r"thread 'main' \(\d+\)", "thread 'main'"));
+    uv_snapshot!(context.filters(), context.workspace_dir().current_dir(&project), @r#"
+    exit_code: 0 (success)
+    ----- stdout -----
+    [TEMP_DIR]/workspace/packages/foo/nested
+    "#);
 
-    uv_snapshot!(filters, context.workspace_dir().current_dir(&project), @r#"
-    exit_code: 101 (failure)
-    ----- stderr -----
+    Ok(())
+}
 
-    thread 'main2' panicked at crates/uv-workspace/src/workspace.rs:1060:13:
-    assertion `left matches right` failed
-      left: All
-     right: MemberDiscovery::None | MemberDiscovery::Ignore(_)
-    note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+/// Test workspace discovery from a nested project matched by a recursive member glob.
+#[test]
+fn workspace_dir_nested_recursive_member() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let workspace = context.temp_dir.child("workspace");
+    let project = workspace.child("packages").child("foo").child("nested");
 
-    thread 'main' panicked at crates/uv/src/lib.rs:3114:10:
-    Tokio executor failed, was there a panic?: Any { .. }
+    workspace.child("pyproject.toml").write_str(
+        r#"
+        [tool.uv.workspace]
+        members = ["packages/**/nested"]
+        "#,
+    )?;
+    project.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "nested"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.workspace_dir().current_dir(&project), @r#"
+    exit_code: 0 (success)
+    ----- stdout -----
+    [TEMP_DIR]/workspace
     "#);
 
     Ok(())
