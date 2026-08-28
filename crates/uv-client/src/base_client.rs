@@ -31,7 +31,7 @@ use uv_platform_tags::Platform;
 use uv_preview::Preview;
 use uv_redacted::DisplaySafeUrl;
 use uv_redacted::DisplaySafeUrlError;
-use uv_static::EnvVars;
+use uv_static::{EnvVars, InvalidEnvironmentVariable};
 use uv_version::version;
 use uv_warnings::warn_user_once;
 
@@ -69,6 +69,8 @@ pub enum ClientBuildError {
     Credentials(#[from] CredentialsFromUrlError),
     #[error(transparent)]
     IndexCredentials(#[from] IndexCredentialsError),
+    #[error(transparent)]
+    InvalidEnvironmentVariable(#[from] InvalidEnvironmentVariable),
 }
 
 /// Selectively skip parts or the entire auth middleware.
