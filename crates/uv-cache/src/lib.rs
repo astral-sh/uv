@@ -641,8 +641,29 @@ impl Cache {
             }
         }
 
+        summary += self.prune_archive_manifests()?;
         summary += self.prune_archive_files()?;
 
+        Ok(summary)
+    }
+
+    /// Remove manifests whose archives have been removed.
+    fn prune_archive_manifests(&self) -> io::Result<Removal> {
+        let mut summary = self.removal();
+        for entry in match fs_err::read_dir(self.bucket(CacheBucket::Manifest)) {
+            Ok(entries) => entries,
+            Err(err) if err.kind() == io::ErrorKind::NotFound => return Ok(summary),
+            Err(err) => return Err(err),
+        } {
+            let entry = entry?;
+            if !self
+                .bucket(CacheBucket::Archive)
+                .join(entry.file_name())
+                .try_exists()?
+            {
+                summary += self.remove_path(entry.path())?;
+            }
+        }
         Ok(summary)
     }
 
@@ -811,6 +832,7 @@ impl Cache {
             Err(err) => return Err(err),
         }
 
+        summary += self.prune_archive_manifests()?;
         summary += self.prune_archive_files()?;
 
         Ok(summary)
@@ -1289,6 +1311,8 @@ pub enum CacheBucket {
     Archive,
     /// Content-addressed files that are hardlinked into cached archives.
     Files,
+    /// Executable metadata for content-addressed archives, keyed by archive ID.
+    Manifest,
     /// Ephemeral virtual environments used to execute PEP 517 builds and other operations.
     Builds,
     /// Reusable virtual environments for Python tools and projects.
@@ -1325,6 +1349,7 @@ impl CacheBucket {
             // `ARCHIVE_VERSION` in `crates/uv-cache/src/lib.rs`.
             Self::Archive => "archive-v0",
             Self::Files => "files-v0",
+            Self::Manifest => "manifest-v0",
             Self::Builds => "builds-v0",
             Self::Environments => "environments-v2",
             Self::Python => "python-v0",
@@ -1435,6 +1460,7 @@ impl CacheBucket {
             | Self::Interpreter
             | Self::Archive
             | Self::Files
+            | Self::Manifest
             | Self::Builds
             | Self::Environments
             | Self::Python
@@ -1457,6 +1483,7 @@ impl CacheBucket {
             Self::Simple,
             Self::Archive,
             Self::Files,
+            Self::Manifest,
             Self::Builds,
             Self::Environments,
             Self::Python,

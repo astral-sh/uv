@@ -33,7 +33,7 @@ use uv_extract::dirhash::{DirectoryDigest, DirhashTree, HashedFile, UnhashedFile
 use uv_extract::hash::Hasher;
 use uv_fs::{PortablePath, write_atomic};
 use uv_git::{GIT_LFS, GitError};
-use uv_install_wheel::validate_and_heal_record;
+use uv_install_wheel::{ArchiveManifest, validate_and_heal_record};
 use uv_platform_tags::Tags;
 use uv_preview::PreviewFeature;
 use uv_pypi_types::{HashDigest, HashDigests, PyProjectToml};
@@ -1231,11 +1231,22 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
     ) -> Result<ArchiveId, Error> {
         let cache = self.build_context.cache();
         let (temp_dir, id) = if let Some(HashedWheel { files, tree }) = hashed_wheel {
-            let digest = DirectoryDigest::from(tree.hash());
+            let manifest = ArchiveManifest::new(
+                files
+                    .iter()
+                    .filter(|file| file.is_executable())
+                    .map(|file| PortablePath::from(file.path()).to_string()),
+            );
+            let contents = manifest.to_bytes().map_err(Error::CacheWrite)?;
+            let digest = DirectoryDigest::with_metadata(tree.hash(), &contents);
             let id = ArchiveId::from_digest(digest.into());
+            let manifest_entry = cache.entry(CacheBucket::Manifest, &id, "manifest.json");
             let cache = cache.clone();
             let temp_dir = tokio::task::spawn_blocking(move || {
                 persist_archive_files(&cache, temp_dir.path(), &files)
+                    .map_err(Error::CacheWrite)?;
+                fs_err::create_dir_all(manifest_entry.dir()).map_err(Error::CacheWrite)?;
+                uv_fs::write_atomic_sync(manifest_entry.path(), contents)
                     .map_err(Error::CacheWrite)?;
                 Ok::<_, Error>(temp_dir)
             })

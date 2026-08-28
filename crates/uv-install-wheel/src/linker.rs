@@ -1,5 +1,9 @@
 use std::collections::{BTreeMap, BTreeSet};
+#[cfg(unix)]
+use std::fs::Permissions;
 use std::io;
+#[cfg(unix)]
+use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::time::SystemTime;
@@ -15,8 +19,8 @@ use uv_fs::link::{CopyLocks, LinkOptions, OnExistingDirectory, link_dir};
 use uv_preview::{Preview, PreviewFeature};
 use uv_warnings::warn_user;
 
-use crate::Error;
 use crate::wheel::ValidatedWheel;
+use crate::{ArchiveManifest, Error};
 
 pub use uv_fs::link::LinkMode;
 
@@ -256,18 +260,35 @@ pub(crate) fn link_wheel_files(
     wheel: &ValidatedWheel<'_>,
     state: &InstallState,
     filename: &WheelFilename,
+    archive_manifests: Option<&Path>,
 ) -> Result<(), Error> {
     let wheel = wheel.as_path();
     let site_packages = site_packages.as_ref();
+    let manifest = ArchiveManifest::read(wheel, archive_manifests)?;
+    let executable_paths = manifest
+        .iter()
+        .flat_map(ArchiveManifest::executable_paths)
+        .filter(|_| cfg!(unix))
+        .map(|path| wheel.join(path))
+        .collect::<BTreeSet<_>>();
     register_installed_paths(wheel, state, filename)?;
 
-    // The `RECORD` file is modified during installation, so it needs a real
-    // copy rather than a link back to the cache.
+    // RECORD is rewritten and executable files need their permissions changed. Neither may
+    // share an inode with the cache when mutated; reflinks and copies remain safe.
     let options = LinkOptions::new(link_mode)
-        .with_mutable_copy_filter(|p: &Path| p.ends_with("RECORD"))
+        .with_mutable_copy_filter(|path: &Path| {
+            path.ends_with("RECORD") || executable_paths.contains(path)
+        })
         .with_copy_locks(state.copy_locks())
         .with_on_existing_directory(OnExistingDirectory::Merge);
     let used_link_mode = link_dir(wheel, site_packages, &options)?;
+
+    #[cfg(unix)]
+    for path in manifest.iter().flat_map(ArchiveManifest::executable_paths) {
+        let path = site_packages.join(path);
+        let permissions = fs::metadata(&path)?.permissions();
+        fs::set_permissions(path, Permissions::from_mode(permissions.mode() | 0o111))?;
+    }
 
     if used_link_mode == LinkMode::Clone {
         // The directory mtime is not updated when cloning and the mtime is

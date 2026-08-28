@@ -24,7 +24,7 @@ use wiremock::{
 
 use uv_extract::dirhash::{DirectoryDigest, dirhash_path};
 use uv_fs::{PortablePath, Simplified};
-use uv_install_wheel::validate_and_heal_record;
+use uv_install_wheel::{ArchiveManifest, validate_and_heal_record};
 use uv_static::EnvVars;
 use uv_test::archive::write_tar_gz;
 #[cfg(feature = "test-git")]
@@ -16429,7 +16429,8 @@ fn handle_record_mismatches() -> Result<()> {
     let extracted = context.temp_dir.join("foo-extracted");
     let (hashed_files, unhealed_tree) =
         uv_extract::unzip_and_hash(File::open(&repacked_wheel)?, &extracted)?;
-    let unhealed_digest = DirectoryDigest::from(unhealed_tree.hash());
+    let manifest = ArchiveManifest::new([]).to_bytes()?;
+    let unhealed_digest = DirectoryDigest::with_metadata(unhealed_tree.hash(), &manifest);
     assert!(
         validate_and_heal_record(
             &extracted,
@@ -16438,7 +16439,7 @@ fn handle_record_mismatches() -> Result<()> {
         )?
         .is_some()
     );
-    let healed_digest = DirectoryDigest::from(dirhash_path(&extracted)?);
+    let healed_digest = DirectoryDigest::with_metadata(dirhash_path(&extracted)?, &manifest);
     assert_ne!(unhealed_digest, healed_digest);
 
     uv_snapshot!(context.filters(), context.pip_install()
@@ -16609,13 +16610,30 @@ async fn binary_payloads_stay_in_archive_without_preview() -> Result<()> {
 #[tokio::test]
 async fn all_files_except_record_use_archive_file_store() -> Result<()> {
     let server = MockServer::start().await;
-    for (streaming, concurrent_installs) in [(false, "1"), (false, "4"), (true, "1"), (true, "4")] {
+    for (streaming, concurrent_installs, link_mode) in [
+        (false, "1", "hardlink"),
+        (false, "4", "clone"),
+        (false, "4", "copy"),
+        (false, "4", "symlink"),
+        (true, "1", "hardlink"),
+        (true, "4", "clone"),
+        (true, "4", "copy"),
+        (true, "4", "symlink"),
+    ] {
+        if cfg!(windows) && link_mode == "symlink" {
+            continue;
+        }
         let context = uv_test::test_context!("3.12")
             .with_concurrent_installs(concurrent_installs)
             .with_filter((r" \(from (?:file|http)://.*\)", " (from [WHEEL_URL])"));
         let wheel = binary_payload_wheel(&context)?;
         let mut command = context.pip_install();
-        command.args(["--preview-features", "content-addressed-cache"]);
+        command.args([
+            "--preview-features",
+            "content-addressed-cache",
+            "--link-mode",
+            link_mode,
+        ]);
         if streaming {
             Mock::given(method("GET"))
                 .and(path("/binary_payload-0.1.0-py3-none-any.whl"))
@@ -16641,7 +16659,7 @@ async fn all_files_except_record_use_archive_file_store() -> Result<()> {
         }
 
         let objects = cache_files(context.cache_dir.child("files-v0").path())?;
-        // Identical contents still need separate executable and non-executable objects.
+        // Identical contents share one object, even when their executable permissions differ.
         let mut snapshot = String::new();
         for object in &objects {
             writeln!(
@@ -16652,13 +16670,12 @@ async fn all_files_except_record_use_archive_file_store() -> Result<()> {
         }
         allow_duplicates! {
             assert_snapshot!(snapshot, @"
-            files-v0/0c/0c8d68fa16e023b913e926be9b281c5a133c33291b3e60a54c310376f5602a45
-            files-v0/2f/2f4d468b80be8a639ba0bdcfc738be8d912c35dd686a1eb15272e8f56096358c
-            files-v0/4a/4a3f63865c29c673794f181932bc0e2c4779275f22e03a896d3d6ca3ac447332
-            files-v0/80/8043c55c494befd8bb44cf59c112ae6a944da98d04b550ff4fd055e2ebfabeb8
-            files-v0/92/920a0fbc7cd79a94ab2adabfaa8b93804bf6e3e858c454d45958cc9902554248
-            files-v0/bf/bf13d7b1c373edcb8588b94aae048664a6684f665fa4a7e8cd814360e537a049
-            files-v0/fa/fad1ac6fba02614a6ee120fbb397cd676f48c101afee95ab29d146c76df03596
+            files-v0/38/387023cc827c6e6fb62b95a30e2654b3fd4d418cf51c00807d61c6bb82f1d0af
+            files-v0/42/42284fa26bf4514e86fac54bf6bddccc468b6593a9e216068733eb7c391bcb99
+            files-v0/86/867ab8e27ca4cc68bcaf7a7a01620e7bb778bb711fbdb4a5a4548d69ae3ddad0
+            files-v0/91/91543d5aa6b6ba9d28acd610e4db5caae54347e73f9fad8fbeb7dbf2fa8f5f98
+            files-v0/9c/9c1e7edec7951158787a48e42733c98b7911db3830505f1df4c474eda8dc7c7f
+            files-v0/aa/aa3f5c8ec24ecf0b7c05b2cc19c64460b80490e808813819376bcd9ad169ce7e
             ");
         }
         let archive = fs_err::read_dir(context.cache_dir.child("archive-v0").path())?
@@ -16667,6 +16684,48 @@ async fn all_files_except_record_use_archive_file_store() -> Result<()> {
             .context("missing cached archive")?
             .path();
         let paths = cache_files(&archive)?;
+        let manifest = context
+            .cache_dir
+            .join("manifest-v0")
+            .join(archive.file_name().context("archive has no ID")?)
+            .join("manifest.json");
+        let contents = fs_err::read_to_string(&manifest)?;
+        allow_duplicates! {
+            assert_snapshot!(contents, @r#"{"version":1,"executables":["binary_payload/native.so","binary_payload/tool"]}"#);
+        }
+        assert!(!context.site_packages().join("manifest.json").exists());
+        assert_eq!(
+            uv_fs::is_same_file_allow_missing(
+                &archive.join("binary_payload/native.so"),
+                &archive.join("binary_payload/plain.so")
+            ),
+            Some(true)
+        );
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+
+            for path in &paths {
+                assert_eq!(fs_err::metadata(path)?.permissions().mode() & 0o111, 0);
+            }
+            for (path, executable) in [
+                ("binary_payload/native.so", true),
+                ("binary_payload/plain.so", false),
+                ("binary_payload/tool", true),
+            ] {
+                let installed = context.site_packages().join(path);
+                assert_eq!(
+                    fs_err::metadata(&installed)?.permissions().mode() & 0o111 != 0,
+                    executable
+                );
+                if executable {
+                    assert_eq!(
+                        uv_fs::is_same_file_allow_missing(&archive.join(path), &installed),
+                        Some(false)
+                    );
+                }
+            }
+        }
         let shared_paths = paths
             .iter()
             .filter(|path| {
@@ -16682,6 +16741,88 @@ async fn all_files_except_record_use_archive_file_store() -> Result<()> {
             .collect::<Vec<_>>();
         assert_eq!(shared_paths, paths);
     }
+    Ok(())
+}
+
+#[test]
+fn executable_manifests_distinguish_identical_wheel_contents() -> Result<()> {
+    let context = uv_test::test_context!("3.12")
+        .with_filtered_file_counts()
+        .with_filtered_sizes_and_units()
+        .with_filter((r" \(from file://.*\)", " (from [WHEEL_URL])"));
+    for (name, mode) in [("executable", 0o755), ("non-executable", 0o644)] {
+        let wheel = binary_payload_wheel_with_mode(&context, mode)?;
+        let directory = context.temp_dir.join(name);
+        fs_err::create_dir_all(&directory)?;
+        let source = directory.join("binary_payload-0.1.0-py3-none-any.whl");
+        fs_err::rename(wheel, &source)?;
+        let mut command = context.pip_install();
+        command
+            .args([
+                "--preview-features",
+                "content-addressed-cache",
+                "--link-mode",
+                "hardlink",
+            ])
+            .arg(&source);
+        allow_duplicates! {
+            uv_snapshot!(context.filters(), command, @"
+            exit_code: 0 (success)
+            ----- stderr -----
+            Resolved 1 package in [TIME]
+            Prepared 1 package in [TIME]
+            Installed 1 package in [TIME]
+             + binary-payload==0.1.0 (from [WHEEL_URL])
+            ");
+        }
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+
+            assert_eq!(
+                fs_err::metadata(context.site_packages().join("binary_payload/tool"))?
+                    .permissions()
+                    .mode()
+                    & 0o111,
+                u32::from(mode) & 0o111,
+            );
+        }
+        // Leave both cache entries present, but make the next install start with an empty venv.
+        allow_duplicates! {
+            uv_snapshot!(context.filters(), context.pip_uninstall().arg("binary-payload"), @"
+            exit_code: 0 (success)
+            ----- stderr -----
+            Uninstalled 1 package in [TIME]
+             - binary-payload==0.1.0 (from [WHEEL_URL])
+            ");
+        }
+    }
+
+    let archives = fs_err::read_dir(context.cache_dir.child("archive-v0").path())?
+        .map(|entry| entry.map(|entry| entry.path()))
+        .collect::<std::io::Result<Vec<_>>>()?;
+    assert_eq!(archives.len(), 2);
+    assert_eq!(dirhash_path(&archives[0])?, dirhash_path(&archives[1])?);
+    assert_eq!(
+        cache_files(context.cache_dir.child("files-v0").path())?.len(),
+        6
+    );
+    let mut manifests = cache_files(context.cache_dir.child("manifest-v0").path())?
+        .iter()
+        .map(fs_err::read_to_string)
+        .collect::<std::io::Result<Vec<_>>>()?;
+    manifests.sort();
+    assert_snapshot!(manifests.join("\n"), @r#"
+    {"version":1,"executables":["binary_payload/native.so","binary_payload/tool"]}
+    {"version":1,"executables":[]}
+    "#);
+
+    uv_snapshot!(context.filters(), context.clean().arg("binary-payload"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Removed [N] files ([SIZE])
+    ");
+    assert!(cache_files(context.cache_dir.child("manifest-v0").path())?.is_empty());
     Ok(())
 }
 
@@ -16805,7 +16946,7 @@ fn binary_payload_copy_fallback_uses_archive_file_store() -> Result<()> {
     ");
 
     let archive_files = cache_files(context.cache_dir.child("files-v0").path())?;
-    assert_eq!(archive_files.len(), 7);
+    assert_eq!(archive_files.len(), 6);
 
     let target = context.temp_dir.child("fallback-target");
     uv_snapshot!(context.filters(), context.pip_install()
@@ -16836,6 +16977,11 @@ fn binary_payload_copy_fallback_uses_archive_file_store() -> Result<()> {
 const BINARY_PAYLOAD_CONTENTS: &[u8] = b"binary payload contents\n";
 
 fn binary_payload_wheel(context: &TestContext) -> Result<PathBuf> {
+    binary_payload_wheel_with_mode(context, 0o755)
+}
+
+/// Create otherwise identical wheels with different executable permissions.
+fn binary_payload_wheel_with_mode(context: &TestContext, executable_mode: u16) -> Result<PathBuf> {
     const METADATA: &[u8] = b"Metadata-Version: 2.1\nName: binary-payload\nVersion: 0.1.0\n";
     const WHEEL: &[u8] =
         b"Wheel-Version: 1.0\nGenerator: uv-test\nRoot-Is-Purelib: true\nTag: py3-none-any\n";
@@ -16885,7 +17031,7 @@ binary_payload-0.1.0.dist-info/RECORD,,\n";
     ] {
         let entry = ZipEntryBuilder::new(name.into(), Compression::Stored).unix_permissions(
             if matches!(name, "binary_payload/native.so" | "binary_payload/tool") {
-                0o755
+                executable_mode
             } else {
                 0o644
             },
