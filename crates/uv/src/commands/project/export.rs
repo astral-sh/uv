@@ -15,7 +15,7 @@ use uv_configuration::{
     Concurrency, DependencyGroups, EditableMode, ExportFormat, ExtrasSpecification, InstallOptions,
 };
 use uv_distribution_types::Verbatim;
-use uv_normalize::{DefaultExtras, DefaultGroups, PackageName};
+use uv_normalize::{DEV_DEPENDENCIES, DefaultExtras, DefaultGroups, PackageName};
 use uv_preview::Preview;
 use uv_python::{ConfigDiscovery, PythonDownloads, PythonPreference, PythonRequest};
 use uv_requirements::is_pylock_toml;
@@ -105,18 +105,8 @@ pub(crate) async fn export(
                 ..DiscoveryOptions::default()
             };
 
-            if let [name] = package.as_slice() {
-                VirtualProject::discover_with_package(
-                    project_dir,
-                    &options,
-                    cache,
-                    workspace_cache,
-                    name.clone(),
-                )
-                .await?
-            } else {
-                VirtualProject::discover(project_dir, &options, cache, workspace_cache).await?
-            }
+            // A selected member may only exist in the lockfile during a frozen export.
+            VirtualProject::discover(project_dir, &options, cache, workspace_cache).await?
         } else if let [name] = package.as_slice() {
             VirtualProject::discover_with_package(
                 project_dir,
@@ -148,7 +138,18 @@ pub(crate) async fn export(
 
     // Determine the default groups to include.
     let default_groups = match &target {
-        ExportTarget::Project(project) => default_dependency_groups(project.pyproject_toml())?,
+        ExportTarget::Project(project) => match package.as_slice() {
+            // Read the selected member's defaults if its manifest is available. Otherwise, use
+            // the standard defaults rather than inheriting the workspace root's defaults.
+            [name] => project
+                .workspace()
+                .packages()
+                .get(name)
+                .map(|member| default_dependency_groups(member.pyproject_toml()))
+                .transpose()?
+                .unwrap_or_else(|| DefaultGroups::List(vec![DEV_DEPENDENCIES.clone()])),
+            _ => default_dependency_groups(project.pyproject_toml())?,
+        },
         ExportTarget::Script(_) => DefaultGroups::default(),
     };
 
