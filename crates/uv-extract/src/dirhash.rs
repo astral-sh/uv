@@ -110,11 +110,26 @@ where
     R: AsyncRead,
     W: AsyncWrite,
 {
+    let (size, digest, _) = blake3_copy_with_prefix(reader, writer).await?;
+    Ok((size, digest))
+}
+
+/// Hash and copy a file, retaining its first eight bytes without reading it again.
+/// Files shorter than eight bytes leave the remaining prefix bytes zeroed.
+pub(crate) async fn blake3_copy_with_prefix<R, W>(
+    reader: R,
+    writer: W,
+) -> io::Result<(u64, blake3::Hash, [u8; 8])>
+where
+    R: AsyncRead,
+    W: AsyncWrite,
+{
     let mut reader = pin!(reader);
     let mut writer = pin!(writer);
     let mut hasher = blake3::Hasher::new();
     let mut buffer = vec![0; 1 << 16]; // 64 KiB
     let mut total = 0u64;
+    let mut prefix = [0; 8];
     // BLAKE3 is fastest when hashing power-of-two sized buffers. That maximizes the time we spend
     // in the wide SIMD part of the implementation (which wants between 4 and 16 KiB at a time
     // depending on the platform) and minimizes the time we spend in the slower part that handles
@@ -125,8 +140,12 @@ where
         if bytes_read == 0 {
             break; // EOF reached with no bytes. Skip unnecessary calls to `update` and `write_all`.
         }
-        total += bytes_read as u64;
         let bytes = &buffer[..bytes_read];
+        if total == 0 {
+            let length = bytes.len().min(prefix.len());
+            prefix[..length].copy_from_slice(&bytes[..length]);
+        }
+        total += bytes_read as u64;
         hasher.update(bytes);
         writer.write_all(bytes).await?;
         if bytes_read < buffer.len() {
@@ -134,7 +153,7 @@ where
         }
     }
     writer.flush().await?;
-    Ok((total, hasher.finalize()))
+    Ok((total, hasher.finalize(), prefix))
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -719,10 +738,12 @@ mod tests {
         let mut input = vec![0; 64_000 * 3];
         paint_input(&mut input);
         let mut output = Vec::new();
-        let (bytes_read, hash) = super::blake3_copy(ShortReader(&input), &mut output).await?;
+        let (bytes_read, hash, prefix) =
+            super::blake3_copy_with_prefix(ShortReader(&input), &mut output).await?;
         assert_eq!(bytes_read, input.len() as u64);
         assert_eq!(input, &output[..]);
         assert_eq!(hash, blake3::hash(&input));
+        assert_eq!(prefix, input[..8]);
         Ok(())
     }
 

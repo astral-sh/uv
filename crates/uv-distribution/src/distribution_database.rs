@@ -1,19 +1,23 @@
 use std::cmp::Reverse;
 use std::fmt::Display;
+#[cfg(unix)]
+use std::fs::Permissions;
 use std::future::Future;
 use std::io;
-use std::path::Path;
+#[cfg(unix)]
+use std::os::unix::fs::PermissionsExt;
+use std::path::{Path, PathBuf};
 use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll};
 
 use either::Either;
-use futures::{FutureExt, TryStreamExt};
+use futures::{FutureExt, TryFutureExt, TryStreamExt};
 use rayon::in_place_scope;
 use rayon::prelude::*;
-use rustc_hash::FxHashMap;
+use rustc_hash::{FxHashMap, FxHashSet};
 use tokio::io::{AsyncRead, AsyncSeekExt, ReadBuf};
-use tokio::sync::Semaphore;
+use tokio::sync::{Semaphore, mpsc};
 use tokio_util::compat::FuturesAsyncReadCompatExt;
 use tracing::{Instrument, info_span, instrument, warn};
 use url::Url;
@@ -709,21 +713,23 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 let temp_dir = tempfile::tempdir_in(self.build_context.cache().root())
                     .map_err(Error::CacheWrite)?;
 
-                let mut extracted = match progress {
+                let (temp_dir, mut extracted) = match progress {
                     Some((reporter, progress)) => {
                         let mut reader = ProgressReader::new(&mut hasher, progress, &**reporter);
                         ExtractedWheel::extract_streaming(
                             &mut reader,
-                            temp_dir.path(),
-                            self.content_addressed_cache,
+                            temp_dir,
+                            self.content_addressed_cache
+                                .then_some(self.build_context.cache()),
                         )
                         .await
                         .map_err(|err| Error::Extract(filename.to_string(), err))?
                     }
                     None => ExtractedWheel::extract_streaming(
                         &mut hasher,
-                        temp_dir.path(),
-                        self.content_addressed_cache,
+                        temp_dir,
+                        self.content_addressed_cache
+                            .then_some(self.build_context.cache()),
                     )
                     .await
                     .map_err(|err| Error::Extract(filename.to_string(), err))?,
@@ -939,8 +945,13 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
 
                 let target = temp_dir.path().to_owned();
                 let file = file.into_std().await;
+                let cache = self.build_context.cache().clone();
                 let mut extracted = tokio::task::spawn_blocking(move || {
-                    ExtractedWheel::extract_seekable(file, &target, content_addressed_cache)
+                    ExtractedWheel::extract_seekable(
+                        file,
+                        &target,
+                        content_addressed_cache.then_some(&cache),
+                    )
                 })
                 .await?
                 .map_err(|err| Error::Extract(filename.to_string(), err))?;
@@ -1134,10 +1145,11 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             let mut hasher = uv_extract::hash::HashReader::new(file, &mut hashers);
 
             // Unzip the wheel to a temporary directory.
-            let mut extracted = ExtractedWheel::extract_streaming(
+            let (temp_dir, mut extracted) = ExtractedWheel::extract_streaming(
                 &mut hasher,
-                temp_dir.path(),
-                self.content_addressed_cache,
+                temp_dir,
+                self.content_addressed_cache
+                    .then_some(self.build_context.cache()),
             )
             .await
             .map_err(|err| Error::Extract(filename.to_string(), err))?;
@@ -1192,15 +1204,15 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
 
         let (temp_dir, mut extracted) = tokio::task::spawn_blocking({
             let path = path.to_owned();
-            let root = self.build_context.cache().root().to_path_buf();
+            let cache = self.build_context.cache().clone();
             move || -> Result<_, Error> {
                 // Unzip the wheel into a temporary directory.
-                let temp_dir = tempfile::tempdir_in(root).map_err(Error::CacheWrite)?;
+                let temp_dir = tempfile::tempdir_in(cache.root()).map_err(Error::CacheWrite)?;
                 let reader = fs_err::File::open(&path).map_err(Error::CacheWrite)?;
                 let extracted = ExtractedWheel::extract_seekable(
                     reader,
                     temp_dir.path(),
-                    content_addressed_cache,
+                    content_addressed_cache.then_some(&cache),
                 )
                 .map_err(|err| Error::Extract(path.to_string_lossy().into_owned(), err))?;
                 Ok((temp_dir, extracted))
@@ -1230,19 +1242,11 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         hashed_wheel: Option<HashedWheel>,
     ) -> Result<ArchiveId, Error> {
         let cache = self.build_context.cache();
-        let (temp_dir, id) = if let Some(HashedWheel { files, tree }) = hashed_wheel {
+        let id = if let Some(HashedWheel { tree, .. }) = hashed_wheel {
             let digest = DirectoryDigest::from(tree.hash());
-            let id = ArchiveId::from_digest(digest.into());
-            let cache = cache.clone();
-            let temp_dir = tokio::task::spawn_blocking(move || {
-                persist_archive_files(&cache, temp_dir.path(), &files)
-                    .map_err(Error::CacheWrite)?;
-                Ok::<_, Error>(temp_dir)
-            })
-            .await??;
-            (temp_dir, id)
+            ArchiveId::from_digest(digest.into())
         } else {
-            (temp_dir, ArchiveId::default())
+            ArchiveId::default()
         };
 
         cache
@@ -1286,32 +1290,92 @@ enum ExtractedWheel {
 }
 
 impl ExtractedWheel {
-    /// Extract a wheel from a streaming reader, optionally retaining its per-file digests.
+    /// Extract a wheel from a streaming reader, optionally publishing completed file objects while
+    /// the remaining payloads are downloaded and extracted.
     async fn extract_streaming<R>(
         reader: R,
-        target: &Path,
-        content_addressed: bool,
-    ) -> Result<Self, uv_extract::Error>
+        temp_dir: tempfile::TempDir,
+        cache: Option<&Cache>,
+    ) -> Result<(tempfile::TempDir, Self), uv_extract::Error>
     where
         R: AsyncRead + Unpin,
     {
-        if content_addressed {
-            let (files, tree) = uv_extract::stream::unzip_and_hash(reader, target).await?;
-            Ok(Self::Hashed(HashedWheel { files, tree }))
+        if let Some(cache) = cache {
+            const BATCH_SIZE: usize = 256;
+
+            let target = temp_dir.path().to_path_buf();
+            let temp_dir = Arc::new(temp_dir);
+            let archive = Arc::clone(&temp_dir);
+            let publisher_cache = cache.clone();
+            let (sender, mut receiver) = mpsc::channel(BATCH_SIZE);
+            let publisher = async move {
+                let mut files = Vec::with_capacity(BATCH_SIZE);
+                let mut shards = FxHashSet::default();
+                while receiver.recv_many(&mut files, BATCH_SIZE).await != 0 {
+                    let archive = Arc::clone(&archive);
+                    let cache = publisher_cache.clone();
+                    // Keep the private archive alive if extraction is cancelled during this batch.
+                    let (batch, created_shards, result) = tokio::task::spawn_blocking(move || {
+                        let result =
+                            persist_archive_files(&cache, archive.path(), &files, &mut shards);
+                        (files, shards, result)
+                    })
+                    .await
+                    .map_err(io::Error::other)?;
+                    files = batch;
+                    shards = created_shards;
+                    result?;
+                    files.clear();
+                }
+                Ok::<_, io::Error>(shards)
+            };
+            let extraction = async move {
+                let result = uv_extract::stream::unzip_and_hash(reader, &target, |file| {
+                    sender
+                        .send(file)
+                        .map_err(|_| io::Error::other("file cache publisher stopped"))
+                })
+                .await;
+                drop(sender);
+                result
+            };
+
+            // Always join the publisher, including after an extraction error. Report its original
+            // error rather than the channel closure observed by the extraction callback.
+            let (extracted, published) = tokio::join!(extraction, publisher);
+            let mut shards = published.map_err(uv_extract::Error::Io)?;
+            let (files, tree, deferred) = extracted?;
+            let temp_dir = Arc::try_unwrap(temp_dir).map_err(|_| {
+                uv_extract::Error::Io(io::Error::other("file cache publisher retained archive"))
+            })?;
+            let cache = cache.clone();
+            // No publication workers can still be using these paths. Keep the temporary archive
+            // owned by the blocking task if this future is cancelled during mode correction.
+            let (temp_dir, files) = tokio::task::spawn_blocking(move || {
+                finish_streamed_files(&cache, temp_dir.path(), &files, &deferred, &mut shards)?;
+                Ok::<_, io::Error>((temp_dir, files))
+            })
+            .await
+            .map_err(|err| uv_extract::Error::Io(io::Error::other(err)))?
+            .map_err(uv_extract::Error::Io)?;
+            Ok((temp_dir, Self::Hashed(HashedWheel { files, tree })))
         } else {
-            let files = uv_extract::stream::unzip(reader, target).await?;
-            Ok(Self::Unhashed(files))
+            let files = uv_extract::stream::unzip(reader, temp_dir.path()).await?;
+            Ok((temp_dir, Self::Unhashed(files)))
         }
     }
 
-    /// Extract a wheel from a seekable file, optionally retaining its per-file digests.
+    /// Extract a wheel from a seekable file, optionally retaining its per-file digests and
+    /// publishing its files to the file store.
     fn extract_seekable(
         reader: fs_err::File,
         target: &Path,
-        content_addressed: bool,
+        cache: Option<&Cache>,
     ) -> Result<Self, uv_extract::Error> {
-        if content_addressed {
+        if let Some(cache) = cache {
             let (files, tree) = uv_extract::unzip_and_hash(reader, target)?;
+            persist_archive_files(cache, target, &files, &mut FxHashSet::default())
+                .map_err(uv_extract::Error::Io)?;
             Ok(Self::Hashed(HashedWheel { files, tree }))
         } else {
             let files = uv_extract::unzip(reader, target)?;
@@ -1360,8 +1424,44 @@ impl ExtractedWheel {
     }
 }
 
+/// Apply the validated modes and publish files that could not be shared during streaming.
+/// Publication workers must have finished before calling this function.
+fn finish_streamed_files(
+    cache: &Cache,
+    archive: &Path,
+    files: &[HashedFile],
+    deferred: &FxHashSet<PathBuf>,
+    created_shards: &mut FxHashSet<PathBuf>,
+) -> io::Result<()> {
+    initialize_rayon_once();
+    let pending = files
+        .par_iter()
+        .filter(|file| file.is_executable() || deferred.contains(file.path()))
+        .map(|file| {
+            #[cfg(unix)]
+            if file.is_executable() {
+                let path = archive.join(file.path());
+                if !deferred.contains(file.path()) && !file.path().ends_with("RECORD") {
+                    // This file was published as non-executable. Replace only the archive's link
+                    // before chmod, preserving the shared object and all of its other users.
+                    uv_fs::copy_atomic_sync(&path, &path)?;
+                }
+                let permissions = fs_err::metadata(&path)?.permissions();
+                fs_err::set_permissions(&path, Permissions::from_mode(permissions.mode() | 0o111))?;
+            }
+            Ok(file.clone())
+        })
+        .collect::<io::Result<Vec<_>>>()?;
+    persist_archive_files(cache, archive, &pending, created_shards)
+}
+
 /// Share extracted files other than `RECORD` while keeping the unpublished archive complete.
-fn persist_archive_files(cache: &Cache, archive: &Path, files: &[HashedFile]) -> io::Result<()> {
+fn persist_archive_files(
+    cache: &Cache,
+    archive: &Path,
+    files: &[HashedFile],
+    created_shards: &mut FxHashSet<PathBuf>,
+) -> io::Result<()> {
     initialize_rayon_once();
     let targets = files
         .par_iter()
@@ -1397,7 +1497,9 @@ fn persist_archive_files(cache: &Cache, archive: &Path, files: &[HashedFile]) ->
     // thread, while workers link files in the shards that are already available.
     in_place_scope(|scope| -> io::Result<()> {
         for (parent, files, result) in &mut shards {
-            fs_err::create_dir_all(parent)?;
+            if created_shards.insert(parent.to_path_buf()) {
+                fs_err::create_dir_all(parent)?;
+            }
             scope.spawn(move |_| {
                 *result = files
                     .iter()
@@ -1420,14 +1522,181 @@ fn persist_archive_file(src: &Path, dst: &Path) -> io::Result<()> {
         Err(_) => return uv_fs::copy_atomic_sync(src, dst),
     }
 
-    // This archive is still private, so it is safe to replace its extracted copy before publication.
-    if let Err(err) = fs_err::remove_file(src)
-        && err.kind() != io::ErrorKind::NotFound
-    {
-        return Err(err);
+    // Keep the source path present while extraction continues. Removing it first would allow a
+    // later ZIP entry with an aliasing path to create a new file during the gap.
+    let parent = src.parent().ok_or_else(|| {
+        io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "archive file must have a parent directory",
+        )
+    })?;
+    let temporary = tempfile::tempdir_in(parent)?;
+    let link = temporary.path().join("file");
+    match fs_err::hard_link(dst, &link) {
+        Ok(()) => fs_err::rename(link, src),
+        Err(_) => uv_fs::copy_atomic_sync(dst, src),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::io;
+    #[cfg(unix)]
+    use std::os::unix::fs::{MetadataExt, PermissionsExt};
+    use std::path::Path;
+    use std::time::Duration;
+
+    use async_zip::base::write::ZipFileWriter;
+    use async_zip::{Compression, ZipEntryBuilder};
+    use tokio::io::AsyncWriteExt;
+    use uv_cache::{ArchiveFileId, Cache, CacheBucket};
+    use walkdir::WalkDir;
+
+    use super::ExtractedWheel;
+
+    #[tokio::test]
+    async fn rejected_stream_leaves_only_completed_file_objects() -> anyhow::Result<()> {
+        let mut zip = ZipFileWriter::new(Vec::new());
+        zip.write_entry_whole(
+            ZipEntryBuilder::new("module.py".into(), Compression::Deflate).unix_permissions(0o644),
+            b"print(42)",
+        )
+        .await?;
+        // Do not write a central directory. The payload is valid, but the wheel must be rejected.
+        let contents = zip.inner_mut();
+        let root = tempfile::tempdir()?;
+        let cache = Cache::from_path(root.path()).init().await?;
+        let archive = tempfile::tempdir_in(cache.root())?;
+        let path = archive.path().to_path_buf();
+        let result =
+            ExtractedWheel::extract_streaming(contents.as_slice(), archive, Some(&cache)).await;
+        assert!(result.is_err());
+        assert!(!path.exists());
+        assert!(!cache.bucket(CacheBucket::Archive).exists());
+        let objects = WalkDir::new(cache.bucket(CacheBucket::Files))
+            .into_iter()
+            .collect::<Result<Vec<_>, _>>()?
+            .into_iter()
+            .filter(|entry| entry.file_type().is_file())
+            .collect::<Vec<_>>();
+        assert_eq!(objects.len(), 1);
+        assert_eq!(fs_err::read(objects[0].path())?, b"print(42)");
+        #[cfg(unix)]
+        assert_eq!(
+            fs_err::metadata(objects[0].path())?.permissions().mode() & 0o111,
+            0
+        );
+        Ok(())
     }
 
-    fs_err::hard_link(dst, src).or_else(|_| uv_fs::copy_atomic_sync(dst, src))
+    #[tokio::test]
+    async fn streams_files_before_modes_and_preserves_shared_inodes() -> anyhow::Result<()> {
+        let mut zip = ZipFileWriter::new(Vec::new());
+        let mut first_payload_end = 0;
+        for (path, contents, mode) in [
+            ("module.py", &b"print(42)"[..], 0o644),
+            ("missed.py", &b"print(42)"[..], 0o755),
+            ("native", &b"\x7fELFnative"[..], 0o755),
+            ("library", &b"\x7fELFnative"[..], 0o644),
+            ("demo.data/scripts/plain", &b"plain"[..], 0o755),
+            ("RECORD", &b"metadata"[..], 0o644),
+        ] {
+            zip.write_entry_whole(
+                ZipEntryBuilder::new(path.into(), Compression::Deflate).unix_permissions(mode),
+                contents,
+            )
+            .await?;
+            if path == "module.py" {
+                first_payload_end = zip.inner_mut().len();
+            }
+        }
+        let boundary = zip.inner_mut().len();
+        let contents = zip.close().await?;
+        let root = tempfile::tempdir()?;
+        let cache = Cache::from_path(root.path().join("cache")).init().await?;
+        let archive = tempfile::tempdir_in(cache.root())?;
+        let module = archive.path().join("module.py");
+        let native = archive.path().join("native");
+        let installed = root.path().join("installed.py");
+        let (reader, mut writer) = tokio::io::duplex(64);
+        let download = async {
+            writer.write_all(&contents[..first_payload_end]).await?;
+            // Withhold the next payload until a file has actually reached the shared store.
+            loop {
+                if WalkDir::new(cache.bucket(CacheBucket::Files))
+                    .into_iter()
+                    .filter_map(Result::ok)
+                    .any(|entry| {
+                        entry.file_type().is_file()
+                            && uv_fs::is_same_file_allow_missing(&module, entry.path())
+                                == Some(true)
+                    })
+                {
+                    break;
+                }
+                tokio::time::sleep(Duration::from_millis(1)).await;
+            }
+            assert!(!native.exists());
+            fs_err::hard_link(&module, &installed)?;
+            writer
+                .write_all(&contents[first_payload_end..boundary])
+                .await?;
+            let before = fs_err::metadata(&native)?;
+            #[cfg(unix)]
+            assert_eq!(before.permissions().mode() & 0o111, 0);
+            writer.write_all(&contents[boundary..]).await?;
+            writer.shutdown().await?;
+            Ok::<_, io::Error>(before)
+        };
+        let extraction = ExtractedWheel::extract_streaming(reader, archive, Some(&cache));
+        let (download, extraction) = tokio::time::timeout(Duration::from_secs(10), async {
+            tokio::join!(download, extraction)
+        })
+        .await?;
+        let before = download?;
+        let (archive, extracted) = extraction?;
+        let ExtractedWheel::Hashed(wheel) = extracted else {
+            anyhow::bail!("expected a hashed wheel");
+        };
+        assert_eq!(before.len(), fs_err::metadata(&native)?.len());
+        #[cfg(unix)]
+        {
+            // Correctly deferred executables retain the inode written during extraction.
+            assert_eq!(before.ino(), fs_err::metadata(&native)?.ino());
+            assert_eq!(
+                fs_err::metadata(&installed)?.permissions().mode() & 0o111,
+                0
+            );
+        }
+        for file in wheel.files {
+            let source = archive.path().join(file.path());
+            let id = ArchiveFileId::from_digest(&file.object_digest_hex());
+            let object = cache.archive_file(&id);
+            if file.path() == Path::new("RECORD") {
+                assert!(!object.exists());
+                continue;
+            }
+            assert_eq!(
+                uv_fs::is_same_file_allow_missing(&source, &object),
+                Some(true)
+            );
+            #[cfg(unix)]
+            assert_eq!(
+                fs_err::metadata(&object)?.permissions().mode() & 0o111 != 0,
+                file.is_executable()
+            );
+        }
+        assert_eq!(
+            uv_fs::is_same_file_allow_missing(&installed, &module),
+            Some(true)
+        );
+        #[cfg(unix)]
+        assert_eq!(
+            uv_fs::is_same_file_allow_missing(&installed, &archive.path().join("missed.py")),
+            Some(false)
+        );
+        Ok(())
+    }
 }
 
 /// A wrapper around `RegistryClient` that manages a concurrency limit.
