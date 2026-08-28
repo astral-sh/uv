@@ -85,18 +85,10 @@ jobs:
         with:
           persist-credentials: false
           submodules: recursive
-      - name: Install dist
-        shell: bash
-        run: |
-          curl --proto '=https' --tlsv1.2 -LsSf "https://github.com/axodotdev/cargo-dist/releases/download/v${CARGO_DIST_VERSION}/cargo-dist-x86_64-unknown-linux-gnu.tar.xz" -o /tmp/cargo-dist.tar.xz
-          echo "${CARGO_DIST_CHECKSUM}  /tmp/cargo-dist.tar.xz" | sha256sum -c -
-          tar -xf /tmp/cargo-dist.tar.xz -C /tmp
-          install /tmp/cargo-dist-x86_64-unknown-linux-gnu/dist ~/.cargo/bin/
-      - name: Cache dist
-        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+      - name: "Install uv"
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
         with:
-          name: cargo-dist-cache
-          path: ~/.cargo/bin/dist
+          version: "0.12.5"
       # sure would be cool if github gave us proper conditionals...
       # so here's a doubly-nested ternary-via-truthiness to try to provide the best possible
       # functionality based on whether this is a pull_request, and whether it's from a fork.
@@ -104,7 +96,7 @@ jobs:
       # but also really annoying to build CI around when it needs secrets to work right.)
       - id: plan
         run: |
-          dist ${DIST_CMD} --output-format=json > plan-dist-manifest.json
+          uv run --only-dev dist ${DIST_CMD} --output-format=json > plan-dist-manifest.json
           echo "dist ran successfully"
           cat plan-dist-manifest.json
           echo "manifest=$(jq -c "." plan-dist-manifest.json)" >> "$GITHUB_OUTPUT"
@@ -153,12 +145,10 @@ jobs:
         with:
           persist-credentials: false
           submodules: recursive
-      - name: Install cached dist
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+      - name: "Install uv"
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
         with:
-          name: cargo-dist-cache
-          path: ~/.cargo/bin/
-      - run: chmod +x ~/.cargo/bin/dist
+          version: "0.12.5"
       - name: Fetch local artifacts
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
@@ -171,7 +161,7 @@ jobs:
           TAG: ${{ needs.plan.outputs.tag-flag }}
         run: |
           temp_manifest=target/local-dist-manifest.json.tmp
-          dist manifest "$TAG" --output-format=json --no-local-paths --artifacts=local > "$temp_manifest"
+          uv run --only-dev dist manifest "$TAG" --output-format=json --no-local-paths --artifacts=local > "$temp_manifest"
           python3 scripts/patch-dist-manifest-checksums.py --manifest "$temp_manifest" --artifacts-dir target/distrib
           mv "$temp_manifest" target/distrib/local-dist-manifest.json
       - name: Upload synthesized local dist manifest
@@ -196,13 +186,10 @@ jobs:
         with:
           persist-credentials: false
           submodules: recursive
-      - name: Install cached dist
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+      - name: "Install uv"
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
         with:
-          name: cargo-dist-cache
-          path: ~/.cargo/bin/
-      - run: chmod +x ~/.cargo/bin/dist
-      # Get all the local artifacts for the global tasks to use (for e.g. checksums)
+          version: "0.12.5"      # Get all the local artifacts for the global tasks to use (for e.g. checksums)
       - name: Fetch local artifacts
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
@@ -212,7 +199,7 @@ jobs:
       - id: cargo-dist
         shell: bash
         run: |
-          dist build ${DIST_TAG_FLAG} --output-format=json "--artifacts=global" > dist-manifest.json
+          uv run --only-dev dist build ${DIST_TAG_FLAG} --output-format=json "--artifacts=global" > dist-manifest.json
           echo "dist ran successfully"
 
           # Parse out what we just built and upload it to scratch storage
@@ -249,13 +236,10 @@ jobs:
         with:
           persist-credentials: false
           submodules: recursive
-      - name: Install cached dist
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+      - name: "Install uv"
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
         with:
-          name: cargo-dist-cache
-          path: ~/.cargo/bin/
-      - run: chmod +x ~/.cargo/bin/dist
-      # Fetch artifacts from scratch-storage
+          version: "0.12.5"      # Fetch artifacts from scratch-storage
       - name: Fetch artifacts
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
@@ -266,7 +250,7 @@ jobs:
       - id: host
         shell: bash
         run: |
-          dist host ${DIST_TAG_FLAG} --steps=upload --steps=release --output-format=json > dist-manifest.json
+          uv run --only-dev dist host ${DIST_TAG_FLAG} --steps=upload --steps=release --output-format=json > dist-manifest.json
           echo "artifacts uploaded and released successfully"
           cat dist-manifest.json
           echo "manifest=$(jq -c "." dist-manifest.json)" >> "$GITHUB_OUTPUT"
