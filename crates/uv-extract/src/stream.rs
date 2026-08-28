@@ -85,17 +85,11 @@ pub async fn unzip<R: tokio::io::AsyncRead + Unpin>(
 ///
 /// See [`unzip`] for details.
 /// Executable permissions are recorded in the returned files instead of being applied on disk.
-pub async fn unzip_and_hash<R: tokio::io::AsyncRead + Unpin>(
-    reader: R,
-    target: impl AsRef<Path>,
-) -> Result<(Vec<HashedFile>, DirhashTree), Error> {
-    unzip_and_hash_with_callback(reader, target, |_| ready(Ok(()))).await
-}
-
-/// Like [`unzip_and_hash`], but report each completed file after validating its local header and
+///
+/// Reports each completed file to `on_file` after validating its local header and
 /// data descriptor. Files are non-executable; their intended executable status is only known in
 /// the returned metadata after validating the central directory. The remaining ZIP can still fail.
-pub async fn unzip_and_hash_with_callback<R, F, Fut>(
+pub async fn unzip_and_hash<R, F, Fut>(
     reader: R,
     target: impl AsRef<Path>,
     on_file: F,
@@ -975,7 +969,7 @@ mod tests {
             writer.shutdown().await?;
             Ok::<_, io::Error>(())
         };
-        let extraction = super::unzip_and_hash_with_callback(reader, target.path(), |file| {
+        let extraction = super::unzip_and_hash(reader, target.path(), |file| {
             assert!(!file.is_executable());
             if file.path() == Path::new("first")
                 && let Some(sender) = sender.take()
