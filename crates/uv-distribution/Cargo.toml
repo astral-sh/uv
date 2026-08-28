@@ -66,6 +66,7 @@ walkdir = { workspace = true }
 [dev-dependencies]
 uv-preview = { workspace = true, features = ["testing"] }
 
+async_zip = { workspace = true }
 indoc = { workspace = true }
 insta = { workspace = true }
 

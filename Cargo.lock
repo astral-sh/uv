@@ -6554,6 +6554,7 @@ version = "0.0.74"
 dependencies = [
  "anyhow",
  "astral-reqwest-middleware",
+ "astral_async_zip",
  "either",
  "fs-err",
  "futures",

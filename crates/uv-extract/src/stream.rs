@@ -1,3 +1,5 @@
+use std::future::{Future, ready};
+use std::io;
 use std::path::{Path, PathBuf};
 use std::pin::Pin;
 
@@ -18,11 +20,53 @@ use uv_preview::PreviewFeature;
 
 use crate::archive_path::SanitizedArchivePath;
 use crate::dirhash::{
-    DirhashTree, HashedFile, UnhashedFile, UnzipOutput, blake3_copy, directory_tree_from_extracted,
+    DirhashTree, HashedFile, UnhashedFile, UnzipOutput, blake3_copy_with_prefix,
+    directory_tree_from_extracted,
 };
 use crate::{Error, insecure_no_validate};
 
 const DEFAULT_BUF_SIZE: usize = 128 * 1024;
+
+/// Keep likely executables private until their central-directory permissions are available.
+/// False positives only delay publication; false negatives must be detached before chmod.
+fn defer_publication(path: &Path, prefix: [u8; 8]) -> bool {
+    if cfg!(windows)
+        && path
+            .extension()
+            .is_some_and(|extension| extension.eq_ignore_ascii_case("exe"))
+    {
+        return true;
+    }
+    let mut components = path.iter();
+    while let Some(component) = components.next() {
+        if Path::new(component)
+            .extension()
+            .is_some_and(|extension| extension == "data")
+            && components
+                .clone()
+                .next()
+                .is_some_and(|component| component == "scripts")
+        {
+            return true;
+        }
+    }
+    match prefix {
+        [0x7f, b'E', b'L', b'F', ..]
+        | [b'M', b'Z', ..]
+        | [b'#', b'!', ..]
+        | [0xfe, 0xed, 0xfa, 0xce | 0xcf, ..]
+        | [0xce | 0xcf, 0xfa, 0xed, 0xfe, ..] => true,
+        // Fat Mach-O binaries share their magic with Java class files. Check the architecture
+        // count so an ordinary Java version header does not match.
+        [0xca, 0xfe, 0xba, 0xbe | 0xbf, a, b, c, d] => {
+            (1..=32).contains(&u32::from_be_bytes([a, b, c, d]))
+        }
+        [0xbe | 0xbf, 0xba, 0xfe, 0xca, a, b, c, d] => {
+            (1..=32).contains(&u32::from_le_bytes([a, b, c, d]))
+        }
+        _ => false,
+    }
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct LocalHeaderEntry {
@@ -65,7 +109,15 @@ pub async fn unzip<R: tokio::io::AsyncRead + Unpin>(
     reader: R,
     target: impl AsRef<Path>,
 ) -> Result<Vec<UnhashedFile>, Error> {
-    let UnzipOutput::Unhashed(files) = Box::pin(unzip_inner(reader, target, false)).await? else {
+    let UnzipOutput::Unhashed(files) = Box::pin(unzip_inner(
+        reader,
+        target,
+        false,
+        &mut FxHashSet::default(),
+        |_| ready(Ok(())),
+    ))
+    .await?
+    else {
         return Err(Error::Io(std::io::Error::other(
             "streaming ZIP hash tree was unexpectedly computed",
         )));
@@ -80,24 +132,48 @@ pub async fn unzip<R: tokio::io::AsyncRead + Unpin>(
 /// followed as symlinks; non-directory entries are materialized and hashed as regular files.
 ///
 /// See [`unzip`] for details.
-pub async fn unzip_and_hash<R: tokio::io::AsyncRead + Unpin>(
+/// Executable permissions are recorded in the returned files instead of being applied on disk.
+///
+/// Reports completed files to `on_file` after validating their local headers and data descriptors,
+/// except for likely executables, whose paths are returned separately. This is only a heuristic:
+/// reported files can still turn out to be executable when we read the central directory.
+///
+/// All files remain non-executable on disk. The caller must finish publication work before applying
+/// the returned permissions, and detach any reported files before changing their permissions.
+/// The remaining ZIP can still fail after files have been reported.
+pub async fn unzip_and_hash<R, F, Fut>(
     reader: R,
     target: impl AsRef<Path>,
-) -> Result<(Vec<HashedFile>, DirhashTree), Error> {
-    let UnzipOutput::Hashed { files, tree } = Box::pin(unzip_inner(reader, target, true)).await?
+    on_file: F,
+) -> Result<(Vec<HashedFile>, DirhashTree, FxHashSet<PathBuf>), Error>
+where
+    R: tokio::io::AsyncRead + Unpin,
+    F: FnMut(HashedFile) -> Fut,
+    Fut: Future<Output = io::Result<()>>,
+{
+    let mut deferred = FxHashSet::default();
+    let UnzipOutput::Hashed { files, tree } =
+        Box::pin(unzip_inner(reader, target, true, &mut deferred, on_file)).await?
     else {
         return Err(Error::Io(std::io::Error::other(
             "streaming ZIP hash tree was not computed",
         )));
     };
-    Ok((files, tree))
+    Ok((files, tree, deferred))
 }
 
-async fn unzip_inner<R: tokio::io::AsyncRead + Unpin>(
+async fn unzip_inner<R, F, Fut>(
     reader: R,
     target: impl AsRef<Path>,
     hash_contents: bool,
-) -> Result<UnzipOutput, Error> {
+    deferred: &mut FxHashSet<PathBuf>,
+    mut on_file: F,
+) -> Result<UnzipOutput, Error>
+where
+    R: tokio::io::AsyncRead + Unpin,
+    F: FnMut(HashedFile) -> Fut,
+    Fut: Future<Output = io::Result<()>>,
+{
     // Determine whether ZIP validation is disabled.
     let skip_validation = insecure_no_validate();
 
@@ -215,9 +291,13 @@ async fn unzip_inner<R: tokio::io::AsyncRead + Unpin>(
                         };
                         let mut reader = entry.reader_mut().compat();
                         let (bytes_read, digest) = if hash_contents {
-                            let (bytes_read, digest) = blake3_copy(&mut reader, &mut writer)
-                                .await
-                                .map_err(Error::io_or_zip)?;
+                            let (bytes_read, digest, prefix) =
+                                blake3_copy_with_prefix(&mut reader, &mut writer)
+                                    .await
+                                    .map_err(Error::io_or_zip)?;
+                            if defer_publication(relpath.as_path(), prefix) {
+                                deferred.insert(relpath.to_path_buf());
+                            }
                             (bytes_read, Some(digest))
                         } else {
                             let mut bytes_read = 0;
@@ -244,6 +324,13 @@ async fn unzip_inner<R: tokio::io::AsyncRead + Unpin>(
                         (bytes_read, digest, reader)
                     }
                     Err(err) if err.kind() == std::io::ErrorKind::AlreadyExists => {
+                        // Different spellings can alias on a case-insensitive filesystem. The
+                        // existing inode may already be shared with the file store.
+                        if hash_contents {
+                            return Err(Error::DuplicateOutputPath {
+                                path: relpath.to_path_buf(),
+                            });
+                        }
                         debug!(
                             "Found duplicate local file header for: {}",
                             relpath.as_path().display()
@@ -377,6 +464,19 @@ async fn unzip_inner<R: tokio::io::AsyncRead + Unpin>(
                     });
                 }
             }
+        }
+
+        if let Some(digest) = computed.digest
+            && !deferred.contains(relpath.as_path())
+        {
+            on_file(HashedFile::new(
+                relpath.clone(),
+                computed.uncompressed_size,
+                digest,
+                false,
+            ))
+            .await
+            .map_err(Error::Io)?;
         }
 
         // Store the offset, for validation, and error if we see a duplicate file.
@@ -563,7 +663,7 @@ async fn unzip_inner<R: tokio::io::AsyncRead + Unpin>(
                     // The executable bit is the only permission we preserve, otherwise we use the OS defaults.
                     // https://github.com/pypa/pip/blob/3898741e29b7279e7bffe044ecfbe20f6a438b1e/src/pip/_internal/utils/unpacking.py#L88-L100
                     let has_any_executable_bit = mode & 0o111;
-                    if has_any_executable_bit != 0 {
+                    if has_any_executable_bit != 0 && !hash_contents {
                         let path = target.join(relpath.as_path());
                         let permissions = fs_err::tokio::metadata(&path)
                             .await
@@ -892,5 +992,113 @@ pub async fn archive<R: tokio::io::AsyncRead + Unpin>(
             untar_zst(reader, target).await
         }
         SourceDistExtension::Legacy(_) => Err(Error::UnsupportedCompression),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::future::ready;
+    use std::path::Path;
+
+    use async_zip::base::write::ZipFileWriter;
+    use async_zip::{Compression, ZipEntryBuilder};
+
+    #[test]
+    fn executable_publication_hints() {
+        for (path, prefix, expected) in [
+            ("module.py", b"print(42", false),
+            ("script", b"#!python", true),
+            ("native", b"\x7fELF1234", true),
+            ("native", b"MZ123456", true),
+            ("native", b"\xcf\xfa\xed\xfe\x07\0\0\0", true),
+            ("native", b"\xfe\xed\xfa\xce\0\0\0\x07", true),
+            ("native", b"\xca\xfe\xba\xbe\0\0\0\x02", true),
+            ("native", b"\xbf\xba\xfe\xca\x02\0\0\0", true),
+            ("Java.class", b"\xca\xfe\xba\xbe\0\0\0\x34", false),
+            ("demo.data/scripts/plain", b"plaintex", true),
+            ("demo.data/scripts-extra/plain", b"plaintex", false),
+            ("demo.data/data/scripts/plain", b"plaintex", false),
+            ("plain.exe", b"plaintex", cfg!(windows)),
+        ] {
+            assert_eq!(
+                super::defer_publication(Path::new(path), *prefix),
+                expected,
+                "{path}: {prefix:?}"
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn deferred_files_retain_their_actual_modes() -> anyhow::Result<()> {
+        let mut archive = ZipFileWriter::new(Vec::new());
+        for (name, contents, mode) in [
+            ("native", &b"\x7fELFnative"[..], 0o755),
+            ("library", &b"\x7fELFnative"[..], 0o644),
+            ("demo.data/scripts/plain", &b"plain"[..], 0o755),
+            ("missed.py", &b"print(42)"[..], 0o755),
+        ] {
+            archive
+                .write_entry_whole(
+                    ZipEntryBuilder::new(name.into(), Compression::Deflate).unix_permissions(mode),
+                    contents,
+                )
+                .await?;
+        }
+        let contents = archive.close().await?;
+        let target = tempfile::tempdir()?;
+        let mut reported = Vec::new();
+        let (files, _, deferred) =
+            super::unzip_and_hash(contents.as_slice(), target.path(), |file| {
+                reported.push(file.path().to_path_buf());
+                assert!(!file.is_executable());
+                ready(Ok(()))
+            })
+            .await?;
+        assert_eq!(reported, [Path::new("missed.py")]);
+        assert_eq!(deferred.len(), 3);
+        for file in &files {
+            assert_eq!(
+                deferred.contains(file.path()),
+                file.path() != Path::new("missed.py")
+            );
+            assert_eq!(file.is_executable(), file.path() != Path::new("library"));
+        }
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn aliased_output_does_not_modify_shared_files() -> anyhow::Result<()> {
+        let mut archive = ZipFileWriter::new(Vec::new());
+        for (name, mode) in [("file", 0o644), ("FILE", 0o755)] {
+            archive
+                .write_entry_whole(
+                    ZipEntryBuilder::new(name.into(), Compression::Deflate).unix_permissions(mode),
+                    b"same contents",
+                )
+                .await?;
+        }
+        let contents = archive.close().await?;
+        let target = tempfile::tempdir()?;
+        let store = tempfile::tempdir()?;
+        let shared = store.path().join("file");
+        let extraction = super::unzip_and_hash(contents.as_slice(), target.path(), |file| {
+            let source = target.path().join(file.path());
+            let alias = target.path().join("FILE");
+            let shared = &shared;
+            async move {
+                // Create the alias explicitly to exercise this on case-sensitive filesystems too.
+                if !alias.exists() {
+                    fs_err::tokio::hard_link(&source, &alias).await?;
+                }
+                fs_err::tokio::hard_link(&source, shared).await
+            }
+        })
+        .await;
+        assert!(matches!(
+            extraction,
+            Err(crate::Error::DuplicateOutputPath { .. })
+        ));
+        assert_eq!(fs_err::read(&shared)?, b"same contents");
+        Ok(())
     }
 }
