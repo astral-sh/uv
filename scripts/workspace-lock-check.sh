@@ -17,4 +17,4 @@ fi
 uv lock "$@"
 
 # All PEP 723 script lockfiles
-uv workspace list --scripts | xargs -I {} uv lock --script {} "$@"
+uv workspace list --scripts | xargs -P4 -I {} uv lock --script {} "$@"
