@@ -14,7 +14,7 @@ use tokio::sync::{Mutex, Semaphore};
 use tracing::{Instrument, debug, info_span, instrument, trace, warn};
 use url::Url;
 
-use uv_auth::{CredentialsCache, Indexes};
+use uv_auth::{CredentialsCache, Indexes, RealmRef};
 use uv_cache::{Cache, CacheBucket, CacheEntry, WheelCache};
 use uv_configuration::IndexStrategy;
 use uv_configuration::KeyringProviderType;
@@ -1142,11 +1142,16 @@ impl RegistryClient {
             // fetch the file from the remote zip.
             let read_metadata_range_request = |response: Response| {
                 async {
+                    let response_url = DisplaySafeUrl::from_url(response.url().clone());
+                    let mut range_headers = headers.clone();
+                    if RealmRef::from(&**url) != RealmRef::from(&*response_url) {
+                        range_headers.remove(reqwest::header::AUTHORIZATION);
+                    }
                     let mut reader = AsyncHttpRangeReader::from_head_response(
-                        self.uncached_client(url).clone(),
+                        self.uncached_client(&response_url).clone(),
                         response,
-                        Url::from(url.clone()),
-                        headers.clone(),
+                        Url::from(response_url),
+                        range_headers,
                     )
                     .await
                     .map_err(|err| ErrorKind::AsyncHttpRangeReader(url.clone(), err))?;
