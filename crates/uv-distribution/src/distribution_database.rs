@@ -25,7 +25,7 @@ use uv_distribution_types::{
 };
 use uv_extract::dirhash::{DirectoryDigest, DirhashTree, dirhash_path};
 use uv_extract::hash::Hasher;
-use uv_fs::{PortablePath, write_atomic};
+use uv_fs::{LockedFile, PortablePath, write_atomic};
 use uv_git::{GIT_LFS, GitError};
 use uv_install_wheel::validate_and_heal_record;
 use uv_platform_tags::Tags;
@@ -115,6 +115,31 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         } else {
             io::Error::other(err)
         }
+    }
+
+    /// Acquire an advisory lock for a remote wheel cache entry.
+    ///
+    /// The wheel's content hash is not always available until after the download, so concurrent
+    /// cache fills coordinate on the wheel cache entry instead. The entry is already scoped by
+    /// the index or direct URL, package name, version, and wheel tags.
+    ///
+    /// Callers hold the returned lock across cache lookup, download, and publication. A process
+    /// that waited for another download therefore rechecks and reuses the completed cache entry.
+    async fn lock_remote_wheel(
+        wheel_entry: &CacheEntry,
+        filename: &WheelFilename,
+    ) -> Result<LockedFile, Error> {
+        // For backwards compatibility, we use the full wheel stem on Windows. Local wheel
+        // extraction and older uv versions use the same key, so changing it would prevent them
+        // from coordinating through a shared cache.
+        #[cfg(windows)]
+        let lock_key = filename.stem();
+        // On other platforms, we use the bounded cache key to avoid filesystem filename limits.
+        #[cfg(not(windows))]
+        let lock_key = filename.cache_key();
+
+        let lock_entry = wheel_entry.with_file(format!("{lock_key}.lock"));
+        lock_entry.lock().await.map_err(Error::CacheLock)
     }
 
     /// Either fetch the wheel or fetch and build the source distribution
@@ -669,11 +694,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         };
 
         // Acquire an advisory lock, to guard against concurrent writes.
-        #[cfg(windows)]
-        let _lock = {
-            let lock_entry = wheel_entry.with_file(format!("{}.lock", filename.stem()));
-            lock_entry.lock().await.map_err(Error::CacheLock)?
-        };
+        let _lock = Self::lock_remote_wheel(wheel_entry, filename).await?;
 
         // Create an entry for the HTTP cache.
         let http_entry = wheel_entry.with_file(format!("{}.http", filename.cache_key()));
@@ -858,11 +879,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         let content_addressed_cache = self.content_addressed_cache;
 
         // Acquire an advisory lock, to guard against concurrent writes.
-        #[cfg(windows)]
-        let _lock = {
-            let lock_entry = wheel_entry.with_file(format!("{}.lock", filename.stem()));
-            lock_entry.lock().await.map_err(Error::CacheLock)?
-        };
+        let _lock = Self::lock_remote_wheel(wheel_entry, filename).await?;
 
         // Create an entry for the HTTP cache.
         let http_entry = wheel_entry.with_file(format!("{}.http", filename.cache_key()));
