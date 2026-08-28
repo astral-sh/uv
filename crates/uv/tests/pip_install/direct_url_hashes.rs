@@ -78,6 +78,7 @@ impl TestContext {
             ],
         )?;
         let source_hash = hex::encode(Sha256::digest(fs::read(source.path())?));
+        let inner = inner.with_filter((source_hash.clone(), "[SOURCE_HASH]"));
         let source_url =
             Url::from_file_path(source.path()).expect("source path is an absolute path");
         let dependency = format!("ok @ {source_url}#sha256={source_hash}").parse()?;
@@ -126,9 +127,7 @@ impl TestContext {
     }
 
     fn filters(&self) -> Vec<(&str, &str)> {
-        let mut filters = self.inner.filters();
-        filters.push((&self.source_hash, "[SOURCE_HASH]"));
-        filters
+        self.inner.filters()
     }
 
     fn write_child_requirement(&self) -> Result<()> {
