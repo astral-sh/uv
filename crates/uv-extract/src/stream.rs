@@ -1,3 +1,5 @@
+use std::future::{Future, ready};
+use std::io;
 use std::path::{Path, PathBuf};
 use std::pin::Pin;
 
@@ -65,7 +67,9 @@ pub async fn unzip<R: tokio::io::AsyncRead + Unpin>(
     reader: R,
     target: impl AsRef<Path>,
 ) -> Result<Vec<UnhashedFile>, Error> {
-    let UnzipOutput::Unhashed(files) = Box::pin(unzip_inner(reader, target, false)).await? else {
+    let UnzipOutput::Unhashed(files) =
+        Box::pin(unzip_inner(reader, target, false, |_| ready(Ok(())))).await?
+    else {
         return Err(Error::Io(std::io::Error::other(
             "streaming ZIP hash tree was unexpectedly computed",
         )));
@@ -85,7 +89,24 @@ pub async fn unzip_and_hash<R: tokio::io::AsyncRead + Unpin>(
     reader: R,
     target: impl AsRef<Path>,
 ) -> Result<(Vec<HashedFile>, DirhashTree), Error> {
-    let UnzipOutput::Hashed { files, tree } = Box::pin(unzip_inner(reader, target, true)).await?
+    unzip_and_hash_with_callback(reader, target, |_| ready(Ok(()))).await
+}
+
+/// Like [`unzip_and_hash`], but report each completed file after validating its local header and
+/// data descriptor. Files are non-executable; their intended executable status is only known in
+/// the returned metadata after validating the central directory. The remaining ZIP can still fail.
+pub async fn unzip_and_hash_with_callback<R, F, Fut>(
+    reader: R,
+    target: impl AsRef<Path>,
+    on_file: F,
+) -> Result<(Vec<HashedFile>, DirhashTree), Error>
+where
+    R: tokio::io::AsyncRead + Unpin,
+    F: FnMut(HashedFile) -> Fut,
+    Fut: Future<Output = io::Result<()>>,
+{
+    let UnzipOutput::Hashed { files, tree } =
+        Box::pin(unzip_inner(reader, target, true, on_file)).await?
     else {
         return Err(Error::Io(std::io::Error::other(
             "streaming ZIP hash tree was not computed",
@@ -94,11 +115,17 @@ pub async fn unzip_and_hash<R: tokio::io::AsyncRead + Unpin>(
     Ok((files, tree))
 }
 
-async fn unzip_inner<R: tokio::io::AsyncRead + Unpin>(
+async fn unzip_inner<R, F, Fut>(
     reader: R,
     target: impl AsRef<Path>,
     hash_contents: bool,
-) -> Result<UnzipOutput, Error> {
+    mut on_file: F,
+) -> Result<UnzipOutput, Error>
+where
+    R: tokio::io::AsyncRead + Unpin,
+    F: FnMut(HashedFile) -> Fut,
+    Fut: Future<Output = io::Result<()>>,
+{
     // Determine whether ZIP validation is disabled.
     let skip_validation = insecure_no_validate();
 
@@ -378,6 +405,17 @@ async fn unzip_inner<R: tokio::io::AsyncRead + Unpin>(
                     });
                 }
             }
+        }
+
+        if let Some(digest) = computed.digest {
+            on_file(HashedFile::new(
+                relpath.clone(),
+                computed.uncompressed_size,
+                digest,
+                false,
+            ))
+            .await
+            .map_err(Error::Io)?;
         }
 
         // Store the offset, for validation, and error if we see a duplicate file.
@@ -893,5 +931,76 @@ pub async fn archive<R: tokio::io::AsyncRead + Unpin>(
             untar_zst(reader, target).await
         }
         SourceDistExtension::Legacy(_) => Err(Error::UnsupportedCompression),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::future::ready;
+    use std::io;
+    use std::path::Path;
+    use std::time::Duration;
+
+    use async_zip::base::write::ZipFileWriter;
+    use async_zip::{Compression, ZipEntryBuilder};
+    use tokio::io::AsyncWriteExt;
+    use tokio::sync::oneshot;
+
+    #[tokio::test]
+    async fn reports_completed_file_before_next_payload() -> anyhow::Result<()> {
+        let mut archive = ZipFileWriter::new(Vec::new());
+        archive
+            .write_entry_whole(
+                ZipEntryBuilder::new("first".into(), Compression::Deflate).unix_permissions(0o755),
+                b"first payload",
+            )
+            .await?;
+        let boundary = archive.inner_mut().len();
+        archive
+            .write_entry_whole(
+                ZipEntryBuilder::new("second".into(), Compression::Deflate),
+                b"second payload",
+            )
+            .await?;
+        let contents = archive.close().await?;
+        let target = tempfile::tempdir()?;
+        let (reader, mut writer) = tokio::io::duplex(64);
+        let (sender, receiver) = oneshot::channel();
+        let mut sender = Some(sender);
+        let download = async {
+            writer.write_all(&contents[..boundary]).await?;
+            // Do not send the next entry until extraction reports the first completed file.
+            receiver.await.map_err(io::Error::other)?;
+            writer.write_all(&contents[boundary..]).await?;
+            writer.shutdown().await?;
+            Ok::<_, io::Error>(())
+        };
+        let extraction = super::unzip_and_hash_with_callback(reader, target.path(), |file| {
+            assert!(!file.is_executable());
+            if file.path() == Path::new("first")
+                && let Some(sender) = sender.take()
+            {
+                assert!(!target.path().join("second").exists());
+                let _ = sender.send(());
+            }
+            ready(Ok(()))
+        });
+        let (download, extraction) = tokio::time::timeout(Duration::from_secs(10), async {
+            tokio::join!(download, extraction)
+        })
+        .await?;
+        download?;
+        let (files, _) = extraction?;
+        assert_eq!(files.len(), 2);
+        assert!(
+            files
+                .iter()
+                .any(|file| file.path() == Path::new("first") && file.is_executable())
+        );
+        assert_eq!(
+            fs_err::read(target.path().join("second"))?,
+            b"second payload"
+        );
+        Ok(())
     }
 }
