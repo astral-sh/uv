@@ -111,9 +111,15 @@ impl HashedFile {
         self.executable
     }
 
-    /// Return the hex-encoded content digest of the extracted file.
-    pub fn digest_hex(&self) -> String {
-        self.digest.to_hex().to_string()
+    /// Return a hex-encoded digest of the file's contents and executable status.
+    ///
+    /// This identifies shared file objects without changing the content digest used in directory
+    /// hashes.
+    pub fn object_digest_hex(&self) -> String {
+        let mut hasher = blake3::Hasher::new_derive_key("uv archive file v0");
+        hasher.update(self.digest.as_bytes());
+        hasher.update(&[u8::from(self.is_executable())]);
+        hasher.finalize().to_hex().to_string()
     }
 
     /// Return the size of the extracted file in bytes.
