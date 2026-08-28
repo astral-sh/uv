@@ -262,7 +262,7 @@ tempfile = { version = "3.14.0" }
 terminal_size = { version = "0.4.2" }
 textwrap = { version = "0.16.1" }
 thiserror = { version = "2.0.0" }
-astral-tl = { version = "0.7.11" }
+astral-tl = { version = "0.8.0" }
 tokio = { version = "1.40.0", features = [
   "fs",
   "io-util",
