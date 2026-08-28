@@ -138,16 +138,6 @@ impl TestContext {
         Ok(requirements_txt)
     }
 
-    /// Write the direct URL dependency and its hash to a requirements file.
-    fn write_child_requirement(&self) -> Result<ChildPath> {
-        let child_txt = self.inner.temp_dir.child("child.txt");
-        child_txt.write_str(&format!(
-            "ok @ {}#sha256={}\n",
-            self.source_url, self.source_hash
-        ))?;
-        Ok(child_txt)
-    }
-
     /// Assert that the direct URL dependency's backend ran and both packages were installed.
     fn assert_backend_ran(&self) {
         self.backend_marker.assert(predicate::path::is_file());
@@ -190,6 +180,11 @@ async fn require_hashes_rejects_direct_url_hash_discovered_in_wheel_metadata() -
 async fn require_hashes_accepts_direct_url_hash_from_explicit_requirement() -> Result<()> {
     let context = TestContext::new().await?;
     let requirements_txt = context.write_parent_requirement()?;
+    let child_txt = context.inner.temp_dir.child("child.txt");
+    child_txt.write_str(&format!(
+        "ok @ {}#sha256={}\n",
+        context.source_url, context.source_hash
+    ))?;
 
     uv_snapshot!(context.filters(), context.inner.pip_install()
         .arg("-r")
@@ -197,7 +192,7 @@ async fn require_hashes_accepts_direct_url_hash_from_explicit_requirement() -> R
         .arg("--no-index")
         .arg("--require-hashes")
         .arg("--requirement")
-        .arg(context.write_child_requirement()?.path()), @"
+        .arg(child_txt.path()), @"
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
@@ -217,6 +212,11 @@ async fn require_hashes_accepts_direct_url_hash_from_explicit_requirement() -> R
 async fn require_hashes_accepts_direct_url_hash_from_constraint() -> Result<()> {
     let context = TestContext::new().await?;
     let requirements_txt = context.write_parent_requirement()?;
+    let child_txt = context.inner.temp_dir.child("child.txt");
+    child_txt.write_str(&format!(
+        "ok @ {}#sha256={}\n",
+        context.source_url, context.source_hash
+    ))?;
 
     uv_snapshot!(context.filters(), context.inner.pip_install()
         .arg("-r")
@@ -224,7 +224,7 @@ async fn require_hashes_accepts_direct_url_hash_from_constraint() -> Result<()> 
         .arg("--no-index")
         .arg("--require-hashes")
         .arg("--constraint")
-        .arg(context.write_child_requirement()?.path()), @"
+        .arg(child_txt.path()), @"
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
