@@ -466,6 +466,9 @@ pub enum ErrorKind {
     #[error("Failed to read zip with range requests: `{0}`")]
     AsyncHttpRangeReader(DisplaySafeUrl, #[source] AsyncHttpRangeReaderError),
 
+    #[error("Wheel metadata range requests are required, but not supported for: `{0}`")]
+    MetadataRangeRequestsRequired(DisplaySafeUrl, #[source] Box<Error>),
+
     #[error("{0} is not a valid wheel filename")]
     WheelFilename(#[source] WheelFilenameError),
 

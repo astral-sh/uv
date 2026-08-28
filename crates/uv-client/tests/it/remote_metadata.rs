@@ -49,3 +49,43 @@ async fn remote_metadata_with_and_without_cache() -> Result<()> {
 
     Ok(())
 }
+
+#[tokio::test]
+async fn remote_metadata_requires_range_requests() -> Result<()> {
+    let server = MockServer::start().await;
+    let wheel = fs_err::read(
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../test/links/ok-1.0.0-py3-none-any.whl"),
+    )?;
+    Mock::given(method("GET"))
+        .and(path("/ok-1.0.0-py3-none-any.whl"))
+        .respond_with(ResponseTemplate::new(200).set_body_raw(wheel, "application/octet-stream"))
+        .mount(&server)
+        .await;
+
+    let cache = Cache::temp()?.init().await?;
+    let client = RegistryClientBuilder::new(BaseClientBuilder::default(), cache)
+        .require_metadata_range_requests(true)
+        .build()?;
+
+    let url = format!("{}/ok-1.0.0-py3-none-any.whl", server.uri());
+    let filename = WheelFilename::from_str("ok-1.0.0-py3-none-any.whl")?;
+    let dist = BuiltDist::DirectUrl(DirectUrlBuiltDist {
+        filename,
+        location: Box::new(DisplaySafeUrl::parse(&url)?),
+        url: VerbatimUrl::from_str(&url)?,
+        size: None,
+    });
+    let resolver = GitResolver::default();
+    let capabilities = IndexCapabilities::default();
+    let error = client
+        .wheel_metadata(&dist, &resolver, &capabilities, None)
+        .await
+        .expect_err("range requests should be required");
+
+    insta::assert_snapshot!(
+        error.to_string().replace(&server.uri(), "[HOST]"),
+        @"Wheel metadata range requests are required, but not supported for: `[HOST]/ok-1.0.0-py3-none-any.whl`"
+    );
+
+    Ok(())
+}

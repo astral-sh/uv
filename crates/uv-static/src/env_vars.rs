@@ -141,6 +141,13 @@ impl EnvVars {
     #[attr_added_in("0.1.34")]
     pub const UV_REQUIRE_HASHES: &'static str = "UV_REQUIRE_HASHES";
 
+    /// Require wheel metadata to be fetched with HTTP range requests when separate metadata is
+    /// unavailable. If set to `true`, uv will fail instead of downloading the entire wheel.
+    #[attr_hidden]
+    #[attr_added_in("next release")]
+    pub const UV_REQUIRE_METADATA_RANGE_REQUESTS: &'static str =
+        "UV_REQUIRE_METADATA_RANGE_REQUESTS";
+
     /// Equivalent to the `--constraints` command-line argument. If set, uv will use this
     /// file as the constraints file. Uses space-separated list of files.
     #[attr_added_in("0.1.36")]
