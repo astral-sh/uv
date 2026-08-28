@@ -774,7 +774,7 @@ async fn untar_in_tokio_tar(
         // Collect file paths (excluding directories) that were unpacked successfully.
         if unpacked_at.is_some() && (entry_type.is_file() || entry_type.is_hard_link()) {
             let relpath = file.path()?.into_owned();
-            let size = file.header().size()?;
+            let size = file.effective_size();
             files.push((relpath, size));
         }
 
