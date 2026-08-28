@@ -8892,7 +8892,7 @@ fn lock_relative_transitive_archive_paths() -> Result<()> {
 
 /// Preserve local path intent across configured, workspace, and backend metadata.
 ///
-/// Note: Currently broken: configured paths are overridden and inactive paths stay absolute.
+/// Note: Currently broken: backend paths stay absolute and override the configured source.
 #[test]
 fn lock_relative_inactive_dependency_metadata_paths() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -9045,6 +9045,8 @@ fn lock_relative_inactive_dependency_metadata_paths() -> Result<()> {
 
     let lock = context.read("uv.lock");
     let diff = diff_snapshot(&baseline_lock, &lock, 3);
+
+    // Explicit absolute inputs, including inactive requirements, must stay absolute.
     insta::with_settings!({
         filters => context.filters(),
     }, {
@@ -9132,7 +9134,8 @@ fn lock_relative_inactive_dependency_metadata_paths() -> Result<()> {
     let new_lock = context.read("uv.lock");
     let diff = diff_snapshot(&lock, &new_lock, 3);
 
-    // Preserve configured and workspace paths while making backend paths and aliases relative.
+    // Keep the configured `relative-child` source unchanged. Backend requirements should use
+    // `relative-child-alias` and `child`, both relative to the lockfile.
     insta::with_settings!({
         filters => context.filters(),
     }, {
