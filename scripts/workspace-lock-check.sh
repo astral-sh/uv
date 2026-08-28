@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 
 # workspace-lock-check.sh: checks our project lockfile
 # plus all workspace script lockfiles.
