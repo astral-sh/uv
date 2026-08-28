@@ -666,13 +666,13 @@ impl Cache {
                     Err(err) => return Err(err),
                 }
             } else if entry.file_type().is_dir() {
-                directories.push(entry.path().to_path_buf());
                 if let Some(files) = uv_fs::single_link_files(entry.path())? {
                     entries.skip_current_dir();
                     for file in files {
                         summary += self.remove_path(file)?;
                     }
                 }
+                directories.push(entry.into_path());
             }
         }
         for directory in directories.into_iter().rev() {
