@@ -1,6 +1,6 @@
 //! Content-addressed identities for extracted wheel archives.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use super::{DirhashError, DirhashTree};
 use crate::archive_path::SanitizedArchivePath;
@@ -8,6 +8,15 @@ use crate::archive_path::SanitizedArchivePath;
 const DIRECTORY_DIGEST_LENGTH: usize = 24;
 const BASE36_ALPHABET: &[u8; 36] = b"0123456789abcdefghijklmnopqrstuvwxyz";
 const BASE36_RADIX: u16 = 36;
+
+/// Files extracted with or without content hashes.
+pub(crate) enum UnzipOutput {
+    Unhashed(Vec<UnhashedFile>),
+    Hashed {
+        files: Vec<HashedFile>,
+        tree: DirhashTree,
+    },
+}
 
 /// A path-safe encoding of the directory hash of an extracted wheel.
 ///
@@ -39,33 +48,83 @@ impl From<DirectoryDigest> for String {
     }
 }
 
-/// A file extracted from an archive, along with its content-addressing metadata.
+/// The path and size of an extracted file, without a content hash.
 #[derive(Debug, Clone, Eq, PartialEq)]
-pub(crate) struct ExtractedFile {
-    path: SanitizedArchivePath,
+pub struct UnhashedFile {
+    path: PathBuf,
     size: u64,
-    digest: blake3::Hash,
 }
 
-impl ExtractedFile {
-    pub(crate) fn new(path: SanitizedArchivePath, size: u64, digest: blake3::Hash) -> Self {
-        Self { path, size, digest }
+impl UnhashedFile {
+    pub(crate) fn new(path: PathBuf, size: u64) -> Self {
+        Self { path, size }
     }
 
     /// Return the path of the extracted file within the archive.
-    pub(crate) fn path(&self) -> &SanitizedArchivePath {
+    pub fn path(&self) -> &Path {
         &self.path
     }
 
-    /// Convert the extracted file into a `(path, size)` pair.
-    pub(crate) fn into_record(self) -> (PathBuf, u64) {
-        (self.path.into_path_buf(), self.size)
+    /// Return the size of the extracted file in bytes.
+    pub fn size(&self) -> u64 {
+        self.size
+    }
+}
+
+/// A file extracted from an archive, along with its content-addressing metadata.
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub struct HashedFile {
+    path: SanitizedArchivePath,
+    size: u64,
+    digest: blake3::Hash,
+    executable: bool,
+}
+
+impl HashedFile {
+    pub(crate) fn new(
+        path: SanitizedArchivePath,
+        size: u64,
+        digest: blake3::Hash,
+        executable: bool,
+    ) -> Self {
+        let executable = executable
+            || (cfg!(windows)
+                && path
+                    .as_path()
+                    .extension()
+                    .is_some_and(|extension| extension.eq_ignore_ascii_case("exe")));
+        Self {
+            path,
+            size,
+            digest,
+            executable,
+        }
+    }
+
+    /// Return the path of the extracted file within the archive.
+    pub fn path(&self) -> &Path {
+        self.path.as_path()
+    }
+
+    /// Return whether the archive marks this file executable, or it is a Windows executable.
+    pub fn is_executable(&self) -> bool {
+        self.executable
+    }
+
+    /// Return the hex-encoded content digest of the extracted file.
+    pub fn digest_hex(&self) -> String {
+        self.digest.to_hex().to_string()
+    }
+
+    /// Return the size of the extracted file in bytes.
+    pub fn size(&self) -> u64 {
+        self.size
     }
 }
 
 /// Build the shared directory hash tree from extracted file and directory entries.
 pub(crate) fn directory_tree_from_extracted<'a>(
-    files: &[ExtractedFile],
+    files: &[HashedFile],
     directories: impl IntoIterator<Item = &'a SanitizedArchivePath>,
 ) -> Result<DirhashTree, DirhashError> {
     let mut tree = DirhashTree::default();
@@ -78,7 +137,7 @@ pub(crate) fn directory_tree_from_extracted<'a>(
     }
 
     for file in files {
-        tree.add_file(&digest_path(file.path()), file.digest)?;
+        tree.add_file(&digest_path(&file.path), file.digest)?;
     }
 
     Ok(tree)
@@ -121,7 +180,7 @@ mod tests {
     use crate::archive_path::SanitizedArchivePath;
 
     use super::{
-        DIRECTORY_DIGEST_LENGTH, DirectoryDigest, ExtractedFile, digest_path,
+        DIRECTORY_DIGEST_LENGTH, DirectoryDigest, HashedFile, digest_path,
         directory_tree_from_extracted,
     };
 
@@ -133,8 +192,8 @@ mod tests {
 
         let tree = directory_tree_from_extracted(
             &[
-                ExtractedFile::new(a, 5, blake3::hash(b"hello")),
-                ExtractedFile::new(c, 7, blake3::hash(b"goodbye")),
+                HashedFile::new(a, 5, blake3::hash(b"hello"), false),
+                HashedFile::new(c, 7, blake3::hash(b"goodbye"), false),
             ],
             [&directory],
         )
@@ -149,6 +208,20 @@ mod tests {
                 .bytes()
                 .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit())
         );
+        Ok(())
+    }
+
+    #[test]
+    fn extracted_file_executable_status() -> Result<(), Error> {
+        for (name, executable, expected) in [
+            ("tool", true, true),
+            ("data", false, false),
+            ("tool.EXE", false, cfg!(windows)),
+        ] {
+            let path = SanitizedArchivePath::from_archive_member(name)?.expect("valid path");
+            let file = HashedFile::new(path, 1, blake3::hash(b"x"), executable);
+            assert_eq!(file.is_executable(), expected);
+        }
         Ok(())
     }
 
