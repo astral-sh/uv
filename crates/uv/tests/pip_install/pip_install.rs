@@ -16642,7 +16642,25 @@ async fn all_files_except_record_use_archive_file_store() -> Result<()> {
 
         let objects = cache_files(context.cache_dir.child("files-v0").path())?;
         // Identical contents still need separate executable and non-executable objects.
-        assert_eq!(objects.len(), 7);
+        let mut snapshot = String::new();
+        for object in &objects {
+            writeln!(
+                snapshot,
+                "{}",
+                PortablePath::from(object.strip_prefix(context.cache_dir.path())?)
+            )?;
+        }
+        allow_duplicates! {
+            assert_snapshot!(snapshot, @"
+            files-v0/0c/0c8d68fa16e023b913e926be9b281c5a133c33291b3e60a54c310376f5602a45
+            files-v0/2f/2f4d468b80be8a639ba0bdcfc738be8d912c35dd686a1eb15272e8f56096358c
+            files-v0/4a/4a3f63865c29c673794f181932bc0e2c4779275f22e03a896d3d6ca3ac447332
+            files-v0/80/8043c55c494befd8bb44cf59c112ae6a944da98d04b550ff4fd055e2ebfabeb8
+            files-v0/92/920a0fbc7cd79a94ab2adabfaa8b93804bf6e3e858c454d45958cc9902554248
+            files-v0/bf/bf13d7b1c373edcb8588b94aae048664a6684f665fa4a7e8cd814360e537a049
+            files-v0/fa/fad1ac6fba02614a6ee120fbb397cd676f48c101afee95ab29d146c76df03596
+            ");
+        }
         let archive = fs_err::read_dir(context.cache_dir.child("archive-v0").path())?
             .next()
             .transpose()?
