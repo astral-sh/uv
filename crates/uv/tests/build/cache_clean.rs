@@ -461,16 +461,30 @@ fn clean_package_does_not_follow_symlinks() -> Result<()> {
     fs_err::os::unix::fs::symlink(&victim_dir, package_entry.join("escape"))?;
     fs_err::os::unix::fs::symlink(&archive_entry, package_entry.join("archive"))?;
 
-    uv_snapshot!(context.filters(), context.clean().arg("demo"), @"
+    let files = context.cache_dir.child("files-v0");
+    let shard = files.child("shard");
+    shard.child("orphan").write_str("orphan")?;
+    shard
+        .child("nested")
+        .child("orphan")
+        .write_str("nested orphan")?;
+    fs_err::os::unix::fs::symlink(&victim_dir, files.child("escape"))?;
+    fs_err::os::unix::fs::symlink(&victim_dir, shard.child("escape"))?;
+
+    uv_snapshot!(context.filters(), context.clean().args(["demo", "other"]), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Removed 3 files ([SIZE])
+    Removed 5 files ([SIZE])
     ");
 
     assert!(victim_dir.is_dir());
     assert!(victim_dir.child("payload.txt").is_file());
     assert!(fs_err::symlink_metadata(package_entry).is_err());
     assert!(fs_err::symlink_metadata(archive_entry).is_err());
+    assert!(!shard.child("orphan").exists());
+    assert!(!shard.child("nested").exists());
+    assert!(fs_err::symlink_metadata(files.child("escape"))?.is_symlink());
+    assert!(fs_err::symlink_metadata(shard.child("escape"))?.is_symlink());
 
     Ok(())
 }
