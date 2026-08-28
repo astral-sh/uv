@@ -144,6 +144,23 @@ impl HashStrategy {
         Ok(self)
     }
 
+    /// Return a [`HashStrategy`] augmented with archive URL hashes discovered in distribution
+    /// metadata.
+    ///
+    /// Required-hash verification is intentionally a closed set. In that mode, distribution
+    /// untrusted metadata cannot authorize a requirement that was absent from the input hash set.
+    /// Explicit requirements, such as `build-system.requires` and user-provided metadata, can still
+    /// contribute hashes via [`Self::augment_with_requirements`].
+    pub fn augment_with_metadata_requirements<'a>(
+        self,
+        requirements: impl Iterator<Item = &'a Requirement>,
+    ) -> Result<Self, HashStrategyError> {
+        if matches!(&self.verification, HashVerification::Required(_)) {
+            return Ok(self);
+        }
+        self.augment_with_requirements(requirements)
+    }
+
     /// Generate the required hashes from a set of [`UnresolvedRequirement`] entries.
     ///
     /// When the environment is not given, this treats all marker expressions

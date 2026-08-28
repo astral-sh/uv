@@ -13,7 +13,10 @@ use std::str::FromStr;
 use std::sync::Arc;
 
 use serde_json::json;
-use wiremock::{Request, ResponseTemplate};
+use wiremock::{
+    Mock, MockServer, Request, ResponseTemplate,
+    matchers::{header_exists, method, path},
+};
 
 use uv_distribution_filename::WheelFilename;
 use uv_normalize::PackageName;
@@ -215,7 +218,7 @@ fn handle_request(req: &Request, server_uri: &str, index: &ServerIndex) -> Respo
     if let Some(filename) = path.strip_prefix("/files/") {
         if let Some(file) = index.files.get(filename) {
             return match file.bytes() {
-                Ok(bytes) => build_file_response(req, filename, &bytes),
+                Ok(bytes) => distribution_file_response(req, filename, &bytes),
                 Err(error) => ResponseTemplate::new(500).set_body_string(format!("{error:#}")),
             };
         }
@@ -226,7 +229,7 @@ fn handle_request(req: &Request, server_uri: &str, index: &ServerIndex) -> Respo
 }
 
 /// Build a response for a distribution file, including support for single byte ranges.
-fn build_file_response(req: &Request, filename: &str, bytes: &[u8]) -> ResponseTemplate {
+pub fn distribution_file_response(req: &Request, filename: &str, bytes: &[u8]) -> ResponseTemplate {
     let content_type = content_type_for_filename(filename);
     let Some(range) = req.headers.get("range") else {
         return ResponseTemplate::new(200)
@@ -251,6 +254,46 @@ fn build_file_response(req: &Request, filename: &str, bytes: &[u8]) -> ResponseT
             format!("bytes {start}-{end}/{}", bytes.len()),
         )
         .set_body_raw(bytes[start..=end].to_vec(), content_type)
+}
+
+/// Mount a distribution that serves different bytes to range and full-file requests.
+///
+/// `HEAD` responses advertise range support. Ranged `GET` requests receive the ranged bytes,
+/// while full `GET` requests receive the full-file bytes instead.
+pub async fn mount_mismatched_distribution(
+    server: &MockServer,
+    file_path: &str,
+    filename: &str,
+    ranged_bytes: Vec<u8>,
+    full_bytes: Vec<u8>,
+) {
+    Mock::given(method("HEAD"))
+        .and(path(file_path))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .insert_header("Accept-Ranges", "bytes")
+                .set_body_bytes(ranged_bytes.clone()),
+        )
+        .mount(server)
+        .await;
+
+    let filename = filename.to_string();
+    Mock::given(method("GET"))
+        .and(path(file_path))
+        .and(header_exists("range"))
+        .respond_with(move |request: &Request| {
+            distribution_file_response(request, &filename, &ranged_bytes)
+        })
+        .with_priority(1)
+        .expect(1..)
+        .mount(server)
+        .await;
+
+    Mock::given(method("GET"))
+        .and(path(file_path))
+        .respond_with(ResponseTemplate::new(200).set_body_bytes(full_bytes))
+        .mount(server)
+        .await;
 }
 
 /// Parse a single HTTP byte range and return its inclusive bounds.
@@ -337,10 +380,14 @@ mod tests {
     use anyhow::Result;
     use reqwest::StatusCode;
     use reqwest::header::{ACCEPT_RANGES, CONTENT_RANGE, RANGE};
+    use wiremock::MockServer;
 
     use crate::vendor::vendor_artifacts;
 
-    use super::{PackseServer, Scenario, build_server_index, extract_package_name};
+    use super::{
+        PackseServer, Scenario, build_server_index, extract_package_name,
+        mount_mismatched_distribution,
+    };
 
     #[test]
     fn extract_package_name_accepts_with_or_without_trailing_slash() {
@@ -441,6 +488,38 @@ sdist = false
             response.headers().get(CONTENT_RANGE),
             Some(&format!("bytes */{length}").parse()?)
         );
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn mismatched_distribution_serves_ranged_and_full_bytes() -> Result<()> {
+        let server = MockServer::start().await;
+        mount_mismatched_distribution(
+            &server,
+            "/files/example.whl",
+            "example.whl",
+            b"forged".to_vec(),
+            b"authentic".to_vec(),
+        )
+        .await;
+        let url = format!("{}/files/example.whl", server.uri());
+        let client = reqwest::Client::new();
+
+        let response = client.head(&url).send().await?;
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(
+            response.headers().get(ACCEPT_RANGES),
+            Some(&"bytes".parse()?)
+        );
+
+        let response = client.get(&url).header(RANGE, "bytes=1-3").send().await?;
+        assert_eq!(response.status(), StatusCode::PARTIAL_CONTENT);
+        assert_eq!(response.bytes().await?, b"org".as_slice());
+
+        let response = client.get(&url).send().await?;
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(response.bytes().await?, b"authentic".as_slice());
 
         Ok(())
     }
