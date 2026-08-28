@@ -18,6 +18,7 @@ pub fn unzip(reader: fs_err::File, target: &Path) -> Result<Vec<UnhashedFile>, E
 /// regular files.
 ///
 /// Returns the list of unpacked files and their sizes, along with the hash tree.
+/// Executable permissions are recorded in the returned files instead of being applied on disk.
 pub fn unzip_and_hash(
     reader: fs_err::File,
     target: &Path,

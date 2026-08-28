@@ -36,7 +36,7 @@ impl ArchiveId {
 }
 
 impl ArchiveFileId {
-    /// Identify a file object by a digest that includes its contents and executable status.
+    /// Identify a non-executable file object by its content digest.
     pub fn from_digest(digest: &str) -> Self {
         let shard = digest.get(..2).unwrap_or(digest);
         Self(PathBuf::from(shard).join(digest))

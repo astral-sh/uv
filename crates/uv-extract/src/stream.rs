@@ -80,6 +80,7 @@ pub async fn unzip<R: tokio::io::AsyncRead + Unpin>(
 /// followed as symlinks; non-directory entries are materialized and hashed as regular files.
 ///
 /// See [`unzip`] for details.
+/// Executable permissions are recorded in the returned files instead of being applied on disk.
 pub async fn unzip_and_hash<R: tokio::io::AsyncRead + Unpin>(
     reader: R,
     target: impl AsRef<Path>,
@@ -563,7 +564,7 @@ async fn unzip_inner<R: tokio::io::AsyncRead + Unpin>(
                     // The executable bit is the only permission we preserve, otherwise we use the OS defaults.
                     // https://github.com/pypa/pip/blob/3898741e29b7279e7bffe044ecfbe20f6a438b1e/src/pip/_internal/utils/unpacking.py#L88-L100
                     let has_any_executable_bit = mode & 0o111;
-                    if has_any_executable_bit != 0 {
+                    if has_any_executable_bit != 0 && !hash_contents {
                         let path = target.join(relpath.as_path());
                         let permissions = fs_err::tokio::metadata(&path)
                             .await

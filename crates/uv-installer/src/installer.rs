@@ -6,7 +6,7 @@ use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use tokio::sync::oneshot;
 use tracing::{instrument, warn};
 
-use uv_cache::Cache;
+use uv_cache::{Cache, CacheBucket};
 use uv_configuration::initialize_rayon_once;
 use uv_distribution_types::CachedDist;
 use uv_install_wheel::{Layout, LinkMode};
@@ -107,6 +107,7 @@ impl<'a> Installer<'a> {
 
         let layout = venv.interpreter().layout();
         let relocatable = venv.relocatable();
+        let cache = cache.cloned();
         // Initialize the threadpool with the user settings.
         initialize_rayon_once();
         rayon::spawn(move || {
@@ -118,6 +119,7 @@ impl<'a> Installer<'a> {
                 reporter.as_ref(),
                 relocatable,
                 installer_metadata,
+                cache.as_ref(),
                 preview,
             );
 
@@ -149,6 +151,7 @@ impl<'a> Installer<'a> {
             self.reporter.as_ref(),
             self.venv.relocatable(),
             self.metadata,
+            self.cache,
             self.preview,
         )
     }
@@ -164,11 +167,13 @@ fn install(
     reporter: Option<&Arc<dyn Reporter>>,
     relocatable: bool,
     installer_metadata: bool,
+    cache: Option<&Cache>,
     preview: Preview,
 ) -> Result<Vec<CachedDist>> {
     // Initialize the threadpool with the user settings.
     initialize_rayon_once();
     let state = uv_install_wheel::InstallState::new(preview);
+    let archive_manifests = cache.map(|cache| cache.bucket(CacheBucket::Manifest));
     wheels.par_iter().try_for_each(|wheel| {
         uv_install_wheel::install_wheel(
             layout,
@@ -187,6 +192,7 @@ fn install(
             wheel.build_info(),
             installer_name,
             installer_metadata,
+            archive_manifests.as_deref(),
             link_mode,
             &state,
         )

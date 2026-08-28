@@ -306,7 +306,9 @@ where
         skip_validation,
     )?;
     #[cfg(unix)]
-    preserve_executable_bit(path, entry.unix_permissions())?;
+    if !hash_contents {
+        preserve_executable_bit(path, entry.unix_permissions())?;
+    }
 
     Ok(ExtractedEntry::File {
         path: enclosed_name,

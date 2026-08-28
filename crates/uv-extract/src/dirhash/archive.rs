@@ -21,8 +21,8 @@ pub(crate) enum UnzipOutput {
 /// A path-safe encoding of the directory hash of an extracted wheel.
 ///
 /// The underlying [`DirhashTree`] includes normalized relative paths, file contents, and empty
-/// directories. It intentionally uses the shared dirhash scheme directly, so executable permissions
-/// are not currently part of the archive identity.
+/// directories. [`Self::with_metadata`] also incorporates installation metadata without changing
+/// the shared directory hashing scheme.
 ///
 /// The digest is formatted as 24 lowercase base-36 characters, providing approximately 124 bits
 /// of output entropy. Its alphabet is safe for case-insensitive filesystems.
@@ -33,6 +33,14 @@ impl DirectoryDigest {
     /// Return the complete path-safe digest string.
     pub fn as_str(&self) -> &str {
         &self.0
+    }
+
+    /// Identify an extracted tree together with its serialized installation metadata.
+    pub fn with_metadata(contents: blake3::Hash, metadata: &[u8]) -> Self {
+        let mut hasher = blake3::Hasher::new_derive_key("uv wheel archive v1");
+        hasher.update(contents.as_bytes());
+        hasher.update(metadata);
+        Self::from(hasher.finalize())
     }
 }
 
@@ -87,12 +95,6 @@ impl HashedFile {
         digest: blake3::Hash,
         executable: bool,
     ) -> Self {
-        let executable = executable
-            || (cfg!(windows)
-                && path
-                    .as_path()
-                    .extension()
-                    .is_some_and(|extension| extension.eq_ignore_ascii_case("exe")));
         Self {
             path,
             size,
@@ -106,19 +108,16 @@ impl HashedFile {
         self.path.as_path()
     }
 
-    /// Return whether the archive marks this file executable, or it is a Windows executable.
+    /// Return whether the archive marks this file executable.
     pub fn is_executable(&self) -> bool {
         self.executable
     }
 
-    /// Return a hex-encoded digest of the file's contents and executable status.
-    ///
-    /// This identifies shared file objects without changing the content digest used in directory
-    /// hashes.
+    /// Return a hex-encoded digest of the file's contents, independent of its permissions.
     pub fn object_digest_hex(&self) -> String {
-        let mut hasher = blake3::Hasher::new_derive_key("uv archive file v0");
+        // Keep these non-executable objects separate from older file-cache representations.
+        let mut hasher = blake3::Hasher::new_derive_key("uv archive file v1");
         hasher.update(self.digest.as_bytes());
-        hasher.update(&[u8::from(self.is_executable())]);
         hasher.finalize().to_hex().to_string()
     }
 
@@ -222,7 +221,7 @@ mod tests {
         for (name, executable, expected) in [
             ("tool", true, true),
             ("data", false, false),
-            ("tool.EXE", false, cfg!(windows)),
+            ("tool.EXE", false, false),
         ] {
             let path = SanitizedArchivePath::from_archive_member(name)?.expect("valid path");
             let file = HashedFile::new(path, 1, blake3::hash(b"x"), executable);
