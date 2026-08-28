@@ -3,15 +3,9 @@
 # workspace-lock-check.sh: checks our project lockfile
 # plus all workspace script lockfiles.
 #
-# pass `--write` to update all lockfiles instead of checking.
+# Updates lockfiles by default, run with `--check` to only check.
 
 set -e -o pipefail
-
-if [ "${1-}" = "--write" ]; then
-  shift
-else
-  set -- --check "$@"
-fi
 
 # Project lockfile
 uv lock "$@"
