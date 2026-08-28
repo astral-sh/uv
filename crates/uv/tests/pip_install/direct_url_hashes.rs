@@ -24,7 +24,7 @@ use uv_test::{TestContext as UvTestContext, uv_snapshot};
 /// though the trusted parent wheel has no dependencies.
 struct TestContext {
     /// The shared filesystem, cache, environment, and virtual environment for the `uv` invocation.
-    uv: UvTestContext,
+    inner: UvTestContext,
     /// A marker written if the direct URL dependency's build backend executes.
     backend_marker: ChildPath,
     /// The SHA-256 digest of the direct URL source distribution.
@@ -38,10 +38,16 @@ struct TestContext {
 impl TestContext {
     /// Create a test context with forged ranged metadata and an authentic full-file download.
     async fn new() -> Result<Self> {
-        let uv = uv_test::test_context!("3.12");
+        let inner = uv_test::test_context!("3.12");
 
-        let source = uv.temp_dir.child("ok-1.0.0.tar.gz");
-        let backend_marker = uv.temp_dir.child("backend-marker");
+        let source = inner.temp_dir.child("ok-1.0.0.tar.gz");
+        let backend_marker = inner.temp_dir.child("backend-marker");
+        let child_wheel = inner
+            .workspace_root
+            .join("test/links/ok-1.0.0-py3-none-any.whl");
+        let inner = inner
+            .with_env("WHEEL_METADATA_MARKER", backend_marker.path())
+            .with_env("WHEEL_METADATA_CHILD_WHEEL", child_wheel);
         write_tar_gz(
             File::create(source.path())?,
             &[
@@ -103,12 +109,15 @@ impl TestContext {
         .await;
 
         // Only the parent wheel and its hash are part of the trusted input set.
-        uv.temp_dir.child("requirements.txt").write_str(&format!(
-            "metadata-parent @ {wheel_url} --hash=sha256:{wheel_hash}\n"
-        ))?;
+        inner
+            .temp_dir
+            .child("requirements.txt")
+            .write_str(&format!(
+                "metadata-parent @ {wheel_url} --hash=sha256:{wheel_hash}\n"
+            ))?;
 
         Ok(Self {
-            uv,
+            inner,
             backend_marker,
             source_hash,
             source_url,
@@ -117,13 +126,13 @@ impl TestContext {
     }
 
     fn filters(&self) -> Vec<(&str, &str)> {
-        let mut filters = self.uv.filters();
+        let mut filters = self.inner.filters();
         filters.push((&self.source_hash, "[SOURCE_HASH]"));
         filters
     }
 
     fn write_child_requirement(&self) -> Result<()> {
-        self.uv.temp_dir.child("child.txt").write_str(&format!(
+        self.inner.temp_dir.child("child.txt").write_str(&format!(
             "ok @ {}#sha256={}\n",
             self.source_url, self.source_hash
         ))?;
@@ -136,19 +145,11 @@ impl TestContext {
 async fn require_hashes_rejects_direct_url_hash_discovered_in_wheel_metadata() -> Result<()> {
     let context = TestContext::new().await?;
 
-    uv_snapshot!(context.filters(), context.uv.pip_install()
+    uv_snapshot!(context.filters(), context.inner.pip_install()
         .arg("-r")
         .arg("requirements.txt")
         .arg("--no-index")
-        .arg("--require-hashes")
-        .env("WHEEL_METADATA_MARKER", context.backend_marker.path())
-        .env(
-            "WHEEL_METADATA_CHILD_WHEEL",
-            context
-                .uv
-                .workspace_root
-                .join("test/links/ok-1.0.0-py3-none-any.whl"),
-        ), @"
+        .arg("--require-hashes"), @"
     exit_code: 1 (failure)
     ----- stderr -----
       × Failed to build `ok @ file://[TEMP_DIR]/ok-1.0.0.tar.gz#sha256=[SOURCE_HASH]`
@@ -156,8 +157,8 @@ async fn require_hashes_rejects_direct_url_hash_discovered_in_wheel_metadata() -
     ");
 
     context.backend_marker.assert(predicate::path::missing());
-    context.uv.assert_not_installed("metadata_parent");
-    context.uv.assert_not_installed("ok");
+    context.inner.assert_not_installed("metadata_parent");
+    context.inner.assert_not_installed("ok");
 
     Ok(())
 }
@@ -168,21 +169,13 @@ async fn require_hashes_accepts_direct_url_hash_from_explicit_requirement() -> R
     let context = TestContext::new().await?;
     context.write_child_requirement()?;
 
-    uv_snapshot!(context.filters(), context.uv.pip_install()
+    uv_snapshot!(context.filters(), context.inner.pip_install()
         .arg("-r")
         .arg("requirements.txt")
         .arg("--no-index")
         .arg("--require-hashes")
         .arg("--requirement")
-        .arg("child.txt")
-        .env("WHEEL_METADATA_MARKER", context.backend_marker.path())
-        .env(
-            "WHEEL_METADATA_CHILD_WHEEL",
-            context
-                .uv
-                .workspace_root
-                .join("test/links/ok-1.0.0-py3-none-any.whl"),
-        ), @"
+        .arg("child.txt"), @"
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
@@ -193,8 +186,8 @@ async fn require_hashes_accepts_direct_url_hash_from_explicit_requirement() -> R
     ");
 
     context.backend_marker.assert(predicate::path::is_file());
-    context.uv.assert_installed("metadata_parent", "1.0.0");
-    context.uv.assert_installed("ok", "1.0.0");
+    context.inner.assert_installed("metadata_parent", "1.0.0");
+    context.inner.assert_installed("ok", "1.0.0");
 
     Ok(())
 }
@@ -205,21 +198,13 @@ async fn require_hashes_accepts_direct_url_hash_from_constraint() -> Result<()> 
     let context = TestContext::new().await?;
     context.write_child_requirement()?;
 
-    uv_snapshot!(context.filters(), context.uv.pip_install()
+    uv_snapshot!(context.filters(), context.inner.pip_install()
         .arg("-r")
         .arg("requirements.txt")
         .arg("--no-index")
         .arg("--require-hashes")
         .arg("--constraint")
-        .arg("child.txt")
-        .env("WHEEL_METADATA_MARKER", context.backend_marker.path())
-        .env(
-            "WHEEL_METADATA_CHILD_WHEEL",
-            context
-                .uv
-                .workspace_root
-                .join("test/links/ok-1.0.0-py3-none-any.whl"),
-        ), @"
+        .arg("child.txt"), @"
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
@@ -230,8 +215,8 @@ async fn require_hashes_accepts_direct_url_hash_from_constraint() -> Result<()> 
     ");
 
     context.backend_marker.assert(predicate::path::is_file());
-    context.uv.assert_installed("metadata_parent", "1.0.0");
-    context.uv.assert_installed("ok", "1.0.0");
+    context.inner.assert_installed("metadata_parent", "1.0.0");
+    context.inner.assert_installed("ok", "1.0.0");
 
     Ok(())
 }
@@ -241,19 +226,11 @@ async fn require_hashes_accepts_direct_url_hash_from_constraint() -> Result<()> 
 async fn verify_hashes_accepts_direct_url_hash_discovered_in_wheel_metadata() -> Result<()> {
     let context = TestContext::new().await?;
 
-    uv_snapshot!(context.filters(), context.uv.pip_install()
+    uv_snapshot!(context.filters(), context.inner.pip_install()
         .arg("-r")
         .arg("requirements.txt")
         .arg("--no-index")
-        .arg("--verify-hashes")
-        .env("WHEEL_METADATA_MARKER", context.backend_marker.path())
-        .env(
-            "WHEEL_METADATA_CHILD_WHEEL",
-            context
-                .uv
-                .workspace_root
-                .join("test/links/ok-1.0.0-py3-none-any.whl"),
-        ), @"
+        .arg("--verify-hashes"), @"
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
@@ -264,8 +241,8 @@ async fn verify_hashes_accepts_direct_url_hash_discovered_in_wheel_metadata() ->
     ");
 
     context.backend_marker.assert(predicate::path::is_file());
-    context.uv.assert_installed("metadata_parent", "1.0.0");
-    context.uv.assert_installed("ok", "1.0.0");
+    context.inner.assert_installed("metadata_parent", "1.0.0");
+    context.inner.assert_installed("ok", "1.0.0");
 
     Ok(())
 }

@@ -197,6 +197,13 @@ impl TestContext {
         self
     }
 
+    /// Set an environment variable for all commands created from this context.
+    #[must_use]
+    pub fn with_env(mut self, key: impl Into<OsString>, value: impl Into<OsString>) -> Self {
+        self.extra_env.push((key.into(), value.into()));
+        self
+    }
+
     /// Set the "exclude newer" timestamp for all commands in this context.
     #[must_use]
     pub fn with_exclude_newer(mut self, exclude_newer: &str) -> Self {
