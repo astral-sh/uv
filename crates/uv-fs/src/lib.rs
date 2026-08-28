@@ -66,18 +66,18 @@ pub fn hardlink_count(_path: &Path) -> io::Result<u64> {
     ))
 }
 
-/// Collect regular files with a single hardlink from a flat directory, ignoring symlink entries.
+/// Collect regular files whose only hardlink is their entry in this directory.
 ///
-/// Uses bulk metadata reads on macOS. Returns `None` when the fast path is unavailable, required
-/// attributes are missing, or the directory contains subdirectories that need a recursive walk.
+/// Ignores symlink entries and uses bulk metadata reads on macOS. Returns `None` when the fast path
+/// is unavailable, required attributes are missing, or subdirectories need a recursive walk.
 /// No candidates are returned unless the entire directory can use the fast path.
 ///
 /// Callers deleting these files must prevent concurrent changes to the directory and hardlink
 /// counts throughout both the scan and deletion.
-pub fn single_link_files(path: &Path) -> io::Result<Option<Vec<PathBuf>>> {
+pub fn files_with_one_hardlink(path: &Path) -> io::Result<Option<Vec<PathBuf>>> {
     #[cfg(target_os = "macos")]
     {
-        hardlink_macos::single_link_files(path)
+        hardlink_macos::files_with_one_hardlink(path)
     }
     #[cfg(not(target_os = "macos"))]
     {

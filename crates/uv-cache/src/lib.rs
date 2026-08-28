@@ -670,7 +670,7 @@ impl Cache {
                     Err(err) => return Err(err),
                 }
             } else if entry.file_type().is_dir() {
-                if let Some(files) = uv_fs::single_link_files(entry.path())? {
+                if let Some(files) = uv_fs::files_with_one_hardlink(entry.path())? {
                     entries.skip_current_dir();
                     for file in files {
                         summary += self.remove_path(file)?;
