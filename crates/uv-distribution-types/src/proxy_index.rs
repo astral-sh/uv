@@ -20,7 +20,9 @@ use crate::{
 #[derive(Debug, Clone, PartialEq, Eq, Error)]
 pub enum ProxyIndexConfigError {
     /// The proxy references a canonical Simple API index that is not configured.
-    #[error("The proxy index references package index `{name}`, which is not configured")]
+    #[error(
+        "The proxy index references package index `{name}`, which was not found in your configuration"
+    )]
     MissingCanonicalIndex {
         /// The name of the missing canonical package index.
         name: IndexName,
