@@ -190,6 +190,7 @@ async fn require_hashes_rejects_direct_url_hash_discovered_in_wheel_metadata() -
 async fn require_hashes_accepts_direct_url_hash_from_explicit_requirement() -> Result<()> {
     let context = TestContext::new().await?;
     let requirements_txt = context.write_parent_requirement()?;
+    let child_txt = context.write_child_requirement()?;
 
     uv_snapshot!(context.filters(), context.inner.pip_install()
         .arg("-r")
@@ -197,7 +198,7 @@ async fn require_hashes_accepts_direct_url_hash_from_explicit_requirement() -> R
         .arg("--no-index")
         .arg("--require-hashes")
         .arg("--requirement")
-        .arg(context.write_child_requirement()?.path()), @"
+        .arg(child_txt.path()), @"
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
@@ -217,6 +218,7 @@ async fn require_hashes_accepts_direct_url_hash_from_explicit_requirement() -> R
 async fn require_hashes_accepts_direct_url_hash_from_constraint() -> Result<()> {
     let context = TestContext::new().await?;
     let requirements_txt = context.write_parent_requirement()?;
+    let child_txt = context.write_child_requirement()?;
 
     uv_snapshot!(context.filters(), context.inner.pip_install()
         .arg("-r")
@@ -224,7 +226,7 @@ async fn require_hashes_accepts_direct_url_hash_from_constraint() -> Result<()> 
         .arg("--no-index")
         .arg("--require-hashes")
         .arg("--constraint")
-        .arg(context.write_child_requirement()?.path()), @"
+        .arg(child_txt.path()), @"
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
