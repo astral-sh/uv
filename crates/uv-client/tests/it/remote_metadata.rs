@@ -1,9 +1,12 @@
 use std::path::Path;
 use std::str::FromStr;
 
-use anyhow::Result;
-use wiremock::matchers::{method, path};
-use wiremock::{Mock, MockServer, ResponseTemplate};
+use anyhow::{Context, Result};
+use reqwest::header::{
+    ACCEPT_RANGES, AUTHORIZATION, CONTENT_LENGTH, CONTENT_RANGE, HeaderName, LOCATION, RANGE,
+};
+use wiremock::matchers::{basic_auth, header_exists, method, path};
+use wiremock::{Match, Mock, MockServer, Request, ResponseTemplate};
 
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, RegistryClientBuilder};
@@ -88,4 +91,358 @@ async fn remote_metadata_requires_range_requests() -> Result<()> {
     );
 
     Ok(())
+}
+
+/// Covers same-origin redirect semantics and credential propagation. This is a generic control case
+/// for authenticated proxies; the known registry reports below use cross-origin artifact storage.
+#[tokio::test]
+async fn remote_metadata_redirect_same_origin() -> Result<()> {
+    let server = MockServer::start().await;
+    let wheel = wheel()?;
+    let wheel_len = wheel.len();
+
+    Mock::given(method("HEAD"))
+        .and(path("/artifact"))
+        .and(basic_auth("source-user", "source-password"))
+        .respond_with(
+            ResponseTemplate::new(303)
+                .insert_header(LOCATION, format!("{}/head-wheel", server.uri())),
+        )
+        .expect(1)
+        .named("HEAD request to the redirecting wheel URL")
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/artifact"))
+        .and(basic_auth("source-user", "source-password"))
+        .and(header_exists(RANGE.as_str()))
+        .respond_with(
+            ResponseTemplate::new(303)
+                .insert_header(LOCATION, format!("{}/head-wheel", server.uri())),
+        )
+        .expect(1)
+        .named("ranged GET request to the redirecting wheel URL")
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/artifact"))
+        .and(basic_auth("source-user", "source-password"))
+        .and(header_missing(RANGE))
+        .respond_with(
+            ResponseTemplate::new(303)
+                .insert_header(LOCATION, format!("{}/head-wheel", server.uri())),
+        )
+        .expect(1)
+        .named("streaming fallback GET request to the redirecting wheel URL")
+        .mount(&server)
+        .await;
+    Mock::given(method("HEAD"))
+        .and(path("/head-wheel"))
+        .and(basic_auth("source-user", "source-password"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .insert_header(ACCEPT_RANGES, "bytes")
+                .insert_header(CONTENT_LENGTH, wheel_len.to_string()),
+        )
+        .expect(1)
+        .named("HEAD request to the same-origin redirect target")
+        .mount(&server)
+        .await;
+    let ranged_wheel = wheel.clone();
+    Mock::given(method("GET"))
+        .and(path("/head-wheel"))
+        .and(basic_auth("source-user", "source-password"))
+        .and(header_exists(RANGE.as_str()))
+        .respond_with(move |request: &Request| wheel_range_response(request, &ranged_wheel))
+        .expect(0)
+        .named("ranged GET request to the same-origin redirect target")
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/head-wheel"))
+        .and(basic_auth("source-user", "source-password"))
+        .and(header_missing(RANGE))
+        .respond_with(ResponseTemplate::new(200).set_body_raw(wheel, "application/octet-stream"))
+        .expect(1)
+        .named("streaming GET request to the same-origin redirect target")
+        .mount(&server)
+        .await;
+
+    assert_wheel_metadata_readable(&server).await?;
+
+    Ok(())
+}
+
+/// Models registries that redirect wheels to another artifact origin, such as Azure Artifacts
+/// redirecting to `vsblob.vsassets.io` or Gemfury and pypicloud redirecting to Amazon S3. The source
+/// `Authorization` header must not be forwarded to the artifact host.
+#[tokio::test]
+async fn remote_metadata_redirect_cross_origin() -> Result<()> {
+    let source_server = MockServer::start().await;
+    let target_server = MockServer::start().await;
+    let wheel = wheel()?;
+    let wheel_len = wheel.len();
+    let target = format!("{}/head-wheel", target_server.uri());
+
+    Mock::given(method("HEAD"))
+        .and(path("/artifact"))
+        .and(basic_auth("source-user", "source-password"))
+        .respond_with(ResponseTemplate::new(303).insert_header(LOCATION, target.clone()))
+        .expect(1)
+        .named("HEAD request to the redirecting wheel URL")
+        .mount(&source_server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/artifact"))
+        .and(basic_auth("source-user", "source-password"))
+        .and(header_exists(RANGE.as_str()))
+        .respond_with(ResponseTemplate::new(303).insert_header(LOCATION, target.clone()))
+        .expect(1)
+        .named("ranged GET request to the redirecting wheel URL")
+        .mount(&source_server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/artifact"))
+        .and(basic_auth("source-user", "source-password"))
+        .and(header_missing(RANGE))
+        .respond_with(ResponseTemplate::new(303).insert_header(LOCATION, target))
+        .expect(1)
+        .named("streaming fallback GET request to the redirecting wheel URL")
+        .mount(&source_server)
+        .await;
+    Mock::given(method("HEAD"))
+        .and(path("/head-wheel"))
+        .and(header_missing(AUTHORIZATION))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .insert_header(ACCEPT_RANGES, "bytes")
+                .insert_header(CONTENT_LENGTH, wheel_len.to_string()),
+        )
+        .expect(1)
+        .named("unauthenticated HEAD request to the cross-origin redirect target")
+        .mount(&target_server)
+        .await;
+    let ranged_wheel = wheel.clone();
+    Mock::given(method("GET"))
+        .and(path("/head-wheel"))
+        .and(header_missing(AUTHORIZATION))
+        .and(header_exists(RANGE.as_str()))
+        .respond_with(move |request: &Request| wheel_range_response(request, &ranged_wheel))
+        .expect(0)
+        .named("unauthenticated ranged GET request to the cross-origin redirect target")
+        .mount(&target_server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/head-wheel"))
+        .and(header_missing(AUTHORIZATION))
+        .and(header_missing(RANGE))
+        .respond_with(ResponseTemplate::new(200).set_body_raw(wheel, "application/octet-stream"))
+        .expect(1)
+        .named("unauthenticated streaming GET request to the cross-origin redirect target")
+        .mount(&target_server)
+        .await;
+
+    assert_wheel_metadata_readable(&source_server).await?;
+
+    Ok(())
+}
+
+/// Models registries that issue method-specific signed redirects, such as Gemfury and pypicloud
+/// backed by Amazon S3 (astral-sh/uv#2025 and astral-sh/uv#3255) and the public Microsoft package
+/// feed backed by Azure Artifacts (astral-sh/uv#21347).
+#[tokio::test]
+async fn remote_metadata_redirect_method_specific_target() -> Result<()> {
+    let source_server = MockServer::start().await;
+    let target_server = MockServer::start().await;
+    let wheel = wheel()?;
+    let wheel_len = wheel.len();
+    let head_target = authenticated_url(
+        &target_server.uri(),
+        "/head-wheel",
+        "head-user",
+        "head-password",
+    )?;
+    let get_target = authenticated_url(
+        &target_server.uri(),
+        "/get-wheel",
+        "get-user",
+        "get-password",
+    )?;
+
+    Mock::given(method("HEAD"))
+        .and(path("/artifact"))
+        .and(basic_auth("source-user", "source-password"))
+        .respond_with(ResponseTemplate::new(303).insert_header(LOCATION, head_target))
+        .expect(1)
+        .named("HEAD request to the redirecting wheel URL")
+        .mount(&source_server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/artifact"))
+        .and(basic_auth("source-user", "source-password"))
+        .and(header_exists(RANGE.as_str()))
+        .respond_with(ResponseTemplate::new(303).insert_header(LOCATION, get_target.clone()))
+        .expect(1)
+        .named("ranged GET request to the redirecting wheel URL")
+        .mount(&source_server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/artifact"))
+        .and(basic_auth("source-user", "source-password"))
+        .and(header_missing(RANGE))
+        .respond_with(ResponseTemplate::new(303).insert_header(LOCATION, get_target))
+        .expect(1)
+        .named("streaming fallback GET request to the redirecting wheel URL")
+        .mount(&source_server)
+        .await;
+    Mock::given(method("HEAD"))
+        .and(path("/head-wheel"))
+        .and(basic_auth("head-user", "head-password"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .insert_header(ACCEPT_RANGES, "bytes")
+                .insert_header(CONTENT_LENGTH, wheel_len.to_string()),
+        )
+        .expect(1)
+        .named("HEAD request to the method-specific HEAD redirect target")
+        .mount(&target_server)
+        .await;
+    let ranged_wheel = wheel.clone();
+    Mock::given(method("GET"))
+        .and(path("/get-wheel"))
+        .and(basic_auth("get-user", "get-password"))
+        .and(header_exists(RANGE.as_str()))
+        .respond_with(move |request: &Request| wheel_range_response(request, &ranged_wheel))
+        .expect(0)
+        .named("ranged GET request to the method-specific GET redirect target")
+        .mount(&target_server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/get-wheel"))
+        .and(basic_auth("get-user", "get-password"))
+        .and(header_missing(RANGE))
+        .respond_with(ResponseTemplate::new(200).set_body_raw(wheel, "application/octet-stream"))
+        .expect(1)
+        .named("streaming GET request to the method-specific GET redirect target")
+        .mount(&target_server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/head-wheel"))
+        .respond_with(ResponseTemplate::new(500))
+        .expect(0)
+        .named("GET request must not reuse the HEAD redirect target")
+        .mount(&target_server)
+        .await;
+    Mock::given(method("HEAD"))
+        .and(path("/get-wheel"))
+        .respond_with(ResponseTemplate::new(500))
+        .expect(0)
+        .named("HEAD request must not reuse the GET redirect target")
+        .mount(&target_server)
+        .await;
+
+    assert_wheel_metadata_readable(&source_server).await?;
+
+    Ok(())
+}
+
+#[derive(Debug)]
+struct HeaderMissing(HeaderName);
+
+impl Match for HeaderMissing {
+    fn matches(&self, request: &Request) -> bool {
+        !request.headers.contains_key(&self.0)
+    }
+}
+
+/// Matches requests that omit a header, complementing Wiremock's `header_exists` matcher.
+fn header_missing(header: HeaderName) -> HeaderMissing {
+    HeaderMissing(header)
+}
+
+/// Loads the wheel fixture served by each redirect target.
+fn wheel() -> Result<Vec<u8>> {
+    Ok(fs_err::read(
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../test/links/ok-1.0.0-py3-none-any.whl"),
+    )?)
+}
+
+/// Reads wheel metadata through the authenticated source URL shared by each redirect scenario.
+async fn assert_wheel_metadata_readable(source_server: &MockServer) -> Result<()> {
+    let cache = Cache::temp()?.init().await?;
+    let client = RegistryClientBuilder::new(BaseClientBuilder::default(), cache).build()?;
+    let url = authenticated_url(
+        &source_server.uri(),
+        "/artifact",
+        "source-user",
+        "source-password",
+    )?;
+    let dist = BuiltDist::DirectUrl(DirectUrlBuiltDist {
+        filename: WheelFilename::from_str("ok-1.0.0-py3-none-any.whl")?,
+        location: Box::new(DisplaySafeUrl::parse(&url)?),
+        url: VerbatimUrl::from_str(&url)?,
+        size: None,
+    });
+    let metadata = client
+        .wheel_metadata(
+            &dist,
+            &GitResolver::default(),
+            &IndexCapabilities::default(),
+            None,
+        )
+        .await?;
+    assert_eq!(metadata.version.to_string(), "1.0.0");
+    Ok(())
+}
+
+/// Adds Basic authentication credentials to a Wiremock server URL.
+fn authenticated_url(base: &str, path: &str, username: &str, password: &str) -> Result<String> {
+    Ok(format!(
+        "http://{username}:{password}@{}{path}",
+        base.strip_prefix("http://")
+            .context("mock server URL should use HTTP")?
+    ))
+}
+
+/// Serves a byte range from the wheel fixture, as an artifact host would.
+fn wheel_range_response(request: &Request, wheel: &[u8]) -> ResponseTemplate {
+    let Some((start, end)) = request
+        .headers
+        .get(RANGE)
+        .and_then(|range| range.to_str().ok())
+        .and_then(|range| parse_byte_range(range, wheel.len()))
+    else {
+        return ResponseTemplate::new(416)
+            .insert_header(ACCEPT_RANGES, "bytes")
+            .insert_header(CONTENT_RANGE, format!("bytes */{}", wheel.len()));
+    };
+    ResponseTemplate::new(206)
+        .insert_header(ACCEPT_RANGES, "bytes")
+        .insert_header(
+            CONTENT_RANGE,
+            format!("bytes {start}-{end}/{}", wheel.len()),
+        )
+        .set_body_raw(wheel[start..=end].to_vec(), "application/octet-stream")
+}
+
+/// Parses the single byte-range forms emitted by the range reader.
+fn parse_byte_range(range: &str, length: usize) -> Option<(usize, usize)> {
+    let range = range.strip_prefix("bytes=")?;
+    let (start, end) = range.split_once('-')?;
+
+    if start.is_empty() {
+        let suffix = end.parse::<usize>().ok()?;
+        return (suffix > 0 && length > 0).then(|| (length.saturating_sub(suffix), length - 1));
+    }
+
+    let start = start.parse::<usize>().ok()?;
+    if start >= length {
+        return None;
+    }
+    let end = if end.is_empty() {
+        length - 1
+    } else {
+        end.parse::<usize>().ok()?.min(length - 1)
+    };
+    (start <= end).then_some((start, end))
 }
