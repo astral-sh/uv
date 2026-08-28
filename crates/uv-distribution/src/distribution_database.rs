@@ -2,18 +2,18 @@ use std::cmp::Reverse;
 use std::fmt::Display;
 use std::future::Future;
 use std::io;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll};
 
 use either::Either;
-use futures::{FutureExt, TryStreamExt};
+use futures::{FutureExt, TryFutureExt, TryStreamExt};
 use rayon::in_place_scope;
 use rayon::prelude::*;
-use rustc_hash::FxHashMap;
+use rustc_hash::{FxHashMap, FxHashSet};
 use tokio::io::{AsyncRead, AsyncSeekExt, ReadBuf};
-use tokio::sync::Semaphore;
+use tokio::sync::{Semaphore, mpsc};
 use tokio_util::compat::FuturesAsyncReadCompatExt;
 use tracing::{Instrument, info_span, instrument, warn};
 use url::Url;
@@ -709,21 +709,23 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 let temp_dir = tempfile::tempdir_in(self.build_context.cache().root())
                     .map_err(Error::CacheWrite)?;
 
-                let mut extracted = match progress {
+                let (temp_dir, mut extracted) = match progress {
                     Some((reporter, progress)) => {
                         let mut reader = ProgressReader::new(&mut hasher, progress, &**reporter);
                         ExtractedWheel::extract_streaming(
                             &mut reader,
-                            temp_dir.path(),
-                            self.content_addressed_cache,
+                            temp_dir,
+                            self.content_addressed_cache
+                                .then_some(self.build_context.cache()),
                         )
                         .await
                         .map_err(|err| Error::Extract(filename.to_string(), err))?
                     }
                     None => ExtractedWheel::extract_streaming(
                         &mut hasher,
-                        temp_dir.path(),
-                        self.content_addressed_cache,
+                        temp_dir,
+                        self.content_addressed_cache
+                            .then_some(self.build_context.cache()),
                     )
                     .await
                     .map_err(|err| Error::Extract(filename.to_string(), err))?,
@@ -939,8 +941,13 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
 
                 let target = temp_dir.path().to_owned();
                 let file = file.into_std().await;
+                let cache = self.build_context.cache().clone();
                 let mut extracted = tokio::task::spawn_blocking(move || {
-                    ExtractedWheel::extract_seekable(file, &target, content_addressed_cache)
+                    ExtractedWheel::extract_seekable(
+                        file,
+                        &target,
+                        content_addressed_cache.then_some(&cache),
+                    )
                 })
                 .await?
                 .map_err(|err| Error::Extract(filename.to_string(), err))?;
@@ -1134,10 +1141,11 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             let mut hasher = uv_extract::hash::HashReader::new(file, &mut hashers);
 
             // Unzip the wheel to a temporary directory.
-            let mut extracted = ExtractedWheel::extract_streaming(
+            let (temp_dir, mut extracted) = ExtractedWheel::extract_streaming(
                 &mut hasher,
-                temp_dir.path(),
-                self.content_addressed_cache,
+                temp_dir,
+                self.content_addressed_cache
+                    .then_some(self.build_context.cache()),
             )
             .await
             .map_err(|err| Error::Extract(filename.to_string(), err))?;
@@ -1192,15 +1200,15 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
 
         let (temp_dir, mut extracted) = tokio::task::spawn_blocking({
             let path = path.to_owned();
-            let root = self.build_context.cache().root().to_path_buf();
+            let cache = self.build_context.cache().clone();
             move || -> Result<_, Error> {
                 // Unzip the wheel into a temporary directory.
-                let temp_dir = tempfile::tempdir_in(root).map_err(Error::CacheWrite)?;
+                let temp_dir = tempfile::tempdir_in(cache.root()).map_err(Error::CacheWrite)?;
                 let reader = fs_err::File::open(&path).map_err(Error::CacheWrite)?;
                 let extracted = ExtractedWheel::extract_seekable(
                     reader,
                     temp_dir.path(),
-                    content_addressed_cache,
+                    content_addressed_cache.then_some(&cache),
                 )
                 .map_err(|err| Error::Extract(path.to_string_lossy().into_owned(), err))?;
                 Ok((temp_dir, extracted))
@@ -1241,10 +1249,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             let digest = DirectoryDigest::with_metadata(tree.hash(), &contents);
             let id = ArchiveId::from_digest(digest.into());
             let manifest_entry = cache.entry(CacheBucket::Manifest, &id, "manifest.json");
-            let cache = cache.clone();
             let temp_dir = tokio::task::spawn_blocking(move || {
-                persist_archive_files(&cache, temp_dir.path(), &files)
-                    .map_err(Error::CacheWrite)?;
                 fs_err::create_dir_all(manifest_entry.dir()).map_err(Error::CacheWrite)?;
                 uv_fs::write_atomic_sync(manifest_entry.path(), contents)
                     .map_err(Error::CacheWrite)?;
@@ -1285,6 +1290,8 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
 }
 
 /// Per-file digests and the hash tree of an extracted wheel.
+///
+/// All files except `RECORD` have been published to the file store.
 struct HashedWheel {
     files: Vec<HashedFile>,
     tree: DirhashTree,
@@ -1297,32 +1304,82 @@ enum ExtractedWheel {
 }
 
 impl ExtractedWheel {
-    /// Extract a wheel from a streaming reader, optionally retaining its per-file digests.
+    /// Extract a wheel from a streaming reader, optionally publishing completed file objects while
+    /// the remaining payloads are downloaded and extracted.
     async fn extract_streaming<R>(
         reader: R,
-        target: &Path,
-        content_addressed: bool,
-    ) -> Result<Self, uv_extract::Error>
+        temp_dir: tempfile::TempDir,
+        cache: Option<&Cache>,
+    ) -> Result<(tempfile::TempDir, Self), uv_extract::Error>
     where
         R: AsyncRead + Unpin,
     {
-        if content_addressed {
-            let (files, tree) = uv_extract::stream::unzip_and_hash(reader, target).await?;
-            Ok(Self::Hashed(HashedWheel { files, tree }))
+        if let Some(cache) = cache {
+            const BATCH_SIZE: usize = 256;
+
+            let target = temp_dir.path().to_path_buf();
+            let temp_dir = Arc::new(temp_dir);
+            let archive = Arc::clone(&temp_dir);
+            let cache = cache.clone();
+            let (sender, mut receiver) = mpsc::channel(BATCH_SIZE);
+            let publisher = async move {
+                let mut files = Vec::with_capacity(BATCH_SIZE);
+                let mut shards = FxHashSet::default();
+                while receiver.recv_many(&mut files, BATCH_SIZE).await != 0 {
+                    let archive = Arc::clone(&archive);
+                    let cache = cache.clone();
+                    // Keep the private archive alive if extraction is cancelled during this batch.
+                    let (batch, created_shards, result) = tokio::task::spawn_blocking(move || {
+                        let result =
+                            persist_archive_files(&cache, archive.path(), &files, &mut shards);
+                        (files, shards, result)
+                    })
+                    .await
+                    .map_err(io::Error::other)?;
+                    files = batch;
+                    shards = created_shards;
+                    result?;
+                    files.clear();
+                }
+                Ok::<_, io::Error>(())
+            };
+            let extraction = async move {
+                let result = uv_extract::stream::unzip_and_hash(reader, &target, |file| {
+                    sender
+                        .send(file)
+                        .map_err(|_| io::Error::other("file cache publisher stopped"))
+                })
+                .await;
+                drop(sender);
+                result
+            };
+
+            // Always join the publisher, including after an extraction error. Report its original
+            // error rather than the channel closure observed by the extraction callback.
+            let (extracted, published) = tokio::join!(extraction, publisher);
+            published.map_err(uv_extract::Error::Io)?;
+            let (files, tree) = extracted?;
+            let temp_dir = Arc::try_unwrap(temp_dir).map_err(|_| {
+                uv_extract::Error::Io(io::Error::other("file cache publisher retained archive"))
+            })?;
+            Ok((temp_dir, Self::Hashed(HashedWheel { files, tree })))
         } else {
-            let files = uv_extract::stream::unzip(reader, target).await?;
-            Ok(Self::Unhashed(files))
+            let files = uv_extract::stream::unzip(reader, temp_dir.path()).await?;
+            Ok((temp_dir, Self::Unhashed(files)))
         }
     }
 
-    /// Extract a wheel from a seekable file, optionally retaining its per-file digests.
+    /// Extract a wheel from a seekable file, optionally retaining its per-file digests and
+    /// publishing its files to the file store.
     fn extract_seekable(
         reader: fs_err::File,
         target: &Path,
-        content_addressed: bool,
+        cache: Option<&Cache>,
     ) -> Result<Self, uv_extract::Error> {
-        if content_addressed {
+        if let Some(cache) = cache {
             let (files, tree) = uv_extract::unzip_and_hash(reader, target)?;
+            persist_archive_files(cache, target, &files, &mut FxHashSet::default())
+                .map_err(uv_extract::Error::Io)?;
             Ok(Self::Hashed(HashedWheel { files, tree }))
         } else {
             let files = uv_extract::unzip(reader, target)?;
@@ -1372,7 +1429,12 @@ impl ExtractedWheel {
 }
 
 /// Share extracted files other than `RECORD` while keeping the unpublished archive complete.
-fn persist_archive_files(cache: &Cache, archive: &Path, files: &[HashedFile]) -> io::Result<()> {
+fn persist_archive_files(
+    cache: &Cache,
+    archive: &Path,
+    files: &[HashedFile],
+    created_shards: &mut FxHashSet<PathBuf>,
+) -> io::Result<()> {
     initialize_rayon_once();
     let targets = files
         .par_iter()
@@ -1408,7 +1470,9 @@ fn persist_archive_files(cache: &Cache, archive: &Path, files: &[HashedFile]) ->
     // thread, while workers link files in the shards that are already available.
     in_place_scope(|scope| -> io::Result<()> {
         for (parent, files, result) in &mut shards {
-            fs_err::create_dir_all(parent)?;
+            if created_shards.insert(parent.to_path_buf()) {
+                fs_err::create_dir_all(parent)?;
+            }
             scope.spawn(move |_| {
                 *result = files
                     .iter()

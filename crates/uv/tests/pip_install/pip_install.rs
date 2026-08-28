@@ -16744,6 +16744,52 @@ async fn all_files_except_record_use_archive_file_store() -> Result<()> {
     Ok(())
 }
 
+#[tokio::test]
+async fn streamed_file_objects_survive_invalid_zip_until_pruned() -> Result<()> {
+    let context = uv_test::test_context!("3.12")
+        .with_filtered_file_counts()
+        .with_filtered_sizes_and_units()
+        .with_filter((r"http://127\.0\.0\.1:\d+", "http://[LOCALHOST]"));
+    let server = MockServer::start().await;
+    let wheel = binary_payload_wheel(&context)?;
+    let mut contents = fs_err::read(wheel)?;
+    // Reject the ZIP after all central-directory entries have been processed.
+    contents.extend_from_slice(b"invalid trailing data");
+    Mock::given(method("GET"))
+        .and(path("/binary_payload-0.1.0-py3-none-any.whl"))
+        .respond_with(ResponseTemplate::new(200).set_body_bytes(contents))
+        .mount(&server)
+        .await;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .args(["--preview-features", "content-addressed-cache"])
+        .arg(format!("{}/binary_payload-0.1.0-py3-none-any.whl", server.uri())), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+      × Failed to download `binary-payload @ http://[LOCALHOST]/binary_payload-0.1.0-py3-none-any.whl`
+      ├─▶ Failed to extract archive: binary_payload-0.1.0-py3-none-any.whl
+      ╰─▶ ZIP file contains trailing contents after the end-of-central-directory record
+    ");
+
+    assert_eq!(
+        cache_files(context.cache_dir.child("files-v0").path())?.len(),
+        6
+    );
+    assert!(!context.cache_dir.child("archive-v0").exists());
+    assert!(!context.cache_dir.child("manifest-v0").exists());
+    assert!(!context.site_packages().join("binary_payload").exists());
+
+    uv_snapshot!(context.filters(), context.prune(), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Pruning cache at: [CACHE_DIR]/
+    Removed [N] files ([SIZE])
+    ");
+    assert!(cache_files(context.cache_dir.child("files-v0").path())?.is_empty());
+    Ok(())
+}
+
 #[test]
 fn executable_manifests_distinguish_identical_wheel_contents() -> Result<()> {
     let context = uv_test::test_context!("3.12")
