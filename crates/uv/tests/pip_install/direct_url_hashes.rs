@@ -138,6 +138,20 @@ impl TestContext {
         ))?;
         Ok(())
     }
+
+    /// Assert that the direct URL dependency's backend ran and both packages were installed.
+    fn assert_backend_ran(&self) {
+        self.backend_marker.assert(predicate::path::is_file());
+        self.inner.assert_installed("metadata_parent", "1.0.0");
+        self.inner.assert_installed("ok", "1.0.0");
+    }
+
+    /// Assert that the direct URL dependency's backend did not run or install either package.
+    fn assert_backend_did_not_run(&self) {
+        self.backend_marker.assert(predicate::path::missing());
+        self.inner.assert_not_installed("metadata_parent");
+        self.inner.assert_not_installed("ok");
+    }
 }
 
 /// A direct URL hash discovered only in wheel metadata cannot authorize the dependency.
@@ -156,9 +170,7 @@ async fn require_hashes_rejects_direct_url_hash_discovered_in_wheel_metadata() -
       ╰─▶ Hash-checking is enabled, but no hashes were provided or computed for: `ok @ file://[TEMP_DIR]/ok-1.0.0.tar.gz#sha256=[SOURCE_HASH]`
     ");
 
-    context.backend_marker.assert(predicate::path::missing());
-    context.inner.assert_not_installed("metadata_parent");
-    context.inner.assert_not_installed("ok");
+    context.assert_backend_did_not_run();
 
     Ok(())
 }
@@ -185,9 +197,7 @@ async fn require_hashes_accepts_direct_url_hash_from_explicit_requirement() -> R
      + ok==1.0.0 (from file://[TEMP_DIR]/ok-1.0.0.tar.gz#sha256=[SOURCE_HASH])
     ");
 
-    context.backend_marker.assert(predicate::path::is_file());
-    context.inner.assert_installed("metadata_parent", "1.0.0");
-    context.inner.assert_installed("ok", "1.0.0");
+    context.assert_backend_ran();
 
     Ok(())
 }
@@ -214,9 +224,7 @@ async fn require_hashes_accepts_direct_url_hash_from_constraint() -> Result<()> 
      + ok==1.0.0 (from file://[TEMP_DIR]/ok-1.0.0.tar.gz#sha256=[SOURCE_HASH])
     ");
 
-    context.backend_marker.assert(predicate::path::is_file());
-    context.inner.assert_installed("metadata_parent", "1.0.0");
-    context.inner.assert_installed("ok", "1.0.0");
+    context.assert_backend_ran();
 
     Ok(())
 }
@@ -240,9 +248,7 @@ async fn verify_hashes_accepts_direct_url_hash_discovered_in_wheel_metadata() ->
      + ok==1.0.0 (from file://[TEMP_DIR]/ok-1.0.0.tar.gz#sha256=[SOURCE_HASH])
     ");
 
-    context.backend_marker.assert(predicate::path::is_file());
-    context.inner.assert_installed("metadata_parent", "1.0.0");
-    context.inner.assert_installed("ok", "1.0.0");
+    context.assert_backend_ran();
 
     Ok(())
 }
