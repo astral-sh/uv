@@ -125,6 +125,9 @@ check = [
     "typos>=1.49.0",
     "validate-pyproject[all,store]>=0.25",
 ]
+dev = [
+    "astral-dev-toolchain-cargo-dist>=0.32.0",
+]
 
 [tool.uv]
 no-build = true
@@ -139,6 +142,7 @@ exclude-newer = "P7D"
 
 [tool.uv.exclude-newer-package]
 astral-dev-toolchain-cargo-shear = "2026-08-27T04:00:00Z"
+astral-dev-toolchain-cargo-dist = "2026-08-28T04:00:00Z"
 
 [tool.uv.dependency-groups]
 docs = { requires-python = ">=3.12" }

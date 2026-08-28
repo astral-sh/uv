@@ -1,10 +1,6 @@
 on:
   workflow_call:
 
-env:
-  CARGO_DIST_VERSION: "0.31.0"
-  CARGO_DIST_CHECKSUM: "cd355dab0b4c02fb59038fef87655550021d07f45f1d82f947a34ef98560abb8"
-
 jobs:
   dist-plan:
     name: "dist plan"
@@ -17,16 +13,13 @@ jobs:
           persist-credentials: false
           submodules: recursive
 
-      - name: Install dist
-        shell: bash
-        run: |
-          curl --proto '=https' --tlsv1.2 -LsSf "https://github.com/axodotdev/cargo-dist/releases/download/v${CARGO_DIST_VERSION}/cargo-dist-x86_64-unknown-linux-gnu.tar.xz" -o /tmp/cargo-dist.tar.xz
-          echo "${CARGO_DIST_CHECKSUM}  /tmp/cargo-dist.tar.xz" | sha256sum -c -
-          tar -xf /tmp/cargo-dist.tar.xz -C /tmp
-          install /tmp/cargo-dist-x86_64-unknown-linux-gnu/dist ~/.cargo/bin/
+      - name: "Install uv"
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          version: "0.12.5"
 
       - name: Run dist plan
         run: |
-          dist plan --output-format=json > plan-dist-manifest.json
+          uv run --only-dev dist plan --output-format=json > plan-dist-manifest.json
           echo "dist plan completed successfully"
           cat plan-dist-manifest.json
