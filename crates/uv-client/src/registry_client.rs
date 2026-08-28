@@ -5,12 +5,14 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use async_http_range_reader::AsyncHttpRangeReader;
+use async_zip::ZipFile;
 use futures::{FutureExt, StreamExt, TryStreamExt};
 use http::{HeaderMap, StatusCode};
 use itertools::Either;
 use reqwest::{Proxy, Response};
 use rustc_hash::FxHashMap;
 use tokio::sync::{Mutex, Semaphore};
+use tokio_util::compat::TokioAsyncReadCompatExt;
 use tracing::{Instrument, debug, info_span, instrument, trace, warn};
 use url::Url;
 
@@ -245,6 +247,56 @@ impl RegistryClient {
     /// Return the [`BaseClient`] used by this client.
     pub fn uncached_client(&self, url: &DisplaySafeUrl) -> &RedirectClientWithMiddleware {
         self.client.uncached().for_host(url)
+    }
+
+    /// Fetch the central directory of a wheel while its full response is being streamed.
+    ///
+    /// Start with a suffix range request, which usually includes the entire directory. A strong
+    /// `ETag` from the full response pins subsequent requests to the same representation. Callers
+    /// must still validate the prefetched metadata against the streamed archive.
+    pub async fn wheel_central_directory(
+        &self,
+        url: &DisplaySafeUrl,
+        filename: &WheelFilename,
+        response: &Response,
+    ) -> Result<ZipFile, Error> {
+        let request = self
+            .uncached_client(url)
+            .get(Url::from(url.clone()))
+            .header(reqwest::header::ACCEPT_ENCODING, "identity")
+            .build()
+            .map_err(|err| {
+                ErrorKind::from_reqwest(url.clone(), err, self.client.certificate_source())
+            })?;
+        // Retain authorization and conditional headers for any additional directory ranges.
+        let mut headers = request.headers().clone();
+        if let Some(etag) = response.headers().get(reqwest::header::ETAG)
+            && !etag.as_bytes().starts_with(b"W/")
+        {
+            headers.insert(reqwest::header::IF_MATCH, etag.clone());
+        }
+        let tail = AsyncHttpRangeReader::initial_tail_request(
+            self.uncached_client(url).clone(),
+            Url::from(url.clone()),
+            16_384,
+            headers.clone(),
+        )
+        .await
+        .map_err(|err| ErrorKind::AsyncHttpRangeReader(url.clone(), err))?;
+        let reader = AsyncHttpRangeReader::from_range_response(
+            self.uncached_client(url).clone(),
+            tail,
+            Url::from(url.clone()),
+            headers,
+        )
+        .await
+        .map_err(|err| ErrorKind::AsyncHttpRangeReader(url.clone(), err))?;
+        let reader = async_zip::base::read::seek::ZipFileReader::new(futures::io::BufReader::new(
+            reader.compat(),
+        ))
+        .await
+        .map_err(|err| ErrorKind::Zip(filename.clone(), err))?;
+        Ok(reader.file().clone())
     }
 
     /// Return the [`GitHttpSettings`] for fetching from the given URL.

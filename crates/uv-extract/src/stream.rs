@@ -1,6 +1,12 @@
+#[cfg(unix)]
+use std::fs::Permissions;
+use std::future::{Future, ready};
+#[cfg(unix)]
+use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::pin::Pin;
 
+use async_zip::ZipFile;
 use async_zip::base::read::cd::Entry;
 use async_zip::error::ZipError;
 use futures::{AsyncReadExt, StreamExt};
@@ -23,6 +29,21 @@ use crate::dirhash::{
 use crate::{Error, insecure_no_validate};
 
 const DEFAULT_BUF_SIZE: usize = 128 * 1024;
+
+/// Preserve the executable bits on a private extracted file before it can be shared.
+#[cfg(unix)]
+async fn set_executable(path: &Path) -> Result<(), Error> {
+    let permissions = fs_err::tokio::metadata(path)
+        .await
+        .map_err(Error::Io)?
+        .permissions();
+    if permissions.mode() & 0o111 != 0o111 {
+        fs_err::tokio::set_permissions(path, Permissions::from_mode(permissions.mode() | 0o111))
+            .await
+            .map_err(Error::Io)?;
+    }
+    Ok(())
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct LocalHeaderEntry {
@@ -65,7 +86,9 @@ pub async fn unzip<R: tokio::io::AsyncRead + Unpin>(
     reader: R,
     target: impl AsRef<Path>,
 ) -> Result<Vec<UnhashedFile>, Error> {
-    let UnzipOutput::Unhashed(files) = Box::pin(unzip_inner(reader, target, false)).await? else {
+    let UnzipOutput::Unhashed(files) =
+        Box::pin(unzip_inner(reader, target, false, None, |_| ready(Ok(())))).await?
+    else {
         return Err(Error::Io(std::io::Error::other(
             "streaming ZIP hash tree was unexpectedly computed",
         )));
@@ -80,11 +103,30 @@ pub async fn unzip<R: tokio::io::AsyncRead + Unpin>(
 /// followed as symlinks; non-directory entries are materialized and hashed as regular files.
 ///
 /// See [`unzip`] for details.
-pub async fn unzip_and_hash<R: tokio::io::AsyncRead + Unpin>(
+///
+/// With a prefetched central directory, report each file after writing it with its executable
+/// permissions, so callers can publish it while the rest of the archive is downloaded. Otherwise,
+/// report files when their central-directory entries are read. The remaining ZIP can still fail
+/// validation; prefetched modes are checked against the streamed central directory before success.
+pub async fn unzip_and_hash<R, F, Fut>(
     reader: R,
     target: impl AsRef<Path>,
-) -> Result<(Vec<HashedFile>, DirhashTree), Error> {
-    let UnzipOutput::Hashed { files, tree } = Box::pin(unzip_inner(reader, target, true)).await?
+    central_directory: Option<&ZipFile>,
+    on_file: F,
+) -> Result<(Vec<HashedFile>, DirhashTree), Error>
+where
+    R: tokio::io::AsyncRead + Unpin,
+    F: FnMut(HashedFile) -> Fut,
+    Fut: Future<Output = Result<(), std::io::Error>>,
+{
+    let UnzipOutput::Hashed { files, tree } = Box::pin(unzip_inner(
+        reader,
+        target,
+        true,
+        central_directory,
+        on_file,
+    ))
+    .await?
     else {
         return Err(Error::Io(std::io::Error::other(
             "streaming ZIP hash tree was not computed",
@@ -93,11 +135,18 @@ pub async fn unzip_and_hash<R: tokio::io::AsyncRead + Unpin>(
     Ok((files, tree))
 }
 
-async fn unzip_inner<R: tokio::io::AsyncRead + Unpin>(
+async fn unzip_inner<R, F, Fut>(
     reader: R,
     target: impl AsRef<Path>,
     hash_contents: bool,
-) -> Result<UnzipOutput, Error> {
+    central_directory: Option<&ZipFile>,
+    mut on_file: F,
+) -> Result<UnzipOutput, Error>
+where
+    R: tokio::io::AsyncRead + Unpin,
+    F: FnMut(HashedFile) -> Fut,
+    Fut: Future<Output = Result<(), std::io::Error>>,
+{
     // Determine whether ZIP validation is disabled.
     let skip_validation = insecure_no_validate();
 
@@ -112,6 +161,17 @@ async fn unzip_inner<R: tokio::io::AsyncRead + Unpin>(
     let mut hashed_files = Vec::new();
     let mut digest_directories = FxHashSet::default();
     let mut offset = 0;
+    let prefetched_modes: FxHashMap<_, _> = central_directory
+        .into_iter()
+        .flat_map(ZipFile::entries)
+        // Match the streaming reader, which uses external attributes regardless of creator OS.
+        .map(|entry| {
+            (
+                entry.header_offset(),
+                (entry.external_file_attribute() >> 16) & 0o111 != 0,
+            )
+        })
+        .collect();
 
     while let Some(mut entry) = zip.next_with_entry().await? {
         let zip_entry = entry.reader().entry();
@@ -157,7 +217,7 @@ async fn unzip_inner<R: tokio::io::AsyncRead + Unpin>(
         let is_dir = zip_entry.dir()?;
         let computed = if is_dir {
             if directories.insert(path.clone()) {
-                fs_err::tokio::create_dir_all(path)
+                fs_err::tokio::create_dir_all(&path)
                     .await
                     .map_err(Error::Io)?;
             }
@@ -199,7 +259,7 @@ async fn unzip_inner<R: tokio::io::AsyncRead + Unpin>(
                 }
             }
 
-            // We don't know the file permissions here, because we haven't seen the central directory yet.
+            // Files remain private until their payload is complete and their mode is known.
             let (actual_uncompressed_size, digest, reader) =
                 match fs_err::tokio::File::create_new(&path).await {
                     Ok(file) => {
@@ -244,6 +304,13 @@ async fn unzip_inner<R: tokio::io::AsyncRead + Unpin>(
                         (bytes_read, digest, reader)
                     }
                     Err(err) if err.kind() == std::io::ErrorKind::AlreadyExists => {
+                        // Distinct spellings can alias on a case-insensitive filesystem. A
+                        // previously extracted inode may already be shared with the file store.
+                        if hash_contents {
+                            return Err(Error::DuplicateOutputPath {
+                                path: relpath.to_path_buf(),
+                            });
+                        }
                         debug!(
                             "Found duplicate local file header for: {}",
                             relpath.as_path().display()
@@ -379,6 +446,23 @@ async fn unzip_inner<R: tokio::io::AsyncRead + Unpin>(
             }
         }
 
+        if let Some(digest) = computed.digest
+            && let Some(&executable) = prefetched_modes.get(&file_offset)
+        {
+            #[cfg(unix)]
+            if executable {
+                set_executable(&path).await?;
+            }
+            on_file(HashedFile::new(
+                relpath.clone(),
+                computed.uncompressed_size,
+                digest,
+                executable,
+            ))
+            .await
+            .map_err(Error::Io)?;
+        }
+
         // Store the offset, for validation, and error if we see a duplicate file.
         match local_headers.entry(file_offset) {
             std::collections::hash_map::Entry::Vacant(entry) => {
@@ -503,14 +587,31 @@ async fn unzip_inner<R: tokio::io::AsyncRead + Unpin>(
                                 digest_directories.insert(relpath.clone());
                             }
                         } else if let Some(digest) = local_header.digest {
-                            hashed_files.push(HashedFile::new(
+                            let file = HashedFile::new(
                                 relpath.clone(),
                                 local_header.uncompressed_size,
                                 digest,
                                 entry
                                     .unix_permissions()
                                     .is_some_and(|mode| mode & 0o111 != 0),
-                            ));
+                            );
+                            if let Some(&executable) = prefetched_modes.get(&entry.file_offset()) {
+                                // The callback may already have shared this inode. Never change
+                                // its permissions based on a different response's directory.
+                                if executable != file.is_executable() {
+                                    return Err(Error::ConflictingExecutablePermissions {
+                                        path: relpath.to_path_buf(),
+                                        offset: entry.file_offset(),
+                                    });
+                                }
+                            } else {
+                                #[cfg(unix)]
+                                if file.is_executable() {
+                                    set_executable(&target.join(relpath.as_path())).await?;
+                                }
+                                on_file(file.clone()).await.map_err(Error::Io)?;
+                            }
+                            hashed_files.push(file);
                         } else {
                             files.push(UnhashedFile::new(
                                 relpath.to_path_buf(),
@@ -533,10 +634,7 @@ async fn unzip_inner<R: tokio::io::AsyncRead + Unpin>(
                 // which indicates the first entry in the central directory. So we continue reading from there.
                 #[cfg(unix)]
                 {
-                    use std::fs::Permissions;
-                    use std::os::unix::fs::PermissionsExt;
-
-                    if is_dir {
+                    if is_dir || hash_contents {
                         continue;
                     }
 
@@ -564,19 +662,7 @@ async fn unzip_inner<R: tokio::io::AsyncRead + Unpin>(
                     // https://github.com/pypa/pip/blob/3898741e29b7279e7bffe044ecfbe20f6a438b1e/src/pip/_internal/utils/unpacking.py#L88-L100
                     let has_any_executable_bit = mode & 0o111;
                     if has_any_executable_bit != 0 {
-                        let path = target.join(relpath.as_path());
-                        let permissions = fs_err::tokio::metadata(&path)
-                            .await
-                            .map_err(Error::Io)?
-                            .permissions();
-                        if permissions.mode() & 0o111 != 0o111 {
-                            fs_err::tokio::set_permissions(
-                                &path,
-                                Permissions::from_mode(permissions.mode() | 0o111),
-                            )
-                            .await
-                            .map_err(Error::Io)?;
-                        }
+                        set_executable(&target.join(relpath.as_path())).await?;
                     }
                 }
             }
@@ -892,5 +978,184 @@ pub async fn archive<R: tokio::io::AsyncRead + Unpin>(
             untar_zst(reader, target).await
         }
         SourceDistExtension::Legacy(_) => Err(Error::UnsupportedCompression),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::io;
+    #[cfg(unix)]
+    use std::os::unix::fs::PermissionsExt;
+    use std::path::Path;
+    use std::time::Duration;
+
+    use async_zip::base::read::seek::ZipFileReader;
+    use async_zip::base::write::ZipFileWriter;
+    use async_zip::{Compression, ZipEntryBuilder};
+    use futures::io::Cursor;
+    use tokio::io::AsyncWriteExt;
+    use tokio::sync::oneshot;
+
+    #[tokio::test]
+    async fn publishes_executable_before_next_payload() -> anyhow::Result<()> {
+        let mut archive = ZipFileWriter::new(Vec::new());
+        archive
+            .write_entry_whole(
+                ZipEntryBuilder::new("first".into(), Compression::Deflate).unix_permissions(0o755),
+                b"first payload",
+            )
+            .await?;
+        let boundary = archive.inner_mut().len();
+        archive
+            .write_entry_whole(
+                ZipEntryBuilder::new("second".into(), Compression::Deflate).unix_permissions(0o644),
+                b"second payload",
+            )
+            .await?;
+        let contents = archive.close().await?;
+        let directory = ZipFileReader::new(Cursor::new(&contents))
+            .await?
+            .file()
+            .clone();
+        let target = tempfile::tempdir()?;
+        let store = tempfile::tempdir()?;
+        let (reader, mut writer) = tokio::io::duplex(64);
+        let (sender, receiver) = oneshot::channel();
+        let mut sender = Some(sender);
+        let download = async {
+            writer.write_all(&contents[..boundary]).await?;
+            // Withhold the remaining payload until the first file is shared with its final mode.
+            receiver.await.map_err(io::Error::other)?;
+            writer.write_all(&contents[boundary..]).await?;
+            writer.shutdown().await?;
+            Ok::<_, io::Error>(())
+        };
+        let extraction = super::unzip_and_hash(reader, target.path(), Some(&directory), |file| {
+            let first = file.path() == Path::new("first");
+            assert_eq!(file.is_executable(), first);
+            let sender = if first { sender.take() } else { None };
+            let source = target.path().join(file.path());
+            let shared = store.path().join(file.path());
+            let second = target.path().join("second");
+            async move {
+                fs_err::tokio::hard_link(&source, &shared).await?;
+                #[cfg(unix)]
+                assert_eq!(
+                    fs_err::metadata(&shared)?.permissions().mode() & 0o111 != 0,
+                    first
+                );
+                if let Some(sender) = sender {
+                    assert!(!second.exists());
+                    let _ = sender.send(());
+                }
+                Ok(())
+            }
+        });
+        let (download, extraction) = tokio::time::timeout(Duration::from_secs(10), async {
+            tokio::join!(download, extraction)
+        })
+        .await?;
+        download?;
+        let (files, _) = extraction?;
+        assert_eq!(files.len(), 2);
+        assert_eq!(
+            fs_err::read(store.path().join("second"))?,
+            b"second payload"
+        );
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn aliased_output_does_not_chmod_shared_files() -> anyhow::Result<()> {
+        let mut archive = ZipFileWriter::new(Vec::new());
+        for (name, mode) in [("file", 0o644), ("FILE", 0o755)] {
+            archive
+                .write_entry_whole(
+                    ZipEntryBuilder::new(name.into(), Compression::Deflate).unix_permissions(mode),
+                    b"same contents",
+                )
+                .await?;
+        }
+        let contents = archive.close().await?;
+        let directory = ZipFileReader::new(Cursor::new(&contents))
+            .await?
+            .file()
+            .clone();
+        let target = tempfile::tempdir()?;
+        let store = tempfile::tempdir()?;
+        let shared = store.path().join("file");
+        let extraction = super::unzip_and_hash(
+            contents.as_slice(),
+            target.path(),
+            Some(&directory),
+            |file| {
+                assert!(!file.is_executable());
+                let source = target.path().join(file.path());
+                let alias = target.path().join("FILE");
+                let shared = &shared;
+                async move {
+                    // Also exercise this on case-sensitive filesystems by creating the alias explicitly.
+                    if !alias.exists() {
+                        fs_err::tokio::hard_link(&source, &alias).await?;
+                    }
+                    fs_err::tokio::hard_link(&source, shared).await
+                }
+            },
+        )
+        .await;
+        assert!(matches!(
+            extraction,
+            Err(crate::Error::DuplicateOutputPath { .. })
+        ));
+        assert_eq!(fs_err::read(&shared)?, b"same contents");
+        #[cfg(unix)]
+        assert_eq!(fs_err::metadata(&shared)?.permissions().mode() & 0o111, 0);
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn changed_directory_does_not_chmod_shared_files() -> anyhow::Result<()> {
+        for (prefetched_mode, streamed_mode) in [(0o644, 0o755), (0o755, 0o644)] {
+            let mut archives = Vec::new();
+            for mode in [prefetched_mode, streamed_mode] {
+                let mut archive = ZipFileWriter::new(Vec::new());
+                archive
+                    .write_entry_whole(
+                        ZipEntryBuilder::new("file".into(), Compression::Deflate)
+                            .unix_permissions(mode),
+                        b"same contents",
+                    )
+                    .await?;
+                archives.push(archive.close().await?);
+            }
+            let directory = ZipFileReader::new(Cursor::new(&archives[0]))
+                .await?
+                .file()
+                .clone();
+            let target = tempfile::tempdir()?;
+            let store = tempfile::tempdir()?;
+            let shared = store.path().join("file");
+            let extraction = super::unzip_and_hash(
+                archives[1].as_slice(),
+                target.path(),
+                Some(&directory),
+                |file| {
+                    assert_eq!(file.is_executable(), prefetched_mode & 0o111 != 0);
+                    fs_err::tokio::hard_link(target.path().join(file.path()), &shared)
+                },
+            )
+            .await;
+            assert!(matches!(
+                extraction,
+                Err(crate::Error::ConflictingExecutablePermissions { .. })
+            ));
+            assert_eq!(fs_err::read(&shared)?, b"same contents");
+            #[cfg(unix)]
+            assert_eq!(
+                fs_err::metadata(&shared)?.permissions().mode() & 0o111 != 0,
+                prefetched_mode & 0o111 != 0
+            );
+        }
+        Ok(())
     }
 }

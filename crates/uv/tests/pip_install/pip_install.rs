@@ -1,4 +1,6 @@
 use std::fmt::Write;
+#[cfg(unix)]
+use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -19,7 +21,7 @@ use url::Url;
 use walkdir::WalkDir;
 use wiremock::{
     Mock, MockServer, ResponseTemplate,
-    matchers::{basic_auth, method, path},
+    matchers::{basic_auth, header, method, path},
 };
 
 use uv_extract::dirhash::{DirectoryDigest, dirhash_path};
@@ -16608,8 +16610,15 @@ async fn binary_payloads_stay_in_archive_without_preview() -> Result<()> {
 
 #[tokio::test]
 async fn all_files_except_record_use_archive_file_store() -> Result<()> {
-    let server = MockServer::start().await;
-    for (streaming, concurrent_installs) in [(false, "1"), (false, "4"), (true, "1"), (true, "4")] {
+    for (streaming, ranges, concurrent_installs) in [
+        (false, false, "1"),
+        (false, false, "4"),
+        (true, false, "1"),
+        (true, false, "4"),
+        (true, true, "1"),
+        (true, true, "4"),
+    ] {
+        let server = MockServer::start().await;
         let context = uv_test::test_context!("3.12")
             .with_concurrent_installs(concurrent_installs)
             .with_filter((r" \(from (?:file|http)://.*\)", " (from [WHEEL_URL])"));
@@ -16617,9 +16626,34 @@ async fn all_files_except_record_use_archive_file_store() -> Result<()> {
         let mut command = context.pip_install();
         command.args(["--preview-features", "content-addressed-cache"]);
         if streaming {
+            let contents = fs_err::read(&wheel)?;
+            if ranges {
+                let start = contents.len().saturating_sub(16_384);
+                Mock::given(method("GET"))
+                    .and(path("/binary_payload-0.1.0-py3-none-any.whl"))
+                    .and(header("range", "bytes=-16384"))
+                    .and(header("if-match", "\"wheel\""))
+                    .respond_with(
+                        ResponseTemplate::new(206)
+                            .insert_header(
+                                "content-range",
+                                format!("bytes {start}-{}/{}", contents.len() - 1, contents.len()),
+                            )
+                            .set_body_bytes(contents[start..].to_vec()),
+                    )
+                    .with_priority(1)
+                    .expect(1)
+                    .mount(&server)
+                    .await;
+            }
             Mock::given(method("GET"))
                 .and(path("/binary_payload-0.1.0-py3-none-any.whl"))
-                .respond_with(ResponseTemplate::new(200).set_body_bytes(fs_err::read(&wheel)?))
+                .respond_with(
+                    ResponseTemplate::new(200)
+                        .insert_header("etag", "\"wheel\"")
+                        .set_body_bytes(contents),
+                )
+                .with_priority(2)
                 .mount(&server)
                 .await;
             command.arg(format!(
@@ -16681,6 +16715,15 @@ async fn all_files_except_record_use_archive_file_store() -> Result<()> {
             .filter(|path| !path.ends_with("RECORD"))
             .collect::<Vec<_>>();
         assert_eq!(shared_paths, paths);
+        #[cfg(unix)]
+        for path in &paths {
+            let executable =
+                path.ends_with("binary_payload/native.so") || path.ends_with("binary_payload/tool");
+            assert_eq!(
+                fs_err::metadata(path)?.permissions().mode() & 0o111 != 0,
+                executable
+            );
+        }
     }
     Ok(())
 }
