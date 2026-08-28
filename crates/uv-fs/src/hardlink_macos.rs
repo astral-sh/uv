@@ -15,7 +15,7 @@ const VDIR: u32 = 2;
 #[repr(align(8))]
 struct AttributeBuffer([u8; 64 * 1024]);
 
-/// Read single-link files in batches, falling back if any entries need a regular directory walk.
+/// Collect pruning candidates with `getattrlistbulk`, avoiding a metadata call for every file.
 #[expect(unsafe_code)]
 pub(super) fn single_link_files(path: &Path) -> io::Result<Option<Vec<PathBuf>>> {
     let directory = fs_err::OpenOptions::new()
@@ -65,7 +65,11 @@ pub(super) fn single_link_files(path: &Path) -> io::Result<Option<Vec<PathBuf>>>
     }
 }
 
-/// Decode the fixed attributes and record-relative names returned with `FSOPT_PACK_INVAL_ATTRS`.
+/// Decode a batch using the attribute request in [`single_link_files`].
+///
+/// Offsets assume `FSOPT_PACK_INVAL_ATTRS`; returned attribute bits still determine which values
+/// are valid. A subdirectory or missing required attribute discards the batch's candidates and
+/// returns `None` so the caller can walk the directory normally.
 fn single_link_files_from_buffer(
     directory: &Path,
     mut buffer: &[u8],
@@ -118,13 +122,12 @@ fn single_link_files_from_buffer(
         let name_end = name_start
             .checked_add(read_u32(record, 32)? as usize)
             .ok_or_else(invalid_attributes)?;
-        let name = CStr::from_bytes_with_nul(
-            record
-                .get(name_start..name_end)
-                .ok_or_else(invalid_attributes)?,
-        )
-        .map_err(|_| invalid_attributes())?
-        .to_bytes();
+        let name = record
+            .get(name_start..name_end)
+            .ok_or_else(invalid_attributes)?;
+        let name = CStr::from_bytes_with_nul(name)
+            .map_err(|_| invalid_attributes())?
+            .to_bytes();
         if name.is_empty() || name == b"." || name == b".." || name.contains(&b'/') {
             return Err(invalid_attributes());
         }
