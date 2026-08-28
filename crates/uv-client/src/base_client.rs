@@ -31,14 +31,14 @@ use uv_platform_tags::Platform;
 use uv_preview::Preview;
 use uv_redacted::DisplaySafeUrl;
 use uv_redacted::DisplaySafeUrlError;
-use uv_static::{EnvVars, InvalidEnvironmentVariable};
+use uv_static::EnvVars;
 use uv_version::version;
 use uv_warnings::warn_user_once;
 
 use crate::linehaul::LineHaul;
 use crate::middleware::OfflineMiddleware;
 use crate::tls::{Certificates, read_identity};
-use crate::{Connectivity, RetriableError, RetryState, UvRetryableStrategy};
+use crate::{Connectivity, MetadataRangeRequest, RetriableError, RetryState, UvRetryableStrategy};
 
 pub const DEFAULT_RETRIES: u32 = 3;
 
@@ -69,8 +69,6 @@ pub enum ClientBuildError {
     Credentials(#[from] CredentialsFromUrlError),
     #[error(transparent)]
     IndexCredentials(#[from] IndexCredentialsError),
-    #[error(transparent)]
-    InvalidEnvironmentVariable(#[from] InvalidEnvironmentVariable),
 }
 
 /// Selectively skip parts or the entire auth middleware.
@@ -104,6 +102,7 @@ pub struct BaseClientBuilder<'a> {
     indexes: Indexes,
     read_timeout: Duration,
     connect_timeout: Duration,
+    metadata_range_request: MetadataRangeRequest,
     extra_middleware: Option<ExtraMiddleware>,
     proxies: Vec<Proxy>,
     http_proxy: Option<ProxyUrl>,
@@ -214,6 +213,7 @@ impl Default for BaseClientBuilder<'_> {
             indexes: Indexes::new(),
             read_timeout: DEFAULT_READ_TIMEOUT,
             connect_timeout: DEFAULT_CONNECT_TIMEOUT,
+            metadata_range_request: MetadataRangeRequest::default(),
             extra_middleware: None,
             proxies: vec![],
             http_proxy: None,
@@ -291,6 +291,18 @@ impl<'a> BaseClientBuilder<'a> {
     pub fn no_retry_delay(mut self, no_retry_delay: bool) -> Self {
         self.no_retry_delay = no_retry_delay;
         self
+    }
+
+    /// Require wheel metadata to be fetched with HTTP range requests when separate metadata is
+    /// unavailable.
+    #[must_use]
+    pub fn metadata_range_request(mut self, request: MetadataRangeRequest) -> Self {
+        self.metadata_range_request = request;
+        self
+    }
+
+    pub(crate) fn configured_metadata_range_request(&self) -> MetadataRangeRequest {
+        self.metadata_range_request
     }
 
     /// Set the number of workers available for reading cached HTTP responses.

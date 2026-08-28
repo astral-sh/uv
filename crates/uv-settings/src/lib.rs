@@ -729,6 +729,7 @@ pub struct EnvironmentOptions {
     pub ruff_path: Option<PathBuf>,
     pub ty_path: Option<PathBuf>,
     pub skip_wheel_filename_check: Option<bool>,
+    pub require_metadata_range_requests: Option<bool>,
     pub hide_build_output: Option<bool>,
     pub python_install_bin: Option<bool>,
     pub python_install_registry: Option<bool>,
@@ -808,6 +809,9 @@ impl EnvironmentOptions {
             ty_path: parse_path_environment_variable(EnvVars::TY),
             skip_wheel_filename_check: parse_boolish_environment_variable(
                 EnvVars::UV_SKIP_WHEEL_FILENAME_CHECK,
+            )?,
+            require_metadata_range_requests: parse_boolish_environment_variable(
+                EnvVars::UV_REQUIRE_METADATA_RANGE_REQUESTS,
             )?,
             hide_build_output: parse_boolish_environment_variable(EnvVars::UV_HIDE_BUILD_OUTPUT)?,
             python_install_bin: parse_boolish_environment_variable(EnvVars::UV_PYTHON_INSTALL_BIN)?,

@@ -6,7 +6,7 @@ use wiremock::matchers::{method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
 use uv_cache::Cache;
-use uv_client::{BaseClientBuilder, RegistryClientBuilder};
+use uv_client::{BaseClientBuilder, MetadataRangeRequest, RegistryClientBuilder};
 use uv_distribution_filename::WheelFilename;
 use uv_distribution_types::{BuiltDist, DirectUrlBuiltDist, IndexCapabilities};
 use uv_git::GitResolver;
@@ -63,9 +63,11 @@ async fn remote_metadata_requires_range_requests() -> Result<()> {
         .await;
 
     let cache = Cache::temp()?.init().await?;
-    let client = RegistryClientBuilder::new(BaseClientBuilder::default(), cache)
-        .require_metadata_range_requests(true)
-        .build()?;
+    let client = RegistryClientBuilder::new(
+        BaseClientBuilder::default().metadata_range_request(MetadataRangeRequest::Require),
+        cache,
+    )
+    .build()?;
 
     let url = format!("{}/ok-1.0.0-py3-none-any.whl", server.uri());
     let filename = WheelFilename::from_str("ok-1.0.0-py3-none-any.whl")?;
