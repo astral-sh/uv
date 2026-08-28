@@ -614,6 +614,8 @@ impl Cache {
 
     /// Remove a package from the cache.
     ///
+    /// Unreferenced file objects are removed separately by [`Cache::prune_archive_files`].
+    ///
     /// Returns the number of entries removed from the cache.
     pub fn remove(&self, name: &PackageName) -> io::Result<Removal> {
         // Collect the set of referenced archives.
@@ -623,6 +625,10 @@ impl Cache {
         let mut summary = self.removal();
         for bucket in CacheBucket::iter() {
             summary += bucket.remove(self, name)?;
+        }
+
+        if references.is_empty() {
+            return Ok(summary);
         }
 
         // Only remove targets in the archive bucket. Cache entries may contain unexpected links
@@ -637,13 +643,11 @@ impl Cache {
             }
         }
 
-        summary += self.prune_archive_files()?;
-
         Ok(summary)
     }
 
     /// Remove file objects with no hardlinks outside the files bucket.
-    fn prune_archive_files(&self) -> Result<Removal, io::Error> {
+    pub fn prune_archive_files(&self) -> Result<Removal, io::Error> {
         let root = self.bucket(CacheBucket::Files);
         if !root.exists() {
             return Ok(self.removal());
