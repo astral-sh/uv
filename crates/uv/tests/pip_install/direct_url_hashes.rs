@@ -31,6 +31,10 @@ struct TestContext {
     source_hash: String,
     /// The file URL of the direct URL source distribution.
     source_url: Url,
+    /// The URL of the authentic parent wheel.
+    wheel_url: String,
+    /// The SHA-256 digest of the authentic parent wheel.
+    wheel_hash: String,
     /// The server hosting the mismatched parent distribution, retained for the test's lifetime.
     _server: MockServer,
 }
@@ -109,19 +113,13 @@ impl TestContext {
         )
         .await;
 
-        // Only the parent wheel and its hash are part of the trusted input set.
-        inner
-            .temp_dir
-            .child("requirements.txt")
-            .write_str(&format!(
-                "metadata-parent @ {wheel_url} --hash=sha256:{wheel_hash}\n"
-            ))?;
-
         Ok(Self {
             inner,
             backend_marker,
             source_hash,
             source_url,
+            wheel_url,
+            wheel_hash,
             _server: server,
         })
     }
@@ -130,12 +128,24 @@ impl TestContext {
         self.inner.filters()
     }
 
-    fn write_child_requirement(&self) -> Result<()> {
-        self.inner.temp_dir.child("child.txt").write_str(&format!(
+    /// Write the trusted parent wheel and its hash to a requirements file.
+    fn write_parent_requirement(&self) -> Result<ChildPath> {
+        let requirements_txt = self.inner.temp_dir.child("requirements.txt");
+        requirements_txt.write_str(&format!(
+            "metadata-parent @ {} --hash=sha256:{}\n",
+            self.wheel_url, self.wheel_hash
+        ))?;
+        Ok(requirements_txt)
+    }
+
+    /// Write the direct URL dependency and its hash to a requirements file.
+    fn write_child_requirement(&self) -> Result<ChildPath> {
+        let child_txt = self.inner.temp_dir.child("child.txt");
+        child_txt.write_str(&format!(
             "ok @ {}#sha256={}\n",
             self.source_url, self.source_hash
         ))?;
-        Ok(())
+        Ok(child_txt)
     }
 
     /// Assert that the direct URL dependency's backend ran and both packages were installed.
@@ -157,10 +167,11 @@ impl TestContext {
 #[tokio::test]
 async fn require_hashes_rejects_direct_url_hash_discovered_in_wheel_metadata() -> Result<()> {
     let context = TestContext::new().await?;
+    let requirements_txt = context.write_parent_requirement()?;
 
     uv_snapshot!(context.filters(), context.inner.pip_install()
         .arg("-r")
-        .arg("requirements.txt")
+        .arg(requirements_txt.path())
         .arg("--no-index")
         .arg("--require-hashes"), @"
     exit_code: 1 (failure)
@@ -178,15 +189,15 @@ async fn require_hashes_rejects_direct_url_hash_discovered_in_wheel_metadata() -
 #[tokio::test]
 async fn require_hashes_accepts_direct_url_hash_from_explicit_requirement() -> Result<()> {
     let context = TestContext::new().await?;
-    context.write_child_requirement()?;
+    let requirements_txt = context.write_parent_requirement()?;
 
     uv_snapshot!(context.filters(), context.inner.pip_install()
         .arg("-r")
-        .arg("requirements.txt")
+        .arg(requirements_txt.path())
         .arg("--no-index")
         .arg("--require-hashes")
         .arg("--requirement")
-        .arg("child.txt"), @"
+        .arg(context.write_child_requirement()?.path()), @"
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
@@ -205,15 +216,15 @@ async fn require_hashes_accepts_direct_url_hash_from_explicit_requirement() -> R
 #[tokio::test]
 async fn require_hashes_accepts_direct_url_hash_from_constraint() -> Result<()> {
     let context = TestContext::new().await?;
-    context.write_child_requirement()?;
+    let requirements_txt = context.write_parent_requirement()?;
 
     uv_snapshot!(context.filters(), context.inner.pip_install()
         .arg("-r")
-        .arg("requirements.txt")
+        .arg(requirements_txt.path())
         .arg("--no-index")
         .arg("--require-hashes")
         .arg("--constraint")
-        .arg("child.txt"), @"
+        .arg(context.write_child_requirement()?.path()), @"
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
@@ -232,10 +243,11 @@ async fn require_hashes_accepts_direct_url_hash_from_constraint() -> Result<()> 
 #[tokio::test]
 async fn verify_hashes_accepts_direct_url_hash_discovered_in_wheel_metadata() -> Result<()> {
     let context = TestContext::new().await?;
+    let requirements_txt = context.write_parent_requirement()?;
 
     uv_snapshot!(context.filters(), context.inner.pip_install()
         .arg("-r")
-        .arg("requirements.txt")
+        .arg(requirements_txt.path())
         .arg("--no-index")
         .arg("--verify-hashes"), @"
     exit_code: 0 (success)
