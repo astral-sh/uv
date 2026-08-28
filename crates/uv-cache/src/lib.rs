@@ -21,7 +21,7 @@ use crate::removal::Remover;
 pub use crate::removal::{Removal, RemovalAccounting};
 pub use crate::wheel::WheelCache;
 use crate::wheel::WheelCacheKind;
-pub use archive::ArchiveId;
+pub use archive::{ArchiveFileId, ArchiveId};
 
 mod archive;
 mod by_timestamp;
@@ -326,6 +326,11 @@ impl Cache {
     /// Return the path to an archive in the cache.
     pub fn archive(&self, id: &ArchiveId) -> PathBuf {
         self.bucket(CacheBucket::Archive).join(id)
+    }
+
+    /// Return the path to an archive file in the cache.
+    pub fn archive_file(&self, id: &ArchiveFileId) -> PathBuf {
+        self.bucket(CacheBucket::Files).join(id)
     }
 
     /// Create a temporary directory to be used as a Python virtual environment.
@@ -636,6 +641,46 @@ impl Cache {
             }
         }
 
+        summary += self.prune_archive_files()?;
+
+        Ok(summary)
+    }
+
+    /// Remove file objects with no hardlinks outside the files bucket.
+    fn prune_archive_files(&self) -> Result<Removal, io::Error> {
+        let root = self.bucket(CacheBucket::Files);
+        if !root.exists() {
+            return Ok(self.removal());
+        }
+
+        let mut summary = self.removal();
+        for entry in walkdir::WalkDir::new(&root)
+            .min_depth(1)
+            .contents_first(true)
+        {
+            let entry = entry?;
+            if entry.file_type().is_file() {
+                match uv_fs::hardlink_count(entry.path()) {
+                    Ok(1) => summary += self.remove_path(entry.path())?,
+                    Ok(_) => {}
+                    Err(err) if err.kind() == io::ErrorKind::NotFound => {}
+                    Err(err) => return Err(err),
+                }
+            } else if entry.file_type().is_dir() {
+                match fs_err::remove_dir(entry.path()) {
+                    Ok(()) => {
+                        summary.num_dirs += 1;
+                    }
+                    Err(err)
+                        if matches!(
+                            err.kind(),
+                            io::ErrorKind::DirectoryNotEmpty | io::ErrorKind::NotFound
+                        ) => {}
+                    Err(err) => return Err(err),
+                }
+            }
+        }
+
         Ok(summary)
     }
 
@@ -765,6 +810,8 @@ impl Cache {
             Err(err) if err.kind() == io::ErrorKind::NotFound => (),
             Err(err) => return Err(err),
         }
+
+        summary += self.prune_archive_files()?;
 
         Ok(summary)
     }
@@ -1240,6 +1287,8 @@ pub enum CacheBucket {
     /// that cache entries can be atomically replaced and removed, as storing directories in the
     /// other buckets directly would make atomic operations impossible.
     Archive,
+    /// Content-addressed files that are hardlinked into cached archives.
+    Files,
     /// Ephemeral virtual environments used to execute PEP 517 builds and other operations.
     Builds,
     /// Reusable virtual environments for Python tools and projects.
@@ -1275,6 +1324,7 @@ impl CacheBucket {
             // Note that when bumping this, you'll also need to bump
             // `ARCHIVE_VERSION` in `crates/uv-cache/src/lib.rs`.
             Self::Archive => "archive-v0",
+            Self::Files => "files-v0",
             Self::Builds => "builds-v0",
             Self::Environments => "environments-v2",
             Self::Python => "python-v0",
@@ -1384,6 +1434,7 @@ impl CacheBucket {
             Self::Git
             | Self::Interpreter
             | Self::Archive
+            | Self::Files
             | Self::Builds
             | Self::Environments
             | Self::Python
@@ -1405,6 +1456,7 @@ impl CacheBucket {
             Self::Interpreter,
             Self::Simple,
             Self::Archive,
+            Self::Files,
             Self::Builds,
             Self::Environments,
             Self::Python,

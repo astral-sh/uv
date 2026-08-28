@@ -6560,6 +6560,7 @@ dependencies = [
  "indoc",
  "insta",
  "owo-colors",
+ "rayon",
  "reqwest",
  "rmp-serde",
  "rustc-hash",

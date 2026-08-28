@@ -16427,10 +16427,17 @@ fn handle_record_mismatches() -> Result<()> {
 
     // Healing changes the extracted tree, so the archive ID must reflect the repaired RECORD.
     let extracted = context.temp_dir.join("foo-extracted");
-    let (files, unhealed_tree) =
+    let (hashed_files, unhealed_tree) =
         uv_extract::unzip_and_hash(File::open(&repacked_wheel)?, &extracted)?;
     let unhealed_digest = DirectoryDigest::from(unhealed_tree.hash());
-    assert!(validate_and_heal_record(&extracted, files.iter(), "foo")?.is_some());
+    assert!(
+        validate_and_heal_record(
+            &extracted,
+            hashed_files.iter().map(|file| (file.path(), file.size())),
+            "foo",
+        )?
+        .is_some()
+    );
     let healed_digest = DirectoryDigest::from(dirhash_path(&extracted)?);
     assert_ne!(unhealed_digest, healed_digest);
 
@@ -16440,6 +16447,7 @@ fn handle_record_mismatches() -> Result<()> {
         .arg("--offline")
         .arg("--preview-features")
         .arg("content-addressed-cache")
+        .args(["--link-mode", "hardlink"])
         .arg("foo"), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -16460,6 +16468,15 @@ fn handle_record_mismatches() -> Result<()> {
         .child("archive-v0")
         .child(healed_digest.as_str())
         .assert(predicate::path::exists());
+
+    // Installation must not mutate the healed RECORD retained in the archive.
+    let healed_record = extracted.join("foo-0.1.0.dist-info/RECORD");
+    let cached_record = context
+        .cache_dir
+        .join("archive-v0")
+        .join(healed_digest.as_str())
+        .join("foo-0.1.0.dist-info/RECORD");
+    assert_eq!(fs_err::read(cached_record)?, fs_err::read(healed_record)?);
 
     // Read the healed RECORD.
     let installed_record =
@@ -16539,4 +16556,355 @@ fn compile_bytecode_excludes_stdlib() -> Result<()> {
     assert!(compiled <= site_packages_sources);
 
     Ok(())
+}
+
+#[tokio::test]
+async fn binary_payloads_stay_in_archive_without_preview() -> Result<()> {
+    let server = MockServer::start().await;
+    for streaming in [false, true] {
+        let context = uv_test::test_context!("3.12")
+            .with_filter((r" \(from (?:file|http)://.*\)", " (from [WHEEL_URL])"));
+        let wheel = binary_payload_wheel(&context)?;
+        let mut command = context.pip_install();
+        if streaming {
+            Mock::given(method("GET"))
+                .and(path("/binary_payload-0.1.0-py3-none-any.whl"))
+                .respond_with(ResponseTemplate::new(200).set_body_bytes(fs_err::read(&wheel)?))
+                .mount(&server)
+                .await;
+            command.arg(format!(
+                "{}/binary_payload-0.1.0-py3-none-any.whl",
+                server.uri()
+            ));
+        } else {
+            command.arg(&wheel);
+        }
+
+        allow_duplicates! {
+            uv_snapshot!(context.filters(), command, @"
+            exit_code: 0 (success)
+            ----- stderr -----
+            Resolved 1 package in [TIME]
+            Prepared 1 package in [TIME]
+            Installed 1 package in [TIME]
+             + binary-payload==0.1.0 (from [WHEEL_URL])
+            ");
+        }
+
+        assert!(!context.cache_dir.child("files-v0").exists());
+        let archive_files = cache_files(context.cache_dir.child("archive-v0").path())?;
+        let archive_binary = archive_files
+            .iter()
+            .find(|path| path.ends_with("binary_payload/native.so"))
+            .context("binary payload is missing from the archive")?;
+        assert_eq!(fs_err::read(archive_binary)?, BINARY_PAYLOAD_CONTENTS);
+        assert_eq!(
+            fs_err::read(context.site_packages().join("binary_payload/native.so"))?,
+            BINARY_PAYLOAD_CONTENTS,
+        );
+    }
+    Ok(())
+}
+
+#[tokio::test]
+async fn all_files_except_record_use_archive_file_store() -> Result<()> {
+    let server = MockServer::start().await;
+    for (streaming, concurrent_installs) in [(false, "1"), (false, "4"), (true, "1"), (true, "4")] {
+        let context = uv_test::test_context!("3.12")
+            .with_concurrent_installs(concurrent_installs)
+            .with_filter((r" \(from (?:file|http)://.*\)", " (from [WHEEL_URL])"));
+        let wheel = binary_payload_wheel(&context)?;
+        let mut command = context.pip_install();
+        command.args(["--preview-features", "content-addressed-cache"]);
+        if streaming {
+            Mock::given(method("GET"))
+                .and(path("/binary_payload-0.1.0-py3-none-any.whl"))
+                .respond_with(ResponseTemplate::new(200).set_body_bytes(fs_err::read(&wheel)?))
+                .mount(&server)
+                .await;
+            command.arg(format!(
+                "{}/binary_payload-0.1.0-py3-none-any.whl",
+                server.uri()
+            ));
+        } else {
+            command.arg(&wheel);
+        }
+        allow_duplicates! {
+            uv_snapshot!(context.filters(), command, @"
+            exit_code: 0 (success)
+            ----- stderr -----
+            Resolved 1 package in [TIME]
+            Prepared 1 package in [TIME]
+            Installed 1 package in [TIME]
+             + binary-payload==0.1.0 (from [WHEEL_URL])
+            ");
+        }
+
+        let objects = cache_files(context.cache_dir.child("files-v0").path())?;
+        // Identical contents still need separate executable and non-executable objects.
+        let mut snapshot = String::new();
+        for object in &objects {
+            writeln!(
+                snapshot,
+                "{}",
+                PortablePath::from(object.strip_prefix(context.cache_dir.path())?)
+            )?;
+        }
+        allow_duplicates! {
+            assert_snapshot!(snapshot, @"
+            files-v0/0c/0c8d68fa16e023b913e926be9b281c5a133c33291b3e60a54c310376f5602a45
+            files-v0/2f/2f4d468b80be8a639ba0bdcfc738be8d912c35dd686a1eb15272e8f56096358c
+            files-v0/4a/4a3f63865c29c673794f181932bc0e2c4779275f22e03a896d3d6ca3ac447332
+            files-v0/80/8043c55c494befd8bb44cf59c112ae6a944da98d04b550ff4fd055e2ebfabeb8
+            files-v0/92/920a0fbc7cd79a94ab2adabfaa8b93804bf6e3e858c454d45958cc9902554248
+            files-v0/bf/bf13d7b1c373edcb8588b94aae048664a6684f665fa4a7e8cd814360e537a049
+            files-v0/fa/fad1ac6fba02614a6ee120fbb397cd676f48c101afee95ab29d146c76df03596
+            ");
+        }
+        let archive = fs_err::read_dir(context.cache_dir.child("archive-v0").path())?
+            .next()
+            .transpose()?
+            .context("missing cached archive")?
+            .path();
+        let paths = cache_files(&archive)?;
+        let shared_paths = paths
+            .iter()
+            .filter(|path| {
+                objects
+                    .iter()
+                    .any(|object| uv_fs::is_same_file_allow_missing(path, object) == Some(true))
+            })
+            .cloned()
+            .collect::<Vec<_>>();
+        let paths = paths
+            .into_iter()
+            .filter(|path| !path.ends_with("RECORD"))
+            .collect::<Vec<_>>();
+        assert_eq!(shared_paths, paths);
+    }
+    Ok(())
+}
+
+#[test]
+fn binary_payloads_use_archive_file_store() -> Result<()> {
+    let context = uv_test::test_context!("3.12")
+        .with_filtered_file_counts()
+        .with_filtered_sizes_and_units()
+        .with_filter((
+            r"\.venv[\\/](?:bin[\\/]python3|Scripts[\\/]python\.exe)",
+            ".venv/[BIN]/[PYTHON]",
+        ));
+    let wheel = binary_payload_wheel(&context)?;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .args(["--preview-features", "content-addressed-cache", "--link-mode", "copy"])
+        .arg(&wheel), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + binary-payload==0.1.0 (from file://[TEMP_DIR]/binary_payload-0.1.0-py3-none-any.whl)
+    ");
+
+    let objects = cache_files(context.cache_dir.child("files-v0").path())?;
+    let archive = fs_err::read_dir(context.cache_dir.child("archive-v0").path())?
+        .next()
+        .transpose()?
+        .context("missing cached archive")?
+        .path();
+    let archive_binary = archive.join("binary_payload/native.so");
+    let object = objects
+        .iter()
+        .find(|object| uv_fs::is_same_file_allow_missing(&archive_binary, object) == Some(true))
+        .context("missing shared binary payload")?;
+
+    uv_snapshot!(context.filters(), context.prune(), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Pruning cache at: [CACHE_DIR]/
+    No unused entries found
+    ");
+    assert!(object.exists());
+
+    // The archive remains complete even if its file-store entry is removed.
+    fs_err::remove_file(object)?;
+    let target = context.temp_dir.child("retained-target");
+    uv_snapshot!(context.filters(), context.pip_install()
+        .args(["--preview-features", "content-addressed-cache", "--link-mode", "copy"])
+        .arg("--target")
+        .arg(target.path())
+        .arg(&wheel), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: .venv/[BIN]/[PYTHON]
+    Resolved 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + binary-payload==0.1.0 (from file://[TEMP_DIR]/binary_payload-0.1.0-py3-none-any.whl)
+    ");
+    assert_eq!(
+        fs_err::read(target.join("binary_payload/native.so"))?,
+        BINARY_PAYLOAD_CONTENTS
+    );
+    fs_err::hard_link(&archive_binary, object)?;
+
+    // Links outside the cache also keep objects alive after their archives are removed.
+    let retained_binary = context.temp_dir.child("retained-native.so");
+    fs_err::hard_link(object, &retained_binary)?;
+    uv_snapshot!(context.filters(), context.clean().arg("binary-payload"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Removed [N] files ([SIZE])
+    ");
+    assert!(!archive.exists());
+    assert_eq!(
+        cache_files(context.cache_dir.child("files-v0").path())?,
+        vec![object.clone()]
+    );
+    assert_eq!(fs_err::read(&retained_binary)?, BINARY_PAYLOAD_CONTENTS);
+
+    fs_err::remove_file(&retained_binary)?;
+    uv_snapshot!(context.filters(), context.prune(), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Pruning cache at: [CACHE_DIR]/
+    Removed [N] files ([SIZE])
+    ");
+    assert!(cache_files(context.cache_dir.child("files-v0").path())?.is_empty());
+
+    Ok(())
+}
+
+/// Requires `UV_INTERNAL__TEST_ALT_FS`.
+#[test]
+fn binary_payload_copy_fallback_uses_archive_file_store() -> Result<()> {
+    let Some(context) = uv_test::test_context!("3.12")
+        .with_filter((
+            r"\.venv[\\/](?:bin[\\/]python3|Scripts[\\/]python\.exe)",
+            ".venv/[BIN]/[PYTHON]",
+        ))
+        .with_cache_on_alt_fs()?
+    else {
+        return Ok(());
+    };
+    let wheel = binary_payload_wheel(&context)?;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--preview-features")
+        .arg("content-addressed-cache")
+        .arg(&wheel), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    warning: Failed to hardlink files; falling back to full copy. This may lead to degraded performance.
+             If the cache and target directories are on different filesystems, hardlinking may not be supported.
+             If this is intentional, set `export UV_LINK_MODE=copy` or use `--link-mode=copy` to suppress this warning.
+    Installed 1 package in [TIME]
+     + binary-payload==0.1.0 (from file://[TEMP_DIR]/binary_payload-0.1.0-py3-none-any.whl)
+    ");
+
+    let archive_files = cache_files(context.cache_dir.child("files-v0").path())?;
+    assert_eq!(archive_files.len(), 7);
+
+    let target = context.temp_dir.child("fallback-target");
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--preview-features")
+        .arg("content-addressed-cache")
+        .arg("--target")
+        .arg(target.path())
+        .arg(&wheel), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: .venv/[BIN]/[PYTHON]
+    Resolved 1 package in [TIME]
+    warning: Failed to hardlink files; falling back to full copy. This may lead to degraded performance.
+             If the cache and target directories are on different filesystems, hardlinking may not be supported.
+             If this is intentional, set `export UV_LINK_MODE=copy` or use `--link-mode=copy` to suppress this warning.
+    Installed 1 package in [TIME]
+     + binary-payload==0.1.0 (from file://[TEMP_DIR]/binary_payload-0.1.0-py3-none-any.whl)
+    ");
+
+    assert_eq!(
+        fs_err::read(target.path().join("binary_payload").join("native.so"))?,
+        BINARY_PAYLOAD_CONTENTS,
+    );
+
+    Ok(())
+}
+
+const BINARY_PAYLOAD_CONTENTS: &[u8] = b"binary payload contents\n";
+
+fn binary_payload_wheel(context: &TestContext) -> Result<PathBuf> {
+    const METADATA: &[u8] = b"Metadata-Version: 2.1\nName: binary-payload\nVersion: 0.1.0\n";
+    const WHEEL: &[u8] =
+        b"Wheel-Version: 1.0\nGenerator: uv-test\nRoot-Is-Purelib: true\nTag: py3-none-any\n";
+    const RECORD: &[u8] = b"binary_payload/__init__.py,,\n\
+binary_payload/module.py,,\n\
+binary_payload/native.so,,\n\
+binary_payload/plain.so,,\n\
+binary_payload/versioned.so.1,,\n\
+binary_payload/versioned.so.1.2,,\n\
+binary_payload/native.dylib,,\n\
+binary_payload/native.DLL,,\n\
+binary_payload/native.pyd,,\n\
+binary_payload/tool,,\n\
+binary_payload/large.dat,,\n\
+binary_payload-0.1.0.dist-info/ignored.so,,\n\
+binary_payload-0.1.0.dist-info/METADATA,,\n\
+binary_payload-0.1.0.dist-info/WHEEL,,\n\
+binary_payload-0.1.0.dist-info/RECORD,,\n";
+
+    let wheel = context
+        .temp_dir
+        .join("binary_payload-0.1.0-py3-none-any.whl");
+    let mut writer = ZipFileWriter::new(Vec::new());
+    let large_file = vec![0; 2 * 1024 * 1024];
+    for (name, contents) in [
+        ("binary_payload/__init__.py", &[][..]),
+        (
+            "binary_payload/module.py",
+            b"VALUE = 'not binary'\n" as &[u8],
+        ),
+        ("binary_payload/native.so", BINARY_PAYLOAD_CONTENTS),
+        ("binary_payload/plain.so", BINARY_PAYLOAD_CONTENTS),
+        ("binary_payload/versioned.so.1", BINARY_PAYLOAD_CONTENTS),
+        ("binary_payload/versioned.so.1.2", BINARY_PAYLOAD_CONTENTS),
+        ("binary_payload/native.dylib", BINARY_PAYLOAD_CONTENTS),
+        ("binary_payload/native.DLL", BINARY_PAYLOAD_CONTENTS),
+        ("binary_payload/native.pyd", BINARY_PAYLOAD_CONTENTS),
+        ("binary_payload/tool", BINARY_PAYLOAD_CONTENTS),
+        ("binary_payload/large.dat", large_file.as_slice()),
+        (
+            "binary_payload-0.1.0.dist-info/ignored.so",
+            BINARY_PAYLOAD_CONTENTS,
+        ),
+        ("binary_payload-0.1.0.dist-info/METADATA", METADATA),
+        ("binary_payload-0.1.0.dist-info/WHEEL", WHEEL),
+        ("binary_payload-0.1.0.dist-info/RECORD", RECORD),
+    ] {
+        let entry = ZipEntryBuilder::new(name.into(), Compression::Stored).unix_permissions(
+            if matches!(name, "binary_payload/native.so" | "binary_payload/tool") {
+                0o755
+            } else {
+                0o644
+            },
+        );
+        block_on(writer.write_entry_whole(entry, contents))?;
+    }
+    fs_err::write(&wheel, block_on(writer.close())?)?;
+
+    Ok(wheel)
+}
+
+fn cache_files(root: &Path) -> Result<Vec<PathBuf>> {
+    let mut files = Vec::new();
+    for entry in WalkDir::new(root).min_depth(1) {
+        let entry = entry?;
+        if entry.file_type().is_file() {
+            files.push(entry.path().to_path_buf());
+        }
+    }
+    files.sort();
+    Ok(files)
 }
