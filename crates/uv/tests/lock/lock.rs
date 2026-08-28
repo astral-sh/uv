@@ -8948,36 +8948,32 @@ fn lock_relative_inactive_dependency_metadata_paths() -> Result<()> {
     let parent_url = Url::from_file_path(parent.path())
         .map_err(|()| anyhow::anyhow!("parent path is not a valid file URL"))?;
 
-    context
-        .temp_dir
-        .child("pyproject.toml")
-        .write_str(&formatdoc! {r#"
-            [project]
-            name = "project"
-            version = "0.1.0"
-            requires-python = ">=3.12"
-            dependencies = [
-                "authored-parent",
-                "member",
-            ]
+    let project = indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "authored-parent",
+            "member",
+        ]
 
-            [tool.uv.workspace]
-            members = ["member"]
+        [tool.uv.workspace]
+        members = ["member"]
 
-            [tool.uv.sources]
-            authored-parent = {{ path = "authored-parent" }}
-            member = {{ workspace = true }}
+        [tool.uv.sources]
+        authored-parent = { path = "authored-parent" }
+        member = { workspace = true }
 
-            [[tool.uv.dependency-metadata]]
-            name = "authored-parent"
-            version = "0.1.0"
-            requires-dist = [
-                "active-child @ {active_child_url}",
-                "child @ {child_url}; python_version < '0'",
-                "parent @ {parent_url}",
-                "relative-child @ ${{UV_TEST_CONFIGURED_CHILD_URL}}",
-            ]
-        "#})?;
+        [[tool.uv.dependency-metadata]]
+        name = "authored-parent"
+        version = "0.1.0"
+    "#};
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(&formatdoc! {r"
+        {project}
+        requires-dist = []
+    "})?;
 
     context
         .temp_dir
@@ -8992,6 +8988,43 @@ fn lock_relative_inactive_dependency_metadata_paths() -> Result<()> {
 
     let member = context.temp_dir.child("member");
     member.child("member/__init__.py").touch()?;
+    member.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "member"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+    "#})?;
+
+    parent.child("parent/__init__.py").touch()?;
+    parent.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "parent"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+    "#})?;
+
+    context.lock().assert().success();
+
+    let baseline_lock = context.read("uv.lock");
+
+    pyproject_toml.write_str(&formatdoc! {r#"
+        {project}
+        requires-dist = [
+            "active-child @ {active_child_url}",
+            "child @ {child_url}; python_version < '0'",
+            "parent @ {parent_url}",
+            "relative-child @ ${{UV_TEST_CONFIGURED_CHILD_URL}}",
+        ]
+    "#})?;
+
     member.child("pyproject.toml").write_str(&formatdoc! {r#"
         [project]
         name = "member"
@@ -9004,7 +9037,77 @@ fn lock_relative_inactive_dependency_metadata_paths() -> Result<()> {
         build-backend = "hatchling.build"
     "#})?;
 
-    parent.child("parent/__init__.py").touch()?;
+    context
+        .lock()
+        .env("UV_TEST_CONFIGURED_CHILD_URL", relative_child_url.as_str())
+        .assert()
+        .success();
+
+    let lock = context.read("uv.lock");
+    let diff = diff_snapshot(&baseline_lock, &lock, 3);
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(diff, @r#"
+        --- old
+        +++ new
+        @@ -14,17 +14,44 @@
+         [[manifest.dependency-metadata]]
+         name = "authored-parent"
+         version = "0.1.0"
+        +requires-dist = ["active-child @ file://[TEMP_DIR]/active-child", "child @ file://[TEMP_DIR]/child ; python_full_version < '0'", "parent @ file://[TEMP_DIR]/parent", "relative-child @ file://[TEMP_DIR]/relative-child"]
+        +
+        +[[package]]
+        +name = "active-child"
+        +version = "0.1.0"
+        +source = { directory = "[TEMP_DIR]/active-child" }
+
+         [[package]]
+         name = "authored-parent"
+         version = "0.1.0"
+         source = { directory = "authored-parent" }
+        +dependencies = [
+        +    { name = "active-child" },
+        +    { name = "parent" },
+        +    { name = "relative-child" },
+        +]
+        +
+        +[package.metadata]
+        +requires-dist = [
+        +    { name = "active-child", directory = "[TEMP_DIR]/active-child" },
+        +    { name = "child", marker = "python_full_version < '0'", directory = "[TEMP_DIR]/child" },
+        +    { name = "parent", directory = "[TEMP_DIR]/parent" },
+        +    { name = "relative-child", directory = "relative-child" },
+        +]
+
+         [[package]]
+         name = "member"
+         version = "0.1.0"
+         source = { editable = "member" }
+
+        +[package.metadata]
+        +requires-dist = [{ name = "child", marker = "python_full_version < '0'", directory = "[TEMP_DIR]/child" }]
+        +
+        +[[package]]
+        +name = "parent"
+        +version = "0.1.0"
+        +source = { directory = "[TEMP_DIR]/parent" }
+        +
+         [[package]]
+         name = "project"
+         version = "0.1.0"
+        @@ -39,3 +66,8 @@
+             { name = "authored-parent", directory = "authored-parent" },
+             { name = "member", editable = "member" },
+         ]
+        +
+        +[[package]]
+        +name = "relative-child"
+        +version = "0.1.0"
+        +source = { directory = "relative-child" }
+        "#);
+    });
+
     parent.child("pyproject.toml").write_str(&formatdoc! {r#"
         [project]
         name = "parent"
@@ -9026,48 +9129,39 @@ fn lock_relative_inactive_dependency_metadata_paths() -> Result<()> {
         .assert()
         .success();
 
-    let lock = context.read("uv.lock");
-    let source_paths = lock
-        .lines()
-        .skip_while(|line| *line != "[[package]]")
-        .filter(|line| {
-            line.starts_with("name = ")
-                || line.starts_with("source = ")
-                || *line == "[package.metadata]"
-                || line.contains("directory = ")
-        })
-        .collect::<Vec<_>>()
-        .join("\n");
+    let new_lock = context.read("uv.lock");
+    let diff = diff_snapshot(&lock, &new_lock, 3);
 
     // Preserve configured and workspace paths while making backend paths and aliases relative.
     insta::with_settings!({
         filters => context.filters(),
     }, {
-        assert_snapshot!(source_paths, @r#"
-        name = "active-child"
-        source = { directory = "[TEMP_DIR]/active-child" }
-        name = "authored-parent"
-        source = { directory = "authored-parent" }
-        [package.metadata]
-            { name = "active-child", directory = "[TEMP_DIR]/active-child" },
-            { name = "child", marker = "python_full_version < '0'", directory = "[TEMP_DIR]/child" },
-            { name = "parent", directory = "[TEMP_DIR]/parent" },
-            { name = "relative-child", directory = "relative-child" },
-        name = "member"
-        source = { editable = "member" }
-        [package.metadata]
-        requires-dist = [{ name = "child", marker = "python_full_version < '0'", directory = "[TEMP_DIR]/child" }]
-        name = "parent"
-        source = { directory = "[TEMP_DIR]/parent" }
-        [package.metadata]
-            { name = "child", marker = "extra == 'unused'", directory = "[TEMP_DIR]/child" },
-            { name = "relative-child", directory = "[TEMP_DIR]/relative-child-alias" },
-        name = "project"
-        source = { virtual = "." }
-        [package.metadata]
-            { name = "authored-parent", directory = "authored-parent" },
-        name = "relative-child"
-        source = { directory = "[TEMP_DIR]/relative-child-alias" }
+        assert_snapshot!(diff, @r#"
+        --- old
+        +++ new
+        @@ -51,6 +51,16 @@
+         name = "parent"
+         version = "0.1.0"
+         source = { directory = "[TEMP_DIR]/parent" }
+        +dependencies = [
+        +    { name = "relative-child" },
+        +]
+        +
+        +[package.metadata]
+        +requires-dist = [
+        +    { name = "child", marker = "extra == 'unused'", directory = "[TEMP_DIR]/child" },
+        +    { name = "relative-child", directory = "[TEMP_DIR]/relative-child-alias" },
+        +]
+        +provides-extras = ["unused"]
+
+         [[package]]
+         name = "project"
+        @@ -70,4 +80,4 @@
+         [[package]]
+         name = "relative-child"
+         version = "0.1.0"
+        -source = { directory = "relative-child" }
+        +source = { directory = "[TEMP_DIR]/relative-child-alias" }
         "#);
     });
 
