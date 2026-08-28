@@ -10,7 +10,7 @@ mod wheel;
 
 use std::path::{Path, PathBuf};
 
-pub use server::{PackseServer, distribution_file_response};
+pub use server::{PackseServer, mount_mismatched_distribution};
 pub use wheel::{generate_wheel, generate_wheel_with_files};
 
 fn workspace_root() -> PathBuf {
