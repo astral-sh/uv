@@ -215,7 +215,7 @@ fn handle_request(req: &Request, server_uri: &str, index: &ServerIndex) -> Respo
     if let Some(filename) = path.strip_prefix("/files/") {
         if let Some(file) = index.files.get(filename) {
             return match file.bytes() {
-                Ok(bytes) => build_file_response(req, filename, &bytes),
+                Ok(bytes) => distribution_file_response(req, filename, &bytes),
                 Err(error) => ResponseTemplate::new(500).set_body_string(format!("{error:#}")),
             };
         }
@@ -226,7 +226,7 @@ fn handle_request(req: &Request, server_uri: &str, index: &ServerIndex) -> Respo
 }
 
 /// Build a response for a distribution file, including support for single byte ranges.
-fn build_file_response(req: &Request, filename: &str, bytes: &[u8]) -> ResponseTemplate {
+pub fn distribution_file_response(req: &Request, filename: &str, bytes: &[u8]) -> ResponseTemplate {
     let content_type = content_type_for_filename(filename);
     let Some(range) = req.headers.get("range") else {
         return ResponseTemplate::new(200)
