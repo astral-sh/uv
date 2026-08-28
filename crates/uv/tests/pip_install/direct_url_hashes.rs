@@ -22,7 +22,7 @@ use uv_test::{TestContext as UvTestContext, uv_snapshot};
 /// The hosted parent distribution serves forged wheel bytes to range requests and authentic wheel
 /// bytes to full-file requests. This models metadata that introduces a direct URL dependency even
 /// though the trusted parent wheel has no dependencies.
-struct TestContext {
+struct DirectUrlHashTestContext {
     /// The shared filesystem, cache, environment, and virtual environment for the `uv` invocation.
     inner: UvTestContext,
     /// A marker written if the direct URL dependency's build backend executes.
@@ -39,7 +39,7 @@ struct TestContext {
     _server: MockServer,
 }
 
-impl TestContext {
+impl DirectUrlHashTestContext {
     /// Create a test context with forged ranged metadata and an authentic full-file download.
     async fn new() -> Result<Self> {
         let inner = uv_test::test_context!("3.12");
@@ -166,7 +166,7 @@ impl TestContext {
 /// A direct URL hash discovered only in wheel metadata cannot authorize the dependency.
 #[tokio::test]
 async fn require_hashes_rejects_direct_url_hash_discovered_in_wheel_metadata() -> Result<()> {
-    let context = TestContext::new().await?;
+    let context = DirectUrlHashTestContext::new().await?;
     let requirements_txt = context.write_parent_requirement()?;
 
     uv_snapshot!(context.filters(), context.inner.pip_install()
@@ -188,7 +188,7 @@ async fn require_hashes_rejects_direct_url_hash_discovered_in_wheel_metadata() -
 /// An explicit requirement can authorize a direct URL hash also present in wheel metadata.
 #[tokio::test]
 async fn require_hashes_accepts_direct_url_hash_from_explicit_requirement() -> Result<()> {
-    let context = TestContext::new().await?;
+    let context = DirectUrlHashTestContext::new().await?;
     let requirements_txt = context.write_parent_requirement()?;
     let child_txt = context.write_child_requirement()?;
 
@@ -216,7 +216,7 @@ async fn require_hashes_accepts_direct_url_hash_from_explicit_requirement() -> R
 /// A constraint can authorize a direct URL hash without adding a root requirement.
 #[tokio::test]
 async fn require_hashes_accepts_direct_url_hash_from_constraint() -> Result<()> {
-    let context = TestContext::new().await?;
+    let context = DirectUrlHashTestContext::new().await?;
     let requirements_txt = context.write_parent_requirement()?;
     let child_txt = context.write_child_requirement()?;
 
@@ -244,7 +244,7 @@ async fn require_hashes_accepts_direct_url_hash_from_constraint() -> Result<()> 
 /// Optional verification permits a direct URL hash discovered in wheel metadata.
 #[tokio::test]
 async fn verify_hashes_accepts_direct_url_hash_discovered_in_wheel_metadata() -> Result<()> {
-    let context = TestContext::new().await?;
+    let context = DirectUrlHashTestContext::new().await?;
     let requirements_txt = context.write_parent_requirement()?;
 
     uv_snapshot!(context.filters(), context.inner.pip_install()
