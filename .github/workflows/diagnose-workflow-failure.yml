@@ -81,11 +81,21 @@ jobs:
             exit 1
           fi
 
-          gh run view "$RUN_ID" \
-            --repo "$GITHUB_REPOSITORY" \
-            --attempt "$(jq -r '.attempt' .workflow-failure-event.json)" \
-            --log-failed \
-            > .workflow-failure-log.txt
+          # Fetch jobs separately to avoid gh's limit of 25 per-job log fallbacks.
+          run_attempt="$(jq -r '.attempt' .workflow-failure-event.json)"
+          jq -r '
+            .jobs[]
+            | select(.conclusion | IN("action_required", "failure", "startup_failure", "timed_out"))
+            | .databaseId
+          ' .workflow-failure-event.json > "$RUNNER_TEMP/workflow-failure-job-ids.txt"
+
+          while IFS= read -r job_id; do
+            gh run view \
+              --repo "$GITHUB_REPOSITORY" \
+              --attempt "$run_attempt" \
+              --job "$job_id" \
+              --log-failed
+          done < "$RUNNER_TEMP/workflow-failure-job-ids.txt" > .workflow-failure-log.txt
 
           {
             printf 'Workflow failure diagnosis automation for run %s\n\n' "$RUN_ID"
