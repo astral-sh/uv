@@ -1,4 +1,3 @@
-use std::collections::BTreeMap;
 use std::fmt::Write;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -16,7 +15,6 @@ use futures::executor::block_on;
 use indoc::{formatdoc, indoc};
 use insta::{allow_duplicates, assert_snapshot};
 use predicates::prelude::predicate;
-use sha2::{Digest, Sha256};
 use url::Url;
 use walkdir::WalkDir;
 use wiremock::{
@@ -32,7 +30,7 @@ use uv_test::archive::write_tar_gz;
 #[cfg(feature = "test-git")]
 use uv_test::decode_token;
 use uv_test::find_links::FindLinksServer;
-use uv_test::packse::{PackseServer, generate_wheel, mount_mismatched_distribution};
+use uv_test::packse::PackseServer;
 use uv_test::{
     DEFAULT_PYTHON_VERSION, TestContext, apply_filters, download_to_disk, get_bin, uv_snapshot,
     venv_bin_path,
@@ -8425,224 +8423,6 @@ fn require_hashes_missing_dependency() -> Result<()> {
     error: In `--require-hashes` mode, all requirements must be pinned upfront with `==`, but found: `markupsafe`
     "
     );
-
-    Ok(())
-}
-
-struct DiscoveredDirectUrlFixture {
-    context: TestContext,
-    marker: assert_fs::fixture::ChildPath,
-    source_hash: String,
-    source_url: Url,
-    _server: MockServer,
-}
-
-impl DiscoveredDirectUrlFixture {
-    fn filters(&self) -> Vec<(&str, &str)> {
-        let mut filters = self.context.filters();
-        filters.push((&self.source_hash, "[SOURCE_HASH]"));
-        filters
-    }
-
-    fn command(&self, hash_mode: &str) -> Command {
-        let mut command = self.context.pip_install();
-        command
-            .arg("-r")
-            .arg("requirements.txt")
-            .arg("--no-index")
-            .arg(hash_mode)
-            .env("WHEEL_METADATA_MARKER", self.marker.path())
-            .env(
-                "WHEEL_METADATA_CHILD_WHEEL",
-                self.context
-                    .workspace_root
-                    .join("test/links/ok-1.0.0-py3-none-any.whl"),
-            );
-        command
-    }
-
-    fn write_child_requirement(&self) -> Result<()> {
-        self.context
-            .temp_dir
-            .child("child.txt")
-            .write_str(&format!(
-                "ok @ {}#sha256={}\n",
-                self.source_url, self.source_hash
-            ))?;
-        Ok(())
-    }
-}
-
-async fn discovered_direct_url_fixture() -> Result<DiscoveredDirectUrlFixture> {
-    let context = uv_test::test_context!("3.12");
-
-    // The forged parent wheel declares a direct URL dependency whose fragment includes its hash.
-    // The authentic parent wheel has no dependencies.
-    let source = context.temp_dir.child("ok-1.0.0.tar.gz");
-    let marker = context.temp_dir.child("backend-marker");
-    write_tar_gz(
-        File::create(source.path())?,
-        &[
-            (
-                "ok-1.0.0/pyproject.toml",
-                indoc! {r#"
-                    [build-system]
-                    requires = []
-                    build-backend = "backend"
-                    backend-path = ["."]
-                "#},
-            ),
-            (
-                "ok-1.0.0/backend.py",
-                indoc! {r#"
-                    import os
-                    import shutil
-                    from pathlib import Path
-
-                    Path(os.environ["WHEEL_METADATA_MARKER"]).write_text("executed")
-
-                    def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
-                        wheel = Path(os.environ["WHEEL_METADATA_CHILD_WHEEL"])
-                        shutil.copyfile(wheel, Path(wheel_directory) / wheel.name)
-                        return wheel.name
-                "#},
-            ),
-        ],
-    )?;
-    let source_hash = hex::encode(Sha256::digest(fs::read(source.path())?));
-    let source_url = Url::from_file_path(source.path()).expect("source path is an absolute path");
-    let dependency = format!("ok @ {source_url}#sha256={source_hash}").parse()?;
-
-    let name = "metadata-parent".parse()?;
-    let version = "1.0.0".parse()?;
-    let (wheel_filename, authentic_wheel) =
-        generate_wheel(&name, &version, &[], &BTreeMap::new(), None, "py3-none-any");
-    let (_, forged_wheel) = generate_wheel(
-        &name,
-        &version,
-        &[dependency],
-        &BTreeMap::new(),
-        None,
-        "py3-none-any",
-    );
-    let wheel_hash = hex::encode(Sha256::digest(&authentic_wheel));
-    let server = MockServer::start().await;
-    let wheel_path = format!("/files/{wheel_filename}");
-    let wheel_url = format!("{}{wheel_path}", server.uri());
-
-    mount_mismatched_distribution(
-        &server,
-        &wheel_path,
-        &wheel_filename,
-        forged_wheel,
-        authentic_wheel,
-    )
-    .await;
-
-    // Only the parent wheel and its hash are part of the trusted input set.
-    context
-        .temp_dir
-        .child("requirements.txt")
-        .write_str(&format!(
-            "metadata-parent @ {wheel_url} --hash=sha256:{wheel_hash}\n"
-        ))?;
-
-    Ok(DiscoveredDirectUrlFixture {
-        context,
-        marker,
-        source_hash,
-        source_url,
-        _server: server,
-    })
-}
-
-/// A direct URL hash discovered only in wheel metadata cannot authorize the dependency.
-#[tokio::test]
-async fn require_hashes_rejects_direct_url_hash_discovered_in_wheel_metadata() -> Result<()> {
-    let fixture = discovered_direct_url_fixture().await?;
-
-    uv_snapshot!(fixture.filters(), fixture.command("--require-hashes"), @"
-    exit_code: 1 (failure)
-    ----- stderr -----
-      × Failed to build `ok @ file://[TEMP_DIR]/ok-1.0.0.tar.gz#sha256=[SOURCE_HASH]`
-      ╰─▶ Hash-checking is enabled, but no hashes were provided or computed for: `ok @ file://[TEMP_DIR]/ok-1.0.0.tar.gz#sha256=[SOURCE_HASH]`
-    ");
-
-    fixture.marker.assert(predicate::path::missing());
-    fixture.context.assert_not_installed("metadata_parent");
-    fixture.context.assert_not_installed("ok");
-
-    Ok(())
-}
-
-/// An explicit requirement can authorize a direct URL hash also present in wheel metadata.
-#[tokio::test]
-async fn require_hashes_accepts_direct_url_hash_from_explicit_requirement() -> Result<()> {
-    let fixture = discovered_direct_url_fixture().await?;
-    fixture.write_child_requirement()?;
-    let mut command = fixture.command("--require-hashes");
-    command.arg("--requirement").arg("child.txt");
-
-    uv_snapshot!(fixture.filters(), command, @"
-    exit_code: 0 (success)
-    ----- stderr -----
-    Resolved 2 packages in [TIME]
-    Prepared 2 packages in [TIME]
-    Installed 2 packages in [TIME]
-     + metadata-parent==1.0.0 (from http://[LOCALHOST]/files/metadata_parent-1.0.0-py3-none-any.whl)
-     + ok==1.0.0 (from file://[TEMP_DIR]/ok-1.0.0.tar.gz#sha256=[SOURCE_HASH])
-    ");
-
-    fixture.marker.assert(predicate::path::is_file());
-    fixture.context.assert_installed("metadata_parent", "1.0.0");
-    fixture.context.assert_installed("ok", "1.0.0");
-
-    Ok(())
-}
-
-/// A constraint can authorize a direct URL hash without adding a root requirement.
-#[tokio::test]
-async fn require_hashes_accepts_direct_url_hash_from_constraint() -> Result<()> {
-    let fixture = discovered_direct_url_fixture().await?;
-    fixture.write_child_requirement()?;
-    let mut command = fixture.command("--require-hashes");
-    command.arg("--constraint").arg("child.txt");
-
-    uv_snapshot!(fixture.filters(), command, @"
-    exit_code: 0 (success)
-    ----- stderr -----
-    Resolved 2 packages in [TIME]
-    Prepared 2 packages in [TIME]
-    Installed 2 packages in [TIME]
-     + metadata-parent==1.0.0 (from http://[LOCALHOST]/files/metadata_parent-1.0.0-py3-none-any.whl)
-     + ok==1.0.0 (from file://[TEMP_DIR]/ok-1.0.0.tar.gz#sha256=[SOURCE_HASH])
-    ");
-
-    fixture.marker.assert(predicate::path::is_file());
-    fixture.context.assert_installed("metadata_parent", "1.0.0");
-    fixture.context.assert_installed("ok", "1.0.0");
-
-    Ok(())
-}
-
-/// Optional verification permits a direct URL hash discovered in wheel metadata.
-#[tokio::test]
-async fn verify_hashes_accepts_direct_url_hash_discovered_in_wheel_metadata() -> Result<()> {
-    let fixture = discovered_direct_url_fixture().await?;
-
-    uv_snapshot!(fixture.filters(), fixture.command("--verify-hashes"), @"
-    exit_code: 0 (success)
-    ----- stderr -----
-    Resolved 2 packages in [TIME]
-    Prepared 2 packages in [TIME]
-    Installed 2 packages in [TIME]
-     + metadata-parent==1.0.0 (from http://[LOCALHOST]/files/metadata_parent-1.0.0-py3-none-any.whl)
-     + ok==1.0.0 (from file://[TEMP_DIR]/ok-1.0.0.tar.gz#sha256=[SOURCE_HASH])
-    ");
-
-    fixture.marker.assert(predicate::path::is_file());
-    fixture.context.assert_installed("metadata_parent", "1.0.0");
-    fixture.context.assert_installed("ok", "1.0.0");
 
     Ok(())
 }

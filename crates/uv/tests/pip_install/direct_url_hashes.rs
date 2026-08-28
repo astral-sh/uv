@@ -1,0 +1,241 @@
+//! Tests for direct URL hashes discovered from package metadata.
+
+use std::collections::BTreeMap;
+use std::process::Command;
+
+use anyhow::Result;
+use assert_fs::fixture::ChildPath;
+use assert_fs::prelude::*;
+use fs_err as fs;
+use fs_err::File;
+use indoc::indoc;
+use predicates::prelude::predicate;
+use sha2::{Digest, Sha256};
+use url::Url;
+use wiremock::MockServer;
+
+use uv_test::archive::write_tar_gz;
+use uv_test::packse::{generate_wheel, mount_mismatched_distribution};
+use uv_test::{TestContext as UvTestContext, uv_snapshot};
+
+/// A test context for exercising hashes discovered from forged wheel metadata.
+///
+/// The hosted parent distribution serves forged wheel bytes to range requests and authentic wheel
+/// bytes to full-file requests. This models metadata that introduces a direct URL dependency even
+/// though the trusted parent wheel has no dependencies.
+struct TestContext {
+    /// The shared filesystem, cache, environment, and virtual environment for the `uv` invocation.
+    uv: UvTestContext,
+    /// A marker written if the direct URL dependency's build backend executes.
+    backend_marker: ChildPath,
+    /// The SHA-256 digest of the direct URL source distribution.
+    source_hash: String,
+    /// The file URL of the direct URL source distribution.
+    source_url: Url,
+    /// The server hosting the mismatched parent distribution, retained for the test's lifetime.
+    _server: MockServer,
+}
+
+impl TestContext {
+    /// Create a test context with forged ranged metadata and an authentic full-file download.
+    async fn new() -> Result<Self> {
+        let uv = uv_test::test_context!("3.12");
+
+        let source = uv.temp_dir.child("ok-1.0.0.tar.gz");
+        let backend_marker = uv.temp_dir.child("backend-marker");
+        write_tar_gz(
+            File::create(source.path())?,
+            &[
+                (
+                    "ok-1.0.0/pyproject.toml",
+                    indoc! {r#"
+                        [build-system]
+                        requires = []
+                        build-backend = "backend"
+                        backend-path = ["."]
+                    "#},
+                ),
+                (
+                    "ok-1.0.0/backend.py",
+                    indoc! {r#"
+                        import os
+                        import shutil
+                        from pathlib import Path
+
+                        Path(os.environ["WHEEL_METADATA_MARKER"]).write_text("executed")
+
+                        def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
+                            wheel = Path(os.environ["WHEEL_METADATA_CHILD_WHEEL"])
+                            shutil.copyfile(wheel, Path(wheel_directory) / wheel.name)
+                            return wheel.name
+                    "#},
+                ),
+            ],
+        )?;
+        let source_hash = hex::encode(Sha256::digest(fs::read(source.path())?));
+        let source_url =
+            Url::from_file_path(source.path()).expect("source path is an absolute path");
+        let dependency = format!("ok @ {source_url}#sha256={source_hash}").parse()?;
+
+        let name = "metadata-parent".parse()?;
+        let version = "1.0.0".parse()?;
+        let (wheel_filename, authentic_wheel) =
+            generate_wheel(&name, &version, &[], &BTreeMap::new(), None, "py3-none-any");
+        let (_, forged_wheel) = generate_wheel(
+            &name,
+            &version,
+            &[dependency],
+            &BTreeMap::new(),
+            None,
+            "py3-none-any",
+        );
+        let wheel_hash = hex::encode(Sha256::digest(&authentic_wheel));
+        let server = MockServer::start().await;
+        let wheel_path = format!("/files/{wheel_filename}");
+        let wheel_url = format!("{}{wheel_path}", server.uri());
+
+        mount_mismatched_distribution(
+            &server,
+            &wheel_path,
+            &wheel_filename,
+            forged_wheel,
+            authentic_wheel,
+        )
+        .await;
+
+        // Only the parent wheel and its hash are part of the trusted input set.
+        uv.temp_dir.child("requirements.txt").write_str(&format!(
+            "metadata-parent @ {wheel_url} --hash=sha256:{wheel_hash}\n"
+        ))?;
+
+        Ok(Self {
+            uv,
+            backend_marker,
+            source_hash,
+            source_url,
+            _server: server,
+        })
+    }
+
+    fn filters(&self) -> Vec<(&str, &str)> {
+        let mut filters = self.uv.filters();
+        filters.push((&self.source_hash, "[SOURCE_HASH]"));
+        filters
+    }
+
+    fn command(&self, hash_mode: &str) -> Command {
+        let mut command = self.uv.pip_install();
+        command
+            .arg("-r")
+            .arg("requirements.txt")
+            .arg("--no-index")
+            .arg(hash_mode)
+            .env("WHEEL_METADATA_MARKER", self.backend_marker.path())
+            .env(
+                "WHEEL_METADATA_CHILD_WHEEL",
+                self.uv
+                    .workspace_root
+                    .join("test/links/ok-1.0.0-py3-none-any.whl"),
+            );
+        command
+    }
+
+    fn write_child_requirement(&self) -> Result<()> {
+        self.uv.temp_dir.child("child.txt").write_str(&format!(
+            "ok @ {}#sha256={}\n",
+            self.source_url, self.source_hash
+        ))?;
+        Ok(())
+    }
+}
+
+/// A direct URL hash discovered only in wheel metadata cannot authorize the dependency.
+#[tokio::test]
+async fn require_hashes_rejects_direct_url_hash_discovered_in_wheel_metadata() -> Result<()> {
+    let context = TestContext::new().await?;
+
+    uv_snapshot!(context.filters(), context.command("--require-hashes"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+      × Failed to build `ok @ file://[TEMP_DIR]/ok-1.0.0.tar.gz#sha256=[SOURCE_HASH]`
+      ╰─▶ Hash-checking is enabled, but no hashes were provided or computed for: `ok @ file://[TEMP_DIR]/ok-1.0.0.tar.gz#sha256=[SOURCE_HASH]`
+    ");
+
+    context.backend_marker.assert(predicate::path::missing());
+    context.uv.assert_not_installed("metadata_parent");
+    context.uv.assert_not_installed("ok");
+
+    Ok(())
+}
+
+/// An explicit requirement can authorize a direct URL hash also present in wheel metadata.
+#[tokio::test]
+async fn require_hashes_accepts_direct_url_hash_from_explicit_requirement() -> Result<()> {
+    let context = TestContext::new().await?;
+    context.write_child_requirement()?;
+    let mut command = context.command("--require-hashes");
+    command.arg("--requirement").arg("child.txt");
+
+    uv_snapshot!(context.filters(), command, @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + metadata-parent==1.0.0 (from http://[LOCALHOST]/files/metadata_parent-1.0.0-py3-none-any.whl)
+     + ok==1.0.0 (from file://[TEMP_DIR]/ok-1.0.0.tar.gz#sha256=[SOURCE_HASH])
+    ");
+
+    context.backend_marker.assert(predicate::path::is_file());
+    context.uv.assert_installed("metadata_parent", "1.0.0");
+    context.uv.assert_installed("ok", "1.0.0");
+
+    Ok(())
+}
+
+/// A constraint can authorize a direct URL hash without adding a root requirement.
+#[tokio::test]
+async fn require_hashes_accepts_direct_url_hash_from_constraint() -> Result<()> {
+    let context = TestContext::new().await?;
+    context.write_child_requirement()?;
+    let mut command = context.command("--require-hashes");
+    command.arg("--constraint").arg("child.txt");
+
+    uv_snapshot!(context.filters(), command, @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + metadata-parent==1.0.0 (from http://[LOCALHOST]/files/metadata_parent-1.0.0-py3-none-any.whl)
+     + ok==1.0.0 (from file://[TEMP_DIR]/ok-1.0.0.tar.gz#sha256=[SOURCE_HASH])
+    ");
+
+    context.backend_marker.assert(predicate::path::is_file());
+    context.uv.assert_installed("metadata_parent", "1.0.0");
+    context.uv.assert_installed("ok", "1.0.0");
+
+    Ok(())
+}
+
+/// Optional verification permits a direct URL hash discovered in wheel metadata.
+#[tokio::test]
+async fn verify_hashes_accepts_direct_url_hash_discovered_in_wheel_metadata() -> Result<()> {
+    let context = TestContext::new().await?;
+
+    uv_snapshot!(context.filters(), context.command("--verify-hashes"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + metadata-parent==1.0.0 (from http://[LOCALHOST]/files/metadata_parent-1.0.0-py3-none-any.whl)
+     + ok==1.0.0 (from file://[TEMP_DIR]/ok-1.0.0.tar.gz#sha256=[SOURCE_HASH])
+    ");
+
+    context.backend_marker.assert(predicate::path::is_file());
+    context.uv.assert_installed("metadata_parent", "1.0.0");
+    context.uv.assert_installed("ok", "1.0.0");
+
+    Ok(())
+}
