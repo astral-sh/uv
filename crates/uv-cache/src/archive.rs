@@ -36,11 +36,10 @@ impl ArchiveId {
 }
 
 impl ArchiveFileId {
-    /// Identify an object's contents and executable status, sharded by its content digest.
-    pub fn from_content_digest(digest: &str, executable: bool) -> Self {
+    /// Identify a file object by a digest that includes its contents and executable status.
+    pub fn from_digest(digest: &str) -> Self {
         let shard = digest.get(..2).unwrap_or(digest);
-        let mode = if executable { "x" } else { "n" };
-        Self(PathBuf::from(shard).join(format!("{digest}-{mode}")))
+        Self(PathBuf::from(shard).join(digest))
     }
 }
 

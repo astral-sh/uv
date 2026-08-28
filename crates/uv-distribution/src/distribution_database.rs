@@ -1368,7 +1368,7 @@ fn persist_archive_files(cache: &Cache, archive: &Path, files: &[HashedFile]) ->
         // Keep RECORD private, since it may have been healed after hashing.
         .filter(|file| !file.path().ends_with("RECORD"))
         .map(|file| {
-            let id = ArchiveFileId::from_content_digest(&file.digest_hex(), file.is_executable());
+            let id = ArchiveFileId::from_digest(&file.object_digest_hex());
             (archive.join(file.path()), cache.archive_file(&id))
         })
         .collect::<Vec<_>>();
