@@ -21,7 +21,9 @@ use tracing::{debug, warn};
 use url::ParseError;
 use url::Url;
 
-use uv_auth::{AuthMiddleware, Credentials, CredentialsCache, CredentialsFromUrlError, Indexes};
+use uv_auth::{
+    AuthMiddleware, Credentials, CredentialsCache, CredentialsFromUrlError, Indexes, RealmRef,
+};
 use uv_configuration::ProxyUrlKind;
 use uv_configuration::{Concurrency, KeyringProviderType, ProxyUrl, TrustedHost};
 use uv_distribution_types::IndexCredentialsError;
@@ -1003,9 +1005,8 @@ fn request_into_redirect(
     let mut headers = HeaderMap::new();
     std::mem::swap(req.headers_mut(), &mut headers);
 
-    let cross_host = redirect_url.host_str() != original_req_url.host_str()
-        || redirect_url.port_or_known_default() != original_req_url.port_or_known_default();
-    if cross_host {
+    let cross_realm = RealmRef::from(&*redirect_url) != RealmRef::from(&*original_req_url);
+    if cross_realm {
         if cross_origin_credentials_policy == CrossOriginCredentialsPolicy::Secure {
             debug!("Received a cross-origin redirect. Removing sensitive headers.");
             headers.remove(AUTHORIZATION);
@@ -1209,7 +1210,7 @@ pub enum RetryParsingError {
 mod tests {
     use super::*;
 
-    use anyhow::Result;
+    use anyhow::{Context, Result};
     use reqwest::{Client, Method};
     use wiremock::matchers::method;
     use wiremock::{Mock, MockServer, ResponseTemplate};
@@ -1255,6 +1256,46 @@ mod tests {
             assert!(redirect_request.headers().contains_key(AUTHORIZATION));
         }
 
+        Ok(())
+    }
+
+    /// A scheme change crosses an authentication realm even when the effective port is unchanged.
+    #[test]
+    fn test_redirect_removes_sensitive_headers_on_scheme_change() -> Result<()> {
+        for (source, target) in [
+            (
+                "https://example.com:8080/wheel",
+                "http://example.com:8080/wheel",
+            ),
+            (
+                "http://example.com:8080/wheel",
+                "https://example.com:8080/wheel",
+            ),
+            ("https://example.com/wheel", "http://example.com:443/wheel"),
+        ] {
+            let request = Client::new()
+                .get(source)
+                .header(AUTHORIZATION, "Bearer source-token")
+                .header(COOKIE, "session=source-session")
+                .header(PROXY_AUTHORIZATION, "Basic source-proxy")
+                .header(WWW_AUTHENTICATE, "Basic realm=source")
+                .build()?;
+            let response = Response::from(
+                http::Response::builder()
+                    .status(303)
+                    .header(LOCATION, target)
+                    .body("")?,
+            );
+            let redirected =
+                request_into_redirect(request, &response, CrossOriginCredentialsPolicy::Secure)?
+                    .context("expected a redirect request")?;
+            for header in [AUTHORIZATION, COOKIE, PROXY_AUTHORIZATION, WWW_AUTHENTICATE] {
+                assert!(
+                    !redirected.headers().contains_key(&header),
+                    "retained {header} on redirect from {source} to {target}"
+                );
+            }
+        }
         Ok(())
     }
 
