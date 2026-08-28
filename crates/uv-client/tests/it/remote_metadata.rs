@@ -2,10 +2,12 @@ use std::path::Path;
 use std::str::FromStr;
 
 use anyhow::{Context, Result};
+use async_zip::base::write::ZipFileWriter;
+use async_zip::{Compression, ZipEntryBuilder};
 use reqwest::header::{
     ACCEPT_RANGES, AUTHORIZATION, CONTENT_LENGTH, CONTENT_RANGE, HeaderName, LOCATION, RANGE,
 };
-use wiremock::matchers::{basic_auth, header_exists, method, path};
+use wiremock::matchers::{basic_auth, header_exists, header_regex, method, path};
 use wiremock::{Match, Mock, MockServer, Request, ResponseTemplate};
 
 use uv_cache::Cache;
@@ -265,7 +267,21 @@ async fn remote_metadata_redirect_cross_origin() -> Result<()> {
 async fn remote_metadata_redirect_method_specific_target() -> Result<()> {
     let source_server = MockServer::start().await;
     let target_server = MockServer::start().await;
-    let wheel = wheel()?;
+    // Separate the metadata from the central directory so reading it requires multiple ranges.
+    let mut writer = ZipFileWriter::new(Vec::new());
+    writer
+        .write_entry_whole(
+            ZipEntryBuilder::new("ok-1.0.0.dist-info/METADATA".into(), Compression::Stored),
+            b"Metadata-Version: 2.1\nName: ok\nVersion: 1.0.0\n",
+        )
+        .await?;
+    writer
+        .write_entry_whole(
+            ZipEntryBuilder::new("padding".into(), Compression::Stored),
+            &[0; 32_768],
+        )
+        .await?;
+    let wheel = writer.close().await?;
     let wheel_len = wheel.len();
     let head_target = authenticated_url(
         &target_server.uri(),
@@ -363,6 +379,118 @@ async fn remote_metadata_redirect_method_specific_target() -> Result<()> {
     assert_wheel_metadata_readable(&source_server).await?;
 
     Ok(())
+}
+
+/// Some servers support bounded ranges but reject suffix ranges. Preserve that working path
+/// independently of redirect support; this is a protocol compatibility control, not a registry mock.
+#[tokio::test]
+async fn remote_metadata_bounded_ranges() -> Result<()> {
+    let server = MockServer::start().await;
+    let wheel = wheel()?;
+    Mock::given(method("HEAD"))
+        .and(path("/artifact"))
+        .and(basic_auth("source-user", "source-password"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .insert_header(ACCEPT_RANGES, "bytes")
+                .insert_header(CONTENT_LENGTH, wheel.len().to_string()),
+        )
+        .expect(1)
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/artifact"))
+        .and(basic_auth("source-user", "source-password"))
+        .and(header_regex(RANGE.as_str(), "^bytes=[0-9]+-[0-9]+$"))
+        .respond_with(move |request: &Request| wheel_range_response(request, &wheel))
+        .expect(1)
+        .named("bounded range request")
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/artifact"))
+        .and(header_regex(RANGE.as_str(), "^bytes=-"))
+        .respond_with(ResponseTemplate::new(416))
+        .expect(0)
+        .named("unsupported suffix range request")
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/artifact"))
+        .and(header_missing(RANGE))
+        .respond_with(ResponseTemplate::new(500))
+        .expect(0)
+        .named("unnecessary streaming fallback")
+        .mount(&server)
+        .await;
+
+    assert_wheel_metadata_readable(&server).await
+}
+
+/// An artifact host may reject ranges while allowing a full download. This is a generic fallback
+/// control for redirecting registries, not an assertion about a particular storage service.
+#[tokio::test]
+async fn remote_metadata_redirect_range_forbidden() -> Result<()> {
+    let source_server = MockServer::start().await;
+    let target_server = MockServer::start().await;
+    let wheel = wheel()?;
+    let target = format!("{}/wheel", target_server.uri());
+    Mock::given(method("HEAD"))
+        .and(path("/artifact"))
+        .and(basic_auth("source-user", "source-password"))
+        .respond_with(ResponseTemplate::new(303).insert_header(LOCATION, target.clone()))
+        .expect(1)
+        .mount(&source_server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/artifact"))
+        .and(basic_auth("source-user", "source-password"))
+        .and(header_exists(RANGE.as_str()))
+        .respond_with(ResponseTemplate::new(303).insert_header(LOCATION, target.clone()))
+        .expect(1)
+        .named("ranged GET request to the redirecting wheel URL")
+        .mount(&source_server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/artifact"))
+        .and(basic_auth("source-user", "source-password"))
+        .and(header_missing(RANGE))
+        .respond_with(ResponseTemplate::new(303).insert_header(LOCATION, target))
+        .expect(1)
+        .named("streaming fallback GET request to the redirecting wheel URL")
+        .mount(&source_server)
+        .await;
+    Mock::given(method("HEAD"))
+        .and(path("/wheel"))
+        .and(header_missing(AUTHORIZATION))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .insert_header(ACCEPT_RANGES, "bytes")
+                .insert_header(CONTENT_LENGTH, wheel.len().to_string()),
+        )
+        .expect(1)
+        .mount(&target_server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/wheel"))
+        .and(header_missing(AUTHORIZATION))
+        .and(header_exists(RANGE.as_str()))
+        .respond_with(ResponseTemplate::new(403))
+        .expect(0)
+        .named("forbidden range request to the redirect target")
+        .mount(&target_server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/wheel"))
+        .and(header_missing(AUTHORIZATION))
+        .and(header_missing(RANGE))
+        .respond_with(ResponseTemplate::new(200).set_body_raw(wheel, "application/octet-stream"))
+        .expect(1)
+        .named("streaming GET request to the redirect target")
+        .mount(&target_server)
+        .await;
+
+    assert_wheel_metadata_readable(&source_server).await
 }
 
 #[derive(Debug)]
