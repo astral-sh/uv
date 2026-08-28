@@ -18,4 +18,4 @@ jobs:
         with:
           version: "0.12.5"
       - name: "Check lockfiles"
-        run: ./scripts/workspace-lock-check.sh --check
+        run: ./scripts/workspace-lock.sh --check
