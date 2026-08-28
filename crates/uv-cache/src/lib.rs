@@ -625,10 +625,6 @@ impl Cache {
             summary += bucket.remove(self, name)?;
         }
 
-        if references.is_empty() {
-            return Ok(summary);
-        }
-
         // Only remove targets in the archive bucket. Cache entries may contain unexpected links
         // to paths outside the cache.
         let archive_root = fs_err::canonicalize(&self.root)?.join(CacheBucket::Archive.to_str());
