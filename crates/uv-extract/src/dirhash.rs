@@ -109,10 +109,23 @@ where
     R: AsyncRead,
     W: AsyncWrite,
 {
+    blake3_copy_with_buffer(reader, writer, &mut Vec::new()).await
+}
+
+/// Copy and hash bytes with a reusable 64 KiB buffer, allocating it on the first call.
+pub(crate) async fn blake3_copy_with_buffer<R, W>(
+    reader: R,
+    writer: W,
+    buffer: &mut Vec<u8>,
+) -> io::Result<(u64, blake3::Hash)>
+where
+    R: AsyncRead,
+    W: AsyncWrite,
+{
     let mut reader = pin!(reader);
     let mut writer = pin!(writer);
     let mut hasher = blake3::Hasher::new();
-    let mut buffer = vec![0; 1 << 16]; // 64 KiB
+    buffer.resize(1 << 16, 0); // 64 KiB
     let mut total = 0u64;
     // BLAKE3 is fastest when hashing power-of-two sized buffers. That maximizes the time we spend
     // in the wide SIMD part of the implementation (which wants between 4 and 16 KiB at a time
@@ -120,7 +133,7 @@ where
     // short inputs. Hash as many full 64 KiB buffers as we can, and then one possibly-short buffer
     // when we reach EOF.
     loop {
-        let bytes_read = read_exact_or_eof(reader.as_mut(), &mut buffer).await?;
+        let bytes_read = read_exact_or_eof(reader.as_mut(), buffer).await?;
         if bytes_read == 0 {
             break; // EOF reached with no bytes. Skip unnecessary calls to `update` and `write_all`.
         }
@@ -691,6 +704,22 @@ mod tests {
         assert_eq!(big_bytes_read, big_input.len() as u64);
         assert_eq!(big_input, big_output);
         assert_eq!(big_hash, blake3::hash(&big_input));
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_blake3_copy_reuses_buffer() -> io::Result<()> {
+        let mut input = vec![0; 64_000 * 3];
+        paint_input(&mut input);
+        let mut buffer = Vec::new();
+        for input in [input.as_slice(), b"hello", b""] {
+            let mut output = Vec::new();
+            let (bytes_read, hash) =
+                super::blake3_copy_with_buffer(input, &mut output, &mut buffer).await?;
+            assert_eq!(bytes_read, input.len() as u64);
+            assert_eq!(input, output);
+            assert_eq!(hash, blake3::hash(input));
+        }
         Ok(())
     }
 

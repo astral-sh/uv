@@ -17,7 +17,9 @@ use uv_distribution_filename::{LegacySourceDistExtension, SourceDistExtension};
 use uv_preview::PreviewFeature;
 
 use crate::archive_path::SanitizedArchivePath;
-use crate::dirhash::{DirhashTree, ExtractedFile, blake3_copy, directory_tree_from_extracted};
+use crate::dirhash::{
+    DirhashTree, ExtractedFile, blake3_copy_with_buffer, directory_tree_from_extracted,
+};
 use crate::{Error, insecure_no_validate};
 
 const DEFAULT_BUF_SIZE: usize = 128 * 1024;
@@ -109,6 +111,7 @@ async fn unzip_inner<R: tokio::io::AsyncRead + Unpin>(
     let mut files = Vec::new();
     let mut extracted_files = Vec::new();
     let mut digest_directories = FxHashSet::default();
+    let mut hash_buffer = Vec::new();
     let mut offset = 0;
 
     while let Some(mut entry) = zip.next_with_entry().await? {
@@ -213,9 +216,10 @@ async fn unzip_inner<R: tokio::io::AsyncRead + Unpin>(
                         };
                         let mut reader = entry.reader_mut().compat();
                         let (bytes_read, digest) = if hash_contents {
-                            let (bytes_read, digest) = blake3_copy(&mut reader, &mut writer)
-                                .await
-                                .map_err(Error::io_or_zip)?;
+                            let (bytes_read, digest) =
+                                blake3_copy_with_buffer(&mut reader, &mut writer, &mut hash_buffer)
+                                    .await
+                                    .map_err(Error::io_or_zip)?;
                             (bytes_read, Some(digest))
                         } else {
                             let mut bytes_read = 0;
