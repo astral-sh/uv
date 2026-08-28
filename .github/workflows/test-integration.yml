@@ -977,11 +977,22 @@ jobs:
       - name: "Run public registry tests"
         run: ./uv run --locked --python "${PYTHON_VERSION}" --no-build --script scripts/registries-test.py --uv ./uv --color always
         env:
+          UV_TEST_ASTRAL_PKG: transformer-engine
+          UV_TEST_ASTRAL_PUBLIC: "true"
+          UV_TEST_ASTRAL_URL: https://wheels.astral.sh/simple/cu128/
           UV_TEST_MICROSOFT_PKG: typing-extensions
           UV_TEST_MICROSOFT_PUBLIC: "true"
           # TODO: Enable when https://github.com/astral-sh/uv/issues/21349 is fixed.
           # UV_TEST_MICROSOFT_REQUIRE_METADATA_RANGE_REQUESTS: "true"
           UV_TEST_MICROSOFT_URL: https://packagefeedproxy.microsoft.io/pypi/simple
+          UV_TEST_NVIDIA_PKG: nvidia-nvtx-cu12
+          UV_TEST_NVIDIA_PUBLIC: "true"
+          UV_TEST_NVIDIA_REQUIRE_METADATA_RANGE_REQUESTS: "true"
+          UV_TEST_NVIDIA_URL: https://pypi.nvidia.com/
+          UV_TEST_PYTORCH_PKG: colorama
+          UV_TEST_PYTORCH_PUBLIC: "true"
+          UV_TEST_PYTORCH_REQUIRE_METADATA_RANGE_REQUESTS: "true"
+          UV_TEST_PYTORCH_URL: https://download.pytorch.org/whl/cpu
 
   integration-test-registries:
     name: "registries"
