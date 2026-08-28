@@ -301,6 +301,7 @@ impl BuildContext for BuildDispatch<'_> {
             self.constraints,
             &overrides,
             &excludes,
+            self.dependency_metadata,
             &hasher,
             &self.shared_state.index,
             DistributionDatabase::new(

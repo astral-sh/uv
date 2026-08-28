@@ -7,9 +7,9 @@ use tracing::trace;
 
 use uv_configuration::{Constraints, Excludes, Overrides};
 use uv_distribution::{DistributionDatabase, Reporter};
-use uv_distribution_types::{Dist, Identifier, Requirement, RequirementSource};
+use uv_distribution_types::{DependencyMetadata, Dist, Identifier, Requirement, RequirementSource};
 use uv_resolver::{InMemoryIndex, MetadataResponse, ResolverEnvironment};
-use uv_types::{BuildContext, HashStrategy, RequestedRequirements};
+use uv_types::{BuildContext, HashStrategy, HashVerification, RequestedRequirements};
 
 use crate::{Error, required_dist};
 
@@ -38,6 +38,8 @@ pub struct LookaheadResolver<'a, Context: BuildContext> {
     overrides: &'a Overrides,
     /// The dependency exclusions for the project.
     excludes: &'a Excludes,
+    /// The metadata explicitly provided by the user.
+    dependency_metadata: &'a DependencyMetadata,
     /// The required hashes for the project.
     hasher: &'a HashStrategy,
     /// The in-memory index for resolving dependencies.
@@ -53,6 +55,7 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
         constraints: &'a Constraints,
         overrides: &'a Overrides,
         excludes: &'a Excludes,
+        dependency_metadata: &'a DependencyMetadata,
         hasher: &'a HashStrategy,
         index: &'a InMemoryIndex,
         database: DistributionDatabase<'a, Context>,
@@ -62,6 +65,7 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
             constraints,
             overrides,
             excludes,
+            dependency_metadata,
             hasher,
             index,
             database,
@@ -112,15 +116,37 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
 
             while let Some(result) = futures.next().await {
                 if let Some(lookahead) = result? {
-                    hasher = hasher.augment_with_metadata_requirements(
-                        lookahead.requirements().iter().filter(|requirement| {
+                    // User-provided metadata can authorize dependencies even under required hashes.
+                    // An override may only match after the source's version has been discovered.
+                    // Read its hashes directly; the lookahead requirements may come from the archive.
+                    let trusted_requirements =
+                        if matches!(hasher.verification(), HashVerification::Required(_)) {
+                            self.dependency_metadata
+                                .get(lookahead.package(), Some(lookahead.version()))
+                                .map(|metadata| {
+                                    Box::into_iter(metadata.requires_dist)
+                                        .map(Requirement::from)
+                                        .collect::<Vec<_>>()
+                                })
+                        } else {
+                            None
+                        };
+                    let requirements = trusted_requirements
+                        .as_deref()
+                        .unwrap_or_else(|| lookahead.requirements())
+                        .iter()
+                        .filter(|requirement| {
                             !self.excludes.contains_for(
                                 lookahead.package(),
                                 lookahead.version(),
                                 &requirement.name,
                             )
-                        }),
-                    )?;
+                        });
+                    hasher = if trusted_requirements.is_some() {
+                        hasher.augment_with_requirements(requirements)?
+                    } else {
+                        hasher.augment_with_metadata_requirements(requirements)?
+                    };
                     for requirement in self.constraints.apply(self.overrides.apply_for(
                         lookahead.package(),
                         lookahead.version(),
