@@ -1,7 +1,6 @@
 //! Tests for direct URL hashes discovered from package metadata.
 
 use std::collections::BTreeMap;
-use std::process::Command;
 
 use anyhow::Result;
 use assert_fs::fixture::ChildPath;
@@ -123,23 +122,6 @@ impl TestContext {
         filters
     }
 
-    fn command(&self, hash_mode: &str) -> Command {
-        let mut command = self.uv.pip_install();
-        command
-            .arg("-r")
-            .arg("requirements.txt")
-            .arg("--no-index")
-            .arg(hash_mode)
-            .env("WHEEL_METADATA_MARKER", self.backend_marker.path())
-            .env(
-                "WHEEL_METADATA_CHILD_WHEEL",
-                self.uv
-                    .workspace_root
-                    .join("test/links/ok-1.0.0-py3-none-any.whl"),
-            );
-        command
-    }
-
     fn write_child_requirement(&self) -> Result<()> {
         self.uv.temp_dir.child("child.txt").write_str(&format!(
             "ok @ {}#sha256={}\n",
@@ -154,7 +136,19 @@ impl TestContext {
 async fn require_hashes_rejects_direct_url_hash_discovered_in_wheel_metadata() -> Result<()> {
     let context = TestContext::new().await?;
 
-    uv_snapshot!(context.filters(), context.command("--require-hashes"), @"
+    uv_snapshot!(context.filters(), context.uv.pip_install()
+        .arg("-r")
+        .arg("requirements.txt")
+        .arg("--no-index")
+        .arg("--require-hashes")
+        .env("WHEEL_METADATA_MARKER", context.backend_marker.path())
+        .env(
+            "WHEEL_METADATA_CHILD_WHEEL",
+            context
+                .uv
+                .workspace_root
+                .join("test/links/ok-1.0.0-py3-none-any.whl"),
+        ), @"
     exit_code: 1 (failure)
     ----- stderr -----
       × Failed to build `ok @ file://[TEMP_DIR]/ok-1.0.0.tar.gz#sha256=[SOURCE_HASH]`
@@ -173,10 +167,22 @@ async fn require_hashes_rejects_direct_url_hash_discovered_in_wheel_metadata() -
 async fn require_hashes_accepts_direct_url_hash_from_explicit_requirement() -> Result<()> {
     let context = TestContext::new().await?;
     context.write_child_requirement()?;
-    let mut command = context.command("--require-hashes");
-    command.arg("--requirement").arg("child.txt");
 
-    uv_snapshot!(context.filters(), command, @"
+    uv_snapshot!(context.filters(), context.uv.pip_install()
+        .arg("-r")
+        .arg("requirements.txt")
+        .arg("--no-index")
+        .arg("--require-hashes")
+        .arg("--requirement")
+        .arg("child.txt")
+        .env("WHEEL_METADATA_MARKER", context.backend_marker.path())
+        .env(
+            "WHEEL_METADATA_CHILD_WHEEL",
+            context
+                .uv
+                .workspace_root
+                .join("test/links/ok-1.0.0-py3-none-any.whl"),
+        ), @"
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
@@ -198,10 +204,22 @@ async fn require_hashes_accepts_direct_url_hash_from_explicit_requirement() -> R
 async fn require_hashes_accepts_direct_url_hash_from_constraint() -> Result<()> {
     let context = TestContext::new().await?;
     context.write_child_requirement()?;
-    let mut command = context.command("--require-hashes");
-    command.arg("--constraint").arg("child.txt");
 
-    uv_snapshot!(context.filters(), command, @"
+    uv_snapshot!(context.filters(), context.uv.pip_install()
+        .arg("-r")
+        .arg("requirements.txt")
+        .arg("--no-index")
+        .arg("--require-hashes")
+        .arg("--constraint")
+        .arg("child.txt")
+        .env("WHEEL_METADATA_MARKER", context.backend_marker.path())
+        .env(
+            "WHEEL_METADATA_CHILD_WHEEL",
+            context
+                .uv
+                .workspace_root
+                .join("test/links/ok-1.0.0-py3-none-any.whl"),
+        ), @"
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
@@ -223,7 +241,19 @@ async fn require_hashes_accepts_direct_url_hash_from_constraint() -> Result<()> 
 async fn verify_hashes_accepts_direct_url_hash_discovered_in_wheel_metadata() -> Result<()> {
     let context = TestContext::new().await?;
 
-    uv_snapshot!(context.filters(), context.command("--verify-hashes"), @"
+    uv_snapshot!(context.filters(), context.uv.pip_install()
+        .arg("-r")
+        .arg("requirements.txt")
+        .arg("--no-index")
+        .arg("--verify-hashes")
+        .env("WHEEL_METADATA_MARKER", context.backend_marker.path())
+        .env(
+            "WHEEL_METADATA_CHILD_WHEEL",
+            context
+                .uv
+                .workspace_root
+                .join("test/links/ok-1.0.0-py3-none-any.whl"),
+        ), @"
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
