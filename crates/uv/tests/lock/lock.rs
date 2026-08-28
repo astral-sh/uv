@@ -8604,8 +8604,8 @@ fn lock_relative_transitive_workspace_paths() -> Result<()> {
         members = ["member"]
 
         [tool.uv.sources]
-        parent = { path = "parent", editable = true }
-        directory-child = { path = "directory-child" }
+        intermediate = { path = "intermediate", editable = true }
+        shared-dependency = { path = "shared-dependency" }
     "#})?;
 
     let member = context.temp_dir.child("member");
@@ -8615,20 +8615,20 @@ fn lock_relative_transitive_workspace_paths() -> Result<()> {
         name = "member"
         version = "0.1.0"
         requires-python = ">=3.12"
-        dependencies = ["parent", "directory-child"]
+        dependencies = ["intermediate", "shared-dependency"]
 
         [build-system]
         requires = ["hatchling"]
         build-backend = "hatchling.build"
     "#})?;
 
-    let directory_child = context.temp_dir.child("directory-child");
+    let shared_dependency = context.temp_dir.child("shared-dependency");
 
-    let parent = context.temp_dir.child("parent");
-    parent.child("parent/__init__.py").touch()?;
-    parent.child("pyproject.toml").write_str(indoc! {r#"
+    let intermediate = context.temp_dir.child("intermediate");
+    intermediate.child("intermediate/__init__.py").touch()?;
+    intermediate.child("pyproject.toml").write_str(indoc! {r#"
         [project]
-        name = "parent"
+        name = "intermediate"
         version = "0.1.0"
         requires-python = ">=3.12"
 
@@ -8637,14 +8637,14 @@ fn lock_relative_transitive_workspace_paths() -> Result<()> {
         build-backend = "hatchling.build"
     "#})?;
 
-    directory_child
-        .child("directory_child/__init__.py")
+    shared_dependency
+        .child("shared_dependency/__init__.py")
         .touch()?;
-    directory_child
+    shared_dependency
         .child("pyproject.toml")
         .write_str(indoc! {r#"
             [project]
-            name = "directory-child"
+            name = "shared-dependency"
             version = "0.1.0"
 
             [build-system]
@@ -8656,17 +8656,19 @@ fn lock_relative_transitive_workspace_paths() -> Result<()> {
 
     let lock = context.read("uv.lock");
 
-    let directory_child_alias = context.temp_dir.child("directory-child-alias");
-    create_symlink(directory_child.path(), directory_child_alias.path())?;
-    let directory_child_url = Url::from_file_path(directory_child_alias.path())
-        .map_err(|()| anyhow::anyhow!("directory child path is not a valid file URL"))?;
+    let shared_dependency_alias = context.temp_dir.child("shared-dependency-alias");
+    create_symlink(shared_dependency.path(), shared_dependency_alias.path())?;
+    let shared_dependency_url = Url::from_file_path(shared_dependency_alias.path())
+        .map_err(|()| anyhow::anyhow!("shared dependency path is not a valid file URL"))?;
 
-    parent.child("pyproject.toml").write_str(&formatdoc! {r#"
+    intermediate
+        .child("pyproject.toml")
+        .write_str(&formatdoc! {r#"
         [project]
-        name = "parent"
+        name = "intermediate"
         version = "0.1.0"
         requires-python = ">=3.12"
-        dependencies = ["directory-child @ {directory_child_url}"]
+        dependencies = ["shared-dependency @ {shared_dependency_url}"]
 
         [build-system]
         requires = ["hatchling"]
@@ -8675,7 +8677,7 @@ fn lock_relative_transitive_workspace_paths() -> Result<()> {
 
     context.lock().assert().success();
 
-    // Keep the workspace path and the parent's metadata alias relative to the lockfile.
+    // Keep the workspace path and the intermediate's metadata alias relative to the lockfile.
     let new_lock = context.read("uv.lock");
     let diff = diff_snapshot(&lock, &new_lock, 3);
     insta::with_settings!({
@@ -8684,29 +8686,29 @@ fn lock_relative_transitive_workspace_paths() -> Result<()> {
         assert_snapshot!(diff, @r#"
         --- old
         +++ new
-        @@ -13,7 +13,7 @@
-         [[package]]
-         name = "directory-child"
+        @@ -14,6 +14,12 @@
+         name = "intermediate"
          version = "0.1.0"
-        -source = { directory = "directory-child" }
-        +source = { directory = "[TEMP_DIR]/directory-child-alias" }
-
-         [[package]]
-         name = "member"
-        @@ -34,3 +34,9 @@
-         name = "parent"
-         version = "0.1.0"
-         source = { editable = "parent" }
+         source = { editable = "intermediate" }
         +dependencies = [
-        +    { name = "directory-child" },
+        +    { name = "shared-dependency" },
         +]
         +
         +[package.metadata]
-        +requires-dist = [{ name = "directory-child", directory = "[TEMP_DIR]/directory-child-alias" }]
+        +requires-dist = [{ name = "shared-dependency", directory = "[TEMP_DIR]/shared-dependency-alias" }]
+
+         [[package]]
+         name = "member"
+        @@ -33,4 +39,4 @@
+         [[package]]
+         name = "shared-dependency"
+         version = "0.1.0"
+        -source = { directory = "shared-dependency" }
+        +source = { directory = "[TEMP_DIR]/shared-dependency-alias" }
         "#);
     });
 
-    // The recorded alias must still match the parent's unchanged metadata.
+    // The recorded alias must still match the intermediate's unchanged metadata.
     context
         .lock()
         .arg("--check")
