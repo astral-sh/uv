@@ -75,6 +75,7 @@ pub(crate) async fn cache_clean(
             summary += removed;
             reporter.on_clean(package.as_str(), &summary);
         }
+        summary += cache.prune_archive_files()?;
         reporter.on_complete();
 
         summary
