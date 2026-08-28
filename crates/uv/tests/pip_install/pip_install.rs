@@ -27,9 +27,6 @@ use wiremock::{
 use uv_extract::dirhash::{DirectoryDigest, dirhash_path};
 use uv_fs::{PortablePath, Simplified};
 use uv_install_wheel::validate_and_heal_record;
-use uv_normalize::PackageName;
-use uv_pep440::Version;
-use uv_pep508::Requirement;
 use uv_static::EnvVars;
 use uv_test::archive::write_tar_gz;
 #[cfg(feature = "test-git")]
@@ -8433,92 +8430,143 @@ fn require_hashes_missing_dependency() -> Result<()> {
     Ok(())
 }
 
-/// Do not trust a direct URL hash discovered in wheel metadata.
+/// Require explicit authorisation for direct URL hashes discovered in wheel metadata.
 #[test]
 fn require_hashes_discovered_direct_url() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
+    allow_duplicates! {
+        for (hash_mode, authorization_flag, expect_success) in [
+            // A hash discovered only in metadata cannot authorize the child.
+            ("--require-hashes", None, false),
+            // The user explicitly authorizes the child through a requirement.
+            ("--require-hashes", Some("--requirement"), true),
+            // A constraint supplies the child's trusted hash without adding a root requirement.
+            ("--require-hashes", Some("--constraint"), true),
+            // Optional verification permits hashes supplied by the metadata.
+            ("--verify-hashes", None, true),
+        ] {
+            let context = uv_test::test_context!("3.12");
 
-    // The parent wheel declares a direct URL dependency whose fragment includes its hash.
-    let source = context.temp_dir.child("metadata_injected-1.0.0.tar.gz");
-    let marker = context.temp_dir.child("backend-marker");
-    write_tar_gz(
-        File::create(source.path())?,
-        &[
-            (
-                "metadata_injected-1.0.0/pyproject.toml",
-                indoc! {r#"
-                    [build-system]
-                    requires = []
-                    build-backend = "backend"
-                    backend-path = ["."]
-                "#},
-            ),
-            (
-                "metadata_injected-1.0.0/backend.py",
-                indoc! {r#"
-                    import os
-                    from pathlib import Path
+            // The parent wheel declares a direct URL dependency whose fragment includes its hash.
+            let source = context.temp_dir.child("ok-1.0.0.tar.gz");
+            let marker = context.temp_dir.child("backend-marker");
+            write_tar_gz(
+                File::create(source.path())?,
+                &[
+                    (
+                        "ok-1.0.0/pyproject.toml",
+                        indoc! {r#"
+                            [build-system]
+                            requires = []
+                            build-backend = "backend"
+                            backend-path = ["."]
+                        "#},
+                    ),
+                    (
+                        "ok-1.0.0/backend.py",
+                        indoc! {r#"
+                            import os
+                            import shutil
+                            from pathlib import Path
 
-                    Path(os.environ["WHEEL_METADATA_MARKER"]).write_text("executed")
-                    raise RuntimeError("wheel metadata dependency invoked a build backend")
-                "#},
-            ),
-        ],
-    )?;
-    let source_hash = hex::encode(Sha256::digest(fs::read(source.path())?));
-    let source_url = Url::from_file_path(source.path())
-        .map_err(|()| anyhow!("failed to convert source path to file URL"))?;
-    let dependency: Requirement =
-        format!("metadata-injected @ {source_url}#sha256={source_hash}").parse()?;
+                            Path(os.environ["WHEEL_METADATA_MARKER"]).write_text("executed")
 
-    let mut scenario = Scenario::empty();
-    scenario.packages.insert(
-        "metadata-parent".parse::<PackageName>()?,
-        Package {
-            versions: BTreeMap::from([(
-                "1.0.0".parse::<Version>()?,
-                PackageMetadata {
-                    requires: vec![dependency],
-                    sdist: false,
-                    wheel: true,
-                    ..PackageMetadata::default()
+                            def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
+                                wheel = Path(os.environ["WHEEL_METADATA_CHILD_WHEEL"])
+                                shutil.copyfile(wheel, Path(wheel_directory) / wheel.name)
+                                return wheel.name
+                        "#},
+                    ),
+                ],
+            )?;
+            let source_hash = hex::encode(Sha256::digest(fs::read(source.path())?));
+            let source_url = Url::from_file_path(source.path())
+                .expect("source path is an absolute path");
+            let dependency = format!("ok @ {source_url}#sha256={source_hash}").parse()?;
+
+            let mut scenario = Scenario::empty();
+            scenario.packages.insert(
+                "metadata-parent".parse()?,
+                Package {
+                    versions: BTreeMap::from([(
+                        "1.0.0".parse()?,
+                        PackageMetadata {
+                            requires: vec![dependency],
+                            sdist: false,
+                            wheel: true,
+                            ..PackageMetadata::default()
+                        },
+                    )]),
                 },
-            )]),
-        },
-    );
-    let server = PackseServer::from_scenario(&scenario);
-    let wheel_url = server.file_url("metadata_parent-1.0.0-py3-none-any.whl");
-    let wheel = context
-        .temp_dir
-        .child("metadata_parent-1.0.0-py3-none-any.whl");
-    download_to_disk(&wheel_url, wheel.path());
-    let wheel_hash = hex::encode(Sha256::digest(fs::read(wheel.path())?));
+            );
+            let server = PackseServer::from_scenario(&scenario);
+            let wheel_url = server.file_url("metadata_parent-1.0.0-py3-none-any.whl");
+            let wheel = context
+                .temp_dir
+                .child("metadata_parent-1.0.0-py3-none-any.whl");
+            download_to_disk(&wheel_url, wheel.path());
+            let wheel_hash = hex::encode(Sha256::digest(fs::read(wheel.path())?));
 
-    // Only the parent wheel and its hash are part of the trusted input set.
-    context
-        .temp_dir
-        .child("requirements.txt")
-        .write_str(&format!(
-            "metadata-parent @ {wheel_url} --hash=sha256:{wheel_hash}\n"
-        ))?;
+            // Only the parent wheel and its hash are part of the trusted input set.
+            context
+                .temp_dir
+                .child("requirements.txt")
+                .write_str(&format!(
+                    "metadata-parent @ {wheel_url} --hash=sha256:{wheel_hash}\n"
+                ))?;
 
-    let mut filters = context.filters();
-    filters.push((&source_hash, "[SOURCE_HASH]"));
-    uv_snapshot!(filters, context.pip_install()
-        .arg("-r")
-        .arg("requirements.txt")
-        .arg("--no-index")
-        .arg("--require-hashes")
-        .env("WHEEL_METADATA_MARKER", marker.path()), @"
-    exit_code: 1 (failure)
-    ----- stderr -----
-      × Failed to build `metadata-injected @ file://[TEMP_DIR]/metadata_injected-1.0.0.tar.gz#sha256=[SOURCE_HASH]`
-      ╰─▶ Hash-checking is enabled, but no hashes were provided or computed for: `metadata-injected @ file://[TEMP_DIR]/metadata_injected-1.0.0.tar.gz#sha256=[SOURCE_HASH]`
-    ");
+            let mut filters = context.filters();
+            filters.push((&source_hash, "[SOURCE_HASH]"));
+            let mut command = context.pip_install();
+            command
+                .arg("-r")
+                .arg("requirements.txt")
+                .arg("--no-index")
+                .arg(hash_mode)
+                .env("WHEEL_METADATA_MARKER", marker.path())
+                .env(
+                    "WHEEL_METADATA_CHILD_WHEEL",
+                    context
+                        .workspace_root
+                        .join("test/links/ok-1.0.0-py3-none-any.whl"),
+                );
 
-    marker.assert(predicate::path::missing());
-    context.assert_not_installed("metadata_parent");
-    context.assert_not_installed("metadata_injected");
+            // Supply the child's URL and hash as trusted user input, separate from wheel metadata.
+            if let Some(authorization_flag) = authorization_flag {
+                context
+                    .temp_dir
+                    .child("child.txt")
+                    .write_str(&format!("ok @ {source_url}#sha256={source_hash}\n"))?;
+                command.arg(authorization_flag).arg("child.txt");
+            }
+
+            if expect_success {
+                uv_snapshot!(filters, command, @"
+                exit_code: 0 (success)
+                ----- stderr -----
+                Resolved 2 packages in [TIME]
+                Prepared 2 packages in [TIME]
+                Installed 2 packages in [TIME]
+                 + metadata-parent==1.0.0 (from http://[LOCALHOST]/files/metadata_parent-1.0.0-py3-none-any.whl)
+                 + ok==1.0.0 (from file://[TEMP_DIR]/ok-1.0.0.tar.gz#sha256=[SOURCE_HASH])
+                ");
+                marker.assert(predicate::path::is_file());
+                context.assert_installed("metadata_parent", "1.0.0");
+                context.assert_installed("ok", "1.0.0");
+            } else {
+                uv_snapshot!(filters, command, @"
+                exit_code: 1 (failure)
+                ----- stderr -----
+                  × Failed to build `ok @ file://[TEMP_DIR]/ok-1.0.0.tar.gz#sha256=[SOURCE_HASH]`
+                  ╰─▶ Hash-checking is enabled, but no hashes were provided or computed for: `ok @ file://[TEMP_DIR]/ok-1.0.0.tar.gz#sha256=[SOURCE_HASH]`
+                ");
+                marker.assert(predicate::path::missing());
+                context.assert_not_installed("metadata_parent");
+                context.assert_not_installed("ok");
+            }
+        }
+        Ok::<(), anyhow::Error>(())
+    }?;
+
     Ok(())
 }
 
