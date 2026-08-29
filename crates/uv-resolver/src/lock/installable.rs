@@ -375,18 +375,7 @@ fn walk_reachable_names<'lock>(
     let mut names = BTreeSet::new();
     while let Some((package, extra)) = queue.pop_front() {
         names.insert(package.name().clone());
-        let dependencies = if let Some(extra) = extra {
-            Either::Left(
-                package
-                    .optional_dependencies()
-                    .get(extra)
-                    .into_iter()
-                    .flatten(),
-            )
-        } else {
-            Either::Right(package.dependencies().iter())
-        };
-        for dependency in dependencies {
+        for dependency in package_dependencies(package, extra) {
             enqueue_reachable_dependency(
                 lock,
                 dependency,
