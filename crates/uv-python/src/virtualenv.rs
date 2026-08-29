@@ -71,7 +71,7 @@ pub(crate) fn virtualenv_from_env() -> Option<PathBuf> {
 }
 
 #[derive(Debug, PartialEq, Eq, Copy, Clone)]
-pub(crate) enum CondaEnvironmentKind {
+pub enum CondaEnvironmentKind {
     /// The base Conda environment; treated like a system Python environment.
     Base,
     /// Any other Conda environment; treated like a virtual environment.
@@ -136,7 +136,7 @@ fn is_pixi_environment(path: &Path) -> bool {
 ///
 /// If `base` is true, the active environment must be the base environment or `None` is returned,
 /// and vice-versa.
-pub(crate) fn conda_environment_from_env(kind: CondaEnvironmentKind) -> Option<PathBuf> {
+pub fn conda_environment_from_env(kind: CondaEnvironmentKind) -> Option<PathBuf> {
     let dir = env::var_os(EnvVars::CONDA_PREFIX).filter(|value| !value.is_empty())?;
     let path = PathBuf::from(dir);
 
