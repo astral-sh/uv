@@ -4235,7 +4235,7 @@ fn remove_ignores_extras_of_extraneous_packages() -> Result<()> {
     ");
 
     context.assert_command("import b").success();
-    context.pip_show().arg("candidate").assert().failure();
+    context.assert_not_installed("candidate");
 
     Ok(())
 }
@@ -4288,7 +4288,7 @@ fn remove_subset_preserves_explicit_extras_on_installed_edges() -> Result<()> {
     context
         .assert_command("import bridge; import candidate; import edge_root")
         .success();
-    context.assert_command("import removed").failure();
+    context.assert_not_installed("removed");
     context.pip_check().assert().success();
 
     Ok(())
@@ -4341,9 +4341,9 @@ fn remove_subset_prunes_only_unshared_branches() -> Result<()> {
     context
         .assert_command("import candidate; import external")
         .success();
-    context
-        .assert_command("import orphan; import removed")
-        .failure();
+    context.assert_not_installed("orphan");
+    context.assert_not_installed("orphan_leaf");
+    context.assert_not_installed("removed");
     context.pip_check().assert().success();
 
     Ok(())
@@ -4387,9 +4387,10 @@ fn remove_subset_without_previous_lock() -> Result<()> {
      - removed==1.0.0
     ");
 
-    context
-        .assert_command("import candidate; import orphan; import removed")
-        .failure();
+    context.assert_not_installed("candidate");
+    context.assert_not_installed("orphan");
+    context.assert_not_installed("orphan_leaf");
+    context.assert_not_installed("removed");
 
     Ok(())
 }
@@ -4433,9 +4434,8 @@ fn remove_subset_uses_active_environment_markers() -> Result<()> {
      - marker-root==1.0.0
     ");
 
-    context
-        .assert_command("import marker_candidate; import marker_root")
-        .failure();
+    context.assert_not_installed("marker_candidate");
+    context.assert_not_installed("marker_root");
 
     Ok(())
 }
@@ -4480,7 +4480,7 @@ fn remove_subset_preserves_unselected_group_overlap() -> Result<()> {
     ");
 
     context.assert_command("import candidate").success();
-    context.assert_command("import removed").failure();
+    context.assert_not_installed("removed");
 
     Ok(())
 }
@@ -4639,7 +4639,7 @@ fn remove_subset_preserves_unselected_extra_overlap() -> Result<()> {
     ");
 
     context.assert_command("import candidate").success();
-    context.assert_command("import removed").failure();
+    context.assert_not_installed("removed");
 
     Ok(())
 }
@@ -4690,7 +4690,7 @@ fn remove_subset_handles_cycles() -> Result<()> {
     context
         .assert_command("import cycle_a; import cycle_b; import cycle_external")
         .success();
-    context.assert_command("import cycle_root").failure();
+    context.assert_not_installed("cycle_root");
     context.pip_check().assert().success();
 
     Ok(())
@@ -4949,7 +4949,7 @@ fn remove_subset_respects_workspace_target_reachability() -> Result<()> {
      - candidate==1.0.0
     ");
 
-    context.pip_show().arg("candidate").assert().failure();
+    context.assert_not_installed("candidate");
 
     Ok(())
 }
@@ -5001,7 +5001,7 @@ fn remove_subset_unions_conflicting_project_extras() -> Result<()> {
     ");
 
     context.assert_command("import candidate").success();
-    context.assert_command("import removed").failure();
+    context.assert_not_installed("removed");
 
     Ok(())
 }
@@ -5056,9 +5056,8 @@ fn remove_subset_prunes_on_unreadable_external_metadata() -> Result<()> {
     ");
 
     context.assert_command("import b").success();
-    context
-        .assert_command("import candidate; import removed")
-        .failure();
+    context.assert_not_installed("candidate");
+    context.assert_not_installed("removed");
 
     Ok(())
 }
@@ -5155,11 +5154,8 @@ fn remove_subset_uses_previous_lock_for_removed_extra() -> Result<()> {
      - candidate==1.0.0
     ");
 
-    context
-        .pip_show()
-        .args(["bridge", "candidate"])
-        .assert()
-        .failure();
+    context.assert_not_installed("bridge");
+    context.assert_not_installed("candidate");
 
     Ok(())
 }
@@ -5211,9 +5207,9 @@ fn remove_subset_prunes_selected_optional_dependency() -> Result<()> {
     context
         .assert_command("import candidate; import external")
         .success();
-    context
-        .assert_command("import orphan; import removed")
-        .failure();
+    context.assert_not_installed("orphan");
+    context.assert_not_installed("orphan_leaf");
+    context.assert_not_installed("removed");
 
     Ok(())
 }
@@ -5265,9 +5261,9 @@ fn remove_subset_prunes_selected_group_dependency() -> Result<()> {
     context
         .assert_command("import candidate; import external")
         .success();
-    context
-        .assert_command("import orphan; import removed")
-        .failure();
+    context.assert_not_installed("orphan");
+    context.assert_not_installed("orphan_leaf");
+    context.assert_not_installed("removed");
 
     Ok(())
 }
@@ -5312,9 +5308,10 @@ fn remove_subset_prunes_virtual_workspace_group() -> Result<()> {
      - removed==1.0.0
     ");
 
-    context
-        .assert_command("import candidate; import orphan; import removed")
-        .failure();
+    context.assert_not_installed("candidate");
+    context.assert_not_installed("orphan");
+    context.assert_not_installed("orphan_leaf");
+    context.assert_not_installed("removed");
 
     Ok(())
 }
@@ -5365,9 +5362,10 @@ fn remove_subset_ignores_stale_previous_project_root() -> Result<()> {
      - removed==1.0.0
     ");
 
-    context
-        .assert_command("import candidate; import orphan; import removed")
-        .failure();
+    context.assert_not_installed("candidate");
+    context.assert_not_installed("orphan");
+    context.assert_not_installed("orphan_leaf");
+    context.assert_not_installed("removed");
 
     Ok(())
 }
@@ -5455,11 +5453,9 @@ fn remove_subset_prunes_orphan_cycle() -> Result<()> {
      - cycle-root==1.0.0
     ");
 
-    context
-        .pip_show()
-        .args(["cycle-root", "cycle-a", "cycle-b"])
-        .assert()
-        .failure();
+    context.assert_not_installed("cycle_root");
+    context.assert_not_installed("cycle_a");
+    context.assert_not_installed("cycle_b");
 
     Ok(())
 }
@@ -5502,9 +5498,9 @@ fn remove_subset_preserves_production_overlap() -> Result<()> {
     context
         .assert_command("import candidate; import external")
         .success();
-    context
-        .assert_command("import orphan; import removed")
-        .failure();
+    context.assert_not_installed("orphan");
+    context.assert_not_installed("orphan_leaf");
+    context.assert_not_installed("removed");
 
     Ok(())
 }
@@ -5551,7 +5547,7 @@ fn remove_subset_uses_markers_on_installed_edges() -> Result<()> {
     ");
 
     context.pip_show().arg("candidate").assert().success();
-    context.pip_show().arg("marker-removed").assert().failure();
+    context.assert_not_installed("marker_removed");
 
     Ok(())
 }
@@ -5591,8 +5587,8 @@ fn remove_subset_uses_installed_extra_without_previous_lock() -> Result<()> {
      - candidate==1.0.0
     ");
 
-    context.pip_show().arg("bridge").assert().failure();
-    context.pip_show().arg("candidate").assert().failure();
+    context.assert_not_installed("bridge");
+    context.assert_not_installed("candidate");
 
     Ok(())
 }
