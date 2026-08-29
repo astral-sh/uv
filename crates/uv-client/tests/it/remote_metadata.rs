@@ -381,12 +381,13 @@ async fn remote_metadata_redirect_method_specific_target() -> Result<()> {
     Ok(())
 }
 
-/// Some servers support bounded ranges but reject suffix ranges. Preserve that working path
-/// independently of redirect support; this is a protocol compatibility control, not a registry mock.
+/// Some servers support bounded ranges but reject suffix ranges. Covers the working bounded-range
+/// path independently of redirect support.
 #[tokio::test]
 async fn remote_metadata_bounded_ranges() -> Result<()> {
     let server = MockServer::start().await;
     let wheel = wheel()?;
+    // The initial `HEAD` response should advertise bounded range support and the artifact length.
     Mock::given(method("HEAD"))
         .and(path("/artifact"))
         .and(basic_auth("source-user", "source-password"))
@@ -398,6 +399,7 @@ async fn remote_metadata_bounded_ranges() -> Result<()> {
         .expect(1)
         .mount(&server)
         .await;
+    // The metadata should be read with a bounded range request.
     Mock::given(method("GET"))
         .and(path("/artifact"))
         .and(basic_auth("source-user", "source-password"))
@@ -407,6 +409,7 @@ async fn remote_metadata_bounded_ranges() -> Result<()> {
         .named("bounded range request")
         .mount(&server)
         .await;
+    // A suffix range request should not be sent when bounded ranges are supported.
     Mock::given(method("GET"))
         .and(path("/artifact"))
         .and(header_regex(RANGE.as_str(), "^bytes=-"))
@@ -415,6 +418,7 @@ async fn remote_metadata_bounded_ranges() -> Result<()> {
         .named("unsupported suffix range request")
         .mount(&server)
         .await;
+    // A streaming fallback should not be needed when the bounded range request succeeds.
     Mock::given(method("GET"))
         .and(path("/artifact"))
         .and(header_missing(RANGE))
@@ -427,14 +431,15 @@ async fn remote_metadata_bounded_ranges() -> Result<()> {
     assert_wheel_metadata_readable(&server).await
 }
 
-/// An artifact host may reject ranges while allowing a full download. This is a generic fallback
-/// control for redirecting registries, not an assertion about a particular storage service.
+/// An artifact host may reject ranges while allowing a full download. Covers the streaming fallback
+/// for redirecting registries.
 #[tokio::test]
 async fn remote_metadata_redirect_range_forbidden() -> Result<()> {
     let source_server = MockServer::start().await;
     let target_server = MockServer::start().await;
     let wheel = wheel()?;
     let target = format!("{}/wheel", target_server.uri());
+    // The initial metadata probe should authenticate to the source and receive a redirect.
     Mock::given(method("HEAD"))
         .and(path("/artifact"))
         .and(basic_auth("source-user", "source-password"))
@@ -442,6 +447,7 @@ async fn remote_metadata_redirect_range_forbidden() -> Result<()> {
         .expect(1)
         .mount(&source_server)
         .await;
+    // The range reader should retry the source with an authenticated range request.
     Mock::given(method("GET"))
         .and(path("/artifact"))
         .and(basic_auth("source-user", "source-password"))
@@ -451,6 +457,7 @@ async fn remote_metadata_redirect_range_forbidden() -> Result<()> {
         .named("ranged GET request to the redirecting wheel URL")
         .mount(&source_server)
         .await;
+    // A streaming retry should be sent to the source when the range request cannot be used.
     Mock::given(method("GET"))
         .and(path("/artifact"))
         .and(basic_auth("source-user", "source-password"))
@@ -460,6 +467,8 @@ async fn remote_metadata_redirect_range_forbidden() -> Result<()> {
         .named("streaming fallback GET request to the redirecting wheel URL")
         .mount(&source_server)
         .await;
+    // The redirected `HEAD` request should omit the source credentials, and its response should
+    // advertise range support.
     Mock::given(method("HEAD"))
         .and(path("/wheel"))
         .and(header_missing(AUTHORIZATION))
@@ -471,6 +480,7 @@ async fn remote_metadata_redirect_range_forbidden() -> Result<()> {
         .expect(1)
         .mount(&target_server)
         .await;
+    // The range request should not be sent to the redirect target.
     Mock::given(method("GET"))
         .and(path("/wheel"))
         .and(header_missing(AUTHORIZATION))
@@ -480,6 +490,7 @@ async fn remote_metadata_redirect_range_forbidden() -> Result<()> {
         .named("forbidden range request to the redirect target")
         .mount(&target_server)
         .await;
+    // The streaming retry should follow the redirect without forwarding source credentials.
     Mock::given(method("GET"))
         .and(path("/wheel"))
         .and(header_missing(AUTHORIZATION))
