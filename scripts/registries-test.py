@@ -412,7 +412,7 @@ def main() -> None:
         else:
             failed.append(registry_name)
 
-        untested_registries.remove(registry_name)
+        untested_registries.discard(registry_name)
 
     total = len(passed) + len(failed)
 

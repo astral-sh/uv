@@ -1073,6 +1073,111 @@ jobs:
           UV_TEST_GITLAB_URL: ${{ secrets.UV_TEST_GITLAB_URL }}
           UV_TEST_GITLAB_USERNAME: token
 
+  integration-test-self-hosted-registries:
+    name: "self-hosted registries"
+    timeout-minutes: 10
+    runs-on: ubuntu-latest
+    env:
+      PYTHON_VERSION: 3.12
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "${{ env.PYTHON_VERSION }}"
+
+      - name: "Download binary"
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: uv-linux-libc-${{ inputs.sha }}
+
+      - name: "Prepare binary"
+        run: chmod +x ./uv
+
+      - name: "Install registry servers"
+        run: |
+          ./uv venv --python "${PYTHON_VERSION}" "$RUNNER_TEMP/registry-tools"
+          ./uv pip install \
+            --python "$RUNNER_TEMP/registry-tools/bin/python" \
+            "devpi-client==7.3.0" \
+            "devpi-server==6.20.3" \
+            "pypiserver==2.4.1"
+          mkdir "$RUNNER_TEMP/packages"
+          cp test/links/ok-1.0.0-py3-none-any.whl "$RUNNER_TEMP/packages"
+          "$RUNNER_TEMP/registry-tools/bin/devpi-init" \
+            --serverdir "$RUNNER_TEMP/devpi" \
+            --no-root-pypi
+
+      - name: "Run registry tests"
+        run: |
+          registry_bin="$RUNNER_TEMP/registry-tools/bin"
+
+          "$registry_bin/devpi-server" \
+            --serverdir "$RUNNER_TEMP/devpi" \
+            --host 127.0.0.1 \
+            --port 3141 &
+          devpi_pid=$!
+
+          "$registry_bin/pypi-server" run \
+            --interface 127.0.0.1 \
+            --port 8081 \
+            --authenticate . \
+            --passwords . \
+            --disable-fallback \
+            --health-endpoint /health \
+            "$RUNNER_TEMP/packages" &
+          pypiserver_pid=$!
+
+          trap 'kill "$devpi_pid" "$pypiserver_pid" 2>/dev/null || true' EXIT
+
+          curl \
+            --retry 10 \
+            --retry-delay 1 \
+            --retry-connrefused \
+            --fail \
+            --silent \
+            --show-error \
+            http://127.0.0.1:3141/+api
+          curl \
+            --retry 10 \
+            --retry-delay 1 \
+            --retry-connrefused \
+            --fail \
+            --silent \
+            --show-error \
+            http://127.0.0.1:8081/health
+
+          "$registry_bin/devpi" \
+            --clientdir "$RUNNER_TEMP/devpi-client" \
+            use http://127.0.0.1:3141
+          "$registry_bin/devpi" \
+            --clientdir "$RUNNER_TEMP/devpi-client" \
+            login root --password ''
+          "$registry_bin/devpi" \
+            --clientdir "$RUNNER_TEMP/devpi-client" \
+            index --create root/test bases=
+          "$registry_bin/devpi" \
+            --clientdir "$RUNNER_TEMP/devpi-client" \
+            upload \
+            --index root/test \
+            test/links/ok-1.0.0-py3-none-any.whl
+
+          ./uv run --locked --python "${PYTHON_VERSION}" --no-build --script scripts/registries-test.py --uv ./uv --color always --auth-method env
+        env:
+          RUST_LOG: uv=debug
+          UV_TEST_DEVPI_PKG: ok
+          UV_TEST_DEVPI_TOKEN: dummy
+          UV_TEST_DEVPI_URL: http://127.0.0.1:3141/root/test/+simple/
+          UV_TEST_DEVPI_USERNAME: dummy
+          UV_TEST_PYPISERVER_PKG: ok
+          UV_TEST_PYPISERVER_REQUIRE_METADATA_RANGE_REQUESTS: "true"
+          UV_TEST_PYPISERVER_TOKEN: dummy
+          UV_TEST_PYPISERVER_URL: http://127.0.0.1:8081/simple/
+          UV_TEST_PYPISERVER_USERNAME: dummy
+
   integration-uv-build-backend:
     name: "uv_build"
     timeout-minutes: 10
