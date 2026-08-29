@@ -4743,6 +4743,142 @@ fn remove_subset_ignores_inactive_removed_roots() -> Result<()> {
     Ok(())
 }
 
+/// A member's inherited workspace-root groups should retain their installed dependencies.
+#[test]
+fn remove_subset_preserves_workspace_root_group() -> Result<()> {
+    let server = uv_test::packse::PackseServer::new("extras/remove-prune-extra.toml");
+    let context = uv_test::test_context!("3.12");
+    let filters = context.filters();
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "root"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["orphan==1.0.0"]
+
+        [dependency-groups]
+        keep = ["candidate==1.0.0"]
+
+        [tool.uv]
+        package = false
+
+        [tool.uv.workspace]
+        members = ["child"]
+    "#})?;
+    context
+        .temp_dir
+        .child("child/pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "child"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["removed==1.0.0"]
+
+        [tool.uv]
+        package = false
+    "#})?;
+    context
+        .sync()
+        .args(["--package", "child", "--group", "keep", "--index"])
+        .arg(server.index_url())
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .assert()
+        .success();
+
+    uv_snapshot!(filters, context.remove().args(["removed", "--package", "child", "--index"]).arg(server.index_url()).env_remove(EnvVars::UV_EXCLUDE_NEWER), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    Uninstalled 3 packages in [TIME]
+     - orphan==1.0.0
+     - orphan-leaf==1.0.0
+     - removed==1.0.0
+    ");
+
+    context.assert_installed("candidate", "1.0.0");
+    context.assert_not_installed("orphan");
+    context.assert_not_installed("orphan_leaf");
+    context.assert_not_installed("removed");
+
+    Ok(())
+}
+
+/// A member's group takes precedence over an inherited group with the same name.
+#[test]
+fn remove_subset_ignores_shadowed_workspace_root_group() -> Result<()> {
+    let server = uv_test::packse::PackseServer::new("extras/remove-prune-extra.toml");
+    let context = uv_test::test_context!("3.12");
+    let filters = context.filters();
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "root"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [dependency-groups]
+        keep = ["candidate==1.0.0"]
+        root-only = ["other==1.0.0"]
+
+        [tool.uv]
+        package = false
+
+        [tool.uv.workspace]
+        members = ["child"]
+    "#})?;
+    context
+        .temp_dir
+        .child("child/pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "child"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["removed==1.0.0"]
+
+        [dependency-groups]
+        keep = ["other==1.0.0"]
+
+        [tool.uv]
+        package = false
+    "#})?;
+    context
+        .sync()
+        .args(["--package", "child", "--group", "keep", "--index"])
+        .arg(server.index_url())
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .assert()
+        .success();
+
+    uv_snapshot!(filters, context.remove().args(["removed", "--package", "child", "--index"]).arg(server.index_url()).env_remove(EnvVars::UV_EXCLUDE_NEWER), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    Uninstalled 4 packages in [TIME]
+     - candidate==1.0.0
+     - orphan==1.0.0
+     - orphan-leaf==1.0.0
+     - removed==1.0.0
+    ");
+
+    context.assert_installed("other", "1.0.0");
+    context.assert_not_installed("candidate");
+    context.assert_not_installed("orphan");
+    context.assert_not_installed("orphan_leaf");
+    context.assert_not_installed("removed");
+
+    Ok(())
+}
+
 /// A workspace member that remains in the universal lock should not retain an installed package
 /// after it leaves the selected project's dependency graph.
 #[test]

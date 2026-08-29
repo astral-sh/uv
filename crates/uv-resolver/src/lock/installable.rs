@@ -10,12 +10,12 @@ use petgraph::Graph;
 use rustc_hash::{FxHashMap, FxHashSet};
 
 use uv_configuration::{
-    BuildOptions, DependencyGroupsWithDefaults, ExtrasSpecification,
+    BuildOptions, DependencyGroups, DependencyGroupsWithDefaults, ExtrasSpecification,
     ExtrasSpecificationWithDefaults, InstallOptions,
 };
 use uv_distribution_types::{Edge, FirstParty, Node, Requirement, Resolution, ResolvedDist};
 use uv_normalize::{
-    DEV_DEPENDENCIES, DefaultExtras, ExtraName, GroupName, PackageName,
+    DEV_DEPENDENCIES, DefaultExtras, DefaultGroups, ExtraName, GroupName, PackageName,
 };
 use uv_platform_tags::Tags;
 use uv_pypi_types::{ConflictKind, ConflictSet, ResolverMarkerEnvironment};
@@ -413,7 +413,16 @@ pub fn reachable_declared_package_names<'lock>(
     let mut queue = VecDeque::new();
     let mut seen = FxHashSet::default();
 
-    for root_name in target.roots() {
+    let groups = DependencyGroups::from_all_groups().with_defaults(DefaultGroups::default());
+    let roots = target
+        .roots()
+        .map(|name| (name, InstallableRootKind::Production))
+        .chain(
+            target
+                .group_root(&groups)
+                .map(|name| (name, InstallableRootKind::DependencyGroups)),
+        );
+    for (root_name, root_kind) in roots {
         let root = lock
             .find_by_name(root_name)
             .map_err(|_| LockErrorKind::MultipleRootPackages {
@@ -422,11 +431,18 @@ pub fn reachable_declared_package_names<'lock>(
             .ok_or_else(|| LockErrorKind::MissingRootPackage {
                 name: root_name.clone(),
             })?;
-        enqueue_reachability_state(&mut queue, &mut seen, root, None);
-        for extra in root.optional_dependencies().keys() {
-            enqueue_reachability_state(&mut queue, &mut seen, root, Some(extra));
+        if root_kind == InstallableRootKind::Production {
+            enqueue_reachability_state(&mut queue, &mut seen, root, None);
+            for extra in root.optional_dependencies().keys() {
+                enqueue_reachability_state(&mut queue, &mut seen, root, Some(extra));
+            }
         }
-        for dependency in root.resolved_dependency_groups().values().flatten() {
+        for dependency in root
+            .resolved_dependency_groups()
+            .iter()
+            .filter(|(group, _)| target.includes_group(Some(root.name()), group, &groups))
+            .flat_map(|(_, dependencies)| dependencies)
+        {
             enqueue_reachable_dependency(
                 lock,
                 dependency,
