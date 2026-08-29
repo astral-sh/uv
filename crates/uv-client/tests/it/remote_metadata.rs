@@ -381,8 +381,8 @@ async fn remote_metadata_redirect_method_specific_target() -> Result<()> {
     Ok(())
 }
 
-/// Some servers support bounded ranges but reject suffix ranges. Covers the working bounded-range
-/// path independently of redirect support.
+/// Some servers support bounded ranges but reject suffix ranges. Wheel metadata should be read with
+/// a bounded range request, without attempting a suffix range or streaming fallback.
 #[tokio::test]
 async fn remote_metadata_bounded_ranges() -> Result<()> {
     let server = MockServer::start().await;
