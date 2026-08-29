@@ -10078,6 +10078,38 @@ fn compatible_build_constraint() -> Result<()> {
     Ok(())
 }
 
+/// Include a `build_constraints.txt` file with hashes for the build dependencies.
+#[test]
+fn require_build_hashes_from_build_constraint() -> Result<()> {
+    let context = uv_test::test_context!("3.9");
+
+    let constraints_txt = context.temp_dir.child("build_constraints.txt");
+    constraints_txt.write_str(indoc::indoc! {r"
+        setuptools==69.0.2 \
+            --hash=sha256:1e8fdff6797d3865f37397be788a4e3cba233608e9b509382a2777d25ebde7f2
+        wheel==0.42.0 \
+            --hash=sha256:177f9c9b0d45c47873b619f5b650346d632cdc35fb5e4d25058e09c9e581433d
+    "})?;
+
+    uv_snapshot!(context.pip_install()
+        .arg("requests==1.2")
+        .arg("--build-constraint")
+        .arg("build_constraints.txt")
+        .arg("--require-build-hashes")
+        .arg("--preview-features")
+        .arg("build-dependency-hashes"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + requests==1.2.0
+    "
+    );
+
+    Ok(())
+}
+
 /// Include `build-constraint-dependencies` in pyproject.toml with an incompatible constraint.
 #[test]
 fn incompatible_build_constraint_in_pyproject_toml() -> Result<()> {
