@@ -95,6 +95,8 @@ async fn remote_metadata_requires_range_requests() -> Result<()> {
 
 /// Covers same-origin redirect semantics and credential propagation. This is a generic control case
 /// for authenticated proxies; the known registry reports below use cross-origin artifact storage.
+/// We expect the source credentials to be preserved across both redirect hops, and check that the
+/// metadata remains readable when the `303` turns the ranged `GET` into a streaming `GET`.
 #[tokio::test]
 async fn remote_metadata_redirect_same_origin() -> Result<()> {
     let server = MockServer::start().await;
@@ -174,8 +176,9 @@ async fn remote_metadata_redirect_same_origin() -> Result<()> {
 }
 
 /// Models registries that redirect wheels to another artifact origin, such as Azure Artifacts
-/// redirecting to `vsblob.vsassets.io` or Gemfury and pypicloud redirecting to Amazon S3. The source
-/// `Authorization` header must not be forwarded to the artifact host.
+/// redirecting to `vsblob.vsassets.io` or Gemfury and pypicloud redirecting to Amazon S3. We expect
+/// the source requests to be authenticated and the redirected requests to omit `Authorization`, and
+/// check that the metadata remains readable through the streaming fallback.
 #[tokio::test]
 async fn remote_metadata_redirect_cross_origin() -> Result<()> {
     let source_server = MockServer::start().await;
@@ -249,7 +252,9 @@ async fn remote_metadata_redirect_cross_origin() -> Result<()> {
 
 /// Models registries that issue method-specific signed redirects, such as Gemfury and pypicloud
 /// backed by Amazon S3 (astral-sh/uv#2025 and astral-sh/uv#3255) and the public Microsoft package
-/// feed backed by Azure Artifacts (astral-sh/uv#21347).
+/// feed backed by Azure Artifacts (astral-sh/uv#21347). We expect each request to follow its own
+/// target with the target's credentials, and check that neither target is reused for the other method
+/// and that the metadata remains readable through the streaming fallback.
 #[tokio::test]
 async fn remote_metadata_redirect_method_specific_target() -> Result<()> {
     let source_server = MockServer::start().await;
