@@ -71,11 +71,12 @@ pub(super) fn files_with_one_hardlink(path: &Path) -> io::Result<Option<Vec<Path
             let error = io::Error::last_os_error();
             return match error.raw_os_error() {
                 // ENOTSUP/ENOSYS mean bulk reads are unavailable. EINVAL means this attribute
-                // request was rejected; the ordinary scan remains valid. Log the fallback since
-                // EINVAL can also indicate a bug in the request. Propagate other errors, such as
-                // permission or I/O failures, instead of hiding them behind the fallback.
-                Some(libc::ENOTSUP | libc::ENOSYS | libc::EINVAL) => {
-                    debug!(%error, "Falling back to individual hardlink counts");
+                // request was rejected; log the fallback since it can also indicate a bug.
+                // EACCES can require a fallback too: bulk link counts need search permission,
+                // but an empty directory can still be read and removed without it. The ordinary
+                // walk will propagate permission errors for inaccessible entries.
+                Some(libc::ENOTSUP | libc::ENOSYS | libc::EINVAL | libc::EACCES) => {
+                    debug!("Falling back to individual hardlink counts: {error}");
                     Ok(None)
                 }
                 _ => Err(error),

@@ -679,6 +679,8 @@ impl Cache {
                 directories.push(entry.into_path());
             }
         }
+        // The walk visits parents first so the bulk path can skip their contents.
+        // Remove directories in reverse order so children are removed before parents.
         for directory in directories.into_iter().rev() {
             match fs_err::remove_dir(directory) {
                 Ok(()) => {
