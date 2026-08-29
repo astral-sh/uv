@@ -84,6 +84,11 @@ remove-prune-graph
 │   └── orphan-leaf-1.0.0
 ├── other
 │   └── other-1.0.0
+├── remaining
+│   ├── remaining-1.0.0
+│   │   └── requires candidate
+│   │       └── satisfied by candidate-1.0.0
+│   └── remaining-2.0.0
 ├── removed
 │   └── removed-1.0.0
 │       ├── requires candidate

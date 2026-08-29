@@ -813,7 +813,7 @@ pub(crate) async fn do_sync<'a>(
 
     let bytecode_compilation = compile_bytecode.then_some(operations::BytecodeCompilation::All);
     let site_packages = SitePackages::from_environment(venv)?;
-    let modifications = modifications.prepare(&site_packages, venv);
+    let modifications = modifications.prepare(&resolution, &site_packages, venv);
     let installation_plan = operations::InstallationPlan::build(
         &resolution,
         site_packages,

@@ -424,7 +424,12 @@ pub(crate) enum Modifications {
 }
 
 impl Modifications {
-    pub(crate) fn prepare(self, site_packages: &SitePackages, venv: &PythonEnvironment) -> Self {
+    pub(crate) fn prepare(
+        self,
+        resolution: &Resolution,
+        site_packages: &SitePackages,
+        venv: &PythonEnvironment,
+    ) -> Self {
         let Self::Prune {
             roots,
             mut candidates,
@@ -447,10 +452,12 @@ impl Modifications {
             );
         }
 
-        let managed = candidates
-            .iter()
-            .chain(&retained)
-            .cloned()
+        // The resolution supplies the dependencies of packages being synced. Packages left
+        // outside it still need their installed dependencies, even if the lockfile is newer.
+        let managed = resolution
+            .distributions()
+            .map(Name::name)
+            .chain(candidates.difference(&retained))
             .collect::<BTreeSet<_>>();
         let external_reachability = site_packages.reachable_packages(
             site_packages
@@ -774,7 +781,7 @@ pub(crate) async fn install(
     printer: Printer,
     preview: Preview,
 ) -> Result<Changelog, Error> {
-    let modifications = modifications.prepare(&site_packages, venv);
+    let modifications = modifications.prepare(resolution, &site_packages, venv);
 
     let plan = InstallationPlan::build(
         resolution,

@@ -25,6 +25,11 @@ requires = ["candidate", "orphan"]
 [packages.external.versions."1.0.0"]
 requires = ["candidate"]
 
+[packages.remaining.versions."1.0.0"]
+requires = ["candidate"]
+
+[packages.remaining.versions."2.0.0"]
+
 [packages.root-external.versions."1.0.0"]
 requires = ["removed"]
 
