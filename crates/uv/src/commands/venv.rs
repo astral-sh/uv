@@ -131,7 +131,12 @@ pub(crate) async fn venv(
         .as_ref()
         .map(VirtualProject::workspace)
         .filter(|workspace| path.is_none() && workspace.install_path() == project_dir)
-        .map(|workspace| (workspace, workspace.environment_selection(Some(false))));
+        .map(|workspace| {
+            (
+                workspace,
+                workspace.environment_selection(Some(false), None),
+            )
+        });
 
     let centralized_workspace = project_environment
         .as_ref()

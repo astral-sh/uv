@@ -34,10 +34,10 @@ use uv_preview::{Preview, PreviewFeature};
 use uv_pypi_types::{ConflictItem, ConflictKind, ConflictSet, Conflicts};
 use uv_python::managed::{ManagedPythonInstallation, PythonMinorVersionLink};
 use uv_python::{
-    BrokenLink, ConfigDiscovery, EnvironmentPreference, Interpreter, InvalidEnvironmentKind,
-    LenientImplementationName, PythonDownloads, PythonEnvironment, PythonInstallation,
-    PythonPreference, PythonRequest, PythonSource, PythonVariant, PythonVersionFile,
-    VersionFileDiscoveryOptions, VersionRequest,
+    BrokenLink, CondaEnvironmentKind, ConfigDiscovery, EnvironmentPreference, Interpreter,
+    InvalidEnvironmentKind, LenientImplementationName, PythonDownloads, PythonEnvironment,
+    PythonInstallation, PythonPreference, PythonRequest, PythonSource, PythonVariant,
+    PythonVersionFile, VersionFileDiscoveryOptions, VersionRequest, conda_environment_from_env,
 };
 use uv_requirements::{
     LockedRequirements, NamedRequirementsResolver, RequirementsSpecification,
@@ -1410,7 +1410,8 @@ impl ProjectInterpreter {
         active: Option<bool>,
         cache: &Cache,
     ) -> Result<Option<PythonEnvironment>, ProjectError> {
-        let selection = workspace.environment_selection(active);
+        let conda_env_path = conda_environment_from_env(CondaEnvironmentKind::Child);
+        let selection = workspace.environment_selection(active, conda_env_path);
         let root = selection
             .explicit_path()
             .map_or_else(|| workspace.install_path().join(".venv"), Path::to_path_buf);
@@ -1450,8 +1451,8 @@ impl ProjectInterpreter {
             python_request,
             requires_python,
         } = workspace_python;
-
-        let environment_selection = workspace.environment_selection(active);
+        let conda_env_path = conda_environment_from_env(CondaEnvironmentKind::Child);
+        let environment_selection = workspace.environment_selection(active, conda_env_path);
         let centralized = centralized_environments_enabled(&environment_selection, cache);
         let upgradeable = python_request
             .as_ref()
@@ -1869,7 +1870,8 @@ impl ProjectEnvironment {
         link_error_reporting: LinkErrorReporting,
         printer: Printer,
     ) -> Result<Self, ProjectError> {
-        let environment_selection = workspace.environment_selection(active);
+        let conda_env_path = conda_environment_from_env(CondaEnvironmentKind::Child);
+        let environment_selection = workspace.environment_selection(active, conda_env_path);
         let centralized = centralized_environments_enabled(&environment_selection, cache);
 
         // Lock the project environment to avoid synchronization issues.
