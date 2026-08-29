@@ -1,3 +1,8 @@
+#[cfg(target_os = "macos")]
+use std::fs::Permissions;
+#[cfg(target_os = "macos")]
+use std::os::unix::fs::PermissionsExt;
+
 use anyhow::Result;
 use assert_cmd::prelude::*;
 use assert_fs::prelude::*;
@@ -485,6 +490,26 @@ fn clean_package_does_not_follow_symlinks() -> Result<()> {
     assert!(!shard.child("nested").exists());
     assert!(fs_err::symlink_metadata(files.child("escape"))?.is_symlink());
     assert!(fs_err::symlink_metadata(shard.child("escape"))?.is_symlink());
+
+    Ok(())
+}
+
+/// Empty file-cache shards can be removed without search permission.
+#[cfg(target_os = "macos")]
+#[test]
+fn clean_package_empty_shard_without_search_permission() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let shard = context.cache_dir.child("files-v0").child("shard");
+    shard.create_dir_all()?;
+    fs_err::set_permissions(&shard, Permissions::from_mode(0o600))?;
+
+    uv_snapshot!(context.filters(), context.clean().arg("demo"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Removed 1 directory (0B)
+    ");
+
+    assert!(!shard.exists());
 
     Ok(())
 }
