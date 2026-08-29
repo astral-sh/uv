@@ -1017,14 +1017,19 @@ jobs:
         run: ./uv run --locked --python "${PYTHON_VERSION}" --no-build --script scripts/registries-test.py --uv ./uv --color always --all --auth-method env
         env:
           RUST_LOG: uv=debug
+          UV_TEST_ARTIFACTORY_REQUIRE_METADATA_RANGE_REQUESTS: "true"
           UV_TEST_ARTIFACTORY_TOKEN: ${{ secrets.UV_TEST_ARTIFACTORY_TOKEN }}
           UV_TEST_ARTIFACTORY_URL: ${{ secrets.UV_TEST_ARTIFACTORY_URL }}
           UV_TEST_ARTIFACTORY_USERNAME: ${{ secrets.UV_TEST_ARTIFACTORY_USERNAME }}
+          UV_TEST_AWS_REQUIRE_METADATA_RANGE_REQUESTS: "true"
           UV_TEST_AWS_URL: ${{ secrets.UV_TEST_AWS_URL }}
           UV_TEST_AWS_USERNAME: aws
+          # TODO: Enable when https://github.com/astral-sh/uv/issues/21349 is fixed.
+          # UV_TEST_AZURE_REQUIRE_METADATA_RANGE_REQUESTS: "true"
           UV_TEST_AZURE_TOKEN: ${{ secrets.UV_TEST_AZURE_TOKEN }}
           UV_TEST_AZURE_URL: ${{ secrets.UV_TEST_AZURE_URL }}
           UV_TEST_AZURE_USERNAME: dummy
+          UV_TEST_CLOUDSMITH_REQUIRE_METADATA_RANGE_REQUESTS: "true"
           UV_TEST_CLOUDSMITH_TOKEN: ${{ secrets.UV_TEST_CLOUDSMITH_TOKEN }}
           UV_TEST_CLOUDSMITH_URL: ${{ secrets.UV_TEST_CLOUDSMITH_URL }}
           UV_TEST_CLOUDSMITH_USERNAME: ${{ secrets.UV_TEST_CLOUDSMITH_USERNAME }}
@@ -1033,6 +1038,7 @@ jobs:
           UV_TEST_GEMFURY_TOKEN: ${{ secrets.UV_TEST_GEMFURY_TOKEN }}
           UV_TEST_GEMFURY_URL: ${{ secrets.UV_TEST_GEMFURY_URL }}
           UV_TEST_GEMFURY_USERNAME: ${{ secrets.UV_TEST_GEMFURY_USERNAME }}
+          UV_TEST_GITLAB_REQUIRE_METADATA_RANGE_REQUESTS: "true"
           UV_TEST_GITLAB_TOKEN: ${{ secrets.UV_TEST_GITLAB_TOKEN }}
           UV_TEST_GITLAB_URL: ${{ secrets.UV_TEST_GITLAB_URL }}
           UV_TEST_GITLAB_USERNAME: token
@@ -1041,14 +1047,19 @@ jobs:
         run: ./uv run --locked --python "${PYTHON_VERSION}" --no-build --script scripts/registries-test.py --uv ./uv --color always --all --auth-method text-store
         env:
           RUST_LOG: uv=debug
+          UV_TEST_ARTIFACTORY_REQUIRE_METADATA_RANGE_REQUESTS: "true"
           UV_TEST_ARTIFACTORY_TOKEN: ${{ secrets.UV_TEST_ARTIFACTORY_TOKEN }}
           UV_TEST_ARTIFACTORY_URL: ${{ secrets.UV_TEST_ARTIFACTORY_URL }}
           UV_TEST_ARTIFACTORY_USERNAME: ${{ secrets.UV_TEST_ARTIFACTORY_USERNAME }}
+          UV_TEST_AWS_REQUIRE_METADATA_RANGE_REQUESTS: "true"
           UV_TEST_AWS_URL: ${{ secrets.UV_TEST_AWS_URL }}
           UV_TEST_AWS_USERNAME: aws
+          # TODO: Enable when https://github.com/astral-sh/uv/issues/21349 is fixed.
+          # UV_TEST_AZURE_REQUIRE_METADATA_RANGE_REQUESTS: "true"
           UV_TEST_AZURE_TOKEN: ${{ secrets.UV_TEST_AZURE_TOKEN }}
           UV_TEST_AZURE_URL: ${{ secrets.UV_TEST_AZURE_URL }}
           UV_TEST_AZURE_USERNAME: dummy
+          UV_TEST_CLOUDSMITH_REQUIRE_METADATA_RANGE_REQUESTS: "true"
           UV_TEST_CLOUDSMITH_TOKEN: ${{ secrets.UV_TEST_CLOUDSMITH_TOKEN }}
           UV_TEST_CLOUDSMITH_URL: ${{ secrets.UV_TEST_CLOUDSMITH_URL }}
           UV_TEST_CLOUDSMITH_USERNAME: ${{ secrets.UV_TEST_CLOUDSMITH_USERNAME }}
@@ -1057,6 +1068,7 @@ jobs:
           UV_TEST_GEMFURY_TOKEN: ${{ secrets.UV_TEST_GEMFURY_TOKEN }}
           UV_TEST_GEMFURY_URL: ${{ secrets.UV_TEST_GEMFURY_URL }}
           UV_TEST_GEMFURY_USERNAME: ${{ secrets.UV_TEST_GEMFURY_USERNAME }}
+          UV_TEST_GITLAB_REQUIRE_METADATA_RANGE_REQUESTS: "true"
           UV_TEST_GITLAB_TOKEN: ${{ secrets.UV_TEST_GITLAB_TOKEN }}
           UV_TEST_GITLAB_URL: ${{ secrets.UV_TEST_GITLAB_URL }}
           UV_TEST_GITLAB_USERNAME: token
