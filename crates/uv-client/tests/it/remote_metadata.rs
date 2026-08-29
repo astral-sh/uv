@@ -93,10 +93,9 @@ async fn remote_metadata_requires_range_requests() -> Result<()> {
     Ok(())
 }
 
-/// Covers same-origin redirect semantics and credential propagation. This is a generic control case
-/// for authenticated proxies; the known registry reports below use cross-origin artifact storage.
-/// We expect the source credentials to be preserved across both redirect hops, and check that the
-/// metadata remains readable when the `303` turns the ranged `GET` into a streaming `GET`.
+/// Covers same-origin redirect semantics and credential propagation. We expect the source
+/// credentials to be preserved across both redirect hops, and check that the metadata remains
+/// readable when the `303` turns the ranged `GET` into a streaming `GET`.
 #[tokio::test]
 async fn remote_metadata_redirect_same_origin() -> Result<()> {
     let server = MockServer::start().await;
