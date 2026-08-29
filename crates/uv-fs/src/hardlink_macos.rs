@@ -76,7 +76,7 @@ pub(super) fn files_with_one_hardlink(path: &Path) -> io::Result<Option<Vec<Path
                 // but an empty directory can still be read and removed without it. The ordinary
                 // walk will propagate permission errors for inaccessible entries.
                 Some(libc::ENOTSUP | libc::ENOSYS | libc::EINVAL | libc::EACCES) => {
-                    debug!(%error, "Falling back to individual hardlink counts");
+                    debug!("Falling back to individual hardlink counts: {error}");
                     Ok(None)
                 }
                 _ => Err(error),
