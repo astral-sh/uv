@@ -431,8 +431,9 @@ async fn remote_metadata_bounded_ranges() -> Result<()> {
     assert_wheel_metadata_readable(&server).await
 }
 
-/// An artifact host may reject ranges while allowing a full download. Covers the streaming fallback
-/// for redirecting registries.
+/// A redirect target may reject range requests while allowing a full download. The range request
+/// should not reach the target; metadata should be read after retrying the source without a `Range`
+/// header.
 #[tokio::test]
 async fn remote_metadata_redirect_range_forbidden() -> Result<()> {
     let source_server = MockServer::start().await;
