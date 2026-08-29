@@ -21,6 +21,52 @@ inputs:
 runs:
   using: "composite"
   steps:
+    - name: "Check QEMU support"
+      id: qemu
+      shell: bash
+      env:
+        PLATFORM: ${{ inputs.platform }}
+      run: |
+        architecture="${PLATFORM#*/}"
+        architecture="${architecture%%/*}"
+        case "$(uname -m)" in
+          x86_64) host_architecture=amd64 ;;
+          i386 | i486 | i586 | i686) host_architecture=386 ;;
+          aarch64 | arm64) host_architecture=arm64 ;;
+          armv[5-8]l) host_architecture=arm ;;
+          *) host_architecture="$(uname -m)" ;;
+        esac
+
+        if [[ "$architecture" == "$host_architecture" ]]; then
+          echo "required=false" >> "$GITHUB_OUTPUT"
+          exit 0
+        fi
+
+        case "$architecture" in
+          amd64) qemu_architecture=x86_64 ;;
+          arm64) qemu_architecture=aarch64 ;;
+          386) qemu_architecture=i386 ;;
+          *) qemu_architecture="$architecture" ;;
+        esac
+        binfmt="/proc/sys/fs/binfmt_misc/qemu-$qemu_architecture"
+        if [[ -r "$binfmt" ]] \
+          && grep -qx enabled "$binfmt" \
+          && grep -Eq '^flags:.*F' "$binfmt"; then
+          echo "required=false" >> "$GITHUB_OUTPUT"
+        else
+          echo "required=true" >> "$GITHUB_OUTPUT"
+          echo "platform=$architecture" >> "$GITHUB_OUTPUT"
+        fi
+
+    - name: "Set up QEMU"
+      if: steps.qemu.outputs.required == 'true'
+      uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3.7.0
+      with:
+        # QEMU registration is privileged, unlike the smoke-test container.
+        image: tonistiigi/binfmt@sha256:400a4873b838d1b89194d982c45e5fb3cda4593fbfd7e08a02e76b03b21166f0
+        platforms: ${{ steps.qemu.outputs.platform }}
+        cache-image: false
+
     - name: "Test release artifact"
       shell: bash
       env:
