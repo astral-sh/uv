@@ -62,7 +62,6 @@ runs:
       if: steps.qemu.outputs.required == 'true'
       uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3.7.0
       with:
-        # QEMU registration is privileged, unlike the smoke-test container.
         image: tonistiigi/binfmt@sha256:400a4873b838d1b89194d982c45e5fb3cda4593fbfd7e08a02e76b03b21166f0
         platforms: ${{ steps.qemu.outputs.platform }}
         cache-image: false
