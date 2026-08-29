@@ -476,10 +476,18 @@ fn clean_package_does_not_follow_symlinks() -> Result<()> {
     fs_err::os::unix::fs::symlink(&victim_dir, files.child("escape"))?;
     fs_err::os::unix::fs::symlink(&victim_dir, shard.child("escape"))?;
 
+    // Keep this shard flat so macOS can prune it with bulk metadata reads.
+    let flat_shard = files.child("flat");
+    flat_shard.child("orphan").write_str("orphan")?;
+    let retained = context.cache_dir.path().with_file_name("retained.bin");
+    fs_err::write(&retained, "retained")?;
+    fs_err::hard_link(&retained, flat_shard.child("retained"))?;
+    fs_err::os::unix::fs::symlink(&victim_dir, flat_shard.child("escape"))?;
+
     uv_snapshot!(context.filters(), context.clean().args(["demo", "other"]), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Removed 5 files ([SIZE])
+    Removed 6 files ([SIZE])
     ");
 
     assert!(victim_dir.is_dir());
@@ -490,6 +498,10 @@ fn clean_package_does_not_follow_symlinks() -> Result<()> {
     assert!(!shard.child("nested").exists());
     assert!(fs_err::symlink_metadata(files.child("escape"))?.is_symlink());
     assert!(fs_err::symlink_metadata(shard.child("escape"))?.is_symlink());
+    assert!(!flat_shard.child("orphan").exists());
+    assert!(retained.is_file());
+    assert!(flat_shard.child("retained").is_file());
+    assert!(fs_err::symlink_metadata(flat_shard.child("escape"))?.is_symlink());
 
     Ok(())
 }
