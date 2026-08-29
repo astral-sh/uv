@@ -3851,8 +3851,8 @@ pub struct SyncArgs {
     /// Sync dependencies to the active virtual environment.
     ///
     /// Instead of creating or updating the virtual environment for the project or script, the
-    /// active virtual environment will be preferred, if the `VIRTUAL_ENV` environment variable is
-    /// set.
+    /// active environment will be preferred, if the `VIRTUAL_ENV` environment variable is
+    /// set, or if a non-base Conda environment is active via `CONDA_PREFIX`.
     #[arg(long, overrides_with = "no_active")]
     pub active: bool,
 
@@ -7814,8 +7814,8 @@ pub struct MetadataArgs {
     /// Sync dependencies to the active virtual environment.
     ///
     /// Instead of creating or updating the virtual environment for the project or script, the
-    /// active virtual environment will be preferred, if the `VIRTUAL_ENV` environment variable is
-    /// set.
+    /// active environment will be preferred, if the `VIRTUAL_ENV` environment variable is
+    /// set, or if a non-base Conda environment is active via `CONDA_PREFIX`.
     #[arg(long)]
     pub active: bool,
 

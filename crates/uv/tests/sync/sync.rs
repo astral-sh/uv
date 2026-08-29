@@ -6899,6 +6899,120 @@ fn sync_active_project_environment() -> Result<()> {
 }
 
 #[test]
+fn sync_active_conda_project_environment() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&["3.11", "3.12"])
+        .with_filtered_virtualenv_bin()
+        .with_filtered_python_names();
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.11"
+        dependencies = ["iniconfig"]
+        "#,
+    )?;
+
+    // An active conda environment should be ignored without `--active`, and unlike
+    // `VIRTUAL_ENV`, no warning is emitted. Conda users typically have an environment
+    // active at all times.
+    uv_snapshot!(context.filters(), context.sync()
+    .env(EnvVars::CONDA_PREFIX, "envs/conda-env")
+    .env(EnvVars::CONDA_DEFAULT_ENV, "conda-env"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Using CPython 3.11.[X] interpreter at: [PYTHON-3.11]
+    Creating virtual environment at: .venv
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    ");
+
+    context
+        .temp_dir
+        .child(".venv")
+        .assert(predicate::path::is_dir());
+
+    context
+        .temp_dir
+        .child("envs/conda-env")
+        .assert(predicate::path::missing());
+
+    // Using `--active` should use the conda environment
+    uv_snapshot!(context.filters(), context.sync()
+    .arg("--active")
+    .env(EnvVars::CONDA_PREFIX, "envs/conda-env")
+    .env(EnvVars::CONDA_DEFAULT_ENV, "conda-env"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Using CPython 3.11.[X] interpreter at: [PYTHON-3.11]
+    Creating virtual environment at: envs/conda-env
+    Resolved 2 packages in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    ");
+
+    context
+        .temp_dir
+        .child("envs/conda-env")
+        .assert(predicate::path::is_dir());
+
+    // `--no-active` still prefers the project environment
+    uv_snapshot!(context.filters(), context.sync()
+    .arg("--no-active")
+    .env(EnvVars::CONDA_PREFIX, "envs/conda-env")
+    .env(EnvVars::CONDA_DEFAULT_ENV, "conda-env"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Checked 1 package in [TIME]
+    ");
+
+    // A conda base environment is treated as a system installation, so it is
+    // never used, even with `--active`. `CONDA_DEFAULT_ENV` doesn't match the
+    // prefix directory name, which marks it as a base environment.
+    uv_snapshot!(context.filters(), context.sync()
+    .arg("--active")
+    .env(EnvVars::CONDA_PREFIX, "envs/base-env")
+    .env(EnvVars::CONDA_DEFAULT_ENV, "base"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Checked 1 package in [TIME]
+    ");
+
+    context
+        .temp_dir
+        .child("envs/base-env")
+        .assert(predicate::path::missing());
+
+    // `VIRTUAL_ENV` should take precedence over `CONDA_PREFIX`
+    uv_snapshot!(context.filters(), context.sync()
+    .arg("--active")
+    .env(EnvVars::VIRTUAL_ENV, "foo")
+    .env(EnvVars::CONDA_PREFIX, "envs/conda-env")
+    .env(EnvVars::CONDA_DEFAULT_ENV, "conda-env"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Using CPython 3.11.[X] interpreter at: [PYTHON-3.11]
+    Creating virtual environment at: foo
+    Resolved 2 packages in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    ");
+
+    context
+        .temp_dir
+        .child("foo")
+        .assert(predicate::path::is_dir());
+
+    Ok(())
+}
+
+#[test]
 #[cfg(feature = "test-python-managed")]
 fn sync_active_project_environment_with_relative_managed_python_dir() -> Result<()> {
     let context = uv_test::test_context_with_versions!(&[])
