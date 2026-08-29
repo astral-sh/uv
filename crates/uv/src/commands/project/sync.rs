@@ -813,11 +813,11 @@ pub(crate) async fn do_sync<'a>(
 
     let bytecode_compilation = compile_bytecode.then_some(operations::BytecodeCompilation::All);
     let site_packages = SitePackages::from_environment(venv)?;
-    let modifications = modifications.prepare(&resolution, &site_packages, venv);
     let installation_plan = operations::InstallationPlan::build(
         &resolution,
         site_packages,
         InstallationStrategy::Strict,
+        modifications,
         reinstall,
         build_options,
         &hasher,
@@ -833,7 +833,7 @@ pub(crate) async fn do_sync<'a>(
 
     // Avoid constructing an HTTP client and build dispatch when planning shows that there is no
     // installation work to perform.
-    if installation_plan.is_noop(&modifications, bytecode_compilation, dry_run) {
+    if installation_plan.is_noop(bytecode_compilation, dry_run) {
         maybe_check_malware(
             &target,
             &resolution,
@@ -847,7 +847,6 @@ pub(crate) async fn do_sync<'a>(
 
         return Ok(installation_plan.finish_noop(
             &resolution,
-            &modifications,
             bytecode_compilation,
             logger.as_ref(),
             dry_run,
@@ -931,7 +930,6 @@ pub(crate) async fn do_sync<'a>(
     let changelog = installation_plan
         .execute(
             &resolution,
-            modifications,
             build_options,
             link_mode,
             bytecode_compilation,

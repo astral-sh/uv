@@ -424,19 +424,21 @@ pub(crate) enum Modifications {
 }
 
 impl Modifications {
-    pub(crate) fn prepare(
+    /// Return the packages eligible for removal, or [`None`] to allow removing any extraneous package.
+    fn removable_packages(
         self,
         resolution: &Resolution,
         site_packages: &SitePackages,
         venv: &PythonEnvironment,
-    ) -> Self {
-        let Self::Prune {
-            roots,
-            mut candidates,
-            retained,
-        } = self
-        else {
-            return self;
+    ) -> Option<BTreeSet<PackageName>> {
+        let (roots, mut candidates, retained) = match self {
+            Self::Sufficient => return Some(BTreeSet::new()),
+            Self::Exact => return None,
+            Self::Prune {
+                roots,
+                candidates,
+                retained,
+            } => (roots, candidates, retained),
         };
 
         let markers = venv.interpreter().to_resolver_marker_environment();
@@ -477,21 +479,7 @@ impl Modifications {
             !retained.contains(candidate) && !external_reachability.packages().contains(candidate)
         });
 
-        Self::Prune {
-            roots,
-            candidates,
-            retained,
-        }
-    }
-
-    fn apply(&self, plan: &mut Plan) {
-        match self {
-            Self::Sufficient => plan.extraneous.clear(),
-            Self::Exact => {}
-            Self::Prune { candidates, .. } => plan
-                .extraneous
-                .retain(|distribution| candidates.contains(distribution.name())),
-        }
+        Some(candidates)
     }
 }
 
@@ -665,6 +653,7 @@ impl InstallationPlan {
         resolution: &Resolution,
         site_packages: SitePackages,
         installation: InstallationStrategy,
+        modifications: Modifications,
         reinstall: &Reinstall,
         build_options: &BuildOptions,
         hasher: &HashStrategy,
@@ -678,7 +667,8 @@ impl InstallationPlan {
         tags: &Tags,
     ) -> Result<Self, Error> {
         let start = Instant::now();
-        let plan = Planner::new(resolution)
+        let removable_packages = modifications.removable_packages(resolution, &site_packages, venv);
+        let mut plan = Planner::new(resolution)
             .build(
                 site_packages,
                 installation,
@@ -696,6 +686,11 @@ impl InstallationPlan {
             )
             .context("Failed to determine installation plan")?;
 
+        if let Some(removable_packages) = removable_packages {
+            plan.extraneous
+                .retain(|distribution| removable_packages.contains(distribution.name()));
+        }
+
         Ok(Self {
             plan,
             elapsed: start.elapsed(),
@@ -703,43 +698,22 @@ impl InstallationPlan {
     }
 
     /// Returns `true` if executing the plan would not modify the environment.
-    pub(crate) fn is_noop(
-        &self,
-        modifications: &Modifications,
-        compile: Option<BytecodeCompilation>,
-        dry_run: DryRun,
-    ) -> bool {
-        self.plan.cached.is_empty()
-            && self.plan.remote.is_empty()
-            && self.plan.reinstalls.is_empty()
-            && self
-                .plan
-                .extraneous
-                .iter()
-                .all(|distribution| match modifications {
-                    Modifications::Sufficient => true,
-                    Modifications::Exact => false,
-                    Modifications::Prune { candidates, .. } => {
-                        !candidates.contains(distribution.name())
-                    }
-                })
-            && (compile.is_none() || dry_run.enabled())
+    pub(crate) fn is_noop(&self, compile: Option<BytecodeCompilation>, dry_run: DryRun) -> bool {
+        self.plan.is_empty() && (compile.is_none() || dry_run.enabled())
     }
 
     /// Complete an installation that was determined to be a no-op.
     pub(crate) fn finish_noop(
         self,
         resolution: &Resolution,
-        modifications: &Modifications,
         compile: Option<BytecodeCompilation>,
         logger: &dyn InstallLogger,
         dry_run: DryRun,
         printer: Printer,
     ) -> Result<Changelog, Error> {
-        debug_assert!(self.is_noop(modifications, compile, dry_run));
+        debug_assert!(self.is_noop(compile, dry_run));
 
-        let (mut plan, start) = self.into_parts();
-        modifications.apply(&mut plan);
+        let (plan, start) = self.into_parts();
         if dry_run.enabled() {
             report_dry_run(dry_run, resolution, plan, start, logger, printer)
         } else {
@@ -781,12 +755,11 @@ pub(crate) async fn install(
     printer: Printer,
     preview: Preview,
 ) -> Result<Changelog, Error> {
-    let modifications = modifications.prepare(resolution, &site_packages, venv);
-
     let plan = InstallationPlan::build(
         resolution,
         site_packages,
         installation,
+        modifications,
         reinstall,
         build_options,
         hasher,
@@ -802,7 +775,6 @@ pub(crate) async fn install(
 
     plan.execute(
         resolution,
-        modifications,
         build_options,
         link_mode,
         compile,
@@ -828,7 +800,6 @@ impl InstallationPlan {
     pub(crate) async fn execute(
         self,
         resolution: &Resolution,
-        modifications: Modifications,
         build_options: &BuildOptions,
         link_mode: LinkMode,
         compile: Option<BytecodeCompilation>,
@@ -846,8 +817,7 @@ impl InstallationPlan {
         printer: Printer,
         preview: Preview,
     ) -> Result<Changelog, Error> {
-        let (mut plan, start) = self.into_parts();
-        modifications.apply(&mut plan);
+        let (plan, start) = self.into_parts();
 
         if dry_run.enabled() {
             return report_dry_run(dry_run, resolution, plan, start, logger.as_ref(), printer);
