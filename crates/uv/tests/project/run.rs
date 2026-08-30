@@ -4627,6 +4627,12 @@ fn run_active_script_environment() -> Result<()> {
         .child("foo")
         .assert(predicate::path::missing());
 
+    let active_environment = context.temp_dir.child("foo");
+    active_environment.create_dir_all()?;
+    active_environment
+        .child("important.txt")
+        .write_str("important data")?;
+
     // Using `--active` should create the environment
     uv_snapshot!(context.filters(), context.run()
         .arg("--active")
@@ -4643,10 +4649,12 @@ fn run_active_script_environment() -> Result<()> {
      + iniconfig==2.0.0
     ");
 
-    context
-        .temp_dir
-        .child("foo")
-        .assert(predicate::path::is_dir());
+    active_environment.assert(predicate::path::is_dir());
+    // Silently deleting user data outside a virtual environment is undesirable.
+    // See astral-sh/uv#21364.
+    active_environment
+        .child("important.txt")
+        .assert(predicate::path::missing());
 
     // Requesting a different Python version should invalidate the environment
     uv_snapshot!(context.filters(), context.run()
