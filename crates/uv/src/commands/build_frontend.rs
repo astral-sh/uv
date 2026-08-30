@@ -702,7 +702,7 @@ async fn build_package(
             .into_inner();
 
     // Create a build dispatch.
-    let build_dispatch = BuildDispatch::new(
+    let mut build_dispatch = BuildDispatch::new(
         &client,
         cache,
         &build_constraints,
@@ -836,6 +836,9 @@ async fn build_package(
             let temp_dir = tempfile::tempdir_in(cache.bucket(CacheBucket::SourceDistributions))?;
             uv_extract::stream::archive(reader, ext, temp_dir.path()).await?;
 
+            // Do not cache an environment keyed on this temporary source tree.
+            build_dispatch.disable_build_environment_reuse();
+
             // Extract the top-level directory from the archive.
             let extracted = match uv_extract::strip_component(temp_dir.path()) {
                 Ok(top_level) => top_level,
@@ -942,6 +945,9 @@ async fn build_package(
             })?;
             let temp_dir = tempfile::tempdir_in(&output_dir)?;
             uv_extract::stream::archive(reader, ext, temp_dir.path()).await?;
+
+            // Do not cache an environment keyed on this temporary source tree.
+            build_dispatch.disable_build_environment_reuse();
 
             // If the source distribution has a normalized filename, check its identity.
             let source_dist = source

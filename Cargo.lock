@@ -6238,6 +6238,7 @@ dependencies = [
  "uv-python",
  "uv-static",
  "uv-types",
+ "uv-version",
  "uv-virtualenv",
  "uv-warnings",
  "uv-workspace",

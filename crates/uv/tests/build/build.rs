@@ -347,6 +347,68 @@ fn build_backend_path_symlink_outside_source_tree() -> Result<()> {
     Ok(())
 }
 
+/// `uv build` reuses only the source distribution's build environment.
+#[test]
+fn build_reuse_build_environment() -> Result<()> {
+    let context = uv_test::test_context!("3.12").with_filter((r"\\\.", ""));
+
+    let project = context.temp_dir.child("project");
+
+    let pyproject_toml = project.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+        "#,
+    )?;
+
+    project
+        .child("src")
+        .child("project")
+        .child("__init__.py")
+        .touch()?;
+    project.child("README").touch()?;
+
+    uv_snapshot!(context.filters(), context.build().arg("project").arg("--preview-features").arg("reuse-build-environment").arg("--reuse-build-environment-package").arg("project"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Building source distribution...
+    Building wheel from source distribution...
+    Successfully built project/dist/project-0.1.0.tar.gz
+    Successfully built project/dist/project-0.1.0-py3-none-any.whl
+    ");
+
+    let build_environments = context.cache_dir.child("build-envs-v0").child("project");
+    let count = || -> Result<usize> {
+        Ok(fs_err::read_dir(build_environments.to_path_buf())?
+            .filter_map(Result::ok)
+            .filter(|entry| entry.path().is_dir())
+            .count())
+    };
+
+    assert_eq!(count()?, 1);
+
+    // The second build reuses the source distribution environment.
+    uv_snapshot!(context.filters(), context.build().arg("project").arg("--preview-features").arg("reuse-build-environment").arg("--reuse-build-environment-package").arg("project"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Building source distribution...
+    Building wheel from source distribution...
+    Successfully built project/dist/project-0.1.0.tar.gz
+    Successfully built project/dist/project-0.1.0-py3-none-any.whl
+    ");
+
+    assert_eq!(count()?, 1);
+
+    Ok(())
+}
+
 #[test]
 fn build_sdist() -> Result<()> {
     let context = uv_test::test_context!("3.12").with_filter((r"\\\.", ""));

@@ -5,6 +5,7 @@ use indoc::{formatdoc, indoc};
 use insta::assert_snapshot;
 use predicates::prelude::predicate;
 use serde_json::json;
+use std::collections::BTreeSet;
 #[cfg(feature = "test-git")]
 use std::process::Command;
 use tempfile::tempdir_in;
@@ -1785,6 +1786,299 @@ fn sync_build_isolation() -> Result<()> {
     ");
 
     assert!(context.temp_dir.child("uv.lock").exists());
+
+    Ok(())
+}
+
+/// Set up a build backend that records its build environment.
+fn reuse_build_environment_project(
+    context: &TestContext,
+    build_requires: &str,
+    reuse: bool,
+) -> Result<ChildPath> {
+    let child = context.temp_dir.child("child");
+    child.create_dir_all()?;
+    child.child("pyproject.toml").write_str(&formatdoc! {r#"
+        [project]
+        name = "child"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = [{build_requires}]
+        backend-path = ["."]
+        build-backend = "build_backend"
+    "#})?;
+    child.child("build_backend.py").write_str(indoc! {r#"
+        import os
+        import sys
+
+        from hatchling.build import *
+
+        with open(os.environ["UV_TEST_BUILD_PREFIX_LOG"], "a") as fp:
+            fp.write(sys.prefix + "\n")
+    "#})?;
+    child.child("src/child/__init__.py").touch()?;
+
+    let reuse = if reuse {
+        indoc! {r#"
+            [tool.uv]
+            reuse-build-environment-package = ["child"]
+        "#}
+    } else {
+        ""
+    };
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&formatdoc! {r#"
+        [project]
+        name = "parent"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["child"]
+
+        [tool.uv.sources]
+        child = {{ path = "child" }}
+
+        {reuse}
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+    "#})?;
+    context.temp_dir.child("src/parent/__init__.py").touch()?;
+
+    Ok(child)
+}
+
+/// Return the build environments recorded by the test backend.
+fn recorded_build_environments(log: &ChildPath) -> Result<BTreeSet<String>> {
+    Ok(fs_err::read_to_string(log)?
+        .lines()
+        .map(ToString::to_string)
+        .collect())
+}
+
+/// Count build environments, excluding markers and locks.
+fn cached_build_environments(context: &TestContext, package: &str) -> usize {
+    let shard = context
+        .cache_dir
+        .child("build-envs-v0")
+        .child(package)
+        .to_path_buf();
+    let Ok(entries) = fs_err::read_dir(shard) else {
+        return 0;
+    };
+    entries
+        .filter_map(Result::ok)
+        .filter(|entry| entry.path().is_dir())
+        .count()
+}
+
+/// `reuse-build-environment-package` reuses the build environment.
+#[test]
+#[cfg_attr(
+    windows,
+    ignore = "Configuration tests are not yet supported on Windows"
+)]
+fn sync_reuse_build_environment() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    reuse_build_environment_project(&context, r#""hatchling""#, true)?;
+
+    let log = context.temp_dir.child("prefixes.txt");
+
+    context
+        .sync()
+        .env("UV_TEST_BUILD_PREFIX_LOG", log.as_os_str())
+        .assert()
+        .success();
+    context
+        .sync()
+        .arg("--reinstall-package")
+        .arg("child")
+        .env("UV_TEST_BUILD_PREFIX_LOG", log.as_os_str())
+        .assert()
+        .success();
+
+    // Both builds use the same environment.
+    assert_eq!(recorded_build_environments(&log)?.len(), 1);
+    assert_eq!(cached_build_environments(&context, "child"), 1);
+
+    Ok(())
+}
+
+/// Without the setting, each build uses a fresh environment.
+#[test]
+#[cfg_attr(
+    windows,
+    ignore = "Configuration tests are not yet supported on Windows"
+)]
+fn sync_reuse_build_environment_not_enabled() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    reuse_build_environment_project(&context, r#""hatchling""#, false)?;
+
+    let log = context.temp_dir.child("prefixes.txt");
+
+    context
+        .sync()
+        .env("UV_TEST_BUILD_PREFIX_LOG", log.as_os_str())
+        .assert()
+        .success();
+    context
+        .sync()
+        .arg("--reinstall-package")
+        .arg("child")
+        .env("UV_TEST_BUILD_PREFIX_LOG", log.as_os_str())
+        .assert()
+        .success();
+
+    assert_eq!(recorded_build_environments(&log)?.len(), 2);
+    assert_eq!(cached_build_environments(&context, "child"), 0);
+
+    Ok(())
+}
+
+/// Changed build requirements create a new build environment.
+#[test]
+#[cfg_attr(
+    windows,
+    ignore = "Configuration tests are not yet supported on Windows"
+)]
+fn sync_reuse_build_environment_invalidated() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let child = reuse_build_environment_project(&context, r#""hatchling""#, true)?;
+
+    let log = context.temp_dir.child("prefixes.txt");
+
+    context
+        .sync()
+        .env("UV_TEST_BUILD_PREFIX_LOG", log.as_os_str())
+        .assert()
+        .success();
+
+    child.child("pyproject.toml").write_str(&formatdoc! {r#"
+        [project]
+        name = "child"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["hatchling", "iniconfig"]
+        backend-path = ["."]
+        build-backend = "build_backend"
+    "#})?;
+
+    context
+        .sync()
+        .arg("--reinstall-package")
+        .arg("child")
+        .env("UV_TEST_BUILD_PREFIX_LOG", log.as_os_str())
+        .assert()
+        .success();
+
+    assert_eq!(recorded_build_environments(&log)?.len(), 2);
+    assert_eq!(cached_build_environments(&context, "child"), 2);
+
+    Ok(())
+}
+
+/// `--refresh-package` recreates the environment in place.
+#[test]
+#[cfg_attr(
+    windows,
+    ignore = "Configuration tests are not yet supported on Windows"
+)]
+fn sync_reuse_build_environment_refresh() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    reuse_build_environment_project(&context, r#""hatchling""#, true)?;
+
+    let log = context.temp_dir.child("prefixes.txt");
+
+    context
+        .sync()
+        .env("UV_TEST_BUILD_PREFIX_LOG", log.as_os_str())
+        .assert()
+        .success();
+    context
+        .sync()
+        .arg("--reinstall-package")
+        .arg("child")
+        .arg("--refresh-package")
+        .arg("child")
+        .env("UV_TEST_BUILD_PREFIX_LOG", log.as_os_str())
+        .assert()
+        .success();
+
+    // The unchanged digest preserves the environment path.
+    assert_eq!(recorded_build_environments(&log)?.len(), 1);
+    assert_eq!(cached_build_environments(&context, "child"), 1);
+
+    Ok(())
+}
+
+/// `--no-cache` does not persist build environments.
+#[test]
+#[cfg_attr(
+    windows,
+    ignore = "Configuration tests are not yet supported on Windows"
+)]
+fn sync_reuse_build_environment_no_cache() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    reuse_build_environment_project(&context, r#""hatchling""#, true)?;
+
+    let log = context.temp_dir.child("prefixes.txt");
+
+    context
+        .sync()
+        .arg("--no-cache")
+        .env("UV_TEST_BUILD_PREFIX_LOG", log.as_os_str())
+        .assert()
+        .success();
+
+    assert_eq!(cached_build_environments(&context, "child"), 0);
+
+    Ok(())
+}
+
+/// A missing build environment is recreated.
+#[test]
+#[cfg_attr(
+    windows,
+    ignore = "Configuration tests are not yet supported on Windows"
+)]
+fn sync_reuse_build_environment_corrupt() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    reuse_build_environment_project(&context, r#""hatchling""#, true)?;
+
+    let log = context.temp_dir.child("prefixes.txt");
+
+    context
+        .sync()
+        .env("UV_TEST_BUILD_PREFIX_LOG", log.as_os_str())
+        .assert()
+        .success();
+
+    // Leave the marker after removing the environment.
+    let shard = context.cache_dir.child("build-envs-v0").child("child");
+    for entry in fs_err::read_dir(shard.to_path_buf())? {
+        let entry = entry?;
+        if entry.path().is_dir() {
+            fs_err::remove_dir_all(entry.path())?;
+        }
+    }
+
+    context
+        .sync()
+        .arg("--reinstall-package")
+        .arg("child")
+        .env("UV_TEST_BUILD_PREFIX_LOG", log.as_os_str())
+        .assert()
+        .success();
+
+    // The unchanged digest preserves the environment path.
+    assert_eq!(recorded_build_environments(&log)?.len(), 1);
+    assert_eq!(cached_build_environments(&context, "child"), 1);
 
     Ok(())
 }

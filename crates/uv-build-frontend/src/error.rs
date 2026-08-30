@@ -49,6 +49,8 @@ pub enum Error {
     MissingHeader(#[from] Box<MissingHeaderError>),
     #[error("Failed to build PATH for build script")]
     BuildScriptPath(#[source] env::JoinPathsError),
+    #[error("Failed to serialize build environment marker")]
+    BuildEnvironmentMarker(#[source] serde_json::Error),
     #[error("Cyclic build dependency detected for `{0}`")]
     CyclicBuildDependency(PackageName),
     #[error(
@@ -70,6 +72,7 @@ impl IsBuildBackendError for Error {
             | Self::RequirementsResolve(_, _)
             | Self::RequirementsInstall(_, _)
             | Self::Virtualenv(_)
+            | Self::BuildEnvironmentMarker(_)
             | Self::CyclicBuildDependency(_)
             | Self::UnmatchedRuntime(_, _) => false,
             Self::CommandFailed(_, _)

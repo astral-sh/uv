@@ -218,6 +218,13 @@ impl<'a> BuildDispatch<'a> {
             .collect();
         self
     }
+
+    /// Disable build environment reuse for subsequent builds.
+    ///
+    /// Reuse is keyed on the source tree path, so temporary source trees cannot be reused.
+    pub fn disable_build_environment_reuse(&mut self) {
+        self.reuse_build_environment = &[];
+    }
 }
 
 #[allow(refining_impl_trait)]
