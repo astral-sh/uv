@@ -7,6 +7,7 @@ use toml_edit::{Array, Item, Table, Value, value};
 use uv_configuration::ExcludeDependency;
 use uv_distribution_types::Requirement;
 use uv_fs::{PortablePath, Simplified};
+use uv_normalize::PackageName;
 use uv_pypi_types::VerbatimParsedUrl;
 use uv_python::PythonRequest;
 use uv_settings::{ToolOptions, ToolOptionsWire};
@@ -15,6 +16,10 @@ use uv_settings::{ToolOptions, ToolOptionsWire};
 #[derive(Debug, Clone, Deserialize)]
 #[serde(try_from = "ToolWire", into = "ToolWire")]
 pub struct Tool {
+    /// The package that provides the tool.
+    package: PackageName,
+    /// The suffix appended to the tool's environment and entry point names.
+    suffix: Option<String>,
     /// The requirements requested by the user during installation.
     ///
     /// The first requirement is the tool target itself; any remaining requirements come from
@@ -39,6 +44,8 @@ pub struct Tool {
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 struct ToolWire {
+    package: Option<PackageName>,
+    suffix: Option<String>,
     #[serde(default)]
     requirements: Vec<RequirementWire>,
     #[serde(default)]
@@ -68,6 +75,8 @@ enum RequirementWire {
 impl From<Tool> for ToolWire {
     fn from(tool: Tool) -> Self {
         Self {
+            package: Some(tool.package),
+            suffix: tool.suffix,
             requirements: tool
                 .requirements
                 .into_iter()
@@ -88,15 +97,27 @@ impl TryFrom<ToolWire> for Tool {
     type Error = serde::de::value::Error;
 
     fn try_from(tool: ToolWire) -> Result<Self, Self::Error> {
+        let requirements = tool
+            .requirements
+            .into_iter()
+            .map(|req| match req {
+                RequirementWire::Requirement(requirements) => requirements,
+                RequirementWire::Deprecated(requirement) => Requirement::from(requirement),
+            })
+            .collect::<Vec<_>>();
+        let package = tool
+            .package
+            .or_else(|| {
+                requirements
+                    .first()
+                    .map(|requirement| requirement.name.clone())
+            })
+            .ok_or_else(|| serde::de::Error::custom("tool receipt is missing a package"))?;
+
         Ok(Self {
-            requirements: tool
-                .requirements
-                .into_iter()
-                .map(|req| match req {
-                    RequirementWire::Requirement(requirements) => requirements,
-                    RequirementWire::Deprecated(requirement) => Requirement::from(requirement),
-                })
-                .collect(),
+            package,
+            suffix: tool.suffix,
+            requirements,
             constraints: tool.constraints,
             overrides: tool.overrides,
             excludes: tool.excludes,
@@ -172,6 +193,8 @@ fn each_element_on_its_line_array(elements: impl Iterator<Item = impl Into<Value
 impl Tool {
     /// Create a new `Tool`.
     pub fn new(
+        package: PackageName,
+        suffix: Option<String>,
         requirements: Vec<Requirement>,
         constraints: Vec<Requirement>,
         overrides: Vec<Requirement>,
@@ -184,6 +207,8 @@ impl Tool {
         let mut entrypoints: Vec<_> = entrypoints.into_iter().collect();
         entrypoints.sort();
         Self {
+            package,
+            suffix,
             requirements,
             constraints,
             overrides,
@@ -204,6 +229,11 @@ impl Tool {
     /// Returns the TOML table for this tool.
     pub(crate) fn to_toml(&self) -> Result<Table, toml_edit::ser::Error> {
         let mut table = Table::new();
+
+        if let Some(suffix) = &self.suffix {
+            table.insert("package", value(self.package.to_string()));
+            table.insert("suffix", value(suffix));
+        }
 
         if !self.requirements.is_empty() {
             table.insert("requirements", {
@@ -353,6 +383,14 @@ impl Tool {
 
     pub fn entrypoints(&self) -> &[ToolEntrypoint] {
         &self.entrypoints
+    }
+
+    pub fn package(&self) -> &PackageName {
+        &self.package
+    }
+
+    pub fn suffix(&self) -> Option<&str> {
+        self.suffix.as_deref()
     }
 
     pub fn requirements(&self) -> &[Requirement] {

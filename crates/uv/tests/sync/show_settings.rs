@@ -1018,6 +1018,7 @@ fn tool_install_baseline() {
             reinstall: None,
         },
         force: false,
+        suffix: None,
         editable: false,
         install_mirrors: PythonInstallMirrors {
             python_install_mirror: None,
