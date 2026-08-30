@@ -687,7 +687,21 @@ impl Cache {
             Err(err) => return Err(err),
         }
 
-        // Third, if enabled, remove all unzipped wheels, leaving only the wheel archives.
+        // Third, remove reusable build environments.
+        match fs_err::read_dir(self.bucket(CacheBucket::BuildEnvironments)) {
+            Ok(entries) => {
+                for entry in entries {
+                    let entry = entry?;
+                    let path = entry.path();
+                    debug!("Removing build environment: {}", path.display());
+                    summary += self.remove_path(path)?;
+                }
+            }
+            Err(err) if err.kind() == io::ErrorKind::NotFound => (),
+            Err(err) => return Err(err),
+        }
+
+        // Fourth, if enabled, remove all unzipped wheels, leaving only the wheel archives.
         if ci {
             // Remove the entire pre-built wheel cache, since every entry is an unzipped wheel.
             match fs_err::read_dir(self.bucket(CacheBucket::Wheels)) {
@@ -747,7 +761,7 @@ impl Cache {
             }
         }
 
-        // Fourth, remove any unused archives (by searching for archives that are not symlinked).
+        // Fifth, remove any unused archives (by searching for archives that are not symlinked).
         let references = self.find_archive_references()?;
 
         match fs_err::read_dir(self.bucket(CacheBucket::Archive)) {
@@ -1242,6 +1256,16 @@ pub enum CacheBucket {
     Archive,
     /// Ephemeral virtual environments used to execute PEP 517 builds and other operations.
     Builds,
+    /// Reusable virtual environments for PEP 517 builds.
+    ///
+    /// Unlike [`CacheBucket::Environments`], these are created in place so native build caches can
+    /// reference their stable paths.
+    ///
+    /// Cache structure:
+    ///  * `build-envs-v0/<package_name>/<digest>/` — the virtual environment
+    ///  * `build-envs-v0/<package_name>/<digest>.json` — the marker, written once provisioned
+    ///  * `build-envs-v0/<package_name>/<digest>.lock` — the cross-process provisioning lock
+    BuildEnvironments,
     /// Reusable virtual environments for Python tools and projects.
     Environments,
     /// Cached Python downloads
@@ -1276,6 +1300,7 @@ impl CacheBucket {
             // `ARCHIVE_VERSION` in `crates/uv-cache/src/lib.rs`.
             Self::Archive => "archive-v0",
             Self::Builds => "builds-v0",
+            Self::BuildEnvironments => "build-envs-v0",
             Self::Environments => "environments-v2",
             Self::Python => "python-v0",
             Self::Binaries => "binaries-v0",
@@ -1381,6 +1406,11 @@ impl CacheBucket {
                 let root = cache.bucket(self);
                 summary += cache.remove_path(root)?;
             }
+            Self::BuildEnvironments => {
+                // Each package has a directory for its environments, markers, and locks.
+                let root = cache.bucket(self);
+                summary += cache.remove_path(root.join(name.to_string()))?;
+            }
             Self::Git
             | Self::Interpreter
             | Self::Archive
@@ -1406,6 +1436,7 @@ impl CacheBucket {
             Self::Simple,
             Self::Archive,
             Self::Builds,
+            Self::BuildEnvironments,
             Self::Environments,
             Self::Python,
             Self::Binaries,

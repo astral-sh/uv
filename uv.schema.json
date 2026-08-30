@@ -1827,7 +1827,8 @@
             "tar-codec",
             "index-by-name",
             "artifact-hash-filtering",
-            "content-addressed-cache"
+            "content-addressed-cache",
+            "reuse-build-environment"
           ]
         },
         {

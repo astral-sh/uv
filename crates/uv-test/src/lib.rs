@@ -1154,6 +1154,11 @@ impl TestContext {
             r"environments-v(\d+)[\\/]([\w.\[\]-]+)-[a-f0-9]{16}".to_string(),
             "environments-v$1/$2-[HASH]".to_string(),
         ));
+        // Filter unstable build environment cache entry hashes.
+        filters.push((
+            r"build-envs-v(\d+)[\\/]([\w.\[\]-]+)[\\/][a-f0-9]{16}".to_string(),
+            "build-envs-v$1/$2/[HASH]".to_string(),
+        ));
         // Filter archive hashes
         filters.push((
             r"archive-v(\d+)[\\/][A-Za-z0-9\-\_]+".to_string(),
