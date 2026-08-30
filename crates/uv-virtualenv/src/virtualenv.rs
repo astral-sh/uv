@@ -581,12 +581,29 @@ pub(crate) fn create(
 
     // Construct the path to the `site-packages` directory.
     let purelib = location.join(&interpreter.virtualenv().purelib);
+    let platlib = location.join(&interpreter.virtualenv().platlib);
     fs_err::create_dir_all(&purelib)?;
 
-    // Create platlib directory if necessary.
-    let platlib = location.join(&interpreter.virtualenv().platlib);
     if platlib != purelib {
-        fs_err::create_dir_all(&platlib)?;
+        if interpreter.python_tuple() >= (3, 15) {
+            // https://docs.python.org/3.15/whatsnew/3.15.html#venv
+            fs_err::create_dir_all(&platlib)?;
+        } else {
+            // Preserve `lib64->lib` symlink for compatibility in Python earlier than 3.15.
+            #[cfg(unix)]
+            if interpreter.pointer_size().is_64()
+                && interpreter.markers().os_name() == "posix"
+                && interpreter.markers().sys_platform() != "darwin"
+            {
+                match fs_err::os::unix::fs::symlink("lib", location.join("lib64")) {
+                    Ok(()) => {}
+                    Err(err) if err.kind() == io::ErrorKind::AlreadyExists => {}
+                    Err(err) => {
+                        return Err(err.into());
+                    }
+                }
+            }
+        }
     }
 
     if install_distutils_patch(interpreter) {

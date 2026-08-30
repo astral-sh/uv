@@ -19,6 +19,7 @@ pub use crate::installation::{
 pub use crate::interpreter::{
     BrokenLink, Error as InterpreterError, Interpreter, canonicalize_executable,
 };
+pub use crate::pointer_size::PointerSize;
 pub use crate::prefix::Prefix;
 pub use crate::python_version::{BuildVersionError, PythonVersion};
 pub use crate::target::Target;
@@ -39,6 +40,7 @@ pub mod macos_dylib;
 pub mod managed;
 #[cfg(windows)]
 mod microsoft_store;
+mod pointer_size;
 mod prefix;
 mod python_version;
 mod sysconfig;
@@ -391,6 +393,7 @@ mod tests {
                         "purelib": "lib/python{VERSION}/site-packages",
                         "scripts": "bin"
                     },
+                    "pointer_size": "64",
                     "gil_disabled": {FREE_THREADED},
                     "debug_enabled": false
                 }
@@ -486,6 +489,7 @@ mod tests {
                         "scripts": "bin",
                         "data": ""
                     },
+                    "pointer_size": "32",
                     "gil_disabled": false,
                     "debug_enabled": false
                 }
