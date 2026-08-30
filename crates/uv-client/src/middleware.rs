@@ -1,9 +1,37 @@
 use http::Extensions;
 use std::fmt::Debug;
+use uv_auth::AzureEndpointProvider;
+use uv_preview::Preview;
 use uv_redacted::DisplaySafeUrl;
 
+use reqwest::header::HeaderValue;
 use reqwest::{Request, Response};
 use reqwest_middleware::{Middleware, Next};
+
+const AZURE_STORAGE_VERSION: &str = "2023-11-03";
+
+pub(crate) struct AzureStorageMiddleware {
+    pub(crate) preview: Preview,
+}
+
+#[async_trait::async_trait]
+impl Middleware for AzureStorageMiddleware {
+    async fn handle(
+        &self,
+        mut request: Request,
+        extensions: &mut Extensions,
+        next: Next<'_>,
+    ) -> reqwest_middleware::Result<Response> {
+        if AzureEndpointProvider::is_azure_endpoint(request.url(), self.preview)? {
+            request
+                .headers_mut()
+                .entry("x-ms-version")
+                .or_insert(HeaderValue::from_static(AZURE_STORAGE_VERSION));
+        }
+
+        next.run(request, extensions).await
+    }
+}
 
 /// A custom error type for the offline middleware.
 #[derive(Debug, Clone, PartialEq, Eq)]

@@ -12,7 +12,7 @@ use reqsign::aws::DefaultSigner as AwsDefaultSigner;
 use reqsign::azure::DefaultSigner as AzureDefaultSigner;
 use reqsign::google::DefaultSigner as GcsDefaultSigner;
 use reqwest::Request;
-use reqwest::header::{HeaderName, HeaderValue, InvalidHeaderValue};
+use reqwest::header::{HeaderValue, InvalidHeaderValue};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use url::Url;
@@ -20,8 +20,6 @@ use url::Url;
 use uv_netrc::Netrc;
 use uv_redacted::DisplaySafeUrl;
 use uv_static::EnvVars;
-
-const AZURE_STORAGE_VERSION: &str = "2023-11-03";
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Credentials {
@@ -602,10 +600,6 @@ impl Authentication {
                         source,
                     })?;
                 *http_req.headers_mut() = request.headers().clone();
-                http_req
-                    .headers_mut()
-                    .entry(HeaderName::from_static("x-ms-version"))
-                    .or_insert(HeaderValue::from_static(AZURE_STORAGE_VERSION));
 
                 // Sign the parts.
                 let (mut parts, ()) = http_req.into_parts();
@@ -823,15 +817,6 @@ mod tests {
             .expect("Authorization header should be set");
         assert_eq!(authorization.to_str().unwrap(), "Bearer token");
         assert!(request.headers().contains_key("x-ms-date"));
-        assert_eq!(
-            request
-                .headers()
-                .get("x-ms-version")
-                .expect("x-ms-version header should be set")
-                .to_str()
-                .unwrap(),
-            AZURE_STORAGE_VERSION
-        );
     }
 
     #[tokio::test]
