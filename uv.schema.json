@@ -543,6 +543,13 @@
         }
       ]
     },
+    "reuse-build-environment-package": {
+      "description": "Reuse a package's PEP 517 build environment across invocations.\n\nThe stable cache path lets native build backends reuse incremental caches. The build remains\nisolated from the project environment.\n\nThe environment is recreated when its declared build dependencies, settings, or interpreter\nchanges. Use `--refresh-package` or `uv cache clean` to remove it.",
+      "type": ["array", "null"],
+      "items": {
+        "$ref": "#/definitions/PackageName"
+      }
+    },
     "sources": {
       "description": "The sources to use when resolving dependencies.\n\n`tool.uv.sources` enriches the dependency metadata with additional sources, incorporated\nduring development. A dependency source can be a Git repository, a URL, a local path, or an\nalternative registry.\n\nSee [Dependencies](https://docs.astral.sh/uv/concepts/projects/dependencies/) for more.",
       "anyOf": [
@@ -1692,6 +1699,13 @@
               "type": "null"
             }
           ]
+        },
+        "reuse-build-environment-package": {
+          "description": "Reuse a package's PEP 517 build environment across invocations.\n\nThe stable cache path lets native build backends reuse incremental caches. The build remains\nisolated from the project environment.\n\nThe environment is recreated when its declared build dependencies, settings, or interpreter\nchanges. Use `--refresh-package` or `uv cache clean` to remove it.",
+          "type": ["array", "null"],
+          "items": {
+            "$ref": "#/definitions/PackageName"
+          }
         },
         "strict": {
           "description": "Validate the Python environment, to detect packages with missing dependencies and other\nissues.",

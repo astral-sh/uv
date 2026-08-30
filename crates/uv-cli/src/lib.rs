@@ -6003,6 +6003,9 @@ pub struct ToolUpgradeArgs {
     pub build_isolation: PackageBuildIsolationArgs,
 
     #[command(flatten)]
+    pub build_environment_reuse: BuildEnvironmentReuseArgs,
+
+    #[command(flatten)]
     pub exclude_newer: PackageExcludeNewerArgs,
 
     /// The method to use when installing packages from the global cache.
@@ -7252,6 +7255,24 @@ pub struct PackageBuildIsolationArgs {
     no_build_isolation_package: Vec<PackageName>,
 }
 
+/// Arguments for reusing PEP 517 build environments.
+#[derive(Args)]
+#[group(skip)]
+pub struct BuildEnvironmentReuseArgs {
+    /// Reuse a package's PEP 517 build environment across invocations.
+    ///
+    /// The stable cache path lets native build backends reuse incremental caches. The build remains
+    /// isolated from the project environment.
+    #[arg(
+        long,
+        help_heading = "Build options",
+        env = EnvVars::UV_REUSE_BUILD_ENVIRONMENT_PACKAGE,
+        value_delimiter = ' ',
+        value_hint = ValueHint::Other,
+    )]
+    reuse_build_environment_package: Vec<PackageName>,
+}
+
 #[derive(Args)]
 #[group(skip)]
 pub struct ReinstallArgs {
@@ -7346,6 +7367,9 @@ pub struct InstallerArgs {
     build_isolation: BuildIsolationArgs,
 
     #[command(flatten)]
+    build_environment_reuse: BuildEnvironmentReuseArgs,
+
+    #[command(flatten)]
     exclude_newer: PackageExcludeNewerArgs,
 
     /// The method to use when installing packages from the global cache.
@@ -7431,6 +7455,9 @@ pub struct ResolverArgs {
 
     #[command(flatten)]
     build_isolation: PackageBuildIsolationArgs,
+
+    #[command(flatten)]
+    build_environment_reuse: BuildEnvironmentReuseArgs,
 
     #[command(flatten)]
     exclude_newer: PackageExcludeNewerArgs,
@@ -7522,6 +7549,9 @@ pub struct ResolverInstallerArgs {
 
     #[command(flatten)]
     pub build_isolation: PackageBuildIsolationArgs,
+
+    #[command(flatten)]
+    pub build_environment_reuse: BuildEnvironmentReuseArgs,
 
     #[command(flatten)]
     pub exclude_newer: PackageExcludeNewerArgs,

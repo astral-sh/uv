@@ -540,6 +540,7 @@ mod resolver {
             &config_settings,
             &config_settings_package,
             build_isolation,
+            &[],
             &extra_build_requires,
             &extra_build_variables,
             LinkMode::default(),

@@ -14,10 +14,10 @@ use uv_settings::{
 use uv_warnings::owo_colors::OwoColorize;
 
 use crate::{
-    BuildIsolationArgs, BuildOptionsArgs, CompileBytecodeArgs, ExcludeNewerArgs, FetchArgs,
-    IndexArgs, InstallerArgs, Maybe, PackageBuildIsolationArgs, PackageExcludeNewerArgs,
-    RefreshArgs, RegistryClientArgs, ReinstallArgs, ResolverArgs, ResolverInstallerArgs,
-    SourcesArgs, VersionSelectionArgs,
+    BuildEnvironmentReuseArgs, BuildIsolationArgs, BuildOptionsArgs, CompileBytecodeArgs,
+    ExcludeNewerArgs, FetchArgs, IndexArgs, InstallerArgs, Maybe, PackageBuildIsolationArgs,
+    PackageExcludeNewerArgs, RefreshArgs, RegistryClientArgs, ReinstallArgs, ResolverArgs,
+    ResolverInstallerArgs, SourcesArgs, VersionSelectionArgs,
 };
 
 /// An error caused by an invalid combination of command-line arguments.
@@ -279,6 +279,10 @@ impl IntoPipOptions for ResolverArgs {
                         },
                     no_build_isolation_package,
                 },
+            build_environment_reuse:
+                BuildEnvironmentReuseArgs {
+                    reuse_build_environment_package,
+                },
             exclude_newer:
                 PackageExcludeNewerArgs {
                     exclude_newer: ExcludeNewerArgs { exclude_newer },
@@ -321,6 +325,7 @@ impl IntoPipOptions for ResolverArgs {
             }),
             no_build_isolation: flag(no_build_isolation, build_isolation, "build-isolation")?,
             no_build_isolation_package: Some(no_build_isolation_package),
+            reuse_build_environment_package: Some(reuse_build_environment_package),
             exclude_newer,
             exclude_newer_package: exclude_newer_package.map(ExcludeNewerPackage::from_iter),
             link_mode,
@@ -358,6 +363,10 @@ impl IntoPipOptions for InstallerArgs {
                     no_build_isolation,
                     build_isolation,
                 },
+            build_environment_reuse:
+                BuildEnvironmentReuseArgs {
+                    reuse_build_environment_package,
+                },
             exclude_newer:
                 PackageExcludeNewerArgs {
                     exclude_newer: ExcludeNewerArgs { exclude_newer },
@@ -389,6 +398,7 @@ impl IntoPipOptions for InstallerArgs {
                     .collect::<PackageConfigSettings>()
             }),
             no_build_isolation: flag(no_build_isolation, build_isolation, "build-isolation")?,
+            reuse_build_environment_package: Some(reuse_build_environment_package),
             exclude_newer,
             exclude_newer_package: exclude_newer_package.map(ExcludeNewerPackage::from_iter),
             link_mode,
@@ -443,6 +453,10 @@ impl IntoPipOptions for ResolverInstallerArgs {
                         },
                     no_build_isolation_package,
                 },
+            build_environment_reuse:
+                BuildEnvironmentReuseArgs {
+                    reuse_build_environment_package,
+                },
             exclude_newer:
                 PackageExcludeNewerArgs {
                     exclude_newer: ExcludeNewerArgs { exclude_newer },
@@ -492,6 +506,7 @@ impl IntoPipOptions for ResolverInstallerArgs {
             }),
             no_build_isolation: flag(no_build_isolation, build_isolation, "build-isolation")?,
             no_build_isolation_package: Some(no_build_isolation_package),
+            reuse_build_environment_package: Some(reuse_build_environment_package),
             exclude_newer,
             exclude_newer_package: exclude_newer_package.map(ExcludeNewerPackage::from_iter),
             link_mode,
@@ -620,6 +635,10 @@ pub fn resolver_options(
                     },
                 no_build_isolation_package,
             },
+        build_environment_reuse:
+            BuildEnvironmentReuseArgs {
+                reuse_build_environment_package,
+            },
         exclude_newer:
             PackageExcludeNewerArgs {
                 exclude_newer: ExcludeNewerArgs { exclude_newer },
@@ -670,6 +689,7 @@ pub fn resolver_options(
             flag(no_build_isolation, build_isolation, "build-isolation")?,
             no_build_isolation_package,
         ),
+        reuse_build_environment_package: Some(reuse_build_environment_package),
         extra_build_dependencies: None,
         extra_build_variables: None,
         exclude_newer,
@@ -741,6 +761,10 @@ pub fn resolver_installer_options(
                     },
                 no_build_isolation_package,
             },
+        build_environment_reuse:
+            BuildEnvironmentReuseArgs {
+                reuse_build_environment_package,
+            },
         exclude_newer:
             PackageExcludeNewerArgs {
                 exclude_newer: ExcludeNewerArgs { exclude_newer },
@@ -800,6 +824,7 @@ pub fn resolver_installer_options(
             flag(no_build_isolation, build_isolation, "build-isolation")?,
             no_build_isolation_package,
         ),
+        reuse_build_environment_package: Some(reuse_build_environment_package),
         extra_build_dependencies: None,
         extra_build_variables: None,
         exclude_newer,

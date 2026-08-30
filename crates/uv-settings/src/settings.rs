@@ -569,6 +569,7 @@ pub struct InstallerOptions {
     compile_bytecode: Option<bool>,
     reinstall: Option<Reinstall>,
     build_isolation: Option<BuildIsolation>,
+    reuse_build_environment_package: Option<Vec<PackageName>>,
     no_build: Option<bool>,
     no_build_package: Option<Vec<PackageName>>,
     no_binary: Option<bool>,
@@ -665,6 +666,7 @@ pub struct ResolverOptions {
     pub torch_backend: Option<TorchMode>,
     pub upgrade: Option<Upgrade>,
     pub build_isolation: Option<BuildIsolation>,
+    pub reuse_build_environment_package: Option<Vec<PackageName>>,
     pub no_build: Option<bool>,
     pub no_build_package: Option<Vec<PackageName>>,
     pub no_binary: Option<bool>,
@@ -698,6 +700,7 @@ pub struct ResolverInstallerOptions {
     pub config_settings: Option<ConfigSettings>,
     pub config_settings_package: Option<PackageConfigSettings>,
     pub build_isolation: Option<BuildIsolation>,
+    pub reuse_build_environment_package: Option<Vec<PackageName>>,
     pub extra_build_dependencies: Option<ExtraBuildDependencies>,
     pub extra_build_variables: Option<ExtraBuildVariables>,
     pub exclude_newer: Option<ExcludeNewerOverride>,
@@ -742,6 +745,7 @@ impl From<ResolverInstallerSchema> for ResolverInstallerOptions {
             config_settings_package,
             no_build_isolation,
             no_build_isolation_package,
+            reuse_build_environment_package,
             extra_build_dependencies,
             extra_build_variables,
             exclude_newer,
@@ -781,6 +785,7 @@ impl From<ResolverInstallerSchema> for ResolverInstallerOptions {
                 no_build_isolation,
                 no_build_isolation_package.into_iter().flatten().collect(),
             ),
+            reuse_build_environment_package,
             extra_build_dependencies,
             extra_build_variables,
             exclude_newer,
@@ -1083,6 +1088,21 @@ pub struct ResolverInstallerSchema {
     "#
     )]
     pub no_build_isolation_package: Option<Vec<PackageName>>,
+    /// Reuse a package's PEP 517 build environment across invocations.
+    ///
+    /// The stable cache path lets native build backends reuse incremental caches. The build remains
+    /// isolated from the project environment.
+    ///
+    /// The environment is recreated when its declared build dependencies, settings, or interpreter
+    /// changes. Use `--refresh-package` or `uv cache clean` to remove it.
+    #[option(
+        default = "[]",
+        value_type = "list[str]",
+        example = r#"
+            reuse-build-environment-package = ["package1", "package2"]
+        "#
+    )]
+    pub reuse_build_environment_package: Option<Vec<PackageName>>,
     /// Additional build dependencies for packages.
     ///
     /// This allows extending the PEP 517 build environment for the project's dependencies with
@@ -1624,6 +1644,21 @@ pub struct PipOptions {
         "#
     )]
     pub no_build_isolation_package: Option<Vec<PackageName>>,
+    /// Reuse a package's PEP 517 build environment across invocations.
+    ///
+    /// The stable cache path lets native build backends reuse incremental caches. The build remains
+    /// isolated from the project environment.
+    ///
+    /// The environment is recreated when its declared build dependencies, settings, or interpreter
+    /// changes. Use `--refresh-package` or `uv cache clean` to remove it.
+    #[option(
+        default = "[]",
+        value_type = "list[str]",
+        example = r#"
+            reuse-build-environment-package = ["package1", "package2"]
+        "#
+    )]
+    pub reuse_build_environment_package: Option<Vec<PackageName>>,
     /// Additional build dependencies for packages.
     ///
     /// This allows extending the PEP 517 build environment for the project's dependencies with
@@ -2251,6 +2286,7 @@ impl From<ResolverInstallerSchema> for ResolverOptions {
                 value.no_build_isolation,
                 value.no_build_isolation_package.unwrap_or_default(),
             ),
+            reuse_build_environment_package: value.reuse_build_environment_package,
             extra_build_dependencies: value.extra_build_dependencies,
             extra_build_variables: value.extra_build_variables,
             no_sources: value.no_sources,
@@ -2282,6 +2318,7 @@ impl From<ResolverInstallerSchema> for InstallerOptions {
                 value.no_build_isolation,
                 value.no_build_isolation_package.unwrap_or_default(),
             ),
+            reuse_build_environment_package: value.reuse_build_environment_package,
             no_build: value.no_build,
             no_build_package: value.no_build_package,
             no_binary: value.no_binary,
@@ -2317,6 +2354,7 @@ pub struct ToolOptions {
     config_settings: Option<ConfigSettings>,
     config_settings_package: Option<PackageConfigSettings>,
     build_isolation: Option<BuildIsolation>,
+    reuse_build_environment_package: Option<Vec<PackageName>>,
     extra_build_dependencies: Option<ExtraBuildDependencies>,
     extra_build_variables: Option<ExtraBuildVariables>,
     exclude_newer: Option<ExcludeNewerOverride>,
@@ -2351,6 +2389,7 @@ pub struct ToolOptionsWire {
     config_settings: Option<ConfigSettings>,
     config_settings_package: Option<PackageConfigSettings>,
     build_isolation: Option<BuildIsolation>,
+    reuse_build_environment_package: Option<Vec<PackageName>>,
     extra_build_dependencies: Option<ExtraBuildDependencies>,
     extra_build_variables: Option<ExtraBuildVariables>,
     exclude_newer: Option<ExcludeNewerOverride>,
@@ -2391,6 +2430,7 @@ impl From<ResolverInstallerOptions> for ToolOptions {
             config_settings: value.config_settings,
             config_settings_package: value.config_settings_package,
             build_isolation: value.build_isolation,
+            reuse_build_environment_package: value.reuse_build_environment_package,
             extra_build_dependencies: value.extra_build_dependencies,
             extra_build_variables: value.extra_build_variables,
             exclude_newer: value.exclude_newer,
@@ -2442,6 +2482,7 @@ impl From<ToolOptionsWire> for ToolOptions {
             config_settings: value.config_settings,
             config_settings_package: value.config_settings_package,
             build_isolation: value.build_isolation,
+            reuse_build_environment_package: value.reuse_build_environment_package,
             extra_build_dependencies: value.extra_build_dependencies,
             extra_build_variables: value.extra_build_variables,
             exclude_newer,
@@ -2491,6 +2532,7 @@ impl From<ToolOptions> for ToolOptionsWire {
             config_settings: value.config_settings,
             config_settings_package: value.config_settings_package,
             build_isolation: value.build_isolation,
+            reuse_build_environment_package: value.reuse_build_environment_package,
             extra_build_dependencies: value.extra_build_dependencies,
             extra_build_variables: value.extra_build_variables,
             exclude_newer,
@@ -2529,6 +2571,7 @@ impl From<ToolOptions> for ResolverInstallerOptions {
             config_settings: value.config_settings,
             config_settings_package: value.config_settings_package,
             build_isolation: value.build_isolation,
+            reuse_build_environment_package: value.reuse_build_environment_package,
             extra_build_dependencies: value.extra_build_dependencies,
             extra_build_variables: value.extra_build_variables,
             exclude_newer: value.exclude_newer,
@@ -2591,6 +2634,7 @@ struct OptionsWire {
     config_settings_package: Option<PackageConfigSettings>,
     no_build_isolation: Option<bool>,
     no_build_isolation_package: Option<Vec<PackageName>>,
+    reuse_build_environment_package: Option<Vec<PackageName>>,
     extra_build_dependencies: Option<ExtraBuildDependencies>,
     extra_build_variables: Option<ExtraBuildVariables>,
     exclude_newer: Option<ExcludeNewerOverride>,
@@ -2697,6 +2741,7 @@ impl TryFrom<OptionsWire> for Options {
             config_settings_package,
             no_build_isolation,
             no_build_isolation_package,
+            reuse_build_environment_package,
             exclude_newer,
             exclude_newer_package,
             link_mode,
@@ -2776,6 +2821,7 @@ impl TryFrom<OptionsWire> for Options {
                 config_settings_package,
                 no_build_isolation,
                 no_build_isolation_package,
+                reuse_build_environment_package,
                 extra_build_dependencies,
                 extra_build_variables,
                 exclude_newer,

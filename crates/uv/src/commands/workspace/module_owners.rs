@@ -62,6 +62,7 @@ pub(crate) async fn collect_module_owners(
             config_setting: &settings.config_setting,
             config_settings_package: &settings.config_settings_package,
             build_isolation: &settings.build_isolation,
+            reuse_build_environment_package: &settings.reuse_build_environment_package,
             extra_build_dependencies: &settings.extra_build_dependencies,
             extra_build_variables: &settings.extra_build_variables,
             exclude_newer: &settings.exclude_newer,

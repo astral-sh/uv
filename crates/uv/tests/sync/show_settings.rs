@@ -148,6 +148,7 @@ fn pip_compile_baseline() {
             cuda_driver_version: None,
             amd_gpu_architecture: None,
             build_isolation: Isolate,
+            reuse_build_environment_package: [],
             extra_build_dependencies: ExtraBuildDependencies(
                 {},
             ),
@@ -516,6 +517,7 @@ fn pip_install_baseline() {
             cuda_driver_version: None,
             amd_gpu_architecture: None,
             build_isolation: Isolate,
+            reuse_build_environment_package: [],
             extra_build_dependencies: ExtraBuildDependencies(
                 {},
             ),
@@ -685,6 +687,7 @@ fn lock_baseline() {
             keyring_provider: Disabled,
             link_mode: Clone,
             build_isolation: Isolate,
+            reuse_build_environment_package: [],
             extra_build_dependencies: ExtraBuildDependencies(
                 {},
             ),
@@ -818,6 +821,7 @@ fn version_baseline() {
                 keyring_provider: Disabled,
                 link_mode: Clone,
                 build_isolation: Isolate,
+                reuse_build_environment_package: [],
                 extra_build_dependencies: ExtraBuildDependencies(
                     {},
                 ),
@@ -943,6 +947,9 @@ fn tool_install_baseline() {
             config_settings: None,
             config_settings_package: None,
             build_isolation: None,
+            reuse_build_environment_package: Some(
+                [],
+            ),
             extra_build_dependencies: None,
             extra_build_variables: None,
             exclude_newer: None,
@@ -992,6 +999,7 @@ fn tool_install_baseline() {
                 keyring_provider: Disabled,
                 link_mode: Clone,
                 build_isolation: Isolate,
+                reuse_build_environment_package: [],
                 extra_build_dependencies: ExtraBuildDependencies(
                     {},
                 ),
@@ -2696,7 +2704,7 @@ fn resolve_config_file() -> anyhow::Result<()> {
           |
         1 | [project]
           |  ^^^^^^^
-        unknown field `project`, expected one of `required-version`, `system-certs`, `native-tls`, `offline`, `no-cache`, `cache-dir`, `preview`, `preview-features`, `python-preference`, `python-downloads`, `concurrent-downloads`, `concurrent-builds`, `concurrent-installs`, `index`, `index-url`, `extra-index-url`, `no-index`, `find-links`, `index-strategy`, `keyring-provider`, `http-proxy`, `https-proxy`, `no-proxy`, `allow-insecure-host`, `resolution`, `prerelease`, `prerelease-package`, `fork-strategy`, `dependency-metadata`, `config-settings`, `config-settings-package`, `no-build-isolation`, `no-build-isolation-package`, `extra-build-dependencies`, `extra-build-variables`, `exclude-newer`, `exclude-newer-package`, `link-mode`, `compile-bytecode`, `no-sources`, `no-sources-package`, `upgrade`, `upgrade-package`, `reinstall`, `reinstall-package`, `no-build`, `no-build-package`, `no-binary`, `no-binary-package`, `torch-backend`, `python-install-mirror`, `pypy-install-mirror`, `python-downloads-json-url`, `publish-url`, `trusted-publishing`, `check-url`, `add-bounds`, `audit`, `pip`, `cache-keys`, `override-dependencies`, `exclude-dependencies`, `constraint-dependencies`, `build-constraint-dependencies`, `environments`, `required-environments`, `conflicts`, `workspace`, `sources`, `managed`, `package`, `default-groups`, `dependency-groups`, `dev-dependencies`, `build-backend`
+        unknown field `project`, expected one of `required-version`, `system-certs`, `native-tls`, `offline`, `no-cache`, `cache-dir`, `preview`, `preview-features`, `python-preference`, `python-downloads`, `concurrent-downloads`, `concurrent-builds`, `concurrent-installs`, `index`, `index-url`, `extra-index-url`, `no-index`, `find-links`, `index-strategy`, `keyring-provider`, `http-proxy`, `https-proxy`, `no-proxy`, `allow-insecure-host`, `resolution`, `prerelease`, `prerelease-package`, `fork-strategy`, `dependency-metadata`, `config-settings`, `config-settings-package`, `no-build-isolation`, `no-build-isolation-package`, `reuse-build-environment-package`, `extra-build-dependencies`, `extra-build-variables`, `exclude-newer`, `exclude-newer-package`, `link-mode`, `compile-bytecode`, `no-sources`, `no-sources-package`, `upgrade`, `upgrade-package`, `reinstall`, `reinstall-package`, `no-build`, `no-build-package`, `no-binary`, `no-binary-package`, `torch-backend`, `python-install-mirror`, `pypy-install-mirror`, `python-downloads-json-url`, `publish-url`, `trusted-publishing`, `check-url`, `add-bounds`, `audit`, `pip`, `cache-keys`, `override-dependencies`, `exclude-dependencies`, `constraint-dependencies`, `build-constraint-dependencies`, `environments`, `required-environments`, `conflicts`, `workspace`, `sources`, `managed`, `package`, `default-groups`, `dependency-groups`, `dev-dependencies`, `build-backend`
     "
     );
 
@@ -5171,9 +5179,9 @@ fn build_isolation_override() -> anyhow::Result<()> {
     -            ],
     -        ),
     +        build_isolation: Shared,
+             reuse_build_environment_package: [],
              extra_build_dependencies: ExtraBuildDependencies(
                  {},
-             ),
     ...
     "#);
 
@@ -5199,9 +5207,9 @@ fn build_isolation_override() -> anyhow::Result<()> {
     +                ),
     +            ],
     +        ),
+             reuse_build_environment_package: [],
              extra_build_dependencies: ExtraBuildDependencies(
                  {},
-             ),
     ...
     "#);
 

@@ -6538,6 +6538,7 @@ dependencies = [
  "uv-git",
  "uv-install-wheel",
  "uv-installer",
+ "uv-normalize",
  "uv-platform-tags",
  "uv-preview",
  "uv-pypi-types",
@@ -6546,6 +6547,7 @@ dependencies = [
  "uv-resolver",
  "uv-types",
  "uv-version",
+ "uv-warnings",
  "uv-workspace",
 ]
 

@@ -133,6 +133,11 @@ pub trait BuildContext {
         SourceTreeEditablePolicy::Project
     }
 
+    /// The packages whose PEP 517 build environments should be cached and reused.
+    fn reuse_build_environment(&self) -> &[PackageName] {
+        &[]
+    }
+
     /// The index locations being searched.
     fn locations(&self) -> &IndexLocations;
 

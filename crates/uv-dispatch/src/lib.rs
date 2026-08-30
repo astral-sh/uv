@@ -30,7 +30,8 @@ use uv_distribution_types::{
 };
 use uv_git::GitResolver;
 use uv_installer::{InstallationStrategy, Installer, Plan, Planner, Preparer, SitePackages};
-use uv_preview::Preview;
+use uv_normalize::PackageName;
+use uv_preview::{Preview, PreviewFeature};
 use uv_pypi_types::Conflicts;
 use uv_python::{Interpreter, PythonEnvironment};
 use uv_requirements::LookaheadResolver;
@@ -42,6 +43,7 @@ use uv_types::{
     AnyErrorBuild, BuildArena, BuildContext, BuildIsolation, BuildStack, EmptyInstalledPackages,
     HashStrategy, InFlight, ResolvedRequirements, SourceTreeEditablePolicy,
 };
+use uv_warnings::warn_user_once;
 use uv_workspace::WorkspaceCache;
 
 #[derive(Debug, Error)]
@@ -118,6 +120,7 @@ pub struct BuildDispatch<'a> {
     shared_state: SharedState,
     dependency_metadata: &'a DependencyMetadata,
     build_isolation: BuildIsolation<'a>,
+    reuse_build_environment: &'a [PackageName],
     extra_build_requires: &'a ExtraBuildRequires,
     extra_build_variables: &'a ExtraBuildVariables,
     link_mode: uv_install_wheel::LinkMode,
@@ -149,6 +152,7 @@ impl<'a> BuildDispatch<'a> {
         config_settings: &'a ConfigSettings,
         config_settings_package: &'a PackageConfigSettings,
         build_isolation: BuildIsolation<'a>,
+        reuse_build_environment: &'a [PackageName],
         extra_build_requires: &'a ExtraBuildRequires,
         extra_build_variables: &'a ExtraBuildVariables,
         link_mode: uv_install_wheel::LinkMode,
@@ -161,6 +165,15 @@ impl<'a> BuildDispatch<'a> {
         concurrency: Concurrency,
         preview: Preview,
     ) -> Self {
+        if !reuse_build_environment.is_empty()
+            && !preview.is_enabled(PreviewFeature::ReuseBuildEnvironment)
+        {
+            warn_user_once!(
+                "The `reuse-build-environment-package` option is experimental and may change without warning. Pass `--preview-features {}` to disable this warning.",
+                PreviewFeature::ReuseBuildEnvironment
+            );
+        }
+
         Self {
             client,
             cache,
@@ -174,6 +187,7 @@ impl<'a> BuildDispatch<'a> {
             config_settings,
             config_settings_package,
             build_isolation,
+            reuse_build_environment,
             extra_build_requires,
             extra_build_variables,
             link_mode,
@@ -240,6 +254,10 @@ impl BuildContext for BuildDispatch<'_> {
 
     fn build_isolation(&self) -> BuildIsolation<'_> {
         self.build_isolation
+    }
+
+    fn reuse_build_environment(&self) -> &[PackageName] {
+        self.reuse_build_environment
     }
 
     fn config_settings(&self) -> &ConfigSettings {

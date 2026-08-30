@@ -341,6 +341,7 @@ pub(crate) async fn venv(
             &config_settings,
             &config_settings_package,
             BuildIsolation::Isolated,
+            &[],
             &extra_build_requires,
             &extra_build_variables,
             link_mode,
