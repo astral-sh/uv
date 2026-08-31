@@ -332,7 +332,7 @@ pub struct Lock {
     /// this map, and that every dependency for every package has an ID
     /// that exists in this map. That is, there are no dependencies that don't
     /// have a corresponding locked package entry in the same lockfile.
-    by_id: FxHashMap<PackageId, usize>,
+    by_id: FxHashMap<PackageId, PackageIndex>,
     /// The input requirements to the resolution.
     manifest: ResolverManifest,
 }
@@ -1201,8 +1201,8 @@ impl Lock {
         // Check for duplicate package IDs and also build up the map for
         // packages keyed by their ID.
         let mut by_id = FxHashMap::default();
-        for (i, dist) in packages.iter().enumerate() {
-            if by_id.insert(dist.id.clone(), i).is_some() {
+        for (index, dist) in packages.iter().enumerate() {
+            if by_id.insert(dist.id.clone(), PackageIndex(index)).is_some() {
                 return Err(LockErrorKind::DuplicatePackage {
                     id: dist.id.clone(),
                 }
@@ -2072,7 +2072,7 @@ impl Lock {
     fn find_by_id(&self, id: &PackageId) -> &Package {
         let index = *self.by_id.get(id).expect("locked package for ID");
 
-        (self.packages.get(index).expect("valid index for package")) as _
+        (self.packages.get(index.0).expect("valid index for package")) as _
     }
 
     /// Return a [`SatisfiesResult`] if the given extras do not match the [`Package`] metadata.
@@ -6289,6 +6289,10 @@ impl TryFrom<WheelWire> for Wheel {
     }
 }
 
+/// The position of a package in [`Lock::packages`].
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+struct PackageIndex(usize);
+
 /// A single dependency of a package in a lockfile.
 #[derive(Clone, Debug, Eq)]
 pub struct Dependency {
@@ -6296,7 +6300,7 @@ pub struct Dependency {
     /// The target's position in [`Lock::packages`], initialized by [`Lock::new`].
     /// This cache is excluded from equality and ordering, since the position can differ between
     /// locks that contain the same dependency.
-    package_index: usize,
+    package_index: PackageIndex,
     extra: BTreeSet<ExtraName>,
     /// A marker simplified from the PEP 508 marker in `complexified_marker`
     /// by assuming `requires-python` and the PEP 508 portion of the parent package's reachability
@@ -6335,7 +6339,7 @@ impl Dependency {
         let complexified_marker = simplified_marker.into_marker(requires_python);
         Self {
             package_id,
-            package_index: 0,
+            package_index: PackageIndex(0),
             extra,
             simplified_marker,
             complexified_marker: UniversalMarker::from_combined(complexified_marker),
@@ -6439,7 +6443,7 @@ impl DependencyWire {
             };
         Ok(Dependency {
             package_id: self.package_id.unwire(unambiguous_package_ids)?,
-            package_index: 0,
+            package_index: PackageIndex(0),
             extra: self.extra,
             simplified_marker,
             complexified_marker,

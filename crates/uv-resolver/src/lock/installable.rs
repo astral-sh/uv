@@ -19,8 +19,8 @@ use uv_platform_tags::Tags;
 use uv_pypi_types::{ConflictKind, ConflictSet, ResolverMarkerEnvironment};
 
 use crate::lock::{
-    Dependency, DependencySelectionContext, HashedDist, LockErrorKind, Package, SelectedDependency,
-    TagPolicy,
+    Dependency, DependencySelectionContext, HashedDist, LockErrorKind, Package, PackageIndex,
+    SelectedDependency, TagPolicy,
 };
 use crate::universal_marker::ActivatedConflictItems;
 use crate::{Lock, LockError, UniversalMarker};
@@ -42,8 +42,8 @@ fn newly_activated_extras<'lock>(
 ///
 /// Returns `true` when the combined reachability changed.
 fn add_reachability<'lock>(
-    reachability: &mut FxHashMap<(usize, Option<&'lock ExtraName>), UniversalMarker>,
-    key: (usize, Option<&'lock ExtraName>),
+    reachability: &mut FxHashMap<(PackageIndex, Option<&'lock ExtraName>), UniversalMarker>,
+    key: (PackageIndex, Option<&'lock ExtraName>),
     marker: UniversalMarker,
 ) -> bool {
     match reachability.entry(key) {
@@ -267,7 +267,7 @@ trait InstallableExt<'lock>: Installable<'lock> {
         let mut petgraph = Graph::with_capacity(size_guess, size_guess);
         let mut inverse = vec![None; size_guess];
 
-        let mut queue: VecDeque<(usize, Option<&ExtraName>)> = VecDeque::new();
+        let mut queue: VecDeque<(PackageIndex, Option<&ExtraName>)> = VecDeque::new();
         let mut seen = FxHashSet::default();
         let mut conflict_reachability = FxHashMap::default();
         let mut activated_projects: Vec<&PackageName> = vec![];
@@ -350,7 +350,7 @@ trait InstallableExt<'lock>: Installable<'lock> {
                     self.non_installable_node(dist, tags, marker_env)?
                 },
             );
-            inverse[package_index] = Some(index);
+            inverse[package_index.0] = Some(index);
 
             // Add an edge from the root.
             petgraph.add_edge(root, index, Edge::Prod);
@@ -408,10 +408,10 @@ trait InstallableExt<'lock>: Installable<'lock> {
                     continue;
                 }
 
-                let dep_dist = &self.lock().packages[dep.package_index];
+                let dep_dist = &self.lock().packages[dep.package_index.0];
 
                 // Add the package to the graph.
-                let dep_index = match inverse[dep.package_index] {
+                let dep_index = match inverse[dep.package_index.0] {
                     None => {
                         let index = petgraph.add_node(self.package_to_node(
                             dep_dist,
@@ -420,7 +420,7 @@ trait InstallableExt<'lock>: Installable<'lock> {
                             install_options,
                             marker_env,
                         )?);
-                        inverse[dep.package_index] = Some(index);
+                        inverse[dep.package_index.0] = Some(index);
                         index
                     }
                     Some(index) => {
@@ -507,7 +507,7 @@ trait InstallableExt<'lock>: Installable<'lock> {
                 } else {
                     self.non_installable_node(dist, tags, marker_env)?
                 });
-                inverse[package_index] = Some(index);
+                inverse[package_index.0] = Some(index);
 
                 // Add the edge.
                 petgraph.add_edge(root, index, Edge::Prod);
@@ -565,7 +565,7 @@ trait InstallableExt<'lock>: Installable<'lock> {
 
                 // Add the package to the graph.
                 let package_index = self.lock().by_id[&dist.id];
-                let index = match inverse[package_index] {
+                let index = match inverse[package_index.0] {
                     None => {
                         let index = petgraph.add_node(self.package_to_node(
                             dist,
@@ -574,7 +574,7 @@ trait InstallableExt<'lock>: Installable<'lock> {
                             install_options,
                             marker_env,
                         )?);
-                        inverse[package_index] = Some(index);
+                        inverse[package_index.0] = Some(index);
                         index
                     }
                     Some(index) => {
@@ -665,7 +665,7 @@ trait InstallableExt<'lock>: Installable<'lock> {
             let mut queue = queue.clone();
             let mut reachability = conflict_reachability;
             while let Some((package_index, extra)) = queue.pop_front() {
-                let package = &self.lock().packages[package_index];
+                let package = &self.lock().packages[package_index.0];
                 let Some(parent_reachability) = reachability.get(&(package_index, extra)).copied()
                 else {
                     continue;
@@ -754,7 +754,7 @@ trait InstallableExt<'lock>: Installable<'lock> {
         );
 
         while let Some((package_index, extra)) = queue.pop_front() {
-            let package = &self.lock().packages[package_index];
+            let package = &self.lock().packages[package_index.0];
             for dep in package_dependencies(package, extra) {
                 if validate_conflicts && dep.complexified_marker.has_conflict_marker() {
                     dependencies_for_conflict_validation.push((package, dep));
@@ -766,10 +766,10 @@ trait InstallableExt<'lock>: Installable<'lock> {
                     continue;
                 }
 
-                let dep_dist = &self.lock().packages[dep.package_index];
+                let dep_dist = &self.lock().packages[dep.package_index.0];
 
                 // Add the dependency to the graph.
-                let dep_index = match inverse[dep.package_index] {
+                let dep_index = match inverse[dep.package_index.0] {
                     None => {
                         let index = petgraph.add_node(self.package_to_node(
                             dep_dist,
@@ -778,7 +778,7 @@ trait InstallableExt<'lock>: Installable<'lock> {
                             install_options,
                             marker_env,
                         )?);
-                        inverse[dep.package_index] = Some(index);
+                        inverse[dep.package_index.0] = Some(index);
                         index
                     }
                     Some(index) => {
@@ -796,7 +796,7 @@ trait InstallableExt<'lock>: Installable<'lock> {
                 };
 
                 // Add the edge.
-                let index = inverse[package_index].expect("queued package has a graph node");
+                let index = inverse[package_index.0].expect("queued package has a graph node");
                 petgraph.add_edge(
                     index,
                     dep_index,
@@ -929,7 +929,7 @@ impl Lock {
             }
             .into());
         };
-        let Some(package) = self.packages.get(*index) else {
+        let Some(package) = self.packages.get(index.0) else {
             return Err(LockErrorKind::RootPackageMissingFromLock {
                 id: selected_package.id.clone(),
             }
@@ -994,7 +994,7 @@ impl Lock {
                 .into());
             };
             if seen.insert(&root.id) {
-                let Some(root) = self.packages.get(*index) else {
+                let Some(root) = self.packages.get(index.0) else {
                     return Err(LockErrorKind::RootPackageMissingFromLock {
                         id: root.id.clone(),
                     }

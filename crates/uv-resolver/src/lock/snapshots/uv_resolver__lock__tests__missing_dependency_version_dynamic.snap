@@ -169,7 +169,9 @@ Ok(
                                 "path/to/a",
                             ),
                         },
-                        package_index: 0,
+                        package_index: PackageIndex(
+                            0,
+                        ),
                         extra: {},
                         simplified_marker: SimplifiedMarkerTree(
                             true,
@@ -195,7 +197,9 @@ Ok(
                 source: Editable(
                     "path/to/a",
                 ),
-            }: 0,
+            }: PackageIndex(
+                0,
+            ),
             PackageId {
                 name: PackageName(
                     "a",
@@ -210,7 +214,9 @@ Ok(
                         ),
                     ),
                 ),
-            }: 1,
+            }: PackageIndex(
+                1,
+            ),
             PackageId {
                 name: PackageName(
                     "b",
@@ -225,7 +231,9 @@ Ok(
                         ),
                     ),
                 ),
-            }: 2,
+            }: PackageIndex(
+                2,
+            ),
         },
         manifest: ResolverManifest {
             members: {},
