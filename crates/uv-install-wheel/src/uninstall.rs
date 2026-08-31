@@ -6,7 +6,7 @@ use std::sync::{LazyLock, Mutex, OnceLock};
 
 use tracing::trace;
 
-use uv_fs::write_atomic_sync;
+use uv_fs::{remove_symlink, write_atomic_sync};
 use uv_pypi_types::Identifier;
 use uv_warnings::warn_user;
 
@@ -46,11 +46,35 @@ pub fn uninstall_wheel(
 
     // Uninstall the files, keeping track of any directories that are left empty.
     let mut visited = BTreeSet::new();
+    let mut checked_directories = HashSet::new();
+    let mut removed_symlinks = HashSet::new();
     for entry in &record {
         let path = site_packages.join(&entry.path);
 
         if !is_path_in_scheme(&entry.path, site_packages, &distribution, layout) {
             continue;
+        }
+
+        // A directory link owns all the files beneath it. Remove the link once instead of
+        // following RECORD paths into the shared wheel cache. Shared package directories are
+        // expanded into real directories during installation, so normal per-file removal applies.
+        let normalized = normalize_path(&path);
+        if let Ok(relative) = normalized.strip_prefix(site_packages) {
+            let mut components = relative.components();
+            if let Some(Component::Normal(name)) = components.next()
+                && components.next().is_some()
+            {
+                let directory = site_packages.join(name);
+                if removed_symlinks.contains(&directory) {
+                    continue;
+                }
+                if checked_directories.insert(directory.clone()) && directory.is_symlink() {
+                    remove_symlink(&directory)?;
+                    removed_symlinks.insert(directory);
+                    dir_count += 1;
+                    continue;
+                }
+            }
         }
 
         // On Windows, deleting the current executable is a special case.

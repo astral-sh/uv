@@ -205,6 +205,7 @@ pub async fn compile_tree(
     let mut source_files = 0;
     let mut send_error = None;
     let walker = WalkDir::new(dir)
+        .follow_links(true)
         .into_iter()
         // Otherwise we stumble over temporary files from `compileall`.
         .filter_entry(|dir| dir.file_name() != "__pycache__");

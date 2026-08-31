@@ -14,6 +14,7 @@ use sha2::{Digest, Sha256};
 use tracing::{debug, instrument, trace, warn};
 use walkdir::WalkDir;
 
+use uv_fs::link::materialize_symlink_dir;
 use uv_fs::{PortablePath, Simplified, normalize_path_under, persist_with_retry_sync, relative_to};
 use uv_normalize::PackageName;
 use uv_pypi_types::DirectUrl;
@@ -21,6 +22,7 @@ use uv_shell::escape_posix_for_single_quotes;
 use uv_trampoline_builder::windows_script_launcher;
 use uv_warnings::warn_user_once;
 
+use crate::linker::InstallState;
 use crate::record::RecordEntry;
 use crate::script::{EntryPoints, Script};
 use crate::{Error, Layout};
@@ -464,9 +466,10 @@ pub(crate) enum LibKind {
 fn move_folder_recorded(
     src_dir: &Path,
     dest_dir: &Path,
-    scripts: &Path,
+    layout: &Layout,
     site_packages: &Path,
     record: &mut [RecordEntry],
+    state: &InstallState,
 ) -> Result<(), Error> {
     let mut rename_or_copy = RenameOrCopy::default();
     fs::create_dir_all(dest_dir)?;
@@ -485,9 +488,21 @@ fn move_folder_recorded(
             .expect("prefix must not change");
         let target = dest_dir.join(relative_to_data);
         if entry.file_type().is_dir() {
-            fs::create_dir_all(&target)?;
+            // Only package directories can be links created by our installer. Preserve symlinks
+            // in the installation scheme itself (for example, a symlinked `lib` directory).
+            if target.parent().is_some_and(|parent| {
+                parent == layout.scheme.purelib || parent == layout.scheme.platlib
+            }) {
+                state.copy_locks().with_directory_lock(&target, || {
+                    materialize_symlink_dir(&target)?;
+                    fs::create_dir_all(&target)?;
+                    Ok::<_, Error>(())
+                })?;
+            } else {
+                fs::create_dir_all(&target)?;
+            }
         } else {
-            validate_data_script_destination(&target, scripts)?;
+            validate_data_script_destination(&target, &layout.scheme.scripts)?;
             rename_or_copy.rename_or_copy(src, &target)?;
             let entry = record
                 .iter_mut()
@@ -720,6 +735,7 @@ pub(crate) fn install_data(
     console_scripts: &[Script],
     gui_scripts: &[Script],
     record: &mut [RecordEntry],
+    state: &InstallState,
 ) -> Result<(), Error> {
     for entry in fs::read_dir(data_dir)? {
         let entry = entry?;
@@ -736,9 +752,10 @@ pub(crate) fn install_data(
                 move_folder_recorded(
                     &path,
                     &layout.scheme.data,
-                    &layout.scheme.scripts,
+                    layout,
                     site_packages,
                     record,
+                    state,
                 )?;
             }
             Some("scripts") => {
@@ -791,13 +808,7 @@ pub(crate) fn install_data(
                     "Installing data/headers to {}",
                     target_path.user_display()
                 );
-                move_folder_recorded(
-                    &path,
-                    &target_path,
-                    &layout.scheme.scripts,
-                    site_packages,
-                    record,
-                )?;
+                move_folder_recorded(&path, &target_path, layout, site_packages, record, state)?;
             }
             Some("purelib") => {
                 trace!(
@@ -808,9 +819,10 @@ pub(crate) fn install_data(
                 move_folder_recorded(
                     &path,
                     &layout.scheme.purelib,
-                    &layout.scheme.scripts,
+                    layout,
                     site_packages,
                     record,
+                    state,
                 )?;
             }
             Some("platlib") => {
@@ -822,9 +834,10 @@ pub(crate) fn install_data(
                 move_folder_recorded(
                     &path,
                     &layout.scheme.platlib,
-                    &layout.scheme.scripts,
+                    layout,
                     site_packages,
                     record,
+                    state,
                 )?;
             }
             _ => {

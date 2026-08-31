@@ -37,19 +37,35 @@ use uv_test::{
 };
 
 fn write_many_files_wheel(path: &Path, source_files: usize) -> Result<()> {
+    write_test_wheel(
+        path,
+        "large_wheel",
+        (0..source_files).map(|index| {
+            (
+                format!("large_wheel/module_{index:05}.py"),
+                "VALUE = 1\n".to_string(),
+            )
+        }),
+    )
+}
+
+fn write_test_wheel(
+    path: &Path,
+    name: &str,
+    files: impl IntoIterator<Item = (String, String)>,
+) -> Result<()> {
     let mut writer = ZipFileWriter::new(Vec::new());
     let mut record = String::new();
 
-    for index in 0..source_files {
-        let name = format!("large_wheel/module_{index:05}.py");
+    for (name, contents) in files {
         let entry = ZipEntryBuilder::new(name.clone().into(), Compression::Stored);
-        block_on(writer.write_entry_whole(entry, b"VALUE = 1\n"))?;
+        block_on(writer.write_entry_whole(entry, contents.as_bytes()))?;
         writeln!(record, "{name},,")?;
     }
 
-    let metadata = indoc! {"
+    let metadata = formatdoc! {"
         Metadata-Version: 2.1
-        Name: large-wheel
+        Name: {name}
         Version: 1.0.0
     "};
     let wheel = indoc! {"
@@ -59,16 +75,19 @@ fn write_many_files_wheel(path: &Path, source_files: usize) -> Result<()> {
         Tag: py3-none-any
     "};
     for (name, contents) in [
-        ("large_wheel-1.0.0.dist-info/METADATA", metadata),
-        ("large_wheel-1.0.0.dist-info/WHEEL", wheel),
+        (
+            format!("{name}-1.0.0.dist-info/METADATA"),
+            metadata.as_str(),
+        ),
+        (format!("{name}-1.0.0.dist-info/WHEEL"), wheel),
     ] {
-        let entry = ZipEntryBuilder::new(name.into(), Compression::Stored);
+        let entry = ZipEntryBuilder::new(name.clone().into(), Compression::Stored);
         block_on(writer.write_entry_whole(entry, contents.as_bytes()))?;
         writeln!(record, "{name},,")?;
     }
-    record.push_str("large_wheel-1.0.0.dist-info/RECORD,,\n");
+    writeln!(record, "{name}-1.0.0.dist-info/RECORD,,")?;
     let entry = ZipEntryBuilder::new(
-        "large_wheel-1.0.0.dist-info/RECORD".into(),
+        format!("{name}-1.0.0.dist-info/RECORD").into(),
         Compression::Stored,
     );
     block_on(writer.write_entry_whole(entry, record.as_bytes()))?;
@@ -311,6 +330,205 @@ fn compile_bytecode_with_symlink_link_mode() {
             .join("__init__.cpython-312.pyc")
             .exists()
     );
+}
+
+/// Directory links retain private install metadata and can be uninstalled without changing the
+/// cached wheel. Bytecode compilation follows the directory link.
+#[test]
+#[cfg(unix)]
+fn directory_symlink_install() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let wheel = context
+        .temp_dir
+        .child("symlink_test-1.0.0-py3-none-any.whl");
+    write_test_wheel(
+        wheel.path(),
+        "symlink_test",
+        [
+            ("symlink_test/__init__.py", "VALUE = 1\n"),
+            ("symlink_test/nested/module.py", "VALUE = 2\n"),
+            ("symlink_module.py", "VALUE = 3\n"),
+            (
+                "symlink_test-1.0.0.data/purelib/symlink_data.py",
+                "VALUE = 4\n",
+            ),
+            (
+                "symlink_test-1.0.0.data/scripts/symlink-script",
+                "#!python\nprint('hello')\n",
+            ),
+        ]
+        .map(|(path, contents)| (path.to_string(), contents.to_string())),
+    )?;
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg(wheel.path())
+        .arg("--link-mode=symlink")
+        .arg("--compile-bytecode"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+    Bytecode compiled 4 files in [TIME]
+     + symlink-test==1.0.0 (from file://[TEMP_DIR]/symlink_test-1.0.0-py3-none-any.whl)
+    ");
+
+    let package = context.site_packages().join("symlink_test");
+    let cached_package = fs::read_link(&package)?;
+    let dist_info = context.site_packages().join("symlink_test-1.0.0.dist-info");
+    assert!(!dist_info.is_symlink());
+    assert!(!dist_info.join("RECORD").is_symlink());
+    assert!(dist_info.join("METADATA").is_symlink());
+    assert!(
+        context
+            .site_packages()
+            .join("symlink_module.py")
+            .is_symlink()
+    );
+    assert!(
+        cached_package
+            .join("__pycache__/__init__.cpython-312.pyc")
+            .is_file()
+    );
+    context
+        .assert_command(
+            "import symlink_test, symlink_test.nested.module, symlink_module, symlink_data",
+        )
+        .success();
+    Command::new(venv_bin_path(&context.venv).join("symlink-script"))
+        .assert()
+        .success()
+        .stdout("hello\n");
+
+    uv_snapshot!(context.filters(), context.pip_uninstall().arg("symlink-test"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Uninstalled 1 package in [TIME]
+     - symlink-test==1.0.0 (from file://[TEMP_DIR]/symlink_test-1.0.0-py3-none-any.whl)
+    ");
+    assert!(!package.is_symlink());
+    assert_eq!(
+        fs::read_to_string(cached_package.join("__init__.py"))?,
+        "VALUE = 1\n"
+    );
+    assert_eq!(
+        fs::read_to_string(cached_package.join("nested/module.py"))?,
+        "VALUE = 2\n"
+    );
+
+    // Reuse the cached wheel after uninstalling it.
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg(wheel.path())
+        .arg("--link-mode=symlink")
+        .arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + symlink-test==1.0.0 (from file://[TEMP_DIR]/symlink_test-1.0.0-py3-none-any.whl)
+    ");
+    assert!(package.is_symlink());
+    context
+        .assert_command("import symlink_test.nested.module")
+        .success();
+    Ok(())
+}
+
+/// A later install expands a shared directory before merging, including when the new package
+/// uses another link mode or contributes its files through `.data`.
+#[test]
+#[cfg(unix)]
+fn directory_symlink_shared_namespace() -> Result<()> {
+    for link_mode in ["symlink", "copy", "hardlink", "clone"] {
+        for data in [false, true] {
+            let context = uv_test::test_context!("3.12");
+            let first = context.temp_dir.child("symlink_a-1.0.0-py3-none-any.whl");
+            let second = context.temp_dir.child("symlink_b-1.0.0-py3-none-any.whl");
+            write_test_wheel(
+                first.path(),
+                "symlink_a",
+                [(
+                    "shared/a/__init__.py".to_string(),
+                    "VALUE = 1\n".to_string(),
+                )],
+            )?;
+            let second_path = if data {
+                "symlink_b-1.0.0.data/purelib/shared/b/__init__.py"
+            } else {
+                "shared/b/__init__.py"
+            };
+            write_test_wheel(
+                second.path(),
+                "symlink_b",
+                [(second_path.to_string(), "VALUE = 2\n".to_string())],
+            )?;
+
+            allow_duplicates! {
+                uv_snapshot!(context.filters(), context.pip_install()
+                    .arg(first.path()).arg("--link-mode=symlink"), @"
+                exit_code: 0 (success)
+                ----- stderr -----
+                Resolved 1 package in [TIME]
+                Prepared 1 package in [TIME]
+                Installed 1 package in [TIME]
+                 + symlink-a==1.0.0 (from file://[TEMP_DIR]/symlink_a-1.0.0-py3-none-any.whl)
+                ");
+            }
+            let shared = context.site_packages().join("shared");
+            let cached_shared = fs::read_link(&shared)?;
+            allow_duplicates! {
+                uv_snapshot!(context.filters(), context.pip_install()
+                    .arg(second.path()).arg("--link-mode").arg(link_mode), @"
+                exit_code: 0 (success)
+                ----- stderr -----
+                Resolved 1 package in [TIME]
+                Prepared 1 package in [TIME]
+                Installed 1 package in [TIME]
+                 + symlink-b==1.0.0 (from file://[TEMP_DIR]/symlink_b-1.0.0-py3-none-any.whl)
+                ");
+            }
+            assert!(!shared.is_symlink());
+            assert!(shared.join("a/__init__.py").is_symlink());
+            assert!(!cached_shared.join("b").exists());
+            context
+                .assert_command("import shared.a, shared.b")
+                .success();
+
+            allow_duplicates! {
+                uv_snapshot!(context.filters(), context.pip_uninstall().arg("symlink-a"), @"
+                exit_code: 0 (success)
+                ----- stderr -----
+                Uninstalled 1 package in [TIME]
+                 - symlink-a==1.0.0 (from file://[TEMP_DIR]/symlink_a-1.0.0-py3-none-any.whl)
+                ");
+            }
+            context.assert_command("import shared.b").success();
+            assert!(cached_shared.join("a/__init__.py").is_file());
+
+            // Concurrent installation must produce the same merged namespace.
+            if link_mode != "symlink" {
+                continue;
+            }
+            context.venv().arg("--clear").assert().success();
+            allow_duplicates! {
+                uv_snapshot!(context.filters(), context.pip_install()
+                    .arg(first.path()).arg(second.path()).arg("--link-mode=symlink")
+                    .env(EnvVars::UV_CONCURRENT_INSTALLS, "2"), @"
+                exit_code: 0 (success)
+                ----- stderr -----
+                Resolved 2 packages in [TIME]
+                Installed 2 packages in [TIME]
+                 + symlink-a==1.0.0 (from file://[TEMP_DIR]/symlink_a-1.0.0-py3-none-any.whl)
+                 + symlink-b==1.0.0 (from file://[TEMP_DIR]/symlink_b-1.0.0-py3-none-any.whl)
+                ");
+            }
+            assert!(!shared.is_symlink());
+            assert!(!cached_shared.join("b").exists());
+            context
+                .assert_command("import shared.a, shared.b")
+                .success();
+        }
+    }
+    Ok(())
 }
 
 /// Compile bytecode when installing into a relative `--target` or `--prefix` path.
