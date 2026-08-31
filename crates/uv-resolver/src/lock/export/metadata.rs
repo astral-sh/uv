@@ -655,7 +655,7 @@ fn metadata_reachability(
             let mut dependency_reachability =
                 dependency.simplified_marker.as_simplified_marker_tree();
             dependency_reachability = dependency_reachability.and(parent_reachability);
-            let dependency_package = lock.find_by_id(&dependency.package_id);
+            let dependency_package = lock.package(dependency.index);
             if dependency.extra.is_empty() {
                 add_metadata_reachability(
                     workspace_root,

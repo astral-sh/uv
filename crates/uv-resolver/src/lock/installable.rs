@@ -408,7 +408,7 @@ trait InstallableExt<'lock>: Installable<'lock> {
                     continue;
                 }
 
-                let dep_dist = &self.lock().packages[dep.index.0];
+                let dep_dist = self.lock().package(dep.index);
 
                 // Add the package to the graph.
                 let dep_index = match inverse[dep.index.0] {
@@ -665,7 +665,7 @@ trait InstallableExt<'lock>: Installable<'lock> {
             let mut queue = queue.clone();
             let mut reachability = conflict_reachability;
             while let Some((package_index, extra)) = queue.pop_front() {
-                let package = &self.lock().packages[package_index.0];
+                let package = self.lock().package(package_index);
                 let Some(parent_reachability) = reachability.get(&(package_index, extra)).copied()
                 else {
                     continue;
@@ -750,7 +750,7 @@ trait InstallableExt<'lock>: Installable<'lock> {
         );
 
         while let Some((package_index, extra)) = queue.pop_front() {
-            let package = &self.lock().packages[package_index.0];
+            let package = self.lock().package(package_index);
             for dep in package_dependencies(package, extra) {
                 if validate_conflicts && dep.complexified_marker.has_conflict_marker() {
                     dependencies_for_conflict_validation.push((package, dep));
@@ -762,7 +762,7 @@ trait InstallableExt<'lock>: Installable<'lock> {
                     continue;
                 }
 
-                let dep_dist = &self.lock().packages[dep.index.0];
+                let dep_dist = self.lock().package(dep.index);
 
                 // Add the dependency to the graph.
                 let dep_index = match inverse[dep.index.0] {

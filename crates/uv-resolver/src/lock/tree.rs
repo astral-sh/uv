@@ -24,7 +24,7 @@ use crate::lock::export::{
     MetadataNode, MetadataNodeId, MetadataNodeKind, MetadataScript, MetadataWorkspace,
     MetadataWorkspaceMember,
 };
-use crate::lock::{Package, PackageId};
+use crate::lock::{Package, PackageId, PackageIndex};
 use crate::{ConflictMarker, Lock, PackageMap, UniversalMarker};
 
 #[derive(Debug, Clone, Copy)]
@@ -45,7 +45,7 @@ impl<'a> TreeJsonTarget<'a> {
 #[derive(Debug)]
 pub struct TreeDisplay<'env> {
     /// The constructed dependency graph.
-    graph: petgraph::graph::Graph<Node<'env>, Edge<'env>, petgraph::Directed>,
+    graph: petgraph::graph::Graph<Node, Edge<'env>, petgraph::Directed>,
     /// The packages considered as roots of the dependency tree.
     roots: Vec<NodeIndex>,
     /// The latest known version of each package.
@@ -115,8 +115,8 @@ impl<'env> TreeDisplay<'env> {
         let size_guess = lock.packages.len();
         let mut graph =
             Graph::<Node, Edge, petgraph::Directed>::with_capacity(size_guess, size_guess);
-        let mut inverse = FxHashMap::with_capacity_and_hasher(size_guess, FxBuildHasher);
-        let mut queue: VecDeque<(&PackageId, Option<&ExtraName>)> = VecDeque::new();
+        let mut inverse = vec![None; size_guess];
+        let mut queue: VecDeque<(PackageIndex, Option<&ExtraName>)> = VecDeque::new();
         let mut seen = FxHashSet::default();
 
         let root = graph.add_node(Node::Root);
@@ -127,28 +127,28 @@ impl<'env> TreeDisplay<'env> {
                 continue;
             }
 
-            let dist = lock.find_by_id(id);
+            let package_index = lock.by_id[id];
+            let dist = lock.package(package_index);
 
             // Add the workspace package to the graph. Under `--only-group`, the workspace member
             // may not be installed, but it's still relevant for the dependency tree, since we want
             // to show the connection from the workspace package to the enabled dependency groups.
-            let index = *inverse
-                .entry(id)
-                .or_insert_with(|| graph.add_node(Node::Package(id)));
+            let index = *inverse[package_index.0]
+                .get_or_insert_with(|| graph.add_node(Node::Package(package_index)));
 
             // Add an edge from the root.
             graph.add_edge(root, index, Edge::Prod(None, UniversalMarker::TRUE));
 
             if groups.prod() {
                 // Push its dependencies on the queue.
-                if seen.insert((id, None)) {
-                    queue.push_back((id, None));
+                if seen.insert((package_index, None)) {
+                    queue.push_back((package_index, None));
                 }
 
                 // Push any extras on the queue.
                 for extra in dist.optional_dependencies.keys() {
-                    if seen.insert((id, Some(extra))) {
-                        queue.push_back((id, Some(extra)));
+                    if seen.insert((package_index, Some(extra))) {
+                        queue.push_back((package_index, Some(extra)));
                     }
                 }
             }
@@ -177,9 +177,8 @@ impl<'env> TreeDisplay<'env> {
                 }
 
                 // Add the dependency to the graph and get its index.
-                let dep_index = *inverse
-                    .entry(&dep.package_id)
-                    .or_insert_with(|| graph.add_node(Node::Package(&dep.package_id)));
+                let dep_index = *inverse[dep.index.0]
+                    .get_or_insert_with(|| graph.add_node(Node::Package(dep.index)));
 
                 // Add an edge from the workspace package.
                 graph.add_edge(
@@ -193,12 +192,12 @@ impl<'env> TreeDisplay<'env> {
                 );
 
                 // Push its dependencies on the queue.
-                if seen.insert((&dep.package_id, None)) {
-                    queue.push_back((&dep.package_id, None));
+                if seen.insert((dep.index, None)) {
+                    queue.push_back((dep.index, None));
                 }
                 for extra in &dep.extra {
-                    if seen.insert((&dep.package_id, Some(extra))) {
-                        queue.push_back((&dep.package_id, Some(extra)));
+                    if seen.insert((dep.index, Some(extra))) {
+                        queue.push_back((dep.index, Some(extra)));
                     }
                 }
             }
@@ -215,10 +214,12 @@ impl<'env> TreeDisplay<'env> {
         {
             // Index the lockfile by name.
             let by_name: FxHashMap<_, Vec<_>> = {
-                lock.packages().iter().fold(
+                lock.packages().iter().enumerate().fold(
                     FxHashMap::with_capacity_and_hasher(lock.len(), FxBuildHasher),
-                    |mut map, package| {
-                        map.entry(&package.id.name).or_default().push(package);
+                    |mut map, (index, package)| {
+                        map.entry(&package.id.name)
+                            .or_default()
+                            .push(PackageIndex(index));
                         map
                     },
                 )
@@ -226,7 +227,8 @@ impl<'env> TreeDisplay<'env> {
 
             // Identify any requirements attached to the workspace itself.
             for requirement in lock.requirements() {
-                for package in by_name.get(&requirement.name).into_iter().flatten() {
+                for &package_index in by_name.get(&requirement.name).into_iter().flatten() {
+                    let package = lock.package(package_index);
                     // Determine whether this entry is "relevant" for the requirement, by intersecting
                     // the markers.
                     let marker = if package.fork_markers.is_empty() {
@@ -246,14 +248,13 @@ impl<'env> TreeDisplay<'env> {
                         continue;
                     }
                     // Add the package to the graph.
-                    let index = inverse
-                        .entry(&package.id)
-                        .or_insert_with(|| graph.add_node(Node::Package(&package.id)));
+                    let index = *inverse[package_index.0]
+                        .get_or_insert_with(|| graph.add_node(Node::Package(package_index)));
 
                     // Add an edge from the root.
                     graph.add_edge(
                         root,
-                        *index,
+                        index,
                         Edge::Prod(
                             Some(RequestedExtras::Requirement(requirement.extras.as_ref())),
                             UniversalMarker::from_combined(marker),
@@ -261,12 +262,12 @@ impl<'env> TreeDisplay<'env> {
                     );
 
                     // Push its dependencies on the queue.
-                    if seen.insert((&package.id, None)) {
-                        queue.push_back((&package.id, None));
+                    if seen.insert((package_index, None)) {
+                        queue.push_back((package_index, None));
                     }
                     for extra in &*requirement.extras {
-                        if seen.insert((&package.id, Some(extra))) {
-                            queue.push_back((&package.id, Some(extra)));
+                        if seen.insert((package_index, Some(extra))) {
+                            queue.push_back((package_index, Some(extra)));
                         }
                     }
                 }
@@ -278,7 +279,8 @@ impl<'env> TreeDisplay<'env> {
                     continue;
                 }
                 for requirement in requirements {
-                    for package in by_name.get(&requirement.name).into_iter().flatten() {
+                    for &package_index in by_name.get(&requirement.name).into_iter().flatten() {
+                        let package = lock.package(package_index);
                         // Determine whether this entry is "relevant" for the requirement, by intersecting
                         // the markers.
                         let marker = if package.fork_markers.is_empty() {
@@ -298,14 +300,13 @@ impl<'env> TreeDisplay<'env> {
                             continue;
                         }
                         // Add the package to the graph.
-                        let index = inverse
-                            .entry(&package.id)
-                            .or_insert_with(|| graph.add_node(Node::Package(&package.id)));
+                        let index = *inverse[package_index.0]
+                            .get_or_insert_with(|| graph.add_node(Node::Package(package_index)));
 
                         // Add an edge from the root.
                         graph.add_edge(
                             root,
-                            *index,
+                            index,
                             Edge::Dev(
                                 group,
                                 Some(RequestedExtras::Requirement(requirement.extras.as_ref())),
@@ -314,12 +315,12 @@ impl<'env> TreeDisplay<'env> {
                         );
 
                         // Push its dependencies on the queue.
-                        if seen.insert((&package.id, None)) {
-                            queue.push_back((&package.id, None));
+                        if seen.insert((package_index, None)) {
+                            queue.push_back((package_index, None));
                         }
                         for extra in &*requirement.extras {
-                            if seen.insert((&package.id, Some(extra))) {
-                                queue.push_back((&package.id, Some(extra)));
+                            if seen.insert((package_index, Some(extra))) {
+                                queue.push_back((package_index, Some(extra)));
                             }
                         }
                     }
@@ -328,9 +329,9 @@ impl<'env> TreeDisplay<'env> {
         }
 
         // Create all the relevant nodes.
-        while let Some((id, extra)) = queue.pop_front() {
-            let index = inverse[&id];
-            let package = lock.find_by_id(id);
+        while let Some((package_index, extra)) = queue.pop_front() {
+            let index = inverse[package_index.0].expect("queued package has a graph node");
+            let package = lock.package(package_index);
 
             let deps = if let Some(extra) = extra {
                 Either::Left(
@@ -356,9 +357,8 @@ impl<'env> TreeDisplay<'env> {
                 }
 
                 // Add the dependency to the graph.
-                let dep_index = *inverse
-                    .entry(&dep.package_id)
-                    .or_insert_with(|| graph.add_node(Node::Package(&dep.package_id)));
+                let dep_index = *inverse[dep.index.0]
+                    .get_or_insert_with(|| graph.add_node(Node::Package(dep.index)));
 
                 // Add an edge from the workspace package.
                 graph.add_edge(
@@ -379,12 +379,12 @@ impl<'env> TreeDisplay<'env> {
                 );
 
                 // Push its dependencies on the queue.
-                if seen.insert((&dep.package_id, None)) {
-                    queue.push_back((&dep.package_id, None));
+                if seen.insert((dep.index, None)) {
+                    queue.push_back((dep.index, None));
                 }
                 for extra in &dep.extra {
-                    if seen.insert((&dep.package_id, Some(extra))) {
-                        queue.push_back((&dep.package_id, Some(extra)));
+                    if seen.insert((dep.index, Some(extra))) {
+                        queue.push_back((dep.index, Some(extra)));
                     }
                 }
             }
@@ -395,7 +395,9 @@ impl<'env> TreeDisplay<'env> {
             let mut reachable = graph
                 .node_indices()
                 .filter(|index| match graph[*index] {
-                    Node::Package(package_id) => members.contains(package_id),
+                    Node::Package(package_index) => {
+                        members.contains(&lock.package(package_index).id)
+                    }
                     Node::Root => true,
                 })
                 .collect::<FxHashSet<_>>();
@@ -422,10 +424,10 @@ impl<'env> TreeDisplay<'env> {
             let mut reachable = graph
                 .node_indices()
                 .filter(|index| {
-                    let Node::Package(package_id) = graph[*index] else {
+                    let Node::Package(package_index) = graph[*index] else {
                         return false;
                     };
-                    packages.contains(&package_id.name)
+                    packages.contains(&lock.package(package_index).id.name)
                 })
                 .collect::<FxHashSet<_>>();
             let mut stack = reachable.iter().copied().collect::<VecDeque<_>>();
@@ -448,15 +450,15 @@ impl<'env> TreeDisplay<'env> {
                 let mut roots = graph
                     .node_indices()
                     .filter(|index| {
-                        let Node::Package(package_id) = graph[*index] else {
+                        let Node::Package(package_index) = graph[*index] else {
                             return false;
                         };
-                        packages.contains(&package_id.name)
+                        packages.contains(&lock.package(package_index).id.name)
                     })
                     .collect::<Vec<_>>();
 
                 // Sort the roots.
-                roots.sort_by_key(|index| &graph[*index]);
+                roots.sort_by_key(|index| graph[*index].sort_key(lock));
 
                 roots
             } else {
@@ -480,7 +482,7 @@ impl<'env> TreeDisplay<'env> {
                         .collect::<Vec<_>>()
                 };
 
-                roots.sort_by_key(|index| &graph[*index]);
+                roots.sort_by_key(|index| graph[*index].sort_key(lock));
                 roots
             }
         };
@@ -504,7 +506,7 @@ impl<'env> TreeDisplay<'env> {
     fn visit(
         &'env self,
         cursor: Cursor,
-        visited: &mut FxHashMap<VisitedNode<'env>, Vec<&'env PackageId>>,
+        visited: &mut FxHashMap<VisitedNode<'env>, Vec<PackageIndex>>,
         path: &mut Vec<VisitedNode<'env>>,
     ) -> Vec<String> {
         // Short-circuit if the current path is longer than the provided depth.
@@ -512,15 +514,16 @@ impl<'env> TreeDisplay<'env> {
             return Vec::new();
         }
 
-        let Node::Package(package_id) = self.graph[cursor.node()] else {
+        let Node::Package(package_index) = self.graph[cursor.node()] else {
             return Vec::new();
         };
         let edge = cursor.edge().map(|edge_id| &self.graph[edge_id]);
-        let package = self.lock.find_by_id(package_id);
+        let package = self.lock.package(package_index);
+        let package_id = &package.id;
 
         let expanded_extras = self.expanded_extras(package, edge);
         let visited_node = VisitedNode {
-            package_id,
+            package_index,
             expanded_extras: expanded_extras.clone(),
             marker: self.invert.then_some(cursor.marker()),
         };
@@ -636,7 +639,7 @@ impl<'env> TreeDisplay<'env> {
                 .collect::<Vec<_>>()
         };
         dependencies.sort_by_key(|cursor| {
-            let node = &self.graph[cursor.node()];
+            let node = self.graph[cursor.node()].sort_key(self.lock);
             let edge = cursor
                 .edge()
                 .map(|edge_id| &self.graph[edge_id])
@@ -654,7 +657,7 @@ impl<'env> TreeDisplay<'env> {
                 dependencies
                     .iter()
                     .filter_map(|node| match self.graph[node.node()] {
-                        Node::Package(package_id) => Some(package_id),
+                        Node::Package(package_index) => Some(package_index),
                         Node::Root => None,
                     })
                     .collect(),
@@ -784,13 +787,13 @@ impl<'env> TreeDisplay<'env> {
             match self.graph[*root] {
                 Node::Root => {
                     for edge in self.graph.edges_directed(*root, Direction::Outgoing) {
-                        let Node::Package(package_id) = self.graph[edge.target()] else {
+                        let Node::Package(package_index) = self.graph[edge.target()] else {
                             continue;
                         };
                         let state = JsonTraversalNode {
                             index: edge.target(),
                             expanded_extras: self.expanded_extras(
-                                self.lock.find_by_id(package_id),
+                                self.lock.package(package_index),
                                 Some(edge.weight()),
                             ),
                             marker: UniversalMarker::TRUE,
@@ -802,11 +805,11 @@ impl<'env> TreeDisplay<'env> {
                         }
                     }
                 }
-                Node::Package(package_id) => {
+                Node::Package(package_index) => {
                     let state = JsonTraversalNode {
                         index: *root,
                         expanded_extras: self
-                            .expanded_extras(self.lock.find_by_id(package_id), None),
+                            .expanded_extras(self.lock.package(package_index), None),
                         marker: if self.invert {
                             self.conflict_marker
                         } else {
@@ -868,13 +871,13 @@ impl<'env> TreeDisplay<'env> {
                     edges.insert(edge.id());
                     continue;
                 }
-                let Node::Package(package_id) = self.graph[target] else {
+                let Node::Package(package_index) = self.graph[target] else {
                     continue;
                 };
                 let state = JsonTraversalNode {
                     index: target,
                     expanded_extras: self
-                        .expanded_extras(self.lock.find_by_id(package_id), Some(edge.weight())),
+                        .expanded_extras(self.lock.package(package_index), Some(edge.weight())),
                     marker,
                     reached_via_dependency_group: self.invert && edge_kind.is_dev(),
                 };
@@ -1027,10 +1030,10 @@ impl JsonGraph {
         let mut builder = JsonGraphBuilder::new(tree, workspace_root.clone());
 
         for index in traversal.nodes.iter().copied() {
-            let Node::Package(package_id) = tree.graph[index] else {
+            let Node::Package(package_index) = tree.graph[index] else {
                 continue;
             };
-            builder.ensure_package(package_id, MetadataNodeKind::Package);
+            builder.ensure_package(package_index, MetadataNodeKind::Package);
         }
 
         for edge in tree
@@ -1096,12 +1099,13 @@ impl<'tree, 'env> JsonGraphBuilder<'tree, 'env> {
         id
     }
 
-    fn ensure_package(&mut self, package_id: &'env PackageId, kind: MetadataNodeKind) -> String {
+    fn ensure_package(&mut self, package_index: PackageIndex, kind: MetadataNodeKind) -> String {
+        let package = self.tree.lock.package(package_index);
+        let package_id = &package.id;
         let is_package = matches!(kind, MetadataNodeKind::Package);
         let id = MetadataNodeId::from_package_id(&self.workspace_root, package_id, kind.clone())
             .to_flat();
         self.resolution.entry(id.clone()).or_insert_with(|| {
-            let package = self.tree.lock.find_by_id(package_id);
             let mut node = MetadataNode::from_package_id(&self.workspace_root, package_id, kind);
             if is_package {
                 node.set_latest_version(self.tree.latest.get(package_id).cloned());
@@ -1112,9 +1116,9 @@ impl<'tree, 'env> JsonGraphBuilder<'tree, 'env> {
         id
     }
 
-    fn ensure_extra(&mut self, package_id: &'env PackageId, extra: &ExtraName) -> String {
-        let package = self.ensure_package(package_id, MetadataNodeKind::Package);
-        let extra_id = self.ensure_package(package_id, MetadataNodeKind::Extra(extra.clone()));
+    fn ensure_extra(&mut self, package_index: PackageIndex, extra: &ExtraName) -> String {
+        let package = self.ensure_package(package_index, MetadataNodeKind::Package);
+        let extra_id = self.ensure_package(package_index, MetadataNodeKind::Extra(extra.clone()));
         self.add_link(
             package.clone(),
             extra_id.clone(),
@@ -1124,9 +1128,9 @@ impl<'tree, 'env> JsonGraphBuilder<'tree, 'env> {
         extra_id
     }
 
-    fn ensure_group(&mut self, package_id: &'env PackageId, group: &GroupName) -> String {
-        let package = self.ensure_package(package_id, MetadataNodeKind::Package);
-        let group_id = self.ensure_package(package_id, MetadataNodeKind::Group(group.clone()));
+    fn ensure_group(&mut self, package_index: PackageIndex, group: &GroupName) -> String {
+        let package = self.ensure_package(package_index, MetadataNodeKind::Package);
+        let group_id = self.ensure_package(package_index, MetadataNodeKind::Group(group.clone()));
         self.add_link(package, group_id.clone(), JsonLink::Group(group.clone()));
         group_id
     }
@@ -1151,15 +1155,15 @@ impl<'tree, 'env> JsonGraphBuilder<'tree, 'env> {
 
     fn dependency_targets(
         &mut self,
-        package_id: &'env PackageId,
+        package_index: PackageIndex,
         extras: Option<RequestedExtras<'env>>,
     ) -> Vec<String> {
         let Some(extras) = extras.filter(|extras| !extras.is_empty()) else {
-            return vec![self.ensure_package(package_id, MetadataNodeKind::Package)];
+            return vec![self.ensure_package(package_index, MetadataNodeKind::Package)];
         };
         extras
             .iter()
-            .map(|extra| self.ensure_extra(package_id, extra))
+            .map(|extra| self.ensure_extra(package_index, extra))
             .collect()
     }
 
@@ -1272,8 +1276,9 @@ impl<'tree, 'env> JsonGraphBuilder<'tree, 'env> {
         }
     }
 
-    fn add_package_roots(&mut self, roots: &mut Vec<JsonRoot>, package_id: &'env PackageId) {
-        let package = self.tree.lock.find_by_id(package_id);
+    fn add_package_roots(&mut self, roots: &mut Vec<JsonRoot>, package_index: PackageIndex) {
+        let package = self.tree.lock.package(package_index);
+        let package_id = &package.id;
         let extras = package
             .optional_dependencies
             .keys()
@@ -1288,7 +1293,7 @@ impl<'tree, 'env> JsonGraphBuilder<'tree, 'env> {
 
         if self.tree.prod {
             roots.push(JsonRoot {
-                id: self.ensure_package(package_id, MetadataNodeKind::Package),
+                id: self.ensure_package(package_index, MetadataNodeKind::Package),
             });
             for extra in &extras {
                 let id = MetadataNodeId::from_package_id(
@@ -1320,13 +1325,13 @@ impl<'tree, 'env> JsonGraphBuilder<'tree, 'env> {
         let mut roots = Vec::new();
         for root in &self.tree.roots {
             match self.tree.graph[*root] {
-                Node::Package(package_id) => {
+                Node::Package(package_index) => {
                     if self.tree.invert {
                         roots.push(JsonRoot {
-                            id: self.ensure_package(package_id, MetadataNodeKind::Package),
+                            id: self.ensure_package(package_index, MetadataNodeKind::Package),
                         });
                     } else {
-                        self.add_package_roots(&mut roots, package_id);
+                        self.add_package_roots(&mut roots, package_index);
                     }
                 }
                 Node::Root => match target {
@@ -1341,15 +1346,15 @@ impl<'tree, 'env> JsonGraphBuilder<'tree, 'env> {
                             .edges_directed(*root, Direction::Outgoing)
                             .filter(|edge| matches!(edge.weight(), Edge::Prod(..)))
                             .filter_map(|edge| {
-                                let Node::Package(package_id) = self.tree.graph[edge.target()]
+                                let Node::Package(package_index) = self.tree.graph[edge.target()]
                                 else {
                                     return None;
                                 };
-                                Some(package_id)
+                                Some(package_index)
                             })
                             .collect::<Vec<_>>();
-                        for package_id in packages {
-                            self.add_package_roots(&mut roots, package_id);
+                        for package_index in packages {
+                            self.add_package_roots(&mut roots, package_index);
                         }
                         let groups = self
                             .tree
@@ -1443,17 +1448,27 @@ struct JsonRoot {
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 struct VisitedNode<'env> {
-    package_id: &'env PackageId,
+    package_index: PackageIndex,
     expanded_extras: BTreeSet<&'env ExtraName>,
     marker: Option<UniversalMarker>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Ord, PartialOrd)]
-enum Node<'env> {
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Node {
     /// The synthetic root node.
     Root,
     /// A package in the dependency graph.
-    Package(&'env PackageId),
+    Package(PackageIndex),
+}
+
+impl Node {
+    /// Preserve package identity ordering independently of positions in the lock.
+    fn sort_key(self, lock: &Lock) -> Option<&PackageId> {
+        match self {
+            Self::Root => None,
+            Self::Package(index) => Some(&lock.package(index).id),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Ord, PartialOrd)]
