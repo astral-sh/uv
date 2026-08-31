@@ -1,29 +1,35 @@
+use std::cmp::Reverse;
 use std::fmt::Display;
 use std::future::Future;
 use std::io;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll};
 
+use either::Either;
 use futures::{FutureExt, TryStreamExt};
+use rayon::in_place_scope;
+use rayon::prelude::*;
+use rustc_hash::FxHashMap;
 use tokio::io::{AsyncRead, AsyncSeekExt, ReadBuf};
 use tokio::sync::Semaphore;
 use tokio_util::compat::FuturesAsyncReadCompatExt;
 use tracing::{Instrument, info_span, instrument, warn};
 use url::Url;
 
-use uv_cache::{ArchiveId, CacheBucket, CacheEntry, WheelCache};
+use uv_cache::{ArchiveFileId, ArchiveId, Cache, CacheBucket, CacheEntry, WheelCache};
 use uv_cache_info::{CacheInfo, Timestamp};
 use uv_client::{
     CacheControl, CachedClientError, Connectivity, DataWithCachePolicy, RegistryClient,
 };
+use uv_configuration::initialize_rayon_once;
 use uv_distribution_filename::WheelFilename;
 use uv_distribution_types::{
     BuildInfo, BuildableSource, BuiltDist, Dist, DistRef, HashPolicy, Hashed, IndexUrl,
     InstalledDist, Name, SourceDist,
 };
-use uv_extract::dirhash::{DirectoryDigest, DirhashTree, dirhash_path};
+use uv_extract::dirhash::{DirectoryDigest, DirhashTree, HashedFile, UnhashedFile, dirhash_path};
 use uv_extract::hash::Hasher;
 use uv_fs::{PortablePath, write_atomic};
 use uv_git::{GIT_LFS, GitError};
@@ -706,7 +712,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 let mut extracted = match progress {
                     Some((reporter, progress)) => {
                         let mut reader = ProgressReader::new(&mut hasher, progress, &**reporter);
-                        ExtractedWheelManifest::extract_streaming(
+                        ExtractedWheel::extract_streaming(
                             &mut reader,
                             temp_dir.path(),
                             self.content_addressed_cache,
@@ -714,7 +720,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                         .await
                         .map_err(|err| Error::Extract(filename.to_string(), err))?
                     }
-                    None => ExtractedWheelManifest::extract_streaming(
+                    None => ExtractedWheel::extract_streaming(
                         &mut hasher,
                         temp_dir.path(),
                         self.content_addressed_cache,
@@ -741,7 +747,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
 
                 // Persist the temporary directory to the directory store.
                 let id = self
-                    .persist_extracted_wheel(temp_dir, wheel_entry.path(), extracted.tree)
+                    .persist_extracted_wheel(temp_dir, wheel_entry.path(), extracted.into_hashed())
                     .await?;
 
                 if let Some((reporter, progress)) = progress {
@@ -934,7 +940,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 let target = temp_dir.path().to_owned();
                 let file = file.into_std().await;
                 let mut extracted = tokio::task::spawn_blocking(move || {
-                    ExtractedWheelManifest::extract_seekable(file, &target, content_addressed_cache)
+                    ExtractedWheel::extract_seekable(file, &target, content_addressed_cache)
                 })
                 .await?
                 .map_err(|err| Error::Extract(filename.to_string(), err))?;
@@ -946,7 +952,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
 
                 // Persist the temporary directory to the directory store.
                 let id = self
-                    .persist_extracted_wheel(temp_dir, wheel_entry.path(), extracted.tree)
+                    .persist_extracted_wheel(temp_dir, wheel_entry.path(), extracted.into_hashed())
                     .await?;
 
                 if let Some((reporter, progress)) = progress {
@@ -1128,7 +1134,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             let mut hasher = uv_extract::hash::HashReader::new(file, &mut hashers);
 
             // Unzip the wheel to a temporary directory.
-            let mut extracted = ExtractedWheelManifest::extract_streaming(
+            let mut extracted = ExtractedWheel::extract_streaming(
                 &mut hasher,
                 temp_dir.path(),
                 self.content_addressed_cache,
@@ -1147,7 +1153,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
 
             // Persist the temporary directory to the directory store.
             let id = self
-                .persist_extracted_wheel(temp_dir, wheel_entry.path(), extracted.tree)
+                .persist_extracted_wheel(temp_dir, wheel_entry.path(), extracted.into_hashed())
                 .await?;
 
             // Create an archive.
@@ -1191,7 +1197,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 // Unzip the wheel into a temporary directory.
                 let temp_dir = tempfile::tempdir_in(root).map_err(Error::CacheWrite)?;
                 let reader = fs_err::File::open(&path).map_err(Error::CacheWrite)?;
-                let extracted = ExtractedWheelManifest::extract_seekable(
+                let extracted = ExtractedWheel::extract_seekable(
                     reader,
                     temp_dir.path(),
                     content_addressed_cache,
@@ -1207,7 +1213,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
 
         // Persist the temporary directory to the directory store.
         let id = self
-            .persist_extracted_wheel(temp_dir, target, extracted.tree)
+            .persist_extracted_wheel(temp_dir, target, extracted.into_hashed())
             .await?;
 
         Ok(id)
@@ -1221,18 +1227,28 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         &self,
         temp_dir: tempfile::TempDir,
         target: &Path,
-        tree: Option<DirhashTree>,
+        hashed_wheel: Option<HashedWheel>,
     ) -> Result<ArchiveId, Error> {
         let cache = self.build_context.cache();
-        match tree {
-            Some(tree) => {
-                let digest = DirectoryDigest::from(tree.hash());
-                let id = ArchiveId::from_digest(digest.into());
-                cache.persist_with_id(temp_dir, target, id).await
-            }
-            None => cache.persist(temp_dir.keep(), target).await,
-        }
-        .map_err(Error::CacheWrite)
+        let (temp_dir, id) = if let Some(HashedWheel { files, tree }) = hashed_wheel {
+            let digest = DirectoryDigest::from(tree.hash());
+            let id = ArchiveId::from_digest(digest.into());
+            let cache = cache.clone();
+            let temp_dir = tokio::task::spawn_blocking(move || {
+                persist_archive_files(&cache, temp_dir.path(), &files)
+                    .map_err(Error::CacheWrite)?;
+                Ok::<_, Error>(temp_dir)
+            })
+            .await??;
+            (temp_dir, id)
+        } else {
+            (temp_dir, ArchiveId::default())
+        };
+
+        cache
+            .persist_with_id(temp_dir, target, id)
+            .await
+            .map_err(Error::CacheWrite)
     }
 
     /// Returns a GET [`reqwest::Request`] for the given URL.
@@ -1257,14 +1273,20 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
     }
 }
 
-/// The manifest of files extracted from a wheel, along with a hash tree of the unpacked archive.
-struct ExtractedWheelManifest {
-    files: Vec<(PathBuf, u64)>,
-    tree: Option<DirhashTree>,
+/// Per-file digests and the hash tree of an extracted wheel.
+struct HashedWheel {
+    files: Vec<HashedFile>,
+    tree: DirhashTree,
 }
 
-impl ExtractedWheelManifest {
-    /// Extract a wheel from a streaming reader, optionally computing its directory hash tree.
+/// Files extracted from a wheel, with or without content-addressing metadata.
+enum ExtractedWheel {
+    Unhashed(Vec<UnhashedFile>),
+    Hashed(HashedWheel),
+}
+
+impl ExtractedWheel {
+    /// Extract a wheel from a streaming reader, optionally retaining its per-file digests.
     async fn extract_streaming<R>(
         reader: R,
         target: &Path,
@@ -1275,17 +1297,14 @@ impl ExtractedWheelManifest {
     {
         if content_addressed {
             let (files, tree) = uv_extract::stream::unzip_and_hash(reader, target).await?;
-            Ok(Self {
-                files,
-                tree: Some(tree),
-            })
+            Ok(Self::Hashed(HashedWheel { files, tree }))
         } else {
             let files = uv_extract::stream::unzip(reader, target).await?;
-            Ok(Self::without_tree(files))
+            Ok(Self::Unhashed(files))
         }
     }
 
-    /// Extract a wheel from a seekable file, optionally computing its directory hash tree.
+    /// Extract a wheel from a seekable file, optionally retaining its per-file digests.
     fn extract_seekable(
         reader: fs_err::File,
         target: &Path,
@@ -1293,28 +1312,37 @@ impl ExtractedWheelManifest {
     ) -> Result<Self, uv_extract::Error> {
         if content_addressed {
             let (files, tree) = uv_extract::unzip_and_hash(reader, target)?;
-            Ok(Self {
-                files,
-                tree: Some(tree),
-            })
+            Ok(Self::Hashed(HashedWheel { files, tree }))
         } else {
             let files = uv_extract::unzip(reader, target)?;
-            Ok(Self::without_tree(files))
+            Ok(Self::Unhashed(files))
         }
     }
 
-    fn without_tree(files: Vec<(PathBuf, u64)>) -> Self {
-        Self { files, tree: None }
+    /// Return the hashed wheel if content hashing was enabled.
+    fn into_hashed(self) -> Option<HashedWheel> {
+        match self {
+            Self::Unhashed(_) => None,
+            Self::Hashed(wheel) => Some(wheel),
+        }
     }
 
     /// Heal the wheel's `RECORD` and keep its hash tree consistent with the repaired contents.
     fn validate_and_heal_record(&mut self, root: &Path, dist: impl Display) -> Result<(), Error> {
-        let Some(record_path) = validate_and_heal_record(root, self.files.iter(), dist)
-            .map_err(Error::InstallWheelError)?
+        let files = match self {
+            Self::Unhashed(files) => {
+                Either::Left(files.iter().map(|file| (file.path(), file.size())))
+            }
+            Self::Hashed(wheel) => {
+                Either::Right(wheel.files.iter().map(|file| (file.path(), file.size())))
+            }
+        };
+        let Some(record_path) =
+            validate_and_heal_record(root, files, dist).map_err(Error::InstallWheelError)?
         else {
             return Ok(());
         };
-        let Some(tree) = self.tree.as_mut() else {
+        let Self::Hashed(hashed_wheel) = self else {
             return Ok(());
         };
 
@@ -1325,9 +1353,81 @@ impl ExtractedWheelManifest {
             )
         })?;
         let record_path = PortablePath::from(record_path.as_path()).to_string();
-        tree.update_file(&record_path, hash)
+        hashed_wheel
+            .tree
+            .update_file(&record_path, hash)
             .map_err(|err| Error::Extract(record_path, uv_extract::Error::from(err)))
     }
+}
+
+/// Share extracted files other than `RECORD` while keeping the unpublished archive complete.
+fn persist_archive_files(cache: &Cache, archive: &Path, files: &[HashedFile]) -> io::Result<()> {
+    initialize_rayon_once();
+    let targets = files
+        .par_iter()
+        // Keep RECORD private, since it may have been healed after hashing.
+        .filter(|file| !file.path().ends_with("RECORD"))
+        .map(|file| {
+            let id = ArchiveFileId::from_digest(&file.object_digest_hex());
+            (archive.join(file.path()), cache.archive_file(&id))
+        })
+        .collect::<Vec<_>>();
+
+    // Group files by shard so its directory is created once and its files are linked by the
+    // same worker, avoiding contention between workers on each shard directory.
+    let mut shards: FxHashMap<&Path, Vec<_>> = FxHashMap::default();
+    for (source, target) in &targets {
+        let Some(parent) = target.parent() else {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "archive file path must have a parent directory",
+            ));
+        };
+        shards.entry(parent).or_default().push((source, target));
+    }
+
+    let mut shards = shards
+        .into_iter()
+        .map(|(parent, files)| (parent, files, Ok(())))
+        .collect::<Vec<_>>();
+    // Start larger shards first so their work can overlap the remaining directory creation.
+    shards.sort_unstable_by_key(|(_, files, _)| Reverse(files.len()));
+
+    // Creating shards concurrently contends on their shared parent. Keep creation on this
+    // thread, while workers link files in the shards that are already available.
+    in_place_scope(|scope| -> io::Result<()> {
+        for (parent, files, result) in &mut shards {
+            fs_err::create_dir_all(parent)?;
+            scope.spawn(move |_| {
+                *result = files
+                    .iter()
+                    .try_for_each(|(source, target)| persist_archive_file(source, target));
+            });
+        }
+        Ok(())
+    })?;
+
+    shards.into_iter().try_for_each(|(_, _, result)| result)
+}
+
+/// Publish a shared object and retain a hardlink in the archive, with a copy fallback.
+fn persist_archive_file(src: &Path, dst: &Path) -> io::Result<()> {
+    // The shard already exists, and most objects are new, so try linking before checking for an
+    // existing object. This avoids an extra filesystem lookup for every new object.
+    match fs_err::hard_link(src, dst) {
+        Ok(()) => return Ok(()),
+        Err(_) if dst.try_exists()? => {}
+        Err(_) => return uv_fs::copy_atomic_sync(src, dst),
+    }
+
+    // This archive is still private, so it is safe to replace its extracted copy before publication.
+    if let Err(err) = fs_err::remove_file(src)
+        && err.kind() != io::ErrorKind::NotFound
+    {
+        return Err(err);
+    }
+
+    fs_err::hard_link(dst, src).or_else(|_| uv_fs::copy_atomic_sync(dst, src))
 }
 
 /// A wrapper around `RegistryClient` that manages a concurrency limit.

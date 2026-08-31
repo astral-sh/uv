@@ -16427,10 +16427,17 @@ fn handle_record_mismatches() -> Result<()> {
 
     // Healing changes the extracted tree, so the archive ID must reflect the repaired RECORD.
     let extracted = context.temp_dir.join("foo-extracted");
-    let (files, unhealed_tree) =
+    let (hashed_files, unhealed_tree) =
         uv_extract::unzip_and_hash(File::open(&repacked_wheel)?, &extracted)?;
     let unhealed_digest = DirectoryDigest::from(unhealed_tree.hash());
-    assert!(validate_and_heal_record(&extracted, files.iter(), "foo")?.is_some());
+    assert!(
+        validate_and_heal_record(
+            &extracted,
+            hashed_files.iter().map(|file| (file.path(), file.size())),
+            "foo",
+        )?
+        .is_some()
+    );
     let healed_digest = DirectoryDigest::from(dirhash_path(&extracted)?);
     assert_ne!(unhealed_digest, healed_digest);
 
@@ -16440,6 +16447,7 @@ fn handle_record_mismatches() -> Result<()> {
         .arg("--offline")
         .arg("--preview-features")
         .arg("content-addressed-cache")
+        .args(["--link-mode", "hardlink"])
         .arg("foo"), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -16460,6 +16468,15 @@ fn handle_record_mismatches() -> Result<()> {
         .child("archive-v0")
         .child(healed_digest.as_str())
         .assert(predicate::path::exists());
+
+    // Installation must not mutate the healed RECORD retained in the archive.
+    let healed_record = extracted.join("foo-0.1.0.dist-info/RECORD");
+    let cached_record = context
+        .cache_dir
+        .join("archive-v0")
+        .join(healed_digest.as_str())
+        .join("foo-0.1.0.dist-info/RECORD");
+    assert_eq!(fs_err::read(cached_record)?, fs_err::read(healed_record)?);
 
     // Read the healed RECORD.
     let installed_record =

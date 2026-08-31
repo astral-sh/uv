@@ -6561,6 +6561,7 @@ dependencies = [
  "indoc",
  "insta",
  "owo-colors",
+ "rayon",
  "reqwest",
  "rmp-serde",
  "rustc-hash",
@@ -7531,6 +7532,7 @@ dependencies = [
  "uv-python",
  "uv-static",
  "uv-version",
+ "walkdir",
  "wiremock",
 ]
 
