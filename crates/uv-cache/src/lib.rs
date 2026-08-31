@@ -647,6 +647,10 @@ impl Cache {
     }
 
     /// Remove file objects with no hardlinks outside the files bucket.
+    ///
+    /// Archives refer to these objects via hardlinks, independently of the installation link mode.
+    /// Installed copies and reflinks remain valid when the cached file is removed, so they do not
+    /// need to keep the file object alive.
     pub fn prune_archive_files(&self) -> Result<Removal, io::Error> {
         let root = self.bucket(CacheBucket::Files);
         if !root.exists() {

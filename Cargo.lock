@@ -7532,6 +7532,7 @@ dependencies = [
  "uv-python",
  "uv-static",
  "uv-version",
+ "walkdir",
  "wiremock",
 ]
 
