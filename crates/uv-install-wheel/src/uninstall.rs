@@ -1,5 +1,6 @@
 use std::borrow::Cow;
-use std::collections::{BTreeSet, HashSet};
+use std::collections::hash_map::Entry;
+use std::collections::{BTreeSet, HashMap, HashSet};
 use std::fmt::Display;
 use std::ops::ControlFlow;
 use std::path::{Component, Path, PathBuf};
@@ -55,6 +56,7 @@ pub fn uninstall_wheel(
     let mut visited = BTreeSet::new();
     let mut checked_directories = HashSet::new();
     let mut removed_symlinks = HashSet::new();
+    let mut resolved_parents = HashMap::new();
     for entry in &record {
         if !is_path_in_scheme(&entry.path, site_packages, &distribution, layout) {
             continue;
@@ -66,35 +68,40 @@ pub fn uninstall_wheel(
         let (Some(parent), Some(filename)) = (normalized.parent(), normalized.file_name()) else {
             continue;
         };
-        let ControlFlow::Continue(parent) = libraries.resolve(parent, |directory| {
-            if removed_symlinks.contains(directory) {
-                return Ok(ControlFlow::Break(()));
-            }
-            if checked_directories.contains(directory) {
-                return Ok(ControlFlow::Continue(()));
-            }
-            match fs_err::symlink_metadata(directory) {
-                Ok(metadata) if metadata.file_type().is_symlink() => {
-                    remove_symlink(directory)?;
-                    trace!("Removed directory link: {}", directory.display());
-                    removed_symlinks.insert(directory.to_path_buf());
-                    if let Some(parent) = directory.parent() {
-                        visited.insert(parent.to_path_buf());
+        // Reuse each parent's resolution across its RECORD entries. Uninstall only removes
+        // entries, so resolved directories cannot change identity and missing paths stay absent.
+        let resolved = match resolved_parents.entry(parent.to_path_buf()) {
+            Entry::Occupied(entry) => entry.into_mut(),
+            Entry::Vacant(entry) => entry.insert(libraries.resolve(parent, |directory| {
+                if removed_symlinks.contains(directory) {
+                    return Ok(ControlFlow::Break(()));
+                }
+                if checked_directories.contains(directory) {
+                    return Ok(ControlFlow::Continue(()));
+                }
+                match fs_err::symlink_metadata(directory) {
+                    Ok(metadata) if metadata.file_type().is_symlink() => {
+                        remove_symlink(directory)?;
+                        trace!("Removed directory link: {}", directory.display());
+                        removed_symlinks.insert(directory.to_path_buf());
+                        if let Some(parent) = directory.parent() {
+                            visited.insert(parent.to_path_buf());
+                        }
+                        dir_count += 1;
+                        return Ok(ControlFlow::Break(()));
                     }
-                    dir_count += 1;
-                    return Ok(ControlFlow::Break(()));
+                    Ok(_) => {
+                        checked_directories.insert(directory.to_path_buf());
+                    }
+                    Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+                        return Ok(ControlFlow::Break(()));
+                    }
+                    Err(err) => return Err(err.into()),
                 }
-                Ok(_) => {
-                    checked_directories.insert(directory.to_path_buf());
-                }
-                Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
-                    return Ok(ControlFlow::Break(()));
-                }
-                Err(err) => return Err(err.into()),
-            }
-            Ok::<_, Error>(ControlFlow::Continue(()))
-        })?
-        else {
+                Ok::<_, Error>(ControlFlow::Continue(()))
+            })?),
+        };
+        let ControlFlow::Continue(parent) = resolved else {
             continue;
         };
         let path = parent.join(filename);
