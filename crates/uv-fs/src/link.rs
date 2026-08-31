@@ -1,10 +1,12 @@
 //! Utilities for linking a file or directory with various options and automated fallback (e.g., to
 //! copying) when link methods are unsupported.
 
+use std::ffi::OsStr;
 use std::io;
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, RwLock};
 
+use either::Either;
 use rustc_hash::FxHashMap;
 use tracing::debug;
 use uv_warnings::warn_user_once;
@@ -81,7 +83,14 @@ where
     F: Fn(&Path) -> bool,
 {
     if options.directory_symlinks {
-        return link_dir_entries(src, dst, options);
+        if same_file::is_same_file(src, dst).unwrap_or(false) {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "Cannot link a directory onto itself",
+            )
+            .into());
+        }
+        return link_dir_entries(src, dst, options.mode, true, options);
     }
     match options.mode {
         LinkMode::Clone => clone_dir(src, dst, options),
@@ -103,12 +112,18 @@ where
 #[derive(Debug, Default)]
 pub struct CopyLocks {
     dir_locks: Mutex<FxHashMap<PathBuf, Arc<Mutex<()>>>>,
+    directory_parents: Mutex<FxHashMap<PathBuf, Arc<RwLock<()>>>>,
     directory_locks: Mutex<FxHashMap<PathBuf, Arc<Mutex<()>>>>,
 }
 
 impl CopyLocks {
     /// Serialize changes to a directory's representation, including expanding a directory link
     /// before merging another package into it. Separate from the locks used while copying files.
+    ///
+    /// The parent directory must exist. Resolve aliases in the parent without following the final
+    /// directory link, which may itself be replaced while holding the lock.
+    /// ASCII names share the parent lock; non-ASCII names acquire it exclusively to account for
+    /// filesystem-specific Unicode aliases. Acquire ancestor locks before descendant locks.
     pub fn with_directory_lock<T, E>(
         &self,
         path: &Path,
@@ -117,11 +132,56 @@ impl CopyLocks {
     where
         E: From<io::Error>,
     {
+        let path = if let Some(parent) = path.parent()
+            && let Some(name) = path.file_name()
+        {
+            let parent = if parent.as_os_str().is_empty() {
+                Path::new(".")
+            } else {
+                parent
+            };
+            fs_err::canonicalize(parent)?.join(name)
+        } else {
+            fs_err::canonicalize(path)?
+        };
+
+        let parent_lock = path
+            .parent()
+            .map(|parent| {
+                Ok::<_, io::Error>(
+                    self.directory_parents
+                        .lock()
+                        .map_err(|err| io::Error::other(err.to_string()))?
+                        .entry(parent.to_path_buf())
+                        .or_default()
+                        .clone(),
+                )
+            })
+            .transpose()?;
+        let _parent_guard = if let Some(lock) = &parent_lock {
+            Some(if path.file_name().is_some_and(OsStr::is_ascii) {
+                Either::Left(
+                    lock.read()
+                        .map_err(|err| io::Error::other(err.to_string()))?,
+                )
+            } else {
+                Either::Right(
+                    lock.write()
+                        .map_err(|err| io::Error::other(err.to_string()))?,
+                )
+            })
+        } else {
+            None
+        };
+        let path = path.file_name().map_or_else(
+            || path.clone(),
+            |name| path.with_file_name(name.to_ascii_lowercase()),
+        );
         let lock = self
             .directory_locks
             .lock()
             .map_err(|err| io::Error::other(err.to_string()))?
-            .entry(path.to_path_buf())
+            .entry(path)
             .or_default()
             .clone();
         let _guard = lock
@@ -168,7 +228,7 @@ pub struct LinkOptions<'a, F = fn(&Path) -> bool> {
     copy_locks: Option<&'a CopyLocks>,
     /// What to do when the destination directory already exists.
     on_existing_directory: OnExistingDirectory,
-    /// Allow top-level directories to be symlinked, expanding existing links before merging.
+    /// Allow directories to be symlinked, expanding existing links only where merging is needed.
     directory_symlinks: bool,
 }
 
@@ -236,8 +296,8 @@ impl<'a, F> LinkOptions<'a, F> {
         }
     }
 
-    /// Symlink top-level directories in [`LinkMode::Symlink`], unless the mutable-copy filter
-    /// selects the directory. Other modes expand existing directory links before merging.
+    /// Symlink directories in [`LinkMode::Symlink`], unless the mutable-copy filter selects the
+    /// directory or an ancestor. Existing directory links are expanded only where merging is needed.
     /// The filter must select every top-level directory containing mutable files: the contents
     /// of directories eligible for linking are not inspected.
     #[must_use]
@@ -260,17 +320,19 @@ impl<'a, F> LinkOptions<'a, F> {
     }
 }
 
-/// Link top-level entries independently so a package directory can be represented by one link.
+/// Link entries independently, descending into directory links only where merging is needed.
 fn link_dir_entries<F>(
     src: &Path,
     dst: &Path,
+    mode: LinkMode,
+    directory_symlinks: bool,
     options: &LinkOptions<'_, F>,
 ) -> Result<LinkMode, LinkError>
 where
     F: Fn(&Path) -> bool,
 {
     fs_err::create_dir_all(dst)?;
-    let mut state = LinkState::new(options.mode);
+    let mut state = LinkState::new(mode);
     for entry in fs_err::read_dir(src)? {
         let entry = entry?;
         let path = entry.path();
@@ -281,11 +343,19 @@ where
         }
 
         let operation = || {
-            materialize_symlink_dir(&target)?;
-            if state.mode == LinkMode::Symlink && !(options.needs_mutable_copy)(&path) {
+            let directory_symlinks = directory_symlinks && !(options.needs_mutable_copy)(&path);
+            if state.mode == LinkMode::Symlink && directory_symlinks {
                 match create_symlink(&path, &target) {
                     Ok(()) => return Ok(LinkMode::Symlink),
-                    Err(err) if err.kind() == io::ErrorKind::AlreadyExists => {}
+                    Err(err) if err.kind() == io::ErrorKind::AlreadyExists => {
+                        if options.on_existing_directory == OnExistingDirectory::Fail {
+                            return Err(LinkError::Symlink {
+                                from: path.clone(),
+                                to: target.clone(),
+                                err,
+                            });
+                        }
+                    }
                     Err(err) => debug!(
                         "Failed to symlink directory `{}` to `{}`: {err}; linking individual files",
                         path.display(),
@@ -293,7 +363,23 @@ where
                     ),
                 }
             }
-            // These helpers link individual files, without trying directory symlinks again.
+
+            match fs_err::symlink_metadata(&target) {
+                Ok(_) => {
+                    materialize_symlink_dir(&target)?;
+                    return link_dir_entries(
+                        &path,
+                        &target,
+                        state.mode,
+                        directory_symlinks,
+                        options,
+                    );
+                }
+                Err(err) if err.kind() == io::ErrorKind::NotFound => {}
+                Err(err) => return Err(err.into()),
+            }
+
+            // This subtree is new and cannot contain directory links that need expanding.
             match state.mode {
                 LinkMode::Clone => clone_dir(&path, &target, options),
                 mode => walk_and_link(&path, &target, mode, options),
@@ -309,8 +395,9 @@ where
     Ok(state.mode)
 }
 
-/// Replace a directory symlink with real directories and individual file symlinks before merging
-/// new files into it. The caller must serialize changes to `path` with other directory writers.
+/// Replace a directory symlink with a real directory containing links to its immediate children.
+/// Child directories stay linked until they need merging too. The caller must serialize changes
+/// to `path` with other directory writers.
 pub fn materialize_symlink_dir(path: &Path) -> Result<(), LinkError> {
     match fs_err::symlink_metadata(path) {
         Ok(metadata) if metadata.file_type().is_symlink() => {}
@@ -323,11 +410,10 @@ pub fn materialize_symlink_dir(path: &Path) -> Result<(), LinkError> {
         .parent()
         .ok_or_else(|| io::Error::other("Directory link has no parent"))?;
     let temporary = tempfile::tempdir_in(parent)?;
-    walk_and_link(
+    link_dir(
         &source,
         temporary.path(),
-        LinkMode::Symlink,
-        &LinkOptions::new(LinkMode::Symlink),
+        &LinkOptions::new(LinkMode::Symlink).with_directory_symlinks(),
     )?;
     crate::remove_symlink(path)?;
     if let Err(err) = fs_err::rename(temporary.path(), path) {
@@ -766,7 +852,11 @@ where
     F: Fn(&Path) -> bool,
 {
     if (options.needs_mutable_copy)(path) {
-        copy_file(path, target, options)?;
+        if options.on_existing_directory == OnExistingDirectory::Merge {
+            atomic_copy_overwrite(path, target, options)?;
+        } else {
+            copy_file(path, target, options)?;
+        }
         return Ok(state);
     }
 
@@ -825,7 +915,11 @@ where
     F: Fn(&Path) -> bool,
 {
     if (options.needs_mutable_copy)(path) {
-        copy_file(path, target, options)?;
+        if options.on_existing_directory == OnExistingDirectory::Merge {
+            atomic_copy_overwrite(path, target, options)?;
+        } else {
+            copy_file(path, target, options)?;
+        }
         return Ok(state);
     }
 
@@ -1149,6 +1243,54 @@ mod tests {
         // If symlink succeeded, verify files are symlinks
         if result == LinkMode::Symlink {
             assert!(dst_dir.path().join("file1.txt").is_symlink());
+        }
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn test_directory_symlinks_fail_preserves_existing() {
+        let src_dir = test_tempdir();
+        let existing_dir = test_tempdir();
+        let dst_dir = test_tempdir();
+
+        fs_err::create_dir_all(src_dir.path().join("package")).unwrap();
+        fs_err::write(src_dir.path().join("package/new.txt"), "new").unwrap();
+        fs_err::write(existing_dir.path().join("existing.txt"), "existing").unwrap();
+        create_symlink(existing_dir.path(), &dst_dir.path().join("package")).unwrap();
+
+        let options = LinkOptions::new(LinkMode::Symlink)
+            .with_directory_symlinks()
+            .with_on_existing_directory(OnExistingDirectory::Fail);
+        let result = link_dir(src_dir.path(), dst_dir.path(), &options);
+
+        assert_matches!(result, Err(LinkError::Symlink { err, .. }) if err.kind() == io::ErrorKind::AlreadyExists);
+        assert_eq!(
+            fs_err::read_link(dst_dir.path().join("package")).unwrap(),
+            existing_dir.path()
+        );
+        assert!(!existing_dir.path().join("new.txt").exists());
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn test_directory_symlinks_onto_self() {
+        let src_dir = test_tempdir();
+        let aliases = test_tempdir();
+
+        create_test_tree(src_dir.path());
+        let alias = aliases.path().join("source");
+        create_symlink(src_dir.path(), &alias).unwrap();
+
+        let options = LinkOptions::new(LinkMode::Symlink)
+            .with_directory_symlinks()
+            .with_on_existing_directory(OnExistingDirectory::Merge);
+        for target in [src_dir.path(), alias.as_path()] {
+            let result = link_dir(src_dir.path(), target, &options);
+
+            assert_matches!(result, Err(LinkError::Io(err)) if err.kind() == io::ErrorKind::InvalidInput);
+            assert!(!src_dir.path().join("file1.txt").is_symlink());
+            assert!(!src_dir.path().join("subdir").is_symlink());
+            verify_test_tree(src_dir.path());
         }
     }
 

@@ -1,7 +1,9 @@
 use std::collections::{BTreeMap, HashMap};
+use std::convert::Infallible;
 use std::fmt::Display;
 use std::io;
 use std::io::{BufReader, Read, Write};
+use std::ops::ControlFlow;
 use std::path::{Path, PathBuf};
 
 use data_encoding::BASE64URL_NOPAD;
@@ -15,13 +17,17 @@ use tracing::{debug, instrument, trace, warn};
 use walkdir::WalkDir;
 
 use uv_fs::link::materialize_symlink_dir;
-use uv_fs::{PortablePath, Simplified, normalize_path_under, persist_with_retry_sync, relative_to};
+use uv_fs::{
+    PortablePath, Simplified, copy_atomic_sync, normalize_path_under, persist_with_retry_sync,
+    relative_to,
+};
 use uv_normalize::PackageName;
 use uv_pypi_types::DirectUrl;
 use uv_shell::escape_posix_for_single_quotes;
 use uv_trampoline_builder::windows_script_launcher;
 use uv_warnings::warn_user_once;
 
+use crate::directory::LibraryDirectories;
 use crate::linker::InstallState;
 use crate::record::RecordEntry;
 use crate::script::{EntryPoints, Script};
@@ -472,7 +478,7 @@ fn move_folder_recorded(
     state: &InstallState,
 ) -> Result<(), Error> {
     let mut rename_or_copy = RenameOrCopy::default();
-    fs::create_dir_all(dest_dir)?;
+    let directories = LibraryDirectories::new(layout)?;
     for entry in WalkDir::new(src_dir) {
         let entry = entry?;
         let src = entry.path();
@@ -488,18 +494,16 @@ fn move_folder_recorded(
             .expect("prefix must not change");
         let target = dest_dir.join(relative_to_data);
         if entry.file_type().is_dir() {
-            // Only package directories can be links created by our installer. Preserve symlinks
-            // in the installation scheme itself (for example, a symlinked `lib` directory).
-            if target.parent().is_some_and(|parent| {
-                parent == layout.scheme.purelib || parent == layout.scheme.platlib
-            }) {
-                state.copy_locks().with_directory_lock(&target, || {
-                    materialize_symlink_dir(&target)?;
-                    fs::create_dir_all(&target)?;
-                    Ok::<_, Error>(())
-                })?;
-            } else {
-                fs::create_dir_all(&target)?;
+            let resolved = directories.resolve(&target, |directory| {
+                state.copy_locks().with_directory_lock(directory, || {
+                    materialize_symlink_dir(directory)?;
+                    fs::create_dir_all(directory)?;
+                    Ok::<_, Error>(ControlFlow::<Infallible>::Continue(()))
+                })
+            })?;
+            match resolved {
+                ControlFlow::Continue(directory) => fs::create_dir_all(directory)?,
+                ControlFlow::Break(never) => match never {},
             }
         } else {
             validate_data_script_destination(&target, &layout.scheme.scripts)?;
@@ -1214,7 +1218,8 @@ impl RenameOrCopy {
     /// Try to rename, and on failure, copy.
     ///
     /// Usually, source and target are on the same device, so we can rename, but if that fails, we
-    /// have to copy. If renaming failed once, we switch to copy permanently.
+    /// have to copy. If renaming failed once, we switch to copy permanently. Copies replace the
+    /// destination atomically so an existing file symlink is never followed into the wheel cache.
     fn rename_or_copy(&mut self, from: impl AsRef<Path>, to: impl AsRef<Path>) -> io::Result<()> {
         match self {
             Self::Rename => match fs_err::rename(from.as_ref(), to.as_ref()) {
@@ -1222,11 +1227,11 @@ impl RenameOrCopy {
                 Err(err) => {
                     *self = Self::Copy;
                     debug!("Failed to rename, falling back to copy: {err}");
-                    fs_err::copy(from.as_ref(), to.as_ref())?;
+                    copy_atomic_sync(from.as_ref(), to.as_ref())?;
                 }
             },
             Self::Copy => {
-                fs_err::copy(from.as_ref(), to.as_ref())?;
+                copy_atomic_sync(from.as_ref(), to.as_ref())?;
             }
         }
         Ok(())
@@ -1241,12 +1246,37 @@ mod test {
 
     use anyhow::Result;
     use assert_fs::prelude::*;
+    #[cfg(unix)]
+    use fs_err::os::unix::fs::symlink;
     use indoc::{formatdoc, indoc};
 
+    #[cfg(unix)]
+    use super::RenameOrCopy;
     use super::{
         Error, RecordEntry, Script, WheelFile, format_shebang, get_script_executable,
         parse_email_message_file, parse_scripts, read_record, write_installer_metadata,
     };
+
+    #[cfg(unix)]
+    #[test]
+    fn copy_data_over_existing_symlink() -> Result<()> {
+        let temporary = assert_fs::TempDir::new()?;
+        let source = temporary.child("source");
+        let cached = temporary.child("cached");
+        let target = temporary.child("target");
+        source.write_str("new data")?;
+        cached.write_str("cached data")?;
+        symlink(cached.path(), target.path())?;
+
+        // Exercise the fallback without requiring two filesystems in the test environment.
+        RenameOrCopy::Copy.rename_or_copy(source.path(), target.path())?;
+
+        assert!(!target.path().is_symlink());
+        target.assert("new data");
+        cached.assert("cached data");
+        source.assert("new data");
+        Ok(())
+    }
 
     #[test]
     fn test_parse_email_message_file() {

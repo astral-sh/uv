@@ -17,6 +17,7 @@ pub use record::RecordEntry;
 pub use uninstall::{Uninstall, uninstall_egg, uninstall_legacy_editable, uninstall_wheel};
 pub use wheel::{WheelFile, read_record, read_record_into_iter, validate_and_heal_record};
 
+mod directory;
 mod install;
 mod linker;
 mod record;

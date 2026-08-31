@@ -1,6 +1,7 @@
 use std::borrow::Cow;
 use std::collections::{BTreeSet, HashSet};
 use std::fmt::Display;
+use std::ops::ControlFlow;
 use std::path::{Component, Path, PathBuf};
 use std::sync::{LazyLock, Mutex, OnceLock};
 
@@ -10,6 +11,7 @@ use uv_fs::{remove_symlink, write_atomic_sync};
 use uv_pypi_types::Identifier;
 use uv_warnings::warn_user;
 
+use crate::directory::LibraryDirectories;
 use crate::wheel::read_record;
 use crate::{Error, Layout};
 
@@ -37,6 +39,7 @@ pub fn uninstall_wheel(
         };
         read_record(&mut record_file)?
     };
+    let libraries = LibraryDirectories::new(layout)?;
 
     let mut file_count = 0usize;
     let mut dir_count = 0usize;
@@ -49,33 +52,48 @@ pub fn uninstall_wheel(
     let mut checked_directories = HashSet::new();
     let mut removed_symlinks = HashSet::new();
     for entry in &record {
-        let path = site_packages.join(&entry.path);
-
         if !is_path_in_scheme(&entry.path, site_packages, &distribution, layout) {
             continue;
         }
 
-        // A directory link owns all the files beneath it. Remove the link once instead of
-        // following RECORD paths into the shared wheel cache. Shared package directories are
-        // expanded into real directories during installation, so normal per-file removal applies.
-        let normalized = normalize_path(&path);
-        if let Ok(relative) = normalized.strip_prefix(site_packages) {
-            let mut components = relative.components();
-            if let Some(Component::Normal(name)) = components.next()
-                && components.next().is_some()
-            {
-                let directory = site_packages.join(name);
-                if removed_symlinks.contains(&directory) {
-                    continue;
-                }
-                if checked_directories.insert(directory.clone()) && directory.is_symlink() {
-                    remove_symlink(&directory)?;
-                    removed_symlinks.insert(directory);
-                    dir_count += 1;
-                    continue;
+        // Resolve scheme aliases without following package directory links into the cache.
+        // A link owns all the files beneath it, so remove it once, including nested links left
+        // beneath shared namespace directories. Keep the final file component unresolved.
+        let normalized = normalize_path(&site_packages.join(&entry.path));
+        let (Some(parent), Some(filename)) = (normalized.parent(), normalized.file_name()) else {
+            continue;
+        };
+        let ControlFlow::Continue(parent) = libraries.resolve(parent, |directory| {
+            if removed_symlinks.contains(directory) {
+                return Ok(ControlFlow::Break(()));
+            }
+            if !checked_directories.contains(directory) {
+                match fs_err::symlink_metadata(directory) {
+                    Ok(metadata) if metadata.file_type().is_symlink() => {
+                        remove_symlink(directory)?;
+                        trace!("Removed directory link: {}", directory.display());
+                        removed_symlinks.insert(directory.to_path_buf());
+                        if let Some(parent) = directory.parent() {
+                            visited.insert(parent.to_path_buf());
+                        }
+                        dir_count += 1;
+                        return Ok(ControlFlow::Break(()));
+                    }
+                    Ok(_) => {
+                        checked_directories.insert(directory.to_path_buf());
+                    }
+                    Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+                        return Ok(ControlFlow::Break(()));
+                    }
+                    Err(err) => return Err(err.into()),
                 }
             }
-        }
+            Ok::<_, Error>(ControlFlow::Continue(()))
+        })?
+        else {
+            continue;
+        };
+        let path = parent.join(filename);
 
         // On Windows, deleting the current executable is a special case.
         #[cfg(windows)]
@@ -91,7 +109,7 @@ pub fn uninstall_wheel(
                             trace!("Removed file: {}", path.display());
                             file_count += 1;
                             if let Some(parent) = path.parent() {
-                                visited.insert(normalize_path(parent));
+                                visited.insert(parent.to_path_buf());
                             }
                         }
                         Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
@@ -107,7 +125,7 @@ pub fn uninstall_wheel(
                 trace!("Removed file: {}", path.display());
                 file_count += 1;
                 if let Some(parent) = path.parent() {
-                    visited.insert(normalize_path(parent));
+                    visited.insert(parent.to_path_buf());
                 }
             }
             Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
@@ -125,21 +143,12 @@ pub fn uninstall_wheel(
     // If any directories were left empty, remove them. Iterate in reverse order such that we visit
     // the deepest directories first.
     for path in visited.iter().rev() {
-        // No need to look at directories outside of `site-packages` (like `bin`).
-        if !path.starts_with(site_packages) {
-            continue;
-        }
-
         // Iterate up the directory tree, removing any empty directories. It's insufficient to
         // rely on `visited` alone here, because we may end up removing a directory whose parent
-        // directory doesn't contain any files, leaving the _parent_ directory empty.
+        // directory doesn't contain any files, leaving the _parent_ directory empty. Stop at the
+        // library root, and leave directories elsewhere in the scheme (like `bin`) alone.
         let mut path = path.as_path();
-        loop {
-            // If we reach the site-packages directory, we're done.
-            if path == site_packages {
-                break;
-            }
-
+        while libraries.contains(path) {
             // If the directory contains a `__pycache__` directory, always remove it. `__pycache__`
             // may or may not be listed in the RECORD, but installers are expected to be smart
             // enough to remove it either way.
