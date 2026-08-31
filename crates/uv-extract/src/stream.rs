@@ -85,27 +85,6 @@ pub async fn unzip<R: tokio::io::AsyncRead + Unpin>(
     Ok(files)
 }
 
-/// Unpack a `.zip` archive into the target directory while computing a hash tree of the extracted
-/// files.
-///
-/// The tree includes regular-file paths, contents, and empty directories. ZIP entries are never
-/// followed as symlinks; non-directory entries are materialized and hashed as regular files.
-///
-/// See [`unzip`] for details.
-pub async fn unzip_and_hash<R: tokio::io::AsyncRead + Unpin>(
-    reader: R,
-    target: impl AsRef<Path>,
-) -> Result<(Vec<HashedFile>, DirhashTree), Error> {
-    let UnzipOutput::Hashed { files, tree } =
-        Box::pin(unzip_inner::<_, false>(reader, target, true, None)).await?
-    else {
-        return Err(Error::Io(std::io::Error::other(
-            "streaming ZIP hash tree was not computed",
-        )));
-    };
-    Ok((files, tree))
-}
-
 /// Extract a streaming ZIP archive with synchronous filesystem operations.
 ///
 /// This uses the same parser and validation as [`unzip`]. Call it on a blocking thread.
@@ -127,8 +106,11 @@ pub fn unzip_blocking<R: tokio::io::AsyncRead + Unpin>(
 
 /// Extract and hash a streaming ZIP archive with synchronous filesystem operations.
 ///
-/// Returns the same per-file digests and hash tree as [`unzip_and_hash`]. See [`unzip_blocking`] for
-/// requirements on the reader, calling thread, and cleanup after cancellation.
+/// The tree includes regular-file paths, contents, and empty directories. ZIP entries are never
+/// followed as symlinks; non-directory entries are materialized and hashed as regular files.
+///
+/// See [`unzip_blocking`] for requirements on the reader, calling thread, and cleanup after
+/// cancellation.
 pub fn unzip_blocking_and_hash<R: tokio::io::AsyncRead + Unpin>(
     reader: R,
     target: &Path,
