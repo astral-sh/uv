@@ -785,7 +785,7 @@ fn python_install_preview_no_bin() {
         .with_python_download_cache();
 
     // Install the latest version
-    uv_snapshot!(context.filters(), context.python_install().arg("--no-shim").arg("--preview").arg("--no-bin"), @"
+    uv_snapshot!(context.filters(), context.python_install().arg("--preview").arg("--no-bin"), @"
     exit_code: 0 (success)
     ----- stderr -----
     Installed Python 3.14.[LATEST] in [TIME]
@@ -799,7 +799,7 @@ fn python_install_preview_no_bin() {
     // The executable should not be installed in the bin directory
     bin_python.assert(predicate::path::missing());
 
-    uv_snapshot!(context.filters(), context.python_install().arg("--no-shim").arg("--preview").arg("--no-bin").arg("--default"), @"
+    uv_snapshot!(context.filters(), context.python_install().arg("--preview").arg("--no-bin").arg("--default"), @"
     exit_code: 2 (failure)
     ----- stderr -----
     error: the argument '--no-bin' cannot be used with '--default'

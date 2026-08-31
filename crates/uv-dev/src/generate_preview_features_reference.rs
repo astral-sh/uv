@@ -145,7 +145,7 @@ mod tests {
           not normalized.
         - `pylock`: Allows installing from `pylock.toml` files.
         - `python-install-default`: Allows [installing `python` and `python3` executables](./python-versions.md#installing-python-executables).
-        - `python-shim`: Allows installing a `python` shim with `uv python install`.
+        - `python-shim`: Allows installing Python shims with `uv python install`.
         - `relocatable-envs-default`: Creates relocatable virtual environments by default.
         - `s3-endpoint`: Allows signing requests to configured S3-compatible endpoints.
         - `sbom-export`: Allows using `uv export --format=cyclonedx1.5`.

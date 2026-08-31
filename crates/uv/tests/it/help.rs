@@ -653,10 +653,10 @@ fn help_subsubcommand() {
               If multiple Python versions are requested, uv will exit with an error.
 
           --shim
-              Install a `python` shim
+              Install Python shims
 
           --no-shim
-              Do not install a `python` shim
+              Do not install Python shims
 
           --compile-bytecode
               Compile Python's standard library to bytecode after installation.
@@ -917,9 +917,9 @@ fn help_flag_subsubcommand() {
           --default
               Use as the default Python version
           --shim
-              Install a `python` shim
+              Install Python shims
           --no-shim
-              Do not install a `python` shim
+              Do not install Python shims
           --compile-bytecode
               Compile Python's standard library to bytecode after installation [env:
               UV_COMPILE_BYTECODE=]

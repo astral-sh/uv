@@ -1,9 +1,9 @@
 use std::convert::Infallible;
 use std::io::Write;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use std::{
-    ffi::OsString,
+    ffi::{OsStr, OsString},
     process::{Command, ExitCode, ExitStatus},
 };
 use uv_static::EnvVars;
@@ -101,6 +101,25 @@ fn parse_options(mut args: Vec<OsString>) -> (Vec<OsString>, Options) {
     (args.split_off(position), options)
 }
 
+/// Infer a CPython request from the invoked shim name, without resolving symlinks.
+fn request_from_name(executable: &OsStr) -> Option<String> {
+    let name = Path::new(executable).file_name()?.to_str()?;
+    #[cfg(windows)]
+    let lowercase_name = name.to_ascii_lowercase();
+    #[cfg(windows)]
+    let name = lowercase_name.as_str();
+    let name = name.strip_suffix(".exe").unwrap_or(name);
+    let suffix = name.strip_prefix("python")?;
+    match suffix {
+        // Unversioned variant names still need a version in the request syntax.
+        "t" | "d" | "td" => Some(format!("cpython@3{suffix}")),
+        _ if suffix.starts_with(|character: char| character.is_ascii_digit()) => {
+            Some(format!("cpython@{suffix}"))
+        }
+        _ => None,
+    }
+}
+
 /// Find the `uv` binary to use.
 fn find_uv() -> Result<PathBuf, Error> {
     // We prefer one next to the current binary.
@@ -120,8 +139,13 @@ fn run() -> Result<ExitStatus, Error> {
         return Err(Error::RecursiveQuery);
     }
 
-    let args = std::env::args_os().skip(1).collect::<Vec<_>>();
-    let (args, options) = parse_options(args);
+    let mut args = std::env::args_os();
+    let request = args.next().as_deref().and_then(request_from_name);
+    let (args, mut options) = parse_options(args.collect());
+    // An explicit `+<request>` takes precedence over the executable name.
+    if options.request.is_none() {
+        options.request = request;
+    }
     let uv = find_uv()?;
     let mut cmd = Command::new(uv);
     let uv_args = ["python", "find"].iter().copied().chain(options.as_args());
