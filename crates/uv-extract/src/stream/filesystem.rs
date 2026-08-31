@@ -1,4 +1,4 @@
-//! Filesystem operations shared by asynchronous and buffered ZIP extraction.
+//! Filesystem operations shared by asynchronous and blocking ZIP extraction.
 
 use std::io;
 use std::path::Path;

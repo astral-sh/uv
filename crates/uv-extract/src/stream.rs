@@ -102,32 +102,36 @@ pub async fn unzip_and_hash<R: tokio::io::AsyncRead + Unpin>(
     Ok((files, tree))
 }
 
-/// Extract a buffered ZIP archive with synchronous filesystem operations.
+/// Extract a streaming ZIP archive with synchronous filesystem operations.
 ///
 /// This uses the same parser and validation as [`unzip`]. Call it on a blocking thread.
-pub fn unzip_buffered(reader: &[u8], target: &Path) -> Result<Vec<UnhashedFile>, Error> {
+/// The reader must be driven independently of this thread, for example through a bounded pipe.
+pub fn unzip_blocking<R: tokio::io::AsyncRead + Unpin>(
+    reader: R,
+    target: &Path,
+) -> Result<Vec<UnhashedFile>, Error> {
     let UnzipOutput::Unhashed(files) =
         block_on(Box::pin(unzip_inner::<_, true>(reader, target, false)))?
     else {
         return Err(Error::Io(std::io::Error::other(
-            "buffered ZIP hash tree was unexpectedly computed",
+            "streaming ZIP hash tree was unexpectedly computed",
         )));
     };
     Ok(files)
 }
 
-/// Extract and hash a buffered ZIP archive with synchronous filesystem operations.
+/// Extract and hash a streaming ZIP archive with synchronous filesystem operations.
 ///
-/// This uses the same parser and validation as [`unzip_and_hash`]. Call it on a blocking thread.
-pub fn unzip_buffered_and_hash(
-    reader: &[u8],
+/// See [`unzip_blocking`] for requirements on the reader and calling thread.
+pub fn unzip_blocking_and_hash<R: tokio::io::AsyncRead + Unpin>(
+    reader: R,
     target: &Path,
 ) -> Result<(Vec<HashedFile>, DirhashTree), Error> {
     let UnzipOutput::Hashed { files, tree } =
         block_on(Box::pin(unzip_inner::<_, true>(reader, target, true)))?
     else {
         return Err(Error::Io(std::io::Error::other(
-            "buffered ZIP hash tree was not computed",
+            "streaming ZIP hash tree was not computed",
         )));
     };
     Ok((files, tree))

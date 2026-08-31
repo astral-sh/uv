@@ -12,7 +12,7 @@ use futures::{FutureExt, TryStreamExt};
 use rayon::in_place_scope;
 use rayon::prelude::*;
 use rustc_hash::FxHashMap;
-use tokio::io::{AsyncRead, AsyncReadExt, AsyncSeekExt, ReadBuf};
+use tokio::io::{AsyncRead, AsyncReadExt, AsyncSeekExt, AsyncWriteExt, ReadBuf};
 use tokio::sync::Semaphore;
 use tokio_util::compat::FuturesAsyncReadCompatExt;
 use tracing::{Instrument, info_span, instrument, warn};
@@ -47,10 +47,6 @@ use crate::hash::http_hash_algorithms;
 use crate::metadata::{ArchiveMetadata, Metadata};
 use crate::source::SourceDistributionBuilder;
 use crate::{Error, LocalWheel, Reporter, RequiresDist};
-
-const SMALL_WHEEL_BUFFER_SIZE: usize = 2 * 1024 * 1024;
-// Bound compressed wheel buffers to 32 MiB across concurrent downloads and extraction workers.
-static SMALL_WHEEL_BUFFERS: Semaphore = Semaphore::const_new(16);
 
 /// A cached high-level interface to convert distributions (a requirement resolved to a location)
 /// to a wheel or wheel metadata.
@@ -711,8 +707,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
 
         let download = |response: reqwest::Response| {
             async {
-                let response_size = content_length(&response);
-                let progress_size = size.or(response_size);
+                let progress_size = size.or_else(|| content_length(&response));
 
                 let progress = self.reporter.as_ref().map(|reporter| {
                     (
@@ -738,20 +733,18 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 let (temp_dir, mut extracted) = match progress {
                     Some((reporter, progress)) => {
                         let mut reader = ProgressReader::new(&mut hasher, progress, &**reporter);
-                        ExtractedWheel::extract_adaptive(
+                        ExtractedWheel::extract_in_background(
                             &mut reader,
                             temp_dir,
                             self.content_addressed_cache,
-                            response_size.or(size),
                         )
                         .await
                         .map_err(|err| Error::Extract(filename.to_string(), err))?
                     }
-                    None => ExtractedWheel::extract_adaptive(
+                    None => ExtractedWheel::extract_in_background(
                         &mut hasher,
                         temp_dir,
                         self.content_addressed_cache,
-                        response_size.or(size),
                     )
                     .await
                     .map_err(|err| Error::Extract(filename.to_string(), err))?,
@@ -1310,72 +1303,67 @@ enum ExtractedWheel {
 }
 
 impl ExtractedWheel {
-    /// Buffer small wheels under a shared memory budget, then extract in one blocking task.
-    async fn extract_adaptive<R>(
+    /// Feed the download through a bounded pipe to a single extraction worker.
+    ///
+    /// Filesystem operations run synchronously on the worker, while downloading and hashing remain
+    /// asynchronous. The pipe applies backpressure without buffering the entire wheel.
+    async fn extract_in_background<R>(
         mut reader: R,
         temp_dir: tempfile::TempDir,
         content_addressed: bool,
-        size: Option<u64>,
     ) -> Result<(tempfile::TempDir, Self), uv_extract::Error>
     where
         R: AsyncRead + Unpin,
     {
-        if let Some(size) = size
-            && size < SMALL_WHEEL_BUFFER_SIZE as u64
-            && let Ok(permit) = SMALL_WHEEL_BUFFERS.try_acquire()
-        {
-            // Treat the reported size as a hint, not an allocation limit: a response can be larger.
-            let mut bytes = Vec::with_capacity(SMALL_WHEEL_BUFFER_SIZE);
-            let mut bounded_reader = (&mut reader).take(SMALL_WHEEL_BUFFER_SIZE as u64);
-            while bytes.len() < SMALL_WHEEL_BUFFER_SIZE {
-                if bounded_reader
-                    .read_buf(&mut bytes)
-                    .await
-                    .map_err(uv_extract::Error::Io)?
-                    == 0
-                {
+        const READ_BUFFER_SIZE: usize = 128 * 1024;
+        const PIPE_BUFFER_SIZE: usize = 1024 * 1024;
+
+        // Allow the download to get ahead while the worker decompresses and writes files.
+        let (sender, receiver) = tokio::io::duplex(PIPE_BUFFER_SIZE);
+        let mut extraction = tokio::task::spawn_blocking(move || {
+            // Keep the directory alive until the worker stops, even if the download is cancelled.
+            let extracted = if content_addressed {
+                let (files, tree) =
+                    uv_extract::stream::unzip_blocking_and_hash(receiver, temp_dir.path())?;
+                Self::Hashed(HashedWheel { files, tree })
+            } else {
+                let files = uv_extract::stream::unzip_blocking(receiver, temp_dir.path())?;
+                Self::Unhashed(files)
+            };
+            Ok::<_, uv_extract::Error>((temp_dir, extracted))
+        });
+        let download = async {
+            // Own the write end so EOF, errors and cancellation all close the pipe.
+            let mut sender = sender;
+            let mut buffer = vec![0; READ_BUFFER_SIZE];
+            loop {
+                let read = reader.read(&mut buffer).await?;
+                if read == 0 {
                     break;
                 }
+                if let Err(err) = sender.write_all(&buffer[..read]).await {
+                    if err.kind() == io::ErrorKind::BrokenPipe {
+                        // The worker either rejected the archive or finished early because ZIP
+                        // validation is disabled. The caller drains the download in the latter case.
+                        break;
+                    }
+                    return Err(err);
+                }
             }
-            if bytes.len() < SMALL_WHEEL_BUFFER_SIZE {
-                return tokio::task::spawn_blocking(move || {
-                    // Keep the buffer budget and temporary directory alive even if cancelled.
-                    let _permit = permit;
-                    let extracted =
-                        Self::extract_buffered(&bytes, temp_dir.path(), content_addressed)?;
-                    Ok((temp_dir, extracted))
-                })
-                .await
-                .map_err(|err| uv_extract::Error::Io(io::Error::other(err)))?;
+            Ok::<_, io::Error>(())
+        };
+        let extraction = tokio::select! {
+            // Prefer a download error over the resulting truncated-ZIP error if both are ready.
+            biased;
+            download = download => {
+                let extraction = extraction.await;
+                download.map_err(uv_extract::Error::Io)?;
+                extraction
             }
-
-            // The response exceeded the bound. Replay the already-hashed prefix, then stream.
-            let extracted = Self::extract_streaming(
-                bytes.as_slice().chain(reader),
-                temp_dir.path(),
-                content_addressed,
-            )
-            .await?;
-            return Ok((temp_dir, extracted));
-        }
-
-        let extracted = Self::extract_streaming(reader, temp_dir.path(), content_addressed).await?;
-        Ok((temp_dir, extracted))
-    }
-
-    /// Extract buffered bytes using the streaming parser and synchronous filesystem operations.
-    fn extract_buffered(
-        bytes: &[u8],
-        target: &Path,
-        content_addressed: bool,
-    ) -> Result<Self, uv_extract::Error> {
-        if content_addressed {
-            let (files, tree) = uv_extract::stream::unzip_buffered_and_hash(bytes, target)?;
-            Ok(Self::Hashed(HashedWheel { files, tree }))
-        } else {
-            let files = uv_extract::stream::unzip_buffered(bytes, target)?;
-            Ok(Self::Unhashed(files))
-        }
+            // Stop reading even if the server stalls after sending an invalid ZIP entry.
+            extraction = &mut extraction => extraction,
+        };
+        extraction.map_err(|err| uv_extract::Error::Io(io::Error::other(err)))?
     }
 
     /// Extract a wheel from a streaming reader, optionally computing its directory hash tree.
@@ -1696,14 +1684,20 @@ impl PathArchivePointer {
 
 #[cfg(test)]
 mod tests {
+    use std::io;
+    use std::time::Duration;
+
+    use futures::{StreamExt, TryStreamExt, stream};
+    use tokio_util::compat::FuturesAsyncReadCompatExt;
+
     use uv_extract::dirhash::dirhash_path;
     use uv_extract::hash::{HashReader, Hasher};
     use uv_pypi_types::{HashAlgorithm, HashDigest};
 
-    use super::{ExtractedWheel, SMALL_WHEEL_BUFFER_SIZE, SMALL_WHEEL_BUFFERS};
+    use super::ExtractedWheel;
 
     #[tokio::test]
-    async fn adaptive_extraction_preserves_files_and_hashes() -> anyhow::Result<()> {
+    async fn background_extraction_preserves_files_and_hashes() -> anyhow::Result<()> {
         let wheel = include_bytes!("../../../test/links/ok-1.0.0-py3-none-any.whl").as_slice();
         let reference_dir = tempfile::tempdir()?;
         let ExtractedWheel::Hashed(reference) =
@@ -1713,23 +1707,10 @@ mod tests {
         };
         let reference_digest = dirhash_path(reference_dir.path())?;
 
-        // ZIP permits trailing null bytes. Use them to exercise the actual buffer limit even
-        // when the reported download size is wrong, without changing the extracted contents.
+        // ZIP permits trailing null bytes. Exceed the pipe capacity without changing the contents.
         let mut large_wheel = wheel.to_vec();
-        large_wheel.resize(SMALL_WHEEL_BUFFER_SIZE + 1, 0);
-        for (bytes, size, budget_available) in [
-            (wheel, Some(wheel.len() as u64), true),
-            (wheel, None, true),
-            (wheel, Some(wheel.len() as u64), false),
-            (&large_wheel[..SMALL_WHEEL_BUFFER_SIZE], Some(1), true),
-            (large_wheel.as_slice(), Some(1), true),
-            (large_wheel.as_slice(), Some(large_wheel.len() as u64), true),
-        ] {
-            let _permit = if budget_available {
-                None
-            } else {
-                Some(SMALL_WHEEL_BUFFERS.acquire_many(16).await?)
-            };
+        large_wheel.resize(2 * 1024 * 1024, 0);
+        for bytes in [wheel, large_wheel.as_slice()] {
             let mut expected_hashers = [Hasher::from(HashAlgorithm::Sha256)];
             HashReader::new(bytes, &mut expected_hashers)
                 .finish()
@@ -1740,11 +1721,10 @@ mod tests {
             for content_addressed in [false, true] {
                 let mut hashers = [Hasher::from(HashAlgorithm::Sha256)];
                 let mut reader = HashReader::new(bytes, &mut hashers);
-                let (target, extracted) = ExtractedWheel::extract_adaptive(
+                let (target, extracted) = ExtractedWheel::extract_in_background(
                     &mut reader,
                     tempfile::tempdir()?,
                     content_addressed,
-                    size,
                 )
                 .await?;
                 reader.finish().await?;
@@ -1775,6 +1755,86 @@ mod tests {
                 }
             }
         }
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn background_extraction_stops_a_stalled_download_on_zip_error() -> anyhow::Result<()> {
+        let mut bytes = include_bytes!("../../../test/links/ok-1.0.0-py3-none-any.whl").to_vec();
+        bytes[14] ^= 1;
+        let chunks = stream::iter([Ok::<_, io::Error>(bytes.as_slice())]).chain(stream::pending());
+        let result = tokio::time::timeout(
+            Duration::from_secs(2),
+            ExtractedWheel::extract_in_background(
+                chunks.into_async_read().compat(),
+                tempfile::tempdir()?,
+                false,
+            ),
+        )
+        .await?;
+        assert!(matches!(result, Err(uv_extract::Error::BadCrc32 { .. })));
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn background_extraction_preserves_download_errors() -> anyhow::Result<()> {
+        let wheel = include_bytes!("../../../test/links/ok-1.0.0-py3-none-any.whl").as_slice();
+        for kind in [io::ErrorKind::ConnectionReset, io::ErrorKind::BrokenPipe] {
+            let chunks = stream::iter([
+                Ok(&wheel[..100]),
+                Err(io::Error::new(kind, "download interrupted")),
+            ]);
+            let result = tokio::time::timeout(
+                Duration::from_secs(10),
+                ExtractedWheel::extract_in_background(
+                    chunks.into_async_read().compat(),
+                    tempfile::tempdir()?,
+                    false,
+                ),
+            )
+            .await?;
+            let Err(uv_extract::Error::Io(error)) = result else {
+                anyhow::bail!("expected the download error");
+            };
+            assert_eq!(error.kind(), kind);
+            assert_eq!(error.to_string(), "download interrupted");
+        }
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn background_extraction_cancellation_removes_temporary_directory() -> anyhow::Result<()>
+    {
+        let wheel = include_bytes!("../../../test/links/ok-1.0.0-py3-none-any.whl").as_slice();
+        // Hold the download open after sending all entries but before the central directory.
+        let directory_offset = wheel
+            .windows(4)
+            .position(|bytes| bytes == b"PK\x01\x02")
+            .ok_or_else(|| anyhow::anyhow!("fixture must have a central directory"))?;
+        let chunks =
+            stream::iter([Ok::<_, io::Error>(&wheel[..directory_offset])]).chain(stream::pending());
+        let target = tempfile::tempdir()?;
+        let path = target.path().to_path_buf();
+        let task = tokio::spawn(ExtractedWheel::extract_in_background(
+            chunks.into_async_read().compat(),
+            target,
+            false,
+        ));
+        let started = tokio::time::timeout(Duration::from_secs(10), async {
+            while !path.join("ok-1.0.0.dist-info/METADATA").exists() {
+                tokio::time::sleep(Duration::from_millis(1)).await;
+            }
+        })
+        .await;
+        task.abort();
+        assert!(task.await.is_err());
+        started?;
+        tokio::time::timeout(Duration::from_secs(10), async {
+            while path.exists() {
+                tokio::time::sleep(Duration::from_millis(1)).await;
+            }
+        })
+        .await?;
         Ok(())
     }
 }

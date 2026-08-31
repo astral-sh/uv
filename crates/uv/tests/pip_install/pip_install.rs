@@ -15,6 +15,7 @@ use futures::executor::block_on;
 use indoc::{formatdoc, indoc};
 use insta::{allow_duplicates, assert_snapshot};
 use predicates::prelude::predicate;
+use sha2::{Digest, Sha256};
 use url::Url;
 use walkdir::WalkDir;
 use wiremock::{
@@ -74,6 +75,62 @@ fn write_many_files_wheel(path: &Path, source_files: usize) -> Result<()> {
     block_on(writer.write_entry_whole(entry, record.as_bytes()))?;
 
     fs_err::write(path, block_on(writer.close())?)?;
+    Ok(())
+}
+
+/// Stream an HTTP wheel larger than the download buffer, verifying its hash and every output file.
+#[test]
+fn install_http_wheel_through_bounded_buffer() -> Result<()> {
+    const SOURCE_FILES: usize = 10000;
+
+    allow_duplicates! {
+        for (content_addressed, skip_validation) in [(false, false), (true, false), (false, true), (true, true)] {
+            let context = uv_test::test_context!("3.12");
+            let filename = "large_wheel-1.0.0-py3-none-any.whl";
+            let wheel = context.temp_dir.join(filename);
+            write_many_files_wheel(&wheel, SOURCE_FILES)?;
+            let mut bytes = fs::read(&wheel)?;
+            assert!(bytes.len() > 1024 * 1024);
+            if skip_validation {
+                // When validation is disabled, extraction stops at the central directory. The
+                // remaining bytes must still be downloaded and hashed after the pipe closes.
+                bytes.resize(bytes.len() + 3 * 1024 * 1024, b'x');
+            }
+            let hash = hex::encode(Sha256::digest(&bytes));
+            fs::write(&wheel, bytes)?;
+            let server = FindLinksServer::new(context.temp_dir.path());
+            let context = context.with_filter((server.url().to_string(), "http://[LOCALHOST]"));
+            context.temp_dir.child("requirements.txt").write_str(&format!(
+                "large-wheel @ {}/{filename} --hash=sha256:{hash}\n",
+                server.url(),
+            ))?;
+
+            let mut command = context.pip_install();
+            command.arg("--no-index").arg("--require-hashes").arg("-r").arg("requirements.txt");
+            if skip_validation {
+                command.env(EnvVars::UV_INSECURE_NO_ZIP_VALIDATION, "1");
+            }
+            if content_addressed {
+                command.arg("--preview-features").arg("content-addressed-cache");
+            }
+            uv_snapshot!(context.filters(), command, @"
+            exit_code: 0 (success)
+            ----- stderr -----
+            Resolved 1 package in [TIME]
+            Prepared 1 package in [TIME]
+            Installed 1 package in [TIME]
+             + large-wheel==1.0.0 (from http://[LOCALHOST]/large_wheel-1.0.0-py3-none-any.whl)
+            ");
+
+            for index in 0..SOURCE_FILES {
+                assert_eq!(
+                    fs::read_to_string(context.site_packages().join(format!("large_wheel/module_{index:05}.py")))?,
+                    "VALUE = 1\n",
+                );
+            }
+        }
+        Ok::<(), anyhow::Error>(())
+    }?;
     Ok(())
 }
 

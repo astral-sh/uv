@@ -24,14 +24,14 @@ async fn unzip(url: &str) -> anyhow::Result<(), uv_extract::Error> {
     let target = tempfile::TempDir::new().map_err(uv_extract::Error::Io)?;
     let streaming = uv_extract::stream::unzip(bytes.as_ref(), target.path()).await;
 
-    // The buffered path must accept and reject the same archive structures.
+    // The blocking path must accept and reject the same archive structures.
     let target = tempfile::TempDir::new().map_err(uv_extract::Error::Io)?;
-    let buffered = tokio::task::spawn_blocking(move || {
-        uv_extract::stream::unzip_buffered(&bytes, target.path())
+    let blocking = tokio::task::spawn_blocking(move || {
+        uv_extract::stream::unzip_blocking(bytes.as_ref(), target.path())
     })
     .await
-    .expect("buffered ZIP extraction task should not panic");
-    assert_eq!(format!("{streaming:?}"), format!("{buffered:?}"));
+    .expect("blocking ZIP extraction task should not panic");
+    assert_eq!(format!("{streaming:?}"), format!("{blocking:?}"));
     streaming?;
     Ok(())
 }
