@@ -363,6 +363,8 @@ impl<'a, F> LinkOptions<'a, F> {
     /// directory or an ancestor. Existing directory links are expanded only where merging is needed.
     /// The filter must select every top-level directory containing mutable files: the contents
     /// of directories eligible for linking are not inspected.
+    /// Source trees must not contain directory symlinks. Concurrent overlapping installs must share a
+    /// destination root and prepare ancestor directories before writing below them.
     #[must_use]
     pub fn with_directory_symlinks(mut self) -> Self {
         self.directory_symlinks = true;
@@ -437,11 +439,11 @@ where
             continue;
         }
 
+        let directory_symlinks = directory_symlinks && !(options.needs_mutable_copy)(&path);
         let operation = || {
-            let directory_symlinks = directory_symlinks && !(options.needs_mutable_copy)(&path);
             if state.mode == LinkMode::Symlink && directory_symlinks {
                 match create_symlink(&path, &target) {
-                    Ok(()) => return Ok(LinkMode::Symlink),
+                    Ok(()) => return Ok(Some(LinkMode::Symlink)),
                     Err(err) if err.kind() == io::ErrorKind::AlreadyExists => {
                         if options.on_existing_directory == OnExistingDirectory::Fail {
                             return Err(LinkError::Symlink {
@@ -462,30 +464,39 @@ where
             match fs_err::symlink_metadata(&target) {
                 Ok(_) => {
                     materialize_symlink_dir(&target)?;
-                    return link_dir_entries(
-                        &path,
-                        &target,
-                        state.mode,
-                        directory_symlinks,
-                        options,
-                    );
+                    return Ok(None);
                 }
                 Err(err) if err.kind() == io::ErrorKind::NotFound => {}
                 Err(err) => return Err(err.into()),
             }
 
-            // This subtree is new and cannot contain directory links that need expanding.
+            // The ancestor lock reserves this new subtree until the bulk install finishes.
+            // Wheel contents are regular files and directories, and other installers must
+            // prepare this ancestor before writing below it, so per-file guards are redundant.
+            let subtree_options = LinkOptions {
+                mode: options.mode,
+                needs_mutable_copy: &options.needs_mutable_copy,
+                copy_locks: options.copy_locks,
+                on_existing_directory: options.on_existing_directory,
+                directory_symlinks: options.directory_symlinks && options.copy_locks.is_none(),
+            };
             match state.mode {
-                LinkMode::Clone => clone_dir(&path, &target, options),
-                mode => walk_and_link(&path, &target, mode, options),
+                LinkMode::Clone => clone_dir(&path, &target, &subtree_options),
+                mode => walk_and_link(&path, &target, mode, &subtree_options),
             }
+            .map(Some)
         };
         let mode = if let Some(locks) = options.copy_locks {
             locks.with_directory_lock(&target, operation)?
         } else {
             operation()?
         };
-        state = LinkState::new(mode);
+        // A real directory stays real throughout installation. Release its lock before descending
+        // so wheels sharing a namespace can install independent children concurrently.
+        state = LinkState::new(match mode {
+            Some(mode) => mode,
+            None => link_dir_entries(&path, &target, state.mode, directory_symlinks, options)?,
+        });
     }
     Ok(state.mode)
 }
@@ -1243,6 +1254,9 @@ fn create_symlink(original: &Path, link: &Path) -> io::Result<()> {
 #[expect(clippy::print_stderr)]
 mod tests {
     use std::assert_matches;
+    use std::sync::mpsc;
+    use std::thread;
+    use std::time::Duration;
 
     use super::*;
     use tempfile::TempDir;
@@ -1422,6 +1436,79 @@ mod tests {
             fs_err::read_to_string(existing_dir.path().join("existing.txt"))?,
             "existing"
         );
+        Ok(())
+    }
+
+    #[test]
+    fn test_shared_namespace_children_install_concurrently() -> Result<(), LinkError> {
+        let sources = [test_tempdir(), test_tempdir()];
+        let destination = test_tempdir();
+        let locks = CopyLocks::default();
+
+        fs_err::create_dir_all(destination.path().join("shared"))?;
+        for (index, source) in sources.iter().enumerate() {
+            let directory = source.path().join(format!("shared/child_{index}"));
+            fs_err::create_dir_all(&directory)?;
+            fs_err::write(directory.join("file.txt"), "content")?;
+        }
+
+        let (entered_sender, entered_receiver) = mpsc::channel();
+        let both_entered = thread::scope(|scope| -> Result<bool, LinkError> {
+            let mut releases = Vec::new();
+            let mut handles = Vec::new();
+            for (index, source) in sources.iter().enumerate() {
+                let child = format!("child_{index}");
+                let entered_sender = entered_sender.clone();
+                let (release_sender, release_receiver) = mpsc::channel::<()>();
+                releases.push(release_sender);
+                let destination = destination.path();
+                let locks = &locks;
+                handles.push(scope.spawn(move || {
+                    let options = LinkOptions::new(LinkMode::Copy)
+                        .with_directory_symlinks()
+                        .with_copy_locks(locks)
+                        .with_on_existing_directory(OnExistingDirectory::Merge)
+                        .with_mutable_copy_filter(|path| {
+                            if path.ends_with(&child) {
+                                let _ = entered_sender.send(());
+                                let _ = release_receiver.recv();
+                            }
+                            false
+                        });
+                    link_dir(source.path(), destination, &options)
+                }));
+            }
+
+            // Both children must enter before either is released. Always release before joining,
+            // including when an ancestor lock prevented the second child from making progress.
+            let both_entered = (0..2).all(|_| {
+                entered_receiver
+                    .recv_timeout(Duration::from_secs(10))
+                    .is_ok()
+            });
+            drop(releases);
+            for handle in handles {
+                handle
+                    .join()
+                    .map_err(|_| io::Error::other("Namespace installation thread panicked"))??;
+            }
+            Ok(both_entered)
+        })?;
+
+        assert!(
+            both_entered,
+            "Shared namespace serialized disjoint children"
+        );
+        for index in 0..2 {
+            assert_eq!(
+                fs_err::read_to_string(
+                    destination
+                        .path()
+                        .join(format!("shared/child_{index}/file.txt"))
+                )?,
+                "content"
+            );
+        }
         Ok(())
     }
 
