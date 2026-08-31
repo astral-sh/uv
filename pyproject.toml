@@ -54,6 +54,7 @@ include = [
     # this one isn't discovered by maturin because it's behind a feature flag
     { path = "crates/uv-performance-memory-allocator/**/*", format = "sdist" },
     { path = "crates/uv-trampoline-builder/trampolines/*", format = "sdist" },
+    { path = "crates/uv-trampoline-builder/python-shims/*", format = "sdist" },
     # https://github.com/rust-lang/cargo/issues/5933
     { path = "LICENSE-APACHE", format = "sdist" },
     { path = "LICENSE-MIT", format = "sdist" },

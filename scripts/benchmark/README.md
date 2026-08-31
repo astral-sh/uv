@@ -17,10 +17,10 @@ uv run resolver \
 
 ## Python shim startup
 
-Build the draft's optimized benchmark binaries from the repository root:
+Build the draft's optimized benchmark binary from the repository root:
 
 ```shell
-cargo build --locked --profile profiling --package uv --bin uv --bin uv-python
+cargo build --locked --profile profiling --package uv --bin uv
 ```
 
 With Python 3.11+ and `hyperfine` installed, run the standard-library-only driver (no package

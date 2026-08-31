@@ -1,8 +1,6 @@
 use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write;
-#[cfg(windows)]
-use std::io;
 use std::io::ErrorKind;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
@@ -38,7 +36,7 @@ use uv_python::{
     VersionFileDiscoveryOptions, VersionFilePreference, VersionRequest,
 };
 use uv_shell::Shell;
-use uv_trampoline_builder::{Launcher, LauncherKind};
+use uv_trampoline_builder::{Launcher, LauncherKind, python_shim};
 use uv_warnings::warn_user;
 
 use crate::commands::python::{ChangeEvent, ChangeEventKind};
@@ -995,19 +993,6 @@ async fn perform_install(
     Ok(ExitStatus::Success)
 }
 
-/// Find the launcher distributed alongside uv.
-fn find_python_shim() -> Result<PathBuf> {
-    let current_exe = std::env::current_exe()?;
-    let Some(bin) = current_exe.parent() else {
-        anyhow::bail!("Could not find the directory for the `uv-python` binary");
-    };
-    let shim = bin.join(format!("uv-python{}", std::env::consts::EXE_SUFFIX));
-    if !shim.try_exists()? {
-        anyhow::bail!("Could not find the `uv-python` binary");
-    }
-    Ok(shim)
-}
-
 /// Install shims for the same unversioned, major, and minor names as Python links.
 fn install_python_shims(
     installations: &[&ManagedPythonInstallation],
@@ -1015,7 +1000,9 @@ fn install_python_shims(
     force: bool,
     printer: Printer,
 ) -> Result<()> {
-    let shim_src = find_python_shim()?;
+    if python_shim::binary().is_none() {
+        anyhow::bail!("Python shims are not supported on this platform");
+    }
     let bin = python_executable_dir()?;
     fs_err::create_dir_all(&bin)?;
     let mut targets = BTreeSet::new();
@@ -1053,19 +1040,7 @@ fn install_python_shims(
             Err(err) if err.kind() == ErrorKind::NotFound => {}
             Err(err) => return Err(err.into()),
         }
-        cfg_select! {
-            unix => fs_err::os::unix::fs::symlink(&shim_src, &shim_dst)?,
-            windows => {
-                // Copy the launcher instead of using a trampoline: the shim needs its own
-                // invoked filename to select the requested Python version.
-                let mut source = fs_err::File::open(&shim_src)?;
-                let mut destination = fs_err::OpenOptions::new()
-                    .write(true)
-                    .create_new(true)
-                    .open(&shim_dst)?;
-                io::copy(&mut source, &mut destination)?;
-            },
-        }
+        python_shim::write_to_path(&shim_dst)?;
         writeln!(
             printer.stderr(),
             "Installed Python shim to `{}`",
@@ -1073,33 +1048,6 @@ fn install_python_shims(
         )?;
     }
     Ok(())
-}
-
-/// Check whether an executable is a link or copy of the current Python shim.
-fn is_python_shim(path: &Path) -> bool {
-    let Ok(shim) = find_python_shim() else {
-        return false;
-    };
-    if uv_fs::is_same_file_allow_missing(path, &shim) == Some(true) {
-        return true;
-    }
-    #[cfg(windows)]
-    {
-        // Recognize the trampoline installed by earlier versions of the shim draft.
-        if let Ok(Some(launcher)) = Launcher::try_from_path(path)
-            && matches!(launcher.kind, LauncherKind::Python)
-            && uv_fs::is_same_file_allow_missing(&launcher.python_path, &shim) == Some(true)
-        {
-            return true;
-        }
-        if let (Ok(metadata), Ok(shim_metadata)) = (fs_err::metadata(path), fs_err::metadata(&shim))
-            && metadata.len() == shim_metadata.len()
-            && let (Ok(contents), Ok(shim_contents)) = (fs_err::read(path), fs_err::read(shim))
-        {
-            return contents == shim_contents;
-        }
-    }
-    false
 }
 
 /// Link the binaries of a managed Python installation to the bin directory.
@@ -1179,7 +1127,7 @@ fn create_bin_links(
                 );
 
                 // Keep a name-aware shim when installing or upgrading its interpreters.
-                let existing_shim = is_python_shim(&target);
+                let existing_shim = python_shim::is_python_shim(&target).unwrap_or(false);
                 if existing_shim && !default && !force {
                     continue;
                 }

@@ -1,0 +1,2 @@
+[target.'cfg(windows)']
+rustflags = ["-C", "target-feature=+crt-static", "-C", "link-arg=/Brepro", "-C", "link-arg=/DEBUG:NONE"]

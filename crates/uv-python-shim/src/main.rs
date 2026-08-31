@@ -6,7 +6,6 @@ use std::{
     ffi::{OsStr, OsString},
     process::{Command, ExitCode, ExitStatus},
 };
-use uv_static::EnvVars;
 
 /// Spawns a command exec style.
 fn exec_spawn(cmd: &mut Command) -> std::io::Result<Infallible> {
@@ -135,7 +134,7 @@ fn find_uv() -> Result<PathBuf, Error> {
 }
 
 fn run() -> Result<ExitStatus, Error> {
-    if std::env::var_os(EnvVars::UV_INTERNAL__PYTHON_QUERY).is_some() {
+    if std::env::var_os("UV_INTERNAL__PYTHON_QUERY").is_some() {
         return Err(Error::RecursiveQuery);
     }
 
@@ -174,7 +173,6 @@ fn run() -> Result<ExitStatus, Error> {
     match exec_spawn(&mut cmd).map_err(Error::Io)? {}
 }
 
-#[expect(clippy::print_stderr)]
 fn main() -> ExitCode {
     let result = run();
     match result {

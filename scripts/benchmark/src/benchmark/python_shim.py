@@ -74,9 +74,8 @@ def summarize(results: list[dict], output_dir: Path) -> None:
 
 def benchmark(args: argparse.Namespace, output_dir: Path, root: Path) -> None:
     uv = args.uv_path.resolve()
-    shim = uv.with_name("uv-python")
-    if not uv.is_file() or not shim.is_file():
-        raise ValueError("--uv-path must have a uv-python binary alongside it")
+    if not uv.is_file():
+        raise ValueError("--uv-path must point to a uv binary")
 
     # Do not inherit user configuration or interpreter-selection overrides.
     env = {
@@ -155,7 +154,7 @@ def benchmark(args: argparse.Namespace, output_dir: Path, root: Path) -> None:
         "uv_path": str(uv),
         "uv_version": output([str(uv), "--version"], cwd=root, env=env),
         "uv_sha256": digest(uv),
-        "shim_sha256": digest(shim),
+        "shim_sha256": digest(bin_dir / "python"),
         "hyperfine_version": output(["hyperfine", "--version"], cwd=root, env=env),
         "python": python_info,
         "runs": args.runs,

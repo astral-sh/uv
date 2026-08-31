@@ -1,4 +1,3 @@
-#[cfg(feature = "test-python-managed")]
 use std::path::Path;
 use std::process::Command;
 
@@ -13,16 +12,19 @@ use predicates::prelude::predicate;
 
 use uv_static::EnvVars;
 use uv_test::{TestContext, uv_snapshot};
+use uv_trampoline_builder::python_shim;
 
 fn shim(context: &TestContext) -> Command {
-    let mut command = Command::new(env!("CARGO_BIN_EXE_uv-python"));
-    command.current_dir(context.temp_dir.path());
-    context.add_shared_env(&mut command, false);
-    command.env(EnvVars::UV_CACHE_DIR, context.cache_dir.path());
-    command
+    let path = context
+        .bin_dir
+        .join(format!("uv-python{}", std::env::consts::EXE_SUFFIX));
+    if !path.exists() {
+        fs_err::create_dir_all(&context.bin_dir).expect("create shim directory");
+        python_shim::write_to_path(&path).expect("write embedded shim");
+    }
+    installed_shim(context, "uv-python")
 }
 
-#[cfg(feature = "test-python-managed")]
 fn installed_shim(context: &TestContext, name: &str) -> Command {
     let mut command = Command::new(
         context
@@ -30,7 +32,8 @@ fn installed_shim(context: &TestContext, name: &str) -> Command {
             .join(format!("{name}{}", std::env::consts::EXE_SUFFIX)),
     );
     context.add_shared_env(&mut command, false);
-    // Windows shims are copies, so they find this build of uv through PATH.
+    command.env(EnvVars::UV_CACHE_DIR, context.cache_dir.path());
+    // Extracted shims find this build of uv through PATH.
     command.env(
         EnvVars::PATH,
         Path::new(env!("CARGO_BIN_EXE_uv"))
@@ -169,7 +172,7 @@ fn python_install_shim() {
     Installed Python shim to `[BIN]/python3.12`
     Python 3.12 is already installed
     ");
-    let shim_contents = fs_err::read(env!("CARGO_BIN_EXE_uv-python")).expect("read shim binary");
+    let shim_contents = python_shim::binary().expect("embedded shim for this platform");
     for name in ["python", "python3", "python3.12"] {
         let installed = context
             .bin_dir
@@ -179,6 +182,64 @@ fn python_install_shim() {
             "{name} should be a shim"
         );
     }
+}
+
+#[test]
+#[cfg(feature = "test-python-managed")]
+fn python_install_shim_from_standalone_uv() {
+    let binaries = assert_fs::TempDir::new().expect("create binary directory");
+    let uv = binaries.child(format!("uv{}", std::env::consts::EXE_SUFFIX));
+    fs_err::copy(env!("CARGO_BIN_EXE_uv"), uv.path()).expect("copy standalone uv");
+    let context = TestContext::new_with_versions_and_bin(&[], uv.path().to_path_buf())
+        .with_filtered_python_keys()
+        .with_filtered_exe_suffix()
+        .with_filtered_latest_python_versions()
+        .with_managed_python_dirs()
+        .with_empty_python_install_mirror()
+        .with_python_download_cache();
+
+    // There is no uv-python next to uv. Keep system utilities available for
+    // Python installation (e.g., install_name_tool on macOS), but do not put
+    // the build directory on PATH.
+    uv_snapshot!(context.filters(), context.python_install().args(["--preview-features", "python-shim", "3.12"]), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Installed Python shim to `[BIN]/python`
+    Installed Python shim to `[BIN]/python3`
+    Installed Python shim to `[BIN]/python3.12`
+    Installed Python 3.12.[LATEST] in [TIME]
+     + cpython-3.12.[LATEST]-[PLATFORM]
+    ");
+
+    for name in ["python", "python3", "python3.12"] {
+        let path = context
+            .bin_dir
+            .join(format!("{name}{}", std::env::consts::EXE_SUFFIX));
+        assert!(
+            !fs_err::symlink_metadata(&path)
+                .expect("shim metadata")
+                .is_symlink()
+        );
+        insta::allow_duplicates! {
+            uv_snapshot!(context.filters(), installed_shim(&context, name).env(EnvVars::PATH, binaries.path()).args(["+managed", "-c", "import sys; print(sys.version_info[:2])"]), @"
+            exit_code: 0 (success)
+            ----- stdout -----
+            (3, 12)
+            ");
+        }
+    }
+
+    // Shims also find uv alongside themselves without a PATH entry.
+    fs_err::copy(
+        uv.path(),
+        context.bin_dir.join(uv.file_name().expect("uv filename")),
+    )
+    .expect("copy uv beside shims");
+    uv_snapshot!(context.filters(), installed_shim(&context, "python3.12").env(EnvVars::PATH, "").args(["+managed", "-c", "print('sibling uv')"]), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    sibling uv
+    ");
 }
 
 #[test]
@@ -326,8 +387,7 @@ fn python_shim_names() {
     let missing = context
         .bin_dir
         .child(format!("python3.10{}", std::env::consts::EXE_SUFFIX));
-    uv_fs::symlink_or_copy_file(env!("CARGO_BIN_EXE_uv-python"), missing.path())
-        .expect("create shim for missing version");
+    python_shim::write_to_path(missing.path()).expect("create shim for missing version");
     // A missing version must fail rather than falling back to a different minor.
     uv_snapshot!(context.filters(), installed_shim(&context, "python3.10").arg("--version"), @"
     exit_code: 2 (failure)
@@ -402,7 +462,7 @@ fn python_shim_replaces_managed_links() {
     Installed Python shim to `[BIN]/python3.12`
     Python 3.12 is already installed
     ");
-    let shim_contents = fs_err::read(env!("CARGO_BIN_EXE_uv-python")).expect("read shim binary");
+    let shim_contents = python_shim::binary().expect("embedded shim for this platform");
     for name in ["python", "python3", "python3.12"] {
         let installed = context
             .bin_dir

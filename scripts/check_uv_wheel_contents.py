@@ -10,7 +10,6 @@ from zipfile import ZipFile
 uv_expected = {
     "uv-VERSION.data/scripts/uv",
     "uv-VERSION.data/scripts/uvx",
-    "uv-VERSION.data/scripts/uv-python",
     "uv-VERSION.dist-info/METADATA",
     "uv-VERSION.dist-info/RECORD",
     "uv-VERSION.dist-info/WHEEL",

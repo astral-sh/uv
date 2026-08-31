@@ -129,6 +129,18 @@ jobs:
         run: rustup component add clippy
       - name: "Clippy"
         run: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
+      - name: "Clippy Python shim"
+        working-directory: crates/uv-python-shim
+        run: |
+          rustup component add clippy
+          cargo clippy --all-targets --locked -- -D warnings
+      - name: "Check embedded Linux Python shim"
+        working-directory: crates/uv-python-shim
+        run: |
+          rustup target add x86_64-unknown-linux-musl
+          rustup component add llvm-tools
+          python3 ../../scripts/build-python-shims.py --work-dir "$RUNNER_TEMP/python-shims" --target x86_64-unknown-linux-musl
+          git diff --exit-code -- ../uv-trampoline-builder/python-shims/uv-python-x86_64-unknown-linux-musl
 
   clippy-windows:
     name: "clippy on windows"
@@ -159,6 +171,11 @@ jobs:
       - name: "Clippy"
         working-directory: ${{ env.UV_WORKSPACE }}
         run: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
+      - name: "Clippy Python shim"
+        working-directory: ${{ env.UV_WORKSPACE }}/crates/uv-python-shim
+        run: |
+          rustup component add clippy
+          cargo clippy --all-targets --locked -- -D warnings
 
   hawk:
     timeout-minutes: 15

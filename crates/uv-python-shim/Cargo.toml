@@ -1,0 +1,28 @@
+[package]
+name = "uv-python-shim"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.95.0"
+license = "MIT OR Apache-2.0"
+publish = false
+
+[[bin]]
+name = "uv-python"
+path = "src/main.rs"
+
+[dependencies]
+which = "8.0.0"
+
+[target.'cfg(windows)'.dependencies]
+uv-windows = { path = "../uv-windows" }
+
+[build-dependencies]
+embed-manifest = "1.5.0"
+
+[profile.shim]
+inherits = "release"
+opt-level = "z"
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true

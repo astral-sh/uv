@@ -2,6 +2,8 @@
 members = ["crates/*"]
 exclude = [
   "scripts",
+  # Launcher assets are rebuilt separately from normal uv builds.
+  "crates/uv-python-shim",
   # Needs nightly
   "crates/uv-trampoline",
 ]

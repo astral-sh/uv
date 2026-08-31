@@ -15,6 +15,11 @@ jobs:
       - name: "Install Rustfmt"
         run: rustup component add rustfmt
       - run: cargo fmt --all --check
+      - name: "Format Python shim"
+        working-directory: crates/uv-python-shim
+        run: |
+          rustup component add rustfmt
+          cargo fmt --check
 
   prettier:
     timeout-minutes: 10

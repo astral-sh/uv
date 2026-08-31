@@ -21,7 +21,7 @@ if [[ "$(uname)" == "Darwin" && -n "${UV_TEST_CODESIGN_IDENTITY:-}" ]]; then
 
   targets=()
 
-  for bin in target/debug/uv target/debug/uvx target/debug/uv-python; do
+  for bin in target/debug/uv target/debug/uvx; do
     [[ -f "$bin" ]] && targets+=("$bin")
   done
 
