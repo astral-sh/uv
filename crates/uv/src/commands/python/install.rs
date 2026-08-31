@@ -316,8 +316,11 @@ async fn perform_install(
     if shim == Some(true) && bin == Some(false) {
         anyhow::bail!("A Python shim cannot be installed when executable installation is disabled");
     }
-    if shim == Some(true) && !preview.all_enabled() {
-        warn_user!("The uv Python shim is experimental and may change without warning");
+    if shim == Some(true) && !preview.is_enabled(PreviewFeature::PythonShim) {
+        warn_user!(
+            "The uv Python shim is experimental and may change without warning. Pass `--preview-features {}` to disable this warning",
+            PreviewFeature::PythonShim
+        );
     }
 
     // TODO(zanieb): We should consider marking the Python installation as the default when
@@ -681,7 +684,7 @@ async fn perform_install(
 
     let installations: Vec<_> = downloaded.iter().chain(satisfied.iter().copied()).collect();
     let install_shim = shim.unwrap_or(
-        preview.all_enabled()
+        preview.is_enabled(PreviewFeature::PythonShim)
             && !default
             && bin_dir.is_some()
             && installations

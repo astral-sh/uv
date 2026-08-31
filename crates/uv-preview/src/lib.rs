@@ -333,6 +333,8 @@ pub enum PreviewFeature {
     TarCodec,
     /// Allows selecting configured package indexes by name with `--index` and `--default-index`.
     IndexByName,
+    /// Allows installing a `python` shim with `uv python install`.
+    PythonShim,
 }
 
 impl Display for PreviewFeature {

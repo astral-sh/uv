@@ -1826,7 +1826,8 @@
             "lockfile-format-check",
             "lock-without-metadata",
             "tar-codec",
-            "index-by-name"
+            "index-by-name",
+            "python-shim"
           ]
         },
         {
