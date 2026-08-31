@@ -5899,7 +5899,7 @@ pub struct ToolUninstallArgs {
     #[arg(required = true, value_hint = ValueHint::Other)]
     pub name: Vec<PackageName>,
 
-    /// Uninstall all tools, including dangling tool directories.
+    /// Uninstall all tools.
     #[arg(long, conflicts_with("name"))]
     pub all: bool,
 }
