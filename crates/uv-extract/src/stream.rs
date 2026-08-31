@@ -188,7 +188,8 @@ async fn unzip_inner<R: tokio::io::AsyncRead + Unpin, const BLOCKING: bool>(
     let mut files = Vec::new();
     let mut hashed_files = Vec::new();
     let mut digest_directories = FxHashSet::default();
-    let mut hash_buffer = Vec::new();
+    // Reuse the copy buffer across files, whether or not their contents are hashed.
+    let mut copy_buffer = Vec::new();
     let mut offset = 0;
 
     while let Some(mut entry) = zip.next_with_entry().await? {
@@ -302,23 +303,27 @@ async fn unzip_inner<R: tokio::io::AsyncRead + Unpin, const BLOCKING: bool>(
                         let mut reader = AbortReader::new(entry.reader_mut(), abort).compat();
                         if hash_contents {
                             let (bytes_read, digest) =
-                                blake3_copy_with_buffer(&mut reader, &mut writer, &mut hash_buffer)
+                                blake3_copy_with_buffer(&mut reader, &mut writer, &mut copy_buffer)
                                     .await
                                     .map_err(Error::io_or_zip)?;
                             (bytes_read, Some(digest))
                         } else {
                             let mut bytes_read = 0;
-                            let mut buffer = vec![0; DEFAULT_BUF_SIZE];
+                            copy_buffer.resize(DEFAULT_BUF_SIZE, 0);
                             loop {
-                                let read = tokio::io::AsyncReadExt::read(&mut reader, &mut buffer)
-                                    .await
-                                    .map_err(Error::io_or_zip)?;
+                                let read =
+                                    tokio::io::AsyncReadExt::read(&mut reader, &mut copy_buffer)
+                                        .await
+                                        .map_err(Error::io_or_zip)?;
                                 if read == 0 {
                                     break;
                                 }
-                                tokio::io::AsyncWriteExt::write_all(&mut writer, &buffer[..read])
-                                    .await
-                                    .map_err(Error::Io)?;
+                                tokio::io::AsyncWriteExt::write_all(
+                                    &mut writer,
+                                    &copy_buffer[..read],
+                                )
+                                .await
+                                .map_err(Error::Io)?;
                                 bytes_read += read as u64;
                             }
                             tokio::io::AsyncWriteExt::flush(&mut writer)

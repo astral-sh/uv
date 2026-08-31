@@ -1342,7 +1342,7 @@ impl ExtractedWheel {
         R: AsyncRead + Unpin,
     {
         const READ_BUFFER_SIZE: usize = 128 * 1024;
-        const PIPE_BUFFER_SIZE: usize = 1024 * 1024;
+        const PIPE_BUFFER_SIZE: usize = 256 * 1024;
 
         // Allow the download to get ahead while the worker decompresses and writes files.
         let (sender, receiver) = tokio::io::duplex(PIPE_BUFFER_SIZE);
