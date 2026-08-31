@@ -23,7 +23,6 @@ use uv_trampoline_builder::windows_script_launcher;
 use uv_warnings::warn_user_once;
 
 use crate::directory::LibraryDirectories;
-use crate::linker::InstallState;
 use crate::record::RecordEntry;
 use crate::script::{EntryPoints, Script};
 use crate::{Error, Layout};
@@ -337,7 +336,7 @@ pub(crate) fn write_script_entrypoints(
     entrypoints: &[Script],
     record: &mut Vec<RecordEntry>,
     is_gui: bool,
-    state: &InstallState,
+    locks: &CopyLocks,
 ) -> Result<(), Error> {
     for script in entrypoints {
         let script = ValidatedScript::try_from_script(script, layout)?;
@@ -345,7 +344,7 @@ pub(crate) fn write_script_entrypoints(
         if let Some(parent) = script.as_path().parent()
             && parent != layout.scheme.scripts
         {
-            LibraryDirectories::new(layout)?.prepare(parent, state)?;
+            LibraryDirectories::new(layout)?.prepare(parent, locks)?;
         }
 
         // Generate the launcher script.
@@ -363,28 +362,23 @@ pub(crate) fn write_script_entrypoints(
         } else {
             launcher_python_script.into_bytes()
         };
-        state
-            .copy_locks()
-            .with_file_write(&site_packages.join(&entrypoint_relative), || {
-                write_file_recorded(site_packages, &entrypoint_relative, &launcher, record)?;
+        locks.with_file_write(&site_packages.join(&entrypoint_relative), || {
+            write_file_recorded(site_packages, &entrypoint_relative, &launcher, record)?;
 
-                // Make the launcher executable before another installation can replace it.
-                #[cfg(unix)]
-                {
-                    use std::fs::Permissions;
-                    use std::os::unix::fs::PermissionsExt;
+            // Make the launcher executable before another installation can replace it.
+            #[cfg(unix)]
+            {
+                use std::fs::Permissions;
+                use std::os::unix::fs::PermissionsExt;
 
-                    let path = script.as_path();
-                    let permissions = fs::metadata(path)?.permissions();
-                    if permissions.mode() & 0o111 != 0o111 {
-                        fs::set_permissions(
-                            path,
-                            Permissions::from_mode(permissions.mode() | 0o111),
-                        )?;
-                    }
+                let path = script.as_path();
+                let permissions = fs::metadata(path)?.permissions();
+                if permissions.mode() & 0o111 != 0o111 {
+                    fs::set_permissions(path, Permissions::from_mode(permissions.mode() | 0o111))?;
                 }
-                Ok::<_, Error>(())
-            })?;
+            }
+            Ok::<_, Error>(())
+        })?;
     }
     Ok(())
 }
@@ -475,7 +469,7 @@ fn move_folder_recorded(
     layout: &Layout,
     site_packages: &Path,
     record: &mut [RecordEntry],
-    state: &InstallState,
+    locks: &CopyLocks,
 ) -> Result<(), Error> {
     let mut rename_or_copy = RenameOrCopy::default();
     let directories = LibraryDirectories::new(layout)?;
@@ -494,10 +488,10 @@ fn move_folder_recorded(
             .expect("prefix must not change");
         let target = dest_dir.join(relative_to_data);
         if entry.file_type().is_dir() {
-            directories.prepare(&target, state)?;
+            directories.prepare(&target, locks)?;
         } else {
             validate_data_script_destination(&target, &layout.scheme.scripts)?;
-            rename_or_copy.rename_or_copy(src, &target, state.copy_locks())?;
+            rename_or_copy.rename_or_copy(src, &target, locks)?;
             let entry = record
                 .iter_mut()
                 .find(|entry| Path::new(&entry.path) == relative_to_site_packages)
@@ -523,7 +517,7 @@ fn install_script(
     record: &mut [RecordEntry],
     file: &DirEntry,
     #[allow(unused)] rename_or_copy: &mut RenameOrCopy,
-    state: &InstallState,
+    locks: &CopyLocks,
 ) -> Result<(), Error> {
     let file_type = file.file_type()?;
 
@@ -632,7 +626,7 @@ fn install_script(
                     .set_permissions(Permissions::from_mode(permissions.mode() | 0o111))?;
             }
         }
-        state.copy_locks().with_file_write(&script_absolute, || {
+        locks.with_file_write(&script_absolute, || {
             persist_with_retry_sync(target, &script_absolute)
         })?;
         fs::remove_file(&path)?;
@@ -653,7 +647,7 @@ fn install_script(
             if permissions.mode() & 0o111 == 0o111 {
                 // If the permissions are already executable, we don't need to change them.
                 // We fall back to copy when the file is on another drive.
-                rename_or_copy.rename_or_copy(&path, &script_absolute, state.copy_locks())?;
+                rename_or_copy.rename_or_copy(&path, &script_absolute, locks)?;
             } else {
                 // If we have to modify the permissions, copy the file, since we might not own it,
                 // and we may not be allowed to change permissions on an unowned moved file.
@@ -667,7 +661,7 @@ fn install_script(
                 let target = uv_fs::tempfile_in(&layout.scheme.scripts)?;
                 fs::copy(&path, &target)?;
                 fs::set_permissions(&target, Permissions::from_mode(permissions.mode() | 0o111))?;
-                state.copy_locks().with_file_write(&script_absolute, || {
+                locks.with_file_write(&script_absolute, || {
                     persist_with_retry_sync(target, &script_absolute)
                 })?;
             }
@@ -678,7 +672,7 @@ fn install_script(
             // Here, two wrappers over rename are clashing: We want to retry for security software
             // blocking the file, but we also need the copy fallback is the problem was trying to
             // move a file cross-drive.
-            let renamed = state.copy_locks().with_file_write(&script_absolute, || {
+            let renamed = locks.with_file_write(&script_absolute, || {
                 Ok::<_, io::Error>(uv_fs::with_retry_sync(
                     &path,
                     &script_absolute,
@@ -693,7 +687,7 @@ fn install_script(
                     fs_err::copy(&path, &target)?;
                     Ok(())
                 })?;
-                state.copy_locks().with_file_write(&script_absolute, || {
+                locks.with_file_write(&script_absolute, || {
                     persist_with_retry_sync(target, &script_absolute)
                 })?;
             }
@@ -737,7 +731,7 @@ pub(crate) fn install_data(
     console_scripts: &[Script],
     gui_scripts: &[Script],
     record: &mut [RecordEntry],
-    state: &InstallState,
+    locks: &CopyLocks,
 ) -> Result<(), Error> {
     for entry in fs::read_dir(data_dir)? {
         let entry = entry?;
@@ -757,7 +751,7 @@ pub(crate) fn install_data(
                     layout,
                     site_packages,
                     record,
-                    state,
+                    locks,
                 )?;
             }
             Some("scripts") => {
@@ -789,7 +783,7 @@ pub(crate) fn install_data(
 
                     // Create the scripts directory, if it doesn't exist.
                     if !initialized {
-                        LibraryDirectories::new(layout)?.prepare(&layout.scheme.scripts, state)?;
+                        LibraryDirectories::new(layout)?.prepare(&layout.scheme.scripts, locks)?;
                         initialized = true;
                     }
 
@@ -800,7 +794,7 @@ pub(crate) fn install_data(
                         record,
                         &file,
                         &mut rename_or_copy,
-                        state,
+                        locks,
                     )?;
                 }
             }
@@ -811,7 +805,7 @@ pub(crate) fn install_data(
                     "Installing data/headers to {}",
                     target_path.user_display()
                 );
-                move_folder_recorded(&path, &target_path, layout, site_packages, record, state)?;
+                move_folder_recorded(&path, &target_path, layout, site_packages, record, locks)?;
             }
             Some("purelib") => {
                 trace!(
@@ -825,7 +819,7 @@ pub(crate) fn install_data(
                     layout,
                     site_packages,
                     record,
-                    state,
+                    locks,
                 )?;
             }
             Some("platlib") => {
@@ -840,7 +834,7 @@ pub(crate) fn install_data(
                     layout,
                     site_packages,
                     record,
-                    state,
+                    locks,
                 )?;
             }
             _ => {
@@ -1219,14 +1213,7 @@ impl RenameOrCopy {
     /// Usually, source and target are on the same device, so we can rename, but if that fails, we
     /// have to copy. If renaming failed once, we switch to copy permanently. Copies replace the
     /// destination atomically so an existing file symlink is never followed into the wheel cache.
-    fn rename_or_copy(
-        &mut self,
-        from: impl AsRef<Path>,
-        to: impl AsRef<Path>,
-        locks: &CopyLocks,
-    ) -> io::Result<()> {
-        let from = from.as_ref();
-        let to = to.as_ref();
+    fn rename_or_copy(&mut self, from: &Path, to: &Path, locks: &CopyLocks) -> io::Result<()> {
         if let Self::Rename = self {
             // Distinguish a directory conflict from a rename failure that permits copying.
             match locks.with_file_write(to, || Ok::<_, io::Error>(fs_err::rename(from, to)))? {

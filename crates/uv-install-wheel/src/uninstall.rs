@@ -16,6 +16,10 @@ use crate::wheel::read_record;
 use crate::{Error, Layout};
 
 /// Uninstall the wheel represented by the given `.dist-info` directory.
+///
+/// Directory links below the library roots are removed once without following RECORD paths into
+/// the cache. This relies on installers expanding directories shared by multiple wheels, so a
+/// remaining link owns only this wheel's files.
 pub fn uninstall_wheel(
     dist_info: &Path,
     distribution: impl Display,
@@ -56,9 +60,8 @@ pub fn uninstall_wheel(
             continue;
         }
 
-        // Resolve scheme aliases without following package directory links into the cache.
-        // A link owns all the files beneath it, so remove it once, including nested links left
-        // beneath shared namespace directories. Keep the final file component unresolved.
+        // Resolve parents, including links beneath shared namespaces. Keep the final filename
+        // unresolved so removing a file symlink does not remove its cache target.
         let normalized = normalize_path(&site_packages.join(&entry.path));
         let (Some(parent), Some(filename)) = (normalized.parent(), normalized.file_name()) else {
             continue;
@@ -67,26 +70,27 @@ pub fn uninstall_wheel(
             if removed_symlinks.contains(directory) {
                 return Ok(ControlFlow::Break(()));
             }
-            if !checked_directories.contains(directory) {
-                match fs_err::symlink_metadata(directory) {
-                    Ok(metadata) if metadata.file_type().is_symlink() => {
-                        remove_symlink(directory)?;
-                        trace!("Removed directory link: {}", directory.display());
-                        removed_symlinks.insert(directory.to_path_buf());
-                        if let Some(parent) = directory.parent() {
-                            visited.insert(parent.to_path_buf());
-                        }
-                        dir_count += 1;
-                        return Ok(ControlFlow::Break(()));
+            if checked_directories.contains(directory) {
+                return Ok(ControlFlow::Continue(()));
+            }
+            match fs_err::symlink_metadata(directory) {
+                Ok(metadata) if metadata.file_type().is_symlink() => {
+                    remove_symlink(directory)?;
+                    trace!("Removed directory link: {}", directory.display());
+                    removed_symlinks.insert(directory.to_path_buf());
+                    if let Some(parent) = directory.parent() {
+                        visited.insert(parent.to_path_buf());
                     }
-                    Ok(_) => {
-                        checked_directories.insert(directory.to_path_buf());
-                    }
-                    Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
-                        return Ok(ControlFlow::Break(()));
-                    }
-                    Err(err) => return Err(err.into()),
+                    dir_count += 1;
+                    return Ok(ControlFlow::Break(()));
                 }
+                Ok(_) => {
+                    checked_directories.insert(directory.to_path_buf());
+                }
+                Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+                    return Ok(ControlFlow::Break(()));
+                }
+                Err(err) => return Err(err.into()),
             }
             Ok::<_, Error>(ControlFlow::Continue(()))
         })?

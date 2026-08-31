@@ -100,13 +100,14 @@ pub fn install_wheel<Cache: serde::Serialize, Build: serde::Serialize>(
 
     let (console_scripts, gui_scripts) =
         parse_scripts(wheel, &dist_info_prefix, None, layout.python_version.1)?;
+    let locks = state.copy_locks();
 
     if console_scripts.is_empty() && gui_scripts.is_empty() {
         trace!(?name, "No entrypoints");
     } else {
         trace!(?name, "Writing entrypoints");
 
-        LibraryDirectories::new(layout)?.prepare(&layout.scheme.scripts, state)?;
+        LibraryDirectories::new(layout)?.prepare(&layout.scheme.scripts, locks)?;
         write_script_entrypoints(
             layout,
             relocatable,
@@ -114,7 +115,7 @@ pub fn install_wheel<Cache: serde::Serialize, Build: serde::Serialize>(
             &console_scripts,
             &mut record,
             false,
-            state,
+            locks,
         )?;
         write_script_entrypoints(
             layout,
@@ -123,7 +124,7 @@ pub fn install_wheel<Cache: serde::Serialize, Build: serde::Serialize>(
             &gui_scripts,
             &mut record,
             true,
-            state,
+            locks,
         )?;
     }
 
@@ -140,7 +141,7 @@ pub fn install_wheel<Cache: serde::Serialize, Build: serde::Serialize>(
             &console_scripts,
             &gui_scripts,
             &mut record,
-            state,
+            locks,
         )?;
         // 2.c If applicable, update scripts starting with #!python to point to the correct interpreter.
         // Script are unsupported through data

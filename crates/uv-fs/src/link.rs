@@ -124,8 +124,7 @@ struct DirectoryParent {
 }
 
 impl CopyLocks {
-    /// Resolve each parent once, interning aliases under the same canonical directory identity.
-    /// Parents must retain that identity for the lifetime of these locks.
+    /// Cache canonical parent identities so scheme aliases share the same publication gate.
     fn directory_parent(&self, path: &Path) -> io::Result<Arc<DirectoryParent>> {
         let path = std::path::absolute(if path.as_os_str().is_empty() {
             Path::new(".")
@@ -159,14 +158,12 @@ impl CopyLocks {
         Ok(parent)
     }
 
-    /// Serialize changes to a directory's representation, including expanding a directory link
-    /// before merging another package into it. Separate from the locks used while copying files.
+    /// Serialize directory creation and expansion against other directory and file writers.
     ///
-    /// The parent directory must exist. Resolve aliases in the parent without following the final
-    /// directory link, which may itself be replaced while holding the lock.
-    /// The parent's canonical identity must remain stable for the lifetime of these locks.
-    /// ASCII names share the parent lock; non-ASCII names acquire it exclusively to account for
-    /// filesystem-specific Unicode aliases. Acquire ancestor locks before descendant locks.
+    /// Resolve aliases in the parent without following the final directory link. The parent must
+    /// exist and retain its canonical identity for the lifetime of these locks. ASCII case variants
+    /// share an entry lock; non-ASCII names lock the whole parent to cover filesystem-specific aliases.
+    /// Acquire ancestors before descendants, and do not lock sibling entries from `operation`.
     pub fn with_directory_lock<T, E>(
         &self,
         path: &Path,
@@ -223,11 +220,12 @@ impl CopyLocks {
         operation()
     }
 
-    /// Publish a file without replacing a directory or racing its materialization.
+    /// Publish a file while excluding directory transitions in its parent.
     ///
-    /// The parent must already be prepared and retain its canonical identity for the lifetime of
-    /// these locks. File writers exclude directory transitions, including the brief absence while
-    /// replacing a directory link. Prepare temporary file contents before taking this lock.
+    /// Materialize package links in the parent path first, then keep its canonical identity stable
+    /// for the lifetime of these locks. Targets that resolve to directories are rejected.
+    /// The exclusive parent lock covers the gap while [`materialize_symlink_dir`] replaces a link.
+    /// Prepare temporary contents beforehand; `operation` must not lock another entry in this parent.
     pub fn with_file_write<T, E>(
         &self,
         path: &Path,
@@ -337,34 +335,29 @@ impl<'a, F> LinkOptions<'a, F> {
     /// When provided, file copy operations will acquire a directory-level lock before writing. This
     /// prevents corruption when multiple installations run concurrently.
     #[must_use]
-    pub fn with_copy_locks(self, locks: &'a CopyLocks) -> Self {
-        LinkOptions {
-            mode: self.mode,
-            needs_mutable_copy: self.needs_mutable_copy,
-            copy_locks: Some(locks),
-            on_existing_directory: self.on_existing_directory,
-            directory_symlinks: self.directory_symlinks,
-        }
+    pub fn with_copy_locks(mut self, locks: &'a CopyLocks) -> Self {
+        self.copy_locks = Some(locks);
+        self
     }
 
     /// Set the behavior when the destination directory already exists.
     #[must_use]
-    pub fn with_on_existing_directory(self, on_existing_directory: OnExistingDirectory) -> Self {
-        LinkOptions {
-            mode: self.mode,
-            needs_mutable_copy: self.needs_mutable_copy,
-            copy_locks: self.copy_locks,
-            on_existing_directory,
-            directory_symlinks: self.directory_symlinks,
-        }
+    pub fn with_on_existing_directory(
+        mut self,
+        on_existing_directory: OnExistingDirectory,
+    ) -> Self {
+        self.on_existing_directory = on_existing_directory;
+        self
     }
 
-    /// Symlink directories in [`LinkMode::Symlink`], unless the mutable-copy filter selects the
-    /// directory or an ancestor. Existing directory links are expanded only where merging is needed.
-    /// The filter must select every top-level directory containing mutable files: the contents
-    /// of directories eligible for linking are not inspected.
-    /// Source trees must not contain directory symlinks. Concurrent overlapping installs must share a
-    /// destination root and prepare ancestor directories before writing below them.
+    /// Symlink untouched directories in [`LinkMode::Symlink`], expanding shared links in any mode.
+    ///
+    /// The mutable-copy filter must select every top-level directory containing mutable files:
+    /// eligible directories are linked without inspecting their contents. Source trees must not
+    /// contain directory symlinks.
+    ///
+    /// Concurrent overlapping writers must share [`CopyLocks`] and a destination root, and prepare
+    /// ancestor directories before writing below them. Fresh subtrees rely on that ancestor lock.
     #[must_use]
     pub fn with_directory_symlinks(mut self) -> Self {
         self.directory_symlinks = true;
@@ -417,7 +410,10 @@ fn check_file_destination(path: &Path) -> io::Result<()> {
     }
 }
 
-/// Link entries independently, descending into directory links only where merging is needed.
+/// Merge shared directories one level at a time, leaving untouched subtrees linked.
+///
+/// `directory_symlinks` carries mutable-ancestor exclusions; the options still protect file writes
+/// in subtrees that must use real directories.
 fn link_dir_entries<F>(
     src: &Path,
     dst: &Path,
@@ -501,9 +497,12 @@ where
     Ok(state.mode)
 }
 
-/// Replace a directory symlink with a real directory containing links to its immediate children.
-/// Child directories stay linked until they need merging too. The caller must serialize changes
-/// to `path` with other directory writers.
+/// Replace a directory symlink with a real directory linking its immediate children.
+///
+/// Child directories stay linked until they need merging. Missing paths and non-links are unchanged.
+/// If writes can overlap, hold [`CopyLocks::with_directory_lock`] for `path` throughout this call and
+/// use [`CopyLocks::with_file_write`] for competing file writes. Replacing the link briefly removes
+/// its name before publishing the expanded directory.
 pub fn materialize_symlink_dir(path: &Path) -> Result<(), LinkError> {
     match fs_err::symlink_metadata(path) {
         Ok(metadata) if metadata.file_type().is_symlink() => {}
@@ -967,54 +966,32 @@ where
         return Ok(state);
     }
 
-    match state.attempt {
-        LinkAttempt::Initial => {
-            if let Err(err) = try_hardlink_file(path, target, |from, to| {
-                options.with_file_write(to, || fs_err::hard_link(from, to))
-            }) {
-                if err.kind() == io::ErrorKind::IsADirectory {
-                    return Err(err.into());
-                }
-                if err.kind() == io::ErrorKind::AlreadyExists
-                    && options.on_existing_directory == OnExistingDirectory::Merge
-                {
-                    atomic_hardlink_overwrite(path, target, state, options)
-                } else {
-                    debug!(
-                        "Failed to hard link `{}` to `{}`: {}; falling back to copy",
-                        path.display(),
-                        target.display(),
-                        err
-                    );
-                    warn_user_once!(
-                        "Failed to hardlink files; falling back to full copy. This may lead to degraded performance.\n         \
-                        If the cache and target directories are on different filesystems, hardlinking may not be supported.\n         \
-                        If this is intentional, set `export UV_LINK_MODE=copy` or use `--link-mode=copy` to suppress this warning."
-                    );
-                    link_file(path, target, state.next_mode(), options)
-                }
-            } else {
-                Ok(state.mode_working())
-            }
+    match try_hardlink_file(path, target, |from, to| {
+        options.with_file_write(to, || fs_err::hard_link(from, to))
+    }) {
+        Ok(()) => Ok(state.mode_working()),
+        Err(err) if err.kind() == io::ErrorKind::IsADirectory => Err(err.into()),
+        Err(err)
+            if err.kind() == io::ErrorKind::AlreadyExists
+                && options.on_existing_directory == OnExistingDirectory::Merge =>
+        {
+            atomic_hardlink_overwrite(path, target, state, options)
         }
-        LinkAttempt::Subsequent => {
-            if let Err(err) = try_hardlink_file(path, target, |from, to| {
-                options.with_file_write(to, || fs_err::hard_link(from, to))
-            }) {
-                if err.kind() == io::ErrorKind::IsADirectory {
-                    return Err(err.into());
-                }
-                if err.kind() == io::ErrorKind::AlreadyExists
-                    && options.on_existing_directory == OnExistingDirectory::Merge
-                {
-                    atomic_hardlink_overwrite(path, target, state, options)
-                } else {
-                    Err(LinkError::Io(err))
-                }
-            } else {
-                Ok(state)
-            }
+        Err(err) if state.attempt == LinkAttempt::Initial => {
+            debug!(
+                "Failed to hard link `{}` to `{}`: {}; falling back to copy",
+                path.display(),
+                target.display(),
+                err
+            );
+            warn_user_once!(
+                "Failed to hardlink files; falling back to full copy. This may lead to degraded performance.\n         \
+                If the cache and target directories are on different filesystems, hardlinking may not be supported.\n         \
+                If this is intentional, set `export UV_LINK_MODE=copy` or use `--link-mode=copy` to suppress this warning."
+            );
+            link_file(path, target, state.next_mode(), options)
         }
+        Err(err) => Err(LinkError::Io(err)),
     }
 }
 
@@ -1040,54 +1017,34 @@ where
         return Ok(state);
     }
 
-    match state.attempt {
-        LinkAttempt::Initial => {
-            if let Err(err) = options.with_file_write(target, || create_symlink(path, target)) {
-                if err.kind() == io::ErrorKind::IsADirectory {
-                    return Err(err.into());
-                }
-                if err.kind() == io::ErrorKind::AlreadyExists
-                    && options.on_existing_directory == OnExistingDirectory::Merge
-                {
-                    atomic_symlink_overwrite(path, target, state, options)
-                } else {
-                    debug!(
-                        "Failed to symlink `{}` to `{}`: {}; falling back to copy",
-                        path.display(),
-                        target.display(),
-                        err
-                    );
-                    warn_user_once!(
-                        "Failed to symlink files; falling back to full copy. This may lead to degraded performance.\n         \
-                        If the cache and target directories are on different filesystems, symlinking may not be supported.\n         \
-                        If this is intentional, set `export UV_LINK_MODE=copy` or use `--link-mode=copy` to suppress this warning."
-                    );
-                    link_file(path, target, state.next_mode(), options)
-                }
-            } else {
-                Ok(state.mode_working())
-            }
+    match options.with_file_write(target, || create_symlink(path, target)) {
+        Ok(()) => Ok(state.mode_working()),
+        Err(err) if err.kind() == io::ErrorKind::IsADirectory => Err(err.into()),
+        Err(err)
+            if err.kind() == io::ErrorKind::AlreadyExists
+                && options.on_existing_directory == OnExistingDirectory::Merge =>
+        {
+            atomic_symlink_overwrite(path, target, state, options)
         }
-        LinkAttempt::Subsequent => {
-            if let Err(err) = options.with_file_write(target, || create_symlink(path, target)) {
-                if err.kind() == io::ErrorKind::IsADirectory {
-                    return Err(err.into());
-                }
-                if err.kind() == io::ErrorKind::AlreadyExists
-                    && options.on_existing_directory == OnExistingDirectory::Merge
-                {
-                    atomic_symlink_overwrite(path, target, state, options)
-                } else {
-                    Err(LinkError::Symlink {
-                        from: path.to_path_buf(),
-                        to: target.to_path_buf(),
-                        err,
-                    })
-                }
-            } else {
-                Ok(state)
-            }
+        Err(err) if state.attempt == LinkAttempt::Initial => {
+            debug!(
+                "Failed to symlink `{}` to `{}`: {}; falling back to copy",
+                path.display(),
+                target.display(),
+                err
+            );
+            warn_user_once!(
+                "Failed to symlink files; falling back to full copy. This may lead to degraded performance.\n         \
+                If the cache and target directories are on different filesystems, symlinking may not be supported.\n         \
+                If this is intentional, set `export UV_LINK_MODE=copy` or use `--link-mode=copy` to suppress this warning."
+            );
+            link_file(path, target, state.next_mode(), options)
         }
+        Err(err) => Err(LinkError::Symlink {
+            from: path.to_path_buf(),
+            to: target.to_path_buf(),
+            err,
+        }),
     }
 }
 
@@ -1108,7 +1065,7 @@ where
 
 /// Try to create a hard link, handling `TooManyLinks` (EMLINK/`ERROR_TOO_MANY_LINKS`)
 /// by copying the source to a fresh inode and retrying.
-/// The supplied operation locks publication without holding that lock while copying the source.
+/// The callback lets callers guard link creation without holding the guard while copying.
 fn try_hardlink_file(
     src: &Path,
     dst: &Path,

@@ -40,26 +40,22 @@ fn write_many_files_wheel(path: &Path, source_files: usize) -> Result<()> {
     write_test_wheel(
         path,
         "large_wheel",
-        (0..source_files).map(|index| {
-            (
-                format!("large_wheel/module_{index:05}.py"),
-                "VALUE = 1\n".to_string(),
-            )
-        }),
+        (0..source_files).map(|index| (format!("large_wheel/module_{index:05}.py"), "VALUE = 1\n")),
     )
 }
 
 fn write_test_wheel(
     path: &Path,
     name: &str,
-    files: impl IntoIterator<Item = (String, String)>,
+    files: impl IntoIterator<Item = (impl AsRef<str>, impl AsRef<str>)>,
 ) -> Result<()> {
     let mut writer = ZipFileWriter::new(Vec::new());
     let mut record = String::new();
 
     for (name, contents) in files {
-        let entry = ZipEntryBuilder::new(name.clone().into(), Compression::Stored);
-        block_on(writer.write_entry_whole(entry, contents.as_bytes()))?;
+        let name = name.as_ref();
+        let entry = ZipEntryBuilder::new(name.into(), Compression::Stored);
+        block_on(writer.write_entry_whole(entry, contents.as_ref().as_bytes()))?;
         writeln!(record, "{name},,")?;
     }
 
@@ -356,8 +352,7 @@ fn directory_symlink_install() -> Result<()> {
                 "symlink_test-1.0.0.data/scripts/symlink-script",
                 "#!python\nprint('hello')\n",
             ),
-        ]
-        .map(|(path, contents)| (path.to_string(), contents.to_string())),
+        ],
     )?;
     uv_snapshot!(context.filters(), context.pip_install()
         .arg(wheel.path())
@@ -450,8 +445,7 @@ fn directory_symlink_shared_namespace() -> Result<()> {
                     ("shared/a/__init__.py", "VALUE = 1\n"),
                     ("shared/collision/module.py", "VALUE = 1\n"),
                     ("shared/collision/RECORD", "VALUE = 1\n"),
-                ]
-                .map(|(path, contents)| (path.to_string(), contents.to_string())),
+                ],
             )?;
             let second_prefix = if data {
                 "symlink_b-1.0.0.data/purelib/"
@@ -466,20 +460,15 @@ fn directory_symlink_shared_namespace() -> Result<()> {
                     "shared/collision/module.py",
                     "shared/collision/RECORD",
                 ]
-                .map(|path| (format!("{second_prefix}{path}"), "VALUE = 2\n".to_string())),
+                .map(|path| (format!("{second_prefix}{path}"), "VALUE = 2\n")),
             )?;
 
-            allow_duplicates! {
-                uv_snapshot!(context.filters(), context.pip_install()
-                    .arg(first.path()).arg("--link-mode=symlink"), @"
-                exit_code: 0 (success)
-                ----- stderr -----
-                Resolved 1 package in [TIME]
-                Prepared 1 package in [TIME]
-                Installed 1 package in [TIME]
-                 + symlink-a==1.0.0 (from file://[TEMP_DIR]/symlink_a-1.0.0-py3-none-any.whl)
-                ");
-            }
+            context
+                .pip_install()
+                .arg(first.path())
+                .arg("--link-mode=symlink")
+                .assert()
+                .success();
             let shared = context.site_packages().join("shared");
             let cached_shared = fs::read_link(&shared)?;
             let cached_digest = dirhash_path(&cached_shared)?;
@@ -585,8 +574,7 @@ fn directory_symlink_data_data() -> Result<()> {
                 [
                     ("shared/collision/original.py", "VALUE = 1\n"),
                     ("shared/sibling/__init__.py", "VALUE = 2\n"),
-                ]
-                .map(|(path, contents)| (path.to_string(), contents.to_string())),
+                ],
             )?;
             let expected = context.temp_dir.child("expected");
             uv_extract::unzip(File::open(first.path())?, expected.path())?;
@@ -608,11 +596,11 @@ fn directory_symlink_data_data() -> Result<()> {
                 [
                     (
                         format!("symlink_b-1.0.0.data/data/{destination}/added.py"),
-                        "VALUE = 3\n".to_string(),
+                        "VALUE = 3\n",
                     ),
                     (
                         "symlink_b-1.0.0.data/data/share/symlink_b/config.txt".to_string(),
-                        "configuration\n".to_string(),
+                        "configuration\n",
                     ),
                 ],
             )?;
@@ -623,31 +611,12 @@ fn directory_symlink_data_data() -> Result<()> {
                 [&first, &second]
             };
             for wheel in wheels {
-                if wheel.path() == first.path() {
-                    allow_duplicates! {
-                        uv_snapshot!(context.filters(), context.pip_install()
-                            .arg(wheel.path()).arg("--link-mode=symlink"), @"
-                        exit_code: 0 (success)
-                        ----- stderr -----
-                        Resolved 1 package in [TIME]
-                        Prepared 1 package in [TIME]
-                        Installed 1 package in [TIME]
-                         + symlink-a==1.0.0 (from file://[TEMP_DIR]/symlink_a-1.0.0-py3-none-any.whl)
-                        ");
-                    }
-                } else {
-                    allow_duplicates! {
-                        uv_snapshot!(context.filters(), context.pip_install()
-                            .arg(wheel.path()).arg("--link-mode=symlink"), @"
-                        exit_code: 0 (success)
-                        ----- stderr -----
-                        Resolved 1 package in [TIME]
-                        Prepared 1 package in [TIME]
-                        Installed 1 package in [TIME]
-                         + symlink-b==1.0.0 (from file://[TEMP_DIR]/symlink_b-1.0.0-py3-none-any.whl)
-                        ");
-                    }
-                }
+                context
+                    .pip_install()
+                    .arg(wheel.path())
+                    .arg("--link-mode=symlink")
+                    .assert()
+                    .success();
             }
 
             let shared = context.site_packages().join("shared");
@@ -733,10 +702,22 @@ fn directory_symlink_data_data() -> Result<()> {
 #[test]
 #[cfg(unix)]
 fn directory_symlink_target_scripts() -> Result<()> {
-    for (data, script_name) in [
-        (false, "symlink-script"),
-        (false, "nested/symlink-script"),
-        (true, "symlink-script"),
+    for (script_name, script_file, script_contents) in [
+        (
+            "symlink-script",
+            "symlink_b-1.0.0.dist-info/entry_points.txt",
+            "[console_scripts]\nsymlink-script = symlink_b:main\n",
+        ),
+        (
+            "nested/symlink-script",
+            "symlink_b-1.0.0.dist-info/entry_points.txt",
+            "[console_scripts]\nnested/symlink-script = symlink_b:main\n",
+        ),
+        (
+            "symlink-script",
+            "symlink_b-1.0.0.data/scripts/symlink-script",
+            "#!python\nprint('hello')\n",
+        ),
     ] {
         for order in ["package-first", "scripts-first", "concurrent"] {
             let context = uv_test::test_context!("3.12")
@@ -753,29 +734,14 @@ fn directory_symlink_target_scripts() -> Result<()> {
                     ("bin/payload.py", "VALUE = 1\n"),
                     ("bin/resources/config.txt", "configuration\n"),
                     ("bin/nested/payload.py", "VALUE = 2\n"),
-                ]
-                .map(|(path, contents)| (path.to_string(), contents.to_string())),
+                ],
             )?;
-            let script = if data {
-                (
-                    "symlink_b-1.0.0.data/scripts/symlink-script".to_string(),
-                    "#!python\nprint('hello')\n".to_string(),
-                )
-            } else {
-                (
-                    "symlink_b-1.0.0.dist-info/entry_points.txt".to_string(),
-                    format!("[console_scripts]\n{script_name} = symlink_b:main\n"),
-                )
-            };
             write_test_wheel(
                 second.path(),
                 "symlink_b",
                 [
-                    (
-                        "symlink_b.py".to_string(),
-                        "def main(): print('hello')\n".to_string(),
-                    ),
-                    script,
+                    ("symlink_b.py", "def main(): print('hello')\n"),
+                    (script_file, script_contents),
                 ],
             )?;
             let expected = context.temp_dir.child("expected");
@@ -805,37 +771,16 @@ fn directory_symlink_target_scripts() -> Result<()> {
                     [&second, &first]
                 };
                 for wheel in wheels {
-                    if wheel.path() == first.path() {
-                        allow_duplicates! {
-                            uv_snapshot!(context.filters(), context.pip_install()
-                                .arg(wheel.path()).arg("--link-mode=symlink")
-                                .arg("--target").arg(target.path()), @"
-                            exit_code: 0 (success)
-                            ----- stderr -----
-                            Using CPython 3.12.[X] interpreter at: .venv/[BIN]/[PYTHON]
-                            Resolved 1 package in [TIME]
-                            Prepared 1 package in [TIME]
-                            Installed 1 package in [TIME]
-                             + symlink-a==1.0.0 (from file://[TEMP_DIR]/symlink_a-1.0.0-py3-none-any.whl)
-                            ");
-                        }
-                        if order == "package-first" {
-                            assert!(target.join("bin").is_symlink());
-                        }
-                    } else {
-                        allow_duplicates! {
-                            uv_snapshot!(context.filters(), context.pip_install()
-                                .arg(wheel.path()).arg("--link-mode=symlink")
-                                .arg("--target").arg(target.path()), @"
-                            exit_code: 0 (success)
-                            ----- stderr -----
-                            Using CPython 3.12.[X] interpreter at: .venv/[BIN]/[PYTHON]
-                            Resolved 1 package in [TIME]
-                            Prepared 1 package in [TIME]
-                            Installed 1 package in [TIME]
-                             + symlink-b==1.0.0 (from file://[TEMP_DIR]/symlink_b-1.0.0-py3-none-any.whl)
-                            ");
-                        }
+                    context
+                        .pip_install()
+                        .arg(wheel.path())
+                        .arg("--link-mode=symlink")
+                        .arg("--target")
+                        .arg(target.path())
+                        .assert()
+                        .success();
+                    if order == "package-first" && wheel.path() == first.path() {
+                        assert!(target.join("bin").is_symlink());
                     }
                 }
             }
@@ -898,31 +843,21 @@ fn directory_symlink_file_directory_conflict() -> Result<()> {
             [
                 ("shared/collision/payload.py", "VALUE = 1\n"),
                 ("shared/sibling/__init__.py", "VALUE = 2\n"),
-            ]
-            .map(|(path, contents)| (path.to_string(), contents.to_string())),
+            ],
         )?;
         let destination = if data {
             "symlink_b-1.0.0.data/purelib/shared/collision"
         } else {
             "shared/collision"
         };
-        write_test_wheel(
-            second.path(),
-            "symlink_b",
-            [(destination.to_string(), "replacement\n".to_string())],
-        )?;
+        write_test_wheel(second.path(), "symlink_b", [(destination, "replacement\n")])?;
 
-        allow_duplicates! {
-            uv_snapshot!(context.filters(), context.pip_install()
-                .arg(first.path()).arg("--link-mode=symlink"), @"
-            exit_code: 0 (success)
-            ----- stderr -----
-            Resolved 1 package in [TIME]
-            Prepared 1 package in [TIME]
-            Installed 1 package in [TIME]
-             + symlink-a==1.0.0 (from file://[TEMP_DIR]/symlink_a-1.0.0-py3-none-any.whl)
-            ");
-        }
+        context
+            .pip_install()
+            .arg(first.path())
+            .arg("--link-mode=symlink")
+            .assert()
+            .success();
         let shared = context.site_packages().join("shared");
         let cached_shared = fs::read_link(&shared)?;
         let cached_digest = dirhash_path(&cached_shared)?;
@@ -980,8 +915,7 @@ fn directory_symlink_target_script_directory_conflict() -> Result<()> {
             [
                 ("bin/symlink-script/payload.py", "VALUE = 1\n"),
                 ("bin/resources/config.txt", "configuration\n"),
-            ]
-            .map(|(path, contents)| (path.to_string(), contents.to_string())),
+            ],
         )?;
         write_test_wheel(
             second.path(),
@@ -989,23 +923,17 @@ fn directory_symlink_target_script_directory_conflict() -> Result<()> {
             [
                 ("symlink_b.py", "def main(): print('replacement')\n"),
                 script,
-            ]
-            .map(|(path, contents)| (path.to_string(), contents.to_string())),
+            ],
         )?;
 
-        allow_duplicates! {
-            uv_snapshot!(context.filters(), context.pip_install()
-                .arg(first.path()).arg("--link-mode=symlink")
-                .arg("--target").arg(target.path()), @"
-            exit_code: 0 (success)
-            ----- stderr -----
-            Using CPython 3.12.[X] interpreter at: .venv/[BIN]/[PYTHON]
-            Resolved 1 package in [TIME]
-            Prepared 1 package in [TIME]
-            Installed 1 package in [TIME]
-             + symlink-a==1.0.0 (from file://[TEMP_DIR]/symlink_a-1.0.0-py3-none-any.whl)
-            ");
-        }
+        context
+            .pip_install()
+            .arg(first.path())
+            .arg("--link-mode=symlink")
+            .arg("--target")
+            .arg(target.path())
+            .assert()
+            .success();
         let scripts = target.join("bin");
         let cached_bin = fs::read_link(&scripts)?;
         let cached_digest = dirhash_path(&cached_bin)?;
