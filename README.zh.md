@@ -24,19 +24,23 @@
 
 ## 核心亮点
 
-- **All-in-One 统一工具**：单一工具即可全面替代 `pip`、`pip-tools`、`pipx`、`poetry`、`pyenv`、`twine`、`virtualenv` 等繁杂工具链。
-- **极致性能**：安装与解析速度比传统 `pip` [快 10 到 100 倍](https://github.com/astral-sh/uv/blob/main/BENCHMARKS.md)。
+- **All-in-One 统一工具**：单一工具即可全面替代
+  `pip`、`pip-tools`、`pipx`、`poetry`、`pyenv`、`twine`、`virtualenv` 等繁杂工具链。
+- **极致性能**：安装与解析速度比传统 `pip`
+  [快 10 到 100 倍](https://github.com/astral-sh/uv/blob/main/BENCHMARKS.md)。
 - **全功能项目管理**：提供[完善的项目管理能力](#项目管理-projects)，配合跨平台的[通用 Lockfile 锁定文件](https://docs.astral.sh/uv/concepts/projects/layout#the-lockfile)。
 - **单文件脚本即开即用**：支持[直接运行单文件脚本](#单文件脚本-scripts)，并原生支持[内联依赖元数据 (PEP 723)](https://docs.astral.sh/uv/guides/scripts#declaring-script-dependencies)。
 - **Python 版本管理**：无需安装 pyenv 即可[自动下载、安装与切换](#python-版本管理-python-versions)多种 Python 版本。
-- **CLI 工具管理**：支持直接[安装与隔离运行](#全局工具管理-tools) Python 生态中发布的各类命令行工具（替代 `pipx`）。
+- **CLI 工具管理**：支持直接[安装与隔离运行](#全局工具管理-tools)
+  Python 生态中发布的各类命令行工具（替代 `pipx`）。
 - **完全兼容 pip 接口**：包含无缝[兼容 pip 的命令行接口](#pip-兼容接口-the-pip-interface)，以熟悉的语法享受极致性能提升。
 - **Workspace 工作空间支持**：支持类似 Cargo 风格的[多包工作区（Workspaces）](https://docs.astral.sh/uv/concepts/projects/workspaces)，轻松管理大型单体代码库（Monorepo）。
 - **磁盘空间高效**：具备[全局内容寻址缓存](https://docs.astral.sh/uv/concepts/cache)，自动跨项目去重共享依赖包。
 - **开箱即用**：无需预装 Rust 或 Python 环境，可通过 `curl` 或 `pip` 直接一键安装二进制可执行文件。
 - **全平台支持**：支持 macOS、Linux 与 Windows。
 
-uv 由 [Astral](https://astral.sh) 团队开发与支持，他们也是 [Ruff](https://github.com/astral-sh/ruff) 与 [ty](https://github.com/astral-sh/ty) 的缔造者。
+uv 由 [Astral](https://astral.sh) 团队开发与支持，他们也是 [Ruff](https://github.com/astral-sh/ruff)
+与 [ty](https://github.com/astral-sh/ty) 的缔造者。
 
 ## 安装指南
 
@@ -82,7 +86,8 @@ uv 的完整文档位于 [docs.astral.sh/uv](https://docs.astral.sh/uv)。
 
 ### 项目管理 (Projects)
 
-uv 统一管理项目依赖与虚拟环境，支持 lockfile 锁定、workspaces 工作区等现代项目管理范式，体验类似于 `rye` 或 `poetry`：
+uv 统一管理项目依赖与虚拟环境，支持 lockfile 锁定、workspaces 工作区等现代项目管理范式，体验类似于
+`rye` 或 `poetry`：
 
 ```console
 $ uv init example
@@ -260,27 +265,39 @@ Installed 43 packages in 208ms
 ## 常见问题解答 (FAQ)
 
 #### uv 应该如何发音？
+
 发音为字母读音 "you - vee"（[`/juː viː/`](https://en.wikipedia.org/wiki/Help:IPA/English#Key)）。
 
 #### uv 的大小写规范是什么？
+
 统一全小写写作 "uv"。详情参阅[样式指南](./STYLE.md#styling-uv)。
 
 #### uv 支持哪些操作系统和平台？
+
 请查阅 uv 的[支持平台文档](https://docs.astral.sh/uv/reference/platforms/)。
 
 #### uv 是否已生产就绪？
+
 是的，uv 非常稳定，已被全球众多企业和顶尖开源项目广泛应用于生产环境。详情参阅 uv 的[版本发布策略](https://docs.astral.sh/uv/reference/versioning/)。
 
 ## 致谢 (Acknowledgements)
 
-- uv 底层依赖解析算法采用了 [PubGrub](https://github.com/pubgrub-rs/pubgrub)。特别感谢 PubGrub 维护者 [Jacob Finkelman](https://github.com/Eh2406) 的支持。
+- uv 底层依赖解析算法采用了
+  [PubGrub](https://github.com/pubgrub-rs/pubgrub)。特别感谢 PubGrub 维护者
+  [Jacob Finkelman](https://github.com/Eh2406) 的支持。
 - uv 的 Git 交互实现参考了 [Cargo](https://github.com/rust-lang/cargo)。
-- 部分优化灵感源自 [pnpm](https://pnpm.io/)、[Orogene](https://github.com/orogene/orogene) 与 [Bun](https://github.com/oven-sh/bun) 的杰出设计。同时我们也从 Nathaniel J. Smith 的 [Posy](https://github.com/njsmith/posy) 中汲取了灵感并移植了 Windows 的 [trampoline](https://github.com/njsmith/posy/tree/main/src/trampolines/windows-trampolines/posy-trampoline) 支持。
+- 部分优化灵感源自 [pnpm](https://pnpm.io/)、[Orogene](https://github.com/orogene/orogene) 与
+  [Bun](https://github.com/oven-sh/bun) 的杰出设计。同时我们也从 Nathaniel J. Smith 的
+  [Posy](https://github.com/njsmith/posy) 中汲取了灵感并移植了 Windows 的
+  [trampoline](https://github.com/njsmith/posy/tree/main/src/trampolines/windows-trampolines/posy-trampoline)
+  支持。
 
 ## 开源许可证 (License)
 
 uv 采用双重许可证模式发布：
-- Apache 许可证 2.0 版本 ([LICENSE-APACHE](LICENSE-APACHE) 或 <https://www.apache.org/licenses/LICENSE-2.0>)
+
+- Apache 许可证 2.0 版本 ([LICENSE-APACHE](LICENSE-APACHE) 或
+  <https://www.apache.org/licenses/LICENSE-2.0>)
 - MIT 许可证 ([LICENSE-MIT](LICENSE-MIT) 或 <https://opensource.org/licenses/MIT>)
 
 您可以根据需要自由选择。
@@ -293,4 +310,5 @@ uv 采用双重许可证模式发布：
 
 ---
 
-> 💡 **文档维护说明**：本中文文档由社区志愿者（@JasonYeYuhe）翻译维护，最后同步更新于 2026年8月31日。如发现内容与官方英文原版存在差异或新特性滞后，欢迎提交 PR 共同完善！
+> 💡
+> **文档维护说明**：本中文文档由社区志愿者（@JasonYeYuhe）翻译维护，最后同步更新于 2026年8月31日。如发现内容与官方英文原版存在差异或新特性滞后，欢迎提交 PR 共同完善！
