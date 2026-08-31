@@ -57,7 +57,7 @@ use uv_pypi_types::{
 };
 use uv_redacted::{DisplaySafeUrl, DisplaySafeUrlError};
 use uv_small_str::SmallString;
-use uv_types::{BuildContext, HashStrategy};
+use uv_types::{BuildContext, HashStrategy, Worklist};
 use uv_warnings::warn_user_once;
 use uv_workspace::{Editability, WorkspaceMember};
 
@@ -1736,14 +1736,11 @@ impl Lock {
     {
         // Enqueue a dependency for auditability checks: base package (no extra) first, then each activated extra.
         fn enqueue_dep<'lock>(
-            seen: &mut FxHashSet<(PackageIndex, Option<&'lock ExtraName>)>,
-            queue: &mut VecDeque<(PackageIndex, Option<&'lock ExtraName>)>,
+            worklist: &mut Worklist<(PackageIndex, Option<&'lock ExtraName>)>,
             dep: &'lock Dependency,
         ) {
             for maybe_extra in std::iter::once(None).chain(dep.extra.iter().map(Some)) {
-                if seen.insert((dep.index, maybe_extra)) {
-                    queue.push_back((dep.index, maybe_extra));
-                }
+                worklist.push((dep.index, maybe_extra));
             }
         }
 
@@ -1763,8 +1760,7 @@ impl Lock {
         };
 
         // Lockfile traversal state: (package, optional extra to activate on that package).
-        let mut queue: VecDeque<(PackageIndex, Option<&ExtraName>)> = VecDeque::new();
-        let mut seen: FxHashSet<(PackageIndex, Option<&ExtraName>)> = FxHashSet::default();
+        let mut worklist = Worklist::default();
 
         // Seed from workspace members. Always queue with `None` so that we can traverse
         // their dependency groups; only queue extras when prod mode is active.
@@ -1775,14 +1771,10 @@ impl Lock {
             .filter(|(index, _)| workspace_members.contains(&PackageIndex(*index)))
         {
             let index = PackageIndex(index);
-            if seen.insert((index, None)) {
-                queue.push_back((index, None));
-            }
+            worklist.push((index, None));
             if groups.prod() {
                 for extra in extras.extra_names(package.optional_dependencies.keys()) {
-                    if seen.insert((index, Some(extra))) {
-                        queue.push_back((index, Some(extra)));
-                    }
+                    worklist.push((index, Some(extra)));
                 }
             }
         }
@@ -1796,13 +1788,9 @@ impl Lock {
                 .filter(|(_, package)| package.id.name == requirement.name)
             {
                 let index = PackageIndex(index);
-                if seen.insert((index, None)) {
-                    queue.push_back((index, None));
-                }
+                worklist.push((index, None));
                 for extra in &*requirement.extras {
-                    if seen.insert((index, Some(extra))) {
-                        queue.push_back((index, Some(extra)));
-                    }
+                    worklist.push((index, Some(extra)));
                 }
             }
         }
@@ -1821,19 +1809,15 @@ impl Lock {
                     .filter(|(_, package)| package.id.name == requirement.name)
                 {
                     let index = PackageIndex(index);
-                    if seen.insert((index, None)) {
-                        queue.push_back((index, None));
-                    }
+                    worklist.push((index, None));
                     for extra in &*requirement.extras {
-                        if seen.insert((index, Some(extra))) {
-                            queue.push_back((index, Some(extra)));
-                        }
+                        worklist.push((index, Some(extra)));
                     }
                 }
             }
         }
 
-        while let Some((index, extra)) = queue.pop_front() {
+        while let Some((index, extra)) = worklist.pop() {
             let package = self.package(index);
             let is_member = workspace_members.contains(&index);
 
@@ -1858,7 +1842,7 @@ impl Lock {
                     .filter(|(group, _)| groups.contains(group))
                     .flat_map(|(_, deps)| deps)
                 {
-                    enqueue_dep(&mut seen, &mut queue, dep);
+                    enqueue_dep(&mut worklist, dep);
                 }
             }
 
@@ -1875,7 +1859,7 @@ impl Lock {
             };
 
             for dep in dependencies {
-                enqueue_dep(&mut seen, &mut queue, dep);
+                enqueue_dep(&mut worklist, dep);
             }
         }
     }
