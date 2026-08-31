@@ -4191,6 +4191,1500 @@ fn remove_registry() -> Result<()> {
     Ok(())
 }
 
+/// Removing a dependency should ignore extras previously requested for an extraneous package.
+/// See `test/scenarios/extras/remove-prune-extra.md` for the rendered dependency graph.
+#[test]
+fn remove_ignores_extras_of_extraneous_packages() -> Result<()> {
+    let server = uv_test::packse::PackseServer::new("extras/remove-prune-extra.toml");
+    let context = uv_test::test_context!("3.12");
+    let filters = context.filters();
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["candidate==1.0.0"]
+    "#})?;
+
+    uv_snapshot!(filters, context.sync().arg("--index").arg(server.index_url()).env_remove(EnvVars::UV_EXCLUDE_NEWER), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + candidate==1.0.0
+    ");
+    uv_snapshot!(filters, context.pip_install().arg("b[foo]").arg("--index").arg(server.index_url()).env_remove(EnvVars::UV_EXCLUDE_NEWER), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + b==1.0.0
+    ");
+    uv_snapshot!(filters, context.remove().arg("candidate").env_remove(EnvVars::UV_EXCLUDE_NEWER), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+     - candidate==1.0.0
+    ");
+
+    context.assert_command("import b").success();
+    context.assert_not_installed("candidate");
+
+    Ok(())
+}
+
+/// A dependency extra on an installed edge should protect the packages it activates, even when
+/// the dependency itself remains in the project graph.
+#[test]
+fn remove_subset_preserves_explicit_extras_on_installed_edges() -> Result<()> {
+    let server = uv_test::packse::PackseServer::new("extras/remove-prune-extra.toml");
+    let context = uv_test::test_context!("3.12");
+    let filters = context.filters();
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["removed==1.0.0", "bridge==1.0.0"]
+    "#})?;
+
+    context
+        .sync()
+        .arg("--index")
+        .arg(server.index_url())
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .assert()
+        .success();
+    context
+        .pip_install()
+        .arg("edge-root")
+        .arg("--index")
+        .arg(server.index_url())
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .assert()
+        .success();
+
+    uv_snapshot!(filters, context.remove().arg("removed").arg("--index").arg(server.index_url()).env_remove(EnvVars::UV_EXCLUDE_NEWER), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Uninstalled 3 packages in [TIME]
+     - orphan==1.0.0
+     - orphan-leaf==1.0.0
+     - removed==1.0.0
+    ");
+
+    context
+        .assert_command("import bridge; import candidate; import edge_root")
+        .success();
+    context.assert_not_installed("removed");
+    context.pip_check().assert().success();
+
+    Ok(())
+}
+
+/// An external package should protect only the shared branch of a removed dependency graph.
+#[test]
+fn remove_subset_prunes_only_unshared_branches() -> Result<()> {
+    let server = uv_test::packse::PackseServer::new("extras/remove-prune-extra.toml");
+    let context = uv_test::test_context!("3.12");
+    let filters = context.filters();
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["removed==1.0.0"]
+    "#})?;
+
+    context
+        .sync()
+        .arg("--index")
+        .arg(server.index_url())
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .assert()
+        .success();
+    context
+        .pip_install()
+        .arg("external")
+        .arg("--index")
+        .arg(server.index_url())
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .assert()
+        .success();
+
+    uv_snapshot!(filters, context.remove().arg("removed").env_remove(EnvVars::UV_EXCLUDE_NEWER), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Uninstalled 3 packages in [TIME]
+     - orphan==1.0.0
+     - orphan-leaf==1.0.0
+     - removed==1.0.0
+    ");
+
+    context
+        .assert_command("import candidate; import external")
+        .success();
+    context.assert_not_installed("orphan");
+    context.assert_not_installed("orphan_leaf");
+    context.assert_not_installed("removed");
+    context.pip_check().assert().success();
+
+    Ok(())
+}
+
+/// Installed metadata should provide the removal graph when no previous lockfile is available.
+#[test]
+fn remove_subset_without_previous_lock() -> Result<()> {
+    let server = uv_test::packse::PackseServer::new("extras/remove-prune-extra.toml");
+    let context = uv_test::test_context!("3.12");
+    let filters = context.filters();
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["removed==1.0.0"]
+    "#})?;
+
+    context
+        .sync()
+        .arg("--index")
+        .arg(server.index_url())
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .assert()
+        .success();
+    fs_err::remove_file(context.temp_dir.join("uv.lock"))?;
+
+    uv_snapshot!(filters, context.remove().arg("removed").env_remove(EnvVars::UV_EXCLUDE_NEWER), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Uninstalled 4 packages in [TIME]
+     - candidate==1.0.0
+     - orphan==1.0.0
+     - orphan-leaf==1.0.0
+     - removed==1.0.0
+    ");
+
+    context.assert_not_installed("candidate");
+    context.assert_not_installed("orphan");
+    context.assert_not_installed("orphan_leaf");
+    context.assert_not_installed("removed");
+
+    Ok(())
+}
+
+/// A declaration that only applies to another Python version should not retain an installed
+/// package in the active environment.
+#[test]
+fn remove_subset_uses_active_environment_markers() -> Result<()> {
+    let server = uv_test::packse::PackseServer::new("extras/remove-prune-extra.toml");
+    let context = uv_test::test_context!("3.12");
+    let filters = context.filters();
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.11"
+        dependencies = [
+            "marker-root==1.0.0",
+            "marker-candidate==1.0.0; python_version < '3.12'",
+        ]
+    "#})?;
+
+    context
+        .sync()
+        .arg("--index")
+        .arg(server.index_url())
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .assert()
+        .success();
+
+    uv_snapshot!(filters, context.remove().arg("marker-root").arg("--index").arg(server.index_url()).env_remove(EnvVars::UV_EXCLUDE_NEWER), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Uninstalled 2 packages in [TIME]
+     - marker-candidate==1.0.0
+     - marker-root==1.0.0
+    ");
+
+    context.assert_not_installed("marker_candidate");
+    context.assert_not_installed("marker_root");
+
+    Ok(())
+}
+
+/// A package in an unselected dependency group is still owned by the project declaration graph.
+#[test]
+fn remove_subset_preserves_unselected_group_overlap() -> Result<()> {
+    let server = uv_test::packse::PackseServer::new("extras/remove-prune-extra.toml");
+    let context = uv_test::test_context!("3.12");
+    let filters = context.filters();
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["removed==1.0.0"]
+
+        [dependency-groups]
+        test = ["candidate==1.0.0"]
+    "#})?;
+
+    context
+        .sync()
+        .arg("--index")
+        .arg(server.index_url())
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .assert()
+        .success();
+
+    uv_snapshot!(filters, context.remove().arg("removed").arg("--index").arg(server.index_url()).env_remove(EnvVars::UV_EXCLUDE_NEWER), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Uninstalled 3 packages in [TIME]
+     - orphan==1.0.0
+     - orphan-leaf==1.0.0
+     - removed==1.0.0
+    ");
+
+    context.assert_command("import candidate").success();
+    context.assert_not_installed("removed");
+
+    Ok(())
+}
+
+/// An unselected group's installed dependencies must be preserved when its lockfile is newer.
+#[test]
+fn remove_subset_preserves_installed_dependencies_of_unselected_group() -> Result<()> {
+    let server = uv_test::packse::PackseServer::new("extras/remove-prune-extra.toml");
+    let context = uv_test::test_context!("3.12");
+    let filters = context.filters();
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["removed==1.0.0"]
+
+        [dependency-groups]
+        keep = ["remaining==1.0.0"]
+    "#})?;
+    context
+        .sync()
+        .args(["--group", "keep", "--index"])
+        .arg(server.index_url())
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .assert()
+        .success();
+    context
+        .add()
+        .args([
+            "remaining==2.0.0",
+            "--group",
+            "keep",
+            "--no-sync",
+            "--index",
+        ])
+        .arg(server.index_url())
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .assert()
+        .success();
+
+    uv_snapshot!(filters, context.remove().arg("removed").env_remove(EnvVars::UV_EXCLUDE_NEWER), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Uninstalled 3 packages in [TIME]
+     - orphan==1.0.0
+     - orphan-leaf==1.0.0
+     - removed==1.0.0
+    ");
+
+    context.assert_installed("remaining", "1.0.0");
+    context.assert_installed("candidate", "1.0.0");
+    context.assert_not_installed("removed");
+    context.pip_check().assert().success();
+
+    Ok(())
+}
+
+/// A package being upgraded should not retain dependencies of its previous installed version.
+#[test]
+fn remove_subset_ignores_replaced_package_dependencies() -> Result<()> {
+    let server = uv_test::packse::PackseServer::new("extras/remove-prune-extra.toml");
+    let context = uv_test::test_context!("3.12");
+    let filters = context.filters();
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["removed==1.0.0", "remaining==1.0.0"]
+    "#})?;
+    context
+        .sync()
+        .arg("--index")
+        .arg(server.index_url())
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .assert()
+        .success();
+    context
+        .add()
+        .args(["remaining==2.0.0", "--no-sync", "--index"])
+        .arg(server.index_url())
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .assert()
+        .success();
+
+    uv_snapshot!(filters, context.remove().arg("removed").env_remove(EnvVars::UV_EXCLUDE_NEWER), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 5 packages in [TIME]
+    Installed 1 package in [TIME]
+     - candidate==1.0.0
+     - orphan==1.0.0
+     - orphan-leaf==1.0.0
+     - remaining==1.0.0
+     + remaining==2.0.0
+     - removed==1.0.0
+    ");
+
+    context.assert_installed("remaining", "2.0.0");
+    context.assert_not_installed("candidate");
+    context.assert_not_installed("removed");
+    context.pip_check().assert().success();
+
+    Ok(())
+}
+
+/// A package in an unselected project extra is still owned by the project declaration graph.
+#[test]
+fn remove_subset_preserves_unselected_extra_overlap() -> Result<()> {
+    let server = uv_test::packse::PackseServer::new("extras/remove-prune-extra.toml");
+    let context = uv_test::test_context!("3.12");
+    let filters = context.filters();
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["removed==1.0.0"]
+
+        [project.optional-dependencies]
+        test = ["candidate==1.0.0"]
+    "#})?;
+
+    context
+        .sync()
+        .arg("--index")
+        .arg(server.index_url())
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .assert()
+        .success();
+
+    uv_snapshot!(filters, context.remove().arg("removed").arg("--index").arg(server.index_url()).env_remove(EnvVars::UV_EXCLUDE_NEWER), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Uninstalled 3 packages in [TIME]
+     - orphan==1.0.0
+     - orphan-leaf==1.0.0
+     - removed==1.0.0
+    ");
+
+    context.assert_command("import candidate").success();
+    context.assert_not_installed("removed");
+
+    Ok(())
+}
+
+/// Candidate cycles should be removed, while a path from an external root should retain the
+/// reachable cycle.
+#[test]
+fn remove_subset_handles_cycles() -> Result<()> {
+    let server = uv_test::packse::PackseServer::new("extras/remove-prune-extra.toml");
+    let context = uv_test::test_context!("3.12");
+    let filters = context.filters();
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["cycle-root==1.0.0"]
+    "#})?;
+
+    context
+        .sync()
+        .arg("--index")
+        .arg(server.index_url())
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .assert()
+        .success();
+    context
+        .pip_install()
+        .arg("cycle-external")
+        .arg("--index")
+        .arg(server.index_url())
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .assert()
+        .success();
+
+    uv_snapshot!(filters, context.remove().arg("cycle-root").env_remove(EnvVars::UV_EXCLUDE_NEWER), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+     - cycle-root==1.0.0
+    ");
+
+    context
+        .assert_command("import cycle_a; import cycle_b; import cycle_external")
+        .success();
+    context.assert_not_installed("cycle_root");
+    context.pip_check().assert().success();
+
+    Ok(())
+}
+
+/// A marker-false removed declaration never owned a same-name package installed manually in the
+/// active environment.
+#[test]
+fn remove_subset_ignores_inactive_removed_roots() -> Result<()> {
+    let server = uv_test::packse::PackseServer::new("extras/remove-prune-extra.toml");
+    let context = uv_test::test_context!("3.12");
+    let filters = context.filters();
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.11"
+        dependencies = ["marker-candidate==1.0.0; python_version < '3.12'"]
+    "#})?;
+
+    context
+        .sync()
+        .arg("--index")
+        .arg(server.index_url())
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .assert()
+        .success();
+    context
+        .pip_install()
+        .arg("marker-candidate")
+        .arg("--index")
+        .arg(server.index_url())
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .assert()
+        .success();
+
+    uv_snapshot!(filters, context.remove().arg("marker-candidate").env_remove(EnvVars::UV_EXCLUDE_NEWER), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Checked in [TIME]
+    ");
+
+    context.assert_command("import marker_candidate").success();
+
+    Ok(())
+}
+
+/// A member's inherited workspace-root groups should retain their installed dependencies.
+#[test]
+fn remove_subset_preserves_workspace_root_group() -> Result<()> {
+    let server = uv_test::packse::PackseServer::new("extras/remove-prune-extra.toml");
+    let context = uv_test::test_context!("3.12");
+    let filters = context.filters();
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "root"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["orphan==1.0.0"]
+
+        [dependency-groups]
+        keep = ["candidate==1.0.0"]
+
+        [tool.uv]
+        package = false
+
+        [tool.uv.workspace]
+        members = ["child"]
+    "#})?;
+    context
+        .temp_dir
+        .child("child/pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "child"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["removed==1.0.0"]
+
+        [tool.uv]
+        package = false
+    "#})?;
+    context
+        .sync()
+        .args(["--package", "child", "--group", "keep", "--index"])
+        .arg(server.index_url())
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .assert()
+        .success();
+
+    uv_snapshot!(filters, context.remove().args(["removed", "--package", "child", "--index"]).arg(server.index_url()).env_remove(EnvVars::UV_EXCLUDE_NEWER), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    Uninstalled 3 packages in [TIME]
+     - orphan==1.0.0
+     - orphan-leaf==1.0.0
+     - removed==1.0.0
+    ");
+
+    context.assert_installed("candidate", "1.0.0");
+    context.assert_not_installed("orphan");
+    context.assert_not_installed("orphan_leaf");
+    context.assert_not_installed("removed");
+
+    Ok(())
+}
+
+/// A member's group takes precedence over an inherited group with the same name.
+#[test]
+fn remove_subset_ignores_shadowed_workspace_root_group() -> Result<()> {
+    let server = uv_test::packse::PackseServer::new("extras/remove-prune-extra.toml");
+    let context = uv_test::test_context!("3.12");
+    let filters = context.filters();
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "root"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [dependency-groups]
+        keep = ["candidate==1.0.0"]
+        root-only = ["other==1.0.0"]
+
+        [tool.uv]
+        package = false
+
+        [tool.uv.workspace]
+        members = ["child"]
+    "#})?;
+    context
+        .temp_dir
+        .child("child/pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "child"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["removed==1.0.0"]
+
+        [dependency-groups]
+        keep = ["other==1.0.0"]
+
+        [tool.uv]
+        package = false
+    "#})?;
+    context
+        .sync()
+        .args(["--package", "child", "--group", "keep", "--index"])
+        .arg(server.index_url())
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .assert()
+        .success();
+
+    uv_snapshot!(filters, context.remove().args(["removed", "--package", "child", "--index"]).arg(server.index_url()).env_remove(EnvVars::UV_EXCLUDE_NEWER), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    Uninstalled 4 packages in [TIME]
+     - candidate==1.0.0
+     - orphan==1.0.0
+     - orphan-leaf==1.0.0
+     - removed==1.0.0
+    ");
+
+    context.assert_installed("other", "1.0.0");
+    context.assert_not_installed("candidate");
+    context.assert_not_installed("orphan");
+    context.assert_not_installed("orphan_leaf");
+    context.assert_not_installed("removed");
+
+    Ok(())
+}
+
+/// A member's group takes precedence over a virtual workspace root group with the same name.
+#[test]
+fn remove_subset_ignores_shadowed_virtual_workspace_root_group() -> Result<()> {
+    let server = uv_test::packse::PackseServer::new("extras/remove-prune-extra.toml");
+    let context = uv_test::test_context!("3.12");
+    let filters = context.filters();
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [dependency-groups]
+        dev = ["candidate==1.0.0"]
+
+        [tool.uv.workspace]
+        members = ["child"]
+    "#})?;
+    context
+        .temp_dir
+        .child("child/pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "child"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["removed==1.0.0"]
+
+        [dependency-groups]
+        dev = ["other==1.0.0"]
+
+        [tool.uv]
+        package = false
+    "#})?;
+    context
+        .sync()
+        .args(["--group", "dev", "--index"])
+        .arg(server.index_url())
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .assert()
+        .success();
+
+    uv_snapshot!(filters, context.remove().args(["removed", "--package", "child", "--index"]).arg(server.index_url()).env_remove(EnvVars::UV_EXCLUDE_NEWER), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Uninstalled 4 packages in [TIME]
+     - candidate==1.0.0
+     - orphan==1.0.0
+     - orphan-leaf==1.0.0
+     - removed==1.0.0
+    ");
+
+    context.assert_installed("other", "1.0.0");
+    context.assert_not_installed("candidate");
+    context.assert_not_installed("orphan");
+    context.assert_not_installed("orphan_leaf");
+    context.assert_not_installed("removed");
+
+    Ok(())
+}
+
+/// A workspace member that remains in the universal lock should not retain an installed package
+/// after it leaves the selected project's dependency graph.
+#[test]
+fn remove_subset_respects_workspace_target_reachability() -> Result<()> {
+    let server = uv_test::packse::PackseServer::new("extras/remove-prune-extra.toml");
+    let context = uv_test::test_context!("3.12");
+    let filters = context.filters();
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [tool.uv.workspace]
+        members = ["child1", "candidate"]
+    "#})?;
+    context
+        .temp_dir
+        .child("child1/pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "child1"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["candidate"]
+
+        [tool.uv]
+        package = false
+
+        [tool.uv.sources]
+        candidate = { workspace = true }
+    "#})?;
+    context
+        .temp_dir
+        .child("candidate/pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "candidate"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [tool.uv]
+        package = false
+    "#})?;
+
+    let child1 = context.temp_dir.join("child1");
+    context
+        .sync()
+        .current_dir(&child1)
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .assert()
+        .success();
+    context
+        .pip_install()
+        .arg("candidate")
+        .arg("--index")
+        .arg(server.index_url())
+        .current_dir(&child1)
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .assert()
+        .success();
+
+    uv_snapshot!(filters, context.remove().arg("candidate").current_dir(&child1).env_remove(EnvVars::UV_EXCLUDE_NEWER), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Uninstalled 1 package in [TIME]
+     - candidate==1.0.0
+    ");
+
+    context.assert_not_installed("candidate");
+
+    Ok(())
+}
+
+/// Retention should union conflicting project extras instead of activating them together.
+#[test]
+fn remove_subset_unions_conflicting_project_extras() -> Result<()> {
+    let server = uv_test::packse::PackseServer::new("extras/remove-prune-extra.toml");
+    let context = uv_test::test_context!("3.12");
+    let filters = context.filters();
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["removed==1.0.0"]
+
+        [project.optional-dependencies]
+        foo = ["candidate==1.0.0"]
+        bar = ["other==1.0.0"]
+
+        [tool.uv]
+        conflicts = [[
+            { extra = "foo" },
+            { extra = "bar" },
+        ]]
+    "#})?;
+
+    context
+        .sync()
+        .arg("--index")
+        .arg(server.index_url())
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .assert()
+        .success();
+
+    uv_snapshot!(filters, context.remove().arg("removed").arg("--index").arg(server.index_url()).env_remove(EnvVars::UV_EXCLUDE_NEWER), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Uninstalled 3 packages in [TIME]
+     - orphan==1.0.0
+     - orphan-leaf==1.0.0
+     - removed==1.0.0
+    ");
+
+    context.assert_command("import candidate").success();
+    context.assert_not_installed("removed");
+
+    Ok(())
+}
+
+/// If an external package has unreadable metadata, prune based on the available metadata.
+#[test]
+fn remove_subset_prunes_on_unreadable_external_metadata() -> Result<()> {
+    let server = uv_test::packse::PackseServer::new("extras/remove-prune-extra.toml");
+    let context = uv_test::test_context!("3.12");
+    let filters = context.filters();
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["removed==1.0.0"]
+    "#})?;
+
+    context
+        .sync()
+        .arg("--index")
+        .arg(server.index_url())
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .assert()
+        .success();
+    context
+        .pip_install()
+        .arg("b")
+        .arg("--index")
+        .arg(server.index_url())
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .assert()
+        .success();
+    fs_err::write(
+        context.site_packages().join("b-1.0.0.dist-info/METADATA"),
+        b"invalid metadata",
+    )?;
+
+    uv_snapshot!(filters, context.remove().arg("removed").env_remove(EnvVars::UV_EXCLUDE_NEWER), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Uninstalled 4 packages in [TIME]
+     - candidate==1.0.0
+     - orphan==1.0.0
+     - orphan-leaf==1.0.0
+     - removed==1.0.0
+    ");
+
+    context.assert_command("import b").success();
+    context.assert_not_installed("candidate");
+    context.assert_not_installed("removed");
+
+    Ok(())
+}
+
+/// Activating an extra must preserve the package's base requirements as a separate dependency
+/// state, including `extra != ...` markers.
+#[test]
+fn remove_subset_preserves_base_dependencies_with_edge_extras() -> Result<()> {
+    let server = uv_test::packse::PackseServer::new("extras/remove-prune-extra.toml");
+    let context = uv_test::test_context!("3.12");
+    let filters = context.filters();
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["base-removed==1.0.0"]
+    "#})?;
+
+    context
+        .sync()
+        .arg("--index")
+        .arg(server.index_url())
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .assert()
+        .success();
+    context
+        .pip_install()
+        .arg("base-external")
+        .arg("--index")
+        .arg(server.index_url())
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .assert()
+        .success();
+
+    uv_snapshot!(filters, context.remove().arg("base-removed").env_remove(EnvVars::UV_EXCLUDE_NEWER), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+     - base-removed==1.0.0
+    ");
+
+    context
+        .assert_command("import base_external; import base_extra_root; import base_leaf")
+        .success();
+    context.pip_check().assert().success();
+
+    Ok(())
+}
+
+/// The previous lock should preserve extras on the removed declaration edge when installed
+/// metadata for the removed root cannot be read.
+#[test]
+fn remove_subset_uses_previous_lock_for_removed_extra() -> Result<()> {
+    let server = uv_test::packse::PackseServer::new("extras/remove-prune-extra.toml");
+    let context = uv_test::test_context!("3.12");
+    let filters = context.filters();
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["bridge[foo]==1.0.0"]
+    "#})?;
+    context
+        .sync()
+        .arg("--index")
+        .arg(server.index_url())
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .assert()
+        .success();
+    fs_err::write(
+        context
+            .site_packages()
+            .join("bridge-1.0.0.dist-info/METADATA"),
+        b"invalid metadata",
+    )?;
+
+    uv_snapshot!(filters, context.remove().arg("bridge").env_remove(EnvVars::UV_EXCLUDE_NEWER), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Uninstalled 2 packages in [TIME]
+     - bridge==1.0.0
+     - candidate==1.0.0
+    ");
+
+    context.assert_not_installed("bridge");
+    context.assert_not_installed("candidate");
+
+    Ok(())
+}
+
+/// Removing a selected optional dependency should prune only its unshared branch.
+#[test]
+fn remove_subset_prunes_selected_optional_dependency() -> Result<()> {
+    let server = uv_test::packse::PackseServer::new("extras/remove-prune-extra.toml");
+    let context = uv_test::test_context!("3.12");
+    let filters = context.filters();
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["external==1.0.0"]
+
+        [project.optional-dependencies]
+        cleanup = ["removed==1.0.0"]
+    "#})?;
+    context
+        .sync()
+        .args(["--extra", "cleanup", "--index"])
+        .arg(server.index_url())
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .assert()
+        .success();
+    fs_err::write(
+        context
+            .site_packages()
+            .join("removed-1.0.0.dist-info/METADATA"),
+        b"invalid metadata",
+    )?;
+
+    uv_snapshot!(filters, context.remove().arg("removed").args(["--optional", "cleanup", "--index"]).arg(server.index_url()).env_remove(EnvVars::UV_EXCLUDE_NEWER), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Uninstalled 3 packages in [TIME]
+     - orphan==1.0.0
+     - orphan-leaf==1.0.0
+     - removed==1.0.0
+    ");
+
+    context
+        .assert_command("import candidate; import external")
+        .success();
+    context.assert_not_installed("orphan");
+    context.assert_not_installed("orphan_leaf");
+    context.assert_not_installed("removed");
+
+    Ok(())
+}
+
+/// Removing a selected dependency-group dependency should prune only its unshared branch.
+#[test]
+fn remove_subset_prunes_selected_group_dependency() -> Result<()> {
+    let server = uv_test::packse::PackseServer::new("extras/remove-prune-extra.toml");
+    let context = uv_test::test_context!("3.12");
+    let filters = context.filters();
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["external==1.0.0"]
+
+        [dependency-groups]
+        cleanup = ["removed==1.0.0"]
+    "#})?;
+    context
+        .sync()
+        .args(["--group", "cleanup", "--index"])
+        .arg(server.index_url())
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .assert()
+        .success();
+    fs_err::write(
+        context
+            .site_packages()
+            .join("removed-1.0.0.dist-info/METADATA"),
+        b"invalid metadata",
+    )?;
+
+    uv_snapshot!(filters, context.remove().arg("removed").args(["--group", "cleanup", "--index"]).arg(server.index_url()).env_remove(EnvVars::UV_EXCLUDE_NEWER), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Uninstalled 3 packages in [TIME]
+     - orphan==1.0.0
+     - orphan-leaf==1.0.0
+     - removed==1.0.0
+    ");
+
+    context
+        .assert_command("import candidate; import external")
+        .success();
+    context.assert_not_installed("orphan");
+    context.assert_not_installed("orphan_leaf");
+    context.assert_not_installed("removed");
+
+    Ok(())
+}
+
+/// A virtual workspace's lock-manifest dependency group should seed the removed graph.
+#[test]
+fn remove_subset_prunes_virtual_workspace_group() -> Result<()> {
+    let server = uv_test::packse::PackseServer::new("extras/remove-prune-extra.toml");
+    let context = uv_test::test_context!("3.12");
+    let filters = context.filters();
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [dependency-groups]
+        cleanup = ["removed==1.0.0"]
+    "#})?;
+    context
+        .sync()
+        .args(["--group", "cleanup", "--index"])
+        .arg(server.index_url())
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .assert()
+        .success();
+    fs_err::write(
+        context
+            .site_packages()
+            .join("removed-1.0.0.dist-info/METADATA"),
+        b"invalid metadata",
+    )?;
+
+    uv_snapshot!(filters, context.remove().arg("removed").args(["--group", "cleanup", "--index"]).arg(server.index_url()).env_remove(EnvVars::UV_EXCLUDE_NEWER), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    warning: No `requires-python` value found in the workspace. Defaulting to `>=3.12`.
+    Resolved in [TIME]
+    Uninstalled 4 packages in [TIME]
+     - candidate==1.0.0
+     - orphan==1.0.0
+     - orphan-leaf==1.0.0
+     - removed==1.0.0
+    ");
+
+    context.assert_not_installed("candidate");
+    context.assert_not_installed("orphan");
+    context.assert_not_installed("orphan_leaf");
+    context.assert_not_installed("removed");
+
+    Ok(())
+}
+
+/// An inapplicable previous lock should fall back to the installed dependency graph.
+#[test]
+fn remove_subset_ignores_stale_previous_project_root() -> Result<()> {
+    let server = uv_test::packse::PackseServer::new("extras/remove-prune-extra.toml");
+    let context = uv_test::test_context!("3.12");
+    let filters = context.filters();
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "old-project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["removed==1.0.0"]
+    "#})?;
+    context
+        .sync()
+        .arg("--index")
+        .arg(server.index_url())
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .assert()
+        .success();
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "new-project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["removed==1.0.0"]
+    "#})?;
+
+    uv_snapshot!(filters, context.remove().arg("removed").arg("--index").arg(server.index_url()).env_remove(EnvVars::UV_EXCLUDE_NEWER), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Uninstalled 4 packages in [TIME]
+     - candidate==1.0.0
+     - orphan==1.0.0
+     - orphan-leaf==1.0.0
+     - removed==1.0.0
+    ");
+
+    context.assert_not_installed("candidate");
+    context.assert_not_installed("orphan");
+    context.assert_not_installed("orphan_leaf");
+    context.assert_not_installed("removed");
+
+    Ok(())
+}
+
+/// A manually installed package that requires the removed root should retain that entire graph.
+#[test]
+fn remove_subset_preserves_root_required_by_external_package() -> Result<()> {
+    let server = uv_test::packse::PackseServer::new("extras/remove-prune-extra.toml");
+    let context = uv_test::test_context!("3.12");
+    let filters = context.filters();
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["removed==1.0.0"]
+    "#})?;
+    context
+        .sync()
+        .arg("--index")
+        .arg(server.index_url())
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .assert()
+        .success();
+    context
+        .pip_install()
+        .arg("root-external")
+        .arg("--index")
+        .arg(server.index_url())
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .assert()
+        .success();
+
+    uv_snapshot!(filters, context.remove().arg("removed").env_remove(EnvVars::UV_EXCLUDE_NEWER), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Checked in [TIME]
+    ");
+
+    context
+        .assert_command("import root_external; import removed; import candidate; import orphan")
+        .success();
+    context.pip_check().assert().success();
+
+    Ok(())
+}
+
+/// A dependency cycle with no remaining owner should be removed in full.
+#[test]
+fn remove_subset_prunes_orphan_cycle() -> Result<()> {
+    let server = uv_test::packse::PackseServer::new("extras/remove-prune-extra.toml");
+    let context = uv_test::test_context!("3.12");
+    let filters = context.filters();
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["cycle-root==1.0.0"]
+    "#})?;
+    context
+        .sync()
+        .arg("--index")
+        .arg(server.index_url())
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .assert()
+        .success();
+
+    uv_snapshot!(filters, context.remove().arg("cycle-root").env_remove(EnvVars::UV_EXCLUDE_NEWER), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Uninstalled 3 packages in [TIME]
+     - cycle-a==1.0.0
+     - cycle-b==1.0.0
+     - cycle-root==1.0.0
+    ");
+
+    context.assert_not_installed("cycle_root");
+    context.assert_not_installed("cycle_a");
+    context.assert_not_installed("cycle_b");
+
+    Ok(())
+}
+
+/// A remaining production dependency should retain the branch it shares with the removed root.
+#[test]
+fn remove_subset_preserves_production_overlap() -> Result<()> {
+    let server = uv_test::packse::PackseServer::new("extras/remove-prune-extra.toml");
+    let context = uv_test::test_context!("3.12");
+    let filters = context.filters();
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["removed==1.0.0", "external==1.0.0"]
+    "#})?;
+    context
+        .sync()
+        .arg("--index")
+        .arg(server.index_url())
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .assert()
+        .success();
+
+    uv_snapshot!(filters, context.remove().arg("removed").arg("--index").arg(server.index_url()).env_remove(EnvVars::UV_EXCLUDE_NEWER), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Uninstalled 3 packages in [TIME]
+     - orphan==1.0.0
+     - orphan-leaf==1.0.0
+     - removed==1.0.0
+    ");
+
+    context
+        .assert_command("import candidate; import external")
+        .success();
+    context.assert_not_installed("orphan");
+    context.assert_not_installed("orphan_leaf");
+    context.assert_not_installed("removed");
+
+    Ok(())
+}
+
+/// Inactive transitive edges should not make an unrelated installed package a removal candidate.
+#[test]
+fn remove_subset_uses_markers_on_installed_edges() -> Result<()> {
+    let server = uv_test::packse::PackseServer::new("extras/remove-prune-extra.toml");
+    let context = uv_test::test_context!("3.12");
+    let filters = context.filters();
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["marker-removed==1.0.0"]
+    "#})?;
+    context
+        .sync()
+        .arg("--index")
+        .arg(server.index_url())
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .assert()
+        .success();
+    context
+        .pip_install()
+        .arg("candidate")
+        .arg("--index")
+        .arg(server.index_url())
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .assert()
+        .success();
+
+    uv_snapshot!(filters, context.remove().arg("marker-removed").env_remove(EnvVars::UV_EXCLUDE_NEWER), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+     - marker-removed==1.0.0
+    ");
+
+    context.pip_show().arg("candidate").assert().success();
+    context.assert_not_installed("marker_removed");
+
+    Ok(())
+}
+
+/// Installed metadata should preserve extras on the removed root when no previous lock exists.
+#[test]
+fn remove_subset_uses_installed_extra_without_previous_lock() -> Result<()> {
+    let server = uv_test::packse::PackseServer::new("extras/remove-prune-extra.toml");
+    let context = uv_test::test_context!("3.12");
+    let filters = context.filters();
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["bridge[foo]==1.0.0"]
+    "#})?;
+    context
+        .sync()
+        .arg("--index")
+        .arg(server.index_url())
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .assert()
+        .success();
+    fs_err::remove_file(context.temp_dir.join("uv.lock"))?;
+
+    uv_snapshot!(filters, context.remove().arg("bridge").env_remove(EnvVars::UV_EXCLUDE_NEWER), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Uninstalled 2 packages in [TIME]
+     - bridge==1.0.0
+     - candidate==1.0.0
+    ");
+
+    context.assert_not_installed("bridge");
+    context.assert_not_installed("candidate");
+
+    Ok(())
+}
+
+/// Frozen removal should not validate an existing lockfile.
+#[test]
+fn remove_subset_frozen_ignores_invalid_lock() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["candidate==1.0.0"]
+    "#})?;
+    context
+        .temp_dir
+        .child("uv.lock")
+        .write_str("invalid lock")?;
+
+    context
+        .remove()
+        .args(["candidate", "--frozen"])
+        .assert()
+        .success();
+
+    assert_eq!(context.read("uv.lock"), "invalid lock");
+    assert!(!context.read("pyproject.toml").contains("candidate"));
+
+    Ok(())
+}
+
 #[test]
 fn add_preserves_indentation_in_pyproject_toml() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -6320,12 +7814,8 @@ fn add_group_normalize() -> Result<()> {
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 5 packages in [TIME]
-    Uninstalled 5 packages in [TIME]
-     - anyio==3.7.0
-     - idna==3.6
+    Uninstalled 1 package in [TIME]
      - iniconfig==2.0.0
-     - sniffio==1.3.1
-     - typing-extensions==4.10.0
     ");
 
     let pyproject_toml = context.read("pyproject.toml");
@@ -6350,7 +7840,8 @@ fn add_group_normalize() -> Result<()> {
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    Checked in [TIME]
+    Uninstalled 1 package in [TIME]
+     - typing-extensions==4.10.0
     ");
 
     let pyproject_toml = context.read("pyproject.toml");
@@ -14139,12 +15630,8 @@ fn add_optional_normalize() -> Result<()> {
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 5 packages in [TIME]
-    Uninstalled 5 packages in [TIME]
-     - anyio==3.7.0
-     - idna==3.6
+    Uninstalled 1 package in [TIME]
      - iniconfig==2.0.0
-     - sniffio==1.3.1
-     - typing-extensions==4.10.0
     ");
 
     let pyproject_toml = context.read("pyproject.toml");
@@ -14169,7 +15656,8 @@ fn add_optional_normalize() -> Result<()> {
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    Checked in [TIME]
+    Uninstalled 1 package in [TIME]
+     - typing-extensions==4.10.0
     ");
 
     let pyproject_toml = context.read("pyproject.toml");

@@ -3,7 +3,8 @@ pub use installer::{Installer, Reporter as InstallReporter};
 pub use plan::{IncompatibleWheelError, Plan, Planner};
 pub use preparer::{Error as PrepareError, Preparer, Reporter as PrepareReporter};
 pub use site_packages::{
-    InstallationStrategy, SatisfiesResult, SitePackages, SitePackagesDiagnostic,
+    InstallationStrategy, InstalledReachability, SatisfiesResult, SitePackages,
+    SitePackagesDiagnostic,
 };
 pub use uninstall::{UninstallError, uninstall};
 

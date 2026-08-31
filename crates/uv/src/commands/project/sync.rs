@@ -45,7 +45,7 @@ use uv_workspace::{DiscoveryOptions, MemberDiscovery, VirtualProject, Workspace,
 
 use crate::commands::editable::apply_editable_mode;
 use crate::commands::pip::loggers::{DefaultInstallLogger, DefaultResolveLogger, InstallLogger};
-use crate::commands::pip::operations::{ChangedDist, Changelog, Modifications};
+use crate::commands::pip::operations::{ChangedDist, Changelog, Modifications, PrunePolicy};
 use crate::commands::pip::resolution_markers;
 use crate::commands::pip::{operations, resolution_tags};
 use crate::commands::project::install_target::InstallTarget;
@@ -658,6 +658,56 @@ pub(crate) async fn do_sync<'a>(
     preview: Preview,
     malware_settings: impl Into<MalwareCheckContext<'a>>,
 ) -> Result<Changelog, ProjectError> {
+    do_sync_with_prune(
+        target,
+        venv,
+        extras,
+        groups,
+        editable,
+        install_options,
+        modifications,
+        None,
+        python_platform,
+        settings,
+        client_builder,
+        state,
+        logger,
+        installer_metadata,
+        concurrency,
+        cache,
+        workspace_cache,
+        dry_run,
+        printer,
+        preview,
+        malware_settings,
+    )
+    .await
+}
+
+/// Sync a lockfile with an environment, pruning packages removed from the managed graph.
+pub(crate) async fn do_sync_with_prune<'a>(
+    target: InstallTarget<'_>,
+    venv: &PythonEnvironment,
+    extras: &ExtrasSpecificationWithDefaults,
+    groups: &DependencyGroupsWithDefaults,
+    editable: Option<EditableMode>,
+    install_options: InstallOptions,
+    modifications: Modifications,
+    prune: Option<PrunePolicy>,
+    python_platform: Option<&TargetTriple>,
+    settings: InstallerSettingsRef<'_>,
+    client_builder: &BaseClientBuilder<'_>,
+    state: &PlatformState,
+    logger: Box<dyn InstallLogger>,
+    installer_metadata: bool,
+    concurrency: &Concurrency,
+    cache: &Cache,
+    workspace_cache: &WorkspaceCache,
+    dry_run: DryRun,
+    printer: Printer,
+    preview: Preview,
+    malware_settings: impl Into<MalwareCheckContext<'a>>,
+) -> Result<Changelog, ProjectError> {
     let malware_context = malware_settings.into();
 
     // Extract the project settings.
@@ -817,6 +867,8 @@ pub(crate) async fn do_sync<'a>(
         &resolution,
         site_packages,
         InstallationStrategy::Strict,
+        modifications,
+        prune,
         reinstall,
         build_options,
         &hasher,
@@ -832,7 +884,7 @@ pub(crate) async fn do_sync<'a>(
 
     // Avoid constructing an HTTP client and build dispatch when planning shows that there is no
     // installation work to perform.
-    if installation_plan.is_noop(modifications, bytecode_compilation, dry_run) {
+    if installation_plan.is_noop(bytecode_compilation, dry_run) {
         maybe_check_malware(
             &target,
             &resolution,
@@ -846,7 +898,6 @@ pub(crate) async fn do_sync<'a>(
 
         return Ok(installation_plan.finish_noop(
             &resolution,
-            modifications,
             bytecode_compilation,
             logger.as_ref(),
             dry_run,
@@ -930,7 +981,6 @@ pub(crate) async fn do_sync<'a>(
     let changelog = installation_plan
         .execute(
             &resolution,
-            modifications,
             build_options,
             link_mode,
             bytecode_compilation,
