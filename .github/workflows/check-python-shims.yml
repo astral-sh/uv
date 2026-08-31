@@ -1,0 +1,49 @@
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+env:
+  CARGO_INCREMENTAL: 0
+  CARGO_NET_RETRY: 10
+  CARGO_TERM_COLOR: always
+  RUSTUP_MAX_RETRIES: 10
+
+jobs:
+  cross:
+    name: "check Linux, Windows, and FreeBSD shims"
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: "Check Windows dependency versions"
+        run: python3 scripts/check-trampoline-version-consistency.py
+      - name: "Set up Docker Buildx"
+        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
+      - name: "Check committed shims against a clean pinned build"
+        run: scripts/build-python-shims.sh --check --cache-from type=gha --cache-to type=gha
+
+  macos:
+    name: "check macOS shims"
+    runs-on: macos-26
+    timeout-minutes: 15
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.5.app/Contents/Developer
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+      - name: "Install pinned Rust toolchain"
+        working-directory: crates/uv-python-shim
+        run: |
+          rustup toolchain install --profile minimal
+          rustup component add llvm-tools
+          rustup target add aarch64-apple-darwin x86_64-apple-darwin
+      - name: "Check committed shims against a clean pinned build"
+        run: python3 scripts/build-python-shims.py --group macos --work-dir "$RUNNER_TEMP/python-shims" --check

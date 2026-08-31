@@ -90,6 +90,11 @@ jobs:
     with:
       trampoline-build: ${{ needs.plan.outputs.test-windows-trampoline-check-binary }}
 
+  check-python-shims:
+    needs: plan
+    if: ${{ needs.plan.outputs.check-python-shims == 'true' }}
+    uses: ./.github/workflows/check-python-shims.yml
+
   build-dev-binaries:
     needs: plan
     if: ${{ needs.plan.outputs.test-code == 'true' }}
@@ -289,6 +294,7 @@ jobs:
       - check-lint
       - check-docs
       - check-generated-files
+      - check-python-shims
       - test
       - build-dev-binaries
     runs-on: ubuntu-slim

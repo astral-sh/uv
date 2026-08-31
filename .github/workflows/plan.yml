@@ -36,6 +36,9 @@ on:
       test-windows-trampoline-check-binary:
         description: "Whether the Windows trampoline binary check should run"
         value: ${{ jobs.plan.outputs.test-windows-trampoline-check-binary }}
+      check-python-shims:
+        description: "Whether to rebuild and compare committed Python shims"
+        value: ${{ jobs.plan.outputs.check-python-shims }}
       save-rust-cache:
         description: "Whether the Rust cache should be saved"
         value: ${{ jobs.plan.outputs.save-rust-cache }}
@@ -79,6 +82,7 @@ jobs:
       test-publish: ${{ steps.plan.outputs.test_publish }}
       test-windows-trampoline: ${{ steps.plan.outputs.test_windows_trampoline }}
       test-windows-trampoline-check-binary: ${{ steps.plan.outputs.test_windows_trampoline_check_binary }}
+      check-python-shims: ${{ steps.plan.outputs.check_python_shims }}
       save-rust-cache: ${{ steps.plan.outputs.save_rust_cache }}
       run-bench: ${{ steps.plan.outputs.run_bench }}
       test-smoke: ${{ steps.plan.outputs.test_smoke }}
@@ -146,6 +150,9 @@ jobs:
             [[ "$file" =~ ^crates/uv-trampoline/.*\.rs$ || "$file" =~ ^crates/uv-trampoline-builder/trampolines/ ]] && trampoline_repro_changed=1
             [[ "$file" == "scripts/build-trampolines.sh" || "$file" == "scripts/build-trampolines-in-docker.sh" ]] && trampoline_build_scripts_changed=1
             [[ "$file" == "scripts/build-trampolines.sh" || "$file" == "scripts/build-trampolines-in-docker.sh" || "$file" == "scripts/check-trampoline-version-consistency.py" ]] && trampoline_scripts_changed=1
+            [[ "$file" =~ ^crates/uv-python-shim/ || "$file" =~ ^crates/uv-windows/ || "$file" =~ ^crates/uv-trampoline-builder/python-shims/ ]] && python_shim_changed=1
+            [[ "$file" == "Cargo.toml" || "$file" == "Cargo.lock" || "$file" == "crates/uv-trampoline-builder/src/python_shim.rs" || "$file" == "crates/uv-trampoline-builder/src/bin/normalize-pe-timestamps.rs" || "$file" == "crates/uv-trampoline-builder/Cargo.toml" ]] && python_shim_changed=1
+            [[ "$file" == "scripts/build-python-shims.py" || "$file" == "scripts/build-python-shims.sh" || "$file" == "scripts/check-trampoline-version-consistency.py" || "$file" == ".github/workflows/check-python-shims.yml" || "$file" == ".github/workflows/plan.yml" || "$file" == ".github/workflows/ci.yml" ]] && python_shim_changed=1
             [[ "$file" =~ ^crates/uv-build/ ]] && uv_build_changed=1
             [[ "$file" == "Dockerfile" ]] && dockerfile_changed=1
             [[ "$file" == ".github/workflows/build-docker.yml" ]] && docker_workflow_changed=1
@@ -173,13 +180,14 @@ jobs:
           [[ $publish_changed || $has_publish_label || $has_extended_label || $on_main_branch ]] && test_publish=1
           [[ ! $has_skip_label && ($trampoline_code_changed || $trampoline_scripts_changed || $trampoline_workflow_changed || $rust_deps_changed || $has_build_windows_trampoline_label || $on_main_branch) ]] && test_windows_trampoline=1
           [[ ! $has_skip_label && ($trampoline_repro_changed || $trampoline_build_scripts_changed || $has_build_windows_trampoline_label) ]] && test_windows_trampoline_check_binary=1
+          [[ ! $has_skip_label && ($python_shim_changed || $on_main_branch) ]] && check_python_shims=1
           [[ $on_main_branch || $cache_relevant_changed ]] && save_rust_cache=1
           [[ ! $has_skip_label && ($any_rust_changed || $bench_workflow_changed || $on_main_branch) ]] && run_bench=1
           [[ ! $has_skip_label ]] && test_smoke=1
           [[ ! $has_skip_label ]] && test_ecosystem=1
           [[ $has_integration_label || $has_extended_label || $on_main_branch || $integration_changed ]] && test_integration=1
           [[ $has_system_label || $has_extended_label || $on_main_branch || $system_workflow_changed || $system_test_changed ]] && test_system=1
-          [[ $has_macos_label || $has_extended_label || $on_main_branch || $build_release_binaries ]] && test_macos=1
+          [[ $has_macos_label || $has_extended_label || $on_main_branch || $build_release_binaries || $python_shim_changed ]] && test_macos=1
           [[ ! $has_build_skip_label && ! $has_build_skip_docker_label && ($docker_build_changed || $has_build_push_docker_label) ]] && build_docker=1
           [[ $has_build_push_docker_label ]] && push_docker=1
 
@@ -194,6 +202,7 @@ jobs:
             out test_publish            "$test_publish"
             out test_windows_trampoline "$test_windows_trampoline"
             out test_windows_trampoline_check_binary "$test_windows_trampoline_check_binary"
+            out check_python_shims      "$check_python_shims"
             out save_rust_cache         "$save_rust_cache"
             out run_bench               "$run_bench"
             out test_smoke              "$test_smoke"

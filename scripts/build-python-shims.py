@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import os
 import re
 import shlex
@@ -37,7 +38,12 @@ def run(*args: str, cwd: Path, env: dict[str, str] | None = None) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--target", action="append", choices=TARGETS, required=True)
+    selection = parser.add_mutually_exclusive_group(required=True)
+    selection.add_argument("--target", action="append", choices=TARGETS)
+    selection.add_argument("--group", choices=("macos", "cross"))
+    parser.add_argument(
+        "--check", action="store_true", help="Compare without changing committed assets"
+    )
     parser.add_argument("--work-dir", type=Path, required=True)
     parser.add_argument("--freebsd-sysroot", type=Path)
     parser.add_argument(
@@ -48,6 +54,14 @@ def main() -> None:
     args = parser.parse_args()
     args.output_dir = args.output_dir.resolve()
     work_dir = args.work_dir.resolve()
+    work_dir.mkdir(parents=True, exist_ok=True)
+    if any(work_dir.iterdir()):
+        parser.error("--work-dir must be empty so checks cannot reuse build artifacts")
+    targets = args.target or [
+        target
+        for target in TARGETS
+        if ("apple-darwin" in target) == (args.group == "macos")
+    ]
     source = work_dir / "source"
     source.mkdir(parents=True, exist_ok=True)
     shutil.copyfile(ROOT / "Cargo.toml", source / "Cargo.toml")
@@ -89,11 +103,41 @@ def main() -> None:
     )
     host = compiler["host"]
     rust_lld = Path(rustc).parent.parent / "lib/rustlib" / host / "bin/rust-lld"
-    args.output_dir.mkdir(parents=True, exist_ok=True)
+    # Ignore ambient compiler/profile settings; caches and registry configuration
+    # can still be inherited without changing the build contract.
+    build_env = {
+        key: value
+        for key, value in os.environ.items()
+        if not key.startswith(("CARGO_PROFILE_", "CARGO_TARGET_", "CARGO_BUILD_"))
+        and key
+        not in {
+            "RUSTFLAGS",
+            "CARGO_ENCODED_RUSTFLAGS",
+            "RUSTC",
+            "RUSTC_WRAPPER",
+            "RUSTC_WORKSPACE_WRAPPER",
+        }
+    }
+    temporary = work_dir / "tmp"
+    temporary.mkdir()
+    build_env.update(TMPDIR=str(temporary), CARGO_INCREMENTAL="0", ZERO_AR_DATE="1")
+    build_outputs = work_dir / "assets"
+    build_outputs.mkdir()
     windows_outputs = []
-    for target in args.target:
-        env = os.environ.copy()
-        env.pop("CARGO_ENCODED_RUSTFLAGS", None)
+    for target in targets:
+        env = build_env.copy()
+        # Populate registry sources before enumerating path remaps, including
+        # when CI starts with an empty Cargo home.
+        run(
+            "cargo",
+            f"+{toolchain}",
+            "fetch",
+            "--locked",
+            "--target",
+            target,
+            cwd=crate_dir,
+            env=env,
+        )
         flags = [
             f"--remap-path-prefix={source}=/uv",
             f"--remap-path-prefix={Path(rustc).parent.parent}/lib/rustlib/src/rust=/rustc/{compiler['commit-hash']}",
@@ -173,6 +217,26 @@ def main() -> None:
                 linker.chmod(0o755)
                 env[linker_key] = str(linker)
             elif "apple-darwin" in target:
+                sdk_version = subprocess.check_output(
+                    ["xcrun", "--sdk", "macosx26.5", "--show-sdk-version"], text=True
+                ).strip()
+                if sdk_version != "26.5":
+                    parser.error(f"Expected macOS SDK 26.5, found {sdk_version}")
+                env[linker_key] = subprocess.check_output(
+                    ["xcrun", "--sdk", "macosx26.5", "--find", "clang"], text=True
+                ).strip()
+                env["SDKROOT"] = subprocess.check_output(
+                    ["xcrun", "--sdk", "macosx26.5", "--show-sdk-path"], text=True
+                ).strip()
+                # LLD hashes the output basename into LC_UUID. Cargo's basename
+                # contains a path-dependent hash, so give LLD a stable final name.
+                flags.extend(
+                    [
+                        f"-Clink-arg=-fuse-ld={rust_lld.parent}/gcc-ld/ld64.lld",
+                        "-Clink-arg=-Wl,-S",
+                        "-Clink-arg=-Wl,-final_output,uv-python",
+                    ]
+                )
                 env["MACOSX_DEPLOYMENT_TARGET"] = (
                     "11.0" if target.startswith("aarch64-") else "10.12"
                 )
@@ -188,7 +252,7 @@ def main() -> None:
             env=env,
         )
         suffix = ".exe" if target.endswith("windows-msvc") else ""
-        output = args.output_dir / f"uv-python-{target}{suffix}"
+        output = build_outputs / f"uv-python-{target}{suffix}"
         shutil.copyfile(
             work_dir / "target" / target / "shim" / f"uv-python{suffix}", output
         )
@@ -204,8 +268,10 @@ def main() -> None:
                 cwd=ROOT,
             )
     if windows_outputs:
+        build_env["CARGO_TARGET_DIR"] = str(work_dir / "normalize-target")
         run(
             "cargo",
+            f"+{toolchain}",
             "run",
             "--locked",
             "--profile",
@@ -217,7 +283,38 @@ def main() -> None:
             "--",
             *windows_outputs,
             cwd=ROOT,
+            env=build_env,
         )
+    if args.check:
+        failures = []
+        # Catch added/removed assets as well as stale contents. Each CI group
+        # checks its own bytes, and together the groups cover the complete catalog.
+        expected = {
+            f"uv-python-{target}{'.exe' if target.endswith('windows-msvc') else ''}"
+            for target in TARGETS
+        }
+        actual = (
+            {path.name for path in args.output_dir.iterdir()}
+            if args.output_dir.is_dir()
+            else set()
+        )
+        if actual != expected:
+            failures.append(
+                f"Asset catalog differs: missing={sorted(expected - actual)}, extra={sorted(actual - expected)}"
+            )
+        for output in sorted(build_outputs.iterdir()):
+            committed = args.output_dir / output.name
+            if not committed.is_file() or committed.read_bytes() != output.read_bytes():
+                failures.append(
+                    f"{output.name} differs from its clean build ({hashlib.sha256(output.read_bytes()).hexdigest()})"
+                )
+        if failures:
+            parser.exit(1, "\n".join(failures) + "\n")
+        print(f"All {len(targets)} selected shim assets match their clean builds.")
+    else:
+        args.output_dir.mkdir(parents=True, exist_ok=True)
+        for output in build_outputs.iterdir():
+            shutil.copyfile(output, args.output_dir / output.name)
 
 
 if __name__ == "__main__":

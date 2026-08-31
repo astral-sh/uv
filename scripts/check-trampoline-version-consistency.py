@@ -1,8 +1,8 @@
 """Check that the `windows` crate version matches between workspaces.
 
-The uv-trampoline crate is excluded from the main workspace (it requires nightly),
-so this script verifies that the `windows` crate version is kept in sync by
-comparing the locked versions in both Cargo.lock files.
+The launcher crates are excluded from the main workspace. Verify that their
+locked `windows` versions stay in sync with the workspace dependency used by
+`uv-windows`.
 """
 
 # /// script
@@ -34,20 +34,22 @@ def get_locked_windows_version(lockfile_path: Path) -> str | None:
 
 def main() -> int:
     main_lockfile = ROOT / "Cargo.lock"
-    trampoline_lockfile = ROOT / "crates" / "uv-trampoline" / "Cargo.lock"
-
     main_version = get_locked_windows_version(main_lockfile)
-    trampoline_version = get_locked_windows_version(trampoline_lockfile)
-
     print(f"workspace:       windows {main_version}")
-    print(f"uv-trampoline:   windows {trampoline_version}")
-
-    if main_version != trampoline_version:
-        print(
-            f"\n::error::windows crate version mismatch! "
-            f"workspace uses {main_version} but uv-trampoline uses {trampoline_version}",
-            file=sys.stderr,
+    matches = True
+    for crate in ("uv-trampoline", "uv-python-shim"):
+        launcher_version = get_locked_windows_version(
+            ROOT / "crates" / crate / "Cargo.lock"
         )
+        print(f"{crate}: windows {launcher_version}")
+        if main_version is None or main_version != launcher_version:
+            print(
+                f"\n::error::windows crate version mismatch! "
+                f"workspace uses {main_version} but {crate} uses {launcher_version}",
+                file=sys.stderr,
+            )
+            matches = False
+    if not matches:
         return 1
 
     print("\nVersions match.")
