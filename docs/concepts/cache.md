@@ -163,6 +163,33 @@ deadlocks. This timeout can be changed with
 [`UV_LOCK_TIMEOUT`](../reference/environment.md#uv_lock_timeout). In cases where it is known that no
 other uv processes are reading or writing from the cache, `--force` can be used to ignore the lock.
 
+### Removing old wheels
+
+The experimental `--max-age` option removes unpacked wheels that have not been used for a given
+number of days. Preview the removals before running the command:
+
+```console
+$ uv cache prune --max-age 90 --dry-run
+$ uv cache prune --max-age 90
+```
+
+This mode removes unpacked wheel payloads and their cache pointers, while retaining source
+distributions, compressed wheels built from source, separate metadata entries, and cached
+environments. Usage is recorded in separate files with timestamp updates coalesced over a day.
+Cleanup includes an extra day of retention to account for this approximate tracking. Wheels without
+a usage record receive a full retention period on the first prune; a dry run does not create usage
+records or change the cache.
+
+This prototype skips age-based cleanup if it finds an unrecognized wheel, source distribution,
+archive, or environment bucket version, since those buckets may contain references it cannot read.
+
+Age-based cleanup is manual; uv does not run it automatically. It waits for other uv commands to
+finish and cannot be combined with `--ci` or `--force`. `--max-age` requires a positive integer
+number of days, and `--dry-run` requires `--max-age`.
+
+As with other cache cleanup commands, removing wheels can break external environments installed with
+`--link-mode symlink`.
+
 ## Caching in continuous integration
 
 It's common to cache package installation artifacts in continuous integration environments (like

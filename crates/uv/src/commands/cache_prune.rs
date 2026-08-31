@@ -1,4 +1,5 @@
 use std::fmt::Write;
+use std::time::Duration;
 
 use anyhow::{Context, Result};
 use owo_colors::OwoColorize;
@@ -15,6 +16,8 @@ use crate::printer::Printer;
 pub(crate) async fn cache_prune(
     ci: bool,
     force: bool,
+    max_age: Option<Duration>,
+    dry_run: bool,
     cache: Cache,
     printer: Printer,
     preview: Preview,
@@ -30,18 +33,40 @@ pub(crate) async fn cache_prune(
 
     let cache = match cache.with_exclusive_lock_no_wait() {
         Ok(cache) => cache,
-        Err(cache) if force => {
+        Err(cache) if force && max_age.is_none() => {
             debug!("Cache is currently in use, proceeding due to `--force`");
             cache
         }
         Err(cache) => {
-            writeln!(
-                printer.stderr(),
-                "Cache is currently in-use, waiting for other uv processes to finish (use `--force` to override)"
-            )?;
+            if max_age.is_some() {
+                writeln!(
+                    printer.stderr(),
+                    "Cache is currently in-use, waiting for other uv processes to finish"
+                )?;
+            } else {
+                writeln!(
+                    printer.stderr(),
+                    "Cache is currently in-use, waiting for other uv processes to finish (use `--force` to override)"
+                )?;
+            }
             cache.with_exclusive_lock().await?
         }
     };
+
+    if let Some(max_age) = max_age {
+        let paths = cache.prune_unused(max_age, dry_run).with_context(|| {
+            format!("Failed to prune cache at: {}", cache.root().user_display())
+        })?;
+        let action = if dry_run { "Would remove" } else { "Removed" };
+        let wheels = if paths.len() == 1 { "wheel" } else { "wheels" };
+        writeln!(printer.stderr(), "{action} {} unused {wheels}", paths.len())?;
+        if dry_run {
+            for path in paths {
+                writeln!(printer.stderr(), "  {}", path.user_display())?;
+            }
+        }
+        return Ok(ExitStatus::Success);
+    }
 
     let removal_accounting = if preview.is_enabled(PreviewFeature::CachePhysicalSpace) {
         RemovalAccounting::Fine

@@ -19,6 +19,7 @@ pub use crate::by_timestamp::CachedByTimestamp;
 pub use crate::cli::CacheArgs;
 use crate::removal::Remover;
 pub use crate::removal::{Removal, RemovalAccounting};
+use crate::usage::CacheUsage;
 pub use crate::wheel::WheelCache;
 use crate::wheel::WheelCacheKind;
 pub use archive::ArchiveId;
@@ -27,7 +28,9 @@ mod archive;
 mod by_timestamp;
 #[cfg(feature = "clap")]
 mod cli;
+mod gc;
 mod removal;
+mod usage;
 mod wheel;
 
 /// The version of the archive bucket.
@@ -174,6 +177,8 @@ pub struct Cache {
     /// Ensure that `uv cache` operations don't remove items from the cache that are used by another
     /// uv process.
     lock_file: Option<Arc<LockedFile>>,
+    /// Deferred last-use records, retaining the shared lock until they have been flushed.
+    usage: Option<Arc<CacheUsage>>,
     /// The storage accounting used when removing cache entries.
     removal_accounting: RemovalAccounting,
 }
@@ -186,6 +191,7 @@ impl Cache {
             refresh: Refresh::None(Timestamp::now()),
             temp_dir: None,
             lock_file: None,
+            usage: None,
             removal_accounting: RemovalAccounting::Coarse,
         }
     }
@@ -198,6 +204,7 @@ impl Cache {
             refresh: Refresh::None(Timestamp::now()),
             temp_dir: Some(Arc::new(temp_dir)),
             lock_file: None,
+            usage: None,
             removal_accounting: RemovalAccounting::Coarse,
         })
     }
@@ -237,8 +244,12 @@ impl Cache {
             refresh,
             temp_dir,
             lock_file,
+            usage,
             removal_accounting,
         } = self;
+
+        // Flush usage while the shared lock is still held.
+        drop(usage);
 
         // Release the existing lock, avoid deadlocks from a cloned cache.
         if let Some(lock_file) = lock_file {
@@ -260,6 +271,7 @@ impl Cache {
             refresh,
             temp_dir,
             lock_file: Some(Arc::new(lock_file)),
+            usage: None,
             removal_accounting,
         })
     }
@@ -273,6 +285,7 @@ impl Cache {
             refresh,
             temp_dir,
             lock_file,
+            usage,
             removal_accounting,
         } = self;
 
@@ -286,6 +299,7 @@ impl Cache {
                 refresh,
                 temp_dir,
                 lock_file: Some(Arc::new(lock_file)),
+                usage,
                 removal_accounting,
             }),
             None => Err(Self {
@@ -293,6 +307,7 @@ impl Cache {
                 refresh,
                 temp_dir,
                 lock_file,
+                usage,
                 removal_accounting,
             }),
         }
@@ -326,6 +341,16 @@ impl Cache {
     /// Return the path to an archive in the cache.
     pub fn archive(&self, id: &ArchiveId) -> PathBuf {
         self.bucket(CacheBucket::Archive).join(id)
+    }
+
+    /// Record use of a selected or newly prepared unpacked wheel.
+    ///
+    /// Updates are deduplicated and flushed before the last shared cache lock is released.
+    /// Paths outside the archive store are ignored, as are temporary and uninitialized caches.
+    pub fn record_archive_use(&self, path: impl AsRef<Path>) {
+        if let Some(usage) = &self.usage {
+            usage.record(path.as_ref());
+        }
     }
 
     /// Create a temporary directory to be used as a Python virtual environment.
@@ -420,6 +445,8 @@ impl Cache {
         fs_err::create_dir_all(path.as_ref().parent().expect("Cache entry to have parent"))?;
         self.create_link(&id, path.as_ref())?;
 
+        self.record_archive_use(&archive_entry);
+
         Ok(id)
     }
 
@@ -445,6 +472,8 @@ impl Cache {
         // Create a symlink to the directory store.
         fs_err::create_dir_all(path.as_ref().parent().expect("Cache entry to have parent"))?;
         self.create_link(&id, path.as_ref())?;
+
+        self.record_archive_use(&archive_entry);
 
         Ok(id)
     }
@@ -546,9 +575,18 @@ impl Cache {
             Err(err) => return Err(err.into()),
         };
 
+        let root = std::path::absolute(root).map_err(Error::Absolute)?;
+        let usage = if self.is_temporary() {
+            None
+        } else {
+            lock_file
+                .as_ref()
+                .map(|lock| Arc::new(CacheUsage::new(root.clone(), Arc::clone(lock))))
+        };
         Ok(Self {
-            root: std::path::absolute(root).map_err(Error::Absolute)?,
+            root,
             lock_file,
+            usage,
             ..self
         })
     }
@@ -567,15 +605,22 @@ impl Cache {
         ) else {
             return Ok(None);
         };
+        let root = std::path::absolute(root).map_err(Error::Absolute)?;
+        let lock_file = Arc::new(lock_file);
+        let usage = (!self.is_temporary())
+            .then(|| Arc::new(CacheUsage::new(root.clone(), Arc::clone(&lock_file))));
         Ok(Some(Self {
-            root: std::path::absolute(root).map_err(Error::Absolute)?,
-            lock_file: Some(Arc::new(lock_file)),
+            root,
+            lock_file: Some(lock_file),
+            usage,
             ..self
         }))
     }
 
     /// Clear the cache, removing all entries.
-    pub fn clear(self, reporter: Box<dyn CleanReporter>) -> Result<Removal, io::Error> {
+    pub fn clear(mut self, reporter: Box<dyn CleanReporter>) -> Result<Removal, io::Error> {
+        // Do not recreate usage markers after clearing the cache.
+        self.usage.take();
         // Remove everything but `.lock`, Windows does not allow removal of a locked file
         let mut removal = Remover::new(reporter)
             .with_removal_accounting(self.removal_accounting)
@@ -1253,6 +1298,8 @@ pub enum CacheBucket {
     /// Cache structure:
     ///  * `osv-v0/vulnerability/<vuln_id>.msgpack` — cached full vulnerability records
     Osv,
+    /// Explicit last-use timestamps for cached artifacts.
+    Usage,
 }
 
 impl CacheBucket {
@@ -1280,6 +1327,7 @@ impl CacheBucket {
             Self::Python => "python-v0",
             Self::Binaries => "binaries-v0",
             Self::Osv => "osv-v0",
+            Self::Usage => "usage-v0",
         }
     }
 
@@ -1388,7 +1436,8 @@ impl CacheBucket {
             | Self::Environments
             | Self::Python
             | Self::Binaries
-            | Self::Osv => {
+            | Self::Osv
+            | Self::Usage => {
                 // Nothing to do.
             }
         }
@@ -1410,6 +1459,7 @@ impl CacheBucket {
             Self::Python,
             Self::Binaries,
             Self::Osv,
+            Self::Usage,
         ]
         .iter()
         .copied()

@@ -1288,7 +1288,16 @@ async fn run_with_workspace_cache(
             command: CacheCommand::Prune(args),
         }) => {
             show_settings!(args);
-            commands::cache_prune(args.ci, args.force, cache, printer, globals.preview).await
+            commands::cache_prune(
+                args.ci,
+                args.force,
+                args.max_age,
+                args.dry_run,
+                cache,
+                printer,
+                globals.preview,
+            )
+            .await
         }
         Commands::Cache(CacheNamespace {
             command: CacheCommand::Dir,

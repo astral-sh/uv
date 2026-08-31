@@ -762,6 +762,10 @@ impl<'a> Planner<'a> {
             }
         }
 
+        for dist in &cached {
+            cache.record_archive_use(dist.path());
+        }
+
         Ok(Plan {
             cached,
             remote,

@@ -130,10 +130,14 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         tags: &Tags,
         hashes: HashPolicy<'_>,
     ) -> Result<LocalWheel, Error> {
-        match dist {
+        let wheel = match dist {
             Dist::Built(built) => self.get_wheel(built, hashes).await,
             Dist::Source(source) => self.build_wheel(source, tags, hashes).await,
-        }
+        }?;
+        self.build_context
+            .cache()
+            .record_archive_use(&wheel.archive);
+        Ok(wheel)
     }
 
     /// Either fetch the only wheel metadata (directly from the index or with range requests) or
@@ -539,6 +543,9 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         // TODO(charlie): Request the hashes via a separate method, to reduce the coupling in this API.
         if hashes.is_generate(dist) {
             let wheel = self.get_wheel(dist, hashes).await?;
+            self.build_context
+                .cache()
+                .record_archive_use(&wheel.archive);
             // If the metadata was provided by the user directly, prefer it.
             let metadata = if let Some(metadata) = self
                 .build_context
@@ -592,6 +599,9 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 // If the request failed due to an error that could be resolved by
                 // downloading the wheel directly, try that.
                 let wheel = self.get_wheel(dist, hashes).await?;
+                self.build_context
+                    .cache()
+                    .record_archive_use(&wheel.archive);
                 let metadata = wheel.metadata()?;
                 let hashes = wheel.hashes;
                 Ok(ArchiveMetadata {

@@ -1,8 +1,10 @@
 use std::ffi::OsString;
 use std::fmt::{self, Display, Formatter};
+use std::num::NonZeroU64;
 use std::ops::{Deref, DerefMut};
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
+use std::time::Duration;
 
 use anyhow::{Result, anyhow};
 use clap::builder::styling::{AnsiColor, Effects, Style};
@@ -979,6 +981,37 @@ pub struct PruneArgs {
     /// `--force` is used, `uv cache prune` will proceed without taking a lock.
     #[arg(long)]
     pub force: bool,
+
+    /// Remove unpacked wheels that have not been used for the given number of days.
+    ///
+    /// This experimental mode retains source distributions, compressed wheels built from source,
+    /// metadata, and cached environments. Wheels without usage records receive a full retention
+    /// period on the first prune.
+    ///
+    /// The number of days must be a positive integer. Cannot be combined with `--ci` or `--force`.
+    #[arg(
+        long,
+        value_name = "DAYS",
+        value_parser = parse_max_age,
+        conflicts_with_all = ["ci", "force"]
+    )]
+    pub max_age: Option<Duration>,
+
+    /// Show which unpacked wheels would be removed without changing the cache.
+    #[arg(long, requires = "max_age")]
+    pub dry_run: bool,
+}
+
+/// Parse a positive number of days into a [`Duration`].
+fn parse_max_age(input: &str) -> Result<Duration, String> {
+    let days = input
+        .parse::<NonZeroU64>()
+        .map_err(|_| "expected a positive integer number of days".to_string())?;
+    let seconds = days
+        .get()
+        .checked_mul(24 * 60 * 60)
+        .ok_or_else(|| "number of days is too large".to_string())?;
+    Ok(Duration::from_secs(seconds))
 }
 
 #[derive(Args, Debug)]
