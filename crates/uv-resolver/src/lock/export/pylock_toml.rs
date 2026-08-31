@@ -303,7 +303,14 @@ impl HashSource {
         install_path: &Path,
     ) -> Result<Self, PylockTomlErrorKind> {
         if let Some(url) = url {
-            Ok(Self::Url(url.clone()))
+            if url.scheme() == "file" {
+                Ok(Self::Path(
+                    url.to_file_path()
+                        .map_err(|()| PylockTomlErrorKind::UrlToPath)?,
+                ))
+            } else {
+                Ok(Self::Url(url.clone()))
+            }
         } else if let Some(path) = path {
             Ok(Self::Path(install_path.join(path)))
         } else {
