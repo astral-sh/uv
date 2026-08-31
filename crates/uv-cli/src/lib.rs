@@ -5896,10 +5896,12 @@ pub struct ToolDirArgs {
 #[derive(Args)]
 pub struct ToolUninstallArgs {
     /// The name of the tool to uninstall.
+    ///
+    /// To remove a directory with an invalid package name, use its exact name in the tool directory.
     #[arg(required = true, value_hint = ValueHint::Other)]
-    pub name: Vec<PackageName>,
+    pub name: Vec<String>,
 
-    /// Uninstall all tools.
+    /// Uninstall all tools, including dangling tool directories.
     #[arg(long, conflicts_with("name"))]
     pub all: bool,
 }

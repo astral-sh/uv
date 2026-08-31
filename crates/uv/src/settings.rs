@@ -1377,7 +1377,7 @@ impl ToolAuditSettings {
 /// The resolved settings to use for a `tool uninstall` invocation.
 #[derive(Debug, Clone)]
 pub(crate) struct ToolUninstallSettings {
-    pub(crate) name: Vec<PackageName>,
+    pub(crate) name: Vec<String>,
 }
 
 impl ToolUninstallSettings {

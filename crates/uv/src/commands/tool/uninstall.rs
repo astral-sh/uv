@@ -1,4 +1,6 @@
 use std::fmt::Write;
+use std::path::{Path, PathBuf};
+use std::str::FromStr;
 
 use anyhow::{Result, bail};
 use itertools::Itertools;
@@ -13,7 +15,7 @@ use crate::commands::ExitStatus;
 use crate::printer::Printer;
 
 /// Uninstall a tool.
-pub(crate) async fn uninstall(name: Vec<PackageName>, printer: Printer) -> Result<ExitStatus> {
+pub(crate) async fn uninstall(name: Vec<String>, printer: Printer) -> Result<ExitStatus> {
     let installed_tools = InstalledTools::from_settings()?.init()?;
     let _lock = match installed_tools.lock().await {
         Ok(lock) => lock,
@@ -96,12 +98,16 @@ impl IgnoreCurrentlyBeingDeleted for Result<(), std::io::Error> {
 /// Perform the uninstallation.
 async fn do_uninstall(
     installed_tools: &InstalledTools,
-    names: Vec<PackageName>,
+    names: Vec<String>,
     printer: Printer,
 ) -> Result<()> {
     let mut dangling = false;
     let mut entrypoints = if names.is_empty() {
         let mut entrypoints = vec![];
+        for directory in invalid_tool_directories(installed_tools)? {
+            remove_invalid_tool(&directory, printer)?;
+            dangling = true;
+        }
         for (name, receipt) in installed_tools.tools()? {
             let Ok(receipt) = receipt else {
                 // If the tool is not installed properly, attempt to remove the environment anyway.
@@ -133,6 +139,20 @@ async fn do_uninstall(
     } else {
         let mut entrypoints = vec![];
         for name in names {
+            let Ok(name) = PackageName::from_str(&name) else {
+                let Some(directory) =
+                    invalid_tool_directories(installed_tools)?.find(|directory| {
+                        directory
+                            .file_name()
+                            .is_some_and(|file_name| file_name == name.as_str())
+                    })
+                else {
+                    bail!("`{name}` is not installed");
+                };
+                remove_invalid_tool(&directory, printer)?;
+                dangling = true;
+                continue;
+            };
             let Some(receipt) = installed_tools.get_tool_receipt(&name)? else {
                 // If the tool is not installed properly, attempt to remove the environment anyway.
                 match installed_tools.remove_environment(&name) {
@@ -180,6 +200,32 @@ async fn do_uninstall(
             .join(", ")
     )?;
 
+    Ok(())
+}
+
+/// Return tool directories whose names cannot be parsed as a [`PackageName`].
+fn invalid_tool_directories(
+    installed_tools: &InstalledTools,
+) -> Result<impl Iterator<Item = PathBuf>> {
+    // Preserve trailing dots and spaces in directory names by using verbatim paths on Windows.
+    let root = fs_err::canonicalize(installed_tools.root())?;
+    Ok(uv_fs::directories(root)?.filter(|directory| {
+        directory
+            .file_name()
+            .and_then(|name| name.to_str())
+            .is_none_or(|name| PackageName::from_str(name).is_err())
+    }))
+}
+
+/// Remove an invalidly named tool directory without consulting its receipt, which may have been
+/// copied from another tool and refer to executables that are still in use.
+fn remove_invalid_tool(directory: &Path, printer: Printer) -> Result<()> {
+    uv_fs::remove_virtualenv(directory)?;
+    writeln!(
+        printer.stderr(),
+        "Removed dangling tool directory `{}`",
+        directory.user_display()
+    )?;
     Ok(())
 }
 
