@@ -1303,7 +1303,11 @@ enum ExtractedWheel {
     Hashed(HashedWheel),
 }
 
-/// Stop extraction before removing its directory, including when the blocking task is still queued.
+/// Stop the extraction worker before removing its temporary directory.
+///
+/// The worker holds the directory's lock throughout extraction. Dropping the guard cancels active
+/// work and waits for that lock, or takes the directory immediately if the worker is still queued.
+/// Cleanup completes without relying on the async runtime.
 struct ExtractionGuard {
     abort: AbortHandle,
     temp_dir: Arc<Mutex<Option<tempfile::TempDir>>>,
@@ -1312,9 +1316,6 @@ struct ExtractionGuard {
 impl Drop for ExtractionGuard {
     fn drop(&mut self) {
         self.abort.abort();
-        // The worker holds this lock while accessing the directory. Cancellation wakes it without
-        // needing the async runtime, so waiting here also makes cleanup safe during runtime shutdown.
-        // If the worker has not started, taking the directory prevents it from starting extraction.
         self.temp_dir
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
@@ -1327,6 +1328,11 @@ impl ExtractedWheel {
     ///
     /// Filesystem operations run synchronously on the worker, while downloading and hashing remain
     /// asynchronous. The pipe applies backpressure without buffering the entire wheel.
+    /// Dropping the future cancels extraction and removes its temporary directory synchronously.
+    /// Successful extraction returns ownership of the directory to the caller.
+    ///
+    /// Extraction can leave unread bytes when ZIP validation is disabled. Callers must drain the
+    /// reader before finalizing download hashes.
     async fn extract_in_background<R>(
         mut reader: R,
         temp_dir: tempfile::TempDir,
@@ -1392,6 +1398,7 @@ impl ExtractedWheel {
                 if download.is_err() {
                     guard.abort.abort();
                 }
+                // Await the worker so the guard does not block this runtime thread on cleanup.
                 let extraction = extraction.await;
                 download.map_err(uv_extract::Error::Io)?;
                 extraction
@@ -1410,7 +1417,7 @@ impl ExtractedWheel {
         Ok((temp_dir, extracted))
     }
 
-    /// Extract a wheel from a streaming reader, optionally computing its directory hash tree.
+    /// Extract a wheel from a streaming reader, optionally retaining its per-file digests.
     async fn extract_streaming<R>(
         reader: R,
         target: &Path,

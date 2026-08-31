@@ -6,6 +6,9 @@ use futures::future::{AbortHandle, Aborted};
 use futures::io::AsyncRead;
 
 /// Check cancellation between reads, including reads of already-buffered, decompressed data.
+///
+/// With an abort handle, each read is bounded to limit work between checks. This adapter does not
+/// register a waker; pair it with [`futures::future::Abortable`] to wake a pending read on cancellation.
 pub(super) struct AbortReader<'a, R> {
     reader: R,
     abort: Option<&'a AbortHandle>,
@@ -14,10 +17,6 @@ pub(super) struct AbortReader<'a, R> {
 impl<'a, R> AbortReader<'a, R> {
     pub(super) fn new(reader: R, abort: Option<&'a AbortHandle>) -> Self {
         Self { reader, abort }
-    }
-
-    pub(super) fn into_inner(self) -> R {
-        self.reader
     }
 }
 

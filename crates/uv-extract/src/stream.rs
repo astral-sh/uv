@@ -111,8 +111,9 @@ pub async fn unzip_and_hash<R: tokio::io::AsyncRead + Unpin>(
 /// Extract a streaming ZIP archive with synchronous filesystem operations.
 ///
 /// This uses the same parser and validation as [`unzip`]. Call it on a blocking thread.
-/// The reader must be driven independently of this thread, for example through a bounded pipe.
-/// Aborting the registration stops extraction, including when the reader is stalled.
+/// Any async work needed to supply input must run independently of this thread.
+/// Aborting the registration wakes stalled reads and stops extraction between decompression chunks.
+/// Files already written remain in `target`; the caller is responsible for cleanup.
 pub fn unzip_blocking<R: tokio::io::AsyncRead + Unpin>(
     reader: R,
     target: &Path,
@@ -128,7 +129,8 @@ pub fn unzip_blocking<R: tokio::io::AsyncRead + Unpin>(
 
 /// Extract and hash a streaming ZIP archive with synchronous filesystem operations.
 ///
-/// See [`unzip_blocking`] for requirements on the reader and calling thread.
+/// Returns the same per-file digests and hash tree as [`unzip_and_hash`]. See [`unzip_blocking`] for
+/// requirements on the reader, calling thread, and cleanup after cancellation.
 pub fn unzip_blocking_and_hash<R: tokio::io::AsyncRead + Unpin>(
     reader: R,
     target: &Path,
@@ -144,6 +146,9 @@ pub fn unzip_blocking_and_hash<R: tokio::io::AsyncRead + Unpin>(
 }
 
 /// Wake a stalled reader on cancellation and check cancellation while the parser makes progress.
+///
+/// [`Abortable`] wakes the worker when input is pending; [`AbortReader`] also checks during
+/// decompression that can keep producing output without yielding to the executor.
 fn unzip_blocking_inner<R: tokio::io::AsyncRead + Unpin>(
     reader: R,
     target: &Path,
@@ -281,7 +286,7 @@ async fn unzip_inner<R: tokio::io::AsyncRead + Unpin, const BLOCKING: bool>(
             }
 
             // We don't know the file permissions here, because we haven't seen the central directory yet.
-            let (actual_uncompressed_size, digest, reader) =
+            let (actual_uncompressed_size, digest) =
                 match Filesystem::<BLOCKING>::create_file(&path).await {
                     Ok(file) => {
                         // Write the file to disk.
@@ -295,7 +300,7 @@ async fn unzip_inner<R: tokio::io::AsyncRead + Unpin, const BLOCKING: bool>(
                             tokio::io::BufWriter::new(file)
                         };
                         let mut reader = AbortReader::new(entry.reader_mut(), abort).compat();
-                        let (bytes_read, digest) = if hash_contents {
+                        if hash_contents {
                             let (bytes_read, digest) =
                                 blake3_copy_with_buffer(&mut reader, &mut writer, &mut hash_buffer)
                                     .await
@@ -320,10 +325,7 @@ async fn unzip_inner<R: tokio::io::AsyncRead + Unpin, const BLOCKING: bool>(
                                 .await
                                 .map_err(Error::Io)?;
                             (bytes_read, None)
-                        };
-                        let reader = reader.into_inner().into_inner();
-
-                        (bytes_read, digest, reader)
+                        }
                     }
                     Err(err) if err.kind() == std::io::ErrorKind::AlreadyExists => {
                         debug!(
@@ -354,7 +356,7 @@ async fn unzip_inner<R: tokio::io::AsyncRead + Unpin, const BLOCKING: bool>(
                         }
 
                         let digest = hash_contents.then(|| blake3::hash(&expected_contents));
-                        (bytes_read as u64, digest, entry_reader.into_inner())
+                        (bytes_read as u64, digest)
                     }
                     Err(err) => return Err(Error::Io(err)),
                 };
@@ -373,6 +375,7 @@ async fn unzip_inner<R: tokio::io::AsyncRead + Unpin, const BLOCKING: bool>(
             }
 
             // Validate the compressed size.
+            let reader = entry.reader_mut();
             let actual_compressed_size = reader.bytes_read();
             if actual_compressed_size != expected_compressed_size {
                 if !(expected_compressed_size == 0 && expected_data_descriptor) {

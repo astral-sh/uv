@@ -20,6 +20,8 @@ impl<const BLOCKING: bool> Filesystem<BLOCKING> {
         }
     }
 
+    /// Create a file without overwriting an existing path, so the parser can detect and verify
+    /// duplicate ZIP entries.
     pub(super) async fn create_file(path: &Path) -> io::Result<impl AsyncWrite + Unpin> {
         if BLOCKING {
             let file = fs_err::OpenOptions::new()
