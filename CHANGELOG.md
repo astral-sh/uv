@@ -3,6 +3,38 @@
 <!-- prettier-ignore-start -->
 
 
+## 0.12.8
+
+Released on 2026-08-31.
+
+### Enhancements
+
+- Warn about invalid tool directories and continue upgrading valid tools with `uv tool upgrade --all` ([#21368](https://github.com/astral-sh/uv/pull/21368))
+
+### Preview features
+
+- Deduplicate identical files within and across cached wheels with the `content-addressed-cache` preview feature ([#21327](https://github.com/astral-sh/uv/pull/21327))
+- Reduce allocations while extracting content-addressed wheels by reusing the hashing buffer across files ([#21340](https://github.com/astral-sh/uv/pull/21340))
+- Speed up content-addressed cache cleanup on macOS by reading hard-link counts in bulk ([#21344](https://github.com/astral-sh/uv/pull/21344))
+
+### Performance
+
+- Prevent concurrent uv processes from downloading and extracting the same remote wheel more than once ([#21379](https://github.com/astral-sh/uv/pull/21379))
+- Speed up dependency graph construction from large lockfiles by indexing packages during traversal ([#21373](https://github.com/astral-sh/uv/pull/21373))
+- Extend indexed lockfile traversal to exports, dependency trees, audits, and freshness checks ([#21377](https://github.com/astral-sh/uv/pull/21377))
+- Speed up warm resolutions by reducing repeated marker interner work ([#21300](https://github.com/astral-sh/uv/pull/21300))
+
+### Bug fixes
+
+- Do not trust hashes from direct URLs discovered only in wheel metadata when installing with `--require-hashes` ([#21348](https://github.com/astral-sh/uv/pull/21348))
+- Use a compatible Azure Storage API version for anonymous and authenticated requests, allowing credential retries when public access is disabled ([#21366](https://github.com/astral-sh/uv/pull/21366))
+- Redact Azure shared access signature (`sig`) query parameters from displayed URLs ([#21360](https://github.com/astral-sh/uv/pull/21360))
+- Treat projects below one-level workspace member globs as standalone instead of aborting workspace discovery ([#21341](https://github.com/astral-sh/uv/pull/21341))
+
+### Other changes
+
+- Update `astral-tokio-tar` to 0.7.0 and use effective sizes when tracking extracted hard links ([#21346](https://github.com/astral-sh/uv/pull/21346))
+
 ## 0.12.7
 
 Released on 2026-08-27.

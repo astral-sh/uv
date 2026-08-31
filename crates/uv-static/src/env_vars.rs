@@ -144,7 +144,7 @@ impl EnvVars {
     /// Require wheel metadata to be fetched with HTTP range requests when separate metadata is
     /// unavailable. If set to `true`, uv will fail instead of downloading the entire wheel.
     #[attr_hidden]
-    #[attr_added_in("next release")]
+    #[attr_added_in("0.12.8")]
     pub const UV_REQUIRE_METADATA_RANGE_REQUESTS: &'static str =
         "UV_REQUIRE_METADATA_RANGE_REQUESTS";
 
