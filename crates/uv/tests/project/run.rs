@@ -4627,12 +4627,6 @@ fn run_active_script_environment() -> Result<()> {
         .child("foo")
         .assert(predicate::path::missing());
 
-    let active_environment = context.temp_dir.child("foo");
-    active_environment.create_dir_all()?;
-    active_environment
-        .child("important.txt")
-        .write_str("important data")?;
-
     // Using `--active` should create the environment
     uv_snapshot!(context.filters(), context.run()
         .arg("--active")
@@ -4649,12 +4643,10 @@ fn run_active_script_environment() -> Result<()> {
      + iniconfig==2.0.0
     ");
 
-    active_environment.assert(predicate::path::is_dir());
-    // Silently deleting user data outside a virtual environment is undesirable.
-    // See astral-sh/uv#21364.
-    active_environment
-        .child("important.txt")
-        .assert(predicate::path::missing());
+    context
+        .temp_dir
+        .child("foo")
+        .assert(predicate::path::is_dir());
 
     // Requesting a different Python version should invalidate the environment
     uv_snapshot!(context.filters(), context.run()
@@ -4672,6 +4664,45 @@ fn run_active_script_environment() -> Result<()> {
     Installed 1 package in [TIME]
      + iniconfig==2.0.0
     ");
+
+    Ok(())
+}
+
+/// Regression test for <https://github.com/astral-sh/uv/issues/21364>.
+#[test]
+fn run_active_script_environment_non_virtualenv() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let test_script = context.temp_dir.child("main.py");
+    test_script.write_str(indoc! { r#"
+        # /// script
+        # requires-python = ">=3.12"
+        # dependencies = []
+        # ///
+
+        print("Hello, world!")
+       "#
+    })?;
+
+    let active_environment = context.temp_dir.child("foo");
+    active_environment.create_dir_all()?;
+    active_environment
+        .child("important.txt")
+        .write_str("important data")?;
+
+    context
+        .run()
+        .arg("--active")
+        .arg("--script")
+        .arg("main.py")
+        .env(EnvVars::VIRTUAL_ENV, "foo")
+        .assert()
+        .success();
+
+    active_environment.assert(predicate::path::is_dir());
+    active_environment
+        .child("important.txt")
+        .assert(predicate::path::missing());
 
     Ok(())
 }
