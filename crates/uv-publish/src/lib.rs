@@ -1,6 +1,7 @@
 mod trusted_publishing;
 
 use std::collections::BTreeSet;
+use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::{fmt, io};
@@ -33,7 +34,7 @@ use uv_client::{
 use uv_configuration::{KeyringProviderType, TrustedPublishing};
 use uv_distribution_filename::{DistFilename, SourceDistExtension, SourceDistFilename};
 use uv_distribution_types::{IndexCapabilities, IndexUrl};
-use uv_extract::hash::{HashReader, Hasher};
+use uv_extract::hash::Hasher;
 use uv_fs::{ProgressReader, Simplified};
 use uv_metadata::read_metadata_async_seek;
 use uv_preview::PreviewFeature;
@@ -738,31 +739,39 @@ async fn hash_file(
     hashers: Vec<Hasher>,
     reporter: Arc<impl Reporter>,
 ) -> Result<Vec<HashDigest>, io::Error> {
-    let path = path.as_ref();
+    let path = path.as_ref().to_path_buf();
     debug!("Hashing {}", path.user_display());
+    let filename = filename.clone();
 
-    let file = File::open(path).await?;
-    let file_size = file.metadata().await?.len();
-    let idx = reporter.on_hash_start(filename, Some(file_size));
+    // Read and hash the file in one blocking task, instead of dispatching each read separately.
+    tokio::task::spawn_blocking(move || {
+        let mut file = fs_err::File::open(path)?;
+        let file_size = file.metadata()?.len();
+        let index = reporter.on_hash_start(&filename, Some(file_size));
+        let mut hashers = hashers;
+        let mut buffer = vec![0; 64 * 1024];
 
-    let reader = BufReader::new(file);
-    let mut hashers = hashers;
-    let reporter_clone = reporter.clone();
-    let mut reader = HashReader::new(
-        ProgressReader::new(reader, move |read| {
-            reporter_clone.on_hash_progress(idx, read as u64);
-        }),
-        &mut hashers,
-    );
+        let result = loop {
+            let read = match file.read(&mut buffer) {
+                Ok(0) => break Ok(()),
+                Ok(read) => read,
+                Err(err) if err.kind() == io::ErrorKind::Interrupted => continue,
+                Err(err) => break Err(err),
+            };
+            reporter.on_hash_progress(index, read as u64);
+            for hasher in &mut hashers {
+                hasher.update(&buffer[..read]);
+            }
+        };
+        reporter.on_hash_complete(index);
+        result?;
 
-    let result = reader.finish().await;
-    reporter.on_hash_complete(idx);
-    result?;
-
-    Ok(hashers
-        .into_iter()
-        .map(HashDigest::from)
-        .collect::<Vec<_>>())
+        Ok(hashers
+            .into_iter()
+            .map(HashDigest::from)
+            .collect::<Vec<_>>())
+    })
+    .await?
 }
 
 // Not in `uv-metadata` because we only support tar files here.
