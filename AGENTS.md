@@ -8,6 +8,8 @@
 - NEVER perform builds with the release profile, unless asked or reproducing performance issues
 - AVOID using `panic!`, `unreachable!`, `.unwrap()`, unsafe code, and clippy rule ignores
 - PREFER patterns like `if let` to handle fallibility
+- PREFER exhaustive `match` expressions without wildcard (`_`) arms over `matches!`, so new enum
+  variants require explicit handling
 - ALWAYS write `SAFETY` comments following our usual style when writing `unsafe` code
 - PREFER `#[expect()]` over `[allow()]` if clippy must be disabled
 - PREFER let chains (`if let` combined with `&&`) over nested `if let` statements
