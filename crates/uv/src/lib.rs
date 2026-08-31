@@ -79,6 +79,7 @@ pub(crate) fn base_client_builder<'a>(globals: &GlobalSettings) -> BaseClientBui
         globals.network_settings.connect_timeout,
         globals.network_settings.retries,
     )
+    .metadata_range_request(globals.network_settings.metadata_range_request)
     .cache_read_concurrency(globals.concurrency.cache_reads)
     .http_proxy(globals.network_settings.http_proxy.clone())
     .https_proxy(globals.network_settings.https_proxy.clone())

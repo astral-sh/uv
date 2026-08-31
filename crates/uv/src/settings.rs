@@ -32,7 +32,7 @@ use uv_cli::{
         resolver_installer_options, resolver_options,
     },
 };
-use uv_client::{Certificates, Connectivity};
+use uv_client::{Certificates, Connectivity, MetadataRangeRequest};
 use uv_configuration::{
     BuildIsolation, BuildOptions, Concurrency, DependencyGroups, DevMode, DryRun, EditableMode,
     EnvFile, ExcludeDependency, ExportFormat, ExtrasSpecification, GitLfsSetting, HashCheckingMode,
@@ -283,6 +283,7 @@ pub(crate) struct NetworkSettings {
     pub(super) read_timeout: Duration,
     pub(super) connect_timeout: Duration,
     pub(super) retries: u32,
+    pub(super) metadata_range_request: MetadataRangeRequest,
 }
 
 impl NetworkSettings {
@@ -409,6 +410,10 @@ impl NetworkSettings {
             read_timeout: environment.http_read_timeout,
             connect_timeout: environment.http_connect_timeout,
             retries: environment.http_retries,
+            metadata_range_request: environment
+                .require_metadata_range_requests
+                .unwrap_or_default()
+                .into(),
         })
     }
 

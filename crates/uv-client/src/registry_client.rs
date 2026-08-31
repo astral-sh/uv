@@ -34,7 +34,6 @@ use uv_pypi_types::{HashAlgorithm, HashDigest, HashDigests, ProjectStatus, Yanke
 use uv_pypi_types::{PypiSimpleDetail, PypiSimpleIndex, ResolutionMetadata};
 use uv_redacted::DisplaySafeUrl;
 use uv_small_str::SmallString;
-use uv_static::{EnvVars, parse_boolish_environment_variable};
 use uv_torch::TorchStrategy;
 
 use crate::base_client::{BaseClientBuilder, ClientBuildError, ExtraMiddleware, RedirectPolicy};
@@ -55,27 +54,20 @@ pub struct RegistryClientBuilder<'a> {
     torch_backend: Option<TorchStrategy>,
     cache: Cache,
     base_client_builder: BaseClientBuilder<'a>,
-    require_metadata_range_requests: Option<bool>,
+    metadata_range_request: MetadataRangeRequest,
 }
 
 impl<'a> RegistryClientBuilder<'a> {
     pub fn new(base_client_builder: BaseClientBuilder<'a>, cache: Cache) -> Self {
+        let metadata_range_request = base_client_builder.configured_metadata_range_request();
         Self {
             index_locations: IndexLocations::default(),
             index_strategy: IndexStrategy::default(),
             torch_backend: None,
             cache,
             base_client_builder: base_client_builder.redirect(RedirectPolicy::RetriggerMiddleware),
-            require_metadata_range_requests: None,
+            metadata_range_request,
         }
-    }
-
-    /// Require wheel metadata to be fetched with HTTP range requests when separate metadata is
-    /// unavailable.
-    #[must_use]
-    pub fn require_metadata_range_requests(mut self, require: bool) -> Self {
-        self.require_metadata_range_requests = Some(require);
-        self
     }
 
     #[must_use]
@@ -186,13 +178,6 @@ impl<'a> RegistryClientBuilder<'a> {
         mut self,
         existing: Option<&BaseClient>,
     ) -> Result<RegistryClient, ClientBuildError> {
-        let require_metadata_range_requests =
-            if let Some(require) = self.require_metadata_range_requests {
-                require
-            } else {
-                parse_boolish_environment_variable(EnvVars::UV_REQUIRE_METADATA_RANGE_REQUESTS)?
-                    .unwrap_or(false)
-            };
         self.cache_index_credentials()?;
 
         // Wrap in any relevant middleware and handle connectivity.
@@ -220,7 +205,7 @@ impl<'a> RegistryClientBuilder<'a> {
             client,
             read_timeout,
             flat_indexes: Arc::default(),
-            require_metadata_range_requests,
+            metadata_range_request: self.metadata_range_request,
         })
     }
 }
@@ -244,8 +229,28 @@ pub struct RegistryClient {
     read_timeout: Duration,
     /// The flat index entries for each `--find-links`-style index URL, with one slot per index.
     flat_indexes: Arc<Mutex<FlatIndexCache>>,
-    /// Whether to fail instead of streaming a wheel when metadata range requests are unsupported.
-    require_metadata_range_requests: bool,
+    /// The behavior when metadata range requests are unsupported.
+    metadata_range_request: MetadataRangeRequest,
+}
+
+/// The behavior when wheel metadata cannot be fetched with HTTP range requests.
+#[derive(Debug, Default, Clone, Copy, Eq, PartialEq)]
+pub enum MetadataRangeRequest {
+    /// Download the entire wheel to read the metadata.
+    #[default]
+    Fallback,
+    /// Fail instead of downloading the entire wheel.
+    Require,
+}
+
+impl From<bool> for MetadataRangeRequest {
+    fn from(require: bool) -> Self {
+        if require {
+            Self::Require
+        } else {
+            Self::Fallback
+        }
+    }
 }
 
 /// The format of the package metadata returned by querying an index.
@@ -1200,7 +1205,7 @@ impl RegistryClient {
                 Ok(metadata) => return Ok(metadata),
                 Err(err) => {
                     if err.is_http_range_requests_unsupported(url, index) {
-                        if self.require_metadata_range_requests {
+                        if self.metadata_range_request == MetadataRangeRequest::Require {
                             return Err(ErrorKind::MetadataRangeRequestsRequired(
                                 url.clone(),
                                 Box::new(err),
