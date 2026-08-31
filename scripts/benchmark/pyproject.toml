@@ -16,6 +16,7 @@ dependencies = [
 [project.scripts]
 resolver = "benchmark.resolver:main"
 tools = "benchmark.tools:main"
+python-shim = "benchmark.python_shim:main"
 
 [build-system]
 requires = ["hatchling"]
