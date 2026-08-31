@@ -400,7 +400,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
     Ok((resolution, hasher))
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub(crate) enum Modifications {
     /// Use `pip install` semantics, whereby existing installations are left as-is, unless they are
     /// marked for re-installation or upgrade.
@@ -413,33 +413,31 @@ pub(crate) enum Modifications {
     /// Ensures that the resulting environment is an exact match for the requirements, but may
     /// result in more changes than necessary.
     Exact,
-    /// Remove only packages that disappeared from the managed dependency graph.
-    ///
-    /// Packages that are still required by an unmanaged installed package are retained.
-    Prune {
-        roots: Vec<RemovalRoot>,
-        candidates: BTreeSet<PackageName>,
-        retained: BTreeSet<PackageName>,
-    },
 }
 
-impl Modifications {
-    /// Return the packages eligible for removal, or [`None`] to allow removing any extraneous package.
+/// Removal policy for packages that disappeared from the managed dependency graph.
+///
+/// Packages that are still required by an unmanaged installed package are retained.
+#[derive(Debug)]
+pub(crate) struct PrunePolicy {
+    pub(crate) roots: Vec<RemovalRoot>,
+    pub(crate) candidates: BTreeSet<PackageName>,
+    pub(crate) retained: BTreeSet<PackageName>,
+}
+
+impl PrunePolicy {
+    /// Return the packages eligible for removal.
     fn removable_packages(
         self,
         resolution: &Resolution,
         site_packages: &SitePackages,
         venv: &PythonEnvironment,
-    ) -> Option<BTreeSet<PackageName>> {
-        let (roots, mut candidates, retained) = match self {
-            Self::Sufficient => return Some(BTreeSet::new()),
-            Self::Exact => return None,
-            Self::Prune {
-                roots,
-                candidates,
-                retained,
-            } => (roots, candidates, retained),
-        };
+    ) -> BTreeSet<PackageName> {
+        let Self {
+            roots,
+            mut candidates,
+            retained,
+        } = self;
 
         let markers = venv.interpreter().to_resolver_marker_environment();
         let removed_reachability = site_packages.reachable_packages(
@@ -479,7 +477,7 @@ impl Modifications {
             !retained.contains(candidate) && !external_reachability.packages().contains(candidate)
         });
 
-        Some(candidates)
+        candidates
     }
 }
 
@@ -654,6 +652,7 @@ impl InstallationPlan {
         site_packages: SitePackages,
         installation: InstallationStrategy,
         modifications: Modifications,
+        prune: Option<PrunePolicy>,
         reinstall: &Reinstall,
         build_options: &BuildOptions,
         hasher: &HashStrategy,
@@ -667,7 +666,14 @@ impl InstallationPlan {
         tags: &Tags,
     ) -> Result<Self, Error> {
         let start = Instant::now();
-        let removable_packages = modifications.removable_packages(resolution, &site_packages, venv);
+        let removable_packages = if let Some(prune) = prune {
+            Some(prune.removable_packages(resolution, &site_packages, venv))
+        } else {
+            match modifications {
+                Modifications::Sufficient => Some(BTreeSet::new()),
+                Modifications::Exact => None,
+            }
+        };
         let mut plan = Planner::new(resolution)
             .build(
                 site_packages,
@@ -760,6 +766,7 @@ pub(crate) async fn install(
         site_packages,
         installation,
         modifications,
+        None,
         reinstall,
         build_options,
         hasher,

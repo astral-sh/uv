@@ -28,7 +28,7 @@ use uv_workspace::pyproject_mut::{DependencyTarget, PyProjectTomlMut};
 use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceCache};
 
 use crate::commands::pip::loggers::{DefaultInstallLogger, DefaultResolveLogger};
-use crate::commands::pip::operations::{Modifications, RemovalRoot};
+use crate::commands::pip::operations::{Modifications, PrunePolicy, RemovalRoot};
 use crate::commands::project::add::{AddTarget, PythonTarget};
 use crate::commands::project::install_target::InstallTarget;
 use crate::commands::project::lock::{LockMode, LockResult};
@@ -360,7 +360,7 @@ pub(crate) async fn remove(
     } else {
         BTreeSet::new()
     };
-    let modifications = Modifications::Prune {
+    let prune = PrunePolicy {
         roots: removed_roots,
         candidates,
         retained,
@@ -371,14 +371,15 @@ pub(crate) async fn remove(
 
     let state = state.fork();
 
-    match project::sync::do_sync(
+    match project::sync::do_sync_with_prune(
         target,
         venv,
         &extras,
         &groups,
         None,
         InstallOptions::default(),
-        modifications,
+        Modifications::Exact,
+        Some(prune),
         None,
         (&settings).into(),
         &client_builder,
