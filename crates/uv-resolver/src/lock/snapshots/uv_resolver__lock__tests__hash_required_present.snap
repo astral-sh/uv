@@ -119,7 +119,9 @@ Ok(
                 source: Path(
                     "file:///foo/bar",
                 ),
-            }: 0,
+            }: PackageIndex(
+                0,
+            ),
         },
         manifest: ResolverManifest {
             members: {},

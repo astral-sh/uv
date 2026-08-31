@@ -120,7 +120,9 @@ Ok(
                         ),
                     ),
                 ),
-            }: 0,
+            }: PackageIndex(
+                0,
+            ),
         },
         manifest: ResolverManifest {
             members: {},

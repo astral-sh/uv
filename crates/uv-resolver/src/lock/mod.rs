@@ -1,4 +1,5 @@
 use std::borrow::Cow;
+use std::cmp::Ordering;
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::error::Error;
 use std::fmt::{Debug, Display, Formatter};
@@ -331,7 +332,7 @@ pub struct Lock {
     /// this map, and that every dependency for every package has an ID
     /// that exists in this map. That is, there are no dependencies that don't
     /// have a corresponding locked package entry in the same lockfile.
-    by_id: FxHashMap<PackageId, usize>,
+    by_id: FxHashMap<PackageId, PackageIndex>,
     /// The input requirements to the resolution.
     manifest: ResolverManifest,
 }
@@ -1200,8 +1201,8 @@ impl Lock {
         // Check for duplicate package IDs and also build up the map for
         // packages keyed by their ID.
         let mut by_id = FxHashMap::default();
-        for (i, dist) in packages.iter().enumerate() {
-            if by_id.insert(dist.id.clone(), i).is_some() {
+        for (index, dist) in packages.iter().enumerate() {
+            if by_id.insert(dist.id.clone(), PackageIndex(index)).is_some() {
                 return Err(LockErrorKind::DuplicatePackage {
                     id: dist.id.clone(),
                 }
@@ -1239,15 +1240,21 @@ impl Lock {
         // Check that every dependency has an entry in `by_id`. If any don't,
         // it implies we somehow have a dependency with no corresponding locked
         // package.
-        for dist in &packages {
-            for dependency in dist.all_dependencies() {
-                if !by_id.contains_key(&dependency.package_id) {
+        for dist in &mut packages {
+            for dependency in dist
+                .dependencies
+                .iter_mut()
+                .chain(dist.optional_dependencies.values_mut().flatten())
+                .chain(dist.dependency_groups.values_mut().flatten())
+            {
+                let Some(&index) = by_id.get(&dependency.package_id) else {
                     return Err(LockErrorKind::UnrecognizedDependency {
                         id: dist.id.clone(),
                         dependency: dependency.clone(),
                     }
                     .into());
-                }
+                };
+                dependency.index = index;
             }
 
             // Also check that our sources are consistent with whether we have
@@ -2065,7 +2072,7 @@ impl Lock {
     fn find_by_id(&self, id: &PackageId) -> &Package {
         let index = *self.by_id.get(id).expect("locked package for ID");
 
-        (self.packages.get(index).expect("valid index for package")) as _
+        (self.packages.get(index.0).expect("valid index for package")) as _
     }
 
     /// Return a [`SatisfiesResult`] if the given extras do not match the [`Package`] metadata.
@@ -6282,10 +6289,18 @@ impl TryFrom<WheelWire> for Wheel {
     }
 }
 
+/// The position of a package in [`Lock::packages`].
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+struct PackageIndex(usize);
+
 /// A single dependency of a package in a lockfile.
-#[derive(Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
+#[derive(Clone, Debug, Eq)]
 pub struct Dependency {
     package_id: PackageId,
+    /// The target's position in [`Lock::packages`], initialized by [`Lock::new`].
+    /// This cache is excluded from equality and ordering, since the position can differ between
+    /// locks that contain the same dependency.
+    index: PackageIndex,
     extra: BTreeSet<ExtraName>,
     /// A marker simplified from the PEP 508 marker in `complexified_marker`
     /// by assuming `requires-python` and the PEP 508 portion of the parent package's reachability
@@ -6324,6 +6339,7 @@ impl Dependency {
         let complexified_marker = simplified_marker.into_marker(requires_python);
         Self {
             package_id,
+            index: PackageIndex(0),
             extra,
             simplified_marker,
             complexified_marker: UniversalMarker::from_combined(complexified_marker),
@@ -6338,6 +6354,38 @@ impl Dependency {
     /// Returns the extras specified on this dependency.
     pub fn extra(&self) -> &BTreeSet<ExtraName> {
         &self.extra
+    }
+}
+
+impl PartialEq for Dependency {
+    fn eq(&self, other: &Self) -> bool {
+        self.package_id == other.package_id
+            && self.extra == other.extra
+            && self.simplified_marker == other.simplified_marker
+            && self.complexified_marker == other.complexified_marker
+    }
+}
+
+impl PartialOrd for Dependency {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for Dependency {
+    fn cmp(&self, other: &Self) -> Ordering {
+        (
+            &self.package_id,
+            &self.extra,
+            &self.simplified_marker,
+            &self.complexified_marker,
+        )
+            .cmp(&(
+                &other.package_id,
+                &other.extra,
+                &other.simplified_marker,
+                &other.complexified_marker,
+            ))
     }
 }
 
@@ -6395,6 +6443,7 @@ impl DependencyWire {
             };
         Ok(Dependency {
             package_id: self.package_id.unwire(unambiguous_package_ids)?,
+            index: PackageIndex(0),
             extra: self.extra,
             simplified_marker,
             complexified_marker,
