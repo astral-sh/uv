@@ -8,8 +8,6 @@ use reqwest::header::HeaderValue;
 use reqwest::{Request, Response};
 use reqwest_middleware::{Middleware, Next};
 
-const AZURE_STORAGE_VERSION: &str = "2023-11-03";
-
 pub(crate) struct AzureStorageMiddleware {
     pub(crate) preview: Preview,
 }
@@ -23,10 +21,17 @@ impl Middleware for AzureStorageMiddleware {
         next: Next<'_>,
     ) -> reqwest_middleware::Result<Response> {
         if AzureEndpointProvider::is_azure_endpoint(request.url(), self.preview)? {
+            // Anonymous requests need 2019-12-12 or later to return a 401
+            // bearer challenge instead of 409 when account-level public access
+            // is disabled. Use the earliest such version supported by Azure
+            // Stack Hub (2301 and later).
+            //
+            // https://learn.microsoft.com/en-us/rest/api/storageservices/authorize-with-azure-active-directory#bearer-challenge
+            // https://learn.microsoft.com/en-us/azure-stack/user/azure-stack-acs-differences#api-version
             request
                 .headers_mut()
                 .entry("x-ms-version")
-                .or_insert(HeaderValue::from_static(AZURE_STORAGE_VERSION));
+                .or_insert(HeaderValue::from_static("2020-10-02"));
         }
 
         next.run(request, extensions).await
