@@ -169,7 +169,7 @@ Ok(
                                 "path/to/a",
                             ),
                         },
-                        package_index: PackageIndex(
+                        index: PackageIndex(
                             0,
                         ),
                         extra: {},

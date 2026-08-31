@@ -1254,7 +1254,7 @@ impl Lock {
                     }
                     .into());
                 };
-                dependency.package_index = index;
+                dependency.index = index;
             }
 
             // Also check that our sources are consistent with whether we have
@@ -6300,7 +6300,7 @@ pub struct Dependency {
     /// The target's position in [`Lock::packages`], initialized by [`Lock::new`].
     /// This cache is excluded from equality and ordering, since the position can differ between
     /// locks that contain the same dependency.
-    package_index: PackageIndex,
+    index: PackageIndex,
     extra: BTreeSet<ExtraName>,
     /// A marker simplified from the PEP 508 marker in `complexified_marker`
     /// by assuming `requires-python` and the PEP 508 portion of the parent package's reachability
@@ -6339,7 +6339,7 @@ impl Dependency {
         let complexified_marker = simplified_marker.into_marker(requires_python);
         Self {
             package_id,
-            package_index: PackageIndex(0),
+            index: PackageIndex(0),
             extra,
             simplified_marker,
             complexified_marker: UniversalMarker::from_combined(complexified_marker),
@@ -6443,7 +6443,7 @@ impl DependencyWire {
             };
         Ok(Dependency {
             package_id: self.package_id.unwire(unambiguous_package_ids)?,
-            package_index: PackageIndex(0),
+            index: PackageIndex(0),
             extra: self.extra,
             simplified_marker,
             complexified_marker,

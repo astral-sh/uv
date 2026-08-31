@@ -408,10 +408,10 @@ trait InstallableExt<'lock>: Installable<'lock> {
                     continue;
                 }
 
-                let dep_dist = &self.lock().packages[dep.package_index.0];
+                let dep_dist = &self.lock().packages[dep.index.0];
 
                 // Add the package to the graph.
-                let dep_index = match inverse[dep.package_index.0] {
+                let dep_index = match inverse[dep.index.0] {
                     None => {
                         let index = petgraph.add_node(self.package_to_node(
                             dep_dist,
@@ -420,7 +420,7 @@ trait InstallableExt<'lock>: Installable<'lock> {
                             install_options,
                             marker_env,
                         )?);
-                        inverse[dep.package_index.0] = Some(index);
+                        inverse[dep.index.0] = Some(index);
                         index
                     }
                     Some(index) => {
@@ -462,20 +462,20 @@ trait InstallableExt<'lock>: Installable<'lock> {
                 // Push its dependencies on the queue.
                 add_reachability(
                     &mut conflict_reachability,
-                    (dep.package_index, None),
+                    (dep.index, None),
                     dep.complexified_marker,
                 );
-                if seen.insert((dep.package_index, None)) {
-                    queue.push_back((dep.package_index, None));
+                if seen.insert((dep.index, None)) {
+                    queue.push_back((dep.index, None));
                 }
                 for extra in &dep.extra {
                     add_reachability(
                         &mut conflict_reachability,
-                        (dep.package_index, Some(extra)),
+                        (dep.index, Some(extra)),
                         dep.complexified_marker,
                     );
-                    if seen.insert((dep.package_index, Some(extra))) {
-                        queue.push_back((dep.package_index, Some(extra)));
+                    if seen.insert((dep.index, Some(extra))) {
+                        queue.push_back((dep.index, Some(extra)));
                     }
                 }
             }
@@ -699,20 +699,16 @@ trait InstallableExt<'lock>: Installable<'lock> {
                         activated_extras.push(key);
                     }
                     // Push its dependencies on the queue.
-                    if add_reachability(
-                        &mut reachability,
-                        (dep.package_index, None),
-                        dep_reachability,
-                    ) {
-                        queue.push_back((dep.package_index, None));
+                    if add_reachability(&mut reachability, (dep.index, None), dep_reachability) {
+                        queue.push_back((dep.index, None));
                     }
                     for extra in &dep.extra {
                         if add_reachability(
                             &mut reachability,
-                            (dep.package_index, Some(extra)),
+                            (dep.index, Some(extra)),
                             dep_reachability,
                         ) {
-                            queue.push_back((dep.package_index, Some(extra)));
+                            queue.push_back((dep.index, Some(extra)));
                         }
                     }
                 }
@@ -766,10 +762,10 @@ trait InstallableExt<'lock>: Installable<'lock> {
                     continue;
                 }
 
-                let dep_dist = &self.lock().packages[dep.package_index.0];
+                let dep_dist = &self.lock().packages[dep.index.0];
 
                 // Add the dependency to the graph.
-                let dep_index = match inverse[dep.package_index.0] {
+                let dep_index = match inverse[dep.index.0] {
                     None => {
                         let index = petgraph.add_node(self.package_to_node(
                             dep_dist,
@@ -778,7 +774,7 @@ trait InstallableExt<'lock>: Installable<'lock> {
                             install_options,
                             marker_env,
                         )?);
-                        inverse[dep.package_index.0] = Some(index);
+                        inverse[dep.index.0] = Some(index);
                         index
                     }
                     Some(index) => {
@@ -808,12 +804,12 @@ trait InstallableExt<'lock>: Installable<'lock> {
                 );
 
                 // Push its dependencies on the queue.
-                if seen.insert((dep.package_index, None)) {
-                    queue.push_back((dep.package_index, None));
+                if seen.insert((dep.index, None)) {
+                    queue.push_back((dep.index, None));
                 }
                 for extra in &dep.extra {
-                    if seen.insert((dep.package_index, Some(extra))) {
-                        queue.push_back((dep.package_index, Some(extra)));
+                    if seen.insert((dep.index, Some(extra))) {
+                        queue.push_back((dep.index, Some(extra)));
                     }
                 }
             }
