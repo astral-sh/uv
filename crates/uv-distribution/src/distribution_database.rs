@@ -4,10 +4,11 @@ use std::future::Future;
 use std::io;
 use std::path::Path;
 use std::pin::Pin;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex, PoisonError};
 use std::task::{Context, Poll};
 
 use either::Either;
+use futures::future::{AbortHandle, Aborted};
 use futures::{FutureExt, TryStreamExt};
 use rayon::in_place_scope;
 use rayon::prelude::*;
@@ -1302,6 +1303,25 @@ enum ExtractedWheel {
     Hashed(HashedWheel),
 }
 
+/// Stop extraction before removing its directory, including when the blocking task is still queued.
+struct ExtractionGuard {
+    abort: AbortHandle,
+    temp_dir: Arc<Mutex<Option<tempfile::TempDir>>>,
+}
+
+impl Drop for ExtractionGuard {
+    fn drop(&mut self) {
+        self.abort.abort();
+        // The worker holds this lock while accessing the directory. Cancellation wakes it without
+        // needing the async runtime, so waiting here also makes cleanup safe during runtime shutdown.
+        // If the worker has not started, taking the directory prevents it from starting extraction.
+        self.temp_dir
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .take();
+    }
+}
+
 impl ExtractedWheel {
     /// Feed the download through a bounded pipe to a single extraction worker.
     ///
@@ -1320,17 +1340,30 @@ impl ExtractedWheel {
 
         // Allow the download to get ahead while the worker decompresses and writes files.
         let (sender, receiver) = tokio::io::duplex(PIPE_BUFFER_SIZE);
+        let (abort, registration) = AbortHandle::new_pair();
+        let guard = ExtractionGuard {
+            abort,
+            temp_dir: Arc::new(Mutex::new(Some(temp_dir))),
+        };
+        let temp_dir = Arc::clone(&guard.temp_dir);
         let mut extraction = tokio::task::spawn_blocking(move || {
-            // Keep the directory alive until the worker stops, even if the download is cancelled.
+            let temp_dir = temp_dir.lock().unwrap_or_else(PoisonError::into_inner);
+            let Some(temp_dir) = temp_dir.as_ref() else {
+                return Err(uv_extract::Error::Io(io::Error::other(Aborted)));
+            };
             let extracted = if content_addressed {
-                let (files, tree) =
-                    uv_extract::stream::unzip_blocking_and_hash(receiver, temp_dir.path())?;
+                let (files, tree) = uv_extract::stream::unzip_blocking_and_hash(
+                    receiver,
+                    temp_dir.path(),
+                    registration,
+                )?;
                 Self::Hashed(HashedWheel { files, tree })
             } else {
-                let files = uv_extract::stream::unzip_blocking(receiver, temp_dir.path())?;
+                let files =
+                    uv_extract::stream::unzip_blocking(receiver, temp_dir.path(), registration)?;
                 Self::Unhashed(files)
             };
-            Ok::<_, uv_extract::Error>((temp_dir, extracted))
+            Ok::<_, uv_extract::Error>(extracted)
         });
         let download = async {
             // Own the write end so EOF, errors and cancellation all close the pipe.
@@ -1356,6 +1389,9 @@ impl ExtractedWheel {
             // Prefer a download error over the resulting truncated-ZIP error if both are ready.
             biased;
             download = download => {
+                if download.is_err() {
+                    guard.abort.abort();
+                }
                 let extraction = extraction.await;
                 download.map_err(uv_extract::Error::Io)?;
                 extraction
@@ -1363,7 +1399,15 @@ impl ExtractedWheel {
             // Stop reading even if the server stalls after sending an invalid ZIP entry.
             extraction = &mut extraction => extraction,
         };
-        extraction.map_err(|err| uv_extract::Error::Io(io::Error::other(err)))?
+        let extracted =
+            extraction.map_err(|err| uv_extract::Error::Io(io::Error::other(err)))??;
+        let temp_dir = guard
+            .temp_dir
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .take()
+            .ok_or_else(|| uv_extract::Error::Io(io::Error::other(Aborted)))?;
+        Ok((temp_dir, extracted))
     }
 
     /// Extract a wheel from a streaming reader, optionally computing its directory hash tree.
@@ -1685,6 +1729,7 @@ impl PathArchivePointer {
 #[cfg(test)]
 mod tests {
     use std::io;
+    use std::sync::mpsc;
     use std::time::Duration;
 
     use futures::{StreamExt, TryStreamExt, stream};
@@ -1829,12 +1874,31 @@ mod tests {
         task.abort();
         assert!(task.await.is_err());
         started?;
-        tokio::time::timeout(Duration::from_secs(10), async {
-            while path.exists() {
-                tokio::time::sleep(Duration::from_millis(1)).await;
-            }
-        })
-        .await?;
+        assert!(!path.exists());
         Ok(())
+    }
+
+    #[test]
+    fn background_extraction_cancellation_before_worker_starts() -> anyhow::Result<()> {
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .max_blocking_threads(1)
+            .build()?;
+        runtime.block_on(async {
+            // Keep extraction queued: cancellation must not wait for a blocking-pool slot.
+            let (release, wait) = mpsc::channel::<()>();
+            let blocker = tokio::task::spawn_blocking(move || wait.recv());
+            let target = tempfile::tempdir()?;
+            let path = target.path().to_path_buf();
+            let wheel = include_bytes!("../../../test/links/ok-1.0.0-py3-none-any.whl").as_slice();
+            let mut extraction =
+                Box::pin(ExtractedWheel::extract_in_background(wheel, target, false));
+            assert!(futures::poll!(extraction.as_mut()).is_pending());
+            drop(extraction);
+            assert!(!path.exists());
+            drop(release);
+            let _ = blocker.await?;
+            Ok(())
+        })
     }
 }
