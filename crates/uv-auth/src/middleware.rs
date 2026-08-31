@@ -326,8 +326,7 @@ impl Middleware for AuthMiddleware {
     ///
     /// - Check the cache (URL key)
     /// - Perform the request
-    /// - On 401, 403, 404, or an Azure public-access denial, check for authentication if there was
-    ///   a cache miss
+    /// - On 401, 403, or 404 check for authentication if there was a cache miss
     ///     - Check the cache (index URL or realm key) for the username and password
     ///     - Check the netrc for a username and password
     ///     - Perform the request again if found
@@ -420,11 +419,12 @@ impl Middleware for AuthMiddleware {
 
             let response = next.clone().run(request, extensions).await?;
 
-            // If we don't fail with authorization related codes or authentication policy is
-            // Never, return the response.
-            if !response_requires_authentication(&response, retry_request.url(), self.preview)
-                .map_err(Error::Middleware)?
-                || matches!(auth_policy, AuthPolicy::Never)
+            // If we don't fail with authorization related codes or
+            // authentication policy is Never, return the response.
+            if !matches!(
+                response.status(),
+                StatusCode::FORBIDDEN | StatusCode::NOT_FOUND | StatusCode::UNAUTHORIZED
+            ) || matches!(auth_policy, AuthPolicy::Never)
             {
                 return Ok(response);
             }
@@ -876,32 +876,6 @@ impl AuthMiddleware {
     }
 }
 
-/// Returns `true` when an unauthenticated response should trigger credential discovery.
-fn response_requires_authentication(
-    response: &Response,
-    url: &url::Url,
-    preview: Preview,
-) -> anyhow::Result<bool> {
-    if matches!(
-        response.status(),
-        StatusCode::FORBIDDEN | StatusCode::NOT_FOUND | StatusCode::UNAUTHORIZED
-    ) {
-        return Ok(true);
-    }
-
-    if response.status() != StatusCode::CONFLICT {
-        return Ok(false);
-    }
-
-    // Azure Storage reports an anonymous request to a private endpoint as a conflict instead of an
-    // authorization error.
-    Ok(AzureEndpointProvider::is_azure_endpoint(url, preview)?
-        && response
-            .headers()
-            .get("x-ms-error-code")
-            .is_some_and(|value| value == "PublicAccessNotPermitted"))
-}
-
 fn tracing_url(request: &Request, credentials: Option<&Authentication>) -> DisplaySafeUrl {
     let mut url = DisplaySafeUrl::from_url(request.url().clone());
     if let Some(Authentication::Credentials(creds)) = credentials {
@@ -935,51 +909,6 @@ mod tests {
     use super::*;
 
     type Error = Box<dyn std::error::Error>;
-
-    #[test]
-    fn test_response_requires_authentication() -> Result<(), Error> {
-        let url = Url::parse("https://example.com")?;
-
-        let response = Response::from(
-            http::Response::builder()
-                .status(401)
-                .body(Vec::new())
-                .unwrap(),
-        );
-        assert!(response_requires_authentication(
-            &response,
-            &url,
-            Preview::default()
-        )?);
-
-        let response = Response::from(
-            http::Response::builder()
-                .status(409)
-                .header("x-ms-error-code", "PublicAccessNotPermitted")
-                .body(Vec::new())
-                .unwrap(),
-        );
-        assert!(!response_requires_authentication(
-            &response,
-            &url,
-            Preview::default()
-        )?);
-
-        let response = Response::from(
-            http::Response::builder()
-                .status(409)
-                .header("x-ms-error-code", "ContainerBeingDeleted")
-                .body(Vec::new())
-                .unwrap(),
-        );
-        assert!(!response_requires_authentication(
-            &response,
-            &url,
-            Preview::default()
-        )?);
-
-        Ok(())
-    }
 
     async fn start_test_server(username: &'static str, password: &'static str) -> MockServer {
         let server = MockServer::start().await;

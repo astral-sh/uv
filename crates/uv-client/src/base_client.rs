@@ -36,7 +36,7 @@ use uv_version::version;
 use uv_warnings::warn_user_once;
 
 use crate::linehaul::LineHaul;
-use crate::middleware::OfflineMiddleware;
+use crate::middleware::{AzureStorageMiddleware, OfflineMiddleware};
 use crate::tls::{Certificates, read_identity};
 use crate::{Connectivity, MetadataRangeRequest, RetriableError, RetryState, UvRetryableStrategy};
 
@@ -678,6 +678,10 @@ impl<'a> BaseClientBuilder<'a> {
                         client = client.with_arc(middleware.clone());
                     }
                 }
+
+                client = client.with(AzureStorageMiddleware {
+                    preview: self.preview,
+                });
 
                 // Initialize the authentication middleware to set headers.
                 match self.auth_integration {
