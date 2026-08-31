@@ -951,6 +951,49 @@ jobs:
           # Check that we don't fail on `pyenv-win` shims
           ./uv python list -v
 
+  integration-test-public-registries:
+    name: "public registries"
+    timeout-minutes: 10
+    runs-on: ubuntu-latest
+    env:
+      PYTHON_VERSION: 3.12
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "${{ env.PYTHON_VERSION }}"
+
+      - name: "Download binary"
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: uv-linux-libc-${{ inputs.sha }}
+
+      - name: "Prepare binary"
+        run: chmod +x ./uv
+
+      - name: "Run public registry tests"
+        run: ./uv run --locked --python "${PYTHON_VERSION}" --no-build --script scripts/registries-test.py --uv ./uv --color always
+        env:
+          UV_TEST_ASTRAL_PKG: transformer-engine
+          UV_TEST_ASTRAL_PUBLIC: "true"
+          UV_TEST_ASTRAL_URL: https://wheels.astral.sh/simple/cu128/
+          UV_TEST_MICROSOFT_PKG: typing-extensions
+          UV_TEST_MICROSOFT_PUBLIC: "true"
+          # TODO: Enable when https://github.com/astral-sh/uv/issues/21349 is fixed.
+          # UV_TEST_MICROSOFT_REQUIRE_METADATA_RANGE_REQUESTS: "true"
+          UV_TEST_MICROSOFT_URL: https://packagefeedproxy.microsoft.io/pypi/simple
+          UV_TEST_NVIDIA_PKG: nvidia-nvtx-cu12
+          UV_TEST_NVIDIA_PUBLIC: "true"
+          UV_TEST_NVIDIA_REQUIRE_METADATA_RANGE_REQUESTS: "true"
+          UV_TEST_NVIDIA_URL: https://pypi.nvidia.com/
+          UV_TEST_PYTORCH_PKG: colorama
+          UV_TEST_PYTORCH_PUBLIC: "true"
+          UV_TEST_PYTORCH_REQUIRE_METADATA_RANGE_REQUESTS: "true"
+          UV_TEST_PYTORCH_URL: https://download.pytorch.org/whl/cpu
+
   integration-test-registries:
     name: "registries"
     timeout-minutes: 10
