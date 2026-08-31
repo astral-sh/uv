@@ -1,8 +1,6 @@
 #![cfg(feature = "test-r2")]
 
 use backon::{BackoffBuilder, Retryable};
-use futures::TryStreamExt;
-use tokio_util::compat::FuturesAsyncReadCompatExt;
 
 async fn unzip(url: &str) -> anyhow::Result<(), uv_extract::Error> {
     let backoff = backon::ExponentialBuilder::default()
@@ -17,13 +15,24 @@ async fn unzip(url: &str) -> anyhow::Result<(), uv_extract::Error> {
 
     let response = download.retry(backoff).await.unwrap();
 
-    let reader = response
-        .bytes_stream()
+    let bytes = response
+        .bytes()
+        .await
         .map_err(std::io::Error::other)
-        .into_async_read();
+        .map_err(uv_extract::Error::Io)?;
 
     let target = tempfile::TempDir::new().map_err(uv_extract::Error::Io)?;
-    uv_extract::stream::unzip(reader.compat(), target.path()).await?;
+    let streaming = uv_extract::stream::unzip(bytes.as_ref(), target.path()).await;
+
+    // The buffered path must accept and reject the same archive structures.
+    let target = tempfile::TempDir::new().map_err(uv_extract::Error::Io)?;
+    let buffered = tokio::task::spawn_blocking(move || {
+        uv_extract::stream::unzip_buffered(&bytes, target.path())
+    })
+    .await
+    .expect("buffered ZIP extraction task should not panic");
+    assert_eq!(format!("{streaming:?}"), format!("{buffered:?}"));
+    streaming?;
     Ok(())
 }
 
