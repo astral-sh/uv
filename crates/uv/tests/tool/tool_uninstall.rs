@@ -170,3 +170,48 @@ fn tool_uninstall_all_missing_receipt() {
     Removed dangling environment for `black`
     ");
 }
+
+#[test]
+fn tool_uninstall_suffix() {
+    let context = uv_test::test_context!("3.12")
+        .with_filtered_exe_suffix()
+        .with_tool_dirs();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    // Install `ruff` with a custom suffix.
+    context
+        .tool_install()
+        .arg("ruff==0.3.4")
+        .arg("--suffix")
+        .arg("-0.3.4")
+        .assert()
+        .success();
+
+    // The suffixed executable is installed and the unsuffixed one is not.
+    assert!(
+        bin_dir
+            .join(format!("ruff-0.3.4{}", std::env::consts::EXE_SUFFIX))
+            .exists()
+    );
+    assert!(
+        !bin_dir
+            .join(format!("ruff{}", std::env::consts::EXE_SUFFIX))
+            .exists()
+    );
+
+    // Uninstall by the suffixed name.
+    uv_snapshot!(context.filters(), context.tool_uninstall().arg("ruff-0.3.4"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Uninstalled 1 executable: ruff-0.3.4
+    ");
+
+    // The suffixed environment and executable are removed.
+    assert!(!tool_dir.join("ruff-0.3.4").exists());
+    assert!(
+        !bin_dir
+            .join(format!("ruff-0.3.4{}", std::env::consts::EXE_SUFFIX))
+            .exists()
+    );
+}

@@ -5761,6 +5761,22 @@ pub struct ToolInstallArgs {
     #[arg(long)]
     pub force: bool,
 
+    /// The suffix to append to the installed executable names.
+    ///
+    /// When provided, executables are installed as `<executable-name><suffix>` instead of their
+    /// plain names, allowing multiple versions of the same tool to be installed side by side.
+    /// For example, `--suffix -0.11` installs `ruff-0.11` alongside an existing `ruff`.
+    ///
+    /// The suffixed installation is tracked separately from any unsuffixed installation of the
+    /// same package.
+    #[arg(
+        long,
+        allow_hyphen_values = true,
+        value_hint = ValueHint::Other,
+        help_heading = "Installer options"
+    )]
+    pub suffix: Option<String>,
+
     /// Whether to use Git LFS when adding a dependency from Git.
     #[arg(long)]
     pub lfs: bool,
@@ -5896,8 +5912,10 @@ pub struct ToolDirArgs {
 #[derive(Args)]
 pub struct ToolUninstallArgs {
     /// The name of the tool to uninstall.
+    ///
+    /// Tools installed with a suffix are referenced by their suffixed name, e.g., `ruff-0.11`.
     #[arg(required = true, value_hint = ValueHint::Other)]
-    pub name: Vec<PackageName>,
+    pub name: Vec<String>,
 
     /// Uninstall all tools.
     #[arg(long, conflicts_with("name"))]

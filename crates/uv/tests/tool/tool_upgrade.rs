@@ -1869,3 +1869,45 @@ fn tool_upgrade_lock_uses_requested_python() -> Result<()> {
 
     Ok(())
 }
+
+#[test]
+fn tool_upgrade_suffix() {
+    let context = uv_test::test_context!("3.12")
+        .with_filtered_counts()
+        .with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    // Install a pinned version of `ruff` with a suffix.
+    context
+        .tool_install()
+        .arg("ruff==0.3.4")
+        .arg("--suffix")
+        .arg("-0.3.4")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str())
+        .assert()
+        .success();
+
+    // Upgrades target the suffixed installation by its tool name and preserve the suffix.
+    uv_snapshot!(context.filters(), context.tool_upgrade()
+        .arg("ruff-0.3.4")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Nothing to upgrade
+
+    hint: `ruff-0.3.4` is pinned to `0.3.4` (installed with an exact version pin); reinstall with `uv tool install ruff@latest --suffix=-0.3.4` to upgrade to a new version.
+    ");
+
+    // The suffixed environment and executable remain intact.
+    assert!(tool_dir.join("ruff-0.3.4").exists());
+    assert!(
+        bin_dir
+            .join(format!("ruff-0.3.4{}", std::env::consts::EXE_SUFFIX))
+            .exists()
+    );
+}

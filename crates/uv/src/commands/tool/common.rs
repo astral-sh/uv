@@ -45,10 +45,10 @@ use uv_resolver::{
     FlatIndex, Installable, Lock, OptionsBuilder, Preference, ResolverManifest, ResolverOutput,
 };
 use uv_settings::{PythonInstallMirrors, ToolOptions};
-use uv_shell::Shell;
-use uv_tool::{InstalledTools, Tool, ToolEntrypoint, entrypoint_paths};
+use uv_shell::{Shell, shlex_posix};
+use uv_tool::{InstalledTools, Tool, ToolEntrypoint, ToolName, entrypoint_paths};
 use uv_types::{BuildIsolation, HashStrategy, SourceTreeEditablePolicy};
-use uv_warnings::warn_user_once;
+use uv_warnings::{warn_user, warn_user_once};
 use uv_workspace::WorkspaceCache;
 
 use crate::commands::pip;
@@ -723,6 +723,100 @@ pub(crate) async fn refine_interpreter(
     Ok(Some(interpreter))
 }
 
+/// Validate a user-provided tool executable suffix.
+///
+/// The suffix is appended to executable names, so it must be non-empty and cannot contain path
+/// separators. Characters that are invalid in Windows executable names and trailing dots or
+/// spaces are allowed but warned about.
+pub(crate) fn validate_tool_suffix(suffix: &str) -> anyhow::Result<()> {
+    if suffix.is_empty() {
+        bail!("A tool suffix cannot be empty");
+    }
+
+    if suffix.contains(['/', '\\']) {
+        bail!("Invalid tool suffix `{suffix}`: a suffix cannot contain path separators");
+    }
+
+    if suffix
+        .chars()
+        .any(|character| matches!(character, '<' | '>' | ':' | '"' | '|' | '?' | '*'))
+    {
+        warn_user!(
+            "The tool suffix `{suffix}` contains characters that are invalid in Windows executable names"
+        );
+    }
+
+    if suffix.ends_with(['.', ' ']) {
+        warn_user!(
+            "The tool suffix `{suffix}` ends with a dot or space, which are trimmed from executable names on Windows"
+        );
+    }
+
+    Ok(())
+}
+
+/// Format a suffix as a safely quoted command-line argument.
+pub(crate) fn format_tool_suffix_arg(suffix: &str) -> String {
+    format_tool_suffix_arg_for_shell(suffix, Shell::from_env())
+}
+
+fn format_tool_suffix_arg_for_shell(suffix: &str, shell: Option<Shell>) -> String {
+    let argument = format!("--suffix={suffix}");
+    if shell == Some(Shell::Cmd) {
+        return escape_cmd_argument(&argument);
+    }
+
+    let posix = shlex_posix(&argument);
+    if posix == argument {
+        return argument;
+    }
+
+    match shell {
+        Some(Shell::Powershell) => format!("'{}'", argument.replace('\'', "''")),
+        Some(Shell::Nushell) => quote_nushell_raw_string(&argument),
+        _ => posix,
+    }
+}
+
+fn quote_nushell_raw_string(argument: &str) -> String {
+    let mut hashes = "#".to_string();
+    while argument.contains(&format!("'{hashes}")) {
+        hashes.push('#');
+    }
+    format!("r{hashes}'{argument}'{hashes}")
+}
+
+fn escape_cmd_argument(argument: &str) -> String {
+    let mut escaped = String::with_capacity(argument.len());
+    let mut in_variable = false;
+    for (index, character) in argument.char_indices() {
+        if character == '%' {
+            if in_variable {
+                escaped.push('%');
+                in_variable = false;
+            } else if argument[index + character.len_utf8()..].contains('%') {
+                // Command Prompt does not provide a direct escape for percent expansion in
+                // interactive commands. Include a caret in the variable name to prevent a match;
+                // the caret is removed by later command-line processing.
+                escaped.push_str("%^");
+                in_variable = true;
+            } else {
+                escaped.push('%');
+            }
+            continue;
+        }
+
+        if matches!(
+            character,
+            ' ' | '\t' | '&' | '|' | '<' | '>' | '(' | ')' | '^'
+        ) {
+            escaped.push('^');
+        }
+        escaped.push(character);
+    }
+    escaped
+}
+
 /// Finalizes a tool installation, after creation of an environment.
 ///
 /// Installs tool executables for a given package, handling any conflicts.
@@ -731,6 +825,8 @@ pub(crate) async fn refine_interpreter(
 pub(crate) fn finalize_tool_install(
     environment: &PythonEnvironment,
     name: &PackageName,
+    tool_name: &ToolName,
+    suffix: Option<&str>,
     entrypoints: &[PackageName],
     installed_tools: &InstalledTools,
     options: &ToolOptions,
@@ -765,9 +861,9 @@ pub(crate) fn finalize_tool_install(
 
     for package in ordered_packages {
         if package == name {
-            debug!("Installing entrypoints for tool `{package}`");
+            debug!("Installing entrypoints for tool `{tool_name}` from package `{package}`");
         } else {
-            debug!("Installing entrypoints for `{package}` as part of tool `{name}`");
+            debug!("Installing entrypoints for `{package}` as part of tool `{tool_name}`");
         }
 
         let installed = site_packages.get_packages(package);
@@ -786,7 +882,7 @@ pub(crate) fn finalize_tool_install(
                     .iter()
                     .map(|entrypoint| entrypoint.install_path.as_path()),
             );
-            installed_tools.remove_environment(name)?;
+            installed_tools.remove_environment(tool_name)?;
 
             return Err(NoExecutablesError::Root {
                 package: package.clone(),
@@ -800,12 +896,39 @@ pub(crate) fn finalize_tool_install(
         let target_entrypoints = dist_entrypoints
             .into_iter()
             .map(|(name, source_path)| {
-                let target_path = executable_directory.join(
-                    source_path
-                        .file_name()
-                        .map(std::borrow::ToOwned::to_owned)
-                        .unwrap_or_else(|| OsString::from(name.clone())),
-                );
+                let filename = source_path
+                    .file_name()
+                    .map(std::borrow::ToOwned::to_owned)
+                    .unwrap_or_else(|| OsString::from(name));
+                let filename = if let Some(suffix) = suffix {
+                    // On Unix, the suffix is appended directly to the file name. On Windows,
+                    // it's inserted before the extension so that the executable retains its
+                    // `.exe` extension.
+                    cfg_select! {
+                        windows => {
+                            let path = Path::new(&filename);
+                            let mut stem = path
+                                .file_stem()
+                                .map(std::borrow::ToOwned::to_owned)
+                                .unwrap_or_else(|| filename.clone());
+                            stem.push(suffix);
+                            if let Some(extension) = path.extension() {
+                                stem.push(".");
+                                stem.push(extension);
+                            }
+                            stem
+                        },
+                        unix => {
+                            let mut filename = filename;
+                            filename.push(suffix);
+                            filename
+                        }
+                    }
+                } else {
+                    filename
+                };
+                let name = filename.to_string_lossy().into_owned();
+                let target_path = executable_directory.join(filename);
                 (name, source_path, target_path)
             })
             .collect::<BTreeSet<_>>();
@@ -851,7 +974,7 @@ pub(crate) fn finalize_tool_install(
                     .iter()
                     .map(|entrypoint| entrypoint.install_path.as_path()),
             );
-            installed_tools.remove_environment(name)?;
+            installed_tools.remove_environment(tool_name)?;
 
             return Err(err.into());
         }
@@ -869,7 +992,7 @@ pub(crate) fn finalize_tool_install(
                         .iter()
                         .map(|entrypoint| entrypoint.install_path.as_path()),
                 );
-                installed_tools.remove_environment(name)?;
+                installed_tools.remove_environment(tool_name)?;
 
                 let existing_entrypoints = existing_entrypoints
                     // SAFETY: We know the target has a filename because we just constructed it above
@@ -928,8 +1051,10 @@ pub(crate) fn finalize_tool_install(
         )?;
     }
 
-    debug!("Adding receipt for tool `{name}`");
+    debug!("Adding receipt for tool `{tool_name}` from package `{name}`");
     let tool = Tool::new(
+        name.clone(),
+        suffix.map(ToOwned::to_owned),
         requirements,
         constraints,
         overrides,
@@ -939,8 +1064,8 @@ pub(crate) fn finalize_tool_install(
         installed_entrypoints,
         options.clone(),
     );
-    ToolLock::write(&installed_tools.tool_dir(name), lock)?;
-    installed_tools.add_tool_receipt(name, tool)?;
+    ToolLock::write(&installed_tools.tool_dir(tool_name), lock)?;
+    installed_tools.add_tool_receipt(tool_name, tool)?;
 
     warn_out_of_path(&executable_directory);
 

@@ -15,7 +15,7 @@ use uv_preview::{Preview, PreviewFeature};
 use uv_redacted::DisplaySafeUrl;
 use uv_resolver::{Lock, LockParseError};
 use uv_settings::{Combine, ResolverInstallerOptions};
-use uv_tool::InstalledTools;
+use uv_tool::{InstalledTools, ToolName};
 use uv_warnings::warn_user;
 
 use crate::commands::ExitStatus;
@@ -88,6 +88,7 @@ pub(crate) async fn audit(
     } else {
         let mut tools = Vec::with_capacity(names.len());
         for name in names {
+            let name = ToolName::from(&name);
             match installed_tools.get_tool_receipt(&name) {
                 Ok(Some(tool)) => tools.push((name, Ok(tool))),
                 Ok(None) => {
@@ -243,7 +244,7 @@ pub(crate) async fn audit(
 }
 
 fn render_audits(
-    audits: &[(PackageName, AuditResults)],
+    audits: &[(ToolName, AuditResults)],
     output_format: AuditOutputFormat,
     printer: Printer,
 ) -> Result<ExitStatus> {

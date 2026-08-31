@@ -9,7 +9,7 @@ use std::collections::BTreeMap;
 use serde::Serialize;
 use serde_json::Value;
 use uv_audit::{AdverseStatus, ProjectStatus, Vulnerability};
-use uv_normalize::PackageName;
+use uv_tool::ToolName;
 
 use super::AuditResults;
 
@@ -93,7 +93,7 @@ impl Report {
     }
 
     /// Combine tool findings into one SARIF document, retaining a run for each tool.
-    pub(crate) fn from_audits(audits: &[(PackageName, AuditResults)]) -> Self {
+    pub(crate) fn from_audits(audits: &[(ToolName, AuditResults)]) -> Self {
         let mut report = Self::from_findings(&[], &[], "");
         report.runs.clear();
 
