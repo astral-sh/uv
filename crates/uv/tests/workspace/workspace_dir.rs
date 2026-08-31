@@ -71,6 +71,71 @@ fn workspace_metadata_from_member() -> Result<()> {
     Ok(())
 }
 
+/// Test workspace discovery from a nested project that is ignored by a shallower member glob.
+#[test]
+fn workspace_dir_nested_gitignored_project() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let workspace = context.temp_dir.child("workspace");
+    let project = workspace.child("packages").child("foo").child("nested");
+
+    workspace.child("pyproject.toml").write_str(
+        r#"
+        [tool.uv.workspace]
+        members = ["packages/*"]
+        "#,
+    )?;
+    workspace
+        .child(".gitignore")
+        .write_str("packages/foo/nested/\n")?;
+    project.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "nested"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.workspace_dir().current_dir(&project), @r#"
+    exit_code: 0 (success)
+    ----- stdout -----
+    [TEMP_DIR]/workspace/packages/foo/nested
+    "#);
+
+    Ok(())
+}
+
+/// Test workspace discovery from a nested project matched by a recursive member glob.
+#[test]
+fn workspace_dir_nested_recursive_member() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let workspace = context.temp_dir.child("workspace");
+    let project = workspace.child("packages").child("foo").child("nested");
+
+    workspace.child("pyproject.toml").write_str(
+        r#"
+        [tool.uv.workspace]
+        members = ["packages/**/nested"]
+        "#,
+    )?;
+    project.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "nested"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.workspace_dir().current_dir(&project), @r#"
+    exit_code: 0 (success)
+    ----- stdout -----
+    [TEMP_DIR]/workspace
+    "#);
+
+    Ok(())
+}
+
 /// Test that a project inside the configured cache directory is rejected before workspace
 /// discovery.
 #[test]

@@ -10,7 +10,7 @@ use std::hash::BuildHasherDefault;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use glob::{GlobError, Pattern, PatternError, glob};
+use glob::{GlobError, MatchOptions, Pattern, PatternError, glob};
 use itertools::Itertools;
 use rustc_hash::{FxHashSet, FxHasher};
 use tracing::{debug, trace, warn};
@@ -2041,6 +2041,10 @@ fn is_included_in_workspace(
     workspace_root: &Path,
     workspace: &ToolUvWorkspace,
 ) -> Result<bool, WorkspaceError> {
+    let options = MatchOptions {
+        require_literal_separator: true,
+        ..MatchOptions::new()
+    };
     for member_glob in workspace.members.iter().flatten() {
         // Normalize the member glob to remove leading `./` and other relative path components
         let normalized_glob = normalize_path(Path::new(member_glob.as_str()));
@@ -2051,7 +2055,7 @@ fn is_included_in_workspace(
         let absolute_glob = absolute_glob.to_string_lossy();
         let include_pattern = glob::Pattern::new(&absolute_glob)
             .map_err(|err| WorkspaceErrorKind::Pattern(absolute_glob.to_string(), err))?;
-        if include_pattern.matches_path(project_path) {
+        if include_pattern.matches_path_with(project_path, options) {
             return Ok(true);
         }
     }
