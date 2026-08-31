@@ -137,6 +137,7 @@ pub fn install_wheel<Cache: serde::Serialize, Build: serde::Serialize>(
             &console_scripts,
             &gui_scripts,
             &mut record,
+            state,
         )?;
         // 2.c If applicable, update scripts starting with #!python to point to the correct interpreter.
         // Script are unsupported through data

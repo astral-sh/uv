@@ -43,7 +43,7 @@ impl InstallState {
     }
 
     /// Get the underlying copy locks for use with [`uv_fs::link::link_dir`] functions.
-    fn copy_locks(&self) -> &CopyLocks {
+    pub(crate) fn copy_locks(&self) -> &CopyLocks {
         &self.locks
     }
 
@@ -261,11 +261,17 @@ pub(crate) fn link_wheel_files(
     let site_packages = site_packages.as_ref();
     register_installed_paths(wheel, state, filename)?;
 
-    // The `RECORD` file is modified during installation, so it needs a real
-    // copy rather than a link back to the cache.
+    // Keep metadata and relocated data in real directories. The `RECORD` file is modified during
+    // installation, so it also needs a private copy.
     let options = LinkOptions::new(link_mode)
-        .with_mutable_copy_filter(|p: &Path| p.ends_with("RECORD"))
+        .with_mutable_copy_filter(|path: &Path| {
+            path.ends_with("RECORD")
+                || path
+                    .extension()
+                    .is_some_and(|extension| extension == "dist-info" || extension == "data")
+        })
         .with_copy_locks(state.copy_locks())
+        .with_directory_symlinks()
         .with_on_existing_directory(OnExistingDirectory::Merge);
     let used_link_mode = link_dir(wheel, site_packages, &options)?;
 
