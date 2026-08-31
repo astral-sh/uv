@@ -1533,6 +1533,7 @@ pub(crate) struct PythonInstallSettings {
     pub(crate) force: bool,
     pub(crate) upgrade: PythonUpgrade,
     pub(crate) bin: Option<bool>,
+    pub(crate) shim: Option<bool>,
     pub(crate) registry: Option<bool>,
     pub(crate) python_install_mirror: Option<String>,
     pub(crate) pypy_install_mirror: Option<String>,
@@ -1569,6 +1570,8 @@ impl PythonInstallSettings {
             reinstall,
             bin,
             no_bin,
+            shim,
+            no_shim,
             registry,
             no_registry,
             force,
@@ -1591,6 +1594,7 @@ impl PythonInstallSettings {
                 PythonUpgrade::Disabled
             },
             bin: flag(bin, no_bin, "bin")?.or(environment.python_install_bin),
+            shim: flag(shim, no_shim, "shim")?,
             registry: match flag(registry, no_registry, "registry")? {
                 Some(registry) => Some(registry),
                 None => environment.python_install_registry.or(

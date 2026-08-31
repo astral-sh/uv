@@ -3,6 +3,9 @@
 mod python_dir;
 
 #[cfg(feature = "test-python")]
+mod python_shim;
+
+#[cfg(feature = "test-python")]
 mod python_find;
 
 #[cfg(feature = "test-python-managed")]

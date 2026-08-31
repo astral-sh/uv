@@ -187,6 +187,7 @@ pub(crate) async fn install(
     reinstall: bool,
     upgrade: PythonUpgrade,
     bin: Option<bool>,
+    shim: Option<bool>,
     registry: Option<bool>,
     force: bool,
     python_install_mirror: Option<String>,
@@ -234,6 +235,7 @@ pub(crate) async fn install(
         reinstall,
         upgrade,
         bin,
+        shim,
         registry,
         force,
         python_install_mirror,
@@ -293,6 +295,7 @@ async fn perform_install(
     reinstall: bool,
     upgrade: PythonUpgrade,
     bin: Option<bool>,
+    shim: Option<bool>,
     registry: Option<bool>,
     force: bool,
     python_install_mirror: Option<String>,
@@ -309,6 +312,13 @@ async fn perform_install(
     printer: Printer,
 ) -> Result<ExitStatus> {
     let start = std::time::Instant::now();
+
+    if shim == Some(true) && bin == Some(false) {
+        anyhow::bail!("A Python shim cannot be installed when executable installation is disabled");
+    }
+    if shim == Some(true) && !preview.all_enabled() {
+        warn_user!("The uv Python shim is experimental and may change without warning");
+    }
 
     // TODO(zanieb): We should consider marking the Python installation as the default when
     // `--default` is used. It's not clear how this overlaps with a global Python pin, but I'd be
@@ -671,6 +681,14 @@ async fn perform_install(
     };
 
     let installations: Vec<_> = downloaded.iter().chain(satisfied.iter().copied()).collect();
+    let install_shim = shim.unwrap_or(
+        preview.all_enabled()
+            && !default
+            && bin_dir.is_some()
+            && installations
+                .iter()
+                .any(|installation| installation.implementation() == ImplementationName::CPython),
+    );
 
     // Ensure that the installations are _complete_ for both downloaded installations and existing
     // installations that match the request
@@ -698,7 +716,7 @@ async fn perform_install(
                     upgrade,
                     PythonUpgrade::Enabled(PythonUpgradeSource::Upgrade)
                 ),
-                is_default_install,
+                is_default_install && !install_shim,
                 &existing_installations,
                 &installations,
                 &mut changelog,
@@ -734,6 +752,10 @@ async fn perform_install(
 
     for installation in minor_versions.values() {
         installation.ensure_minor_version_link()?;
+    }
+
+    if install_shim && errors.is_empty() {
+        install_python_shim(printer)?;
     }
 
     if changelog.installed.is_empty() && errors.is_empty() {
@@ -965,6 +987,38 @@ async fn perform_install(
     }
 
     Ok(ExitStatus::Success)
+}
+
+/// Install the launcher without replacing an existing Python executable.
+fn install_python_shim(printer: Printer) -> Result<()> {
+    let current_exe = std::env::current_exe()?;
+    let Some(bin) = current_exe.parent() else {
+        anyhow::bail!("Could not find the directory for the `uv-python` binary");
+    };
+    let shim_src = bin.join(format!("uv-python{}", std::env::consts::EXE_SUFFIX));
+    if !shim_src.try_exists()? {
+        anyhow::bail!("Could not find the `uv-python` binary");
+    }
+    let shim_dst = python_executable_dir()?.join(format!("python{}", std::env::consts::EXE_SUFFIX));
+    match fs_err::symlink_metadata(&shim_dst) {
+        Ok(_) => {
+            writeln!(
+                printer.stderr(),
+                "Python executable already exists at `{}`",
+                shim_dst.user_display().cyan()
+            )?;
+            return Ok(());
+        }
+        Err(err) if err.kind() == ErrorKind::NotFound => {}
+        Err(err) => return Err(err.into()),
+    }
+    create_link_to_executable(&shim_dst, PythonExecutable::console(&shim_src))?;
+    writeln!(
+        printer.stderr(),
+        "Installed Python shim to `{}`",
+        shim_dst.user_display().cyan()
+    )?;
+    Ok(())
 }
 
 /// Link the binaries of a managed Python installation to the bin directory.

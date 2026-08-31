@@ -6360,6 +6360,14 @@ pub struct PythonInstallArgs {
     #[arg(long, conflicts_with("no_bin"))]
     pub default: bool,
 
+    /// Install a `python` shim.
+    #[arg(long, overrides_with("no_shim"), conflicts_with_all(["default", "no_bin"]))]
+    pub shim: bool,
+
+    /// Do not install a `python` shim.
+    #[arg(long, overrides_with("shim"))]
+    pub no_shim: bool,
+
     #[command(flatten)]
     pub compile_bytecode: PythonInstallCompileBytecodeArgs,
 }

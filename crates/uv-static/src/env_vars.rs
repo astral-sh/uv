@@ -672,6 +672,11 @@ impl EnvVars {
     #[attr_added_in("0.2.0")]
     pub const UV_INTERNAL__PARENT_INTERPRETER: &'static str = "UV_INTERNAL__PARENT_INTERPRETER";
 
+    /// Prevents the Python shim from recursively querying itself.
+    #[attr_hidden]
+    #[attr_added_in("0.12.5")]
+    pub const UV_INTERNAL__PYTHON_QUERY: &'static str = "UV_INTERNAL__PYTHON_QUERY";
+
     /// Used to identify the source tree when invoking PEP 517 build hooks.
     #[attr_hidden]
     #[attr_added_in("0.11.22")]

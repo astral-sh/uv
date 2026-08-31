@@ -509,7 +509,7 @@ fn python_install_preview() {
         .with_python_download_cache();
 
     // Install the latest version
-    uv_snapshot!(context.filters(), context.python_install().arg("--preview"), @"
+    uv_snapshot!(context.filters(), context.python_install().arg("--no-shim").arg("--preview"), @"
     exit_code: 0 (success)
     ----- stderr -----
     Installed Python 3.14.[LATEST] in [TIME]
@@ -555,14 +555,14 @@ fn python_install_preview() {
     ");
 
     // Should be a no-op when already installed
-    uv_snapshot!(context.filters(), context.python_install().arg("--preview"), @"
+    uv_snapshot!(context.filters(), context.python_install().arg("--no-shim").arg("--preview"), @"
     exit_code: 0 (success)
     ----- stderr -----
     Python is already installed. Use `uv python install <request>` to install another version.
     ");
 
     // You can opt-in to a reinstall
-    uv_snapshot!(context.filters(), context.python_install().arg("--preview").arg("--reinstall"), @"
+    uv_snapshot!(context.filters(), context.python_install().arg("--no-shim").arg("--preview").arg("--reinstall"), @"
     exit_code: 0 (success)
     ----- stderr -----
     Installed Python 3.14.[LATEST] in [TIME]
@@ -573,7 +573,7 @@ fn python_install_preview() {
     bin_python.assert(predicate::path::exists());
 
     // You can also force replacement of the executables
-    uv_snapshot!(context.filters(), context.python_install().arg("--preview").arg("--force"), @"
+    uv_snapshot!(context.filters(), context.python_install().arg("--no-shim").arg("--preview").arg("--force"), @"
     exit_code: 0 (success)
     ----- stderr -----
     Installed Python 3.14.[LATEST] in [TIME]
@@ -587,7 +587,7 @@ fn python_install_preview() {
     fs_err::remove_file(bin_python.path()).unwrap();
     bin_python.touch().unwrap();
 
-    uv_snapshot!(context.filters(), context.python_install().arg("--preview").arg("3.14"), @"
+    uv_snapshot!(context.filters(), context.python_install().arg("--no-shim").arg("--preview").arg("3.14"), @"
     exit_code: 0 (success)
     ----- stderr -----
     warning: Failed to install executable for cpython-3.14.[LATEST]-[PLATFORM]
@@ -595,13 +595,13 @@ fn python_install_preview() {
     ");
 
     // With `--bin`, this should error instead of warn
-    uv_snapshot!(context.filters(), context.python_install().arg("--preview").arg("--bin").arg("3.14"), @"
+    uv_snapshot!(context.filters(), context.python_install().arg("--no-shim").arg("--preview").arg("--bin").arg("3.14"), @"
     exit_code: 1 (failure)
     ----- stderr -----
     error: Failed to install executable for cpython-3.14.[LATEST]-[PLATFORM]
       Caused by: Executable already exists at `[BIN]/python3.14` but is not managed by uv; use `--force` to replace it
     ");
-    uv_snapshot!(context.filters(), context.python_install().arg("--preview").arg("3.14").env(EnvVars::UV_PYTHON_INSTALL_BIN, "1"), @"
+    uv_snapshot!(context.filters(), context.python_install().arg("--no-shim").arg("--preview").arg("3.14").env(EnvVars::UV_PYTHON_INSTALL_BIN, "1"), @"
     exit_code: 1 (failure)
     ----- stderr -----
     error: Failed to install executable for cpython-3.14.[LATEST]-[PLATFORM]
@@ -609,18 +609,18 @@ fn python_install_preview() {
     ");
 
     // With `--no-bin`, this should be silent
-    uv_snapshot!(context.filters(), context.python_install().arg("--preview").arg("--no-bin").arg("3.14"), @"
+    uv_snapshot!(context.filters(), context.python_install().arg("--no-shim").arg("--preview").arg("--no-bin").arg("3.14"), @"
     exit_code: 0 (success)
     ----- stderr -----
     Python 3.14 is already installed
     ");
-    uv_snapshot!(context.filters(), context.python_install().arg("--preview").arg("3.14").env(EnvVars::UV_PYTHON_INSTALL_BIN, "0"), @"
+    uv_snapshot!(context.filters(), context.python_install().arg("--no-shim").arg("--preview").arg("3.14").env(EnvVars::UV_PYTHON_INSTALL_BIN, "0"), @"
     exit_code: 0 (success)
     ----- stderr -----
     Python 3.14 is already installed
     ");
 
-    uv_snapshot!(context.filters(), context.python_install().arg("--preview").arg("--force").arg("3.14"), @"
+    uv_snapshot!(context.filters(), context.python_install().arg("--no-shim").arg("--preview").arg("--force").arg("3.14"), @"
     exit_code: 0 (success)
     ----- stderr -----
     Installed Python 3.14.[LATEST] in [TIME]
@@ -657,7 +657,7 @@ fn python_install_preview() {
     bin_python.assert(predicate::path::missing());
 
     // Install a minor version
-    uv_snapshot!(context.filters(), context.python_install().arg("3.11").arg("--preview"), @"
+    uv_snapshot!(context.filters(), context.python_install().arg("--no-shim").arg("3.11").arg("--preview"), @"
     exit_code: 0 (success)
     ----- stderr -----
     Installed Python 3.11.[LATEST] in [TIME]
@@ -696,7 +696,7 @@ fn python_install_preview() {
     ");
 
     // Install multiple patch versions
-    uv_snapshot!(context.filters(), context.python_install().arg("--preview").arg("3.12.8").arg("3.12.6"), @"
+    uv_snapshot!(context.filters(), context.python_install().arg("--no-shim").arg("--preview").arg("3.12.8").arg("3.12.6"), @"
     exit_code: 0 (success)
     ----- stderr -----
     Installed 2 versions in [TIME]
@@ -785,7 +785,7 @@ fn python_install_preview_no_bin() {
         .with_python_download_cache();
 
     // Install the latest version
-    uv_snapshot!(context.filters(), context.python_install().arg("--preview").arg("--no-bin"), @"
+    uv_snapshot!(context.filters(), context.python_install().arg("--no-shim").arg("--preview").arg("--no-bin"), @"
     exit_code: 0 (success)
     ----- stderr -----
     Installed Python 3.14.[LATEST] in [TIME]
@@ -799,7 +799,7 @@ fn python_install_preview_no_bin() {
     // The executable should not be installed in the bin directory
     bin_python.assert(predicate::path::missing());
 
-    uv_snapshot!(context.filters(), context.python_install().arg("--preview").arg("--no-bin").arg("--default"), @"
+    uv_snapshot!(context.filters(), context.python_install().arg("--no-shim").arg("--preview").arg("--no-bin").arg("--default"), @"
     exit_code: 2 (failure)
     ----- stderr -----
     error: the argument '--no-bin' cannot be used with '--default'
@@ -830,7 +830,7 @@ fn python_install_preview_upgrade() {
         .child(format!("python3.12{}", std::env::consts::EXE_SUFFIX));
 
     // Install 3.12.5
-    uv_snapshot!(context.filters(), context.python_install().arg("--preview").arg("3.12.5"), @"
+    uv_snapshot!(context.filters(), context.python_install().arg("--no-shim").arg("--preview").arg("3.12.5"), @"
     exit_code: 0 (success)
     ----- stderr -----
     Installed Python 3.12.5 in [TIME]
@@ -857,7 +857,7 @@ fn python_install_preview_upgrade() {
     }
 
     // Installing 3.12.4 should not replace the executable, but also shouldn't fail
-    uv_snapshot!(context.filters(), context.python_install().arg("--preview").arg("3.12.4"), @"
+    uv_snapshot!(context.filters(), context.python_install().arg("--no-shim").arg("--preview").arg("3.12.4"), @"
     exit_code: 0 (success)
     ----- stderr -----
     Installed Python 3.12.4 in [TIME]
@@ -883,7 +883,7 @@ fn python_install_preview_upgrade() {
     }
 
     // Using `--reinstall` is not sufficient to replace it either
-    uv_snapshot!(context.filters(), context.python_install().arg("--preview").arg("3.12.4").arg("--reinstall"), @"
+    uv_snapshot!(context.filters(), context.python_install().arg("--no-shim").arg("--preview").arg("3.12.4").arg("--reinstall"), @"
     exit_code: 0 (success)
     ----- stderr -----
     Installed Python 3.12.4 in [TIME]
@@ -909,7 +909,7 @@ fn python_install_preview_upgrade() {
     }
 
     // But `--force` is
-    uv_snapshot!(context.filters(), context.python_install().arg("--preview").arg("3.12.4").arg("--force"), @"
+    uv_snapshot!(context.filters(), context.python_install().arg("--no-shim").arg("--preview").arg("3.12.4").arg("--force"), @"
     exit_code: 0 (success)
     ----- stderr -----
     Installed Python 3.12.4 in [TIME]
@@ -935,7 +935,7 @@ fn python_install_preview_upgrade() {
     }
 
     // But installing 3.12.6 should upgrade automatically
-    uv_snapshot!(context.filters(), context.python_install().arg("--preview").arg("3.12.6"), @"
+    uv_snapshot!(context.filters(), context.python_install().arg("--no-shim").arg("--preview").arg("3.12.6"), @"
     exit_code: 0 (success)
     ----- stderr -----
     Installed Python 3.12.6 in [TIME]
@@ -973,7 +973,7 @@ fn python_install_freethreaded() {
         .with_filtered_exe_suffix();
 
     // Install the latest version
-    uv_snapshot!(context.filters(), context.python_install().arg("--preview").arg("3.13t"), @"
+    uv_snapshot!(context.filters(), context.python_install().arg("--no-shim").arg("--preview").arg("3.13t"), @"
     exit_code: 0 (success)
     ----- stderr -----
     Installed Python 3.13.[LATEST] in [TIME]
@@ -1142,6 +1142,7 @@ fn python_install_freethreaded_and_gil_list() {
         .success();
     context
         .python_install()
+        .arg("--no-shim")
         .arg("--preview")
         .arg("3.13t")
         .env_remove(EnvVars::UV_PYTHON_NO_REGISTRY)
@@ -1274,7 +1275,7 @@ fn python_install_debug() {
         .with_managed_python_dirs();
 
     // Install the latest version
-    uv_snapshot!(context.filters(), context.python_install().arg("--preview").arg("3.13+debug"), @"
+    uv_snapshot!(context.filters(), context.python_install().arg("--no-shim").arg("--preview").arg("3.13+debug"), @"
     exit_code: 0 (success)
     ----- stderr -----
     Installed Python 3.13.[LATEST] in [TIME]
@@ -1374,7 +1375,7 @@ fn python_install_debug_freethreaded() {
         .with_python_download_cache();
 
     // Install the latest version
-    uv_snapshot!(context.filters(), context.python_install().arg("--preview").arg("3.13td"), @"
+    uv_snapshot!(context.filters(), context.python_install().arg("--no-shim").arg("--preview").arg("3.13td"), @"
     exit_code: 0 (success)
     ----- stderr -----
     Installed Python 3.13.[LATEST] in [TIME]
@@ -1748,7 +1749,7 @@ fn python_install_default_preview() {
         .child(format!("python{}", std::env::consts::EXE_SUFFIX));
 
     // Install a specific version
-    uv_snapshot!(context.filters(), context.python_install().arg("--preview").arg("3.14"), @"
+    uv_snapshot!(context.filters(), context.python_install().arg("--no-shim").arg("--preview").arg("3.14"), @"
     exit_code: 0 (success)
     ----- stderr -----
     Installed Python 3.14.[LATEST] in [TIME]
@@ -1761,7 +1762,7 @@ fn python_install_default_preview() {
     bin_python_default.assert(predicate::path::missing());
 
     // Install again, with `--default`
-    uv_snapshot!(context.filters(), context.python_install().arg("--preview").arg("--default").arg("3.14"), @"
+    uv_snapshot!(context.filters(), context.python_install().arg("--no-shim").arg("--preview").arg("--default").arg("3.14"), @"
     exit_code: 0 (success)
     ----- stderr -----
     Installed Python 3.14.[LATEST] in [TIME]
@@ -1788,7 +1789,7 @@ fn python_install_default_preview() {
     bin_python_default.assert(predicate::path::missing());
 
     // Install the latest version, i.e., a "default install"
-    uv_snapshot!(context.filters(), context.python_install().arg("--default").arg("--preview"), @"
+    uv_snapshot!(context.filters(), context.python_install().arg("--no-shim").arg("--default").arg("--preview"), @"
     exit_code: 0 (success)
     ----- stderr -----
     Installed Python 3.14.[LATEST] in [TIME]
@@ -1884,14 +1885,14 @@ fn python_install_default_preview() {
     bin_python_default.assert(predicate::path::missing());
 
     // Install multiple versions, with the `--default` flag
-    uv_snapshot!(context.filters(), context.python_install().arg("--preview").arg("3.12").arg("3.14").arg("--default"), @"
+    uv_snapshot!(context.filters(), context.python_install().arg("--no-shim").arg("--preview").arg("3.12").arg("3.14").arg("--default"), @"
     exit_code: 2 (failure)
     ----- stderr -----
     error: The `--default` flag cannot be used with multiple targets
     ");
 
     // Install 3.12 as a new default
-    uv_snapshot!(context.filters(), context.python_install().arg("--preview").arg("3.12").arg("--default"), @"
+    uv_snapshot!(context.filters(), context.python_install().arg("--no-shim").arg("--preview").arg("3.12").arg("--default"), @"
     exit_code: 0 (success)
     ----- stderr -----
     Installed Python 3.12.[LATEST] in [TIME]
@@ -1977,7 +1978,7 @@ fn python_install_default_preview() {
     }
 
     // Change the default to 3.14
-    uv_snapshot!(context.filters(), context.python_install().arg("--preview").arg("3.14").arg("--default"), @"
+    uv_snapshot!(context.filters(), context.python_install().arg("--no-shim").arg("--preview").arg("3.14").arg("--default"), @"
     exit_code: 0 (success)
     ----- stderr -----
     Installed Python 3.14.[LATEST] in [TIME]
@@ -2274,6 +2275,7 @@ fn python_install_patch_dylib() {
     // Install the latest version
     context
         .python_install()
+        .arg("--no-shim")
         .arg("--preview")
         .arg("3.13.1")
         .assert()
@@ -2740,7 +2742,7 @@ fn install_transparent_patch_upgrade_uv_venv() {
         .with_filtered_python_install_bin();
 
     // Install a lower patch version.
-    uv_snapshot!(context.filters(), context.python_install().arg("--preview").arg("3.12.9"), @"
+    uv_snapshot!(context.filters(), context.python_install().arg("--no-shim").arg("--preview").arg("3.12.9"), @"
     exit_code: 0 (success)
     ----- stderr -----
     Installed Python 3.12.9 in [TIME]
@@ -2783,7 +2785,7 @@ fn install_transparent_patch_upgrade_uv_venv() {
     );
 
     // Install a higher patch version.
-    uv_snapshot!(context.filters(), context.python_install().arg("--preview").arg("3.12.11"), @"
+    uv_snapshot!(context.filters(), context.python_install().arg("--no-shim").arg("--preview").arg("3.12.11"), @"
     exit_code: 0 (success)
     ----- stderr -----
     Installed Python 3.12.11 in [TIME]
@@ -2800,7 +2802,7 @@ fn install_transparent_patch_upgrade_uv_venv() {
     );
 
     // Install a lower patch version.
-    uv_snapshot!(context.filters(), context.python_install().arg("--preview").arg("3.12.8"), @"
+    uv_snapshot!(context.filters(), context.python_install().arg("--no-shim").arg("--preview").arg("3.12.8"), @"
     exit_code: 0 (success)
     ----- stderr -----
     Installed Python 3.12.8 in [TIME]
@@ -2829,7 +2831,7 @@ fn install_multiple_patches() {
         .with_filtered_python_install_bin();
 
     // Install 3.12 patches in ascending order list
-    uv_snapshot!(context.filters(), context.python_install().arg("--preview").arg("3.12.9").arg("3.12.11"), @"
+    uv_snapshot!(context.filters(), context.python_install().arg("--no-shim").arg("--preview").arg("3.12.9").arg("3.12.11"), @"
     exit_code: 0 (success)
     ----- stderr -----
     Installed 2 versions in [TIME]
@@ -2861,7 +2863,7 @@ fn install_multiple_patches() {
     fs_err::remove_dir_all(&context.venv).unwrap();
 
     // Install 3.10 patches in descending order list
-    uv_snapshot!(context.filters(), context.python_install().arg("--preview").arg("3.10.17").arg("3.10.16"), @"
+    uv_snapshot!(context.filters(), context.python_install().arg("--no-shim").arg("--preview").arg("3.10.17").arg("3.10.16"), @"
     exit_code: 0 (success)
     ----- stderr -----
     Installed 2 versions in [TIME]
@@ -2902,7 +2904,7 @@ fn uninstall_highest_patch() {
         .with_filtered_python_install_bin();
 
     // Install patches in ascending order list
-    uv_snapshot!(context.filters(), context.python_install().arg("--preview").arg("3.12.11").arg("3.12.9").arg("3.12.8"), @"
+    uv_snapshot!(context.filters(), context.python_install().arg("--no-shim").arg("--preview").arg("3.12.11").arg("3.12.9").arg("3.12.8"), @"
     exit_code: 0 (success)
     ----- stderr -----
     Installed 3 versions in [TIME]
@@ -2960,7 +2962,7 @@ fn install_no_transparent_upgrade_with_venv_patch_specification() {
         .with_python_download_cache()
         .with_filtered_python_install_bin();
 
-    uv_snapshot!(context.filters(), context.python_install().arg("--preview").arg("3.12.9"), @"
+    uv_snapshot!(context.filters(), context.python_install().arg("--no-shim").arg("--preview").arg("3.12.9"), @"
     exit_code: 0 (success)
     ----- stderr -----
     Installed Python 3.12.9 in [TIME]
@@ -2987,7 +2989,7 @@ fn install_no_transparent_upgrade_with_venv_patch_specification() {
     );
 
     // Install a higher patch version.
-    uv_snapshot!(context.filters(), context.python_install().arg("--preview").arg("3.12.11"), @"
+    uv_snapshot!(context.filters(), context.python_install().arg("--no-shim").arg("--preview").arg("3.12.11"), @"
     exit_code: 0 (success)
     ----- stderr -----
     Installed Python 3.12.11 in [TIME]
@@ -3017,7 +3019,7 @@ fn install_transparent_patch_upgrade_venv_module() {
 
     let bin_dir = context.temp_dir.child("bin");
 
-    uv_snapshot!(context.filters(), context.python_install().arg("--preview").arg("3.12.9"), @"
+    uv_snapshot!(context.filters(), context.python_install().arg("--no-shim").arg("--preview").arg("3.12.9"), @"
     exit_code: 0 (success)
     ----- stderr -----
     Installed Python 3.12.9 in [TIME]
@@ -3046,7 +3048,7 @@ fn install_transparent_patch_upgrade_venv_module() {
     );
 
     // Install a higher patch version
-    uv_snapshot!(context.filters(), context.python_install().arg("--preview").arg("3.12.11"), @"
+    uv_snapshot!(context.filters(), context.python_install().arg("--no-shim").arg("--preview").arg("3.12.11"), @"
     exit_code: 0 (success)
     ----- stderr -----
     Installed Python 3.12.11 in [TIME]
@@ -3074,7 +3076,7 @@ fn install_lower_patch_automatically() {
         .with_python_download_cache()
         .with_filtered_python_install_bin();
 
-    uv_snapshot!(context.filters(), context.python_install().arg("--preview").arg("3.12.11"), @"
+    uv_snapshot!(context.filters(), context.python_install().arg("--no-shim").arg("--preview").arg("3.12.11"), @"
     exit_code: 0 (success)
     ----- stderr -----
     Installed Python 3.12.11 in [TIME]
@@ -3129,7 +3131,7 @@ fn uninstall_last_patch() {
         .with_python_download_cache()
         .with_filtered_virtualenv_bin();
 
-    uv_snapshot!(context.filters(), context.python_install().arg("--preview").arg("3.10.17"), @"
+    uv_snapshot!(context.filters(), context.python_install().arg("--no-shim").arg("--preview").arg("3.10.17"), @"
     exit_code: 0 (success)
     ----- stderr -----
     Installed Python 3.10.17 in [TIME]
