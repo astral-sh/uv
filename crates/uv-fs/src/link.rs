@@ -220,11 +220,12 @@ impl CopyLocks {
         operation()
     }
 
-    /// Publish a file while excluding directory transitions in its parent.
+    /// Publish a file while excluding directory transitions at the same destination.
     ///
     /// Materialize package links in the parent path first, then keep its canonical identity stable
     /// for the lifetime of these locks. Targets that resolve to directories are rejected.
-    /// The exclusive parent lock covers the gap while [`materialize_symlink_dir`] replaces a link.
+    /// Share the directory entry lock so sibling files can be written while a package tree is being
+    /// installed. Non-ASCII names still acquire the parent lock exclusively to cover aliases.
     /// Prepare temporary contents beforehand; `operation` must not lock another entry in this parent.
     pub fn with_file_write<T, E>(
         &self,
@@ -234,21 +235,10 @@ impl CopyLocks {
     where
         E: From<io::Error>,
     {
-        let parent = path
-            .parent()
-            .map(|parent| self.directory_parent(parent))
-            .transpose()?;
-        let _guard = parent
-            .as_ref()
-            .map(|parent| {
-                parent
-                    .gate
-                    .write()
-                    .map_err(|err| io::Error::other(err.to_string()))
-            })
-            .transpose()?;
-        check_file_destination(path)?;
-        operation()
+        self.with_directory_lock(path, || {
+            check_file_destination(path)?;
+            operation()
+        })
     }
 
     /// Copy a file with directory-level synchronization.
@@ -1397,72 +1387,82 @@ mod tests {
     }
 
     #[test]
-    fn test_shared_namespace_children_install_concurrently() -> Result<(), LinkError> {
-        let sources = [test_tempdir(), test_tempdir()];
+    fn test_shared_namespace_entries_install_concurrently() -> Result<(), LinkError> {
+        let sources = [test_tempdir(), test_tempdir(), test_tempdir()];
         let destination = test_tempdir();
         let locks = CopyLocks::default();
+        let files = [
+            "shared/child_0/file.txt",
+            "shared/child_1/file.txt",
+            "shared/file.txt",
+        ];
 
         fs_err::create_dir_all(destination.path().join("shared"))?;
-        for (index, source) in sources.iter().enumerate() {
-            let directory = source.path().join(format!("shared/child_{index}"));
-            fs_err::create_dir_all(&directory)?;
-            fs_err::write(directory.join("file.txt"), "content")?;
+        for (source, file) in sources.iter().zip(files) {
+            let path = source.path().join(file);
+            if let Some(parent) = path.parent() {
+                fs_err::create_dir_all(parent)?;
+            }
+            fs_err::write(path, "content")?;
         }
 
         let (entered_sender, entered_receiver) = mpsc::channel();
-        let both_entered = thread::scope(|scope| -> Result<bool, LinkError> {
+        let all_entered = thread::scope(|scope| -> Result<bool, LinkError> {
             let mut releases = Vec::new();
             let mut handles = Vec::new();
+            let mut directories_entered = false;
             for (index, source) in sources.iter().enumerate() {
-                let child = format!("child_{index}");
+                if index == 2 {
+                    directories_entered = (0..2).all(|_| {
+                        entered_receiver
+                            .recv_timeout(Duration::from_secs(10))
+                            .is_ok()
+                    });
+                }
                 let entered_sender = entered_sender.clone();
                 let (release_sender, release_receiver) = mpsc::channel::<()>();
                 releases.push(release_sender);
                 let destination = destination.path();
                 let locks = &locks;
                 handles.push(scope.spawn(move || {
-                    let options = LinkOptions::new(LinkMode::Copy)
+                    let options = LinkOptions::new(LinkMode::Hardlink)
                         .with_directory_symlinks()
                         .with_copy_locks(locks)
                         .with_on_existing_directory(OnExistingDirectory::Merge)
                         .with_mutable_copy_filter(|path| {
-                            if path.ends_with(&child) {
+                            if index < 2 && path.ends_with("file.txt") {
                                 let _ = entered_sender.send(());
                                 let _ = release_receiver.recv();
                             }
                             false
                         });
-                    link_dir(source.path(), destination, &options)
+                    let result = link_dir(source.path(), destination, &options);
+                    if index == 2 {
+                        let _ = entered_sender.send(());
+                    }
+                    result
                 }));
             }
 
-            // Both children must enter before either is released. Always release before joining,
-            // including when an ancestor lock prevented the second child from making progress.
-            let both_entered = (0..2).all(|_| {
-                entered_receiver
+            // Both directories must enter and the sibling file must finish before either directory
+            // is released. Always release before joining, even if a parent lock blocked progress.
+            let all_entered = directories_entered
+                && entered_receiver
                     .recv_timeout(Duration::from_secs(10))
-                    .is_ok()
-            });
+                    .is_ok();
             drop(releases);
             for handle in handles {
                 handle
                     .join()
                     .map_err(|_| io::Error::other("Namespace installation thread panicked"))??;
             }
-            Ok(both_entered)
+            Ok(all_entered)
         })?;
 
-        assert!(
-            both_entered,
-            "Shared namespace serialized disjoint children"
-        );
-        for index in 0..2 {
+        assert!(all_entered, "Shared namespace serialized disjoint entries");
+        for file in files {
             assert_eq!(
-                fs_err::read_to_string(
-                    destination
-                        .path()
-                        .join(format!("shared/child_{index}/file.txt"))
-                )?,
+                fs_err::read_to_string(destination.path().join(file))?,
                 "content"
             );
         }
