@@ -77,6 +77,48 @@ fn write_many_files_wheel(path: &Path, source_files: usize) -> Result<()> {
     Ok(())
 }
 
+#[cfg(unix)]
+fn write_data_scripts_wheel(path: &Path, scripts: &[(&str, &[u8])]) -> Result<()> {
+    let mut writer = ZipFileWriter::new(Vec::new());
+    let mut record = String::new();
+
+    for (name, contents) in scripts {
+        let name = format!("source_encoding_test-0.1.0.data/scripts/{name}");
+        let entry = ZipEntryBuilder::new(name.clone().into(), Compression::Stored);
+        block_on(writer.write_entry_whole(entry, contents))?;
+        writeln!(record, "{name},,")?;
+    }
+
+    let metadata = indoc! {"
+        Metadata-Version: 2.1
+        Name: source-encoding-test
+        Version: 0.1.0
+    "};
+    let wheel = indoc! {"
+        Wheel-Version: 1.0
+        Generator: uv-test
+        Root-Is-Purelib: true
+        Tag: py3-none-any
+    "};
+    for (name, contents) in [
+        ("source_encoding_test-0.1.0.dist-info/METADATA", metadata),
+        ("source_encoding_test-0.1.0.dist-info/WHEEL", wheel),
+    ] {
+        let entry = ZipEntryBuilder::new(name.into(), Compression::Stored);
+        block_on(writer.write_entry_whole(entry, contents.as_bytes()))?;
+        writeln!(record, "{name},,")?;
+    }
+    record.push_str("source_encoding_test-0.1.0.dist-info/RECORD,,\n");
+    let entry = ZipEntryBuilder::new(
+        "source_encoding_test-0.1.0.dist-info/RECORD".into(),
+        Compression::Stored,
+    );
+    block_on(writer.write_entry_whole(entry, record.as_bytes()))?;
+
+    fs_err::write(path, block_on(writer.close())?)?;
+    Ok(())
+}
+
 #[test]
 fn install_wheel_cache_incompatible_with_older_uv() -> Result<()> {
     allow_duplicates! {
@@ -14405,6 +14447,97 @@ fn strip_shebang_arguments() -> Result<()> {
         print(f"Hello from GUI script: {sys.executable}")
         "#);
     });
+
+    Ok(())
+}
+
+/// PEP 263 requires source encoding declarations to appear on the first or second line.
+#[test]
+#[cfg(unix)]
+fn preserve_data_script_source_encoding_with_sh_redirector() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let wheel = context
+        .temp_dir
+        .child("source_encoding_test-0.1.0-py3-none-any.whl");
+    write_data_scripts_wheel(
+        wheel.path(),
+        &[
+            (
+                "form-feed-lf",
+                b"#!python\n \t\x0c# coding=windows-1252\nprint(\"\x80\x99\")\n",
+            ),
+            (
+                "form-feed-crlf",
+                b"#!python\r\n\x0c# coding=windows-1252\r\nprint(\"\x80\x99\")\r\n",
+            ),
+            (
+                "form-feed-cr",
+                b"#!python\r\x0c# coding=windows-1252\rprint(\"\x80\x99\")\r",
+            ),
+            (
+                "space-lf",
+                b"#!python\n # coding=windows-1252\nprint(\"\x80\x99\")\n",
+            ),
+            (
+                "tab-crlf",
+                b"#!python\r\n\t# coding=windows-1252\r\nprint(\"\x80\x99\")\r\n",
+            ),
+        ],
+    )?;
+
+    // A space in the virtual environment path forces uv to use the `#!/bin/sh` redirector.
+    let venv = context.temp_dir.child("venv with space");
+    context
+        .command()
+        .arg("venv")
+        .arg(venv.path())
+        .assert()
+        .success();
+    context
+        .command()
+        .arg("pip")
+        .arg("install")
+        .arg("--python")
+        .arg(venv_bin_path(&venv).join("python"))
+        .arg(wheel.path())
+        .assert()
+        .success();
+
+    for (name, expected_prefix) in [
+        (
+            "form-feed-lf",
+            b"#!/bin/sh\n# \t\x0c# coding=windows-1252\n'''exec' ".as_slice(),
+        ),
+        (
+            "form-feed-crlf",
+            b"#!/bin/sh\n#\x0c# coding=windows-1252\r\n'''exec' ".as_slice(),
+        ),
+        (
+            "form-feed-cr",
+            b"#!/bin/sh\n#\x0c# coding=windows-1252\r\n'''exec' ".as_slice(),
+        ),
+        (
+            "space-lf",
+            b"#!/bin/sh\n # coding=windows-1252\n'''exec' ".as_slice(),
+        ),
+        (
+            "tab-crlf",
+            b"#!/bin/sh\n\t# coding=windows-1252\r\n'''exec' ".as_slice(),
+        ),
+    ] {
+        let installed_script = venv_bin_path(&venv).join(name);
+        let contents = fs::read(&installed_script)?;
+        assert!(
+            contents.starts_with(expected_prefix),
+            "encoding declaration must remain shell-safe on line 2 for {name}: {}",
+            String::from_utf8_lossy(&contents)
+        );
+        Command::new(installed_script)
+            .assert()
+            .success()
+            .stdout("€™\n")
+            .stderr("");
+    }
 
     Ok(())
 }
