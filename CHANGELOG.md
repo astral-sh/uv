@@ -3,6 +3,36 @@
 <!-- prettier-ignore-start -->
 
 
+## 0.12.8
+
+Released on 2026-08-31.
+
+### Enhancements
+
+- Deduplicate all files in the wheel cache ([#21327](https://github.com/astral-sh/uv/pull/21327))
+- Warn and skip invalid tool directories ([#21368](https://github.com/astral-sh/uv/pull/21368))
+
+### Performance
+
+- Avoid duplicate concurrent wheel downloads ([#21379](https://github.com/astral-sh/uv/pull/21379))
+- Read file-cache link counts in bulk on macOS ([#21344](https://github.com/astral-sh/uv/pull/21344))
+- Reuse the hashing buffer across streamed wheel files ([#21340](https://github.com/astral-sh/uv/pull/21340))
+- Use integer indices when traversing locked dependencies ([#21373](https://github.com/astral-sh/uv/pull/21373))
+- Use package indices for additional lockfile traversals ([#21377](https://github.com/astral-sh/uv/pull/21377))
+- perf(marker): reduce interner work ([#21300](https://github.com/astral-sh/uv/pull/21300))
+
+### Bug fixes
+
+- Align workspace member matching with glob expansion ([#21341](https://github.com/astral-sh/uv/pull/21341))
+- Do not allow direct URLs in wheel metadata to expand the set of approved hashes ([#21348](https://github.com/astral-sh/uv/pull/21348))
+- Redact Azure shared access signatures in URLs ([#21360](https://github.com/astral-sh/uv/pull/21360))
+
+### Other changes
+
+- Bump astral-tokio-tar to 0.7.0 ([#21346](https://github.com/astral-sh/uv/pull/21346))
+- Fix workflow checksums and tool upgrade test compilation ([#21387](https://github.com/astral-sh/uv/pull/21387))
+- Version all Azure requests ([#21366](https://github.com/astral-sh/uv/pull/21366))
+
 ## 0.12.7
 
 Released on 2026-08-27.
