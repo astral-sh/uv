@@ -14,13 +14,10 @@ use uv_configuration::{
     ExtrasSpecificationWithDefaults, InstallOptions,
 };
 use uv_distribution_types::{Edge, FirstParty, Node, Requirement, Resolution, ResolvedDist};
-use uv_normalize::{
-    DEV_DEPENDENCIES, DefaultExtras, DefaultGroups, ExtraName, GroupName, PackageName,
-};
+use uv_normalize::{DefaultExtras, DefaultGroups, ExtraName, GroupName, PackageName};
 use uv_platform_tags::Tags;
 use uv_pypi_types::{ConflictKind, ConflictSet, ResolverMarkerEnvironment};
 use uv_types::OnceQueue;
-use uv_workspace::pyproject::DependencyType;
 
 use crate::lock::{
     Dependency, DependencySelectionContext, HashedDist, LockErrorKind, Package, PackageIndex,
@@ -309,23 +306,10 @@ pub trait Installable<'lock> {
     }
 }
 
-fn enqueue_reachability_state<'lock>(
-    queue: &mut VecDeque<(&'lock Package, Option<&'lock ExtraName>)>,
-    seen: &mut FxHashSet<(&'lock PackageId, Option<&'lock ExtraName>)>,
-    package: &'lock Package,
-    extra: Option<&'lock ExtraName>,
-) {
-    if seen.insert((&package.id, extra)) {
-        queue.push_back((package, extra));
-    }
-}
-
 fn enqueue_reachable_dependency<'lock>(
-    lock: &'lock Lock,
     dependency: &'lock Dependency,
     marker_environment: &ResolverMarkerEnvironment,
-    queue: &mut VecDeque<(&'lock Package, Option<&'lock ExtraName>)>,
-    seen: &mut FxHashSet<(&'lock PackageId, Option<&'lock ExtraName>)>,
+    queue: &mut OnceQueue<TraversalState<'lock>>,
 ) {
     if !dependency
         .complexified_marker
@@ -334,24 +318,23 @@ fn enqueue_reachable_dependency<'lock>(
     {
         return;
     }
-    let package = lock.find_by_id(&dependency.package_id);
-    enqueue_reachability_state(queue, seen, package, None);
+    queue.push((dependency.index, None));
     for extra in &dependency.extra {
-        enqueue_reachability_state(queue, seen, package, Some(extra));
+        queue.push((dependency.index, Some(extra)));
     }
 }
 
 fn enqueue_reachable_requirement<'lock>(
     lock: &'lock Lock,
-    requirement: &'lock uv_distribution_types::Requirement,
+    requirement: &'lock Requirement,
     marker_environment: &ResolverMarkerEnvironment,
-    queue: &mut VecDeque<(&'lock Package, Option<&'lock ExtraName>)>,
-    seen: &mut FxHashSet<(&'lock PackageId, Option<&'lock ExtraName>)>,
+    queue: &mut OnceQueue<TraversalState<'lock>>,
 ) {
-    for package in lock
+    for (index, package) in lock
         .packages()
         .iter()
-        .filter(|package| package.name() == &requirement.name)
+        .enumerate()
+        .filter(|(_, package)| package.name() == &requirement.name)
     {
         if !lock
             .root_requirement_marker(requirement, package)
@@ -359,9 +342,10 @@ fn enqueue_reachable_requirement<'lock>(
         {
             continue;
         }
-        enqueue_reachability_state(queue, seen, package, None);
+        let index = PackageIndex(index);
+        queue.push((index, None));
         for extra in &requirement.extras {
-            enqueue_reachability_state(queue, seen, package, Some(extra));
+            queue.push((index, Some(extra)));
         }
     }
 }
@@ -369,23 +353,28 @@ fn enqueue_reachable_requirement<'lock>(
 fn walk_reachable_names<'lock>(
     lock: &'lock Lock,
     marker_environment: &ResolverMarkerEnvironment,
-    mut queue: VecDeque<(&'lock Package, Option<&'lock ExtraName>)>,
-    mut seen: FxHashSet<(&'lock PackageId, Option<&'lock ExtraName>)>,
+    mut queue: OnceQueue<TraversalState<'lock>>,
 ) -> BTreeSet<PackageName> {
     let mut names = BTreeSet::new();
-    while let Some((package, extra)) = queue.pop_front() {
+    while let Some((index, extra)) = queue.pop() {
+        let package = lock.package(index);
         names.insert(package.name().clone());
         for dependency in package_dependencies(package, extra) {
-            enqueue_reachable_dependency(
-                lock,
-                dependency,
-                marker_environment,
-                &mut queue,
-                &mut seen,
-            );
+            enqueue_reachable_dependency(dependency, marker_environment, &mut queue);
         }
     }
     names
+}
+
+/// A direct dependency section in a project or lock target.
+#[derive(Debug, Clone, Copy)]
+pub enum DependencySection<'a> {
+    /// Project dependencies or lock-level requirements.
+    Production,
+    /// An optional dependency group.
+    Optional(&'a ExtraName),
+    /// A dependency group.
+    Group(&'a GroupName),
 }
 
 /// Return package names required by any declaration in the target.
@@ -399,19 +388,10 @@ pub fn reachable_declared_package_names<'lock>(
     marker_environment: &ResolverMarkerEnvironment,
 ) -> Result<BTreeSet<PackageName>, LockError> {
     let lock = target.lock();
-    let mut queue = VecDeque::new();
-    let mut seen = FxHashSet::default();
+    let mut queue = OnceQueue::default();
 
     let groups = DependencyGroups::from_all_groups().with_defaults(DefaultGroups::default());
-    let roots = target
-        .roots()
-        .map(|name| (name, InstallableRootKind::Production))
-        .chain(
-            target
-                .group_root(&groups)
-                .map(|name| (name, InstallableRootKind::DependencyGroups)),
-        );
-    for (root_name, root_kind) in roots {
+    for (root_name, root_kind) in target.roots_with_kind(&groups) {
         let root = lock
             .find_by_name(root_name)
             .map_err(|_| LockErrorKind::MultipleRootPackages {
@@ -421,9 +401,10 @@ pub fn reachable_declared_package_names<'lock>(
                 name: root_name.clone(),
             })?;
         if root_kind == InstallableRootKind::Production {
-            enqueue_reachability_state(&mut queue, &mut seen, root, None);
+            let index = lock.by_id[&root.id];
+            queue.push((index, None));
             for extra in root.optional_dependencies().keys() {
-                enqueue_reachability_state(&mut queue, &mut seen, root, Some(extra));
+                queue.push((index, Some(extra)));
             }
         }
         for dependency in root
@@ -432,36 +413,25 @@ pub fn reachable_declared_package_names<'lock>(
             .filter(|(group, _)| target.includes_group(Some(root.name()), group, &groups))
             .flat_map(|(_, dependencies)| dependencies)
         {
-            enqueue_reachable_dependency(
-                lock,
-                dependency,
-                marker_environment,
-                &mut queue,
-                &mut seen,
-            );
+            enqueue_reachable_dependency(dependency, marker_environment, &mut queue);
         }
     }
-    for requirement in lock
-        .requirements()
-        .iter()
-        .chain(lock.dependency_groups().values().flatten())
-    {
-        enqueue_reachable_requirement(lock, requirement, marker_environment, &mut queue, &mut seen);
+    for requirement in target.root_requirements(&groups) {
+        enqueue_reachable_requirement(lock, requirement, marker_environment, &mut queue);
     }
 
-    Ok(walk_reachable_names(lock, marker_environment, queue, seen))
+    Ok(walk_reachable_names(lock, marker_environment, queue))
 }
 
 /// Return package names required by the named direct dependencies in one project section.
 pub fn reachable_direct_dependency_names<'lock>(
     target: &impl Installable<'lock>,
     marker_environment: &ResolverMarkerEnvironment,
-    dependency_type: &DependencyType,
+    section: DependencySection<'_>,
     names: &BTreeSet<PackageName>,
 ) -> Result<BTreeSet<PackageName>, LockError> {
     let lock = target.lock();
-    let mut queue = VecDeque::new();
-    let mut seen = FxHashSet::default();
+    let mut queue = OnceQueue::default();
 
     if let Some(project_name) = target.project_name() {
         let project = lock
@@ -472,19 +442,14 @@ pub fn reachable_direct_dependency_names<'lock>(
             .ok_or_else(|| LockErrorKind::MissingRootPackage {
                 name: project_name.clone(),
             })?;
-        let dependencies = match dependency_type {
-            DependencyType::Production => project.dependencies(),
-            DependencyType::Dev => project
-                .resolved_dependency_groups()
-                .get(&*DEV_DEPENDENCIES)
-                .map(Vec::as_slice)
-                .unwrap_or_default(),
-            DependencyType::Optional(extra) => project
+        let dependencies = match section {
+            DependencySection::Production => project.dependencies(),
+            DependencySection::Optional(extra) => project
                 .optional_dependencies()
                 .get(extra)
                 .map(Vec::as_slice)
                 .unwrap_or_default(),
-            DependencyType::Group(group) => project
+            DependencySection::Group(group) => project
                 .resolved_dependency_groups()
                 .get(group)
                 .map(Vec::as_slice)
@@ -494,37 +459,24 @@ pub fn reachable_direct_dependency_names<'lock>(
             .iter()
             .filter(|dependency| names.contains(&dependency.package_id.name))
         {
-            enqueue_reachable_dependency(
-                lock,
-                dependency,
-                marker_environment,
-                &mut queue,
-                &mut seen,
-            );
+            enqueue_reachable_dependency(dependency, marker_environment, &mut queue);
         }
     } else {
-        let requirements = match dependency_type {
-            DependencyType::Production => Some(lock.requirements()),
-            DependencyType::Dev => lock.dependency_groups().get(&*DEV_DEPENDENCIES),
-            DependencyType::Optional(_) => None,
-            DependencyType::Group(group) => lock.dependency_groups().get(group),
+        let requirements = match section {
+            DependencySection::Production => Some(lock.requirements()),
+            DependencySection::Optional(_) => None,
+            DependencySection::Group(group) => lock.dependency_groups().get(group),
         };
         for requirement in requirements
             .into_iter()
             .flatten()
             .filter(|requirement| names.contains(&requirement.name))
         {
-            enqueue_reachable_requirement(
-                lock,
-                requirement,
-                marker_environment,
-                &mut queue,
-                &mut seen,
-            );
+            enqueue_reachable_requirement(lock, requirement, marker_environment, &mut queue);
         }
     }
 
-    Ok(walk_reachable_names(lock, marker_environment, queue, seen))
+    Ok(walk_reachable_names(lock, marker_environment, queue))
 }
 
 /// Internal lock-to-resolution implementation shared by [`Installable`] and [`Lock`].

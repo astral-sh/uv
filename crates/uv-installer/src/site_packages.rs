@@ -1,5 +1,5 @@
 use std::borrow::Cow;
-use std::collections::{BTreeSet, VecDeque};
+use std::collections::BTreeSet;
 use std::iter::Flatten;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
@@ -23,7 +23,7 @@ use uv_platform_tags::Tags;
 use uv_pypi_types::{ResolverMarkerEnvironment, VerbatimParsedUrl};
 use uv_python::{Interpreter, PythonEnvironment};
 use uv_redacted::DisplaySafeUrl;
-use uv_types::InstalledPackagesProvider;
+use uv_types::{InstalledPackagesProvider, OnceQueue};
 use uv_warnings::warn_user;
 
 use crate::satisfies::RequirementSatisfaction;
@@ -206,24 +206,16 @@ impl SitePackages {
     ) -> InstalledReachability {
         let mut packages = BTreeSet::new();
         let mut incomplete = BTreeSet::new();
-        let mut seen = FxHashSet::default();
-        let mut queue = VecDeque::new();
+        let mut queue = OnceQueue::default();
 
         for (name, extras) in roots {
-            queue.push_back((name.clone(), None));
-            queue.extend(
-                extras
-                    .iter()
-                    .cloned()
-                    .map(|extra| (name.clone(), Some(extra))),
-            );
+            queue.push((name.clone(), None));
+            for extra in extras {
+                queue.push((name.clone(), Some(extra.clone())));
+            }
         }
 
-        while let Some((package, extra)) = queue.pop_front() {
-            if !seen.insert((package.clone(), extra.clone())) {
-                continue;
-            }
-
+        while let Some((package, extra)) = queue.pop() {
             let distributions = self.get_packages(&package);
             if distributions.is_empty() {
                 continue;
@@ -262,14 +254,10 @@ impl SitePackages {
                         continue;
                     }
 
-                    queue.push_back((dependency.name.clone(), None));
-                    queue.extend(
-                        dependency
-                            .extras
-                            .iter()
-                            .cloned()
-                            .map(|extra| (dependency.name.clone(), Some(extra))),
-                    );
+                    queue.push((dependency.name.clone(), None));
+                    for extra in &dependency.extras {
+                        queue.push((dependency.name.clone(), Some(extra.clone())));
+                    }
                 }
             }
         }

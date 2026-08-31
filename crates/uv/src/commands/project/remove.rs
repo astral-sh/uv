@@ -14,10 +14,12 @@ use uv_configuration::{
     Concurrency, DependencyGroups, DryRun, ExtrasSpecification, InstallOptions,
 };
 use uv_fs::Simplified;
-use uv_normalize::{DefaultExtras, DefaultGroups, PackageName};
+use uv_normalize::{DEV_DEPENDENCIES, DefaultExtras, DefaultGroups, PackageName};
 use uv_preview::Preview;
 use uv_python::{ConfigDiscovery, PythonDownloads, PythonPreference, PythonRequest};
-use uv_resolver::{Lock, reachable_declared_package_names, reachable_direct_dependency_names};
+use uv_resolver::{
+    DependencySection, Lock, reachable_declared_package_names, reachable_direct_dependency_names,
+};
 use uv_scripts::{Pep723Metadata, Pep723Script};
 use uv_settings::{MalwareCheckSettings, PythonInstallMirrors};
 use uv_warnings::warn_user_once;
@@ -334,10 +336,16 @@ pub(crate) async fn remove(
     // or unreadable previous lockfiles.
     let candidates = if let LockResult::Changed(Some(previous), _) = &lock_result {
         let previous_target = install_target(&project, previous);
+        let section = match &dependency_type {
+            DependencyType::Production => DependencySection::Production,
+            DependencyType::Dev => DependencySection::Group(&DEV_DEPENDENCIES),
+            DependencyType::Optional(extra) => DependencySection::Optional(extra),
+            DependencyType::Group(group) => DependencySection::Group(group),
+        };
         match reachable_direct_dependency_names(
             &previous_target,
             &marker_environment,
-            &dependency_type,
+            section,
             &removed_names,
         ) {
             Ok(candidates) => candidates,
