@@ -31,7 +31,7 @@ jobs:
       - name: "Install uv"
         uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
         with:
-          version: "0.12.7"
+          version: "0.12.5"
       - run: uv run --only-group check ruff check .
 
   ty:
@@ -44,7 +44,7 @@ jobs:
       - name: "Install uv"
         uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
         with:
-          version: "0.12.7"
+          version: "0.12.5"
       # `uv check` checks the entire repository; keep this scoped to the Python package.
       - run: uv run --only-group check ty check python/uv
       - name: "Check scrolls"
@@ -86,7 +86,7 @@ jobs:
       - name: "Install uv"
         uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
         with:
-          version: "0.12.7"
+          version: "0.12.5"
       - name: "Validate pyproject and uv schema"
         run: ./scripts/validate-pyproject.sh
 
@@ -189,7 +189,7 @@ jobs:
       - name: "Install uv"
         uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
         with:
-          version: "0.12.7"
+          version: "0.12.5"
       - run: uv run --only-group check cargo-shear --deny-warnings
 
   typos:
@@ -202,5 +202,5 @@ jobs:
       - name: "Install uv"
         uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
         with:
-          version: "0.12.7"
+          version: "0.12.5"
       - run: uv run --only-group check typos

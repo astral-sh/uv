@@ -78,7 +78,7 @@ jobs:
       - name: "Install uv"
         uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
         with:
-          version: "0.12.7"
+          version: "0.12.5"
           checksum: "68a509da24b06b4223a1c0175fb5eb5bc79342b76cbeff0cfe51ac3f5b17b6b2"
           enable-cache: false
 
