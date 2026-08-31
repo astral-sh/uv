@@ -4700,6 +4700,7 @@ fn run_active_script_environment_non_virtualenv() -> Result<()> {
         .success();
 
     active_environment.assert(predicate::path::is_dir());
+    // Silently deleting user data outside a virtual environment is undesirable.
     active_environment
         .child("important.txt")
         .assert(predicate::path::missing());
