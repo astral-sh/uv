@@ -16,7 +16,6 @@ use uv_pep508::MarkerTree;
 use uv_pypi_types::ConflictItem;
 
 use crate::graph_ops::Reachable;
-use crate::lock::LockErrorKind;
 pub use crate::lock::export::metadata::{Metadata, PythonReport};
 pub(crate) use crate::lock::export::metadata::{
     MetadataNode, MetadataNodeId, MetadataNodeKind, MetadataScript, MetadataWorkspace,
@@ -25,6 +24,7 @@ pub(crate) use crate::lock::export::metadata::{
 pub(crate) use crate::lock::export::pylock_toml::PylockTomlPackage;
 pub use crate::lock::export::pylock_toml::{PylockToml, PylockTomlError, PylockTomlErrorKind};
 pub use crate::lock::export::requirements_txt::RequirementsTxtExport;
+use crate::lock::{LockErrorKind, PackageIndex};
 use crate::universal_marker::resolve_activated_extras;
 use crate::{Installable, InstallableRootKind, LockError, Package};
 
@@ -60,9 +60,9 @@ impl<'lock> ExportableRequirements<'lock> {
     ) -> Result<Self, LockError> {
         let size_guess = target.lock().packages.len();
         let mut graph = Graph::<Node<'lock>, Edge<'lock>>::with_capacity(size_guess, size_guess);
-        let mut inverse = FxHashMap::with_capacity_and_hasher(size_guess, FxBuildHasher);
+        let mut inverse = vec![None; size_guess];
 
-        let mut queue: VecDeque<(&Package, Option<&ExtraName>)> = VecDeque::new();
+        let mut queue: VecDeque<(PackageIndex, Option<&ExtraName>)> = VecDeque::new();
         let mut seen = FxHashSet::default();
         let mut activated_items = FxHashMap::default();
 
@@ -98,10 +98,11 @@ impl<'lock> ExportableRequirements<'lock> {
             }
 
             if root_kind == InstallableRootKind::Production && groups.prod() {
+                let package_index = target.lock().by_id[&dist.id];
+
                 // Add the workspace package to the graph.
-                let index = *inverse
-                    .entry(&dist.id)
-                    .or_insert_with(|| graph.add_node(Node::Package(dist)));
+                let index = *inverse[package_index.0]
+                    .get_or_insert_with(|| graph.add_node(Node::Package(dist)));
                 graph.add_edge(
                     root,
                     index,
@@ -112,9 +113,9 @@ impl<'lock> ExportableRequirements<'lock> {
                 );
 
                 // Push its dependencies on the queue.
-                queue.push_back((dist, None));
+                queue.push_back((package_index, None));
                 for extra in extras.extra_names(dist.optional_dependencies.keys()) {
-                    queue.push_back((dist, Some(extra)));
+                    queue.push_back((package_index, Some(extra)));
                     activated_items.insert(
                         ConflictItem::from((dist.id.name.clone(), extra.clone())),
                         MarkerTree::TRUE,
@@ -145,12 +146,11 @@ impl<'lock> ExportableRequirements<'lock> {
                     continue;
                 }
 
-                let dep_dist = target.lock().find_by_id(&dep.package_id);
+                let dep_dist = target.lock().package(dep.index);
 
                 // Add the dependency to the graph.
-                let dep_index = *inverse
-                    .entry(&dep.package_id)
-                    .or_insert_with(|| graph.add_node(Node::Package(dep_dist)));
+                let dep_index = *inverse[dep.index.0]
+                    .get_or_insert_with(|| graph.add_node(Node::Package(dep_dist)));
 
                 // Add an edge from the root. Development dependencies may be installed without
                 // installing the workspace package itself (which can never have markers on it
@@ -166,12 +166,12 @@ impl<'lock> ExportableRequirements<'lock> {
                 );
 
                 // Push its dependencies on the queue.
-                if seen.insert((&dep.package_id, None)) {
-                    queue.push_back((dep_dist, None));
+                if seen.insert((dep.index, None)) {
+                    queue.push_back((dep.index, None));
                 }
                 for extra in &dep.extra {
-                    if seen.insert((&dep.package_id, Some(extra))) {
-                        queue.push_back((dep_dist, Some(extra)));
+                    if seen.insert((dep.index, Some(extra))) {
+                        queue.push_back((dep.index, Some(extra)));
                     }
                 }
             }
@@ -226,11 +226,11 @@ impl<'lock> ExportableRequirements<'lock> {
                     else {
                         continue;
                     };
+                    let package_index = target.lock().by_id[&dist.id];
 
                     // Add the dependency to the graph and get its index.
-                    let dep_index = *inverse
-                        .entry(&dist.id)
-                        .or_insert_with(|| graph.add_node(Node::Package(dist)));
+                    let dep_index = *inverse[package_index.0]
+                        .get_or_insert_with(|| graph.add_node(Node::Package(dist)));
 
                     // Add an edge from the root.
                     graph.add_edge(
@@ -243,12 +243,12 @@ impl<'lock> ExportableRequirements<'lock> {
                     );
 
                     // Push its dependencies on the queue.
-                    if seen.insert((&dist.id, None)) {
-                        queue.push_back((dist, None));
+                    if seen.insert((package_index, None)) {
+                        queue.push_back((package_index, None));
                     }
                     for extra in &requirement.extras {
-                        if seen.insert((&dist.id, Some(extra))) {
-                            queue.push_back((dist, Some(extra)));
+                        if seen.insert((package_index, Some(extra))) {
+                            queue.push_back((package_index, Some(extra)));
                         }
                     }
                 }
@@ -256,8 +256,9 @@ impl<'lock> ExportableRequirements<'lock> {
         }
 
         // Create all the relevant nodes.
-        while let Some((package, extra)) = queue.pop_front() {
-            let index = inverse[&package.id];
+        while let Some((package_index, extra)) = queue.pop_front() {
+            let index = inverse[package_index.0].expect("queued package has a graph node");
+            let package = target.lock().package(package_index);
 
             let deps = if let Some(extra) = extra {
                 Either::Left(
@@ -277,12 +278,11 @@ impl<'lock> ExportableRequirements<'lock> {
                 }
 
                 // Evaluate the conflict marker.
-                let dep_dist = target.lock().find_by_id(&dep.package_id);
+                let dep_dist = target.lock().package(dep.index);
 
                 // Add the dependency to the graph.
-                let dep_index = *inverse
-                    .entry(&dep.package_id)
-                    .or_insert_with(|| graph.add_node(Node::Package(dep_dist)));
+                let dep_index = *inverse[dep.index.0]
+                    .get_or_insert_with(|| graph.add_node(Node::Package(dep_dist)));
 
                 let dep_extras = dep.extra.iter().collect::<Vec<_>>();
                 graph.add_edge(
@@ -303,12 +303,12 @@ impl<'lock> ExportableRequirements<'lock> {
                 );
 
                 // Push its dependencies on the queue.
-                if seen.insert((&dep.package_id, None)) {
-                    queue.push_back((dep_dist, None));
+                if seen.insert((dep.index, None)) {
+                    queue.push_back((dep.index, None));
                 }
                 for extra in &dep.extra {
-                    if seen.insert((&dep.package_id, Some(extra))) {
-                        queue.push_back((dep_dist, Some(extra)));
+                    if seen.insert((dep.index, Some(extra))) {
+                        queue.push_back((dep.index, Some(extra)));
                     }
                 }
             }
