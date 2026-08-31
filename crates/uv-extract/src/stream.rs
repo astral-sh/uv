@@ -3,6 +3,7 @@ use std::pin::Pin;
 
 use async_zip::base::read::cd::Entry;
 use async_zip::error::ZipError;
+use futures::executor::block_on;
 use futures::{AsyncReadExt, StreamExt};
 use rustc_hash::{FxHashMap, FxHashSet};
 use tar_codec::extract::{ExtractPolicy, LinkPolicy, SymlinkPolicy};
@@ -21,6 +22,10 @@ use crate::dirhash::{
     DirhashTree, ExtractedFile, blake3_copy_with_buffer, directory_tree_from_extracted,
 };
 use crate::{Error, insecure_no_validate};
+
+mod filesystem;
+
+use filesystem::Filesystem;
 
 const DEFAULT_BUF_SIZE: usize = 128 * 1024;
 
@@ -70,7 +75,9 @@ pub async fn unzip<R: tokio::io::AsyncRead + Unpin>(
     reader: R,
     target: impl AsRef<Path>,
 ) -> Result<Vec<(PathBuf, u64)>, Error> {
-    Ok(Box::pin(unzip_inner(reader, target, false)).await?.files)
+    Ok(Box::pin(unzip_inner::<_, false>(reader, target, false))
+        .await?
+        .files)
 }
 
 /// Unpack a `.zip` archive into the target directory while computing a hash tree of the extracted
@@ -84,7 +91,7 @@ pub async fn unzip_and_hash<R: tokio::io::AsyncRead + Unpin>(
     reader: R,
     target: impl AsRef<Path>,
 ) -> Result<(Vec<(PathBuf, u64)>, DirhashTree), Error> {
-    let output = Box::pin(unzip_inner(reader, target, true)).await?;
+    let output = Box::pin(unzip_inner::<_, false>(reader, target, true)).await?;
     let Some(tree) = output.tree else {
         return Err(Error::Io(std::io::Error::other(
             "streaming ZIP hash tree was not computed",
@@ -93,7 +100,34 @@ pub async fn unzip_and_hash<R: tokio::io::AsyncRead + Unpin>(
     Ok((output.files, tree))
 }
 
-async fn unzip_inner<R: tokio::io::AsyncRead + Unpin>(
+/// Extract a streaming ZIP archive with synchronous filesystem operations.
+///
+/// This uses the same parser and validation as [`unzip`]. Call it on a blocking thread.
+/// The reader must be driven independently of this thread, for example through a bounded pipe.
+pub fn unzip_blocking<R: tokio::io::AsyncRead + Unpin>(
+    reader: R,
+    target: &Path,
+) -> Result<Vec<(PathBuf, u64)>, Error> {
+    Ok(block_on(Box::pin(unzip_inner::<_, true>(reader, target, false)))?.files)
+}
+
+/// Extract and hash a streaming ZIP archive with synchronous filesystem operations.
+///
+/// See [`unzip_blocking`] for requirements on the reader and calling thread.
+pub fn unzip_blocking_and_hash<R: tokio::io::AsyncRead + Unpin>(
+    reader: R,
+    target: &Path,
+) -> Result<(Vec<(PathBuf, u64)>, DirhashTree), Error> {
+    let output = block_on(Box::pin(unzip_inner::<_, true>(reader, target, true)))?;
+    let Some(tree) = output.tree else {
+        return Err(Error::Io(std::io::Error::other(
+            "streaming ZIP hash tree was not computed",
+        )));
+    };
+    Ok((output.files, tree))
+}
+
+async fn unzip_inner<R: tokio::io::AsyncRead + Unpin, const BLOCKING: bool>(
     reader: R,
     target: impl AsRef<Path>,
     hash_contents: bool,
@@ -158,7 +192,7 @@ async fn unzip_inner<R: tokio::io::AsyncRead + Unpin>(
         let is_dir = zip_entry.dir()?;
         let computed = if is_dir {
             if directories.insert(path.clone()) {
-                fs_err::tokio::create_dir_all(path)
+                Filesystem::<BLOCKING>::create_dir_all(&path)
                     .await
                     .map_err(Error::Io)?;
             }
@@ -194,7 +228,7 @@ async fn unzip_inner<R: tokio::io::AsyncRead + Unpin>(
         } else {
             if let Some(parent) = path.parent() {
                 if directories.insert(parent.to_path_buf()) {
-                    fs_err::tokio::create_dir_all(parent)
+                    Filesystem::<BLOCKING>::create_dir_all(parent)
                         .await
                         .map_err(Error::Io)?;
                 }
@@ -202,7 +236,7 @@ async fn unzip_inner<R: tokio::io::AsyncRead + Unpin>(
 
             // We don't know the file permissions here, because we haven't seen the central directory yet.
             let (actual_uncompressed_size, digest, reader) =
-                match fs_err::tokio::File::create_new(&path).await {
+                match Filesystem::<BLOCKING>::create_file(&path).await {
                     Ok(file) => {
                         // Write the file to disk.
                         let size = zip_entry.uncompressed_size();
@@ -252,8 +286,9 @@ async fn unzip_inner<R: tokio::io::AsyncRead + Unpin>(
                         );
 
                         // Read the existing file into memory.
-                        let existing_contents =
-                            fs_err::tokio::read(&path).await.map_err(Error::Io)?;
+                        let existing_contents = Filesystem::<BLOCKING>::read(&path)
+                            .await
+                            .map_err(Error::Io)?;
 
                         // Read the entry into memory.
                         let mut expected_contents = Vec::with_capacity(existing_contents.len());
@@ -562,12 +597,12 @@ async fn unzip_inner<R: tokio::io::AsyncRead + Unpin>(
                     let has_any_executable_bit = mode & 0o111;
                     if has_any_executable_bit != 0 {
                         let path = target.join(relpath.as_path());
-                        let permissions = fs_err::tokio::metadata(&path)
+                        let permissions = Filesystem::<BLOCKING>::metadata(&path)
                             .await
                             .map_err(Error::Io)?
                             .permissions();
                         if permissions.mode() & 0o111 != 0o111 {
-                            fs_err::tokio::set_permissions(
+                            Filesystem::<BLOCKING>::set_permissions(
                                 &path,
                                 Permissions::from_mode(permissions.mode() | 0o111),
                             )
