@@ -20,14 +20,12 @@ use uv_test::{uv_snapshot, venv_bin_path};
 fn tool_upgrade_empty() {
     let context = uv_test::test_context!("3.12")
         .with_filtered_counts()
-        .with_filtered_exe_suffix();
-    let tool_dir = context.temp_dir.child("tools");
+        .with_filtered_exe_suffix()
+        .with_tool_dirs();
     let bin_dir = context.temp_dir.child("bin");
 
     uv_snapshot!(context.filters(), context.tool_upgrade()
         .arg("--all")
-        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -38,8 +36,6 @@ fn tool_upgrade_empty() {
         .arg("--all")
         .arg("-p")
         .arg("3.13")
-        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -51,8 +47,6 @@ fn tool_upgrade_empty() {
         .arg("babel")
         .arg("--index-url")
         .arg("https://pypi.org/simple/")
-        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -65,8 +59,6 @@ fn tool_upgrade_empty() {
 
     uv_snapshot!(context.filters(), context.tool_upgrade()
         .arg("--all")
-        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -77,8 +69,6 @@ fn tool_upgrade_empty() {
         .arg("--all")
         .arg("-p")
         .arg("3.12")
-        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -88,7 +78,9 @@ fn tool_upgrade_empty() {
 
 #[test]
 fn tool_upgrade_all_ignores_invalid_tool_name() -> Result<()> {
-    let context = uv_test::test_context!("3.12").with_filtered_exe_suffix();
+    let context = uv_test::test_context!("3.12")
+        .with_filtered_exe_suffix()
+        .with_tool_dirs();
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
@@ -96,8 +88,6 @@ fn tool_upgrade_all_ignores_invalid_tool_name() -> Result<()> {
 
     uv_snapshot!(context.filters(), context.tool_upgrade()
         .arg("--all")
-        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -131,8 +121,9 @@ fn tool_upgrade_all_unreadable_receipt() -> Result<()> {
 
 #[test]
 fn tool_upgrade_preserves_workspace_member_editability() -> Result<()> {
-    let context = uv_test::test_context!("3.12").with_filtered_exe_suffix();
-    let tool_dir = context.temp_dir.child("tools");
+    let context = uv_test::test_context!("3.12")
+        .with_filtered_exe_suffix()
+        .with_tool_dirs();
     let bin_dir = context.temp_dir.child("bin");
 
     let root_pyproject = context.temp_dir.child("pyproject.toml");
@@ -191,8 +182,6 @@ fn tool_upgrade_preserves_workspace_member_editability() -> Result<()> {
     let status = context
         .tool_install()
         .arg(context.temp_dir.path())
-        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str())
         .status()
         .expect("failed to run uv tool install");
@@ -217,8 +206,6 @@ fn tool_upgrade_preserves_workspace_member_editability() -> Result<()> {
     let status = context
         .tool_upgrade()
         .arg("root")
-        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str())
         .status()
         .expect("failed to run uv tool upgrade");
@@ -245,8 +232,9 @@ fn tool_upgrade_preserves_workspace_member_editability() -> Result<()> {
 
 #[test]
 fn tool_upgrade_preserves_mixed_workspace_member_editability() -> Result<()> {
-    let context = uv_test::test_context!("3.12").with_filtered_exe_suffix();
-    let tool_dir = context.temp_dir.child("tools");
+    let context = uv_test::test_context!("3.12")
+        .with_filtered_exe_suffix()
+        .with_tool_dirs();
     let bin_dir = context.temp_dir.child("bin");
 
     let tool_root = context.temp_dir.child("tool-root");
@@ -324,8 +312,6 @@ fn tool_upgrade_preserves_mixed_workspace_member_editability() -> Result<()> {
         .arg("--with-editable")
         .arg(other_workspace.path())
         .arg(tool_root.path())
-        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str())
         .status()
         .expect("failed to run uv tool install");
@@ -354,8 +340,6 @@ fn tool_upgrade_preserves_mixed_workspace_member_editability() -> Result<()> {
     let status = context
         .tool_upgrade()
         .arg("tool-root")
-        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str())
         .status()
         .expect("failed to run uv tool upgrade");
@@ -382,8 +366,9 @@ fn tool_upgrade_preserves_mixed_workspace_member_editability() -> Result<()> {
 
 #[test]
 fn tool_upgrade_preserves_mixed_workspace_member_non_editability() -> Result<()> {
-    let context = uv_test::test_context!("3.12").with_filtered_exe_suffix();
-    let tool_dir = context.temp_dir.child("tools");
+    let context = uv_test::test_context!("3.12")
+        .with_filtered_exe_suffix()
+        .with_tool_dirs();
     let bin_dir = context.temp_dir.child("bin");
 
     let tool_root = context.temp_dir.child("tool-root");
@@ -462,8 +447,6 @@ fn tool_upgrade_preserves_mixed_workspace_member_non_editability() -> Result<()>
         .arg("--with")
         .arg(other_workspace.path())
         .arg(tool_root.path())
-        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str())
         .status()
         .expect("failed to run uv tool install");
@@ -492,8 +475,6 @@ fn tool_upgrade_preserves_mixed_workspace_member_non_editability() -> Result<()>
     let status = context
         .tool_upgrade()
         .arg("tool-root")
-        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str())
         .status()
         .expect("failed to run uv tool upgrade");
@@ -522,8 +503,8 @@ fn tool_upgrade_preserves_mixed_workspace_member_non_editability() -> Result<()>
 fn tool_upgrade_name() {
     let context = uv_test::test_context!("3.12")
         .with_filtered_counts()
-        .with_filtered_exe_suffix();
-    let tool_dir = context.temp_dir.child("tools");
+        .with_filtered_exe_suffix()
+        .with_tool_dirs();
     let bin_dir = context.temp_dir.child("bin");
 
     // Install `babel` from Test PyPI, to get an outdated version.
@@ -531,8 +512,6 @@ fn tool_upgrade_name() {
         .arg("babel")
         .arg("--index-url")
         .arg("https://test.pypi.org/simple/")
-        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -549,8 +528,6 @@ fn tool_upgrade_name() {
         .arg("babel")
         .arg("--index-url")
         .arg("https://pypi.org/simple/")
-        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -564,7 +541,9 @@ fn tool_upgrade_name() {
 
 #[test]
 fn tool_upgrade_recomputes_relative_exclude_newer() {
-    let context = uv_test::test_context!("3.12").with_filtered_exe_suffix();
+    let context = uv_test::test_context!("3.12")
+        .with_filtered_exe_suffix()
+        .with_tool_dirs();
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
@@ -575,8 +554,6 @@ fn tool_upgrade_recomputes_relative_exclude_newer() {
         .arg("3 weeks")
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, "2024-03-22T00:00:00Z")
-        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str())
         .assert()
         .success();
@@ -585,8 +562,6 @@ fn tool_upgrade_recomputes_relative_exclude_newer() {
         .arg("black")
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, "2024-04-15T00:00:00Z")
-        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -620,8 +595,8 @@ fn tool_upgrade_recomputes_relative_exclude_newer() {
 fn tool_upgrade_multiple_names() {
     let context = uv_test::test_context!("3.12")
         .with_filtered_counts()
-        .with_filtered_exe_suffix();
-    let tool_dir = context.temp_dir.child("tools");
+        .with_filtered_exe_suffix()
+        .with_tool_dirs();
     let bin_dir = context.temp_dir.child("bin");
 
     // Install `python-dotenv` from Test PyPI, to get an outdated version.
@@ -629,8 +604,6 @@ fn tool_upgrade_multiple_names() {
         .arg("python-dotenv")
         .arg("--index-url")
         .arg("https://test.pypi.org/simple/")
-        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -646,8 +619,6 @@ fn tool_upgrade_multiple_names() {
         .arg("babel")
         .arg("--index-url")
         .arg("https://test.pypi.org/simple/")
-        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -665,8 +636,6 @@ fn tool_upgrade_multiple_names() {
         .arg("python-dotenv")
         .arg("--index-url")
         .arg("https://pypi.org/simple/")
-        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -686,9 +655,8 @@ fn tool_upgrade_multiple_names() {
 fn tool_upgrade_pinned_hint() {
     let context = uv_test::test_context!("3.12")
         .with_filtered_counts()
-        .with_filtered_exe_suffix();
-
-    let tool_dir = context.temp_dir.child("tools");
+        .with_filtered_exe_suffix()
+        .with_tool_dirs();
     let bin_dir = context.temp_dir.child("bin");
 
     // Install a specific version of `babel` so the receipt records an exact pin.
@@ -696,8 +664,6 @@ fn tool_upgrade_pinned_hint() {
         .arg("babel==2.6.0")
         .arg("--index-url")
         .arg("https://test.pypi.org/simple/")
-        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -714,8 +680,6 @@ fn tool_upgrade_pinned_hint() {
         .arg("babel")
         .arg("--index-url")
         .arg("https://pypi.org/simple/")
-        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -731,9 +695,8 @@ fn tool_upgrade_pinned_hint() {
 fn tool_upgrade_pinned_hint_with_mixed_constraint() {
     let context = uv_test::test_context!("3.12")
         .with_filtered_counts()
-        .with_filtered_exe_suffix();
-
-    let tool_dir = context.temp_dir.child("tools");
+        .with_filtered_exe_suffix()
+        .with_tool_dirs();
     let bin_dir = context.temp_dir.child("bin");
 
     // Install a specific version of `babel` with an additional constraint to ensure the requirement
@@ -742,8 +705,6 @@ fn tool_upgrade_pinned_hint_with_mixed_constraint() {
         .arg("babel>=2.0,==2.6.0")
         .arg("--index-url")
         .arg("https://test.pypi.org/simple/")
-        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -760,8 +721,6 @@ fn tool_upgrade_pinned_hint_with_mixed_constraint() {
         .arg("babel")
         .arg("--index-url")
         .arg("https://pypi.org/simple/")
-        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -777,8 +736,8 @@ fn tool_upgrade_pinned_hint_with_mixed_constraint() {
 fn tool_upgrade_all() -> Result<()> {
     let context = uv_test::test_context!("3.12")
         .with_filtered_counts()
-        .with_filtered_exe_suffix();
-    let tool_dir = context.temp_dir.child("tools");
+        .with_filtered_exe_suffix()
+        .with_tool_dirs();
     let bin_dir = context.temp_dir.child("bin");
 
     // Install `python-dotenv` from Test PyPI, to get an outdated version.
@@ -786,8 +745,6 @@ fn tool_upgrade_all() -> Result<()> {
         .arg("python-dotenv")
         .arg("--index-url")
         .arg("https://test.pypi.org/simple/")
-        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -803,8 +760,6 @@ fn tool_upgrade_all() -> Result<()> {
         .arg("babel")
         .arg("--index-url")
         .arg("https://test.pypi.org/simple/")
-        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -824,8 +779,6 @@ fn tool_upgrade_all() -> Result<()> {
         .arg("--all")
         .arg("--index-url")
         .arg("https://pypi.org/simple/")
-        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -848,15 +801,13 @@ fn tool_upgrade_all() -> Result<()> {
 fn tool_upgrade_non_existing_package() {
     let context = uv_test::test_context!("3.12")
         .with_filtered_counts()
-        .with_filtered_exe_suffix();
-    let tool_dir = context.temp_dir.child("tools");
+        .with_filtered_exe_suffix()
+        .with_tool_dirs();
     let bin_dir = context.temp_dir.child("bin");
 
     // Attempt to upgrade `black`.
     uv_snapshot!(context.filters(), context.tool_upgrade()
         .arg("black")
-        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 1 (failure)
     ----- stderr -----
@@ -867,8 +818,6 @@ fn tool_upgrade_non_existing_package() {
     // Attempt to upgrade all.
     uv_snapshot!(context.filters(), context.tool_upgrade()
         .arg("--all")
-        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -880,7 +829,8 @@ fn tool_upgrade_non_existing_package() {
 fn tool_upgrade_not_stop_if_upgrade_fails() -> anyhow::Result<()> {
     let context = uv_test::test_context!("3.12")
         .with_filtered_counts()
-        .with_filtered_exe_suffix();
+        .with_filtered_exe_suffix()
+        .with_tool_dirs();
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
@@ -889,8 +839,6 @@ fn tool_upgrade_not_stop_if_upgrade_fails() -> anyhow::Result<()> {
         .arg("python-dotenv")
         .arg("--index-url")
         .arg("https://test.pypi.org/simple/")
-        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -906,8 +854,6 @@ fn tool_upgrade_not_stop_if_upgrade_fails() -> anyhow::Result<()> {
         .arg("babel")
         .arg("--index-url")
         .arg("https://test.pypi.org/simple/")
-        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -930,8 +876,6 @@ fn tool_upgrade_not_stop_if_upgrade_fails() -> anyhow::Result<()> {
         .arg("--all")
         .arg("--index-url")
         .arg("https://pypi.org/simple/")
-        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 1 (failure)
     ----- stderr -----
@@ -951,16 +895,14 @@ fn tool_upgrade_not_stop_if_upgrade_fails() -> anyhow::Result<()> {
 fn tool_upgrade_settings() {
     let context = uv_test::test_context!("3.12")
         .with_filtered_counts()
-        .with_filtered_exe_suffix();
-    let tool_dir = context.temp_dir.child("tools");
+        .with_filtered_exe_suffix()
+        .with_tool_dirs();
     let bin_dir = context.temp_dir.child("bin");
 
     // Install `black` with `lowest-direct`.
     uv_snapshot!(context.filters(), context.tool_install()
         .arg("black>=23")
         .arg("--resolution=lowest-direct")
-        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -979,8 +921,6 @@ fn tool_upgrade_settings() {
     // Upgrade `black`. This should be a no-op, since the resolution is set to `lowest-direct`.
     uv_snapshot!(context.filters(), context.tool_upgrade()
         .arg("black")
-        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -991,8 +931,6 @@ fn tool_upgrade_settings() {
     uv_snapshot!(context.filters(), context.tool_upgrade()
         .arg("black")
         .arg("--resolution=highest")
-        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -1005,15 +943,15 @@ fn tool_upgrade_settings() {
 
 #[test]
 fn tool_upgrade_no_binary_package_env_var() {
-    let context = uv_test::test_context!("3.12").with_filtered_exe_suffix();
+    let context = uv_test::test_context!("3.12")
+        .with_filtered_exe_suffix()
+        .with_tool_dirs();
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
     uv_snapshot!(context.filters(), context.tool_install()
         .arg("black>=23")
         .arg("--resolution=lowest-direct")
-        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -1033,8 +971,6 @@ fn tool_upgrade_no_binary_package_env_var() {
         .arg("black")
         .arg("--resolution=highest")
         .env(EnvVars::UV_NO_BINARY_PACKAGE, "iniconfig")
-        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -1058,8 +994,8 @@ fn tool_upgrade_no_binary_package_env_var() {
 fn tool_upgrade_respect_constraints() {
     let context = uv_test::test_context!("3.12")
         .with_filtered_counts()
-        .with_filtered_exe_suffix();
-    let tool_dir = context.temp_dir.child("tools");
+        .with_filtered_exe_suffix()
+        .with_tool_dirs();
     let bin_dir = context.temp_dir.child("bin");
 
     // Install `babel` from Test PyPI, to get an outdated version.
@@ -1067,8 +1003,6 @@ fn tool_upgrade_respect_constraints() {
         .arg("babel<2.10")
         .arg("--index-url")
         .arg("https://test.pypi.org/simple/")
-        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -1085,8 +1019,6 @@ fn tool_upgrade_respect_constraints() {
         .arg("babel")
         .arg("--index-url")
         .arg("https://pypi.org/simple/")
-        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -1103,8 +1035,8 @@ fn tool_upgrade_respect_constraints() {
 fn tool_upgrade_constraint() {
     let context = uv_test::test_context!("3.12")
         .with_filtered_counts()
-        .with_filtered_exe_suffix();
-    let tool_dir = context.temp_dir.child("tools");
+        .with_filtered_exe_suffix()
+        .with_tool_dirs();
     let bin_dir = context.temp_dir.child("bin");
 
     // Install `babel` from Test PyPI, to get an outdated version.
@@ -1112,8 +1044,6 @@ fn tool_upgrade_constraint() {
         .arg("babel")
         .arg("--index-url")
         .arg("https://test.pypi.org/simple/")
-        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -1130,8 +1060,6 @@ fn tool_upgrade_constraint() {
         .arg("babel<2.12.0")
         .arg("--index-url")
         .arg("https://pypi.org/simple/")
-        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -1150,8 +1078,6 @@ fn tool_upgrade_constraint() {
         .arg("https://pypi.org/simple/")
         .arg("--upgrade-package")
         .arg("babel<2.14.0")
-        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -1169,8 +1095,6 @@ fn tool_upgrade_constraint() {
         .arg("babel")
         .arg("--index-url")
         .arg("https://pypi.org/simple/")
-        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -1187,8 +1111,6 @@ fn tool_upgrade_constraint() {
         .arg("--index-url")
         .arg("https://pypi.org/simple/")
         .arg("--upgrade")
-        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -1203,8 +1125,8 @@ fn tool_upgrade_constraint() {
 fn tool_upgrade_with() {
     let context = uv_test::test_context!("3.12")
         .with_filtered_counts()
-        .with_filtered_exe_suffix();
-    let tool_dir = context.temp_dir.child("tools");
+        .with_filtered_exe_suffix()
+        .with_tool_dirs();
     let bin_dir = context.temp_dir.child("bin");
 
     // Install `babel` from Test PyPI, to get an outdated version.
@@ -1212,8 +1134,6 @@ fn tool_upgrade_with() {
         .arg("babel==2.6.0")
         .arg("--index-url")
         .arg("https://test.pypi.org/simple/")
-        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -1230,8 +1150,6 @@ fn tool_upgrade_with() {
         .arg("babel")
         .arg("--index-url")
         .arg("https://pypi.org/simple/")
-        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -1247,7 +1165,8 @@ fn tool_upgrade_with() {
 fn tool_upgrade_python() {
     let context = uv_test::test_context_with_versions!(&["3.11", "3.12"])
         .with_filtered_counts()
-        .with_filtered_exe_suffix();
+        .with_filtered_exe_suffix()
+        .with_tool_dirs();
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
@@ -1256,8 +1175,6 @@ fn tool_upgrade_python() {
     .arg("--index-url")
     .arg("https://test.pypi.org/simple/")
     .arg("--python").arg("3.11")
-    .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-    .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
     .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -1273,8 +1190,6 @@ fn tool_upgrade_python() {
         context.filters(),
         context.tool_upgrade().arg("babel")
         .arg("--python").arg("3.12")
-        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -1300,7 +1215,8 @@ fn tool_upgrade_python() {
 fn tool_upgrade_python_with_all() {
     let context = uv_test::test_context_with_versions!(&["3.11", "3.12"])
         .with_filtered_counts()
-        .with_filtered_exe_suffix();
+        .with_filtered_exe_suffix()
+        .with_tool_dirs();
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
@@ -1309,8 +1225,6 @@ fn tool_upgrade_python_with_all() {
     .arg("--index-url")
     .arg("https://test.pypi.org/simple/")
     .arg("--python").arg("3.11")
-    .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-    .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
     .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -1327,8 +1241,6 @@ fn tool_upgrade_python_with_all() {
     .arg("--index-url")
     .arg("https://test.pypi.org/simple/")
     .arg("--python").arg("3.11")
-    .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-    .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
     .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -1343,8 +1255,6 @@ fn tool_upgrade_python_with_all() {
         context.filters(),
         context.tool_upgrade().arg("--all")
         .arg("--python").arg("3.12")
-        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -1384,8 +1294,8 @@ fn tool_upgrade_python_with_all() {
 fn test_tool_upgrade_additional_entrypoints() {
     let context = uv_test::test_context_with_versions!(&["3.11", "3.12"])
         .with_filtered_counts()
-        .with_filtered_exe_suffix();
-    let tool_dir = context.temp_dir.child("tools");
+        .with_filtered_exe_suffix()
+        .with_tool_dirs();
     let bin_dir = context.temp_dir.child("bin");
 
     // Install `babel` entrypoint, and all additional ones from `black` too.
@@ -1395,8 +1305,6 @@ fn test_tool_upgrade_additional_entrypoints() {
         .arg("--with-executables-from")
         .arg("black")
         .arg("babel==2.14.0")
-        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -1420,8 +1328,6 @@ fn test_tool_upgrade_additional_entrypoints() {
         .arg("--python")
         .arg("3.12")
         .arg("babel")
-        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -1449,8 +1355,8 @@ fn test_tool_upgrade_additional_entrypoints() {
 fn tool_upgrade_excludes() {
     let context = uv_test::test_context!("3.12")
         .with_filtered_counts()
-        .with_filtered_exe_suffix();
-    let tool_dir = context.temp_dir.child("tools");
+        .with_filtered_exe_suffix()
+        .with_tool_dirs();
     let bin_dir = context.temp_dir.child("bin");
 
     let excludes_txt = context.temp_dir.child("excludes.txt");
@@ -1464,8 +1370,6 @@ fn tool_upgrade_excludes() {
         .arg("excludes.txt")
         .arg("--index-url")
         .arg("https://test.pypi.org/simple/")
-        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -1482,8 +1386,6 @@ fn tool_upgrade_excludes() {
         .arg("babel")
         .arg("--index-url")
         .arg("https://pypi.org/simple/")
-        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -1515,7 +1417,8 @@ async fn tool_upgrade_index_url_keyring_auth() -> Result<()> {
     let proxy = crate::pypi_proxy::start().await;
     let context = uv_test::test_context!("3.12")
         .with_exclude_newer("2025-01-18T00:00:00Z")
-        .with_filtered_exe_suffix();
+        .with_filtered_exe_suffix()
+        .with_tool_dirs();
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
     let path = std::env::join_paths([venv_bin_path(&keyring_context.venv), bin_dir.to_path_buf()])?;
@@ -1541,8 +1444,6 @@ async fn tool_upgrade_index_url_keyring_auth() -> Result<()> {
         .arg("--config-file")
         .arg(uv_toml.as_os_str())
         .env_remove(EnvVars::UV_DEFAULT_INDEX)
-        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::KEYRING_TEST_CREDENTIALS, &credentials)
         .env(EnvVars::PATH, &path)
         .assert()
@@ -1575,8 +1476,6 @@ async fn tool_upgrade_index_url_keyring_auth() -> Result<()> {
         .arg("--config-file")
         .arg(uv_toml.as_os_str())
         .env_remove(EnvVars::UV_DEFAULT_INDEX)
-        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::KEYRING_TEST_CREDENTIALS, &credentials)
         .env(EnvVars::PATH, &path), @"
     exit_code: 0 (success)
@@ -1600,7 +1499,8 @@ async fn tool_upgrade_invalid_auth() -> Result<()> {
     let context = uv_test::test_context!("3.12")
         .with_exclude_newer("2025-01-18T00:00:00Z")
         .with_filtered_counts()
-        .with_filtered_exe_suffix();
+        .with_filtered_exe_suffix()
+        .with_tool_dirs();
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
@@ -1610,8 +1510,6 @@ async fn tool_upgrade_invalid_auth() -> Result<()> {
         .arg("executable-application")
         .arg("--index")
         .arg(proxy.authenticated_url("public", "heron", "/basic-auth/simple"))
-        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -1645,8 +1543,6 @@ async fn tool_upgrade_invalid_auth() -> Result<()> {
     // with a credentials error rather than silently reporting "Nothing to upgrade".
     uv_snapshot!(context.filters(), context.tool_upgrade()
         .arg("executable-application")
-        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 1 (failure)
     ----- stderr -----
@@ -1660,7 +1556,7 @@ async fn tool_upgrade_invalid_auth() -> Result<()> {
 
 #[test]
 fn tool_upgrade_writes_preview_lock() {
-    let context = uv_test::test_context!("3.12");
+    let context = uv_test::test_context!("3.12").with_tool_dirs();
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
@@ -1670,8 +1566,6 @@ fn tool_upgrade_writes_preview_lock() {
         .arg("--no-index")
         .arg("--find-links")
         .arg(context.workspace_root.join("test/links"))
-        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str())
         .assert()
         .success();
@@ -1682,8 +1576,6 @@ fn tool_upgrade_writes_preview_lock() {
         .tool_upgrade()
         .arg("simple-launcher")
         .env(EnvVars::UV_PREVIEW_FEATURES, "tool-install-locks")
-        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str())
         .assert()
         .success();
@@ -1764,8 +1656,7 @@ async fn mount_simple_launcher_index(server: &MockServer, hash: &str, wheel: &[u
 /// source preference remains valid, while the index changes the advertised hash before upgrade.
 #[tokio::test]
 async fn tool_upgrade_lock_verifies_hashes() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
-    let tool_dir = context.temp_dir.child("tools");
+    let context = uv_test::test_context!("3.12").with_tool_dirs();
     let bin_dir = context.temp_dir.child("bin");
     let wheel_filename = "simple_launcher-0.1.0-py3-none-any.whl";
     let wheel = fs_err::read(
@@ -1788,8 +1679,6 @@ async fn tool_upgrade_lock_verifies_hashes() -> Result<()> {
         .arg("simple-launcher")
         .arg("--index-url")
         .arg(&index_url)
-        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str())
         .assert()
         .success();
@@ -1809,8 +1698,6 @@ async fn tool_upgrade_lock_verifies_hashes() -> Result<()> {
         .arg("--reinstall")
         .arg("--no-cache")
         .env(EnvVars::UV_PREVIEW_FEATURES, "tool-install-locks")
-        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 1 (failure)
     ----- stderr -----
@@ -1834,7 +1721,8 @@ async fn tool_upgrade_lock_verifies_hashes() -> Result<()> {
 fn tool_upgrade_lock_uses_requested_python() -> Result<()> {
     let context = uv_test::test_context_with_versions!(&["3.11", "3.12"])
         .with_filtered_counts()
-        .with_filtered_exe_suffix();
+        .with_filtered_exe_suffix()
+        .with_tool_dirs();
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
     let local_package = context.temp_dir.child("simple-launcher");
@@ -1864,8 +1752,6 @@ fn tool_upgrade_lock_uses_requested_python() -> Result<()> {
         .arg("--python")
         .arg("3.11")
         .env(EnvVars::UV_PREVIEW_FEATURES, "tool-install-locks")
-        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str())
         .assert()
         .success();
@@ -1876,8 +1762,6 @@ fn tool_upgrade_lock_uses_requested_python() -> Result<()> {
         .arg("--python")
         .arg("3.12")
         .env(EnvVars::UV_PREVIEW_FEATURES, "tool-install-locks")
-        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str())
         .assert()
         .success();
