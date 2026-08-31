@@ -13,17 +13,22 @@ use tar_codec::{
 use tokio_util::compat::{FuturesAsyncReadCompatExt, TokioAsyncReadCompatExt};
 use tracing::{debug, warn};
 
+use uv_cache::Cache;
 use uv_distribution_filename::{LegacySourceDistExtension, SourceDistExtension};
 use uv_preview::PreviewFeature;
 
 use crate::archive_path::SanitizedArchivePath;
 use crate::dirhash::{
-    DirhashTree, HashedFile, UnhashedFile, UnzipOutput, blake3_copy_with_buffer,
-    directory_tree_from_extracted,
+    DirhashTree, HashedFile, MAX_BUFFERED_FILE_SIZE, UnhashedFile, UnzipOutput,
+    blake3_copy_with_buffer, directory_tree_from_extracted,
 };
 use crate::{Error, insecure_no_validate};
 
 const DEFAULT_BUF_SIZE: usize = 128 * 1024;
+// Streaming ZIPs reveal executable permissions in the central directory. Bound both the bytes
+// and number of files retained until then; later entries continue through ordinary extraction.
+const MAX_BUFFERED_WHEEL_SIZE: usize = 1024 * 1024;
+const MAX_BUFFERED_FILES: usize = 1024;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct LocalHeaderEntry {
@@ -41,6 +46,7 @@ struct LocalHeaderEntry {
     data_descriptor: bool,
     /// The digest of the extracted file contents.
     digest: Option<blake3::Hash>,
+    contents: Option<Vec<u8>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -66,7 +72,8 @@ pub async fn unzip<R: tokio::io::AsyncRead + Unpin>(
     reader: R,
     target: impl AsRef<Path>,
 ) -> Result<Vec<UnhashedFile>, Error> {
-    let UnzipOutput::Unhashed(files) = Box::pin(unzip_inner(reader, target, false)).await? else {
+    let UnzipOutput::Unhashed(files) = Box::pin(unzip_inner(reader, target, false, None)).await?
+    else {
         return Err(Error::Io(std::io::Error::other(
             "streaming ZIP hash tree was unexpectedly computed",
         )));
@@ -81,11 +88,15 @@ pub async fn unzip<R: tokio::io::AsyncRead + Unpin>(
 /// followed as symlinks; non-directory entries are materialized and hashed as regular files.
 ///
 /// See [`unzip`] for details.
+/// When a cache is provided, a bounded set of small files is retained until the central directory
+/// supplies their executable status, then linked directly from existing file objects when possible.
 pub async fn unzip_and_hash<R: tokio::io::AsyncRead + Unpin>(
     reader: R,
     target: impl AsRef<Path>,
+    cache: Option<&Cache>,
 ) -> Result<(Vec<HashedFile>, DirhashTree), Error> {
-    let UnzipOutput::Hashed { files, tree } = Box::pin(unzip_inner(reader, target, true)).await?
+    let UnzipOutput::Hashed { files, tree } =
+        Box::pin(unzip_inner(reader, target, true, cache)).await?
     else {
         return Err(Error::Io(std::io::Error::other(
             "streaming ZIP hash tree was not computed",
@@ -98,9 +109,11 @@ async fn unzip_inner<R: tokio::io::AsyncRead + Unpin>(
     reader: R,
     target: impl AsRef<Path>,
     hash_contents: bool,
+    cache: Option<&Cache>,
 ) -> Result<UnzipOutput, Error> {
     // Determine whether ZIP validation is disabled.
     let skip_validation = insecure_no_validate();
+    let cache = cache.filter(|_| !skip_validation);
 
     let target = target.as_ref();
     let mut reader = futures::io::BufReader::with_capacity(DEFAULT_BUF_SIZE, reader.compat());
@@ -113,6 +126,8 @@ async fn unzip_inner<R: tokio::io::AsyncRead + Unpin>(
     let mut hashed_files = Vec::new();
     let mut digest_directories = FxHashSet::default();
     let mut hash_buffer = Vec::new();
+    let mut buffered_size = 0;
+    let mut buffered_files = 0;
     let mut offset = 0;
 
     while let Some(mut entry) = zip.next_with_entry().await? {
@@ -157,6 +172,7 @@ async fn unzip_inner<R: tokio::io::AsyncRead + Unpin>(
         // Either create the directory or write the file to disk.
         let path = target.join(relpath.as_path());
         let is_dir = zip_entry.dir()?;
+        let mut contents = None;
         let computed = if is_dir {
             if directories.insert(path.clone()) {
                 fs_err::tokio::create_dir_all(path)
@@ -201,12 +217,40 @@ async fn unzip_inner<R: tokio::io::AsyncRead + Unpin>(
                 }
             }
 
+            // Retain only small entries until their executable status is known. Read one extra
+            // byte so an incorrect local-header size cannot grow the buffer without bound.
+            let mut prefix = Vec::new();
+            if cache.is_some()
+                && expected_uncompressed_size <= MAX_BUFFERED_FILE_SIZE as u64
+                && buffered_size <= MAX_BUFFERED_WHEEL_SIZE - MAX_BUFFERED_FILE_SIZE
+                && buffered_files < MAX_BUFFERED_FILES
+                && !relpath.as_path().ends_with("RECORD")
+            {
+                entry
+                    .reader_mut()
+                    .take(MAX_BUFFERED_FILE_SIZE as u64 + 1)
+                    .read_to_end(&mut prefix)
+                    .await
+                    .map_err(Error::io_or_zip)?;
+                if prefix.len() <= MAX_BUFFERED_FILE_SIZE {
+                    buffered_size += prefix.len();
+                    buffered_files += 1;
+                    contents = Some(std::mem::take(&mut prefix));
+                }
+            }
+
             // We don't know the file permissions here, because we haven't seen the central directory yet.
-            let (actual_uncompressed_size, digest, reader) =
+            let (actual_uncompressed_size, digest, reader) = if let Some(contents) = &contents {
+                (
+                    contents.len() as u64,
+                    Some(blake3::hash(contents)),
+                    entry.reader_mut(),
+                )
+            } else {
                 match fs_err::tokio::File::create_new(&path).await {
                     Ok(file) => {
                         // Write the file to disk.
-                        let size = zip_entry.uncompressed_size();
+                        let size = expected_uncompressed_size;
                         let mut writer = if let Ok(size) = usize::try_from(size) {
                             tokio::io::BufWriter::with_capacity(
                                 std::cmp::min(size, 1024 * 1024),
@@ -217,10 +261,13 @@ async fn unzip_inner<R: tokio::io::AsyncRead + Unpin>(
                         };
                         let mut reader = entry.reader_mut().compat();
                         let (bytes_read, digest) = if hash_contents {
-                            let (bytes_read, digest) =
-                                blake3_copy_with_buffer(&mut reader, &mut writer, &mut hash_buffer)
-                                    .await
-                                    .map_err(Error::io_or_zip)?;
+                            let (bytes_read, digest) = blake3_copy_with_buffer(
+                                tokio::io::AsyncReadExt::chain(prefix.as_slice(), &mut reader),
+                                &mut writer,
+                                &mut hash_buffer,
+                            )
+                            .await
+                            .map_err(Error::io_or_zip)?;
                             (bytes_read, Some(digest))
                         } else {
                             let mut bytes_read = 0;
@@ -277,7 +324,8 @@ async fn unzip_inner<R: tokio::io::AsyncRead + Unpin>(
                         (bytes_read as u64, digest, entry_reader)
                     }
                     Err(err) => return Err(Error::Io(err)),
-                };
+                }
+            };
 
             // Validate the uncompressed size.
             if actual_uncompressed_size != expected_uncompressed_size {
@@ -393,6 +441,7 @@ async fn unzip_inner<R: tokio::io::AsyncRead + Unpin>(
                     compressed_size: expected_compressed_size,
                     data_descriptor: expected_data_descriptor,
                     digest: computed.digest,
+                    contents,
                 });
             }
             std::collections::hash_map::Entry::Occupied(..) => {
@@ -447,6 +496,7 @@ async fn unzip_inner<R: tokio::io::AsyncRead + Unpin>(
                     continue;
                 };
                 let is_dir = entry.dir()?;
+                let mut reused = false;
 
                 // Validate that various fields are consistent between the local file header and the
                 // central directory entry.
@@ -506,14 +556,36 @@ async fn unzip_inner<R: tokio::io::AsyncRead + Unpin>(
                                 digest_directories.insert(relpath.clone());
                             }
                         } else if let Some(digest) = local_header.digest {
-                            hashed_files.push(HashedFile::new(
+                            let mut file = HashedFile::new(
                                 relpath.clone(),
                                 local_header.uncompressed_size,
                                 digest,
                                 entry
                                     .unix_permissions()
                                     .is_some_and(|mode| mode & 0o111 != 0),
-                            ));
+                            );
+                            if let Some(contents) = local_header.contents {
+                                let path = target.join(relpath.as_path());
+                                if let Some(cache) = cache {
+                                    reused =
+                                        fs_err::tokio::hard_link(file.cache_path(cache), &path)
+                                            .await
+                                            .is_ok();
+                                }
+                                if !reused {
+                                    let mut output = fs_err::tokio::File::create_new(&path)
+                                        .await
+                                        .map_err(Error::Io)?;
+                                    tokio::io::AsyncWriteExt::write_all(&mut output, &contents)
+                                        .await
+                                        .map_err(Error::Io)?;
+                                    tokio::io::AsyncWriteExt::flush(&mut output)
+                                        .await
+                                        .map_err(Error::Io)?;
+                                }
+                            }
+                            file.reused = reused;
+                            hashed_files.push(file);
                         } else {
                             files.push(UnhashedFile::new(
                                 relpath.to_path_buf(),
@@ -539,7 +611,7 @@ async fn unzip_inner<R: tokio::io::AsyncRead + Unpin>(
                     use std::fs::Permissions;
                     use std::os::unix::fs::PermissionsExt;
 
-                    if is_dir {
+                    if is_dir || reused {
                         continue;
                     }
 

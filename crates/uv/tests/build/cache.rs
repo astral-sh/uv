@@ -6,15 +6,19 @@ use anyhow::{Context, Result};
 use assert_fs::prelude::*;
 use async_zip::base::write::ZipFileWriter;
 use async_zip::{Compression, ZipEntryBuilder};
+use fs_err as fs;
+use fs_err::File;
+use futures::AsyncWriteExt;
 use futures::executor::block_on;
-use insta::{allow_duplicates, assert_snapshot};
+use insta::{allow_duplicates, assert_debug_snapshot, assert_snapshot};
 use predicates::prelude::predicate;
 use wiremock::{
     Mock, MockServer, ResponseTemplate,
     matchers::{method, path},
 };
 
-use uv_cache::CacheBucket;
+use uv_cache::{ArchiveFileId, Cache, CacheBucket};
+use uv_extract::dirhash::dirhash_path;
 use uv_fs::PortablePath;
 #[cfg(unix)]
 use uv_fs::create_symlink;
@@ -622,6 +626,181 @@ fn binary_payload_copy_fallback_uses_archive_file_store() -> Result<()> {
         BINARY_PAYLOAD_CONTENTS,
     );
 
+    Ok(())
+}
+
+#[tokio::test]
+async fn small_files_reuse_cached_objects_during_extraction() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let wheel = binary_payload_wheel(&context)?;
+    uv_snapshot!(context.filters(), context.pip_install()
+        .args(["--preview-features", "content-addressed-cache"])
+        .arg(&wheel), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + binary-payload==0.1.0 (from file://[TEMP_DIR]/binary_payload-0.1.0-py3-none-any.whl)
+    ");
+
+    let cache = Cache::from_path(context.cache_dir.path()).init().await?;
+    for streaming in [false, true] {
+        let target = context.temp_dir.child(format!("extracted-{streaming}"));
+        target.create_dir_all()?;
+        let (mut files, tree) = if streaming {
+            uv_extract::stream::unzip_and_hash(
+                fs::read(&wheel)?.as_slice(),
+                target.path(),
+                Some(&cache),
+            )
+            .await?
+        } else {
+            uv_extract::unzip_and_hash(File::open(&wheel)?, target.path(), Some(&cache))?
+        };
+        assert_eq!(tree.hash(), dirhash_path(target.path())?);
+        files.sort_by(|left, right| left.path().cmp(right.path()));
+        let mut snapshot = String::new();
+        for file in files {
+            let object = cache.archive_file(&ArchiveFileId::from_digest(&file.object_digest_hex()));
+            let shared =
+                uv_fs::is_same_file_allow_missing(&target.join(file.path()), &object) == Some(true);
+            assert_eq!(file.is_reused(), shared);
+            writeln!(
+                snapshot,
+                "{}: shared={shared}",
+                PortablePath::from(file.path())
+            )?;
+        }
+        allow_duplicates! {
+            assert_snapshot!(snapshot, @"
+            binary_payload/__init__.py: shared=true
+            binary_payload/large.dat: shared=false
+            binary_payload/module.py: shared=true
+            binary_payload/native.DLL: shared=true
+            binary_payload/native.dylib: shared=true
+            binary_payload/native.pyd: shared=true
+            binary_payload/native.so: shared=true
+            binary_payload/plain.so: shared=true
+            binary_payload/tool: shared=true
+            binary_payload/versioned.so.1: shared=true
+            binary_payload/versioned.so.1.2: shared=true
+            binary_payload-0.1.0.dist-info/METADATA: shared=true
+            binary_payload-0.1.0.dist-info/RECORD: shared=false
+            binary_payload-0.1.0.dist-info/WHEEL: shared=true
+            binary_payload-0.1.0.dist-info/ignored.so: shared=true
+            ");
+        }
+    }
+    // Corrupt the first file's CRC in both ZIP headers. An existing object with identical
+    // contents must not bypass validation of the archive being extracted.
+    let mut contents = fs::read(&wheel)?;
+    let central_directory = contents
+        .windows(4)
+        .position(|bytes| bytes == b"PK\x01\x02")
+        .context("missing central directory")?;
+    contents[14] ^= 1;
+    contents[central_directory + 16] ^= 1;
+    fs::write(&wheel, &contents)?;
+    for streaming in [false, true] {
+        let target = context.temp_dir.child(format!("invalid-{streaming}"));
+        target.create_dir_all()?;
+        let result = if streaming {
+            uv_extract::stream::unzip_and_hash(contents.as_slice(), target.path(), Some(&cache))
+                .await
+        } else {
+            uv_extract::unzip_and_hash(File::open(&wheel)?, target.path(), Some(&cache))
+        };
+        allow_duplicates! {
+            assert_debug_snapshot!(result.map(|_| ()), @r#"
+            Err(
+                BadCrc32 {
+                    path: "binary_payload/__init__.py",
+                    computed: 0,
+                    expected: 1,
+                },
+            )
+            "#);
+        }
+    }
+    Ok(())
+}
+
+#[tokio::test]
+async fn cached_streaming_extraction_limits_buffered_files() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let cache = Cache::from_path(context.cache_dir.path()).init().await?;
+    let wheel = context.temp_dir.child("many-files.zip");
+    let mut writer = ZipFileWriter::new(Vec::new());
+    for index in 0..1100 {
+        let entry = ZipEntryBuilder::new(format!("module_{index}.py").into(), Compression::Stored);
+        writer.write_entry_whole(entry, b"VALUE = 1\n").await?;
+    }
+    fs::write(wheel.path(), writer.close().await?)?;
+    let source = context.temp_dir.child("source");
+    source.create_dir_all()?;
+    let (files, expected_tree) =
+        uv_extract::unzip_and_hash(File::open(wheel.path())?, source.path(), None)?;
+    let file = files.first().context("missing extracted file")?;
+    let object = cache.archive_file(&ArchiveFileId::from_digest(&file.object_digest_hex()));
+    fs::create_dir_all(object.parent().context("missing cache shard")?)?;
+    fs::hard_link(source.join(file.path()), &object)?;
+
+    let target = context.temp_dir.child("target");
+    target.create_dir_all()?;
+    let (files, tree) = uv_extract::stream::unzip_and_hash(
+        fs::read(wheel.path())?.as_slice(),
+        target.path(),
+        Some(&cache),
+    )
+    .await?;
+    assert_eq!(tree.hash(), expected_tree.hash());
+    assert_eq!(tree.hash(), dirhash_path(target.path())?);
+    assert_snapshot!(format!("files={}, reused={}", files.len(), files.iter().filter(|file| file.is_reused()).count()), @"files=1100, reused=1024");
+    Ok(())
+}
+
+#[tokio::test]
+async fn cached_streaming_extraction_limits_buffered_bytes() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let cache = Cache::from_path(context.cache_dir.path()).init().await?;
+    let wheel = context.temp_dir.child("buffered.zip");
+    let mut writer = ZipFileWriter::new(Vec::new());
+    for index in 0..20 {
+        let entry = ZipEntryBuilder::new(format!("payload_{index}").into(), Compression::Deflate);
+        // Streaming entries omit sizes in the local header. The first entry exceeds the
+        // per-file limit; the remaining entries exceed the aggregate buffering limit.
+        let mut entry = writer.write_entry_stream(entry).await?;
+        entry
+            .write_all(&vec![42; 64 * 1024 + usize::from(index == 0)])
+            .await?;
+        entry.close().await?;
+    }
+    fs::write(wheel.path(), writer.close().await?)?;
+
+    let source = context.temp_dir.child("source");
+    source.create_dir_all()?;
+    let (files, expected_tree) =
+        uv_extract::unzip_and_hash(File::open(wheel.path())?, source.path(), None)?;
+    for file in files {
+        let object = cache.archive_file(&ArchiveFileId::from_digest(&file.object_digest_hex()));
+        if !object.exists() {
+            fs::create_dir_all(object.parent().context("missing cache shard")?)?;
+            fs::hard_link(source.join(file.path()), &object)?;
+        }
+    }
+
+    let target = context.temp_dir.child("target");
+    target.create_dir_all()?;
+    let (files, tree) = uv_extract::stream::unzip_and_hash(
+        fs::read(wheel.path())?.as_slice(),
+        target.path(),
+        Some(&cache),
+    )
+    .await?;
+    assert_eq!(tree.hash(), expected_tree.hash());
+    assert_eq!(tree.hash(), dirhash_path(target.path())?);
+    assert_snapshot!(format!("files={}, reused={}", files.len(), files.iter().filter(|file| file.is_reused()).count()), @"files=20, reused=16");
     Ok(())
 }
 

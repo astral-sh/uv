@@ -1,5 +1,7 @@
 use std::path::{Path, PathBuf};
 
+use uv_cache::Cache;
+
 use crate::Error;
 use crate::dirhash::{DirhashTree, HashedFile, UnhashedFile};
 
@@ -18,11 +20,13 @@ pub fn unzip(reader: fs_err::File, target: &Path) -> Result<Vec<UnhashedFile>, E
 /// regular files.
 ///
 /// Returns the list of unpacked files and their sizes, along with the hash tree.
+/// When a cache is provided, small files can reuse existing file objects without writing a copy.
 pub fn unzip_and_hash(
     reader: fs_err::File,
     target: &Path,
+    cache: Option<&Cache>,
 ) -> Result<(Vec<HashedFile>, DirhashTree), Error> {
-    crate::dirhash::unzip_and_hash(reader, target)
+    crate::dirhash::unzip_and_hash(reader, target, cache)
 }
 
 /// Extract the top-level directory from an unpacked archive.

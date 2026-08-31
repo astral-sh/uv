@@ -16428,7 +16428,7 @@ fn handle_record_mismatches() -> Result<()> {
     // Healing changes the extracted tree, so the archive ID must reflect the repaired RECORD.
     let extracted = context.temp_dir.join("foo-extracted");
     let (hashed_files, unhealed_tree) =
-        uv_extract::unzip_and_hash(File::open(&repacked_wheel)?, &extracted)?;
+        uv_extract::unzip_and_hash(File::open(&repacked_wheel)?, &extracted, None)?;
     let unhealed_digest = DirectoryDigest::from(unhealed_tree.hash());
     assert!(
         validate_and_heal_record(

@@ -74,6 +74,7 @@ use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 mod archive;
 mod seek;
 
+pub(crate) use archive::MAX_BUFFERED_FILE_SIZE;
 pub(crate) use archive::UnzipOutput;
 pub(crate) use archive::directory_tree_from_extracted;
 pub use archive::{DirectoryDigest, HashedFile, UnhashedFile};

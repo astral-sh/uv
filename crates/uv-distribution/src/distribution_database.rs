@@ -716,6 +716,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                             &mut reader,
                             temp_dir.path(),
                             self.content_addressed_cache,
+                            self.build_context.cache(),
                         )
                         .await
                         .map_err(|err| Error::Extract(filename.to_string(), err))?
@@ -724,6 +725,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                         &mut hasher,
                         temp_dir.path(),
                         self.content_addressed_cache,
+                        self.build_context.cache(),
                     )
                     .await
                     .map_err(|err| Error::Extract(filename.to_string(), err))?,
@@ -939,8 +941,9 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
 
                 let target = temp_dir.path().to_owned();
                 let file = file.into_std().await;
+                let cache = self.build_context.cache().clone();
                 let mut extracted = tokio::task::spawn_blocking(move || {
-                    ExtractedWheel::extract_seekable(file, &target, content_addressed_cache)
+                    ExtractedWheel::extract_seekable(file, &target, content_addressed_cache, &cache)
                 })
                 .await?
                 .map_err(|err| Error::Extract(filename.to_string(), err))?;
@@ -1138,6 +1141,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 &mut hasher,
                 temp_dir.path(),
                 self.content_addressed_cache,
+                self.build_context.cache(),
             )
             .await
             .map_err(|err| Error::Extract(filename.to_string(), err))?;
@@ -1193,6 +1197,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         let (temp_dir, mut extracted) = tokio::task::spawn_blocking({
             let path = path.to_owned();
             let root = self.build_context.cache().root().to_path_buf();
+            let cache = self.build_context.cache().clone();
             move || -> Result<_, Error> {
                 // Unzip the wheel into a temporary directory.
                 let temp_dir = tempfile::tempdir_in(root).map_err(Error::CacheWrite)?;
@@ -1201,6 +1206,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                     reader,
                     temp_dir.path(),
                     content_addressed_cache,
+                    &cache,
                 )
                 .map_err(|err| Error::Extract(path.to_string_lossy().into_owned(), err))?;
                 Ok((temp_dir, extracted))
@@ -1291,12 +1297,14 @@ impl ExtractedWheel {
         reader: R,
         target: &Path,
         content_addressed: bool,
+        cache: &Cache,
     ) -> Result<Self, uv_extract::Error>
     where
         R: AsyncRead + Unpin,
     {
         if content_addressed {
-            let (files, tree) = uv_extract::stream::unzip_and_hash(reader, target).await?;
+            let cache = cache.bucket(CacheBucket::Files).is_dir().then_some(cache);
+            let (files, tree) = uv_extract::stream::unzip_and_hash(reader, target, cache).await?;
             Ok(Self::Hashed(HashedWheel { files, tree }))
         } else {
             let files = uv_extract::stream::unzip(reader, target).await?;
@@ -1309,9 +1317,11 @@ impl ExtractedWheel {
         reader: fs_err::File,
         target: &Path,
         content_addressed: bool,
+        cache: &Cache,
     ) -> Result<Self, uv_extract::Error> {
         if content_addressed {
-            let (files, tree) = uv_extract::unzip_and_hash(reader, target)?;
+            let cache = cache.bucket(CacheBucket::Files).is_dir().then_some(cache);
+            let (files, tree) = uv_extract::unzip_and_hash(reader, target, cache)?;
             Ok(Self::Hashed(HashedWheel { files, tree }))
         } else {
             let files = uv_extract::unzip(reader, target)?;
@@ -1366,7 +1376,7 @@ fn persist_archive_files(cache: &Cache, archive: &Path, files: &[HashedFile]) ->
     let targets = files
         .par_iter()
         // Keep RECORD private, since it may have been healed after hashing.
-        .filter(|file| !file.path().ends_with("RECORD"))
+        .filter(|file| !file.is_reused() && !file.path().ends_with("RECORD"))
         .map(|file| {
             let id = ArchiveFileId::from_digest(&file.object_digest_hex());
             (archive.join(file.path()), cache.archive_file(&id))

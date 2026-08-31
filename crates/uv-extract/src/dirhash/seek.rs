@@ -1,5 +1,6 @@
 //! Directory hashing while extracting seekable ZIP archives.
 
+use std::io;
 use std::path::{Path, PathBuf};
 use std::pin::pin;
 use std::sync::Mutex;
@@ -15,10 +16,12 @@ use rayon::prelude::*;
 use rustc_hash::FxHashSet;
 use tokio_util::compat::{FuturesAsyncReadCompatExt, FuturesAsyncWriteCompatExt};
 use tracing::warn;
+use uv_cache::Cache;
 use uv_configuration::initialize_rayon_once;
 
 use super::{
-    DirhashTree, HashedFile, UnhashedFile, UnzipOutput, blake3_copy, directory_tree_from_extracted,
+    DirhashTree, HashedFile, MAX_BUFFERED_FILE_SIZE, UnhashedFile, UnzipOutput, blake3_copy,
+    directory_tree_from_extracted,
 };
 use crate::archive_path::SanitizedArchivePath;
 
@@ -29,13 +32,14 @@ enum ExtractedEntry {
         size: u64,
         digest: Option<blake3::Hash>,
         executable: bool,
+        reused: bool,
     },
     Directory(SanitizedArchivePath),
 }
 
 /// Unzip a `.zip` archive into the target directory.
 pub(crate) fn unzip(reader: fs_err::File, target: &Path) -> Result<Vec<UnhashedFile>, Error> {
-    let UnzipOutput::Unhashed(files) = unzip_inner(reader, target, false)? else {
+    let UnzipOutput::Unhashed(files) = unzip_inner(reader, target, false, None)? else {
         return Err(Error::Io(std::io::Error::other(
             "seekable ZIP hash tree was unexpectedly computed",
         )));
@@ -51,8 +55,9 @@ pub(crate) fn unzip(reader: fs_err::File, target: &Path) -> Result<Vec<UnhashedF
 pub(crate) fn unzip_and_hash(
     reader: fs_err::File,
     target: &Path,
+    cache: Option<&Cache>,
 ) -> Result<(Vec<HashedFile>, DirhashTree), Error> {
-    let UnzipOutput::Hashed { files, tree } = unzip_inner(reader, target, true)? else {
+    let UnzipOutput::Hashed { files, tree } = unzip_inner(reader, target, true, cache)? else {
         return Err(Error::Io(std::io::Error::other(
             "seekable ZIP hash tree was not computed",
         )));
@@ -64,6 +69,7 @@ fn unzip_inner(
     reader: fs_err::File,
     target: &Path,
     hash_contents: bool,
+    cache: Option<&Cache>,
 ) -> Result<UnzipOutput, Error> {
     let (reader, _) = reader.into_parts();
 
@@ -90,6 +96,7 @@ fn unzip_inner(
             &directories,
             skip_validation,
             hash_contents,
+            cache,
         )
     };
 
@@ -124,9 +131,12 @@ fn unzip_inner(
                 size,
                 digest,
                 executable,
+                reused,
             } => {
                 if let Some(digest) = digest {
-                    hashed_files.push(HashedFile::new(path, size, digest, executable));
+                    let mut file = HashedFile::new(path, size, digest, executable);
+                    file.reused = reused;
+                    hashed_files.push(file);
                 }
             }
             ExtractedEntry::Directory(path) => {
@@ -168,6 +178,7 @@ fn extract_entry<R>(
     directories: &Mutex<FxHashSet<PathBuf>>,
     skip_validation: bool,
     hash_contents: bool,
+    cache: Option<&Cache>,
 ) -> Result<Option<ExtractedEntry>, Error>
 where
     R: std::io::BufRead + std::io::Seek + Unpin,
@@ -205,6 +216,7 @@ where
         &path,
         skip_validation,
         hash_contents,
+        cache,
     )
     .map(Some)
 }
@@ -271,10 +283,66 @@ fn extract_file_entry<R>(
     path: &Path,
     skip_validation: bool,
     hash_contents: bool,
+    cache: Option<&Cache>,
 ) -> Result<ExtractedEntry, Error>
 where
     R: std::io::BufRead + std::io::Seek + Unpin,
 {
+    let size = entry.uncompressed_size();
+    if let Some(cache) = cache
+        && !skip_validation
+        && let Ok(capacity) = usize::try_from(size)
+        && capacity <= MAX_BUFFERED_FILE_SIZE
+        && !enclosed_name.as_path().ends_with("RECORD")
+    {
+        let buffered = block_on(pin!(async {
+            let mut reader = archive.reader_with_entry(file_number).await?;
+            let mut contents = Vec::with_capacity(capacity);
+            (&mut reader)
+                .take(MAX_BUFFERED_FILE_SIZE as u64 + 1)
+                .read_to_end(&mut contents)
+                .await
+                .map_err(Error::io_or_zip)?;
+            Ok::<_, Error>((contents, reader.compute_hash()))
+        }))?;
+        let (contents, computed_crc32) = buffered;
+        // A dishonest size must not turn this into an unbounded allocation. Reopen oversized
+        // entries through the normal streaming path, which validates their actual size.
+        if contents.len() <= MAX_BUFFERED_FILE_SIZE {
+            validate_file_entry(
+                enclosed_name.as_path(),
+                contents.len() as u64,
+                size,
+                computed_crc32,
+                entry.crc32(),
+                skip_validation,
+            )?;
+            let digest = blake3::hash(&contents);
+            let file = HashedFile::new(
+                enclosed_name.clone(),
+                size,
+                digest,
+                entry
+                    .unix_permissions()
+                    .is_some_and(|mode| mode & 0o111 != 0),
+            );
+            let reused = fs_err::hard_link(file.cache_path(cache), path).is_ok();
+            if !reused {
+                let mut output = fs_err::File::create_new(path).map_err(Error::Io)?;
+                io::Write::write_all(&mut output, &contents).map_err(Error::Io)?;
+                #[cfg(unix)]
+                preserve_executable_bit(path, entry.unix_permissions())?;
+            }
+            return Ok(ExtractedEntry::File {
+                path: enclosed_name,
+                size,
+                digest: Some(digest),
+                executable: file.is_executable(),
+                reused,
+            });
+        }
+    }
+
     let outfile = if hash_contents {
         fs_err::OpenOptions::new()
             .write(true)
@@ -284,7 +352,6 @@ where
         fs_err::File::create(path)
     }
     .map_err(Error::Io)?;
-    let size = entry.uncompressed_size();
     let writer = buffered_file_writer(outfile, size);
 
     // Keep the hashing state out of ordinary extraction, and pin both futures here to avoid
@@ -315,6 +382,7 @@ where
         executable: entry
             .unix_permissions()
             .is_some_and(|mode| mode & 0o111 != 0),
+        reused: false,
     })
 }
 

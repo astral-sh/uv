@@ -2,12 +2,17 @@
 
 use std::path::{Path, PathBuf};
 
+use uv_cache::{ArchiveFileId, Cache};
+
 use super::{DirhashError, DirhashTree};
 use crate::archive_path::SanitizedArchivePath;
 
 const DIRECTORY_DIGEST_LENGTH: usize = 24;
 const BASE36_ALPHABET: &[u8; 36] = b"0123456789abcdefghijklmnopqrstuvwxyz";
 const BASE36_RADIX: u16 = 36;
+
+/// Maximum uncompressed file size retained to look up an existing cache object before writing.
+pub(crate) const MAX_BUFFERED_FILE_SIZE: usize = 64 * 1024;
 
 /// Files extracted with or without content hashes.
 pub(crate) enum UnzipOutput {
@@ -78,6 +83,7 @@ pub struct HashedFile {
     size: u64,
     digest: blake3::Hash,
     executable: bool,
+    pub(crate) reused: bool,
 }
 
 impl HashedFile {
@@ -98,6 +104,7 @@ impl HashedFile {
             size,
             digest,
             executable,
+            reused: false,
         }
     }
 
@@ -125,6 +132,16 @@ impl HashedFile {
     /// Return the size of the extracted file in bytes.
     pub fn size(&self) -> u64 {
         self.size
+    }
+
+    /// Whether extraction linked this file directly from an existing cache object.
+    pub fn is_reused(&self) -> bool {
+        self.reused
+    }
+
+    /// Resolve this file's content and executable status in the shared file store.
+    pub(crate) fn cache_path(&self, cache: &Cache) -> PathBuf {
+        cache.archive_file(&ArchiveFileId::from_digest(&self.object_digest_hex()))
     }
 }
 

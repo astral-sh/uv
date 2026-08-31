@@ -6704,6 +6704,7 @@ dependencies = [
  "tokio",
  "tokio-util",
  "tracing",
+ "uv-cache",
  "uv-configuration",
  "uv-distribution-filename",
  "uv-preview",
