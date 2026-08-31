@@ -1,9 +1,8 @@
-use anyhow::Result;
+use anyhow::{Context, Result};
 use itertools::Itertools;
 use owo_colors::OwoColorize;
 use std::collections::BTreeMap;
 use std::fmt::Write;
-use std::path::PathBuf;
 use std::str::FromStr;
 use tracing::{debug, trace};
 
@@ -69,9 +68,11 @@ pub(crate) async fn upgrade(
         if names.is_empty() {
             installed_tools
                 .tools()
-                .map_err(|source| ToolEnumerationError {
-                    root: installed_tools.root().to_path_buf(),
-                    source,
+                .with_context(|| {
+                    format!(
+                        "Failed to inspect installed tools in `{}`",
+                        installed_tools.root().user_display()
+                    )
                 })?
                 .into_iter()
                 .map(|(name, _)| (name, Vec::new()))
@@ -217,27 +218,6 @@ pub(crate) async fn upgrade(
     }
 
     Ok(ExitStatus::Success)
-}
-
-/// An installed tool could not be discovered from the configured tool directory.
-#[derive(Debug, thiserror::Error)]
-#[error("Failed to inspect installed tools in `{}`", root.user_display())]
-pub(crate) struct ToolEnumerationError {
-    root: PathBuf,
-    #[source]
-    source: uv_tool::Error,
-}
-
-impl uv_errors::Hint for ToolEnumerationError {
-    fn hints(&self) -> Hints<'_> {
-        if matches!(&self.source, uv_tool::Error::ToolName(_)) {
-            Hints::from(
-                "Move directories with invalid package names out of the tool directory, or remove them if they are no longer needed",
-            )
-        } else {
-            Hints::none()
-        }
-    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

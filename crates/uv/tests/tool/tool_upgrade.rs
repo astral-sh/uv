@@ -87,26 +87,44 @@ fn tool_upgrade_empty() {
 }
 
 #[test]
-fn tool_upgrade_all_reports_invalid_tool_name() -> Result<()> {
+fn tool_upgrade_all_ignores_invalid_tool_name() -> Result<()> {
     let context = uv_test::test_context!("3.12").with_filtered_exe_suffix();
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
     tool_dir.child("tool backup").create_dir_all()?;
 
-    // Invalid tool directories must not be mistaken for an empty tool inventory.
     uv_snapshot!(context.filters(), context.tool_upgrade()
         .arg("--all")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
         .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
-        .env(EnvVars::PATH, bin_dir.as_os_str()), @r#"
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    warning: Ignoring tool directory `tools/tool backup` with an invalid package name; move it outside the tool directory, or remove it if no longer needed
+    Nothing to upgrade
+    ");
+
+    Ok(())
+}
+
+#[test]
+fn tool_upgrade_all_unreadable_receipt() -> Result<()> {
+    let context = uv_test::test_context!("3.12").with_tool_dirs();
+    let tool_dir = context.temp_dir.child("tools");
+
+    tool_dir.child("babel").create_dir_all()?;
+    tool_dir
+        .child("babel")
+        .child("uv-receipt.toml")
+        .write_binary(&[0xff])?;
+
+    uv_snapshot!(context.filters(), context.tool_upgrade().arg("--all"), @"
     exit_code: 2 (failure)
     ----- stderr -----
     error: Failed to inspect installed tools in `tools`
-      Caused by: Not a valid package or extra name: "tool backup". Names must start and end with a letter or digit and may only contain -, _, ., and alphanumeric characters.
-
-    hint: Move directories with invalid package names out of the tool directory, or remove them if they are no longer needed
-    "#);
+      Caused by: failed to read from file `[TEMP_DIR]/tools/babel/uv-receipt.toml`: stream did not contain valid UTF-8
+    ");
 
     Ok(())
 }
@@ -756,7 +774,7 @@ fn tool_upgrade_pinned_hint_with_mixed_constraint() {
 }
 
 #[test]
-fn tool_upgrade_all() {
+fn tool_upgrade_all() -> Result<()> {
     let context = uv_test::test_context!("3.12")
         .with_filtered_counts()
         .with_filtered_exe_suffix();
@@ -798,6 +816,9 @@ fn tool_upgrade_all() {
     Installed 1 executable: pybabel
     ");
 
+    // An invalid directory must not prevent valid tools from being upgraded.
+    tool_dir.child("tool backup").create_dir_all()?;
+
     // Upgrade all from PyPI.
     uv_snapshot!(context.filters(), context.tool_upgrade()
         .arg("--all")
@@ -808,6 +829,7 @@ fn tool_upgrade_all() {
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
+    warning: Ignoring tool directory `tools/tool backup` with an invalid package name; move it outside the tool directory, or remove it if no longer needed
     Updated babel v2.6.0 -> v2.14.0
      - babel==2.6.0
      + babel==2.14.0
@@ -818,6 +840,8 @@ fn tool_upgrade_all() {
      + python-dotenv==1.0.1
     Installed 1 executable: dotenv
     ");
+
+    Ok(())
 }
 
 #[test]
