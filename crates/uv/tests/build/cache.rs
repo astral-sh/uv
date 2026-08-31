@@ -732,19 +732,23 @@ async fn cached_streaming_extraction_limits_buffered_files() -> Result<()> {
     let cache = Cache::from_path(context.cache_dir.path()).init().await?;
     let wheel = context.temp_dir.child("many-files.zip");
     let mut writer = ZipFileWriter::new(Vec::new());
+    // Distinct payloads exercise the buffering limit without reaching Windows' hardlink limit.
     for index in 0..1100 {
         let entry = ZipEntryBuilder::new(format!("module_{index}.py").into(), Compression::Stored);
-        writer.write_entry_whole(entry, b"VALUE = 1\n").await?;
+        writer
+            .write_entry_whole(entry, format!("VALUE = {index}\n").as_bytes())
+            .await?;
     }
     fs::write(wheel.path(), writer.close().await?)?;
     let source = context.temp_dir.child("source");
     source.create_dir_all()?;
     let (files, expected_tree) =
         uv_extract::unzip_and_hash(File::open(wheel.path())?, source.path(), None)?;
-    let file = files.first().context("missing extracted file")?;
-    let object = cache.archive_file(&ArchiveFileId::from_digest(&file.object_digest_hex()));
-    fs::create_dir_all(object.parent().context("missing cache shard")?)?;
-    fs::hard_link(source.join(file.path()), &object)?;
+    for file in files {
+        let object = cache.archive_file(&ArchiveFileId::from_digest(&file.object_digest_hex()));
+        fs::create_dir_all(object.parent().context("missing cache shard")?)?;
+        fs::hard_link(source.join(file.path()), &object)?;
+    }
 
     let target = context.temp_dir.child("target");
     target.create_dir_all()?;
