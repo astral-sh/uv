@@ -270,19 +270,16 @@ jobs:
 
   windows:
     name: ${{ matrix.platform.target }}
-    runs-on: ${{ matrix.platform.runner }}
+    runs-on: namespace-profile-windows-2022-x86-64-16x32
     strategy:
       matrix:
         platform:
           - target: x86_64-pc-windows-msvc
             arch: x64
-            runner: github-windows-2025-x86_64-8
           - target: i686-pc-windows-msvc
             arch: x86
-            runner: github-windows-2025-x86_64-8
           - target: aarch64-pc-windows-msvc
-            arch: arm64
-            runner: github-windows-11-aarch64-8
+            arch: x64
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -304,7 +301,15 @@ jobs:
         # See: https://aws.github.io/aws-lc-rs/requirements/windows.html#build-requirements
         if: contains(matrix.platform.target, 'x86') || contains(matrix.platform.target, 'i686')
         run: |
-          winget install NASM.NASM --accept-source-agreements --accept-package-agreements
+          $installer = Join-Path $env:RUNNER_TEMP 'nasm-3.02-installer-x64.exe'
+          Invoke-WebRequest 'https://www.nasm.us/pub/nasm/releasebuilds/3.02/win64/nasm-3.02-installer-x64.exe' -OutFile $installer
+          if ((Get-FileHash $installer -Algorithm SHA256).Hash -ne '0DDB40310861EB29F4D649FEB9466779982A2D251C0DB2B9CF0D21CF591171F3') {
+            throw 'NASM installer checksum mismatch'
+          }
+          $installation = Start-Process $installer -ArgumentList '/S' -Wait -PassThru
+          if ($installation.ExitCode -ne 0) {
+            throw "NASM installation failed: $($installation.ExitCode)"
+          }
           echo "C:\Program Files\NASM" | Out-File -FilePath $env:GITHUB_PATH -Append
       - name: "Install LLVM profiling tools"
         if: ${{ matrix.platform.target == 'x86_64-pc-windows-msvc' }}
@@ -352,6 +357,7 @@ jobs:
             fi
           done
       - name: "Test wheel"
+        if: matrix.platform.target != 'aarch64-pc-windows-msvc'
         shell: bash
         run: |
           pip install ${PACKAGE_NAME} --no-index --find-links dist/ --force-reinstall
@@ -393,6 +399,7 @@ jobs:
         env:
           CARGO: ${{ github.workspace }}/scripts/cargo.cmd
       - name: "Test wheel uv-build"
+        if: matrix.platform.target != 'aarch64-pc-windows-msvc'
         shell: bash
         run: |
           pip install ${PACKAGE_NAME}_build --no-index --find-links crates/uv-build/dist --force-reinstall
@@ -403,6 +410,36 @@ jobs:
         with:
           name: wheels_uv_build-${{ matrix.platform.target }}
           path: crates/uv-build/dist
+
+  test-windows-aarch64:
+    name: "test aarch64-pc-windows-msvc wheels"
+    needs: windows
+    runs-on: github-windows-11-aarch64-8
+    steps:
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          cache: ""
+          python-version: ${{ env.PYTHON_VERSION }}
+          architecture: arm64
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: wheels_*-aarch64-pc-windows-msvc
+          path: dist
+          merge-multiple: true
+      - name: "Test wheel"
+        shell: bash
+        run: |
+          pip install ${PACKAGE_NAME} --no-index --find-links dist/ --force-reinstall
+          ${MODULE_NAME} --help
+          python -m ${MODULE_NAME} --help
+          uvx --help
+          uvw --help
+      - name: "Test wheel uv-build"
+        shell: bash
+        run: |
+          pip install ${PACKAGE_NAME}_build --no-index --find-links dist/ --force-reinstall
+          ${MODULE_NAME}-build --help
+          python -m ${MODULE_NAME}_build --help
 
   linux:
     name: ${{ matrix.target }}
