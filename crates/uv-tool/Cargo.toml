@@ -33,6 +33,7 @@ uv-settings = { workspace = true }
 uv-state = { workspace = true }
 uv-static = { workspace = true }
 uv-virtualenv = { workspace = true }
+uv-warnings = { workspace = true }
 
 fs-err = { workspace = true }
 owo-colors = { workspace = true }

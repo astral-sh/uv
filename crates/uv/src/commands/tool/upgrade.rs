@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{Context, Result};
 use itertools::Itertools;
 use owo_colors::OwoColorize;
 use std::collections::BTreeMap;
@@ -13,7 +13,7 @@ use uv_configuration::{Concurrency, Constraints, DryRun, HashCheckingMode, Targe
 use uv_distribution::LoweredExtraBuildDependencies;
 use uv_distribution_types::{ExtraBuildRequires, Index, Name, Requirement, RequirementSource};
 use uv_errors::{ErrorOptions, Hints, write_error_chain_with_options};
-use uv_fs::CWD;
+use uv_fs::{CWD, Simplified};
 use uv_installer::{InstallationStrategy, Planner, SitePackages};
 use uv_normalize::PackageName;
 use uv_pep440::{Operator, Version};
@@ -68,7 +68,12 @@ pub(crate) async fn upgrade(
         if names.is_empty() {
             installed_tools
                 .tools()
-                .unwrap_or_default()
+                .with_context(|| {
+                    format!(
+                        "Failed to inspect installed tools in `{}`",
+                        installed_tools.root().user_display()
+                    )
+                })?
                 .into_iter()
                 .map(|(name, _)| (name, Vec::new()))
                 .collect()
