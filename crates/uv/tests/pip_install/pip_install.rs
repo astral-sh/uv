@@ -733,7 +733,11 @@ fn directory_symlink_data_data() -> Result<()> {
 #[test]
 #[cfg(unix)]
 fn directory_symlink_target_scripts() -> Result<()> {
-    for data in [false, true] {
+    for (data, script_name) in [
+        (false, "symlink-script"),
+        (false, "nested/symlink-script"),
+        (true, "symlink-script"),
+    ] {
         for order in ["package-first", "scripts-first", "concurrent"] {
             let context = uv_test::test_context!("3.12")
                 .with_filtered_python_names()
@@ -748,25 +752,31 @@ fn directory_symlink_target_scripts() -> Result<()> {
                 [
                     ("bin/payload.py", "VALUE = 1\n"),
                     ("bin/resources/config.txt", "configuration\n"),
+                    ("bin/nested/payload.py", "VALUE = 2\n"),
                 ]
                 .map(|(path, contents)| (path.to_string(), contents.to_string())),
             )?;
             let script = if data {
                 (
-                    "symlink_b-1.0.0.data/scripts/symlink-script",
-                    "#!python\nprint('hello')\n",
+                    "symlink_b-1.0.0.data/scripts/symlink-script".to_string(),
+                    "#!python\nprint('hello')\n".to_string(),
                 )
             } else {
                 (
-                    "symlink_b-1.0.0.dist-info/entry_points.txt",
-                    "[console_scripts]\nsymlink-script = symlink_b:main\n",
+                    "symlink_b-1.0.0.dist-info/entry_points.txt".to_string(),
+                    format!("[console_scripts]\n{script_name} = symlink_b:main\n"),
                 )
             };
             write_test_wheel(
                 second.path(),
                 "symlink_b",
-                [("symlink_b.py", "def main(): print('hello')\n"), script]
-                    .map(|(path, contents)| (path.to_string(), contents.to_string())),
+                [
+                    (
+                        "symlink_b.py".to_string(),
+                        "def main(): print('hello')\n".to_string(),
+                    ),
+                    script,
+                ],
             )?;
             let expected = context.temp_dir.child("expected");
             uv_extract::unzip(File::open(first.path())?, expected.path())?;
@@ -837,7 +847,7 @@ fn directory_symlink_target_scripts() -> Result<()> {
                 .parent()
                 .context("Missing cached scripts directory")?;
             assert_eq!(dirhash_path(cached_bin)?, cached_digest);
-            Command::new(scripts.join("symlink-script"))
+            Command::new(scripts.join(script_name))
                 .env(EnvVars::PYTHONPATH, target.path())
                 .assert()
                 .success()
@@ -852,14 +862,174 @@ fn directory_symlink_target_scripts() -> Result<()> {
                  - symlink-b==1.0.0 (from file://[TEMP_DIR]/symlink_b-1.0.0-py3-none-any.whl)
                 ");
             }
-            assert!(!scripts.join("symlink-script").exists());
+            assert!(!scripts.join(script_name).exists());
             assert_eq!(
                 fs::read_to_string(scripts.join("payload.py"))?,
                 "VALUE = 1\n"
             );
+            assert_eq!(
+                fs::read_to_string(scripts.join("nested/payload.py"))?,
+                "VALUE = 2\n"
+            );
             assert!(scripts.join("resources").is_symlink());
             assert_eq!(dirhash_path(cached_bin)?, cached_digest);
         }
+    }
+    Ok(())
+}
+
+/// A file cannot replace another wheel's directory, including after a namespace is expanded.
+#[test]
+#[cfg(unix)]
+fn directory_symlink_file_directory_conflict() -> Result<()> {
+    for (link_mode, data) in [
+        ("copy", false),
+        ("hardlink", false),
+        ("clone", false),
+        ("symlink", false),
+        ("symlink", true),
+    ] {
+        let context = uv_test::test_context!("3.12");
+        let first = context.temp_dir.child("symlink_a-1.0.0-py3-none-any.whl");
+        let second = context.temp_dir.child("symlink_b-1.0.0-py3-none-any.whl");
+        write_test_wheel(
+            first.path(),
+            "symlink_a",
+            [
+                ("shared/collision/payload.py", "VALUE = 1\n"),
+                ("shared/sibling/__init__.py", "VALUE = 2\n"),
+            ]
+            .map(|(path, contents)| (path.to_string(), contents.to_string())),
+        )?;
+        let destination = if data {
+            "symlink_b-1.0.0.data/purelib/shared/collision"
+        } else {
+            "shared/collision"
+        };
+        write_test_wheel(
+            second.path(),
+            "symlink_b",
+            [(destination.to_string(), "replacement\n".to_string())],
+        )?;
+
+        allow_duplicates! {
+            uv_snapshot!(context.filters(), context.pip_install()
+                .arg(first.path()).arg("--link-mode=symlink"), @"
+            exit_code: 0 (success)
+            ----- stderr -----
+            Resolved 1 package in [TIME]
+            Prepared 1 package in [TIME]
+            Installed 1 package in [TIME]
+             + symlink-a==1.0.0 (from file://[TEMP_DIR]/symlink_a-1.0.0-py3-none-any.whl)
+            ");
+        }
+        let shared = context.site_packages().join("shared");
+        let cached_shared = fs::read_link(&shared)?;
+        let cached_digest = dirhash_path(&cached_shared)?;
+
+        allow_duplicates! {
+            uv_snapshot!(context.filters(), context.pip_install()
+                .arg(second.path()).arg("--link-mode").arg(link_mode), @"
+            exit_code: 2 (failure)
+            ----- stderr -----
+            Resolved 1 package in [TIME]
+            Prepared 1 package in [TIME]
+            error: Failed to install: symlink_b-1.0.0-py3-none-any.whl (symlink-b==1.0.0 (from file://[TEMP_DIR]/symlink_b-1.0.0-py3-none-any.whl))
+              Caused by: Cannot replace directory `[SITE_PACKAGES]/shared/collision` with a file
+            ");
+        }
+        assert!(shared.join("collision").is_dir());
+        assert_eq!(
+            fs::read_to_string(shared.join("collision/payload.py"))?,
+            "VALUE = 1\n"
+        );
+        assert!(shared.join("sibling").is_symlink());
+        assert_eq!(dirhash_path(&cached_shared)?, cached_digest);
+    }
+    Ok(())
+}
+
+/// Generated and relocated scripts cannot replace directory links inside a `--target` library.
+#[test]
+#[cfg(unix)]
+fn directory_symlink_target_script_directory_conflict() -> Result<()> {
+    for script in [
+        (
+            "symlink_b-1.0.0.dist-info/entry_points.txt",
+            "[console_scripts]\nsymlink-script = symlink_b:main\n",
+        ),
+        (
+            "symlink_b-1.0.0.data/scripts/symlink-script",
+            "#!python\nprint('replacement')\n",
+        ),
+        (
+            "symlink_b-1.0.0.data/scripts/symlink-script",
+            "#!/bin/sh\necho replacement\n",
+        ),
+    ] {
+        let context = uv_test::test_context!("3.12")
+            .with_filtered_python_names()
+            .with_filtered_virtualenv_bin()
+            .with_filtered_exe_suffix();
+        let target = context.temp_dir.child("target");
+        let first = context.temp_dir.child("symlink_a-1.0.0-py3-none-any.whl");
+        let second = context.temp_dir.child("symlink_b-1.0.0-py3-none-any.whl");
+        write_test_wheel(
+            first.path(),
+            "symlink_a",
+            [
+                ("bin/symlink-script/payload.py", "VALUE = 1\n"),
+                ("bin/resources/config.txt", "configuration\n"),
+            ]
+            .map(|(path, contents)| (path.to_string(), contents.to_string())),
+        )?;
+        write_test_wheel(
+            second.path(),
+            "symlink_b",
+            [
+                ("symlink_b.py", "def main(): print('replacement')\n"),
+                script,
+            ]
+            .map(|(path, contents)| (path.to_string(), contents.to_string())),
+        )?;
+
+        allow_duplicates! {
+            uv_snapshot!(context.filters(), context.pip_install()
+                .arg(first.path()).arg("--link-mode=symlink")
+                .arg("--target").arg(target.path()), @"
+            exit_code: 0 (success)
+            ----- stderr -----
+            Using CPython 3.12.[X] interpreter at: .venv/[BIN]/[PYTHON]
+            Resolved 1 package in [TIME]
+            Prepared 1 package in [TIME]
+            Installed 1 package in [TIME]
+             + symlink-a==1.0.0 (from file://[TEMP_DIR]/symlink_a-1.0.0-py3-none-any.whl)
+            ");
+        }
+        let scripts = target.join("bin");
+        let cached_bin = fs::read_link(&scripts)?;
+        let cached_digest = dirhash_path(&cached_bin)?;
+
+        allow_duplicates! {
+            uv_snapshot!(context.filters(), context.pip_install()
+                .arg(second.path()).arg("--link-mode=symlink")
+                .arg("--target").arg(target.path()), @"
+            exit_code: 2 (failure)
+            ----- stderr -----
+            Using CPython 3.12.[X] interpreter at: .venv/[BIN]/[PYTHON]
+            Resolved 1 package in [TIME]
+            Prepared 1 package in [TIME]
+            error: Failed to install: symlink_b-1.0.0-py3-none-any.whl (symlink-b==1.0.0 (from file://[TEMP_DIR]/symlink_b-1.0.0-py3-none-any.whl))
+              Caused by: Cannot replace directory `[TEMP_DIR]/target/[BIN]/symlink-script` with a file
+            ");
+        }
+        assert!(scripts.join("symlink-script").is_dir());
+        assert_eq!(
+            fs::read_to_string(scripts.join("symlink-script/payload.py"))?,
+            "VALUE = 1\n"
+        );
+        assert!(scripts.join("resources").is_symlink());
+        assert_eq!(dirhash_path(&cached_bin)?, cached_digest);
     }
     Ok(())
 }

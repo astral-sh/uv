@@ -114,6 +114,7 @@ pub fn install_wheel<Cache: serde::Serialize, Build: serde::Serialize>(
             &console_scripts,
             &mut record,
             false,
+            state,
         )?;
         write_script_entrypoints(
             layout,
@@ -122,6 +123,7 @@ pub fn install_wheel<Cache: serde::Serialize, Build: serde::Serialize>(
             &gui_scripts,
             &mut record,
             true,
+            state,
         )?;
     }
 

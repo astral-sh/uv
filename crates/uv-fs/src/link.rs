@@ -112,16 +112,59 @@ where
 #[derive(Debug, Default)]
 pub struct CopyLocks {
     dir_locks: Mutex<FxHashMap<PathBuf, Arc<Mutex<()>>>>,
-    directory_parents: Mutex<FxHashMap<PathBuf, Arc<RwLock<()>>>>,
+    directory_parents: Mutex<FxHashMap<PathBuf, Arc<DirectoryParent>>>,
     directory_locks: Mutex<FxHashMap<PathBuf, Arc<Mutex<()>>>>,
 }
 
+/// A stable directory identity shared by its canonical path and any scheme aliases.
+#[derive(Debug)]
+struct DirectoryParent {
+    path: PathBuf,
+    gate: RwLock<()>,
+}
+
 impl CopyLocks {
+    /// Resolve each parent once, interning aliases under the same canonical directory identity.
+    /// Parents must retain that identity for the lifetime of these locks.
+    fn directory_parent(&self, path: &Path) -> io::Result<Arc<DirectoryParent>> {
+        let path = std::path::absolute(if path.as_os_str().is_empty() {
+            Path::new(".")
+        } else {
+            path
+        })?;
+        if let Some(parent) = self
+            .directory_parents
+            .lock()
+            .map_err(|err| io::Error::other(err.to_string()))?
+            .get(&path)
+        {
+            return Ok(parent.clone());
+        }
+
+        let canonical = fs_err::canonicalize(&path)?;
+        let mut parents = self
+            .directory_parents
+            .lock()
+            .map_err(|err| io::Error::other(err.to_string()))?;
+        let parent = parents
+            .entry(canonical.clone())
+            .or_insert_with(|| {
+                Arc::new(DirectoryParent {
+                    path: canonical,
+                    gate: RwLock::new(()),
+                })
+            })
+            .clone();
+        parents.insert(path, parent.clone());
+        Ok(parent)
+    }
+
     /// Serialize changes to a directory's representation, including expanding a directory link
     /// before merging another package into it. Separate from the locks used while copying files.
     ///
     /// The parent directory must exist. Resolve aliases in the parent without following the final
     /// directory link, which may itself be replaced while holding the lock.
+    /// The parent's canonical identity must remain stable for the lifetime of these locks.
     /// ASCII names share the parent lock; non-ASCII names acquire it exclusively to account for
     /// filesystem-specific Unicode aliases. Acquire ancestor locks before descendant locks.
     pub fn with_directory_lock<T, E>(
@@ -132,41 +175,31 @@ impl CopyLocks {
     where
         E: From<io::Error>,
     {
-        let path = if let Some(parent) = path.parent()
+        let (path, parent_lock) = if let Some(parent) = path.parent()
             && let Some(name) = path.file_name()
         {
-            let parent = if parent.as_os_str().is_empty() {
-                Path::new(".")
-            } else {
-                parent
-            };
-            fs_err::canonicalize(parent)?.join(name)
+            let parent = self.directory_parent(parent)?;
+            (parent.path.join(name), Some(parent))
         } else {
-            fs_err::canonicalize(path)?
+            let path = fs_err::canonicalize(path)?;
+            let parent = path
+                .parent()
+                .map(|parent| self.directory_parent(parent))
+                .transpose()?;
+            (path, parent)
         };
 
-        let parent_lock = path
-            .parent()
-            .map(|parent| {
-                Ok::<_, io::Error>(
-                    self.directory_parents
-                        .lock()
-                        .map_err(|err| io::Error::other(err.to_string()))?
-                        .entry(parent.to_path_buf())
-                        .or_default()
-                        .clone(),
-                )
-            })
-            .transpose()?;
         let _parent_guard = if let Some(lock) = &parent_lock {
             Some(if path.file_name().is_some_and(OsStr::is_ascii) {
                 Either::Left(
-                    lock.read()
+                    lock.gate
+                        .read()
                         .map_err(|err| io::Error::other(err.to_string()))?,
                 )
             } else {
                 Either::Right(
-                    lock.write()
+                    lock.gate
+                        .write()
                         .map_err(|err| io::Error::other(err.to_string()))?,
                 )
             })
@@ -187,6 +220,36 @@ impl CopyLocks {
         let _guard = lock
             .lock()
             .map_err(|err| io::Error::other(err.to_string()))?;
+        operation()
+    }
+
+    /// Publish a file without replacing a directory or racing its materialization.
+    ///
+    /// The parent must already be prepared and retain its canonical identity for the lifetime of
+    /// these locks. File writers exclude directory transitions, including the brief absence while
+    /// replacing a directory link. Prepare temporary file contents before taking this lock.
+    pub fn with_file_write<T, E>(
+        &self,
+        path: &Path,
+        operation: impl FnOnce() -> Result<T, E>,
+    ) -> Result<T, E>
+    where
+        E: From<io::Error>,
+    {
+        let parent = path
+            .parent()
+            .map(|parent| self.directory_parent(parent))
+            .transpose()?;
+        let _guard = parent
+            .as_ref()
+            .map(|parent| {
+                parent
+                    .gate
+                    .write()
+                    .map_err(|err| io::Error::other(err.to_string()))
+            })
+            .transpose()?;
+        check_file_destination(path)?;
         operation()
     }
 
@@ -317,6 +380,38 @@ impl<'a, F> LinkOptions<'a, F> {
             fs_err::copy(from, to)?;
             Ok(())
         }
+    }
+
+    /// Guard file publication when directory links may be present at the destination.
+    fn with_file_write<T, E>(
+        &self,
+        path: &Path,
+        operation: impl FnOnce() -> Result<T, E>,
+    ) -> Result<T, E>
+    where
+        E: From<io::Error>,
+    {
+        if !self.directory_symlinks {
+            return operation();
+        }
+        if let Some(locks) = self.copy_locks {
+            return locks.with_file_write(path, operation);
+        }
+        check_file_destination(path)?;
+        operation()
+    }
+}
+
+/// Reject directory destinations, following links so file publication cannot hide a package tree.
+fn check_file_destination(path: &Path) -> io::Result<()> {
+    match fs_err::metadata(path) {
+        Ok(metadata) if metadata.is_dir() => Err(io::Error::new(
+            io::ErrorKind::IsADirectory,
+            format!("Cannot replace directory `{}` with a file", path.display()),
+        )),
+        Ok(_) => Ok(()),
+        Err(err) if err.kind() == io::ErrorKind::NotFound => Ok(()),
+        Err(err) => Err(err),
     }
 }
 
@@ -674,9 +769,11 @@ fn reflink_file_with_fallback<F>(
 where
     F: Fn(&Path) -> bool,
 {
+    let result = options.with_file_write(target, || reflink_with_permissions(path, target));
     match state.attempt {
-        LinkAttempt::Initial => match reflink_with_permissions(path, target) {
+        LinkAttempt::Initial => match result {
             Ok(()) => Ok(state.mode_working()),
+            Err(err) if err.kind() == io::ErrorKind::IsADirectory => Err(err.into()),
             Err(err) if err.kind() == io::ErrorKind::AlreadyExists => {
                 if options.on_existing_directory == OnExistingDirectory::Merge {
                     // File exists, overwrite atomically via temp file
@@ -684,7 +781,7 @@ where
                     let tempdir = tempfile::tempdir_in(parent)?;
                     let tempfile = tempdir.path().join(target.file_name().unwrap());
                     if reflink_with_permissions(path, &tempfile).is_ok() {
-                        fs_err::rename(&tempfile, target)?;
+                        options.with_file_write(target, || fs_err::rename(&tempfile, target))?;
                         Ok(state.mode_working())
                     } else {
                         debug!(
@@ -711,8 +808,9 @@ where
                 link_file(path, target, state.next_mode(), options)
             }
         },
-        LinkAttempt::Subsequent => match reflink_with_permissions(path, target) {
+        LinkAttempt::Subsequent => match result {
             Ok(()) => Ok(state),
+            Err(err) if err.kind() == io::ErrorKind::IsADirectory => Err(err.into()),
             Err(err) if err.kind() == io::ErrorKind::AlreadyExists => {
                 if options.on_existing_directory == OnExistingDirectory::Merge {
                     let parent = target.parent().unwrap();
@@ -725,7 +823,7 @@ where
                             err,
                         }
                     })?;
-                    fs_err::rename(&tempfile, target)?;
+                    options.with_file_write(target, || fs_err::rename(&tempfile, target))?;
                     Ok(state)
                 } else {
                     Err(LinkError::Reflink {
@@ -780,11 +878,7 @@ where
 
 /// Clone a directory by merging into an existing destination.
 #[cfg(target_os = "macos")]
-fn clone_dir_merge<F>(
-    src: &Path,
-    dst: &Path,
-    _options: &LinkOptions<'_, F>,
-) -> Result<(), LinkError>
+fn clone_dir_merge<F>(src: &Path, dst: &Path, options: &LinkOptions<'_, F>) -> Result<(), LinkError>
 where
     F: Fn(&Path) -> bool,
 {
@@ -798,7 +892,7 @@ where
             match reflink_copy::reflink(&src_path, &dst_path) {
                 Ok(()) => {}
                 Err(err) if err.kind() == io::ErrorKind::AlreadyExists => {
-                    clone_dir_merge(&src_path, &dst_path, _options)?;
+                    clone_dir_merge(&src_path, &dst_path, options)?;
                 }
                 Err(err) => {
                     return Err(LinkError::Reflink {
@@ -810,8 +904,10 @@ where
             }
         } else {
             // Try to clone the file
-            match reflink_copy::reflink(&src_path, &dst_path) {
+            match options.with_file_write(&dst_path, || reflink_copy::reflink(&src_path, &dst_path))
+            {
                 Ok(()) => {}
+                Err(err) if err.kind() == io::ErrorKind::IsADirectory => return Err(err.into()),
                 Err(err) if err.kind() == io::ErrorKind::AlreadyExists => {
                     // File exists, overwrite atomically via temp file
                     let tempdir = tempfile::tempdir_in(dst)?;
@@ -823,7 +919,7 @@ where
                             err,
                         }
                     })?;
-                    fs_err::rename(&tempfile, &dst_path)?;
+                    options.with_file_write(&dst_path, || fs_err::rename(&tempfile, &dst_path))?;
                 }
                 Err(err) => {
                     return Err(LinkError::Reflink {
@@ -862,7 +958,12 @@ where
 
     match state.attempt {
         LinkAttempt::Initial => {
-            if let Err(err) = try_hardlink_file(path, target) {
+            if let Err(err) = try_hardlink_file(path, target, |from, to| {
+                options.with_file_write(to, || fs_err::hard_link(from, to))
+            }) {
+                if err.kind() == io::ErrorKind::IsADirectory {
+                    return Err(err.into());
+                }
                 if err.kind() == io::ErrorKind::AlreadyExists
                     && options.on_existing_directory == OnExistingDirectory::Merge
                 {
@@ -886,7 +987,12 @@ where
             }
         }
         LinkAttempt::Subsequent => {
-            if let Err(err) = try_hardlink_file(path, target) {
+            if let Err(err) = try_hardlink_file(path, target, |from, to| {
+                options.with_file_write(to, || fs_err::hard_link(from, to))
+            }) {
+                if err.kind() == io::ErrorKind::IsADirectory {
+                    return Err(err.into());
+                }
                 if err.kind() == io::ErrorKind::AlreadyExists
                     && options.on_existing_directory == OnExistingDirectory::Merge
                 {
@@ -925,7 +1031,10 @@ where
 
     match state.attempt {
         LinkAttempt::Initial => {
-            if let Err(err) = create_symlink(path, target) {
+            if let Err(err) = options.with_file_write(target, || create_symlink(path, target)) {
+                if err.kind() == io::ErrorKind::IsADirectory {
+                    return Err(err.into());
+                }
                 if err.kind() == io::ErrorKind::AlreadyExists
                     && options.on_existing_directory == OnExistingDirectory::Merge
                 {
@@ -949,7 +1058,10 @@ where
             }
         }
         LinkAttempt::Subsequent => {
-            if let Err(err) = create_symlink(path, target) {
+            if let Err(err) = options.with_file_write(target, || create_symlink(path, target)) {
+                if err.kind() == io::ErrorKind::IsADirectory {
+                    return Err(err.into());
+                }
                 if err.kind() == io::ErrorKind::AlreadyExists
                     && options.on_existing_directory == OnExistingDirectory::Merge
                 {
@@ -973,18 +1085,25 @@ fn copy_file<F>(path: &Path, target: &Path, options: &LinkOptions<'_, F>) -> Res
 where
     F: Fn(&Path) -> bool,
 {
-    options
-        .copy_file(path, target)
-        .map_err(|err| LinkError::Copy {
-            to: target.to_path_buf(),
-            err,
-        })
+    options.with_file_write(target, || {
+        options
+            .copy_file(path, target)
+            .map_err(|err| LinkError::Copy {
+                to: target.to_path_buf(),
+                err,
+            })
+    })
 }
 
 /// Try to create a hard link, handling `TooManyLinks` (EMLINK/`ERROR_TOO_MANY_LINKS`)
 /// by copying the source to a fresh inode and retrying.
-fn try_hardlink_file(src: &Path, dst: &Path) -> io::Result<()> {
-    match fs_err::hard_link(src, dst) {
+/// The supplied operation locks publication without holding that lock while copying the source.
+fn try_hardlink_file(
+    src: &Path,
+    dst: &Path,
+    link: impl Fn(&Path, &Path) -> io::Result<()>,
+) -> io::Result<()> {
+    match link(src, dst) {
         Ok(()) => Ok(()),
         Err(err) if err.kind() == io::ErrorKind::TooManyLinks => {
             debug!(
@@ -1001,7 +1120,7 @@ fn try_hardlink_file(src: &Path, dst: &Path) -> io::Result<()> {
             fs_err::copy(src, temp.path())?;
             // Linking a copy before renaming avoids the unlikely race where another process could
             // exhaust the fresh inode's links between the rename and our link.
-            fs_err::hard_link(temp.path(), dst)?;
+            link(temp.path(), dst)?;
             fs_err::rename(temp.path(), src)?;
             Ok(())
         }
@@ -1025,8 +1144,8 @@ where
     let tempdir = tempfile::tempdir_in(parent)?;
     let tempfile = tempdir.path().join(dst.file_name().unwrap());
 
-    if try_hardlink_file(src, &tempfile).is_ok() {
-        fs_err::rename(&tempfile, dst)?;
+    if try_hardlink_file(src, &tempfile, |from, to| fs_err::hard_link(from, to)).is_ok() {
+        options.with_file_write(dst, || fs_err::rename(&tempfile, dst))?;
         Ok(state.mode_working())
     } else {
         debug!(
@@ -1065,7 +1184,7 @@ where
             to: tempfile.clone(),
             err,
         })?;
-    fs_err::rename(&tempfile, dst)?;
+    options.with_file_write(dst, || fs_err::rename(&tempfile, dst))?;
     Ok(())
 }
 
@@ -1086,7 +1205,7 @@ where
     let tempfile = tempdir.path().join(dst.file_name().unwrap());
 
     if create_symlink(src, &tempfile).is_ok() {
-        fs_err::rename(&tempfile, dst)?;
+        options.with_file_write(dst, || fs_err::rename(&tempfile, dst))?;
         Ok(state.mode_working())
     } else {
         debug!(
@@ -1269,6 +1388,41 @@ mod tests {
             existing_dir.path()
         );
         assert!(!existing_dir.path().join("new.txt").exists());
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn test_directory_symlinks_reject_files_without_locks() -> io::Result<()> {
+        let src_dir = test_tempdir();
+        let existing_dir = test_tempdir();
+        let dst_dir = test_tempdir();
+
+        fs_err::write(src_dir.path().join("package"), "new file")?;
+        fs_err::write(existing_dir.path().join("existing.txt"), "existing")?;
+        create_symlink(existing_dir.path(), &dst_dir.path().join("package"))?;
+
+        for mode in [
+            LinkMode::Clone,
+            LinkMode::Copy,
+            LinkMode::Hardlink,
+            LinkMode::Symlink,
+        ] {
+            let options = LinkOptions::new(mode)
+                .with_directory_symlinks()
+                .with_on_existing_directory(OnExistingDirectory::Merge);
+            let result = link_dir(src_dir.path(), dst_dir.path(), &options);
+
+            assert_matches!(result, Err(LinkError::Io(err)) if err.kind() == io::ErrorKind::IsADirectory);
+            assert_eq!(
+                fs_err::read_link(dst_dir.path().join("package"))?,
+                existing_dir.path()
+            );
+        }
+        assert_eq!(
+            fs_err::read_to_string(existing_dir.path().join("existing.txt"))?,
+            "existing"
+        );
+        Ok(())
     }
 
     #[test]
