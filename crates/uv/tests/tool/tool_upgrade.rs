@@ -738,6 +738,7 @@ fn tool_upgrade_all() -> Result<()> {
         .with_filtered_counts()
         .with_filtered_exe_suffix()
         .with_tool_dirs();
+    let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
     // Install `python-dotenv` from Test PyPI, to get an outdated version.
