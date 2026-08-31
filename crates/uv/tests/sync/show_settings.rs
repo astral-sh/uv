@@ -947,9 +947,7 @@ fn tool_install_baseline() {
             config_settings: None,
             config_settings_package: None,
             build_isolation: None,
-            reuse_build_environment_package: Some(
-                [],
-            ),
+            reuse_build_environment_package: None,
             extra_build_dependencies: None,
             extra_build_variables: None,
             exclude_newer: None,
