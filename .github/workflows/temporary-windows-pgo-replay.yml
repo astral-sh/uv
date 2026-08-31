@@ -1,0 +1,95 @@
+name: Temporary Windows PGO training replay
+
+on:
+  push:
+    branches: [charlie/uv-windows-pgo-runners]
+    paths:
+      - .github/workflows/temporary-windows-pgo-replay.yml
+      - scripts/replay-windows-pgo-training.py
+
+permissions:
+  contents: read
+  actions: read
+
+env:
+  ACTIONS_CACHE_MODE: none
+
+jobs:
+  replay:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: github-8-replay
+            runner: github-windows-2025-x86_64-8
+          - name: namespace-16-replay
+            runner: nscloud-windows-2022-amd64-16x32
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          cache: ""
+          python-version: "3.11.9"
+          architecture: x64
+      - name: Download old instrumented and release binaries
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: windows-pgo-namespace-16-base
+          path: binaries/base
+          run-id: 33446887401
+          github-token: ${{ github.token }}
+      - name: Download new instrumented and release binaries
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: windows-pgo-namespace-16-head
+          path: binaries/head
+          run-id: 33446887401
+          github-token: ${{ github.token }}
+      - name: Record host and start resource sampling
+        shell: pwsh
+        run: |
+          $output = Join-Path $env:GITHUB_WORKSPACE 'replay-observation'
+          New-Item -ItemType Directory -Force $output | Out-Null
+          $hostInfo = @{
+            workspace = $env:GITHUB_WORKSPACE
+            operatingSystem = Get-CimInstance Win32_OperatingSystem | Select-Object Caption, Version, BuildNumber, TotalVisibleMemorySize
+            processors = @(Get-CimInstance Win32_Processor | Select-Object Name, NumberOfCores, NumberOfLogicalProcessors, MaxClockSpeed)
+            volumes = @(Get-Volume | Select-Object DriveLetter, FileSystem, Size, SizeRemaining)
+          }
+          try { $hostInfo.defender = Get-MpComputerStatus | Select-Object AMProductVersion, AMEngineVersion, AntivirusSignatureVersion, AntivirusEnabled, RealTimeProtectionEnabled, BehaviorMonitorEnabled } catch { $hostInfo.defenderError = $_.ToString() }
+          $hostInfo | ConvertTo-Json -Depth 6 | Tee-Object -FilePath "$output/host.json"
+          $monitor = Join-Path $env:GITHUB_WORKSPACE 'scripts/monitor-windows-pgo.ps1'
+          $arguments = @('-NoProfile', '-File', "`"$monitor`"", '-OutputPath', "`"$output/resources.jsonl`"", '-StopPath', "`"$output/stop-monitor`"")
+          Start-Process pwsh -ArgumentList $arguments -PassThru | Select-Object Id
+      - name: Replay fixed offline workloads
+        shell: pwsh
+        run: |
+          python scripts/replay-windows-pgo-training.py `
+            --repo . --workdir replay-data `
+            --binary old-instrumented=binaries/base/instrumented/uv.exe `
+            --binary new-instrumented=binaries/head/instrumented/uv.exe `
+            --binary old-final=binaries/base/release/uv.exe `
+            --binary new-final=binaries/head/release/uv.exe `
+            --projects flask sentry zulip pyx-workspace --rounds 2
+      - name: Stop resource sampling
+        if: always()
+        shell: pwsh
+        run: New-Item -ItemType File -Force replay-observation/stop-monitor | Out-Null
+      - name: Upload replay results
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: windows-pgo-${{ matrix.name }}
+          path: |
+            replay-observation
+            replay-data/metadata.json
+            replay-data/commands.jsonl
+            replay-data/measurements.json
+            replay-data/logs
+          retention-days: 7
+          if-no-files-found: error
