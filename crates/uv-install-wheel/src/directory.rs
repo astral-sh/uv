@@ -4,18 +4,22 @@ use std::io;
 use std::ops::ControlFlow;
 use std::path::{Component, Path, PathBuf};
 
-use uv_fs::link::materialize_symlink_dir;
+use uv_fs::link::{CopyLocks, materialize_symlink_dir};
 
-use crate::linker::InstallState;
 use crate::{Error, Layout};
 
 /// Resolve installation-scheme aliases without following package directory links into the cache.
+///
+/// Scheme aliases such as `lib64 -> lib` are followed. Links below a library root, such as
+/// `site-packages/numpy -> <cache>/numpy`, are handled by the caller before traversal can enter
+/// the cache. Scheme aliases must remain stable while this resolver is in use.
 pub(crate) struct LibraryDirectories {
     roots: Vec<(PathBuf, PathBuf)>,
 }
 
 impl LibraryDirectories {
-    /// Remember both spellings of the library roots, including roots that do not exist yet.
+    /// Cache both scheme and resolved root spellings so RECORD paths can skip repeated scheme
+    /// traversal. Existing ancestors are resolved even when the library directory does not exist yet.
     pub(crate) fn new(layout: &Layout) -> io::Result<Self> {
         let directories = Self { roots: Vec::new() };
         let mut roots = Vec::with_capacity(2);
@@ -40,9 +44,12 @@ impl LibraryDirectories {
     }
 
     /// Create an installation directory, expanding package links before writing beneath them.
-    pub(crate) fn prepare(&self, path: &Path, state: &InstallState) -> Result<(), Error> {
+    ///
+    /// Call this for a file's parent before publishing with the same [`CopyLocks`]. Each package
+    /// directory is expanded under its lock before traversal reaches its children.
+    pub(crate) fn prepare(&self, path: &Path, locks: &CopyLocks) -> Result<(), Error> {
         let resolved = self.resolve(path, |directory| {
-            state.copy_locks().with_directory_lock(directory, || {
+            locks.with_directory_lock(directory, || {
                 materialize_symlink_dir(directory)?;
                 fs_err::create_dir_all(directory)?;
                 Ok::<_, Error>(ControlFlow::<Infallible>::Continue(()))
@@ -55,12 +62,14 @@ impl LibraryDirectories {
         Ok(())
     }
 
-    /// Visit directory components inside the libraries before following their symlinks.
+    /// Resolve a directory path, visiting components below library roots before following their links.
     ///
-    /// The visitor must either leave a real directory or stop traversal. Installers expand links
-    /// under their directory lock; uninstallers stop at the first link and remove the link itself.
-    /// Aliases outside the libraries are followed component by component, since an alias can point
-    /// inside a package whose directory is still linked to the cache.
+    /// Visits run from parent to child. Returning [`ControlFlow::Continue`] requires the component
+    /// to be a real directory; [`ControlFlow::Break`] stops before its descendants are inspected.
+    /// Callers handling files must pass the parent path, leaving the final filename unresolved.
+    ///
+    /// Scheme aliases are followed component by component: an alias may point below a package link,
+    /// so canonicalizing the whole path could enter the cache before the visitor can handle it.
     pub(crate) fn resolve<B, E>(
         &self,
         path: &Path,
