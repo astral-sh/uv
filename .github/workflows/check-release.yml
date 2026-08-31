@@ -20,6 +20,6 @@ jobs:
 
       - name: Run dist plan
         run: |
-          uv run --only-dev dist plan --output-format=json > plan-dist-manifest.json
+          uv run --locked --only-dev dist plan --output-format=json > plan-dist-manifest.json
           echo "dist plan completed successfully"
           cat plan-dist-manifest.json
