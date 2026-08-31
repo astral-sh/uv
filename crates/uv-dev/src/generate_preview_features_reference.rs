@@ -128,7 +128,7 @@ mod tests {
         - `index-hash-algorithm`: Allows requiring a hash algorithm for configured package indexes.
         - `init-project-flag`: Rejects the deprecated `--project` option in `uv init`.
         - `json-output`: Allows `--output-format json` for various uv commands.
-        - `lock-without-metadata`: Omit `package.metadata` from `uv.lock`.
+        - `lock-without-metadata`: Omit `package.metadata` from `uv.lock`, except for remote URL dependencies.
         - `lockfile-format-check`: Rejects non-canonical lockfile formatting when using `--locked` or `--check`.
         - `malware-check`: Allows `uv sync` and other commands to check for malware using [OSV](https://osv.dev) before
           installing packages.
