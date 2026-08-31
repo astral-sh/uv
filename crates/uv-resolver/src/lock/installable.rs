@@ -7,7 +7,7 @@ use std::sync::Arc;
 use either::Either;
 use itertools::Itertools;
 use petgraph::Graph;
-use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
+use rustc_hash::{FxHashMap, FxHashSet};
 
 use uv_configuration::{
     BuildOptions, DependencyGroupsWithDefaults, ExtrasSpecification,
@@ -19,8 +19,8 @@ use uv_platform_tags::Tags;
 use uv_pypi_types::{ConflictKind, ConflictSet, ResolverMarkerEnvironment};
 
 use crate::lock::{
-    Dependency, DependencySelectionContext, HashedDist, LockErrorKind, Package, PackageId,
-    SelectedDependency, TagPolicy,
+    Dependency, DependencySelectionContext, HashedDist, LockErrorKind, Package, SelectedDependency,
+    TagPolicy,
 };
 use crate::universal_marker::ActivatedConflictItems;
 use crate::{Lock, LockError, UniversalMarker};
@@ -42,8 +42,8 @@ fn newly_activated_extras<'lock>(
 ///
 /// Returns `true` when the combined reachability changed.
 fn add_reachability<'lock>(
-    reachability: &mut FxHashMap<(&'lock PackageId, Option<&'lock ExtraName>), UniversalMarker>,
-    key: (&'lock PackageId, Option<&'lock ExtraName>),
+    reachability: &mut FxHashMap<(usize, Option<&'lock ExtraName>), UniversalMarker>,
+    key: (usize, Option<&'lock ExtraName>),
     marker: UniversalMarker,
 ) -> bool {
     match reachability.entry(key) {
@@ -265,9 +265,9 @@ trait InstallableExt<'lock>: Installable<'lock> {
     ) -> Result<Resolution, LockError> {
         let size_guess = self.lock().packages.len();
         let mut petgraph = Graph::with_capacity(size_guess, size_guess);
-        let mut inverse = FxHashMap::with_capacity_and_hasher(size_guess, FxBuildHasher);
+        let mut inverse = vec![None; size_guess];
 
-        let mut queue: VecDeque<(&Package, Option<&ExtraName>)> = VecDeque::new();
+        let mut queue: VecDeque<(usize, Option<&ExtraName>)> = VecDeque::new();
         let mut seen = FxHashSet::default();
         let mut conflict_reachability = FxHashMap::default();
         let mut activated_projects: Vec<&PackageName> = vec![];
@@ -342,6 +342,7 @@ trait InstallableExt<'lock>: Installable<'lock> {
             .chain(group_root.map(|dist| (dist, InstallableRootKind::DependencyGroups)))
         {
             // Add the workspace package to the graph.
+            let package_index = self.lock().by_id[&dist.id];
             let index = petgraph.add_node(
                 if root_kind == InstallableRootKind::Production && groups.prod() {
                     self.package_to_node(dist, tags, build_options, install_options, marker_env)?
@@ -349,30 +350,30 @@ trait InstallableExt<'lock>: Installable<'lock> {
                     self.non_installable_node(dist, tags, marker_env)?
                 },
             );
-            inverse.insert(&dist.id, index);
+            inverse[package_index] = Some(index);
 
             // Add an edge from the root.
             petgraph.add_edge(root, index, Edge::Prod);
 
             // Push the package onto the queue.
-            initialized_roots.push((dist, index, root_kind));
+            initialized_roots.push((dist, package_index, index, root_kind));
         }
 
         // Add the workspace dependencies to the queue.
-        for (dist, index, root_kind) in initialized_roots {
+        for (dist, package_index, index, root_kind) in initialized_roots {
             if root_kind == InstallableRootKind::Production && groups.prod() {
                 // Push its dependencies onto the queue.
-                queue.push_back((dist, None));
+                queue.push_back((package_index, None));
                 add_reachability(
                     &mut conflict_reachability,
-                    (&dist.id, None),
+                    (package_index, None),
                     UniversalMarker::TRUE,
                 );
                 for extra in extras.extra_names(dist.optional_dependencies.keys()) {
-                    queue.push_back((dist, Some(extra)));
+                    queue.push_back((package_index, Some(extra)));
                     add_reachability(
                         &mut conflict_reachability,
-                        (&dist.id, Some(extra)),
+                        (package_index, Some(extra)),
                         UniversalMarker::TRUE,
                     );
                 }
@@ -407,11 +408,11 @@ trait InstallableExt<'lock>: Installable<'lock> {
                     continue;
                 }
 
-                let dep_dist = self.lock().find_by_id(&dep.package_id);
+                let dep_dist = &self.lock().packages[dep.package_index];
 
                 // Add the package to the graph.
-                let dep_index = match inverse.entry(&dep.package_id) {
-                    Entry::Vacant(entry) => {
+                let dep_index = match inverse[dep.package_index] {
+                    None => {
                         let index = petgraph.add_node(self.package_to_node(
                             dep_dist,
                             tags,
@@ -419,14 +420,13 @@ trait InstallableExt<'lock>: Installable<'lock> {
                             install_options,
                             marker_env,
                         )?);
-                        entry.insert(index);
+                        inverse[dep.package_index] = Some(index);
                         index
                     }
-                    Entry::Occupied(entry) => {
+                    Some(index) => {
                         // Critically, if the package is already in the graph, then it's a workspace
                         // member. If it was omitted due to, e.g., `--only-dev`, but is itself
                         // referenced as a development dependency, then we need to re-enable it.
-                        let index = *entry.get();
                         let node = &mut petgraph[index];
                         if !groups.prod() || matches!(node, Node::Dist { install: false, .. }) {
                             *node = self.package_to_node(
@@ -462,20 +462,20 @@ trait InstallableExt<'lock>: Installable<'lock> {
                 // Push its dependencies on the queue.
                 add_reachability(
                     &mut conflict_reachability,
-                    (&dep.package_id, None),
+                    (dep.package_index, None),
                     dep.complexified_marker,
                 );
-                if seen.insert((&dep.package_id, None)) {
-                    queue.push_back((dep_dist, None));
+                if seen.insert((dep.package_index, None)) {
+                    queue.push_back((dep.package_index, None));
                 }
                 for extra in &dep.extra {
                     add_reachability(
                         &mut conflict_reachability,
-                        (&dep.package_id, Some(extra)),
+                        (dep.package_index, Some(extra)),
                         dep.complexified_marker,
                     );
-                    if seen.insert((&dep.package_id, Some(extra))) {
-                        queue.push_back((dep_dist, Some(extra)));
+                    if seen.insert((dep.package_index, Some(extra))) {
+                        queue.push_back((dep.package_index, Some(extra)));
                     }
                 }
             }
@@ -501,12 +501,13 @@ trait InstallableExt<'lock>: Installable<'lock> {
                     })?;
 
                 // Add the package to the graph.
+                let package_index = self.lock().by_id[&dist.id];
                 let index = petgraph.add_node(if groups.prod() {
                     self.package_to_node(dist, tags, build_options, install_options, marker_env)?
                 } else {
                     self.non_installable_node(dist, tags, marker_env)?
                 });
-                inverse.insert(&dist.id, index);
+                inverse[package_index] = Some(index);
 
                 // Add the edge.
                 petgraph.add_edge(root, index, Edge::Prod);
@@ -514,20 +515,20 @@ trait InstallableExt<'lock>: Installable<'lock> {
                 // Push its dependencies on the queue.
                 add_reachability(
                     &mut conflict_reachability,
-                    (&dist.id, None),
+                    (package_index, None),
                     UniversalMarker::TRUE,
                 );
-                if seen.insert((&dist.id, None)) {
-                    queue.push_back((dist, None));
+                if seen.insert((package_index, None)) {
+                    queue.push_back((package_index, None));
                 }
                 for extra in &dependency.extras {
                     add_reachability(
                         &mut conflict_reachability,
-                        (&dist.id, Some(extra)),
+                        (package_index, Some(extra)),
                         UniversalMarker::TRUE,
                     );
-                    if seen.insert((&dist.id, Some(extra))) {
-                        queue.push_back((dist, Some(extra)));
+                    if seen.insert((package_index, Some(extra))) {
+                        queue.push_back((package_index, Some(extra)));
                     }
                 }
             }
@@ -563,8 +564,9 @@ trait InstallableExt<'lock>: Installable<'lock> {
                     })?;
 
                 // Add the package to the graph.
-                let index = match inverse.entry(&dist.id) {
-                    Entry::Vacant(entry) => {
+                let package_index = self.lock().by_id[&dist.id];
+                let index = match inverse[package_index] {
+                    None => {
                         let index = petgraph.add_node(self.package_to_node(
                             dist,
                             tags,
@@ -572,14 +574,13 @@ trait InstallableExt<'lock>: Installable<'lock> {
                             install_options,
                             marker_env,
                         )?);
-                        entry.insert(index);
+                        inverse[package_index] = Some(index);
                         index
                     }
-                    Entry::Occupied(entry) => {
+                    Some(index) => {
                         // Critically, if the package is already in the graph, then it's a workspace
                         // member. If it was omitted due to, e.g., `--only-dev`, but is itself
                         // referenced as a development dependency, then we need to re-enable it.
-                        let index = *entry.get();
                         let node = &mut petgraph[index];
                         if !groups.prod() {
                             *node = self.package_to_node(
@@ -611,20 +612,20 @@ trait InstallableExt<'lock>: Installable<'lock> {
                 // Push its dependencies on the queue.
                 add_reachability(
                     &mut conflict_reachability,
-                    (&dist.id, None),
+                    (package_index, None),
                     UniversalMarker::TRUE,
                 );
-                if seen.insert((&dist.id, None)) {
-                    queue.push_back((dist, None));
+                if seen.insert((package_index, None)) {
+                    queue.push_back((package_index, None));
                 }
                 for extra in &dependency.extras {
                     add_reachability(
                         &mut conflict_reachability,
-                        (&dist.id, Some(extra)),
+                        (package_index, Some(extra)),
                         UniversalMarker::TRUE,
                     );
-                    if seen.insert((&dist.id, Some(extra))) {
-                        queue.push_back((dist, Some(extra)));
+                    if seen.insert((package_index, Some(extra))) {
+                        queue.push_back((package_index, Some(extra)));
                     }
                 }
             }
@@ -663,8 +664,9 @@ trait InstallableExt<'lock>: Installable<'lock> {
                 activated_extras.iter().copied().collect();
             let mut queue = queue.clone();
             let mut reachability = conflict_reachability;
-            while let Some((package, extra)) = queue.pop_front() {
-                let Some(parent_reachability) = reachability.get(&(&package.id, extra)).copied()
+            while let Some((package_index, extra)) = queue.pop_front() {
+                let package = &self.lock().packages[package_index];
+                let Some(parent_reachability) = reachability.get(&(package_index, extra)).copied()
                 else {
                     continue;
                 };
@@ -696,22 +698,21 @@ trait InstallableExt<'lock>: Installable<'lock> {
                         activated_extras_set.insert(key);
                         activated_extras.push(key);
                     }
-                    let dep_dist = self.lock().find_by_id(&dep.package_id);
                     // Push its dependencies on the queue.
                     if add_reachability(
                         &mut reachability,
-                        (&dep.package_id, None),
+                        (dep.package_index, None),
                         dep_reachability,
                     ) {
-                        queue.push_back((dep_dist, None));
+                        queue.push_back((dep.package_index, None));
                     }
                     for extra in &dep.extra {
                         if add_reachability(
                             &mut reachability,
-                            (&dep.package_id, Some(extra)),
+                            (dep.package_index, Some(extra)),
                             dep_reachability,
                         ) {
-                            queue.push_back((dep_dist, Some(extra)));
+                            queue.push_back((dep.package_index, Some(extra)));
                         }
                     }
                 }
@@ -752,7 +753,8 @@ trait InstallableExt<'lock>: Installable<'lock> {
             activated_groups.iter().copied(),
         );
 
-        while let Some((package, extra)) = queue.pop_front() {
+        while let Some((package_index, extra)) = queue.pop_front() {
+            let package = &self.lock().packages[package_index];
             for dep in package_dependencies(package, extra) {
                 if validate_conflicts && dep.complexified_marker.has_conflict_marker() {
                     dependencies_for_conflict_validation.push((package, dep));
@@ -764,11 +766,11 @@ trait InstallableExt<'lock>: Installable<'lock> {
                     continue;
                 }
 
-                let dep_dist = self.lock().find_by_id(&dep.package_id);
+                let dep_dist = &self.lock().packages[dep.package_index];
 
                 // Add the dependency to the graph.
-                let dep_index = match inverse.entry(&dep.package_id) {
-                    Entry::Vacant(entry) => {
+                let dep_index = match inverse[dep.package_index] {
+                    None => {
                         let index = petgraph.add_node(self.package_to_node(
                             dep_dist,
                             tags,
@@ -776,11 +778,10 @@ trait InstallableExt<'lock>: Installable<'lock> {
                             install_options,
                             marker_env,
                         )?);
-                        entry.insert(index);
+                        inverse[dep.package_index] = Some(index);
                         index
                     }
-                    Entry::Occupied(entry) => {
-                        let index = *entry.get();
+                    Some(index) => {
                         if matches!(&petgraph[index], Node::Dist { install: false, .. }) {
                             petgraph[index] = self.package_to_node(
                                 dep_dist,
@@ -795,7 +796,7 @@ trait InstallableExt<'lock>: Installable<'lock> {
                 };
 
                 // Add the edge.
-                let index = inverse[&package.id];
+                let index = inverse[package_index].expect("queued package has a graph node");
                 petgraph.add_edge(
                     index,
                     dep_index,
@@ -807,12 +808,12 @@ trait InstallableExt<'lock>: Installable<'lock> {
                 );
 
                 // Push its dependencies on the queue.
-                if seen.insert((&dep.package_id, None)) {
-                    queue.push_back((dep_dist, None));
+                if seen.insert((dep.package_index, None)) {
+                    queue.push_back((dep.package_index, None));
                 }
                 for extra in &dep.extra {
-                    if seen.insert((&dep.package_id, Some(extra))) {
-                        queue.push_back((dep_dist, Some(extra)));
+                    if seen.insert((dep.package_index, Some(extra))) {
+                        queue.push_back((dep.package_index, Some(extra)));
                     }
                 }
             }
@@ -822,8 +823,11 @@ trait InstallableExt<'lock>: Installable<'lock> {
         // them. Reject markers that still depend on conflict items outside the resulting subgraph.
         if !dependencies_for_conflict_validation.is_empty() {
             let subgraph_packages = inverse
-                .keys()
-                .map(|package_id| &package_id.name)
+                .iter()
+                .enumerate()
+                .filter_map(|(package_index, index)| {
+                    index.map(|_| &self.lock().packages[package_index].id.name)
+                })
                 .collect::<FxHashSet<_>>();
             let selection_context_package = selection_context.package();
 
@@ -1023,6 +1027,7 @@ impl Lock {
 #[cfg(test)]
 mod tests {
     use std::cell::Cell;
+    use std::cmp::Ordering;
     use std::str::FromStr;
     use std::sync::LazyLock;
 
@@ -1382,6 +1387,34 @@ provides-extras = ["cli"]
             &InstallOptions::default(),
         )
         .expect("valid resolution")
+    }
+
+    #[test]
+    fn unrelated_packages_do_not_change_dependency_identity() {
+        let original = lock();
+        let input = format!(
+            "{}\n{}",
+            original.to_toml().expect("valid lock TOML"),
+            r#"
+[[package]]
+name = "aaa-unrelated"
+version = "1.0.0"
+source = { registry = "https://example.com/simple" }
+"#
+        );
+        let extended = Lock::from_toml(&input).expect("valid extended lock");
+        let original_root = package(&original, "root-a", "1.0.0");
+        let extended_root = package(&extended, "root-a", "1.0.0");
+
+        assert_eq!(original_root, extended_root);
+        assert_eq!(
+            original_root.dependencies.cmp(&extended_root.dependencies),
+            Ordering::Equal,
+        );
+        assert_eq!(
+            graph_snapshot(&materialize(&original, &[original_root], &DARWIN_MARKERS)),
+            graph_snapshot(&materialize(&extended, &[extended_root], &DARWIN_MARKERS)),
+        );
     }
 
     struct OverridingInstallable<'lock> {

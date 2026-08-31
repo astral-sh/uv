@@ -153,6 +153,7 @@ Ok(
                                 ),
                             ),
                         },
+                        package_index: 0,
                         extra: {},
                         simplified_marker: SimplifiedMarkerTree(
                             true,
