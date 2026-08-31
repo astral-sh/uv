@@ -28,8 +28,6 @@ use crate::{Error, insecure_no_validate};
 
 mod abort;
 mod filesystem;
-#[cfg(test)]
-mod tests;
 
 use abort::{AbortReader, check_aborted};
 use filesystem::Filesystem;

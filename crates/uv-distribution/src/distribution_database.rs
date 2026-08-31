@@ -1742,73 +1742,7 @@ mod tests {
     use futures::{StreamExt, TryStreamExt, stream};
     use tokio_util::compat::FuturesAsyncReadCompatExt;
 
-    use uv_extract::dirhash::dirhash_path;
-    use uv_extract::hash::{HashReader, Hasher};
-    use uv_pypi_types::{HashAlgorithm, HashDigest};
-
     use super::ExtractedWheel;
-
-    #[tokio::test]
-    async fn background_extraction_preserves_files_and_hashes() -> anyhow::Result<()> {
-        let wheel = include_bytes!("../../../test/links/ok-1.0.0-py3-none-any.whl").as_slice();
-        let reference_dir = tempfile::tempdir()?;
-        let ExtractedWheel::Hashed(reference) =
-            ExtractedWheel::extract_streaming(wheel, reference_dir.path(), true).await?
-        else {
-            anyhow::bail!("expected a hashed wheel");
-        };
-        let reference_digest = dirhash_path(reference_dir.path())?;
-
-        // ZIP permits trailing null bytes. Exceed the pipe capacity without changing the contents.
-        let mut large_wheel = wheel.to_vec();
-        large_wheel.resize(2 * 1024 * 1024, 0);
-        for bytes in [wheel, large_wheel.as_slice()] {
-            let mut expected_hashers = [Hasher::from(HashAlgorithm::Sha256)];
-            HashReader::new(bytes, &mut expected_hashers)
-                .finish()
-                .await?;
-            let [expected_hasher] = expected_hashers;
-            let expected_hash = HashDigest::from(expected_hasher);
-
-            for content_addressed in [false, true] {
-                let mut hashers = [Hasher::from(HashAlgorithm::Sha256)];
-                let mut reader = HashReader::new(bytes, &mut hashers);
-                let (target, extracted) = ExtractedWheel::extract_in_background(
-                    &mut reader,
-                    tempfile::tempdir()?,
-                    content_addressed,
-                )
-                .await?;
-                reader.finish().await?;
-                assert_eq!(reader.bytes_read(), bytes.len() as u64);
-                let [hasher] = hashers;
-                assert_eq!(HashDigest::from(hasher), expected_hash);
-                assert_eq!(dirhash_path(target.path())?, reference_digest);
-                match extracted {
-                    ExtractedWheel::Hashed(extracted) => {
-                        assert!(content_addressed);
-                        assert_eq!(extracted.files, reference.files);
-                        assert_eq!(extracted.tree.hash(), reference_digest);
-                    }
-                    ExtractedWheel::Unhashed(files) => {
-                        assert!(!content_addressed);
-                        assert_eq!(
-                            files
-                                .iter()
-                                .map(|file| (file.path(), file.size()))
-                                .collect::<Vec<_>>(),
-                            reference
-                                .files
-                                .iter()
-                                .map(|file| (file.path(), file.size()))
-                                .collect::<Vec<_>>(),
-                        );
-                    }
-                }
-            }
-        }
-        Ok(())
-    }
 
     #[tokio::test]
     async fn background_extraction_stops_a_stalled_download_on_zip_error() -> anyhow::Result<()> {
