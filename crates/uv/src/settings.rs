@@ -633,6 +633,42 @@ pub(crate) enum FrozenSource {
     Configuration,
 }
 
+/// Resolve conflicting lock flags, letting CLI arguments override environment variables.
+fn resolve_lock_flags(locked: Flag, frozen: Flag) -> anyhow::Result<(Flag, Flag)> {
+    match (locked, frozen) {
+        (
+            Flag::Enabled {
+                source: FlagSource::Cli,
+                name,
+            },
+            Flag::Enabled {
+                source: FlagSource::Env(env),
+                ..
+            },
+        ) => {
+            warn_user_once!("Ignoring `{env}` because `--{name}` was provided");
+            Ok((locked, Flag::disabled()))
+        }
+        (
+            Flag::Enabled {
+                source: FlagSource::Env(env),
+                ..
+            },
+            Flag::Enabled {
+                source: FlagSource::Cli,
+                name,
+            },
+        ) => {
+            warn_user_once!("Ignoring `{env}` because `--{name}` was provided");
+            Ok((Flag::disabled(), frozen))
+        }
+        _ => {
+            check_conflicts(locked, frozen)?;
+            Ok((locked, frozen))
+        }
+    }
+}
+
 /// Convert a resolved flag to an optional frozen source.
 fn resolve_frozen(flag: Flag) -> Option<FrozenSource> {
     if flag.is_enabled() {
@@ -761,8 +797,7 @@ impl RunSettings {
         let frozen = resolve_flag(frozen, "frozen", environment.frozen);
         let no_sync = resolve_flag(no_sync, "no-sync", environment.no_sync);
 
-        // Check for conflicts between locked and frozen.
-        check_conflicts(locked, frozen)?;
+        let (locked, frozen) = resolve_lock_flags(locked, frozen)?;
 
         let (dev, no_dev) = resolve_flag_pair(
             dev,
@@ -1929,8 +1964,7 @@ impl SyncSettings {
         let locked = resolve_flag(locked, "locked", environment.locked);
         let frozen = resolve_flag(frozen, "frozen", environment.frozen);
 
-        // Check for conflicts between locked and frozen.
-        check_conflicts(locked, frozen)?;
+        let (locked, frozen) = resolve_lock_flags(locked, frozen)?;
 
         let (dev, no_dev) = resolve_flag_pair(
             dev,
@@ -2088,11 +2122,14 @@ impl LockSettings {
             .unwrap_or_default();
 
         // Resolve flags from CLI and environment variables.
-        let locked = resolve_flag(locked, "locked", environment.locked);
-        let frozen = resolve_flag(check_exists, "frozen", environment.frozen);
+        let locked = resolve_flag(
+            locked || check,
+            if check { "check" } else { "locked" },
+            environment.locked,
+        );
+        let frozen = resolve_flag(check_exists, "check-exists", environment.frozen);
 
-        // Check for conflicts between locked and frozen.
-        check_conflicts(locked, frozen)?;
+        let (locked, frozen) = resolve_lock_flags(locked, frozen)?;
 
         let lock_check = if check {
             LockCheck::Enabled(LockCheckSource::Check)
@@ -2203,8 +2240,7 @@ impl MetadataSettings {
         let locked = resolve_flag(locked, "locked", environment.locked);
         let frozen = resolve_flag(frozen, "frozen", environment.frozen);
 
-        // Check for conflicts between locked and frozen.
-        check_conflicts(locked, frozen)?;
+        let (locked, frozen) = resolve_lock_flags(locked, frozen)?;
 
         let malware_settings = MalwareCheckSettings::resolve(filesystem.as_ref(), &environment);
 
@@ -2415,8 +2451,7 @@ impl AddSettings {
         let frozen = resolve_flag(frozen, "frozen", environment.frozen);
         let no_sync = resolve_flag(no_sync, "no-sync", environment.no_sync);
 
-        // Check for conflicts between locked and frozen.
-        check_conflicts(locked, frozen)?;
+        let (locked, frozen) = resolve_lock_flags(locked, frozen)?;
 
         // Check for conflicts between no_sync and frozen.
         check_conflicts(no_sync, frozen)?;
@@ -2581,8 +2616,7 @@ impl RemoveSettings {
         let frozen = resolve_flag(frozen, "frozen", environment.frozen);
         let no_sync = resolve_flag(no_sync, "no-sync", environment.no_sync);
 
-        // Check for conflicts between locked and frozen.
-        check_conflicts(locked, frozen)?;
+        let (locked, frozen) = resolve_lock_flags(locked, frozen)?;
 
         // Check for conflicts between no_sync and frozen.
         check_conflicts(no_sync, frozen)?;
@@ -2669,8 +2703,7 @@ impl VersionSettings {
         let frozen = resolve_flag(frozen, "frozen", environment.frozen);
         let no_sync = resolve_flag(no_sync, "no-sync", environment.no_sync);
 
-        // Check for conflicts between locked and frozen.
-        check_conflicts(locked, frozen)?;
+        let (locked, frozen) = resolve_lock_flags(locked, frozen)?;
 
         // Check for conflicts between no_sync and frozen.
         check_conflicts(no_sync, frozen)?;
@@ -2769,8 +2802,7 @@ impl TreeSettings {
         let locked = resolve_flag(locked, "locked", environment.locked);
         let frozen = resolve_flag(frozen, "frozen", environment.frozen);
 
-        // Check for conflicts between locked and frozen.
-        check_conflicts(locked, frozen)?;
+        let (locked, frozen) = resolve_lock_flags(locked, frozen)?;
 
         let (dev, no_dev) = resolve_flag_pair(
             dev,
@@ -2910,8 +2942,7 @@ impl ExportSettings {
         let locked = resolve_flag(locked, "locked", environment.locked);
         let frozen = resolve_flag(frozen_cli, "frozen", environment.frozen);
 
-        // Check for conflicts between locked and frozen.
-        check_conflicts(locked, frozen)?;
+        let (locked, frozen) = resolve_lock_flags(locked, frozen)?;
 
         let (dev, no_dev) = resolve_flag_pair(
             dev,
@@ -3119,7 +3150,7 @@ impl CheckSettings {
             environment.no_install_project,
         );
         let isolated = resolve_flag(isolated, "isolated", environment.isolated).is_enabled();
-        check_conflicts(locked, frozen)?;
+        let (locked, frozen) = resolve_lock_flags(locked, frozen)?;
         check_conflicts(no_install_project, no_sync)?;
         if script.is_some() {
             check_conflicts(no_install_project, Flag::from_cli("script"))?;
@@ -3249,8 +3280,7 @@ impl AuditSettings {
         let locked = resolve_flag(locked, "locked", environment.locked);
         let frozen = resolve_flag(frozen, "frozen", environment.frozen);
 
-        // Check for conflicts between locked and frozen.
-        check_conflicts(locked, frozen)?;
+        let (locked, frozen) = resolve_lock_flags(locked, frozen)?;
 
         Ok(Self {
             extras: ExtrasSpecification::from_args(
