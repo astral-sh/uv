@@ -729,6 +729,141 @@ fn directory_symlink_data_data() -> Result<()> {
     Ok(())
 }
 
+/// Scripts inside a `--target` library expand overlapping package links before being written.
+#[test]
+#[cfg(unix)]
+fn directory_symlink_target_scripts() -> Result<()> {
+    for data in [false, true] {
+        for order in ["package-first", "scripts-first", "concurrent"] {
+            let context = uv_test::test_context!("3.12")
+                .with_filtered_python_names()
+                .with_filtered_virtualenv_bin()
+                .with_filtered_exe_suffix();
+            let target = context.temp_dir.child("target");
+            let first = context.temp_dir.child("symlink_a-1.0.0-py3-none-any.whl");
+            let second = context.temp_dir.child("symlink_b-1.0.0-py3-none-any.whl");
+            write_test_wheel(
+                first.path(),
+                "symlink_a",
+                [
+                    ("bin/payload.py", "VALUE = 1\n"),
+                    ("bin/resources/config.txt", "configuration\n"),
+                ]
+                .map(|(path, contents)| (path.to_string(), contents.to_string())),
+            )?;
+            let script = if data {
+                (
+                    "symlink_b-1.0.0.data/scripts/symlink-script",
+                    "#!python\nprint('hello')\n",
+                )
+            } else {
+                (
+                    "symlink_b-1.0.0.dist-info/entry_points.txt",
+                    "[console_scripts]\nsymlink-script = symlink_b:main\n",
+                )
+            };
+            write_test_wheel(
+                second.path(),
+                "symlink_b",
+                [("symlink_b.py", "def main(): print('hello')\n"), script]
+                    .map(|(path, contents)| (path.to_string(), contents.to_string())),
+            )?;
+            let expected = context.temp_dir.child("expected");
+            uv_extract::unzip(File::open(first.path())?, expected.path())?;
+            let cached_digest = dirhash_path(&expected.join("bin"))?;
+
+            if order == "concurrent" {
+                allow_duplicates! {
+                    uv_snapshot!(context.filters(), context.pip_install()
+                        .arg(first.path()).arg(second.path()).arg("--link-mode=symlink")
+                        .arg("--target").arg(target.path())
+                        .env(EnvVars::UV_CONCURRENT_INSTALLS, "2"), @"
+                    exit_code: 0 (success)
+                    ----- stderr -----
+                    Using CPython 3.12.[X] interpreter at: .venv/[BIN]/[PYTHON]
+                    Resolved 2 packages in [TIME]
+                    Prepared 2 packages in [TIME]
+                    Installed 2 packages in [TIME]
+                     + symlink-a==1.0.0 (from file://[TEMP_DIR]/symlink_a-1.0.0-py3-none-any.whl)
+                     + symlink-b==1.0.0 (from file://[TEMP_DIR]/symlink_b-1.0.0-py3-none-any.whl)
+                    ");
+                }
+            } else {
+                let wheels = if order == "package-first" {
+                    [&first, &second]
+                } else {
+                    [&second, &first]
+                };
+                for wheel in wheels {
+                    if wheel.path() == first.path() {
+                        allow_duplicates! {
+                            uv_snapshot!(context.filters(), context.pip_install()
+                                .arg(wheel.path()).arg("--link-mode=symlink")
+                                .arg("--target").arg(target.path()), @"
+                            exit_code: 0 (success)
+                            ----- stderr -----
+                            Using CPython 3.12.[X] interpreter at: .venv/[BIN]/[PYTHON]
+                            Resolved 1 package in [TIME]
+                            Prepared 1 package in [TIME]
+                            Installed 1 package in [TIME]
+                             + symlink-a==1.0.0 (from file://[TEMP_DIR]/symlink_a-1.0.0-py3-none-any.whl)
+                            ");
+                        }
+                        if order == "package-first" {
+                            assert!(target.join("bin").is_symlink());
+                        }
+                    } else {
+                        allow_duplicates! {
+                            uv_snapshot!(context.filters(), context.pip_install()
+                                .arg(wheel.path()).arg("--link-mode=symlink")
+                                .arg("--target").arg(target.path()), @"
+                            exit_code: 0 (success)
+                            ----- stderr -----
+                            Using CPython 3.12.[X] interpreter at: .venv/[BIN]/[PYTHON]
+                            Resolved 1 package in [TIME]
+                            Prepared 1 package in [TIME]
+                            Installed 1 package in [TIME]
+                             + symlink-b==1.0.0 (from file://[TEMP_DIR]/symlink_b-1.0.0-py3-none-any.whl)
+                            ");
+                        }
+                    }
+                }
+            }
+
+            let scripts = target.join("bin");
+            assert!(!scripts.is_symlink());
+            let cached_resources = fs::read_link(scripts.join("resources"))?;
+            let cached_bin = cached_resources
+                .parent()
+                .context("Missing cached scripts directory")?;
+            assert_eq!(dirhash_path(cached_bin)?, cached_digest);
+            Command::new(scripts.join("symlink-script"))
+                .env(EnvVars::PYTHONPATH, target.path())
+                .assert()
+                .success()
+                .stdout("hello\n");
+
+            allow_duplicates! {
+                uv_snapshot!(context.filters(), context.pip_uninstall()
+                    .arg("symlink-b").arg("--target").arg(target.path()), @"
+                exit_code: 0 (success)
+                ----- stderr -----
+                Uninstalled 1 package in [TIME]
+                 - symlink-b==1.0.0 (from file://[TEMP_DIR]/symlink_b-1.0.0-py3-none-any.whl)
+                ");
+            }
+            assert!(!scripts.join("symlink-script").exists());
+            assert_eq!(
+                fs::read_to_string(scripts.join("payload.py"))?,
+                "VALUE = 1\n"
+            );
+            assert!(scripts.join("resources").is_symlink());
+            assert_eq!(dirhash_path(cached_bin)?, cached_digest);
+        }
+    }
+    Ok(())
+}
+
 /// Compile bytecode when installing into a relative `--target` or `--prefix` path.
 #[test]
 fn compile_bytecode_for_relative_install_root() {

@@ -4,7 +4,10 @@ use std::io;
 use std::ops::ControlFlow;
 use std::path::{Component, Path, PathBuf};
 
-use crate::Layout;
+use uv_fs::link::materialize_symlink_dir;
+
+use crate::linker::InstallState;
+use crate::{Error, Layout};
 
 /// Resolve installation-scheme aliases without following package directory links into the cache.
 pub(crate) struct LibraryDirectories {
@@ -34,6 +37,22 @@ impl LibraryDirectories {
         self.roots
             .iter()
             .any(|(_, root)| path != root && path.starts_with(root))
+    }
+
+    /// Create an installation directory, expanding package links before writing beneath them.
+    pub(crate) fn prepare(&self, path: &Path, state: &InstallState) -> Result<(), Error> {
+        let resolved = self.resolve(path, |directory| {
+            state.copy_locks().with_directory_lock(directory, || {
+                materialize_symlink_dir(directory)?;
+                fs_err::create_dir_all(directory)?;
+                Ok::<_, Error>(ControlFlow::<Infallible>::Continue(()))
+            })
+        })?;
+        match resolved {
+            ControlFlow::Continue(directory) => fs_err::create_dir_all(directory)?,
+            ControlFlow::Break(never) => match never {},
+        }
+        Ok(())
     }
 
     /// Visit directory components inside the libraries before following their symlinks.

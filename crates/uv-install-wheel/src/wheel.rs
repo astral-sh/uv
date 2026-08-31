@@ -1,9 +1,7 @@
 use std::collections::{BTreeMap, HashMap};
-use std::convert::Infallible;
 use std::fmt::Display;
 use std::io;
 use std::io::{BufReader, Read, Write};
-use std::ops::ControlFlow;
 use std::path::{Path, PathBuf};
 
 use data_encoding::BASE64URL_NOPAD;
@@ -16,7 +14,6 @@ use sha2::{Digest, Sha256};
 use tracing::{debug, instrument, trace, warn};
 use walkdir::WalkDir;
 
-use uv_fs::link::materialize_symlink_dir;
 use uv_fs::{
     PortablePath, Simplified, copy_atomic_sync, normalize_path_under, persist_with_retry_sync,
     relative_to,
@@ -494,17 +491,7 @@ fn move_folder_recorded(
             .expect("prefix must not change");
         let target = dest_dir.join(relative_to_data);
         if entry.file_type().is_dir() {
-            let resolved = directories.resolve(&target, |directory| {
-                state.copy_locks().with_directory_lock(directory, || {
-                    materialize_symlink_dir(directory)?;
-                    fs::create_dir_all(directory)?;
-                    Ok::<_, Error>(ControlFlow::<Infallible>::Continue(()))
-                })
-            })?;
-            match resolved {
-                ControlFlow::Continue(directory) => fs::create_dir_all(directory)?,
-                ControlFlow::Break(never) => match never {},
-            }
+            directories.prepare(&target, state)?;
         } else {
             validate_data_script_destination(&target, &layout.scheme.scripts)?;
             rename_or_copy.rename_or_copy(src, &target)?;
@@ -791,7 +778,7 @@ pub(crate) fn install_data(
 
                     // Create the scripts directory, if it doesn't exist.
                     if !initialized {
-                        fs::create_dir_all(&layout.scheme.scripts)?;
+                        LibraryDirectories::new(layout)?.prepare(&layout.scheme.scripts, state)?;
                         initialized = true;
                     }
 
