@@ -1,0 +1,170 @@
+name: Temporary Windows PGO timing
+
+on:
+  push:
+    branches: [charlie/uv-windows-pgo-runners]
+    paths:
+      - .github/workflows/temporary-windows-pgo-timing.yml
+      - scripts/benchmark-windows-pgo.py
+      - scripts/monitor-windows-pgo.ps1
+
+permissions:
+  contents: read
+
+env:
+  ACTIONS_CACHE_MODE: none
+  AWS_LC_SYS_USE_SYSTEM: "0"
+  AWS_LC_SYS_PREBUILT_NASM: "0"
+  CARGO_INCREMENTAL: "0"
+  CARGO_NET_RETRY: "10"
+  CARGO_TERM_COLOR: always
+  RUSTUP_MAX_RETRIES: "10"
+
+jobs:
+  build:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: github-8-head
+            runner: github-windows-2025-x86_64-8
+            source: 68209e5c61ce4b76c2e685bea7913876bc929dc9
+          - name: namespace-16-head
+            runner: nscloud-windows-2022-amd64-16x32
+            source: 68209e5c61ce4b76c2e685bea7913876bc929dc9
+          - name: namespace-32-head
+            runner: nscloud-windows-2022-amd64-32x64
+            source: 68209e5c61ce4b76c2e685bea7913876bc929dc9
+          - name: namespace-16-base
+            runner: nscloud-windows-2022-amd64-16x32
+            source: 61291a8ca5477a9ca653f14d2ac5665587c263fa
+    defaults:
+      run:
+        working-directory: source
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          ref: ${{ matrix.source }}
+          path: source
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          cache: ""
+          python-version: "3.11.9"
+          architecture: x64
+      - name: Record host and start resource sampling
+        shell: pwsh
+        run: |
+          $output = Join-Path $env:GITHUB_WORKSPACE 'benchmark-output'
+          New-Item -ItemType Directory -Force $output | Out-Null
+          $hostInfo = @{
+            source = '${{ matrix.source }}'
+            runner = '${{ matrix.runner }}'
+            workspace = $env:GITHUB_WORKSPACE
+            temporaryDirectory = $env:RUNNER_TEMP
+            operatingSystem = Get-CimInstance Win32_OperatingSystem | Select-Object Caption, Version, BuildNumber, TotalVisibleMemorySize
+            processors = @(Get-CimInstance Win32_Processor | Select-Object Name, NumberOfCores, NumberOfLogicalProcessors, MaxClockSpeed)
+            volumes = @(Get-Volume | Select-Object DriveLetter, FileSystem, Size, SizeRemaining)
+          }
+          try { $hostInfo.defender = Get-MpComputerStatus | Select-Object AMProductVersion, AMEngineVersion, AntivirusSignatureVersion, AntivirusEnabled, RealTimeProtectionEnabled, BehaviorMonitorEnabled } catch { $hostInfo.defenderError = $_.ToString() }
+          $hostInfo | ConvertTo-Json -Depth 6 | Tee-Object -FilePath "$output/host.json"
+          $monitor = Join-Path $env:GITHUB_WORKSPACE 'scripts/monitor-windows-pgo.ps1'
+          $arguments = @('-NoProfile', '-File', "`"$monitor`"", '-OutputPath', "`"$output/resources.jsonl`"", '-StopPath', "`"$output/stop-monitor`"")
+          Start-Process pwsh -ArgumentList $arguments -PassThru | Select-Object Id
+      - name: Prepare README
+        run: python scripts/transform_readme.py --target pypi
+      - name: Install cargo extensions
+        shell: bash
+        run: scripts/install-cargo-extensions.sh
+      - name: Install NASM
+        shell: pwsh
+        run: |
+          $installer = Join-Path $env:RUNNER_TEMP 'nasm-3.02-installer-x64.exe'
+          Invoke-WebRequest 'https://www.nasm.us/pub/nasm/releasebuilds/3.02/win64/nasm-3.02-installer-x64.exe' -OutFile $installer
+          $expected = '0DDB40310861EB29F4D649FEB9466779982A2D251C0DB2B9CF0D21CF591171F3'
+          if ((Get-FileHash $installer -Algorithm SHA256).Hash -ne $expected) {
+            throw 'NASM installer checksum mismatch'
+          }
+          $installation = Start-Process $installer -ArgumentList '/S' -Wait -PassThru
+          if ($installation.ExitCode -ne 0) { throw "NASM installation failed: $($installation.ExitCode)" }
+          'C:\Program Files\NASM' | Out-File -FilePath $env:GITHUB_PATH -Append
+      - name: Install LLVM profiling tools
+        run: rustup component add llvm-tools-preview
+      - name: Record compiler
+        shell: pwsh
+        run: |
+          rustc -vV | Tee-Object -FilePath ../benchmark-output/rustc.txt
+          cargo --version | Tee-Object -FilePath ../benchmark-output/cargo.txt
+          nasm -v | Tee-Object -FilePath ../benchmark-output/nasm.txt
+          $vswhere = "${env:ProgramFiles(x86)}/Microsoft Visual Studio/Installer/vswhere.exe"
+          if (Test-Path $vswhere) { & $vswhere -format json > ../benchmark-output/visual-studio.json }
+      - name: Train PGO uv
+        shell: bash
+        run: |
+          export RUSTFLAGS="-C target-feature=+crt-static"
+          python ../scripts/benchmark-windows-pgo.py --output ../benchmark-output/pgo.jsonl
+        env:
+          CARGO: ${{ github.workspace }}/source/scripts/cargo.cmd
+      - name: Build wheels
+        uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
+        with:
+          working-directory: source
+          sccache: false
+          maturin-version: v1.14.1
+          target: x86_64-pc-windows-msvc
+          args: --release --locked --out dist --features self-update,windows-gui-bin --compatibility pypi
+        env:
+          CARGO: ${{ github.workspace }}/source/scripts/cargo.cmd
+          CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_RUSTFLAGS: -Cprofile-use=${{ github.workspace }}/source/target/uv-pgo/uv.profdata
+      - name: Verify static runtime and smoke test
+        shell: bash
+        run: |
+          LLVM_READOBJ="$(rustc --print sysroot)/lib/rustlib/x86_64-pc-windows-msvc/bin/llvm-readobj.exe"
+          for binary in uv uvx uvw; do
+            "$LLVM_READOBJ" --coff-imports "target/x86_64-pc-windows-msvc/release/${binary}.exe" > "../benchmark-output/${binary}-imports.txt"
+            if grep -Eiq 'vcruntime[[:digit:]_]*\.dll|ucrtbase\.dll|api-ms-win-crt-' "../benchmark-output/${binary}-imports.txt"; then
+              exit 1
+            fi
+          done
+          python -m pip install uv --no-index --find-links dist --force-reinstall
+          uv --help > /dev/null
+          python -m uv --help > /dev/null
+          uvx --help > /dev/null
+          uvw --help > /dev/null
+      - name: Build wheels uv-build
+        uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
+        with:
+          working-directory: source
+          sccache: false
+          maturin-version: v1.14.1
+          target: x86_64-pc-windows-msvc
+          args: --profile minimal-size --locked --out crates/uv-build/dist -m crates/uv-build/Cargo.toml --compatibility pypi
+        env:
+          CARGO: ${{ github.workspace }}/source/scripts/cargo.cmd
+      - name: Collect benchmark binaries
+        if: always()
+        shell: pwsh
+        run: |
+          foreach ($variant in @('instrumented', 'release')) {
+            $destination = "../benchmark-output/$variant"
+            New-Item -ItemType Directory -Force $destination | Out-Null
+            $source = if ($variant -eq 'instrumented') { 'target/uv-pgo/instrumented/x86_64-pc-windows-msvc/release' } else { 'target/x86_64-pc-windows-msvc/release' }
+            foreach ($binary in @('uv.exe', 'uvx.exe')) {
+              if (Test-Path "$source/$binary") { Copy-Item "$source/$binary" $destination }
+            }
+          }
+          New-Item -ItemType File -Force ../benchmark-output/stop-monitor | Out-Null
+      - name: Upload benchmark data
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: windows-pgo-${{ matrix.name }}
+          path: benchmark-output
+          retention-days: 7
+          if-no-files-found: error
