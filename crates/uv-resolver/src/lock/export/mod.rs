@@ -1,4 +1,3 @@
-use std::collections::VecDeque;
 use std::collections::hash_map::Entry;
 
 use either::Either;
@@ -14,8 +13,10 @@ use uv_configuration::{
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep508::MarkerTree;
 use uv_pypi_types::ConflictItem;
+use uv_types::OnceQueue;
 
 use crate::graph_ops::Reachable;
+use crate::lock::LockErrorKind;
 pub use crate::lock::export::metadata::{Metadata, PythonReport};
 pub(crate) use crate::lock::export::metadata::{
     MetadataNode, MetadataNodeId, MetadataNodeKind, MetadataScript, MetadataWorkspace,
@@ -24,7 +25,6 @@ pub(crate) use crate::lock::export::metadata::{
 pub(crate) use crate::lock::export::pylock_toml::PylockTomlPackage;
 pub use crate::lock::export::pylock_toml::{PylockToml, PylockTomlError, PylockTomlErrorKind};
 pub use crate::lock::export::requirements_txt::RequirementsTxtExport;
-use crate::lock::{LockErrorKind, PackageIndex};
 use crate::universal_marker::resolve_activated_extras;
 use crate::{Installable, InstallableRootKind, LockError, Package};
 
@@ -62,22 +62,13 @@ impl<'lock> ExportableRequirements<'lock> {
         let mut graph = Graph::<Node<'lock>, Edge<'lock>>::with_capacity(size_guess, size_guess);
         let mut inverse = vec![None; size_guess];
 
-        let mut queue: VecDeque<(PackageIndex, Option<&ExtraName>)> = VecDeque::new();
-        let mut seen = FxHashSet::default();
+        let mut queue = OnceQueue::default();
         let mut activated_items = FxHashMap::default();
 
         let root = graph.add_node(Node::Root);
 
         // Add the workspace packages and any additional dependency-group roots to the queue.
-        for (root_name, root_kind) in target
-            .roots()
-            .map(|root| (root, InstallableRootKind::Production))
-            .chain(
-                target
-                    .group_root(groups)
-                    .map(|root| (root, InstallableRootKind::DependencyGroups)),
-            )
-        {
+        for (root_name, root_kind) in target.roots_with_kind(groups) {
             if prune.contains(root_name) {
                 continue;
             }
@@ -113,9 +104,9 @@ impl<'lock> ExportableRequirements<'lock> {
                 );
 
                 // Push its dependencies on the queue.
-                queue.push_back((package_index, None));
+                queue.push((package_index, None));
                 for extra in extras.extra_names(dist.optional_dependencies.keys()) {
-                    queue.push_back((package_index, Some(extra)));
+                    queue.push((package_index, Some(extra)));
                     activated_items.insert(
                         ConflictItem::from((dist.id.name.clone(), extra.clone())),
                         MarkerTree::TRUE,
@@ -166,13 +157,9 @@ impl<'lock> ExportableRequirements<'lock> {
                 );
 
                 // Push its dependencies on the queue.
-                if seen.insert((dep.index, None)) {
-                    queue.push_back((dep.index, None));
-                }
+                queue.push((dep.index, None));
                 for extra in &dep.extra {
-                    if seen.insert((dep.index, Some(extra))) {
-                        queue.push_back((dep.index, Some(extra)));
-                    }
+                    queue.push((dep.index, Some(extra)));
                 }
             }
         }
@@ -180,23 +167,7 @@ impl<'lock> ExportableRequirements<'lock> {
         // Add requirements that are exclusive to the workspace root (e.g., dependency groups in
         // non-project workspace roots).
         let root_requirements = target
-            .lock()
-            .requirements()
-            .iter()
-            .chain(
-                target
-                    .lock()
-                    .dependency_groups()
-                    .iter()
-                    .filter_map(|(group, deps)| {
-                        if target.includes_group(None, group, groups) {
-                            Some(deps)
-                        } else {
-                            None
-                        }
-                    })
-                    .flatten(),
-            )
+            .root_requirements(groups)
             .filter(|dep| !prune.contains(&dep.name))
             .collect::<Vec<_>>();
 
@@ -243,20 +214,16 @@ impl<'lock> ExportableRequirements<'lock> {
                     );
 
                     // Push its dependencies on the queue.
-                    if seen.insert((package_index, None)) {
-                        queue.push_back((package_index, None));
-                    }
+                    queue.push((package_index, None));
                     for extra in &requirement.extras {
-                        if seen.insert((package_index, Some(extra))) {
-                            queue.push_back((package_index, Some(extra)));
-                        }
+                        queue.push((package_index, Some(extra)));
                     }
                 }
             }
         }
 
         // Create all the relevant nodes.
-        while let Some((package_index, extra)) = queue.pop_front() {
+        while let Some((package_index, extra)) = queue.pop() {
             let index = inverse[package_index.0].expect("queued package has a graph node");
             let package = target.lock().package(package_index);
 
@@ -303,13 +270,9 @@ impl<'lock> ExportableRequirements<'lock> {
                 );
 
                 // Push its dependencies on the queue.
-                if seen.insert((dep.index, None)) {
-                    queue.push_back((dep.index, None));
-                }
+                queue.push((dep.index, None));
                 for extra in &dep.extra {
-                    if seen.insert((dep.index, Some(extra))) {
-                        queue.push_back((dep.index, Some(extra)));
-                    }
+                    queue.push((dep.index, Some(extra)));
                 }
             }
         }
