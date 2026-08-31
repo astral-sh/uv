@@ -30,6 +30,8 @@ pub use crate::read::ValidatedReader;
 pub use crate::space::{PhysicalSpaceError, physical_space, supports_fine_grained_accounting};
 
 pub mod cachedir;
+#[cfg(target_os = "macos")]
+mod hardlink_macos;
 pub mod link;
 mod locked_file;
 mod path;
@@ -62,6 +64,26 @@ pub fn hardlink_count(_path: &Path) -> io::Result<u64> {
         io::ErrorKind::Unsupported,
         "hardlink counts are not supported on this platform",
     ))
+}
+
+/// Collect regular files whose only hardlink is their entry in this directory.
+///
+/// Ignores symlink entries and uses bulk metadata reads on macOS. Returns `None` when the fast path
+/// is unavailable, required attributes are missing, or subdirectories need a recursive walk.
+/// No candidates are returned unless the entire directory can use the fast path.
+///
+/// Callers deleting these files must prevent concurrent changes to the directory and hardlink
+/// counts throughout both the scan and deletion.
+pub fn files_with_one_hardlink(path: &Path) -> io::Result<Option<Vec<PathBuf>>> {
+    #[cfg(target_os = "macos")]
+    {
+        hardlink_macos::files_with_one_hardlink(path)
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = path;
+        Ok(None)
+    }
 }
 
 /// Return a path's creation time, including on Linux targets where [`std::fs::Metadata::created`]

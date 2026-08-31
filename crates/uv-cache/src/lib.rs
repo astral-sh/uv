@@ -658,10 +658,9 @@ impl Cache {
         }
 
         let mut summary = self.removal();
-        for entry in walkdir::WalkDir::new(&root)
-            .min_depth(1)
-            .contents_first(true)
-        {
+        let mut directories = Vec::new();
+        let mut entries = walkdir::WalkDir::new(&root).min_depth(1).into_iter();
+        while let Some(entry) = entries.next() {
             let entry = entry?;
             if entry.file_type().is_file() {
                 match uv_fs::hardlink_count(entry.path()) {
@@ -671,17 +670,28 @@ impl Cache {
                     Err(err) => return Err(err),
                 }
             } else if entry.file_type().is_dir() {
-                match fs_err::remove_dir(entry.path()) {
-                    Ok(()) => {
-                        summary.num_dirs += 1;
+                if let Some(files) = uv_fs::files_with_one_hardlink(entry.path())? {
+                    entries.skip_current_dir();
+                    for file in files {
+                        summary += self.remove_path(file)?;
                     }
-                    Err(err)
-                        if matches!(
-                            err.kind(),
-                            io::ErrorKind::DirectoryNotEmpty | io::ErrorKind::NotFound
-                        ) => {}
-                    Err(err) => return Err(err),
                 }
+                directories.push(entry.into_path());
+            }
+        }
+        // The walk visits parents first so the bulk path can skip their contents.
+        // Remove directories in reverse order so children are removed before parents.
+        for directory in directories.into_iter().rev() {
+            match fs_err::remove_dir(directory) {
+                Ok(()) => {
+                    summary.num_dirs += 1;
+                }
+                Err(err)
+                    if matches!(
+                        err.kind(),
+                        io::ErrorKind::DirectoryNotEmpty | io::ErrorKind::NotFound
+                    ) => {}
+                Err(err) => return Err(err),
             }
         }
 
