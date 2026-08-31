@@ -55,7 +55,7 @@ impl ExtractedWheel {
     ///
     /// Extraction can leave unread bytes when ZIP validation is disabled. Callers must drain the
     /// reader before finalizing download hashes.
-    pub(crate) async fn extract_in_background<R>(
+    pub(crate) async fn extract_streaming<R>(
         mut reader: R,
         temp_dir: tempfile::TempDir,
         content_addressed: bool,

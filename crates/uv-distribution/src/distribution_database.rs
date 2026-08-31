@@ -731,7 +731,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 let (temp_dir, mut extracted) = match progress {
                     Some((reporter, progress)) => {
                         let mut reader = ProgressReader::new(&mut hasher, progress, &**reporter);
-                        ExtractedWheel::extract_in_background(
+                        ExtractedWheel::extract_streaming(
                             &mut reader,
                             temp_dir,
                             self.content_addressed_cache,
@@ -739,7 +739,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                         .await
                         .map_err(|err| Error::Extract(filename.to_string(), err))?
                     }
-                    None => ExtractedWheel::extract_in_background(
+                    None => ExtractedWheel::extract_streaming(
                         &mut hasher,
                         temp_dir,
                         self.content_addressed_cache,
@@ -1149,7 +1149,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             let mut hasher = uv_extract::hash::HashReader::new(file, &mut hashers);
 
             // Unzip the wheel to a temporary directory.
-            let (temp_dir, mut extracted) = ExtractedWheel::extract_in_background(
+            let (temp_dir, mut extracted) = ExtractedWheel::extract_streaming(
                 &mut hasher,
                 temp_dir,
                 self.content_addressed_cache,
