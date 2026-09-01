@@ -22,18 +22,29 @@ from zipfile import ZIP_DEFLATED, ZipFile
 
 from check_uv_wheel_contents import check_uv_wheel, uv_build_expected, uv_expected
 
-TARGET = "aarch64-apple-darwin"
-TAG = "py3-none-macosx_11_0_arm64"
-BINARIES = {"uv": ["uv", "uvx"], "uv_build": ["uv-build"]}
-TOOLS = ("uv-dev", "macos_signing.py", "check_uv_wheel_contents.py")
+PLATFORMS = {
+    "aarch64-apple-darwin": (
+        "py3-none-macosx_11_0_arm64",
+        {"uv": ["uv", "uvx"], "uv_build": ["uv-build"]},
+    ),
+    "x86_64-pc-windows-msvc": (
+        "py3-none-win_amd64",
+        {"uv": ["uv.exe", "uvx.exe", "uvw.exe"], "uv_build": ["uv-build.exe"]},
+    ),
+}
+TARGET = os.environ.get("TARGET", "aarch64-apple-darwin")
+TAG, BINARIES = PLATFORMS[TARGET]
+TOOLS = ("uv-dev", "release_signing.py", "check_uv_wheel_contents.py")
 
 
 def require(condition, message):
+    """Reject an artifact that does not match the workflow's expectations."""
     if not condition:
         raise ValueError(message)
 
 
 def digest(stream):
+    """Return the SHA-256 digest and byte length of a binary stream."""
     hasher = hashlib.sha256()
     size = 0
     while chunk := stream.read(128 * 1024):
@@ -43,12 +54,14 @@ def digest(stream):
 
 
 def file_digest(path):
+    """Return the SHA-256 digest of an artifact file."""
     require(stat.S_ISREG(path.lstat().st_mode), f"Not a regular file: {path}")
     with path.open("rb") as stream:
         return digest(stream)[0]
 
 
 def context():
+    """Identify the source revision, workflow attempt, and signing target."""
     return {
         "repository": os.environ["GITHUB_REPOSITORY"],
         "workflow_ref": os.environ["GITHUB_WORKFLOW_REF"],
@@ -62,6 +75,7 @@ def context():
 
 
 def load(path, expected_digest):
+    """Read a manifest bound to a job output and this workflow attempt."""
     require(file_digest(path) == expected_digest, f"Manifest digest mismatch: {path}")
     manifest = json.loads(path.read_bytes())
     require(
@@ -72,6 +86,7 @@ def load(path, expected_digest):
 
 
 def save(path, manifest):
+    """Write a manifest and expose its digest as a job output."""
     with path.open("x") as stream:
         json.dump(manifest, stream, sort_keys=True, separators=(",", ":"))
         stream.write("\n")
@@ -86,6 +101,12 @@ def wheel_members(path):
     require(match is not None, f"Unexpected wheel filename: {path.name}")
     distribution, version = match.groups()
     templates = uv_expected if distribution == "uv" else uv_build_expected
+    if TARGET == "x86_64-pc-windows-msvc":
+        if distribution == "uv":
+            templates = templates | {"uv-VERSION.data/scripts/uvw"}
+        templates = {
+            name + ".exe" if ".data/scripts/" in name else name for name in templates
+        }
     expected_names = {name.replace("VERSION", version) for name in templates}
     with ZipFile(path) as wheel:
         infos = wheel.infolist()
@@ -148,6 +169,7 @@ def wheel_members(path):
 
 
 def prepare():
+    """Extract the known executable members and bind the wheel and tooling inputs."""
     Path("unsigned").mkdir()
     manifest = {
         "schema": 1,
@@ -208,6 +230,7 @@ def prepare():
 
 
 def signed_manifest():
+    """Check that signing only added binary digests and a certificate identity."""
     source = load(Path("manifest.json"), os.environ["INPUT_MANIFEST_SHA256"])
     signed = load(Path("signed/manifest.json"), os.environ["SIGNED_MANIFEST_SHA256"])
     unsigned_fields = {
@@ -217,7 +240,9 @@ def signed_manifest():
     }
     require(unsigned_fields == source, "Signing changed the input manifest")
     require(
-        set(signed["signed"]) == {"uv", "uvx", "uv-build"}, "Unexpected signed binaries"
+        set(signed["signed"])
+        == {binary for names in BINARIES.values() for binary in names},
+        "Unexpected signed binaries",
     )
     require(
         re.fullmatch(r"[0-9a-f]{64}", signed["certificate_sha256"]),
@@ -227,6 +252,7 @@ def signed_manifest():
 
 
 def verify_wheels(manifest, directory):
+    """Check replaced bytes, untouched members, metadata, and regenerated RECORD files."""
     require(
         {path.name for path in directory.iterdir()}
         == {wheel["filename"] for wheel in manifest["wheels"]},
@@ -253,7 +279,81 @@ def verify_wheels(manifest, directory):
             require(after == expected, f"Unexpected output member: {name}")
 
 
+def write_archive():
+    """Package the signed uv executables in the platform's release archive layout."""
+    if TARGET == "x86_64-pc-windows-msvc":
+        archive = f"uv-{TARGET}.zip"
+        with ZipFile(Path("dist") / archive, "x", compression=ZIP_DEFLATED) as output:
+            for binary in BINARIES["uv"]:
+                output.writestr(binary, (Path("signed") / binary).read_bytes())
+        (Path("dist") / f"{archive}.sha256").write_text(
+            f"{file_digest(Path('dist') / archive)}  {archive}\n"
+        )
+    else:
+        archive = f"uv-{TARGET}.tar.gz"
+        with tarfile.open(Path("dist") / archive, "x:gz") as output:
+            for binary in BINARIES["uv"]:
+                path = Path("signed") / binary
+                info = tarfile.TarInfo(f"uv-{TARGET}/{binary}")
+                info.size = path.stat().st_size
+                info.mode = 0o755
+                with path.open("rb") as stream:
+                    output.addfile(info, stream)
+    return {"filename": archive, "sha256": file_digest(Path("dist") / archive)}
+
+
+def verify_archive(manifest):
+    """Check that the release archive contains the same signed bytes as the wheels."""
+    extension = "zip" if TARGET == "x86_64-pc-windows-msvc" else "tar.gz"
+    archive = f"uv-{TARGET}.{extension}"
+    require(
+        manifest["archive"]["filename"] == archive
+        and file_digest(Path("dist") / archive) == manifest["archive"]["sha256"],
+        "Final archive mismatch",
+    )
+    if extension == "zip":
+        require(
+            (Path("dist") / f"{archive}.sha256").read_text()
+            == f"{manifest['archive']['sha256']}  {archive}\n",
+            "Archive checksum mismatch",
+        )
+        with ZipFile(Path("dist") / archive) as source:
+            require(
+                sorted(source.namelist()) == sorted(BINARIES["uv"]),
+                "Archive membership changed",
+            )
+            for binary in BINARIES["uv"]:
+                with source.open(binary) as stream:
+                    sha256, size = digest(stream)
+                require(
+                    {"sha256": sha256, "size": size} == manifest["signed"][binary],
+                    "Archive binary mismatch",
+                )
+    else:
+        with tarfile.open(Path("dist") / archive) as source:
+            members = source.getmembers()
+            require(
+                len(members) == len(BINARIES["uv"])
+                and {member.name for member in members}
+                == {f"uv-{TARGET}/{binary}" for binary in BINARIES["uv"]},
+                "Archive membership changed",
+            )
+            for member in members:
+                require(
+                    member.isfile() and member.mode == 0o755,
+                    "Invalid archive member type/mode",
+                )
+                binary = member.name.rsplit("/", 1)[1]
+                with source.extractfile(member) as stream:
+                    sha256, size = digest(stream)
+                require(
+                    {"sha256": sha256, "size": size} == manifest["signed"][binary],
+                    "Archive binary mismatch",
+                )
+
+
 def assemble():
+    """Replace signed wheel members and create release artifacts without credentials."""
     manifest = signed_manifest()
     for name, expected in manifest["tools"].items():
         require(
@@ -283,31 +383,17 @@ def assemble():
             command.extend(["--replace", f"{member}=signed/{binary}"])
         subprocess.run(command, check=True)
     verify_wheels(manifest, Path("dist/wheels"))
-    archive = f"uv-{TARGET}.tar.gz"
-    with tarfile.open(Path("dist") / archive, "x:gz") as output:
-        for binary in ("uv", "uvx"):
-            path = Path("signed") / binary
-            require(
-                file_digest(path) == manifest["signed"][binary]["sha256"],
-                "Signed binary changed",
-            )
-            info = tarfile.TarInfo(f"uv-{TARGET}/{binary}")
-            info.size = path.stat().st_size
-            info.mode = 0o755
-            with path.open("rb") as stream:
-                output.addfile(info, stream)
     manifest["output_wheels"] = {
         wheel["filename"]: file_digest(Path("dist/wheels") / wheel["filename"])
         for wheel in manifest["wheels"]
     }
-    manifest["archive"] = {
-        "filename": archive,
-        "sha256": file_digest(Path("dist") / archive),
-    }
+    manifest["archive"] = write_archive()
+    verify_archive(manifest)
     save(Path("dist/manifest.json"), manifest)
 
 
 def verify():
+    """Validate the final artifacts and extract binaries for native signature checks."""
     signed = signed_manifest()
     final = load(Path("dist/manifest.json"), os.environ["FINAL_MANIFEST_SHA256"])
     require(
@@ -340,33 +426,8 @@ def verify():
                     (directory / binary).open("xb") as output,
                 ):
                     shutil.copyfileobj(stream, output)
-    archive = f"uv-{TARGET}.tar.gz"
-    require(
-        final["archive"]["filename"] == archive
-        and file_digest(Path("dist") / archive) == final["archive"]["sha256"],
-        "Final archive mismatch",
-    )
-    with tarfile.open(Path("dist") / archive) as source:
-        members = source.getmembers()
-        require(
-            len(members) == 2
-            and {member.name for member in members}
-            == {f"uv-{TARGET}/uv", f"uv-{TARGET}/uvx"},
-            "Archive membership changed",
-        )
-        for member in members:
-            require(
-                member.isfile() and member.mode == 0o755,
-                "Invalid archive member type/mode",
-            )
-            binary = member.name.rsplit("/", 1)[1]
-            with source.extractfile(member) as stream:
-                sha256, size = digest(stream)
-            require(
-                {"sha256": sha256, "size": size} == signed["signed"][binary],
-                "Archive binary mismatch",
-            )
-    # Native signature/certificate verification runs separately on this fresh macOS runner.
+    verify_archive(final)
+    # Native signature/certificate verification runs separately on a fresh platform runner.
 
 
 if __name__ == "__main__":
