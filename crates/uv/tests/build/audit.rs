@@ -2141,7 +2141,7 @@ async fn audit_script_frozen_missing_lockfile() {
     ----- stderr -----
     error: Unable to find lockfile at `script.py.lock`, but `--frozen` was provided.
 
-    hint: Run the command again with `--no-frozen`.
+    hint: Run `uv audit --no-frozen`.
     ");
 }
 
