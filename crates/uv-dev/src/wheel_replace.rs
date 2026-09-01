@@ -1,5 +1,5 @@
 use std::collections::BTreeMap;
-use std::io::{BufReader, BufWriter, Read, Seek, SeekFrom};
+use std::io::{BufReader, BufWriter};
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
@@ -14,13 +14,6 @@ use futures::io::{AllowStdIo, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt
 use sha2::{Digest, Sha256, Sha384, Sha512};
 
 const BUFFER_SIZE: usize = 128 * 1024;
-// Bound compressed input, decompressed output and RECORD allocation for this release tool.
-const MAX_ARCHIVE_SIZE: u64 = 512 * 1024 * 1024;
-const MAX_WHEEL_SIZE: u64 = 2 * 1024 * 1024 * 1024;
-const MAX_MEMBER_SIZE: u64 = 512 * 1024 * 1024;
-const MAX_RECORD_SIZE: u64 = 8 * 1024 * 1024;
-const MAX_ENTRIES: usize = 10_000;
-const MAX_DIRECTORY_SIZE: u64 = 16 * 1024 * 1024;
 
 #[derive(Debug, Parser)]
 pub(crate) struct WheelReplaceArgs {
@@ -71,7 +64,7 @@ struct HashDigests {
     sha512: String,
 }
 
-/// Rewrite a wheel without extracting its members to the filesystem.
+/// Rewrite a trusted wheel without extracting its members to the filesystem.
 ///
 /// Preserve exact decompressed bytes except for explicitly replaced members and RECORD. Preserve
 /// each non-RECORD member's compression method, DOS timestamp, internal/external attributes and
@@ -104,18 +97,13 @@ pub(crate) async fn wheel_replace(args: WheelReplaceArgs) -> Result<()> {
         );
     }
 
-    let mut input = fs_err::File::open(&args.input)
+    let input = fs_err::File::open(&args.input)
         .with_context(|| format!("failed to open input wheel `{}`", args.input.display()))?;
-    ensure!(
-        input.metadata()?.len() <= MAX_ARCHIVE_SIZE,
-        "input wheel is too large"
-    );
-    preflight_directory(&mut input)?;
     let mut archive = ZipFileReader::new(AllowStdIo::new(BufReader::new(input))).await?;
     let (record_index, record_path) = validate_archive(archive.file())?;
     let mut record_bytes = Vec::new();
     let mut record_reader = archive.reader_with_entry(record_index).await?;
-    copy_hashed(&mut record_reader, &mut record_bytes, MAX_RECORD_SIZE).await?;
+    copy_hashed(&mut record_reader, &mut record_bytes).await?;
     validate_zip_contents(&mut record_reader, record_bytes.len() as u64)?;
     let mut expected_record = read_record(&record_bytes, &record_path)?;
 
@@ -130,7 +118,6 @@ pub(crate) async fn wheel_replace(args: WheelReplaceArgs) -> Result<()> {
     let mut writer = ZipFileWriter::new(AllowStdIo::new(BufWriter::new(output)));
     let mut output_record = Vec::new();
     let mut output_members = BTreeMap::new();
-    let mut total_size = 0;
 
     for index in 0..archive.file().entries().len() {
         let entry = archive.file().entries()[index].clone();
@@ -151,7 +138,8 @@ pub(crate) async fn wheel_replace(args: WheelReplaceArgs) -> Result<()> {
                 "cannot replace directory member `{name}`"
             );
             let mut original = archive.reader_with_entry(index).await?;
-            let contents = hash_reader(&mut original, 0).await?;
+            let contents = hash_reader(&mut original).await?;
+            ensure!(contents.1 == 0, "directory member `{name}` contains data");
             validate_zip_contents(&mut original, contents.1)?;
             writer.write_entry_whole(builder.clone(), &[]).await?;
             contents
@@ -161,7 +149,7 @@ pub(crate) async fn wheel_replace(args: WheelReplaceArgs) -> Result<()> {
                 .with_context(|| format!("RECORD does not contain `{name}`"))?;
             let mut original = archive.reader_with_entry(index).await?;
             let contents = if let Some(path) = replacements.remove(&name) {
-                let (hash, size) = hash_reader(&mut original, MAX_MEMBER_SIZE).await?;
+                let (hash, size) = hash_reader(&mut original).await?;
                 validate_zip_contents(&mut original, size)?;
                 validate_record_entry(&name, &expected, &hash, size)?;
                 let replacement = fs_err::File::open(&path)
@@ -172,29 +160,14 @@ pub(crate) async fn wheel_replace(args: WheelReplaceArgs) -> Result<()> {
                     "replacement `{}` is not a regular file",
                     path.display()
                 );
-                ensure!(
-                    metadata.len() <= MAX_MEMBER_SIZE,
-                    "replacement `{}` is too large",
-                    path.display()
-                );
                 let mut replacement = AllowStdIo::new(BufReader::new(replacement));
                 let mut output_entry = writer.write_entry_seekable(builder.clone()).await?;
-                let contents = copy_hashed(
-                    &mut replacement,
-                    &mut output_entry,
-                    MAX_MEMBER_SIZE.min(MAX_WHEEL_SIZE - total_size),
-                )
-                .await?;
+                let contents = copy_hashed(&mut replacement, &mut output_entry).await?;
                 output_entry.close().await?;
                 contents
             } else {
                 let mut output_entry = writer.write_entry_seekable(builder.clone()).await?;
-                let (hash, size) = copy_hashed(
-                    &mut original,
-                    &mut output_entry,
-                    MAX_MEMBER_SIZE.min(MAX_WHEEL_SIZE - total_size),
-                )
-                .await?;
+                let (hash, size) = copy_hashed(&mut original, &mut output_entry).await?;
                 validate_zip_contents(&mut original, size)?;
                 output_entry.close().await?;
                 validate_record_entry(&name, &expected, &hash, size)?;
@@ -203,7 +176,6 @@ pub(crate) async fn wheel_replace(args: WheelReplaceArgs) -> Result<()> {
             output_record.push((name.clone(), contents.0.sha256.clone(), contents.1));
             contents
         };
-        total_size += size;
         output_members.insert(name, (builder, hash.sha256, size));
     }
     ensure!(
@@ -222,14 +194,6 @@ pub(crate) async fn wheel_replace(args: WheelReplaceArgs) -> Result<()> {
     );
 
     let record_bytes = write_record(&record_path, output_record)?;
-    ensure!(
-        record_bytes.len() as u64 <= MAX_RECORD_SIZE,
-        "output RECORD is too large"
-    );
-    ensure!(
-        total_size + record_bytes.len() as u64 <= MAX_WHEEL_SIZE,
-        "output wheel is too large"
-    );
     let record_entry = ZipEntryBuilder::new(record_path.clone().into(), Compression::Deflate)
         .unix_permissions(0o100_644)
         .last_modification_date(async_zip::ZipDateTime::default())
@@ -266,83 +230,9 @@ async fn finish_archive<W: AsyncWrite + Unpin>(writer: ZipFileWriter<W>) -> Resu
     Ok(())
 }
 
-/// Bound allocation before the ZIP reader parses the central directory. Only inspect the end
-/// records here; the ZIP library still validates all offsets, headers, sizes and ZIP64 binding.
-fn preflight_directory(file: &mut (impl Read + Seek)) -> Result<()> {
-    let length = file.seek(SeekFrom::End(0))?;
-    let tail_size = usize::try_from(length.min(22 + u64::from(u16::MAX)))?;
-    ensure!(tail_size >= 22, "wheel has no ZIP end record");
-    file.seek(SeekFrom::Start(length - tail_size as u64))?;
-    let mut tail = vec![0; tail_size];
-    file.read_exact(&mut tail)?;
-    // Match the reader's last signature search, excluding the 18 fixed trailing bytes.
-    let position = tail[..tail_size - 18]
-        .windows(4)
-        .rposition(|bytes| bytes == b"PK\x05\x06")
-        .context("wheel has no ZIP end record")?;
-    let end = &tail[position..];
-    let comment_size = u16::from_le_bytes(end[20..22].try_into()?) as usize;
-    ensure!(
-        end.len() == 22 + comment_size,
-        "invalid ZIP end record length"
-    );
-    let count = u16::from_le_bytes(end[10..12].try_into()?);
-    let size = u32::from_le_bytes(end[12..16].try_into()?);
-    ensure!(
-        count == u16::MAX || usize::from(count) <= MAX_ENTRIES,
-        "wheel contains too many entries"
-    );
-    ensure!(
-        size == u32::MAX || u64::from(size) <= MAX_DIRECTORY_SIZE,
-        "wheel central directory is too large"
-    );
-    let end_offset = length - tail_size as u64 + position as u64;
-    let mut zip64 = false;
-    if let Some(locator_offset) = end_offset.checked_sub(20) {
-        file.seek(SeekFrom::Start(locator_offset))?;
-        let mut locator = [0; 20];
-        file.read_exact(&mut locator)?;
-        if &locator[..4] == b"PK\x06\x07" {
-            zip64 = true;
-            let offset = u64::from_le_bytes(locator[8..16].try_into()?);
-            ensure!(
-                offset
-                    .checked_add(56)
-                    .is_some_and(|end| end <= locator_offset),
-                "invalid ZIP64 end offset"
-            );
-            file.seek(SeekFrom::Start(offset))?;
-            let mut record = [0; 56];
-            file.read_exact(&mut record)?;
-            ensure!(&record[..4] == b"PK\x06\x06", "invalid ZIP64 end signature");
-            let count = u64::from_le_bytes(record[32..40].try_into()?);
-            let size = u64::from_le_bytes(record[40..48].try_into()?);
-            ensure!(
-                count <= MAX_ENTRIES as u64,
-                "wheel contains too many ZIP64 entries"
-            );
-            ensure!(
-                size <= MAX_DIRECTORY_SIZE,
-                "wheel ZIP64 central directory is too large"
-            );
-        }
-    }
-    ensure!(
-        zip64 || (count != u16::MAX && size != u32::MAX),
-        "wheel is missing its ZIP64 end record"
-    );
-    file.rewind()?;
-    Ok(())
-}
-
 fn validate_archive(file: &ZipFile) -> Result<(usize, String)> {
-    ensure!(
-        file.entries().len() <= MAX_ENTRIES,
-        "wheel contains too many entries"
-    );
     let mut names = BTreeMap::new();
     let mut portable_names = BTreeMap::new();
-    let mut total_size: u64 = 0;
     let mut record = None;
     for (index, entry) in file.entries().iter().enumerate() {
         let name = entry
@@ -372,17 +262,6 @@ fn validate_archive(file: &ZipFile) -> Result<(usize, String)> {
             "duplicate or aliased wheel member `{name}`"
         );
         ensure!(
-            entry.uncompressed_size() <= MAX_MEMBER_SIZE,
-            "wheel member `{name}` is too large"
-        );
-        total_size = total_size
-            .checked_add(entry.uncompressed_size())
-            .context("wheel size overflowed")?;
-        ensure!(
-            total_size <= MAX_WHEEL_SIZE,
-            "uncompressed wheel is too large"
-        );
-        ensure!(
             !entry.dir()? || entry.uncompressed_size() == 0,
             "directory member `{name}` contains data"
         );
@@ -391,10 +270,6 @@ fn validate_archive(file: &ZipFile) -> Result<(usize, String)> {
             "wheel contains unsupported RECORD signature `{name}`"
         );
         if name.ends_with(".dist-info/RECORD") {
-            ensure!(
-                entry.uncompressed_size() <= MAX_RECORD_SIZE,
-                "RECORD is too large"
-            );
             ensure!(record.is_none(), "wheel contains multiple RECORD files");
             record = Some((index, name.to_string()));
         }
@@ -433,12 +308,7 @@ async fn verify_output(
     path: &Path,
     expected: &BTreeMap<String, (ZipEntry, String, u64)>,
 ) -> Result<()> {
-    let mut file = fs_err::File::open(path)?;
-    ensure!(
-        file.metadata()?.len() <= MAX_ARCHIVE_SIZE,
-        "output wheel is too large"
-    );
-    preflight_directory(&mut file)?;
+    let file = fs_err::File::open(path)?;
     let mut archive = ZipFileReader::new(AllowStdIo::new(BufReader::new(file))).await?;
     let (record_index, record_path) = validate_archive(archive.file())?;
     ensure!(
@@ -451,7 +321,7 @@ async fn verify_output(
     );
     let mut record_bytes = Vec::new();
     let mut reader = archive.reader_with_entry(record_index).await?;
-    copy_hashed(&mut reader, &mut record_bytes, MAX_RECORD_SIZE).await?;
+    copy_hashed(&mut reader, &mut record_bytes).await?;
     validate_zip_contents(&mut reader, record_bytes.len() as u64)?;
     let mut record = read_record(&record_bytes, &record_path)?;
     for index in 0..archive.file().entries().len() {
@@ -476,7 +346,7 @@ async fn verify_output(
             "output metadata changed for `{name}`"
         );
         let mut reader = archive.reader_with_entry(index).await?;
-        let (hash, size) = hash_reader(&mut reader, MAX_MEMBER_SIZE).await?;
+        let (hash, size) = hash_reader(&mut reader).await?;
         validate_zip_contents(&mut reader, size)?;
         ensure!(
             &hash.sha256 == expected_hash && size == *expected_size,
@@ -643,17 +513,13 @@ fn validate_member_type(name: &str, permissions: Option<u16>, directory: bool) -
     Ok(())
 }
 
-async fn hash_reader(
-    reader: &mut (impl AsyncRead + Unpin),
-    limit: u64,
-) -> Result<(HashDigests, u64)> {
-    copy_hashed(reader, &mut futures::io::sink(), limit).await
+async fn hash_reader(reader: &mut (impl AsyncRead + Unpin)) -> Result<(HashDigests, u64)> {
+    copy_hashed(reader, &mut futures::io::sink()).await
 }
 
 async fn copy_hashed(
     reader: &mut (impl AsyncRead + Unpin),
     writer: &mut (impl AsyncWrite + Unpin),
-    limit: u64,
 ) -> Result<(HashDigests, u64)> {
     let mut sha256 = Sha256::new();
     let mut sha384 = Sha384::new();
@@ -668,10 +534,6 @@ async fn copy_hashed(
         size = size
             .checked_add(read as u64)
             .context("wheel member size overflowed")?;
-        ensure!(
-            size <= limit,
-            "wheel member exceeds size limit ({limit} bytes)"
-        );
         writer.write_all(&buffer[..read]).await?;
         sha256.update(&buffer[..read]);
         sha384.update(&buffer[..read]);
@@ -990,31 +852,52 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn bounds_streamed_bytes_even_with_small_declared_sizes() -> Result<()> {
-        let mut input = futures::io::Cursor::new(vec![0; BUFFER_SIZE + 1]);
-        let mut output = Vec::new();
-        assert!(
-            copy_hashed(&mut input, &mut output, BUFFER_SIZE as u64)
-                .await
-                .is_err()
+    async fn replaces_in_a_wheel_with_many_members() -> Result<()> {
+        let directory = tempfile::tempdir()?;
+        let args = args(directory.path());
+        fs_err::write(&args.replacements[0].path, b"signed")?;
+        let mut members = fixture_members();
+        // Wheel replacement must not impose an entry-count limit on trusted build artifacts.
+        for index in 0..10_000 {
+            members.push((
+                ZipEntryBuilder::new(format!("package/{index}.txt").into(), Compression::Stored)
+                    .build(),
+                b"untouched".to_vec(),
+            ));
+        }
+        fixture(&args.input, members, None, false, false).await?;
+        wheel_replace(args).await?;
+        let output = directory.path().join("output.whl");
+        assert_eq!(read_entry(&output, BINARY).await?.0, b"signed");
+        assert_eq!(
+            read_entry(&output, "package/9999.txt").await?.0,
+            b"untouched"
         );
-        assert_eq!(output.len(), BUFFER_SIZE);
+        let (record, _, _) = read_entry(&output, RECORD).await?;
+        assert_eq!(read_record(&record, RECORD)?.len(), 10_002);
         Ok(())
     }
 
     #[tokio::test]
-    async fn rejects_corrupt_zip_headers_and_early_allocation_claims() -> Result<()> {
-        for (signature, field, replacement) in [
-            (b"PK\x01\x02", 16, vec![0; 4]),                        // CRC32
-            (b"PK\x01\x02", 24, 9_u32.to_le_bytes().to_vec()),      // uncompressed size
-            (b"PK\x05\x06", 10, 10_001_u16.to_le_bytes().to_vec()), // entry count
-            (
-                b"PK\x05\x06",
-                12,
-                u32::try_from(MAX_DIRECTORY_SIZE + 1)?
-                    .to_le_bytes()
-                    .to_vec(),
-            ),
+    async fn streams_across_buffer_boundaries() -> Result<()> {
+        let bytes = vec![42; BUFFER_SIZE + 1];
+        let mut input = futures::io::Cursor::new(&bytes);
+        let mut output = Vec::new();
+        let (hash, size) = copy_hashed(&mut input, &mut output).await?;
+        assert_eq!(output, bytes);
+        assert_eq!(size, bytes.len() as u64);
+        assert_eq!(
+            hash.sha256,
+            BASE64_URL_SAFE_NO_PAD.encode(Sha256::digest(&bytes))
+        );
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn rejects_corrupt_zip_contents() -> Result<()> {
+        for (field, replacement) in [
+            (16, 0_u32), // CRC32
+            (24, 9_u32), // uncompressed size
         ] {
             let directory = tempfile::tempdir()?;
             let args = args(directory.path());
@@ -1023,26 +906,14 @@ mod tests {
             let mut bytes = fs_err::read(&args.input)?;
             let position = bytes
                 .windows(4)
-                .position(|bytes| bytes == signature)
+                .position(|bytes| bytes == b"PK\x01\x02")
                 .context("missing ZIP header")?;
-            bytes[position + field..position + field + replacement.len()]
-                .copy_from_slice(&replacement);
+            bytes[position + field..position + field + 4]
+                .copy_from_slice(&replacement.to_le_bytes());
             fs_err::write(&args.input, bytes)?;
             assert!(wheel_replace(args).await.is_err());
             assert_eq!(fs_err::read_dir(directory.path())?.count(), 2);
         }
-        let directory = tempfile::tempdir()?;
-        let path = directory.path().join("zip64.whl");
-        fixture(&path, fixture_members(), None, false, true).await?;
-        let mut bytes = fs_err::read(path)?;
-        let position = bytes
-            .windows(4)
-            .position(|bytes| bytes == b"PK\x06\x06")
-            .context("missing ZIP64 end record")?;
-        bytes[position + 32..position + 40].copy_from_slice(&u64::MAX.to_le_bytes());
-        let error = preflight_directory(&mut Cursor::new(bytes))
-            .expect_err("bound count before allocating");
-        assert_eq!(error.to_string(), "wheel contains too many ZIP64 entries");
         Ok(())
     }
 
@@ -1165,7 +1036,7 @@ mod tests {
         for index in 0..archive.file().entries().len() {
             let entry = archive.file().entries()[index].clone();
             let mut reader = archive.reader_with_entry(index).await?;
-            let (hash, size) = hash_reader(&mut reader, MAX_MEMBER_SIZE).await?;
+            let (hash, size) = hash_reader(&mut reader).await?;
             expected.insert(
                 entry.filename().as_str()?.to_string(),
                 ((*entry).clone(), hash.sha256, size),
