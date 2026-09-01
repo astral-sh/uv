@@ -1,5 +1,4 @@
 use std::cmp::Reverse;
-use std::fmt::Display;
 use std::future::Future;
 use std::io;
 use std::path::Path;
@@ -7,7 +6,6 @@ use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll};
 
-use either::Either;
 use futures::{FutureExt, TryStreamExt};
 use rayon::in_place_scope;
 use rayon::prelude::*;
@@ -29,11 +27,10 @@ use uv_distribution_types::{
     BuildInfo, BuildableSource, BuiltDist, Dist, DistRef, HashPolicy, Hashed, IndexUrl,
     InstalledDist, Name, SourceDist,
 };
-use uv_extract::dirhash::{DirectoryDigest, DirhashTree, HashedFile, UnhashedFile, dirhash_path};
+use uv_extract::dirhash::{DirectoryDigest, HashedFile};
 use uv_extract::hash::Hasher;
-use uv_fs::{LockedFile, PortablePath, write_atomic};
+use uv_fs::{LockedFile, write_atomic};
 use uv_git::{GIT_LFS, GitError};
-use uv_install_wheel::validate_and_heal_record;
 use uv_platform_tags::Tags;
 use uv_preview::PreviewFeature;
 use uv_pypi_types::{HashDigest, HashDigests, PyProjectToml};
@@ -43,6 +40,7 @@ use uv_types::{BuildContext, BuildStack};
 
 use crate::archive::Archive;
 use crate::error::PythonVersion;
+use crate::extracted_wheel::{ExtractedWheel, HashedWheel};
 use crate::hash::http_hash_algorithms;
 use crate::metadata::{ArchiveMetadata, Metadata};
 use crate::source::SourceDistributionBuilder;
@@ -721,12 +719,12 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 let temp_dir = tempfile::tempdir_in(self.build_context.cache().root())
                     .map_err(Error::CacheWrite)?;
 
-                let mut extracted = match progress {
+                let (temp_dir, mut extracted) = match progress {
                     Some((reporter, progress)) => {
                         let mut reader = ProgressReader::new(&mut hasher, progress, &**reporter);
                         ExtractedWheel::extract_streaming(
                             &mut reader,
-                            temp_dir.path(),
+                            temp_dir,
                             self.content_addressed_cache,
                         )
                         .await
@@ -734,7 +732,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                     }
                     None => ExtractedWheel::extract_streaming(
                         &mut hasher,
-                        temp_dir.path(),
+                        temp_dir,
                         self.content_addressed_cache,
                     )
                     .await
@@ -1139,9 +1137,9 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             let mut hasher = uv_extract::hash::HashReader::new(file, &mut hashers);
 
             // Unzip the wheel to a temporary directory.
-            let mut extracted = ExtractedWheel::extract_streaming(
+            let (temp_dir, mut extracted) = ExtractedWheel::extract_streaming(
                 &mut hasher,
-                temp_dir.path(),
+                temp_dir,
                 self.content_addressed_cache,
             )
             .await
@@ -1275,93 +1273,6 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
     /// Return the [`ManagedClient`] used by this resolver.
     pub fn client(&self) -> &ManagedClient<'a> {
         &self.client
-    }
-}
-
-/// Per-file digests and the hash tree of an extracted wheel.
-struct HashedWheel {
-    files: Vec<HashedFile>,
-    tree: DirhashTree,
-}
-
-/// Files extracted from a wheel, with or without content-addressing metadata.
-enum ExtractedWheel {
-    Unhashed(Vec<UnhashedFile>),
-    Hashed(HashedWheel),
-}
-
-impl ExtractedWheel {
-    /// Extract a wheel from a streaming reader, optionally retaining its per-file digests.
-    async fn extract_streaming<R>(
-        reader: R,
-        target: &Path,
-        content_addressed: bool,
-    ) -> Result<Self, uv_extract::Error>
-    where
-        R: AsyncRead + Unpin,
-    {
-        if content_addressed {
-            let (files, tree) = uv_extract::stream::unzip_and_hash(reader, target).await?;
-            Ok(Self::Hashed(HashedWheel { files, tree }))
-        } else {
-            let files = uv_extract::stream::unzip(reader, target).await?;
-            Ok(Self::Unhashed(files))
-        }
-    }
-
-    /// Extract a wheel from a seekable file, optionally retaining its per-file digests.
-    fn extract_seekable(
-        reader: fs_err::File,
-        target: &Path,
-        content_addressed: bool,
-    ) -> Result<Self, uv_extract::Error> {
-        if content_addressed {
-            let (files, tree) = uv_extract::unzip_and_hash(reader, target)?;
-            Ok(Self::Hashed(HashedWheel { files, tree }))
-        } else {
-            let files = uv_extract::unzip(reader, target)?;
-            Ok(Self::Unhashed(files))
-        }
-    }
-
-    /// Return the hashed wheel if content hashing was enabled.
-    fn into_hashed(self) -> Option<HashedWheel> {
-        match self {
-            Self::Unhashed(_) => None,
-            Self::Hashed(wheel) => Some(wheel),
-        }
-    }
-
-    /// Heal the wheel's `RECORD` and keep its hash tree consistent with the repaired contents.
-    fn validate_and_heal_record(&mut self, root: &Path, dist: impl Display) -> Result<(), Error> {
-        let files = match self {
-            Self::Unhashed(files) => {
-                Either::Left(files.iter().map(|file| (file.path(), file.size())))
-            }
-            Self::Hashed(wheel) => {
-                Either::Right(wheel.files.iter().map(|file| (file.path(), file.size())))
-            }
-        };
-        let Some(record_path) =
-            validate_and_heal_record(root, files, dist).map_err(Error::InstallWheelError)?
-        else {
-            return Ok(());
-        };
-        let Self::Hashed(hashed_wheel) = self else {
-            return Ok(());
-        };
-
-        let hash = dirhash_path(&root.join(&record_path)).map_err(|err| {
-            Error::Extract(
-                record_path.display().to_string(),
-                uv_extract::Error::from(err),
-            )
-        })?;
-        let record_path = PortablePath::from(record_path.as_path()).to_string();
-        hashed_wheel
-            .tree
-            .update_file(&record_path, hash)
-            .map_err(|err| Error::Extract(record_path, uv_extract::Error::from(err)))
     }
 }
 

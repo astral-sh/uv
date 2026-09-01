@@ -143,11 +143,11 @@ fn unpack_sdist_many_files(c: &mut Criterion<WallTime>) {
                 )
             },
             |(archive, extracted_sdist)| {
-                let files = runtime
+                let (extracted_sdist, files) = runtime
                     .block_on(uv_extract::stream::archive(
                         archive,
                         SourceDistExtension::TarGz,
-                        extracted_sdist.path(),
+                        extracted_sdist,
                     ))
                     .expect("Failed to unpack sdist");
                 let source_tree = uv_extract::strip_component(extracted_sdist.path())
