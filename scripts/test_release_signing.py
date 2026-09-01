@@ -1,4 +1,4 @@
-"""Small caller-binding fixtures; no signing identity or compiled helper is needed."""
+"""Release signing fixtures; set UV_DEV_BIN to exercise the compiled wheel replacement helper."""
 
 import base64
 import contextlib
@@ -7,6 +7,7 @@ import hashlib
 import io
 import json
 import os
+import shutil
 import tempfile
 import unittest
 from pathlib import Path
@@ -18,7 +19,12 @@ from check_uv_wheel_contents import uv_build_expected, uv_expected
 
 
 def wheel(path, distribution, *, signed=False, tamper=False):
+    """Create a wheel with uv's platform layout and a complete RECORD."""
     names = uv_expected if distribution == "uv" else uv_build_expected
+    if signing.TARGET == "x86_64-pc-windows-msvc":
+        if distribution == "uv":
+            names = names | {"uv-VERSION.data/scripts/uvw"}
+        names = {name + ".exe" if ".data/scripts/" in name else name for name in names}
     contents = {}
     for template in sorted(names):
         name = template.replace("VERSION", "1.2.3")
@@ -56,7 +62,14 @@ def wheel(path, distribution, *, signed=False, tamper=False):
 
 
 class SigningBindings(unittest.TestCase):
+    target = "aarch64-apple-darwin"
+
     def setUp(self):
+        """Prepare isolated workflow inputs for this platform."""
+        tag, binaries = signing.PLATFORMS[self.target]
+        self.enterContext(
+            patch.multiple(signing, TARGET=self.target, TAG=tag, BINARIES=binaries)
+        )
         temporary = tempfile.TemporaryDirectory()
         self.addCleanup(temporary.cleanup)
         self.directory = Path(temporary.name)
@@ -86,11 +99,13 @@ class SigningBindings(unittest.TestCase):
             )
 
     def prepared(self):
+        """Prepare the fixture wheels and bind the resulting input manifest."""
         signing.prepare()
         os.environ["INPUT_MANIFEST_SHA256"] = signing.file_digest(Path("manifest.json"))
         return json.loads(Path("manifest.json").read_text())
 
     def signed(self):
+        """Emulate signing by replacing executable bytes and binding their digests."""
         manifest = self.prepared()
         manifest["signed"] = {}
         manifest["certificate_sha256"] = "c" * 64
@@ -183,6 +198,66 @@ class SigningBindings(unittest.TestCase):
         ):
             signing.assemble()
         self.assertFalse(Path("dist/manifest.json").exists())
+
+    def test_archive_contains_signed_uv_binaries(self):
+        """Keep the standalone archive consistent with the signed wheel members."""
+        manifest = self.signed()
+        Path("dist").mkdir()
+        manifest["archive"] = signing.write_archive()
+        signing.verify_archive(manifest)
+
+    def test_archive_rejects_unsigned_binary(self):
+        """Reject an archive accidentally built from unsigned executables."""
+        manifest = self.signed()
+        (Path("signed") / signing.BINARIES["uv"][0]).write_bytes(b"unsigned")
+        Path("dist").mkdir()
+        manifest["archive"] = signing.write_archive()
+        with self.assertRaisesRegex(ValueError, "Archive binary mismatch"):
+            signing.verify_archive(manifest)
+
+    @unittest.skipUnless(
+        os.environ.get("UV_DEV_BIN"), "Set UV_DEV_BIN to test wheel replacement"
+    )
+    def test_wheel_replacement_and_final_verification(self):
+        """Exercise the actual Rust helper through preparation, assembly, and verification."""
+        shutil.copy(os.environ["UV_DEV_BIN"], "tools/uv-dev")
+        manifest = self.signed()
+        signing.assemble()
+        os.environ["FINAL_MANIFEST_SHA256"] = signing.file_digest(
+            Path("dist/manifest.json")
+        )
+        signing.verify()
+        for binary in manifest["signed"]:
+            self.assertEqual(
+                (Path("verified-binaries") / binary).read_bytes(),
+                (Path("signed") / binary).read_bytes(),
+            )
+
+
+class WindowsSigningBindings(SigningBindings):
+    target = "x86_64-pc-windows-msvc"
+
+    def test_prepare_includes_windowed_launcher_and_build_backend(self):
+        """Sign all four Windows wheel executables, including uvw and uv-build."""
+        manifest = self.prepared()
+        self.assertEqual(
+            {
+                binary
+                for item in manifest["wheels"]
+                for binary in item["replacements"].values()
+            },
+            {"uv.exe", "uvx.exe", "uvw.exe", "uv-build.exe"},
+        )
+
+    def test_zip_has_flat_release_layout(self):
+        """Keep the Windows release ZIP flat and exclude the build backend."""
+        self.signed()
+        Path("dist").mkdir()
+        archive = signing.write_archive()
+        with ZipFile(Path("dist") / archive["filename"]) as source:
+            self.assertEqual(
+                sorted(source.namelist()), ["uv.exe", "uvw.exe", "uvx.exe"]
+            )
 
 
 if __name__ == "__main__":
