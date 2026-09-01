@@ -124,6 +124,11 @@ pub(crate) async fn init(
                     // whitespace, and replacing any internal whitespace with hyphens.
                     let candidate = directory_name.trim().replace(' ', "-");
                     match PackageName::from_owned(candidate) {
+                        Ok(name) if name.as_str() == "python" => {
+                            anyhow::bail!(
+                                "The directory name (`{directory_name}`) would result in the reserved executable name `python`. Please provide a package name with `--name`."
+                            );
+                        }
                         Ok(name) => name,
                         Err(_) => {
                             let directory_description = if explicit_path.is_some() {
