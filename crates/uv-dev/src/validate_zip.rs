@@ -53,7 +53,7 @@ pub(crate) async fn validate_zip(
 
     let target = tempfile::TempDir::new()?;
 
-    uv_extract::stream::unzip(reader.compat(), target.path()).await?;
+    uv_extract::stream::unzip(reader.compat(), target).await?;
 
     Ok(())
 }

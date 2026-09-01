@@ -66,7 +66,7 @@ impl ValidatedSourceArchive {
             .collect::<Vec<_>>();
         let mut hasher = HashReader::new(reader, &mut hashers);
 
-        uv_extract::stream::archive(&mut hasher, ext, staging_dir.path())
+        let (staging_dir, _) = uv_extract::stream::archive(&mut hasher, ext, staging_dir)
             .await
             .map_err(|err| Error::Extract(source.to_string(), err))?;
 

@@ -1,12 +1,10 @@
 use std::fmt::Display;
-use std::io;
 use std::path::Path;
 
 use either::Either;
-use tokio::io::{AsyncRead, AsyncReadExt, AsyncWriteExt};
+use tokio::io::AsyncRead;
 
 use uv_extract::dirhash::{DirhashTree, HashedFile, UnhashedFile, dirhash_path};
-use uv_extract::stream::DEFAULT_BUF_SIZE;
 use uv_fs::PortablePath;
 use uv_install_wheel::validate_and_heal_record;
 
@@ -25,70 +23,25 @@ pub(crate) enum ExtractedWheel {
 }
 
 impl ExtractedWheel {
-    /// Feed an archive reader through a bounded pipe to a single extraction worker.
+    /// Extract a wheel from a streaming reader, optionally retaining its per-file digests.
     ///
-    /// Filesystem operations run synchronously on the worker, while reading and hashing the archive
-    /// remain asynchronous. The pipe applies backpressure without buffering the entire wheel.
-    /// The worker owns the temporary directory and returns it on successful extraction. Dropping
-    /// the future closes the pipe; the worker may continue processing buffered input before exiting
-    /// and removing the directory. Process shutdown can interrupt this cleanup.
-    ///
-    /// Extraction can leave unread bytes when ZIP validation is disabled. Callers must drain the
-    /// reader before finalizing download hashes.
+    /// See [`uv_extract::stream::unzip`] for buffering, cleanup, and download hash requirements.
     pub(crate) async fn extract_streaming<R>(
-        mut reader: R,
+        reader: R,
         temp_dir: tempfile::TempDir,
         content_addressed: bool,
     ) -> Result<(tempfile::TempDir, Self), uv_extract::Error>
     where
         R: AsyncRead + Unpin,
     {
-        const PIPE_BUFFER_SIZE: usize = 2 * DEFAULT_BUF_SIZE;
-
-        // Allow the download to get ahead while the worker decompresses and writes files.
-        let (sender, receiver) = tokio::io::duplex(PIPE_BUFFER_SIZE);
-        let mut extraction = tokio::task::spawn_blocking(move || {
-            let extracted = if content_addressed {
-                let (files, tree) =
-                    uv_extract::stream::unzip_blocking_and_hash(receiver, temp_dir.path())?;
-                Self::Hashed(HashedWheel { files, tree })
-            } else {
-                let files = uv_extract::stream::unzip_blocking(receiver, temp_dir.path())?;
-                Self::Unhashed(files)
-            };
-            Ok::<_, uv_extract::Error>((temp_dir, extracted))
-        });
-        let download = async {
-            // Own the write end so EOF, errors and cancellation all close the pipe.
-            let mut sender = sender;
-            let mut buffer = vec![0; DEFAULT_BUF_SIZE];
-            loop {
-                let read = reader.read(&mut buffer).await?;
-                if read == 0 {
-                    break;
-                }
-                if let Err(err) = sender.write_all(&buffer[..read]).await {
-                    if err.kind() == io::ErrorKind::BrokenPipe {
-                        // The worker either rejected the archive or finished early because ZIP
-                        // validation is disabled. The caller drains the download in the latter case.
-                        break;
-                    }
-                    return Err(err);
-                }
-            }
-            Ok::<_, io::Error>(())
-        };
-        let extraction = tokio::select! {
-            // Prefer a download error over the resulting truncated-ZIP error if both are ready.
-            biased;
-            download = download => {
-                download.map_err(uv_extract::Error::Io)?;
-                extraction.await
-            }
-            // Stop reading even if the server stalls after sending an invalid ZIP entry.
-            extraction = &mut extraction => extraction,
-        };
-        extraction.map_err(|err| uv_extract::Error::Io(io::Error::other(err)))?
+        if content_addressed {
+            let (temp_dir, files, tree) =
+                uv_extract::stream::unzip_and_hash(reader, temp_dir).await?;
+            Ok((temp_dir, Self::Hashed(HashedWheel { files, tree })))
+        } else {
+            let (temp_dir, files) = uv_extract::stream::unzip(reader, temp_dir).await?;
+            Ok((temp_dir, Self::Unhashed(files)))
+        }
     }
 
     /// Extract a wheel from a seekable file, optionally retaining its per-file digests.
