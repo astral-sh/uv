@@ -1,4 +1,4 @@
-"""Bind this test workflow's artifacts; wheel rewriting remains in `uv-dev wheel-replace`.
+"""Bind this test workflow's artifacts; wheel rewriting remains in `uv-dev inject-signed-wheel-binaries`.
 
 Manifests are integrity bindings carried by job outputs, not signatures or attestations. A retry
 must rerun preparation: artifacts from a different run attempt are deliberately rejected. This
@@ -273,14 +273,14 @@ def assemble():
         )
         command = [
             str(Path("tools/uv-dev").resolve()),
-            "wheel-replace",
+            "inject-signed-wheel-binaries",
             "--input",
             str(source),
             "--output",
             str(Path("dist/wheels") / source.name),
+            "--signed-binaries",
+            "signed",
         ]
-        for member, binary in wheel["replacements"].items():
-            command.extend(["--replace", f"{member}=signed/{binary}"])
         subprocess.run(command, check=True)
     verify_wheels(manifest, Path("dist/wheels"))
     archive = f"uv-{TARGET}.tar.gz"

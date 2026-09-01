@@ -178,10 +178,22 @@ class SigningBindings(unittest.TestCase):
                 signing.subprocess,
                 "run",
                 side_effect=RuntimeError("injected assembly failure"),
-            ),
+            ) as run,
             self.assertRaisesRegex(RuntimeError, "injected"),
         ):
             signing.assemble()
+        self.assertEqual(
+            run.call_args.args[0][1:],
+            [
+                "inject-signed-wheel-binaries",
+                "--input",
+                f"wheels/uv-1.2.3-{signing.TAG}.whl",
+                "--output",
+                f"dist/wheels/uv-1.2.3-{signing.TAG}.whl",
+                "--signed-binaries",
+                "signed",
+            ],
+        )
         self.assertFalse(Path("dist/manifest.json").exists())
 
 
