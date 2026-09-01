@@ -56,7 +56,7 @@ use crate::commands::project::{
 use crate::commands::reporters::{PythonDownloadReporter, ResolverReporter};
 use crate::commands::{ExitStatus, ScriptPath, UvError, diagnostics, pip};
 use crate::printer::Printer;
-use crate::settings::{FrozenSource, LockCheck, LockCheckSource, ResolverSettings};
+use crate::settings::{FrozenSource, LockCheck, LockedSource, ResolverSettings};
 
 /// The result of running a lock operation.
 #[derive(Debug, Clone)]
@@ -230,19 +230,10 @@ pub(crate) async fn lock(
     {
         Ok(lock) => {
             if let Some(frozen_source) = frozen {
-                match frozen_source {
-                    FrozenSource::Cli => {
-                        warn_user!(
-                            "The lockfile at `uv.lock` was only checked for validity, not whether it is up-to-date, because `--frozen` was provided; use `--check` instead"
-                        );
-                    }
-                    FrozenSource::Env | FrozenSource::Configuration => {
-                        warn_user!(
-                            "The lockfile at `uv.lock` was only checked for validity, not whether it is up-to-date, because {} was provided; use `--check` instead",
-                            MissingLockfileSource::from(frozen_source)
-                        );
-                    }
-                }
+                warn_user!(
+                    "The lockfile at `uv.lock` was only checked for validity, not whether it is up-to-date, because {} was provided; use `--check` instead",
+                    MissingLockfileSource::from(frozen_source)
+                );
             }
 
             if dry_run.enabled() {
@@ -293,7 +284,7 @@ pub(crate) enum LockMode<'env> {
     /// Perform a resolution, but don't write the lockfile to disk.
     DryRun(&'env Interpreter),
     /// Error if the lockfile is not up-to-date with the project requirements.
-    Locked(&'env Interpreter, LockCheckSource),
+    Locked(&'env Interpreter, LockedSource),
     /// Use the existing lockfile without performing a resolution.
     Frozen(MissingLockfileSource),
 }
@@ -390,9 +381,11 @@ impl<'env> LockOperation<'env> {
                     for package_name in workspace.packages().keys() {
                         existing
                             .find_by_name(package_name)
-                            .map_err(|_| ProjectError::LockWorkspaceMismatch(package_name.clone()))?
+                            .map_err(|_| {
+                                ProjectError::LockWorkspaceMismatch(package_name.clone(), source)
+                            })?
                             .ok_or_else(|| {
-                                ProjectError::LockWorkspaceMismatch(package_name.clone())
+                                ProjectError::LockWorkspaceMismatch(package_name.clone(), source)
                             })?;
                     }
                 }

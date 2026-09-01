@@ -59,7 +59,7 @@ use crate::commands::project::{
 use crate::commands::{ExitStatus, UvError, diagnostics};
 use crate::printer::Printer;
 use crate::settings::{
-    FrozenSource, InstallerSettingsRef, LockCheck, LockCheckSource, ResolverInstallerSettings,
+    FrozenSource, InstallerSettingsRef, LockCheck, LockedSource, ResolverInstallerSettings,
     ResolverSettings,
 };
 
@@ -494,7 +494,7 @@ enum Outcome {
     /// The `lock` operation was successful.
     Success(LockResult),
     /// The `lock` operation successfully resolved, but failed due to a mismatch (e.g., with `--locked`).
-    LockMismatch(Option<Box<Lock>>, Box<Lock>, LockCheckSource),
+    LockMismatch(Option<Box<Lock>>, Box<Lock>, LockedSource),
 }
 
 impl Outcome {

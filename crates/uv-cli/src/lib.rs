@@ -4080,8 +4080,12 @@ pub struct LockArgs {
     /// Assert that a `uv.lock` exists without checking if it is up-to-date [env: UV_FROZEN=]
     ///
     /// Equivalent to `--frozen`.
-    #[arg(long, alias = "frozen", conflicts_with_all = ["check", "locked"])]
+    #[arg(long, conflicts_with_all = ["check", "locked"])]
     pub check_exists: bool,
+
+    /// Equivalent to `--check-exists`.
+    #[arg(long, hide = true, conflicts_with_all = ["check_exists", "check", "locked", "dry_run"])]
+    pub frozen: bool,
 
     /// Perform a dry run, without writing the lockfile.
     ///

@@ -80,7 +80,7 @@ use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::{ExitStatus, diagnostics, project, read_env_files};
 use crate::printer::Printer;
 use crate::settings::{
-    FrozenSource, GlobalSettings, LockCheck, LockCheckSource, ResolverInstallerSettings,
+    FrozenSource, GlobalSettings, LockCheck, LockedSource, ResolverInstallerSettings,
     ResolverSettings,
 };
 
@@ -330,13 +330,13 @@ pub(crate) async fn run(
             // breaking users who set `UV_LOCKED=1` globally.
             if let LockCheck::Enabled(lock_check) = lock_check {
                 match lock_check {
-                    LockCheckSource::LockedCli | LockCheckSource::Check => {
+                    LockedSource::Cli(_) => {
                         bail!(
                             "Unable to find lockfile for Python script, but `{lock_check}` was provided. To create a lockfile, run `{}`.",
                             "uv lock --script".green(),
                         );
                     }
-                    LockCheckSource::LockedEnv | LockCheckSource::LockedConfiguration => {
+                    LockedSource::Env | LockedSource::Configuration => {
                         warn_user!(
                             "No lockfile found for Python script (ignoring `{lock_check}`); run `{}` to generate a lockfile",
                             "uv lock --script".green(),
@@ -346,9 +346,9 @@ pub(crate) async fn run(
             }
             if let Some(frozen_source) = frozen {
                 match frozen_source {
-                    FrozenSource::Cli => {
+                    FrozenSource::Cli(_) => {
                         bail!(
-                            "Unable to find lockfile for Python script, but `--frozen` was provided. To create a lockfile, run `{}`.",
+                            "Unable to find lockfile for Python script, but `{frozen_source}` was provided. To create a lockfile, run `{}`.",
                             "uv lock --script".green(),
                         );
                     }
