@@ -54,18 +54,12 @@ jobs:
     runs-on: github-ubuntu-24.04-aarch64-4
     env:
       RUSTC_BOOTSTRAP: 1
+      # Use rustc's bundled LLD instead of the system linker.
+      RUSTFLAGS: -Z unstable-options -C linker-features=+lld -C link-self-contained=+linker
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-
-      - name: "Use bundled LLD"
-        run: |
-          # The direct rustc opt-in is unstable here, so route the C driver to
-          # rustc's bundled LLD wrapper instead of installing mold.
-          bundled_lld_dir="$(rustc --print sysroot)/lib/rustlib/$(rustc -vV | sed -n 's/^host: //p')/bin/gcc-ld"
-          test -x "${bundled_lld_dir}/ld.lld"
-          echo "RUSTFLAGS=-C link-arg=-B${bundled_lld_dir} -C link-arg=-fuse-ld=lld" >> "${GITHUB_ENV}"
 
       - name: "Install Rust toolchain"
         run: rustup toolchain install --profile minimal
@@ -142,18 +136,12 @@ jobs:
     runs-on: github-ubuntu-24.04-x86_64-8
     env:
       RUSTC_BOOTSTRAP: 1
+      # Use rustc's bundled LLD instead of the system linker.
+      RUSTFLAGS: -Z unstable-options -C linker-features=+lld -C link-self-contained=+linker
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-
-      - name: "Use bundled LLD"
-        run: |
-          # The direct rustc opt-in is unstable here, so route the C driver to
-          # rustc's bundled LLD wrapper instead of installing mold.
-          bundled_lld_dir="$(rustc --print sysroot)/lib/rustlib/$(rustc -vV | sed -n 's/^host: //p')/bin/gcc-ld"
-          test -x "${bundled_lld_dir}/ld.lld"
-          echo "RUSTFLAGS=-C link-arg=-B${bundled_lld_dir} -C link-arg=-fuse-ld=lld" >> "${GITHUB_ENV}"
 
       - name: "Setup musl"
         run: sudo apt-get install musl-tools
