@@ -159,7 +159,7 @@ pub(crate) async fn sync(
     let frozen_lock = if let Some(source) = frozen {
         Some(
             lock_target
-                .read_frozen(MissingLockfileSource::from(source))
+                .read_frozen(MissingLockfileSource::from(source), LockCommand::Sync)
                 .await
                 .map_err(|err| match (err, &target) {
                     (ProjectError::MissingLockfile(..), SyncTarget::Script(script)) => anyhow::anyhow!(
