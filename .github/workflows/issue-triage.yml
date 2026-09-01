@@ -253,7 +253,7 @@ jobs:
       contents: read
       id-token: write
       issues: read
-    uses: $/.github/workflows/reproduce-bug.yml
+    uses: ./.github/workflows/reproduce-bug.yml
     with:
       issue: ${{ inputs.issue || github.event.issue.number }}
       issue-type: ${{ fromJSON(needs.triage.outputs.result).type }}
@@ -275,7 +275,7 @@ jobs:
       contents: read
       id-token: write
       issues: read
-    uses: $/.github/workflows/fix-bug.yml
+    uses: ./.github/workflows/fix-bug.yml
     with:
       issue: ${{ inputs.issue || github.event.issue.number }}
       issue-number: ${{ needs.reproduce-bug.outputs.issue-number }}

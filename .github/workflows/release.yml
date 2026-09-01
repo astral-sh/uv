@@ -117,7 +117,7 @@ jobs:
     needs:
       - plan
     if: ${{ needs.plan.outputs.publishing == 'true' || fromJson(needs.plan.outputs.val).ci.github.pr_run_mode == 'upload' || inputs.tag == 'dry-run' }}
-    uses: $/.github/workflows/build-release-binaries.yml
+    uses: ./.github/workflows/build-release-binaries.yml
     with:
       plan: ${{ needs.plan.outputs.val }}
     secrets: inherit
@@ -127,7 +127,7 @@ jobs:
       - plan
       - release-gate
     if: ${{ always() && needs.plan.result == 'success' && (needs.release-gate.result == 'success' || needs.release-gate.result == 'skipped') && (needs.plan.outputs.publishing == 'true' || fromJson(needs.plan.outputs.val).ci.github.pr_run_mode == 'upload' || inputs.tag == 'dry-run') }}
-    uses: $/.github/workflows/build-docker.yml
+    uses: ./.github/workflows/build-docker.yml
     with:
       plan: ${{ needs.plan.outputs.val }}
     secrets: inherit
@@ -280,7 +280,7 @@ jobs:
       - host
       - release-gate
     if: ${{ !fromJson(needs.plan.outputs.val).announcement_is_prerelease || fromJson(needs.plan.outputs.val).publish_prereleases }}
-    uses: $/.github/workflows/publish-pypi.yml
+    uses: ./.github/workflows/publish-pypi.yml
     with:
       plan: ${{ needs.plan.outputs.val }}
     secrets: inherit
@@ -296,7 +296,7 @@ jobs:
       - release-gate
       - publish-pypi # DIRTY: see #16989
     if: ${{ !fromJson(needs.plan.outputs.val).announcement_is_prerelease || fromJson(needs.plan.outputs.val).publish_prereleases }}
-    uses: $/.github/workflows/publish-crates.yml
+    uses: ./.github/workflows/publish-crates.yml
     with:
       plan: ${{ needs.plan.outputs.val }}
     secrets: inherit
@@ -381,7 +381,7 @@ jobs:
     # Use `always() && ...` so this job gates only on whether `publish-github`
     # completed successfully.
     if: ${{ always() && needs.publish-github.result == 'success' }}
-    uses: $/.github/workflows/publish-docs.yml
+    uses: ./.github/workflows/publish-docs.yml
     with:
       plan: ${{ needs.plan.outputs.val }}
     secrets: inherit
@@ -391,7 +391,7 @@ jobs:
       - plan
       - publish-github
     if: ${{ always() && needs.publish-github.result == 'success' }}
-    uses: $/.github/workflows/publish-versions.yml
+    uses: ./.github/workflows/publish-versions.yml
     with:
       plan: ${{ needs.plan.outputs.val }}
     secrets: inherit
@@ -401,7 +401,7 @@ jobs:
       - plan
       - publish-github
     if: ${{ always() && needs.publish-github.result == 'success' }}
-    uses: $/.github/workflows/publish-mirror.yml
+    uses: ./.github/workflows/publish-mirror.yml
     with:
       plan: ${{ needs.plan.outputs.val }}
     secrets: inherit
