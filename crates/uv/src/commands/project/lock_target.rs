@@ -360,14 +360,11 @@ impl<'lock> LockTarget<'lock> {
         command: LockCommand,
     ) -> Result<Lock, ProjectError> {
         let lock_filename = self.lock_filename();
-        let existing = self
-            .read()
-            .await?
-            .ok_or(ProjectError::MissingLockfile(
-                source,
-                lock_filename,
-                command,
-            ))?;
+        let existing = self.read().await?.ok_or(ProjectError::MissingLockfile(
+            source,
+            lock_filename,
+            command,
+        ))?;
 
         // Check if the discovered workspace members match the locked workspace members.
         if let Self::Workspace(workspace) = self {
