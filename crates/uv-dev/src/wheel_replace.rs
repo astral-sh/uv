@@ -18,7 +18,7 @@ pub(crate) struct WheelReplaceArgs {
     /// A wheel produced by uv's release build.
     #[arg(long)]
     input: PathBuf,
-    /// The rewritten wheel. Must not already exist (including a dangling symlink).
+    /// The rewritten wheel. Existing paths are not overwritten.
     #[arg(long)]
     output: PathBuf,
     /// A wheel member and its replacement file, in the form `MEMBER=PATH`.
@@ -50,6 +50,26 @@ impl FromStr for Replacement {
 }
 
 /// Reassemble `uv` and `uv_build` wheels with code-signed executables.
+///
+/// The release build produces file-only wheels with the relevant members arranged as:
+///
+/// ```text
+/// uv-{version}.data/scripts/
+/// ├── uv[.exe]
+/// ├── uvx[.exe]
+/// └── uvw.exe                 # Windows only
+/// uv-{version}.dist-info/
+/// └── RECORD
+/// uv/
+/// └── ...
+///
+/// uv_build-{version}.data/scripts/
+/// └── uv-build[.exe]
+/// uv_build-{version}.dist-info/
+/// └── RECORD
+/// uv_build/
+/// └── ...
+/// ```
 ///
 /// Expects a trusted, file-only wheel and replacement binaries that fit in memory. Replacements
 /// match exact member names; every requested member must exist. Other file contents and executable
