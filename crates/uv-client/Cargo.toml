@@ -91,4 +91,5 @@ temp-env = { workspace = true }
 tempfile = { workspace = true }
 tokio = { workspace = true }
 tokio-rustls = { workspace = true }
+tracing-test = { workspace = true }
 wiremock = { workspace = true }

@@ -6376,6 +6376,7 @@ dependencies = [
  "tokio-rustls",
  "tokio-util",
  "tracing",
+ "tracing-test",
  "url",
  "uv-auth",
  "uv-cache",
