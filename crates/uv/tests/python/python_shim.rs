@@ -1,3 +1,5 @@
+#[cfg(unix)]
+use std::os::unix::fs::PermissionsExt;
 use std::path::Path;
 use std::process::Command;
 
@@ -69,6 +71,50 @@ fn python_shim() {
     ----- stderr -----
     error: Ignoring recursive query from uv
     ");
+}
+
+#[test]
+#[cfg(unix)]
+fn python_shim_marks_discovery_queries() -> anyhow::Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let mut command = shim(&context);
+    let uv = context.bin_dir.join("uv");
+    // Simulate an older uv that queries a shim without adding a recursion guard.
+    // Fail before querying if the guard is absent so this test cannot recurse.
+    fs_err::write(
+        &uv,
+        r#"#!/bin/sh
+if [ "${UV_INTERNAL__PYTHON_QUERY:-}" != "1" ]; then
+    echo 'error: missing discovery recursion guard' >&2
+    exit 1
+fi
+"$UV_SHIM_TEST_QUERY" -c pass >&2
+if [ "$?" != "2" ]; then
+    exit 1
+fi
+printf '%s\n' "$UV_SHIM_TEST_PYTHON"
+"#,
+    )?;
+    let mut permissions = fs_err::metadata(&uv)?.permissions();
+    permissions.set_mode(0o755);
+    fs_err::set_permissions(&uv, permissions)?;
+    command
+        .env("UV_SHIM_TEST_QUERY", command.get_program().to_owned())
+        .env(
+            "UV_SHIM_TEST_PYTHON",
+            context.python_command().get_program(),
+        );
+
+    // The lookup must reject the recursive query without leaking its guard into Python.
+    uv_snapshot!(context.filters(), command.arg("+v").arg("-c").arg("import os; print(os.environ.get('UV_INTERNAL__PYTHON_QUERY'))"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    None
+
+    ----- stderr -----
+    error: Ignoring recursive query from uv
+    ");
+    Ok(())
 }
 
 #[test]

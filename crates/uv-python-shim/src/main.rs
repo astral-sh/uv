@@ -149,6 +149,9 @@ fn run() -> Result<ExitStatus, Error> {
     let mut cmd = Command::new(uv);
     let uv_args = ["python", "find"].iter().copied().chain(options.as_args());
     cmd.args(uv_args);
+    // Older uv versions do not mark interpreter queries themselves. Propagate the
+    // guard through discovery, but not to the Python process we execute below.
+    cmd.env("UV_INTERNAL__PYTHON_QUERY", "1");
     let output = cmd.output().map_err(Error::Io)?;
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(output.stderr.as_slice());
