@@ -707,7 +707,7 @@ mod tests {
         for (compression, streaming, zip64) in [
             (Compression::Stored, false, false),
             (Compression::Deflate, true, false),
-            (Compression::Bz, false, true),
+            (Compression::Zstd, false, true),
         ] {
             let directory = tempfile::tempdir()?;
             let args = args(directory.path());
