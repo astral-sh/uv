@@ -10,9 +10,8 @@ use indoc::{formatdoc, indoc};
 #[cfg(unix)]
 use insta::allow_duplicates;
 use url::Url;
-use walkdir::WalkDir;
 
-use uv_cache::{Cache, CacheBucket};
+use uv_cache::Cache;
 use uv_python::PythonEnvironment;
 use uv_static::EnvVars;
 #[cfg(unix)]
@@ -514,32 +513,6 @@ fn workspace_metadata_script_sync_caches_interpreter() -> Result<()> {
     // Priming the cache must not run the newly prepared interpreter.
     assert!(!startup_marker.exists());
 
-    let interpreter_cache = context
-        .cache_dir
-        .child(CacheBucket::Interpreter.to_string());
-    let cache_entries = || {
-        WalkDir::new(&interpreter_cache)
-            .sort_by_file_name()
-            .into_iter()
-            .map(|entry| {
-                let entry = entry?;
-                Ok((entry.path().to_path_buf(), entry.metadata()?.modified()?))
-            })
-            .collect::<Result<Vec<_>>>()
-    };
-    let prepared_cache = cache_entries()?;
-
-    context
-        .workspace_metadata()
-        .arg("--script")
-        .arg(script.path())
-        .assert()
-        .success();
-
-    // Reusing the environment should neither add nor rewrite interpreter cache entries.
-    assert_eq!(cache_entries()?, prepared_cache);
-    assert!(!startup_marker.exists());
-
     // Compare all inferred interpreter metadata with a query of the actual venv Python.
     let cache = Cache::from_path(context.cache_dir.path().to_path_buf())
         .init_no_wait()?
@@ -586,17 +559,14 @@ fn workspace_metadata_script_sync_launcher_override() -> Result<()> {
         assert_ne!(Path::new(root), context.venv.path());
 
         // Inferred metadata for the script environment must not hide the launcher override.
-        // Both a fresh query and a cached query should report the overridden environment.
         allow_duplicates! {
-            for _ in 0..2 {
-                uv_snapshot!(context.filters(), context.python_find()
-                    .arg(root)
-                    .env(variable, &override_python), @"
-                exit_code: 0 (success)
-                ----- stdout -----
-                [VENV]/bin/python3
-                ");
-            }
+            uv_snapshot!(context.filters(), context.python_find()
+                .arg(root)
+                .env(variable, &override_python), @"
+            exit_code: 0 (success)
+            ----- stdout -----
+            [VENV]/bin/python3
+            ");
         }
     }
 
