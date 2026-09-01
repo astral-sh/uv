@@ -625,8 +625,8 @@ pub(crate) enum LockCheck {
 /// The source of the frozen flag.
 #[derive(Debug, Clone, Copy)]
 pub(crate) enum FrozenSource {
-    /// The `--frozen` flag was provided on CLI.
-    Cli,
+    /// A frozen-mode flag was provided on CLI, e.g., `--frozen` or `--check-exists`.
+    Cli(&'static str),
     /// The `UV_FROZEN` environment variable was set.
     Env,
     /// The `frozen` option was set via workspace configuration.
@@ -671,14 +671,13 @@ fn resolve_lock_flags(locked: Flag, frozen: Flag) -> anyhow::Result<(Flag, Flag)
 
 /// Convert a resolved flag to an optional frozen source.
 fn resolve_frozen(flag: Flag) -> Option<FrozenSource> {
-    if flag.is_enabled() {
-        Some(match flag.source() {
-            Some(FlagSource::Cli) | None => FrozenSource::Cli,
-            Some(FlagSource::Env(_)) => FrozenSource::Env,
-            Some(FlagSource::Config) => FrozenSource::Configuration,
-        })
-    } else {
-        None
+    match flag {
+        Flag::Disabled => None,
+        Flag::Enabled { source, name } => Some(match source {
+            FlagSource::Cli => FrozenSource::Cli(name),
+            FlagSource::Env(_) => FrozenSource::Env,
+            FlagSource::Config => FrozenSource::Configuration,
+        }),
     }
 }
 
@@ -2108,6 +2107,7 @@ impl LockSettings {
             check,
             locked,
             check_exists,
+            frozen,
             dry_run,
             script,
             resolver,
@@ -2127,7 +2127,15 @@ impl LockSettings {
             if check { "check" } else { "locked" },
             environment.locked,
         );
-        let frozen = resolve_flag(check_exists, "frozen", environment.frozen);
+        let frozen = resolve_flag(
+            frozen || check_exists,
+            if check_exists {
+                "check-exists"
+            } else {
+                "frozen"
+            },
+            environment.frozen,
+        );
 
         let (locked, frozen) = resolve_lock_flags(locked, frozen)?;
 

@@ -89,8 +89,8 @@ pub(crate) mod version;
 /// The source of a missing lockfile error.
 #[derive(Debug, Clone, Copy)]
 pub(crate) enum MissingLockfileSource {
-    /// The `--frozen` flag was provided.
-    Frozen,
+    /// A frozen-mode flag was provided, e.g., `--frozen` or `--check-exists`.
+    Frozen(&'static str),
     /// The `UV_FROZEN` environment variable was set.
     FrozenEnv,
     /// The `frozen` option was set via workspace configuration.
@@ -108,7 +108,7 @@ pub(crate) enum MissingLockfileSource {
 impl std::fmt::Display for MissingLockfileSource {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Frozen => write!(f, "`--frozen`"),
+            Self::Frozen(name) => write!(f, "`--{name}`"),
             Self::FrozenEnv => write!(f, "`UV_FROZEN=1`"),
             Self::FrozenConfiguration => write!(f, "`frozen` (workspace configuration)"),
             Self::Locked => write!(f, "`--locked`"),
@@ -133,7 +133,7 @@ impl From<LockCheckSource> for MissingLockfileSource {
 impl From<FrozenSource> for MissingLockfileSource {
     fn from(source: FrozenSource) -> Self {
         match source {
-            FrozenSource::Cli => Self::Frozen,
+            FrozenSource::Cli(name) => Self::Frozen(name),
             FrozenSource::Env => Self::FrozenEnv,
             FrozenSource::Configuration => Self::FrozenConfiguration,
         }
@@ -156,9 +156,9 @@ pub(crate) enum ProjectError {
     MissingLockfile(MissingLockfileSource, PathBuf),
 
     #[error(
-        "The lockfile at `uv.lock` needs to be updated, but `--frozen` was provided: Missing workspace member `{0}`."
+        "The lockfile at `uv.lock` needs to be updated, but {1} was provided: Missing workspace member `{0}`."
     )]
-    LockWorkspaceMismatch(PackageName),
+    LockWorkspaceMismatch(PackageName, MissingLockfileSource),
 
     #[error(
         "The lockfile at `uv.lock` uses an unsupported schema version (v{1}, but only v{0} is supported). Downgrade to a compatible uv version, or remove the `uv.lock` prior to running `uv lock` or `uv sync`."

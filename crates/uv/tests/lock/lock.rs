@@ -38301,12 +38301,120 @@ fn lock_frozen_overrides_locked_environment() -> Result<()> {
         .env(EnvVars::UV_LOCKED, "1"), @"
     exit_code: 0 (success)
     ----- stderr -----
-    warning: Ignoring `UV_LOCKED` because `--frozen` was provided
-    warning: The lockfile at `uv.lock` was only checked for validity, not whether it is up-to-date, because `--frozen` was provided; use `--check` instead
+    warning: Ignoring `UV_LOCKED` because `--check-exists` was provided
+    warning: The lockfile at `uv.lock` was only checked for validity, not whether it is up-to-date, because `--check-exists` was provided; use `--check` instead
     ");
     assert_eq!(context.read("uv.lock"), lock);
 
     Ok(())
+}
+
+/// Errors identify the flag or environment variable that enabled frozen mode.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_frozen_errors_report_source() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--frozen"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Unable to find lockfile at `uv.lock`, but `--frozen` was provided. To create a lockfile, run `uv lock` or `uv sync` without the flag.
+    ");
+
+    uv_snapshot!(context.filters(), context.lock().arg("--check-exists"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Unable to find lockfile at `uv.lock`, but `--check-exists` was provided. To create a lockfile, run `uv lock` or `uv sync` without the flag.
+    ");
+
+    uv_snapshot!(context.filters(), context.lock().env(EnvVars::UV_FROZEN, "1"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Unable to find lockfile at `uv.lock`, but `UV_FROZEN=1` was provided. To create a lockfile, run `uv lock` or `uv sync` without the flag.
+    ");
+
+    context.lock().assert().success();
+    let lock = context.read("uv.lock");
+
+    // Rename the project so it is missing from the existing lockfile.
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "renamed"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--frozen"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: The lockfile at `uv.lock` needs to be updated, but `--frozen` was provided: Missing workspace member `renamed`.
+
+    hint: To update the lockfile, run `uv lock`.
+    ");
+
+    uv_snapshot!(context.filters(), context.lock().arg("--check-exists"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: The lockfile at `uv.lock` needs to be updated, but `--check-exists` was provided: Missing workspace member `renamed`.
+
+    hint: To update the lockfile, run `uv lock`.
+    ");
+
+    uv_snapshot!(context.filters(), context.lock().env(EnvVars::UV_FROZEN, "1"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: The lockfile at `uv.lock` needs to be updated, but `UV_FROZEN=1` was provided: Missing workspace member `renamed`.
+
+    hint: To update the lockfile, run `uv lock`.
+    ");
+    assert_eq!(context.read("uv.lock"), lock);
+
+    Ok(())
+}
+
+/// Both spellings retain the same conflicts with other lock modes and dry runs.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_frozen_flag_conflicts() {
+    let context = uv_test::test_context_with_versions!(&[]);
+
+    for flag in ["--frozen", "--check-exists"] {
+        context
+            .lock()
+            .arg("--show-settings")
+            .arg(flag)
+            .assert()
+            .success();
+
+        for conflict in [
+            "--check",
+            "--locked",
+            "--dry-run",
+            "--frozen",
+            "--check-exists",
+        ] {
+            // Showing settings succeeds without a project unless argument validation fails.
+            context
+                .lock()
+                .arg("--show-settings")
+                .args([flag, conflict])
+                .assert()
+                .code(2);
+            context
+                .lock()
+                .arg("--show-settings")
+                .args([conflict, flag])
+                .assert()
+                .code(2);
+        }
+    }
 }
 
 /// Test that `uv lock --frozen` and `UV_FROZEN=1` show a warning.
