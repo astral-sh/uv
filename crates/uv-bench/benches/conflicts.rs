@@ -1,84 +1,92 @@
-//! Warm, offline conflict benchmarks. These are reduced dependency graphs, not timings of the
-//! motivating projects. See the fixture constructors for their sizes and historical regressions.
+//! Warm, offline `uv lock` benchmarks over a fixed package graph with different conflict shapes.
 //!
-//! Like the resolver benchmarks, these use the repository's `.venv`. Fixture generation, interpreter
-//! discovery, cache warming, and output checks are outside measurement. Each measured invocation
-//! starts with a fresh workspace cache, but reuses the disk cache and process-global marker interner.
-//! Lock benchmarks remove the previous lockfile outside measurement, so they include resolution,
-//! conflict simplification, and serialization rather than measuring the up-to-date-lock fast path.
+//! These use the repository's `.venv`. Packse fixture generation, interpreter discovery, cache
+//! warming, lockfile removal, and output checks are outside measurement. Each invocation resolves
+//! from scratch with a fresh workspace cache, but reuses the disk cache and global marker interner.
 
 // Don't optimize the alloc crate away due to it being otherwise unused.
 extern crate uv_performance_memory_allocator;
 
 use std::collections::{BTreeMap, BTreeSet};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use clap::Parser;
 use criterion::{BatchSize, Criterion, criterion_group, criterion_main};
 use tempfile::TempDir;
-use tokio::runtime::Runtime;
 
 use uv::GlobalInitialization;
 use uv::commands::ExitStatus;
 use uv_cache::Cache;
 use uv_cli::Cli;
 use uv_python::PythonEnvironment;
-use uv_resolver::{Lock, PylockToml};
+use uv_resolver::Lock;
 use uv_test::packse::generate_wheel;
-
-const SHARED_PACKAGES: usize = 8;
-const WORKSPACE_MEMBERS: usize = 24;
-const BACKENDS: usize = 24;
 
 struct Fixture {
     directory: TempDir,
-    pyproject: toml::Table,
-    packages: BTreeSet<(String, String)>,
+    packages: BTreeSet<String>,
+    conflict_count: usize,
 }
 
 impl Fixture {
-    fn new() -> Self {
+    fn new(extra_count: usize, conflicts: &[Vec<usize>]) -> Self {
         let directory = tempfile::tempdir().expect("Failed to create benchmark directory");
         fs_err::create_dir(directory.path().join("wheels"))
             .expect("Failed to create wheel directory");
         let mut fixture = Self {
             directory,
-            pyproject: toml::toml! {
-                [project]
-                name = "conflict-benchmark"
-                version = "1.0.0"
-                requires-python = ">=3.11"
-                dependencies = []
-                optional-dependencies = {}
-
-                [tool.uv]
-                package = false
-                conflicts = []
-                sources = {}
-                workspace = { members = [] }
-            },
-            packages: BTreeSet::from([("conflict-benchmark".to_string(), "1.0.0".to_string())]),
+            packages: BTreeSet::from(["conflict-benchmark".to_string()]),
+            conflict_count: conflicts.len(),
         };
-        // A short shared chain, with a platform-dependent version at its leaf. This keeps platform
-        // conditions mixed with conflict conditions rather than benchmarking only Boolean extras.
-        for index in 0..SHARED_PACKAGES {
-            let dependencies = if index + 1 < SHARED_PACKAGES {
-                vec![format!("shared-{}==1.0.0", index + 1)]
+
+        for index in 0..4 {
+            let dependencies = if index < 3 {
+                vec![format!("shared-{}", index + 1)]
             } else {
-                vec![
-                    "platform-dep==1.0.0; sys_platform == 'linux'".to_string(),
-                    "platform-dep==2.0.0; sys_platform != 'linux'".to_string(),
-                ]
+                Vec::new()
             };
             fixture.wheel(
                 &format!("shared-{index}"),
-                "1.0.0",
                 &dependencies,
                 (index == 0).then_some("feature"),
             );
         }
-        fixture.wheel("platform-dep", "1.0.0", &[], None);
-        fixture.wheel("platform-dep", "2.0.0", &[], None);
+
+        let mut extras = toml::Table::new();
+        for index in 0..extra_count {
+            let name = format!("package-{index}");
+            // A requested transitive extra exercises marker projection, optimized in #19538.
+            fixture.wheel(&name, &["shared-0[feature]".to_string()], None);
+            extras.insert(format!("extra-{index}"), vec![name].into());
+        }
+        // Deliberately keep the same versions and dependencies across conflict shapes, including
+        // the no-conflict control: only the declarations should change resolution's workload.
+        let conflicts = conflicts
+            .iter()
+            .map(|set| {
+                toml::Value::Array(
+                    set.iter()
+                        .map(|index| toml::toml! { extra = (format!("extra-{index}")) }.into())
+                        .collect(),
+                )
+            })
+            .collect::<Vec<_>>();
+        let pyproject = toml::toml! {
+            [project]
+            name = "conflict-benchmark"
+            version = "1.0.0"
+            requires-python = ">=3.11"
+            optional-dependencies = (extras)
+
+            [tool.uv]
+            package = false
+            conflicts = (conflicts)
+        };
+        fs_err::write(
+            fixture.root().join("pyproject.toml"),
+            toml::to_string(&pyproject).expect("Failed to serialize benchmark project"),
+        )
+        .expect("Failed to write benchmark project");
         fixture
     }
 
@@ -86,31 +94,9 @@ impl Fixture {
         self.directory.path()
     }
 
-    fn write(&self) {
-        fs_err::write(
-            self.root().join("pyproject.toml"),
-            toml::to_string(&self.pyproject).expect("Failed to serialize benchmark project"),
-        )
-        .expect("Failed to write benchmark project");
-        // An explicit config file prevents repository/user index and build policies from leaking
-        // into these fixtures, while leaving their project metadata available to discovery.
-        let wheels = self.root().join("wheels");
-        let config = toml::toml! {
-            no-index = true
-            no-build = true
-            find-links = [(wheels.to_str().expect("Wheel path must be UTF-8"))]
-        };
-        fs_err::write(
-            self.root().join("uv.toml"),
-            toml::to_string(&config).expect("Failed to serialize benchmark configuration"),
-        )
-        .expect("Failed to write benchmark configuration");
-    }
-
-    /// Generate a local package with packse, outside the measured invocation.
-    fn wheel(&mut self, name: &str, version: &str, dependencies: &[String], extra: Option<&str>) {
+    fn wheel(&mut self, name: &str, dependencies: &[String], extra: Option<&str>) {
         let name = name.parse().expect("Invalid fixture package name");
-        let version = version.parse().expect("Invalid fixture package version");
+        let version = "1.0.0".parse().expect("Invalid fixture package version");
         let requires = dependencies
             .iter()
             .map(|dependency| dependency.parse().expect("Invalid fixture dependency"))
@@ -132,13 +118,12 @@ impl Fixture {
         );
         fs_err::write(self.root().join("wheels").join(filename), bytes)
             .expect("Failed to write wheel");
-        self.packages
-            .insert((name.to_string(), version.to_string()));
+        self.packages.insert(name.to_string());
     }
 
     fn remove_lock(&self) {
         let path = self.root().join("uv.lock");
-        // CodSpeed may call the batch setup more than once before invoking the measured routine.
+        // CodSpeed can call setup more than once before the measured routine.
         if path.exists() {
             fs_err::remove_file(path).expect("Failed to remove benchmark lockfile");
         }
@@ -151,405 +136,96 @@ impl Fixture {
         let packages = lock
             .packages()
             .iter()
-            .map(|package| {
-                (
-                    package.name().to_string(),
-                    package
-                        .version()
-                        .expect("Fixture packages have versions")
-                        .to_string(),
-                )
-            })
+            .map(|package| package.name().to_string())
             .collect();
         assert_eq!(
             self.packages, packages,
-            "Lock must retain every alternative"
+            "Lock must retain every extra's packages"
         );
-    }
-}
-
-/// Preserve sktime's 15 overlapping pairs from the report behind #18094 (issue #18026), including
-/// its multiple overlapping CI pins, rather than using hundreds of independent conflict sets.
-/// <https://github.com/sktime/sktime/blob/4a5ab785285b7615cedd8a617c84d09dee47f6b0/pyproject.toml>
-fn overlapping() -> Fixture {
-    let mut fixture = Fixture::new();
-    let pairs = [
-        ("dependencies_lowest", "dependencies_lower"),
-        ("dependencies_lowest", "all_extras"),
-        ("dependencies_lowest", "all_extras_pandas2"),
-        ("dl", "dependencies_lowest"),
-        ("forecasting", "dependencies_lowest"),
-        ("notebooks", "dependencies_lowest"),
-        ("pandas1", "dependencies_lower"),
-        ("dependencies_2024", "dependencies_lowest"),
-        ("classification", "dependencies_lowest"),
-        ("networks", "dependencies_lowest"),
-        ("regression", "dependencies_lowest"),
-        ("dependencies_2024", "dependencies_lower"),
-        ("notebooks", "dependencies_2024"),
-        ("numpy1", "dependencies_2024"),
-        ("pandas1", "dependencies_2024"),
-    ];
-    let mut extras = toml::Table::new();
-    let mut conflicts = Vec::new();
-    for (index, (left, right)) in pairs.into_iter().enumerate() {
-        // A separate version disagreement per pair preserves exactly the declared compatibility
-        // graph: extras that do not conflict can still be selected together.
-        let name = format!("choice-{index}");
-        for (extra, version) in [(left, "1.0.0"), (right, "2.0.0")] {
-            fixture.wheel(&name, version, &["shared-0".to_string()], None);
-            extras
-                .entry(extra)
-                .or_insert_with(|| toml::Value::Array(Vec::new()))
-                .as_array_mut()
-                .expect("Extra requirements are arrays")
-                .push(format!("{name}=={version}").into());
-        }
-        conflicts.push(toml::Value::Array(vec![
-            toml::toml! { extra = (left) }.into(),
-            toml::toml! { extra = (right) }.into(),
-        ]));
-    }
-    fixture.pyproject["project"]["optional-dependencies"] = extras.into();
-    fixture.pyproject["tool"]["uv"]["conflicts"] = conflicts.into();
-    fixture.write();
-    fixture
-}
-
-/// The report behind #19538 (#16779) had 24 defined extras, mostly sharing the same runtime pins.
-/// Model that scale with one mutually exclusive set of environments using two backend versions.
-/// This is not a copy of its dependency graph or its conflict declarations, which also contained
-/// duplicate and undefined extra names.
-/// <https://github.com/alex-shapiro/PufferLib/blob/21807b34145822e307314dd0e3b503139c6aaa97/pyproject.toml>
-fn mutually_exclusive() -> Fixture {
-    let mut fixture = Fixture::new();
-    let mut extras = toml::Table::new();
-    let mut conflicts = Vec::new();
-    for version in ["1.0.0", "2.0.0"] {
-        // Requesting a transitive extra is essential to the `without_extras` regression in #19538.
-        fixture.wheel("backend", version, &["shared-0[feature]".to_string()], None);
-    }
-    for index in 1..=BACKENDS {
-        let extra = format!("backend-{index}");
-        let environment = format!("environment-{index}");
-        let version = if index < BACKENDS { "1.0.0" } else { "2.0.0" };
-        fixture.wheel(
-            &environment,
-            "1.0.0",
-            &[format!("backend=={version}")],
-            None,
-        );
-        extras.insert(extra.clone(), vec![environment].into());
-        conflicts.push(toml::Value::from(toml::toml! { extra = (extra) }));
-    }
-    fixture.pyproject["project"]["optional-dependencies"] = extras.into();
-    fixture.pyproject["tool"]["uv"]["conflicts"] = vec![toml::Value::Array(conflicts)].into();
-    fixture.write();
-    fixture
-}
-
-/// #20211, #20578, and #20611 optimized expansion and deduplication of included group conflicts.
-/// One CPU/GPU pair expands through two small inclusion diamonds (eight groups, 16 resulting
-/// conflict pairs); neither thousands of groups nor empty groups are needed to exercise this path.
-fn included_groups() -> Fixture {
-    let mut fixture = Fixture::new();
-    fixture.wheel("backend", "1.0.0", &["shared-0".to_string()], None);
-    fixture.wheel("backend", "2.0.0", &["shared-0".to_string()], None);
-    fixture.pyproject.insert(
-        "dependency-groups".to_string(),
-        toml::toml! {
-            cpu = ["backend==1.0.0"]
-            gpu = ["backend==2.0.0"]
-            dev = [{ include-group = "cpu" }]
-            test = [{ include-group = "cpu" }]
-            ci = [{ include-group = "dev" }, { include-group = "test" }]
-            gpu-dev = [{ include-group = "gpu" }]
-            gpu-test = [{ include-group = "gpu" }]
-            gpu-ci = [{ include-group = "gpu-dev" }, { include-group = "gpu-test" }]
-        }
-        .into(),
-    );
-    fixture.pyproject["tool"]["uv"]["conflicts"] = vec![toml::Value::Array(vec![
-        toml::toml! { group = "cpu" }.into(),
-        toml::toml! { group = "gpu" }.into(),
-    ])]
-    .into();
-    fixture.write();
-    fixture
-}
-
-/// A reduced workspace fan-in for #21399: 24 members' `test` extras share an eight-package chain,
-/// with just one CPU/GPU conflict. The identical graph without that declaration is the control.
-/// Frozen traversal also exercises activated-item encoding (#21148) and extra/marker evaluation.
-fn shared_extras(conflicts: bool) -> Fixture {
-    let mut fixture = Fixture::new();
-    fixture.wheel("cpu-backend", "1.0.0", &["shared-0".to_string()], None);
-    fixture.wheel("gpu-backend", "1.0.0", &["shared-0".to_string()], None);
-    let mut sources = toml::Table::new();
-    let mut dependencies = Vec::new();
-    for index in 0..WORKSPACE_MEMBERS {
-        let name = format!("member-{index}");
-        let directory = fixture.root().join(&name);
-        fs_err::create_dir(&directory).expect("Failed to create member directory");
-        let member = toml::toml! {
-            [project]
-            name = (name.clone())
-            version = "1.0.0"
-            requires-python = ">=3.11"
-            [project.optional-dependencies]
-            test = ["shared-0"]
-            [tool.uv]
-            package = false
-        };
-        fs_err::write(
-            directory.join("pyproject.toml"),
-            toml::to_string(&member).expect("Failed to serialize member"),
-        )
-        .expect("Failed to write member");
-        dependencies.push(format!("{name}[test]"));
-        sources.insert(name.clone(), toml::toml! { workspace = true }.into());
-        fixture.packages.insert((name, "1.0.0".to_string()));
-    }
-    fixture.pyproject["project"]["dependencies"] = dependencies.into();
-    fixture.pyproject["project"]["optional-dependencies"] = toml::toml! {
-        cpu = ["cpu-backend"]
-        gpu = ["gpu-backend"]
-    }
-    .into();
-    fixture.pyproject["tool"]["uv"]["sources"] = sources.into();
-    fixture.pyproject["tool"]["uv"]["workspace"] = toml::toml! { members = ["member-*"] }.into();
-    if conflicts {
-        fixture.pyproject["tool"]["uv"]["conflicts"] = vec![toml::Value::Array(vec![
-            toml::toml! { extra = "cpu" }.into(),
-            toml::toml! { extra = "gpu" }.into(),
-        ])]
-        .into();
-    }
-    fixture.write();
-    fixture
-}
-
-struct Harness {
-    runtime: Runtime,
-    python: PathBuf,
-    initialization: GlobalInitialization,
-}
-
-impl Harness {
-    fn new() -> Self {
-        let cache = Cache::temp().expect("Failed to create interpreter cache");
-        let environment = PythonEnvironment::from_root("../../.venv", &cache)
-            .expect("Create the repository's .venv before running benchmarks");
-        Self {
-            runtime: tokio::runtime::Builder::new_current_thread()
-                .max_blocking_threads(256)
-                .enable_all()
-                .build()
-                .expect("Failed to create Tokio runtime"),
-            python: environment.interpreter().sys_executable().to_path_buf(),
-            initialization: GlobalInitialization::Initialize,
-        }
-    }
-
-    fn run(&mut self, fixture: &Fixture, args: &[&str]) {
-        let cache = fixture.root().join("cache");
-        let config = fixture.root().join("uv.toml");
-        let cli = Cli::try_parse_from(
-            [
-                "uv",
-                "--quiet",
-                "--offline",
-                "--config-file",
-                config.to_str().expect("Config path must be UTF-8"),
-                "--no-python-downloads",
-                "--project",
-                fixture.root().to_str().expect("Fixture path must be UTF-8"),
-                "--cache-dir",
-                cache.to_str().expect("Cache path must be UTF-8"),
-            ]
-            .into_iter()
-            .chain(args.iter().copied())
-            .chain([
-                "--python",
-                self.python.to_str().expect("Python path must be UTF-8"),
-            ]),
-        )
-        .expect("Failed to parse benchmark arguments");
-        let status = self
-            .runtime
-            .block_on(uv::run(cli, self.initialization))
-            .expect("Benchmark invocation failed");
-        self.initialization = GlobalInitialization::Reuse;
-        let success = match status {
-            ExitStatus::Success => true,
-            ExitStatus::Failure | ExitStatus::Error | ExitStatus::External(_) => false,
-        };
-        assert!(success, "Benchmark invocation did not succeed");
-    }
-
-    fn lock(&mut self, criterion: &mut Criterion, name: &str, fixture: &Fixture) {
-        self.run(fixture, &["lock"]);
-        fixture.check_lock();
-        fixture.remove_lock();
-        self.run(fixture, &["lock"]);
-        criterion.bench_function(name, |bencher| {
-            bencher.iter_batched(
-                || fixture.remove_lock(),
-                |()| self.run(fixture, &["lock"]),
-                BatchSize::PerIteration,
-            );
-        });
-        fixture.check_lock();
-    }
-
-    fn export_args<'a>(output: &'a str, selection: &'a [&'a str]) -> Vec<&'a str> {
-        let mut args = vec![
-            "export",
-            "--frozen",
-            "--no-default-groups",
-            "--format",
-            "pylock.toml",
-            "--output-file",
-            output,
-        ];
-        args.extend_from_slice(selection);
-        args
-    }
-
-    /// Check both sides of a conflict outside measurement, not just that locking terminates.
-    fn check_selection(
-        &mut self,
-        fixture: &Fixture,
-        selection: &[&str],
-        name: &str,
-        versions: &[&str],
-    ) {
-        let output = fixture.root().join("pylock.toml");
-        let args = Self::export_args(
-            output.to_str().expect("Output path must be UTF-8"),
-            selection,
-        );
-        self.run(fixture, &args);
-        let contents = fs_err::read_to_string(output).expect("Failed to read exported lockfile");
-        let lock: PylockToml =
-            toml::from_str(&contents).expect("Failed to parse exported lockfile");
-        let selected: BTreeSet<_> = lock
-            .packages
-            .iter()
-            .filter(|package| package.name.as_ref() == name)
-            .map(|package| {
-                package
-                    .version
-                    .as_ref()
-                    .expect("Wheel has a version")
-                    .to_string()
-            })
-            .collect();
-        assert_eq!(
-            selected,
-            versions
-                .iter()
-                .map(|version| (*version).to_string())
-                .collect()
-        );
-    }
-
-    fn export(
-        &mut self,
-        criterion: &mut Criterion,
-        name: &str,
-        fixture: &Fixture,
-        selection: &[&str],
-    ) {
-        let output = fixture.root().join("pylock.toml");
-        let args = Self::export_args(
-            output.to_str().expect("Output path must be UTF-8"),
-            selection,
-        );
-        self.run(fixture, &args);
-        criterion.bench_function(name, |bencher| bencher.iter(|| self.run(fixture, &args)));
-    }
-
-    fn sync(&mut self, criterion: &mut Criterion, name: &str, fixture: &Fixture) {
-        let environment = fixture.root().join(".venv");
-        self.run(
-            fixture,
-            &[
-                "venv",
-                environment
-                    .to_str()
-                    .expect("Environment path must be UTF-8"),
-            ],
-        );
-        // Keep the environment empty: measure graph traversal and planning, not installation or
-        // creation of a virtual environment. No subprocess is included in the measured operation.
-        let args = [
-            "sync",
-            "--frozen",
-            "--dry-run",
-            "--no-default-groups",
-            "--extra",
-            "cpu",
-        ];
-        self.run(fixture, &args);
-        criterion.bench_function(name, |bencher| bencher.iter(|| self.run(fixture, &args)));
+        assert_eq!(lock.conflicts().iter().count(), self.conflict_count);
     }
 }
 
 fn conflicts(criterion: &mut Criterion) {
-    let mut harness = Harness::new();
+    let cache = Cache::temp().expect("Failed to create interpreter cache");
+    let environment = PythonEnvironment::from_root("../../.venv", &cache)
+        .expect("Create the repository's .venv before running benchmarks");
+    let python = environment.interpreter().sys_executable();
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .max_blocking_threads(256)
+        .enable_all()
+        .build()
+        .expect("Failed to create Tokio runtime");
+    let mut initialization = GlobalInitialization::Initialize;
 
-    let fixture = overlapping();
-    harness.lock(criterion, "lock_conflicts_overlapping_15", &fixture);
-    harness.check_selection(
-        &fixture,
-        &["--extra", "dependencies_lowest"],
-        "choice-0",
-        &["1.0.0"],
-    );
-    harness.check_selection(
-        &fixture,
-        &["--extra", "dependencies_lower"],
-        "choice-0",
-        &["2.0.0"],
-    );
-
-    let fixture = mutually_exclusive();
-    harness.lock(criterion, "lock_conflicts_mutually_exclusive_24", &fixture);
-    harness.check_selection(&fixture, &["--extra", "backend-1"], "backend", &["1.0.0"]);
-    harness.check_selection(&fixture, &["--extra", "backend-24"], "backend", &["2.0.0"]);
-    harness.export(
-        criterion,
-        "export_frozen_conflicts_mutually_exclusive_24",
-        &fixture,
-        &["--extra", "backend-1"],
-    );
-
-    let fixture = included_groups();
-    harness.lock(criterion, "lock_conflicts_included_groups", &fixture);
-    harness.check_selection(&fixture, &["--group", "ci"], "backend", &["1.0.0"]);
-    harness.check_selection(&fixture, &["--group", "gpu-ci"], "backend", &["2.0.0"]);
-
-    for (conflicts, suffix) in [
-        (true, "conflicts_shared_extras_24"),
-        (false, "no_conflicts_shared_extras_24"),
-    ] {
-        let fixture = shared_extras(conflicts);
-        harness.lock(criterion, &format!("lock_{suffix}"), &fixture);
-        for (selection, cpu, gpu) in [
-            ("cpu", vec!["1.0.0"], vec![]),
-            ("gpu", vec![], vec!["1.0.0"]),
+    for extra_count in [4, 8, 16] {
+        for (shape, sets) in [
+            ("none", Vec::new()),
+            // Keep one pair fixed as unrelated extras grow (#21399).
+            ("single_pair", vec![vec![0, 1]]),
+            // Cap independent pairs at four; eight pairs already create thousands of forks.
+            (
+                "disjoint_pairs",
+                (0..extra_count.min(8))
+                    .step_by(2)
+                    .map(|i| vec![i, i + 1])
+                    .collect(),
+            ),
+            // Shared endpoints exercise dominated-fork pruning (#18094).
+            (
+                "overlapping_pairs",
+                (1..extra_count).map(|i| vec![0, i]).collect(),
+            ),
+            ("mutually_exclusive", vec![(0..extra_count).collect()]),
         ] {
-            harness.check_selection(&fixture, &["--extra", selection], "cpu-backend", &cpu);
-            harness.check_selection(&fixture, &["--extra", selection], "gpu-backend", &gpu);
+            let fixture = Fixture::new(extra_count, &sets);
+            let wheels = fixture.root().join("wheels");
+            let cache = fixture.root().join("cache");
+            let args = [
+                "uv",
+                "lock",
+                "--quiet",
+                "--offline",
+                "--no-config",
+                "--no-python-downloads",
+                "--no-index",
+                "--no-build",
+                "--find-links",
+                wheels.to_str().expect("Wheel path must be UTF-8"),
+                "--project",
+                fixture.root().to_str().expect("Fixture path must be UTF-8"),
+                "--cache-dir",
+                cache.to_str().expect("Cache path must be UTF-8"),
+                "--python",
+                python.to_str().expect("Python path must be UTF-8"),
+            ];
+            let mut run = || {
+                let cli = Cli::try_parse_from(args).expect("Failed to parse benchmark arguments");
+                let status = runtime
+                    .block_on(uv::run(cli, initialization))
+                    .expect("Benchmark invocation failed");
+                initialization = GlobalInitialization::Reuse;
+                let success = match status {
+                    ExitStatus::Success => true,
+                    ExitStatus::Failure | ExitStatus::Error | ExitStatus::External(_) => false,
+                };
+                assert!(success, "Benchmark invocation did not succeed");
+            };
+
+            run();
+            fixture.check_lock();
+            criterion.bench_function(
+                &format!("lock_conflicts_{shape}_{extra_count}_extras"),
+                |bencher| {
+                    bencher.iter_batched(
+                        || fixture.remove_lock(),
+                        |()| run(),
+                        BatchSize::PerIteration,
+                    );
+                },
+            );
+            fixture.check_lock();
         }
-        harness.export(
-            criterion,
-            &format!("export_frozen_{suffix}"),
-            &fixture,
-            &["--extra", "cpu"],
-        );
-        harness.sync(criterion, &format!("sync_frozen_{suffix}"), &fixture);
     }
 }
 
