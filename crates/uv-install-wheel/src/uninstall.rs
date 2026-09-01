@@ -54,15 +54,14 @@ pub fn uninstall_wheel(
 
     // Uninstall the files, keeping track of any directories that are left empty.
     let mut visited = BTreeSet::new();
-    let mut checked_directories = HashSet::new();
-    let mut removed_symlinks = HashSet::new();
+    let mut checked_directories = HashMap::new();
     let mut resolved_parents = HashMap::new();
     for entry in &record {
         if !is_path_in_scheme(&entry.path, site_packages, &distribution, layout) {
             continue;
         }
 
-        // Resolve parents, including links beneath shared namespaces. Keep the final filename
+        // Resolve parents, removing top-level package links. Keep the final filename
         // unresolved so removing a file symlink does not remove its cache target.
         let normalized = normalize_path(&site_packages.join(&entry.path));
         let (Some(parent), Some(filename)) = (normalized.parent(), normalized.file_name()) else {
@@ -73,32 +72,27 @@ pub fn uninstall_wheel(
         let resolved = match resolved_parents.entry(parent.to_path_buf()) {
             Entry::Occupied(entry) => entry.into_mut(),
             Entry::Vacant(entry) => entry.insert(libraries.resolve(parent, |directory| {
-                if removed_symlinks.contains(directory) {
-                    return Ok(ControlFlow::Break(()));
+                if let Some(result) = checked_directories.get(directory) {
+                    return Ok(*result);
                 }
-                if checked_directories.contains(directory) {
-                    return Ok(ControlFlow::Continue(()));
-                }
-                match fs_err::symlink_metadata(directory) {
+                let result = match fs_err::symlink_metadata(directory) {
                     Ok(metadata) if metadata.file_type().is_symlink() => {
                         remove_symlink(directory)?;
                         trace!("Removed directory link: {}", directory.display());
-                        removed_symlinks.insert(directory.to_path_buf());
                         if let Some(parent) = directory.parent() {
                             visited.insert(parent.to_path_buf());
                         }
                         dir_count += 1;
-                        return Ok(ControlFlow::Break(()));
+                        ControlFlow::Break(())
                     }
-                    Ok(_) => {
-                        checked_directories.insert(directory.to_path_buf());
-                    }
+                    Ok(_) => ControlFlow::Continue(()),
                     Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
-                        return Ok(ControlFlow::Break(()));
+                        ControlFlow::Break(())
                     }
                     Err(err) => return Err(err.into()),
-                }
-                Ok::<_, Error>(ControlFlow::Continue(()))
+                };
+                checked_directories.insert(directory.to_path_buf(), result);
+                Ok::<_, Error>(result)
             })?),
         };
         let ControlFlow::Continue(parent) = resolved else {

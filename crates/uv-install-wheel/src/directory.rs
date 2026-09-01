@@ -45,8 +45,8 @@ impl LibraryDirectories {
 
     /// Create an installation directory, expanding package links before writing beneath them.
     ///
-    /// Call this for a file's parent before publishing with the same [`CopyLocks`]. Each package
-    /// directory is expanded under its lock before traversal reaches its children.
+    /// Call this for a file's parent before publishing with the same [`CopyLocks`]. Top-level package
+    /// directories are fully expanded under their lock before traversal reaches their children.
     pub(crate) fn prepare(&self, path: &Path, locks: &CopyLocks) -> Result<(), Error> {
         let resolved = self.resolve(path, |directory| {
             locks.with_directory_lock(directory, || {
@@ -62,10 +62,10 @@ impl LibraryDirectories {
         Ok(())
     }
 
-    /// Resolve a directory path, visiting components below library roots before following their links.
+    /// Resolve a directory path, visiting top-level package directories before following their links.
     ///
-    /// Visits run from parent to child. Returning [`ControlFlow::Continue`] requires the component
-    /// to be a real directory; [`ControlFlow::Break`] stops before its descendants are inspected.
+    /// Returning [`ControlFlow::Continue`] requires the package tree to contain only real directories;
+    /// [`ControlFlow::Break`] stops before its descendants are inspected.
     /// Callers handling files must pass the parent path, leaving the final filename unresolved.
     ///
     /// Scheme aliases are followed component by component: an alias may point below a package link,
@@ -107,7 +107,12 @@ impl LibraryDirectories {
                 Some(Component::Normal(_)) => {
                     resolved.push(component);
                     if self.contains(&resolved) {
-                        if let ControlFlow::Break(value) = visit(&resolved)? {
+                        if self
+                            .roots
+                            .iter()
+                            .any(|(_, root)| resolved.parent() == Some(root.as_path()))
+                            && let ControlFlow::Break(value) = visit(&resolved)?
+                        {
                             return Ok(ControlFlow::Break(value));
                         }
                         continue;

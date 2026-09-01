@@ -332,6 +332,24 @@ fn install_symlink() -> Result<()> {
     "
     );
 
+    assert!(context.site_packages().join("markupsafe").is_symlink());
+    let metadata = context.site_packages().join("MarkupSafe-2.1.3.dist-info");
+    assert!(!metadata.is_symlink());
+    assert!(!metadata.join("RECORD").is_symlink());
+
+    // Uninstalling must preserve the cached package for an offline reinstall.
+    context.pip_uninstall().arg("MarkupSafe").assert().success();
+    uv_snapshot!(context.pip_sync()
+        .arg("requirements.txt")
+        .arg("--link-mode=symlink")
+        .arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + markupsafe==2.1.3
+    ");
+
     context
         .assert_command("from markupsafe import Markup")
         .success();
