@@ -49,7 +49,7 @@ enum Cli {
     WheelMetadata(WheelMetadataArgs),
     /// Validate that a `.whl` or `.zip` file at a given URL is a valid ZIP file.
     ValidateZip(ValidateZipArgs),
-    /// Replace selected files in a wheel and regenerate its `RECORD` file.
+    /// Replace selected files in a `uv` or `uv_build` wheel and regenerate its `RECORD` file.
     WheelReplace(WheelReplaceArgs),
     /// Compile all `.py` to `.pyc` files in the tree.
     Compile(CompileArgs),
