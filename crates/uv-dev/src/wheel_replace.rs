@@ -1,5 +1,5 @@
 use std::collections::{BTreeMap, BTreeSet};
-use std::io::{BufReader, BufWriter};
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
@@ -10,7 +10,7 @@ use async_zip::{Compression, ZipEntryBuilder, ZipFile};
 use base64::Engine;
 use base64::prelude::BASE64_URL_SAFE_NO_PAD;
 use clap::Parser;
-use futures::io::{AllowStdIo, AsyncWrite, AsyncWriteExt};
+use futures::io::Cursor;
 use sha2::{Digest, Sha256};
 
 #[derive(Debug, Parser)]
@@ -51,8 +51,8 @@ impl FromStr for Replacement {
 
 /// Rewrite a trusted wheel without extracting its members to the filesystem.
 ///
-/// Read and write one member at a time in memory. Each member and its compressed output must fit
-/// in memory; this helper is intended for trusted build artifacts, not arbitrary input archives.
+/// Hold the input and output archives in memory, processing one member at a time. These archives
+/// and member contents must fit in memory; this helper is intended for uv's build artifacts.
 ///
 /// Preserve exact decompressed bytes except for explicitly replaced members and `RECORD`. Preserve
 /// each non-`RECORD` member's compression method, DOS timestamp, internal/external attributes and
@@ -61,7 +61,7 @@ impl FromStr for Replacement {
 /// metadata, including for DOS inputs. `RECORD` is emitted last with SHA-256 hashes, Deflate, mode
 /// 0644, the ZIP epoch timestamp and no comment. Structural ZIP64 fields are generated as needed.
 ///
-/// Flush the completed temporary archive before atomically creating the output with no clobber.
+/// Write the completed archive to a temporary file, then atomically publish it without clobbering.
 /// Existing output is never reused, even if it has identical bytes. Failure removes the temporary
 /// file and leaves existing paths alone.
 /// This is process-level atomic publication, not a promise of power-loss durability. Callers own
@@ -84,20 +84,12 @@ pub(crate) async fn wheel_replace(args: WheelReplaceArgs) -> Result<()> {
         );
     }
 
-    let input = fs_err::File::open(&args.input)
-        .with_context(|| format!("failed to open input wheel `{}`", args.input.display()))?;
-    let mut archive = ZipFileReader::new(AllowStdIo::new(BufReader::new(input))).await?;
+    let input = fs_err::read(&args.input)
+        .with_context(|| format!("failed to read input wheel `{}`", args.input.display()))?;
+    let mut archive = ZipFileReader::new(Cursor::new(input)).await?;
     let record_path = validate_archive(archive.file())?;
 
-    let output_directory = args
-        .output
-        .parent()
-        .filter(|path| !path.as_os_str().is_empty())
-        .unwrap_or_else(|| Path::new("."));
-    fs_err::create_dir_all(output_directory)?;
-    let temporary = tempfile::NamedTempFile::new_in(output_directory)?;
-    let output = temporary.reopen()?;
-    let mut writer = ZipFileWriter::new(AllowStdIo::new(BufWriter::new(output)));
+    let mut writer = ZipFileWriter::new(Vec::new());
     let mut output_record = Vec::new();
 
     for index in 0..archive.file().entries().len() {
@@ -161,25 +153,24 @@ pub(crate) async fn wheel_replace(args: WheelReplaceArgs) -> Result<()> {
     writer
         .write_entry_whole(record_entry, &record_bytes)
         .await?;
-    finish_archive(writer).await?;
+    let output = writer.close().await?;
+
+    let output_directory = args
+        .output
+        .parent()
+        .filter(|path| !path.as_os_str().is_empty())
+        .unwrap_or_else(|| Path::new("."));
+    fs_err::create_dir_all(output_directory)?;
+    let mut temporary = tempfile::NamedTempFile::new_in(output_directory)?;
+    temporary
+        .write_all(&output)
+        .context("failed to write completed wheel")?;
     temporary.persist_noclobber(&args.output).with_context(|| {
         format!(
             "failed to create output wheel `{}` without overwriting",
             args.output.display()
         )
     })?;
-    Ok(())
-}
-
-/// Write the central directory and flush all buffered output before publishing the archive.
-///
-/// [`ZipFileWriter::close`] alone does not flush the underlying writer.
-async fn finish_archive<W: AsyncWrite + Unpin>(writer: ZipFileWriter<W>) -> Result<()> {
-    let mut output = writer.close().await?;
-    output
-        .flush()
-        .await
-        .context("failed to flush completed wheel")?;
     Ok(())
 }
 
@@ -239,9 +230,8 @@ fn validate_member_type(name: &str, permissions: Option<u16>, directory: bool) -
 
 #[cfg(test)]
 mod tests {
-    use std::io::{self, Cursor, Write};
-
     use async_zip::{ZipDateTimeBuilder, ZipEntry};
+    use futures::io::AsyncWriteExt;
 
     use super::*;
 
@@ -325,8 +315,7 @@ mod tests {
         zip64: bool,
     ) -> Result<()> {
         let record = record.map_or_else(|| fixture_record(&members), Ok)?;
-        let mut writer =
-            ZipFileWriter::new(AllowStdIo::new(BufWriter::new(fs_err::File::create(path)?)));
+        let mut writer = ZipFileWriter::new(Vec::new());
         if zip64 {
             writer = writer.force_zip64();
         }
@@ -345,7 +334,8 @@ mod tests {
                 writer.write_entry_whole(entry, &bytes).await?;
             }
         }
-        finish_archive(writer).await
+        fs_err::write(path, writer.close().await?)?;
+        Ok(())
     }
 
     /// Use conventional fixture paths and replace the executable with the `signed` file.
@@ -563,56 +553,6 @@ mod tests {
         Ok(())
     }
 
-    struct FailingWriter {
-        fail_write: bool,
-    }
-
-    impl Write for FailingWriter {
-        /// Inject a write failure when requested; otherwise discard the bytes successfully.
-        fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
-            if self.fail_write {
-                Err(io::Error::other("injected buffered write failure"))
-            } else {
-                Ok(bytes.len())
-            }
-        }
-        /// Always fail so the test can distinguish final flushing from ZIP closure.
-        fn flush(&mut self) -> io::Result<()> {
-            Err(io::Error::other("injected flush failure"))
-        }
-    }
-
-    /// Buffered write and flush failures must propagate before the temporary file is published.
-    #[tokio::test]
-    async fn propagates_final_buffered_failures_before_persistence() -> Result<()> {
-        for fail_write in [true, false] {
-            let directory = tempfile::tempdir()?;
-            let output = directory.path().join("output.whl");
-            let result: Result<()> = async {
-                let temporary = tempfile::NamedTempFile::new_in(directory.path())?;
-                // The empty ZIP's end record fits entirely in this buffer. ZIP close succeeds;
-                // only the explicit final flush reaches the failing underlying writer.
-                let writer = ZipFileWriter::new(AllowStdIo::new(BufWriter::with_capacity(
-                    1024,
-                    FailingWriter { fail_write },
-                )));
-                finish_archive(writer).await?;
-                temporary.persist_noclobber(&output)?;
-                Ok(())
-            }
-            .await;
-            assert_eq!(
-                result
-                    .expect_err("buffered error must propagate")
-                    .to_string(),
-                "failed to flush completed wheel"
-            );
-            assert!(!output.exists());
-            assert_eq!(fs_err::read_dir(directory.path())?.count(), 0);
-        }
-        Ok(())
-    }
-
     /// Trusted build artifacts are not rejected merely for containing many members.
     #[tokio::test]
     async fn replaces_in_a_wheel_with_many_members() -> Result<()> {
@@ -711,10 +651,7 @@ mod tests {
                 (bytes, method, mode),
                 (b"untouched".to_vec(), compression, Some(0o100_640))
             );
-            let archive = ZipFileReader::new(AllowStdIo::new(BufReader::new(fs_err::File::open(
-                &output,
-            )?)))
-            .await?;
+            let archive = ZipFileReader::new(Cursor::new(fs_err::read(&output)?)).await?;
             let entry = archive
                 .file()
                 .entries()
@@ -834,8 +771,7 @@ mod tests {
         path: &Path,
         expected: &BTreeMap<String, (ZipEntry, String, u64)>,
     ) -> Result<()> {
-        let file = fs_err::File::open(path)?;
-        let mut archive = ZipFileReader::new(AllowStdIo::new(BufReader::new(file))).await?;
+        let mut archive = ZipFileReader::new(Cursor::new(fs_err::read(path)?)).await?;
         let record_path = validate_archive(archive.file())?;
         ensure!(
             archive.file().entries().len() == expected.len(),
@@ -917,8 +853,7 @@ mod tests {
     /// Read an exact member name with CRC32 checking, returning its bytes, compression, and mode.
     async fn read_entry(path: &Path, name: &str) -> Result<(Vec<u8>, Compression, Option<u16>)> {
         let bytes = fs_err::read(path)?;
-        let mut archive =
-            ZipFileReader::new(AllowStdIo::new(BufReader::new(Cursor::new(bytes)))).await?;
+        let mut archive = ZipFileReader::new(Cursor::new(bytes)).await?;
         let (index, compression, permissions) = archive
             .file()
             .entries()
