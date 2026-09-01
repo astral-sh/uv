@@ -108,6 +108,13 @@ pub(crate) fn simplify_conflict_markers(
         return;
     }
 
+    // Unrelated extras and groups cannot simplify a conflict marker. Tracking
+    // them enumerates distinct paths through large workspaces unnecessarily.
+    let relevant: FxHashSet<ConflictItem> = conflicts
+        .iter()
+        .flat_map(|set| set.iter().cloned())
+        .collect();
+
     // The set of activated extras and groups for each node. The ROOT nodes
     // don't have any extras/groups activated.
     let mut activated: FxHashMap<NodeIndex, Vec<FxHashSet<ConflictItem>>> = FxHashMap::default();
@@ -128,20 +135,26 @@ pub(crate) fn simplify_conflict_markers(
 
     let mut seen: FxHashSet<NodeIndex> = FxHashSet::default();
     while let Some(parent_index) = queue.pop() {
-        if let Some((package, extra)) = graph[parent_index].package_extra_names() {
+        let extra = graph[parent_index]
+            .package_extra_names()
+            .map(|(package, extra)| ConflictItem::from((package.clone(), extra.clone())));
+        if let Some(item) = extra.filter(|item| relevant.contains(item)) {
             for set in activated
                 .entry(parent_index)
                 .or_insert_with(|| vec![FxHashSet::default()])
             {
-                set.insert(ConflictItem::from((package.clone(), extra.clone())));
+                set.insert(item.clone());
             }
         }
-        if let Some((package, group)) = graph[parent_index].package_group_names() {
+        let group = graph[parent_index]
+            .package_group_names()
+            .map(|(package, group)| ConflictItem::from((package.clone(), group.clone())));
+        if let Some(item) = group.filter(|item| relevant.contains(item)) {
             for set in activated
                 .entry(parent_index)
                 .or_insert_with(|| vec![FxHashSet::default()])
             {
-                set.insert(ConflictItem::from((package.clone(), group.clone())));
+                set.insert(item.clone());
             }
         }
         let sets = activated
