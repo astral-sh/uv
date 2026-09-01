@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::fmt::Write;
 use std::sync::Arc;
 
@@ -143,7 +144,7 @@ pub(crate) async fn publish(
     let download_concurrency = Arc::new(Semaphore::new(1));
 
     // Load credentials.
-    let (publish_url, credentials, trusted_publishing_token) = gather_credentials(
+    let (publish_url, credentials) = gather_credentials(
         publish_url,
         username,
         password,
@@ -155,6 +156,7 @@ pub(crate) async fn publish(
         printer,
     )
     .await?;
+    let upload_credentials = credentials.as_credentials();
 
     // Initialize the registry client.
     let check_url_client = if let Some(index_url) = &check_url {
@@ -282,7 +284,7 @@ pub(crate) async fn publish(
                 &publish_url,
                 &upload_client,
                 retry_policy,
-                &credentials,
+                &upload_credentials,
                 check_url_client.as_ref(),
                 &download_concurrency,
                 reporter.clone(),
@@ -309,8 +311,8 @@ pub(crate) async fn publish(
     }
     .await;
 
-    if let Some(token) = trusted_publishing_token
-        && let Err(err) = burn_trusted_publishing_token(&token, &publish_url, &oidc_client).await
+    if let PublishingCredentials::TrustedPublishing(token) = &credentials
+        && let Err(err) = burn_trusted_publishing_token(token, &publish_url, &oidc_client).await
     {
         warn_user!(
             "Failed to revoke trusted publishing token: {err}. The token will expire naturally."
@@ -319,6 +321,27 @@ pub(crate) async fn publish(
     }
 
     result
+}
+
+/// Credentials for publishing, including whether they require revocation after use.
+enum PublishingCredentials {
+    /// Credentials supplied by the user or resolved by the authentication middleware.
+    Standard(Credentials),
+    /// A short-lived token obtained through trusted publishing.
+    TrustedPublishing(TrustedPublishingToken),
+}
+
+impl PublishingCredentials {
+    /// Return the HTTP credentials to use for uploads.
+    fn as_credentials(&self) -> Cow<'_, Credentials> {
+        match self {
+            Self::Standard(credentials) => Cow::Borrowed(credentials),
+            Self::TrustedPublishing(token) => Cow::Owned(Credentials::basic(
+                Some("__token__".to_string()),
+                Some(token.to_string()),
+            )),
+        }
+    }
 }
 
 /// Whether to allow prompting for username and password.
@@ -359,7 +382,7 @@ enum Prompt {
 /// If no credentials are found, the auth middleware does a final check for cached credentials and
 /// otherwise errors without sending the request.
 ///
-/// Returns the publish URL, credentials, and any trusted publishing token to revoke after use.
+/// Returns the publish URL and [`PublishingCredentials`].
 async fn gather_credentials(
     mut publish_url: DisplaySafeUrl,
     mut username: Option<String>,
@@ -370,7 +393,7 @@ async fn gather_credentials(
     check_url: Option<&IndexUrl>,
     prompt: Prompt,
     printer: Printer,
-) -> Result<(DisplaySafeUrl, Credentials, Option<TrustedPublishingToken>)> {
+) -> Result<(DisplaySafeUrl, PublishingCredentials)> {
     // Support reading username and password from the URL, for symmetry with the index API.
     if let Some(url_password) = publish_url.password() {
         if password.is_some_and(|password| password != url_password) {
@@ -393,7 +416,7 @@ async fn gather_credentials(
     }
 
     // If applicable, attempt obtaining a token for trusted publishing.
-    let trusted_publishing_token = check_trusted_publishing(
+    let trusted_publishing_error = match check_trusted_publishing(
         username.as_deref(),
         password.as_deref(),
         keyring_provider,
@@ -401,19 +424,23 @@ async fn gather_credentials(
         &publish_url,
         oidc_client,
     )
-    .await?;
+    .await?
+    {
+        TrustedPublishResult::Configured(token) => {
+            return Ok((publish_url, PublishingCredentials::TrustedPublishing(token)));
+        }
+        TrustedPublishResult::Skipped => None,
+        TrustedPublishResult::Ignored(err) => Some(err),
+    };
 
-    let (username, mut password) =
-        if let TrustedPublishResult::Configured(password) = &trusted_publishing_token {
-            (Some("__token__".to_string()), Some(password.to_string()))
-        } else if username.is_none() && password.is_none() {
-            match prompt {
-                Prompt::Enabled => prompt_username_and_password()?,
-                Prompt::Disabled => (None, None),
-            }
-        } else {
-            (username, password)
-        };
+    let (username, mut password) = if username.is_none() && password.is_none() {
+        match prompt {
+            Prompt::Enabled => prompt_username_and_password()?,
+            Prompt::Disabled => (None, None),
+        }
+    } else {
+        (username, password)
+    };
 
     if password.is_some() && username.is_none() {
         bail!(
@@ -423,37 +450,31 @@ async fn gather_credentials(
         );
     }
 
-    let trusted_publishing_token = match trusted_publishing_token {
-        TrustedPublishResult::Configured(token) => Some(token),
-        TrustedPublishResult::Skipped => None,
-        TrustedPublishResult::Ignored(err) => {
-            if username.is_none()
-                && password.is_none()
-                && keyring_provider == KeyringProviderType::Disabled
-            {
-                // The user has configured something incorrectly:
-                // * The user forgot to configure credentials.
-                // * The user forgot to forward the secrets as env vars (or used the wrong ones).
-                // * The trusted publishing configuration is wrong.
-                writeln!(
-                    printer.stderr(),
-                    "Note: Neither credentials nor keyring are configured, and there was an error \
-                    fetching the trusted publishing token. If you don't want to use trusted \
-                    publishing, you can ignore this error, but you need to provide credentials."
-                )?;
+    if username.is_none()
+        && password.is_none()
+        && keyring_provider == KeyringProviderType::Disabled
+        && let Some(err) = trusted_publishing_error
+    {
+        // The user has configured something incorrectly:
+        // * The user forgot to configure credentials.
+        // * The user forgot to forward the secrets as env vars (or used the wrong ones).
+        // * The trusted publishing configuration is wrong.
+        writeln!(
+            printer.stderr(),
+            "Note: Neither credentials nor keyring are configured, and there was an error \
+            fetching the trusted publishing token. If you don't want to use trusted \
+            publishing, you can ignore this error, but you need to provide credentials."
+        )?;
 
-                trace!("Error trace: {err:?}");
-                write_error_chain_with_options(
-                    anyhow::Error::from(err)
-                        .context("Trusted publishing failed")
-                        .as_ref(),
-                    Hints::none(),
-                    ErrorOptions::default().with_stream(printer.stderr()),
-                )?;
-            }
-            None
-        }
-    };
+        trace!("Error trace: {err:?}");
+        write_error_chain_with_options(
+            anyhow::Error::from(err)
+                .context("Trusted publishing failed")
+                .as_ref(),
+            Hints::none(),
+            ErrorOptions::default().with_stream(printer.stderr()),
+        )?;
+    }
 
     // If applicable, fetch the password from the keyring eagerly to avoid user confusion about
     // missing keyring entries later.
@@ -485,7 +506,7 @@ async fn gather_credentials(
 
     let credentials = Credentials::basic(username, password);
 
-    Ok((publish_url, credentials, trusted_publishing_token))
+    Ok((publish_url, PublishingCredentials::Standard(credentials)))
 }
 
 fn prompt_username_and_password() -> Result<(Option<String>, Option<String>)> {
@@ -529,7 +550,7 @@ mod tests {
             Printer::Quiet,
         )
         .await
-        .map(|(publish_url, credentials, _)| (publish_url, credentials))
+        .map(|(publish_url, credentials)| (publish_url, credentials.as_credentials().into_owned()))
     }
 
     #[tokio::test]
