@@ -19530,6 +19530,23 @@ async fn compile_missing_python_download_error_warning() {
       cause: tunnel error: unsuccessful
     ");
 
+    // Quiet mode should suppress the download warning and its causes, but retain the fatal error.
+    uv_snapshot!(context.filters(), context
+        .pip_compile()
+        .arg("--quiet")
+        .arg("--python-version").arg("3.10")
+        .env("ALL_PROXY", server.uri())
+        .env(EnvVars::UV_HTTP_RETRIES, "0")
+        .env(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY, "true")
+        .arg("requirements.in"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Failed to fetch: `https://pypi.org/simple/anyio/`
+      Caused by: error sending request for url (https://pypi.org/simple/anyio/)
+      Caused by: client error (Connect)
+      Caused by: tunnel error: unsuccessful
+    ");
+
     // Also check for the patch fallback
     uv_snapshot!(context.filters(), context
         .pip_compile()

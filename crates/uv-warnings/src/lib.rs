@@ -9,7 +9,9 @@ pub use anstream;
 #[doc(hidden)]
 pub use owo_colors;
 use rustc_hash::FxHashSet;
-use uv_errors::{ErrorOptions, Hints, write_error_chain_with_options};
+#[doc(hidden)]
+pub use uv_errors::Hints;
+use uv_errors::{ErrorOptions, write_error_chain_with_options};
 
 /// Whether user-facing warnings are enabled.
 pub static ENABLED: AtomicBool = AtomicBool::new(false);
@@ -58,6 +60,23 @@ macro_rules! warn_user {
     }};
 }
 
+/// Warn a user with an error and its cause chain, if warnings are enabled.
+///
+/// The error must be passed as a reference to a type implementing [`Error`], or as a
+/// `&dyn Error`. Optional [`Hints`] are rendered after the cause chain. Arguments are
+/// only evaluated when warnings are enabled.
+#[macro_export]
+macro_rules! warn_user_with_chain {
+    ($err:expr $(,)?) => {
+        $crate::warn_user_with_chain!($err, $crate::Hints::none())
+    };
+    ($err:expr, $hints:expr $(,)?) => {{
+        if $crate::ENABLED.load(std::sync::atomic::Ordering::Relaxed) {
+            $crate::write_warning_chain($err, &$hints).expect("writing to stderr should not fail");
+        }
+    }};
+}
+
 pub static WARNINGS: LazyLock<Mutex<FxHashSet<String>>> = LazyLock::new(Mutex::default);
 
 /// Warn a user once, if warnings are enabled, with uniqueness determined by the content of the
@@ -85,7 +104,7 @@ mod tests {
     use insta::assert_snapshot;
     use uv_errors::{ErrorOptions, Hints};
 
-    use super::write_warning_chain_with_options;
+    use super::{disable, write_warning_chain_with_options};
 
     #[test]
     fn format_warning_chain() {
@@ -126,5 +145,29 @@ mod tests {
 
         hint: Check the registry permissions.
         ");
+    }
+
+    #[test]
+    fn warn_user_with_chain_skips_disabled_arguments() {
+        disable();
+        let error = anyhow!("should not be displayed");
+        let mut evaluations = 0;
+
+        warn_user_with_chain!({
+            evaluations += 1;
+            error.as_ref()
+        });
+        warn_user_with_chain!(
+            {
+                evaluations += 1;
+                error.as_ref()
+            },
+            {
+                evaluations += 1;
+                Hints::none()
+            },
+        );
+
+        assert_eq!(evaluations, 0);
     }
 }
