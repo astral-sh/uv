@@ -3,11 +3,6 @@ name: "Sign release binaries"
 
 on:
   workflow_call:
-    inputs:
-      production:
-        description: Use Azure signing in the release environment instead of the CI test certificates.
-        type: boolean
-        default: false
 
 permissions: {}
 
@@ -75,9 +70,9 @@ jobs:
   sign-macos:
     name: "sign macOS binaries"
     needs: prepare-macos
-    if: ${{ !inputs.production || (github.repository == 'astral-sh/uv' && github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') }}
-    runs-on: ${{ inputs.production && 'ubuntu-24.04' || 'namespace-profile-macos-15' }}
-    environment: ${{ inputs.production && 'release' || 'release-test' }}
+    if: ${{ github.repository == 'astral-sh/uv' && github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' }}
+    runs-on: ubuntu-24.04
+    environment: release
     permissions:
       id-token: write
     outputs:
@@ -109,60 +104,7 @@ jobs:
             test "$(shasum -a 256 "unsigned/$binary" | cut -d ' ' -f 1)" = "$expected"
           done
 
-      - name: "Sign executable wheel members with the test certificate"
-        if: ${{ !inputs.production }}
-        shell: bash
-        env:
-          CODESIGN_CERTIFICATE_MACOS: ${{ secrets.CODESIGN_CERTIFICATE_MACOS }}
-          CODESIGN_CERTIFICATE_PASSWORD: ${{ secrets.CODESIGN_CERTIFICATE_PASSWORD }}
-          CODESIGN_IDENTITY_MACOS: ${{ secrets.CODESIGN_IDENTITY_MACOS }}
-        run: |
-          set -euo pipefail
-
-          certificate="$RUNNER_TEMP/codesign-test.p12"
-          keychain="$RUNNER_TEMP/codesign-test.keychain-db"
-          keychain_password="$(uuidgen | tr -d '-')"
-          trap 'security delete-keychain "$keychain" >/dev/null 2>&1 || true; rm -f "$certificate"' EXIT
-
-          printf '%s' "$CODESIGN_CERTIFICATE_MACOS" | base64 --decode > "$certificate"
-          security create-keychain -p "$keychain_password" "$keychain"
-          security set-keychain-settings -t 21600 -u "$keychain"
-          security unlock-keychain -p "$keychain_password" "$keychain"
-          security import "$certificate" \
-            -k "$keychain" \
-            -P "$CODESIGN_CERTIFICATE_PASSWORD" \
-            -f pkcs12 \
-            -T /usr/bin/codesign \
-            -T /usr/bin/security >/dev/null
-          security set-key-partition-list \
-            -S apple-tool:,apple:,codesign: \
-            -s \
-            -k "$keychain_password" \
-            "$keychain" >/dev/null
-
-          existing_keychains=()
-          while IFS= read -r existing_keychain; do
-            existing_keychain="${existing_keychain#\"}"
-            existing_keychain="${existing_keychain%\"}"
-            existing_keychains+=("$existing_keychain")
-          done < <(security list-keychains -d user | sed -E 's/^[[:space:]]+//')
-          security list-keychains -d user -s "$keychain" "${existing_keychains[@]}"
-
-          mkdir -p signed
-          for binary in uv uvx uv-build; do
-            test -f "unsigned/$binary"
-            cp "unsigned/$binary" "signed/$binary"
-            codesign \
-              --force \
-              --keychain "$keychain" \
-              --sign "$CODESIGN_IDENTITY_MACOS" \
-              --options runtime \
-              --timestamp=none \
-              "signed/$binary"
-          done
-
       - name: "Log in to Azure with GitHub OIDC"
-        if: ${{ inputs.production }}
         uses: azure/login@7ddb5af1ef8758cf1353cf3b42f940aee27ba21c # v3
         with:
           client-id: ${{ secrets.AZURE_CLIENT_ID_MACOS }}
@@ -170,7 +112,6 @@ jobs:
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID_MACOS }}
 
       - name: "Sign executable wheel members through Azure Key Vault"
-        if: ${{ inputs.production }}
         shell: bash
         env:
           STORAGE_ACCOUNT: ${{ secrets.CODESIGN_STORAGE_ACCOUNT }}
@@ -232,19 +173,11 @@ jobs:
 
       - name: "Bind signed bytes and signing certificate"
         id: manifest
-        env:
-          PRODUCTION: ${{ inputs.production }}
         run: |
           set -euo pipefail
           cp unsigned/manifest.json signed/manifest.json
           for binary in uv uvx uv-build; do
-            if [[ "$PRODUCTION" == true ]]; then
-              certificate_sha256=$(openssl x509 -in "$RUNNER_TEMP/signing-cert.pem" -outform DER | sha256sum | cut -d ' ' -f 1)
-            else
-              codesign --verify --strict "signed/$binary"
-              codesign --display --extract-certificates="$RUNNER_TEMP/$binary-cert-" "signed/$binary"
-              certificate_sha256=$(shasum -a 256 "$RUNNER_TEMP/$binary-cert-0" | cut -d ' ' -f 1)
-            fi
+            certificate_sha256=$(openssl x509 -in "$RUNNER_TEMP/signing-cert.pem" -outform DER | sha256sum | cut -d ' ' -f 1)
             digest=$(shasum -a 256 "signed/$binary" | cut -d ' ' -f 1)
             size=$(wc -c < "signed/$binary" | tr -d '[:space:]')
             jq --arg binary "$binary" --arg digest "$digest" --argjson size "$size" --arg certificate "$certificate_sha256" \
@@ -335,7 +268,6 @@ jobs:
           INPUT_MANIFEST_SHA256: ${{ needs.prepare-macos.outputs.manifest-sha256 }}
           SIGNED_MANIFEST_SHA256: ${{ needs.sign-macos.outputs.manifest-sha256 }}
           FINAL_MANIFEST_SHA256: ${{ needs.assemble-macos.outputs.manifest-sha256 }}
-          PRODUCTION: ${{ inputs.production }}
         run: |
           set -euo pipefail
           test "$(shasum -a 256 tooling.tar | cut -d ' ' -f 1)" = "$TOOLING_SHA256"
@@ -345,11 +277,8 @@ jobs:
           for binary in uv uvx uv-build; do
             expected_certificate=$(jq -r --arg binary "$binary" '.certificates[$binary]' signed/manifest.json)
             path="$RUNNER_TEMP/verified-binaries/$binary"
-            codesign --verify --strict "$path"
-            if [[ "$PRODUCTION" == true ]]; then
-              codesign --verify --strict -R 'anchor apple generic' "$path"
-              codesign --display --verbose=4 "$path" 2>&1 | grep -q '^Timestamp='
-            fi
+            codesign --verify --strict -R 'anchor apple generic' "$path"
+            codesign --display --verbose=4 "$path" 2>&1 | grep -q '^Timestamp='
             details="$(codesign -dv --verbose=4 "$path" 2>&1)"
             if grep -q 'Signature=adhoc' <<< "$details"; then
               echo "Expected an identity signature on '$binary'." >&2
@@ -428,16 +357,16 @@ jobs:
   sign-windows:
     name: "sign Windows binaries"
     needs: prepare-windows
-    if: ${{ !inputs.production || (github.repository == 'astral-sh/uv' && github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') }}
-    runs-on: ${{ inputs.production && 'windows-2022' || 'namespace-profile-windows-2022-x86-64-16x32' }}
-    environment: ${{ inputs.production && 'release' || 'release-test' }}
+    if: ${{ github.repository == 'astral-sh/uv' && github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' }}
+    runs-on: windows-2022
+    environment: release
     permissions:
       id-token: write
     env:
       TARGET: x86_64-pc-windows-msvc
     outputs:
       artifact: ${{ steps.upload.outputs.artifact-id }}
-      manifest-sha256: ${{ steps.sign.outputs.manifest-sha256 || steps.sign-azure.outputs.manifest-sha256 }}
+      manifest-sha256: ${{ steps.sign-azure.outputs.manifest-sha256 }}
     steps:
       - name: "Download unsigned executable wheel members"
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
@@ -484,56 +413,7 @@ jobs:
             }
           }
 
-      - name: "Sign executable wheel members with the test certificate"
-        if: ${{ !inputs.production }}
-        id: sign
-        shell: pwsh
-        env:
-          CODESIGN_CERTIFICATE_WINDOWS: ${{ secrets.CODESIGN_CERTIFICATE_WINDOWS }}
-          CODESIGN_CERTIFICATE_PASSWORD: ${{ secrets.CODESIGN_CERTIFICATE_PASSWORD }}
-        run: |
-          $ErrorActionPreference = 'Stop'
-          $signtool = Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\bin\*\x64\signtool.exe" |
-            Sort-Object FullName -Descending | Select-Object -First 1 -ExpandProperty FullName
-          if (-not $signtool) { throw 'signtool.exe not found in Windows SDK' }
-          $certificatePath = Join-Path $env:RUNNER_TEMP 'codesign-test.pfx'
-          try {
-            [IO.File]::WriteAllBytes($certificatePath, [Convert]::FromBase64String($env:CODESIGN_CERTIFICATE_WINDOWS))
-            $certificate = [System.Security.Cryptography.X509Certificates.X509Certificate2]::new(
-              $certificatePath, $env:CODESIGN_CERTIFICATE_PASSWORD,
-              [System.Security.Cryptography.X509Certificates.X509KeyStorageFlags]::EphemeralKeySet)
-            $certificateHash = $certificate.GetCertHashString([System.Security.Cryptography.HashAlgorithmName]::SHA256).ToLowerInvariant()
-            $manifest = Get-Content unsigned/manifest.json -Raw | ConvertFrom-Json -AsHashtable
-            $manifest.certificates = @{}
-            $manifest.signed = @{}
-            New-Item signed -ItemType Directory | Out-Null
-            foreach ($binary in @('uv.exe', 'uvx.exe', 'uvw.exe', 'uv-build.exe')) {
-              $path = Join-Path signed $binary
-              Copy-Item (Join-Path unsigned $binary) $path
-              # Match the macOS experiment: use the test certificate without timestamping.
-              & $signtool sign /fd SHA256 /f $certificatePath /p $env:CODESIGN_CERTIFICATE_PASSWORD $path
-              if ($LASTEXITCODE -ne 0) { throw "Signing failed: $binary" }
-              $signature = Get-AuthenticodeSignature $path
-              if ($null -eq $signature.SignerCertificate -or
-                  $signature.SignerCertificate.GetCertHashString([System.Security.Cryptography.HashAlgorithmName]::SHA256).ToLowerInvariant() -ne $certificateHash) {
-                throw "Signing certificate mismatch: $binary"
-              }
-              $manifest.certificates[$binary] = $certificateHash
-              $manifest.signed[$binary] = @{
-                sha256 = (Get-FileHash $path -Algorithm SHA256).Hash.ToLowerInvariant()
-                size = (Get-Item $path).Length
-              }
-            }
-            $manifest | ConvertTo-Json -Depth 20 | Set-Content signed/manifest.json -Encoding utf8NoBOM
-            $digest = (Get-FileHash signed/manifest.json -Algorithm SHA256).Hash.ToLowerInvariant()
-            "manifest-sha256=$digest" >> $env:GITHUB_OUTPUT
-          } finally {
-            if ($null -ne $certificate) { $certificate.Dispose() }
-            Remove-Item $certificatePath -Force -ErrorAction SilentlyContinue
-          }
-
       - name: "Log in to Azure with GitHub OIDC"
-        if: ${{ inputs.production }}
         uses: azure/login@7ddb5af1ef8758cf1353cf3b42f940aee27ba21c # v3
         with:
           client-id: ${{ secrets.AZURE_CLIENT_ID_WINDOWS }}
@@ -541,7 +421,6 @@ jobs:
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID_WINDOWS }}
 
       - name: "Copy executable wheel members for signing"
-        if: ${{ inputs.production }}
         shell: pwsh
         run: |
           New-Item signed -ItemType Directory | Out-Null
@@ -550,7 +429,6 @@ jobs:
           }
 
       - name: "Sign executable wheel members with Azure Artifact Signing"
-        if: ${{ inputs.production }}
         uses: azure/artifact-signing-action@c7ab2a863ab5f9a846ddb8265964877ef296ee82 # v2
         with:
           endpoint: ${{ secrets.CODESIGN_ENDPOINT }}
@@ -570,7 +448,6 @@ jobs:
           trace: false
 
       - name: "Bind signed bytes and certificate identities"
-        if: ${{ inputs.production }}
         id: sign-azure
         shell: pwsh
         env:
@@ -690,7 +567,6 @@ jobs:
           INPUT_MANIFEST_SHA256: ${{ needs.prepare-windows.outputs.manifest-sha256 }}
           SIGNED_MANIFEST_SHA256: ${{ needs.sign-windows.outputs.manifest-sha256 }}
           FINAL_MANIFEST_SHA256: ${{ needs.assemble-windows.outputs.manifest-sha256 }}
-          PRODUCTION: ${{ inputs.production }}
         run: |
           $ErrorActionPreference = 'Stop'
           if ((Get-FileHash tooling.tar -Algorithm SHA256).Hash -ne $env:TOOLING_SHA256) {
@@ -707,30 +583,18 @@ jobs:
           if (-not $signtool) { throw 'signtool.exe not found in Windows SDK' }
           $manifest = Get-Content signed/manifest.json -Raw | ConvertFrom-Json -AsHashtable
           $directory = Join-Path $env:RUNNER_TEMP 'verified-binaries'
-          $certificatePath = Join-Path $env:RUNNER_TEMP 'codesign-test.cer'
-          try {
-            foreach ($binary in @('uv.exe', 'uvx.exe', 'uvw.exe', 'uv-build.exe')) {
-              $path = Join-Path $directory $binary
-              $signature = Get-AuthenticodeSignature $path
-              if ($null -eq $signature.SignerCertificate -or
-                  $signature.SignerCertificate.GetCertHashString([System.Security.Cryptography.HashAlgorithmName]::SHA256).ToLowerInvariant() -ne $manifest.certificates[$binary]) {
-                throw "Signing certificate mismatch: $binary"
-              }
-              if ($env:PRODUCTION -eq 'true') {
-                if ($signature.Status -ne 'Valid' -or $null -eq $signature.TimeStamperCertificate) {
-                  throw "Expected a publicly trusted, timestamped signature: $binary"
-                }
-              } elseif ($null -eq $trusted) {
-                # Trust only the signer's bound public test certificate on this fresh runner.
-                [IO.File]::WriteAllBytes($certificatePath, $signature.SignerCertificate.RawData)
-                $trusted = Import-Certificate -FilePath $certificatePath -CertStoreLocation Cert:\CurrentUser\Root
-              }
-              & $signtool verify /pa /all /v $path
-              if ($LASTEXITCODE -ne 0) { throw "Signature verification failed: $binary" }
+          foreach ($binary in @('uv.exe', 'uvx.exe', 'uvw.exe', 'uv-build.exe')) {
+            $path = Join-Path $directory $binary
+            $signature = Get-AuthenticodeSignature $path
+            if ($null -eq $signature.SignerCertificate -or
+                $signature.SignerCertificate.GetCertHashString([System.Security.Cryptography.HashAlgorithmName]::SHA256).ToLowerInvariant() -ne $manifest.certificates[$binary]) {
+              throw "Signing certificate mismatch: $binary"
             }
-          } finally {
-            if ($null -ne $trusted) { Remove-Item "Cert:\CurrentUser\Root\$($trusted.Thumbprint)" }
-            Remove-Item $certificatePath -Force -ErrorAction SilentlyContinue
+            if ($signature.Status -ne 'Valid' -or $null -eq $signature.TimeStamperCertificate) {
+              throw "Expected a publicly trusted, timestamped signature: $binary"
+            }
+            & $signtool verify /pa /all /v $path
+            if ($LASTEXITCODE -ne 0) { throw "Signature verification failed: $binary" }
           }
 
       - name: "Install and run the signed wheels"
