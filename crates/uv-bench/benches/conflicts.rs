@@ -1,4 +1,4 @@
-//! Warm, offline `uv lock` benchmarks over a fixed package graph with different conflict shapes.
+//! Warm, offline `uv lock` benchmarks for conflict shapes and shared-dependency activation paths.
 //!
 //! These use the repository's `.venv`. Packse fixture generation, interpreter discovery, cache
 //! warming, lockfile removal, and output checks are outside measurement. Each invocation resolves
@@ -22,6 +22,12 @@ use uv_python::PythonEnvironment;
 use uv_resolver::Lock;
 use uv_test::packse::generate_wheel;
 
+#[derive(Clone, Copy)]
+enum Workload {
+    Extras(usize),
+    FanIn(usize),
+}
+
 struct Fixture {
     directory: TempDir,
     packages: BTreeSet<String>,
@@ -29,7 +35,11 @@ struct Fixture {
 }
 
 impl Fixture {
-    fn new(extra_count: usize, conflicts: &[Vec<usize>]) -> Self {
+    fn new(workload: Workload, conflicts: &[Vec<usize>]) -> Self {
+        let (extra_count, package_count, chain_length) = match workload {
+            Workload::Extras(count) => (count, count, 4),
+            Workload::FanIn(count) => (4, count, 8),
+        };
         let directory = tempfile::tempdir().expect("Failed to create benchmark directory");
         fs_err::create_dir(directory.path().join("wheels"))
             .expect("Failed to create wheel directory");
@@ -39,8 +49,8 @@ impl Fixture {
             conflict_count: conflicts.len(),
         };
 
-        for index in 0..4 {
-            let dependencies = if index < 3 {
+        for index in 0..chain_length {
+            let dependencies = if index + 1 < chain_length {
                 vec![format!("shared-{}", index + 1)]
             } else {
                 Vec::new()
@@ -48,16 +58,33 @@ impl Fixture {
             fixture.wheel(
                 &format!("shared-{index}"),
                 &dependencies,
-                (index == 0).then_some("feature"),
+                (index == 0).then_some(("feature", &[])),
             );
         }
 
         let mut extras = toml::Table::new();
-        for index in 0..extra_count {
-            let name = format!("package-{index}");
-            // A requested transitive extra exercises marker projection, optimized in #19538.
-            fixture.wheel(&name, &["shared-0[feature]".to_string()], None);
-            extras.insert(format!("extra-{index}"), vec![name].into());
+        for extra_index in 0..extra_count {
+            let mut packages = Vec::new();
+            for index in (extra_index..package_count).step_by(extra_count) {
+                let name = format!("package-{index}");
+                // A requested transitive extra exercises marker projection, optimized in #19538.
+                let dependencies = ["shared-0[feature]".to_string()];
+                let requirement = match workload {
+                    Workload::Extras(_) => {
+                        fixture.wheel(&name, &dependencies, None);
+                        name
+                    }
+                    Workload::FanIn(_) => {
+                        // Both the base and the extra depend on the shared chain. This creates
+                        // distinct activation paths even though these extras cannot affect the
+                        // root's conflicts, exercising the filtering added in #21399.
+                        fixture.wheel(&name, &dependencies, Some(("feature", &dependencies)));
+                        format!("{name}[feature]")
+                    }
+                };
+                packages.push(requirement);
+            }
+            extras.insert(format!("extra-{extra_index}"), packages.into());
         }
         // Deliberately keep the same versions and dependencies across conflict shapes, including
         // the no-conflict control: only the declarations should change resolution's workload.
@@ -94,7 +121,7 @@ impl Fixture {
         self.directory.path()
     }
 
-    fn wheel(&mut self, name: &str, dependencies: &[String], extra: Option<&str>) {
+    fn wheel(&mut self, name: &str, dependencies: &[String], extra: Option<(&str, &[String])>) {
         let name = name.parse().expect("Invalid fixture package name");
         let version = "1.0.0".parse().expect("Invalid fixture package version");
         let requires = dependencies
@@ -103,7 +130,15 @@ impl Fixture {
             .collect::<Vec<_>>();
         let extras = extra
             .into_iter()
-            .map(|extra| (extra.parse().expect("Invalid fixture extra"), Vec::new()))
+            .map(|(extra, dependencies)| {
+                (
+                    extra.parse().expect("Invalid fixture extra"),
+                    dependencies
+                        .iter()
+                        .map(|dependency| dependency.parse().expect("Invalid fixture dependency"))
+                        .collect(),
+                )
+            })
             .collect::<BTreeMap<_, _>>();
         let requires_python = ">=3.11"
             .parse()
@@ -158,10 +193,10 @@ fn conflicts(criterion: &mut Criterion) {
         .expect("Failed to create Tokio runtime");
     let mut initialization = GlobalInitialization::Initialize;
 
-    for extra_count in [4, 8, 16] {
-        for (shape, sets) in [
+    let shapes = [4, 8, 16].into_iter().flat_map(|extra_count| {
+        [
             ("none", Vec::new()),
-            // Keep one pair fixed as unrelated extras grow (#21399).
+            // Keep one pair fixed as the number of root extras grows.
             ("single_pair", vec![vec![0, 1]]),
             // Cap independent pairs at four; eight pairs already create thousands of forks.
             (
@@ -177,55 +212,74 @@ fn conflicts(criterion: &mut Criterion) {
                 (1..extra_count).map(|i| vec![0, i]).collect(),
             ),
             ("mutually_exclusive", vec![(0..extra_count).collect()]),
-        ] {
-            let fixture = Fixture::new(extra_count, &sets);
-            let wheels = fixture.root().join("wheels");
-            let cache = fixture.root().join("cache");
-            let args = [
-                "uv",
-                "lock",
-                "--quiet",
-                "--offline",
-                "--no-config",
-                "--no-python-downloads",
-                "--no-index",
-                "--no-build",
-                "--find-links",
-                wheels.to_str().expect("Wheel path must be UTF-8"),
-                "--project",
-                fixture.root().to_str().expect("Fixture path must be UTF-8"),
-                "--cache-dir",
-                cache.to_str().expect("Cache path must be UTF-8"),
-                "--python",
-                python.to_str().expect("Python path must be UTF-8"),
-            ];
-            let mut run = || {
-                let cli = Cli::try_parse_from(args).expect("Failed to parse benchmark arguments");
-                let status = runtime
-                    .block_on(uv::run(cli, initialization))
-                    .expect("Benchmark invocation failed");
-                initialization = GlobalInitialization::Reuse;
-                let success = match status {
-                    ExitStatus::Success => true,
-                    ExitStatus::Failure | ExitStatus::Error | ExitStatus::External(_) => false,
-                };
-                assert!(success, "Benchmark invocation did not succeed");
+        ]
+        .into_iter()
+        .map(move |(shape, sets)| {
+            (
+                format!("lock_conflicts_{shape}_{extra_count}_extras"),
+                Workload::Extras(extra_count),
+                sets,
+            )
+        })
+    });
+    // Hold the root configuration fixed while growing unrelated activation paths through
+    // shared dependencies. Keep a matched no-conflict control for each package count.
+    let fan_in = [16, 32, 64].into_iter().flat_map(|package_count| {
+        [("none", Vec::new()), ("single_pair", vec![vec![0, 1]])]
+            .into_iter()
+            .map(move |(shape, sets)| {
+                (
+                    format!("lock_conflicts_fan_in_{shape}_{package_count}_packages"),
+                    Workload::FanIn(package_count),
+                    sets,
+                )
+            })
+    });
+    for (name, workload, sets) in shapes.chain(fan_in) {
+        let fixture = Fixture::new(workload, &sets);
+        let wheels = fixture.root().join("wheels");
+        let cache = fixture.root().join("cache");
+        let args = [
+            "uv",
+            "lock",
+            "--quiet",
+            "--offline",
+            "--no-config",
+            "--no-python-downloads",
+            "--no-index",
+            "--no-build",
+            "--find-links",
+            wheels.to_str().expect("Wheel path must be UTF-8"),
+            "--project",
+            fixture.root().to_str().expect("Fixture path must be UTF-8"),
+            "--cache-dir",
+            cache.to_str().expect("Cache path must be UTF-8"),
+            "--python",
+            python.to_str().expect("Python path must be UTF-8"),
+        ];
+        let mut run = || {
+            let cli = Cli::try_parse_from(args).expect("Failed to parse benchmark arguments");
+            let status = runtime
+                .block_on(uv::run(cli, initialization))
+                .expect("Benchmark invocation failed");
+            initialization = GlobalInitialization::Reuse;
+            let success = match status {
+                ExitStatus::Success => true,
+                ExitStatus::Failure | ExitStatus::Error | ExitStatus::External(_) => false,
             };
+            assert!(success, "Benchmark invocation did not succeed");
+        };
 
-            run();
-            fixture.check_lock();
-            criterion.bench_function(
-                &format!("lock_conflicts_{shape}_{extra_count}_extras"),
-                |bencher| {
-                    bencher.iter_batched(
-                        || fixture.remove_lock(),
-                        |()| run(),
-                        BatchSize::PerIteration,
-                    );
-                },
+        run();
+        fixture.check_lock();
+        criterion.bench_function(&name, |bencher| {
+            bencher.iter_batched(
+                || fixture.remove_lock(),
+                |()| run(),
+                BatchSize::PerIteration,
             );
-            fixture.check_lock();
-        }
+        });
+        fixture.check_lock();
     }
 }
 
