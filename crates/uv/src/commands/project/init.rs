@@ -127,7 +127,8 @@ pub(crate) async fn init(
                     match PackageName::from_owned(candidate) {
                         Ok(name) if reserved_script_name(name.as_str()).is_some() => {
                             anyhow::bail!(
-                                "The directory name (`{directory_name}`) cannot be used as project name, please provide a package name with `--name`."
+                                "The directory name (`{directory_name}`) cannot be used as project \
+                                name, please provide a package name with `--name`."
                             );
                         }
                         Ok(name) => name,
