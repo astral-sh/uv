@@ -246,8 +246,8 @@ pub(crate) async fn metadata(
                 .await
                 .context("Failed to collect module owners")?;
                 if sync.is_some() {
-                    // Prime discovery with the parent interpreter's metadata and inferred venv
-                    // paths, without running the newly created Python executable.
+                    // Prime the interpreter cache so we don't have to query on the next uv
+                    // invocation.
                     environment.interpreter().cache_virtualenv(cache)?;
                 }
                 export = export

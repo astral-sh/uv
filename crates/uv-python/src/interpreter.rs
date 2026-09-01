@@ -121,9 +121,9 @@ impl Interpreter {
     /// Uses the executable selected by virtual environment discovery, which may be a different
     /// alias from the executable used to create the environment.
     pub fn cache_virtualenv(&self, cache: &Cache) -> Result<(), Error> {
-        // Launcher overrides can change `sys.executable` and `sys.prefix`.
-        // The cache key includes them, but it still needs queried metadata for that case.
-        // Even an empty `__PYVENV_LAUNCHER__` affects `site.py` on older macOS Pythons.
+        // Launcher overrides can change `sys.executable` and `sys.prefix`, while
+        // `sys._base_executable` isn't affected. Instead of trying to stitch together this edge
+        // case, query the actual metadata on the next run.
         if env::var_os(EnvVars::PYTHONEXECUTABLE).is_some()
             || env::var_os(EnvVars::PYVENV_LAUNCHER).is_some()
         {
@@ -1235,7 +1235,7 @@ impl InterpreterInfo {
             key
         };
 
-        Ok(cache.entry(
+        let entry = cache.entry(
             CacheBucket::Interpreter,
             // Shard interpreter metadata by host architecture, operating system, and version, to
             // invalidate the cache (e.g.) on OS upgrades.
@@ -1259,7 +1259,8 @@ impl InterpreterInfo {
             // Launcher overrides can also change the reported executable and virtual environment
             // without changing either executable path.
             format!("{key}.msgpack"),
-        ))
+        );
+        Ok(entry)
     }
 
     /// A wrapper around [`markers::query_interpreter_info`] to cache the computed markers.
