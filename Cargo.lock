@@ -6455,7 +6455,7 @@ dependencies = [
  "anstream",
  "anyhow",
  "astral_async_zip",
- "base64",
+ "base64 0.22.1",
  "blake3",
  "clap",
  "csv",
