@@ -409,12 +409,12 @@ impl uv_errors::Hint for ProjectError {
                 "To regenerate the lockfile, run `uv lock --refresh --preview-features lockfile-format-check`.",
             ),
             Self::MissingLockfile(source, _, command) => match source {
-                MissingLockfileSource::Frozen(_) => {
-                    uv_errors::Hints::from(format!("Run `uv {command} --no-frozen`."))
-                }
-                MissingLockfileSource::Locked(_) => {
-                    uv_errors::Hints::from(format!("Run `uv {command} --no-locked`."))
-                }
+                MissingLockfileSource::Frozen(_) => uv_errors::Hints::from(format!(
+                    "To create a lockfile, run `uv {command} --no-frozen`.",
+                )),
+                MissingLockfileSource::Locked(_) => uv_errors::Hints::from(format!(
+                    "To create a lockfile, run `uv {command} --no-locked`.",
+                )),
             },
             Self::OverlappingMarkers(_, rhs, replacement) => {
                 uv_errors::Hints::from(format!("replace `{rhs}` with `{replacement}`"))
