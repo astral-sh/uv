@@ -139,7 +139,7 @@ impl Interpreter {
     pub fn with_virtualenv(self, virtualenv: VirtualEnvironment) -> Self {
         // Match `site.getsitepackages()` for the new environment instead of retaining the
         // parent interpreter's site-packages paths.
-        let site_packages = if self.markers.os_name() == "nt" {
+        let mut site_packages = if self.markers.os_name() == "nt" {
             vec![virtualenv.root.clone(), virtualenv.scheme.purelib.clone()]
         } else if virtualenv.scheme.platlib == virtualenv.scheme.purelib {
             vec![virtualenv.scheme.purelib.clone()]
@@ -149,6 +149,19 @@ impl Interpreter {
                 virtualenv.scheme.purelib.clone(),
             ]
         };
+        if self.markers.os_name() != "nt" {
+            // Some distributions add import paths that are not part of the installation scheme,
+            // e.g., Debian's `dist-packages`. Rebase those paths into the new environment, excluding
+            // paths outside the parent's prefix (such as an existing venv's system site packages).
+            for path in &self.site_packages {
+                if let Ok(relative) = path.strip_prefix(&self.sys_prefix) {
+                    let path = virtualenv.root.join(relative);
+                    if !site_packages.contains(&path) {
+                        site_packages.push(path);
+                    }
+                }
+            }
+        }
         Self {
             scheme: virtualenv.scheme,
             sys_base_executable: Some(virtualenv.base_executable),
