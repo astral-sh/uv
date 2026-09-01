@@ -226,9 +226,29 @@ impl Hinted for LockError {
             Self::LockFormat(..) => Hints::from(
                 "To regenerate the lockfile, run `uv lock --refresh --preview-features lockfile-format-check`.",
             ),
-            Self::MissingLockfile(..) => Hints::from(
-                "To create a lockfile, run `uv lock` or `uv sync` without the flag.",
-            ),
+            Self::MissingLockfile(source, _) => {
+                let action = match source {
+                    MissingLockfileSource::Frozen(FrozenSource::Cli(_))
+                    | MissingLockfileSource::Locked(LockedSource::Cli(_)) => {
+                        format!("without the {source} flag")
+                    }
+                    MissingLockfileSource::Frozen(FrozenSource::Env) => {
+                        "with `UV_FROZEN` unset".to_string()
+                    }
+                    MissingLockfileSource::Locked(LockedSource::Env) => {
+                        "with `UV_LOCKED` unset".to_string()
+                    }
+                    MissingLockfileSource::Frozen(FrozenSource::Configuration) => {
+                        "with `frozen` disabled in the workspace configuration".to_string()
+                    }
+                    MissingLockfileSource::Locked(LockedSource::Configuration) => {
+                        "with `locked` disabled in the workspace configuration".to_string()
+                    }
+                };
+                Hints::from(format!(
+                    "To create a lockfile, run `uv lock` or `uv sync` {action}.",
+                ))
+            }
             Self::OverlappingMarkers(_, rhs, replacement) => {
                 Hints::from(format!("replace `{rhs}` with `{replacement}`"))
             }
