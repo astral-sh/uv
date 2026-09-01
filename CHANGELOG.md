@@ -7,28 +7,26 @@
 
 Released on 2026-09-01.
 
+### Python
+
+- Add CPython 3.15.0rc2 downloads and sysconfig mappings ([#21413](https://github.com/astral-sh/uv/pull/21413), [#21415](https://github.com/astral-sh/uv/pull/21415))
+
 ### Enhancements
 
-- Preserve the supplied lock flag in diagnostics ([#21402](https://github.com/astral-sh/uv/pull/21402))
+- Add `--no-locked` and `--no-frozen` to disable lock modes enabled by `UV_LOCKED` and `UV_FROZEN` for a single invocation ([#21408](https://github.com/astral-sh/uv/pull/21408))
+- Report the exact command-line lock-mode flag in warnings and errors ([#21402](https://github.com/astral-sh/uv/pull/21402))
 
 ### Performance
 
-- Run streaming ZIP extraction in a blocking task ([#21372](https://github.com/astral-sh/uv/pull/21372))
+- Speed up cold wheel installs by extracting each streaming ZIP archive in a single blocking task and reusing buffers across files ([#21372](https://github.com/astral-sh/uv/pull/21372))
 
 ### Bug fixes
 
-- Avoid duplicate concurrent wheel extraction ([#21400](https://github.com/astral-sh/uv/pull/21400))
-- Bump async_http_range_reader to 0.11.1 ([#21401](https://github.com/astral-sh/uv/pull/21401))
-- Give CLI lock flags precedence over environment variables ([#21396](https://github.com/astral-sh/uv/pull/21396))
-- Use authentication realms when following redirects ([#21382](https://github.com/astral-sh/uv/pull/21382))
-
-### Other changes
-
-- Add CPython 3.15.0rc2 ([#21413](https://github.com/astral-sh/uv/pull/21413))
-- Allow negating locked and frozen modes ([#21408](https://github.com/astral-sh/uv/pull/21408))
-- Redact signed URLs in retry diagnostics ([#21381](https://github.com/astral-sh/uv/pull/21381))
-- Sync latest Python releases ([#21415](https://github.com/astral-sh/uv/pull/21415))
-- Use Namespace runners for Windows release builds ([#21391](https://github.com/astral-sh/uv/pull/21391))
+- Update `async_http_range_reader` to 0.11.1 to address a potential memory-safety issue when reading metadata ranges from untrusted wheels ([#21401](https://github.com/astral-sh/uv/pull/21401))
+- Remove sensitive headers when redirects cross authentication realms, including same-host redirects that change URL schemes ([#21382](https://github.com/astral-sh/uv/pull/21382))
+- Redact secrets in signed URLs from retry diagnostics, including nested request errors ([#21381](https://github.com/astral-sh/uv/pull/21381))
+- Give `--locked`, `--frozen`, `--check`, and `--check-exists` precedence over conflicting `UV_LOCKED` and `UV_FROZEN` values ([#21396](https://github.com/astral-sh/uv/pull/21396))
+- Prevent concurrent uv processes from redundantly extracting the same local or source-built wheel ([#21400](https://github.com/astral-sh/uv/pull/21400))
 
 ## 0.12.8
 
