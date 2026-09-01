@@ -167,7 +167,10 @@ const RESERVED_VERSIONED_SCRIPT_NAME_PREFIX_ERROR: &str = "python3.";
 const RESERVED_FREE_THREADED_SCRIPT_NAME_PREFIXES_ERROR: &[&str; 2] = &["python3.", "pythonw3."];
 const RESERVED_SCRIPT_NAMES_WARN: &[&str; 2] = &["activate", "activate_this.py"];
 
-fn reserved_script_name(name: &str) -> Option<&str> {
+/// Return the reserved interpreter name if a script would overwrite a Python executable.
+///
+/// Expects a lowercase string.
+pub fn reserved_script_name(name: &str) -> Option<&str> {
     let normalized_name = name.strip_suffix(".py").unwrap_or(name);
     (RESERVED_SCRIPT_NAMES_ERROR.contains(&normalized_name)
         || normalized_name

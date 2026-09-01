@@ -18,6 +18,7 @@ use uv_configuration::{
 use uv_distribution_types::RequiresPython;
 use uv_fs::{CWD, Simplified};
 use uv_git::GIT;
+use uv_install_wheel::reserved_script_name;
 use uv_normalize::PackageName;
 use uv_pep440::Version;
 use uv_python::{
@@ -124,6 +125,12 @@ pub(crate) async fn init(
                     // whitespace, and replacing any internal whitespace with hyphens.
                     let candidate = directory_name.trim().replace(' ', "-");
                     match PackageName::from_owned(candidate) {
+                        Ok(name) if reserved_script_name(name.as_str()).is_some() => {
+                            anyhow::bail!(
+                                "The directory name (`{directory_name}`) cannot be used as project \
+                                name, please provide a package name with `--name`."
+                            );
+                        }
                         Ok(name) => name,
                         Err(_) => {
                             let directory_description = if explicit_path.is_some() {
