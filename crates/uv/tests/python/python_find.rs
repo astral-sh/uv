@@ -2,6 +2,8 @@ use assert_cmd::assert::OutputAssertExt;
 use assert_fs::prelude::{FileTouch, PathChild};
 use assert_fs::{fixture::FileWriteStr, prelude::PathCreateDir};
 use indoc::indoc;
+#[cfg(unix)]
+use insta::allow_duplicates;
 
 use uv_platform::{Arch, Os};
 use uv_static::EnvVars;
@@ -160,6 +162,47 @@ fn python_find_cached_launcher_override() {
     ----- stdout -----
     [TEMP_DIR]/other/bin/python3
     ");
+}
+
+#[test]
+#[cfg(unix)]
+fn python_find_cached_relative_launcher_override() {
+    let context = uv_test::test_context!("3.12");
+    let other_venv = context.temp_dir.child("other");
+    context
+        .venv()
+        .arg("--python")
+        .arg("3.12")
+        .arg(other_venv.path())
+        .assert()
+        .success();
+
+    let requested_python = venv_bin_path(&context.venv).join("python3");
+    for variable in [EnvVars::PYTHONEXECUTABLE, EnvVars::PYVENV_LAUNCHER] {
+        allow_duplicates! {
+            for _ in 0..2 {
+                uv_snapshot!(context.filters(), context.python_find()
+                    .arg(&requested_python)
+                    .current_dir(&context.venv)
+                    .env(variable, "bin/python3"), @"
+                exit_code: 0 (success)
+                ----- stdout -----
+                [VENV]/bin/python3
+                ");
+
+                // The same relative override now refers to a different environment. Check both
+                // the first query and reuse of the cache from each working directory.
+                uv_snapshot!(context.filters(), context.python_find()
+                    .arg(&requested_python)
+                    .current_dir(&other_venv)
+                    .env(variable, "bin/python3"), @"
+                exit_code: 0 (success)
+                ----- stdout -----
+                [TEMP_DIR]/other/bin/python3
+                ");
+            }
+        }
+    }
 }
 
 #[test]

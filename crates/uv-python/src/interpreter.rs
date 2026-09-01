@@ -107,7 +107,7 @@ impl Interpreter {
     pub fn clear_cache(executable: impl AsRef<Path>, cache: &Cache) -> Result<(), Error> {
         let absolute = std::path::absolute(executable.as_ref())?;
         let canonical = canonicalize_executable(&absolute)?;
-        let cache_entry = InterpreterInfo::cache_entry(&absolute, &canonical, cache);
+        let cache_entry = InterpreterInfo::cache_entry(&absolute, &canonical, cache)?;
 
         match fs::remove_file(cache_entry.path()) {
             Ok(()) => Ok(()),
@@ -123,6 +123,7 @@ impl Interpreter {
     pub fn cache_virtualenv(&self, cache: &Cache) -> Result<(), Error> {
         // Launcher overrides can change `sys.executable` and `sys.prefix`.
         // The cache key includes them, but it still needs queried metadata for that case.
+        // Even an empty `__PYVENV_LAUNCHER__` affects `site.py` on older macOS Pythons.
         if env::var_os(EnvVars::PYTHONEXECUTABLE).is_some()
             || env::var_os(EnvVars::PYVENV_LAUNCHER).is_some()
         {
@@ -1035,7 +1036,7 @@ impl InterpreterInfo {
     fn cache(&self, cache: &Cache) -> Result<(), Error> {
         let absolute = std::path::absolute(&self.sys_executable)?;
         let canonical = canonicalize_executable(&absolute)?;
-        let cache_entry = Self::cache_entry(&absolute, &canonical, cache);
+        let cache_entry = Self::cache_entry(&absolute, &canonical, cache)?;
         let modified = Timestamp::from_path(&canonical)?;
         self.write_cache(&cache_entry, modified)
     }
@@ -1174,7 +1175,11 @@ impl InterpreterInfo {
                 err,
                 path: interpreter.to_path_buf(),
             }),
-            InterpreterInfoResult::Success(data) => Ok(*data),
+            InterpreterInfoResult::Success(mut data) => {
+                // CPython can report a relative executable when a launcher override is relative.
+                data.sys_executable = std::path::absolute(&data.sys_executable)?;
+                Ok(*data)
+            }
         }
     }
 
@@ -1213,11 +1218,24 @@ impl InterpreterInfo {
     }
 
     /// Return the cache entry for an interpreter's absolute and canonical executable paths.
-    fn cache_entry(absolute: &Path, canonical: &Path, cache: &Cache) -> CacheEntry {
+    fn cache_entry(absolute: &Path, canonical: &Path, cache: &Cache) -> Result<CacheEntry, Error> {
         let python_executable = env::var_os(EnvVars::PYTHONEXECUTABLE).map(PathBuf::from);
         let pyvenv_launcher = env::var_os(EnvVars::PYVENV_LAUNCHER).map(PathBuf::from);
+        let key = cache_digest(&(absolute, canonical, &python_executable, &pyvenv_launcher));
+        // Keep the original values: relative and absolute overrides can behave differently in
+        // CPython. Relative overrides also depend on the working directory, including an empty
+        // `__PYVENV_LAUNCHER__` consumed by `site.py` on older macOS Pythons.
+        let key = if python_executable
+            .iter()
+            .chain(pyvenv_launcher.iter())
+            .any(|path| path.is_relative())
+        {
+            cache_digest(&(key, env::current_dir()?))
+        } else {
+            key
+        };
 
-        cache.entry(
+        Ok(cache.entry(
             CacheBucket::Interpreter,
             // Shard interpreter metadata by host architecture, operating system, and version, to
             // invalidate the cache (e.g.) on OS upgrades.
@@ -1240,11 +1258,8 @@ impl InterpreterInfo {
             //
             // Launcher overrides can also change the reported executable and virtual environment
             // without changing either executable path.
-            format!(
-                "{}.msgpack",
-                cache_digest(&(absolute, canonical, &python_executable, &pyvenv_launcher))
-            ),
-        )
+            format!("{key}.msgpack"),
+        ))
     }
 
     /// A wrapper around [`markers::query_interpreter_info`] to cache the computed markers.
@@ -1280,7 +1295,7 @@ impl InterpreterInfo {
         };
 
         let canonical = canonicalize_executable(&absolute).map_err(handle_io_error)?;
-        let cache_entry = Self::cache_entry(&absolute, &canonical, cache);
+        let cache_entry = Self::cache_entry(&absolute, &canonical, cache)?;
 
         // We check the timestamp of the canonicalized executable to check if an underlying
         // interpreter has been modified.
