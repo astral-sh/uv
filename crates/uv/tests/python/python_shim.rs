@@ -97,7 +97,7 @@ printf '%s\n' "$UV_SHIM_TEST_PYTHON"
     permissions.set_mode(0o755);
     fs_err::set_permissions(&uv, permissions)?;
     command
-        .env("UV_SHIM_TEST_QUERY", command.get_program().to_owned())
+        .env("UV_SHIM_TEST_QUERY", context.bin_dir.join("uv-python"))
         .env(
             "UV_SHIM_TEST_PYTHON",
             context.python_command().get_program(),
