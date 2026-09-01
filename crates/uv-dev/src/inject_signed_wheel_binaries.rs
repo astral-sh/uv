@@ -19,7 +19,7 @@ pub(crate) struct InjectSignedWheelBinariesArgs {
     /// The rewritten wheel. Existing paths are not overwritten.
     #[arg(long)]
     output: PathBuf,
-    /// A directory containing the code-signed executables, named as they appear in the wheel.
+    /// A directory containing code-signed executables named for their `.data/scripts` members.
     #[arg(long)]
     signed_binaries: PathBuf,
 }
@@ -47,8 +47,10 @@ pub(crate) struct InjectSignedWheelBinariesArgs {
 /// ```
 ///
 /// Expects a trusted, file-only wheel and signed binaries that fit in memory. Every member under
-/// `.data/scripts` is replaced by the same-named file from `signed_binaries`. Other file contents
-/// and executable permissions are preserved, and `RECORD` is regenerated from the output contents.
+/// `.data/scripts` is replaced by the same-named file from `signed_binaries`; unrelated files in
+/// that directory are ignored. Other wheel contents and executable permissions are preserved, and
+/// `RECORD` is regenerated from the output contents. The caller owns artifact provenance and
+/// signature verification.
 ///
 /// Input files are left unchanged. The output must not already exist and is only published once
 /// the complete wheel has been written.
@@ -524,9 +526,9 @@ mod tests {
         Ok(())
     }
 
-    /// Multiple signed binaries produce the expected bytes, metadata, and `RECORD` entries.
+    /// A shared signing directory contributes only the binaries required by this wheel.
     #[tokio::test]
-    async fn preserves_multiple_signed_binaries() -> Result<()> {
+    async fn uses_only_signed_binaries_required_by_wheel() -> Result<()> {
         let directory = tempfile::tempdir()?;
         let args = fixture_args(directory.path());
         let mut members = fixture_members();
@@ -540,6 +542,8 @@ mod tests {
         fixture(&args.input, members.clone(), None).await?;
         write_signed_binary(&args, "uv", b"signed uv")?;
         write_signed_binary(&args, "uvx", b"signed uvx")?;
+        write_signed_binary(&args, "uv-build", b"signed uv-build")?;
+        write_signed_binary(&args, "certificate.pem", b"signing certificate")?;
         // Derive expected bytes from the fixture and signed inputs, not from the output archive.
         for (entry, bytes) in &mut members {
             match entry.filename().as_str()? {
