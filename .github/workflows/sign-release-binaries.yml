@@ -5,7 +5,7 @@ on:
   workflow_call:
     inputs:
       production:
-        description: Use protected Azure signing environments instead of the CI test certificates.
+        description: Use Azure signing in the release environment instead of the CI test certificates.
         type: boolean
         default: false
 
@@ -77,7 +77,7 @@ jobs:
     needs: prepare-macos
     if: ${{ !inputs.production || (github.repository == 'astral-sh/uv' && github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') }}
     runs-on: ${{ inputs.production && 'ubuntu-24.04' || 'namespace-profile-macos-15' }}
-    environment: ${{ inputs.production && 'release-signing-macos' || 'release-test' }}
+    environment: ${{ inputs.production && 'release' || 'release-test' }}
     permissions:
       id-token: write
     outputs:
@@ -165,9 +165,9 @@ jobs:
         if: ${{ inputs.production }}
         uses: azure/login@7ddb5af1ef8758cf1353cf3b42f940aee27ba21c # v3
         with:
-          client-id: ${{ secrets.AZURE_CLIENT_ID }}
-          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
-          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          client-id: ${{ secrets.AZURE_CLIENT_ID_MACOS }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID_MACOS }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID_MACOS }}
 
       - name: "Sign executable wheel members through Azure Key Vault"
         if: ${{ inputs.production }}
@@ -430,7 +430,7 @@ jobs:
     needs: prepare-windows
     if: ${{ !inputs.production || (github.repository == 'astral-sh/uv' && github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') }}
     runs-on: ${{ inputs.production && 'windows-2022' || 'namespace-profile-windows-2022-x86-64-16x32' }}
-    environment: ${{ inputs.production && 'release-signing-windows' || 'release-test' }}
+    environment: ${{ inputs.production && 'release' || 'release-test' }}
     permissions:
       id-token: write
     env:
@@ -536,9 +536,9 @@ jobs:
         if: ${{ inputs.production }}
         uses: azure/login@7ddb5af1ef8758cf1353cf3b42f940aee27ba21c # v3
         with:
-          client-id: ${{ secrets.AZURE_CLIENT_ID }}
-          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
-          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          client-id: ${{ secrets.AZURE_CLIENT_ID_WINDOWS }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID_WINDOWS }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID_WINDOWS }}
 
       - name: "Copy executable wheel members for signing"
         if: ${{ inputs.production }}
