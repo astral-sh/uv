@@ -330,13 +330,13 @@ pub(crate) async fn run(
             // breaking users who set `UV_LOCKED=1` globally.
             if let LockCheck::Enabled(lock_check) = lock_check {
                 match lock_check {
-                    LockCheckSource::LockedCli | LockCheckSource::Check => {
+                    LockCheckSource::Cli(_) => {
                         bail!(
                             "Unable to find lockfile for Python script, but `{lock_check}` was provided. To create a lockfile, run `{}`.",
                             "uv lock --script".green(),
                         );
                     }
-                    LockCheckSource::LockedEnv | LockCheckSource::LockedConfiguration => {
+                    LockCheckSource::Env | LockCheckSource::Configuration => {
                         warn_user!(
                             "No lockfile found for Python script (ignoring `{lock_check}`); run `{}` to generate a lockfile",
                             "uv lock --script".green(),
@@ -346,7 +346,7 @@ pub(crate) async fn run(
             }
             if let Some(frozen_source) = frozen {
                 match frozen_source {
-                    FrozenSource::Cli | FrozenSource::CheckExists => {
+                    FrozenSource::Cli(_) => {
                         bail!(
                             "Unable to find lockfile for Python script, but `{frozen_source}` was provided. To create a lockfile, run `{}`.",
                             "uv lock --script".green(),

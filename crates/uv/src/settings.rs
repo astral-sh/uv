@@ -57,9 +57,9 @@ use uv_resolver::{
     ForkStrategy, Prerelease, PrereleaseMode, PrereleasePackage, ResolutionMode,
 };
 use uv_settings::{
-    Combine, EnvironmentOptions, FilesystemOptions, IndexOptions, MalwareCheckSettings, Options,
-    PipOptions, PreviewFeaturesOption, PreviewOption, PublishOptions, PythonInstallMirrors,
-    ResolverInstallerOptions, ResolverInstallerSchema, ResolverOptions,
+    Combine, EnvFlag, EnvironmentOptions, FilesystemOptions, IndexOptions, MalwareCheckSettings,
+    Options, PipOptions, PreviewFeaturesOption, PreviewOption, PublishOptions,
+    PythonInstallMirrors, ResolverInstallerOptions, ResolverInstallerSchema, ResolverOptions,
 };
 use uv_static::EnvVars;
 use uv_torch::{AmdGpuArchitecture, TorchMode};
@@ -589,26 +589,45 @@ impl InitSettings {
     }
 }
 
+/// The CLI flag that requested a lock check.
+#[derive(Debug, Clone, Copy)]
+pub(crate) enum LockCheckFlag {
+    Locked,
+    Check,
+}
+
+impl LockCheckFlag {
+    fn name(self) -> &'static str {
+        match self {
+            Self::Locked => "locked",
+            Self::Check => "check",
+        }
+    }
+}
+
+impl std::fmt::Display for LockCheckFlag {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "--{}", self.name())
+    }
+}
+
 /// The source of a lock check operation.
 #[derive(Debug, Clone, Copy)]
 pub(crate) enum LockCheckSource {
-    /// The user invoked `uv <command> --locked`
-    LockedCli,
+    /// A lock check was requested on the CLI.
+    Cli(LockCheckFlag),
     /// The `UV_LOCKED` environment variable was set.
-    LockedEnv,
+    Env,
     /// The `locked` option was set via workspace configuration.
-    LockedConfiguration,
-    /// The user invoked `uv <command> --check`
-    Check,
+    Configuration,
 }
 
 impl std::fmt::Display for LockCheckSource {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::LockedCli => write!(f, "--locked"),
-            Self::LockedEnv => write!(f, "UV_LOCKED=1"),
-            Self::LockedConfiguration => write!(f, "locked (workspace configuration)"),
-            Self::Check => write!(f, "--check"),
+            Self::Cli(flag) => flag.fmt(f),
+            Self::Env => write!(f, "UV_LOCKED=1"),
+            Self::Configuration => write!(f, "locked (workspace configuration)"),
         }
     }
 }
@@ -622,89 +641,122 @@ pub(crate) enum LockCheck {
     Disabled,
 }
 
+impl From<LockCheck> for Flag {
+    fn from(lock_check: LockCheck) -> Self {
+        match lock_check {
+            LockCheck::Enabled(LockCheckSource::Cli(flag)) => Self::from_cli(flag.name()),
+            LockCheck::Enabled(LockCheckSource::Env) => Self::Enabled {
+                source: FlagSource::Env(EnvVars::UV_LOCKED),
+                name: "locked",
+            },
+            LockCheck::Enabled(LockCheckSource::Configuration) => Self::from_config("locked"),
+            LockCheck::Disabled => Self::disabled(),
+        }
+    }
+}
+
+/// The CLI flag that requested frozen mode.
+#[derive(Debug, Clone, Copy)]
+pub(crate) enum FrozenFlag {
+    Frozen,
+    CheckExists,
+}
+
+impl FrozenFlag {
+    fn name(self) -> &'static str {
+        match self {
+            Self::Frozen => "frozen",
+            Self::CheckExists => "check-exists",
+        }
+    }
+}
+
+impl std::fmt::Display for FrozenFlag {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "--{}", self.name())
+    }
+}
+
 /// The source of the frozen flag.
 #[derive(Debug, Clone, Copy)]
 pub(crate) enum FrozenSource {
-    /// The `--frozen` flag was provided on CLI.
-    Cli,
+    /// Frozen mode was requested on the CLI.
+    Cli(FrozenFlag),
     /// The `UV_FROZEN` environment variable was set.
     Env,
     /// The `frozen` option was set via workspace configuration.
     Configuration,
-    /// The `--check-exists` flag was provided on CLI.
-    CheckExists,
 }
 
 impl std::fmt::Display for FrozenSource {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Cli => write!(f, "--frozen"),
+            Self::Cli(flag) => flag.fmt(f),
             Self::Env => write!(f, "UV_FROZEN=1"),
             Self::Configuration => write!(f, "frozen (workspace configuration)"),
-            Self::CheckExists => write!(f, "--check-exists"),
+        }
+    }
+}
+
+impl From<FrozenSource> for Flag {
+    fn from(source: FrozenSource) -> Self {
+        match source {
+            FrozenSource::Cli(flag) => Self::from_cli(flag.name()),
+            FrozenSource::Env => Self::Enabled {
+                source: FlagSource::Env(EnvVars::UV_FROZEN),
+                name: "frozen",
+            },
+            FrozenSource::Configuration => Self::from_config("frozen"),
         }
     }
 }
 
 /// Resolve conflicting lock flags, letting CLI arguments override environment variables.
-fn resolve_lock_flags(locked: Flag, frozen: Flag) -> anyhow::Result<(Flag, Flag)> {
+fn resolve_lock_flags(
+    locked: LockCheck,
+    frozen: Option<FrozenSource>,
+) -> anyhow::Result<(LockCheck, Option<FrozenSource>)> {
     match (locked, frozen) {
-        (
-            Flag::Enabled {
-                source: FlagSource::Cli,
-                name,
-            },
-            Flag::Enabled {
-                source: FlagSource::Env(env),
-                ..
-            },
-        ) => {
-            warn_user_once!("Ignoring `{env}` because `--{name}` was provided");
-            Ok((locked, Flag::disabled()))
+        (LockCheck::Enabled(LockCheckSource::Cli(flag)), Some(FrozenSource::Env)) => {
+            warn_user_once!("Ignoring `UV_FROZEN` because `{flag}` was provided");
+            Ok((locked, None))
         }
-        (
-            Flag::Enabled {
-                source: FlagSource::Env(env),
-                ..
-            },
-            Flag::Enabled {
-                source: FlagSource::Cli,
-                name,
-            },
-        ) => {
-            warn_user_once!("Ignoring `{env}` because `--{name}` was provided");
-            Ok((Flag::disabled(), frozen))
+        (LockCheck::Enabled(LockCheckSource::Env), Some(FrozenSource::Cli(flag))) => {
+            warn_user_once!("Ignoring `UV_LOCKED` because `{flag}` was provided");
+            Ok((LockCheck::Disabled, frozen))
         }
         _ => {
-            check_conflicts(locked, frozen)?;
+            check_conflicts(locked.into(), frozen.map_or(Flag::Disabled, Flag::from))?;
             Ok((locked, frozen))
         }
     }
 }
 
-/// Convert a resolved flag to an optional frozen source.
-fn resolve_frozen(flag: Flag) -> Option<FrozenSource> {
-    if flag.is_enabled() {
-        Some(match flag.source() {
-            Some(FlagSource::Cli) | None => FrozenSource::Cli,
-            Some(FlagSource::Env(_)) => FrozenSource::Env,
-            Some(FlagSource::Config) => FrozenSource::Configuration,
-        })
-    } else {
-        None
+/// Resolve frozen mode and its source from CLI arguments and the environment.
+fn resolve_frozen(
+    enabled: bool,
+    cli_flag: FrozenFlag,
+    environment: EnvFlag,
+) -> Option<FrozenSource> {
+    match resolve_flag(enabled, cli_flag.name(), environment) {
+        Flag::Enabled { source, .. } => Some(match source {
+            FlagSource::Cli => FrozenSource::Cli(cli_flag),
+            FlagSource::Env(_) => FrozenSource::Env,
+            FlagSource::Config => FrozenSource::Configuration,
+        }),
+        Flag::Disabled => None,
     }
 }
 
-/// Convert a resolved flag to a lock check.
-fn resolve_lock_check(flag: Flag) -> LockCheck {
-    if flag.is_enabled() {
-        LockCheck::Enabled(match flag.source() {
-            Some(FlagSource::Cli) | None => LockCheckSource::LockedCli,
-            Some(FlagSource::Env(_)) => LockCheckSource::LockedEnv,
-            Some(FlagSource::Config) => LockCheckSource::LockedConfiguration,
-        })
-    } else {
-        LockCheck::Disabled
+/// Resolve a lock check and its source from CLI arguments and the environment.
+fn resolve_lock_check(enabled: bool, cli_flag: LockCheckFlag, environment: EnvFlag) -> LockCheck {
+    match resolve_flag(enabled, cli_flag.name(), environment) {
+        Flag::Enabled { source, .. } => LockCheck::Enabled(match source {
+            FlagSource::Cli => LockCheckSource::Cli(cli_flag),
+            FlagSource::Env(_) => LockCheckSource::Env,
+            FlagSource::Config => LockCheckSource::Configuration,
+        }),
+        Flag::Disabled => LockCheck::Disabled,
     }
 }
 
@@ -806,8 +858,8 @@ impl RunSettings {
             .unwrap_or_default();
 
         // Resolve flags from CLI and environment variables.
-        let locked = resolve_flag(locked, "locked", environment.locked);
-        let frozen = resolve_flag(frozen, "frozen", environment.frozen);
+        let locked = resolve_lock_check(locked, LockCheckFlag::Locked, environment.locked);
+        let frozen = resolve_frozen(frozen, FrozenFlag::Frozen, environment.frozen);
         let no_sync = resolve_flag(no_sync, "no-sync", environment.no_sync);
 
         let (locked, frozen) = resolve_lock_flags(locked, frozen)?;
@@ -836,8 +888,8 @@ impl RunSettings {
         let malware_settings = MalwareCheckSettings::resolve(filesystem.as_ref(), &environment);
 
         Ok(Self {
-            lock_check: resolve_lock_check(locked),
-            frozen: resolve_frozen(frozen),
+            lock_check: locked,
+            frozen,
             extras: ExtrasSpecification::from_args(
                 extra.unwrap_or_default(),
                 no_extra,
@@ -1974,8 +2026,8 @@ impl SyncSettings {
         };
 
         // Resolve flags from CLI and environment variables.
-        let locked = resolve_flag(locked, "locked", environment.locked);
-        let frozen = resolve_flag(frozen, "frozen", environment.frozen);
+        let locked = resolve_lock_check(locked, LockCheckFlag::Locked, environment.locked);
+        let frozen = resolve_frozen(frozen, FrozenFlag::Frozen, environment.frozen);
 
         let (locked, frozen) = resolve_lock_flags(locked, frozen)?;
 
@@ -2038,8 +2090,8 @@ impl SyncSettings {
 
         Ok(Self {
             output_format,
-            lock_check: resolve_lock_check(locked),
-            frozen: resolve_frozen(frozen),
+            lock_check: locked,
+            frozen,
             dry_run,
             script,
             active: flag(active, no_active, "active")?,
@@ -2136,36 +2188,29 @@ impl LockSettings {
             .unwrap_or_default();
 
         // Resolve flags from CLI and environment variables.
-        let locked = resolve_flag(
+        let locked = resolve_lock_check(
             locked || check,
-            if check { "check" } else { "locked" },
+            if check {
+                LockCheckFlag::Check
+            } else {
+                LockCheckFlag::Locked
+            },
             environment.locked,
         );
-        let frozen = resolve_flag(
+        let frozen = resolve_frozen(
             frozen || check_exists,
             if check_exists {
-                "check-exists"
+                FrozenFlag::CheckExists
             } else {
-                "frozen"
+                FrozenFlag::Frozen
             },
             environment.frozen,
         );
 
         let (locked, frozen) = resolve_lock_flags(locked, frozen)?;
 
-        let lock_check = if check {
-            LockCheck::Enabled(LockCheckSource::Check)
-        } else {
-            resolve_lock_check(locked)
-        };
-        let frozen = if check_exists {
-            Some(FrozenSource::CheckExists)
-        } else {
-            resolve_frozen(frozen)
-        };
-
         Ok(Self {
-            lock_check,
+            lock_check: locked,
             frozen,
             dry_run: DryRun::from_args(dry_run),
             script,
@@ -2264,8 +2309,8 @@ impl MetadataSettings {
             .unwrap_or_default();
 
         // Resolve flags from CLI and environment variables.
-        let locked = resolve_flag(locked, "locked", environment.locked);
-        let frozen = resolve_flag(frozen, "frozen", environment.frozen);
+        let locked = resolve_lock_check(locked, LockCheckFlag::Locked, environment.locked);
+        let frozen = resolve_frozen(frozen, FrozenFlag::Frozen, environment.frozen);
 
         let (locked, frozen) = resolve_lock_flags(locked, frozen)?;
 
@@ -2273,8 +2318,8 @@ impl MetadataSettings {
 
         Ok(Self {
             script,
-            lock_check: resolve_lock_check(locked),
-            frozen: resolve_frozen(frozen),
+            lock_check: locked,
+            frozen,
             dry_run: DryRun::from_args(dry_run),
             sync: sync.then_some(if exact {
                 Modifications::Exact
@@ -2474,14 +2519,14 @@ impl AddSettings {
         let lfs = GitLfsSetting::new(lfs.then_some(true), environment.lfs);
 
         // Resolve flags from CLI and environment variables.
-        let locked = resolve_flag(locked, "locked", environment.locked);
-        let frozen = resolve_flag(frozen, "frozen", environment.frozen);
+        let locked = resolve_lock_check(locked, LockCheckFlag::Locked, environment.locked);
+        let frozen = resolve_frozen(frozen, FrozenFlag::Frozen, environment.frozen);
         let no_sync = resolve_flag(no_sync, "no-sync", environment.no_sync);
 
         let (locked, frozen) = resolve_lock_flags(locked, frozen)?;
 
         // Check for conflicts between no_sync and frozen.
-        check_conflicts(no_sync, frozen)?;
+        check_conflicts(no_sync, frozen.map_or(Flag::Disabled, Flag::from))?;
 
         let no_install_package_flag = if no_install_package.is_empty() {
             Flag::disabled()
@@ -2504,7 +2549,7 @@ impl AddSettings {
             no_install_package_flag,
             only_install_package_flag,
         ] {
-            check_conflicts(install_flag, frozen)?;
+            check_conflicts(install_flag, frozen.map_or(Flag::Disabled, Flag::from))?;
             check_conflicts(install_flag, no_sync)?;
         }
 
@@ -2528,8 +2573,8 @@ impl AddSettings {
         let indexes = options.indexes.index.clone().unwrap_or_default();
 
         Ok(Self {
-            lock_check: resolve_lock_check(locked),
-            frozen: resolve_frozen(frozen),
+            lock_check: locked,
+            frozen,
             active,
             no_sync: no_sync.is_enabled(),
             packages,
@@ -2639,20 +2684,20 @@ impl RemoveSettings {
             .collect();
 
         // Resolve flags from CLI and environment variables.
-        let locked = resolve_flag(locked, "locked", environment.locked);
-        let frozen = resolve_flag(frozen, "frozen", environment.frozen);
+        let locked = resolve_lock_check(locked, LockCheckFlag::Locked, environment.locked);
+        let frozen = resolve_frozen(frozen, FrozenFlag::Frozen, environment.frozen);
         let no_sync = resolve_flag(no_sync, "no-sync", environment.no_sync);
 
         let (locked, frozen) = resolve_lock_flags(locked, frozen)?;
 
         // Check for conflicts between no_sync and frozen.
-        check_conflicts(no_sync, frozen)?;
+        check_conflicts(no_sync, frozen.map_or(Flag::Disabled, Flag::from))?;
 
         let malware_settings = MalwareCheckSettings::resolve(filesystem.as_ref(), &environment);
 
         Ok(Self {
-            lock_check: resolve_lock_check(locked),
-            frozen: resolve_frozen(frozen),
+            lock_check: locked,
+            frozen,
             active: flag(active, no_active, "active")?,
             no_sync: no_sync.is_enabled(),
             packages,
@@ -2726,14 +2771,14 @@ impl VersionSettings {
             .unwrap_or_default();
 
         // Resolve flags from CLI and environment variables.
-        let locked = resolve_flag(locked, "locked", environment.locked);
-        let frozen = resolve_flag(frozen, "frozen", environment.frozen);
+        let locked = resolve_lock_check(locked, LockCheckFlag::Locked, environment.locked);
+        let frozen = resolve_frozen(frozen, FrozenFlag::Frozen, environment.frozen);
         let no_sync = resolve_flag(no_sync, "no-sync", environment.no_sync);
 
         let (locked, frozen) = resolve_lock_flags(locked, frozen)?;
 
         // Check for conflicts between no_sync and frozen.
-        check_conflicts(no_sync, frozen)?;
+        check_conflicts(no_sync, frozen.map_or(Flag::Disabled, Flag::from))?;
 
         let malware_settings = MalwareCheckSettings::resolve(filesystem.as_ref(), &environment);
 
@@ -2743,8 +2788,8 @@ impl VersionSettings {
             short,
             output_format,
             dry_run,
-            lock_check: resolve_lock_check(locked),
-            frozen: resolve_frozen(frozen),
+            lock_check: locked,
+            frozen,
             active: flag(active, no_active, "active")?,
             no_sync: no_sync.is_enabled(),
             package,
@@ -2826,8 +2871,8 @@ impl TreeSettings {
             .unwrap_or_default();
 
         // Resolve flags from CLI and environment variables.
-        let locked = resolve_flag(locked, "locked", environment.locked);
-        let frozen = resolve_flag(frozen, "frozen", environment.frozen);
+        let locked = resolve_lock_check(locked, LockCheckFlag::Locked, environment.locked);
+        let frozen = resolve_frozen(frozen, FrozenFlag::Frozen, environment.frozen);
 
         let (locked, frozen) = resolve_lock_flags(locked, frozen)?;
 
@@ -2853,8 +2898,8 @@ impl TreeSettings {
                 only_group,
                 all_groups,
             ),
-            lock_check: resolve_lock_check(locked),
-            frozen: resolve_frozen(frozen),
+            lock_check: locked,
+            frozen,
             universal,
             format,
             depth: tree.depth,
@@ -2966,8 +3011,8 @@ impl ExportSettings {
             .unwrap_or_default();
 
         // Resolve flags from CLI and environment variables.
-        let locked = resolve_flag(locked, "locked", environment.locked);
-        let frozen = resolve_flag(frozen_cli, "frozen", environment.frozen);
+        let locked = resolve_lock_check(locked, LockCheckFlag::Locked, environment.locked);
+        let frozen = resolve_frozen(frozen_cli, FrozenFlag::Frozen, environment.frozen);
 
         let (locked, frozen) = resolve_lock_flags(locked, frozen)?;
 
@@ -3030,8 +3075,8 @@ impl ExportSettings {
                 only_emit_package,
             ),
             output_file,
-            lock_check: resolve_lock_check(locked),
-            frozen: resolve_frozen(frozen),
+            lock_check: locked,
+            frozen,
             include_annotations: flag(annotate, no_annotate, "annotate")?.unwrap_or(true),
             include_header: flag(header, no_header, "header")?.unwrap_or(true),
             include_index_url: flag(emit_index_url, no_emit_index_url, "emit-index-url")?
@@ -3168,8 +3213,8 @@ impl CheckSettings {
             .map(|fs| fs.install_mirrors.clone())
             .unwrap_or_default();
 
-        let locked = resolve_flag(locked, "locked", environment.locked);
-        let frozen = resolve_flag(frozen, "frozen", environment.frozen);
+        let locked = resolve_lock_check(locked, LockCheckFlag::Locked, environment.locked);
+        let frozen = resolve_frozen(frozen, FrozenFlag::Frozen, environment.frozen);
         let no_sync = resolve_flag(no_sync, "no-sync", environment.no_sync);
         let no_install_project = resolve_flag(
             no_install_project,
@@ -3222,8 +3267,8 @@ impl CheckSettings {
                 only_group,
                 all_groups,
             ),
-            lock_check: resolve_lock_check(locked),
-            frozen: resolve_frozen(frozen),
+            lock_check: locked,
+            frozen,
             no_sync: no_sync.is_enabled(),
             no_install_project: no_install_project.is_enabled(),
             isolated,
@@ -3304,8 +3349,8 @@ impl AuditSettings {
         let no_dev = no_dev || environment.no_dev.value == Some(true);
 
         // Resolve flags from CLI and environment variables.
-        let locked = resolve_flag(locked, "locked", environment.locked);
-        let frozen = resolve_flag(frozen, "frozen", environment.frozen);
+        let locked = resolve_lock_check(locked, LockCheckFlag::Locked, environment.locked);
+        let frozen = resolve_frozen(frozen, FrozenFlag::Frozen, environment.frozen);
 
         let (locked, frozen) = resolve_lock_flags(locked, frozen)?;
 
@@ -3331,8 +3376,8 @@ impl AuditSettings {
                 only_group.clone(),
                 only_group.is_empty() && !only_dev,
             ),
-            lock_check: resolve_lock_check(locked),
-            frozen: resolve_frozen(frozen),
+            lock_check: locked,
+            frozen,
             python_version,
             python_platform,
             settings: ResolverSettings::resolve(resolver, build, filesystem, &environment)?,
