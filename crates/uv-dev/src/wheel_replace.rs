@@ -6,7 +6,7 @@ use std::str::FromStr;
 use anyhow::{Context, Result, bail, ensure};
 use async_zip::base::read::seek::ZipFileReader;
 use async_zip::base::write::ZipFileWriter;
-use async_zip::{Compression, ZipEntry, ZipEntryBuilder, ZipFile};
+use async_zip::{Compression, ZipEntryBuilder, ZipFile};
 use base64::Engine;
 use base64::prelude::BASE64_URL_SAFE_NO_PAD;
 use clap::Parser;
@@ -72,9 +72,9 @@ struct HashDigests {
 /// metadata, including for DOS inputs. RECORD is emitted last with SHA-256 hashes, Deflate, mode
 /// 0644, the ZIP epoch timestamp and no comment. Structural ZIP64 fields are generated as needed.
 ///
-/// Flush and reopen the completed temporary archive to verify its membership, metadata and bytes
-/// before atomically creating the output with no clobber. Existing output is never reused, even
-/// if it has identical bytes. Failure removes the temporary file and leaves existing paths alone.
+/// Flush the completed temporary archive before atomically creating the output with no clobber.
+/// Existing output is never reused, even if it has identical bytes. Failure removes the temporary
+/// file and leaves existing paths alone.
 /// This is process-level atomic publication, not a promise of power-loss durability. Callers own
 /// provenance, digest verification and immutable input/replacement staging.
 /// Member names are copied verbatim, not interpreted as filesystem paths.
@@ -114,7 +114,6 @@ pub(crate) async fn wheel_replace(args: WheelReplaceArgs) -> Result<()> {
     let output = temporary.reopen()?;
     let mut writer = ZipFileWriter::new(AllowStdIo::new(BufWriter::new(output)));
     let mut output_record = Vec::new();
-    let mut output_members = BTreeMap::new();
 
     for index in 0..archive.file().entries().len() {
         let entry = archive.file().entries()[index].clone();
@@ -129,7 +128,7 @@ pub(crate) async fn wheel_replace(args: WheelReplaceArgs) -> Result<()> {
             .comment(entry.comment().clone())
             .build();
 
-        let (hash, size) = if entry.dir()? {
+        if entry.dir()? {
             ensure!(
                 !replacements.contains_key(&name),
                 "cannot replace directory member `{name}`"
@@ -138,42 +137,39 @@ pub(crate) async fn wheel_replace(args: WheelReplaceArgs) -> Result<()> {
             let contents = hash_reader(&mut original).await?;
             ensure!(contents.1 == 0, "directory member `{name}` contains data");
             validate_zip_contents(&mut original, contents.1)?;
-            writer.write_entry_whole(builder.clone(), &[]).await?;
+            writer.write_entry_whole(builder, &[]).await?;
+            continue;
+        }
+        let expected = expected_record
+            .remove(&name)
+            .with_context(|| format!("RECORD does not contain `{name}`"))?;
+        let mut original = archive.reader_with_entry(index).await?;
+        let contents = if let Some(path) = replacements.remove(&name) {
+            let (hash, size) = hash_reader(&mut original).await?;
+            validate_zip_contents(&mut original, size)?;
+            validate_record_entry(&name, &expected, &hash, size)?;
+            let replacement = fs_err::File::open(&path)
+                .with_context(|| format!("failed to open replacement `{}`", path.display()))?;
+            let metadata = replacement.metadata()?;
+            ensure!(
+                metadata.is_file(),
+                "replacement `{}` is not a regular file",
+                path.display()
+            );
+            let mut replacement = AllowStdIo::new(BufReader::new(replacement));
+            let mut output_entry = writer.write_entry_seekable(builder).await?;
+            let contents = copy_hashed(&mut replacement, &mut output_entry).await?;
+            output_entry.close().await?;
             contents
         } else {
-            let expected = expected_record
-                .remove(&name)
-                .with_context(|| format!("RECORD does not contain `{name}`"))?;
-            let mut original = archive.reader_with_entry(index).await?;
-            let contents = if let Some(path) = replacements.remove(&name) {
-                let (hash, size) = hash_reader(&mut original).await?;
-                validate_zip_contents(&mut original, size)?;
-                validate_record_entry(&name, &expected, &hash, size)?;
-                let replacement = fs_err::File::open(&path)
-                    .with_context(|| format!("failed to open replacement `{}`", path.display()))?;
-                let metadata = replacement.metadata()?;
-                ensure!(
-                    metadata.is_file(),
-                    "replacement `{}` is not a regular file",
-                    path.display()
-                );
-                let mut replacement = AllowStdIo::new(BufReader::new(replacement));
-                let mut output_entry = writer.write_entry_seekable(builder.clone()).await?;
-                let contents = copy_hashed(&mut replacement, &mut output_entry).await?;
-                output_entry.close().await?;
-                contents
-            } else {
-                let mut output_entry = writer.write_entry_seekable(builder.clone()).await?;
-                let (hash, size) = copy_hashed(&mut original, &mut output_entry).await?;
-                validate_zip_contents(&mut original, size)?;
-                output_entry.close().await?;
-                validate_record_entry(&name, &expected, &hash, size)?;
-                (hash, size)
-            };
-            output_record.push((name.clone(), contents.0.sha256.clone(), contents.1));
-            contents
+            let mut output_entry = writer.write_entry_seekable(builder).await?;
+            let (hash, size) = copy_hashed(&mut original, &mut output_entry).await?;
+            validate_zip_contents(&mut original, size)?;
+            output_entry.close().await?;
+            validate_record_entry(&name, &expected, &hash, size)?;
+            (hash, size)
         };
-        output_members.insert(name, (builder, hash.sha256, size));
+        output_record.push((name, contents.0.sha256, contents.1));
     }
     ensure!(
         expected_record.is_empty(),
@@ -191,23 +187,14 @@ pub(crate) async fn wheel_replace(args: WheelReplaceArgs) -> Result<()> {
     );
 
     let record_bytes = write_record(&record_path, output_record)?;
-    let record_entry = ZipEntryBuilder::new(record_path.clone().into(), Compression::Deflate)
+    let record_entry = ZipEntryBuilder::new(record_path.into(), Compression::Deflate)
         .unix_permissions(0o100_644)
         .last_modification_date(async_zip::ZipDateTime::default())
         .build();
     writer
-        .write_entry_whole(record_entry.clone(), &record_bytes)
+        .write_entry_whole(record_entry, &record_bytes)
         .await?;
-    output_members.insert(
-        record_path,
-        (
-            record_entry,
-            BASE64_URL_SAFE_NO_PAD.encode(Sha256::digest(&record_bytes)),
-            record_bytes.len() as u64,
-        ),
-    );
     finish_archive(writer).await?;
-    verify_output(temporary.path(), &output_members).await?;
     temporary.persist_noclobber(&args.output).with_context(|| {
         format!(
             "failed to create output wheel `{}` without overwriting",
@@ -269,65 +256,6 @@ fn validate_zip_contents<R: futures::io::AsyncBufRead + Unpin>(
         reader.compute_hash() == reader.entry().crc32(),
         "ZIP member CRC32 does not match its contents"
     );
-    Ok(())
-}
-
-async fn verify_output(
-    path: &Path,
-    expected: &BTreeMap<String, (ZipEntry, String, u64)>,
-) -> Result<()> {
-    let file = fs_err::File::open(path)?;
-    let mut archive = ZipFileReader::new(AllowStdIo::new(BufReader::new(file))).await?;
-    let (record_index, record_path) = validate_archive(archive.file())?;
-    ensure!(
-        archive.file().entries().len() == expected.len(),
-        "output membership changed"
-    );
-    ensure!(
-        archive.file().comment().as_bytes().is_empty(),
-        "unexpected output archive comment"
-    );
-    let mut record_bytes = Vec::new();
-    let mut reader = archive.reader_with_entry(record_index).await?;
-    copy_hashed(&mut reader, &mut record_bytes).await?;
-    validate_zip_contents(&mut reader, record_bytes.len() as u64)?;
-    let mut record = read_record(&record_bytes, &record_path)?;
-    for index in 0..archive.file().entries().len() {
-        let entry = archive.file().entries()[index].clone();
-        let name = entry.filename().as_str()?;
-        let (metadata, expected_hash, expected_size) =
-            expected.get(name).context("unexpected output member")?;
-        ensure!(
-            entry
-                .extra_fields()
-                .iter()
-                .all(|field| matches!(field.header_id().0, 0x0001 | 0x6375 | 0x7075)),
-            "unexpected output extra field for `{name}`"
-        );
-        ensure!(
-            entry.compression() == metadata.compression()
-                && entry.last_modification_date() == metadata.last_modification_date()
-                && entry.internal_file_attribute() == metadata.internal_file_attribute()
-                && entry.external_file_attribute() == metadata.external_file_attribute()
-                && entry.comment().as_bytes() == metadata.comment().as_bytes()
-                && entry.attribute_compatibility() == metadata.attribute_compatibility(),
-            "output metadata changed for `{name}`"
-        );
-        let mut reader = archive.reader_with_entry(index).await?;
-        let (hash, size) = hash_reader(&mut reader).await?;
-        validate_zip_contents(&mut reader, size)?;
-        ensure!(
-            &hash.sha256 == expected_hash && size == *expected_size,
-            "output bytes changed for `{name}`"
-        );
-        if !entry.dir()? && name != record_path {
-            let expected = record
-                .remove(name)
-                .context("output RECORD is missing a member")?;
-            validate_record_entry(name, &expected, &hash, size)?;
-        }
-    }
-    ensure!(record.is_empty(), "output RECORD contains extra members");
     Ok(())
 }
 
@@ -469,7 +397,7 @@ async fn copy_hashed(
 mod tests {
     use std::io::{self, Cursor, Write};
 
-    use async_zip::ZipDateTimeBuilder;
+    use async_zip::{ZipDateTimeBuilder, ZipEntry};
 
     use super::*;
 
@@ -937,47 +865,114 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn verifies_completed_output_against_the_transform() -> Result<()> {
+    async fn preserves_multiple_replacements() -> Result<()> {
         let directory = tempfile::tempdir()?;
-        let args = args(directory.path());
-        fs_err::write(&args.replacements[0].path, b"signed")?;
-        fixture(&args.input, fixture_members(), None, false, false).await?;
-        wheel_replace(args).await?;
-        let output = directory.path().join("output.whl");
-        let mut archive = ZipFileReader::new(AllowStdIo::new(BufReader::new(fs_err::File::open(
-            &output,
-        )?)))
-        .await?;
-        let mut expected = BTreeMap::new();
-        for index in 0..archive.file().entries().len() {
-            let entry = archive.file().entries()[index].clone();
-            let mut reader = archive.reader_with_entry(index).await?;
-            let (hash, size) = hash_reader(&mut reader).await?;
-            expected.insert(
-                entry.filename().as_str()?.to_string(),
-                ((*entry).clone(), hash.sha256, size),
-            );
+        let mut args = args(directory.path());
+        let mut members = fixture_members();
+        let second_binary = "uv-1.2.3.data/scripts/uvx";
+        members.push((
+            ZipEntryBuilder::new(second_binary.into(), Compression::Deflate)
+                .unix_permissions(0o100_755)
+                .build(),
+            b"unsigned uvx".to_vec(),
+        ));
+        fixture(&args.input, members.clone(), None, false, false).await?;
+        fs_err::write(&args.replacements[0].path, b"signed uv")?;
+        let second_path = directory.path().join("signed-uvx");
+        fs_err::write(&second_path, b"signed uvx")?;
+        args.replacements.push(Replacement {
+            member: second_binary.to_string(),
+            path: second_path,
+        });
+        // Derive expected bytes from the fixture and replacements, not from the output archive.
+        for (entry, bytes) in &mut members {
+            match entry.filename().as_str()? {
+                BINARY => *bytes = b"signed uv".to_vec(),
+                name if name == second_binary => *bytes = b"signed uvx".to_vec(),
+                _ => {}
+            }
         }
-        verify_output(&output, &expected).await?;
-        expected
-            .get_mut(BINARY)
-            .context("missing expected binary")?
-            .1 = "different signed bytes".to_string();
-        assert_eq!(
-            verify_output(&output, &expected)
-                .await
-                .expect_err("reject substituted bytes")
-                .to_string(),
-            format!("output bytes changed for `{BINARY}`")
-        );
-        expected.remove(BINARY);
-        assert_eq!(
-            verify_output(&output, &expected)
-                .await
-                .expect_err("reject extra member")
-                .to_string(),
+        let record = fixture_record(&members)?;
+        members.push((
+            ZipEntryBuilder::new(RECORD.into(), Compression::Deflate)
+                .unix_permissions(0o100_644)
+                .build(),
+            record,
+        ));
+        let expected = members
+            .into_iter()
+            .map(|(entry, bytes)| {
+                Ok((
+                    entry.filename().as_str()?.to_string(),
+                    (
+                        entry,
+                        BASE64_URL_SAFE_NO_PAD.encode(Sha256::digest(&bytes)),
+                        bytes.len() as u64,
+                    ),
+                ))
+            })
+            .collect::<Result<_>>()?;
+        wheel_replace(args).await?;
+        verify_output(&directory.path().join("output.whl"), &expected).await?;
+        Ok(())
+    }
+
+    async fn verify_output(
+        path: &Path,
+        expected: &BTreeMap<String, (ZipEntry, String, u64)>,
+    ) -> Result<()> {
+        let file = fs_err::File::open(path)?;
+        let mut archive = ZipFileReader::new(AllowStdIo::new(BufReader::new(file))).await?;
+        let (record_index, record_path) = validate_archive(archive.file())?;
+        ensure!(
+            archive.file().entries().len() == expected.len(),
             "output membership changed"
         );
+        ensure!(
+            archive.file().comment().as_bytes().is_empty(),
+            "unexpected output archive comment"
+        );
+        let mut record_bytes = Vec::new();
+        let mut reader = archive.reader_with_entry(record_index).await?;
+        copy_hashed(&mut reader, &mut record_bytes).await?;
+        validate_zip_contents(&mut reader, record_bytes.len() as u64)?;
+        let mut record = read_record(&record_bytes, &record_path)?;
+        for index in 0..archive.file().entries().len() {
+            let entry = archive.file().entries()[index].clone();
+            let name = entry.filename().as_str()?;
+            let (metadata, expected_hash, expected_size) =
+                expected.get(name).context("unexpected output member")?;
+            ensure!(
+                entry
+                    .extra_fields()
+                    .iter()
+                    .all(|field| matches!(field.header_id().0, 0x0001 | 0x6375 | 0x7075)),
+                "unexpected output extra field for `{name}`"
+            );
+            ensure!(
+                entry.compression() == metadata.compression()
+                    && entry.last_modification_date() == metadata.last_modification_date()
+                    && entry.internal_file_attribute() == metadata.internal_file_attribute()
+                    && entry.external_file_attribute() == metadata.external_file_attribute()
+                    && entry.comment().as_bytes() == metadata.comment().as_bytes()
+                    && entry.attribute_compatibility() == metadata.attribute_compatibility(),
+                "output metadata changed for `{name}`"
+            );
+            let mut reader = archive.reader_with_entry(index).await?;
+            let (hash, size) = hash_reader(&mut reader).await?;
+            validate_zip_contents(&mut reader, size)?;
+            ensure!(
+                &hash.sha256 == expected_hash && size == *expected_size,
+                "output bytes changed for `{name}`"
+            );
+            if !entry.dir()? && name != record_path {
+                let expected = record
+                    .remove(name)
+                    .context("output RECORD is missing a member")?;
+                validate_record_entry(name, &expected, &hash, size)?;
+            }
+        }
+        ensure!(record.is_empty(), "output RECORD contains extra members");
         Ok(())
     }
 
