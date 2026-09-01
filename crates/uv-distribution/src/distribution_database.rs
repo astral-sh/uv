@@ -123,15 +123,15 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         }
     }
 
-    /// Acquire an advisory lock for a remote wheel cache entry.
+    /// Acquire an advisory lock for a wheel cache entry.
     ///
-    /// The wheel's content hash is not always available until after the download, so concurrent
-    /// cache fills coordinate on the wheel cache entry instead. The entry is already scoped by
-    /// the index or direct URL, package name, version, and wheel tags.
+    /// A remote wheel's content hash is not always available until after the download, so
+    /// concurrent cache fills coordinate on the wheel cache entry instead. The entry is already
+    /// scoped to the distribution's source and wheel filename.
     ///
-    /// Callers hold the returned lock across cache lookup, download, and publication. A process
-    /// that waited for another download therefore rechecks and reuses the completed cache entry.
-    async fn lock_remote_wheel(
+    /// Callers hold the returned lock across cache lookup, download or extraction, and publication.
+    /// A process that waited for another cache fill therefore rechecks and reuses the completed entry.
+    async fn lock_wheel(
         wheel_entry: &CacheEntry,
         filename: &WheelFilename,
     ) -> Result<LockedFile, Error> {
@@ -497,17 +497,8 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         }
 
         // Acquire the advisory lock.
-        #[cfg(windows)]
-        let _lock = {
-            let lock_entry = CacheEntry::new(
-                built_wheel.target.parent().unwrap(),
-                format!(
-                    "{}.lock",
-                    built_wheel.target.file_name().unwrap().to_str().unwrap()
-                ),
-            );
-            lock_entry.lock().await.map_err(Error::CacheLock)?
-        };
+        let wheel_entry = CacheEntry::from_path(built_wheel.target.as_ref());
+        let _lock = Self::lock_wheel(&wheel_entry, &built_wheel.filename).await?;
 
         // If the wheel was unzipped previously, respect it. Source distributions are
         // cached under a unique revision ID, so unzipped directories are never stale.
@@ -700,7 +691,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         };
 
         // Acquire an advisory lock, to guard against concurrent writes.
-        let _lock = Self::lock_remote_wheel(wheel_entry, filename).await?;
+        let _lock = Self::lock_wheel(wheel_entry, filename).await?;
 
         // Create an entry for the HTTP cache.
         let http_entry = wheel_entry.with_file(format!("{}.http", filename.cache_key()));
@@ -885,7 +876,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         let content_addressed_cache = self.content_addressed_cache;
 
         // Acquire an advisory lock, to guard against concurrent writes.
-        let _lock = Self::lock_remote_wheel(wheel_entry, filename).await?;
+        let _lock = Self::lock_wheel(wheel_entry, filename).await?;
 
         // Create an entry for the HTTP cache.
         let http_entry = wheel_entry.with_file(format!("{}.http", filename.cache_key()));
@@ -1075,11 +1066,8 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         dist: &BuiltDist,
         hashes: HashPolicy<'_>,
     ) -> Result<LocalWheel, Error> {
-        #[cfg(windows)]
-        let _lock = {
-            let lock_entry = wheel_entry.with_file(format!("{}.lock", filename.stem()));
-            lock_entry.lock().await.map_err(Error::CacheLock)?
-        };
+        // Acquire an advisory lock, to guard against concurrent writes.
+        let _lock = Self::lock_wheel(&wheel_entry, filename).await?;
 
         // Determine the last-modified time of the wheel.
         let modified = Timestamp::from_path(path).map_err(Error::CacheRead)?;
