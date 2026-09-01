@@ -326,7 +326,7 @@ pub(crate) async fn publish(
 /// Credentials for publishing, including whether they require revocation after use.
 enum PublishingCredentials {
     /// Credentials supplied by the user or resolved by the authentication middleware.
-    Standard(Credentials),
+    Supplied(Credentials),
     /// A short-lived token obtained through trusted publishing.
     TrustedPublishing(TrustedPublishingToken),
 }
@@ -335,7 +335,7 @@ impl PublishingCredentials {
     /// Return the HTTP credentials to use for uploads.
     fn as_credentials(&self) -> Cow<'_, Credentials> {
         match self {
-            Self::Standard(credentials) => Cow::Borrowed(credentials),
+            Self::Supplied(credentials) => Cow::Borrowed(credentials),
             Self::TrustedPublishing(token) => Cow::Owned(Credentials::basic(
                 Some("__token__".to_string()),
                 Some(token.to_string()),
@@ -416,7 +416,7 @@ async fn gather_credentials(
     }
 
     // If applicable, attempt obtaining a token for trusted publishing.
-    let trusted_publishing_error = match check_trusted_publishing(
+    let trusted_publishing_status = match check_trusted_publishing(
         username.as_deref(),
         password.as_deref(),
         keyring_provider,
@@ -453,7 +453,7 @@ async fn gather_credentials(
     if username.is_none()
         && password.is_none()
         && keyring_provider == KeyringProviderType::Disabled
-        && let Some(err) = trusted_publishing_error
+        && let Some(err) = trusted_publishing_status
     {
         // The user has configured something incorrectly:
         // * The user forgot to configure credentials.
@@ -506,7 +506,7 @@ async fn gather_credentials(
 
     let credentials = Credentials::basic(username, password);
 
-    Ok((publish_url, PublishingCredentials::Standard(credentials)))
+    Ok((publish_url, PublishingCredentials::Supplied(credentials)))
 }
 
 fn prompt_username_and_password() -> Result<(Option<String>, Option<String>)> {
