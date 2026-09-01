@@ -226,9 +226,14 @@ impl Hinted for LockError {
             Self::LockFormat(..) => Hints::from(
                 "To regenerate the lockfile, run `uv lock --refresh --preview-features lockfile-format-check`.",
             ),
-            Self::MissingLockfile(..) => Hints::from(
-                "To create a lockfile, run `uv lock --no-locked --no-frozen` or `uv sync --no-locked --no-frozen`.",
-            ),
+            Self::MissingLockfile(source, _) => match source {
+                MissingLockfileSource::Frozen(_) => {
+                    Hints::from("Run the command again with `--no-frozen`.")
+                }
+                MissingLockfileSource::Locked(_) => {
+                    Hints::from("Run the command again with `--no-locked`.")
+                }
+            },
             Self::OverlappingMarkers(_, rhs, replacement) => {
                 Hints::from(format!("replace `{rhs}` with `{replacement}`"))
             }
