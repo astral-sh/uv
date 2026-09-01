@@ -9,7 +9,7 @@ Released on 2026-09-01.
 
 ### Python
 
-- Add CPython 3.15.0rc2 downloads and sysconfig mappings ([#21413](https://github.com/astral-sh/uv/pull/21413), [#21415](https://github.com/astral-sh/uv/pull/21415))
+- Add CPython 3.15.0rc2 ([#21413](https://github.com/astral-sh/uv/pull/21413), [#21415](https://github.com/astral-sh/uv/pull/21415))
 
 ### Enhancements
 
