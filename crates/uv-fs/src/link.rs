@@ -97,14 +97,16 @@ where
 ///
 /// These locks are used whenever a file is physically copied, regardless of the requested
 /// [`LinkMode`], as all modes can fallback to copying.
-/// Directory links use separate locks while creating or expanding a shared directory.
+/// Directory entry operations can copy files while holding a lock, so they use separate locks.
 ///
 /// The intended pattern for usage is to create a [`CopyLocks`] instance then share it across all
 /// [`link_dir`] invocations that may conflict via [`LinkOptions::with_copy_locks`].
 #[derive(Debug, Default)]
 pub struct CopyLocks {
-    dir_locks: Mutex<FxHashMap<PathBuf, Arc<Mutex<()>>>>,
-    directory_locks: Mutex<FxHashMap<PathBuf, Arc<Mutex<()>>>>,
+    /// Serialize non-atomic file copies into the same directory.
+    file_copy_locks: Mutex<FxHashMap<PathBuf, Arc<Mutex<()>>>>,
+    /// Serialize entry creation and replacement while directory links are created or expanded.
+    directory_entry_locks: Mutex<FxHashMap<PathBuf, Arc<Mutex<()>>>>,
 }
 
 impl CopyLocks {
@@ -128,7 +130,7 @@ impl CopyLocks {
             parent
         })?;
         let lock = self
-            .directory_locks
+            .directory_entry_locks
             .lock()
             .map_err(|err| io::Error::other(err.to_string()))?
             .entry(parent)
@@ -166,7 +168,7 @@ impl CopyLocks {
         // TODO(zanieb): This unwrap was copied from `uv-install-wheel`; consider propagating the
         // error instead of panicking if `to` has no parent.
         let dir_lock = {
-            let mut locks_guard = self.dir_locks.lock().unwrap();
+            let mut locks_guard = self.file_copy_locks.lock().unwrap();
             locks_guard
                 .entry(to.parent().unwrap().to_path_buf())
                 .or_insert_with(|| Arc::new(Mutex::new(())))
