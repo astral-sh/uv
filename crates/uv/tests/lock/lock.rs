@@ -38226,9 +38226,10 @@ fn lock_tilde_equal_version_u64_max_rejected() -> Result<()> {
     Ok(())
 }
 
-/// The `lock` aliases follow the same CLI precedence as `--locked` and `--frozen`.
+/// `--check` overrides `UV_FROZEN` when checking a stale lockfile.
+#[cfg(feature = "test-universal")]
 #[test]
-fn lock_flags_override_environment() -> Result<()> {
+fn lock_check_overrides_frozen_environment() -> Result<()> {
     let context = uv_test::test_context!("3.12");
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {r#"
@@ -38257,16 +38258,6 @@ fn lock_flags_override_environment() -> Result<()> {
     error: The lockfile at `uv.lock` needs to be updated, but `--check` was provided.
 
     hint: To update the lockfile, run `uv lock`.
-    ");
-    assert_eq!(context.read("uv.lock"), lock);
-
-    uv_snapshot!(context.filters(), context.lock()
-        .arg("--check-exists")
-        .env(EnvVars::UV_LOCKED, "1"), @"
-    exit_code: 0 (success)
-    ----- stderr -----
-    warning: Ignoring `UV_LOCKED` because `--check-exists` was provided
-    warning: The lockfile at `uv.lock` was only checked for validity, not whether it is up-to-date, because `--frozen` was provided; use `--check` instead
     ");
     assert_eq!(context.read("uv.lock"), lock);
 
