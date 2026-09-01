@@ -10258,7 +10258,9 @@ fn lock_exclusion() -> Result<()> {
     uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: Unable to find lockfile at `uv.lock`, but `--locked` was provided. To create a lockfile, run `uv lock` or `uv sync` without the flag.
+    error: Unable to find lockfile at `uv.lock`, but `--locked` was provided.
+
+    hint: To create a lockfile, run `uv lock` or `uv sync` without the flag.
     ");
 
     Ok(())
@@ -15873,7 +15875,9 @@ fn check_no_lock() -> Result<()> {
         .arg("--check"), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: Unable to find lockfile at `uv.lock`, but `--check` was provided. To create a lockfile, run `uv lock` or `uv sync` without the flag.
+    error: Unable to find lockfile at `uv.lock`, but `--check` was provided.
+
+    hint: To create a lockfile, run `uv lock` or `uv sync` without the flag.
     ");
     Ok(())
 }
@@ -38452,19 +38456,25 @@ fn lock_frozen_errors_report_source() -> Result<()> {
     uv_snapshot!(context.filters(), context.lock().arg("--frozen"), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: Unable to find lockfile at `uv.lock`, but `--frozen` was provided. To create a lockfile, run `uv lock` or `uv sync` without the flag.
+    error: Unable to find lockfile at `uv.lock`, but `--frozen` was provided.
+
+    hint: To create a lockfile, run `uv lock` or `uv sync` without the flag.
     ");
 
     uv_snapshot!(context.filters(), context.lock().arg("--check-exists"), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: Unable to find lockfile at `uv.lock`, but `--check-exists` was provided. To create a lockfile, run `uv lock` or `uv sync` without the flag.
+    error: Unable to find lockfile at `uv.lock`, but `--check-exists` was provided.
+
+    hint: To create a lockfile, run `uv lock` or `uv sync` without the flag.
     ");
 
     uv_snapshot!(context.filters(), context.lock().env(EnvVars::UV_FROZEN, "1"), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: Unable to find lockfile at `uv.lock`, but `UV_FROZEN=1` was provided. To create a lockfile, run `uv lock` or `uv sync` without the flag.
+    error: Unable to find lockfile at `uv.lock`, but `UV_FROZEN=1` was provided.
+
+    hint: To create a lockfile, run `uv lock` or `uv sync` without the flag.
     ");
 
     context.lock().assert().success();
