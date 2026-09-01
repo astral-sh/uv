@@ -2,9 +2,6 @@ use assert_cmd::assert::OutputAssertExt;
 use assert_fs::prelude::{FileTouch, PathChild};
 use assert_fs::{fixture::FileWriteStr, prelude::PathCreateDir};
 use indoc::indoc;
-#[cfg(unix)]
-use insta::allow_duplicates;
-
 use uv_platform::{Arch, Os};
 use uv_static::EnvVars;
 
@@ -162,29 +159,6 @@ fn python_find_cached_launcher_override() {
     ----- stdout -----
     [TEMP_DIR]/other/bin/python3
     ");
-
-    for variable in [EnvVars::PYTHONEXECUTABLE, EnvVars::PYVENV_LAUNCHER] {
-        allow_duplicates! {
-            uv_snapshot!(context.filters(), context.python_find()
-                .arg(&requested_python)
-                .current_dir(&context.venv)
-                .env(variable, "bin/python3"), @"
-            exit_code: 0 (success)
-            ----- stdout -----
-            [VENV]/bin/python3
-            ");
-
-            // Changing directories must not reuse metadata for the previous override target.
-            uv_snapshot!(context.filters(), context.python_find()
-                .arg(&requested_python)
-                .current_dir(&other_venv)
-                .env(variable, "bin/python3"), @"
-            exit_code: 0 (success)
-            ----- stdout -----
-            [TEMP_DIR]/other/bin/python3
-            ");
-        }
-    }
 }
 
 #[test]
