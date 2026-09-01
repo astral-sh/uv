@@ -8,6 +8,7 @@ use futures::future::{AbortHandle, Aborted};
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWriteExt};
 
 use uv_extract::dirhash::{DirhashTree, HashedFile, UnhashedFile, dirhash_path};
+use uv_extract::stream::DEFAULT_BUF_SIZE;
 use uv_fs::PortablePath;
 use uv_install_wheel::validate_and_heal_record;
 
@@ -63,8 +64,7 @@ impl ExtractedWheel {
     where
         R: AsyncRead + Unpin,
     {
-        const READ_BUFFER_SIZE: usize = 128 * 1024;
-        const PIPE_BUFFER_SIZE: usize = 256 * 1024;
+        const PIPE_BUFFER_SIZE: usize = 2 * DEFAULT_BUF_SIZE;
 
         // Allow the download to get ahead while the worker decompresses and writes files.
         let (sender, receiver) = tokio::io::duplex(PIPE_BUFFER_SIZE);
@@ -96,7 +96,7 @@ impl ExtractedWheel {
         let download = async {
             // Own the write end so EOF, errors and cancellation all close the pipe.
             let mut sender = sender;
-            let mut buffer = vec![0; READ_BUFFER_SIZE];
+            let mut buffer = vec![0; DEFAULT_BUF_SIZE];
             loop {
                 let read = reader.read(&mut buffer).await?;
                 if read == 0 {

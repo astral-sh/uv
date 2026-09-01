@@ -29,10 +29,11 @@ use crate::{Error, insecure_no_validate};
 mod abort;
 mod filesystem;
 
-use abort::{AbortReader, check_aborted};
+use abort::AbortReader;
 use filesystem::Filesystem;
 
-const DEFAULT_BUF_SIZE: usize = 128 * 1024;
+/// Default buffer size for streaming archive reads and file copies.
+pub const DEFAULT_BUF_SIZE: usize = 128 * 1024;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct LocalHeaderEntry {
@@ -156,9 +157,10 @@ async fn unzip_inner<R: tokio::io::AsyncRead + Unpin, const BLOCKING: bool>(
     let skip_validation = insecure_no_validate();
 
     let target = target.as_ref();
-    let mut reader = futures::io::BufReader::with_capacity(
-        DEFAULT_BUF_SIZE,
-        AbortReader::new(reader.compat(), abort),
+    // Check cancellation even when the parser reads headers already held in the buffer.
+    let mut reader = AbortReader::new(
+        futures::io::BufReader::with_capacity(DEFAULT_BUF_SIZE, reader.compat()),
+        abort,
     );
     let mut zip = async_zip::base::read::stream::ZipFileReader::new(&mut reader);
 
@@ -173,7 +175,6 @@ async fn unzip_inner<R: tokio::io::AsyncRead + Unpin, const BLOCKING: bool>(
     let mut offset = 0;
 
     while let Some(mut entry) = zip.next_with_entry().await? {
-        check_aborted(abort).map_err(Error::Io)?;
         let zip_entry = entry.reader().entry();
 
         // Construct the (expected) path to the file on-disk.
@@ -500,7 +501,6 @@ async fn unzip_inner<R: tokio::io::AsyncRead + Unpin, const BLOCKING: bool>(
 
     let mut directory = async_zip::base::read::cd::CentralDirectoryReader::new(&mut reader, offset);
     loop {
-        check_aborted(abort).map_err(Error::Io)?;
         match directory.next().await? {
             Entry::CentralDirectoryEntry(entry) => {
                 // Count the number of entries in the central directory.

@@ -3,12 +3,13 @@ use std::pin::Pin;
 use std::task::{Context, Poll};
 
 use futures::future::{AbortHandle, Aborted};
-use futures::io::AsyncRead;
+use futures::io::{AsyncBufRead, AsyncRead};
 
 /// Check cancellation between reads, including reads of already-buffered, decompressed data.
 ///
 /// With an abort handle, each read is bounded to limit work between checks. This adapter does not
 /// register a waker; pair it with [`futures::future::Abortable`] to wake a pending read on cancellation.
+/// Wrap buffered readers from the outside so buffered data cannot bypass cancellation checks.
 pub(super) struct AbortReader<'a, R> {
     reader: R,
     abort: Option<&'a AbortHandle>,
@@ -37,7 +38,18 @@ impl<R: AsyncRead + Unpin> AsyncRead for AbortReader<'_, R> {
     }
 }
 
-pub(super) fn check_aborted(abort: Option<&AbortHandle>) -> io::Result<()> {
+impl<R: AsyncBufRead + Unpin> AsyncBufRead for AbortReader<'_, R> {
+    fn poll_fill_buf(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<&[u8]>> {
+        check_aborted(self.abort)?;
+        Pin::new(&mut self.get_mut().reader).poll_fill_buf(cx)
+    }
+
+    fn consume(mut self: Pin<&mut Self>, amount: usize) {
+        Pin::new(&mut self.reader).consume(amount);
+    }
+}
+
+fn check_aborted(abort: Option<&AbortHandle>) -> io::Result<()> {
     if abort.is_some_and(AbortHandle::is_aborted) {
         return Err(io::Error::other(Aborted));
     }
