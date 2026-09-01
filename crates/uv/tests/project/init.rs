@@ -2685,24 +2685,24 @@ fn init_unmanaged() -> Result<()> {
 }
 
 #[test]
-fn init_python_directory() {
+fn init_python_directory() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
-    uv_snapshot!(context.filters(), context.init().arg("python"), @"
+    let directory = context.temp_dir.child("python");
+    directory.create_dir_all()?;
+
+    uv_snapshot!(context.filters(), context.init().current_dir(&directory), @"
     exit_code: 2 (failure)
     ----- stderr -----
     error: The directory name (`python`) cannot be used as project name, please provide a package name with `--name`.
     ");
 
-    context
-        .temp_dir
-        .child("python")
-        .assert(predicate::path::missing());
+    assert!(fs_err::read_dir(directory.path())?.next().is_none());
 
-    uv_snapshot!(context.filters(), context.init().arg("python").arg("--name").arg("foo"), @"
+    uv_snapshot!(context.filters(), context.init().current_dir(&directory).arg("--name").arg("foo"), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Initialized project `foo` at `[TEMP_DIR]/python`
+    Initialized project `foo`
     ");
 
     let pyproject = context.read("python/pyproject.toml");
@@ -2728,6 +2728,8 @@ fn init_python_directory() {
         "#
         );
     });
+
+    Ok(())
 }
 
 #[test]
