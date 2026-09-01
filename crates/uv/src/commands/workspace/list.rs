@@ -44,6 +44,19 @@ pub(crate) async fn list(
 
     if scripts {
         let mut scripts = find_scripts(workspace.install_path(), cache)
+            .filter_map(|script| match script {
+                Ok(script) => Some(Ok(script)),
+                Err(ScriptDiscoveryError::Parse { path, source }) => {
+                    warn_user!(
+                        "Skipping invalid PEP 723 script `{}`: {source}",
+                        path.simplified_display()
+                    );
+                    None
+                }
+                Err(
+                    error @ (ScriptDiscoveryError::Walk(_) | ScriptDiscoveryError::Read { .. }),
+                ) => Some(Err(error)),
+            })
             .collect::<Result<Vec<_>, _>>()
             .with_context(|| {
                 format!(
