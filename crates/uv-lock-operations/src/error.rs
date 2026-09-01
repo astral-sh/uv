@@ -63,9 +63,7 @@ pub enum LockError {
     )]
     LockFormat(PathBuf, usize, LockedSource),
 
-    #[error(
-        "Unable to find lockfile at `{1}`, but {0} was provided. To create a lockfile, run `uv lock` or `uv sync` without the flag."
-    )]
+    #[error("Unable to find lockfile at `{1}`, but {0} was provided.")]
     MissingLockfile(MissingLockfileSource, PathBuf),
 
     #[error(
@@ -228,14 +226,16 @@ impl Hinted for LockError {
             Self::LockFormat(..) => Hints::from(
                 "To regenerate the lockfile, run `uv lock --refresh --preview-features lockfile-format-check`.",
             ),
+            Self::MissingLockfile(..) => Hints::from(
+                "To create a lockfile, run `uv lock` or `uv sync` without the flag.",
+            ),
             Self::OverlappingMarkers(_, rhs, replacement) => {
                 Hints::from(format!("replace `{rhs}` with `{replacement}`"))
             }
             Self::Resolve(error) => error.hints(),
             Self::Lock(error) => error.hints(),
             Self::PythonSelection(error) => error.hints(),
-            Self::MissingLockfile(..)
-            | Self::UnsupportedLockVersion(..)
+            Self::UnsupportedLockVersion(..)
             | Self::UnparsableLockVersion(..)
             | Self::LockSerialization(_)
             | Self::DisjointEnvironment(..)
