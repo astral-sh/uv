@@ -4,8 +4,6 @@ use std::pin::Pin;
 use async_zip::base::read::cd::Entry;
 use async_zip::error::ZipError;
 use futures::executor::block_on;
-use futures::future::{AbortHandle, AbortRegistration, Abortable};
-use futures::io::{copy, sink};
 use futures::{AsyncReadExt, StreamExt};
 use rustc_hash::{FxHashMap, FxHashSet};
 use tar_codec::extract::{ExtractPolicy, LinkPolicy, SymlinkPolicy};
@@ -26,10 +24,8 @@ use crate::dirhash::{
 };
 use crate::{Error, insecure_no_validate};
 
-mod abort;
 mod filesystem;
 
-use abort::AbortReader;
 use filesystem::Filesystem;
 
 /// Default buffer size for streaming archive reads and file copies.
@@ -77,7 +73,7 @@ pub async fn unzip<R: tokio::io::AsyncRead + Unpin>(
     target: impl AsRef<Path>,
 ) -> Result<Vec<UnhashedFile>, Error> {
     let UnzipOutput::Unhashed(files) =
-        Box::pin(unzip_inner::<_, false>(reader, target, false, None)).await?
+        Box::pin(unzip_inner::<_, false>(reader, target, false)).await?
     else {
         return Err(Error::Io(std::io::Error::other(
             "streaming ZIP hash tree was unexpectedly computed",
@@ -90,14 +86,14 @@ pub async fn unzip<R: tokio::io::AsyncRead + Unpin>(
 ///
 /// This uses the same parser and validation as [`unzip`]. Call it on a blocking thread.
 /// Any async work needed to supply input must run independently of this thread.
-/// Aborting the registration wakes stalled reads and stops extraction between decompression chunks.
 /// Files already written remain in `target`; the caller is responsible for cleanup.
 pub fn unzip_blocking<R: tokio::io::AsyncRead + Unpin>(
     reader: R,
     target: &Path,
-    abort: AbortRegistration,
 ) -> Result<Vec<UnhashedFile>, Error> {
-    let UnzipOutput::Unhashed(files) = unzip_blocking_inner(reader, target, false, abort)? else {
+    let UnzipOutput::Unhashed(files) =
+        block_on(Box::pin(unzip_inner::<_, true>(reader, target, false)))?
+    else {
         return Err(Error::Io(std::io::Error::other(
             "streaming ZIP hash tree was unexpectedly computed",
         )));
@@ -110,14 +106,13 @@ pub fn unzip_blocking<R: tokio::io::AsyncRead + Unpin>(
 /// The tree includes regular-file paths, contents, and empty directories. ZIP entries are never
 /// followed as symlinks; non-directory entries are materialized and hashed as regular files.
 ///
-/// See [`unzip_blocking`] for requirements on the reader, calling thread, and cleanup after
-/// cancellation.
+/// See [`unzip_blocking`] for requirements on the reader, calling thread, and cleanup.
 pub fn unzip_blocking_and_hash<R: tokio::io::AsyncRead + Unpin>(
     reader: R,
     target: &Path,
-    abort: AbortRegistration,
 ) -> Result<(Vec<HashedFile>, DirhashTree), Error> {
-    let UnzipOutput::Hashed { files, tree } = unzip_blocking_inner(reader, target, true, abort)?
+    let UnzipOutput::Hashed { files, tree } =
+        block_on(Box::pin(unzip_inner::<_, true>(reader, target, true)))?
     else {
         return Err(Error::Io(std::io::Error::other(
             "streaming ZIP hash tree was not computed",
@@ -126,42 +121,16 @@ pub fn unzip_blocking_and_hash<R: tokio::io::AsyncRead + Unpin>(
     Ok((files, tree))
 }
 
-/// Wake a stalled reader on cancellation and check cancellation while the parser makes progress.
-///
-/// [`Abortable`] wakes the worker when input is pending; [`AbortReader`] also checks during
-/// decompression that can keep producing output without yielding to the executor.
-fn unzip_blocking_inner<R: tokio::io::AsyncRead + Unpin>(
-    reader: R,
-    target: &Path,
-    hash_contents: bool,
-    registration: AbortRegistration,
-) -> Result<UnzipOutput, Error> {
-    let abort = registration.handle();
-    let extraction = Box::pin(unzip_inner::<_, true>(
-        reader,
-        target,
-        hash_contents,
-        Some(&abort),
-    ));
-    block_on(Abortable::new(extraction, registration))
-        .map_err(|err| Error::Io(std::io::Error::other(err)))?
-}
-
 async fn unzip_inner<R: tokio::io::AsyncRead + Unpin, const BLOCKING: bool>(
     reader: R,
     target: impl AsRef<Path>,
     hash_contents: bool,
-    abort: Option<&AbortHandle>,
 ) -> Result<UnzipOutput, Error> {
     // Determine whether ZIP validation is disabled.
     let skip_validation = insecure_no_validate();
 
     let target = target.as_ref();
-    // Check cancellation even when the parser reads headers already held in the buffer.
-    let mut reader = AbortReader::new(
-        futures::io::BufReader::with_capacity(DEFAULT_BUF_SIZE, reader.compat()),
-        abort,
-    );
+    let mut reader = futures::io::BufReader::with_capacity(DEFAULT_BUF_SIZE, reader.compat());
     let mut zip = async_zip::base::read::stream::ZipFileReader::new(&mut reader);
 
     let mut directories = FxHashSet::default();
@@ -192,13 +161,6 @@ async fn unzip_inner<R: tokio::io::AsyncRead + Unpin, const BLOCKING: bool>(
         };
         let Some(relpath) = relpath else {
             warn!("Skipping unsafe file name: {path}");
-
-            copy(
-                &mut AbortReader::new(entry.reader_mut(), abort),
-                &mut sink(),
-            )
-            .await
-            .map_err(Error::io_or_zip)?;
 
             // Close current file prior to proceeding, as per:
             // https://docs.rs/async_zip/0.0.16/async_zip/base/read/stream/
@@ -281,7 +243,7 @@ async fn unzip_inner<R: tokio::io::AsyncRead + Unpin, const BLOCKING: bool>(
                         } else {
                             tokio::io::BufWriter::new(file)
                         };
-                        let mut reader = AbortReader::new(entry.reader_mut(), abort).compat();
+                        let mut reader = entry.reader_mut().compat();
                         if hash_contents {
                             let (bytes_read, digest) =
                                 blake3_copy_with_buffer(&mut reader, &mut writer, &mut copy_buffer)
@@ -326,8 +288,8 @@ async fn unzip_inner<R: tokio::io::AsyncRead + Unpin, const BLOCKING: bool>(
 
                         // Read the entry into memory.
                         let mut expected_contents = Vec::with_capacity(existing_contents.len());
-                        let mut entry_reader = AbortReader::new(entry.reader_mut(), abort);
-                        let bytes_read = entry_reader
+                        let bytes_read = entry
+                            .reader_mut()
                             .read_to_end(&mut expected_contents)
                             .await
                             .map_err(Error::io_or_zip)?;
@@ -398,17 +360,6 @@ async fn unzip_inner<R: tokio::io::AsyncRead + Unpin, const BLOCKING: bool>(
                 digest,
             }
         };
-
-        // Directory entries can contain data when validation is disabled. Check cancellation
-        // while discarding that data, just as when extracting a regular file.
-        if is_dir {
-            copy(
-                &mut AbortReader::new(entry.reader_mut(), abort),
-                &mut sink(),
-            )
-            .await
-            .map_err(Error::io_or_zip)?;
-        }
 
         // Close current file prior to proceeding, as per:
         // https://docs.rs/async_zip/0.0.16/async_zip/base/read/stream/

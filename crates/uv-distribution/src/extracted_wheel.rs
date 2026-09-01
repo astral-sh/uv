@@ -1,10 +1,8 @@
 use std::fmt::Display;
 use std::io;
 use std::path::Path;
-use std::sync::{Arc, Mutex, PoisonError};
 
 use either::Either;
-use futures::future::{AbortHandle, Aborted};
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWriteExt};
 
 use uv_extract::dirhash::{DirhashTree, HashedFile, UnhashedFile, dirhash_path};
@@ -26,33 +24,14 @@ pub(crate) enum ExtractedWheel {
     Hashed(HashedWheel),
 }
 
-/// Stop the extraction worker before removing its temporary directory.
-///
-/// The worker holds the directory's lock throughout extraction. Dropping the guard cancels active
-/// work and waits for that lock, or takes the directory immediately if the worker is still queued.
-/// Cleanup completes without relying on the async runtime.
-struct ExtractionGuard {
-    abort: AbortHandle,
-    temp_dir: Arc<Mutex<Option<tempfile::TempDir>>>,
-}
-
-impl Drop for ExtractionGuard {
-    fn drop(&mut self) {
-        self.abort.abort();
-        self.temp_dir
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner)
-            .take();
-    }
-}
-
 impl ExtractedWheel {
     /// Feed an archive reader through a bounded pipe to a single extraction worker.
     ///
     /// Filesystem operations run synchronously on the worker, while reading and hashing the archive
     /// remain asynchronous. The pipe applies backpressure without buffering the entire wheel.
-    /// Dropping the future cancels extraction and removes its temporary directory synchronously.
-    /// Successful extraction returns ownership of the directory to the caller.
+    /// The worker owns the temporary directory and returns it on successful extraction. Dropping
+    /// the future closes the pipe; the worker may continue processing buffered input before exiting
+    /// and removing the directory. Process shutdown can interrupt this cleanup.
     ///
     /// Extraction can leave unread bytes when ZIP validation is disabled. Callers must drain the
     /// reader before finalizing download hashes.
@@ -68,30 +47,16 @@ impl ExtractedWheel {
 
         // Allow the download to get ahead while the worker decompresses and writes files.
         let (sender, receiver) = tokio::io::duplex(PIPE_BUFFER_SIZE);
-        let (abort, registration) = AbortHandle::new_pair();
-        let guard = ExtractionGuard {
-            abort,
-            temp_dir: Arc::new(Mutex::new(Some(temp_dir))),
-        };
-        let temp_dir = Arc::clone(&guard.temp_dir);
         let mut extraction = tokio::task::spawn_blocking(move || {
-            let temp_dir = temp_dir.lock().unwrap_or_else(PoisonError::into_inner);
-            let Some(temp_dir) = temp_dir.as_ref() else {
-                return Err(uv_extract::Error::Io(io::Error::other(Aborted)));
-            };
             let extracted = if content_addressed {
-                let (files, tree) = uv_extract::stream::unzip_blocking_and_hash(
-                    receiver,
-                    temp_dir.path(),
-                    registration,
-                )?;
+                let (files, tree) =
+                    uv_extract::stream::unzip_blocking_and_hash(receiver, temp_dir.path())?;
                 Self::Hashed(HashedWheel { files, tree })
             } else {
-                let files =
-                    uv_extract::stream::unzip_blocking(receiver, temp_dir.path(), registration)?;
+                let files = uv_extract::stream::unzip_blocking(receiver, temp_dir.path())?;
                 Self::Unhashed(files)
             };
-            Ok::<_, uv_extract::Error>(extracted)
+            Ok::<_, uv_extract::Error>((temp_dir, extracted))
         });
         let download = async {
             // Own the write end so EOF, errors and cancellation all close the pipe.
@@ -117,26 +82,13 @@ impl ExtractedWheel {
             // Prefer a download error over the resulting truncated-ZIP error if both are ready.
             biased;
             download = download => {
-                if download.is_err() {
-                    guard.abort.abort();
-                }
-                // Await the worker so the guard does not block this runtime thread on cleanup.
-                let extraction = extraction.await;
                 download.map_err(uv_extract::Error::Io)?;
-                extraction
+                extraction.await
             }
             // Stop reading even if the server stalls after sending an invalid ZIP entry.
             extraction = &mut extraction => extraction,
         };
-        let extracted =
-            extraction.map_err(|err| uv_extract::Error::Io(io::Error::other(err)))??;
-        let temp_dir = guard
-            .temp_dir
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner)
-            .take()
-            .ok_or_else(|| uv_extract::Error::Io(io::Error::other(Aborted)))?;
-        Ok((temp_dir, extracted))
+        extraction.map_err(|err| uv_extract::Error::Io(io::Error::other(err)))?
     }
 
     /// Extract a wheel from a seekable file, optionally retaining its per-file digests.

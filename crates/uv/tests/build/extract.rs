@@ -1,7 +1,6 @@
 #![cfg(feature = "test-r2")]
 
 use backon::{BackoffBuilder, Retryable};
-use futures::future::AbortHandle;
 
 async fn unzip(url: &str) -> anyhow::Result<(), uv_extract::Error> {
     let backoff = backon::ExponentialBuilder::default()
@@ -28,7 +27,7 @@ async fn unzip(url: &str) -> anyhow::Result<(), uv_extract::Error> {
     // The blocking path must accept and reject the same archive structures.
     let target = tempfile::TempDir::new().map_err(uv_extract::Error::Io)?;
     let blocking = tokio::task::spawn_blocking(move || {
-        uv_extract::stream::unzip_blocking(bytes.as_ref(), target.path(), AbortHandle::new_pair().1)
+        uv_extract::stream::unzip_blocking(bytes.as_ref(), target.path())
     })
     .await
     .expect("blocking ZIP extraction task should not panic");
