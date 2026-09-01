@@ -11,7 +11,7 @@ use base64::Engine;
 use base64::prelude::BASE64_URL_SAFE_NO_PAD;
 use clap::Parser;
 use futures::io::{AllowStdIo, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
-use sha2::{Digest, Sha256, Sha384, Sha512};
+use sha2::{Digest, Sha256};
 
 const BUFFER_SIZE: usize = 128 * 1024;
 
@@ -50,33 +50,21 @@ impl FromStr for Replacement {
     }
 }
 
-#[derive(Debug)]
-struct RecordEntry {
-    hash: String,
-    size: u64,
-}
-
-#[derive(Debug)]
-struct HashDigests {
-    sha256: String,
-    sha384: String,
-    sha512: String,
-}
-
 /// Rewrite a trusted wheel without extracting its members to the filesystem.
 ///
-/// Preserve exact decompressed bytes except for explicitly replaced members and RECORD. Preserve
-/// each non-RECORD member's compression method, DOS timestamp, internal/external attributes and
+/// Preserve exact decompressed bytes except for explicitly replaced members and `RECORD`. Preserve
+/// each non-`RECORD` member's compression method, DOS timestamp, internal/external attributes and
 /// entry comment. Recompression does not preserve compressed streams, local headers, compression
 /// levels, arbitrary extra fields or the archive comment. The ZIP library emits Unix creator
-/// metadata, including for DOS inputs. RECORD is emitted last with SHA-256 hashes, Deflate, mode
+/// metadata, including for DOS inputs. `RECORD` is emitted last with SHA-256 hashes, Deflate, mode
 /// 0644, the ZIP epoch timestamp and no comment. Structural ZIP64 fields are generated as needed.
 ///
 /// Flush the completed temporary archive before atomically creating the output with no clobber.
 /// Existing output is never reused, even if it has identical bytes. Failure removes the temporary
 /// file and leaves existing paths alone.
 /// This is process-level atomic publication, not a promise of power-loss durability. Callers own
-/// provenance, digest verification and immutable input/replacement staging.
+/// provenance, digest verification and immutable input/replacement staging. The input `RECORD`
+/// and replaced member contents are discarded without reading or validating them.
 /// Member names are copied verbatim, not interpreted as filesystem paths.
 pub(crate) async fn wheel_replace(args: WheelReplaceArgs) -> Result<()> {
     ensure!(
@@ -97,12 +85,7 @@ pub(crate) async fn wheel_replace(args: WheelReplaceArgs) -> Result<()> {
     let input = fs_err::File::open(&args.input)
         .with_context(|| format!("failed to open input wheel `{}`", args.input.display()))?;
     let mut archive = ZipFileReader::new(AllowStdIo::new(BufReader::new(input))).await?;
-    let (record_index, record_path) = validate_archive(archive.file())?;
-    let mut record_bytes = Vec::new();
-    let mut record_reader = archive.reader_with_entry(record_index).await?;
-    copy_hashed(&mut record_reader, &mut record_bytes).await?;
-    validate_zip_contents(&mut record_reader, record_bytes.len() as u64)?;
-    let mut expected_record = read_record(&record_bytes, &record_path)?;
+    let record_path = validate_archive(archive.file())?;
 
     let output_directory = args
         .output
@@ -134,52 +117,32 @@ pub(crate) async fn wheel_replace(args: WheelReplaceArgs) -> Result<()> {
                 "cannot replace directory member `{name}`"
             );
             let mut original = archive.reader_with_entry(index).await?;
-            let contents = hash_reader(&mut original).await?;
-            ensure!(contents.1 == 0, "directory member `{name}` contains data");
-            validate_zip_contents(&mut original, contents.1)?;
+            let size = futures::io::copy(&mut original, &mut futures::io::sink()).await?;
+            ensure!(size == 0, "directory member `{name}` contains data");
+            validate_zip_contents(&mut original, size)?;
             writer.write_entry_whole(builder, &[]).await?;
             continue;
         }
-        let expected = expected_record
-            .remove(&name)
-            .with_context(|| format!("RECORD does not contain `{name}`"))?;
-        let mut original = archive.reader_with_entry(index).await?;
-        let contents = if let Some(path) = replacements.remove(&name) {
-            let (hash, size) = hash_reader(&mut original).await?;
-            validate_zip_contents(&mut original, size)?;
-            validate_record_entry(&name, &expected, &hash, size)?;
+        let mut output_entry = writer.write_entry_seekable(builder).await?;
+        let (hash, size) = if let Some(path) = replacements.remove(&name) {
             let replacement = fs_err::File::open(&path)
                 .with_context(|| format!("failed to open replacement `{}`", path.display()))?;
-            let metadata = replacement.metadata()?;
             ensure!(
-                metadata.is_file(),
+                replacement.metadata()?.is_file(),
                 "replacement `{}` is not a regular file",
                 path.display()
             );
             let mut replacement = AllowStdIo::new(BufReader::new(replacement));
-            let mut output_entry = writer.write_entry_seekable(builder).await?;
-            let contents = copy_hashed(&mut replacement, &mut output_entry).await?;
-            output_entry.close().await?;
-            contents
+            copy_hashed(&mut replacement, &mut output_entry).await?
         } else {
-            let mut output_entry = writer.write_entry_seekable(builder).await?;
+            let mut original = archive.reader_with_entry(index).await?;
             let (hash, size) = copy_hashed(&mut original, &mut output_entry).await?;
             validate_zip_contents(&mut original, size)?;
-            output_entry.close().await?;
-            validate_record_entry(&name, &expected, &hash, size)?;
             (hash, size)
         };
-        output_record.push((name, contents.0.sha256, contents.1));
+        output_entry.close().await?;
+        output_record.push((name, hash, size));
     }
-    ensure!(
-        expected_record.is_empty(),
-        "RECORD contains members not present in the wheel: {}",
-        expected_record
-            .keys()
-            .cloned()
-            .collect::<Vec<_>>()
-            .join(", ")
-    );
     ensure!(
         replacements.is_empty(),
         "replacement members not present in the wheel: {}",
@@ -214,10 +177,10 @@ async fn finish_archive<W: AsyncWrite + Unpin>(writer: ZipFileWriter<W>) -> Resu
     Ok(())
 }
 
-fn validate_archive(file: &ZipFile) -> Result<(usize, String)> {
+fn validate_archive(file: &ZipFile) -> Result<String> {
     let mut names = BTreeSet::new();
     let mut record = None;
-    for (index, entry) in file.entries().iter().enumerate() {
+    for entry in file.entries() {
         let name = entry
             .filename()
             .as_str()
@@ -234,7 +197,7 @@ fn validate_archive(file: &ZipFile) -> Result<(usize, String)> {
         );
         if name.ends_with(".dist-info/RECORD") {
             ensure!(record.is_none(), "wheel contains multiple RECORD files");
-            record = Some((index, name.to_string()));
+            record = Some(name.to_string());
         }
     }
     record.context("wheel does not contain a RECORD file")
@@ -259,57 +222,6 @@ fn validate_zip_contents<R: futures::io::AsyncBufRead + Unpin>(
     Ok(())
 }
 
-fn read_record(bytes: &[u8], record_path: &str) -> Result<BTreeMap<String, RecordEntry>> {
-    let mut entries = BTreeMap::new();
-    let mut record_seen = false;
-    let mut reader = csv::ReaderBuilder::new()
-        .has_headers(false)
-        .from_reader(bytes);
-    for row in reader.records() {
-        let row = row.context("failed to parse RECORD")?;
-        ensure!(
-            row.len() == 3,
-            "RECORD rows must contain exactly three fields"
-        );
-        let path = row.get(0).context("RECORD row has no path")?;
-        if path == record_path {
-            ensure!(!record_seen, "duplicate RECORD entry `{path}`");
-            record_seen = true;
-            ensure!(
-                row.get(1) == Some("") && row.get(2) == Some(""),
-                "RECORD entry for itself must not contain a hash or size"
-            );
-            continue;
-        }
-        let hash = row.get(1).context("RECORD row has no hash")?;
-        ensure!(
-            hash.starts_with("sha256=")
-                || hash.starts_with("sha384=")
-                || hash.starts_with("sha512="),
-            "RECORD entry `{path}` must use a secure hash"
-        );
-        let size = row
-            .get(2)
-            .context("RECORD row has no size")?
-            .parse::<u64>()
-            .with_context(|| format!("RECORD entry `{path}` has an invalid size"))?;
-        ensure!(
-            entries
-                .insert(
-                    path.to_string(),
-                    RecordEntry {
-                        hash: hash.to_string(),
-                        size,
-                    },
-                )
-                .is_none(),
-            "duplicate RECORD entry `{path}`"
-        );
-    }
-    ensure!(record_seen, "RECORD does not contain an entry for itself");
-    Ok(entries)
-}
-
 fn write_record(record_path: &str, entries: Vec<(String, String, u64)>) -> Result<Vec<u8>> {
     let mut writer = csv::Writer::from_writer(Vec::new());
     for (path, hash, size) in entries {
@@ -318,30 +230,6 @@ fn write_record(record_path: &str, entries: Vec<(String, String, u64)>) -> Resul
     writer.write_record([record_path, "", ""])?;
     writer.flush()?;
     writer.into_inner().context("failed to finish RECORD")
-}
-
-fn validate_record_entry(
-    name: &str,
-    expected: &RecordEntry,
-    hash: &HashDigests,
-    size: u64,
-) -> Result<()> {
-    let actual = if expected.hash.starts_with("sha256=") {
-        format!("sha256={}", hash.sha256)
-    } else if expected.hash.starts_with("sha384=") {
-        format!("sha384={}", hash.sha384)
-    } else {
-        format!("sha512={}", hash.sha512)
-    };
-    ensure!(
-        expected.hash == actual,
-        "RECORD hash for `{name}` does not match its contents"
-    );
-    ensure!(
-        expected.size == size,
-        "RECORD size for `{name}` does not match its contents"
-    );
-    Ok(())
 }
 
 fn validate_member_type(name: &str, permissions: Option<u16>, directory: bool) -> Result<()> {
@@ -357,17 +245,11 @@ fn validate_member_type(name: &str, permissions: Option<u16>, directory: bool) -
     Ok(())
 }
 
-async fn hash_reader(reader: &mut (impl AsyncRead + Unpin)) -> Result<(HashDigests, u64)> {
-    copy_hashed(reader, &mut futures::io::sink()).await
-}
-
 async fn copy_hashed(
     reader: &mut (impl AsyncRead + Unpin),
     writer: &mut (impl AsyncWrite + Unpin),
-) -> Result<(HashDigests, u64)> {
+) -> Result<(String, u64)> {
     let mut sha256 = Sha256::new();
-    let mut sha384 = Sha384::new();
-    let mut sha512 = Sha512::new();
     let mut size: u64 = 0;
     let mut buffer = vec![0; BUFFER_SIZE];
     loop {
@@ -380,17 +262,8 @@ async fn copy_hashed(
             .context("wheel member size overflowed")?;
         writer.write_all(&buffer[..read]).await?;
         sha256.update(&buffer[..read]);
-        sha384.update(&buffer[..read]);
-        sha512.update(&buffer[..read]);
     }
-    Ok((
-        HashDigests {
-            sha256: BASE64_URL_SAFE_NO_PAD.encode(sha256.finalize()),
-            sha384: BASE64_URL_SAFE_NO_PAD.encode(sha384.finalize()),
-            sha512: BASE64_URL_SAFE_NO_PAD.encode(sha512.finalize()),
-        },
-        size,
-    ))
+    Ok((BASE64_URL_SAFE_NO_PAD.encode(sha256.finalize()), size))
 }
 
 #[cfg(test)]
@@ -404,6 +277,36 @@ mod tests {
     const BINARY: &str = "uv-1.2.3.data/scripts/uv";
     const RECORD: &str = "uv-1.2.3.dist-info/RECORD";
     const METADATA: &str = "uv-1.2.3.dist-info/METADATA";
+
+    #[derive(Debug)]
+    struct RecordEntry {
+        hash: String,
+        size: u64,
+    }
+
+    fn read_record(bytes: &[u8], record_path: &str) -> Result<BTreeMap<String, RecordEntry>> {
+        let mut entries = BTreeMap::new();
+        let mut record_seen = false;
+        let mut reader = csv::ReaderBuilder::new()
+            .has_headers(false)
+            .from_reader(bytes);
+        for row in reader.deserialize::<(String, String, String)>() {
+            let (path, hash, size) = row?;
+            if path == record_path {
+                assert!(!record_seen);
+                record_seen = true;
+                assert_eq!((hash.as_str(), size.as_str()), ("", ""));
+            } else {
+                let entry = RecordEntry {
+                    hash,
+                    size: size.parse()?,
+                };
+                assert!(entries.insert(path, entry).is_none());
+            }
+        }
+        assert!(record_seen);
+        Ok(entries)
+    }
 
     fn fixture_members() -> Vec<(ZipEntry, Vec<u8>)> {
         [
@@ -557,41 +460,72 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn rejects_invalid_record_rows() -> Result<()> {
-        let members = fixture_members();
-        let record = String::from_utf8(fixture_record(&members)?)?;
-        let rows: Vec<_> = record.lines().collect();
-        let malformed = [
-            record.replace(
-                &BASE64_URL_SAFE_NO_PAD.encode(Sha256::digest(b"metadata")),
-                "invalid",
+    async fn rejects_unmatched_and_duplicate_replacements() -> Result<()> {
+        for (names, expected) in [
+            (
+                vec!["missing"],
+                "replacement members not present in the wheel: missing",
             ),
-            record.replace(",8\n", ",9\n"),
-            format!("{record}{}\n", rows[1]),
-            format!("{}\n{}\n", rows[0], rows[2]),
-            format!("{record}missing,sha256=missing,1\n"),
-            format!("{}\n{}\n", rows[0], rows[1]),
-            record.replace(
-                &format!("{RECORD},,"),
-                &format!("{RECORD},sha256=invalid,1"),
+            (
+                vec![BINARY, BINARY],
+                "duplicate replacement for `uv-1.2.3.data/scripts/uv`",
             ),
-            format!("{record}{RECORD},,\n"),
-            record.replace(",8\n", ",8,extra\n"),
-        ];
-        for record in malformed {
+            (
+                vec![RECORD],
+                "replacement members not present in the wheel: uv-1.2.3.dist-info/RECORD",
+            ),
+        ] {
+            let directory = tempfile::tempdir()?;
+            let mut args = args(directory.path());
+            let replacement = args.replacements[0].path.clone();
+            fs_err::write(&replacement, b"signed")?;
+            fixture(&args.input, fixture_members(), None, false, false).await?;
+            args.replacements = names
+                .into_iter()
+                .map(|name| Replacement {
+                    member: name.to_string(),
+                    path: replacement.clone(),
+                })
+                .collect();
+            let error = wheel_replace(args).await.expect_err("invalid replacement");
+            assert_eq!(error.to_string(), expected);
+            assert_eq!(fs_err::read_dir(directory.path())?.count(), 2);
+        }
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn regenerates_record_without_reading_the_original() -> Result<()> {
+        // A fresh `RECORD` describes the bytes written, regardless of the old CSV or hashes.
+        for record in [b"".as_slice(), b"stale,sha256=wrong,123", b"\xff"] {
             let directory = tempfile::tempdir()?;
             let args = args(directory.path());
             fs_err::write(&args.replacements[0].path, b"signed")?;
             fixture(
                 &args.input,
                 fixture_members(),
-                Some(record.into_bytes()),
+                Some(record.to_vec()),
                 false,
                 false,
             )
             .await?;
-            assert!(wheel_replace(args).await.is_err());
-            assert_eq!(fs_err::read_dir(directory.path())?.count(), 2);
+            wheel_replace(args).await?;
+            let output = directory.path().join("output.whl");
+            assert_eq!(read_entry(&output, BINARY).await?.0, b"signed");
+            assert_eq!(read_entry(&output, METADATA).await?.0, b"metadata");
+            let (record, _, _) = read_entry(&output, RECORD).await?;
+            let record = read_record(&record, RECORD)?;
+            assert_eq!(record.len(), 2);
+            for (name, contents) in [(BINARY, b"signed".as_slice()), (METADATA, b"metadata")] {
+                assert_eq!(record[name].size, contents.len() as u64);
+                assert_eq!(
+                    record[name].hash,
+                    format!(
+                        "sha256={}",
+                        BASE64_URL_SAFE_NO_PAD.encode(Sha256::digest(contents))
+                    )
+                );
+            }
         }
         Ok(())
     }
@@ -730,18 +664,16 @@ mod tests {
         let (hash, size) = copy_hashed(&mut input, &mut output).await?;
         assert_eq!(output, bytes);
         assert_eq!(size, bytes.len() as u64);
-        assert_eq!(
-            hash.sha256,
-            BASE64_URL_SAFE_NO_PAD.encode(Sha256::digest(&bytes))
-        );
+        assert_eq!(hash, BASE64_URL_SAFE_NO_PAD.encode(Sha256::digest(&bytes)));
         Ok(())
     }
 
     #[tokio::test]
-    async fn rejects_corrupt_zip_contents() -> Result<()> {
-        for (field, replacement) in [
-            (16, 0_u32), // CRC32
-            (24, 9_u32), // uncompressed size
+    async fn validates_only_copied_zip_contents() -> Result<()> {
+        for (member_index, field, replacement) in [
+            (0, 16, 0_u32), // Replaced member: the old CRC32 is irrelevant.
+            (1, 16, 0_u32), // Copied member: CRC32 must match.
+            (1, 24, 9_u32), // Copied member: uncompressed size must match.
         ] {
             let directory = tempfile::tempdir()?;
             let args = args(directory.path());
@@ -750,13 +682,22 @@ mod tests {
             let mut bytes = fs_err::read(&args.input)?;
             let position = bytes
                 .windows(4)
-                .position(|bytes| bytes == b"PK\x01\x02")
+                .enumerate()
+                .filter(|(_, bytes)| *bytes == b"PK\x01\x02")
+                .nth(member_index)
+                .map(|(position, _)| position)
                 .context("missing ZIP header")?;
             bytes[position + field..position + field + 4]
                 .copy_from_slice(&replacement.to_le_bytes());
             fs_err::write(&args.input, bytes)?;
-            assert!(wheel_replace(args).await.is_err());
-            assert_eq!(fs_err::read_dir(directory.path())?.count(), 2);
+            if member_index == 0 {
+                wheel_replace(args).await?;
+                let output = directory.path().join("output.whl");
+                assert_eq!(read_entry(&output, BINARY).await?.0, b"signed");
+            } else {
+                assert!(wheel_replace(args).await.is_err());
+                assert_eq!(fs_err::read_dir(directory.path())?.count(), 2);
+            }
         }
         Ok(())
     }
@@ -923,7 +864,7 @@ mod tests {
     ) -> Result<()> {
         let file = fs_err::File::open(path)?;
         let mut archive = ZipFileReader::new(AllowStdIo::new(BufReader::new(file))).await?;
-        let (record_index, record_path) = validate_archive(archive.file())?;
+        let record_path = validate_archive(archive.file())?;
         ensure!(
             archive.file().entries().len() == expected.len(),
             "output membership changed"
@@ -932,10 +873,7 @@ mod tests {
             archive.file().comment().as_bytes().is_empty(),
             "unexpected output archive comment"
         );
-        let mut record_bytes = Vec::new();
-        let mut reader = archive.reader_with_entry(record_index).await?;
-        copy_hashed(&mut reader, &mut record_bytes).await?;
-        validate_zip_contents(&mut reader, record_bytes.len() as u64)?;
+        let (record_bytes, _, _) = read_entry(path, &record_path).await?;
         let mut record = read_record(&record_bytes, &record_path)?;
         for index in 0..archive.file().entries().len() {
             let entry = archive.file().entries()[index].clone();
@@ -959,77 +897,49 @@ mod tests {
                 "output metadata changed for `{name}`"
             );
             let mut reader = archive.reader_with_entry(index).await?;
-            let (hash, size) = hash_reader(&mut reader).await?;
+            let mut bytes = Vec::new();
+            reader.read_to_end(&mut bytes).await?;
+            let size = bytes.len() as u64;
+            let hash = BASE64_URL_SAFE_NO_PAD.encode(Sha256::digest(&bytes));
             validate_zip_contents(&mut reader, size)?;
             ensure!(
-                &hash.sha256 == expected_hash && size == *expected_size,
+                &hash == expected_hash && size == *expected_size,
                 "output bytes changed for `{name}`"
             );
             if !entry.dir()? && name != record_path {
                 let expected = record
                     .remove(name)
                     .context("output RECORD is missing a member")?;
-                validate_record_entry(name, &expected, &hash, size)?;
+                assert_eq!(expected.hash, format!("sha256={hash}"));
+                assert_eq!(expected.size, size);
             }
         }
         ensure!(record.is_empty(), "output RECORD contains extra members");
         Ok(())
     }
 
-    async fn write_wheel(
-        path: &Path,
-        tamper_record: bool,
-        executable_mode: u16,
-        algorithm: &str,
-    ) -> Result<()> {
-        let executable = b"unsigned executable";
-        let metadata = b"Metadata-Version: 2.4\nName: uv\nVersion: 1.2.3\n";
-        let digest = |bytes: &[u8]| -> Result<String> {
-            match algorithm {
-                "sha256" => Ok(BASE64_URL_SAFE_NO_PAD.encode(Sha256::digest(bytes))),
-                "sha384" => Ok(BASE64_URL_SAFE_NO_PAD.encode(Sha384::digest(bytes))),
-                "sha512" => Ok(BASE64_URL_SAFE_NO_PAD.encode(Sha512::digest(bytes))),
-                _ => bail!("unsupported test hash algorithm `{algorithm}`"),
-            }
-        };
-        let executable_hash = digest(executable)?;
-        let metadata_hash = digest(metadata)?;
-        let record = format!(
-            "uv-1.2.3.data/scripts/uv,{algorithm}={},{}\nuv-1.2.3.dist-info/METADATA,{algorithm}={metadata_hash},{}\nuv-1.2.3.dist-info/RECORD,,\n",
-            if tamper_record {
-                "invalid"
-            } else {
-                &executable_hash
-            },
-            executable.len(),
-            metadata.len()
-        );
-
-        let output = fs_err::File::create(path)?;
-        let mut writer = ZipFileWriter::new(AllowStdIo::new(BufWriter::new(output)));
-        writer
-            .write_entry_whole(
-                ZipEntryBuilder::new("uv-1.2.3.data/scripts/uv".into(), Compression::Deflate)
-                    .unix_permissions(executable_mode),
-                executable,
-            )
-            .await?;
-        writer
-            .write_entry_whole(
-                ZipEntryBuilder::new("uv-1.2.3.dist-info/METADATA".into(), Compression::Stored)
-                    .unix_permissions(0o100_644),
-                metadata,
-            )
-            .await?;
-        writer
-            .write_entry_whole(
-                ZipEntryBuilder::new("uv-1.2.3.dist-info/RECORD".into(), Compression::Deflate)
-                    .unix_permissions(0o100_644),
-                record.as_bytes(),
-            )
-            .await?;
-        finish_archive(writer).await?;
-        Ok(())
+    async fn write_wheel(path: &Path, executable_mode: u16) -> Result<()> {
+        fixture(
+            path,
+            vec![
+                (
+                    ZipEntryBuilder::new(BINARY.into(), Compression::Deflate)
+                        .unix_permissions(executable_mode)
+                        .build(),
+                    b"unsigned executable".to_vec(),
+                ),
+                (
+                    ZipEntryBuilder::new(METADATA.into(), Compression::Stored)
+                        .unix_permissions(0o100_644)
+                        .build(),
+                    b"Metadata-Version: 2.4\nName: uv\nVersion: 1.2.3\n".to_vec(),
+                ),
+            ],
+            None,
+            false,
+            false,
+        )
+        .await
     }
 
     async fn read_entry(path: &Path, name: &str) -> Result<(Vec<u8>, Compression, Option<u16>)> {
@@ -1053,7 +963,7 @@ mod tests {
         archive
             .reader_with_entry(index)
             .await?
-            .read_to_end(&mut bytes)
+            .read_to_end_checked(&mut bytes)
             .await?;
         Ok((bytes, compression, permissions))
     }
@@ -1064,7 +974,7 @@ mod tests {
         let input = temporary.path().join("unsigned.whl");
         let output = temporary.path().join("signed.whl");
         let replacement = temporary.path().join("uv");
-        write_wheel(&input, false, 0o100_755, "sha256").await?;
+        write_wheel(&input, 0o100_755).await?;
         fs_err::write(&replacement, b"signed executable")?;
 
         wheel_replace(WheelReplaceArgs {
@@ -1101,40 +1011,12 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn rejects_an_invalid_input_record() -> Result<()> {
-        let temporary = tempfile::tempdir()?;
-        let input = temporary.path().join("unsigned.whl");
-        let output = temporary.path().join("signed.whl");
-        let replacement = temporary.path().join("uv");
-        write_wheel(&input, true, 0o100_755, "sha256").await?;
-        fs_err::write(&replacement, b"signed executable")?;
-
-        let error = wheel_replace(WheelReplaceArgs {
-            input,
-            output: output.clone(),
-            replacements: vec![Replacement {
-                member: "uv-1.2.3.data/scripts/uv".to_string(),
-                path: replacement,
-            }],
-        })
-        .await
-        .expect_err("invalid RECORD should be rejected");
-
-        assert_eq!(
-            error.to_string(),
-            "RECORD hash for `uv-1.2.3.data/scripts/uv` does not match its contents"
-        );
-        assert!(!output.exists());
-        Ok(())
-    }
-
-    #[tokio::test]
     async fn rejects_a_symlink_member() -> Result<()> {
         let temporary = tempfile::tempdir()?;
         let input = temporary.path().join("unsigned.whl");
         let output = temporary.path().join("signed.whl");
         let replacement = temporary.path().join("uv");
-        write_wheel(&input, false, 0o120_777, "sha256").await?;
+        write_wheel(&input, 0o120_777).await?;
         fs_err::write(&replacement, b"signed executable")?;
 
         let error = wheel_replace(WheelReplaceArgs {
@@ -1153,34 +1035,6 @@ mod tests {
             "wheel member `uv-1.2.3.data/scripts/uv` is not a regular file or directory"
         );
         assert!(!output.exists());
-        Ok(())
-    }
-
-    #[tokio::test]
-    async fn accepts_secure_input_record_hashes() -> Result<()> {
-        let temporary = tempfile::tempdir()?;
-        for algorithm in ["sha384", "sha512"] {
-            let input = temporary.path().join(format!("unsigned-{algorithm}.whl"));
-            let output = temporary.path().join(format!("signed-{algorithm}.whl"));
-            let replacement = temporary.path().join(format!("uv-{algorithm}"));
-            write_wheel(&input, false, 0o100_755, algorithm).await?;
-            fs_err::write(&replacement, b"signed executable")?;
-
-            wheel_replace(WheelReplaceArgs {
-                input,
-                output: output.clone(),
-                replacements: vec![Replacement {
-                    member: "uv-1.2.3.data/scripts/uv".to_string(),
-                    path: replacement,
-                }],
-            })
-            .await?;
-
-            let (record, _, _) = read_entry(&output, "uv-1.2.3.dist-info/RECORD").await?;
-            let record = String::from_utf8(record)?;
-            assert!(record.contains(",sha256="));
-            assert!(!record.contains(&format!(",{algorithm}=")));
-        }
         Ok(())
     }
 
