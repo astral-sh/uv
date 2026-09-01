@@ -5,10 +5,8 @@ use std::process::Command;
 
 use assert_cmd::assert::OutputAssertExt;
 #[cfg(feature = "test-python-managed")]
-use assert_fs::{
-    assert::PathAssert,
-    prelude::{FileWriteStr, PathChild},
-};
+use assert_fs::assert::PathAssert;
+use assert_fs::prelude::{FileWriteStr, PathChild};
 #[cfg(feature = "test-python-managed")]
 use predicates::prelude::predicate;
 
@@ -138,6 +136,73 @@ fn python_shim_virtualenv() {
     ----- stdout -----
     (3, 11)
     ");
+}
+
+#[test]
+fn python_shim_project_selection() -> anyhow::Result<()> {
+    let context = uv_test::test_context_with_versions!(&["3.11", "3.12"]);
+    fs_err::create_dir_all(&context.bin_dir)?;
+    for name in ["python", "python3", "python3.11"] {
+        python_shim::write_to_path(
+            &context
+                .bin_dir
+                .join(format!("{name}{}", std::env::consts::EXE_SUFFIX)),
+        )?;
+    }
+
+    context
+        .temp_dir
+        .child(".python-version")
+        .write_str("3.12")?;
+    // Generic names follow the pin rather than the first interpreter on the search path.
+    uv_snapshot!(context.filters(), installed_shim(&context, "python").arg("-c").arg("import sys; print(sys.version_info[:2])"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    (3, 12)
+    ");
+    uv_snapshot!(context.filters(), installed_shim(&context, "python3").arg("-c").arg("import sys; print(sys.version_info[:2])"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    (3, 12)
+    ");
+    // A minor-version name remains an explicit request, even with a different project pin.
+    uv_snapshot!(context.filters(), installed_shim(&context, "python3.11").arg("-c").arg("import sys; print(sys.version_info[:2])"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    (3, 11)
+    ");
+    uv_snapshot!(context.filters(), installed_shim(&context, "python").arg("+3.11").arg("-c").arg("import sys; print(sys.version_info[:2])"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    (3, 11)
+    ");
+
+    fs_err::remove_file(context.temp_dir.join(".python-version"))?;
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = "==3.12.*"
+        "#,
+    )?;
+    // Without a pin, generic names respect the project's Python requirement.
+    uv_snapshot!(context.filters(), installed_shim(&context, "python").arg("-c").arg("import sys; print(sys.version_info[:2])"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    (3, 12)
+    ");
+    uv_snapshot!(context.filters(), installed_shim(&context, "python3").arg("-c").arg("import sys; print(sys.version_info[:2])"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    (3, 12)
+    ");
+    uv_snapshot!(context.filters(), installed_shim(&context, "python3.11").arg("-c").arg("import sys; print(sys.version_info[:2])"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    (3, 11)
+    ");
+    Ok(())
 }
 
 #[test]

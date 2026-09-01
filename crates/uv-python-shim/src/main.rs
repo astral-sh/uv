@@ -40,9 +40,6 @@ impl Options {
         let mut args = Vec::new();
         if let Some(request) = &self.request {
             args.push(request.as_str());
-        } else {
-            // By default, we should never select an alternative implementation with the shim
-            args.push("cpython");
         }
         if self.system {
             args.push("--system");
@@ -110,6 +107,9 @@ fn request_from_name(executable: &OsStr) -> Option<String> {
     let name = name.strip_suffix(".exe").unwrap_or(name);
     let suffix = name.strip_prefix("python")?;
     match suffix {
+        // Generic names use normal project discovery, including version files and
+        // requires-python. An explicit request would override those preferences.
+        "" | "3" => None,
         // Unversioned variant names still need a version in the request syntax.
         "t" | "d" | "td" => Some(format!("cpython@3{suffix}")),
         _ if suffix.starts_with(|character: char| character.is_ascii_digit()) => {

@@ -115,7 +115,7 @@ def benchmark(args: argparse.Namespace, output_dir: Path, root: Path) -> None:
     )
     # All downloads and environment creation happen outside the measurements.
     env.update({"UV_OFFLINE": "1", "UV_PYTHON_DOWNLOADS": "never"})
-    python = output([str(uv), "python", "find", "cpython"], cwd=root, env=env)
+    python = output([str(uv), "python", "find"], cwd=root, env=env)
     python_info = json.loads(output([python, "-c", PROBE], cwd=root, env=env))
     major, minor, _patch = python_info["version"]
     names = ["python", f"python{major}", f"python{major}.{minor}"]
@@ -183,9 +183,7 @@ def benchmark(args: argparse.Namespace, output_dir: Path, root: Path) -> None:
             metadata["selection_checks"].append(
                 {"scenario": scenario, "name": name, "selected": selected}
             )
-        found = output(
-            [str(uv), "python", "find", "cpython"], cwd=cwd, env=scenario_env
-        )
+        found = output([str(uv), "python", "find"], cwd=cwd, env=scenario_env)
         if not os.path.samefile(found, direct):
             raise ValueError(
                 f"{scenario}: uv python find selected {found}, not {direct}"
@@ -194,7 +192,7 @@ def benchmark(args: argparse.Namespace, output_dir: Path, root: Path) -> None:
         shutil.rmtree(cache)
         for state in ("cold", "warm"):
             trace = subprocess.run(
-                [str(uv), "python", "find", "cpython", "--verbose"],
+                [str(uv), "python", "find", "--verbose"],
                 cwd=cwd,
                 env=scenario_env | {"RUST_LOG": "uv_python=trace"},
                 capture_output=True,
@@ -230,7 +228,7 @@ def benchmark(args: argparse.Namespace, output_dir: Path, root: Path) -> None:
             commands.extend(
                 (name, [str(bin_dir / name), "-c", "pass"]) for name in names
             )
-            commands.append(("uv-python-find", [str(uv), "python", "find", "cpython"]))
+            commands.append(("uv-python-find", [str(uv), "python", "find"]))
             if repetition % 2:
                 commands.reverse()
             for state in ("warm", "cold"):

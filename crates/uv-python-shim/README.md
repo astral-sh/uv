@@ -4,6 +4,11 @@ This crate produces the Python launchers embedded by `uv-trampoline-builder`. It
 the workspace: normal builds and release artifacts do not build or ship a separate `uv-python`
 executable. `uv python install` extracts the embedded launcher under each Python name.
 
+The generic `python` and `python3` names use normal `uv python find` discovery, including
+`.python-version` files and project `requires-python` constraints. Minor-version and variant names
+request that CPython version explicitly. A leading `+<request>` overrides both the executable name
+and project selection. The shim selects an interpreter; it does not activate the environment.
+
 ## Regenerating the launchers
 
 Commit source changes together with the assets in `crates/uv-trampoline-builder/python-shims`.
