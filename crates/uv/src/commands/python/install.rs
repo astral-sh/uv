@@ -1016,7 +1016,12 @@ fn install_python_shims(
         }
     }
 
-    for target in targets {
+    // Sort by executable name without the platform suffix so Windows and Unix
+    // report the unversioned, major, and minor shims in the same order.
+    for target in targets.into_iter().sorted_by(|left, right| {
+        left.trim_end_matches(".exe")
+            .cmp(right.trim_end_matches(".exe"))
+    }) {
         let shim_dst = bin.join(target);
         match fs_err::symlink_metadata(&shim_dst) {
             Ok(_) => {
