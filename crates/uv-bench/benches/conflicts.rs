@@ -233,25 +233,30 @@ fn overlapping() -> Fixture {
     fixture
 }
 
-/// The report behind #19538 (#16779) had 24 defined extras. Model that scale with one
-/// mutually exclusive set and distinct backend versions. This is not a copy of its dependency
-/// graph or its conflict declarations, which also contained duplicate and undefined extra names.
+/// The report behind #19538 (#16779) had 24 defined extras, mostly sharing the same runtime pins.
+/// Model that scale with one mutually exclusive set of environments using two backend versions.
+/// This is not a copy of its dependency graph or its conflict declarations, which also contained
+/// duplicate and undefined extra names.
 /// <https://github.com/alex-shapiro/PufferLib/blob/21807b34145822e307314dd0e3b503139c6aaa97/pyproject.toml>
 fn mutually_exclusive() -> Fixture {
     let mut fixture = Fixture::new();
     let mut extras = toml::Table::new();
     let mut conflicts = Vec::new();
+    for version in ["1.0.0", "2.0.0"] {
+        // Requesting a transitive extra is essential to the `without_extras` regression in #19538.
+        fixture.wheel("backend", version, &["shared-0[feature]".to_string()], None);
+    }
     for index in 1..=BACKENDS {
         let extra = format!("backend-{index}");
-        let version = format!("{index}.0.0");
-        // Requesting a transitive extra is essential to the `without_extras` regression in #19538.
+        let environment = format!("environment-{index}");
+        let version = if index < BACKENDS { "1.0.0" } else { "2.0.0" };
         fixture.wheel(
-            "backend",
-            &version,
-            &["shared-0[feature]".to_string()],
+            &environment,
+            "1.0.0",
+            &[format!("backend=={version}")],
             None,
         );
-        extras.insert(extra.clone(), vec![format!("backend=={version}")].into());
+        extras.insert(extra.clone(), vec![environment].into());
         conflicts.push(toml::Value::from(toml::toml! { extra = (extra) }));
     }
     fixture.pyproject["project"]["optional-dependencies"] = extras.into();
@@ -529,7 +534,7 @@ fn conflicts(criterion: &mut Criterion) {
     let fixture = mutually_exclusive();
     harness.lock(criterion, "lock_conflicts_mutually_exclusive_24", &fixture);
     harness.check_selection(&fixture, &["--extra", "backend-1"], "backend", &["1.0.0"]);
-    harness.check_selection(&fixture, &["--extra", "backend-24"], "backend", &["24.0.0"]);
+    harness.check_selection(&fixture, &["--extra", "backend-24"], "backend", &["2.0.0"]);
     harness.export(
         criterion,
         "export_frozen_conflicts_mutually_exclusive_24",
