@@ -12761,7 +12761,7 @@ fn lock_exclusion() -> Result<()> {
     ----- stderr -----
     error: Unable to find lockfile at `uv.lock`, but `--locked` was provided.
 
-    hint: To create a lockfile, run `uv lock` or `uv sync` without the flag.
+    hint: To create a lockfile, run `uv lock` or `uv sync` without the `--locked` flag.
     ");
 
     Ok(())
@@ -18378,7 +18378,7 @@ fn check_no_lock() -> Result<()> {
     ----- stderr -----
     error: Unable to find lockfile at `uv.lock`, but `--check` was provided.
 
-    hint: To create a lockfile, run `uv lock` or `uv sync` without the flag.
+    hint: To create a lockfile, run `uv lock` or `uv sync` without the `--check` flag.
     ");
     Ok(())
 }
@@ -41650,7 +41650,7 @@ fn lock_frozen_errors_report_source() -> Result<()> {
     ----- stderr -----
     error: Unable to find lockfile at `uv.lock`, but `--frozen` was provided.
 
-    hint: To create a lockfile, run `uv lock` or `uv sync` without the flag.
+    hint: To create a lockfile, run `uv lock` or `uv sync` without the `--frozen` flag.
     ");
 
     uv_snapshot!(context.filters(), context.lock().arg("--check-exists"), @"
@@ -41658,7 +41658,7 @@ fn lock_frozen_errors_report_source() -> Result<()> {
     ----- stderr -----
     error: Unable to find lockfile at `uv.lock`, but `--check-exists` was provided.
 
-    hint: To create a lockfile, run `uv lock` or `uv sync` without the flag.
+    hint: To create a lockfile, run `uv lock` or `uv sync` without the `--check-exists` flag.
     ");
 
     uv_snapshot!(context.filters(), context.lock().env(EnvVars::UV_FROZEN, "1"), @"
@@ -41666,7 +41666,7 @@ fn lock_frozen_errors_report_source() -> Result<()> {
     ----- stderr -----
     error: Unable to find lockfile at `uv.lock`, but `UV_FROZEN=1` was provided.
 
-    hint: To create a lockfile, run `uv lock` or `uv sync` without the flag.
+    hint: To create a lockfile, run `uv lock` or `uv sync` with `UV_FROZEN` unset.
     ");
 
     context.lock().assert().success();
