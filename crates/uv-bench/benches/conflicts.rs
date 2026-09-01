@@ -10,15 +10,11 @@
 // Don't optimize the alloc crate away due to it being otherwise unused.
 extern crate uv_performance_memory_allocator;
 
-use std::collections::BTreeSet;
-use std::fmt::Write;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
-use async_zip::base::write::ZipFileWriter;
-use async_zip::{Compression, ZipEntryBuilder};
 use clap::Parser;
 use criterion::{BatchSize, Criterion, criterion_group, criterion_main};
-use futures::executor::block_on;
 use tempfile::TempDir;
 use tokio::runtime::Runtime;
 
@@ -28,6 +24,7 @@ use uv_cache::Cache;
 use uv_cli::Cli;
 use uv_python::PythonEnvironment;
 use uv_resolver::{Lock, PylockToml};
+use uv_test::packse::generate_wheel;
 
 const SHARED_PACKAGES: usize = 8;
 const WORKSPACE_MEMBERS: usize = 24;
@@ -110,45 +107,31 @@ impl Fixture {
         .expect("Failed to write benchmark configuration");
     }
 
-    /// Write a tiny, installable wheel with static metadata; no index access or builds are needed.
+    /// Generate a local package with packse, outside the measured invocation.
     fn wheel(&mut self, name: &str, version: &str, dependencies: &[String], extra: Option<&str>) {
-        let stem = format!("{}-{version}", name.replace('-', "_"));
-        let mut metadata = format!(
-            "Metadata-Version: 2.1\nName: {name}\nVersion: {version}\nRequires-Python: >=3.11\n"
+        let name = name.parse().expect("Invalid fixture package name");
+        let version = version.parse().expect("Invalid fixture package version");
+        let requires = dependencies
+            .iter()
+            .map(|dependency| dependency.parse().expect("Invalid fixture dependency"))
+            .collect::<Vec<_>>();
+        let extras = extra
+            .into_iter()
+            .map(|extra| (extra.parse().expect("Invalid fixture extra"), Vec::new()))
+            .collect::<BTreeMap<_, _>>();
+        let requires_python = ">=3.11"
+            .parse()
+            .expect("Invalid fixture Python requirement");
+        let (filename, bytes) = generate_wheel(
+            &name,
+            &version,
+            &requires,
+            &extras,
+            Some(&requires_python),
+            "py3-none-any",
         );
-        for dependency in dependencies {
-            writeln!(metadata, "Requires-Dist: {dependency}").expect("Failed to write metadata");
-        }
-        if let Some(extra) = extra {
-            writeln!(metadata, "Provides-Extra: {extra}").expect("Failed to write metadata");
-        }
-        let entries = [
-            (format!("{stem}.dist-info/METADATA"), metadata),
-            (
-                format!("{stem}.dist-info/WHEEL"),
-                "Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n".to_string(),
-            ),
-        ];
-        let mut writer = ZipFileWriter::new(Vec::new());
-        let mut record = String::new();
-        for (path, contents) in entries {
-            writeln!(record, "{path},,").expect("Failed to write wheel record");
-            let entry = ZipEntryBuilder::new(path.into(), Compression::Stored);
-            block_on(writer.write_entry_whole(entry, contents.as_bytes()))
-                .expect("Failed to write wheel entry");
-        }
-        let path = format!("{stem}.dist-info/RECORD");
-        writeln!(record, "{path},,").expect("Failed to write wheel record");
-        let entry = ZipEntryBuilder::new(path.into(), Compression::Stored);
-        block_on(writer.write_entry_whole(entry, record.as_bytes()))
-            .expect("Failed to write wheel record");
-        fs_err::write(
-            self.root()
-                .join("wheels")
-                .join(format!("{stem}-py3-none-any.whl")),
-            block_on(writer.close()).expect("Failed to finish wheel"),
-        )
-        .expect("Failed to write wheel");
+        fs_err::write(self.root().join("wheels").join(filename), bytes)
+            .expect("Failed to write wheel");
         self.packages
             .insert((name.to_string(), version.to_string()));
     }

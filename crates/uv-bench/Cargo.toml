@@ -63,6 +63,7 @@ uv-preview = { workspace = true }
 uv-pypi-types = { workspace = true }
 uv-python = { workspace = true }
 uv-resolver = { workspace = true }
+uv-test = { workspace = true }
 uv-types = { workspace = true }
 uv-workspace = { workspace = true }
 
