@@ -1,4 +1,4 @@
-# Exercise separated macOS signing and wheel assembly with the self-signed CI certificate.
+# Exercise separated macOS and Windows signing with the self-signed CI certificates.
 name: "Sign release binaries (test)"
 
 on:
@@ -26,8 +26,8 @@ jobs:
 
       - name: "Build assembly tooling without signing credentials"
         run: |
-          python3 -m unittest discover -s scripts -p test_release_signing.py
           cargo build --locked --package uv-dev --features dev
+          UV_DEV_BIN="$PWD/target/debug/uv-dev" python3 -m unittest discover -s scripts -p test_release_signing.py
           mkdir tools
           cp target/debug/uv-dev scripts/release_signing.py scripts/check_uv_wheel_contents.py tools/
 
@@ -269,3 +269,307 @@ jobs:
             codesign --display --extract-certificates="$RUNNER_TEMP/verified-$binary-cert-" "$path"
             test "$(shasum -a 256 "$RUNNER_TEMP/verified-$binary-cert-0" | cut -d ' ' -f 1)" = "$expected_certificate"
           done
+
+  prepare-windows:
+    name: "prepare Windows signing inputs"
+    runs-on: depot-ubuntu-24.04-4
+    env:
+      TARGET: x86_64-pc-windows-msvc
+      ARTIFACT_SUFFIX: x86_64-pc-windows-msvc
+    outputs:
+      manifest-sha256: ${{ steps.prepare.outputs.manifest-sha256 }}
+      tooling-sha256: ${{ steps.prepare.outputs.tooling-sha256 }}
+      unsigned-artifact: ${{ steps.unsigned.outputs.artifact-id }}
+      assembly-artifact: ${{ steps.assembly.outputs.artifact-id }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: "Build assembly tooling without signing credentials"
+        run: |
+          cargo build --locked --package uv-dev --features dev
+          UV_DEV_BIN="$PWD/target/debug/uv-dev" python3 -m unittest discover -s scripts -p test_release_signing.py
+          mkdir tools
+          cp target/debug/uv-dev scripts/release_signing.py scripts/check_uv_wheel_contents.py tools/
+
+      - name: "Download unsigned wheels"
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: wheels_*-${{ env.ARTIFACT_SUFFIX }}
+          path: wheels
+          merge-multiple: true
+
+      - name: "Bind wheels and extract executable members"
+        id: prepare
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/release_signing.py prepare
+          tar cf tooling.tar -C tools .
+          echo "tooling-sha256=$(shasum -a 256 tooling.tar | cut -d ' ' -f 1)" >> "$GITHUB_OUTPUT"
+
+      - name: "Upload unsigned executable wheel members"
+        id: unsigned
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: unsigned-windows-${{ github.run_id }}-${{ github.run_attempt }}-${{ env.TARGET }}
+          path: unsigned/*
+          if-no-files-found: error
+
+      - name: "Upload immutable assembly inputs"
+        id: assembly
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: assembly-windows-${{ github.run_id }}-${{ github.run_attempt }}-${{ env.TARGET }}
+          path: |
+            wheels
+            manifest.json
+            tooling.tar
+          if-no-files-found: error
+
+  sign-windows:
+    name: "sign Windows binaries"
+    needs: prepare-windows
+    runs-on: namespace-profile-windows-2022-x86-64-16x32
+    environment: release-test
+    env:
+      TARGET: x86_64-pc-windows-msvc
+    outputs:
+      artifact: ${{ steps.upload.outputs.artifact-id }}
+      manifest-sha256: ${{ steps.sign.outputs.manifest-sha256 }}
+    steps:
+      - name: "Download unsigned executable wheel members"
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          artifact-ids: ${{ needs.prepare-windows.outputs.unsigned-artifact }}
+          path: unsigned
+          merge-multiple: true
+
+      - name: "Verify signing inputs"
+        shell: pwsh
+        env:
+          INPUT_MANIFEST_SHA256: ${{ needs.prepare-windows.outputs.manifest-sha256 }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if ((Get-FileHash unsigned/manifest.json -Algorithm SHA256).Hash -ne $env:INPUT_MANIFEST_SHA256) {
+            throw 'Input manifest digest mismatch'
+          }
+          $manifest = Get-Content unsigned/manifest.json -Raw | ConvertFrom-Json -AsHashtable
+          $context = @{
+            repository = $env:GITHUB_REPOSITORY
+            workflow_ref = $env:GITHUB_WORKFLOW_REF
+            workflow_sha = $env:GITHUB_WORKFLOW_SHA
+            run_id = $env:GITHUB_RUN_ID
+            run_attempt = $env:GITHUB_RUN_ATTEMPT
+            source_sha = $env:GITHUB_SHA
+            target = $env:TARGET
+            signing_workflow = '.github/workflows/sign-release-binaries.yml'
+          }
+          if ($manifest.schema -ne 1 -or $manifest.context.Count -ne $context.Count) {
+            throw 'Wrong workflow context'
+          }
+          foreach ($key in $context.Keys) {
+            if ($manifest.context[$key] -cne $context[$key]) { throw "Wrong workflow context: $key" }
+          }
+          $binaries = @('uv.exe', 'uvx.exe', 'uvw.exe', 'uv-build.exe')
+          $replacements = @($manifest.wheels | ForEach-Object { $_.replacements.Values })
+          if (@(Compare-Object $binaries $replacements).Count -ne 0) { throw 'Unexpected signing inputs' }
+          foreach ($wheel in $manifest.wheels) {
+            foreach ($replacement in $wheel.replacements.GetEnumerator()) {
+              $path = Join-Path unsigned $replacement.Value
+              if ((Get-FileHash $path -Algorithm SHA256).Hash -ne $wheel.members[$replacement.Key].sha256) {
+                throw "Unsigned binary digest mismatch: $path"
+              }
+            }
+          }
+
+      - name: "Sign executable wheel members and bind signed bytes"
+        id: sign
+        shell: pwsh
+        env:
+          CODESIGN_CERTIFICATE_WINDOWS: ${{ secrets.CODESIGN_CERTIFICATE_WINDOWS }}
+          CODESIGN_CERTIFICATE_PASSWORD: ${{ secrets.CODESIGN_CERTIFICATE_PASSWORD }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $signtool = Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\bin\*\x64\signtool.exe" |
+            Sort-Object FullName -Descending | Select-Object -First 1 -ExpandProperty FullName
+          if (-not $signtool) { throw 'signtool.exe not found in Windows SDK' }
+          $certificatePath = Join-Path $env:RUNNER_TEMP 'codesign-test.pfx'
+          try {
+            [IO.File]::WriteAllBytes($certificatePath, [Convert]::FromBase64String($env:CODESIGN_CERTIFICATE_WINDOWS))
+            $certificate = [System.Security.Cryptography.X509Certificates.X509Certificate2]::new(
+              $certificatePath, $env:CODESIGN_CERTIFICATE_PASSWORD,
+              [System.Security.Cryptography.X509Certificates.X509KeyStorageFlags]::EphemeralKeySet)
+            $certificateHash = $certificate.GetCertHashString([System.Security.Cryptography.HashAlgorithmName]::SHA256).ToLowerInvariant()
+            $manifest = Get-Content unsigned/manifest.json -Raw | ConvertFrom-Json -AsHashtable
+            $manifest.certificate_sha256 = $certificateHash
+            $manifest.signed = @{}
+            New-Item signed -ItemType Directory | Out-Null
+            foreach ($binary in @('uv.exe', 'uvx.exe', 'uvw.exe', 'uv-build.exe')) {
+              $path = Join-Path signed $binary
+              Copy-Item (Join-Path unsigned $binary) $path
+              # Match the macOS experiment: use the test certificate without timestamping.
+              & $signtool sign /fd SHA256 /f $certificatePath /p $env:CODESIGN_CERTIFICATE_PASSWORD $path
+              if ($LASTEXITCODE -ne 0) { throw "Signing failed: $binary" }
+              $signature = Get-AuthenticodeSignature $path
+              if ($null -eq $signature.SignerCertificate -or
+                  $signature.SignerCertificate.GetCertHashString([System.Security.Cryptography.HashAlgorithmName]::SHA256).ToLowerInvariant() -ne $certificateHash) {
+                throw "Signing certificate mismatch: $binary"
+              }
+              $manifest.signed[$binary] = @{
+                sha256 = (Get-FileHash $path -Algorithm SHA256).Hash.ToLowerInvariant()
+                size = (Get-Item $path).Length
+              }
+            }
+            $manifest | ConvertTo-Json -Depth 20 | Set-Content signed/manifest.json -Encoding utf8NoBOM
+            $digest = (Get-FileHash signed/manifest.json -Algorithm SHA256).Hash.ToLowerInvariant()
+            "manifest-sha256=$digest" >> $env:GITHUB_OUTPUT
+          } finally {
+            if ($null -ne $certificate) { $certificate.Dispose() }
+            Remove-Item $certificatePath -Force -ErrorAction SilentlyContinue
+          }
+
+      - name: "Upload signed executable wheel members"
+        id: upload
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: signed-windows-${{ github.run_id }}-${{ github.run_attempt }}-${{ env.TARGET }}
+          path: signed/*
+          if-no-files-found: error
+
+  assemble-windows:
+    name: "assemble signed Windows artifacts"
+    needs: [prepare-windows, sign-windows]
+    runs-on: depot-ubuntu-24.04-4
+    env:
+      TARGET: x86_64-pc-windows-msvc
+      ARTIFACT_SUFFIX: x86_64-pc-windows-msvc
+    outputs:
+      artifact: ${{ steps.upload.outputs.artifact-id }}
+      manifest-sha256: ${{ steps.assemble.outputs.manifest-sha256 }}
+    steps:
+      - name: "Download bound assembly inputs"
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          artifact-ids: ${{ needs.prepare-windows.outputs.assembly-artifact }}
+          merge-multiple: true
+
+      - name: "Download signed executable wheel members"
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          artifact-ids: ${{ needs.sign-windows.outputs.artifact }}
+          path: signed
+          merge-multiple: true
+
+      - name: "Assemble signed wheels and archive without a source checkout"
+        id: assemble
+        env:
+          TOOLING_SHA256: ${{ needs.prepare-windows.outputs.tooling-sha256 }}
+          INPUT_MANIFEST_SHA256: ${{ needs.prepare-windows.outputs.manifest-sha256 }}
+          SIGNED_MANIFEST_SHA256: ${{ needs.sign-windows.outputs.manifest-sha256 }}
+        run: |
+          set -euo pipefail
+          test "$(shasum -a 256 tooling.tar | cut -d ' ' -f 1)" = "$TOOLING_SHA256"
+          mkdir tools
+          tar xf tooling.tar -C tools
+          python3 tools/release_signing.py assemble
+
+      - name: "Upload signed Windows artifacts"
+        id: upload
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: signed-windows-artifacts-${{ github.run_id }}-${{ github.run_attempt }}-${{ env.TARGET }}
+          path: dist
+          if-no-files-found: error
+
+  verify-windows:
+    name: "verify signed Windows artifacts"
+    needs: [prepare-windows, sign-windows, assemble-windows]
+    runs-on: namespace-profile-windows-2022-x86-64-16x32
+    env:
+      TARGET: x86_64-pc-windows-msvc
+    steps:
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.13"
+
+      - name: "Download original bindings and independent verification tooling"
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          artifact-ids: ${{ needs.prepare-windows.outputs.assembly-artifact }}
+          merge-multiple: true
+
+      - name: "Download signer bindings"
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          artifact-ids: ${{ needs.sign-windows.outputs.artifact }}
+          path: signed
+          merge-multiple: true
+
+      - name: "Download completed artifacts"
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          artifact-ids: ${{ needs.assemble-windows.outputs.artifact }}
+          path: dist
+          merge-multiple: true
+
+      - name: "Independently verify final wheels, members and signatures"
+        shell: pwsh
+        env:
+          TOOLING_SHA256: ${{ needs.prepare-windows.outputs.tooling-sha256 }}
+          INPUT_MANIFEST_SHA256: ${{ needs.prepare-windows.outputs.manifest-sha256 }}
+          SIGNED_MANIFEST_SHA256: ${{ needs.sign-windows.outputs.manifest-sha256 }}
+          FINAL_MANIFEST_SHA256: ${{ needs.assemble-windows.outputs.manifest-sha256 }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if ((Get-FileHash tooling.tar -Algorithm SHA256).Hash -ne $env:TOOLING_SHA256) {
+            throw 'Tooling digest mismatch'
+          }
+          New-Item tools -ItemType Directory | Out-Null
+          tar xf tooling.tar -C tools
+          if ($LASTEXITCODE -ne 0) { throw 'Tooling extraction failed' }
+          python tools/release_signing.py verify
+          if ($LASTEXITCODE -ne 0) { throw 'Artifact verification failed' }
+
+          $signtool = Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\bin\*\x64\signtool.exe" |
+            Sort-Object FullName -Descending | Select-Object -First 1 -ExpandProperty FullName
+          if (-not $signtool) { throw 'signtool.exe not found in Windows SDK' }
+          $manifest = Get-Content signed/manifest.json -Raw | ConvertFrom-Json -AsHashtable
+          $directory = Join-Path $env:RUNNER_TEMP 'verified-binaries'
+          $certificatePath = Join-Path $env:RUNNER_TEMP 'codesign-test.cer'
+          try {
+            foreach ($binary in @('uv.exe', 'uvx.exe', 'uvw.exe', 'uv-build.exe')) {
+              $path = Join-Path $directory $binary
+              $signature = Get-AuthenticodeSignature $path
+              if ($null -eq $signature.SignerCertificate -or
+                  $signature.SignerCertificate.GetCertHashString([System.Security.Cryptography.HashAlgorithmName]::SHA256).ToLowerInvariant() -ne $manifest.certificate_sha256) {
+                throw "Signing certificate mismatch: $binary"
+              }
+              if ($null -eq $trusted) {
+                # Trust only the signer's bound public test certificate on this fresh runner.
+                [IO.File]::WriteAllBytes($certificatePath, $signature.SignerCertificate.RawData)
+                $trusted = Import-Certificate -FilePath $certificatePath -CertStoreLocation Cert:\CurrentUser\Root
+              }
+              & $signtool verify /pa /all /v $path
+              if ($LASTEXITCODE -ne 0) { throw "Signature verification failed: $binary" }
+            }
+          } finally {
+            if ($null -ne $trusted) { Remove-Item "Cert:\CurrentUser\Root\$($trusted.Thumbprint)" }
+            Remove-Item $certificatePath -Force -ErrorAction SilentlyContinue
+          }
+
+      - name: "Install and run the signed wheels"
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          python -m venv wheel-test
+          if ($LASTEXITCODE -ne 0) { throw 'Virtual environment creation failed' }
+          $wheels = Get-ChildItem dist/wheels/*.whl
+          & wheel-test/Scripts/python.exe -m pip install --no-index --no-deps $wheels.FullName
+          if ($LASTEXITCODE -ne 0) { throw 'Signed wheel installation failed' }
+          foreach ($binary in @('uv.exe', 'uvx.exe', 'uvw.exe', 'uv-build.exe')) {
+            $path = Join-Path wheel-test/Scripts $binary
+            $process = Start-Process -FilePath $path -ArgumentList '--version' -NoNewWindow -Wait -PassThru
+            if ($process.ExitCode -ne 0) { throw "Signed executable failed: $binary" }
+          }
