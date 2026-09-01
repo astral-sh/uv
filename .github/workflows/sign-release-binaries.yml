@@ -290,12 +290,9 @@ jobs:
           for target in aarch64-apple-darwin x86_64-pc-windows-msvc; do
             mkdir -p "dist/$target/wheels"
             for wheel in wheels/"$target"/*.whl; do
-              replacements=()
-              while IFS= read -r member; do
-                replacements+=(--replace "$member=signed/$target/${member##*/}")
-              done < <(unzip -Z1 "$wheel" '*.data/scripts/*')
-              ./uv-dev wheel-replace --input "$wheel" \
-                --output "dist/$target/wheels/${wheel##*/}" "${replacements[@]}"
+              ./uv-dev inject-signed-wheel-binaries --input "$wheel" \
+                --output "dist/$target/wheels/${wheel##*/}" \
+                --signed-binaries "signed/$target"
             done
           done
 
