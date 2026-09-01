@@ -7,6 +7,7 @@ on:
 permissions: {}
 
 env:
+  # Keep Azure CLI response metadata out of the workflow log.
   AZURE_CORE_OUTPUT: none
 
 jobs:
@@ -82,7 +83,7 @@ jobs:
           if-no-files-found: error
 
   sign-macos:
-    name: "sign macOS binaries"
+    name: "sign macos binaries"
     needs: prepare
     if: ${{ github.repository == 'astral-sh/uv' && github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' }}
     runs-on: ubuntu-24.04
@@ -128,7 +129,7 @@ jobs:
             test -n "${!variable}" || { echo "Missing signing configuration: $variable" >&2; exit 1; }
           done
 
-          # Download an approved tool without publishing provider diagnostics or resource locations.
+          # Download a signing tool from Azure Blob Storage.
           download_blob() {
             if ! az storage blob download --auth-mode login --only-show-errors \
               --account-name "$STORAGE_ACCOUNT" --container-name "$STORAGE_CONTAINER" \
@@ -177,7 +178,7 @@ jobs:
           if-no-files-found: error
 
   sign-windows:
-    name: "sign Windows binaries"
+    name: "sign windows binaries"
     needs: prepare
     if: ${{ github.repository == 'astral-sh/uv' && github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' }}
     runs-on: windows-2022
@@ -329,7 +330,7 @@ jobs:
           if-no-files-found: error
 
   verify-macos:
-    name: "verify signed macOS artifacts"
+    name: "verify signed macos artifacts"
     needs: [sign-macos, assemble]
     runs-on: namespace-profile-macos-15
     steps:
@@ -378,7 +379,7 @@ jobs:
           done
 
   verify-windows:
-    name: "verify signed Windows artifacts"
+    name: "verify signed windows artifacts"
     needs: [sign-windows, assemble]
     runs-on: namespace-profile-windows-2022-x86-64-16x32
     steps:
