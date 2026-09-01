@@ -81,12 +81,12 @@ fn workspace_metadata_simple() {
 
     // The lockfile hint retains the full command, including the workspace namespace.
     uv_snapshot!(context.filters(), context.workspace_metadata().current_dir(&workspace).arg("--frozen"), @r#"
-    exit_code: 2 (failure)
+    exit_code: 1 (failure)
     ----- stderr -----
     warning: The `uv workspace metadata` command is experimental and may change without warning. Pass `--preview-features workspace-metadata` to disable this warning.
     error: Unable to find lockfile at `uv.lock`, but `--frozen` was provided.
 
-    hint: Run `uv workspace metadata --no-frozen`.
+    hint: To create a lockfile, run `uv workspace metadata --no-frozen`.
     "#);
 
     uv_snapshot!(context.filters(), context.workspace_metadata().current_dir(&workspace), @r#"
