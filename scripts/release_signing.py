@@ -230,13 +230,13 @@ def prepare():
 
 
 def signed_manifest():
-    """Check that signing only added binary digests and a certificate identity."""
+    """Check that signing only added binary digests and their certificate identities."""
     source = load(Path("manifest.json"), os.environ["INPUT_MANIFEST_SHA256"])
     signed = load(Path("signed/manifest.json"), os.environ["SIGNED_MANIFEST_SHA256"])
     unsigned_fields = {
         key: value
         for key, value in signed.items()
-        if key not in ("signed", "certificate_sha256")
+        if key not in ("signed", "certificates")
     }
     require(unsigned_fields == source, "Signing changed the input manifest")
     require(
@@ -245,8 +245,12 @@ def signed_manifest():
         "Unexpected signed binaries",
     )
     require(
-        re.fullmatch(r"[0-9a-f]{64}", signed["certificate_sha256"]),
-        "Invalid signing certificate digest",
+        set(signed["certificates"]) == set(signed["signed"])
+        and all(
+            re.fullmatch(r"[0-9a-f]{64}", certificate)
+            for certificate in signed["certificates"].values()
+        ),
+        "Invalid signing certificate map",
     )
     return signed
 

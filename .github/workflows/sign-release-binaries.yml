@@ -163,8 +163,7 @@ jobs:
             digest=$(shasum -a 256 "signed/$binary" | cut -d ' ' -f 1)
             size=$(wc -c < "signed/$binary" | tr -d '[:space:]')
             jq --arg binary "$binary" --arg digest "$digest" --argjson size "$size" --arg certificate "$certificate_sha256" \
-              'if .certificate_sha256 != null and .certificate_sha256 != $certificate then error("signing certificate mismatch") else
-              .certificate_sha256 = $certificate | .signed[$binary] = {sha256: $digest, size: $size} end' \
+              '.certificates[$binary] = $certificate | .signed[$binary] = {sha256: $digest, size: $size}' \
               signed/manifest.json > signed/manifest.next
             mv signed/manifest.next signed/manifest.json
           done
@@ -257,8 +256,8 @@ jobs:
           mkdir tools
           tar xf tooling.tar -C tools
           python3 tools/release_signing.py verify
-          expected_certificate=$(jq -r .certificate_sha256 signed/manifest.json)
           for binary in uv uvx uv-build; do
+            expected_certificate=$(jq -r --arg binary "$binary" '.certificates[$binary]' signed/manifest.json)
             path="$RUNNER_TEMP/verified-binaries/$binary"
             codesign --verify --strict --verbose=4 "$path"
             details="$(codesign -dv --verbose=4 "$path" 2>&1)"
@@ -403,7 +402,7 @@ jobs:
               [System.Security.Cryptography.X509Certificates.X509KeyStorageFlags]::EphemeralKeySet)
             $certificateHash = $certificate.GetCertHashString([System.Security.Cryptography.HashAlgorithmName]::SHA256).ToLowerInvariant()
             $manifest = Get-Content unsigned/manifest.json -Raw | ConvertFrom-Json -AsHashtable
-            $manifest.certificate_sha256 = $certificateHash
+            $manifest.certificates = @{}
             $manifest.signed = @{}
             New-Item signed -ItemType Directory | Out-Null
             foreach ($binary in @('uv.exe', 'uvx.exe', 'uvw.exe', 'uv-build.exe')) {
@@ -417,6 +416,7 @@ jobs:
                   $signature.SignerCertificate.GetCertHashString([System.Security.Cryptography.HashAlgorithmName]::SHA256).ToLowerInvariant() -ne $certificateHash) {
                 throw "Signing certificate mismatch: $binary"
               }
+              $manifest.certificates[$binary] = $certificateHash
               $manifest.signed[$binary] = @{
                 sha256 = (Get-FileHash $path -Algorithm SHA256).Hash.ToLowerInvariant()
                 size = (Get-Item $path).Length
@@ -543,7 +543,7 @@ jobs:
               $path = Join-Path $directory $binary
               $signature = Get-AuthenticodeSignature $path
               if ($null -eq $signature.SignerCertificate -or
-                  $signature.SignerCertificate.GetCertHashString([System.Security.Cryptography.HashAlgorithmName]::SHA256).ToLowerInvariant() -ne $manifest.certificate_sha256) {
+                  $signature.SignerCertificate.GetCertHashString([System.Security.Cryptography.HashAlgorithmName]::SHA256).ToLowerInvariant() -ne $manifest.certificates[$binary]) {
                 throw "Signing certificate mismatch: $binary"
               }
               if ($null -eq $trusted) {

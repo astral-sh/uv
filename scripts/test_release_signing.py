@@ -108,12 +108,15 @@ class SigningBindings(unittest.TestCase):
         """Emulate signing by replacing executable bytes and binding their digests."""
         manifest = self.prepared()
         manifest["signed"] = {}
-        manifest["certificate_sha256"] = "c" * 64
+        manifest["certificates"] = {}
         Path("signed").mkdir()
         for item in manifest["wheels"]:
             for member, binary in item["replacements"].items():
                 data = b"signed " + member.encode()
                 (Path("signed") / binary).write_bytes(data)
+                manifest["certificates"][binary] = hashlib.sha256(
+                    binary.encode()
+                ).hexdigest()
                 manifest["signed"][binary] = {
                     "sha256": hashlib.sha256(data).hexdigest(),
                     "size": len(data),
@@ -164,6 +167,18 @@ class SigningBindings(unittest.TestCase):
             Path("signed/manifest.json")
         )
         with self.assertRaisesRegex(ValueError, "changed the input manifest"):
+            signing.signed_manifest()
+
+    def test_signed_certificates_cover_each_binary(self):
+        """Accept rotated certificates, but require a fingerprint for every binary."""
+        manifest = self.signed()
+        self.assertEqual(signing.signed_manifest(), manifest)
+        manifest["certificates"].pop(next(iter(manifest["certificates"])))
+        Path("signed/manifest.json").write_text(json.dumps(manifest))
+        os.environ["SIGNED_MANIFEST_SHA256"] = signing.file_digest(
+            Path("signed/manifest.json")
+        )
+        with self.assertRaisesRegex(ValueError, "Invalid signing certificate map"):
             signing.signed_manifest()
 
     def test_final_wheels_are_checked_against_signed_bytes(self):
