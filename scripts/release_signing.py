@@ -25,7 +25,7 @@ from check_uv_wheel_contents import check_uv_wheel, uv_build_expected, uv_expect
 TARGET = "aarch64-apple-darwin"
 TAG = "py3-none-macosx_11_0_arm64"
 BINARIES = {"uv": ["uv", "uvx"], "uv_build": ["uv-build"]}
-TOOLS = ("uv-dev", "macos_signing.py", "check_uv_wheel_contents.py")
+TOOLS = ("uv-dev", "release_signing.py", "check_uv_wheel_contents.py")
 
 
 def require(condition, message):

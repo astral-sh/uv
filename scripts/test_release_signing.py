@@ -13,7 +13,7 @@ from pathlib import Path
 from unittest.mock import patch
 from zipfile import ZIP_DEFLATED, ZipFile, ZipInfo
 
-import macos_signing as signing
+import release_signing as signing
 from check_uv_wheel_contents import uv_build_expected, uv_expected
 
 

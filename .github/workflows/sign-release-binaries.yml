@@ -26,10 +26,10 @@ jobs:
 
       - name: "Build assembly tooling without signing credentials"
         run: |
-          python3 -m unittest discover -s scripts -p test_macos_signing.py
+          python3 -m unittest discover -s scripts -p test_release_signing.py
           cargo build --locked --package uv-dev --features dev
           mkdir tools
-          cp target/debug/uv-dev scripts/macos_signing.py scripts/check_uv_wheel_contents.py tools/
+          cp target/debug/uv-dev scripts/release_signing.py scripts/check_uv_wheel_contents.py tools/
 
       - name: "Download unsigned wheels"
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
@@ -43,7 +43,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          python3 scripts/macos_signing.py prepare
+          python3 scripts/release_signing.py prepare
           tar cf tooling.tar -C tools .
           echo "tooling-sha256=$(shasum -a 256 tooling.tar | cut -d ' ' -f 1)" >> "$GITHUB_OUTPUT"
 
@@ -210,7 +210,7 @@ jobs:
           test "$(shasum -a 256 tooling.tar | cut -d ' ' -f 1)" = "$TOOLING_SHA256"
           mkdir tools
           tar xf tooling.tar -C tools
-          python3 tools/macos_signing.py assemble
+          python3 tools/release_signing.py assemble
 
       - name: "Upload signed macOS artifacts"
         id: upload
@@ -256,7 +256,7 @@ jobs:
           test "$(shasum -a 256 tooling.tar | cut -d ' ' -f 1)" = "$TOOLING_SHA256"
           mkdir tools
           tar xf tooling.tar -C tools
-          python3 tools/macos_signing.py verify
+          python3 tools/release_signing.py verify
           expected_certificate=$(jq -r .certificate_sha256 signed/manifest.json)
           for binary in uv uvx uv-build; do
             path="$RUNNER_TEMP/verified-binaries/$binary"
