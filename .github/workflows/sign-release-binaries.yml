@@ -181,7 +181,7 @@ jobs:
     name: "sign windows binaries"
     needs: prepare
     if: ${{ github.repository == 'astral-sh/uv' && github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' }}
-    runs-on: windows-2022
+    runs-on: windows-2025
     environment: release
     permissions:
       id-token: write
