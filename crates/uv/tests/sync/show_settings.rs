@@ -3784,6 +3784,7 @@ fn preview_features() {
     +            LockWithoutMetadata,
     +            TarCodec,
     +            IndexByName,
+    +            PythonShim,
     +        ],
          },
          python_preference: Managed,
