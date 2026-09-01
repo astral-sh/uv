@@ -35,7 +35,7 @@ use uv_errors::HintOrdering;
 use uv_fs::Simplified;
 use uv_git::store_credentials;
 use uv_install_operations::loggers::DefaultInstallLogger;
-use uv_lock_operations::{LockError, LockMode, LockOperation, LockTarget};
+use uv_lock_operations::{LockCommand, LockError, LockMode, LockOperation, LockTarget};
 use uv_normalize::{DEV_DEPENDENCIES, DefaultExtras, DefaultGroups, ExtraName, PackageName};
 use uv_pep508::{MarkerTree, VersionOrUrl};
 use uv_preview::Preview;
@@ -1128,6 +1128,7 @@ async fn lock_and_sync(
     };
     let mut lock = Box::pin(
         LockOperation::new(
+            LockCommand::Add,
             if let LockCheck::Enabled(lock_check) = lock_check {
                 LockMode::Locked(python_target.interpreter(), lock_check)
             } else if dry_run {
@@ -1258,6 +1259,7 @@ async fn lock_and_sync(
             // the addition of the minimum version specifiers.
             lock = Box::pin(
                 LockOperation::new(
+                    LockCommand::Add,
                     if let LockCheck::Enabled(lock_check) = lock_check {
                         LockMode::Locked(python_target.interpreter(), lock_check)
                     } else if dry_run {

@@ -16,7 +16,7 @@ use uv_environment_operations::{
 use uv_git_types::GitOid;
 use uv_lock::{Lock, Package};
 use uv_lock_operations::{
-    LockError, LockMode, LockOperation, LockResult, LockTarget, MissingLockfileSource,
+    LockCommand, LockError, LockMode, LockOperation, LockResult, LockTarget, MissingLockfileSource,
 };
 use uv_normalize::PackageName;
 use uv_pep440::Version;
@@ -162,6 +162,7 @@ pub async fn lock(
     // Perform the lock operation.
     match Box::pin(
         LockOperation::new(
+            LockCommand::Lock,
             mode,
             &settings,
             &client_builder,

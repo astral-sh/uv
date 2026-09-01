@@ -22,6 +22,8 @@ use uv_types::HashStrategyError;
 use uv_workspace::dependency_groups::DependencyGroupError;
 use uv_workspace::{DefaultGroupsError, WorkspaceError};
 
+use crate::LockCommand;
+
 /// The source of a missing lockfile error.
 #[derive(Debug, Clone, Copy)]
 pub enum MissingLockfileSource {
@@ -64,7 +66,7 @@ pub enum LockError {
     LockFormat(PathBuf, usize, LockedSource),
 
     #[error("Unable to find lockfile at `{1}`, but {0} was provided.")]
-    MissingLockfile(MissingLockfileSource, PathBuf),
+    MissingLockfile(MissingLockfileSource, PathBuf, LockCommand),
 
     #[error(
         "The lockfile at `uv.lock` needs to be updated, but {1} was provided: Missing workspace member `{0}`."
@@ -226,12 +228,12 @@ impl Hinted for LockError {
             Self::LockFormat(..) => Hints::from(
                 "To regenerate the lockfile, run `uv lock --refresh --preview-features lockfile-format-check`.",
             ),
-            Self::MissingLockfile(source, _) => match source {
+            Self::MissingLockfile(source, _, command) => match source {
                 MissingLockfileSource::Frozen(_) => {
-                    Hints::from("Run the command again with `--no-frozen`.")
+                    Hints::from(format!("Run `uv {command} --no-frozen`."))
                 }
                 MissingLockfileSource::Locked(_) => {
-                    Hints::from("Run the command again with `--no-locked`.")
+                    Hints::from(format!("Run `uv {command} --no-locked`."))
                 }
             },
             Self::OverlappingMarkers(_, rhs, replacement) => {
