@@ -27,7 +27,7 @@ use crate::commands::pip::loggers::{SummaryInstallLogger, SummaryResolveLogger};
 use crate::commands::pip::operations::Modifications;
 use crate::commands::project::environment::CachedEnvironment;
 use crate::commands::project::install_target::InstallTarget;
-use crate::commands::project::lock::LockMode;
+use crate::commands::project::lock::{LockCommand, LockMode};
 use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{
     LinkErrorReporting, ProjectEnvironment, ProjectEnvironmentPolicy, ProjectError,
@@ -406,6 +406,7 @@ pub(crate) async fn check(
         };
         let result = match Box::pin(
             project::lock::LockOperation::new(
+                LockCommand::Check,
                 mode,
                 &settings.resolver,
                 &client_builder,
@@ -581,6 +582,7 @@ pub(crate) async fn check(
 
         let result = match Box::pin(
             project::lock::LockOperation::new(
+                LockCommand::Check,
                 mode,
                 &settings.resolver,
                 &client_builder,
