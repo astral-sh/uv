@@ -14027,7 +14027,7 @@ fn lock_exclusion() -> Result<()> {
     ----- stderr -----
     error: Unable to find lockfile at `uv.lock`, but `--locked` was provided.
 
-    hint: Run `uv lock --no-locked`.
+    hint: To create a lockfile, run `uv lock --no-locked`.
     ");
 
     Ok(())
@@ -19644,7 +19644,7 @@ fn check_no_lock() -> Result<()> {
     ----- stderr -----
     error: Unable to find lockfile at `uv.lock`, but `--check` was provided.
 
-    hint: Run `uv lock --no-locked`.
+    hint: To create a lockfile, run `uv lock --no-locked`.
     ");
     Ok(())
 }
@@ -45053,7 +45053,7 @@ fn lock_frozen_errors_report_source() -> Result<()> {
     ----- stderr -----
     error: Unable to find lockfile at `uv.lock`, but `--frozen` was provided.
 
-    hint: Run `uv lock --no-frozen`.
+    hint: To create a lockfile, run `uv lock --no-frozen`.
     ");
 
     uv_snapshot!(context.filters(), context.lock().arg("--check-exists"), @"
@@ -45061,7 +45061,7 @@ fn lock_frozen_errors_report_source() -> Result<()> {
     ----- stderr -----
     error: Unable to find lockfile at `uv.lock`, but `--check-exists` was provided.
 
-    hint: Run `uv lock --no-frozen`.
+    hint: To create a lockfile, run `uv lock --no-frozen`.
     ");
 
     uv_snapshot!(context.filters(), context.lock().env(EnvVars::UV_FROZEN, "1"), @"
@@ -45069,7 +45069,7 @@ fn lock_frozen_errors_report_source() -> Result<()> {
     ----- stderr -----
     error: Unable to find lockfile at `uv.lock`, but `UV_FROZEN=1` was provided.
 
-    hint: Run `uv lock --no-frozen`.
+    hint: To create a lockfile, run `uv lock --no-frozen`.
     ");
 
     // The hint targets the active mode, even when its CLI flag masks the other environment setting.
@@ -45077,12 +45077,12 @@ fn lock_frozen_errors_report_source() -> Result<()> {
         .arg("--frozen")
         .env(EnvVars::UV_LOCKED, "1")
         .env(EnvVars::UV_FROZEN, "1"), @"
-    exit_code: 2 (failure)
+    exit_code: 1 (failure)
     ----- stderr -----
     warning: Ignoring `UV_LOCKED` because `--frozen` was provided
     error: Unable to find lockfile at `uv.lock`, but `--frozen` was provided.
 
-    hint: Run `uv lock --no-frozen`.
+    hint: To create a lockfile, run `uv lock --no-frozen`.
     ");
 
     // Disabling frozen mode exposes the independent locked setting and its corresponding hint.
@@ -45091,11 +45091,11 @@ fn lock_frozen_errors_report_source() -> Result<()> {
         .arg("--no-frozen")
         .env(EnvVars::UV_LOCKED, "1")
         .env(EnvVars::UV_FROZEN, "1"), @"
-    exit_code: 2 (failure)
+    exit_code: 1 (failure)
     ----- stderr -----
     error: Unable to find lockfile at `uv.lock`, but `UV_LOCKED=1` was provided.
 
-    hint: Run `uv lock --no-locked`.
+    hint: To create a lockfile, run `uv lock --no-locked`.
     ");
 
     // Applying both hints to the original command creates the missing lockfile.

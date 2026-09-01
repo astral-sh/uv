@@ -229,12 +229,12 @@ impl Hinted for LockError {
                 "To regenerate the lockfile, run `uv lock --refresh --preview-features lockfile-format-check`.",
             ),
             Self::MissingLockfile(source, _, command) => match source {
-                MissingLockfileSource::Frozen(_) => {
-                    Hints::from(format!("Run `uv {command} --no-frozen`."))
-                }
-                MissingLockfileSource::Locked(_) => {
-                    Hints::from(format!("Run `uv {command} --no-locked`."))
-                }
+                MissingLockfileSource::Frozen(_) => Hints::from(format!(
+                    "To create a lockfile, run `uv {command} --no-frozen`.",
+                )),
+                MissingLockfileSource::Locked(_) => Hints::from(format!(
+                    "To create a lockfile, run `uv {command} --no-locked`.",
+                )),
             },
             Self::OverlappingMarkers(_, rhs, replacement) => {
                 Hints::from(format!("replace `{rhs}` with `{replacement}`"))

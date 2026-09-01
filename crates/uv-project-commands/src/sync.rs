@@ -31,8 +31,8 @@ use uv_install_operations::loggers::DefaultInstallLogger;
 use uv_install_operations::report::{PackageChangesReport, SchemaReport};
 use uv_lock::{Installable, Lock, PythonReport};
 use uv_lock_operations::{
-    DiscoveredProject, FrozenWorkspace, LockCommand, LockError, LockMode, LockOperation, LockResult,
-    LockTarget, MissingLockfileSource,
+    DiscoveredProject, FrozenWorkspace, LockCommand, LockError, LockMode, LockOperation,
+    LockResult, LockTarget, MissingLockfileSource,
 };
 use uv_normalize::{DefaultExtras, DefaultGroups, PackageName};
 use uv_preview::{Preview, PreviewFeature};
