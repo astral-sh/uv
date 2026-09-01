@@ -17,7 +17,7 @@ use uv_redacted::SafeUrl;
 use uv_redacted::policy::{SerializationPolicy, Stripped};
 use uv_warnings::warn_user;
 
-use crate::{ExcludeNewerOverride, Index, IndexRoute, ProxyIndexConfigError, Verbatim};
+use crate::{ExcludeNewerOverride, Index, ProxyIndexConfigError, ProxyRoute, Verbatim};
 
 pub static PYPI_URL: LazyLock<SafeUrl> =
     LazyLock::new(|| SafeUrl::parse("https://pypi.org/simple").unwrap());
@@ -280,7 +280,7 @@ pub struct IndexLocations {
     indexes: Vec<Index>,
     flat_index: Vec<Index>,
     no_index: bool,
-    pub(crate) routes: Vec<IndexRoute>,
+    pub(crate) routes: Vec<Arc<ProxyRoute>>,
 }
 
 #[expect(
