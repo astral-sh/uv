@@ -37,6 +37,7 @@ struct Replacement {
 impl FromStr for Replacement {
     type Err = anyhow::Error;
 
+    /// Parse `MEMBER=PATH`, keeping any later `=` characters in the filesystem path.
     fn from_str(value: &str) -> Result<Self> {
         let Some((member, path)) = value.split_once('=') else {
             bail!("expected `MEMBER=PATH`, got `{value}`");
@@ -167,7 +168,9 @@ pub(crate) async fn wheel_replace(args: WheelReplaceArgs) -> Result<()> {
     Ok(())
 }
 
-/// Closing ZIP writes the central directory but does not flush the underlying buffered writer.
+/// Write the central directory and flush all buffered output before publishing the archive.
+///
+/// [`ZipFileWriter::close`] alone does not flush the underlying writer.
 async fn finish_archive<W: AsyncWrite + Unpin>(writer: ZipFileWriter<W>) -> Result<()> {
     let mut output = writer.close().await?;
     output
@@ -177,6 +180,9 @@ async fn finish_archive<W: AsyncWrite + Unpin>(writer: ZipFileWriter<W>) -> Resu
     Ok(())
 }
 
+/// Reject duplicate names, unsupported member types, and signatures; return the unique `RECORD` path.
+///
+/// This inspects ZIP metadata only; it does not read member contents or interpret names as paths.
 fn validate_archive(file: &ZipFile) -> Result<String> {
     let mut names = BTreeSet::new();
     let mut record = None;
@@ -203,6 +209,7 @@ fn validate_archive(file: &ZipFile) -> Result<String> {
     record.context("wheel does not contain a RECORD file")
 }
 
+/// Compare a fully consumed member's byte counts and CRC32 with its ZIP metadata.
 fn validate_zip_contents<R: futures::io::AsyncBufRead + Unpin>(
     reader: &mut async_zip::base::read::ZipEntryReader<'_, R, async_zip::base::read::WithEntry<'_>>,
     size: u64,
@@ -222,6 +229,7 @@ fn validate_zip_contents<R: futures::io::AsyncBufRead + Unpin>(
     Ok(())
 }
 
+/// Serialize file names, encoded SHA-256 hashes, and sizes, then append the empty `RECORD` self-row.
 fn write_record(record_path: &str, entries: Vec<(String, String, u64)>) -> Result<Vec<u8>> {
     let mut writer = csv::Writer::from_writer(Vec::new());
     for (path, hash, size) in entries {
@@ -232,6 +240,7 @@ fn write_record(record_path: &str, entries: Vec<(String, String, u64)>) -> Resul
     writer.into_inner().context("failed to finish RECORD")
 }
 
+/// Accept regular files and directories with matching Unix types, or an unspecified type.
 fn validate_member_type(name: &str, permissions: Option<u16>, directory: bool) -> Result<()> {
     let Some(permissions) = permissions else {
         return Ok(());
@@ -245,6 +254,7 @@ fn validate_member_type(name: &str, permissions: Option<u16>, directory: bool) -
     Ok(())
 }
 
+/// Copy bytes through a fixed-size buffer and return their unpadded URL-safe Base64 SHA-256 and size.
 async fn copy_hashed(
     reader: &mut (impl AsyncRead + Unpin),
     writer: &mut (impl AsyncWrite + Unpin),
@@ -284,6 +294,7 @@ mod tests {
         size: u64,
     }
 
+    /// Parse output `RECORD` rows, asserting unique names and an empty self-row omitted from the map.
     fn read_record(bytes: &[u8], record_path: &str) -> Result<BTreeMap<String, RecordEntry>> {
         let mut entries = BTreeMap::new();
         let mut record_seen = false;
@@ -308,6 +319,7 @@ mod tests {
         Ok(entries)
     }
 
+    /// Create an unsigned executable and metadata member with distinct Unix permissions.
     fn fixture_members() -> Vec<(ZipEntry, Vec<u8>)> {
         [
             (BINARY, b"unsigned".as_slice(), 0o100_755),
@@ -325,6 +337,7 @@ mod tests {
         .collect()
     }
 
+    /// Generate a fixture `RECORD` from file contents, excluding directory entries.
     fn fixture_record(members: &[(ZipEntry, Vec<u8>)]) -> Result<Vec<u8>> {
         write_record(
             RECORD,
@@ -342,6 +355,7 @@ mod tests {
         )
     }
 
+    /// Write members and a supplied or generated `RECORD`, with optional streaming headers or ZIP64.
     async fn fixture(
         path: &Path,
         members: Vec<(ZipEntry, Vec<u8>)>,
@@ -373,6 +387,7 @@ mod tests {
         finish_archive(writer).await
     }
 
+    /// Use conventional fixture paths and replace the executable with the `signed` file.
     fn args(directory: &Path) -> WheelReplaceArgs {
         WheelReplaceArgs {
             input: directory.join("input.whl"),
@@ -384,6 +399,7 @@ mod tests {
         }
     }
 
+    /// ZIP names retain Unicode and case distinctions without filesystem portability restrictions.
     #[tokio::test]
     async fn preserves_member_names() -> Result<()> {
         let directory = tempfile::tempdir()?;
@@ -426,6 +442,7 @@ mod tests {
         Ok(())
     }
 
+    /// Duplicate names, special files, nonempty directories, and signatures leave no output behind.
     #[tokio::test]
     async fn rejects_bad_members_and_cleans_up() -> Result<()> {
         for (name, mode, contents) in [
@@ -459,6 +476,7 @@ mod tests {
         Ok(())
     }
 
+    /// Each replacement must select one existing non-`RECORD` member exactly once.
     #[tokio::test]
     async fn rejects_unmatched_and_duplicate_replacements() -> Result<()> {
         for (names, expected) in [
@@ -494,9 +512,9 @@ mod tests {
         Ok(())
     }
 
+    /// A fresh `RECORD` describes the bytes written, regardless of the old CSV or hashes.
     #[tokio::test]
     async fn regenerates_record_without_reading_the_original() -> Result<()> {
-        // A fresh `RECORD` describes the bytes written, regardless of the old CSV or hashes.
         for record in [b"".as_slice(), b"stale,sha256=wrong,123", b"\xff"] {
             let directory = tempfile::tempdir()?;
             let args = args(directory.path());
@@ -530,6 +548,7 @@ mod tests {
         Ok(())
     }
 
+    /// Existing outputs stay untouched, even when repeating an identical successful transformation.
     #[tokio::test]
     async fn never_overwrites_existing_output() -> Result<()> {
         let directory = tempfile::tempdir()?;
@@ -555,6 +574,7 @@ mod tests {
         Ok(())
     }
 
+    /// Output symlinks and their targets stay untouched, including dangling symlinks.
     #[cfg(unix)]
     #[tokio::test]
     async fn refuses_output_symlinks() -> Result<()> {
@@ -587,6 +607,7 @@ mod tests {
     }
 
     impl Write for FailingWriter {
+        /// Inject a write failure when requested; otherwise discard the bytes successfully.
         fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
             if self.fail_write {
                 Err(io::Error::other("injected buffered write failure"))
@@ -594,11 +615,13 @@ mod tests {
                 Ok(bytes.len())
             }
         }
+        /// Always fail so the test can distinguish final flushing from ZIP closure.
         fn flush(&mut self) -> io::Result<()> {
             Err(io::Error::other("injected flush failure"))
         }
     }
 
+    /// Buffered write and flush failures must propagate before the temporary file is published.
     #[tokio::test]
     async fn propagates_final_buffered_failures_before_persistence() -> Result<()> {
         for fail_write in [true, false] {
@@ -629,13 +652,13 @@ mod tests {
         Ok(())
     }
 
+    /// Trusted build artifacts are not rejected merely for containing many members.
     #[tokio::test]
     async fn replaces_in_a_wheel_with_many_members() -> Result<()> {
         let directory = tempfile::tempdir()?;
         let args = args(directory.path());
         fs_err::write(&args.replacements[0].path, b"signed")?;
         let mut members = fixture_members();
-        // Wheel replacement must not impose an entry-count limit on trusted build artifacts.
         for index in 0..10_000 {
             members.push((
                 ZipEntryBuilder::new(format!("package/{index}.txt").into(), Compression::Stored)
@@ -656,6 +679,7 @@ mod tests {
         Ok(())
     }
 
+    /// Copying and hashing include the final partial buffer.
     #[tokio::test]
     async fn streams_across_buffer_boundaries() -> Result<()> {
         let bytes = vec![42; BUFFER_SIZE + 1];
@@ -668,6 +692,7 @@ mod tests {
         Ok(())
     }
 
+    /// Invalid copied CRC32 or size metadata is rejected, but discarded replacement data is ignored.
     #[tokio::test]
     async fn validates_only_copied_zip_contents() -> Result<()> {
         for (member_index, field, replacement) in [
@@ -702,6 +727,7 @@ mod tests {
         Ok(())
     }
 
+    /// Supported compression, streaming headers, and ZIP64 preserve member bytes and metadata.
     #[tokio::test]
     async fn preserves_declared_metadata_and_bytes() -> Result<()> {
         for (compression, streaming, zip64) in [
@@ -765,6 +791,7 @@ mod tests {
         Ok(())
     }
 
+    /// Rewriting intentionally discards unknown extra fields and emits Unix creator metadata.
     #[tokio::test]
     async fn drops_unknown_extras_and_normalizes_creator_host() -> Result<()> {
         let directory = tempfile::tempdir()?;
@@ -805,6 +832,7 @@ mod tests {
         Ok(())
     }
 
+    /// Multiple replacements produce the expected bytes, metadata, and `RECORD` entries together.
     #[tokio::test]
     async fn preserves_multiple_replacements() -> Result<()> {
         let directory = tempfile::tempdir()?;
@@ -858,6 +886,7 @@ mod tests {
         Ok(())
     }
 
+    /// Check output membership, metadata, hashes, sizes, and `RECORD` against fixture expectations.
     async fn verify_output(
         path: &Path,
         expected: &BTreeMap<String, (ZipEntry, String, u64)>,
@@ -918,6 +947,7 @@ mod tests {
         Ok(())
     }
 
+    /// Write a basic wheel fixture with the requested Unix file type and mode for its executable.
     async fn write_wheel(path: &Path, executable_mode: u16) -> Result<()> {
         fixture(
             path,
@@ -942,6 +972,7 @@ mod tests {
         .await
     }
 
+    /// Read an exact member name with CRC32 checking, returning its bytes, compression, and mode.
     async fn read_entry(path: &Path, name: &str) -> Result<(Vec<u8>, Compression, Option<u16>)> {
         let bytes = fs_err::read(path)?;
         let mut archive =
@@ -968,6 +999,7 @@ mod tests {
         Ok((bytes, compression, permissions))
     }
 
+    /// Replacing an executable preserves modes and untouched metadata while regenerating `RECORD`.
     #[tokio::test]
     async fn replaces_executable_and_regenerates_record() -> Result<()> {
         let temporary = tempfile::tempdir()?;
@@ -1010,6 +1042,7 @@ mod tests {
         Ok(())
     }
 
+    /// A symlink member cannot become a regular file merely because its contents are replaced.
     #[tokio::test]
     async fn rejects_a_symlink_member() -> Result<()> {
         let temporary = tempfile::tempdir()?;
@@ -1038,6 +1071,7 @@ mod tests {
         Ok(())
     }
 
+    /// Replacement arguments require a separator and nonempty member and path components.
     #[test]
     fn validates_replacement_arguments() {
         let valid = Replacement::from_str("uv-1.2.3.data/scripts/uv=/signed/uv")
