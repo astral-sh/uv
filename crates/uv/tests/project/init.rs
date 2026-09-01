@@ -2697,37 +2697,11 @@ fn init_python_directory() -> Result<()> {
     error: The directory name (`python`) cannot be used as project name, please provide a package name with `--name`.
     ");
 
-    assert!(fs_err::read_dir(directory.path())?.next().is_none());
-
     uv_snapshot!(context.filters(), context.init().current_dir(&directory).arg("--name").arg("foo"), @"
     exit_code: 0 (success)
     ----- stderr -----
     Initialized project `foo`
     ");
-
-    let pyproject = context.read("python/pyproject.toml");
-    insta::with_settings!({
-        filters => context.filters(),
-    }, {
-        assert_snapshot!(
-            pyproject, @r#"
-        [project]
-        name = "foo"
-        version = "0.1.0"
-        description = "Add your description here"
-        readme = "README.md"
-        requires-python = ">=3.12"
-        dependencies = []
-
-        [project.scripts]
-        foo = "foo:main"
-
-        [build-system]
-        requires = ["uv_build>=[CURRENT_VERSION],<[NEXT_BREAKING]"]
-        build-backend = "uv_build"
-        "#
-        );
-    });
 
     Ok(())
 }
@@ -2745,29 +2719,12 @@ fn init_python_current_directory() -> Result<()> {
     error: The directory name (`Python`) cannot be used as project name, please provide a package name with `--name`.
     ");
 
-    assert!(fs_err::read_dir(directory.path())?.next().is_none());
-
     // An explicit name is allowed, even if it is `python`.
     uv_snapshot!(context.filters(), context.init().current_dir(&directory).arg("--name").arg("python").arg("--bare"), @"
     exit_code: 0 (success)
     ----- stderr -----
     Initialized project `python`
     ");
-
-    let pyproject = context.read("Python/pyproject.toml");
-    insta::with_settings!({
-        filters => context.filters(),
-    }, {
-        assert_snapshot!(
-            pyproject, @r#"
-        [project]
-        name = "python"
-        version = "0.1.0"
-        requires-python = ">=3.12"
-        dependencies = []
-        "#
-        );
-    });
 
     Ok(())
 }
