@@ -625,12 +625,25 @@ pub(crate) enum LockCheck {
 /// The source of the frozen flag.
 #[derive(Debug, Clone, Copy)]
 pub(crate) enum FrozenSource {
-    /// A frozen-mode flag was provided on CLI, e.g., `--frozen` or `--check-exists`.
-    Cli(&'static str),
+    /// The `--frozen` flag was provided on CLI.
+    Cli,
     /// The `UV_FROZEN` environment variable was set.
     Env,
     /// The `frozen` option was set via workspace configuration.
     Configuration,
+    /// The `--check-exists` flag was provided on CLI.
+    CheckExists,
+}
+
+impl std::fmt::Display for FrozenSource {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Cli => write!(f, "--frozen"),
+            Self::Env => write!(f, "UV_FROZEN=1"),
+            Self::Configuration => write!(f, "frozen (workspace configuration)"),
+            Self::CheckExists => write!(f, "--check-exists"),
+        }
+    }
 }
 
 /// Resolve conflicting lock flags, letting CLI arguments override environment variables.
@@ -671,13 +684,14 @@ fn resolve_lock_flags(locked: Flag, frozen: Flag) -> anyhow::Result<(Flag, Flag)
 
 /// Convert a resolved flag to an optional frozen source.
 fn resolve_frozen(flag: Flag) -> Option<FrozenSource> {
-    match flag {
-        Flag::Disabled => None,
-        Flag::Enabled { source, name } => Some(match source {
-            FlagSource::Cli => FrozenSource::Cli(name),
-            FlagSource::Env(_) => FrozenSource::Env,
-            FlagSource::Config => FrozenSource::Configuration,
-        }),
+    if flag.is_enabled() {
+        Some(match flag.source() {
+            Some(FlagSource::Cli) | None => FrozenSource::Cli,
+            Some(FlagSource::Env(_)) => FrozenSource::Env,
+            Some(FlagSource::Config) => FrozenSource::Configuration,
+        })
+    } else {
+        None
     }
 }
 
@@ -2144,10 +2158,15 @@ impl LockSettings {
         } else {
             resolve_lock_check(locked)
         };
+        let frozen = if check_exists {
+            Some(FrozenSource::CheckExists)
+        } else {
+            resolve_frozen(frozen)
+        };
 
         Ok(Self {
             lock_check,
-            frozen: resolve_frozen(frozen),
+            frozen,
             dry_run: DryRun::from_args(dry_run),
             script,
             python: python.and_then(Maybe::into_option),

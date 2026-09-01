@@ -346,9 +346,9 @@ pub(crate) async fn run(
             }
             if let Some(frozen_source) = frozen {
                 match frozen_source {
-                    FrozenSource::Cli(name) => {
+                    FrozenSource::Cli | FrozenSource::CheckExists => {
                         bail!(
-                            "Unable to find lockfile for Python script, but `--{name}` was provided. To create a lockfile, run `{}`.",
+                            "Unable to find lockfile for Python script, but `{frozen_source}` was provided. To create a lockfile, run `{}`.",
                             "uv lock --script".green(),
                         );
                     }

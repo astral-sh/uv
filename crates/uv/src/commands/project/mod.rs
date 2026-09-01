@@ -89,8 +89,8 @@ pub(crate) mod version;
 /// The source of a missing lockfile error.
 #[derive(Debug, Clone, Copy)]
 pub(crate) enum MissingLockfileSource {
-    /// A frozen-mode flag was provided, e.g., `--frozen` or `--check-exists`.
-    Frozen(&'static str),
+    /// The `--frozen` flag was provided.
+    Frozen,
     /// The `UV_FROZEN` environment variable was set.
     FrozenEnv,
     /// The `frozen` option was set via workspace configuration.
@@ -103,18 +103,21 @@ pub(crate) enum MissingLockfileSource {
     LockedConfiguration,
     /// The `--check` flag was provided.
     Check,
+    /// The `--check-exists` flag was provided.
+    CheckExists,
 }
 
 impl std::fmt::Display for MissingLockfileSource {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Frozen(name) => write!(f, "`--{name}`"),
+            Self::Frozen => write!(f, "`--frozen`"),
             Self::FrozenEnv => write!(f, "`UV_FROZEN=1`"),
             Self::FrozenConfiguration => write!(f, "`frozen` (workspace configuration)"),
             Self::Locked => write!(f, "`--locked`"),
             Self::LockedEnv => write!(f, "`UV_LOCKED=1`"),
             Self::LockedConfiguration => write!(f, "`locked` (workspace configuration)"),
             Self::Check => write!(f, "`--check`"),
+            Self::CheckExists => write!(f, "`--check-exists`"),
         }
     }
 }
@@ -133,9 +136,10 @@ impl From<LockCheckSource> for MissingLockfileSource {
 impl From<FrozenSource> for MissingLockfileSource {
     fn from(source: FrozenSource) -> Self {
         match source {
-            FrozenSource::Cli(name) => Self::Frozen(name),
+            FrozenSource::Cli => Self::Frozen,
             FrozenSource::Env => Self::FrozenEnv,
             FrozenSource::Configuration => Self::FrozenConfiguration,
+            FrozenSource::CheckExists => Self::CheckExists,
         }
     }
 }
