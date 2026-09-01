@@ -772,8 +772,6 @@ impl<'lock> PylockToml {
 
         let mut physical = route.effective_url().url().clone();
         physical.remove_credentials();
-        physical.set_query(None);
-        physical.set_fragment(None);
 
         Err(ProxyIndexError::MissingHash {
             package: package.clone(),

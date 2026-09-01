@@ -16,7 +16,7 @@ use uv_pypi_types::HashAlgorithm;
 use uv_redacted::DisplaySafeUrl;
 use uv_warnings::warn_user;
 
-use crate::{ExcludeNewerOverride, Index, IndexRoute, ProxyIndexConfigError, Verbatim};
+use crate::{ExcludeNewerOverride, Index, ProxyIndexConfigError, ProxyRoute, Verbatim};
 
 pub static PYPI_URL: LazyLock<DisplaySafeUrl> =
     LazyLock::new(|| DisplaySafeUrl::parse("https://pypi.org/simple").unwrap());
@@ -284,7 +284,7 @@ pub struct IndexLocations {
     flat_index: Vec<Index>,
     no_index: bool,
     #[serde(skip)]
-    pub(crate) routes: Vec<IndexRoute>,
+    pub(crate) routes: Vec<Arc<ProxyRoute>>,
 }
 
 #[derive(serde::Deserialize)]

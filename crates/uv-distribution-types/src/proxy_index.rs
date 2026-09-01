@@ -185,10 +185,6 @@ impl IndexUrlPrefix {
     fn as_index_url(&self) -> &IndexUrl {
         &self.0
     }
-
-    fn into_index_url(self) -> IndexUrl {
-        self.0
-    }
 }
 
 /// An artifact URL prefix safe to use when constructing canonical lockfile URLs.
@@ -261,9 +257,12 @@ impl ArtifactUrlMapping {
     }
 }
 
-/// A proxy endpoint, its request policy, and its validated artifact URL mapping.
+/// A validated route from a canonical package index through a configured proxy.
+///
+/// Unlike [`IndexRoute`], this always has a proxy endpoint, artifact URL mapping, and request policy.
 #[derive(Debug, Clone, PartialEq, Eq)]
-struct ProxyRoute {
+pub struct ProxyRoute {
+    canonical: IndexUrlPrefix,
     url: IndexUrlPrefix,
     artifact_mapping: ArtifactUrlMapping,
     request_policy: IndexRequestPolicy,
@@ -271,15 +270,36 @@ struct ProxyRoute {
 
 impl ProxyRoute {
     fn new(
+        canonical: IndexUrlPrefix,
         url: IndexUrlPrefix,
         artifact_mapping: ArtifactUrlMapping,
         request_policy: IndexRequestPolicy,
     ) -> Self {
         Self {
+            canonical,
             url,
             artifact_mapping,
             request_policy,
         }
+    }
+
+    /// Return the proxy index URL used for requests, authentication, and caches.
+    pub fn effective_url(&self) -> &IndexUrl {
+        self.url.as_index_url()
+    }
+
+    /// Translate a canonical artifact URL to its configured proxy URL.
+    pub fn artifact_url_for_request(
+        &self,
+        canonical_url: &CanonicalArtifactUrl,
+    ) -> Result<DisplaySafeUrl, ProxyIndexError> {
+        self.artifact_mapping.to_proxy(canonical_url)
+    }
+
+    fn canonicalize_file(&self, file: File) -> Result<RegistryFile, ProxyIndexError> {
+        let effective_url = file.url.to_url()?;
+        let canonical_url = self.artifact_mapping.to_canonical(&effective_url)?;
+        Ok(file.map_url(|_| CanonicalArtifactUrl::from_url(canonical_url)))
     }
 }
 
@@ -319,34 +339,10 @@ pub struct IndexRoute {
 }
 
 impl IndexRoute {
-    /// Return the index URL used for requests, authentication, and caches.
-    ///
-    /// This is the configured proxy URL, or the canonical URL when no proxy is configured.
-    pub fn effective_url(&self) -> &IndexUrl {
-        self.proxy
-            .as_ref()
-            .map_or(&self.canonical, |proxy| proxy.url.as_index_url())
-    }
-
     /// Return whether this index is routed through a configured proxy.
     #[cfg(test)]
     fn is_proxy(&self) -> bool {
         self.proxy.is_some()
-    }
-
-    /// Return the artifact URL to use for requests.
-    ///
-    /// This translates the canonical artifact URL through the configured proxy, or returns it
-    /// unchanged when no proxy is configured.
-    pub fn artifact_url_for_request(
-        &self,
-        canonical_url: &CanonicalArtifactUrl,
-    ) -> Result<DisplaySafeUrl, ProxyIndexError> {
-        if let Some(proxy) = &self.proxy {
-            proxy.artifact_mapping.to_proxy(canonical_url)
-        } else {
-            Ok(canonical_url.to_url()?)
-        }
     }
 
     /// Resolve a Simple API file into the canonical namespace used for identity and persistence.
@@ -355,9 +351,7 @@ impl IndexRoute {
     /// translation. The returned file cannot be confused with unresolved response metadata.
     pub fn canonicalize_file(&self, file: File) -> Result<RegistryFile, ProxyIndexError> {
         if let Some(proxy) = &self.proxy {
-            let effective_url = file.url.to_url()?;
-            let canonical_url = proxy.artifact_mapping.to_canonical(&effective_url)?;
-            Ok(file.map_url(|_| CanonicalArtifactUrl::from_url(canonical_url)))
+            proxy.canonicalize_file(file)
         } else {
             Ok(file.map_url(CanonicalArtifactUrl::from_location))
         }
@@ -365,14 +359,18 @@ impl IndexRoute {
 }
 
 impl IndexLocations {
-    /// Borrow the configured proxy route for a canonical index, if any.
+    /// Borrow the configured [`ProxyRoute`] for a canonical index, if any.
     ///
     /// The route contains the configured canonical URL, which may differ from `index` in spelling
     /// or credentials. Use [`Self::route_for`] to retain an owned route with the caller's URL.
-    pub fn proxy_route_for(&self, index: &IndexUrl) -> Option<&IndexRoute> {
+    pub fn proxy_route_for(&self, index: &IndexUrl) -> Option<&ProxyRoute> {
+        self.find_proxy_route(index).map(AsRef::as_ref)
+    }
+
+    fn find_proxy_route(&self, index: &IndexUrl) -> Option<&Arc<ProxyRoute>> {
         self.routes
             .iter()
-            .find(|route| route.canonical.is_same_index(index))
+            .find(|route| route.canonical.as_index_url().is_same_index(index))
     }
 
     /// Return an owned route that preserves the caller's canonical index URL.
@@ -381,16 +379,14 @@ impl IndexLocations {
     pub fn route_for(&self, index: &IndexUrl) -> IndexRoute {
         IndexRoute {
             canonical: index.clone(),
-            proxy: self
-                .proxy_route_for(index)
-                .and_then(|route| route.proxy.clone()),
+            proxy: self.find_proxy_route(index).cloned(),
         }
     }
 
     /// Return the configured proxy URL, or the caller's URL for a direct index.
     pub fn effective_url<'a>(&'a self, index: &'a IndexUrl) -> &'a IndexUrl {
         self.proxy_route_for(index)
-            .map_or(index, IndexRoute::effective_url)
+            .map_or(index, ProxyRoute::effective_url)
     }
 
     /// Return the status code strategy of the proxy, or of the direct index when no proxy is set.
@@ -437,26 +433,24 @@ impl IndexLocations {
     }
 
     fn proxy_request_policy(&self, index: &IndexUrl) -> Option<&IndexRequestPolicy> {
-        self.proxy_route_for(index)?
-            .proxy
-            .as_ref()
+        self.proxy_route_for(index)
             .map(|proxy| &proxy.request_policy)
     }
 
     /// Iterate over the configured proxy routes.
-    pub fn proxy_routes(&self) -> impl Iterator<Item = &IndexRoute> {
-        self.routes.iter()
+    pub fn proxy_routes(&self) -> impl Iterator<Item = &ProxyRoute> {
+        self.routes.iter().map(AsRef::as_ref)
     }
 }
 
 pub(crate) fn build_routes(
     locations: &IndexLocations,
-) -> Result<Vec<IndexRoute>, ProxyIndexConfigError> {
+) -> Result<Vec<Arc<ProxyRoute>>, ProxyIndexConfigError> {
     let mut indexes_by_name: FxHashMap<_, _> = locations
         .configured_indexes()
         .filter_map(|index| index.name.as_ref().map(|name| (name, index.raw_url())))
         .collect();
-    let mut routes: Vec<IndexRoute> = Vec::new();
+    let mut routes: Vec<Arc<ProxyRoute>> = Vec::new();
 
     for proxy in locations.proxy_indexes() {
         let Some(canonical_name) = &proxy.proxy_for else {
@@ -476,10 +470,12 @@ pub(crate) fn build_routes(
             }
         })?;
 
-        if let Some(route) = routes
-            .iter()
-            .find(|route| route.canonical.is_same_index(canonical.url()))
-        {
+        if let Some(route) = routes.iter().find(|route| {
+            route
+                .canonical
+                .as_index_url()
+                .is_same_index(canonical.url())
+        }) {
             return Err(ProxyIndexConfigError::DuplicateCanonicalIndex {
                 index: Box::new(canonical.url.url().clone()),
                 first_proxy: Box::new(route.effective_url().url().clone()),
@@ -510,13 +506,12 @@ pub(crate) fn build_routes(
         let proxy_artifact_base = UrlPrefix::new(proxy_artifact_base)?;
         let artifact_mapping =
             ArtifactUrlMapping::new(canonical_artifact_base, proxy_artifact_base);
-        let proxy_route =
-            ProxyRoute::new(proxy_url, artifact_mapping, IndexRequestPolicy::from(proxy));
-
-        routes.push(IndexRoute {
-            canonical: canonical_url.into_index_url(),
-            proxy: Some(Arc::new(proxy_route)),
-        });
+        routes.push(Arc::new(ProxyRoute::new(
+            canonical_url,
+            proxy_url,
+            artifact_mapping,
+            IndexRequestPolicy::from(proxy),
+        )));
     }
 
     Ok(routes)
@@ -619,15 +614,17 @@ mod tests {
 
         assert!(route.is_proxy());
         assert_eq!(route.canonical, canonical);
-        assert_eq!(
-            route.effective_url(),
-            &index_url("https://proxy.example.com/simple/")?
-        );
         let borrowed = locations
             .proxy_route_for(&canonical)
             .ok_or("missing proxy route")?;
-        assert_eq!(borrowed.effective_url(), route.effective_url());
-        assert_eq!(borrowed.canonical, index_url("https://pypi.org/simple")?);
+        assert_eq!(
+            borrowed.effective_url(),
+            &index_url("https://proxy.example.com/simple/")?
+        );
+        assert_eq!(
+            borrowed.canonical.as_index_url(),
+            &index_url("https://pypi.org/simple")?
+        );
         assert_eq!(locations.proxy_routes().count(), 1);
         Ok(())
     }
@@ -737,11 +734,9 @@ mod tests {
         assert_eq!(locations.effective_url(&flat), &flat);
         assert!(!route.is_proxy());
         assert_eq!(route.canonical, flat);
-        assert_eq!(route.effective_url(), &flat);
         let artifact = url("https://flat.example.com/packages/package.whl?download=1#sha256=abc")?;
         let file = route.canonicalize_file(response_file(artifact.clone()))?;
-        assert_eq!(file.url.to_url()?, artifact.clone());
-        assert_eq!(route.artifact_url_for_request(&file.url)?, artifact);
+        assert_eq!(file.url.to_url()?, artifact);
         Ok(())
     }
 
@@ -810,8 +805,14 @@ mod tests {
             .ok_or("missing proxy route")?;
         let canonical_artifact = url("https://artifacts.example.com/distributions/package.whl")?;
 
-        assert_eq!(route.canonical.url().username(), "canonical-user");
-        assert_eq!(route.canonical.url().password(), Some("canonical-secret"));
+        assert_eq!(
+            route.canonical.as_index_url().url().username(),
+            "canonical-user"
+        );
+        assert_eq!(
+            route.canonical.as_index_url().url().password(),
+            Some("canonical-secret")
+        );
         let canonical_artifact = as_canonical(canonical_artifact);
         assert_eq!(
             route.artifact_url_for_request(&canonical_artifact)?,

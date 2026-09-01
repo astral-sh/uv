@@ -1067,8 +1067,6 @@ impl Lock {
             {
                 let mut physical = route.effective_url().url().clone();
                 physical.remove_credentials();
-                physical.set_query(None);
-                physical.set_fragment(None);
 
                 return Err(ProxyIndexError::MissingHash {
                     package: package.id.name.clone(),
