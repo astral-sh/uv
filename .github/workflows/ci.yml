@@ -150,6 +150,9 @@ jobs:
     if: ${{ github.repository == 'astral-sh/uv' && github.event.pull_request.head.repo.fork != true && needs.plan.outputs.build-release-binaries == 'true' }}
     uses: $/.github/workflows/sign-release-binaries.yml
     secrets: inherit
+    permissions:
+      contents: read
+      id-token: write
 
   build-docker:
     needs: plan
