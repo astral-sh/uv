@@ -29,7 +29,7 @@ use crate::commands::pip::operations::Modifications;
 use crate::commands::project::add::{AddTarget, PythonTarget};
 use crate::commands::project::edit::ProjectEdit;
 use crate::commands::project::install_target::InstallTarget;
-use crate::commands::project::lock::LockMode;
+use crate::commands::project::lock::{LockCommand, LockMode};
 use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{
     LinkErrorReporting, ProjectEnvironment, ProjectEnvironmentPolicy, ProjectError,
@@ -333,6 +333,7 @@ pub(crate) async fn remove(
     // Lock and sync the environment, if necessary.
     let lock = match Box::pin(
         project::lock::LockOperation::new(
+            LockCommand::Remove,
             mode,
             &settings.resolver,
             &client_builder,
