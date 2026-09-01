@@ -1,0 +1,23 @@
+# Rehearse remote signing without publishing a release or changing the release pipeline.
+name: "Test production signing"
+
+on:
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  build:
+    if: ${{ github.repository == 'astral-sh/uv' && github.ref == 'refs/heads/main' }}
+    uses: $/.github/workflows/build-release-binaries.yml
+    permissions:
+      contents: read
+
+  sign:
+    needs: build
+    uses: $/.github/workflows/sign-release-binaries.yml
+    with:
+      production: true
+    permissions:
+      contents: read
+      id-token: write

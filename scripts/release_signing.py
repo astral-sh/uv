@@ -1,4 +1,4 @@
-"""Bind this test workflow's artifacts; wheel rewriting remains in `uv-dev wheel-replace`.
+"""Bind the release signing workflow's artifacts; wheel rewriting remains in `uv-dev wheel-replace`.
 
 Manifests are integrity bindings carried by job outputs, not signatures or attestations. A retry
 must rerun preparation: artifacts from a different run attempt are deliberately rejected. This
