@@ -169,7 +169,7 @@ const RESERVED_SCRIPT_NAMES_WARN: &[&str; 2] = &["activate", "activate_this.py"]
 
 /// Return the reserved interpreter name if a script would overwrite a Python executable.
 ///
-/// The caller must lowercase the name before checking.
+/// Expects a lowercase string.
 pub fn reserved_script_name(name: &str) -> Option<&str> {
     let normalized_name = name.strip_suffix(".py").unwrap_or(name);
     (RESERVED_SCRIPT_NAMES_ERROR.contains(&normalized_name)

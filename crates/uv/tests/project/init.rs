@@ -2685,28 +2685,6 @@ fn init_unmanaged() -> Result<()> {
 }
 
 #[test]
-fn init_python_directory() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
-
-    let directory = context.temp_dir.child("python");
-    directory.create_dir_all()?;
-
-    uv_snapshot!(context.filters(), context.init().current_dir(&directory), @"
-    exit_code: 2 (failure)
-    ----- stderr -----
-    error: The directory name (`python`) cannot be used as project name, please provide a package name with `--name`.
-    ");
-
-    uv_snapshot!(context.filters(), context.init().current_dir(&directory).arg("--name").arg("foo"), @"
-    exit_code: 0 (success)
-    ----- stderr -----
-    Initialized project `foo`
-    ");
-
-    Ok(())
-}
-
-#[test]
 fn init_python_current_directory() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
