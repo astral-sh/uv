@@ -97,14 +97,8 @@ pub(crate) enum MissingLockfileSource {
 impl std::fmt::Display for MissingLockfileSource {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Frozen(source) => match source {
-                FrozenSource::Cli(_) | FrozenSource::Env => write!(f, "`{source}`"),
-                FrozenSource::Configuration => write!(f, "`frozen` (workspace configuration)"),
-            },
-            Self::Locked(source) => match source {
-                LockedSource::Cli(_) | LockedSource::Env => write!(f, "`{source}`"),
-                LockedSource::Configuration => write!(f, "`locked` (workspace configuration)"),
-            },
+            Self::Frozen(source) => write!(f, "`{source}`"),
+            Self::Locked(source) => write!(f, "`{source}`"),
         }
     }
 }

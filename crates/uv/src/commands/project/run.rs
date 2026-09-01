@@ -326,7 +326,7 @@ pub(crate) async fn run(
             Some(environment.into_interpreter())
         } else {
             // If no lockfile is found, error for `--locked` and `--frozen` when provided
-            // via CLI. For environment variables and configuration, warn instead to avoid
+            // via CLI. For environment variables, warn instead to avoid
             // breaking users who set `UV_LOCKED=1` globally.
             if let LockCheck::Enabled(lock_check) = lock_check {
                 match lock_check {
@@ -336,7 +336,7 @@ pub(crate) async fn run(
                             "uv lock --script".green(),
                         );
                     }
-                    LockedSource::Env | LockedSource::Configuration => {
+                    LockedSource::Env => {
                         warn_user!(
                             "No lockfile found for Python script (ignoring `{lock_check}`); run `{}` to generate a lockfile",
                             "uv lock --script".green(),
@@ -352,7 +352,7 @@ pub(crate) async fn run(
                             "uv lock --script".green(),
                         );
                     }
-                    FrozenSource::Env | FrozenSource::Configuration => {
+                    FrozenSource::Env => {
                         warn_user!(
                             "No lockfile found for Python script (ignoring `--frozen`); run `{}` to generate a lockfile",
                             "uv lock --script".green(),
