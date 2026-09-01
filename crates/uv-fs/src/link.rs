@@ -1,12 +1,10 @@
 //! Utilities for linking a file or directory with various options and automated fallback (e.g., to
 //! copying) when link methods are unsupported.
 
-use std::ffi::OsStr;
 use std::io;
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex, RwLock};
+use std::sync::{Arc, Mutex};
 
-use either::Either;
 use rustc_hash::FxHashMap;
 use tracing::debug;
 use uv_warnings::warn_user_once;
@@ -90,7 +88,7 @@ where
             )
             .into());
         }
-        return link_dir_entries(src, dst, options.mode, true, options);
+        return link_dir_entries(src, dst, options);
     }
     match options.mode {
         LinkMode::Clone => clone_dir(src, dst, options),
@@ -112,58 +110,15 @@ where
 #[derive(Debug, Default)]
 pub struct CopyLocks {
     dir_locks: Mutex<FxHashMap<PathBuf, Arc<Mutex<()>>>>,
-    directory_parents: Mutex<FxHashMap<PathBuf, Arc<DirectoryParent>>>,
     directory_locks: Mutex<FxHashMap<PathBuf, Arc<Mutex<()>>>>,
 }
 
-/// A stable directory identity shared by its canonical path and any scheme aliases.
-#[derive(Debug)]
-struct DirectoryParent {
-    path: PathBuf,
-    gate: RwLock<()>,
-}
-
 impl CopyLocks {
-    /// Cache canonical parent identities so scheme aliases share the same publication gate.
-    fn directory_parent(&self, path: &Path) -> io::Result<Arc<DirectoryParent>> {
-        let path = std::path::absolute(if path.as_os_str().is_empty() {
-            Path::new(".")
-        } else {
-            path
-        })?;
-        if let Some(parent) = self
-            .directory_parents
-            .lock()
-            .map_err(|err| io::Error::other(err.to_string()))?
-            .get(&path)
-        {
-            return Ok(parent.clone());
-        }
-
-        let canonical = fs_err::canonicalize(&path)?;
-        let mut parents = self
-            .directory_parents
-            .lock()
-            .map_err(|err| io::Error::other(err.to_string()))?;
-        let parent = parents
-            .entry(canonical.clone())
-            .or_insert_with(|| {
-                Arc::new(DirectoryParent {
-                    path: canonical,
-                    gate: RwLock::new(()),
-                })
-            })
-            .clone();
-        parents.insert(path, parent.clone());
-        Ok(parent)
-    }
-
-    /// Serialize directory creation and expansion against other directory and file writers.
+    /// Serialize top-level directory creation and expansion with writes to sibling entries.
     ///
-    /// Resolve aliases in the parent without following the final directory link. The parent must
-    /// exist and retain its canonical identity for the lifetime of these locks. ASCII case variants
-    /// share an entry lock; non-ASCII names lock the whole parent to cover filesystem-specific aliases.
-    /// Acquire ancestors before descendants, and do not lock sibling entries from `operation`.
+    /// Lock the canonical parent so scheme aliases and case-insensitive names share a lock.
+    /// Release it before installing files beneath a real directory: real directories never become
+    /// links, and expanding a directory link leaves no directory links below it.
     pub fn with_directory_lock<T, E>(
         &self,
         path: &Path,
@@ -172,46 +127,17 @@ impl CopyLocks {
     where
         E: From<io::Error>,
     {
-        let (path, parent_lock) = if let Some(parent) = path.parent()
-            && let Some(name) = path.file_name()
-        {
-            let parent = self.directory_parent(parent)?;
-            (parent.path.join(name), Some(parent))
+        let parent = path.parent().unwrap_or(path);
+        let parent = fs_err::canonicalize(if parent.as_os_str().is_empty() {
+            Path::new(".")
         } else {
-            let path = fs_err::canonicalize(path)?;
-            let parent = path
-                .parent()
-                .map(|parent| self.directory_parent(parent))
-                .transpose()?;
-            (path, parent)
-        };
-
-        let _parent_guard = if let Some(lock) = &parent_lock {
-            Some(if path.file_name().is_some_and(OsStr::is_ascii) {
-                Either::Left(
-                    lock.gate
-                        .read()
-                        .map_err(|err| io::Error::other(err.to_string()))?,
-                )
-            } else {
-                Either::Right(
-                    lock.gate
-                        .write()
-                        .map_err(|err| io::Error::other(err.to_string()))?,
-                )
-            })
-        } else {
-            None
-        };
-        let path = path.file_name().map_or_else(
-            || path.clone(),
-            |name| path.with_file_name(name.to_ascii_lowercase()),
-        );
+            parent
+        })?;
         let lock = self
             .directory_locks
             .lock()
             .map_err(|err| io::Error::other(err.to_string()))?
-            .entry(path)
+            .entry(parent)
             .or_default()
             .clone();
         let _guard = lock
@@ -220,13 +146,9 @@ impl CopyLocks {
         operation()
     }
 
-    /// Publish a file while excluding directory transitions at the same destination.
+    /// Publish a file without replacing a package directory during expansion.
     ///
-    /// Materialize package links in the parent path first, then keep its canonical identity stable
-    /// for the lifetime of these locks. Targets that resolve to directories are rejected.
-    /// Share the directory entry lock so sibling files can be written while a package tree is being
-    /// installed. Non-ASCII names still acquire the parent lock exclusively to cover aliases.
-    /// Prepare temporary contents beforehand; `operation` must not lock another entry in this parent.
+    /// Prepare its parent first, so it remains a real directory throughout publication.
     pub fn with_file_write<T, E>(
         &self,
         path: &Path,
@@ -279,7 +201,7 @@ pub struct LinkOptions<'a, F = fn(&Path) -> bool> {
     copy_locks: Option<&'a CopyLocks>,
     /// What to do when the destination directory already exists.
     on_existing_directory: OnExistingDirectory,
-    /// Allow directories to be symlinked, expanding existing links only where merging is needed.
+    /// Allow top-level directories to be symlinked, fully expanding shared directory links.
     directory_symlinks: bool,
 }
 
@@ -340,14 +262,14 @@ impl<'a, F> LinkOptions<'a, F> {
         self
     }
 
-    /// Symlink untouched directories in [`LinkMode::Symlink`], expanding shared links in any mode.
+    /// Symlink top-level directories in [`LinkMode::Symlink`], fully expanding shared links in any mode.
     ///
     /// The mutable-copy filter must select every top-level directory containing mutable files:
     /// eligible directories are linked without inspecting their contents. Source trees must not
     /// contain directory symlinks.
     ///
     /// Concurrent overlapping writers must share [`CopyLocks`] and a destination root, and prepare
-    /// ancestor directories before writing below them. Fresh subtrees rely on that ancestor lock.
+    /// package directories before writing below them. Shared directories use ordinary per-file linking.
     #[must_use]
     pub fn with_directory_symlinks(mut self) -> Self {
         self.directory_symlinks = true;
@@ -366,25 +288,6 @@ impl<'a, F> LinkOptions<'a, F> {
             Ok(())
         }
     }
-
-    /// Guard file publication when directory links may be present at the destination.
-    fn with_file_write<T, E>(
-        &self,
-        path: &Path,
-        operation: impl FnOnce() -> Result<T, E>,
-    ) -> Result<T, E>
-    where
-        E: From<io::Error>,
-    {
-        if !self.directory_symlinks {
-            return operation();
-        }
-        if let Some(locks) = self.copy_locks {
-            return locks.with_file_write(path, operation);
-        }
-        check_file_destination(path)?;
-        operation()
-    }
 }
 
 /// Reject directory destinations, following links so file publication cannot hide a package tree.
@@ -400,34 +303,27 @@ fn check_file_destination(path: &Path) -> io::Result<()> {
     }
 }
 
-/// Merge shared directories one level at a time, leaving untouched subtrees linked.
-///
-/// `directory_symlinks` carries mutable-ancestor exclusions; the options still protect file writes
-/// in subtrees that must use real directories.
+/// Symlink top-level directories, using ordinary per-file linking for shared directories.
 fn link_dir_entries<F>(
     src: &Path,
     dst: &Path,
-    mode: LinkMode,
-    directory_symlinks: bool,
     options: &LinkOptions<'_, F>,
 ) -> Result<LinkMode, LinkError>
 where
     F: Fn(&Path) -> bool,
 {
     fs_err::create_dir_all(dst)?;
-    let mut state = LinkState::new(mode);
+    let mut state = LinkState::new(options.mode);
     for entry in fs_err::read_dir(src)? {
         let entry = entry?;
         let path = entry.path();
         let target = dst.join(entry.file_name());
-        if !entry.file_type()?.is_dir() {
-            state = link_file(&path, &target, state, options)?;
-            continue;
-        }
-
-        let directory_symlinks = directory_symlinks && !(options.needs_mutable_copy)(&path);
         let operation = || {
-            if state.mode == LinkMode::Symlink && directory_symlinks {
+            if !entry.file_type()?.is_dir() {
+                check_file_destination(&target)?;
+                return link_file(&path, &target, state, options).map(|state| Some(state.mode));
+            }
+            if state.mode == LinkMode::Symlink && !(options.needs_mutable_copy)(&path) {
                 match create_symlink(&path, &target) {
                     Ok(()) => return Ok(Some(LinkMode::Symlink)),
                     Err(err) if err.kind() == io::ErrorKind::AlreadyExists => {
@@ -446,50 +342,31 @@ where
                     ),
                 }
             }
-
-            match fs_err::symlink_metadata(&target) {
-                Ok(_) => {
-                    materialize_symlink_dir(&target)?;
-                    return Ok(None);
-                }
-                Err(err) if err.kind() == io::ErrorKind::NotFound => {}
-                Err(err) => return Err(err.into()),
-            }
-
-            // The ancestor lock reserves this new subtree until the bulk install finishes.
-            // Wheel contents are regular files and directories, and other installers must
-            // prepare this ancestor before writing below it, so per-file guards are redundant.
-            let subtree_options = LinkOptions {
-                mode: options.mode,
-                needs_mutable_copy: &options.needs_mutable_copy,
-                copy_locks: options.copy_locks,
-                on_existing_directory: options.on_existing_directory,
-                directory_symlinks: options.directory_symlinks && options.copy_locks.is_none(),
-            };
-            match state.mode {
-                LinkMode::Clone => clone_dir(&path, &target, &subtree_options),
-                mode => walk_and_link(&path, &target, mode, &subtree_options),
-            }
-            .map(Some)
+            materialize_symlink_dir(&target)?;
+            fs_err::create_dir_all(&target)?;
+            Ok(None)
         };
         let mode = if let Some(locks) = options.copy_locks {
             locks.with_directory_lock(&target, operation)?
         } else {
             operation()?
         };
-        // A real directory stays real throughout installation. Release its lock before descending
-        // so wheels sharing a namespace can install independent children concurrently.
+        // Once the destination is a real directory, concurrent installers can safely merge files
+        // using the existing linker. No directory links are created beneath this point.
         state = LinkState::new(match mode {
             Some(mode) => mode,
-            None => link_dir_entries(&path, &target, state.mode, directory_symlinks, options)?,
+            None => match state.mode {
+                LinkMode::Clone => clone_dir(&path, &target, options)?,
+                mode => walk_and_link(&path, &target, mode, options)?,
+            },
         });
     }
     Ok(state.mode)
 }
 
-/// Replace a directory symlink with a real directory linking its immediate children.
+/// Replace a directory symlink with real directories and symlinks to individual files.
 ///
-/// Child directories stay linked until they need merging. Missing paths and non-links are unchanged.
+/// Missing paths and non-links are unchanged. The expanded directory never becomes a link again.
 /// If writes can overlap, hold [`CopyLocks::with_directory_lock`] for `path` throughout this call and
 /// use [`CopyLocks::with_file_write`] for competing file writes. Replacing the link briefly removes
 /// its name before publishing the expanded directory.
@@ -508,7 +385,7 @@ pub fn materialize_symlink_dir(path: &Path) -> Result<(), LinkError> {
     link_dir(
         &source,
         temporary.path(),
-        &LinkOptions::new(LinkMode::Symlink).with_directory_symlinks(),
+        &LinkOptions::new(LinkMode::Symlink),
     )?;
     crate::remove_symlink(path)?;
     if let Err(err) = fs_err::rename(temporary.path(), path) {
@@ -769,11 +646,9 @@ fn reflink_file_with_fallback<F>(
 where
     F: Fn(&Path) -> bool,
 {
-    let result = options.with_file_write(target, || reflink_with_permissions(path, target));
     match state.attempt {
-        LinkAttempt::Initial => match result {
+        LinkAttempt::Initial => match reflink_with_permissions(path, target) {
             Ok(()) => Ok(state.mode_working()),
-            Err(err) if err.kind() == io::ErrorKind::IsADirectory => Err(err.into()),
             Err(err) if err.kind() == io::ErrorKind::AlreadyExists => {
                 if options.on_existing_directory == OnExistingDirectory::Merge {
                     // File exists, overwrite atomically via temp file
@@ -781,7 +656,7 @@ where
                     let tempdir = tempfile::tempdir_in(parent)?;
                     let tempfile = tempdir.path().join(target.file_name().unwrap());
                     if reflink_with_permissions(path, &tempfile).is_ok() {
-                        options.with_file_write(target, || fs_err::rename(&tempfile, target))?;
+                        fs_err::rename(&tempfile, target)?;
                         Ok(state.mode_working())
                     } else {
                         debug!(
@@ -808,9 +683,8 @@ where
                 link_file(path, target, state.next_mode(), options)
             }
         },
-        LinkAttempt::Subsequent => match result {
+        LinkAttempt::Subsequent => match reflink_with_permissions(path, target) {
             Ok(()) => Ok(state),
-            Err(err) if err.kind() == io::ErrorKind::IsADirectory => Err(err.into()),
             Err(err) if err.kind() == io::ErrorKind::AlreadyExists => {
                 if options.on_existing_directory == OnExistingDirectory::Merge {
                     let parent = target.parent().unwrap();
@@ -823,7 +697,7 @@ where
                             err,
                         }
                     })?;
-                    options.with_file_write(target, || fs_err::rename(&tempfile, target))?;
+                    fs_err::rename(&tempfile, target)?;
                     Ok(state)
                 } else {
                     Err(LinkError::Reflink {
@@ -878,7 +752,11 @@ where
 
 /// Clone a directory by merging into an existing destination.
 #[cfg(target_os = "macos")]
-fn clone_dir_merge<F>(src: &Path, dst: &Path, options: &LinkOptions<'_, F>) -> Result<(), LinkError>
+fn clone_dir_merge<F>(
+    src: &Path,
+    dst: &Path,
+    _options: &LinkOptions<'_, F>,
+) -> Result<(), LinkError>
 where
     F: Fn(&Path) -> bool,
 {
@@ -892,7 +770,7 @@ where
             match reflink_copy::reflink(&src_path, &dst_path) {
                 Ok(()) => {}
                 Err(err) if err.kind() == io::ErrorKind::AlreadyExists => {
-                    clone_dir_merge(&src_path, &dst_path, options)?;
+                    clone_dir_merge(&src_path, &dst_path, _options)?;
                 }
                 Err(err) => {
                     return Err(LinkError::Reflink {
@@ -904,10 +782,8 @@ where
             }
         } else {
             // Try to clone the file
-            match options.with_file_write(&dst_path, || reflink_copy::reflink(&src_path, &dst_path))
-            {
+            match reflink_copy::reflink(&src_path, &dst_path) {
                 Ok(()) => {}
-                Err(err) if err.kind() == io::ErrorKind::IsADirectory => return Err(err.into()),
                 Err(err) if err.kind() == io::ErrorKind::AlreadyExists => {
                     // File exists, overwrite atomically via temp file
                     let tempdir = tempfile::tempdir_in(dst)?;
@@ -919,7 +795,7 @@ where
                             err,
                         }
                     })?;
-                    options.with_file_write(&dst_path, || fs_err::rename(&tempfile, &dst_path))?;
+                    fs_err::rename(&tempfile, &dst_path)?;
                 }
                 Err(err) => {
                     return Err(LinkError::Reflink {
@@ -956,32 +832,44 @@ where
         return Ok(state);
     }
 
-    match try_hardlink_file(path, target, |from, to| {
-        options.with_file_write(to, || fs_err::hard_link(from, to))
-    }) {
-        Ok(()) => Ok(state.mode_working()),
-        Err(err) if err.kind() == io::ErrorKind::IsADirectory => Err(err.into()),
-        Err(err)
-            if err.kind() == io::ErrorKind::AlreadyExists
-                && options.on_existing_directory == OnExistingDirectory::Merge =>
-        {
-            atomic_hardlink_overwrite(path, target, state, options)
+    match state.attempt {
+        LinkAttempt::Initial => {
+            if let Err(err) = try_hardlink_file(path, target) {
+                if err.kind() == io::ErrorKind::AlreadyExists
+                    && options.on_existing_directory == OnExistingDirectory::Merge
+                {
+                    atomic_hardlink_overwrite(path, target, state, options)
+                } else {
+                    debug!(
+                        "Failed to hard link `{}` to `{}`: {}; falling back to copy",
+                        path.display(),
+                        target.display(),
+                        err
+                    );
+                    warn_user_once!(
+                        "Failed to hardlink files; falling back to full copy. This may lead to degraded performance.\n         \
+                        If the cache and target directories are on different filesystems, hardlinking may not be supported.\n         \
+                        If this is intentional, set `export UV_LINK_MODE=copy` or use `--link-mode=copy` to suppress this warning."
+                    );
+                    link_file(path, target, state.next_mode(), options)
+                }
+            } else {
+                Ok(state.mode_working())
+            }
         }
-        Err(err) if state.attempt == LinkAttempt::Initial => {
-            debug!(
-                "Failed to hard link `{}` to `{}`: {}; falling back to copy",
-                path.display(),
-                target.display(),
-                err
-            );
-            warn_user_once!(
-                "Failed to hardlink files; falling back to full copy. This may lead to degraded performance.\n         \
-                If the cache and target directories are on different filesystems, hardlinking may not be supported.\n         \
-                If this is intentional, set `export UV_LINK_MODE=copy` or use `--link-mode=copy` to suppress this warning."
-            );
-            link_file(path, target, state.next_mode(), options)
+        LinkAttempt::Subsequent => {
+            if let Err(err) = try_hardlink_file(path, target) {
+                if err.kind() == io::ErrorKind::AlreadyExists
+                    && options.on_existing_directory == OnExistingDirectory::Merge
+                {
+                    atomic_hardlink_overwrite(path, target, state, options)
+                } else {
+                    Err(LinkError::Io(err))
+                }
+            } else {
+                Ok(state)
+            }
         }
-        Err(err) => Err(LinkError::Io(err)),
     }
 }
 
@@ -1007,34 +895,48 @@ where
         return Ok(state);
     }
 
-    match options.with_file_write(target, || create_symlink(path, target)) {
-        Ok(()) => Ok(state.mode_working()),
-        Err(err) if err.kind() == io::ErrorKind::IsADirectory => Err(err.into()),
-        Err(err)
-            if err.kind() == io::ErrorKind::AlreadyExists
-                && options.on_existing_directory == OnExistingDirectory::Merge =>
-        {
-            atomic_symlink_overwrite(path, target, state, options)
+    match state.attempt {
+        LinkAttempt::Initial => {
+            if let Err(err) = create_symlink(path, target) {
+                if err.kind() == io::ErrorKind::AlreadyExists
+                    && options.on_existing_directory == OnExistingDirectory::Merge
+                {
+                    atomic_symlink_overwrite(path, target, state, options)
+                } else {
+                    debug!(
+                        "Failed to symlink `{}` to `{}`: {}; falling back to copy",
+                        path.display(),
+                        target.display(),
+                        err
+                    );
+                    warn_user_once!(
+                        "Failed to symlink files; falling back to full copy. This may lead to degraded performance.\n         \
+                        If the cache and target directories are on different filesystems, symlinking may not be supported.\n         \
+                        If this is intentional, set `export UV_LINK_MODE=copy` or use `--link-mode=copy` to suppress this warning."
+                    );
+                    link_file(path, target, state.next_mode(), options)
+                }
+            } else {
+                Ok(state.mode_working())
+            }
         }
-        Err(err) if state.attempt == LinkAttempt::Initial => {
-            debug!(
-                "Failed to symlink `{}` to `{}`: {}; falling back to copy",
-                path.display(),
-                target.display(),
-                err
-            );
-            warn_user_once!(
-                "Failed to symlink files; falling back to full copy. This may lead to degraded performance.\n         \
-                If the cache and target directories are on different filesystems, symlinking may not be supported.\n         \
-                If this is intentional, set `export UV_LINK_MODE=copy` or use `--link-mode=copy` to suppress this warning."
-            );
-            link_file(path, target, state.next_mode(), options)
+        LinkAttempt::Subsequent => {
+            if let Err(err) = create_symlink(path, target) {
+                if err.kind() == io::ErrorKind::AlreadyExists
+                    && options.on_existing_directory == OnExistingDirectory::Merge
+                {
+                    atomic_symlink_overwrite(path, target, state, options)
+                } else {
+                    Err(LinkError::Symlink {
+                        from: path.to_path_buf(),
+                        to: target.to_path_buf(),
+                        err,
+                    })
+                }
+            } else {
+                Ok(state)
+            }
         }
-        Err(err) => Err(LinkError::Symlink {
-            from: path.to_path_buf(),
-            to: target.to_path_buf(),
-            err,
-        }),
     }
 }
 
@@ -1043,25 +945,18 @@ fn copy_file<F>(path: &Path, target: &Path, options: &LinkOptions<'_, F>) -> Res
 where
     F: Fn(&Path) -> bool,
 {
-    options.with_file_write(target, || {
-        options
-            .copy_file(path, target)
-            .map_err(|err| LinkError::Copy {
-                to: target.to_path_buf(),
-                err,
-            })
-    })
+    options
+        .copy_file(path, target)
+        .map_err(|err| LinkError::Copy {
+            to: target.to_path_buf(),
+            err,
+        })
 }
 
 /// Try to create a hard link, handling `TooManyLinks` (EMLINK/`ERROR_TOO_MANY_LINKS`)
 /// by copying the source to a fresh inode and retrying.
-/// The callback lets callers guard link creation without holding the guard while copying.
-fn try_hardlink_file(
-    src: &Path,
-    dst: &Path,
-    link: impl Fn(&Path, &Path) -> io::Result<()>,
-) -> io::Result<()> {
-    match link(src, dst) {
+fn try_hardlink_file(src: &Path, dst: &Path) -> io::Result<()> {
+    match fs_err::hard_link(src, dst) {
         Ok(()) => Ok(()),
         Err(err) if err.kind() == io::ErrorKind::TooManyLinks => {
             debug!(
@@ -1078,7 +973,7 @@ fn try_hardlink_file(
             fs_err::copy(src, temp.path())?;
             // Linking a copy before renaming avoids the unlikely race where another process could
             // exhaust the fresh inode's links between the rename and our link.
-            link(temp.path(), dst)?;
+            fs_err::hard_link(temp.path(), dst)?;
             fs_err::rename(temp.path(), src)?;
             Ok(())
         }
@@ -1102,8 +997,8 @@ where
     let tempdir = tempfile::tempdir_in(parent)?;
     let tempfile = tempdir.path().join(dst.file_name().unwrap());
 
-    if try_hardlink_file(src, &tempfile, |from, to| fs_err::hard_link(from, to)).is_ok() {
-        options.with_file_write(dst, || fs_err::rename(&tempfile, dst))?;
+    if try_hardlink_file(src, &tempfile).is_ok() {
+        fs_err::rename(&tempfile, dst)?;
         Ok(state.mode_working())
     } else {
         debug!(
@@ -1142,7 +1037,7 @@ where
             to: tempfile.clone(),
             err,
         })?;
-    options.with_file_write(dst, || fs_err::rename(&tempfile, dst))?;
+    fs_err::rename(&tempfile, dst)?;
     Ok(())
 }
 
@@ -1163,7 +1058,7 @@ where
     let tempfile = tempdir.path().join(dst.file_name().unwrap());
 
     if create_symlink(src, &tempfile).is_ok() {
-        options.with_file_write(dst, || fs_err::rename(&tempfile, dst))?;
+        fs_err::rename(&tempfile, dst)?;
         Ok(state.mode_working())
     } else {
         debug!(
@@ -1201,9 +1096,6 @@ fn create_symlink(original: &Path, link: &Path) -> io::Result<()> {
 #[expect(clippy::print_stderr)]
 mod tests {
     use std::assert_matches;
-    use std::sync::mpsc;
-    use std::thread;
-    use std::time::Duration;
 
     use super::*;
     use tempfile::TempDir;
@@ -1323,172 +1215,6 @@ mod tests {
         // If symlink succeeded, verify files are symlinks
         if result == LinkMode::Symlink {
             assert!(dst_dir.path().join("file1.txt").is_symlink());
-        }
-    }
-
-    #[test]
-    #[cfg(unix)]
-    fn test_directory_symlinks_fail_preserves_existing() {
-        let src_dir = test_tempdir();
-        let existing_dir = test_tempdir();
-        let dst_dir = test_tempdir();
-
-        fs_err::create_dir_all(src_dir.path().join("package")).unwrap();
-        fs_err::write(src_dir.path().join("package/new.txt"), "new").unwrap();
-        fs_err::write(existing_dir.path().join("existing.txt"), "existing").unwrap();
-        create_symlink(existing_dir.path(), &dst_dir.path().join("package")).unwrap();
-
-        let options = LinkOptions::new(LinkMode::Symlink)
-            .with_directory_symlinks()
-            .with_on_existing_directory(OnExistingDirectory::Fail);
-        let result = link_dir(src_dir.path(), dst_dir.path(), &options);
-
-        assert_matches!(result, Err(LinkError::Symlink { err, .. }) if err.kind() == io::ErrorKind::AlreadyExists);
-        assert_eq!(
-            fs_err::read_link(dst_dir.path().join("package")).unwrap(),
-            existing_dir.path()
-        );
-        assert!(!existing_dir.path().join("new.txt").exists());
-    }
-
-    #[test]
-    #[cfg(unix)]
-    fn test_directory_symlinks_reject_files_without_locks() -> io::Result<()> {
-        let src_dir = test_tempdir();
-        let existing_dir = test_tempdir();
-        let dst_dir = test_tempdir();
-
-        fs_err::write(src_dir.path().join("package"), "new file")?;
-        fs_err::write(existing_dir.path().join("existing.txt"), "existing")?;
-        create_symlink(existing_dir.path(), &dst_dir.path().join("package"))?;
-
-        for mode in [
-            LinkMode::Clone,
-            LinkMode::Copy,
-            LinkMode::Hardlink,
-            LinkMode::Symlink,
-        ] {
-            let options = LinkOptions::new(mode)
-                .with_directory_symlinks()
-                .with_on_existing_directory(OnExistingDirectory::Merge);
-            let result = link_dir(src_dir.path(), dst_dir.path(), &options);
-
-            assert_matches!(result, Err(LinkError::Io(err)) if err.kind() == io::ErrorKind::IsADirectory);
-            assert_eq!(
-                fs_err::read_link(dst_dir.path().join("package"))?,
-                existing_dir.path()
-            );
-        }
-        assert_eq!(
-            fs_err::read_to_string(existing_dir.path().join("existing.txt"))?,
-            "existing"
-        );
-        Ok(())
-    }
-
-    #[test]
-    fn test_shared_namespace_entries_install_concurrently() -> Result<(), LinkError> {
-        let sources = [test_tempdir(), test_tempdir(), test_tempdir()];
-        let destination = test_tempdir();
-        let locks = CopyLocks::default();
-        let files = [
-            "shared/child_0/file.txt",
-            "shared/child_1/file.txt",
-            "shared/file.txt",
-        ];
-
-        fs_err::create_dir_all(destination.path().join("shared"))?;
-        for (source, file) in sources.iter().zip(files) {
-            let path = source.path().join(file);
-            if let Some(parent) = path.parent() {
-                fs_err::create_dir_all(parent)?;
-            }
-            fs_err::write(path, "content")?;
-        }
-
-        let (entered_sender, entered_receiver) = mpsc::channel();
-        let all_entered = thread::scope(|scope| -> Result<bool, LinkError> {
-            let mut releases = Vec::new();
-            let mut handles = Vec::new();
-            let mut directories_entered = false;
-            for (index, source) in sources.iter().enumerate() {
-                if index == 2 {
-                    directories_entered = (0..2).all(|_| {
-                        entered_receiver
-                            .recv_timeout(Duration::from_secs(10))
-                            .is_ok()
-                    });
-                }
-                let entered_sender = entered_sender.clone();
-                let (release_sender, release_receiver) = mpsc::channel::<()>();
-                releases.push(release_sender);
-                let destination = destination.path();
-                let locks = &locks;
-                handles.push(scope.spawn(move || {
-                    let options = LinkOptions::new(LinkMode::Hardlink)
-                        .with_directory_symlinks()
-                        .with_copy_locks(locks)
-                        .with_on_existing_directory(OnExistingDirectory::Merge)
-                        .with_mutable_copy_filter(|path| {
-                            if index < 2 && path.ends_with("file.txt") {
-                                let _ = entered_sender.send(());
-                                let _ = release_receiver.recv();
-                            }
-                            false
-                        });
-                    let result = link_dir(source.path(), destination, &options);
-                    if index == 2 {
-                        let _ = entered_sender.send(());
-                    }
-                    result
-                }));
-            }
-
-            // Both directories must enter and the sibling file must finish before either directory
-            // is released. Always release before joining, even if a parent lock blocked progress.
-            let all_entered = directories_entered
-                && entered_receiver
-                    .recv_timeout(Duration::from_secs(10))
-                    .is_ok();
-            drop(releases);
-            for handle in handles {
-                handle
-                    .join()
-                    .map_err(|_| io::Error::other("Namespace installation thread panicked"))??;
-            }
-            Ok(all_entered)
-        })?;
-
-        assert!(all_entered, "Shared namespace serialized disjoint entries");
-        for file in files {
-            assert_eq!(
-                fs_err::read_to_string(destination.path().join(file))?,
-                "content"
-            );
-        }
-        Ok(())
-    }
-
-    #[test]
-    #[cfg(unix)]
-    fn test_directory_symlinks_onto_self() {
-        let src_dir = test_tempdir();
-        let aliases = test_tempdir();
-
-        create_test_tree(src_dir.path());
-        let alias = aliases.path().join("source");
-        create_symlink(src_dir.path(), &alias).unwrap();
-
-        let options = LinkOptions::new(LinkMode::Symlink)
-            .with_directory_symlinks()
-            .with_on_existing_directory(OnExistingDirectory::Merge);
-        for target in [src_dir.path(), alias.as_path()] {
-            let result = link_dir(src_dir.path(), target, &options);
-
-            assert_matches!(result, Err(LinkError::Io(err)) if err.kind() == io::ErrorKind::InvalidInput);
-            assert!(!src_dir.path().join("file1.txt").is_symlink());
-            assert!(!src_dir.path().join("subdir").is_symlink());
-            verify_test_tree(src_dir.path());
         }
     }
 
