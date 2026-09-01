@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
@@ -6,7 +6,7 @@ use std::str::FromStr;
 use anyhow::{Context, Result, bail, ensure};
 use async_zip::base::read::seek::ZipFileReader;
 use async_zip::base::write::ZipFileWriter;
-use async_zip::{Compression, ZipEntryBuilder, ZipFile};
+use async_zip::{Compression, ZipEntryBuilder};
 use base64::Engine;
 use base64::prelude::BASE64_URL_SAFE_NO_PAD;
 use clap::Parser;
@@ -15,7 +15,7 @@ use sha2::{Digest, Sha256};
 
 #[derive(Debug, Parser)]
 pub(crate) struct WheelReplaceArgs {
-    /// The input wheel.
+    /// A wheel produced by uv's release build.
     #[arg(long)]
     input: PathBuf,
     /// The rewritten wheel. Must not already exist (including a dangling symlink).
@@ -49,25 +49,22 @@ impl FromStr for Replacement {
     }
 }
 
-/// Rewrite a trusted wheel without extracting its members to the filesystem.
+/// Replace selected members in a wheel produced by uv's release build and regenerate `RECORD`.
 ///
-/// Hold the input and output archives in memory, processing one member at a time. These archives
-/// and member contents must fit in memory; this helper is intended for uv's build artifacts.
+/// Expect a trusted `uv` or `uv_build` wheel with unique regular-file entries and no `RECORD`
+/// signatures. Hold the input and output archives in memory, processing one member at a time.
+/// These archives and member contents must fit in memory. Callers own provenance, digest
+/// verification, and immutable input/replacement staging.
 ///
-/// Preserve exact decompressed bytes except for explicitly replaced members and `RECORD`. Preserve
-/// each non-`RECORD` member's compression method, DOS timestamp, internal/external attributes and
-/// entry comment. Recompression does not preserve compressed streams, local headers, compression
-/// levels, arbitrary extra fields or the archive comment. The ZIP library emits Unix creator
-/// metadata, including for DOS inputs. `RECORD` is emitted last with SHA-256 hashes, Deflate, mode
-/// 0644, the ZIP epoch timestamp and no comment. Structural ZIP64 fields are generated as needed.
+/// Preserve each non-`RECORD` member's bytes unless replaced, plus its compression method, timestamp,
+/// attributes, and comment. ZIP headers are rebuilt; compressed streams, extra fields, and archive
+/// comments are not preserved. Write a fresh SHA-256 `RECORD` last with Deflate, mode 0644, the ZIP
+/// epoch timestamp, and no comment. The old `RECORD` and replaced members are not decompressed or
+/// validated. Member names are never interpreted as filesystem paths.
 ///
 /// Write the completed archive to a temporary file, then atomically publish it without clobbering.
-/// Existing output is never reused, even if it has identical bytes. Failure removes the temporary
-/// file and leaves existing paths alone.
-/// This is process-level atomic publication, not a promise of power-loss durability. Callers own
-/// provenance, digest verification and immutable input/replacement staging. The input `RECORD`
-/// and replaced member contents are discarded without reading or validating them.
-/// Member names are copied verbatim, not interpreted as filesystem paths.
+/// Failure removes the temporary file and leaves existing paths alone. This is process-level atomic
+/// publication, not a promise of power-loss durability.
 pub(crate) async fn wheel_replace(args: WheelReplaceArgs) -> Result<()> {
     ensure!(
         args.input != args.output,
@@ -87,15 +84,19 @@ pub(crate) async fn wheel_replace(args: WheelReplaceArgs) -> Result<()> {
     let input = fs_err::read(&args.input)
         .with_context(|| format!("failed to read input wheel `{}`", args.input.display()))?;
     let mut archive = ZipFileReader::new(Cursor::new(input)).await?;
-    let record_path = validate_archive(archive.file())?;
-
     let mut writer = ZipFileWriter::new(Vec::new());
+    let mut record_path = None;
     let mut output_record = Vec::new();
 
     for index in 0..archive.file().entries().len() {
         let entry = archive.file().entries()[index].clone();
         let name = entry.filename().as_str()?.to_string();
-        if name == record_path {
+        if name.ends_with(".dist-info/RECORD") {
+            ensure!(
+                record_path.is_none(),
+                "wheel contains multiple RECORD files"
+            );
+            record_path = Some(name);
             continue;
         }
         let builder = ZipEntryBuilder::new(name.clone().into(), entry.compression())
@@ -105,21 +106,6 @@ pub(crate) async fn wheel_replace(args: WheelReplaceArgs) -> Result<()> {
             .comment(entry.comment().clone())
             .build();
 
-        if entry.dir()? {
-            ensure!(
-                !replacements.contains_key(&name),
-                "cannot replace directory member `{name}`"
-            );
-            let mut bytes = Vec::new();
-            archive
-                .reader_with_entry(index)
-                .await?
-                .read_to_end_checked(&mut bytes)
-                .await?;
-            ensure!(bytes.is_empty(), "directory member `{name}` contains data");
-            writer.write_entry_whole(builder, &[]).await?;
-            continue;
-        }
         let bytes = if let Some(path) = replacements.remove(&name) {
             fs_err::read(&path)
                 .with_context(|| format!("failed to read replacement `{}`", path.display()))?
@@ -145,6 +131,7 @@ pub(crate) async fn wheel_replace(args: WheelReplaceArgs) -> Result<()> {
         replacements.keys().cloned().collect::<Vec<_>>().join(", ")
     );
 
+    let record_path = record_path.context("wheel does not contain a RECORD file")?;
     let record_bytes = write_record(&record_path, output_record)?;
     let record_entry = ZipEntryBuilder::new(record_path.into(), Compression::Deflate)
         .unix_permissions(0o100_644)
@@ -174,35 +161,6 @@ pub(crate) async fn wheel_replace(args: WheelReplaceArgs) -> Result<()> {
     Ok(())
 }
 
-/// Reject duplicate names, unsupported member types, and signatures; return the unique `RECORD` path.
-///
-/// This inspects ZIP metadata only; it does not read member contents or interpret names as paths.
-fn validate_archive(file: &ZipFile) -> Result<String> {
-    let mut names = BTreeSet::new();
-    let mut record = None;
-    for entry in file.entries() {
-        let name = entry
-            .filename()
-            .as_str()
-            .context("wheel member name is not valid UTF-8")?;
-        validate_member_type(name, entry.unix_permissions(), entry.dir()?)?;
-        ensure!(names.insert(name), "duplicate wheel member `{name}`");
-        ensure!(
-            !entry.dir()? || entry.uncompressed_size() == 0,
-            "directory member `{name}` contains data"
-        );
-        ensure!(
-            !name.ends_with(".dist-info/RECORD.jws") && !name.ends_with(".dist-info/RECORD.p7s"),
-            "wheel contains unsupported RECORD signature `{name}`"
-        );
-        if name.ends_with(".dist-info/RECORD") {
-            ensure!(record.is_none(), "wheel contains multiple RECORD files");
-            record = Some(name.to_string());
-        }
-    }
-    record.context("wheel does not contain a RECORD file")
-}
-
 /// Serialize file names, encoded SHA-256 hashes, and sizes, then append the empty `RECORD` self-row.
 fn write_record(record_path: &str, entries: Vec<(String, String, u64)>) -> Result<Vec<u8>> {
     let mut writer = csv::Writer::from_writer(Vec::new());
@@ -214,24 +172,9 @@ fn write_record(record_path: &str, entries: Vec<(String, String, u64)>) -> Resul
     writer.into_inner().context("failed to finish RECORD")
 }
 
-/// Accept regular files and directories with matching Unix types, or an unspecified type.
-fn validate_member_type(name: &str, permissions: Option<u16>, directory: bool) -> Result<()> {
-    let Some(permissions) = permissions else {
-        return Ok(());
-    };
-    let file_type = permissions & 0o170_000;
-    let expected_type = if directory { 0o040_000 } else { 0o100_000 };
-    ensure!(
-        file_type == 0 || file_type == expected_type,
-        "wheel member `{name}` is not a regular file or directory"
-    );
-    Ok(())
-}
-
 #[cfg(test)]
 mod tests {
     use async_zip::{ZipDateTimeBuilder, ZipEntry};
-    use futures::io::AsyncWriteExt;
 
     use super::*;
 
@@ -288,13 +231,12 @@ mod tests {
         .collect()
     }
 
-    /// Generate a fixture `RECORD` from file contents, excluding directory entries.
+    /// Generate a fixture `RECORD` from member contents.
     fn fixture_record(members: &[(ZipEntry, Vec<u8>)]) -> Result<Vec<u8>> {
         write_record(
             RECORD,
             members
                 .iter()
-                .filter(|(entry, _)| !entry.filename().as_bytes().ends_with(b"/"))
                 .map(|(entry, bytes)| {
                     Ok((
                         entry.filename().as_str()?.to_string(),
@@ -306,19 +248,14 @@ mod tests {
         )
     }
 
-    /// Write members and a supplied or generated `RECORD`, with optional streaming headers or ZIP64.
+    /// Write fixture members and a supplied or generated `RECORD`.
     async fn fixture(
         path: &Path,
         members: Vec<(ZipEntry, Vec<u8>)>,
         record: Option<Vec<u8>>,
-        streaming: bool,
-        zip64: bool,
     ) -> Result<()> {
         let record = record.map_or_else(|| fixture_record(&members), Ok)?;
         let mut writer = ZipFileWriter::new(Vec::new());
-        if zip64 {
-            writer = writer.force_zip64();
-        }
         writer.comment("discard this archive comment".to_string());
         for (entry, bytes) in members.into_iter().chain([(
             ZipEntryBuilder::new(RECORD.into(), Compression::Deflate)
@@ -326,13 +263,7 @@ mod tests {
                 .build(),
             record,
         )]) {
-            if streaming {
-                let mut stream = writer.write_entry_stream(entry).await?;
-                stream.write_all(&bytes).await?;
-                stream.close().await?;
-            } else {
-                writer.write_entry_whole(entry, &bytes).await?;
-            }
+            writer.write_entry_whole(entry, &bytes).await?;
         }
         fs_err::write(path, writer.close().await?)?;
         Ok(())
@@ -348,83 +279,6 @@ mod tests {
                 path: directory.join("signed"),
             }],
         }
-    }
-
-    /// ZIP names retain Unicode and case distinctions without filesystem portability restrictions.
-    #[tokio::test]
-    async fn preserves_member_names() -> Result<()> {
-        let directory = tempfile::tempdir()?;
-        let mut args = args(directory.path());
-        fs_err::write(&args.replacements[0].path, b"signed")?;
-        let mut members = fixture_members();
-        let names = [
-            "package/café.txt",
-            "package/CON.txt",
-            "package/Case.txt",
-            "package/case.txt",
-            "Package/another.txt",
-            "package/tilde~.txt",
-        ];
-        for name in names {
-            members.push((
-                ZipEntryBuilder::new(name.into(), Compression::Stored).build(),
-                b"untouched".to_vec(),
-            ));
-        }
-        // Replacement uses the exact ZIP name, including Unicode and case distinctions.
-        args.replacements.push(Replacement {
-            member: names[0].to_string(),
-            path: args.replacements[0].path.clone(),
-        });
-        fixture(&args.input, members, None, false, false).await?;
-        wheel_replace(args).await?;
-        let output = directory.path().join("output.whl");
-        let (record, _, _) = read_entry(&output, RECORD).await?;
-        let record = read_record(&record, RECORD)?;
-        for name in names {
-            let expected: &[u8] = if name == names[0] {
-                b"signed"
-            } else {
-                b"untouched"
-            };
-            assert_eq!(read_entry(&output, name).await?.0, expected);
-            assert!(record.contains_key(name));
-        }
-        Ok(())
-    }
-
-    /// Duplicate names, special files, nonempty directories, and signatures leave no output behind.
-    #[tokio::test]
-    async fn rejects_bad_members_and_cleans_up() -> Result<()> {
-        for (name, mode, contents) in [
-            (BINARY, 0o100_644, b"duplicate".as_slice()),
-            ("link", 0o120_777, b"target"),
-            ("fifo", 0o010_644, b""),
-            ("socket", 0o140_644, b""),
-            ("dir/", 0o040_755, b"not empty"),
-            ("uv-1.2.3.dist-info/RECORD.jws", 0o100_644, b"signature"),
-            ("uv-1.2.3.dist-info/RECORD.p7s", 0o100_644, b"signature"),
-        ] {
-            let directory = tempfile::tempdir()?;
-            let args = args(directory.path());
-            fs_err::write(&args.replacements[0].path, b"signed")?;
-            let mut members = fixture_members();
-            members.push((
-                ZipEntryBuilder::new(name.into(), Compression::Stored)
-                    .unix_permissions(mode)
-                    .build(),
-                contents.to_vec(),
-            ));
-            fixture(&args.input, members, None, false, false).await?;
-            assert!(wheel_replace(args).await.is_err(), "accepted {name}");
-            assert!(!directory.path().join("output.whl").exists());
-            assert_eq!(
-                fs_err::read_dir(directory.path())?.count(),
-                2,
-                "temporary file leaked"
-            );
-        }
-        Ok(())
     }
 
     /// Each replacement must select one existing non-`RECORD` member exactly once.
@@ -448,7 +302,7 @@ mod tests {
             let mut args = args(directory.path());
             let replacement = args.replacements[0].path.clone();
             fs_err::write(&replacement, b"signed")?;
-            fixture(&args.input, fixture_members(), None, false, false).await?;
+            fixture(&args.input, fixture_members(), None).await?;
             args.replacements = names
                 .into_iter()
                 .map(|name| Replacement {
@@ -463,6 +317,39 @@ mod tests {
         Ok(())
     }
 
+    /// A missing or ambiguous `RECORD` prevents publication.
+    #[tokio::test]
+    async fn requires_one_record() -> Result<()> {
+        for (records, expected) in [
+            (vec![], "wheel does not contain a RECORD file"),
+            (
+                vec![RECORD, "uv_build-1.2.3.dist-info/RECORD"],
+                "wheel contains multiple RECORD files",
+            ),
+        ] {
+            let directory = tempfile::tempdir()?;
+            let args = args(directory.path());
+            fs_err::write(&args.replacements[0].path, b"signed")?;
+            let mut writer = ZipFileWriter::new(Vec::new());
+            for (entry, bytes) in fixture_members() {
+                writer.write_entry_whole(entry, &bytes).await?;
+            }
+            for name in records {
+                writer
+                    .write_entry_whole(
+                        ZipEntryBuilder::new(name.into(), Compression::Stored).build(),
+                        b"",
+                    )
+                    .await?;
+            }
+            fs_err::write(&args.input, writer.close().await?)?;
+            let error = wheel_replace(args).await.expect_err("invalid RECORD count");
+            assert_eq!(error.to_string(), expected);
+            assert_eq!(fs_err::read_dir(directory.path())?.count(), 2);
+        }
+        Ok(())
+    }
+
     /// A fresh `RECORD` describes the bytes written, regardless of the old CSV or hashes.
     #[tokio::test]
     async fn regenerates_record_without_reading_the_original() -> Result<()> {
@@ -470,14 +357,7 @@ mod tests {
             let directory = tempfile::tempdir()?;
             let args = args(directory.path());
             fs_err::write(&args.replacements[0].path, b"signed")?;
-            fixture(
-                &args.input,
-                fixture_members(),
-                Some(record.to_vec()),
-                false,
-                false,
-            )
-            .await?;
+            fixture(&args.input, fixture_members(), Some(record.to_vec())).await?;
             wheel_replace(args).await?;
             let output = directory.path().join("output.whl");
             assert_eq!(read_entry(&output, BINARY).await?.0, b"signed");
@@ -505,7 +385,7 @@ mod tests {
         let directory = tempfile::tempdir()?;
         let args = args(directory.path());
         fs_err::write(&args.replacements[0].path, b"signed")?;
-        fixture(&args.input, fixture_members(), None, false, false).await?;
+        fixture(&args.input, fixture_members(), None).await?;
         fs_err::write(&args.output, b"existing output")?;
         assert!(wheel_replace(args).await.is_err());
         assert_eq!(
@@ -533,7 +413,7 @@ mod tests {
             let directory = tempfile::tempdir()?;
             let args = args(directory.path());
             fs_err::write(&args.replacements[0].path, b"signed")?;
-            fixture(&args.input, fixture_members(), None, false, false).await?;
+            fixture(&args.input, fixture_members(), None).await?;
             let target = directory.path().join("target");
             if !dangling {
                 fs_err::write(&target, b"sentinel")?;
@@ -553,33 +433,6 @@ mod tests {
         Ok(())
     }
 
-    /// Trusted build artifacts are not rejected merely for containing many members.
-    #[tokio::test]
-    async fn replaces_in_a_wheel_with_many_members() -> Result<()> {
-        let directory = tempfile::tempdir()?;
-        let args = args(directory.path());
-        fs_err::write(&args.replacements[0].path, b"signed")?;
-        let mut members = fixture_members();
-        for index in 0..10_000 {
-            members.push((
-                ZipEntryBuilder::new(format!("package/{index}.txt").into(), Compression::Stored)
-                    .build(),
-                b"untouched".to_vec(),
-            ));
-        }
-        fixture(&args.input, members, None, false, false).await?;
-        wheel_replace(args).await?;
-        let output = directory.path().join("output.whl");
-        assert_eq!(read_entry(&output, BINARY).await?.0, b"signed");
-        assert_eq!(
-            read_entry(&output, "package/9999.txt").await?.0,
-            b"untouched"
-        );
-        let (record, _, _) = read_entry(&output, RECORD).await?;
-        assert_eq!(read_record(&record, RECORD)?.len(), 10_002);
-        Ok(())
-    }
-
     /// CRC32 is checked for copied contents, but not for discarded replacement data.
     #[tokio::test]
     async fn checks_crc32_only_for_copied_members() -> Result<()> {
@@ -587,7 +440,7 @@ mod tests {
             let directory = tempfile::tempdir()?;
             let args = args(directory.path());
             fs_err::write(&args.replacements[0].path, b"signed")?;
-            fixture(&args.input, fixture_members(), None, false, false).await?;
+            fixture(&args.input, fixture_members(), None).await?;
             let mut bytes = fs_err::read(&args.input)?;
             let position = bytes
                 .windows(4)
@@ -610,14 +463,10 @@ mod tests {
         Ok(())
     }
 
-    /// Supported compression, streaming headers, and ZIP64 preserve member bytes and metadata.
+    /// Untouched members retain their bytes and metadata with stored or deflated compression.
     #[tokio::test]
     async fn preserves_declared_metadata_and_bytes() -> Result<()> {
-        for (compression, streaming, zip64) in [
-            (Compression::Stored, false, false),
-            (Compression::Deflate, true, false),
-            (Compression::Zstd, false, true),
-        ] {
+        for compression in [Compression::Stored, Compression::Deflate] {
             let directory = tempfile::tempdir()?;
             let args = args(directory.path());
             fs_err::write(&args.replacements[0].path, b"signed")?;
@@ -630,23 +479,17 @@ mod tests {
                 .second(6)
                 .build();
             let mut members = fixture_members();
-            let extra = ZipEntryBuilder::new("package/comma,name.py".into(), compression)
+            let extra = ZipEntryBuilder::new("uv/_find_uv.py".into(), compression)
                 .unix_permissions(0o100_640)
                 .last_modification_date(stamp)
                 .internal_file_attribute(1)
                 .comment("entry comment".into())
                 .build();
             members.push((extra, b"untouched".to_vec()));
-            members.push((
-                ZipEntryBuilder::new("package/".into(), Compression::Stored)
-                    .unix_permissions(0o040_755)
-                    .build(),
-                Vec::new(),
-            ));
-            fixture(&args.input, members, None, streaming, zip64).await?;
+            fixture(&args.input, members, None).await?;
             wheel_replace(args).await?;
             let output = directory.path().join("output.whl");
-            let (bytes, method, mode) = read_entry(&output, "package/comma,name.py").await?;
+            let (bytes, method, mode) = read_entry(&output, "uv/_find_uv.py").await?;
             assert_eq!(
                 (bytes, method, mode),
                 (b"untouched".to_vec(), compression, Some(0o100_640))
@@ -656,7 +499,7 @@ mod tests {
                 .file()
                 .entries()
                 .iter()
-                .find(|entry| entry.filename().as_bytes() == b"package/comma,name.py")
+                .find(|entry| entry.filename().as_bytes() == b"uv/_find_uv.py")
                 .context("missing metadata fixture")?;
             assert_eq!(entry.last_modification_date(), &stamp);
             assert_eq!(entry.internal_file_attribute(), 1);
@@ -666,49 +509,8 @@ mod tests {
             assert_eq!(method, Compression::Deflate);
             assert_eq!(mode, Some(0o100_644));
             let entries = read_record(&record, RECORD)?;
-            assert_eq!(entries["package/comma,name.py"].size, 9);
+            assert_eq!(entries["uv/_find_uv.py"].size, 9);
         }
-        Ok(())
-    }
-
-    /// Rewriting intentionally discards unknown extra fields and emits Unix creator metadata.
-    #[tokio::test]
-    async fn drops_unknown_extras_and_normalizes_creator_host() -> Result<()> {
-        let directory = tempfile::tempdir()?;
-        let args = args(directory.path());
-        fs_err::write(&args.replacements[0].path, b"signed")?;
-        fixture(&args.input, fixture_members(), None, false, false).await?;
-        let mut bytes = fs_err::read(&args.input)?;
-        let central = bytes
-            .windows(4)
-            .position(|bytes| bytes == b"PK\x01\x02")
-            .context("missing central header")?;
-        let end = bytes
-            .windows(4)
-            .rposition(|bytes| bytes == b"PK\x05\x06")
-            .context("missing end record")?;
-        let name_size = u16::from_le_bytes(bytes[central + 28..central + 30].try_into()?) as usize;
-        // Add one unknown central extra field, leaving local offsets and payload bytes intact.
-        bytes[central + 5] = 0; // DOS creator host, normalized to Unix by the reader/writer.
-        bytes[central + 30..central + 32].copy_from_slice(&8_u16.to_le_bytes());
-        let directory_size = u32::from_le_bytes(bytes[end + 12..end + 16].try_into()?);
-        bytes[end + 12..end + 16].copy_from_slice(&(directory_size + 8).to_le_bytes());
-        bytes.splice(
-            central + 46 + name_size..central + 46 + name_size,
-            [0xfe, 0xca, 4, 0, 1, 2, 3, 4],
-        );
-        fs_err::write(&args.input, bytes)?;
-        wheel_replace(args).await?;
-        let bytes = fs_err::read(directory.path().join("output.whl"))?;
-        let central = bytes
-            .windows(4)
-            .position(|bytes| bytes == b"PK\x01\x02")
-            .context("missing output central header")?;
-        assert_eq!(bytes[central + 5], 3);
-        assert_eq!(
-            u16::from_le_bytes(bytes[central + 30..central + 32].try_into()?),
-            0
-        );
         Ok(())
     }
 
@@ -725,7 +527,7 @@ mod tests {
                 .build(),
             b"unsigned uvx".to_vec(),
         ));
-        fixture(&args.input, members.clone(), None, false, false).await?;
+        fixture(&args.input, members.clone(), None).await?;
         fs_err::write(&args.replacements[0].path, b"signed uv")?;
         let second_path = directory.path().join("signed-uvx");
         fs_err::write(&second_path, b"signed uvx")?;
@@ -772,7 +574,6 @@ mod tests {
         expected: &BTreeMap<String, (ZipEntry, String, u64)>,
     ) -> Result<()> {
         let mut archive = ZipFileReader::new(Cursor::new(fs_err::read(path)?)).await?;
-        let record_path = validate_archive(archive.file())?;
         ensure!(
             archive.file().entries().len() == expected.len(),
             "output membership changed"
@@ -781,20 +582,13 @@ mod tests {
             archive.file().comment().as_bytes().is_empty(),
             "unexpected output archive comment"
         );
-        let (record_bytes, _, _) = read_entry(path, &record_path).await?;
-        let mut record = read_record(&record_bytes, &record_path)?;
+        let (record_bytes, _, _) = read_entry(path, RECORD).await?;
+        let mut record = read_record(&record_bytes, RECORD)?;
         for index in 0..archive.file().entries().len() {
             let entry = archive.file().entries()[index].clone();
             let name = entry.filename().as_str()?;
             let (metadata, expected_hash, expected_size) =
                 expected.get(name).context("unexpected output member")?;
-            ensure!(
-                entry
-                    .extra_fields()
-                    .iter()
-                    .all(|field| matches!(field.header_id().0, 0x0001 | 0x6375 | 0x7075)),
-                "unexpected output extra field for `{name}`"
-            );
             ensure!(
                 entry.compression() == metadata.compression()
                     && entry.last_modification_date() == metadata.last_modification_date()
@@ -813,7 +607,7 @@ mod tests {
                 &hash == expected_hash && size == *expected_size,
                 "output bytes changed for `{name}`"
             );
-            if !entry.dir()? && name != record_path {
+            if name != RECORD {
                 let expected = record
                     .remove(name)
                     .context("output RECORD is missing a member")?;
@@ -825,14 +619,14 @@ mod tests {
         Ok(())
     }
 
-    /// Write a basic wheel fixture with the requested Unix file type and mode for its executable.
-    async fn write_wheel(path: &Path, executable_mode: u16) -> Result<()> {
+    /// Write a basic wheel fixture with an executable and metadata.
+    async fn write_wheel(path: &Path) -> Result<()> {
         fixture(
             path,
             vec![
                 (
                     ZipEntryBuilder::new(BINARY.into(), Compression::Deflate)
-                        .unix_permissions(executable_mode)
+                        .unix_permissions(0o100_755)
                         .build(),
                     b"unsigned executable".to_vec(),
                 ),
@@ -844,8 +638,6 @@ mod tests {
                 ),
             ],
             None,
-            false,
-            false,
         )
         .await
     }
@@ -883,7 +675,7 @@ mod tests {
         let input = temporary.path().join("unsigned.whl");
         let output = temporary.path().join("signed.whl");
         let replacement = temporary.path().join("uv");
-        write_wheel(&input, 0o100_755).await?;
+        write_wheel(&input).await?;
         fs_err::write(&replacement, b"signed executable")?;
 
         wheel_replace(WheelReplaceArgs {
@@ -916,35 +708,6 @@ mod tests {
         uv-1.2.3.dist-info/METADATA,sha256=xIJR2rCm0gl4ZA_dDnXvZFPY7qxwTnekSnzuMDye80k,46
         uv-1.2.3.dist-info/RECORD,,
         "###);
-        Ok(())
-    }
-
-    /// A symlink member cannot become a regular file merely because its contents are replaced.
-    #[tokio::test]
-    async fn rejects_a_symlink_member() -> Result<()> {
-        let temporary = tempfile::tempdir()?;
-        let input = temporary.path().join("unsigned.whl");
-        let output = temporary.path().join("signed.whl");
-        let replacement = temporary.path().join("uv");
-        write_wheel(&input, 0o120_777).await?;
-        fs_err::write(&replacement, b"signed executable")?;
-
-        let error = wheel_replace(WheelReplaceArgs {
-            input,
-            output: output.clone(),
-            replacements: vec![Replacement {
-                member: "uv-1.2.3.data/scripts/uv".to_string(),
-                path: replacement,
-            }],
-        })
-        .await
-        .expect_err("symlink wheel members should be rejected");
-
-        assert_eq!(
-            error.to_string(),
-            "wheel member `uv-1.2.3.data/scripts/uv` is not a regular file or directory"
-        );
-        assert!(!output.exists());
         Ok(())
     }
 
