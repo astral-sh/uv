@@ -56,7 +56,7 @@ use crate::commands::project::{
 use crate::commands::reporters::{PythonDownloadReporter, ResolverReporter};
 use crate::commands::{ExitStatus, ScriptPath, UvError, diagnostics, pip};
 use crate::printer::Printer;
-use crate::settings::{FrozenSource, LockCheck, LockCheckSource, ResolverSettings};
+use crate::settings::{FrozenSource, LockCheck, LockedSource, ResolverSettings};
 
 /// The result of running a lock operation.
 #[derive(Debug, Clone)]
@@ -284,7 +284,7 @@ pub(crate) enum LockMode<'env> {
     /// Perform a resolution, but don't write the lockfile to disk.
     DryRun(&'env Interpreter),
     /// Error if the lockfile is not up-to-date with the project requirements.
-    Locked(&'env Interpreter, LockCheckSource),
+    Locked(&'env Interpreter, LockedSource),
     /// Use the existing lockfile without performing a resolution.
     Frozen(MissingLockfileSource),
 }

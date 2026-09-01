@@ -591,12 +591,12 @@ impl InitSettings {
 
 /// The CLI flag that requested a lock check.
 #[derive(Debug, Clone, Copy)]
-pub(crate) enum LockCheckFlag {
+pub(crate) enum LockedFlag {
     Locked,
     Check,
 }
 
-impl LockCheckFlag {
+impl LockedFlag {
     fn name(self) -> &'static str {
         match self {
             Self::Locked => "locked",
@@ -605,7 +605,7 @@ impl LockCheckFlag {
     }
 }
 
-impl std::fmt::Display for LockCheckFlag {
+impl std::fmt::Display for LockedFlag {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "--{}", self.name())
     }
@@ -613,16 +613,16 @@ impl std::fmt::Display for LockCheckFlag {
 
 /// The source of a lock check operation.
 #[derive(Debug, Clone, Copy)]
-pub(crate) enum LockCheckSource {
+pub(crate) enum LockedSource {
     /// A lock check was requested on the CLI.
-    Cli(LockCheckFlag),
+    Cli(LockedFlag),
     /// The `UV_LOCKED` environment variable was set.
     Env,
     /// The `locked` option was set via workspace configuration.
     Configuration,
 }
 
-impl std::fmt::Display for LockCheckSource {
+impl std::fmt::Display for LockedSource {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Cli(flag) => flag.fmt(f),
@@ -636,7 +636,7 @@ impl std::fmt::Display for LockCheckSource {
 #[derive(Debug, Clone, Copy)]
 pub(crate) enum LockCheck {
     /// Lockfile check is enabled.
-    Enabled(LockCheckSource),
+    Enabled(LockedSource),
     /// Lockfile check is disabled.
     Disabled,
 }
@@ -644,12 +644,12 @@ pub(crate) enum LockCheck {
 impl From<LockCheck> for Flag {
     fn from(lock_check: LockCheck) -> Self {
         match lock_check {
-            LockCheck::Enabled(LockCheckSource::Cli(flag)) => Self::from_cli(flag.name()),
-            LockCheck::Enabled(LockCheckSource::Env) => Self::Enabled {
+            LockCheck::Enabled(LockedSource::Cli(flag)) => Self::from_cli(flag.name()),
+            LockCheck::Enabled(LockedSource::Env) => Self::Enabled {
                 source: FlagSource::Env(EnvVars::UV_LOCKED),
                 name: "locked",
             },
-            LockCheck::Enabled(LockCheckSource::Configuration) => Self::from_config("locked"),
+            LockCheck::Enabled(LockedSource::Configuration) => Self::from_config("locked"),
             LockCheck::Disabled => Self::disabled(),
         }
     }
@@ -717,11 +717,11 @@ fn resolve_lock_flags(
     frozen: Option<FrozenSource>,
 ) -> anyhow::Result<(LockCheck, Option<FrozenSource>)> {
     match (locked, frozen) {
-        (LockCheck::Enabled(LockCheckSource::Cli(flag)), Some(FrozenSource::Env)) => {
+        (LockCheck::Enabled(LockedSource::Cli(flag)), Some(FrozenSource::Env)) => {
             warn_user_once!("Ignoring `UV_FROZEN` because `{flag}` was provided");
             Ok((locked, None))
         }
-        (LockCheck::Enabled(LockCheckSource::Env), Some(FrozenSource::Cli(flag))) => {
+        (LockCheck::Enabled(LockedSource::Env), Some(FrozenSource::Cli(flag))) => {
             warn_user_once!("Ignoring `UV_LOCKED` because `{flag}` was provided");
             Ok((LockCheck::Disabled, frozen))
         }
@@ -749,12 +749,12 @@ fn resolve_frozen(
 }
 
 /// Resolve a lock check and its source from CLI arguments and the environment.
-fn resolve_lock_check(enabled: bool, cli_flag: LockCheckFlag, environment: EnvFlag) -> LockCheck {
+fn resolve_lock_check(enabled: bool, cli_flag: LockedFlag, environment: EnvFlag) -> LockCheck {
     match resolve_flag(enabled, cli_flag.name(), environment) {
         Flag::Enabled { source, .. } => LockCheck::Enabled(match source {
-            FlagSource::Cli => LockCheckSource::Cli(cli_flag),
-            FlagSource::Env(_) => LockCheckSource::Env,
-            FlagSource::Config => LockCheckSource::Configuration,
+            FlagSource::Cli => LockedSource::Cli(cli_flag),
+            FlagSource::Env(_) => LockedSource::Env,
+            FlagSource::Config => LockedSource::Configuration,
         }),
         Flag::Disabled => LockCheck::Disabled,
     }
@@ -858,7 +858,7 @@ impl RunSettings {
             .unwrap_or_default();
 
         // Resolve flags from CLI and environment variables.
-        let locked = resolve_lock_check(locked, LockCheckFlag::Locked, environment.locked);
+        let locked = resolve_lock_check(locked, LockedFlag::Locked, environment.locked);
         let frozen = resolve_frozen(frozen, FrozenFlag::Frozen, environment.frozen);
         let no_sync = resolve_flag(no_sync, "no-sync", environment.no_sync);
 
@@ -2026,7 +2026,7 @@ impl SyncSettings {
         };
 
         // Resolve flags from CLI and environment variables.
-        let locked = resolve_lock_check(locked, LockCheckFlag::Locked, environment.locked);
+        let locked = resolve_lock_check(locked, LockedFlag::Locked, environment.locked);
         let frozen = resolve_frozen(frozen, FrozenFlag::Frozen, environment.frozen);
 
         let (locked, frozen) = resolve_lock_flags(locked, frozen)?;
@@ -2191,9 +2191,9 @@ impl LockSettings {
         let locked = resolve_lock_check(
             locked || check,
             if check {
-                LockCheckFlag::Check
+                LockedFlag::Check
             } else {
-                LockCheckFlag::Locked
+                LockedFlag::Locked
             },
             environment.locked,
         );
@@ -2309,7 +2309,7 @@ impl MetadataSettings {
             .unwrap_or_default();
 
         // Resolve flags from CLI and environment variables.
-        let locked = resolve_lock_check(locked, LockCheckFlag::Locked, environment.locked);
+        let locked = resolve_lock_check(locked, LockedFlag::Locked, environment.locked);
         let frozen = resolve_frozen(frozen, FrozenFlag::Frozen, environment.frozen);
 
         let (locked, frozen) = resolve_lock_flags(locked, frozen)?;
@@ -2519,7 +2519,7 @@ impl AddSettings {
         let lfs = GitLfsSetting::new(lfs.then_some(true), environment.lfs);
 
         // Resolve flags from CLI and environment variables.
-        let locked = resolve_lock_check(locked, LockCheckFlag::Locked, environment.locked);
+        let locked = resolve_lock_check(locked, LockedFlag::Locked, environment.locked);
         let frozen = resolve_frozen(frozen, FrozenFlag::Frozen, environment.frozen);
         let no_sync = resolve_flag(no_sync, "no-sync", environment.no_sync);
 
@@ -2684,7 +2684,7 @@ impl RemoveSettings {
             .collect();
 
         // Resolve flags from CLI and environment variables.
-        let locked = resolve_lock_check(locked, LockCheckFlag::Locked, environment.locked);
+        let locked = resolve_lock_check(locked, LockedFlag::Locked, environment.locked);
         let frozen = resolve_frozen(frozen, FrozenFlag::Frozen, environment.frozen);
         let no_sync = resolve_flag(no_sync, "no-sync", environment.no_sync);
 
@@ -2771,7 +2771,7 @@ impl VersionSettings {
             .unwrap_or_default();
 
         // Resolve flags from CLI and environment variables.
-        let locked = resolve_lock_check(locked, LockCheckFlag::Locked, environment.locked);
+        let locked = resolve_lock_check(locked, LockedFlag::Locked, environment.locked);
         let frozen = resolve_frozen(frozen, FrozenFlag::Frozen, environment.frozen);
         let no_sync = resolve_flag(no_sync, "no-sync", environment.no_sync);
 
@@ -2871,7 +2871,7 @@ impl TreeSettings {
             .unwrap_or_default();
 
         // Resolve flags from CLI and environment variables.
-        let locked = resolve_lock_check(locked, LockCheckFlag::Locked, environment.locked);
+        let locked = resolve_lock_check(locked, LockedFlag::Locked, environment.locked);
         let frozen = resolve_frozen(frozen, FrozenFlag::Frozen, environment.frozen);
 
         let (locked, frozen) = resolve_lock_flags(locked, frozen)?;
@@ -3011,7 +3011,7 @@ impl ExportSettings {
             .unwrap_or_default();
 
         // Resolve flags from CLI and environment variables.
-        let locked = resolve_lock_check(locked, LockCheckFlag::Locked, environment.locked);
+        let locked = resolve_lock_check(locked, LockedFlag::Locked, environment.locked);
         let frozen = resolve_frozen(frozen_cli, FrozenFlag::Frozen, environment.frozen);
 
         let (locked, frozen) = resolve_lock_flags(locked, frozen)?;
@@ -3213,7 +3213,7 @@ impl CheckSettings {
             .map(|fs| fs.install_mirrors.clone())
             .unwrap_or_default();
 
-        let locked = resolve_lock_check(locked, LockCheckFlag::Locked, environment.locked);
+        let locked = resolve_lock_check(locked, LockedFlag::Locked, environment.locked);
         let frozen = resolve_frozen(frozen, FrozenFlag::Frozen, environment.frozen);
         let no_sync = resolve_flag(no_sync, "no-sync", environment.no_sync);
         let no_install_project = resolve_flag(
@@ -3349,7 +3349,7 @@ impl AuditSettings {
         let no_dev = no_dev || environment.no_dev.value == Some(true);
 
         // Resolve flags from CLI and environment variables.
-        let locked = resolve_lock_check(locked, LockCheckFlag::Locked, environment.locked);
+        let locked = resolve_lock_check(locked, LockedFlag::Locked, environment.locked);
         let frozen = resolve_frozen(frozen, FrozenFlag::Frozen, environment.frozen);
 
         let (locked, frozen) = resolve_lock_flags(locked, frozen)?;

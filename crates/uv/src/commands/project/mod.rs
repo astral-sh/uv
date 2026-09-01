@@ -64,8 +64,7 @@ use crate::commands::reporters::{PythonDownloadReporter, ResolverReporter};
 use crate::commands::{capitalize, conjunction, pip};
 use crate::printer::Printer;
 use crate::settings::{
-    FrozenSource, InstallerSettingsRef, LockCheckSource, ResolverInstallerSettings,
-    ResolverSettings,
+    FrozenSource, InstallerSettingsRef, LockedSource, ResolverInstallerSettings, ResolverSettings,
 };
 
 pub(crate) mod add;
@@ -92,7 +91,7 @@ pub(crate) enum MissingLockfileSource {
     /// Frozen mode required an existing lockfile.
     Frozen(FrozenSource),
     /// A lock check required an existing lockfile.
-    Locked(LockCheckSource),
+    Locked(LockedSource),
 }
 
 impl std::fmt::Display for MissingLockfileSource {
@@ -103,15 +102,15 @@ impl std::fmt::Display for MissingLockfileSource {
                 FrozenSource::Configuration => write!(f, "`frozen` (workspace configuration)"),
             },
             Self::Locked(source) => match source {
-                LockCheckSource::Cli(_) | LockCheckSource::Env => write!(f, "`{source}`"),
-                LockCheckSource::Configuration => write!(f, "`locked` (workspace configuration)"),
+                LockedSource::Cli(_) | LockedSource::Env => write!(f, "`{source}`"),
+                LockedSource::Configuration => write!(f, "`locked` (workspace configuration)"),
             },
         }
     }
 }
 
-impl From<LockCheckSource> for MissingLockfileSource {
-    fn from(source: LockCheckSource) -> Self {
+impl From<LockedSource> for MissingLockfileSource {
+    fn from(source: LockedSource) -> Self {
         Self::Locked(source)
     }
 }
@@ -125,12 +124,12 @@ impl From<FrozenSource> for MissingLockfileSource {
 #[derive(thiserror::Error, Debug)]
 pub(crate) enum ProjectError {
     #[error("The lockfile at `uv.lock` needs to be updated, but `{2}` was provided.")]
-    LockMismatch(Option<Box<Lock>>, Box<Lock>, LockCheckSource),
+    LockMismatch(Option<Box<Lock>>, Box<Lock>, LockedSource),
 
     #[error(
         "The lockfile at `{0}` has non-canonical formatting at line {1}, but `{2}` was provided."
     )]
-    LockFormat(PathBuf, usize, LockCheckSource),
+    LockFormat(PathBuf, usize, LockedSource),
 
     #[error(
         "Unable to find lockfile at `{1}`, but {0} was provided. To create a lockfile, run `uv lock` or `uv sync` without the flag."
