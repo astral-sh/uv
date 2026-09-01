@@ -2127,7 +2127,7 @@ impl LockSettings {
             if check { "check" } else { "locked" },
             environment.locked,
         );
-        let frozen = resolve_flag(check_exists, "check-exists", environment.frozen);
+        let frozen = resolve_flag(check_exists, "frozen", environment.frozen);
 
         let (locked, frozen) = resolve_lock_flags(locked, frozen)?;
 
