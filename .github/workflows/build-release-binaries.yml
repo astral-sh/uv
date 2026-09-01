@@ -301,9 +301,12 @@ jobs:
         # See: https://aws.github.io/aws-lc-rs/requirements/windows.html#build-requirements
         if: contains(matrix.platform.target, 'x86') || contains(matrix.platform.target, 'i686')
         run: |
-          $installer = Join-Path $env:RUNNER_TEMP 'nasm-3.02-installer-x64.exe'
-          Invoke-WebRequest 'https://www.nasm.us/pub/nasm/releasebuilds/3.02/win64/nasm-3.02-installer-x64.exe' -OutFile $installer
-          if ((Get-FileHash $installer -Algorithm SHA256).Hash -ne '0DDB40310861EB29F4D649FEB9466779982A2D251C0DB2B9CF0D21CF591171F3') {
+          # Namespace runners do not include winget.
+          $version = '3.02'
+          $sha256 = '0DDB40310861EB29F4D649FEB9466779982A2D251C0DB2B9CF0D21CF591171F3'
+          $installer = Join-Path $env:RUNNER_TEMP "nasm-${version}-installer-x64.exe"
+          Invoke-WebRequest "https://www.nasm.us/pub/nasm/releasebuilds/$version/win64/nasm-${version}-installer-x64.exe" -OutFile $installer
+          if ((Get-FileHash $installer -Algorithm SHA256).Hash -ne $sha256) {
             throw 'NASM installer checksum mismatch'
           }
           $installation = Start-Process $installer -ArgumentList '/S' -Wait -PassThru
@@ -357,6 +360,7 @@ jobs:
             fi
           done
       - name: "Test wheel"
+        # We test aarch64 on a native runner in a separate job.
         if: matrix.platform.target != 'aarch64-pc-windows-msvc'
         shell: bash
         run: |
@@ -399,6 +403,7 @@ jobs:
         env:
           CARGO: ${{ github.workspace }}/scripts/cargo.cmd
       - name: "Test wheel uv-build"
+        # We test aarch64 on a native runner in a separate job.
         if: matrix.platform.target != 'aarch64-pc-windows-msvc'
         shell: bash
         run: |
