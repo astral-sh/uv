@@ -115,14 +115,6 @@ impl Flag {
     pub fn is_enabled(self) -> bool {
         matches!(self, Self::Enabled { .. })
     }
-
-    /// Returns the source of the flag, if it is set.
-    pub fn source(self) -> Option<FlagSource> {
-        match self {
-            Self::Disabled => None,
-            Self::Enabled { source, .. } => Some(source),
-        }
-    }
 }
 
 impl From<Flag> for bool {
