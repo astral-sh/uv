@@ -49,22 +49,14 @@ impl FromStr for Replacement {
     }
 }
 
-/// Replace selected members in a wheel produced by uv's release build and regenerate `RECORD`.
+/// Reassemble `uv` and `uv_build` wheels with code-signed executables.
 ///
-/// Expect a trusted `uv` or `uv_build` wheel with unique regular-file entries and no `RECORD`
-/// signatures. Hold the input and output archives in memory, processing one member at a time.
-/// These archives and member contents must fit in memory. Callers own provenance, digest
-/// verification, and immutable input/replacement staging.
+/// Expects a trusted, file-only wheel and replacement binaries that fit in memory. Replacements
+/// match exact member names; every requested member must exist. Other file contents and executable
+/// permissions are preserved, and `RECORD` is regenerated from the output contents.
 ///
-/// Preserve each non-`RECORD` member's bytes unless replaced, plus its compression method, timestamp,
-/// attributes, and comment. ZIP headers are rebuilt; compressed streams, extra fields, and archive
-/// comments are not preserved. Write a fresh SHA-256 `RECORD` last with Deflate, mode 0644, the ZIP
-/// epoch timestamp, and no comment. The old `RECORD` and replaced members are not decompressed or
-/// validated. Member names are never interpreted as filesystem paths.
-///
-/// Write the completed archive to a temporary file, then atomically publish it without clobbering.
-/// Failure removes the temporary file and leaves existing paths alone. This is process-level atomic
-/// publication, not a promise of power-loss durability.
+/// Input files are left unchanged. The output must not already exist and is only published once
+/// the complete wheel has been written.
 pub(crate) async fn wheel_replace(args: WheelReplaceArgs) -> Result<()> {
     ensure!(
         args.input != args.output,
