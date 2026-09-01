@@ -7,7 +7,6 @@ use std::borrow::Cow;
 use std::cmp::Reverse;
 use std::env::consts::EXE_SUFFIX;
 use std::fmt::{self, Debug, Formatter};
-use std::sync::atomic::Ordering;
 use std::{env, io, iter};
 use std::{path::Path, path::PathBuf, str::FromStr};
 use thiserror::Error;
@@ -1385,10 +1384,7 @@ pub fn find_all_python_installations(
             Ok(Ok(installation)) => installations.push(installation),
             Ok(Err(_)) => {}
             Err(err @ Error::Query(..)) => {
-                if uv_warnings::ENABLED.load(Ordering::Relaxed) {
-                    write_warning_chain(&err, &Hints::none())
-                        .expect("writing to stderr should not fail");
-                }
+                warn_user_with_chain!(&err);
             }
             Err(err) if err.is_critical() => return Err(err),
             Err(_) => {}

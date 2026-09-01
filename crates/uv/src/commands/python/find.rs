@@ -13,7 +13,7 @@ use uv_python::{
 };
 use uv_scripts::Pep723ItemRef;
 use uv_settings::PythonInstallMirrors;
-use uv_warnings::{warn_user, warn_user_once};
+use uv_warnings::{warn_user, warn_user_once_with_chain};
 use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceCache, WorkspaceErrorKind};
 
 use crate::commands::{
@@ -65,7 +65,7 @@ pub(crate) async fn find(
                         | WorkspaceErrorKind::MissingPyprojectToml
                         | WorkspaceErrorKind::NonWorkspace(_)
                 ) {
-                    warn_user_once!("{err}");
+                    warn_user_once_with_chain!(&err);
                 }
                 None
             }
