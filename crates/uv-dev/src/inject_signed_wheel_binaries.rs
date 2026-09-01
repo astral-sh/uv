@@ -1,9 +1,7 @@
-use std::collections::BTreeMap;
 use std::io::Write;
 use std::path::{Path, PathBuf};
-use std::str::FromStr;
 
-use anyhow::{Context, Result, bail, ensure};
+use anyhow::{Context, Result, ensure};
 use async_zip::base::read::seek::ZipFileReader;
 use async_zip::base::write::ZipFileWriter;
 use async_zip::{Compression, ZipEntryBuilder};
@@ -14,39 +12,16 @@ use futures::io::Cursor;
 use sha2::{Digest, Sha256};
 
 #[derive(Debug, Parser)]
-pub(crate) struct WheelReplaceArgs {
+pub(crate) struct InjectSignedWheelBinariesArgs {
     /// A wheel produced by uv's release build.
     #[arg(long)]
     input: PathBuf,
     /// The rewritten wheel. Existing paths are not overwritten.
     #[arg(long)]
     output: PathBuf,
-    /// A wheel member and its replacement file, in the form `MEMBER=PATH`.
-    #[arg(long = "replace", required = true)]
-    replacements: Vec<Replacement>,
-}
-
-#[derive(Clone, Debug)]
-struct Replacement {
-    member: String,
-    path: PathBuf,
-}
-
-impl FromStr for Replacement {
-    type Err = anyhow::Error;
-
-    /// Parse `MEMBER=PATH`, keeping any later `=` characters in the filesystem path.
-    fn from_str(value: &str) -> Result<Self> {
-        let Some((member, path)) = value.split_once('=') else {
-            bail!("expected `MEMBER=PATH`, got `{value}`");
-        };
-        ensure!(!member.is_empty(), "replacement member cannot be empty");
-        ensure!(!path.is_empty(), "replacement path cannot be empty");
-        Ok(Self {
-            member: member.to_string(),
-            path: PathBuf::from(path),
-        })
-    }
+    /// A directory containing the code-signed executables, named as they appear in the wheel.
+    #[arg(long)]
+    signed_binaries: PathBuf,
 }
 
 /// Reassemble `uv` and `uv_build` wheels with code-signed executables.
@@ -71,34 +46,26 @@ impl FromStr for Replacement {
 /// └── ...
 /// ```
 ///
-/// Expects a trusted, file-only wheel and replacement binaries that fit in memory. Replacements
-/// match exact member names; every requested member must exist. Other file contents and executable
-/// permissions are preserved, and `RECORD` is regenerated from the output contents.
+/// Expects a trusted, file-only wheel and signed binaries that fit in memory. Every member under
+/// `.data/scripts` is replaced by the same-named file from `signed_binaries`. Other file contents
+/// and executable permissions are preserved, and `RECORD` is regenerated from the output contents.
 ///
 /// Input files are left unchanged. The output must not already exist and is only published once
 /// the complete wheel has been written.
-pub(crate) async fn wheel_replace(args: WheelReplaceArgs) -> Result<()> {
+pub(crate) async fn inject_signed_wheel_binaries(
+    args: InjectSignedWheelBinariesArgs,
+) -> Result<()> {
     ensure!(
         args.input != args.output,
         "input and output wheels must be different"
     );
-    let mut replacements = BTreeMap::new();
-    for replacement in args.replacements {
-        let member = replacement.member;
-        ensure!(
-            replacements
-                .insert(member.clone(), replacement.path)
-                .is_none(),
-            "duplicate replacement for `{member}`"
-        );
-    }
-
     let input = fs_err::read(&args.input)
         .with_context(|| format!("failed to read input wheel `{}`", args.input.display()))?;
     let mut archive = ZipFileReader::new(Cursor::new(input)).await?;
     let mut writer = ZipFileWriter::new(Vec::new());
     let mut record_path = None;
     let mut output_record = Vec::new();
+    let mut replaced = false;
 
     for index in 0..archive.file().entries().len() {
         let entry = archive.file().entries()[index].clone();
@@ -118,9 +85,15 @@ pub(crate) async fn wheel_replace(args: WheelReplaceArgs) -> Result<()> {
             .comment(entry.comment().clone())
             .build();
 
-        let bytes = if let Some(path) = replacements.remove(&name) {
+        let bytes = if let Some((_, binary)) = name.split_once(".data/scripts/") {
+            ensure!(
+                !binary.is_empty() && !binary.contains('/') && !binary.contains('\\'),
+                "unexpected executable wheel member `{name}`"
+            );
+            let path = args.signed_binaries.join(binary);
+            replaced = true;
             fs_err::read(&path)
-                .with_context(|| format!("failed to read replacement `{}`", path.display()))?
+                .with_context(|| format!("failed to read signed binary `{}`", path.display()))?
         } else {
             let mut bytes = Vec::new();
             archive
@@ -137,11 +110,7 @@ pub(crate) async fn wheel_replace(args: WheelReplaceArgs) -> Result<()> {
             bytes.len() as u64,
         ));
     }
-    ensure!(
-        replacements.is_empty(),
-        "replacement members not present in the wheel: {}",
-        replacements.keys().cloned().collect::<Vec<_>>().join(", ")
-    );
+    ensure!(replaced, "wheel does not contain executable members");
 
     let record_path = record_path.context("wheel does not contain a RECORD file")?;
     let record_bytes = write_record(&record_path, output_record)?;
@@ -186,6 +155,8 @@ fn write_record(record_path: &str, entries: Vec<(String, String, u64)>) -> Resul
 
 #[cfg(test)]
 mod tests {
+    use std::collections::BTreeMap;
+
     use async_zip::{ZipDateTimeBuilder, ZipEntry};
 
     use super::*;
@@ -281,51 +252,76 @@ mod tests {
         Ok(())
     }
 
-    /// Use conventional fixture paths and replace the executable with the `signed` file.
-    fn args(directory: &Path) -> WheelReplaceArgs {
-        WheelReplaceArgs {
+    /// Use conventional fixture paths and a shared directory of signed binaries.
+    fn fixture_args(directory: &Path) -> InjectSignedWheelBinariesArgs {
+        InjectSignedWheelBinariesArgs {
             input: directory.join("input.whl"),
             output: directory.join("output.whl"),
-            replacements: vec![Replacement {
-                member: BINARY.to_string(),
-                path: directory.join("signed"),
-            }],
+            signed_binaries: directory.join("signed"),
         }
     }
 
-    /// Each replacement must select one existing non-`RECORD` member exactly once.
+    /// Write one signed binary under the name used by its wheel member.
+    fn write_signed_binary(
+        args: &InjectSignedWheelBinariesArgs,
+        name: &str,
+        contents: &[u8],
+    ) -> Result<()> {
+        fs_err::create_dir_all(&args.signed_binaries)?;
+        fs_err::write(args.signed_binaries.join(name), contents)?;
+        Ok(())
+    }
+
+    /// Every executable member must be flat and have a same-named signed binary.
     #[tokio::test]
-    async fn rejects_unmatched_and_duplicate_replacements() -> Result<()> {
-        for (names, expected) in [
-            (
-                vec!["missing"],
-                "replacement members not present in the wheel: missing",
-            ),
-            (
-                vec![BINARY, BINARY],
-                "duplicate replacement for `uv-1.2.3.data/scripts/uv`",
-            ),
-            (
-                vec![RECORD],
-                "replacement members not present in the wheel: uv-1.2.3.dist-info/RECORD",
-            ),
-        ] {
-            let directory = tempfile::tempdir()?;
-            let mut args = args(directory.path());
-            let replacement = args.replacements[0].path.clone();
-            fs_err::write(&replacement, b"signed")?;
-            fixture(&args.input, fixture_members(), None).await?;
-            args.replacements = names
-                .into_iter()
-                .map(|name| Replacement {
-                    member: name.to_string(),
-                    path: replacement.clone(),
-                })
-                .collect();
-            let error = wheel_replace(args).await.expect_err("invalid replacement");
-            assert_eq!(error.to_string(), expected);
-            assert_eq!(fs_err::read_dir(directory.path())?.count(), 2);
-        }
+    async fn requires_expected_signed_binaries() -> Result<()> {
+        let directory = tempfile::tempdir()?;
+        let args = fixture_args(directory.path());
+        let output = args.output.clone();
+        fixture(&args.input, fixture_members(), None).await?;
+        let error = inject_signed_wheel_binaries(args)
+            .await
+            .expect_err("missing signed binary");
+        assert!(
+            error
+                .to_string()
+                .starts_with("failed to read signed binary")
+        );
+        assert!(!output.exists());
+
+        let directory = tempfile::tempdir()?;
+        let args = fixture_args(directory.path());
+        write_signed_binary(&args, "uv", b"signed")?;
+        let mut members = fixture_members();
+        members[0].0 = ZipEntryBuilder::new(
+            "uv-1.2.3.data/scripts/nested/uv".into(),
+            Compression::Stored,
+        )
+        .unix_permissions(0o100_755)
+        .build();
+        fixture(&args.input, members, None).await?;
+        let error = inject_signed_wheel_binaries(args)
+            .await
+            .expect_err("nested executable member");
+        assert_eq!(
+            error.to_string(),
+            "unexpected executable wheel member `uv-1.2.3.data/scripts/nested/uv`"
+        );
+
+        let directory = tempfile::tempdir()?;
+        let args = fixture_args(directory.path());
+        let members = fixture_members()
+            .into_iter()
+            .filter(|(entry, _)| entry.filename().as_bytes() != BINARY.as_bytes())
+            .collect();
+        fixture(&args.input, members, None).await?;
+        let error = inject_signed_wheel_binaries(args)
+            .await
+            .expect_err("wheel without executable members");
+        assert_eq!(
+            error.to_string(),
+            "wheel does not contain executable members"
+        );
         Ok(())
     }
 
@@ -340,8 +336,8 @@ mod tests {
             ),
         ] {
             let directory = tempfile::tempdir()?;
-            let args = args(directory.path());
-            fs_err::write(&args.replacements[0].path, b"signed")?;
+            let args = fixture_args(directory.path());
+            write_signed_binary(&args, "uv", b"signed")?;
             let mut writer = ZipFileWriter::new(Vec::new());
             for (entry, bytes) in fixture_members() {
                 writer.write_entry_whole(entry, &bytes).await?;
@@ -355,9 +351,11 @@ mod tests {
                     .await?;
             }
             fs_err::write(&args.input, writer.close().await?)?;
-            let error = wheel_replace(args).await.expect_err("invalid RECORD count");
+            let error = inject_signed_wheel_binaries(args)
+                .await
+                .expect_err("invalid RECORD count");
             assert_eq!(error.to_string(), expected);
-            assert_eq!(fs_err::read_dir(directory.path())?.count(), 2);
+            assert!(!directory.path().join("output.whl").exists());
         }
         Ok(())
     }
@@ -367,10 +365,10 @@ mod tests {
     async fn regenerates_record_without_reading_the_original() -> Result<()> {
         for record in [b"".as_slice(), b"stale,sha256=wrong,123", b"\xff"] {
             let directory = tempfile::tempdir()?;
-            let args = args(directory.path());
-            fs_err::write(&args.replacements[0].path, b"signed")?;
+            let args = fixture_args(directory.path());
+            write_signed_binary(&args, "uv", b"signed")?;
             fixture(&args.input, fixture_members(), Some(record.to_vec())).await?;
-            wheel_replace(args).await?;
+            inject_signed_wheel_binaries(args).await?;
             let output = directory.path().join("output.whl");
             assert_eq!(read_entry(&output, BINARY).await?.0, b"signed");
             assert_eq!(read_entry(&output, METADATA).await?.0, b"metadata");
@@ -395,24 +393,24 @@ mod tests {
     #[tokio::test]
     async fn never_overwrites_existing_output() -> Result<()> {
         let directory = tempfile::tempdir()?;
-        let args = args(directory.path());
-        fs_err::write(&args.replacements[0].path, b"signed")?;
+        let args = fixture_args(directory.path());
+        write_signed_binary(&args, "uv", b"signed")?;
         fixture(&args.input, fixture_members(), None).await?;
         fs_err::write(&args.output, b"existing output")?;
-        assert!(wheel_replace(args).await.is_err());
+        assert!(inject_signed_wheel_binaries(args).await.is_err());
         assert_eq!(
             fs_err::read(directory.path().join("output.whl"))?,
             b"existing output"
         );
         assert_eq!(fs_err::read_dir(directory.path())?.count(), 3);
         // The contract also rejects a repeat of a successful identical transformation.
-        let mut first = self::args(directory.path());
+        let mut first = self::fixture_args(directory.path());
         first.output = directory.path().join("first.whl");
-        wheel_replace(first).await?;
+        inject_signed_wheel_binaries(first).await?;
         let before = fs_err::read(directory.path().join("first.whl"))?;
-        let mut repeated = self::args(directory.path());
+        let mut repeated = self::fixture_args(directory.path());
         repeated.output = directory.path().join("first.whl");
-        assert!(wheel_replace(repeated).await.is_err());
+        assert!(inject_signed_wheel_binaries(repeated).await.is_err());
         assert_eq!(fs_err::read(directory.path().join("first.whl"))?, before);
         Ok(())
     }
@@ -423,15 +421,15 @@ mod tests {
     async fn refuses_output_symlinks() -> Result<()> {
         for dangling in [false, true] {
             let directory = tempfile::tempdir()?;
-            let args = args(directory.path());
-            fs_err::write(&args.replacements[0].path, b"signed")?;
+            let args = fixture_args(directory.path());
+            write_signed_binary(&args, "uv", b"signed")?;
             fixture(&args.input, fixture_members(), None).await?;
             let target = directory.path().join("target");
             if !dangling {
                 fs_err::write(&target, b"sentinel")?;
             }
             fs_err::os::unix::fs::symlink(&target, &args.output)?;
-            assert!(wheel_replace(args).await.is_err());
+            assert!(inject_signed_wheel_binaries(args).await.is_err());
             assert_eq!(
                 fs_err::read_link(directory.path().join("output.whl"))?,
                 target
@@ -445,13 +443,13 @@ mod tests {
         Ok(())
     }
 
-    /// CRC32 is checked for copied contents, but not for discarded replacement data.
+    /// CRC32 is checked for copied contents, but not for discarded executable data.
     #[tokio::test]
     async fn checks_crc32_only_for_copied_members() -> Result<()> {
         for member_index in [0, 1] {
             let directory = tempfile::tempdir()?;
-            let args = args(directory.path());
-            fs_err::write(&args.replacements[0].path, b"signed")?;
+            let args = fixture_args(directory.path());
+            write_signed_binary(&args, "uv", b"signed")?;
             fixture(&args.input, fixture_members(), None).await?;
             let mut bytes = fs_err::read(&args.input)?;
             let position = bytes
@@ -464,11 +462,11 @@ mod tests {
             bytes[position + 16..position + 20].copy_from_slice(&0_u32.to_le_bytes());
             fs_err::write(&args.input, bytes)?;
             if member_index == 0 {
-                wheel_replace(args).await?;
+                inject_signed_wheel_binaries(args).await?;
                 let output = directory.path().join("output.whl");
                 assert_eq!(read_entry(&output, BINARY).await?.0, b"signed");
             } else {
-                assert!(wheel_replace(args).await.is_err());
+                assert!(inject_signed_wheel_binaries(args).await.is_err());
                 assert_eq!(fs_err::read_dir(directory.path())?.count(), 2);
             }
         }
@@ -480,8 +478,8 @@ mod tests {
     async fn preserves_declared_metadata_and_bytes() -> Result<()> {
         for compression in [Compression::Stored, Compression::Deflate] {
             let directory = tempfile::tempdir()?;
-            let args = args(directory.path());
-            fs_err::write(&args.replacements[0].path, b"signed")?;
+            let args = fixture_args(directory.path());
+            write_signed_binary(&args, "uv", b"signed")?;
             let stamp = ZipDateTimeBuilder::new()
                 .year(2001)
                 .month(2)
@@ -499,7 +497,7 @@ mod tests {
                 .build();
             members.push((extra, b"untouched".to_vec()));
             fixture(&args.input, members, None).await?;
-            wheel_replace(args).await?;
+            inject_signed_wheel_binaries(args).await?;
             let output = directory.path().join("output.whl");
             let (bytes, method, mode) = read_entry(&output, "uv/_find_uv.py").await?;
             assert_eq!(
@@ -526,11 +524,11 @@ mod tests {
         Ok(())
     }
 
-    /// Multiple replacements produce the expected bytes, metadata, and `RECORD` entries together.
+    /// Multiple signed binaries produce the expected bytes, metadata, and `RECORD` entries.
     #[tokio::test]
-    async fn preserves_multiple_replacements() -> Result<()> {
+    async fn preserves_multiple_signed_binaries() -> Result<()> {
         let directory = tempfile::tempdir()?;
-        let mut args = args(directory.path());
+        let args = fixture_args(directory.path());
         let mut members = fixture_members();
         let second_binary = "uv-1.2.3.data/scripts/uvx";
         members.push((
@@ -540,14 +538,9 @@ mod tests {
             b"unsigned uvx".to_vec(),
         ));
         fixture(&args.input, members.clone(), None).await?;
-        fs_err::write(&args.replacements[0].path, b"signed uv")?;
-        let second_path = directory.path().join("signed-uvx");
-        fs_err::write(&second_path, b"signed uvx")?;
-        args.replacements.push(Replacement {
-            member: second_binary.to_string(),
-            path: second_path,
-        });
-        // Derive expected bytes from the fixture and replacements, not from the output archive.
+        write_signed_binary(&args, "uv", b"signed uv")?;
+        write_signed_binary(&args, "uvx", b"signed uvx")?;
+        // Derive expected bytes from the fixture and signed inputs, not from the output archive.
         for (entry, bytes) in &mut members {
             match entry.filename().as_str()? {
                 BINARY => *bytes = b"signed uv".to_vec(),
@@ -575,7 +568,7 @@ mod tests {
                 ))
             })
             .collect::<Result<_>>()?;
-        wheel_replace(args).await?;
+        inject_signed_wheel_binaries(args).await?;
         verify_output(&directory.path().join("output.whl"), &expected).await?;
         Ok(())
     }
@@ -686,17 +679,15 @@ mod tests {
         let temporary = tempfile::tempdir()?;
         let input = temporary.path().join("unsigned.whl");
         let output = temporary.path().join("signed.whl");
-        let replacement = temporary.path().join("uv");
+        let signed_binaries = temporary.path().join("signed");
         write_wheel(&input).await?;
-        fs_err::write(&replacement, b"signed executable")?;
+        fs_err::create_dir(&signed_binaries)?;
+        fs_err::write(signed_binaries.join("uv"), b"signed executable")?;
 
-        wheel_replace(WheelReplaceArgs {
+        inject_signed_wheel_binaries(InjectSignedWheelBinariesArgs {
             input,
             output: output.clone(),
-            replacements: vec![Replacement {
-                member: "uv-1.2.3.data/scripts/uv".to_string(),
-                path: replacement,
-            }],
+            signed_binaries,
         })
         .await?;
 
@@ -721,17 +712,5 @@ mod tests {
         uv-1.2.3.dist-info/RECORD,,
         "###);
         Ok(())
-    }
-
-    /// Replacement arguments require a separator and nonempty member and path components.
-    #[test]
-    fn validates_replacement_arguments() {
-        let valid = Replacement::from_str("uv-1.2.3.data/scripts/uv=/signed/uv")
-            .expect("valid replacement should parse");
-        assert_eq!(valid.member, "uv-1.2.3.data/scripts/uv");
-        assert_eq!(valid.path, Path::new("/signed/uv"));
-        assert!(Replacement::from_str("missing-separator").is_err());
-        assert!(Replacement::from_str("=/signed/uv").is_err());
-        assert!(Replacement::from_str("uv=").is_err());
     }
 }
