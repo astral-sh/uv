@@ -416,7 +416,7 @@ fn locked() -> Result<()> {
     ----- stderr -----
     error: Unable to find lockfile at `uv.lock`, but `--locked` was provided.
 
-    hint: To create a lockfile, run `uv lock` or `uv sync` without the flag.
+    hint: To create a lockfile, run `uv lock` or `uv sync` without the `--locked` flag.
     ");
 
     // Lock the initial requirements.
@@ -488,7 +488,7 @@ fn frozen() -> Result<()> {
     ----- stderr -----
     error: Unable to find lockfile at `uv.lock`, but `--frozen` was provided.
 
-    hint: To create a lockfile, run `uv lock` or `uv sync` without the flag.
+    hint: To create a lockfile, run `uv lock` or `uv sync` without the `--frozen` flag.
     ");
 
     context.lock().assert().success();
