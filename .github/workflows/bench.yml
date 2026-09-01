@@ -53,7 +53,10 @@ jobs:
         run: cargo codspeed build -m walltime --profile profiling -p uv-bench --bench uv --bench workspace_discovery
 
       - name: "Create artifact archive"
-        run: tar -cvf benchmarks-walltime.tar target/codspeed target/debug/uv .cache
+        run: |
+          mkdir -p target/codspeed-bin
+          cp "$(command -v cargo-codspeed)" target/codspeed-bin/
+          tar -cvf benchmarks-walltime.tar target/codspeed target/codspeed-bin target/debug/uv .cache
 
       - name: "Upload benchmark artifacts"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -75,11 +78,6 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: "Install codspeed"
-        uses: taiki-e/install-action@6c6fd71fe4fb72c3697d269963d0e15df8adedad # v2.85.10
-        with:
-          tool: cargo-codspeed
-
       - name: "Download benchmark artifacts"
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
@@ -87,6 +85,9 @@ jobs:
 
       - name: "Extract artifact archive"
         run: tar -xvf benchmarks-walltime.tar
+
+      - name: "Add codspeed to PATH"
+        run: echo "$GITHUB_WORKSPACE/target/codspeed-bin" >> "$GITHUB_PATH"
 
       - name: "Create venv"
         run: ./target/debug/uv venv --cache-dir .cache
