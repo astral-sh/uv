@@ -7,7 +7,7 @@ use crate::commands::ExitStatus;
 use crate::commands::UvError;
 use crate::commands::pip::loggers::DefaultResolveLogger;
 use crate::commands::pip::resolution_markers;
-use crate::commands::project::lock::{LockMode, LockOperation};
+use crate::commands::project::lock::{LockCommand, LockMode, LockOperation};
 use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{
     ProjectEnvironmentPolicy, ProjectInterpreter, ScriptInterpreter, UniversalState,
@@ -185,6 +185,7 @@ pub(crate) async fn audit(
     // Update the lockfile, if necessary.
     let lock = match Box::pin(
         LockOperation::new(
+            LockCommand::Audit,
             mode,
             &settings,
             &client_builder,

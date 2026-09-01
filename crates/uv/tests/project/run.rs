@@ -2546,7 +2546,7 @@ fn run_locked() -> Result<()> {
     ----- stderr -----
     error: Unable to find lockfile at `uv.lock`, but `--locked` was provided.
 
-    hint: Run the command again with `--no-locked`.
+    hint: Run `uv run --no-locked`.
     ");
 
     // Lock the initial requirements.
@@ -2707,7 +2707,7 @@ fn run_frozen() -> Result<()> {
     ----- stderr -----
     error: Unable to find lockfile at `uv.lock`, but `--frozen` was provided.
 
-    hint: Run the command again with `--no-frozen`.
+    hint: Run `uv run --no-frozen`.
     ");
 
     context.lock().assert().success();
