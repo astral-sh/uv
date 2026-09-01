@@ -2691,7 +2691,7 @@ fn init_python_directory() {
     uv_snapshot!(context.filters(), context.init().arg("python"), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: The directory name (`python`) would result in the reserved executable name `python`. Please provide a package name with `--name`.
+    error: The directory name (`python`) cannot be used as project name, please provide a package name with `--name`.
     ");
 
     context
@@ -2740,7 +2740,7 @@ fn init_python_current_directory() -> Result<()> {
     uv_snapshot!(context.filters(), context.init().current_dir(&directory), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: The directory name (`Python`) would result in the reserved executable name `python`. Please provide a package name with `--name`.
+    error: The directory name (`Python`) cannot be used as project name, please provide a package name with `--name`.
     ");
 
     assert!(fs_err::read_dir(directory.path())?.next().is_none());

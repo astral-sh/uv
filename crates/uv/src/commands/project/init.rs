@@ -126,7 +126,7 @@ pub(crate) async fn init(
                     match PackageName::from_owned(candidate) {
                         Ok(name) if name.as_str() == "python" => {
                             anyhow::bail!(
-                                "The directory name (`{directory_name}`) would result in the reserved executable name `python`. Please provide a package name with `--name`."
+                                "The directory name (`{directory_name}`) cannot be used as project name, please provide a package name with `--name`."
                             );
                         }
                         Ok(name) => name,
