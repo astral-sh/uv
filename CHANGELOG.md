@@ -3,6 +3,31 @@
 <!-- prettier-ignore-start -->
 
 
+## 0.12.9
+
+Released on 2026-09-01.
+
+### Python
+
+- Add CPython 3.15.0rc2 ([#21413](https://github.com/astral-sh/uv/pull/21413), [#21415](https://github.com/astral-sh/uv/pull/21415))
+
+### Enhancements
+
+- Add `--no-locked` and `--no-frozen` to disable lock modes enabled by `UV_LOCKED` and `UV_FROZEN` for a single invocation ([#21408](https://github.com/astral-sh/uv/pull/21408))
+- Report the exact command-line lock-mode flag in warnings and errors ([#21402](https://github.com/astral-sh/uv/pull/21402))
+
+### Performance
+
+- Speed up cold wheel installs by extracting each streaming ZIP archive in a single blocking task and reusing buffers across files ([#21372](https://github.com/astral-sh/uv/pull/21372))
+
+### Bug fixes
+
+- Update `async_http_range_reader` to 0.11.1 to address a potential memory-safety issue when reading metadata ranges from untrusted wheels ([#21401](https://github.com/astral-sh/uv/pull/21401))
+- Remove sensitive headers when redirects cross authentication realms, including same-host redirects that change URL schemes ([#21382](https://github.com/astral-sh/uv/pull/21382))
+- Redact secrets in signed URLs from retry diagnostics, including nested request errors ([#21381](https://github.com/astral-sh/uv/pull/21381))
+- Give `--locked`, `--frozen`, `--check`, and `--check-exists` precedence over conflicting `UV_LOCKED` and `UV_FROZEN` values ([#21396](https://github.com/astral-sh/uv/pull/21396))
+- Prevent concurrent uv processes from redundantly extracting the same local or source-built wheel ([#21400](https://github.com/astral-sh/uv/pull/21400))
+
 ## 0.12.8
 
 Released on 2026-08-31.
