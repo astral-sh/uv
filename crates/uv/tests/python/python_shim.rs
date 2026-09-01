@@ -186,6 +186,51 @@ fn python_install_shim() {
 
 #[test]
 #[cfg(feature = "test-python-managed")]
+fn python_install_shim_partial_failure() {
+    let context = uv_test::test_context_with_versions!(&[])
+        .with_filtered_python_keys()
+        .with_filtered_exe_suffix()
+        .with_filtered_latest_python_versions()
+        .with_managed_python_dirs()
+        .with_empty_python_install_mirror()
+        .with_python_download_cache()
+        .with_filter((
+            "cpython-3.13.*.tar.gz",
+            "cpython-3.13.[PATCH]-[DATE]-[PLATFORM].tar.gz",
+        ));
+
+    context
+        .python_install()
+        .args(["--no-bin", "3.12"])
+        .assert()
+        .success();
+
+    // A failed download must not prevent shims for the successfully installed version.
+    uv_snapshot!(context.filters(), context.python_install()
+        .args(["--preview-features", "python-shim", "--offline", "3.12", "3.13"])
+        .env(EnvVars::UV_PYTHON_CACHE_DIR, context.temp_dir.join("python-cache")), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Installed Python shim to `[BIN]/python`
+    Installed Python shim to `[BIN]/python3`
+    Installed Python shim to `[BIN]/python3.12`
+    error: Failed to install cpython-3.13.[LATEST]-[PLATFORM]
+      Caused by: An offline Python installation was requested, but cpython-3.13.[PATCH]-[DATE]-[PLATFORM].tar.gz) is missing in python-cache
+    ");
+
+    uv_snapshot!(context.filters(), installed_shim(&context, "python3.12").arg("-c").arg("import sys; print(sys.version_info[:2])"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    (3, 12)
+    ");
+    context
+        .bin_dir
+        .child(format!("python3.13{}", std::env::consts::EXE_SUFFIX))
+        .assert(predicate::path::missing());
+}
+
+#[test]
+#[cfg(feature = "test-python-managed")]
 fn python_install_shim_from_standalone_uv() {
     let binaries = assert_fs::TempDir::new().expect("create binary directory");
     let uv = binaries.child(format!("uv{}", std::env::consts::EXE_SUFFIX));

@@ -758,7 +758,7 @@ async fn perform_install(
         installation.ensure_minor_version_link()?;
     }
 
-    if install_shim && errors.is_empty() {
+    if install_shim && !installations.is_empty() {
         install_python_shims(&installations, &existing_installations, force, printer)?;
     }
 
