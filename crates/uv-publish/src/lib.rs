@@ -42,10 +42,9 @@ use uv_pypi_types::{HashAlgorithm, HashDigest, Metadata23, MetadataError};
 use uv_redacted::{DisplaySafeUrl, DisplaySafeUrlError};
 use uv_warnings::warn_user;
 
+pub use crate::trusted_publishing::TrustedPublishingToken;
 use crate::trusted_publishing::pypi::PyPIPublishingService;
-use crate::trusted_publishing::{
-    TrustedPublishingError, TrustedPublishingService, TrustedPublishingToken,
-};
+use crate::trusted_publishing::{TrustedPublishingError, TrustedPublishingService};
 
 #[derive(Error, Debug)]
 pub enum PublishError {
@@ -475,6 +474,19 @@ pub async fn check_trusted_publishing(
         }
         TrustedPublishing::Never => Ok(TrustedPublishResult::Skipped),
     }
+}
+
+/// Request revocation of a token obtained through trusted publishing.
+///
+/// A successful request does not guarantee that the token was revoked.
+pub async fn burn_trusted_publishing_token(
+    token: &TrustedPublishingToken,
+    registry: &DisplaySafeUrl,
+    client: &BaseClient,
+) -> Result<(), TrustedPublishingError> {
+    PyPIPublishingService::new(registry, client)
+        .burn_token(token)
+        .await
 }
 
 /// Upload a file to a registry.

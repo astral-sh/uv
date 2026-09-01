@@ -16,12 +16,12 @@ use uv_distribution_filename::DistFilename;
 use uv_distribution_types::{IndexCapabilities, IndexLocations, IndexUrl};
 use uv_errors::{ErrorOptions, Hints, write_error_chain_with_options};
 use uv_publish::{
-    CheckUrlClient, FormMetadata, PublishError, TrustedPublishResult, check_trusted_publishing,
-    group_files_for_publishing, upload,
+    CheckUrlClient, FormMetadata, PublishError, TrustedPublishResult, TrustedPublishingToken,
+    burn_trusted_publishing_token, check_trusted_publishing, group_files_for_publishing, upload,
 };
 use uv_redacted::DisplaySafeUrl;
 use uv_settings::EnvironmentOptions;
-use uv_warnings::warn_user_once;
+use uv_warnings::{warn_user, warn_user_once};
 
 use crate::commands::reporters::PublishReporter;
 use crate::commands::{ExitStatus, human_readable_bytes};
@@ -143,7 +143,7 @@ pub(crate) async fn publish(
     let download_concurrency = Arc::new(Semaphore::new(1));
 
     // Load credentials.
-    let (publish_url, credentials) = gather_credentials(
+    let (publish_url, credentials, trusted_publishing_token) = gather_credentials(
         publish_url,
         username,
         password,
@@ -173,137 +173,152 @@ pub(crate) async fn publish(
         None
     };
 
-    let mut error_count: usize = 0;
+    // Keep the publishing result so token revocation also runs after an upload or metadata error.
+    let result = async {
+        let mut error_count: usize = 0;
 
-    for group in groups {
-        // Check if the filename is normalized (e.g., version `2025.09.4` should be `2025.9.4`).
-        let normalized_filename = group.filename.to_string();
-        if group.raw_filename != normalized_filename {
-            warn_user_once!(
-                "`{}` has a non-normalized filename (expected `{normalized_filename}`), skipping",
-                group.raw_filename
-            );
-            continue;
-        }
+        for group in groups {
+            // Check if the filename is normalized (e.g., version `2025.09.4` should be `2025.9.4`).
+            let normalized_filename = group.filename.to_string();
+            if group.raw_filename != normalized_filename {
+                warn_user_once!(
+                    "`{}` has a non-normalized filename (expected `{normalized_filename}`), skipping",
+                    group.raw_filename
+                );
+                continue;
+            }
 
-        let reporter = Arc::new(PublishReporter::single(printer));
+            let reporter = Arc::new(PublishReporter::single(printer));
 
-        if let Some(check_url_client) = &check_url_client {
-            match uv_publish::check_url(
-                check_url_client,
-                &group.file,
-                &group.filename,
+            if let Some(check_url_client) = &check_url_client {
+                match uv_publish::check_url(
+                    check_url_client,
+                    &group.file,
+                    &group.filename,
+                    &download_concurrency,
+                    reporter.clone(),
+                )
+                .await
+                {
+                    Ok(true) => {
+                        writeln!(
+                            printer.stderr(),
+                            "File {} already exists, skipping",
+                            group.filename
+                        )?;
+                        continue;
+                    }
+                    Ok(false) => {}
+                    Err(err) => {
+                        if dry_run {
+                            write_error_chain_with_options(
+                                &err,
+                                Hints::none(),
+                                ErrorOptions::default().with_stream(printer.stderr()),
+                            )?;
+                            error_count += 1;
+                            continue;
+                        }
+                        return Err(err.into());
+                    }
+                }
+            }
+
+            let bytes = human_readable_bytes(fs_err::metadata(&group.file)?.len());
+            if dry_run {
+                writeln!(
+                    printer.stderr(),
+                    "{} {} {}",
+                    "Checking".bold().cyan(),
+                    group.filename,
+                    format!("({bytes:.1})").dimmed()
+                )?;
+            } else {
+                writeln!(
+                    printer.stderr(),
+                    "{} {} {}",
+                    "Hashing".bold().green(),
+                    group.filename,
+                    format!("({bytes:.1})").dimmed()
+                )?;
+            }
+
+            // Collect the metadata for the file.
+            let form_metadata =
+                match FormMetadata::read_from_file(&group.file, &group.filename, reporter.clone())
+                    .await
+                    .map_err(|err| PublishError::PublishPrepare(group.file.clone(), Box::new(err)))
+                {
+                    Ok(metadata) => metadata,
+                    Err(err) => {
+                        if dry_run {
+                            write_error_chain_with_options(
+                                &err,
+                                Hints::none(),
+                                ErrorOptions::default().with_stream(printer.stderr()),
+                            )?;
+                            error_count += 1;
+                            continue;
+                        }
+                        return Err(err.into());
+                    }
+                };
+
+            if dry_run {
+                continue;
+            }
+
+            writeln!(
+                printer.stderr(),
+                "{} {} {}",
+                "Uploading".bold().green(),
+                group.filename,
+                format!("({bytes:.1})").dimmed()
+            )?;
+
+            let uploaded = upload(
+                &group,
+                &form_metadata,
+                &publish_url,
+                &upload_client,
+                retry_policy,
+                &credentials,
+                check_url_client.as_ref(),
                 &download_concurrency,
                 reporter.clone(),
             )
-            .await
-            {
-                Ok(true) => {
-                    writeln!(
-                        printer.stderr(),
-                        "File {} already exists, skipping",
-                        group.filename
-                    )?;
-                    continue;
-                }
-                Ok(false) => {}
-                Err(err) => {
-                    if dry_run {
-                        write_error_chain_with_options(
-                            &err,
-                            Hints::none(),
-                            ErrorOptions::default().with_stream(printer.stderr()),
-                        )?;
-                        error_count += 1;
-                        continue;
-                    }
-                    return Err(err.into());
-                }
+            .await?;
+            info!("Upload succeeded");
+
+            if !uploaded {
+                writeln!(
+                    printer.stderr(),
+                    "{}",
+                    "File already exists, skipping".dimmed()
+                )?;
             }
         }
 
-        let bytes = human_readable_bytes(fs_err::metadata(&group.file)?.len());
-        if dry_run {
-            writeln!(
-                printer.stderr(),
-                "{} {} {}",
-                "Checking".bold().cyan(),
-                group.filename,
-                format!("({bytes:.1})").dimmed()
-            )?;
-        } else {
-            writeln!(
-                printer.stderr(),
-                "{} {} {}",
-                "Hashing".bold().green(),
-                group.filename,
-                format!("({bytes:.1})").dimmed()
-            )?;
+        if error_count > 0 {
+            let failed = if error_count == 1 { "file" } else { "files" };
+            writeln!(printer.stderr(), "Found issues with {error_count} {failed}")?;
+            return Ok(ExitStatus::Failure);
         }
 
-        // Collect the metadata for the file.
-        let form_metadata =
-            match FormMetadata::read_from_file(&group.file, &group.filename, reporter.clone())
-                .await
-                .map_err(|err| PublishError::PublishPrepare(group.file.clone(), Box::new(err)))
-            {
-                Ok(metadata) => metadata,
-                Err(err) => {
-                    if dry_run {
-                        write_error_chain_with_options(
-                            &err,
-                            Hints::none(),
-                            ErrorOptions::default().with_stream(printer.stderr()),
-                        )?;
-                        error_count += 1;
-                        continue;
-                    }
-                    return Err(err.into());
-                }
-            };
+        Ok(ExitStatus::Success)
+    }
+    .await;
 
-        if dry_run {
-            continue;
-        }
-
-        writeln!(
-            printer.stderr(),
-            "{} {} {}",
-            "Uploading".bold().green(),
-            group.filename,
-            format!("({bytes:.1})").dimmed()
-        )?;
-
-        let uploaded = upload(
-            &group,
-            &form_metadata,
-            &publish_url,
-            &upload_client,
-            retry_policy,
-            &credentials,
-            check_url_client.as_ref(),
-            &download_concurrency,
-            reporter.clone(),
-        )
-        .await?;
-        info!("Upload succeeded");
-
-        if !uploaded {
-            writeln!(
-                printer.stderr(),
-                "{}",
-                "File already exists, skipping".dimmed()
-            )?;
-        }
+    if let Some(token) = trusted_publishing_token
+        && let Err(err) = burn_trusted_publishing_token(&token, &publish_url, &oidc_client).await
+    {
+        warn_user!(
+            "Failed to revoke trusted publishing token: {err}. The token will expire naturally."
+        );
+        debug!("Trusted publishing token revocation failed: {err:?}");
     }
 
-    if error_count > 0 {
-        let failed = if error_count == 1 { "file" } else { "files" };
-        writeln!(printer.stderr(), "Found issues with {error_count} {failed}")?;
-        return Ok(ExitStatus::Failure);
-    }
-
-    Ok(ExitStatus::Success)
+    result
 }
 
 /// Whether to allow prompting for username and password.
@@ -344,7 +359,7 @@ enum Prompt {
 /// If no credentials are found, the auth middleware does a final check for cached credentials and
 /// otherwise errors without sending the request.
 ///
-/// Returns the publish URL, the username and the password.
+/// Returns the publish URL, credentials, and any trusted publishing token to revoke after use.
 async fn gather_credentials(
     mut publish_url: DisplaySafeUrl,
     mut username: Option<String>,
@@ -355,7 +370,7 @@ async fn gather_credentials(
     check_url: Option<&IndexUrl>,
     prompt: Prompt,
     printer: Printer,
-) -> Result<(DisplaySafeUrl, Credentials)> {
+) -> Result<(DisplaySafeUrl, Credentials, Option<TrustedPublishingToken>)> {
     // Support reading username and password from the URL, for symmetry with the index API.
     if let Some(url_password) = publish_url.password() {
         if password.is_some_and(|password| password != url_password) {
@@ -408,31 +423,37 @@ async fn gather_credentials(
         );
     }
 
-    if username.is_none()
-        && password.is_none()
-        && keyring_provider == KeyringProviderType::Disabled
-        && let TrustedPublishResult::Ignored(err) = trusted_publishing_token
-    {
-        // The user has configured something incorrectly:
-        // * The user forgot to configure credentials.
-        // * The user forgot to forward the secrets as env vars (or used the wrong ones).
-        // * The trusted publishing configuration is wrong.
-        writeln!(
-            printer.stderr(),
-            "Note: Neither credentials nor keyring are configured, and there was an error \
-            fetching the trusted publishing token. If you don't want to use trusted \
-            publishing, you can ignore this error, but you need to provide credentials."
-        )?;
+    let trusted_publishing_token = match trusted_publishing_token {
+        TrustedPublishResult::Configured(token) => Some(token),
+        TrustedPublishResult::Skipped => None,
+        TrustedPublishResult::Ignored(err) => {
+            if username.is_none()
+                && password.is_none()
+                && keyring_provider == KeyringProviderType::Disabled
+            {
+                // The user has configured something incorrectly:
+                // * The user forgot to configure credentials.
+                // * The user forgot to forward the secrets as env vars (or used the wrong ones).
+                // * The trusted publishing configuration is wrong.
+                writeln!(
+                    printer.stderr(),
+                    "Note: Neither credentials nor keyring are configured, and there was an error \
+                    fetching the trusted publishing token. If you don't want to use trusted \
+                    publishing, you can ignore this error, but you need to provide credentials."
+                )?;
 
-        trace!("Error trace: {err:?}");
-        write_error_chain_with_options(
-            anyhow::Error::from(err)
-                .context("Trusted publishing failed")
-                .as_ref(),
-            Hints::none(),
-            ErrorOptions::default().with_stream(printer.stderr()),
-        )?;
-    }
+                trace!("Error trace: {err:?}");
+                write_error_chain_with_options(
+                    anyhow::Error::from(err)
+                        .context("Trusted publishing failed")
+                        .as_ref(),
+                    Hints::none(),
+                    ErrorOptions::default().with_stream(printer.stderr()),
+                )?;
+            }
+            None
+        }
+    };
 
     // If applicable, fetch the password from the keyring eagerly to avoid user confusion about
     // missing keyring entries later.
@@ -464,7 +485,7 @@ async fn gather_credentials(
 
     let credentials = Credentials::basic(username, password);
 
-    Ok((publish_url, credentials))
+    Ok((publish_url, credentials, trusted_publishing_token))
 }
 
 fn prompt_username_and_password() -> Result<(Option<String>, Option<String>)> {
@@ -508,6 +529,7 @@ mod tests {
             Printer::Quiet,
         )
         .await
+        .map(|(publish_url, credentials, _)| (publish_url, credentials))
     }
 
     #[tokio::test]
