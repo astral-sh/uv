@@ -55,7 +55,7 @@ use crate::commands::pip::loggers::{
 };
 use crate::commands::pip::operations::Modifications;
 use crate::commands::project::install_target::InstallTarget;
-use crate::commands::project::lock::LockMode;
+use crate::commands::project::lock::{LockCommand, LockMode};
 use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{
     LinkErrorReporting, PlatformState, ProjectEnvironment, ProjectEnvironmentPolicy, ProjectError,
@@ -1098,6 +1098,7 @@ async fn lock_and_sync(
 ) -> Result<(), ProjectError> {
     let mut lock = Box::pin(
         project::lock::LockOperation::new(
+            LockCommand::Add,
             if let LockCheck::Enabled(lock_check) = lock_check {
                 LockMode::Locked(target.interpreter(), lock_check)
             } else if dry_run {
@@ -1223,6 +1224,7 @@ async fn lock_and_sync(
             // the addition of the minimum version specifiers.
             lock = Box::pin(
                 project::lock::LockOperation::new(
+                    LockCommand::Add,
                     if let LockCheck::Enabled(lock_check) = lock_check {
                         LockMode::Locked(target.interpreter(), lock_check)
                     } else if dry_run {
