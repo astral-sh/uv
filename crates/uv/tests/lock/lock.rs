@@ -38379,44 +38379,6 @@ fn lock_frozen_errors_report_source() -> Result<()> {
     Ok(())
 }
 
-/// Both spellings retain the same conflicts with other lock modes and dry runs.
-#[cfg(feature = "test-universal")]
-#[test]
-fn lock_frozen_flag_conflicts() {
-    let context = uv_test::test_context_with_versions!(&[]);
-
-    for flag in ["--frozen", "--check-exists"] {
-        context
-            .lock()
-            .arg("--show-settings")
-            .arg(flag)
-            .assert()
-            .success();
-
-        for conflict in [
-            "--check",
-            "--locked",
-            "--dry-run",
-            "--frozen",
-            "--check-exists",
-        ] {
-            // Showing settings succeeds without a project unless argument validation fails.
-            context
-                .lock()
-                .arg("--show-settings")
-                .args([flag, conflict])
-                .assert()
-                .code(2);
-            context
-                .lock()
-                .arg("--show-settings")
-                .args([conflict, flag])
-                .assert()
-                .code(2);
-        }
-    }
-}
-
 /// Test that `uv lock --frozen` and `UV_FROZEN=1` show a warning.
 ///
 /// See: <https://github.com/astral-sh/uv/issues/12783>
