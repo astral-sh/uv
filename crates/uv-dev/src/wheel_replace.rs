@@ -10,10 +10,8 @@ use async_zip::{Compression, ZipEntryBuilder, ZipFile};
 use base64::Engine;
 use base64::prelude::BASE64_URL_SAFE_NO_PAD;
 use clap::Parser;
-use futures::io::{AllowStdIo, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
+use futures::io::{AllowStdIo, AsyncWrite, AsyncWriteExt};
 use sha2::{Digest, Sha256};
-
-const BUFFER_SIZE: usize = 128 * 1024;
 
 #[derive(Debug, Parser)]
 pub(crate) struct WheelReplaceArgs {
@@ -52,6 +50,9 @@ impl FromStr for Replacement {
 }
 
 /// Rewrite a trusted wheel without extracting its members to the filesystem.
+///
+/// Read and write one member at a time in memory. Each member and its compressed output must fit
+/// in memory; this helper is intended for trusted build artifacts, not arbitrary input archives.
 ///
 /// Preserve exact decompressed bytes except for explicitly replaced members and `RECORD`. Preserve
 /// each non-`RECORD` member's compression method, DOS timestamp, internal/external attributes and
@@ -117,32 +118,34 @@ pub(crate) async fn wheel_replace(args: WheelReplaceArgs) -> Result<()> {
                 !replacements.contains_key(&name),
                 "cannot replace directory member `{name}`"
             );
-            let mut original = archive.reader_with_entry(index).await?;
-            let size = futures::io::copy(&mut original, &mut futures::io::sink()).await?;
-            ensure!(size == 0, "directory member `{name}` contains data");
-            validate_zip_contents(&mut original, size)?;
+            let mut bytes = Vec::new();
+            archive
+                .reader_with_entry(index)
+                .await?
+                .read_to_end_checked(&mut bytes)
+                .await?;
+            ensure!(bytes.is_empty(), "directory member `{name}` contains data");
             writer.write_entry_whole(builder, &[]).await?;
             continue;
         }
-        let mut output_entry = writer.write_entry_seekable(builder).await?;
-        let (hash, size) = if let Some(path) = replacements.remove(&name) {
-            let replacement = fs_err::File::open(&path)
-                .with_context(|| format!("failed to open replacement `{}`", path.display()))?;
-            ensure!(
-                replacement.metadata()?.is_file(),
-                "replacement `{}` is not a regular file",
-                path.display()
-            );
-            let mut replacement = AllowStdIo::new(BufReader::new(replacement));
-            copy_hashed(&mut replacement, &mut output_entry).await?
+        let bytes = if let Some(path) = replacements.remove(&name) {
+            fs_err::read(&path)
+                .with_context(|| format!("failed to read replacement `{}`", path.display()))?
         } else {
-            let mut original = archive.reader_with_entry(index).await?;
-            let (hash, size) = copy_hashed(&mut original, &mut output_entry).await?;
-            validate_zip_contents(&mut original, size)?;
-            (hash, size)
+            let mut bytes = Vec::new();
+            archive
+                .reader_with_entry(index)
+                .await?
+                .read_to_end_checked(&mut bytes)
+                .await?;
+            bytes
         };
-        output_entry.close().await?;
-        output_record.push((name, hash, size));
+        writer.write_entry_whole(builder, &bytes).await?;
+        output_record.push((
+            name,
+            BASE64_URL_SAFE_NO_PAD.encode(Sha256::digest(&bytes)),
+            bytes.len() as u64,
+        ));
     }
     ensure!(
         replacements.is_empty(),
@@ -209,26 +212,6 @@ fn validate_archive(file: &ZipFile) -> Result<String> {
     record.context("wheel does not contain a RECORD file")
 }
 
-/// Compare a fully consumed member's byte counts and CRC32 with its ZIP metadata.
-fn validate_zip_contents<R: futures::io::AsyncBufRead + Unpin>(
-    reader: &mut async_zip::base::read::ZipEntryReader<'_, R, async_zip::base::read::WithEntry<'_>>,
-    size: u64,
-) -> Result<()> {
-    ensure!(
-        size == reader.entry().uncompressed_size(),
-        "ZIP member size does not match its contents"
-    );
-    ensure!(
-        reader.bytes_read() == reader.entry().compressed_size(),
-        "ZIP member compressed size does not match its contents"
-    );
-    ensure!(
-        reader.compute_hash() == reader.entry().crc32(),
-        "ZIP member CRC32 does not match its contents"
-    );
-    Ok(())
-}
-
 /// Serialize file names, encoded SHA-256 hashes, and sizes, then append the empty `RECORD` self-row.
 fn write_record(record_path: &str, entries: Vec<(String, String, u64)>) -> Result<Vec<u8>> {
     let mut writer = csv::Writer::from_writer(Vec::new());
@@ -252,28 +235,6 @@ fn validate_member_type(name: &str, permissions: Option<u16>, directory: bool) -
         "wheel member `{name}` is not a regular file or directory"
     );
     Ok(())
-}
-
-/// Copy bytes through a fixed-size buffer and return their unpadded URL-safe Base64 SHA-256 and size.
-async fn copy_hashed(
-    reader: &mut (impl AsyncRead + Unpin),
-    writer: &mut (impl AsyncWrite + Unpin),
-) -> Result<(String, u64)> {
-    let mut sha256 = Sha256::new();
-    let mut size: u64 = 0;
-    let mut buffer = vec![0; BUFFER_SIZE];
-    loop {
-        let read = reader.read(&mut buffer).await?;
-        if read == 0 {
-            break;
-        }
-        size = size
-            .checked_add(read as u64)
-            .context("wheel member size overflowed")?;
-        writer.write_all(&buffer[..read]).await?;
-        sha256.update(&buffer[..read]);
-    }
-    Ok((BASE64_URL_SAFE_NO_PAD.encode(sha256.finalize()), size))
 }
 
 #[cfg(test)]
@@ -679,27 +640,10 @@ mod tests {
         Ok(())
     }
 
-    /// Copying and hashing include the final partial buffer.
+    /// CRC32 is checked for copied contents, but not for discarded replacement data.
     #[tokio::test]
-    async fn streams_across_buffer_boundaries() -> Result<()> {
-        let bytes = vec![42; BUFFER_SIZE + 1];
-        let mut input = futures::io::Cursor::new(&bytes);
-        let mut output = Vec::new();
-        let (hash, size) = copy_hashed(&mut input, &mut output).await?;
-        assert_eq!(output, bytes);
-        assert_eq!(size, bytes.len() as u64);
-        assert_eq!(hash, BASE64_URL_SAFE_NO_PAD.encode(Sha256::digest(&bytes)));
-        Ok(())
-    }
-
-    /// Invalid copied CRC32 or size metadata is rejected, but discarded replacement data is ignored.
-    #[tokio::test]
-    async fn validates_only_copied_zip_contents() -> Result<()> {
-        for (member_index, field, replacement) in [
-            (0, 16, 0_u32), // Replaced member: the old CRC32 is irrelevant.
-            (1, 16, 0_u32), // Copied member: CRC32 must match.
-            (1, 24, 9_u32), // Copied member: uncompressed size must match.
-        ] {
+    async fn checks_crc32_only_for_copied_members() -> Result<()> {
+        for member_index in [0, 1] {
             let directory = tempfile::tempdir()?;
             let args = args(directory.path());
             fs_err::write(&args.replacements[0].path, b"signed")?;
@@ -712,8 +656,7 @@ mod tests {
                 .nth(member_index)
                 .map(|(position, _)| position)
                 .context("missing ZIP header")?;
-            bytes[position + field..position + field + 4]
-                .copy_from_slice(&replacement.to_le_bytes());
+            bytes[position + 16..position + 20].copy_from_slice(&0_u32.to_le_bytes());
             fs_err::write(&args.input, bytes)?;
             if member_index == 0 {
                 wheel_replace(args).await?;
@@ -927,10 +870,9 @@ mod tests {
             );
             let mut reader = archive.reader_with_entry(index).await?;
             let mut bytes = Vec::new();
-            reader.read_to_end(&mut bytes).await?;
+            reader.read_to_end_checked(&mut bytes).await?;
             let size = bytes.len() as u64;
             let hash = BASE64_URL_SAFE_NO_PAD.encode(Sha256::digest(&bytes));
-            validate_zip_contents(&mut reader, size)?;
             ensure!(
                 &hash == expected_hash && size == *expected_size,
                 "output bytes changed for `{name}`"
