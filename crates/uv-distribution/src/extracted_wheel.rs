@@ -1,7 +1,9 @@
 use std::fmt::Display;
+use std::io;
 use std::path::Path;
 
 use either::Either;
+use tempfile::TempDir;
 use tokio::io::AsyncRead;
 
 use uv_extract::dirhash::{DirhashTree, HashedFile, UnhashedFile, dirhash_path};
@@ -16,68 +18,96 @@ pub(crate) struct HashedWheel {
     pub(crate) tree: DirhashTree,
 }
 
+/// A temporary directory and configuration for extracting a wheel.
+pub(crate) struct WheelExtractor {
+    temp_dir: TempDir,
+    content_addressed: bool,
+}
+
+/// An extracted wheel that owns its temporary directory until persistence.
+pub(crate) struct ExtractedWheel {
+    temp_dir: TempDir,
+    files: ExtractedFiles,
+}
+
 /// Files extracted from a wheel, with or without content-addressing metadata.
-pub(crate) enum ExtractedWheel {
+enum ExtractedFiles {
     Unhashed(Vec<UnhashedFile>),
     Hashed(HashedWheel),
 }
 
-impl ExtractedWheel {
+impl WheelExtractor {
+    /// Create a temporary directory under the cache root for extracting a wheel.
+    pub(crate) fn new(root: &Path, content_addressed: bool) -> io::Result<Self> {
+        Ok(Self {
+            temp_dir: tempfile::tempdir_in(root)?,
+            content_addressed,
+        })
+    }
+
     /// Extract a wheel from a streaming reader, optionally retaining its per-file digests.
     ///
     /// See [`uv_extract::stream::unzip`] for buffering, cleanup, and download hash requirements.
     pub(crate) async fn extract_streaming<R>(
+        self,
         reader: R,
-        temp_dir: tempfile::TempDir,
-        content_addressed: bool,
-    ) -> Result<(tempfile::TempDir, Self), uv_extract::Error>
+    ) -> Result<ExtractedWheel, uv_extract::Error>
     where
         R: AsyncRead + Unpin,
     {
-        if content_addressed {
+        if self.content_addressed {
             let (temp_dir, files, tree) =
-                uv_extract::stream::unzip_and_hash(reader, temp_dir).await?;
-            Ok((temp_dir, Self::Hashed(HashedWheel { files, tree })))
+                uv_extract::stream::unzip_and_hash(reader, self.temp_dir).await?;
+            Ok(ExtractedWheel {
+                temp_dir,
+                files: ExtractedFiles::Hashed(HashedWheel { files, tree }),
+            })
         } else {
-            let (temp_dir, files) = uv_extract::stream::unzip(reader, temp_dir).await?;
-            Ok((temp_dir, Self::Unhashed(files)))
+            let (temp_dir, files) = uv_extract::stream::unzip(reader, self.temp_dir).await?;
+            Ok(ExtractedWheel {
+                temp_dir,
+                files: ExtractedFiles::Unhashed(files),
+            })
         }
     }
 
     /// Extract a wheel from a seekable file, optionally retaining its per-file digests.
     pub(crate) fn extract_seekable(
+        self,
         reader: fs_err::File,
-        target: &Path,
-        content_addressed: bool,
-    ) -> Result<Self, uv_extract::Error> {
-        if content_addressed {
-            let (files, tree) = uv_extract::unzip_and_hash(reader, target)?;
-            Ok(Self::Hashed(HashedWheel { files, tree }))
+    ) -> Result<ExtractedWheel, uv_extract::Error> {
+        let files = if self.content_addressed {
+            let (files, tree) = uv_extract::unzip_and_hash(reader, self.temp_dir.path())?;
+            ExtractedFiles::Hashed(HashedWheel { files, tree })
         } else {
-            let files = uv_extract::unzip(reader, target)?;
-            Ok(Self::Unhashed(files))
-        }
+            let files = uv_extract::unzip(reader, self.temp_dir.path())?;
+            ExtractedFiles::Unhashed(files)
+        };
+        Ok(ExtractedWheel {
+            temp_dir: self.temp_dir,
+            files,
+        })
     }
+}
 
-    /// Return the hashed wheel if content hashing was enabled.
-    pub(crate) fn into_hashed(self) -> Option<HashedWheel> {
-        match self {
-            Self::Unhashed(_) => None,
-            Self::Hashed(wheel) => Some(wheel),
-        }
+impl ExtractedWheel {
+    /// Return the temporary directory and optional content hashes for persistence.
+    pub(crate) fn into_parts(self) -> (TempDir, Option<HashedWheel>) {
+        let hashed_wheel = match self.files {
+            ExtractedFiles::Unhashed(_) => None,
+            ExtractedFiles::Hashed(wheel) => Some(wheel),
+        };
+        (self.temp_dir, hashed_wheel)
     }
 
     /// Heal the wheel's `RECORD` and keep its hash tree consistent with the repaired contents.
-    pub(crate) fn validate_and_heal_record(
-        &mut self,
-        root: &Path,
-        dist: impl Display,
-    ) -> Result<(), Error> {
-        let files = match self {
-            Self::Unhashed(files) => {
+    pub(crate) fn validate_and_heal_record(&mut self, dist: impl Display) -> Result<(), Error> {
+        let root = self.temp_dir.path();
+        let files = match &self.files {
+            ExtractedFiles::Unhashed(files) => {
                 Either::Left(files.iter().map(|file| (file.path(), file.size())))
             }
-            Self::Hashed(wheel) => {
+            ExtractedFiles::Hashed(wheel) => {
                 Either::Right(wheel.files.iter().map(|file| (file.path(), file.size())))
             }
         };
@@ -86,7 +116,7 @@ impl ExtractedWheel {
         else {
             return Ok(());
         };
-        let Self::Hashed(hashed_wheel) = self else {
+        let ExtractedFiles::Hashed(hashed_wheel) = &mut self.files else {
             return Ok(());
         };
 
