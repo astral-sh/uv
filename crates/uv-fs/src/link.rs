@@ -69,6 +69,11 @@ pub enum OnExistingDirectory {
 
 /// Link a directory tree from `src` to `dst` using the mode in `options`.
 ///
+/// [`LinkMode::Symlink`] links top-level directories without inspecting their contents. Shared
+/// directory links are fully expanded before merging, regardless of the requested mode. Source
+/// trees must not contain directory symlinks. Concurrent writers must share [`CopyLocks`] and a
+/// destination root, and prepare package directories before writing below them.
+///
 /// Returns the [`LinkMode`] that was actually used, which may differ from the requested mode if a
 /// fallback was needed, e.g., if hard linking was requested but the source and destination are on
 /// different filesystems.
@@ -80,20 +85,14 @@ pub fn link_dir<F>(
 where
     F: Fn(&Path) -> bool,
 {
-    if options.directory_symlinks {
-        if same_file::is_same_file(src, dst).unwrap_or(false) {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidInput,
-                "Cannot link a directory onto itself",
-            )
-            .into());
-        }
-        return link_dir_entries(src, dst, options);
+    if same_file::is_same_file(src, dst).unwrap_or(false) {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "Cannot link a directory onto itself",
+        )
+        .into());
     }
-    match options.mode {
-        LinkMode::Clone => clone_dir(src, dst, options),
-        mode => walk_and_link(src, dst, mode, options),
-    }
+    link_dir_entries(src, dst, options)
 }
 
 /// Directory-level locks for concurrent copy operations.
@@ -201,8 +200,6 @@ pub struct LinkOptions<'a, F = fn(&Path) -> bool> {
     copy_locks: Option<&'a CopyLocks>,
     /// What to do when the destination directory already exists.
     on_existing_directory: OnExistingDirectory,
-    /// Allow top-level directories to be symlinked, fully expanding shared directory links.
-    directory_symlinks: bool,
 }
 
 impl LinkOptions<'static> {
@@ -213,7 +210,6 @@ impl LinkOptions<'static> {
             needs_mutable_copy: |_| false,
             copy_locks: None,
             on_existing_directory: OnExistingDirectory::default(),
-            directory_symlinks: false,
         }
     }
 }
@@ -227,6 +223,9 @@ impl<'a, F> LinkOptions<'a, F> {
     /// Files matching this predicate will use [`LinkMode::Copy`] instead when using
     /// [`LinkMode::Hardlink`] or [`LinkMode::Symlink`] are requested.
     ///
+    /// In [`LinkMode::Symlink`], also select top-level directories containing mutable files to
+    /// prevent linking the directory without inspecting its contents.
+    ///
     /// Has no effect when using [`LinkMode::Copy`] or [`LinkMode::Clone`], since the linked file is
     /// already mutable without affecting source.
     pub fn with_mutable_copy_filter<G>(self, f: G) -> LinkOptions<'a, G>
@@ -238,7 +237,6 @@ impl<'a, F> LinkOptions<'a, F> {
             needs_mutable_copy: f,
             copy_locks: self.copy_locks,
             on_existing_directory: self.on_existing_directory,
-            directory_symlinks: self.directory_symlinks,
         }
     }
 
@@ -259,20 +257,6 @@ impl<'a, F> LinkOptions<'a, F> {
         on_existing_directory: OnExistingDirectory,
     ) -> Self {
         self.on_existing_directory = on_existing_directory;
-        self
-    }
-
-    /// Symlink top-level directories in [`LinkMode::Symlink`], fully expanding shared links in any mode.
-    ///
-    /// The mutable-copy filter must select every top-level directory containing mutable files:
-    /// eligible directories are linked without inspecting their contents. Source trees must not
-    /// contain directory symlinks.
-    ///
-    /// Concurrent overlapping writers must share [`CopyLocks`] and a destination root, and prepare
-    /// package directories before writing below them. Shared directories use ordinary per-file linking.
-    #[must_use]
-    pub fn with_directory_symlinks(mut self) -> Self {
-        self.directory_symlinks = true;
         self
     }
 
@@ -382,9 +366,10 @@ pub fn materialize_symlink_dir(path: &Path) -> Result<(), LinkError> {
         .parent()
         .ok_or_else(|| io::Error::other("Directory link has no parent"))?;
     let temporary = tempfile::tempdir_in(parent)?;
-    link_dir(
+    walk_and_link(
         &source,
         temporary.path(),
+        LinkMode::Symlink,
         &LinkOptions::new(LinkMode::Symlink),
     )?;
     crate::remove_symlink(path)?;
@@ -1215,6 +1200,7 @@ mod tests {
         // If symlink succeeded, verify files are symlinks
         if result == LinkMode::Symlink {
             assert!(dst_dir.path().join("file1.txt").is_symlink());
+            assert!(dst_dir.path().join("subdir").is_symlink());
         }
     }
 

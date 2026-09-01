@@ -271,7 +271,6 @@ pub(crate) fn link_wheel_files(
                     .is_some_and(|extension| extension == "dist-info" || extension == "data")
         })
         .with_copy_locks(state.copy_locks())
-        .with_directory_symlinks()
         .with_on_existing_directory(OnExistingDirectory::Merge);
     let used_link_mode = link_dir(wheel, site_packages, &options)?;
 
