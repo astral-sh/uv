@@ -3,6 +3,33 @@
 <!-- prettier-ignore-start -->
 
 
+## 0.12.9
+
+Released on 2026-09-01.
+
+### Enhancements
+
+- Preserve the supplied lock flag in diagnostics ([#21402](https://github.com/astral-sh/uv/pull/21402))
+
+### Performance
+
+- Run streaming ZIP extraction in a blocking task ([#21372](https://github.com/astral-sh/uv/pull/21372))
+
+### Bug fixes
+
+- Avoid duplicate concurrent wheel extraction ([#21400](https://github.com/astral-sh/uv/pull/21400))
+- Bump async_http_range_reader to 0.11.1 ([#21401](https://github.com/astral-sh/uv/pull/21401))
+- Give CLI lock flags precedence over environment variables ([#21396](https://github.com/astral-sh/uv/pull/21396))
+- Use authentication realms when following redirects ([#21382](https://github.com/astral-sh/uv/pull/21382))
+
+### Other changes
+
+- Add CPython 3.15.0rc2 ([#21413](https://github.com/astral-sh/uv/pull/21413))
+- Allow negating locked and frozen modes ([#21408](https://github.com/astral-sh/uv/pull/21408))
+- Redact signed URLs in retry diagnostics ([#21381](https://github.com/astral-sh/uv/pull/21381))
+- Sync latest Python releases ([#21415](https://github.com/astral-sh/uv/pull/21415))
+- Use Namespace runners for Windows release builds ([#21391](https://github.com/astral-sh/uv/pull/21391))
+
 ## 0.12.8
 
 Released on 2026-08-31.
