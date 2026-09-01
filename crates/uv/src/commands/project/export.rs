@@ -30,7 +30,7 @@ use uv_workspace::{DiscoveryOptions, MemberDiscovery, VirtualProject, WorkspaceC
 
 use crate::commands::pip::loggers::DefaultResolveLogger;
 use crate::commands::project::install_target::InstallTarget;
-use crate::commands::project::lock::{LockMode, LockOperation};
+use crate::commands::project::lock::{LockCommand, LockMode, LockOperation};
 use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{
     ProjectEnvironmentPolicy, ProjectInterpreter, ScriptInterpreter, UniversalState,
@@ -310,6 +310,7 @@ pub(crate) async fn export(
     // Lock the project.
     let lock = match Box::pin(
         LockOperation::new(
+            LockCommand::Export,
             mode,
             &settings,
             &client_builder,
