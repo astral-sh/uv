@@ -11460,3 +11460,149 @@ fn many_conflicts_with_requested_dependency_extra() -> Result<()> {
 
     Ok(())
 }
+
+/// Extras outside every conflict set must not multiply the activation paths
+/// propagated through a shared dependency chain.
+#[test]
+fn many_unrelated_workspace_extras_with_conflicts() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    // This workspace resolves without downloads or builds. With unrelated extras
+    // included in conflict simplification, 1,000 projects sharing a 32-package
+    // chain exceed the timeout; ignoring those extras makes it resolve quickly.
+    let projects: Vec<_> = (0..1000).map(|index| format!("project-{index}")).collect();
+    let chain: Vec<_> = (0..32).map(|index| format!("shared-{index}")).collect();
+    let dependencies = projects
+        .iter()
+        .map(|name| format!("\"{name}[test]\""))
+        .collect::<Vec<_>>()
+        .join(", ");
+    let sources = projects
+        .iter()
+        .chain(&chain)
+        .map(|name| format!("{name} = {{ workspace = true }}"))
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&format!(
+            r#"
+        [project]
+        name = "root"
+        version = "0.1.0"
+        requires-python = "==3.12.*"
+        dependencies = [{dependencies}, "native"]
+
+        [project.optional-dependencies]
+        cpu-policy = ["cpu-leaf"]
+
+        [dependency-groups]
+        default = ["root[cpu-policy]"]
+
+        [tool.uv]
+        package = false
+        conflicts = [
+            [{{ extra = "cpu-policy" }}, {{ package = "native", extra = "cuda" }}],
+            [{{ package = "native", extra = "cpu" }}, {{ package = "native", extra = "cuda" }}],
+        ]
+
+        [tool.uv.workspace]
+        members = ["members/*"]
+
+        [tool.uv.sources]
+        native = {{ workspace = true }}
+        cpu-leaf = {{ workspace = true }}
+        cuda-leaf = {{ workspace = true }}
+        {sources}
+        "#,
+        ))?;
+
+    for name in &projects {
+        context
+            .temp_dir
+            .child(format!("members/{name}/pyproject.toml"))
+            .write_str(&format!(
+                r#"
+                [project]
+                name = "{name}"
+                version = "0.1.0"
+                requires-python = "==3.12.*"
+                dependencies = ["shared-0"]
+
+                [project.optional-dependencies]
+                test = ["shared-0"]
+
+                [tool.uv]
+                package = false
+                "#,
+            ))?;
+    }
+
+    for (index, name) in chain.iter().enumerate() {
+        let dependencies = chain
+            .get(index + 1)
+            .map(|name| format!("\"{name}\""))
+            .unwrap_or_default();
+        context
+            .temp_dir
+            .child(format!("members/{name}/pyproject.toml"))
+            .write_str(&format!(
+                r#"
+                [project]
+                name = "{name}"
+                version = "0.1.0"
+                requires-python = "==3.12.*"
+                dependencies = [{dependencies}]
+
+                [tool.uv]
+                package = false
+                "#,
+            ))?;
+    }
+
+    context
+        .temp_dir
+        .child("members/native/pyproject.toml")
+        .write_str(
+            r#"
+            [project]
+            name = "native"
+            version = "0.1.0"
+            requires-python = "==3.12.*"
+
+            [project.optional-dependencies]
+            cpu = ["cpu-leaf"]
+            cuda = ["cuda-leaf"]
+
+            [tool.uv]
+            package = false
+            "#,
+        )?;
+
+    for name in ["cpu-leaf", "cuda-leaf"] {
+        context
+            .temp_dir
+            .child(format!("members/{name}/pyproject.toml"))
+            .write_str(&format!(
+                r#"
+                [project]
+                name = "{name}"
+                version = "0.1.0"
+                requires-python = "==3.12.*"
+
+                [tool.uv]
+                package = false
+                "#,
+            ))?;
+    }
+
+    assert_cmd::Command::from_std(context.lock())
+        .arg("--offline")
+        .timeout(Duration::from_mins(1))
+        .assert()
+        .success();
+
+    Ok(())
+}
