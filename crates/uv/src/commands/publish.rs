@@ -18,7 +18,8 @@ use uv_distribution_types::{IndexCapabilities, IndexLocations, IndexUrl};
 use uv_errors::{ErrorOptions, Hints, write_error_chain_with_options};
 use uv_publish::{
     CheckUrlClient, FormMetadata, PublishError, TrustedPublishResult, TrustedPublishingToken,
-    burn_trusted_publishing_token, check_trusted_publishing, group_files_for_publishing, upload,
+    UploadDistribution, burn_trusted_publishing_token, check_trusted_publishing,
+    group_files_for_publishing, upload,
 };
 use uv_redacted::DisplaySafeUrl;
 use uv_settings::EnvironmentOptions;
@@ -139,10 +140,6 @@ pub(crate) async fn publish(
         .client_name("oidc")
         .build()?;
 
-    let retry_policy = client_builder.retry_policy();
-    // We're only checking a single URL and one at a time, so 1 permit is sufficient
-    let download_concurrency = Arc::new(Semaphore::new(1));
-
     // Load credentials.
     let (publish_url, credentials) = gather_credentials(
         publish_url,
@@ -176,139 +173,16 @@ pub(crate) async fn publish(
     };
 
     // Keep the publishing result so token revocation also runs after an upload or metadata error.
-    let result = async {
-        let mut error_count: usize = 0;
-
-        for group in groups {
-            // Check if the filename is normalized (e.g., version `2025.09.4` should be `2025.9.4`).
-            let normalized_filename = group.filename.to_string();
-            if group.raw_filename != normalized_filename {
-                warn_user_once!(
-                    "`{}` has a non-normalized filename (expected `{normalized_filename}`), skipping",
-                    group.raw_filename
-                );
-                continue;
-            }
-
-            let reporter = Arc::new(PublishReporter::single(printer));
-
-            if let Some(check_url_client) = &check_url_client {
-                match uv_publish::check_url(
-                    check_url_client,
-                    &group.file,
-                    &group.filename,
-                    &download_concurrency,
-                    reporter.clone(),
-                )
-                .await
-                {
-                    Ok(true) => {
-                        writeln!(
-                            printer.stderr(),
-                            "File {} already exists, skipping",
-                            group.filename
-                        )?;
-                        continue;
-                    }
-                    Ok(false) => {}
-                    Err(err) => {
-                        if dry_run {
-                            write_error_chain_with_options(
-                                &err,
-                                Hints::none(),
-                                ErrorOptions::default().with_stream(printer.stderr()),
-                            )?;
-                            error_count += 1;
-                            continue;
-                        }
-                        return Err(err.into());
-                    }
-                }
-            }
-
-            let bytes = human_readable_bytes(fs_err::metadata(&group.file)?.len());
-            if dry_run {
-                writeln!(
-                    printer.stderr(),
-                    "{} {} {}",
-                    "Checking".bold().cyan(),
-                    group.filename,
-                    format!("({bytes:.1})").dimmed()
-                )?;
-            } else {
-                writeln!(
-                    printer.stderr(),
-                    "{} {} {}",
-                    "Hashing".bold().green(),
-                    group.filename,
-                    format!("({bytes:.1})").dimmed()
-                )?;
-            }
-
-            // Collect the metadata for the file.
-            let form_metadata =
-                match FormMetadata::read_from_file(&group.file, &group.filename, reporter.clone())
-                    .await
-                    .map_err(|err| PublishError::PublishPrepare(group.file.clone(), Box::new(err)))
-                {
-                    Ok(metadata) => metadata,
-                    Err(err) => {
-                        if dry_run {
-                            write_error_chain_with_options(
-                                &err,
-                                Hints::none(),
-                                ErrorOptions::default().with_stream(printer.stderr()),
-                            )?;
-                            error_count += 1;
-                            continue;
-                        }
-                        return Err(err.into());
-                    }
-                };
-
-            if dry_run {
-                continue;
-            }
-
-            writeln!(
-                printer.stderr(),
-                "{} {} {}",
-                "Uploading".bold().green(),
-                group.filename,
-                format!("({bytes:.1})").dimmed()
-            )?;
-
-            let uploaded = upload(
-                &group,
-                &form_metadata,
-                &publish_url,
-                &upload_client,
-                retry_policy,
-                &upload_credentials,
-                check_url_client.as_ref(),
-                &download_concurrency,
-                reporter.clone(),
-            )
-            .await?;
-            info!("Upload succeeded");
-
-            if !uploaded {
-                writeln!(
-                    printer.stderr(),
-                    "{}",
-                    "File already exists, skipping".dimmed()
-                )?;
-            }
-        }
-
-        if error_count > 0 {
-            let failed = if error_count == 1 { "file" } else { "files" };
-            writeln!(printer.stderr(), "Found issues with {error_count} {failed}")?;
-            return Ok(ExitStatus::Failure);
-        }
-
-        Ok(ExitStatus::Success)
-    }
+    let result = publish_files(
+        &groups,
+        &publish_url,
+        client_builder,
+        &upload_client,
+        &upload_credentials,
+        check_url_client.as_ref(),
+        dry_run,
+        printer,
+    )
     .await;
 
     if let PublishingCredentials::TrustedPublishing(token) = &credentials
@@ -321,6 +195,190 @@ pub(crate) async fn publish(
     }
 
     result
+}
+
+/// Publish each distribution, reporting all validation failures during a dry run.
+async fn publish_files(
+    groups: &[UploadDistribution],
+    publish_url: &DisplaySafeUrl,
+    client_builder: &BaseClientBuilder<'_>,
+    upload_client: &BaseClient,
+    credentials: &Credentials,
+    check_url_client: Option<&CheckUrlClient<'_>>,
+    dry_run: bool,
+    printer: Printer,
+) -> Result<ExitStatus> {
+    // We're only checking a single URL and one at a time, so 1 permit is sufficient.
+    let download_concurrency = Semaphore::new(1);
+    let mut error_count: usize = 0;
+
+    for group in groups {
+        match publish_file(
+            group,
+            publish_url,
+            client_builder,
+            upload_client,
+            credentials,
+            check_url_client,
+            &download_concurrency,
+            dry_run,
+            printer,
+        )
+        .await?
+        {
+            PublishResult::Success => {}
+            PublishResult::Failure => error_count += 1,
+        }
+    }
+
+    if error_count > 0 {
+        let failed = if error_count == 1 { "file" } else { "files" };
+        writeln!(printer.stderr(), "Found issues with {error_count} {failed}")?;
+        return Ok(ExitStatus::Failure);
+    }
+
+    Ok(ExitStatus::Success)
+}
+
+/// The outcome of checking or publishing a single distribution.
+enum PublishResult {
+    /// The distribution was checked, uploaded, or skipped successfully.
+    Success,
+    /// A validation error was reported during a dry run.
+    Failure,
+}
+
+/// Check and prepare a distribution, then upload it unless this is a dry run.
+async fn publish_file(
+    group: &UploadDistribution,
+    publish_url: &DisplaySafeUrl,
+    client_builder: &BaseClientBuilder<'_>,
+    upload_client: &BaseClient,
+    credentials: &Credentials,
+    check_url_client: Option<&CheckUrlClient<'_>>,
+    download_concurrency: &Semaphore,
+    dry_run: bool,
+    printer: Printer,
+) -> Result<PublishResult> {
+    // Check if the filename is normalized (e.g., version `2025.09.4` should be `2025.9.4`).
+    let normalized_filename = group.filename.to_string();
+    if group.raw_filename != normalized_filename {
+        warn_user_once!(
+            "`{}` has a non-normalized filename (expected `{normalized_filename}`), skipping",
+            group.raw_filename
+        );
+        return Ok(PublishResult::Success);
+    }
+
+    let reporter = Arc::new(PublishReporter::single(printer));
+
+    if let Some(check_url_client) = check_url_client {
+        match uv_publish::check_url(
+            check_url_client,
+            &group.file,
+            &group.filename,
+            download_concurrency,
+            reporter.clone(),
+        )
+        .await
+        {
+            Ok(true) => {
+                writeln!(
+                    printer.stderr(),
+                    "File {} already exists, skipping",
+                    group.filename
+                )?;
+                return Ok(PublishResult::Success);
+            }
+            Ok(false) => {}
+            Err(err) => {
+                if dry_run {
+                    write_error_chain_with_options(
+                        &err,
+                        Hints::none(),
+                        ErrorOptions::default().with_stream(printer.stderr()),
+                    )?;
+                    return Ok(PublishResult::Failure);
+                }
+                return Err(err.into());
+            }
+        }
+    }
+
+    let bytes = human_readable_bytes(fs_err::metadata(&group.file)?.len());
+    if dry_run {
+        writeln!(
+            printer.stderr(),
+            "{} {} {}",
+            "Checking".bold().cyan(),
+            group.filename,
+            format!("({bytes:.1})").dimmed()
+        )?;
+    } else {
+        writeln!(
+            printer.stderr(),
+            "{} {} {}",
+            "Hashing".bold().green(),
+            group.filename,
+            format!("({bytes:.1})").dimmed()
+        )?;
+    }
+
+    // Collect the metadata for the file.
+    let form_metadata =
+        match FormMetadata::read_from_file(&group.file, &group.filename, reporter.clone())
+            .await
+            .map_err(|err| PublishError::PublishPrepare(group.file.clone(), Box::new(err)))
+        {
+            Ok(metadata) => metadata,
+            Err(err) => {
+                if dry_run {
+                    write_error_chain_with_options(
+                        &err,
+                        Hints::none(),
+                        ErrorOptions::default().with_stream(printer.stderr()),
+                    )?;
+                    return Ok(PublishResult::Failure);
+                }
+                return Err(err.into());
+            }
+        };
+
+    if dry_run {
+        return Ok(PublishResult::Success);
+    }
+
+    writeln!(
+        printer.stderr(),
+        "{} {} {}",
+        "Uploading".bold().green(),
+        group.filename,
+        format!("({bytes:.1})").dimmed()
+    )?;
+
+    let uploaded = upload(
+        group,
+        &form_metadata,
+        publish_url,
+        upload_client,
+        client_builder.retry_policy(),
+        credentials,
+        check_url_client,
+        download_concurrency,
+        reporter.clone(),
+    )
+    .await?;
+    info!("Upload succeeded");
+
+    if !uploaded {
+        writeln!(
+            printer.stderr(),
+            "{}",
+            "File already exists, skipping".dimmed()
+        )?;
+    }
+
+    Ok(PublishResult::Success)
 }
 
 /// Credentials for publishing, including whether they require revocation after use.
