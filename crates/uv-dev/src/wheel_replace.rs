@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::io::{BufReader, BufWriter};
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
@@ -43,7 +43,6 @@ impl FromStr for Replacement {
         };
         ensure!(!member.is_empty(), "replacement member cannot be empty");
         ensure!(!path.is_empty(), "replacement path cannot be empty");
-        validate_member_name(member)?;
         Ok(Self {
             member: member.to_string(),
             path: PathBuf::from(path),
@@ -78,8 +77,7 @@ struct HashDigests {
 /// if it has identical bytes. Failure removes the temporary file and leaves existing paths alone.
 /// This is process-level atomic publication, not a promise of power-loss durability. Callers own
 /// provenance, digest verification and immutable input/replacement staging.
-/// Names must be portable ASCII paths with no Windows device components or case-folded aliases,
-/// including implicit parent directories. Unsupported Unicode names are rejected, not normalized.
+/// Member names are copied verbatim, not interpreted as filesystem paths.
 pub(crate) async fn wheel_replace(args: WheelReplaceArgs) -> Result<()> {
     ensure!(
         args.input != args.output,
@@ -88,7 +86,6 @@ pub(crate) async fn wheel_replace(args: WheelReplaceArgs) -> Result<()> {
     let mut replacements = BTreeMap::new();
     for replacement in args.replacements {
         let member = replacement.member;
-        validate_member_name(&member)?;
         ensure!(
             replacements
                 .insert(member.clone(), replacement.path)
@@ -231,36 +228,15 @@ async fn finish_archive<W: AsyncWrite + Unpin>(writer: ZipFileWriter<W>) -> Resu
 }
 
 fn validate_archive(file: &ZipFile) -> Result<(usize, String)> {
-    let mut names = BTreeMap::new();
-    let mut portable_names = BTreeMap::new();
+    let mut names = BTreeSet::new();
     let mut record = None;
     for (index, entry) in file.entries().iter().enumerate() {
         let name = entry
             .filename()
             .as_str()
             .context("wheel member name is not valid UTF-8")?;
-        validate_member_name(name)?;
         validate_member_type(name, entry.unix_permissions(), entry.dir()?)?;
-        let path = name.trim_end_matches('/');
-        for end in path
-            .match_indices('/')
-            .map(|(index, _)| index)
-            .chain([path.len()])
-        {
-            let prefix = &path[..end];
-            if let Some(previous) = portable_names.insert(prefix.to_ascii_lowercase(), prefix) {
-                ensure!(
-                    previous == prefix,
-                    "wheel members alias `{previous}` and `{prefix}`"
-                );
-            }
-        }
-        ensure!(
-            names
-                .insert(name.trim_end_matches('/').to_string(), entry.dir()?)
-                .is_none(),
-            "duplicate or aliased wheel member `{name}`"
-        );
+        ensure!(names.insert(name), "duplicate wheel member `{name}`");
         ensure!(
             !entry.dir()? || entry.uncompressed_size() == 0,
             "directory member `{name}` contains data"
@@ -272,14 +248,6 @@ fn validate_archive(file: &ZipFile) -> Result<(usize, String)> {
         if name.ends_with(".dist-info/RECORD") {
             ensure!(record.is_none(), "wheel contains multiple RECORD files");
             record = Some((index, name.to_string()));
-        }
-    }
-    for name in names.keys() {
-        for (index, _) in name.match_indices('/') {
-            ensure!(
-                names.get(&name[..index]) != Some(&false),
-                "wheel member `{name}` has a file as a parent"
-            );
         }
     }
     record.context("wheel does not contain a RECORD file")
@@ -376,7 +344,6 @@ fn read_record(bytes: &[u8], record_path: &str) -> Result<BTreeMap<String, Recor
             "RECORD rows must contain exactly three fields"
         );
         let path = row.get(0).context("RECORD row has no path")?;
-        validate_member_name(path)?;
         if path == record_path {
             ensure!(!record_seen, "duplicate RECORD entry `{path}`");
             record_seen = true;
@@ -446,57 +413,6 @@ fn validate_record_entry(
         expected.size == size,
         "RECORD size for `{name}` does not match its contents"
     );
-    Ok(())
-}
-
-fn validate_member_name(name: &str) -> Result<()> {
-    ensure!(!name.is_empty(), "wheel member name cannot be empty");
-    ensure!(
-        name.is_ascii(),
-        "wheel member `{name}` is not a portable ASCII path"
-    );
-    ensure!(
-        !name.starts_with('/'),
-        "absolute wheel member `{name}` is invalid"
-    );
-    ensure!(
-        !name.contains('\\'),
-        "wheel member `{name}` contains a backslash"
-    );
-    ensure!(
-        !name.chars().any(char::is_control),
-        "wheel member `{name}` contains a control character"
-    );
-    ensure!(name.len() <= 4096, "wheel member name is too long");
-    // A single trailing slash denotes a directory. Do not normalize any other component:
-    // extraction must not collapse two different ZIP names to the same portable path.
-    for component in name.strip_suffix('/').unwrap_or(name).split('/') {
-        ensure!(
-            !component.is_empty() && component != "." && component != "..",
-            "wheel member `{name}` contains an empty or dot component"
-        );
-        ensure!(
-            component.len() <= 255
-                && !component.contains([':', '<', '>', '"', '|', '?', '*', '~'])
-                && !component.ends_with(['.', ' ']),
-            "wheel member `{name}` has a non-portable component"
-        );
-        let stem = component
-            .split('.')
-            .next()
-            .unwrap_or(component)
-            .trim_end_matches(' ')
-            .to_ascii_uppercase();
-        ensure!(
-            !matches!(
-                stem.as_str(),
-                "CON" | "PRN" | "AUX" | "NUL" | "CONIN$" | "CONOUT$"
-            ) && !(stem.len() == 4
-                && (stem.starts_with("COM") || stem.starts_with("LPT"))
-                && matches!(stem.as_bytes()[3], b'1'..=b'9')),
-            "wheel member `{name}` uses a reserved device name"
-        );
-    }
     Ok(())
 }
 
@@ -637,58 +553,58 @@ mod tests {
         }
     }
 
-    #[test]
-    fn rejects_noncanonical_names() {
-        for name in [
-            "",
-            "/uv",
-            "../uv",
-            "a/../uv",
-            "./uv",
-            "a/./uv",
-            "a//uv",
-            "a//",
-            "C:uv",
-            "C:/uv",
-            "a/C:uv",
-            "a\\uv",
-            "a\0uv",
-            "a\nuv",
-            "a\u{7f}uv",
-            "a./uv",
-            "a /uv",
-        ] {
-            assert!(validate_member_name(name).is_err(), "{name:?}");
+    #[tokio::test]
+    async fn preserves_member_names() -> Result<()> {
+        let directory = tempfile::tempdir()?;
+        let mut args = args(directory.path());
+        fs_err::write(&args.replacements[0].path, b"signed")?;
+        let mut members = fixture_members();
+        let names = [
+            "package/café.txt",
+            "package/CON.txt",
+            "package/Case.txt",
+            "package/case.txt",
+            "Package/another.txt",
+            "package/tilde~.txt",
+        ];
+        for name in names {
+            members.push((
+                ZipEntryBuilder::new(name.into(), Compression::Stored).build(),
+                b"untouched".to_vec(),
+            ));
         }
-        for name in [
-            BINARY,
-            RECORD,
-            "uv-1.2.3.data/scripts/",
-            "package/comma,name.py",
-        ] {
-            validate_member_name(name).expect("canonical wheel member");
+        // Replacement uses the exact ZIP name, including Unicode and case distinctions.
+        args.replacements.push(Replacement {
+            member: names[0].to_string(),
+            path: args.replacements[0].path.clone(),
+        });
+        fixture(&args.input, members, None, false, false).await?;
+        wheel_replace(args).await?;
+        let output = directory.path().join("output.whl");
+        let (record, _, _) = read_entry(&output, RECORD).await?;
+        let record = read_record(&record, RECORD)?;
+        for name in names {
+            let expected: &[u8] = if name == names[0] {
+                b"signed"
+            } else {
+                b"untouched"
+            };
+            assert_eq!(read_entry(&output, name).await?.0, expected);
+            assert!(record.contains_key(name));
         }
+        Ok(())
     }
 
     #[tokio::test]
     async fn rejects_bad_members_and_cleans_up() -> Result<()> {
         for (name, mode, contents) in [
-            ("a/./b", 0o100_644, b"data".as_slice()),
-            ("a//b", 0o100_644, b"data"),
-            ("a/../b", 0o100_644, b"data"),
-            (BINARY, 0o100_644, b"duplicate"),
+            (BINARY, 0o100_644, b"duplicate".as_slice()),
             ("link", 0o120_777, b"target"),
             ("fifo", 0o010_644, b""),
             ("socket", 0o140_644, b""),
             ("dir/", 0o040_755, b"not empty"),
             ("uv-1.2.3.dist-info/RECORD.jws", 0o100_644, b"signature"),
             ("uv-1.2.3.dist-info/RECORD.p7s", 0o100_644, b"signature"),
-            ("uv-1.2.3.data/scripts", 0o100_644, b"file parent"),
-            ("uv-1.2.3.data/scripts/uv/", 0o040_755, b""),
-            ("uv-1.2.3.data/scripts/UV", 0o100_755, b"case alias"),
-            ("UV-1.2.3.data/another", 0o100_644, b"parent alias"),
-            ("NUL.txt", 0o100_644, b"device"),
-            ("package/é.py", 0o100_644, b"unicode"),
         ] {
             let directory = tempfile::tempdir()?;
             let args = args(directory.path());
@@ -1280,7 +1196,7 @@ mod tests {
         assert_eq!(valid.member, "uv-1.2.3.data/scripts/uv");
         assert_eq!(valid.path, Path::new("/signed/uv"));
         assert!(Replacement::from_str("missing-separator").is_err());
-        assert!(Replacement::from_str("../uv=/signed/uv").is_err());
-        assert!(Replacement::from_str("/absolute/uv=/signed/uv").is_err());
+        assert!(Replacement::from_str("=/signed/uv").is_err());
+        assert!(Replacement::from_str("uv=").is_err());
     }
 }
