@@ -7,8 +7,8 @@ use uv_client::MetadataFormat;
 use uv_configuration::BuildOptions;
 use uv_distribution::{ArchiveMetadata, DistributionDatabase, Reporter};
 use uv_distribution_types::{
-    Dist, IndexCapabilities, IndexLocations, IndexMetadata, IndexMetadataRef, InstalledDist,
-    RequestedDist, RequiresPython,
+    Dist, IndexCapabilities, IndexLocations, IndexMetadata, IndexMetadataRef, IndexUrl,
+    InstalledDist, RequestedDist, RequiresPython,
 };
 use uv_normalize::PackageName;
 use uv_pep440::{Version, VersionSpecifiers};
@@ -80,6 +80,15 @@ impl MetadataUnavailable {
             Self::RequiresPython(..) | Self::Network(..) => None,
         }
     }
+}
+
+/// Return whether a failed metadata request is ignored by the index used for requests.
+fn ignores_metadata_error(
+    index: Option<&IndexUrl>,
+    index_locations: &IndexLocations,
+    status: StatusCode,
+) -> bool {
+    index.is_some_and(|index| index_locations.ignores_error_code(index, status))
 }
 
 pub trait ResolverProvider {
@@ -211,7 +220,11 @@ impl<Context: BuildContext> ResolverProvider for DefaultResolverProvider<'_, Con
                             MetadataFormat::Simple(metadata) => VersionMap::from_simple_metadata(
                                 metadata,
                                 package_name,
-                                index.clone(),
+                                self.fetcher
+                                    .client()
+                                    .unmanaged
+                                    .index_locations()
+                                    .route_for(index),
                                 self.tags.clone(),
                                 self.requires_python.clone(),
                                 self.allowed_yanks.clone(),
@@ -299,9 +312,7 @@ impl<Context: BuildContext> ResolverProvider for DefaultResolverProvider<'_, Con
                         }
                         uv_client::ErrorKind::WrappedReqwestError(url, err) => {
                             let Some(status) = err.status().filter(|status| {
-                                dist.index().is_some_and(|index| {
-                                    self.index_locations.ignores_error_code_for(index, *status)
-                                })
+                                ignores_metadata_error(dist.index(), self.index_locations, *status)
                             }) else {
                                 return Err(uv_client::Error::new(
                                     uv_client::ErrorKind::WrappedReqwestError(url, err),
@@ -366,5 +377,112 @@ impl<Context: BuildContext> ResolverProvider for DefaultResolverProvider<'_, Con
             fetcher: self.fetcher.with_reporter(reporter),
             ..self
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::str::FromStr;
+
+    use uv_distribution_types::{Index, IndexName, SerializableStatusCode};
+    use uv_redacted::DisplaySafeUrl;
+
+    use super::{IndexLocations, IndexUrl, StatusCode, ignores_metadata_error};
+
+    #[test]
+    fn ignored_metadata_error_uses_physical_proxy_index() -> Result<(), Box<dyn std::error::Error>>
+    {
+        let canonical = IndexUrl::from_str("https://canonical.example.com/simple/")?;
+        let physical = IndexUrl::from_str("https://proxy.example.com/simple/")?;
+        let direct = IndexUrl::from_str("https://direct.example.com/simple/")?;
+
+        let mut canonical_index = Index::from_index_url(canonical.clone());
+        let canonical_name = IndexName::from_str("canonical")?;
+        canonical_index.name = Some(canonical_name.clone());
+        canonical_index.artifact_base_url = Some(DisplaySafeUrl::parse(
+            "https://canonical.example.com/packages/",
+        )?);
+        canonical_index.ignore_error_codes = Some(vec![serde_json::from_value::<
+            SerializableStatusCode,
+        >(serde_json::json!(403))?]);
+
+        let mut physical_index = Index::from_extra_index_url(physical.clone());
+        physical_index.name = Some(IndexName::from_str("proxy")?);
+        physical_index.proxy_for = Some(canonical_name);
+        physical_index.artifact_base_url =
+            Some(DisplaySafeUrl::parse("https://proxy.example.com/files/")?);
+        physical_index.ignore_error_codes = Some(vec![serde_json::from_value::<
+            SerializableStatusCode,
+        >(serde_json::json!(401))?]);
+
+        let mut direct_index = Index::from_index_url(direct.clone());
+        direct_index.ignore_error_codes = Some(vec![serde_json::from_value::<
+            SerializableStatusCode,
+        >(serde_json::json!(403))?]);
+
+        let locations = IndexLocations::new(
+            vec![canonical_index, physical_index, direct_index],
+            Vec::new(),
+            false,
+        )?;
+
+        assert!(ignores_metadata_error(
+            Some(&canonical),
+            &locations,
+            StatusCode::UNAUTHORIZED,
+        ));
+        assert!(!ignores_metadata_error(
+            Some(&canonical),
+            &locations,
+            StatusCode::FORBIDDEN,
+        ));
+        assert!(ignores_metadata_error(
+            Some(&direct),
+            &locations,
+            StatusCode::FORBIDDEN,
+        ));
+        assert!(!ignores_metadata_error(
+            Some(&direct),
+            &locations,
+            StatusCode::UNAUTHORIZED,
+        ));
+        assert!(!ignores_metadata_error(
+            None,
+            &locations,
+            StatusCode::UNAUTHORIZED,
+        ));
+
+        Ok(())
+    }
+
+    #[test]
+    fn ignored_metadata_error_uses_implicit_pypi_proxy_index()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let canonical = IndexUrl::from_str("https://pypi.org/simple/")?;
+        let physical = IndexUrl::from_str("https://proxy.example.com/simple/")?;
+
+        let mut physical_index = Index::from_extra_index_url(physical);
+        physical_index.name = Some(IndexName::from_str("proxy")?);
+        physical_index.proxy_for = Some(IndexName::from_str("pypi")?);
+        physical_index.artifact_base_url =
+            Some(DisplaySafeUrl::parse("https://proxy.example.com/files/")?);
+        physical_index.ignore_error_codes = Some(vec![serde_json::from_value::<
+            SerializableStatusCode,
+        >(serde_json::json!(401))?]);
+
+        let locations = IndexLocations::new(vec![physical_index], Vec::new(), false)?;
+
+        assert!(ignores_metadata_error(
+            Some(&canonical),
+            &locations,
+            StatusCode::UNAUTHORIZED,
+        ));
+        assert!(!ignores_metadata_error(
+            Some(&canonical),
+            &locations,
+            StatusCode::FORBIDDEN,
+        ));
+
+        Ok(())
     }
 }

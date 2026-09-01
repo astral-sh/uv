@@ -11,9 +11,9 @@ use uv_client::{FlatIndexEntry, OwnedArchive, SimpleDetailMetadata, VersionFiles
 use uv_configuration::BuildOptions;
 use uv_distribution_filename::{DistFilename, SourceDistFilename, WheelFilename};
 use uv_distribution_types::{
-    HashComparison, IncompatibleSource, IncompatibleWheel, IndexUrl, PrioritizedDist,
-    RegistryBuiltWheel, RegistrySourceDist, RequiresPython, SourceDistCompatibility,
-    WheelCompatibility,
+    HashComparison, IncompatibleSource, IncompatibleWheel, IndexRoute, IndexUrl, PrioritizedDist,
+    ProxyIndexError, RegistryBuiltWheel, RegistrySourceDist, RequiresPython,
+    SourceDistCompatibility, WheelCompatibility,
 };
 use uv_normalize::PackageName;
 use uv_pep440::Version;
@@ -46,7 +46,7 @@ impl VersionMap {
     pub(crate) fn from_simple_metadata(
         simple_metadata: OwnedArchive<SimpleDetailMetadata>,
         package_name: &PackageName,
-        index: IndexUrl,
+        index_route: IndexRoute,
         tags: Option<Tags>,
         requires_python: RequiresPython,
         allowed_yanks: AllowedYanks,
@@ -97,7 +97,8 @@ impl VersionMap {
                 simple_metadata,
                 no_binary: build_options.no_binary_package(package_name),
                 no_build: build_options.no_build_package(package_name),
-                index,
+                index_route,
+                proxy_mapping_error: OnceLock::new(),
                 tags,
                 allowed_yanks,
                 hasher,
@@ -172,8 +173,25 @@ impl VersionMap {
     pub(crate) fn index(&self) -> Option<&IndexUrl> {
         match &self.inner {
             VersionMapInner::Eager(_) => None,
-            VersionMapInner::Lazy(lazy) => Some(&lazy.index),
+            VersionMapInner::Lazy(lazy) => Some(&lazy.index_route.canonical),
         }
+    }
+
+    /// Return any proxy artifact mapping error encountered during lazy materialization.
+    fn proxy_mapping_error(&self) -> Option<ProxyIndexError> {
+        match &self.inner {
+            VersionMapInner::Eager(_) => None,
+            VersionMapInner::Lazy(lazy) => lazy.proxy_mapping_error.get().cloned(),
+        }
+    }
+
+    /// Propagate proxy mapping errors through the existing typed client error chain.
+    pub(crate) fn check_proxy_mapping_errors(maps: &[Self]) -> Result<(), uv_client::Error> {
+        if let Some(error) = maps.iter().find_map(Self::proxy_mapping_error) {
+            return Err(uv_client::ErrorKind::ProxyIndex(error).into());
+        }
+
+        Ok(())
     }
 
     /// Return the included-version cutoff for this version map, if any.
@@ -487,8 +505,10 @@ struct VersionMapLazy {
     no_binary: bool,
     /// When true, source dists aren't allowed.
     no_build: bool,
-    /// The URL of the index where this package came from.
-    index: IndexUrl,
+    /// The validated route from the canonical index to its physical endpoint.
+    index_route: IndexRoute,
+    /// The first invalid proxy artifact encountered during lazy materialization.
+    proxy_mapping_error: OnceLock<ProxyIndexError>,
     /// The set of compatibility tags that determines whether a wheel is usable
     /// in the current environment.
     tags: Option<Tags>,
@@ -503,6 +523,25 @@ struct VersionMapLazy {
     hasher: HashStrategy,
     /// The `requires-python` constraint for the resolution.
     requires_python: RequiresPython,
+}
+
+/// A registry artifact paired with its already-evaluated selection compatibility.
+enum RegistryFileCandidate {
+    Wheel(WheelFilename, WheelCompatibility),
+    Source(SourceDistFilename, SourceDistCompatibility),
+}
+
+impl RegistryFileCandidate {
+    fn is_compatible(&self) -> bool {
+        match self {
+            Self::Wheel(_, compatibility) => {
+                matches!(compatibility, WheelCompatibility::Compatible(..))
+            }
+            Self::Source(_, compatibility) => {
+                matches!(compatibility, SourceDistCompatibility::Compatible(..))
+            }
+        }
+    }
 }
 
 impl VersionMapLazy {
@@ -672,7 +711,7 @@ impl VersionMapLazy {
                 // Prioritize amongst all available files.
                 let yanked = file.yanked.as_deref();
                 let hashes = file.hashes.clone();
-                match filename {
+                let candidate = match filename {
                     DistFilename::WheelFilename(filename) => {
                         let compatibility = self.wheel_compatibility(
                             &filename,
@@ -683,13 +722,7 @@ impl VersionMapLazy {
                             excluded,
                             upload_time,
                         );
-                        let dist = RegistryBuiltWheel {
-                            filename,
-                            file: Box::new(file),
-                            index: self.index.clone(),
-                            size_is_authoritative: false,
-                        };
-                        priority_dist.insert_built(dist, hashes, compatibility);
+                        RegistryFileCandidate::Wheel(filename, compatibility)
                     }
                     DistFilename::SourceDistFilename(filename) => {
                         let compatibility = self.source_dist_compatibility(
@@ -699,12 +732,44 @@ impl VersionMapLazy {
                             excluded,
                             upload_time,
                         );
+                        RegistryFileCandidate::Source(filename, compatibility)
+                    }
+                };
+
+                let file = match self.index_route.canonicalize_file(file) {
+                    Ok(file) => file,
+                    Err(error) => {
+                        // Files that cannot be selected do not need a valid proxy artifact URL.
+                        if !candidate.is_compatible() {
+                            continue;
+                        }
+
+                        if let Some(flat) = init {
+                            return Some(flat.clone());
+                        }
+
+                        let _ = self.proxy_mapping_error.set(error);
+                        return None;
+                    }
+                };
+
+                match candidate {
+                    RegistryFileCandidate::Wheel(filename, compatibility) => {
+                        let dist = RegistryBuiltWheel {
+                            filename,
+                            file: Box::new(file),
+                            index: self.index_route.canonical.clone(),
+                            size_is_authoritative: false,
+                        };
+                        priority_dist.insert_built(dist, hashes, compatibility);
+                    }
+                    RegistryFileCandidate::Source(filename, compatibility) => {
                         let dist = RegistrySourceDist {
                             name: filename.name.clone(),
                             version: filename.version.clone(),
                             ext: filename.extension,
                             file: Box::new(file),
-                            index: self.index.clone(),
+                            index: self.index_route.canonical.clone(),
                             wheels: vec![],
                             size_is_authoritative: false,
                         };
@@ -897,5 +962,106 @@ impl<'a> RangeBounds<Version> for BoundingRange<'a> {
 
     fn end_bound(&self) -> Bound<&'a Version> {
         self.max
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::str::FromStr;
+
+    use uv_distribution_types::{File, FileLocation, Index, IndexLocations, IndexName};
+    use uv_pypi_types::HashDigests;
+    use uv_redacted::DisplaySafeUrl;
+    use uv_small_str::SmallString;
+
+    use super::{IndexRoute, IndexUrl};
+
+    fn proxy_route() -> Result<IndexRoute, Box<dyn std::error::Error>> {
+        let canonical = IndexUrl::from_str("https://canonical.example.com/simple/")?;
+        let physical = IndexUrl::from_str("https://proxy.example.com/simple/")?;
+        let canonical_name = IndexName::from_str("canonical")?;
+
+        let mut canonical_index = Index::from_index_url(canonical.clone());
+        canonical_index.name = Some(canonical_name.clone());
+        canonical_index.artifact_base_url = Some(DisplaySafeUrl::parse(
+            "https://canonical.example.com/packages/",
+        )?);
+
+        let mut physical_index = Index::from_extra_index_url(physical);
+        physical_index.name = Some(IndexName::from_str("proxy")?);
+        physical_index.proxy_for = Some(canonical_name);
+        physical_index.artifact_base_url =
+            Some(DisplaySafeUrl::parse("https://proxy.example.com/files/")?);
+
+        let locations =
+            IndexLocations::new(vec![canonical_index, physical_index], Vec::new(), false)?;
+
+        Ok(locations.route_for(&canonical))
+    }
+
+    fn implicit_pypi_proxy_route() -> Result<IndexRoute, Box<dyn std::error::Error>> {
+        let canonical = IndexUrl::from_str("https://pypi.org/simple/")?;
+        let physical = IndexUrl::from_str("https://proxy.example.com/simple/")?;
+
+        let mut physical_index = Index::from_extra_index_url(physical);
+        physical_index.name = Some(IndexName::from_str("proxy")?);
+        physical_index.proxy_for = Some(IndexName::from_str("pypi")?);
+        physical_index.artifact_base_url =
+            Some(DisplaySafeUrl::parse("https://proxy.example.com/files/")?);
+
+        let locations = IndexLocations::new(vec![physical_index], Vec::new(), false)?;
+
+        Ok(locations.route_for(&canonical))
+    }
+
+    fn registry_file(url: &str, filename: &str) -> File {
+        let url = SmallString::from(url);
+
+        File {
+            dist_info_metadata: true,
+            filename: SmallString::from(filename),
+            hashes: HashDigests::empty(),
+            requires_python: None,
+            size: Some(123),
+            upload_time_utc_ms: Some(456),
+            url: FileLocation::new(url.clone(), &url),
+            yanked: None,
+            zstd: None,
+        }
+    }
+
+    #[test]
+    fn canonicalize_proxy_wheel_uses_implicit_pypi_artifact_base()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let file = registry_file(
+            "https://proxy.example.com/files/example-1.0.0-py3-none-any.whl",
+            "example-1.0.0-py3-none-any.whl",
+        );
+        let expected = DisplaySafeUrl::parse(
+            "https://files.pythonhosted.org/packages/example-1.0.0-py3-none-any.whl",
+        )?;
+
+        let file = implicit_pypi_proxy_route()?.canonicalize_file(file)?;
+
+        assert_eq!(file.url.to_url()?, expected);
+        Ok(())
+    }
+
+    #[test]
+    fn canonicalize_proxy_source_preserves_metadata() -> Result<(), Box<dyn std::error::Error>> {
+        let file = registry_file(
+            "https://proxy.example.com/files/example-1.0.0.tar.gz",
+            "example-1.0.0.tar.gz",
+        );
+        let expected =
+            DisplaySafeUrl::parse("https://canonical.example.com/packages/example-1.0.0.tar.gz")?;
+
+        let file = proxy_route()?.canonicalize_file(file)?;
+
+        assert_eq!(file.url.to_url()?, expected);
+        assert!(file.dist_info_metadata);
+        assert_eq!(file.size, Some(123));
+        assert_eq!(file.upload_time_utc_ms, Some(456));
+        Ok(())
     }
 }

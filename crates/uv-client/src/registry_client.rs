@@ -30,11 +30,13 @@ use uv_normalize::PackageName;
 use uv_pep440::{Version, VersionSpecifiers};
 use uv_pep508::MarkerEnvironment;
 use uv_platform_tags::Platform;
+use uv_preview::PreviewFeature;
 use uv_pypi_types::{HashAlgorithm, HashDigest, HashDigests, ProjectStatus, Yanked};
 use uv_pypi_types::{PypiSimpleDetail, PypiSimpleIndex, ResolutionMetadata};
 use uv_redacted::DisplaySafeUrl;
 use uv_small_str::SmallString;
 use uv_torch::TorchStrategy;
+use uv_warnings::warn_user_once;
 
 use crate::base_client::{BaseClientBuilder, ClientBuildError, ExtraMiddleware, RedirectPolicy};
 use crate::cached_client::CacheControl;
@@ -142,9 +144,41 @@ impl<'a> RegistryClientBuilder<'a> {
         self
     }
 
-    /// Add all authenticated sources to the cache.
-    fn cache_index_credentials(&mut self) -> Result<(), ClientBuildError> {
-        for index in self.index_locations.known_indexes() {
+    pub fn build(self) -> Result<RegistryClient, ClientBuildError> {
+        self.build_inner(None)
+    }
+
+    /// Share the underlying client between two different middleware configurations.
+    pub fn wrap_existing(self, existing: &BaseClient) -> Result<RegistryClient, ClientBuildError> {
+        self.build_inner(Some(existing))
+    }
+
+    fn build_inner(
+        self,
+        existing: Option<&BaseClient>,
+    ) -> Result<RegistryClient, ClientBuildError> {
+        if self.index_locations.proxy_indexes().next().is_some()
+            && !self
+                .base_client_builder
+                .preview()
+                .is_enabled(PreviewFeature::ProxyIndex)
+        {
+            warn_user_once!(
+                "Proxy indexes are experimental and may change without warning. Pass `--preview-features {}` to disable this warning.",
+                PreviewFeature::ProxyIndex
+            );
+        }
+
+        // Cache explicitly configured credentials for indexes and proxy artifact hosts.
+        for index in self
+            .index_locations
+            .known_indexes()
+            .chain(self.index_locations.proxy_indexes())
+        {
+            if self.index_locations.proxy_route_for(index.url()).is_some() {
+                continue;
+            }
+
             if let Some(credentials) = index.credentials()? {
                 trace!(
                     "Read credentials for index {}",
@@ -161,24 +195,14 @@ impl<'a> RegistryClientBuilder<'a> {
                 self.base_client_builder
                     .store_credentials(index.raw_url(), credentials);
             }
+
+            if index.proxy_for.is_some()
+                && let Some(artifact_base_url) = &index.artifact_base_url
+            {
+                self.base_client_builder
+                    .store_credentials_from_url(artifact_base_url)?;
+            }
         }
-        Ok(())
-    }
-
-    pub fn build(self) -> Result<RegistryClient, ClientBuildError> {
-        self.build_inner(None)
-    }
-
-    /// Share the underlying client between two different middleware configurations.
-    pub fn wrap_existing(self, existing: &BaseClient) -> Result<RegistryClient, ClientBuildError> {
-        self.build_inner(Some(existing))
-    }
-
-    fn build_inner(
-        mut self,
-        existing: Option<&BaseClient>,
-    ) -> Result<RegistryClient, ClientBuildError> {
-        self.cache_index_credentials()?;
 
         // Wrap in any relevant middleware and handle connectivity.
         let builder = self
@@ -263,6 +287,11 @@ pub enum MetadataFormat {
 }
 
 impl RegistryClient {
+    /// Return the configured package index locations.
+    pub fn index_locations(&self) -> &IndexLocations {
+        &self.indexes
+    }
+
     /// Return the [`CachedClient`] used by this client.
     pub fn cached_client(&self) -> &CachedClient {
         &self.client
@@ -364,7 +393,7 @@ impl RegistryClient {
                             match self
                                 .simple_detail_single_index(
                                     package_name,
-                                    index.url,
+                                    self.indexes.effective_url(index.url),
                                     capabilities,
                                     &status_code_strategy,
                                 )
@@ -410,7 +439,7 @@ impl RegistryClient {
                                 let metadata = match self
                                     .simple_detail_single_index(
                                         package_name,
-                                        index.url,
+                                        self.indexes.effective_url(index.url),
                                         capabilities,
                                         &status_code_strategy,
                                     )
@@ -890,7 +919,13 @@ impl RegistryClient {
 
                 let wheel = wheels.best_wheel();
 
-                let url = wheel.file.url.to_url().map_err(ErrorKind::InvalidUrl)?;
+                let url = if let Some(route) = self.indexes.proxy_route_for(&wheel.index) {
+                    route
+                        .artifact_url_for_request(&wheel.file.url)
+                        .map_err(ErrorKind::ProxyIndex)?
+                } else {
+                    wheel.file.url.to_url().map_err(ErrorKind::InvalidUrl)?
+                };
                 let location = if url.scheme() == "file" {
                     let path = url
                         .to_file_path()
@@ -920,7 +955,7 @@ impl RegistryClient {
                         })?
                     }
                     WheelLocation::Url(url) => {
-                        self.wheel_metadata_registry(wheel, &url, capabilities)
+                        self.wheel_metadata_registry(wheel, url, capabilities)
                             .await?
                     }
                 }
@@ -1010,11 +1045,13 @@ impl RegistryClient {
         Ok(metadata)
     }
 
-    /// Fetch the metadata from a wheel file.
+    /// Fetch registry wheel metadata from the request URL prepared by [`Self::wheel_metadata`].
+    ///
+    /// The URL has already been parsed and routed through the configured proxy, if any.
     async fn wheel_metadata_registry(
         &self,
         wheel: &RegistryBuiltWheel,
-        url: &DisplaySafeUrl,
+        url: DisplaySafeUrl,
         capabilities: &IndexCapabilities,
     ) -> Result<ResolutionMetadata, Error> {
         let RegistryBuiltWheel {
@@ -1023,16 +1060,17 @@ impl RegistryClient {
             index,
             ..
         } = wheel;
+        let effective_index = self.indexes.effective_url(index);
 
         // If the metadata file is available at its own url (PEP 658), download it from there.
         if file.dist_info_metadata {
-            let mut url = url.clone();
+            let mut url = url;
             let path = format!("{}.metadata", url.path());
             url.set_path(&path);
 
             let cache_entry = self.cache.entry(
                 CacheBucket::Wheels,
-                WheelCache::Index(index).wheel_dir(filename.name.as_ref()),
+                WheelCache::Index(effective_index).wheel_dir(filename.name.as_ref()),
                 format!("{}.msgpack", filename.cache_key()),
             );
             let cache_control = match self.connectivity {
@@ -1088,9 +1126,9 @@ impl RegistryClient {
             // into the cache and read from there
             self.wheel_metadata_no_pep658(
                 filename,
-                url,
-                Some(index),
-                WheelCache::Index(index),
+                &url,
+                Some(effective_index),
+                WheelCache::Index(effective_index),
                 capabilities,
             )
             .await
@@ -1788,8 +1826,10 @@ mod tests {
     use std::assert_matches;
     use std::str::FromStr;
 
+    use http::StatusCode;
     use tokio::sync::Semaphore;
     use url::Url;
+    use uv_auth::AuthPolicy;
     use uv_normalize::PackageName;
     use uv_pypi_types::{HashDigests, PypiSimpleDetail};
     use uv_redacted::DisplaySafeUrl;
@@ -1801,12 +1841,12 @@ mod tests {
     };
     use uv_cache::Cache;
     use uv_distribution_types::{
-        File, FileLocation, Index, IndexCapabilities, IndexFormat, IndexLocations,
-        IndexMetadataRef, IndexUrl, ToUrlError, Zstd,
+        CanonicalArtifactUrl, File, FileLocation, Index, IndexCapabilities, IndexFormat,
+        IndexLocations, IndexMetadataRef, IndexName, IndexUrl, ToUrlError, Zstd,
     };
     use uv_small_str::SmallString;
-    use wiremock::matchers::{basic_auth, method, path_regex};
-    use wiremock::{Mock, MockServer, ResponseTemplate};
+    use wiremock::matchers::{basic_auth, method, path, path_regex};
+    use wiremock::{Match, Mock, MockServer, ResponseTemplate};
 
     type Error = Box<dyn std::error::Error>;
 
@@ -1830,7 +1870,7 @@ mod tests {
     fn no_index_client(flat_indexes: Vec<Index>) -> Result<RegistryClient, Error> {
         Ok(
             RegistryClientBuilder::new(BaseClientBuilder::default(), Cache::temp()?)
-                .index_locations(IndexLocations::new(vec![], flat_indexes, true))
+                .index_locations(IndexLocations::new(vec![], flat_indexes, true)?)
                 .build()?,
         )
     }
@@ -1865,6 +1905,46 @@ mod tests {
                 .expect("request recording should be enabled")
                 .is_empty()
         );
+    }
+
+    /// Create [`IndexLocations`] with a default index and a proxy hosted by `proxy_server`.
+    ///
+    /// The proxy serves package listings from `/simple/` and package files from `/files/`.
+    fn proxy_index_locations(
+        canonical: &IndexUrl,
+        proxy_server: &MockServer,
+    ) -> Result<IndexLocations, Error> {
+        let canonical_name = IndexName::from_str("canonical")?;
+
+        let canonical_index = Index {
+            name: Some(canonical_name.clone()),
+            artifact_base_url: Some(canonical.url().join("../files/")?),
+            ..Index::from_index_url(canonical.clone())
+        };
+        let proxy_index = Index {
+            name: Some(IndexName::from_str("proxy")?),
+            proxy_for: Some(canonical_name),
+            artifact_base_url: Some(DisplaySafeUrl::parse(&format!(
+                "{}/files/",
+                proxy_server.uri()
+            ))?),
+            ..Index::from_extra_index_url(IndexUrl::from_str(&format!(
+                "{}/simple/",
+                proxy_server.uri()
+            ))?)
+        };
+
+        Ok(IndexLocations::new(
+            vec![canonical_index, proxy_index],
+            vec![],
+            false,
+        )?)
+    }
+
+    fn simple_response(body: impl Into<String>) -> ResponseTemplate {
+        ResponseTemplate::new(200)
+            .set_body_raw(body.into(), "application/vnd.pypi.simple.v1+json")
+            .insert_header("cache-control", "max-age=3600")
     }
 
     #[tokio::test]
@@ -1917,7 +1997,7 @@ mod tests {
             BaseClientBuilder::default().connectivity(Connectivity::Offline),
             Cache::temp()?,
         )
-        .index_locations(IndexLocations::new(vec![], vec![flat_index], true))
+        .index_locations(IndexLocations::new(vec![], vec![flat_index], true)?)
         .torch_backend(Some(TorchStrategy::Backend {
             backend: TorchBackend::Cpu,
         }))
@@ -1935,6 +2015,307 @@ mod tests {
 
         assert_no_index(&registry_client, "validation", None).await?;
         assert_no_requests(&server).await;
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn simple_detail_proxy_cache_is_physical() -> Result<(), Error> {
+        let canonical_server = MockServer::start().await;
+        let first_physical_server = MockServer::start().await;
+        let second_physical_server = MockServer::start().await;
+        let canonical = IndexUrl::from_str(&format!("{}/simple/", canonical_server.uri()))?;
+        let cache = Cache::temp()?;
+
+        for physical in [&first_physical_server, &second_physical_server] {
+            Mock::given(method("GET"))
+                .and(path("/simple/example/"))
+                .respond_with(simple_response(r#"{"files":[]}"#))
+                .expect(1)
+                .mount(physical)
+                .await;
+
+            let client = RegistryClientBuilder::new(BaseClientBuilder::default(), cache.clone())
+                .index_locations(proxy_index_locations(&canonical, physical)?)
+                .build()?;
+
+            let results = client
+                .simple_detail(
+                    &PackageName::from_str("example")?,
+                    None,
+                    &IndexCapabilities::default(),
+                    &Semaphore::new(1),
+                )
+                .await?;
+
+            assert_eq!(results.len(), 1);
+            assert_eq!(results[0].0, &canonical);
+        }
+
+        assert_no_requests(&canonical_server).await;
+
+        Mock::given(method("GET"))
+            .and(path("/simple/"))
+            .respond_with(ResponseTemplate::new(200).set_body_raw(
+                r#"<html><body><a href="example-1.0.0-py3-none-any.whl">example-1.0.0-py3-none-any.whl</a></body></html>"#,
+                "text/html",
+            ))
+            .expect(1)
+            .mount(&canonical_server)
+            .await;
+
+        let client = RegistryClientBuilder::new(BaseClientBuilder::default(), cache)
+            .index_locations(proxy_index_locations(&canonical, &first_physical_server)?)
+            .build()?;
+        let results = client
+            .simple_detail(
+                &PackageName::from_str("example")?,
+                Some(IndexMetadataRef {
+                    url: &canonical,
+                    format: IndexFormat::Flat,
+                }),
+                &IndexCapabilities::default(),
+                &Semaphore::new(1),
+            )
+            .await?;
+
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].0, &canonical);
+        for physical in [&first_physical_server, &second_physical_server] {
+            let requests = physical
+                .received_requests()
+                .await
+                .ok_or("mock server should record requests")?;
+            assert_eq!(requests.len(), 1);
+            assert_eq!(requests[0].url.path(), "/simple/example/");
+        }
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn proxy_artifact_authentication_requires_configured_artifact_credentials()
+    -> Result<(), Error> {
+        for (artifact_credentials, auth_policy) in [
+            (
+                Some(("artifact-user", "artifact-password")),
+                AuthPolicy::Always,
+            ),
+            (None, AuthPolicy::Auto),
+        ] {
+            let canonical_server = MockServer::start().await;
+            let physical_server = MockServer::start().await;
+            let artifact_server = MockServer::start().await;
+            let canonical = IndexUrl::from_str(&format!("{}/simple/", canonical_server.uri()))?;
+            let canonical_artifact = DisplaySafeUrl::parse(
+                "https://files.pythonhosted.org/packages/example-1.0.0-py3-none-any.whl",
+            )?;
+
+            let mut physical_url = Url::parse(&format!("{}/simple/", physical_server.uri()))?;
+            physical_url.set_username("proxy-user").map_err(|()| {
+                std::io::Error::other("physical proxy URL cannot contain a username")
+            })?;
+            physical_url
+                .set_password(Some("proxy-password"))
+                .map_err(|()| {
+                    std::io::Error::other("physical proxy URL cannot contain a password")
+                })?;
+
+            Mock::given(method("GET"))
+                .and(path("/files/example-1.0.0-py3-none-any.whl"))
+                .respond_with(ResponseTemplate::new(200))
+                .expect(1)
+                .mount(&artifact_server)
+                .await;
+
+            let canonical_name = IndexName::from_str("canonical")?;
+            let mut canonical_index = Index::from_index_url(canonical.clone());
+            canonical_index.name = Some(canonical_name.clone());
+            canonical_index.artifact_base_url = Some(DisplaySafeUrl::parse(
+                "https://files.pythonhosted.org/packages/",
+            )?);
+
+            let mut artifact_base_url = Url::parse(&format!("{}/files/", artifact_server.uri()))?;
+            if let Some((username, password)) = artifact_credentials {
+                artifact_base_url.set_username(username).map_err(|()| {
+                    std::io::Error::other("artifact URL cannot contain a username")
+                })?;
+                artifact_base_url
+                    .set_password(Some(password))
+                    .map_err(|()| {
+                        std::io::Error::other("artifact URL cannot contain a password")
+                    })?;
+            }
+
+            let mut proxy_index =
+                Index::from_extra_index_url(IndexUrl::from_str(physical_url.as_str())?);
+            proxy_index.name = Some(IndexName::from_str("proxy")?);
+            proxy_index.proxy_for = Some(canonical_name);
+            proxy_index.authenticate = auth_policy;
+            proxy_index.artifact_base_url = Some(DisplaySafeUrl::from_url(artifact_base_url));
+
+            let locations = IndexLocations::new(vec![canonical_index, proxy_index], vec![], false)?;
+            let client = RegistryClientBuilder::new(BaseClientBuilder::default(), Cache::temp()?)
+                .index_locations(locations)
+                .build()?;
+            let route = client
+                .index_locations()
+                .proxy_route_for(&canonical)
+                .ok_or("missing proxy route")?;
+            let physical_artifact = route
+                .artifact_url_for_request(&CanonicalArtifactUrl::from_url(canonical_artifact))?;
+
+            let response = client
+                .uncached_client(&physical_artifact)
+                .get(Url::from(physical_artifact))
+                .send()
+                .await?;
+
+            assert_eq!(response.status(), StatusCode::OK);
+            let requests = artifact_server
+                .received_requests()
+                .await
+                .ok_or("artifact server should record requests")?;
+            let request = requests
+                .first()
+                .ok_or("artifact server should receive the artifact request")?;
+
+            if let Some((username, password)) = artifact_credentials {
+                assert!(
+                    basic_auth(username, password).matches(request),
+                    "artifact request used incorrect credentials: {request:?}"
+                );
+            } else {
+                assert!(
+                    !request.headers.contains_key("authorization"),
+                    "artifact request inherited proxy index credentials: {request:?}"
+                );
+            }
+
+            assert_no_requests(&canonical_server).await;
+            assert_no_requests(&physical_server).await;
+        }
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn proxy_authentication_prefers_path_specific_policies_and_credentials()
+    -> Result<(), Error> {
+        for (
+            canonical_policy,
+            canonical_credentials,
+            proxy_policy,
+            proxy_credentials,
+            expected_credentials,
+        ) in [
+            (
+                AuthPolicy::Never,
+                None,
+                AuthPolicy::Always,
+                Some(("proxy-user", "proxy-password")),
+                Some(("proxy-user", "proxy-password")),
+            ),
+            (
+                AuthPolicy::Always,
+                Some(("upstream-user", "upstream-password")),
+                AuthPolicy::Never,
+                None,
+                None,
+            ),
+            (
+                AuthPolicy::Always,
+                Some(("upstream-user", "upstream-password")),
+                AuthPolicy::Auto,
+                None,
+                None,
+            ),
+            (
+                AuthPolicy::Always,
+                Some(("upstream-user", "upstream-password")),
+                AuthPolicy::Always,
+                Some(("proxy-user", "proxy-password")),
+                Some(("proxy-user", "proxy-password")),
+            ),
+        ] {
+            let server = MockServer::start().await;
+            Mock::given(method("GET"))
+                .and(path("/private/simple/example/"))
+                .respond_with(simple_response(r#"{"files":[]}"#))
+                .expect(1)
+                .mount(&server)
+                .await;
+
+            let index_url = |path: &str, credentials: Option<(&str, &str)>| {
+                let mut url = Url::parse(&format!("{}{path}", server.uri()))?;
+                if let Some((username, password)) = credentials {
+                    url.set_username(username).map_err(|()| {
+                        std::io::Error::other("index URL cannot contain a username")
+                    })?;
+                    url.set_password(Some(password)).map_err(|()| {
+                        std::io::Error::other("index URL cannot contain a password")
+                    })?;
+                }
+                Ok::<_, Error>(IndexUrl::from_str(url.as_str())?)
+            };
+
+            let canonical = index_url("/simple/", canonical_credentials)?;
+            let canonical_name = IndexName::from_str("canonical")?;
+            let mut canonical_index = Index::from_index_url(canonical.clone());
+            canonical_index.name = Some(canonical_name.clone());
+            canonical_index.authenticate = canonical_policy;
+            canonical_index.artifact_base_url = Some(DisplaySafeUrl::parse(&format!(
+                "{}/canonical-files/",
+                server.uri()
+            ))?);
+
+            let mut proxy_index =
+                Index::from_extra_index_url(index_url("/private/simple/", proxy_credentials)?);
+            proxy_index.name = Some(IndexName::from_str("proxy")?);
+            proxy_index.proxy_for = Some(canonical_name);
+            proxy_index.authenticate = proxy_policy;
+            proxy_index.artifact_base_url = Some(DisplaySafeUrl::parse(&format!(
+                "{}/private/files/",
+                server.uri()
+            ))?);
+
+            let client = RegistryClientBuilder::new(BaseClientBuilder::default(), Cache::temp()?)
+                .index_locations(IndexLocations::new(
+                    vec![canonical_index, proxy_index],
+                    vec![],
+                    false,
+                )?)
+                .build()?;
+
+            client
+                .simple_detail(
+                    &PackageName::from_str("example")?,
+                    None,
+                    &IndexCapabilities::default(),
+                    &Semaphore::new(1),
+                )
+                .await?;
+
+            let requests = server
+                .received_requests()
+                .await
+                .ok_or("mock server should record requests")?;
+            let request = requests
+                .first()
+                .ok_or("mock server should receive the proxied index request")?;
+
+            if let Some((username, password)) = expected_credentials {
+                assert!(
+                    basic_auth(username, password).matches(request),
+                    "proxy request used incorrect credentials: {request:?}"
+                );
+            } else {
+                assert!(
+                    !request.headers.contains_key("authorization"),
+                    "proxy request unexpectedly included credentials: {request:?}"
+                );
+            }
+        }
+
         Ok(())
     }
 

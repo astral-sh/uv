@@ -26,7 +26,7 @@ use uv_cache::{Cache, CacheBucket, CacheEntry, CacheShard, Removal, WheelCache};
 use uv_cache_info::CacheInfo;
 use uv_client::{
     BaseClientBuilder, CacheControl, CachedClientError, Connectivity, DataWithCachePolicy,
-    RegistryClient,
+    ErrorKind as ClientErrorKind, RegistryClient,
 };
 use uv_configuration::{BuildKind, BuildOutput, NoSources};
 use uv_distribution_filename::{SourceDistExtension, WheelFilename};
@@ -49,6 +49,7 @@ use uv_workspace::pyproject::ToolUvSources;
 
 use crate::distribution_database::ManagedClient;
 use crate::error::Error;
+use crate::hash::ArtifactHashPolicy;
 use crate::metadata::{ArchiveMetadata, GitWorkspaceMember, Metadata};
 use crate::source::built_wheel_metadata::{BuiltWheelFile, BuiltWheelMetadata};
 use crate::source::revision::Revision;
@@ -266,16 +267,28 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
     ) -> Result<BuiltWheelMetadata, Error> {
         let built_wheel_metadata = match &source {
             BuildableSource::Dist(SourceDist::Registry(dist)) => {
+                let route = client
+                    .unmanaged
+                    .index_locations()
+                    .proxy_route_for(&dist.index);
+                let index = route.map_or(&dist.index, |route| route.effective_url());
+
                 // For registry source distributions, shard by package, then version, for
                 // convenience in debugging.
                 let cache_shard = self.build_context.cache().shard(
                     CacheBucket::SourceDistributions,
-                    WheelCache::Index(&dist.index)
+                    WheelCache::Index(index)
                         .wheel_dir(dist.name.as_ref())
                         .join(dist.version.to_string()),
                 );
 
-                let url = dist.file.url.to_url()?;
+                let url = if let Some(route) = route {
+                    route
+                        .artifact_url_for_request(&dist.file.url)
+                        .map_err(|err| Error::Client(ClientErrorKind::ProxyIndex(err).into()))?
+                } else {
+                    dist.file.url.to_url()?
+                };
 
                 // If the URL is a file URL, use the local path directly.
                 if url.scheme() == "file" {
@@ -301,12 +314,19 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 self.url(
                     source,
                     &url,
-                    Some(&dist.index),
+                    Some(index),
                     &cache_shard,
                     None,
                     dist.ext,
                     tags,
-                    hashes,
+                    ArtifactHashPolicy::new(
+                        hashes,
+                        if route.is_some() && !dist.file.hashes.is_empty() {
+                            HashPolicy::Any(dist.file.hashes.as_slice())
+                        } else {
+                            HashPolicy::None
+                        },
+                    ),
                     client,
                 )
                 .boxed_local()
@@ -327,7 +347,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                     dist.subdirectory.as_deref(),
                     dist.ext,
                     tags,
-                    hashes,
+                    hashes.into(),
                     client,
                 )
                 .boxed_local()
@@ -384,7 +404,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                     resource.subdirectory,
                     resource.ext,
                     tags,
-                    hashes,
+                    hashes.into(),
                     client,
                 )
                 .boxed_local()
@@ -430,15 +450,27 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
     ) -> Result<ArchiveMetadata, Error> {
         let metadata = match &source {
             BuildableSource::Dist(SourceDist::Registry(dist)) => {
+                let route = client
+                    .unmanaged
+                    .index_locations()
+                    .proxy_route_for(&dist.index);
+                let index = route.map_or(&dist.index, |route| route.effective_url());
+
                 // For registry source distributions, shard by package, then version.
                 let cache_shard = self.build_context.cache().shard(
                     CacheBucket::SourceDistributions,
-                    WheelCache::Index(&dist.index)
+                    WheelCache::Index(index)
                         .wheel_dir(dist.name.as_ref())
                         .join(dist.version.to_string()),
                 );
 
-                let url = dist.file.url.to_url()?;
+                let url = if let Some(route) = route {
+                    route
+                        .artifact_url_for_request(&dist.file.url)
+                        .map_err(|err| Error::Client(ClientErrorKind::ProxyIndex(err).into()))?
+                } else {
+                    dist.file.url.to_url()?
+                };
 
                 // If the URL is a file URL, use the local path directly.
                 if url.scheme() == "file" {
@@ -463,11 +495,18 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 self.url_metadata(
                     source,
                     &url,
-                    Some(&dist.index),
+                    Some(index),
                     &cache_shard,
                     None,
                     dist.ext,
-                    hashes,
+                    ArtifactHashPolicy::new(
+                        hashes,
+                        if route.is_some() && !dist.file.hashes.is_empty() {
+                            HashPolicy::Any(dist.file.hashes.as_slice())
+                        } else {
+                            HashPolicy::None
+                        },
+                    ),
                     client,
                 )
                 .boxed_local()
@@ -487,7 +526,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                     &cache_shard,
                     dist.subdirectory.as_deref(),
                     dist.ext,
-                    hashes,
+                    hashes.into(),
                     client,
                 )
                 .boxed_local()
@@ -542,7 +581,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                     &cache_shard,
                     resource.subdirectory,
                     resource.ext,
-                    hashes,
+                    hashes.into(),
                     client,
                 )
                 .boxed_local()
@@ -631,7 +670,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         subdirectory: Option<&'data Path>,
         ext: SourceDistExtension,
         tags: &Tags,
-        hashes: HashPolicy<'_>,
+        hashes: ArtifactHashPolicy<'_>,
         client: &ManagedClient<'_>,
     ) -> Result<BuiltWheelMetadata, Error> {
         let _lock = cache_shard.lock().await.map_err(Error::CacheLock)?;
@@ -642,13 +681,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .await?;
 
         // Before running the build, check that the hashes match.
-        if !revision.satisfies(hashes) {
-            return Err(Error::hash_mismatch(
-                source.to_string(),
-                hashes.digests(),
-                revision.hashes(),
-            ));
-        }
+        hashes.validate_artifact(source, &revision)?;
 
         // Scope all operations to the revision. Within the revision, there's no need to check for
         // freshness, since entries have to be fresher than the revision itself.
@@ -764,7 +797,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         cache_shard: &CacheShard,
         subdirectory: Option<&'data Path>,
         ext: SourceDistExtension,
-        hashes: HashPolicy<'_>,
+        hashes: ArtifactHashPolicy<'_>,
         client: &ManagedClient<'_>,
     ) -> Result<ArchiveMetadata, Error> {
         let _lock = cache_shard.lock().await.map_err(Error::CacheLock)?;
@@ -775,13 +808,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .await?;
 
         // Before running the build, check that the hashes match.
-        if !revision.satisfies(hashes) {
-            return Err(Error::hash_mismatch(
-                source.to_string(),
-                hashes.digests(),
-                revision.hashes(),
-            ));
-        }
+        hashes.validate_artifact(source, &revision)?;
 
         // Scope all operations to the revision. Within the revision, there's no need to check for
         // freshness, since entries have to be fresher than the revision itself.
@@ -948,7 +975,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         url: &DisplaySafeUrl,
         index: Option<&IndexUrl>,
         cache_shard: &CacheShard,
-        hashes: HashPolicy<'_>,
+        hashes: ArtifactHashPolicy<'_>,
         client: &ManagedClient<'_>,
     ) -> Result<Revision, Error> {
         let cache_entry = cache_shard.entry(HTTP_REVISION);
@@ -982,12 +1009,12 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 // Download the source distribution.
                 debug!("Downloading source distribution: {source}");
                 let entry = cache_shard.shard(revision.id()).entry(SOURCE);
-                let (hashes, size) = self
+                let (computed_hashes, size) = self
                     .download_archive(response, source, ext, entry.path(), hashes, &[])
                     .await?;
 
                 Ok(revision
-                    .with_hashes(HashDigests::from(hashes))
+                    .with_hashes(HashDigests::from(computed_hashes))
                     .with_size(size))
             }
             .boxed_local()
@@ -1027,7 +1054,9 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         }
 
         // If the archive is missing the required hashes or size, force a refresh.
-        if revision.has_digests(hashes) && (expected_size.is_none() || revision.size().is_some()) {
+        if hashes.admits_cached_artifact(&revision)
+            && (expected_size.is_none() || revision.size().is_some())
+        {
             Ok(revision)
         } else {
             client
@@ -2741,7 +2770,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         index: Option<&IndexUrl>,
         entry: &CacheEntry,
         revision: Revision,
-        hashes: HashPolicy<'_>,
+        hashes: ArtifactHashPolicy<'_>,
         client: &ManagedClient<'_>,
     ) -> Result<Revision, Error> {
         warn!("Re-downloading missing source distribution: {source}");
@@ -2769,7 +2798,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
 
         let download = |response| {
             async {
-                let (hashes, size) = self
+                let (computed_hashes, size) = self
                     .download_archive(
                         response,
                         source,
@@ -2781,7 +2810,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                     .await?;
                 Ok(revision
                     .clone()
-                    .with_hashes(HashDigests::from(hashes))
+                    .with_hashes(HashDigests::from(computed_hashes))
                     .with_size(size))
             }
             .boxed_local()
@@ -2813,7 +2842,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         source: &BuildableSource<'_>,
         ext: SourceDistExtension,
         target: &Path,
-        hash_policy: HashPolicy<'_>,
+        hash_policy: ArtifactHashPolicy<'_>,
         existing_hashes: &[HashDigest],
     ) -> Result<(Vec<HashDigest>, u64), Error> {
         let reader = response
@@ -2867,7 +2896,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             self.build_context.cache(),
             ArchiveValidation {
                 extra_algorithms: &[],
-                hash_policy,
+                hash_policy: hash_policy.into(),
                 existing_hashes,
                 expected_size: None,
             },

@@ -11,7 +11,8 @@ use uv_configuration::{
 };
 use uv_distribution_types::{
     ConfigSettings, ExtraBuildVariables, Index, IndexLocations, IndexUrl, IndexUrlError, Origin,
-    PackageConfigSettings, PipExtraIndex, PipFindLinks, PipIndex, StaticMetadata,
+    PackageConfigSettings, PipExtraIndex, PipFindLinks, PipIndex, ProxyIndexConfigError,
+    StaticMetadata,
 };
 use uv_install_wheel::LinkMode;
 use uv_macros::{CombineOptions, OptionsMetadata};
@@ -602,8 +603,10 @@ impl IndexOptions {
     }
 }
 
-impl From<IndexOptions> for IndexLocations {
-    fn from(value: IndexOptions) -> Self {
+impl TryFrom<IndexOptions> for IndexLocations {
+    type Error = ProxyIndexConfigError;
+
+    fn try_from(value: IndexOptions) -> Result<Self, Self::Error> {
         let IndexOptions {
             index,
             index_url,
@@ -855,6 +858,19 @@ pub struct ResolverInstallerSchema {
     /// If an index is marked as `default = true`, it will be moved to the end of the prioritized list, such that it is
     /// given the lowest priority when resolving packages. Additionally, marking an index as default will disable the
     /// PyPI default index.
+    ///
+    /// An index can proxy another named index with `proxy-for`. Set `artifact-base-url` to the
+    /// URL prefix where the proxy serves package files. uv downloads from the proxy without
+    /// changing the original index or package URLs recorded in lockfiles. Use
+    /// `proxy-for = "pypi"` to proxy PyPI without configuring it separately:
+    ///
+    /// ```toml
+    /// [[tool.uv.index]]
+    /// name = "socket"
+    /// url = "https://proxy.example.com/simple/"
+    /// artifact-base-url = "https://proxy.example.com/files/"
+    /// proxy-for = "pypi"
+    /// ```
     #[option(
         default = "\"[]\"",
         value_type = "dict",

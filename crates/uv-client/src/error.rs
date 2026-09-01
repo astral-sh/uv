@@ -15,7 +15,7 @@ use crate::middleware::OfflineError;
 use crate::{FlatIndexError, html};
 use uv_cache::Error as CacheError;
 use uv_distribution_filename::{WheelFilename, WheelFilenameError};
-use uv_distribution_types::IndexUrl;
+use uv_distribution_types::{IndexUrl, ProxyIndexError};
 use uv_errors::{Hint, Hints};
 use uv_git::GitError;
 use uv_normalize::PackageName;
@@ -402,6 +402,9 @@ impl From<ErrorKind> for Error {
 pub enum ErrorKind {
     #[error(transparent)]
     InvalidUrl(#[from] uv_distribution_types::ToUrlError),
+
+    #[error(transparent)]
+    ProxyIndex(#[from] ProxyIndexError),
 
     #[error(transparent)]
     Flat(#[from] FlatIndexError),

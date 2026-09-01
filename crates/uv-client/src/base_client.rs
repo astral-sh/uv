@@ -252,6 +252,11 @@ impl<'a> BaseClientBuilder<'a> {
         }
     }
 
+    /// Return the preview features enabled for this client.
+    pub(crate) fn preview(&self) -> Preview {
+        self.preview
+    }
+
     /// Use a custom reqwest client instead of creating a new one.
     ///
     /// This allows you to provide your own reqwest client with custom configuration.

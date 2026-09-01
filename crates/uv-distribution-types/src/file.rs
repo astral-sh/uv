@@ -21,8 +21,8 @@ pub enum FileConversionError {
 
 /// Internal analog to [`uv_pypi_types::PypiFile`].
 #[derive(Debug, Clone, PartialEq, Eq, Hash, rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)]
-#[rkyv(derive(Debug))]
-pub struct File {
+#[rkyv(archive_bounds(Url::Archived: core::fmt::Debug), derive(Debug))]
+pub struct File<Url = FileLocation> {
     pub dist_info_metadata: bool,
     pub filename: SmallString,
     pub hashes: HashDigests,
@@ -33,7 +33,7 @@ pub struct File {
     // comparisons in testing, we just store it as a UTC timestamp in
     // milliseconds.
     pub upload_time_utc_ms: Option<i64>,
-    pub url: FileLocation,
+    pub url: Url,
     pub yanked: Option<Box<Yanked>>,
     /// Deprecated pyx-specific zstd wheel metadata, retained only for compatibility with the
     /// flat-index cache layout.
@@ -41,7 +41,7 @@ pub struct File {
     pub zstd: Option<Box<Zstd>>,
 }
 
-impl File {
+impl File<FileLocation> {
     /// `TryFrom` instead of `From` to filter out files with invalid requires python version specifiers
     pub fn try_from_pypi(
         file: uv_pypi_types::PypiFile,
@@ -66,6 +66,58 @@ impl File {
         })
     }
 }
+
+impl<Url> File<Url> {
+    /// Replace the file URL while preserving the artifact metadata.
+    pub fn map_url<Mapped>(self, map: impl FnOnce(Url) -> Mapped) -> File<Mapped> {
+        File {
+            dist_info_metadata: self.dist_info_metadata,
+            filename: self.filename,
+            hashes: self.hashes,
+            requires_python: self.requires_python,
+            size: self.size,
+            upload_time_utc_ms: self.upload_time_utc_ms,
+            url: map(self.url),
+            yanked: self.yanked,
+            zstd: self.zstd,
+        }
+    }
+}
+
+/// An artifact location in the canonical registry namespace.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct CanonicalArtifactUrl(FileLocation);
+
+impl CanonicalArtifactUrl {
+    /// Mark an artifact location from a canonical source, such as a lockfile or direct index.
+    pub fn from_location(location: FileLocation) -> Self {
+        Self(location)
+    }
+
+    /// Store a parsed canonical artifact URL as an absolute location.
+    pub fn from_url(url: DisplaySafeUrl) -> Self {
+        Self(FileLocation::AbsoluteUrl(url.into()))
+    }
+
+    /// Return the canonical artifact location.
+    pub fn location(&self) -> &FileLocation {
+        &self.0
+    }
+
+    /// Resolve the canonical artifact location to a URL.
+    pub fn to_url(&self) -> Result<DisplaySafeUrl, ToUrlError> {
+        self.0.to_url()
+    }
+}
+
+impl Display for CanonicalArtifactUrl {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        Display::fmt(&self.0, f)
+    }
+}
+
+/// A registry file whose URL is in the canonical registry namespace.
+pub type RegistryFile = File<CanonicalArtifactUrl>;
 
 /// While a registry file is generally a remote URL, it can also be a file if it comes from a directory flat indexes.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)]

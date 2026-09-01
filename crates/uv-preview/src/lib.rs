@@ -335,6 +335,8 @@ pub enum PreviewFeature {
     ArtifactHashFiltering,
     /// Enables content-addressed wheel archives in the cache.
     ContentAddressedCache,
+    /// Allows using [proxy indexes](./indexes.md#proxy-indexes).
+    ProxyIndex,
 }
 
 impl Display for PreviewFeature {
