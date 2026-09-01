@@ -735,10 +735,19 @@ fn resolve_lock_flags(
 /// Resolve frozen mode and its source from CLI arguments and the environment.
 fn resolve_frozen(
     enabled: bool,
+    disabled: bool,
     cli_flag: FrozenFlag,
     environment: EnvFlag,
 ) -> Option<FrozenSource> {
-    match resolve_flag(enabled, cli_flag.name(), environment) {
+    let (flag, _) = resolve_flag_pair(
+        enabled,
+        disabled,
+        cli_flag.name(),
+        "no-frozen",
+        Some(environment),
+        None,
+    );
+    match flag {
         Flag::Enabled { source, .. } => Some(match source {
             FlagSource::Cli => FrozenSource::Cli(cli_flag),
             FlagSource::Env(_) => FrozenSource::Env,
@@ -749,8 +758,21 @@ fn resolve_frozen(
 }
 
 /// Resolve a lock check and its source from CLI arguments and the environment.
-fn resolve_lock_check(enabled: bool, cli_flag: LockedFlag, environment: EnvFlag) -> LockCheck {
-    match resolve_flag(enabled, cli_flag.name(), environment) {
+fn resolve_lock_check(
+    enabled: bool,
+    disabled: bool,
+    cli_flag: LockedFlag,
+    environment: EnvFlag,
+) -> LockCheck {
+    let (flag, _) = resolve_flag_pair(
+        enabled,
+        disabled,
+        cli_flag.name(),
+        "no-locked",
+        Some(environment),
+        None,
+    );
+    match flag {
         Flag::Enabled { source, .. } => LockCheck::Enabled(match source {
             FlagSource::Cli => LockedSource::Cli(cli_flag),
             FlagSource::Env(_) => LockedSource::Env,
@@ -837,7 +859,9 @@ impl RunSettings {
             no_active,
             no_sync,
             locked,
+            no_locked,
             frozen,
+            no_frozen,
             installer,
             build,
             refresh,
@@ -858,8 +882,8 @@ impl RunSettings {
             .unwrap_or_default();
 
         // Resolve flags from CLI and environment variables.
-        let locked = resolve_lock_check(locked, LockedFlag::Locked, environment.locked);
-        let frozen = resolve_frozen(frozen, FrozenFlag::Frozen, environment.frozen);
+        let locked = resolve_lock_check(locked, no_locked, LockedFlag::Locked, environment.locked);
+        let frozen = resolve_frozen(frozen, no_frozen, FrozenFlag::Frozen, environment.frozen);
         let no_sync = resolve_flag(no_sync, "no-sync", environment.no_sync);
 
         let (locked, frozen) = resolve_lock_flags(locked, frozen)?;
@@ -1993,7 +2017,9 @@ impl SyncSettings {
             no_install_package,
             only_install_package,
             locked,
+            no_locked,
             frozen,
+            no_frozen,
             active,
             no_active,
             dry_run,
@@ -2026,8 +2052,8 @@ impl SyncSettings {
         };
 
         // Resolve flags from CLI and environment variables.
-        let locked = resolve_lock_check(locked, LockedFlag::Locked, environment.locked);
-        let frozen = resolve_frozen(frozen, FrozenFlag::Frozen, environment.frozen);
+        let locked = resolve_lock_check(locked, no_locked, LockedFlag::Locked, environment.locked);
+        let frozen = resolve_frozen(frozen, no_frozen, FrozenFlag::Frozen, environment.frozen);
 
         let (locked, frozen) = resolve_lock_flags(locked, frozen)?;
 
@@ -2172,8 +2198,10 @@ impl LockSettings {
         let LockArgs {
             check,
             locked,
+            no_locked,
             check_exists,
             frozen,
+            no_frozen,
             dry_run,
             script,
             resolver,
@@ -2190,6 +2218,7 @@ impl LockSettings {
         // Resolve flags from CLI and environment variables.
         let locked = resolve_lock_check(
             locked || check,
+            no_locked,
             if check {
                 LockedFlag::Check
             } else {
@@ -2199,6 +2228,7 @@ impl LockSettings {
         );
         let frozen = resolve_frozen(
             frozen || check_exists,
+            no_frozen,
             if check_exists {
                 FrozenFlag::CheckExists
             } else {
@@ -2292,7 +2322,9 @@ impl MetadataSettings {
         let MetadataArgs {
             script,
             locked,
+            no_locked,
             frozen,
+            no_frozen,
             dry_run,
             resolver,
             build,
@@ -2309,8 +2341,8 @@ impl MetadataSettings {
             .unwrap_or_default();
 
         // Resolve flags from CLI and environment variables.
-        let locked = resolve_lock_check(locked, LockedFlag::Locked, environment.locked);
-        let frozen = resolve_frozen(frozen, FrozenFlag::Frozen, environment.frozen);
+        let locked = resolve_lock_check(locked, no_locked, LockedFlag::Locked, environment.locked);
+        let frozen = resolve_frozen(frozen, no_frozen, FrozenFlag::Frozen, environment.frozen);
 
         let (locked, frozen) = resolve_lock_flags(locked, frozen)?;
 
@@ -2405,7 +2437,9 @@ impl AddSettings {
             lfs,
             no_sync,
             locked,
+            no_locked,
             frozen,
+            no_frozen,
             active,
             no_active,
             installer,
@@ -2519,8 +2553,8 @@ impl AddSettings {
         let lfs = GitLfsSetting::new(lfs.then_some(true), environment.lfs);
 
         // Resolve flags from CLI and environment variables.
-        let locked = resolve_lock_check(locked, LockedFlag::Locked, environment.locked);
-        let frozen = resolve_frozen(frozen, FrozenFlag::Frozen, environment.frozen);
+        let locked = resolve_lock_check(locked, no_locked, LockedFlag::Locked, environment.locked);
+        let frozen = resolve_frozen(frozen, no_frozen, FrozenFlag::Frozen, environment.frozen);
         let no_sync = resolve_flag(no_sync, "no-sync", environment.no_sync);
 
         let (locked, frozen) = resolve_lock_flags(locked, frozen)?;
@@ -2649,7 +2683,9 @@ impl RemoveSettings {
             group,
             no_sync,
             locked,
+            no_locked,
             frozen,
+            no_frozen,
             active,
             no_active,
             installer,
@@ -2684,8 +2720,8 @@ impl RemoveSettings {
             .collect();
 
         // Resolve flags from CLI and environment variables.
-        let locked = resolve_lock_check(locked, LockedFlag::Locked, environment.locked);
-        let frozen = resolve_frozen(frozen, FrozenFlag::Frozen, environment.frozen);
+        let locked = resolve_lock_check(locked, no_locked, LockedFlag::Locked, environment.locked);
+        let frozen = resolve_frozen(frozen, no_frozen, FrozenFlag::Frozen, environment.frozen);
         let no_sync = resolve_flag(no_sync, "no-sync", environment.no_sync);
 
         let (locked, frozen) = resolve_lock_flags(locked, frozen)?;
@@ -2755,7 +2791,9 @@ impl VersionSettings {
             dry_run,
             no_sync,
             locked,
+            no_locked,
             frozen,
+            no_frozen,
             active,
             no_active,
             installer,
@@ -2771,8 +2809,8 @@ impl VersionSettings {
             .unwrap_or_default();
 
         // Resolve flags from CLI and environment variables.
-        let locked = resolve_lock_check(locked, LockedFlag::Locked, environment.locked);
-        let frozen = resolve_frozen(frozen, FrozenFlag::Frozen, environment.frozen);
+        let locked = resolve_lock_check(locked, no_locked, LockedFlag::Locked, environment.locked);
+        let frozen = resolve_frozen(frozen, no_frozen, FrozenFlag::Frozen, environment.frozen);
         let no_sync = resolve_flag(no_sync, "no-sync", environment.no_sync);
 
         let (locked, frozen) = resolve_lock_flags(locked, frozen)?;
@@ -2856,7 +2894,9 @@ impl TreeSettings {
                     all_groups,
                 },
             locked,
+            no_locked,
             frozen,
+            no_frozen,
             build,
             resolver,
             script,
@@ -2871,8 +2911,8 @@ impl TreeSettings {
             .unwrap_or_default();
 
         // Resolve flags from CLI and environment variables.
-        let locked = resolve_lock_check(locked, LockedFlag::Locked, environment.locked);
-        let frozen = resolve_frozen(frozen, FrozenFlag::Frozen, environment.frozen);
+        let locked = resolve_lock_check(locked, no_locked, LockedFlag::Locked, environment.locked);
+        let frozen = resolve_frozen(frozen, no_frozen, FrozenFlag::Frozen, environment.frozen);
 
         let (locked, frozen) = resolve_lock_flags(locked, frozen)?;
 
@@ -2998,7 +3038,9 @@ impl ExportSettings {
             no_emit_package,
             only_emit_package,
             locked,
+            no_locked,
             frozen: frozen_cli,
+            no_frozen,
             resolver,
             build,
             refresh,
@@ -3011,8 +3053,13 @@ impl ExportSettings {
             .unwrap_or_default();
 
         // Resolve flags from CLI and environment variables.
-        let locked = resolve_lock_check(locked, LockedFlag::Locked, environment.locked);
-        let frozen = resolve_frozen(frozen_cli, FrozenFlag::Frozen, environment.frozen);
+        let locked = resolve_lock_check(locked, no_locked, LockedFlag::Locked, environment.locked);
+        let frozen = resolve_frozen(
+            frozen_cli,
+            no_frozen,
+            FrozenFlag::Frozen,
+            environment.frozen,
+        );
 
         let (locked, frozen) = resolve_lock_flags(locked, frozen)?;
 
@@ -3194,7 +3241,9 @@ impl CheckSettings {
                     all_groups,
                 },
             locked,
+            no_locked,
             frozen,
+            no_frozen,
             no_sync,
             no_install_project,
             isolated,
@@ -3213,8 +3262,8 @@ impl CheckSettings {
             .map(|fs| fs.install_mirrors.clone())
             .unwrap_or_default();
 
-        let locked = resolve_lock_check(locked, LockedFlag::Locked, environment.locked);
-        let frozen = resolve_frozen(frozen, FrozenFlag::Frozen, environment.frozen);
+        let locked = resolve_lock_check(locked, no_locked, LockedFlag::Locked, environment.locked);
+        let frozen = resolve_frozen(frozen, no_frozen, FrozenFlag::Frozen, environment.frozen);
         let no_sync = resolve_flag(no_sync, "no-sync", environment.no_sync);
         let no_install_project = resolve_flag(
             no_install_project,
@@ -3323,7 +3372,9 @@ impl AuditSettings {
             python_version,
             python_platform,
             locked,
+            no_locked,
             frozen,
+            no_frozen,
             audit:
                 AuditCommonArgs {
                     output_format,
@@ -3349,8 +3400,8 @@ impl AuditSettings {
         let no_dev = no_dev || environment.no_dev.value == Some(true);
 
         // Resolve flags from CLI and environment variables.
-        let locked = resolve_lock_check(locked, LockedFlag::Locked, environment.locked);
-        let frozen = resolve_frozen(frozen, FrozenFlag::Frozen, environment.frozen);
+        let locked = resolve_lock_check(locked, no_locked, LockedFlag::Locked, environment.locked);
+        let frozen = resolve_frozen(frozen, no_frozen, FrozenFlag::Frozen, environment.frozen);
 
         let (locked, frozen) = resolve_lock_flags(locked, frozen)?;
 

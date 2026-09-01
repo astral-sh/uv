@@ -38226,6 +38226,133 @@ fn lock_tilde_equal_version_u64_max_rejected() -> Result<()> {
     Ok(())
 }
 
+/// Negating locked mode permits lockfile changes despite `UV_LOCKED` or an earlier CLI flag.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_no_locked() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+    "#})?;
+
+    // Negating the CLI flag must also suppress the environment value when creating a lockfile.
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--locked")
+        .arg("--no-locked")
+        .env(EnvVars::UV_LOCKED, "1"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+    assert!(context.temp_dir.child("uv.lock").exists());
+
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.2.0"
+        requires-python = ">=3.12"
+    "#})?;
+
+    // The negation also overrides the `--check` spelling and allows a stale lockfile to update.
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--check")
+        .arg("--no-locked"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Updated project v0.1.0 -> v0.2.0
+    ");
+    let lock = context.read("uv.lock");
+
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.3.0"
+        requires-python = ">=3.12"
+    "#})?;
+
+    // A later positive flag restores the check and must leave the stale lockfile unchanged.
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--no-locked")
+        .arg("--check"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    error: The lockfile at `uv.lock` needs to be updated, but `--check` was provided.
+
+    hint: To update the lockfile, run `uv lock`.
+    ");
+    assert_eq!(context.read("uv.lock"), lock);
+
+    Ok(())
+}
+
+/// Negating frozen mode permits lockfile changes despite `UV_FROZEN` or an earlier CLI flag.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_no_frozen() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+    "#})?;
+
+    // Negating the CLI flag must also suppress the environment value when creating a lockfile.
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--frozen")
+        .arg("--no-frozen")
+        .env(EnvVars::UV_FROZEN, "1"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+    assert!(context.temp_dir.child("uv.lock").exists());
+
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.2.0"
+        requires-python = ">=3.12"
+    "#})?;
+
+    // The negation also overrides the `--check-exists` spelling and permits re-locking.
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--check-exists")
+        .arg("--no-frozen"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Updated project v0.1.0 -> v0.2.0
+    ");
+    let lock = context.read("uv.lock");
+
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.3.0"
+        requires-python = ">=3.12"
+    "#})?;
+
+    // A later positive flag restores frozen mode and keeps using the existing lockfile.
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--no-frozen")
+        .arg("--check-exists"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    warning: The lockfile at `uv.lock` was only checked for validity, not whether it is up-to-date, because `--check-exists` was provided; use `--check` instead
+    ");
+    assert_eq!(context.read("uv.lock"), lock);
+
+    Ok(())
+}
+
 /// `--check` overrides `UV_FROZEN` when checking a stale lockfile.
 #[cfg(feature = "test-universal")]
 #[test]
