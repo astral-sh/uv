@@ -407,29 +407,9 @@ impl uv_errors::Hint for ProjectError {
             Self::LockFormat(..) => uv_errors::Hints::from(
                 "To regenerate the lockfile, run `uv lock --refresh --preview-features lockfile-format-check`.",
             ),
-            Self::MissingLockfile(source, _) => {
-                let action = match source {
-                    MissingLockfileSource::Frozen(FrozenSource::Cli(_))
-                    | MissingLockfileSource::Locked(LockedSource::Cli(_)) => {
-                        format!("without the {source} flag")
-                    }
-                    MissingLockfileSource::Frozen(FrozenSource::Env) => {
-                        format!("with `{}` unset", EnvVars::UV_FROZEN)
-                    }
-                    MissingLockfileSource::Locked(LockedSource::Env) => {
-                        format!("with `{}` unset", EnvVars::UV_LOCKED)
-                    }
-                    MissingLockfileSource::Frozen(FrozenSource::Configuration) => {
-                        "with `frozen` disabled in the workspace configuration".to_string()
-                    }
-                    MissingLockfileSource::Locked(LockedSource::Configuration) => {
-                        "with `locked` disabled in the workspace configuration".to_string()
-                    }
-                };
-                uv_errors::Hints::from(format!(
-                    "To create a lockfile, run `uv lock` or `uv sync` {action}.",
-                ))
-            }
+            Self::MissingLockfile(..) => uv_errors::Hints::from(
+                "To create a lockfile, run `uv lock --no-locked --no-frozen` or `uv sync --no-locked --no-frozen`.",
+            ),
             Self::OverlappingMarkers(_, rhs, replacement) => {
                 uv_errors::Hints::from(format!("replace `{rhs}` with `{replacement}`"))
             }

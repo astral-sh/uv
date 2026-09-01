@@ -10260,7 +10260,7 @@ fn lock_exclusion() -> Result<()> {
     ----- stderr -----
     error: Unable to find lockfile at `uv.lock`, but `--locked` was provided.
 
-    hint: To create a lockfile, run `uv lock` or `uv sync` without the `--locked` flag.
+    hint: To create a lockfile, run `uv lock --no-locked --no-frozen` or `uv sync --no-locked --no-frozen`.
     ");
 
     Ok(())
@@ -15877,7 +15877,7 @@ fn check_no_lock() -> Result<()> {
     ----- stderr -----
     error: Unable to find lockfile at `uv.lock`, but `--check` was provided.
 
-    hint: To create a lockfile, run `uv lock` or `uv sync` without the `--check` flag.
+    hint: To create a lockfile, run `uv lock --no-locked --no-frozen` or `uv sync --no-locked --no-frozen`.
     ");
     Ok(())
 }
@@ -38440,7 +38440,7 @@ fn lock_frozen_overrides_locked_environment() -> Result<()> {
     Ok(())
 }
 
-/// Errors identify the flag or environment variable that enabled frozen mode.
+/// Errors identify the active source and suggest recovery that overrides both environment modes.
 #[cfg(feature = "test-universal")]
 #[test]
 fn lock_frozen_errors_report_source() -> Result<()> {
@@ -38458,7 +38458,7 @@ fn lock_frozen_errors_report_source() -> Result<()> {
     ----- stderr -----
     error: Unable to find lockfile at `uv.lock`, but `--frozen` was provided.
 
-    hint: To create a lockfile, run `uv lock` or `uv sync` without the `--frozen` flag.
+    hint: To create a lockfile, run `uv lock --no-locked --no-frozen` or `uv sync --no-locked --no-frozen`.
     ");
 
     uv_snapshot!(context.filters(), context.lock().arg("--check-exists"), @"
@@ -38466,7 +38466,7 @@ fn lock_frozen_errors_report_source() -> Result<()> {
     ----- stderr -----
     error: Unable to find lockfile at `uv.lock`, but `--check-exists` was provided.
 
-    hint: To create a lockfile, run `uv lock` or `uv sync` without the `--check-exists` flag.
+    hint: To create a lockfile, run `uv lock --no-locked --no-frozen` or `uv sync --no-locked --no-frozen`.
     ");
 
     uv_snapshot!(context.filters(), context.lock().env(EnvVars::UV_FROZEN, "1"), @"
@@ -38474,10 +38474,32 @@ fn lock_frozen_errors_report_source() -> Result<()> {
     ----- stderr -----
     error: Unable to find lockfile at `uv.lock`, but `UV_FROZEN=1` was provided.
 
-    hint: To create a lockfile, run `uv lock` or `uv sync` with `UV_FROZEN` unset.
+    hint: To create a lockfile, run `uv lock --no-locked --no-frozen` or `uv sync --no-locked --no-frozen`.
     ");
 
-    context.lock().assert().success();
+    // A CLI flag can mask the other environment setting, which the recovery must also override.
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--frozen")
+        .env(EnvVars::UV_LOCKED, "1")
+        .env(EnvVars::UV_FROZEN, "1"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    warning: Ignoring `UV_LOCKED` because `--frozen` was provided
+    error: Unable to find lockfile at `uv.lock`, but `--frozen` was provided.
+
+    hint: To create a lockfile, run `uv lock --no-locked --no-frozen` or `uv sync --no-locked --no-frozen`.
+    ");
+
+    // The suggested command creates the missing lockfile without changing either environment value.
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--no-locked")
+        .arg("--no-frozen")
+        .env(EnvVars::UV_LOCKED, "1")
+        .env(EnvVars::UV_FROZEN, "1"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
     let lock = context.read("uv.lock");
 
     // Rename the project so it is missing from the existing lockfile.
