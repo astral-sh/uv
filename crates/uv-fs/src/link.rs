@@ -69,11 +69,6 @@ pub enum OnExistingDirectory {
 
 /// Link a directory tree from `src` to `dst` using the mode in `options`.
 ///
-/// [`LinkMode::Symlink`] links top-level directories without inspecting their contents. Shared
-/// directory links are fully expanded before merging, regardless of the requested mode. Source
-/// trees must not contain directory symlinks. Concurrent writers must share [`CopyLocks`] and a
-/// destination root, and prepare package directories before writing below them.
-///
 /// Returns the [`LinkMode`] that was actually used, which may differ from the requested mode if a
 /// fallback was needed, e.g., if hard linking was requested but the source and destination are on
 /// different filesystems.
