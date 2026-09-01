@@ -618,8 +618,6 @@ pub(crate) enum LockedSource {
     Cli(LockedFlag),
     /// The `UV_LOCKED` environment variable was set.
     Env,
-    /// The `locked` option was set via workspace configuration.
-    Configuration,
 }
 
 impl std::fmt::Display for LockedSource {
@@ -627,7 +625,6 @@ impl std::fmt::Display for LockedSource {
         match self {
             Self::Cli(flag) => flag.fmt(f),
             Self::Env => write!(f, "UV_LOCKED=1"),
-            Self::Configuration => write!(f, "locked (workspace configuration)"),
         }
     }
 }
@@ -649,7 +646,6 @@ impl From<LockCheck> for Flag {
                 source: FlagSource::Env(EnvVars::UV_LOCKED),
                 name: "locked",
             },
-            LockCheck::Enabled(LockedSource::Configuration) => Self::from_config("locked"),
             LockCheck::Disabled => Self::disabled(),
         }
     }
@@ -684,8 +680,6 @@ pub(crate) enum FrozenSource {
     Cli(FrozenFlag),
     /// The `UV_FROZEN` environment variable was set.
     Env,
-    /// The `frozen` option was set via workspace configuration.
-    Configuration,
 }
 
 impl std::fmt::Display for FrozenSource {
@@ -693,7 +687,6 @@ impl std::fmt::Display for FrozenSource {
         match self {
             Self::Cli(flag) => flag.fmt(f),
             Self::Env => write!(f, "UV_FROZEN=1"),
-            Self::Configuration => write!(f, "frozen (workspace configuration)"),
         }
     }
 }
@@ -706,7 +699,6 @@ impl From<FrozenSource> for Flag {
                 source: FlagSource::Env(EnvVars::UV_FROZEN),
                 name: "frozen",
             },
-            FrozenSource::Configuration => Self::from_config("frozen"),
         }
     }
 }
@@ -739,21 +731,12 @@ fn resolve_frozen(
     cli_flag: FrozenFlag,
     environment: EnvFlag,
 ) -> Option<FrozenSource> {
-    let (flag, _) = resolve_flag_pair(
-        enabled,
-        disabled,
-        cli_flag.name(),
-        "no-frozen",
-        Some(environment),
-        None,
-    );
-    match flag {
-        Flag::Enabled { source, .. } => Some(match source {
-            FlagSource::Cli => FrozenSource::Cli(cli_flag),
-            FlagSource::Env(_) => FrozenSource::Env,
-            FlagSource::Config => FrozenSource::Configuration,
-        }),
-        Flag::Disabled => None,
+    if enabled {
+        Some(FrozenSource::Cli(cli_flag))
+    } else if !disabled && environment.value == Some(true) {
+        Some(FrozenSource::Env)
+    } else {
+        None
     }
 }
 
@@ -764,21 +747,12 @@ fn resolve_lock_check(
     cli_flag: LockedFlag,
     environment: EnvFlag,
 ) -> LockCheck {
-    let (flag, _) = resolve_flag_pair(
-        enabled,
-        disabled,
-        cli_flag.name(),
-        "no-locked",
-        Some(environment),
-        None,
-    );
-    match flag {
-        Flag::Enabled { source, .. } => LockCheck::Enabled(match source {
-            FlagSource::Cli => LockedSource::Cli(cli_flag),
-            FlagSource::Env(_) => LockedSource::Env,
-            FlagSource::Config => LockedSource::Configuration,
-        }),
-        Flag::Disabled => LockCheck::Disabled,
+    if enabled {
+        LockCheck::Enabled(LockedSource::Cli(cli_flag))
+    } else if !disabled && environment.value == Some(true) {
+        LockCheck::Enabled(LockedSource::Env)
+    } else {
+        LockCheck::Disabled
     }
 }
 
