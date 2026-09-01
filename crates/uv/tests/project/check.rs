@@ -1465,7 +1465,7 @@ fn check_no_sync_locked_requires_existing_lock() -> Result<()> {
     warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
     error: Unable to find lockfile at `uv.lock`, but `--locked` was provided.
 
-    hint: To create a lockfile, run `uv lock` or `uv sync` without the flag.
+    hint: To create a lockfile, run `uv lock` or `uv sync` without the `--locked` flag.
     "
     );
 
@@ -1556,7 +1556,7 @@ fn check_no_sync_frozen_requires_existing_lock() -> Result<()> {
     warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
     error: Unable to find lockfile at `uv.lock`, but `--frozen` was provided.
 
-    hint: To create a lockfile, run `uv lock` or `uv sync` without the flag.
+    hint: To create a lockfile, run `uv lock` or `uv sync` without the `--frozen` flag.
     "
     );
 
