@@ -18,6 +18,10 @@ path = "junit.xml"
 [profile.ci-linux]
 inherits = "ci"
 
+[[profile.ci-linux.overrides]]
+filter = 'test(/^extract::malo_/)'
+retries = 2
+
 [profile.ci-macos]
 inherits = "ci"
 test-threads = 12

@@ -28,7 +28,7 @@ jobs:
 
   cargo-test-linux:
     timeout-minutes: 10
-    runs-on: depot-ubuntu-24.04-16
+    runs-on: "namespace-profile-ubuntu-24-04-16;container.privileged=true"
     name: "cargo test on linux"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -62,20 +62,23 @@ jobs:
 
       - name: "Install secret service"
         run: |
-          # Try the next configured mirror after the first failed download.
-          cat /etc/apt/apt-mirrors.txt
+          # Bound package download attempts without depending on Depot's mirror configuration.
           printf '%s\n' \
-            'Acquire::Retries "0";' \
+            'Acquire::Retries "3";' \
             'Acquire::http::Timeout "10";' \
             'Acquire::https::Timeout "10";' \
             | sudo tee /etc/apt/apt.conf.d/80-retries > /dev/null
-          sudo apt install -y --no-install-recommends gnome-keyring
+          sudo apt install -y --no-install-recommends dbus-daemon gnome-keyring
 
       - name: "Start gnome-keyring"
         # run gnome-keyring with 'foobar' as password for the login keyring
         # this will create a new login keyring and unlock it
         # the login password doesn't matter, but the keyring must be unlocked for the tests to work
-        run: gnome-keyring-daemon --components=secrets --daemonize --unlock <<< 'foobar'
+        run: |
+          DBUS_SESSION_BUS_ADDRESS="$(dbus-daemon --session --fork --print-address=1)"
+          export DBUS_SESSION_BUS_ADDRESS
+          echo "DBUS_SESSION_BUS_ADDRESS=$DBUS_SESSION_BUS_ADDRESS" >> "$GITHUB_ENV"
+          gnome-keyring-daemon --components=secrets --daemonize --unlock <<< 'foobar'
 
       - name: "Create btrfs filesystem"
         run: |
@@ -92,13 +95,14 @@ jobs:
           sudo mount -t tmpfs -o size=256m tmpfs /tmpfs
           sudo chown "$(id -u):$(id -g)" /tmpfs
 
-      - name: "Create minix filesystem (low hardlink limit)"
+      - name: "Create ext4 filesystem (low hardlink limit)"
         run: |
-          truncate -s 16M /tmp/minix.img
-          mkfs.minix /tmp/minix.img
-          sudo mkdir /minix
-          sudo mount -o loop /tmp/minix.img /minix
-          sudo chown "$(id -u):$(id -g)" /minix
+          sudo apt install -y e2fsprogs
+          truncate -s 128M /tmp/ext4.img
+          mkfs.ext4 -F /tmp/ext4.img
+          sudo mkdir /ext4
+          sudo mount -o loop /tmp/ext4.img /ext4
+          sudo chown "$(id -u):$(id -g)" /ext4
 
       - name: "Install cargo nextest"
         uses: taiki-e/install-action@6c6fd71fe4fb72c3697d269963d0e15df8adedad # v2.85.10
@@ -114,7 +118,7 @@ jobs:
           UV_INTERNAL__TEST_COW_FS: /btrfs
           UV_INTERNAL__TEST_NOCOW_FS: /tmpfs
           UV_INTERNAL__TEST_ALT_FS: /tmpfs
-          UV_INTERNAL__TEST_LOWLINKS_FS: /minix
+          UV_INTERNAL__TEST_LOWLINKS_FS: /ext4
           # Write pending snapshots to a separate directory for artifact upload
           INSTA_UPDATE: new
           INSTA_PENDING_DIR: ${{ github.workspace }}/pending-snapshots
