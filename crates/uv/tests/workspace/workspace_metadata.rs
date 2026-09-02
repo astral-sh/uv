@@ -12,7 +12,7 @@ use url::Url;
 use uv_cache::Cache;
 use uv_python::PythonEnvironment;
 use uv_static::EnvVars;
-#[cfg(unix)]
+#[cfg(target_os = "macos")]
 use uv_test::venv_bin_path;
 use uv_test::{copy_dir_ignore, site_packages_path, uv_snapshot};
 
@@ -528,7 +528,7 @@ fn workspace_metadata_script_sync_caches_interpreter() -> Result<()> {
 }
 
 #[test]
-#[cfg(unix)]
+#[cfg(target_os = "macos")]
 fn workspace_metadata_script_sync_launcher_override() -> Result<()> {
     let context = uv_test::test_context!("3.12");
     let override_python = venv_bin_path(&context.venv).join("python3");
