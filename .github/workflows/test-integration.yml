@@ -801,6 +801,9 @@ jobs:
     name: "github actions"
     timeout-minutes: 10
     runs-on: ubuntu-latest
+    env:
+      # This job creates and updates test projects without existing lockfiles.
+      UV_LOCKED: 0
     steps:
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:

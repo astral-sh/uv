@@ -58,6 +58,9 @@ jobs:
         run: chmod +x ./uv
 
       - name: "Test"
+        env:
+          # These commands intentionally create and upgrade ecosystem lockfiles.
+          UV_LOCKED: 0
         run: |
           echo '${{ toJSON(matrix.commands) }}' | jq -r '.[]' | while read cmd; do
             echo "+ $cmd" >&2

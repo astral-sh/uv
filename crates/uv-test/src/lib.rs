@@ -1205,6 +1205,13 @@ impl TestContext {
         command
     }
 
+    /// Create a command for an external program with the test environment.
+    pub fn child_command(&self, program: impl AsRef<Path>) -> Command {
+        let mut command = Self::new_command_with(program.as_ref());
+        self.add_shared_env(&mut command, false);
+        command
+    }
+
     pub fn disallow_git_cli(bin_dir: &Path) -> std::io::Result<()> {
         let contents = r"#!/bin/sh
     echo 'error: `git` operations are not allowed — are you missing a cfg for the `git` feature?' >&2

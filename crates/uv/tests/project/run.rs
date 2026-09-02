@@ -5836,13 +5836,12 @@ fn detect_infinite_recursion() -> Result<()> {
 
     fs_err::set_permissions(test_script.path(), PermissionsExt::from_mode(0o0744))?;
 
-    let mut cmd = std::process::Command::new(test_script.as_os_str());
-    context.add_shared_env(&mut cmd, false);
+    let mut command = context.child_command(&test_script);
 
     // Set the max recursion depth to a lower amount to speed up testing.
-    cmd.env(EnvVars::UV_RUN_MAX_RECURSION_DEPTH, "5");
+    command.env(EnvVars::UV_RUN_MAX_RECURSION_DEPTH, "5");
 
-    uv_snapshot!(context.filters(), cmd, @"
+    uv_snapshot!(context.filters(), command, @"
     exit_code: 2 (failure)
     ----- stderr -----
     error: `uv run` was recursively invoked 6 times which exceeds the limit of 5
