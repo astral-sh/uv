@@ -173,10 +173,17 @@ jobs:
 ## Syncing and running
 
 Once uv and Python are installed, the project can be installed with `uv sync` and commands can be
-run in the environment with `uv run`:
+run in the environment with `uv run`.
 
-```yaml title="example.yml" hl_lines="15 17-22"
+We recommend setting [`UV_LOCKED`](../../reference/environment.md#uv_locked) to `1` at the workflow
+level. This ensures that commands such as `uv sync` and `uv run` fail if `uv.lock` is missing or
+needs to be updated, instead of updating it:
+
+```yaml title="example.yml" hl_lines="3-4 17-22"
 name: Example
+
+env:
+  UV_LOCKED: "1"
 
 jobs:
   uv-example:
@@ -190,12 +197,15 @@ jobs:
         uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
 
       - name: Install the project
-        run: uv sync --locked --all-extras --dev
+        run: uv sync --all-extras --dev
 
       - name: Run tests
         # For example, using `pytest`
         run: uv run pytest tests
 ```
+
+To allow an individual command to update the lockfile, pass `--no-locked`, e.g.,
+`uv lock --upgrade --no-locked`.
 
 !!! tip
 
