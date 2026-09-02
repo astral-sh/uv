@@ -60,16 +60,15 @@ jobs:
       - name: "Test sdist"
         uses: ./.github/actions/release-smoke-test
         with:
-          image: python:3.11-bookworm
+          image: python:3.11-bookworm@sha256:35d3a4a3d5e42e02ab916d44513a050689f12c0533d45598d229672503fe77ca
           artifacts: dist
           run: |
             apt-get update
             apt-get install -y --no-install-recommends cmake
             curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs -o rustup-init.sh
-            RUSTUP_TOOLCHAIN="$(python -c 'import tomllib; print(tomllib.load(open("rust-toolchain.toml", "rb"))["toolchain"]["channel"])')"
-            export RUSTUP_TOOLCHAIN
-            sh rustup-init.sh -y --profile minimal --default-toolchain "$RUSTUP_TOOLCHAIN"
+            sh rustup-init.sh -y --profile minimal --default-toolchain none
             export PATH="$HOME/.cargo/bin:$PATH"
+            rustup toolchain install
             # We can't use `--find-links` here, since we need maturin, which means no `--no-index`, and without that option
             # we run the risk that pip pull uv from PyPI instead.
             pip install /dist/${PACKAGE_NAME}-*.tar.gz --force-reinstall
@@ -95,17 +94,16 @@ jobs:
       - name: "Test sdist uv-build"
         uses: ./.github/actions/release-smoke-test
         with:
-          image: python:3.11-bookworm
+          image: python:3.11-bookworm@sha256:35d3a4a3d5e42e02ab916d44513a050689f12c0533d45598d229672503fe77ca
           artifacts: crates/uv-build/dist
           rust-toolchain: crates/uv-build/rust-toolchain.toml
           run: |
             apt-get update
             apt-get install -y --no-install-recommends cmake
             curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs -o rustup-init.sh
-            RUSTUP_TOOLCHAIN="$(python -c 'import tomllib; print(tomllib.load(open("rust-toolchain.toml", "rb"))["toolchain"]["channel"])')"
-            export RUSTUP_TOOLCHAIN
-            sh rustup-init.sh -y --profile minimal --default-toolchain "$RUSTUP_TOOLCHAIN"
+            sh rustup-init.sh -y --profile minimal --default-toolchain none
             export PATH="$HOME/.cargo/bin:$PATH"
+            rustup toolchain install
             pip install /dist/${PACKAGE_NAME}_build-*.tar.gz --force-reinstall
             ${MODULE_NAME}-build --help
             python -m ${MODULE_NAME}_build --help
@@ -630,13 +628,13 @@ jobs:
       - name: "Test wheel"
         uses: ./.github/actions/release-smoke-test
         with:
-          image: ${{ matrix.platform.arch == 'arm' && 'balenalib/rpi-raspbian:bullseye' || (matrix.platform.arch == 'aarch64' && 'arm64v8/ubuntu:20.04' || 'arm32v7/ubuntu:20.04') }}
+          image: ${{ matrix.platform.arch == 'arm' && 'balenalib/rpi-raspbian:bullseye@sha256:851cfc48b26f6413a72a7f6873a7624ba2a427048976f6ab4483f72fe165d4f1' || (matrix.platform.arch == 'aarch64' && 'arm64v8/ubuntu:20.04@sha256:0908a765aeb02fe4e564b543eaed1d77839b7a08de94041e24328b2cb62ac553' || 'arm32v7/ubuntu:20.04@sha256:d9a6ab6baaf86907ea1d46f0cbc87547920077c9c6017721faed6eeb51e9aa7e') }}
           platform: ${{ matrix.platform.arch == 'arm' && 'linux/arm/v6' || (matrix.platform.arch == 'aarch64' && 'linux/arm64' || 'linux/arm/v7') }}
           artifacts: dist
           run: |
             apt-get update
             apt-get install -y --no-install-recommends python3 python3-pip python-is-python3
-            pip3 install --upgrade --require-hashes --only-binary=:all: -r /requirements.txt
+            pip3 install --upgrade --require-hashes -r /pip-requirements.txt
             pip install ${PACKAGE_NAME} --no-index --find-links /dist --force-reinstall
             ${MODULE_NAME} --help
             # TODO(konsti): Enable this test on all platforms, currently `find_uv_bin` is failing to discover uv here.
@@ -685,13 +683,13 @@ jobs:
       - name: "Test wheel uv-build"
         uses: ./.github/actions/release-smoke-test
         with:
-          image: ${{ matrix.platform.arch == 'arm' && 'balenalib/rpi-raspbian:bullseye' || (matrix.platform.arch == 'aarch64' && 'arm64v8/ubuntu:20.04' || 'arm32v7/ubuntu:20.04') }}
+          image: ${{ matrix.platform.arch == 'arm' && 'balenalib/rpi-raspbian:bullseye@sha256:851cfc48b26f6413a72a7f6873a7624ba2a427048976f6ab4483f72fe165d4f1' || (matrix.platform.arch == 'aarch64' && 'arm64v8/ubuntu:20.04@sha256:0908a765aeb02fe4e564b543eaed1d77839b7a08de94041e24328b2cb62ac553' || 'arm32v7/ubuntu:20.04@sha256:d9a6ab6baaf86907ea1d46f0cbc87547920077c9c6017721faed6eeb51e9aa7e') }}
           platform: ${{ matrix.platform.arch == 'arm' && 'linux/arm/v6' || (matrix.platform.arch == 'aarch64' && 'linux/arm64' || 'linux/arm/v7') }}
           artifacts: crates/uv-build/dist
           run: |
             apt-get update
             apt-get install -y --no-install-recommends python3 python3-pip python-is-python3
-            pip3 install --upgrade --require-hashes --only-binary=:all: -r /requirements.txt
+            pip3 install --upgrade --require-hashes -r /pip-requirements.txt
             pip install ${PACKAGE_NAME}_build --no-index --find-links /dist --force-reinstall
             ${MODULE_NAME}-build --help
             # TODO(konsti): Enable this test on all platforms, currently `find_uv_bin` is failing to discover uv here.
@@ -747,13 +745,13 @@ jobs:
       - name: "Test wheel"
         uses: ./.github/actions/release-smoke-test
         with:
-          image: s390x/ubuntu:20.04
+          image: s390x/ubuntu:20.04@sha256:221f5f8e28d896556d0e55605cd6936450e6231544e9d83d687beae2d0e71afd
           platform: linux/s390x
           artifacts: dist
           run: |
             apt-get update
             apt-get install -y --no-install-recommends python3 python3-pip python-is-python3
-            pip3 install --upgrade --require-hashes --only-binary=:all: -r /requirements.txt
+            pip3 install --upgrade --require-hashes -r /pip-requirements.txt
             pip install ${PACKAGE_NAME} --no-index --find-links /dist --force-reinstall
             ${MODULE_NAME} --help
             # TODO(konsti): Enable this test on all platforms, currently `find_uv_bin` is failing to discover uv here.
@@ -802,13 +800,13 @@ jobs:
       - name: "Test wheel uv-build"
         uses: ./.github/actions/release-smoke-test
         with:
-          image: s390x/ubuntu:20.04
+          image: s390x/ubuntu:20.04@sha256:221f5f8e28d896556d0e55605cd6936450e6231544e9d83d687beae2d0e71afd
           platform: linux/s390x
           artifacts: crates/uv-build/dist
           run: |
             apt-get update
             apt-get install -y --no-install-recommends python3 python3-pip python-is-python3
-            pip3 install --upgrade --require-hashes --only-binary=:all: -r /requirements.txt
+            pip3 install --upgrade --require-hashes -r /pip-requirements.txt
             pip install ${PACKAGE_NAME}-build --no-index --find-links /dist --force-reinstall
             ${MODULE_NAME}-build --help
             # TODO(konsti): Enable this test on all platforms, currently `find_uv_bin` is failing to discover uv here.
@@ -975,13 +973,13 @@ jobs:
       - name: "Test wheel"
         uses: ./.github/actions/release-smoke-test
         with:
-          image: riscv64/ubuntu:20.04
+          image: riscv64/ubuntu:20.04@sha256:610bedb0c5d9aeae4b45e9064e820c4e0b0f6c1d2843116b0a1ae754890951ac
           platform: linux/riscv64
           artifacts: dist
           run: |
             apt-get update
             apt-get install -y --no-install-recommends python3 python3-pip python-is-python3
-            pip3 install --upgrade --require-hashes --only-binary=:all: -r /requirements.txt
+            pip3 install --upgrade --require-hashes -r /pip-requirements.txt
             pip install ${PACKAGE_NAME} --no-index --find-links /dist --force-reinstall
             ${MODULE_NAME} --help
             # TODO(konsti): Enable this test on all platforms, currently `find_uv_bin` is failing to discover uv here.
@@ -1030,13 +1028,13 @@ jobs:
       - name: "Test wheel uv-build"
         uses: ./.github/actions/release-smoke-test
         with:
-          image: riscv64/ubuntu:20.04
+          image: riscv64/ubuntu:20.04@sha256:610bedb0c5d9aeae4b45e9064e820c4e0b0f6c1d2843116b0a1ae754890951ac
           platform: linux/riscv64
           artifacts: crates/uv-build/dist
           run: |
             apt-get update
             apt-get install -y --no-install-recommends python3 python3-pip python-is-python3
-            pip3 install --upgrade --require-hashes --only-binary=:all: -r /requirements.txt
+            pip3 install --upgrade --require-hashes -r /pip-requirements.txt
             pip install ${PACKAGE_NAME}-build --no-index --find-links /dist --force-reinstall
             ${MODULE_NAME}-build --help
             # TODO(konsti): Enable this test on all platforms, currently `find_uv_bin` is failing to discover uv here.
@@ -1086,12 +1084,12 @@ jobs:
         uses: ./.github/actions/release-smoke-test
         if: matrix.target == 'x86_64-unknown-linux-musl'
         with:
-          image: alpine:3.12
+          image: alpine:3.12@sha256:c75ac27b49326926b803b9ed43bf088bc220d22556de1bc5f72d742c91398f69
           artifacts: dist
           run: |
             apk add python3 py3-pip
             python3 -m venv .venv
-            .venv/bin/pip install --upgrade --require-hashes --only-binary=:all: -r /requirements.txt
+            .venv/bin/pip install --upgrade --require-hashes -r /pip-requirements.txt
             .venv/bin/pip install ${PACKAGE_NAME} --no-index --find-links /dist/ --force-reinstall
             .venv/bin/${MODULE_NAME} --help
             # TODO(konsti): Enable this test on all platforms, currently `find_uv_bin` is failing to discover uv here.
@@ -1141,12 +1139,12 @@ jobs:
         uses: ./.github/actions/release-smoke-test
         if: matrix.target == 'x86_64-unknown-linux-musl'
         with:
-          image: alpine:3.12
+          image: alpine:3.12@sha256:c75ac27b49326926b803b9ed43bf088bc220d22556de1bc5f72d742c91398f69
           artifacts: crates/uv-build/dist
           run: |
             apk add python3 py3-pip
             python3 -m venv .venv
-            .venv/bin/pip install --upgrade --require-hashes --only-binary=:all: -r /requirements.txt
+            .venv/bin/pip install --upgrade --require-hashes -r /pip-requirements.txt
             .venv/bin/pip install ${PACKAGE_NAME}-build --no-index --find-links /dist --force-reinstall
             .venv/bin/${MODULE_NAME}-build --help
             # TODO(konsti): Enable this test on all platforms, currently `find_uv_bin` is failing to discover uv here.
@@ -1205,7 +1203,7 @@ jobs:
       - name: "Test wheel"
         uses: ./.github/actions/release-smoke-test
         with:
-          image: ${{ matrix.platform.arch == 'aarch64' && 'arm64v8/alpine:latest' || (matrix.platform.arch == 'armv7' && 'arm32v7/alpine:latest' || 'riscv64/alpine:latest') }}
+          image: ${{ matrix.platform.arch == 'aarch64' && 'arm64v8/alpine:latest@sha256:65b6d5e8cc3010146b8b28cad29473b67883635fbedc9851f05ac83fb713ebdb' || (matrix.platform.arch == 'armv7' && 'arm32v7/alpine:latest@sha256:8cc6ea3910f429645e27a90f51b73fb499e9136d12f11973ef233db7f4223967' || 'riscv64/alpine:latest@sha256:e7eb5d29759ca6c5622f8940faa8142a9316799aec31291c075a1847a20f28e6') }}
           platform: ${{ matrix.platform.arch == 'aarch64' && 'linux/arm64' || (matrix.platform.arch == 'armv7' && 'linux/arm/v7' || 'linux/riscv64') }}
           artifacts: dist
           run: |
@@ -1220,13 +1218,13 @@ jobs:
         uses: ./.github/actions/release-smoke-test
         if: matrix.platform.arch == 'aarch64'
         with:
-          image: arm64v8/ubuntu:20.04
+          image: arm64v8/ubuntu:20.04@sha256:0908a765aeb02fe4e564b543eaed1d77839b7a08de94041e24328b2cb62ac553
           platform: linux/arm64
           artifacts: dist
           run: |
             apt-get update
             apt-get install -y --no-install-recommends python3 python3-pip python-is-python3
-            pip3 install --upgrade --require-hashes --only-binary=:all: -r /requirements.txt
+            pip3 install --upgrade --require-hashes -r /pip-requirements.txt
             pip install ${PACKAGE_NAME} --no-index --find-links /dist --force-reinstall
             ${MODULE_NAME} --help
             # TODO(konsti): Enable this test on all platforms, currently `find_uv_bin` is failing to discover uv here.
@@ -1277,7 +1275,7 @@ jobs:
       - name: "Test wheel"
         uses: ./.github/actions/release-smoke-test
         with:
-          image: ${{ matrix.platform.arch == 'aarch64' && 'arm64v8/alpine:latest' || (matrix.platform.arch == 'armv7' && 'arm32v7/alpine:latest' || 'riscv64/alpine:latest') }}
+          image: ${{ matrix.platform.arch == 'aarch64' && 'arm64v8/alpine:latest@sha256:65b6d5e8cc3010146b8b28cad29473b67883635fbedc9851f05ac83fb713ebdb' || (matrix.platform.arch == 'armv7' && 'arm32v7/alpine:latest@sha256:8cc6ea3910f429645e27a90f51b73fb499e9136d12f11973ef233db7f4223967' || 'riscv64/alpine:latest@sha256:e7eb5d29759ca6c5622f8940faa8142a9316799aec31291c075a1847a20f28e6') }}
           platform: ${{ matrix.platform.arch == 'aarch64' && 'linux/arm64' || (matrix.platform.arch == 'armv7' && 'linux/arm/v7' || 'linux/riscv64') }}
           artifacts: crates/uv-build/dist
           run: |
@@ -1291,13 +1289,13 @@ jobs:
         uses: ./.github/actions/release-smoke-test
         if: matrix.platform.arch == 'aarch64'
         with:
-          image: arm64v8/ubuntu:20.04
+          image: arm64v8/ubuntu:20.04@sha256:0908a765aeb02fe4e564b543eaed1d77839b7a08de94041e24328b2cb62ac553
           platform: linux/arm64
           artifacts: crates/uv-build/dist
           run: |
             apt-get update
             apt-get install -y --no-install-recommends python3 python3-pip python-is-python3
-            pip3 install --upgrade --require-hashes --only-binary=:all: -r /requirements.txt
+            pip3 install --upgrade --require-hashes -r /pip-requirements.txt
             pip install ${PACKAGE_NAME}-build --no-index --find-links /dist --force-reinstall
             ${MODULE_NAME}-build --help
             # TODO(konsti): Enable this test on all platforms, currently `find_uv_bin` is failing to discover uv here.
