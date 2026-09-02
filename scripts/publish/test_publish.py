@@ -2,6 +2,8 @@
 # requires-python = ">=3.12"
 # dependencies = [
 #     "httpx[socks]>=0.28.1,<0.29",
+#     "keyring==25.7.0",
+#     "keyrings-alt==5.0.2",
 #     "packaging>=24.1,<25",
 #     "pypi-attestations==0.0.28",
 #     "sigstore==4.4.0",
@@ -16,22 +18,9 @@
 Upload a new version of astral-test-<test case> to one of multiple indexes, exercising
 different options of passing credentials.
 
-Locally, start Docker (Linux containers), execute the credentials setting script,
-then run on Linux or macOS:
+Locally, execute the credentials setting script, then run:
 ```shell
 uv run --locked scripts/publish/test_publish.py local
-```
-
-Rootless Docker is currently unsupported for fixture builds.
-
-Fixture builds and the keyring helper use the hash-locked dependencies in
-`container/*-requirements.txt`. They run in disposable containers with no network or
-access to host credentials or processes. Docker builds the dependency image from
-only the checked-in container files; no credentials are passed to that build.
-
-To check fixture generation and isolation without publishing or setting credentials:
-```shell
-uv run --locked scripts/publish/test_publish.py check
 ```
 
 # Setup
@@ -46,7 +35,7 @@ supports, but they both CLI options.
 
 **pypi-keyring**
 Set `UV_TEST_PUBLISH_KEYRING` to the dedicated TestPyPI token. The harness stores it
-in a temporary keyring inside the helper container; no host keyring is used.
+in a temporary keyring.
 The query parameter a horrible hack stolen from
 https://github.com/pypa/twine/issues/565#issue-555219267
 to prevent the other projects from implicitly using the same credentials.
@@ -82,21 +71,17 @@ import os
 import re
 import shutil
 import sys
-import tarfile
 import time
-import tomllib
 from argparse import ArgumentParser
 from dataclasses import dataclass
-from email.parser import BytesParser
 from pathlib import Path
 from shutil import rmtree
 from subprocess import PIPE, check_call, run
 from tempfile import TemporaryDirectory, gettempdir
 from time import sleep
-from zipfile import ZipFile
 
 import httpx
-from containers import PublishContainer, container_command, validate_distributions
+from keyrings.alt.file import PlaintextKeyring
 from packaging.utils import (
     parse_sdist_filename,
     parse_wheel_filename,
@@ -170,9 +155,6 @@ class Plan:
     """
     The uv executable to use.
     """
-
-    container: PublishContainer
-    """The isolated, hash-locked fixture builder and keyring helper."""
 
     target: str
     """
@@ -320,13 +302,7 @@ def check_index_for_provenance(
 
 
 def build_project_at_version(
-    target: str,
-    version: Version,
-    uv: Path,
-    container: PublishContainer,
-    *,
-    modified: bool = False,
-    directory: Path = cwd,
+    target: str, version: Version, uv: Path, modified: bool = False
 ) -> Path:
     """Build a source dist and a wheel with the project name and an unclaimed
     version."""
@@ -336,7 +312,7 @@ def build_project_at_version(
         dir_name = f"{project_name}-modified"
     else:
         dir_name = project_name
-    project_root = directory.joinpath(dir_name)
+    project_root = cwd.joinpath(dir_name)
 
     if project_root.exists():
         rmtree(project_root)
@@ -352,7 +328,7 @@ def build_project_at_version(
             project_name,
             dir_name,
         ],
-        cwd=directory,
+        cwd=cwd,
     )
     toml = (
         "[project]\n"
@@ -365,11 +341,11 @@ def build_project_at_version(
     project_root.joinpath("pyproject.toml").write_text(toml)
     shutil.copy(
         cwd.parent.parent.joinpath("LICENSE-APACHE"),
-        project_root.joinpath("LICENSE-APACHE"),
+        cwd.joinpath(dir_name).joinpath("LICENSE-APACHE"),
     )
     shutil.copy(
         cwd.parent.parent.joinpath("LICENSE-MIT"),
-        project_root.joinpath("LICENSE-MIT"),
+        cwd.joinpath(dir_name).joinpath("LICENSE-MIT"),
     )
 
     # Modify the code so we get a different source dist and wheel
@@ -382,7 +358,18 @@ def build_project_at_version(
         )
         init_py.write_text("x = 1")
 
-    container.build(project_root, f"{project_name.replace('-', '_')}-{version}")
+    # Explicitly override no-build from the project's pyproject.toml.
+    check_call(
+        [
+            uv,
+            "build",
+            "--build",
+            "--build-constraint",
+            cwd / "build-requirements.txt",
+            "--require-hashes",
+        ],
+        cwd=project_root,
+    )
     # Publication-only indexes must not participate in building fixtures.
     if index_declaration := all_targets[target].index_declaration():
         project_root.joinpath("pyproject.toml").write_text(toml + index_declaration)
@@ -481,9 +468,7 @@ def test_fresh_upload(
     print(f"\nPublish {project_name} for {plan.target}", file=sys.stderr)
 
     version = get_fresh_version(plan)
-    project_dir = build_project_at_version(
-        plan.target, version, plan.uv, plan.container
-    )
+    project_dir = build_project_at_version(plan.target, version, plan.uv)
 
     # Upload configuration
     publish_url = plan.configuration.publish_url
@@ -675,7 +660,7 @@ def test_reupload_modified_files(
 
     # Build a different source dist and wheel at the same version, so the upload fails
     modified_project_dir = build_project_at_version(
-        plan.target, version, plan.uv, plan.container, modified=True
+        plan.target, version, plan.uv, modified=True
     )
 
     print(
@@ -793,157 +778,33 @@ def target_configuration(target: str) -> tuple[dict[str, str], list[str]]:
     return env, extra_args
 
 
-def plan_test(
-    target: str, uv: Path, container: PublishContainer, keyring_directory: Path
-) -> Plan:
+def plan_test(target: str, uv: Path, keyring_directory: Path) -> Plan:
     """
     Create a test plan for the given target.
     """
     configuration = all_targets[target]
     env, extra_args = target_configuration(target)
     if target == "pypi-keyring":
-        env.update(container.keyring_environment(keyring_directory))
+        keyring_file = str(keyring_directory / "keyring.cfg")
+        keyring = PlaintextKeyring().with_properties(file_path=keyring_file)
+        keyring.set_password(
+            configuration.publish_url,
+            "__token__",
+            os.environ["UV_TEST_PUBLISH_KEYRING"],
+        )
+        env.update(
+            {
+                "PYTHON_KEYRING_BACKEND": "keyrings.alt.file.PlaintextKeyring",
+                "KEYRING_PROPERTY_FILE_PATH": keyring_file,
+            }
+        )
     return Plan(
         uv=uv,
-        container=container,
         target=target,
         configuration=configuration,
         extra_args=extra_args,
         env=env,
     )
-
-
-def test_distribution_validation(directory: Path):
-    """Reject unsafe and incomplete output without consuming any files."""
-    distribution = "astral_test_token-0.1.0"
-    for case in ("missing", "symlink", "directory", "sidecar"):
-        output = directory / case
-        output.mkdir()
-        wheel = output / f"{distribution}-py3-none-any.whl"
-        sdist = output / f"{distribution}.tar.gz"
-        wheel.touch()
-        sdist.touch()
-        if case == "sidecar":
-            wheel.with_suffix(".whl.publish.attestation").write_text("{}")
-        else:
-            wheel.unlink()
-            if case == "symlink":
-                wheel.symlink_to(sdist)
-            elif case == "directory":
-                wheel.mkdir()
-        try:
-            validate_distributions(output, distribution)
-        except RuntimeError:
-            pass
-        else:
-            raise RuntimeError(f"Build output validation accepted {case}")
-
-
-def test_containers(uv: Path, container: PublishContainer):
-    """Check fixtures and credential isolation locally, without publishing."""
-    with TemporaryDirectory(prefix="uv-publish-check-") as temporary:
-        directory = Path(temporary)
-        test_distribution_validation(directory)
-        # Use dummy credentials only. Neither this file nor the host environment
-        # should be visible in either container's filesystem or process namespace.
-        credential_file = directory / "credentials.toml"
-        credential_file.write_text("dummy-host-credential")
-        env = {
-            **os.environ,
-            "UV_TEST_PUBLISH_TOKEN": "dummy-unrelated-token",
-            "UV_TEST_PUBLISH_KEYRING": "dummy-keyring-token",
-        }
-        probe = """
-import os
-import sys
-from pathlib import Path
-
-if (
-    os.getpid() != 1
-    or 'UV_TEST_PUBLISH_TOKEN' in os.environ
-    or 'UV_TEST_PUBLISH_KEYRING' in os.environ
-    or Path(sys.argv[1]).exists()
-    or Path('/var/run/docker.sock').exists()
-    or {path.name for path in Path('/sys/class/net').iterdir()} != {'lo'}
-):
-    raise RuntimeError('Publishing dependency container is not isolated')
-"""
-        for image in (container.build_image, container.keyring_image):
-            run(
-                [
-                    *container_command(image),
-                    "python",
-                    "-I",
-                    "-c",
-                    probe,
-                    credential_file,
-                ],
-                env=env,
-                check=True,
-            )
-
-        version = Version("0.1.0")
-        artifacts = []
-        for modified in (False, True):
-            project = build_project_at_version(
-                "pypi-token",
-                version,
-                uv,
-                container,
-                modified=modified,
-                directory=directory,
-            )
-            metadata_path = "astral_test_token-0.1.0.dist-info/METADATA"
-            wheel_path = project / "dist/astral_test_token-0.1.0-py3-none-any.whl"
-            sdist_path = project / "dist/astral_test_token-0.1.0.tar.gz"
-            with ZipFile(wheel_path) as wheel:
-                wheel_metadata = BytesParser().parsebytes(wheel.read(metadata_path))
-                if (
-                    wheel_metadata["Name"] != "astral-test-token"
-                    or wheel_metadata["Version"] != str(version)
-                    or wheel_metadata["License-Expression"] != "MIT OR Apache-2.0"
-                    or sorted(wheel_metadata.get_all("License-File", []))
-                    != ["LICENSE-APACHE", "LICENSE-MIT"]
-                ):
-                    raise RuntimeError("Fixture wheel has unexpected metadata")
-                if modified and wheel.read("astral_test_token/__init__.py") != b"x = 1":
-                    raise RuntimeError("Modified fixture wheel has unchanged source")
-            with tarfile.open(sdist_path) as sdist:
-                source = sdist.extractfile("astral_test_token-0.1.0/pyproject.toml")
-                if source is None:
-                    raise RuntimeError(
-                        "Fixture source distribution has no pyproject.toml"
-                    )
-                with source:
-                    metadata = tomllib.loads(source.read().decode())
-                if "index" in metadata.get("tool", {}).get("uv", {}):
-                    raise RuntimeError("Publication index was exposed to the builder")
-            project_metadata = tomllib.loads((project / "pyproject.toml").read_text())
-            if project_metadata["tool"]["uv"]["index"][0]["name"] != "test-pypi":
-                raise RuntimeError("Publication index is missing after the build")
-            artifacts.append((wheel_path.read_bytes(), sdist_path.read_bytes()))
-        if artifacts[0][0] == artifacts[1][0] or artifacts[0][1] == artifacts[1][1]:
-            raise RuntimeError("Modified fixture distributions have unchanged contents")
-
-        env.update(container.keyring_environment(directory))
-        for service, expected_code, expected_output in (
-            (
-                "https://test.pypi.org/legacy/?astral-test-keyring",
-                0,
-                "dummy-keyring-token\n",
-            ),
-            ("https://test.pypi.org/legacy/?astral-test-text-store", 1, ""),
-        ):
-            result = run(
-                [directory / "keyring", "get", service, "__token__"],
-                env=env,
-                text=True,
-                stdout=PIPE,
-                check=False,
-            )
-            if (result.returncode, result.stdout) != (expected_code, expected_output):
-                raise RuntimeError(f"Isolated keyring lookup failed for {service}")
-    print("Publishing fixture and container checks passed.")
 
 
 def main():
@@ -954,12 +815,10 @@ def main():
     )
 
     parser = ArgumentParser()
-    target_choices = [*all_targets, "local", "all", "check"]
+    target_choices = [*all_targets, "local", "all"]
     parser.add_argument("targets", choices=target_choices, nargs="+")
     parser.add_argument("--uv")
     args = parser.parse_args()
-    if "check" in args.targets and args.targets != ["check"]:
-        parser.error("The check target must be used on its own")
 
     if args.uv:
         # We change the working directory for the subprocess calls, so we have to
@@ -977,13 +836,9 @@ def main():
     else:
         targets = args.targets
 
-    container = PublishContainer.prepare()
-    if args.targets == ["check"]:
-        test_containers(uv, container)
-        return
     with TemporaryDirectory(prefix="uv-publish-keyring-") as temporary:
         for project_name in targets:
-            plan = plan_test(project_name, uv, container, Path(temporary))
+            plan = plan_test(project_name, uv, Path(temporary))
             # Each publish gets its own client, since we may need to introduce
             # target-specific authentication.
             with httpx.Client(timeout=120) as client:
