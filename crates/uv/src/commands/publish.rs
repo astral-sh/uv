@@ -189,7 +189,7 @@ pub(crate) async fn publish(
         && let Err(err) = burn_trusted_publishing_token(token, &publish_url, &oidc_client).await
     {
         warn_user!(
-            "Failed to revoke trusted publishing token: {err}. The token will expire naturally."
+            "Failed to invalidate trusted publishing token. It will expire naturally. Cause: {err}"
         );
         debug!("Trusted publishing token revocation failed: {err:?}");
     }

@@ -803,7 +803,7 @@ async fn trusted_publishing_burn_failure() {
     Publishing 1 file to http://[LOCALHOST]/upload
     Hashing ok-1.0.0-py3-none-any.whl ([SIZE]B)
     Uploading ok-1.0.0-py3-none-any.whl ([SIZE]B)
-    warning: Failed to revoke trusted publishing token: Failed to fetch: `http://[LOCALHOST]/_/oidc/burn-token`. The token will expire naturally.
+    warning: Failed to invalidate trusted publishing token. It will expire naturally. Cause: Failed to fetch: `http://[LOCALHOST]/_/oidc/burn-token`
     "
     );
 
@@ -828,7 +828,7 @@ async fn trusted_publishing_burn_failure() {
     Publishing 1 file to http://[LOCALHOST]/upload
     Hashing ok-1.0.0-py3-none-any.whl ([SIZE]B)
     Uploading ok-1.0.0-py3-none-any.whl ([SIZE]B)
-    warning: Failed to revoke trusted publishing token: Failed to fetch: `http://[LOCALHOST]/_/oidc/burn-token`. The token will expire naturally.
+    warning: Failed to invalidate trusted publishing token. It will expire naturally. Cause: Failed to fetch: `http://[LOCALHOST]/_/oidc/burn-token`
     error: Failed to publish `[WORKSPACE]/test/links/ok-1.0.0-py3-none-any.whl` to http://[LOCALHOST]/upload
       Caused by: Server returned status code 400 Bad Request. Server says: Upload failed
     "
