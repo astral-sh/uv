@@ -136,9 +136,12 @@ PyPI from GitHub Actions or another Trusted Publisher, you don't need to set any
 Instead,
 [add a trusted publisher to the PyPI project](https://docs.pypi.org/trusted-publishers/adding-a-publisher/).
 
-When using trusted publishing, uv requests revocation of the short-lived PyPI token after
-publishing, even if publishing fails. If revocation fails, uv emits a warning without changing the
-publishing result. Tokens provided explicitly with `--token` or `UV_PUBLISH_TOKEN` are not revoked.
+When using trusted publishing, uv will attempt to invalidate the short-lived PyPI token after
+publishing, even if publishing fails. This further reduces the exposure period for the short-lived
+token, beyond its already short lifetime.
+
+If invalidation fails, uv emits a warning without changing the publishing result. Tokens provided
+explicitly with `--token` or `UV_PUBLISH_TOKEN` are not revoked.
 
 !!! note
 
