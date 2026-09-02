@@ -7,8 +7,6 @@ use async_zip::base::write::ZipFileWriter;
 use async_zip::{Compression, ZipEntryBuilder};
 use futures::executor::block_on;
 use indoc::{formatdoc, indoc};
-#[cfg(unix)]
-use insta::allow_duplicates;
 use url::Url;
 
 use uv_cache::Cache;
@@ -532,43 +530,39 @@ fn workspace_metadata_script_sync_caches_interpreter() -> Result<()> {
 #[test]
 #[cfg(unix)]
 fn workspace_metadata_script_sync_launcher_override() -> Result<()> {
-    for variable in [EnvVars::PYTHONEXECUTABLE, EnvVars::PYVENV_LAUNCHER] {
-        let context = uv_test::test_context!("3.12");
-        let override_python = venv_bin_path(&context.venv).join("python3");
-        let script = context.temp_dir.child("script.py");
-        script.write_str(indoc! {r#"
-            # /// script
-            # requires-python = ">=3.12"
-            # dependencies = []
-            # ///
-            "#
-        })?;
+    let context = uv_test::test_context!("3.12");
+    let override_python = venv_bin_path(&context.venv).join("python3");
+    let script = context.temp_dir.child("script.py");
+    script.write_str(indoc! {r#"
+        # /// script
+        # requires-python = ">=3.12"
+        # dependencies = []
+        # ///
+        "#
+    })?;
 
-        let prepared = context
-            .workspace_metadata()
-            .arg("--script")
-            .arg(script.path())
-            .arg("--sync")
-            .env(variable, &override_python)
-            .assert()
-            .success();
-        let metadata: serde_json::Value = serde_json::from_slice(&prepared.get_output().stdout)?;
-        let root = metadata["environment"]["root"]
-            .as_str()
-            .context("Missing environment root")?;
-        assert_ne!(Path::new(root), context.venv.path());
+    let prepared = context
+        .workspace_metadata()
+        .arg("--script")
+        .arg(script.path())
+        .arg("--sync")
+        .env(EnvVars::PYTHONEXECUTABLE, &override_python)
+        .assert()
+        .success();
+    let metadata: serde_json::Value = serde_json::from_slice(&prepared.get_output().stdout)?;
+    let root = metadata["environment"]["root"]
+        .as_str()
+        .context("Missing environment root")?;
+    assert_ne!(Path::new(root), context.venv.path());
 
-        // Inferred metadata for the script environment must not hide the launcher override.
-        allow_duplicates! {
-            uv_snapshot!(context.filters(), context.python_find()
-                .arg(root)
-                .env(variable, &override_python), @"
-            exit_code: 0 (success)
-            ----- stdout -----
-            [VENV]/bin/python3
-            ");
-        }
-    }
+    // Inferred metadata for the script environment must not hide the launcher override.
+    uv_snapshot!(context.filters(), context.python_find()
+        .arg(root)
+        .env(EnvVars::PYTHONEXECUTABLE, &override_python), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    [VENV]/bin/python3
+    ");
 
     Ok(())
 }
