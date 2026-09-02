@@ -564,6 +564,8 @@ jobs:
           # PGO requires a native runner; the 32-bit ARM targets are cross-compiled.
           - target: aarch64-unknown-linux-gnu
             arch: aarch64
+            test_image: arm64v8/ubuntu:20.04@sha256:0908a765aeb02fe4e564b543eaed1d77839b7a08de94041e24328b2cb62ac553
+            test_platform: linux/arm64
             runner: depot-ubuntu-24.04-arm-8
             pgo: true
             # see https://github.com/astral-sh/ruff/issues/3791
@@ -573,11 +575,15 @@ jobs:
             manylinux: 2_28
           - target: armv7-unknown-linux-gnueabihf
             arch: armv7
+            test_image: arm32v7/ubuntu:20.04@sha256:d9a6ab6baaf86907ea1d46f0cbc87547920077c9c6017721faed6eeb51e9aa7e
+            test_platform: linux/arm/v7
             runner: depot-ubuntu-24.04-8
             pgo: false
             manylinux: 2_17
           - target: arm-unknown-linux-musleabihf
             arch: arm
+            test_image: balenalib/rpi-raspbian:bullseye@sha256:851cfc48b26f6413a72a7f6873a7624ba2a427048976f6ab4483f72fe165d4f1
+            test_platform: linux/arm/v6
             runner: depot-ubuntu-24.04-8
             pgo: false
             # Special case: armv6l is linux_armv6l, no manylinux or musllinux.
@@ -628,8 +634,8 @@ jobs:
       - name: "Test wheel"
         uses: ./.github/actions/release-smoke-test
         with:
-          image: ${{ matrix.platform.arch == 'arm' && 'balenalib/rpi-raspbian:bullseye@sha256:851cfc48b26f6413a72a7f6873a7624ba2a427048976f6ab4483f72fe165d4f1' || (matrix.platform.arch == 'aarch64' && 'arm64v8/ubuntu:20.04@sha256:0908a765aeb02fe4e564b543eaed1d77839b7a08de94041e24328b2cb62ac553' || 'arm32v7/ubuntu:20.04@sha256:d9a6ab6baaf86907ea1d46f0cbc87547920077c9c6017721faed6eeb51e9aa7e') }}
-          platform: ${{ matrix.platform.arch == 'arm' && 'linux/arm/v6' || (matrix.platform.arch == 'aarch64' && 'linux/arm64' || 'linux/arm/v7') }}
+          image: ${{ matrix.platform.test_image }}
+          platform: ${{ matrix.platform.test_platform }}
           artifacts: dist
           run: |
             apt-get update
@@ -683,8 +689,8 @@ jobs:
       - name: "Test wheel uv-build"
         uses: ./.github/actions/release-smoke-test
         with:
-          image: ${{ matrix.platform.arch == 'arm' && 'balenalib/rpi-raspbian:bullseye@sha256:851cfc48b26f6413a72a7f6873a7624ba2a427048976f6ab4483f72fe165d4f1' || (matrix.platform.arch == 'aarch64' && 'arm64v8/ubuntu:20.04@sha256:0908a765aeb02fe4e564b543eaed1d77839b7a08de94041e24328b2cb62ac553' || 'arm32v7/ubuntu:20.04@sha256:d9a6ab6baaf86907ea1d46f0cbc87547920077c9c6017721faed6eeb51e9aa7e') }}
-          platform: ${{ matrix.platform.arch == 'arm' && 'linux/arm/v6' || (matrix.platform.arch == 'aarch64' && 'linux/arm64' || 'linux/arm/v7') }}
+          image: ${{ matrix.platform.test_image }}
+          platform: ${{ matrix.platform.test_platform }}
           artifacts: crates/uv-build/dist
           run: |
             apt-get update
@@ -1165,11 +1171,17 @@ jobs:
         platform:
           - target: aarch64-unknown-linux-musl
             arch: aarch64
+            test_image: arm64v8/alpine:latest@sha256:65b6d5e8cc3010146b8b28cad29473b67883635fbedc9851f05ac83fb713ebdb
+            test_platform: linux/arm64
             maturin_docker_options: -e JEMALLOC_SYS_WITH_LG_PAGE=16
           - target: armv7-unknown-linux-musleabihf
             arch: armv7
+            test_image: arm32v7/alpine:latest@sha256:8cc6ea3910f429645e27a90f51b73fb499e9136d12f11973ef233db7f4223967
+            test_platform: linux/arm/v7
           - target: riscv64gc-unknown-linux-musl
             arch: riscv64
+            test_image: riscv64/alpine:latest@sha256:e7eb5d29759ca6c5622f8940faa8142a9316799aec31291c075a1847a20f28e6
+            test_platform: linux/riscv64
       fail-fast: false
 
     steps:
@@ -1203,8 +1215,8 @@ jobs:
       - name: "Test wheel"
         uses: ./.github/actions/release-smoke-test
         with:
-          image: ${{ matrix.platform.arch == 'aarch64' && 'arm64v8/alpine:latest@sha256:65b6d5e8cc3010146b8b28cad29473b67883635fbedc9851f05ac83fb713ebdb' || (matrix.platform.arch == 'armv7' && 'arm32v7/alpine:latest@sha256:8cc6ea3910f429645e27a90f51b73fb499e9136d12f11973ef233db7f4223967' || 'riscv64/alpine:latest@sha256:e7eb5d29759ca6c5622f8940faa8142a9316799aec31291c075a1847a20f28e6') }}
-          platform: ${{ matrix.platform.arch == 'aarch64' && 'linux/arm64' || (matrix.platform.arch == 'armv7' && 'linux/arm/v7' || 'linux/riscv64') }}
+          image: ${{ matrix.platform.test_image }}
+          platform: ${{ matrix.platform.test_platform }}
           artifacts: dist
           run: |
             apk add python3
@@ -1275,8 +1287,8 @@ jobs:
       - name: "Test wheel"
         uses: ./.github/actions/release-smoke-test
         with:
-          image: ${{ matrix.platform.arch == 'aarch64' && 'arm64v8/alpine:latest@sha256:65b6d5e8cc3010146b8b28cad29473b67883635fbedc9851f05ac83fb713ebdb' || (matrix.platform.arch == 'armv7' && 'arm32v7/alpine:latest@sha256:8cc6ea3910f429645e27a90f51b73fb499e9136d12f11973ef233db7f4223967' || 'riscv64/alpine:latest@sha256:e7eb5d29759ca6c5622f8940faa8142a9316799aec31291c075a1847a20f28e6') }}
-          platform: ${{ matrix.platform.arch == 'aarch64' && 'linux/arm64' || (matrix.platform.arch == 'armv7' && 'linux/arm/v7' || 'linux/riscv64') }}
+          image: ${{ matrix.platform.test_image }}
+          platform: ${{ matrix.platform.test_platform }}
           artifacts: crates/uv-build/dist
           run: |
             apk add python3
