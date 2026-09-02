@@ -15,7 +15,8 @@ pub enum Hasher {
 }
 
 impl Hasher {
-    fn update(&mut self, data: &[u8]) {
+    /// Update the hash with the given bytes.
+    pub fn update(&mut self, data: &[u8]) {
         match self {
             Self::Md5(hasher) => hasher.update(data),
             Self::Sha256(hasher) => hasher.update(data),
