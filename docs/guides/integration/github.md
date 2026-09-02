@@ -175,9 +175,9 @@ jobs:
 Once uv and Python are installed, the project can be installed with `uv sync` and commands can be
 run in the environment with `uv run`.
 
-We recommend setting [`UV_LOCKED`](../../reference/environment.md#uv_locked) to `1` at the workflow
-level. This ensures that commands such as `uv sync` and `uv run` fail if `uv.lock` is missing or
-needs to be updated, instead of updating it:
+We recommend setting [`UV_LOCKED`](../../reference/environment.md#uv_locked) at the workflow level.
+This ensures that commands such as `uv sync` and `uv run` fail if `uv.lock` is missing or needs to
+be updated, instead of updating it:
 
 ```yaml title="example.yml" hl_lines="3-4 17-22"
 name: Example
@@ -204,8 +204,10 @@ jobs:
         run: uv run pytest tests
 ```
 
-To allow an individual command to update the lockfile, pass `--no-locked`, e.g.,
-`uv lock --upgrade --no-locked`.
+!!! tip
+
+    To allow an individual command to update the lockfile, pass `--no-locked`, e.g.,
+    `uv lock --upgrade --no-locked`.
 
 !!! tip
 
