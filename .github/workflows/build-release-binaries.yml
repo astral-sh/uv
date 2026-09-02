@@ -62,13 +62,10 @@ jobs:
         with:
           image: python:3.11-bookworm@sha256:35d3a4a3d5e42e02ab916d44513a050689f12c0533d45598d229672503fe77ca
           artifacts: dist
+          rust-toolchain: rust-toolchain.toml
           run: |
             apt-get update
             apt-get install -y --no-install-recommends cmake
-            curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs -o rustup-init.sh
-            sh rustup-init.sh -y --profile minimal --default-toolchain none
-            export PATH="$HOME/.cargo/bin:$PATH"
-            rustup toolchain install
             # We can't use `--find-links` here, since we need maturin, which means no `--no-index`, and without that option
             # we run the risk that pip pull uv from PyPI instead.
             pip install /dist/${PACKAGE_NAME}-*.tar.gz --force-reinstall
@@ -100,10 +97,6 @@ jobs:
           run: |
             apt-get update
             apt-get install -y --no-install-recommends cmake
-            curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs -o rustup-init.sh
-            sh rustup-init.sh -y --profile minimal --default-toolchain none
-            export PATH="$HOME/.cargo/bin:$PATH"
-            rustup toolchain install
             pip install /dist/${PACKAGE_NAME}_build-*.tar.gz --force-reinstall
             ${MODULE_NAME}-build --help
             python -m ${MODULE_NAME}_build --help

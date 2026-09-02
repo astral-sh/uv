@@ -12,8 +12,8 @@ inputs:
     description: "The artifact directory relative to the workspace."
     required: true
   rust-toolchain:
-    description: "The Rust toolchain file relative to the workspace for source builds."
-    default: "rust-toolchain.toml"
+    description: "The Rust toolchain file relative to the workspace. If set, install Rust before running the test."
+    default: ""
   run:
     description: "The smoke-test commands to run in the container."
     required: true
@@ -76,12 +76,19 @@ runs:
         RUST_TOOLCHAIN: ${{ inputs.rust-toolchain }}
         TEST_SCRIPT: ${{ inputs.run }}
       run: |
+        toolchain_mount=()
+        if [[ -n "$RUST_TOOLCHAIN" ]]; then
+          toolchain_mount=(--mount "type=bind,source=$GITHUB_WORKSPACE/$RUST_TOOLCHAIN,target=/test/rust-toolchain.toml,readonly")
+          # Run setup and tests in the same shell so the PATH update carries over.
+          TEST_SCRIPT="$(cat "$ACTION_PATH/setup-rust.sh")"$'\n'"$TEST_SCRIPT"
+        fi
+
         # Test dependencies must not be able to change artifacts, subsequent builds,
         # or the runner. Do not mount the workspace, runner files, or Docker socket.
         # Installations and source builds write only to the disposable container.
         docker run --rm --platform "$PLATFORM" --workdir /test \
           --mount "type=bind,source=$GITHUB_WORKSPACE/$ARTIFACTS,target=/dist,readonly" \
           --mount "type=bind,source=$ACTION_PATH/pip-requirements.txt,target=/pip-requirements.txt,readonly" \
-          --mount "type=bind,source=$GITHUB_WORKSPACE/$RUST_TOOLCHAIN,target=/test/rust-toolchain.toml,readonly" \
+          "${toolchain_mount[@]}" \
           --env PACKAGE_NAME --env MODULE_NAME --env DEBIAN_FRONTEND=noninteractive \
           --entrypoint /bin/sh "$IMAGE" -euc "$TEST_SCRIPT"
