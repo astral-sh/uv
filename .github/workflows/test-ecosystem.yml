@@ -8,6 +8,9 @@ on:
 permissions:
   contents: read
 
+env:
+  UV_LOCKED: 1
+
 jobs:
   ecosystem-test:
     name: "${{ matrix.repo }}"

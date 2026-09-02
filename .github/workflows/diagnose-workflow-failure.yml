@@ -17,6 +17,7 @@ permissions: {}
 
 env:
   MAX_FLAKE_RERUN_ATTEMPTS: "3"
+  UV_LOCKED: 1
 
 jobs:
   diagnose:

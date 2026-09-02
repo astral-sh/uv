@@ -13,6 +13,9 @@ on:
 
 permissions: {}
 
+env:
+  UV_LOCKED: 1
+
 jobs:
   initialize-context:
     if: github.repository == 'astral-sh/uv'

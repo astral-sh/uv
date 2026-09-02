@@ -3,6 +3,9 @@ on:
 
 permissions: {}
 
+env:
+  UV_LOCKED: 1
+
 jobs:
   review:
     name: "security review"

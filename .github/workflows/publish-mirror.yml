@@ -14,6 +14,7 @@ permissions: {}
 
 env:
   ACTIONS_CACHE_MODE: none
+  UV_LOCKED: 1
 
 jobs:
   publish-mirror:

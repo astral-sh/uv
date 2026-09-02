@@ -18,6 +18,7 @@ env:
   UV_REPOSITORY_ID: "699532645"
   AUTOMATIONS_BOT_ID: "305554984"
   UV_SECURITY_PUBLISH_LABEL: "bot:promote"
+  UV_LOCKED: 1
 
 concurrency:
   group: promote-pull-request-${{ inputs.pull_request }}

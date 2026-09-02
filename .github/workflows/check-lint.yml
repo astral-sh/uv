@@ -19,6 +19,7 @@ env:
   # renovate: datasource=github-releases depName=astral-sh/hawk
   HAWK_VERSION: 0.1.13
   RUSTUP_MAX_RETRIES: 10
+  UV_LOCKED: 1
 
 jobs:
   ruff:

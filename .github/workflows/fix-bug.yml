@@ -47,6 +47,9 @@ on:
 
 permissions: {}
 
+env:
+  UV_LOCKED: 1
+
 jobs:
   fix:
     if: github.repository == 'astral-sh/uv'
