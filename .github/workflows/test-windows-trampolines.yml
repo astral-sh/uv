@@ -15,6 +15,7 @@ env:
   CARGO_NET_RETRY: 10
   CARGO_TERM_COLOR: always
   RUSTUP_MAX_RETRIES: 10
+  UV_LOCKED: 1
 
 jobs:
   # Verify windows crate version matches between workspaces

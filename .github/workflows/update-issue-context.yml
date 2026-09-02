@@ -7,6 +7,9 @@ on:
 
 permissions: {}
 
+env:
+  UV_LOCKED: 1
+
 jobs:
   update:
     if: github.repository == 'astral-sh/uv' && !github.event.issue.pull_request

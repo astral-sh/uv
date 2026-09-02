@@ -19,6 +19,9 @@ concurrency:
   group: ${{ github.workflow }}-${{ inputs.pull_request }}
   cancel-in-progress: true
 
+env:
+  UV_LOCKED: 1
+
 jobs:
   labels:
     if: github.repository == 'astral-sh/uv' || github.repository == 'astral-sh/uv-dev'

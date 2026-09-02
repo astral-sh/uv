@@ -234,6 +234,8 @@ def run_test(
             cmd.extend(["-" + "v" * verbosity])
 
         command_env = env.copy()
+        # Each test creates a project without a lockfile; ignore the runner's locked mode.
+        command_env.pop("UV_LOCKED", None)
         if require_metadata_range_requests:
             command_env["UV_REQUIRE_METADATA_RANGE_REQUESTS"] = "true"
 

@@ -11,6 +11,9 @@ concurrency:
   group: sync-uv-security-main
   cancel-in-progress: false
 
+env:
+  UV_LOCKED: 1
+
 jobs:
   sync:
     name: Sync uv-security
