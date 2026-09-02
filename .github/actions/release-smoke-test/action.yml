@@ -1,0 +1,94 @@
+name: "Test release artifact"
+description: "Run a smoke test with read-only access to a release artifact directory."
+
+inputs:
+  image:
+    description: "The container image to run the test in."
+    required: true
+  platform:
+    description: "The Docker platform to run the test on."
+    default: "linux/amd64"
+  artifacts:
+    description: "The artifact directory relative to the workspace."
+    required: true
+  rust-toolchain:
+    description: "The Rust toolchain file relative to the workspace. If set, install Rust before running the test."
+    default: ""
+  run:
+    description: "The smoke-test commands to run in the container."
+    required: true
+
+runs:
+  using: "composite"
+  steps:
+    - name: "Check QEMU support"
+      id: qemu
+      shell: bash
+      env:
+        PLATFORM: ${{ inputs.platform }}
+      run: |
+        architecture="${PLATFORM#*/}"
+        architecture="${architecture%%/*}"
+        case "$(uname -m)" in
+          x86_64) host_architecture=amd64 ;;
+          i386 | i486 | i586 | i686) host_architecture=386 ;;
+          aarch64 | arm64) host_architecture=arm64 ;;
+          armv[5-8]l) host_architecture=arm ;;
+          *) host_architecture="$(uname -m)" ;;
+        esac
+
+        if [[ "$architecture" == "$host_architecture" ]]; then
+          echo "required=false" >> "$GITHUB_OUTPUT"
+          exit 0
+        fi
+
+        case "$architecture" in
+          amd64) qemu_architecture=x86_64 ;;
+          arm64) qemu_architecture=aarch64 ;;
+          386) qemu_architecture=i386 ;;
+          *) qemu_architecture="$architecture" ;;
+        esac
+        binfmt="/proc/sys/fs/binfmt_misc/qemu-$qemu_architecture"
+        if [[ -r "$binfmt" ]] \
+          && grep -qx enabled "$binfmt" \
+          && grep -Eq '^flags:.*F' "$binfmt"; then
+          echo "required=false" >> "$GITHUB_OUTPUT"
+        else
+          echo "required=true" >> "$GITHUB_OUTPUT"
+          echo "platform=$architecture" >> "$GITHUB_OUTPUT"
+        fi
+
+    - name: "Set up QEMU"
+      if: steps.qemu.outputs.required == 'true'
+      uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3.7.0
+      with:
+        image: tonistiigi/binfmt@sha256:400a4873b838d1b89194d982c45e5fb3cda4593fbfd7e08a02e76b03b21166f0
+        platforms: ${{ steps.qemu.outputs.platform }}
+        cache-image: false
+
+    - name: "Test release artifact"
+      shell: bash
+      env:
+        ACTION_PATH: ${{ github.action_path }}
+        ARTIFACTS: ${{ inputs.artifacts }}
+        IMAGE: ${{ inputs.image }}
+        PLATFORM: ${{ inputs.platform }}
+        RUST_TOOLCHAIN: ${{ inputs.rust-toolchain }}
+        TEST_SCRIPT: ${{ inputs.run }}
+      run: |
+        toolchain_mount=()
+        if [[ -n "$RUST_TOOLCHAIN" ]]; then
+          toolchain_mount=(--mount "type=bind,source=$GITHUB_WORKSPACE/$RUST_TOOLCHAIN,target=/test/rust-toolchain.toml,readonly")
+          # Run setup and tests in the same shell so the PATH update carries over.
+          TEST_SCRIPT="$(cat "$ACTION_PATH/setup-rust.sh")"$'\n'"$TEST_SCRIPT"
+        fi
+
+        # Test dependencies must not be able to change artifacts, subsequent builds,
+        # or the runner. Do not mount the workspace, runner files, or Docker socket.
+        # Installations and source builds write only to the disposable container.
+        docker run --rm --platform "$PLATFORM" --workdir /test \
+          --mount "type=bind,source=$GITHUB_WORKSPACE/$ARTIFACTS,target=/dist,readonly" \
+          --mount "type=bind,source=$ACTION_PATH/pip-requirements.txt,target=/pip-requirements.txt,readonly" \
+          "${toolchain_mount[@]}" \
+          --env PACKAGE_NAME --env MODULE_NAME --env DEBIAN_FRONTEND=noninteractive \
+          --entrypoint /bin/sh "$IMAGE" -euc "$TEST_SCRIPT"

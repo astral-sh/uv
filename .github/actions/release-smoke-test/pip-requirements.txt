@@ -1,0 +1,4 @@
+# pip 25.0.1 is the last release supporting Python 3.8 in the older smoke-test images.
+# Only allow the universal wheel; do not fall back to building an sdist.
+--only-binary=:all:
+pip==25.0.1 --hash=sha256:c46efd13b6aa8279f33f2864459c8ce587ea6a1a59ee20de055868d8f7688f7f
