@@ -58,7 +58,8 @@ jobs:
           uv workspace list --scripts |
           while IFS= read -r script; do
             printf 'Checking %s\n' "$script" >&2
-            uv check --script "$script" --locked
+            # Match Python's import path when executing a script directly.
+            PYTHONPATH="$(dirname "$(realpath "$script")")" uv check --script "$script" --locked
           done
 
   shellcheck:
