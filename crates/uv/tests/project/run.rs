@@ -5836,7 +5836,7 @@ fn detect_infinite_recursion() -> Result<()> {
 
     fs_err::set_permissions(test_script.path(), PermissionsExt::from_mode(0o0744))?;
 
-    let mut command = context.child_command(&test_script);
+    let mut command = context.external_command(&test_script);
 
     // Set the max recursion depth to a lower amount to speed up testing.
     command.env(EnvVars::UV_RUN_MAX_RECURSION_DEPTH, "5");

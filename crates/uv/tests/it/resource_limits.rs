@@ -6,7 +6,7 @@ fn adjust_open_file_limit() {
     let context = uv_test::test_context!("3.12");
     let python = &context.python_versions[0].1;
 
-    let mut command = context.child_command("sh");
+    let mut command = context.external_command("sh");
     command
         .arg("-c")
         .arg("ulimit -S -n 128; exec \"$@\"")
@@ -77,7 +77,7 @@ fn run_open_file_limit_override_exceeds_hard_limit() {
     let context = uv_test::test_context!("3.12");
     let python = &context.python_versions[0].1;
 
-    let mut command = context.child_command("sh");
+    let mut command = context.external_command("sh");
     command
         .arg("-c")
         .arg("ulimit -S -n 128; ulimit -H -n 128; exec \"$@\"")
