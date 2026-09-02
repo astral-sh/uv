@@ -7,7 +7,7 @@ use petgraph::{Direction, Graph};
 use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
 
 use uv_pep508::MarkerTree;
-use uv_pypi_types::{ConflictItem, Conflicts, Inference};
+use uv_pypi_types::{ConflictItem, ConflictItemRef, Conflicts, Inference};
 
 use crate::resolution::ResolutionGraphNode;
 use crate::universal_marker::UniversalMarker;
@@ -108,9 +108,17 @@ pub(crate) fn simplify_conflict_markers(
         return;
     }
 
+    // Unrelated extras and groups cannot simplify a conflict marker. Tracking
+    // them enumerates distinct paths through large workspaces unnecessarily.
+    let relevant: FxHashSet<ConflictItemRef<'_>> = conflicts
+        .iter()
+        .flat_map(|set| set.iter().map(ConflictItem::as_ref))
+        .collect();
+
     // The set of activated extras and groups for each node. The ROOT nodes
     // don't have any extras/groups activated.
-    let mut activated: FxHashMap<NodeIndex, Vec<FxHashSet<ConflictItem>>> = FxHashMap::default();
+    let mut activated: FxHashMap<NodeIndex, Vec<FxHashSet<ConflictItemRef<'_>>>> =
+        FxHashMap::default();
 
     // Collect the root nodes.
     //
@@ -128,20 +136,26 @@ pub(crate) fn simplify_conflict_markers(
 
     let mut seen: FxHashSet<NodeIndex> = FxHashSet::default();
     while let Some(parent_index) = queue.pop() {
-        if let Some((package, extra)) = graph[parent_index].package_extra_names() {
+        let extra = graph[parent_index]
+            .package_extra_names()
+            .map(ConflictItemRef::from);
+        if let Some(item) = extra.filter(|item| relevant.contains(item)) {
             for set in activated
                 .entry(parent_index)
                 .or_insert_with(|| vec![FxHashSet::default()])
             {
-                set.insert(ConflictItem::from((package.clone(), extra.clone())));
+                set.insert(item);
             }
         }
-        if let Some((package, group)) = graph[parent_index].package_group_names() {
+        let group = graph[parent_index]
+            .package_group_names()
+            .map(ConflictItemRef::from);
+        if let Some(item) = group.filter(|item| relevant.contains(item)) {
             for set in activated
                 .entry(parent_index)
                 .or_insert_with(|| vec![FxHashSet::default()])
             {
-                set.insert(ConflictItem::from((package.clone(), group.clone())));
+                set.insert(item);
             }
         }
         let sets = activated
@@ -150,15 +164,15 @@ pub(crate) fn simplify_conflict_markers(
             .unwrap_or_else(|| vec![FxHashSet::default()]);
         for child_edge in graph.edges_directed(parent_index, Direction::Outgoing) {
             let mut change = false;
-            for set in sets.clone() {
+            for set in &sets {
                 let existing = activated.entry(child_edge.target()).or_default();
                 // This is doing a linear scan for testing membership, which
                 // is non-ideal. But it's not actually clear that there's a
                 // strictly better alternative without a real workload being
                 // slow because of this. Namely, we are checking whether the
                 // _set_ being inserted is equivalent to an existing set. So
-                // instead of, say, `Vec<FxHashSet<ConflictItem>>`, we could
-                // have `BTreeSet<BTreeSet<ConflictItem>>`. But this in turn
+                // instead of, say, `Vec<FxHashSet<ConflictItemRef>>`, we could
+                // have `BTreeSet<BTreeSet<ConflictItemRef>>`. But this in turn
                 // makes mutating the elements in each set (done above) more
                 // difficult and likely require more allocations.
                 //
@@ -167,8 +181,8 @@ pub(crate) fn simplify_conflict_markers(
                 // whether we're doing more work than we need to be doing. If
                 // we aren't, then we might want a more purpose-built data
                 // structure for this.
-                if !existing.contains(&set) {
-                    existing.push(set);
+                if !existing.contains(set) {
+                    existing.push(set.clone());
                     change = true;
                 }
             }
@@ -185,11 +199,11 @@ pub(crate) fn simplify_conflict_markers(
             let mut new_set = BTreeSet::default();
             for item in set {
                 for conflict_set in conflicts.iter() {
-                    if !conflict_set.contains(item.package(), item.as_ref().kind()) {
+                    if !conflict_set.contains(item.package(), item.kind()) {
                         continue;
                     }
                     for conflict_item in conflict_set.iter() {
-                        if conflict_item == &item {
+                        if conflict_item.as_ref() == item {
                             continue;
                         }
                         new_set.insert(Inference {
@@ -199,7 +213,7 @@ pub(crate) fn simplify_conflict_markers(
                     }
                 }
                 new_set.insert(Inference {
-                    item,
+                    item: item.to_owned(),
                     included: true,
                 });
             }
