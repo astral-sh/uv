@@ -4,6 +4,9 @@
 # This image provides the build environment; the workspace is bind-mounted
 # at runtime by scripts/build-trampolines.sh.
 
+# TODO: At some point we should switch this to astral-dev-toolchain-cargo-xwin,
+# rather that re-building cargo-xwin from source.
+
 ARG UBUNTU_SNAPSHOT=20260127T200000Z
 
 ARG RUST_NIGHTLY=nightly-2026-03-11
