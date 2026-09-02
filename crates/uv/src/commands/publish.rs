@@ -224,10 +224,20 @@ async fn publish_files(
             dry_run,
             printer,
         )
-        .await?
+        .await
         {
-            PublishResult::Success => {}
-            PublishResult::Failure => error_count += 1,
+            Ok(()) => {}
+            Err(err) => {
+                if !dry_run {
+                    return Err(err);
+                }
+                write_error_chain_with_options(
+                    err.as_ref(),
+                    Hints::none(),
+                    ErrorOptions::default().with_stream(printer.stderr()),
+                )?;
+                error_count += 1;
+            }
         }
     }
 
@@ -238,14 +248,6 @@ async fn publish_files(
     }
 
     Ok(ExitStatus::Success)
-}
-
-/// The outcome of checking or publishing a single distribution.
-enum PublishResult {
-    /// The distribution was checked, uploaded, or skipped successfully.
-    Success,
-    /// A validation error was reported during a dry run.
-    Failure,
 }
 
 /// Check and prepare a distribution, then upload it unless this is a dry run.
@@ -259,7 +261,7 @@ async fn publish_file(
     download_concurrency: &Semaphore,
     dry_run: bool,
     printer: Printer,
-) -> Result<PublishResult> {
+) -> Result<()> {
     // Check if the filename is normalized (e.g., version `2025.09.4` should be `2025.9.4`).
     let normalized_filename = group.filename.to_string();
     if group.raw_filename != normalized_filename {
@@ -267,42 +269,27 @@ async fn publish_file(
             "`{}` has a non-normalized filename (expected `{normalized_filename}`), skipping",
             group.raw_filename
         );
-        return Ok(PublishResult::Success);
+        return Ok(());
     }
 
     let reporter = Arc::new(PublishReporter::single(printer));
 
-    if let Some(check_url_client) = check_url_client {
-        match uv_publish::check_url(
+    if let Some(check_url_client) = check_url_client
+        && uv_publish::check_url(
             check_url_client,
             &group.file,
             &group.filename,
             download_concurrency,
             reporter.clone(),
         )
-        .await
-        {
-            Ok(true) => {
-                writeln!(
-                    printer.stderr(),
-                    "File {} already exists, skipping",
-                    group.filename
-                )?;
-                return Ok(PublishResult::Success);
-            }
-            Ok(false) => {}
-            Err(err) => {
-                if dry_run {
-                    write_error_chain_with_options(
-                        &err,
-                        Hints::none(),
-                        ErrorOptions::default().with_stream(printer.stderr()),
-                    )?;
-                    return Ok(PublishResult::Failure);
-                }
-                return Err(err.into());
-            }
-        }
+        .await?
+    {
+        writeln!(
+            printer.stderr(),
+            "File {} already exists, skipping",
+            group.filename
+        )?;
+        return Ok(());
     }
 
     let bytes = human_readable_bytes(fs_err::metadata(&group.file)?.len());
@@ -326,26 +313,12 @@ async fn publish_file(
 
     // Collect the metadata for the file.
     let form_metadata =
-        match FormMetadata::read_from_file(&group.file, &group.filename, reporter.clone())
+        FormMetadata::read_from_file(&group.file, &group.filename, reporter.clone())
             .await
-            .map_err(|err| PublishError::PublishPrepare(group.file.clone(), Box::new(err)))
-        {
-            Ok(metadata) => metadata,
-            Err(err) => {
-                if dry_run {
-                    write_error_chain_with_options(
-                        &err,
-                        Hints::none(),
-                        ErrorOptions::default().with_stream(printer.stderr()),
-                    )?;
-                    return Ok(PublishResult::Failure);
-                }
-                return Err(err.into());
-            }
-        };
+            .map_err(|err| PublishError::PublishPrepare(group.file.clone(), Box::new(err)))?;
 
     if dry_run {
-        return Ok(PublishResult::Success);
+        return Ok(());
     }
 
     writeln!(
@@ -378,7 +351,7 @@ async fn publish_file(
         )?;
     }
 
-    Ok(PublishResult::Success)
+    Ok(())
 }
 
 /// Credentials for publishing, including whether they require revocation after use.
