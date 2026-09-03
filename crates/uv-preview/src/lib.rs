@@ -335,9 +335,9 @@ pub enum PreviewFeature {
     ArtifactHashFiltering,
     /// Enables content-addressed wheel archives in the cache.
     ContentAddressedCache,
-    /// Omits package-specific `exclude-newer` settings for packages outside the resolution from
-    /// `uv.lock`.
-    ExcludeNewerPackageLock,
+    /// Exclude `exclude-newer-package` entries from the lockfile when not included in the
+    /// project's resolved dependencies.
+    MissingExcludeNewerPackageLock,
 }
 
 impl Display for PreviewFeature {

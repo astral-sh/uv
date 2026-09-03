@@ -37620,7 +37620,7 @@ fn lock_exclude_newer_package_absent_preview() -> Result<()> {
         .lock()
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("--preview-features")
-        .arg("exclude-newer-package-lock")
+        .arg("missing-exclude-newer-package-lock")
         .arg("--exclude-newer-package")
         .arg("idna=false"), @"
     exit_code: 0 (success)
@@ -37648,7 +37648,7 @@ fn lock_exclude_newer_package_absent_preview() -> Result<()> {
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("--locked")
         .arg("--preview-features")
-        .arg("exclude-newer-package-lock"), @"
+        .arg("missing-exclude-newer-package-lock"), @"
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
