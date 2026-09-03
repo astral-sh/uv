@@ -6,6 +6,7 @@ use std::path::{Component, Path, PathBuf};
 
 use uv_fs::link::{CopyLocks, materialize_symlink_dir};
 
+use crate::linker::needs_mutable_copy;
 use crate::{Error, Layout};
 
 /// Resolve installation-scheme aliases without following package directory links into the cache.
@@ -58,7 +59,7 @@ impl LibraryDirectories {
                 return Ok(ControlFlow::Continue(()));
             }
             locks.with_directory_lock(directory, || {
-                materialize_symlink_dir(directory)?;
+                materialize_symlink_dir(directory, needs_mutable_copy)?;
                 fs_err::create_dir_all(directory)?;
                 Ok::<_, Error>(ControlFlow::<Infallible>::Continue(()))
             })
