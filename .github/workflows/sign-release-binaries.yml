@@ -111,9 +111,6 @@ jobs:
           checksum: "788f18abea7c5f55d6216e4f5613fd89d4d59b631efeec117b2b07fe72f1da21"
           enable-cache: false
 
-      - name: "Prepare the signing script"
-        run: uv sync --script scripts/sign-release-macos.py
-
       - name: "Download unsigned executable wheel members"
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
@@ -142,7 +139,7 @@ jobs:
           AZURE_KEYVAULT_KEY_VERSION: ${{ secrets.CODESIGN_KEY_VERSION }}
           KEY_NAME: ${{ secrets.CODESIGN_KEY_NAME }}
           CERTIFICATE_SHA256: ${{ secrets.CODESIGN_CERTIFICATE_SHA256 }}
-        run: uv run --offline scripts/sign-release-macos.py unsigned signed
+        run: uv run scripts/sign-release-macos.py unsigned signed
 
       - name: "Upload signed executable wheel members"
         id: upload
@@ -319,9 +316,6 @@ jobs:
           checksum: "127ebdda7ad953cdf198e964b570ea5771b85467ea93eb7cb6d6f8e6f55408f3"
           enable-cache: false
 
-      - name: "Prepare the verification script"
-        run: uv sync --script scripts/verify-release-macos.py
-
       - name: "Download signed executables"
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
@@ -340,10 +334,10 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          uv run --offline scripts/extract-wheel-binaries.py \
+          uv run scripts/extract-wheel-binaries.py \
             --output wheel-contents dist/wheels/*.whl
           tar xzf dist/uv-aarch64-apple-darwin.tar.gz
-          uv run --offline scripts/verify-release-macos.py signed wheel-contents uv-aarch64-apple-darwin
+          uv run scripts/verify-release-macos.py signed wheel-contents uv-aarch64-apple-darwin
 
       - name: "Install and run the signed wheels"
         run: |
