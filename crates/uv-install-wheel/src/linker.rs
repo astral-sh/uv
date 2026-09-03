@@ -248,6 +248,15 @@ impl InstallState {
     }
 }
 
+/// Whether a wheel entry must remain writable without changing the cache.
+pub(crate) fn needs_mutable_copy(path: &Path) -> bool {
+    path.ends_with("RECORD")
+        || path.ends_with("__pycache__")
+        || path.extension().is_some_and(|extension| {
+            extension == "dist-info" || extension == "data" || extension == "pyc"
+        })
+}
+
 /// Extract a wheel by linking all of its files into site packages.
 #[instrument(skip_all)]
 pub(crate) fn link_wheel_files(
@@ -261,15 +270,10 @@ pub(crate) fn link_wheel_files(
     let site_packages = site_packages.as_ref();
     register_installed_paths(wheel, state, filename)?;
 
-    // Keep metadata and relocated data in real directories. The `RECORD` file is modified during
-    // installation, so it also needs a private copy.
+    // Keep metadata and relocated data in real directories. RECORD and bytecode files need
+    // private copies because installation or recompilation can overwrite them.
     let options = LinkOptions::new(link_mode)
-        .with_mutable_copy_filter(|path: &Path| {
-            path.ends_with("RECORD")
-                || path
-                    .extension()
-                    .is_some_and(|extension| extension == "dist-info" || extension == "data")
-        })
+        .with_mutable_copy_filter(needs_mutable_copy)
         .with_copy_locks(state.copy_locks())
         .with_on_existing_directory(OnExistingDirectory::Merge);
     let used_link_mode = link_dir(wheel, site_packages, &options)?;

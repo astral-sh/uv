@@ -323,7 +323,7 @@ where
                     ),
                 }
             }
-            materialize_symlink_dir(&target)?;
+            materialize_symlink_dir(&target, &options.needs_mutable_copy)?;
             if state.mode == LinkMode::Clone && !target.try_exists()? {
                 // Reserve the new directory until cloning finishes, without creating it first.
                 return clone_dir(&path, &target, options).map(Some);
@@ -352,10 +352,13 @@ where
 /// Replace a directory symlink with real directories and symlinks to individual files.
 ///
 /// Missing paths and non-links are unchanged. The expanded directory never becomes a link again.
-/// If writes can overlap, hold [`CopyLocks::with_directory_lock`] for `path` throughout this call and
-/// use [`CopyLocks::with_file_write`] for competing file writes. Replacing the link briefly removes
-/// its name before publishing the expanded directory.
-pub fn materialize_symlink_dir(path: &Path) -> Result<(), LinkError> {
+/// Files matching `needs_mutable_copy` are copied instead of linked.
+/// If writes can overlap, hold [`CopyLocks::with_directory_lock`] for `path` throughout this call.
+/// Replacing the link briefly removes its name before publishing the expanded directory.
+pub fn materialize_symlink_dir(
+    path: &Path,
+    needs_mutable_copy: impl Fn(&Path) -> bool,
+) -> Result<(), LinkError> {
     match fs_err::symlink_metadata(path) {
         Ok(metadata) if metadata.file_type().is_symlink() => {}
         Ok(_) => return Ok(()),
@@ -371,7 +374,7 @@ pub fn materialize_symlink_dir(path: &Path) -> Result<(), LinkError> {
         &source,
         temporary.path(),
         LinkMode::Symlink,
-        &LinkOptions::new(LinkMode::Symlink),
+        &LinkOptions::new(LinkMode::Symlink).with_mutable_copy_filter(needs_mutable_copy),
     )?;
     crate::remove_symlink(path)?;
     if let Err(err) = fs_err::rename(temporary.path(), path) {

@@ -348,6 +348,7 @@ fn directory_symlink_shared_namespace() -> Result<()> {
             second.path(),
             "symlink_b",
             [
+                ("shared/a.py", "VALUE = 12345\n"),
                 ("shared/b.py", "VALUE = 2\n"),
                 ("shared/RECORD", "replacement\n"),
             ],
@@ -356,24 +357,32 @@ fn directory_symlink_shared_namespace() -> Result<()> {
             .pip_install()
             .arg(first.path())
             .arg("--link-mode=symlink")
+            .arg("--compile-bytecode")
             .assert()
             .success();
         let shared = context.site_packages().join("shared");
         let cached = fs::read_link(&shared)?;
         let digest = dirhash_path(&cached)?;
+        let bytecode = shared.join("__pycache__/a.cpython-312.pyc");
+        let original_bytecode = fs::read(&bytecode)?;
 
         allow_duplicates! {
             uv_snapshot!(context.filters(), context.pip_install()
-                .arg(second.path()).arg("--link-mode").arg(link_mode), @"
+                .arg(second.path()).arg("--link-mode").arg(link_mode)
+                .arg("--compile-bytecode")
+                .env(EnvVars::PYC_INVALIDATION_MODE, "CHECKED_HASH"), @"
             exit_code: 0 (success)
             ----- stderr -----
             Resolved 1 package in [TIME]
             Prepared 1 package in [TIME]
             Installed 1 package in [TIME]
+            Bytecode compiled 2 files in [TIME]
              + symlink-b==1.0.0 (from file://[TEMP_DIR]/symlink_b-1.0.0-py3-none-any.whl)
             ");
         }
         assert!(!shared.is_symlink());
+        assert!(!bytecode.is_symlink());
+        assert_ne!(fs::read(&bytecode)?, original_bytecode);
         assert_eq!(fs::read_to_string(shared.join("RECORD"))?, "replacement\n");
         context
             .assert_command("import shared.a, shared.b")
