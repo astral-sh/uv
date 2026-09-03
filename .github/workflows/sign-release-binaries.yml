@@ -56,7 +56,7 @@ jobs:
           set -euo pipefail
           # uv and uv_build keep their executables in .data/scripts.
           for target in aarch64-apple-darwin x86_64-pc-windows-msvc; do
-            uv run --frozen --python 3.13 --script scripts/extract-wheel-binaries.py \
+            uv run --frozen --python 3.13 scripts/extract-wheel-binaries.py \
               --output "unsigned/$target" wheels/"$target"/*.whl
           done
 
@@ -144,7 +144,7 @@ jobs:
           CERTIFICATE_SHA256: ${{ secrets.CODESIGN_CERTIFICATE_SHA256 }}
         run: >-
           uv run --frozen --offline --no-build --python 3.13
-          --script "$RUNNER_TEMP/sign-release-macos.py" sign unsigned signed
+          "$RUNNER_TEMP/sign-release-macos.py" sign unsigned signed
 
       - name: "Upload signed executable wheel members"
         id: upload
@@ -343,11 +343,11 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          uv run --frozen --offline --python 3.13 --script "$RUNNER_TEMP/extract-wheel-binaries.py" \
+          uv run --frozen --offline --python 3.13 "$RUNNER_TEMP/extract-wheel-binaries.py" \
             --output wheel-contents dist/wheels/*.whl
           tar xzf dist/uv-aarch64-apple-darwin.tar.gz
           uv run --frozen --offline --no-build --python 3.13 \
-            --script "$RUNNER_TEMP/sign-release-macos.py" verify signed wheel-contents uv-aarch64-apple-darwin
+            "$RUNNER_TEMP/sign-release-macos.py" verify signed wheel-contents uv-aarch64-apple-darwin
 
       - name: "Install and run the signed wheels"
         run: |
@@ -401,7 +401,7 @@ jobs:
         run: |
           $ErrorActionPreference = 'Stop'
           $wheels = Get-ChildItem dist/wheels/*.whl
-          uv run --frozen --python 3.13 --script "$env:RUNNER_TEMP/extract-wheel-binaries.py" --output wheel-contents $wheels.FullName
+          uv run --frozen --python 3.13 "$env:RUNNER_TEMP/extract-wheel-binaries.py" --output wheel-contents $wheels.FullName
           if ($LASTEXITCODE -ne 0) { throw 'Wheel extraction failed' }
           Expand-Archive dist/uv-x86_64-pc-windows-msvc.zip archive-contents
           foreach ($binary in @('uv.exe', 'uvx.exe', 'uvw.exe')) {
