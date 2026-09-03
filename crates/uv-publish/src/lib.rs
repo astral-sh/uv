@@ -1,5 +1,6 @@
 mod trusted_publishing;
 
+use std::borrow::Cow;
 use std::collections::BTreeSet;
 use std::io::Read;
 use std::path::{Path, PathBuf};
@@ -172,6 +173,27 @@ pub trait Reporter: Send + Sync + 'static {
     fn on_hash_complete(&self, id: usize);
 }
 
+/// Credentials for publishing, including whether they require revocation after use.
+pub enum PublishingCredentials {
+    /// Credentials supplied by the user or resolved by the authentication middleware.
+    Supplied(Credentials),
+    /// A short-lived token obtained through trusted publishing.
+    TrustedPublishing(TrustedPublishingToken),
+}
+
+impl PublishingCredentials {
+    /// Return the HTTP credentials to use for uploads.
+    pub fn as_credentials(&self) -> Cow<'_, Credentials> {
+        match self {
+            Self::Supplied(credentials) => Cow::Borrowed(credentials),
+            Self::TrustedPublishing(token) => Cow::Owned(Credentials::basic(
+                Some("__token__".to_string()),
+                Some(token.to_string()),
+            )),
+        }
+    }
+}
+
 /// The result of uploading a prepared distribution.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum UploadOutcome {
@@ -179,6 +201,25 @@ pub enum UploadOutcome {
     Uploaded,
     /// An identical file already exists on the registry.
     AlreadyExists,
+}
+
+/// The outcome of preparation and uploads, before finalizing the session.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PublishOutcome {
+    /// All files were uploaded or skipped because they did not require uploading.
+    Success,
+    /// Preparation or uploading failed.
+    Failed,
+    /// Validation succeeded without uploading any files.
+    DryRun,
+}
+
+/// A failure while finalizing a publishing session.
+#[derive(Debug, Error)]
+pub enum PublishFinalizeError {
+    /// Token invalidation is best effort and must not change the publishing result.
+    #[error("Failed to invalidate trusted publishing token")]
+    TokenInvalidation(#[source] TrustedPublishingError),
 }
 
 /// A distribution and its associated attestation paths, collected by [`PublishSession::prepare`].
@@ -254,15 +295,19 @@ struct CheckUrlClient<'a> {
     cache: &'a Cache,
 }
 
-/// Shared state for preparing and uploading a set of distributions.
+/// Shared state for preparing, uploading, and finalizing a set of distributions.
 ///
 /// Collect distributions with [`Self::prepare`], then pass each one to [`Self::upload`].
-/// Hashes, metadata, and attestations are read immediately before each upload.
-#[must_use]
+/// Hashes, metadata, and attestations are read immediately before each upload. Call
+/// [`Self::finalize`] after processing the files, including after validation or upload errors
+/// and after a dry run. Finalization is explicit and asynchronous; dropping a session does not
+/// perform cleanup.
+#[must_use = "publishing sessions must be finalized after use"]
 pub struct PublishSession<'a> {
     publish_url: DisplaySafeUrl,
-    credentials: Credentials,
+    credentials: PublishingCredentials,
     upload_client: &'a BaseClient,
+    oidc_client: &'a BaseClient,
     retry_policy: ExponentialBackoff,
     check_url_client: Option<CheckUrlClient<'a>>,
     download_concurrency: Semaphore,
@@ -543,34 +588,23 @@ pub async fn check_trusted_publishing(
     }
 }
 
-/// Request revocation of a token obtained through trusted publishing.
-///
-/// A successful request does not guarantee that the token was revoked.
-pub async fn burn_trusted_publishing_token(
-    token: &TrustedPublishingToken,
-    registry: &DisplaySafeUrl,
-    client: &BaseClient,
-) -> Result<(), TrustedPublishingError> {
-    PyPIPublishingService::new(registry, client)
-        .burn_token(token)
-        .await
-}
-
 impl<'a> PublishSession<'a> {
     /// Start a session with resolved credentials and configured HTTP clients.
     ///
     /// The retry policy applies to streaming uploads, whose client must have automatic retries
-    /// and redirects disabled.
+    /// and redirects disabled. The OIDC client uses its own retry and timeout settings.
     pub fn new(
         publish_url: DisplaySafeUrl,
-        credentials: Credentials,
+        credentials: PublishingCredentials,
         upload_client: &'a BaseClient,
+        oidc_client: &'a BaseClient,
         retry_policy: ExponentialBackoff,
     ) -> Self {
         Self {
             publish_url,
             credentials,
             upload_client,
+            oidc_client,
             retry_policy,
             check_url_client: None,
             // Check URL requests are made one at a time against a single index.
@@ -878,6 +912,26 @@ impl<'a> PublishSession<'a> {
             }
         } else {
             Err(PublishError::MissingHash(Box::new(filename.clone())))
+        }
+    }
+
+    /// Finish the session and request invalidation of any trusted publishing token.
+    ///
+    /// Currently, finalization only invalidates credentials, regardless of the outcome. A future
+    /// upload protocol may publish staged files atomically on [`PublishOutcome::Success`]; failed
+    /// runs and dry runs must only clean up, without publishing staged files.
+    ///
+    /// A successful invalidation request does not guarantee that the token was revoked.
+    pub async fn finalize(self, outcome: PublishOutcome) -> Result<(), PublishFinalizeError> {
+        debug!("Finalizing publishing session: {outcome:?}");
+        match self.credentials {
+            PublishingCredentials::Supplied(_) => Ok(()),
+            PublishingCredentials::TrustedPublishing(token) => {
+                PyPIPublishingService::new(&self.publish_url, self.oidc_client)
+                    .burn_token(&token)
+                    .await
+                    .map_err(PublishFinalizeError::TokenInvalidation)
+            }
         }
     }
 }
@@ -1216,7 +1270,7 @@ impl PublishSession<'_> {
         registry: &DisplaySafeUrl,
         reporter: Arc<impl Reporter>,
     ) -> Result<(RequestBuilder<'_>, usize), PublishPrepareError> {
-        let credentials = &self.credentials;
+        let credentials = self.credentials.as_credentials();
         let mut form = Form::new();
         for (key, value) in form_metadata.iter() {
             form = form.text(*key, value.clone());
@@ -1267,7 +1321,7 @@ impl PublishSession<'_> {
                 "application/json;q=0.9, text/plain;q=0.8, text/html;q=0.7",
             );
 
-        match credentials {
+        match credentials.as_ref() {
             Credentials::Basic { password, .. } => {
                 if password.is_some() {
                     debug!("Using HTTP Basic authentication");
@@ -1376,8 +1430,8 @@ mod tests {
     use uv_redacted::DisplaySafeUrl;
 
     use crate::{
-        FormMetadata, PublishError, PublishPrepareError, PublishSession, Reporter, UploadOutcome,
-        group_files, source_dist_pkg_info,
+        FormMetadata, PublishError, PublishOutcome, PublishPrepareError, PublishSession,
+        PublishingCredentials, Reporter, UploadOutcome, group_files, source_dist_pkg_info,
     };
     use uv_errors::{ErrorOptions, Hints, write_error_chain_with_options};
     use wiremock::matchers::{method, path};
@@ -1478,7 +1532,11 @@ mod tests {
     fn test_session(registry: DisplaySafeUrl, client: &BaseClient) -> PublishSession<'_> {
         PublishSession::new(
             registry,
-            Credentials::basic(Some("ferris".to_string()), Some("F3RR!S".to_string())),
+            PublishingCredentials::Supplied(Credentials::basic(
+                Some("ferris".to_string()),
+                Some("F3RR!S".to_string()),
+            )),
+            client,
             client,
             client.retry_policy(),
         )
@@ -1501,7 +1559,16 @@ mod tests {
             .expect("Valid registry URL");
         let mut session = test_session(registry, &client);
         let prepared = preparation.pop().expect("Distribution should be found");
-        session.upload(prepared, Arc::new(DummyReporter)).await
+        let result = session.upload(prepared, Arc::new(DummyReporter)).await;
+        let outcome = match &result {
+            Ok(UploadOutcome::Uploaded | UploadOutcome::AlreadyExists) => PublishOutcome::Success,
+            Err(_) => PublishOutcome::Failed,
+        };
+        session
+            .finalize(outcome)
+            .await
+            .expect("Finalization failed");
+        result
     }
 
     #[test]
@@ -1944,6 +2011,11 @@ mod tests {
             }
             "#);
         });
+        drop(request);
+        session
+            .finalize(PublishOutcome::DryRun)
+            .await
+            .expect("Finalization failed");
     }
 
     /// Snapshot the data we send for an upload request for a wheel.
@@ -2106,6 +2178,11 @@ mod tests {
             }
             "#);
         });
+        drop(request);
+        session
+            .finalize(PublishOutcome::DryRun)
+            .await
+            .expect("Finalization failed");
     }
 
     #[tokio::test]
