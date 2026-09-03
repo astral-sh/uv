@@ -37,6 +37,14 @@ class SigningTool(Enum):
             case SigningTool.PKCS11:
                 return directory / "libakv_pkcs11.so"
 
+    def is_executable(self) -> bool:
+        """Return whether the downloaded tool needs executable permissions."""
+        match self:
+            case SigningTool.RCODESIGN:
+                return True
+            case SigningTool.PKCS11:
+                return False
+
 
 def run_command(command: list[str | Path], description: str) -> None:
     """Run a command without logging private signing configuration."""
@@ -78,7 +86,7 @@ def download_signing_tool(tool: SigningTool, directory: Path) -> Path:
         f"Downloading {path.name}",
     )
     verify_sha256(path, os.environ[f"{tool.value}_SHA256"])
-    if tool is SigningTool.RCODESIGN:
+    if tool.is_executable():
         path.chmod(0o755)
     return path
 
