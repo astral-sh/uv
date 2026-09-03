@@ -15,15 +15,15 @@ use uv_configuration::{KeyringProviderType, TrustedPublishing};
 use uv_distribution_types::{IndexLocations, IndexUrl};
 use uv_errors::{ErrorOptions, Hints, write_error_chain_with_options};
 use uv_publish::{
-    PreparedDistribution, PublishPreparation, PublishSession, TrustedPublishResult,
-    TrustedPublishingToken, UploadOutcome, burn_trusted_publishing_token, check_trusted_publishing,
+    PreparedDistribution, PublishSession, TrustedPublishResult, TrustedPublishingToken,
+    UploadOutcome, burn_trusted_publishing_token, check_trusted_publishing,
 };
 use uv_redacted::DisplaySafeUrl;
 use uv_settings::EnvironmentOptions;
 use uv_warnings::{warn_user, warn_user_once};
 
+use crate::commands::ExitStatus;
 use crate::commands::reporters::PublishReporter;
-use crate::commands::{ExitStatus, human_readable_bytes};
 use crate::printer::Printer;
 
 pub(crate) async fn publish(
@@ -83,8 +83,8 @@ pub(crate) async fn publish(
         (publish_url, check_url)
     };
 
-    let mut preparation = PublishSession::prepare(paths, no_attestations)?;
-    match preparation.len() {
+    let distributions = PublishSession::prepare(paths, no_attestations)?;
+    match distributions.len() {
         0 => bail!("No files found to publish"),
         1 => {
             if dry_run {
@@ -161,7 +161,7 @@ pub(crate) async fn publish(
     }
 
     // Keep the publishing result so token revocation also runs after an upload or metadata error.
-    let result = publish_files(&mut preparation, &mut session, dry_run, printer).await;
+    let result = publish_files(distributions, &mut session, dry_run, printer).await;
 
     if let PublishingCredentials::TrustedPublishing(token) = &credentials
         && let Err(err) = burn_trusted_publishing_token(token, &publish_url, &oidc_client).await
@@ -177,23 +177,16 @@ pub(crate) async fn publish(
 
 /// Publish each distribution, reporting all validation failures during a dry run.
 async fn publish_files(
-    preparation: &mut PublishPreparation,
+    distributions: Vec<PreparedDistribution>,
     session: &mut PublishSession<'_>,
     dry_run: bool,
     printer: Printer,
 ) -> Result<ExitStatus> {
     let mut error_count: usize = 0;
 
-    loop {
+    for prepared in distributions {
         let reporter = Arc::new(PublishReporter::single(printer, dry_run));
-        let Some(prepared) = session.prepare_next(preparation, reporter.clone()).await else {
-            break;
-        };
-        let result = match prepared {
-            Ok(prepared) => publish_file(prepared, session, reporter, dry_run, printer).await,
-            Err(err) => Err(err.into()),
-        };
-        match result {
+        match publish_file(prepared, session, reporter, dry_run, printer).await {
             Ok(()) => {}
             Err(err) => {
                 if !dry_run {
@@ -226,17 +219,28 @@ async fn publish_file(
     dry_run: bool,
     printer: Printer,
 ) -> Result<()> {
-    if dry_run {
+    let normalized_filename = prepared.filename().to_string();
+    if prepared.raw_filename() != normalized_filename {
+        warn_user_once!(
+            "`{}` has a non-normalized filename (expected `{normalized_filename}`), skipping",
+            prepared.raw_filename()
+        );
         return Ok(());
     }
 
-    writeln!(
-        printer.stderr(),
-        "{} {} {}",
-        "Uploading".bold().green(),
-        prepared.filename(),
-        format!("({:.1})", human_readable_bytes(prepared.size())).dimmed()
-    )?;
+    if session.check_existing(&prepared, reporter.clone()).await? {
+        writeln!(
+            printer.stderr(),
+            "File {} already exists, skipping",
+            prepared.filename()
+        )?;
+        return Ok(());
+    }
+
+    if dry_run {
+        session.validate(&prepared, reporter).await?;
+        return Ok(());
+    }
 
     let uploaded = session.upload(prepared, reporter).await?;
     info!("Upload succeeded");

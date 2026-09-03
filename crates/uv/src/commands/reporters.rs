@@ -712,7 +712,7 @@ impl PublishReporter {
 }
 
 impl uv_publish::Reporter for PublishReporter {
-    fn on_prepare_start(&self, name: &DistFilename, size: u64) -> Result<(), fmt::Error> {
+    fn on_validation_start(&self, name: &DistFilename, size: u64) -> Result<(), fmt::Error> {
         let bytes = human_readable_bytes(size);
         if self.dry_run {
             writeln!(
@@ -731,10 +731,13 @@ impl uv_publish::Reporter for PublishReporter {
         }
     }
 
-    fn on_already_exists(&self, name: &DistFilename) -> Result<(), fmt::Error> {
+    fn on_upload_ready(&self, name: &DistFilename, size: u64) -> Result<(), fmt::Error> {
+        let bytes = human_readable_bytes(size);
         writeln!(
             self.reporter.printer.stderr(),
-            "File {name} already exists, skipping"
+            "{} {name} {}",
+            "Uploading".bold().green(),
+            format!("({bytes:.1})").dimmed()
         )
     }
 
