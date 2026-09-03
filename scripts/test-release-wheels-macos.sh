@@ -9,5 +9,5 @@ trap 'rm -rf "$virtual_environment"' EXIT
 python3 -m venv "$virtual_environment"
 "$virtual_environment/bin/python" -m pip install --no-index --no-deps "$wheel_directory"/*.whl
 for binary in uv uvx uv-build; do
-  "$virtual_environment/bin/$binary" --version
+  "$virtual_environment/bin/$binary" --help
 done

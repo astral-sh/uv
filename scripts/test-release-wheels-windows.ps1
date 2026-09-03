@@ -16,7 +16,7 @@ try {
     if ($LASTEXITCODE -ne 0) { throw 'Signed wheel installation failed' }
     foreach ($binary in @('uv.exe', 'uvx.exe', 'uvw.exe', 'uv-build.exe')) {
         $binaryPath = Join-Path "$virtualEnvironment/Scripts" $binary
-        $process = Start-Process -FilePath $binaryPath -ArgumentList '--version' -NoNewWindow -Wait -PassThru
+        $process = Start-Process -FilePath $binaryPath -ArgumentList '--help' -NoNewWindow -Wait -PassThru
         if ($process.ExitCode -ne 0) { throw "Signed executable failed: $binary" }
     }
 }
