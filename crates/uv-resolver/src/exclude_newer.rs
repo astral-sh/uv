@@ -263,7 +263,6 @@ where
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ExcludeNewerOverrideChange {
-    Disabled { was: ExcludeNewerValue },
     Enabled { now: ExcludeNewerValue },
     TimestampChanged(ExcludeNewerValueChange),
 }
@@ -271,7 +270,7 @@ pub enum ExcludeNewerOverrideChange {
 impl ExcludeNewerOverrideChange {
     fn is_relative_timestamp_change(&self) -> bool {
         match self {
-            Self::Disabled { .. } | Self::Enabled { .. } => false,
+            Self::Enabled { .. } => false,
             Self::TimestampChanged(change) => change.is_relative_timestamp_change(),
         }
     }
@@ -280,9 +279,6 @@ impl ExcludeNewerOverrideChange {
 impl std::fmt::Display for ExcludeNewerOverrideChange {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Disabled { was } => {
-                write!(f, "add exclude newer exclusion (was `{was}`)")
-            }
             Self::Enabled { now } => {
                 write!(f, "remove exclude newer exclusion (now `{now}`)")
             }
@@ -362,17 +358,7 @@ impl ExcludeNewerPackage {
                         ));
                     }
                 }
-                (
-                    ExcludeNewerOverride::Enabled(self_timestamp),
-                    Some(ExcludeNewerOverride::Disabled),
-                ) => {
-                    return Some(ExcludeNewerPackageChange::PackageChanged(
-                        package.clone(),
-                        Box::new(ExcludeNewerOverrideChange::Disabled {
-                            was: self_timestamp.as_ref().clone(),
-                        }),
-                    ));
-                }
+                (ExcludeNewerOverride::Enabled(_), Some(ExcludeNewerOverride::Disabled)) => {}
                 (
                     ExcludeNewerOverride::Disabled,
                     Some(ExcludeNewerOverride::Enabled(other_timestamp)),
@@ -392,7 +378,9 @@ impl ExcludeNewerPackage {
         }
 
         for (package, value) in other {
-            if !self.contains_key(package) {
+            if !self.contains_key(package)
+                && let ExcludeNewerOverride::Enabled(_) = value
+            {
                 return Some(ExcludeNewerPackageChange::PackageAdded(
                     package.clone(),
                     value.clone(),
