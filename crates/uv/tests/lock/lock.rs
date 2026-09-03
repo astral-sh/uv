@@ -37377,6 +37377,61 @@ fn lock_exclude_newer_package_disable() -> Result<()> {
     Ok(())
 }
 
+/// Test the ordering of package-specific cutoffs in the lockfile.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_exclude_newer_package_order() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context
+        .lock()
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .arg("--offline")
+        .arg("--exclude-newer-package")
+        .arg("tqdm=2022-09-04T00:00:00Z")
+        .arg("--exclude-newer-package")
+        .arg("requests=2022-04-04T12:00:00Z"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+
+    // TODO: Sort these entries to avoid order-only lockfile changes (astral-sh/uv-dev#969).
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(context.read("uv.lock"), @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+
+        [options]
+
+        [options.exclude-newer-package]
+        tqdm = "2022-09-04T00:00:00Z"
+        requests = "2022-04-04T12:00:00Z"
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        "#);
+    });
+
+    Ok(())
+}
+
 /// Test that exclude-newer-package is properly serialized in the lockfile.
 #[cfg(feature = "test-universal")]
 #[test]
