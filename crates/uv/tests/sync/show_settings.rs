@@ -3790,6 +3790,7 @@ fn preview_features() {
     +            IndexByName,
     +            ArtifactHashFiltering,
     +            ContentAddressedCache,
+    +            MissingExcludeNewerPackageLock,
     +        ],
          },
          python_preference: Managed,
