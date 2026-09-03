@@ -281,13 +281,6 @@ where
     Ok(version)
 }
 
-/// A distribution file in a `pylock.toml` package that carries hashes.
-enum PylockTomlFile {
-    Archive,
-    Sdist,
-    Wheel(usize),
-}
-
 /// The location of a distribution file with missing hashes.
 enum HashSource {
     Url(DisplaySafeUrl),
@@ -1149,8 +1142,8 @@ impl<'lock> PylockToml {
     ) -> Result<(), PylockTomlErrorKind> {
         // Collect the files that are missing hashes.
         let mut jobs = Vec::new();
-        for (package_index, package) in self.packages.iter().enumerate() {
-            if let Some(archive) = &package.archive
+        for package in &mut self.packages {
+            if let Some(archive) = &mut package.archive
                 && archive.hashes.is_empty()
             {
                 let source = HashSource::new(
@@ -1160,9 +1153,9 @@ impl<'lock> PylockToml {
                     archive.path.as_ref(),
                     install_path,
                 )?;
-                jobs.push((package_index, PylockTomlFile::Archive, source));
+                jobs.push((&mut archive.hashes, source));
             }
-            if let Some(sdist) = &package.sdist
+            if let Some(sdist) = &mut package.sdist
                 && sdist.hashes.is_empty()
             {
                 let source = HashSource::new(
@@ -1172,9 +1165,9 @@ impl<'lock> PylockToml {
                     sdist.path.as_ref(),
                     install_path,
                 )?;
-                jobs.push((package_index, PylockTomlFile::Sdist, source));
+                jobs.push((&mut sdist.hashes, source));
             }
-            for (wheel_index, wheel) in package.wheels.iter().flatten().enumerate() {
+            for wheel in package.wheels.iter_mut().flatten() {
                 if wheel.hashes.is_empty() {
                     let source = HashSource::new(
                         &package.name,
@@ -1183,46 +1176,23 @@ impl<'lock> PylockToml {
                         wheel.path.as_ref(),
                         install_path,
                     )?;
-                    jobs.push((package_index, PylockTomlFile::Wheel(wheel_index), source));
+                    jobs.push((&mut wheel.hashes, source));
                 }
             }
         }
 
         // Fetch and hash the files.
         let hashed = futures::stream::iter(jobs)
-            .map(|(package_index, file, source)| async move {
+            .map(|(destination, source)| async move {
                 let hashes = source.hash(client).await?;
-                Ok::<_, PylockTomlErrorKind>((package_index, file, hashes))
+                Ok::<_, PylockTomlErrorKind>((destination, hashes))
             })
             .buffer_unordered(concurrency)
             .try_collect::<Vec<_>>()
             .await?;
 
-        for (package_index, file, hashes) in hashed {
-            let Some(package) = self.packages.get_mut(package_index) else {
-                continue;
-            };
-            match file {
-                PylockTomlFile::Archive => {
-                    if let Some(archive) = &mut package.archive {
-                        archive.hashes = hashes;
-                    }
-                }
-                PylockTomlFile::Sdist => {
-                    if let Some(sdist) = &mut package.sdist {
-                        sdist.hashes = hashes;
-                    }
-                }
-                PylockTomlFile::Wheel(wheel_index) => {
-                    if let Some(wheel) = package
-                        .wheels
-                        .as_mut()
-                        .and_then(|wheels| wheels.get_mut(wheel_index))
-                    {
-                        wheel.hashes = hashes;
-                    }
-                }
-            }
+        for (destination, hashes) in hashed {
+            *destination = hashes;
         }
 
         Ok(())
