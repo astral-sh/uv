@@ -238,7 +238,7 @@ async fn publish_file(
     }
 
     if dry_run {
-        session.validate(&prepared, reporter).await?;
+        session.dry_run(&prepared, reporter).await?;
         return Ok(());
     }
 
