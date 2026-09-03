@@ -4262,6 +4262,7 @@ fn pep_751_missing_hashes() -> Result<()> {
 
     context.lock().assert().success();
 
+    // Exported wheels should include hashes when the index provides none.
     uv_snapshot!(context.filters(), context.export().arg("--format").arg("pylock.toml").arg("--no-emit-project"), @r#"
     exit_code: 0 (success)
     ----- stdout -----
@@ -4320,6 +4321,7 @@ fn pep_751_missing_hashes_find_links() -> Result<()> {
 
     context.lock().assert().success();
 
+    // Local wheels and source distributions should be exported with hashes.
     uv_snapshot!(context.filters(), context.export().arg("--format").arg("pylock.toml").arg("--no-emit-project"), @r#"
     exit_code: 0 (success)
     ----- stdout -----

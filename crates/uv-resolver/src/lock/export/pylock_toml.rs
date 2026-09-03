@@ -129,13 +129,13 @@ pub enum PylockTomlErrorKind {
     ArchiveMissingPathUrl(PackageName),
     #[error("`packages.vcs` entry for `{0}` must have a `url` or `path`")]
     VcsMissingPathUrl(PackageName),
-    #[error(
-        "Package `{0}` includes `{1}` without hashes and without a URL or path to compute them, but pylock.toml requires at least one hash"
-    )]
+    #[error("`{1}` entry for `{0}` has no hashes and no URL or path to compute them")]
     MissingHashes(PackageName, &'static str),
+    // Request and status errors use `WrappedReqwestError`, while errors reading the response body
+    // use `io::Error`. Both are download failures.
     #[error("Failed to download `{0}` to compute missing hashes")]
     DownloadFile(Box<DisplaySafeUrl>, #[source] WrappedReqwestError),
-    #[error("Failed to stream `{0}` to compute missing hashes")]
+    #[error("Failed to download `{0}` to compute missing hashes")]
     StreamFile(Box<DisplaySafeUrl>, #[source] std::io::Error),
     #[error("Failed to read `{0}` to compute missing hashes")]
     ReadFile(Box<Path>, #[source] std::io::Error),
@@ -328,13 +328,7 @@ impl HashSource {
                     )
                     .send()
                     .await
-                    .map_err(|err| {
-                        PylockTomlErrorKind::DownloadFile(
-                            Box::new(url.clone()),
-                            WrappedReqwestError::from(err),
-                        )
-                    })?
-                    .error_for_status()
+                    .and_then(|response| response.error_for_status().map_err(Into::into))
                     .map_err(|err| {
                         PylockTomlErrorKind::DownloadFile(
                             Box::new(url.clone()),
@@ -1139,6 +1133,8 @@ impl<'lock> PylockToml {
         concurrency: usize,
         install_path: &Path,
     ) -> Result<(), PylockTomlErrorKind> {
+        // TODO(tk): Maybe make hash completion part of the export API so callers cannot accidentally skip it.
+
         // Collect the files that are missing hashes.
         let mut jobs = Vec::new();
         for package in &mut self.packages {
