@@ -53,6 +53,7 @@ serde_json = { workspace = true }
 
 [features]
 default = []
+test-pypi = []
 
 [package.metadata.cargo-shear]
 # NOTE: `async-compression` owns the actual Deflate codec, but we need to
