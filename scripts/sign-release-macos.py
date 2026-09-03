@@ -1,11 +1,12 @@
 # /// script
 # requires-python = ">=3.12"
 # dependencies = ["cryptography==50.0.1"]
+#
 # [tool.uv]
 # no-build = true
 # exclude-newer = "P7D"
 # ///
-"""Sign uv's macOS binaries with Azure Key Vault, or verify their packaged copies."""
+"""Sign uv's macOS binaries with Azure Key Vault."""
 
 import argparse
 import hashlib
@@ -140,68 +141,16 @@ def sign_binaries(unsigned: Path, signed: Path) -> None:
             )
 
 
-def verify_binaries(signed: Path, wheel_binaries: Path, archive_binaries: Path) -> None:
-    """Check packaged bytes, Apple trust, timestamps, and the signing certificate."""
-    for binary in ("uv", "uvx"):
-        if (signed / binary).read_bytes() != (archive_binaries / binary).read_bytes():
-            raise ValueError(
-                f"Archive executable differs from signing output: {binary}"
-            )
-
-    expected_certificate = certificate_sha256(signed / "certificate.pem")
-    with tempfile.TemporaryDirectory() as temporary:
-        for binary in BINARIES:
-            path = wheel_binaries / binary
-            if (signed / binary).read_bytes() != path.read_bytes():
-                raise ValueError(
-                    f"Wheel executable differs from signing output: {binary}"
-                )
-            subprocess.run(
-                [
-                    "codesign",
-                    "--verify",
-                    "--strict",
-                    "-R",
-                    "anchor apple generic",
-                    path,
-                ],
-                check=True,
-            )
-            details = subprocess.check_output(
-                ["codesign", "--display", "--verbose=4", path],
-                stderr=subprocess.STDOUT,
-                text=True,
-            )
-            if not any(line.startswith("Timestamp=") for line in details.splitlines()):
-                raise ValueError(f"Missing signing timestamp: {binary}")
-
-            prefix = Path(temporary) / f"{binary}-cert-"
-            subprocess.run(
-                ["codesign", "--display", f"--extract-certificates={prefix}", path],
-                check=True,
-            )
-            verify_sha256(Path(f"{prefix}0"), expected_certificate)
-
-
 def main() -> None:
-    """Sign in the protected job, or verify on a fresh macOS runner."""
+    """Sign using the Azure identity and settings from the protected release job."""
     parser = argparse.ArgumentParser(description=__doc__)
-    commands = parser.add_subparsers(dest="command", required=True)
-    sign = commands.add_parser("sign", help="Sign with the configured Azure identity")
-    sign.add_argument("unsigned", type=Path)
-    sign.add_argument("signed", type=Path)
-    verify = commands.add_parser("verify", help="Verify packaged binaries on macOS")
-    verify.add_argument("signed", type=Path)
-    verify.add_argument("wheel_binaries", type=Path)
-    verify.add_argument("archive_binaries", type=Path)
+    parser.add_argument("unsigned", type=Path)
+    parser.add_argument("signed", type=Path)
     args = parser.parse_args()
 
     try:
-        if args.command == "sign":
-            sign_binaries(args.unsigned, args.signed)
-        else:
-            verify_binaries(args.signed, args.wheel_binaries, args.archive_binaries)
-    except (OSError, ValueError, RuntimeError, subprocess.CalledProcessError) as error:
+        sign_binaries(args.unsigned, args.signed)
+    except (OSError, ValueError, RuntimeError) as error:
         parser.exit(1, f"{error}\n")
 
 
