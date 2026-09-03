@@ -634,8 +634,8 @@ impl<'env> TreeDisplay<'env> {
                             // follow consumers that activate that extra.
                             if !expanded_extras.is_empty()
                                 && edge_kind.extras().is_none_or(|extras| {
-                                !expanded_extras.iter().all(|extra| extras.contains(extra))
-                            })
+                                    !expanded_extras.iter().all(|extra| extras.contains(extra))
+                                })
                             {
                                 return None;
                             }
@@ -862,11 +862,11 @@ impl<'env> TreeDisplay<'env> {
                     // consumers that activate that extra.
                     if !source.expanded_extras.is_empty()
                         && edge_kind.extras().is_none_or(|extras| {
-                        !source
-                            .expanded_extras
-                            .iter()
-                            .all(|extra| extras.contains(extra))
-                    })
+                            !source
+                                .expanded_extras
+                                .iter()
+                                .all(|extra| extras.contains(extra))
+                        })
                     {
                         continue;
                     }
@@ -1323,7 +1323,7 @@ impl<'tree, 'env> JsonGraphBuilder<'tree, 'env> {
                     package_id,
                     MetadataNodeKind::Extra(extra.clone()),
                 )
-                    .to_flat();
+                .to_flat();
                 if self.resolution.contains_key(&id) {
                     roots.push(JsonRoot { id });
                 }
@@ -1336,7 +1336,7 @@ impl<'tree, 'env> JsonGraphBuilder<'tree, 'env> {
                 package_id,
                 MetadataNodeKind::Group(group.clone()),
             )
-                .to_flat();
+            .to_flat();
             if self.resolution.contains_key(&id) {
                 roots.push(JsonRoot { id });
             }
@@ -1391,7 +1391,7 @@ impl<'tree, 'env> JsonGraphBuilder<'tree, 'env> {
                                 self.workspace_root.clone(),
                                 group,
                             )
-                                .to_flat();
+                            .to_flat();
                             if self.resolution.contains_key(&id) {
                                 roots.push(JsonRoot { id });
                             }
@@ -1429,7 +1429,7 @@ impl<'tree, 'env> JsonGraphBuilder<'tree, 'env> {
                     &package.id,
                     MetadataNodeKind::Package,
                 )
-                    .to_flat();
+                .to_flat();
                 self.resolution.contains_key(&id)
             })
             .filter_map(|package| {
@@ -1586,7 +1586,7 @@ impl<'env> RequestedExtras<'env> {
         }
     }
 
-    fn iter(self) -> impl Iterator<Item=&'env ExtraName> {
+    fn iter(self) -> impl Iterator<Item = &'env ExtraName> {
         match self {
             Self::Dependency(extras) => Either::Left(extras.iter()),
             Self::Requirement(extras) => Either::Right(extras.iter()),
