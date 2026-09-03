@@ -81,6 +81,8 @@ macro_rules! test_context_with_versions {
 ///
 /// Reads the path supplied by Cargo or nextest at runtime, so compiled tests
 /// remain usable when the target directory is relocated.
+///
+/// This path is only available in the `uv` package's integration tests and benchmarks.
 #[macro_export]
 macro_rules! get_bin {
     () => {
