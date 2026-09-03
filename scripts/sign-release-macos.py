@@ -14,12 +14,28 @@ import os
 import shutil
 import subprocess
 import tempfile
+from enum import Enum
 from pathlib import Path
 
 from cryptography import x509
 from cryptography.hazmat.primitives import hashes
 
 BINARIES = ("uv", "uvx", "uv-build")
+
+
+class SigningTool(Enum):
+    """The tools needed to sign uv's macOS executables."""
+
+    RCODESIGN = "RCODESIGN"
+    PKCS11 = "PKCS11"
+
+    def path(self, directory: Path) -> Path:
+        """Return the tool's local path in the download directory."""
+        match self:
+            case SigningTool.RCODESIGN:
+                return directory / "rcodesign"
+            case SigningTool.PKCS11:
+                return directory / "libakv_pkcs11.so"
 
 
 def run_command(command: list[str | Path], description: str) -> None:
@@ -38,8 +54,9 @@ def verify_sha256(path: Path, expected: str) -> None:
         raise ValueError(f"SHA-256 mismatch: {path.name}")
 
 
-def download_signing_tool(name: str, path: Path) -> None:
-    """Download a configured signing-tool blob and verify its pinned digest."""
+def download_signing_tool(tool: SigningTool, directory: Path) -> Path:
+    """Download a signing tool, verify its pinned digest, and return its path."""
+    path = tool.path(directory)
     run_command(
         [
             "az",
@@ -54,13 +71,14 @@ def download_signing_tool(name: str, path: Path) -> None:
             "--container-name",
             os.environ["STORAGE_CONTAINER"],
             "--name",
-            os.environ[f"{name}_BLOB"],
+            os.environ[f"{tool.value}_BLOB"],
             "--file",
             path,
         ],
         f"Downloading {path.name}",
     )
-    verify_sha256(path, os.environ[f"{name}_SHA256"])
+    verify_sha256(path, os.environ[f"{tool.value}_SHA256"])
+    return path
 
 
 def certificate_sha256(path: Path) -> str:
@@ -89,12 +107,10 @@ def sign_binaries(unsigned: Path, signed: Path) -> None:
 
     with tempfile.TemporaryDirectory() as temporary:
         tools = Path(temporary)
-        rcodesign = tools / "rcodesign"
-        pkcs11 = tools / "libakv_pkcs11.so"
         certificate = tools / "certificate.pem"
 
-        download_signing_tool("RCODESIGN", rcodesign)
-        download_signing_tool("PKCS11", pkcs11)
+        rcodesign = download_signing_tool(SigningTool.RCODESIGN, tools)
+        pkcs11 = download_signing_tool(SigningTool.PKCS11, tools)
         rcodesign.chmod(0o755)
 
         run_command(
