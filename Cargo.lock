@@ -6822,9 +6822,11 @@ version = "0.0.74"
 dependencies = [
  "anyhow",
  "assert_fs",
+ "cap-primitives",
  "configparser",
  "csv",
  "data-encoding",
+ "fastrand",
  "fs-err",
  "indoc",
  "itertools 0.14.0",

@@ -121,6 +121,7 @@ blake2 = { version = "0.11.0-rc.6" }
 blake3 = { version = "1.8.5" }
 boxcar = { version = "0.2.5" }
 bytecheck = { version = "0.8.0" }
+cap-primitives = { version = "4.0.3" }
 cargo-util = { version = "0.2.14" }
 clap = { version = "4.5.17", features = [
   "derive",

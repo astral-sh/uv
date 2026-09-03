@@ -30,9 +30,11 @@ uv-shell = { workspace = true }
 uv-trampoline-builder = { workspace = true }
 uv-warnings = { workspace = true }
 
+cap-primitives = { workspace = true }
 configparser = { workspace = true }
 csv = { workspace = true }
 data-encoding = { workspace = true }
+fastrand = { workspace = true }
 fs-err = { workspace = true }
 itertools = { workspace = true }
 mailparse = { workspace = true }

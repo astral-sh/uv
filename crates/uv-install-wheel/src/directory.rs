@@ -18,6 +18,10 @@ pub(crate) struct LibraryDirectories {
 }
 
 impl LibraryDirectories {
+    pub(crate) fn roots(&self) -> impl Iterator<Item = &Path> {
+        self.roots.iter().map(|(_, resolved)| resolved.as_path())
+    }
+
     /// Cache both scheme and resolved root spellings so RECORD paths can skip repeated scheme
     /// traversal. Existing ancestors are resolved even when the library directory does not exist yet.
     pub(crate) fn new(layout: &Layout) -> io::Result<Self> {
