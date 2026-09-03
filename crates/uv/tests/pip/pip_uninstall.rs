@@ -5,7 +5,11 @@ use anyhow::Result;
 use assert_cmd::prelude::*;
 use assert_fs::fixture::ChildPath;
 use assert_fs::prelude::*;
+#[cfg(unix)]
+use fs_err::os::unix::fs::symlink;
 
+#[cfg(unix)]
+use uv_extract::dirhash::dirhash_path;
 use uv_test::uv_snapshot;
 
 #[test]
@@ -102,6 +106,50 @@ fn uninstall() -> Result<()> {
 
     context.assert_command("import markupsafe").failure();
 
+    Ok(())
+}
+
+/// Uninstall directory links at any depth without modifying their targets.
+#[test]
+#[cfg(unix)]
+fn uninstall_nested_directory_symlink() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let site_packages = ChildPath::new(context.site_packages());
+    let dist_info = site_packages.child("example-1.0.0.dist-info");
+    dist_info
+        .child("METADATA")
+        .write_str("Metadata-Version: 2.1\nName: example\nVersion: 1.0.0\n")?;
+    dist_info.child("RECORD").write_str(
+        "example/nested/vendor/a.py,,\n\
+         example/nested/vendor/deeper/b.py,,\n\
+         example/local.py,,\n\
+         example-1.0.0.dist-info/METADATA,,\n\
+         example-1.0.0.dist-info/RECORD,,\n",
+    )?;
+    site_packages.child("example/local.py").touch()?;
+    site_packages.child("example/nested/other.py").touch()?;
+
+    let store = context.temp_dir.child("store");
+    store.child("a.py").write_str("VALUE = 1\n")?;
+    store.child("deeper/b.py").write_str("VALUE = 2\n")?;
+    store.child("__pycache__/a.cpython-312.pyc").touch()?;
+    let digest = dirhash_path(store.path())?;
+    let vendor = site_packages.child("example/nested/vendor");
+    symlink(store.path(), vendor.path())?;
+
+    uv_snapshot!(context.filters(), context.pip_uninstall().arg("example"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Uninstalled 1 package in [TIME]
+     - example==1.0.0
+    ");
+
+    assert!(!vendor.exists());
+    assert!(!vendor.is_symlink());
+    assert!(!site_packages.child("example/local.py").exists());
+    assert!(site_packages.child("example/nested/other.py").exists());
+    assert!(!dist_info.exists());
+    assert_eq!(dirhash_path(store.path())?, digest);
     Ok(())
 }
 
