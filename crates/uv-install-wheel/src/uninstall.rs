@@ -1,23 +1,27 @@
 use std::borrow::Cow;
-use std::collections::hash_map::Entry;
-use std::collections::{BTreeSet, HashMap, HashSet};
+use std::collections::{BTreeSet, HashSet};
+use std::convert::Infallible;
 use std::fmt::Display;
+use std::io;
 use std::ops::ControlFlow;
 use std::path::{Component, Path, PathBuf};
 use std::sync::{LazyLock, Mutex, OnceLock};
 
+use cap_primitives::fs::{FollowSymlinks, read_base_dir, remove_dir_all, remove_file, stat};
 use tracing::trace;
 use walkdir::WalkDir;
 
-use uv_fs::link::materialize_symlink_dir;
-use uv_fs::{remove_symlink, write_atomic_sync};
+use uv_fs::write_atomic_sync;
 use uv_pypi_types::Identifier;
 use uv_warnings::warn_user;
 
 use crate::directory::LibraryDirectories;
-use crate::linker::needs_mutable_copy;
 use crate::wheel::read_record;
 use crate::{Error, Layout};
+
+use self::directory::Directory;
+
+mod directory;
 
 /// Uninstall the wheel represented by the given `.dist-info` directory.
 ///
@@ -47,6 +51,14 @@ pub fn uninstall_wheel(
         read_record(&mut record_file)?
     };
     let libraries = LibraryDirectories::new(layout)?;
+    let mut roots = Vec::new();
+    for path in libraries.roots() {
+        match Directory::open(path) {
+            Ok(directory) => roots.push(directory),
+            Err(err) if err.kind() == io::ErrorKind::NotFound => {}
+            Err(err) => return Err(err.into()),
+        }
+    }
 
     let mut file_count = 0usize;
     let mut dir_count = 0usize;
@@ -56,64 +68,50 @@ pub fn uninstall_wheel(
 
     // Uninstall the files, keeping track of any directories that are left empty.
     let mut visited = BTreeSet::new();
-    let mut checked_directories = HashMap::new();
-    let mut resolved_parents = HashMap::new();
+    let mut cached_parent: Option<(PathBuf, Option<Directory>)> = None;
     let mut record_paths = None;
     for entry in &record {
         if !is_path_in_scheme(&entry.path, site_packages, &distribution, layout) {
             continue;
         }
 
-        // Resolve parents, removing directory links at any depth. Keep the final filename
-        // unresolved so removing a file symlink does not remove its cache target.
+        // Open parents without following package links. Keep the final filename unresolved so
+        // removing a file symlink does not remove its cache target.
         let normalized = normalize_path(&site_packages.join(&entry.path));
         let (Some(parent), Some(filename)) = (normalized.parent(), normalized.file_name()) else {
             continue;
         };
-        // Reuse each parent's resolution across its RECORD entries. Resolved directories remain
-        // real directories throughout uninstall, and missing paths stay absent.
-        let resolved = match resolved_parents.entry(parent.to_path_buf()) {
-            Entry::Occupied(entry) => entry.into_mut(),
-            Entry::Vacant(entry) => entry.insert(libraries.resolve(parent, |directory| {
-                if let Some(result) = checked_directories.get(directory) {
-                    return Ok(*result);
+        // RECORD usually groups sibling files. Retain that parent's handle without holding one
+        // descriptor per directory in a large wheel.
+        if cached_parent
+            .as_ref()
+            .is_none_or(|(path, _)| path != parent)
+        {
+            let directory = open_directory(parent, &libraries, &roots, |parent, name| {
+                let directory = parent.path().join(name);
+                let record_paths = record_paths.get_or_insert_with(|| {
+                    record
+                        .iter()
+                        .map(|entry| normalize_path(&site_packages.join(&entry.path)))
+                        .collect()
+                });
+                if !directory.try_exists()? || directory_is_owned(&directory, record_paths)? {
+                    parent.remove_symlink(name)?;
+                    trace!("Removed directory link: {}", directory.display());
+                    visited.insert(parent.path().to_path_buf());
+                    dir_count += 1;
+                    Ok(None)
+                } else {
+                    Ok(Some(parent.materialize(name)?))
                 }
-                let result = match fs_err::symlink_metadata(directory) {
-                    Ok(metadata) if metadata.file_type().is_symlink() => {
-                        let record_paths = record_paths.get_or_insert_with(|| {
-                            record
-                                .iter()
-                                .map(|entry| normalize_path(&site_packages.join(&entry.path)))
-                                .collect()
-                        });
-                        if !directory.try_exists()? || directory_is_owned(directory, record_paths)?
-                        {
-                            remove_symlink(directory)?;
-                            trace!("Removed directory link: {}", directory.display());
-                            if let Some(parent) = directory.parent() {
-                                visited.insert(parent.to_path_buf());
-                            }
-                            dir_count += 1;
-                            ControlFlow::Break(())
-                        } else {
-                            materialize_symlink_dir(directory, needs_mutable_copy)?;
-                            ControlFlow::Continue(())
-                        }
-                    }
-                    Ok(_) => ControlFlow::Continue(()),
-                    Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
-                        ControlFlow::Break(())
-                    }
-                    Err(err) => return Err(err.into()),
-                };
-                checked_directories.insert(directory.to_path_buf(), result);
-                Ok::<_, Error>(result)
-            })?),
-        };
-        let ControlFlow::Continue(parent) = resolved else {
+            })?;
+            cached_parent = Some((parent.to_path_buf(), directory));
+        }
+        let Some((_, Some(parent))) = &cached_parent else {
             continue;
         };
-        let path = parent.join(filename);
+        let filename = Path::new(filename);
+        let path = parent.path().join(filename);
 
         // On Windows, deleting the current executable is a special case.
         #[cfg(windows)]
@@ -140,7 +138,7 @@ pub fn uninstall_wheel(
             }
         }
 
-        match fs_err::remove_file(&path) {
+        match remove_file(parent.handle.file(), filename) {
             Ok(()) => {
                 trace!("Removed file: {}", path.display());
                 file_count += 1;
@@ -149,7 +147,7 @@ pub fn uninstall_wheel(
                 }
             }
             Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
-            Err(err) => match fs_err::remove_dir_all(&path) {
+            Err(err) => match remove_dir_all(parent.handle.file(), filename) {
                 Ok(()) => {
                     trace!("Removed directory: {}", path.display());
                     dir_count += 1;
@@ -159,6 +157,7 @@ pub fn uninstall_wheel(
             },
         }
     }
+    drop(cached_parent);
 
     // If any directories were left empty, remove them. Iterate in reverse order such that we visit
     // the deepest directories first.
@@ -169,11 +168,14 @@ pub fn uninstall_wheel(
         // library root, and leave directories elsewhere in the scheme (like `bin`) alone.
         let mut path = path.as_path();
         while libraries.contains(path) {
+            let Some(directory) = open_directory(path, &libraries, &roots, |_, _| Ok(None))? else {
+                break;
+            };
             // If the directory contains a `__pycache__` directory, always remove it. `__pycache__`
             // may or may not be listed in the RECORD, but installers are expected to be smart
             // enough to remove it either way.
             let pycache = path.join("__pycache__");
-            match fs_err::remove_dir_all(&pycache) {
+            match remove_dir_all(directory.handle.file(), Path::new("__pycache__")) {
                 Ok(()) => {
                     trace!("Removed directory: {}", pycache.display());
                     dir_count += 1;
@@ -184,7 +186,7 @@ pub fn uninstall_wheel(
 
             // Try to read from the directory. If it doesn't exist, assume we deleted it in a
             // previous iteration.
-            let mut read_dir = match fs_err::read_dir(path) {
+            let mut read_dir = match read_base_dir(directory.handle.file()) {
                 Ok(read_dir) => read_dir,
                 Err(err) if err.kind() == std::io::ErrorKind::NotFound => break,
                 Err(err) => return Err(err.into()),
@@ -194,8 +196,9 @@ pub fn uninstall_wheel(
             if read_dir.next().is_some() {
                 break;
             }
+            drop(read_dir);
 
-            fs_err::remove_dir(path)?;
+            directory.remove()?;
 
             trace!("Removed directory: {}", path.display());
             dir_count += 1;
@@ -212,6 +215,60 @@ pub fn uninstall_wheel(
         file_count,
         dir_count,
     })
+}
+
+/// Resolve scheme aliases, then open each package component relative to its parent without following
+/// symlinks. The visitor may unlink a package link or replace it with a private directory.
+fn open_directory(
+    path: &Path,
+    libraries: &LibraryDirectories,
+    roots: &[Directory],
+    mut visit: impl FnMut(&Directory, &Path) -> Result<Option<Directory>, Error>,
+) -> Result<Option<Directory>, Error> {
+    let resolved = match libraries.resolve(path, |_| {
+        Ok::<_, Error>(ControlFlow::<Infallible>::Continue(()))
+    })? {
+        ControlFlow::Continue(path) => path,
+        ControlFlow::Break(never) => match never {},
+    };
+    let Some((root, relative)) = roots
+        .iter()
+        .filter_map(|root| {
+            resolved
+                .strip_prefix(root.path())
+                .ok()
+                .map(|path| (root, path))
+        })
+        .min_by_key(|(_, relative)| relative.as_os_str().len())
+    else {
+        if libraries.roots().any(|root| resolved.starts_with(root)) {
+            return Ok(None);
+        }
+        return match Directory::open(&resolved) {
+            Ok(directory) => Ok(Some(directory)),
+            Err(err) if err.kind() == io::ErrorKind::NotFound => Ok(None),
+            Err(err) => Err(err.into()),
+        };
+    };
+    let mut directory = root.open_dir(Path::new("."))?;
+    for component in relative.components() {
+        let name = Path::new(component.as_os_str());
+        directory = match directory.open_dir(name) {
+            Ok(child) => child,
+            Err(err) if err.kind() == io::ErrorKind::NotFound => return Ok(None),
+            Err(err) => match stat(directory.handle.file(), name, FollowSymlinks::No) {
+                Ok(metadata) if metadata.file_type().is_symlink() => {
+                    let Some(child) = visit(&directory, name)? else {
+                        return Ok(None);
+                    };
+                    child
+                }
+                Err(err) if err.kind() == io::ErrorKind::NotFound => return Ok(None),
+                Ok(_) | Err(_) => return Err(err.into()),
+            },
+        };
+    }
+    Ok(Some(directory))
 }
 
 /// Whether every file beneath a directory link is in this wheel's RECORD, excluding bytecode caches.

@@ -147,6 +147,7 @@ blake2 = { version = "0.11.0-rc.6", default-features = false }
 blake3 = { version = "1.8.5", default-features = false, features = ["std"] }
 boxcar = { version = "0.2.5", default-features = false }
 bytecheck = { version = "0.8.0", default-features = false }
+cap-primitives = { version = "4.0.3" }
 cargo-util = { version = "0.2.14", default-features = false }
 clap = { version = "4.5.17", default-features = false, features = [
   "color",

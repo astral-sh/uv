@@ -123,6 +123,7 @@ fn uninstall_nested_directory_symlink() -> Result<()> {
     dist_info.child("RECORD").write_str(
         "example/nested/vendor/a.py,,\n\
          example/nested/vendor/deeper/b.py,,\n\
+         example/nested/missing/module.py,,\n\
          example/local.py,,\n\
          example-1.0.0.dist-info/METADATA,,\n\
          example-1.0.0.dist-info/RECORD,,\n",
@@ -137,6 +138,8 @@ fn uninstall_nested_directory_symlink() -> Result<()> {
     let digest = dirhash_path(store.path())?;
     let vendor = site_packages.child("example/nested/vendor");
     symlink(store.path(), vendor.path())?;
+    let missing = site_packages.child("example/nested/missing");
+    symlink(store.child("missing").path(), missing.path())?;
 
     uv_snapshot!(context.filters(), context.pip_uninstall().arg("example"), @"
     exit_code: 0 (success)
@@ -147,6 +150,7 @@ fn uninstall_nested_directory_symlink() -> Result<()> {
 
     assert!(!vendor.exists());
     assert!(!vendor.is_symlink());
+    assert!(!missing.is_symlink());
     assert!(!site_packages.child("example/local.py").exists());
     assert!(site_packages.child("example/nested/other.py").exists());
     assert!(!dist_info.exists());
