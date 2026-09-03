@@ -57,7 +57,7 @@ jobs:
           set -euo pipefail
           # uv and uv_build keep their executables in .data/scripts.
           for target in aarch64-apple-darwin x86_64-pc-windows-msvc; do
-            uv run --frozen --python 3.13 scripts/extract-wheel-binaries.py \
+            uv run --frozen scripts/extract-wheel-binaries.py \
               --output "unsigned/$target" wheels/"$target"/*.whl
           done
 
@@ -114,7 +114,7 @@ jobs:
               "https://raw.githubusercontent.com/astral-sh/uv/$GITHUB_SHA/scripts/$file" \
               --output "$RUNNER_TEMP/$file"
           done
-          uv sync --frozen --no-build --python 3.13 --script "$RUNNER_TEMP/sign-release-macos.py"
+          uv sync --frozen --no-build --script "$RUNNER_TEMP/sign-release-macos.py"
 
       - name: "Download unsigned executable wheel members"
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
@@ -145,7 +145,7 @@ jobs:
           KEY_NAME: ${{ secrets.CODESIGN_KEY_NAME }}
           CERTIFICATE_SHA256: ${{ secrets.CODESIGN_CERTIFICATE_SHA256 }}
         run: >-
-          uv run --frozen --offline --no-build --python 3.13
+          uv run --frozen --offline --no-build
           "$RUNNER_TEMP/sign-release-macos.py" sign unsigned signed
 
       - name: "Upload signed executable wheel members"
@@ -326,7 +326,7 @@ jobs:
               "https://raw.githubusercontent.com/astral-sh/uv/$GITHUB_SHA/scripts/$file" \
               --output "$RUNNER_TEMP/$file"
           done
-          uv sync --frozen --no-build --python 3.13 --script "$RUNNER_TEMP/sign-release-macos.py"
+          uv sync --frozen --no-build --script "$RUNNER_TEMP/sign-release-macos.py"
 
       - name: "Download signed executables"
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
@@ -346,10 +346,10 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          uv run --frozen --offline --python 3.13 "$RUNNER_TEMP/extract-wheel-binaries.py" \
+          uv run --frozen --offline "$RUNNER_TEMP/extract-wheel-binaries.py" \
             --output wheel-contents dist/wheels/*.whl
           tar xzf dist/uv-aarch64-apple-darwin.tar.gz
-          uv run --frozen --offline --no-build --python 3.13 \
+          uv run --frozen --offline --no-build \
             "$RUNNER_TEMP/sign-release-macos.py" verify signed wheel-contents uv-aarch64-apple-darwin
 
       - name: "Install and run the signed wheels"
@@ -405,7 +405,7 @@ jobs:
         run: |
           $ErrorActionPreference = 'Stop'
           $wheels = Get-ChildItem dist/wheels/*.whl
-          uv run --frozen --python 3.13 "$env:RUNNER_TEMP/extract-wheel-binaries.py" --output wheel-contents $wheels.FullName
+          uv run --frozen "$env:RUNNER_TEMP/extract-wheel-binaries.py" --output wheel-contents $wheels.FullName
           if ($LASTEXITCODE -ne 0) { throw 'Wheel extraction failed' }
           Expand-Archive dist/uv-x86_64-pc-windows-msvc.zip archive-contents
           foreach ($binary in @('uv.exe', 'uvx.exe', 'uvw.exe')) {
