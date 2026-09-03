@@ -2931,11 +2931,25 @@ fn cycle_invert_leaf() -> Result<()> {
 
     uv_snapshot!(context.filters(), context.tree().arg("--frozen").arg("--invert"), @"
     exit_code: 0 (success)
+    ----- stdout -----
+    alpha v1.0.0
+    ├── beta v1.0.0
+    │   └── alpha v1.0.0
+    │       ├── beta v1.0.0 (*)
+    │       └── project v1.0.0
+    └── project v1.0.0
+    (*) Package tree already displayed
     ");
 
     assert_json_snapshot!(
         json_tree_package_names(context.tree().arg("--frozen").arg("--invert"))?,
-        @r"[]"
+        @r#"
+    [
+      "alpha",
+      "beta",
+      "project"
+    ]
+    "#
     );
 
     Ok(())
@@ -2950,14 +2964,23 @@ fn cycle_invert_leaf_with_acyclic_leaf() -> Result<()> {
     uv_snapshot!(context.filters(), context.tree().arg("--frozen").arg("--invert"), @"
     exit_code: 0 (success)
     ----- stdout -----
+    alpha v1.0.0
+    ├── beta v1.0.0
+    │   └── alpha v1.0.0
+    │       ├── beta v1.0.0 (*)
+    │       └── project v1.0.0
+    └── project v1.0.0
     leaf v1.0.0
     └── project v1.0.0
+    (*) Package tree already displayed
     ");
 
     assert_json_snapshot!(
         json_tree_package_names(context.tree().arg("--frozen").arg("--invert"))?,
         @r#"
     [
+      "alpha",
+      "beta",
       "leaf",
       "project"
     ]

@@ -6,6 +6,7 @@ use std::path::Path;
 use either::Either;
 use itertools::Itertools;
 use owo_colors::OwoColorize;
+use petgraph::algo::tarjan_scc;
 use petgraph::graph::{EdgeIndex, NodeIndex};
 use petgraph::prelude::EdgeRef;
 use petgraph::{Direction, Graph};
@@ -463,16 +464,39 @@ impl<'env> TreeDisplay<'env> {
                 roots
             } else {
                 let mut roots = if invert {
-                    // For inverted trees, find leaf packages (nodes with no incoming
-                    // edges).
-                    graph
-                        .node_indices()
-                        .filter(|index| {
-                            graph
-                                .edges_directed(*index, Direction::Incoming)
-                                .next()
-                                .is_none()
+                    // A leaf cycle has no package without incoming edges, so choose one
+                    // deterministic package from each strongly connected component
+                    // without incoming edges from another component.
+                    let components = tarjan_scc(&graph);
+                    let component_by_node = components
+                        .iter()
+                        .enumerate()
+                        .flat_map(|(component_index, component)| {
+                            component.iter().map(move |node| (*node, component_index))
                         })
+                        .collect::<FxHashMap<_, _>>();
+
+                    components
+                        .iter()
+                        .enumerate()
+                        // Filter to components with no outgoing edges, i.e. leaves.
+                        .filter(|(component_index, component)| {
+                            component.iter().all(|node| {
+                                // Incoming direction, since the graph was already reverse.
+                                graph
+                                    .edges_directed(*node, Direction::Incoming)
+                                    .all(|edge| {
+                                        component_by_node[&edge.source()] == *component_index
+                                    })
+                            })
+                        })
+                        // Pick an arbitrary but deterministic node as actual leave.
+                        .filter_map(|(_, component)| {
+                            component
+                                .iter()
+                                .min_by_key(|index| graph[**index].sort_key(lock))
+                        })
+                        .copied()
                         .collect::<Vec<_>>()
                 } else {
                     // For non-inverted trees, use the root node directly.
@@ -998,10 +1022,8 @@ struct JsonTraversalNode<'env> {
 /// # Inversion
 ///
 /// `--invert` should flip the edges of the graph, turning the leaves into roots
-/// (with operations like `--depth` being applied afterwards).
-///
-/// Unfortunately this is ill-defined at the moment in the face of leaf-cycles:
-/// <https://github.com/astral-sh/uv/issues/19972>
+/// (with operations like `--depth` being applied afterwards). For leaf cycles,
+/// the alphabetically first package represents the cycle as its root.
 ///
 /// Ignoring the issue of cycles, the only thing to note here is that only the
 /// `dependencies` lists of nodes should be inverted. The `optional_dependencies`
