@@ -2,11 +2,11 @@
 # requires-python = ">=3.12"
 # dependencies = [
 #     "httpx[socks]>=0.28.1,<0.29",
-#     "keyring==25.7.0",
-#     "keyrings-alt==5.0.2",
+#     "keyring",
+#     "keyrings-alt",
 #     "packaging>=24.1,<25",
-#     "pypi-attestations==0.0.28",
-#     "sigstore==4.4.0",
+#     "pypi-attestations>=0.0.28",
+#     "sigstore>=4.4.0",
 # ]
 # [tool.uv]
 # no-build = true
@@ -115,7 +115,7 @@ urls = { "github" = "https://github.com/astral-sh/uv" }
 
 # https://github.com/pypa/hatch/issues/1828
 [build-system]
-requires = ["pdm-backend==2.4.9"]
+requires = ["pdm-backend"]
 build-backend = "pdm.backend"
 """.lstrip()
 
@@ -358,12 +358,10 @@ def build_project_at_version(
         )
         init_py.write_text("x = 1")
 
-    # Explicitly override no-build from the project's pyproject.toml.
     check_call(
         [
             uv,
             "build",
-            "--build",
             "--build-constraint",
             cwd / "build-requirements.txt",
             "--require-hashes",

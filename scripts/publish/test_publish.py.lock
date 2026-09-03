@@ -13,11 +13,11 @@ astral-dev-toolchain-cargo-dist = "2026-08-28T04:00:00Z"
 [manifest]
 requirements = [
     { name = "httpx", extras = ["socks"], specifier = ">=0.28.1,<0.29" },
-    { name = "keyring", specifier = "==25.7.0" },
-    { name = "keyrings-alt", specifier = "==5.0.2" },
+    { name = "keyring" },
+    { name = "keyrings-alt" },
     { name = "packaging", specifier = ">=24.1,<25" },
-    { name = "pypi-attestations", specifier = "==0.0.28" },
-    { name = "sigstore", specifier = "==4.4.0" },
+    { name = "pypi-attestations", specifier = ">=0.0.28" },
+    { name = "sigstore", specifier = ">=4.4.0" },
 ]
 
 [[package]]
