@@ -35102,6 +35102,455 @@ fn lock_invalid_fork_markers() -> Result<()> {
     Ok(())
 }
 
+/// Omit yanked files even when another wheel makes the release usable.
+#[cfg(feature = "test-universal")]
+#[tokio::test]
+async fn lock_omit_yanked_files() -> Result<()> {
+    let context = uv_test::test_context!("3.13");
+    let server = MockServer::start().await;
+
+    let simple_index = json!({
+        "meta": { "api-version": "1.1" },
+        "name": "basic-package",
+        "files": [{
+            "filename": "basic_package-0.1.0-1-py3-none-any.whl",
+            "url": format!("{}/files/basic_package-0.1.0-1-py3-none-any.whl", server.uri()),
+            "hashes": { "sha256": "7b6229db79b5800e4e98a351b5628c1c8a944533a2d428aeeaa7275a30d4ea82" },
+            "core-metadata": true,
+            "yanked": "broken wheel"
+        }, {
+            "filename": "basic_package-0.1.0-py3-none-any.whl",
+            "url": format!("{}/files/basic_package-0.1.0-py3-none-any.whl", server.uri()),
+            "hashes": { "sha256": "7b6229db79b5800e4e98a351b5628c1c8a944533a2d428aeeaa7275a30d4ea82" },
+            "core-metadata": true,
+            "yanked": false
+        }, {
+            "filename": "basic_package-0.1.0.tar.gz",
+            "url": format!("{}/files/basic_package-0.1.0.tar.gz", server.uri()),
+            "hashes": { "sha256": "af478ff91ec60856c99a540b8df13d756513bebb65bc301fb27e0d1f974532b4" },
+            "yanked": true
+        }]
+    });
+    Mock::given(method("GET"))
+        .and(path("/simple/basic-package/"))
+        .respond_with(ResponseTemplate::new(200).set_body_raw(
+            simple_index.to_string(),
+            "application/vnd.pypi.simple.v1+json",
+        ))
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/files/basic_package-0.1.0-py3-none-any.whl.metadata"))
+        .respond_with(ResponseTemplate::new(200).set_body_string(indoc! {"
+            Metadata-Version: 2.3
+            Name: basic-package
+            Version: 0.1.0
+            Requires-Python: >=3.13
+        "}))
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/files/basic_package-0.1.0-py3-none-any.whl"))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_bytes(fs_err::read(
+                context
+                    .workspace_root
+                    .join("test/links/basic_package-0.1.0-py3-none-any.whl"),
+            )?),
+        )
+        .mount(&server)
+        .await;
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&formatdoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.13"
+        dependencies = ["basic-package>=0.1.0"]
+
+        [[tool.uv.index]]
+        url = "{}/simple"
+        default = true
+    "#, server.uri()})?;
+
+    uv_snapshot!(context.filters(), context.lock().env_remove(EnvVars::UV_EXCLUDE_NEWER), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(context.read("uv.lock"), @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.13"
+
+        [[package]]
+        name = "basic-package"
+        version = "0.1.0"
+        source = { registry = "http://[LOCALHOST]/simple" }
+        wheels = [
+            { url = "http://[LOCALHOST]/files/basic_package-0.1.0-py3-none-any.whl", hash = "sha256:7b6229db79b5800e4e98a351b5628c1c8a944533a2d428aeeaa7275a30d4ea82" },
+        ]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "basic-package" },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "basic-package", specifier = ">=0.1.0" }]
+        "#);
+    });
+
+    // The yanked wheel has a higher build tag, so retaining it would break frozen sync.
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + basic-package==0.1.0
+    ");
+
+    let lock = context.read("uv.lock");
+    uv_snapshot!(context.filters(), context.lock().arg("--upgrade").arg("--no-build").env_remove(EnvVars::UV_EXCLUDE_NEWER), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+    assert_eq!(context.read("uv.lock"), lock);
+
+    Ok(())
+}
+
+/// Omit yanked wheels when resolving from a source distribution.
+#[cfg(feature = "test-universal")]
+#[tokio::test]
+async fn lock_omit_yanked_wheel_with_sdist() -> Result<()> {
+    let context = uv_test::test_context!("3.13");
+    let server = MockServer::start().await;
+
+    let simple_index = json!({
+        "meta": { "api-version": "1.1" },
+        "name": "basic-package",
+        "files": [{
+            "filename": "basic_package-0.1.0-py3-none-any.whl",
+            "url": format!("{}/files/basic_package-0.1.0-py3-none-any.whl", server.uri()),
+            "hashes": { "sha256": "7b6229db79b5800e4e98a351b5628c1c8a944533a2d428aeeaa7275a30d4ea82" },
+            "core-metadata": true,
+            "yanked": true
+        }, {
+            "filename": "basic_package-0.1.0.tar.gz",
+            "url": format!("{}/files/basic_package-0.1.0.tar.gz", server.uri()),
+            "hashes": { "sha256": "af478ff91ec60856c99a540b8df13d756513bebb65bc301fb27e0d1f974532b4" }
+        }]
+    });
+    Mock::given(method("GET"))
+        .and(path("/simple/basic-package/"))
+        .respond_with(ResponseTemplate::new(200).set_body_raw(
+            simple_index.to_string(),
+            "application/vnd.pypi.simple.v1+json",
+        ))
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/files/basic_package-0.1.0.tar.gz"))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_bytes(fs_err::read(
+                context
+                    .workspace_root
+                    .join("test/links/basic_package-0.1.0.tar.gz"),
+            )?),
+        )
+        .mount(&server)
+        .await;
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&formatdoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.13"
+        dependencies = ["basic-package>=0.1.0"]
+
+        [[tool.uv.index]]
+        url = "{}/simple"
+        default = true
+    "#, server.uri()})?;
+
+    uv_snapshot!(context.filters(), context.lock().env_remove(EnvVars::UV_EXCLUDE_NEWER), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(context.read("uv.lock"), @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.13"
+
+        [[package]]
+        name = "basic-package"
+        version = "0.1.0"
+        source = { registry = "http://[LOCALHOST]/simple" }
+        sdist = { url = "http://[LOCALHOST]/files/basic_package-0.1.0.tar.gz", hash = "sha256:af478ff91ec60856c99a540b8df13d756513bebb65bc301fb27e0d1f974532b4" }
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "basic-package" },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "basic-package", specifier = ">=0.1.0" }]
+        "#);
+    });
+
+    let lock = context.read("uv.lock");
+    uv_snapshot!(context.filters(), context.lock().arg("--upgrade").arg("--no-binary").env_remove(EnvVars::UV_EXCLUDE_NEWER), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+    assert_eq!(context.read("uv.lock"), lock);
+
+    Ok(())
+}
+
+/// Use an unyanked incompatible wheel for metadata while locking only the source distribution.
+#[cfg(feature = "test-universal")]
+#[tokio::test]
+async fn lock_omit_yanked_wheel_with_incompatible_wheel() -> Result<()> {
+    let context = uv_test::test_context!("3.13");
+    let server = MockServer::start().await;
+
+    let simple_index = json!({
+        "meta": { "api-version": "1.1" },
+        "name": "basic-package",
+        "files": [{
+            "filename": "basic_package-0.1.0-py3-none-any.whl",
+            "url": format!("{}/files/basic_package-0.1.0-py3-none-any.whl", server.uri()),
+            "hashes": { "sha256": "7b6229db79b5800e4e98a351b5628c1c8a944533a2d428aeeaa7275a30d4ea82" },
+            "core-metadata": true,
+            "yanked": true
+        }, {
+            "filename": "basic_package-0.1.0-cp312-cp312-any.whl",
+            "url": format!("{}/files/basic_package-0.1.0-cp312-cp312-any.whl", server.uri()),
+            "hashes": { "sha256": "7b6229db79b5800e4e98a351b5628c1c8a944533a2d428aeeaa7275a30d4ea82" },
+            "core-metadata": true
+        }, {
+            "filename": "basic_package-0.1.0.tar.gz",
+            "url": format!("{}/files/basic_package-0.1.0.tar.gz", server.uri()),
+            "hashes": { "sha256": "af478ff91ec60856c99a540b8df13d756513bebb65bc301fb27e0d1f974532b4" }
+        }]
+    });
+    Mock::given(method("GET"))
+        .and(path("/simple/basic-package/"))
+        .respond_with(ResponseTemplate::new(200).set_body_raw(
+            simple_index.to_string(),
+            "application/vnd.pypi.simple.v1+json",
+        ))
+        .mount(&server)
+        .await;
+    // Only the incompatible wheel's metadata is available; the sdist cannot be downloaded.
+    Mock::given(method("GET"))
+        .and(path(
+            "/files/basic_package-0.1.0-cp312-cp312-any.whl.metadata",
+        ))
+        .respond_with(ResponseTemplate::new(200).set_body_string(indoc! {"
+            Metadata-Version: 2.3
+            Name: basic-package
+            Version: 0.1.0
+        "}))
+        .mount(&server)
+        .await;
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&formatdoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.13"
+        dependencies = ["basic-package>=0.1.0"]
+
+        [[tool.uv.index]]
+        url = "{}/simple"
+        default = true
+    "#, server.uri()})?;
+
+    uv_snapshot!(context.filters(), context.lock().env_remove(EnvVars::UV_EXCLUDE_NEWER), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    let lock = context.read("uv.lock");
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(lock, @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.13"
+
+        [[package]]
+        name = "basic-package"
+        version = "0.1.0"
+        source = { registry = "http://[LOCALHOST]/simple" }
+        sdist = { url = "http://[LOCALHOST]/files/basic_package-0.1.0.tar.gz", hash = "sha256:af478ff91ec60856c99a540b8df13d756513bebb65bc301fb27e0d1f974532b4" }
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "basic-package" },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "basic-package", specifier = ">=0.1.0" }]
+        "#);
+    });
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--locked")
+        .arg("--offline")
+        .arg("--no-cache")
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+    assert_eq!(context.read("uv.lock"), lock);
+
+    Ok(())
+}
+
+/// Retain an unyanked source archive when builds are disabled and another source archive is yanked.
+#[cfg(feature = "test-universal")]
+#[tokio::test]
+async fn lock_omit_yanked_sdist_no_build() -> Result<()> {
+    let context = uv_test::test_context!("3.13");
+    let server = MockServer::start().await;
+
+    let simple_index = json!({
+        "meta": { "api-version": "1.1" },
+        "name": "basic-package",
+        "files": [{
+            "filename": "basic_package-0.1.0-py3-none-any.whl",
+            "url": format!("{}/files/basic_package-0.1.0-py3-none-any.whl", server.uri()),
+            "hashes": { "sha256": "7b6229db79b5800e4e98a351b5628c1c8a944533a2d428aeeaa7275a30d4ea82" },
+            "core-metadata": true
+        }, {
+            "filename": "basic_package-0.1.0.tar.gz",
+            "url": format!("{}/files/basic_package-0.1.0.tar.gz", server.uri()),
+            "hashes": { "sha256": "af478ff91ec60856c99a540b8df13d756513bebb65bc301fb27e0d1f974532b4" }
+        }, {
+            "filename": "basic_package-0.1.0.zip",
+            "url": format!("{}/files/basic_package-0.1.0.zip", server.uri()),
+            "hashes": {},
+            "yanked": true
+        }]
+    });
+    Mock::given(method("GET"))
+        .and(path("/simple/basic-package/"))
+        .respond_with(ResponseTemplate::new(200).set_body_raw(
+            simple_index.to_string(),
+            "application/vnd.pypi.simple.v1+json",
+        ))
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/files/basic_package-0.1.0-py3-none-any.whl.metadata"))
+        .respond_with(ResponseTemplate::new(200).set_body_string(indoc! {"
+            Metadata-Version: 2.3
+            Name: basic-package
+            Version: 0.1.0
+            Requires-Python: >=3.13
+        "}))
+        .mount(&server)
+        .await;
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&formatdoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.13"
+        dependencies = ["basic-package>=0.1.0"]
+
+        [[tool.uv.index]]
+        url = "{}/simple"
+        default = true
+    "#, server.uri()})?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--no-build").env_remove(EnvVars::UV_EXCLUDE_NEWER), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(context.read("uv.lock"), @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.13"
+
+        [[package]]
+        name = "basic-package"
+        version = "0.1.0"
+        source = { registry = "http://[LOCALHOST]/simple" }
+        sdist = { url = "http://[LOCALHOST]/files/basic_package-0.1.0.tar.gz", hash = "sha256:af478ff91ec60856c99a540b8df13d756513bebb65bc301fb27e0d1f974532b4" }
+        wheels = [
+            { url = "http://[LOCALHOST]/files/basic_package-0.1.0-py3-none-any.whl", hash = "sha256:7b6229db79b5800e4e98a351b5628c1c8a944533a2d428aeeaa7275a30d4ea82" },
+        ]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "basic-package" },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "basic-package", specifier = ">=0.1.0" }]
+        "#);
+    });
+
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--no-binary").arg("--dry-run"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Would use project environment at: .venv
+    Would download 1 package
+    Would install 1 package
+     + basic-package==0.1.0
+    ");
+
+    Ok(())
+}
+
 #[cfg(feature = "test-universal")]
 #[test]
 fn lock_omit_wheels_exclude_newer() -> Result<()> {
