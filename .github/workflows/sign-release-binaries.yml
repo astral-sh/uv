@@ -337,12 +337,7 @@ jobs:
         run: uv run scripts/verify-release-wheels-macos.py ./signed ./dist
 
       - name: "Install and run the signed wheels"
-        run: |
-          python3 -m venv wheel-test
-          wheel-test/bin/python -m pip install --no-index --no-deps dist/wheels/*.whl
-          for binary in uv uvx uv-build; do
-            "wheel-test/bin/$binary" --version
-          done
+        run: ./scripts/test-release-wheels-macos.sh ./dist/wheels
 
   verify-windows:
     name: "verify signed windows artifacts"
@@ -386,15 +381,4 @@ jobs:
 
       - name: "Install and run the signed wheels"
         shell: pwsh
-        run: |
-          $ErrorActionPreference = 'Stop'
-          python -m venv wheel-test
-          if ($LASTEXITCODE -ne 0) { throw 'Virtual environment creation failed' }
-          $wheels = Get-ChildItem dist/wheels/*.whl
-          & wheel-test/Scripts/python.exe -m pip install --no-index --no-deps $wheels.FullName
-          if ($LASTEXITCODE -ne 0) { throw 'Signed wheel installation failed' }
-          foreach ($binary in @('uv.exe', 'uvx.exe', 'uvw.exe', 'uv-build.exe')) {
-            $binaryPath = Join-Path wheel-test/Scripts $binary
-            $process = Start-Process -FilePath $binaryPath -ArgumentList '--version' -NoNewWindow -Wait -PassThru
-            if ($process.ExitCode -ne 0) { throw "Signed executable failed: $binary" }
-          }
+        run: ./scripts/test-release-wheels-windows.ps1 ./dist/wheels
