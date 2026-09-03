@@ -184,7 +184,7 @@ pub enum UploadOutcome {
 /// A distribution and its associated attestation paths, collected by [`PublishSession::prepare`].
 ///
 /// File contents are read and hashed when [`PublishSession::upload`] or
-/// [`PublishSession::validate`] is called, so files can be processed one at a time.
+/// [`PublishSession::dry_run`] is called, so files can be processed one at a time.
 #[derive(Debug)]
 pub struct PreparedDistribution {
     file: PathBuf,
@@ -597,7 +597,7 @@ impl<'a> PublishSession<'a> {
     /// Expand input globs, associate attestations, and order distributions for publishing.
     ///
     /// This only collects paths. Hashing and content validation happen in [`Self::upload`]
-    /// or [`Self::validate`], after the caller has checked whether the file can be skipped.
+    /// or [`Self::dry_run`], after the caller has checked whether the file can be skipped.
     pub fn prepare(
         paths: Vec<String>,
         no_attestations: bool,
@@ -615,7 +615,7 @@ impl<'a> PublishSession<'a> {
     /// Validate a distribution's metadata and attestations without uploading it.
     ///
     /// Used for dry runs. [`Self::upload`] performs the same validation before sending a file.
-    pub async fn validate(
+    pub async fn dry_run(
         &self,
         prepared: &PreparedDistribution,
         reporter: Arc<impl Reporter>,
