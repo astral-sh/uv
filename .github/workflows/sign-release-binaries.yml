@@ -383,8 +383,6 @@ jobs:
           path: dist
           merge-multiple: true
 
-      # The signing job checked the expected publisher. On a fresh runner, check
-      # that packaging preserved those bytes and Windows trusts their timestamped signatures.
       - name: "Verify packaged executables and signatures"
         shell: pwsh
         run: |
@@ -393,26 +391,7 @@ jobs:
           uv run scripts/extract-wheel-binaries.py --output wheel-contents $wheels.FullName
           if ($LASTEXITCODE -ne 0) { throw 'Wheel extraction failed' }
           Expand-Archive dist/uv-x86_64-pc-windows-msvc.zip archive-contents
-          foreach ($binary in @('uv.exe', 'uvx.exe', 'uvw.exe')) {
-            if ((Get-FileHash "signed/$binary").Hash -ne (Get-FileHash "archive-contents/$binary").Hash) {
-              throw "Archive executable differs from signing output: $binary"
-            }
-          }
-          $signtool = Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\bin\*\x64\signtool.exe" |
-            Sort-Object FullName -Descending | Select-Object -First 1 -ExpandProperty FullName
-          if (-not $signtool) { throw 'signtool.exe not found in Windows SDK' }
-          foreach ($binary in @('uv.exe', 'uvx.exe', 'uvw.exe', 'uv-build.exe')) {
-            $binaryPath = (Get-Item "wheel-contents/$binary").FullName
-            if ((Get-FileHash "signed/$binary").Hash -ne (Get-FileHash $binaryPath).Hash) {
-              throw "Wheel executable differs from signing output: $binary"
-            }
-            $signature = Get-AuthenticodeSignature $binaryPath
-            if ($signature.Status -ne 'Valid' -or $null -eq $signature.TimeStamperCertificate) {
-              throw "Expected a publicly trusted, timestamped signature: $binary"
-            }
-            & $signtool verify /pa /all /v $binaryPath
-            if ($LASTEXITCODE -ne 0) { throw "Signature verification failed: $binary" }
-          }
+          ./scripts/verify-release-windows.ps1 signed wheel-contents archive-contents
 
       - name: "Install and run the signed wheels"
         shell: pwsh

@@ -13,8 +13,8 @@ For each wheel executable, `codesign` must accept its Apple-rooted signature and
 report a signing timestamp. The embedded leaf certificate must match the
 certificate pinned by the signing job.
 
-The `verify-windows` job in `.github/workflows/sign-release-binaries.yml` performs
-the corresponding Windows checks with `Get-AuthenticodeSignature` and `signtool`.
+`verify-release-windows.ps1` performs the corresponding Windows checks with
+`Get-AuthenticodeSignature` and `signtool`.
 """
 
 import argparse
