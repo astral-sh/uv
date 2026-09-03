@@ -325,6 +325,10 @@ where
                 }
             }
             materialize_symlink_dir(&target)?;
+            if state.mode == LinkMode::Clone && !target.try_exists()? {
+                // Reserve the new directory until cloning finishes, without creating it first.
+                return clone_dir(&path, &target, options).map(Some);
+            }
             fs_err::create_dir_all(&target)?;
             Ok(None)
         };
@@ -1088,6 +1092,8 @@ mod tests {
     use std::assert_matches;
     #[cfg(unix)]
     use std::os::unix::fs::PermissionsExt;
+    #[cfg(target_os = "macos")]
+    use std::fs::Permissions;
 
     use super::*;
     use tempfile::TempDir;
@@ -1956,20 +1962,31 @@ mod tests {
 
     #[test]
     #[cfg(target_os = "macos")]
-    fn test_macos_clone_directory_recursive() {
+    fn test_macos_clone_directory_recursive() -> io::Result<()> {
         // Test the macOS-specific directory cloning via clonefile
         let src_dir = test_tempdir();
         let dst_dir = test_tempdir();
 
         create_test_tree(src_dir.path());
+        fs_err::set_permissions(src_dir.path().join("subdir"), Permissions::from_mode(0o700))?;
 
         // On macOS with APFS, this should use clonefile for entire directories
         let options = LinkOptions::new(LinkMode::Clone);
-        let result = link_dir(src_dir.path(), dst_dir.path(), &options).unwrap();
+        let result =
+            link_dir(src_dir.path(), dst_dir.path(), &options).map_err(io::Error::other)?;
 
         // On APFS, should succeed with Clone mode
         assert_eq!(result, LinkMode::Clone);
         verify_test_tree(dst_dir.path());
+        // Cloning the entire directory preserves its permissions.
+        assert_eq!(
+            fs_err::metadata(dst_dir.path().join("subdir"))?
+                .permissions()
+                .mode()
+                & 0o777,
+            0o700,
+        );
+        Ok(())
     }
 
     #[test]
