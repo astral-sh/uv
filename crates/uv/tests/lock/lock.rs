@@ -37541,13 +37541,14 @@ fn lock_exclude_newer_package_absent() -> Result<()> {
         "#);
     });
 
-    // An irrelevant package-specific setting does not invalidate the lock.
+    // Changing an irrelevant package-specific setting from `false` to a timestamp does not
+    // invalidate the lock.
     uv_snapshot!(context.filters(), context
         .lock()
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("--locked")
         .arg("--exclude-newer-package")
-        .arg("idna=false"), @"
+        .arg("idna=2022-04-04T12:00:00Z"), @"
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
@@ -37561,6 +37562,38 @@ fn lock_exclude_newer_package_absent() -> Result<()> {
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
+    ");
+
+    // Recreate the lock with a global timestamp and a package-specific exemption.
+    fs_err::remove_file(context.temp_dir.child("uv.lock"))?;
+    uv_snapshot!(context.filters(), context
+        .lock()
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .arg("--exclude-newer")
+        .arg("2022-04-04T12:00:00Z")
+        .arg("--exclude-newer-package")
+        .arg("idna=false"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+
+    // Inverting the settings still invalidates the lock because the global setting is relevant.
+    uv_snapshot!(context.filters(), context
+        .lock()
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .arg("--locked")
+        .arg("--exclude-newer")
+        .arg("false")
+        .arg("--exclude-newer-package")
+        .arg("idna=2022-04-04T12:00:00Z"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Resolving despite existing lockfile due to removal of global exclude newer
+    Resolved 1 package in [TIME]
+    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+
+    hint: To update the lockfile, run `uv lock`.
     ");
 
     Ok(())
