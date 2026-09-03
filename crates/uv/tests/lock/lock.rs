@@ -37495,7 +37495,7 @@ fn lock_exclude_newer_package_order() -> Result<()> {
     Ok(())
 }
 
-/// Test the behavior of exclude-newer-package settings for packages outside the resolution.
+/// Test that exclude-newer-package settings for packages outside the resolution are ignored.
 #[test]
 fn lock_exclude_newer_package_absent() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -37541,17 +37541,26 @@ fn lock_exclude_newer_package_absent() -> Result<()> {
         "#);
     });
 
+    // An irrelevant package-specific setting does not invalidate the lock.
+    uv_snapshot!(context.filters(), context
+        .lock()
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .arg("--locked")
+        .arg("--exclude-newer-package")
+        .arg("idna=false"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+
+    // Nor does removing the irrelevant setting.
     uv_snapshot!(context.filters(), context
         .lock()
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("--locked"), @"
-    exit_code: 1 (failure)
+    exit_code: 0 (success)
     ----- stderr -----
-    Resolving despite existing lockfile due to removal of exclude newer for package `idna`
     Resolved 1 package in [TIME]
-    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
-
-    hint: To update the lockfile, run `uv lock`.
     ");
 
     Ok(())
