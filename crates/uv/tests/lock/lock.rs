@@ -37407,7 +37407,6 @@ fn lock_exclude_newer_package_order() -> Result<()> {
     Resolved 1 package in [TIME]
     ");
 
-    // TODO: Sort these entries to avoid order-only lockfile changes (astral-sh/uv-dev#969).
     insta::with_settings!({
         filters => context.filters(),
     }, {
@@ -37419,8 +37418,8 @@ fn lock_exclude_newer_package_order() -> Result<()> {
         [options]
 
         [options.exclude-newer-package]
-        tqdm = "2022-09-04T00:00:00Z"
         requests = "2022-04-04T12:00:00Z"
+        tqdm = "2022-09-04T00:00:00Z"
 
         [[package]]
         name = "project"

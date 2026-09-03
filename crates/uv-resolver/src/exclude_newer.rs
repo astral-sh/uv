@@ -1,10 +1,10 @@
 use std::{
+    collections::BTreeMap,
     ops::{Deref, DerefMut},
     str::FromStr,
 };
 
 use jiff::Timestamp;
-use rustc_hash::FxHashMap;
 use serde::ser::SerializeMap;
 use uv_distribution_types::{ExcludeNewerOverride, ExcludeNewerSpan, ExcludeNewerValue};
 use uv_normalize::PackageName;
@@ -291,12 +291,15 @@ impl std::fmt::Display for ExcludeNewerOverrideChange {
     }
 }
 
+/// Package-specific `exclude-newer` settings.
+///
+/// Entries are stored in package-name order for deterministic serialization.
 #[derive(Debug, Clone, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
-pub struct ExcludeNewerPackage(FxHashMap<PackageName, ExcludeNewerOverride>);
+pub struct ExcludeNewerPackage(BTreeMap<PackageName, ExcludeNewerOverride>);
 
 impl Deref for ExcludeNewerPackage {
-    type Target = FxHashMap<PackageName, ExcludeNewerOverride>;
+    type Target = BTreeMap<PackageName, ExcludeNewerOverride>;
 
     fn deref(&self) -> &Self::Target {
         &self.0
@@ -321,7 +324,7 @@ impl FromIterator<ExcludeNewerPackageEntry> for ExcludeNewerPackage {
 
 impl IntoIterator for ExcludeNewerPackage {
     type Item = (PackageName, ExcludeNewerOverride);
-    type IntoIter = std::collections::hash_map::IntoIter<PackageName, ExcludeNewerOverride>;
+    type IntoIter = std::collections::btree_map::IntoIter<PackageName, ExcludeNewerOverride>;
 
     fn into_iter(self) -> Self::IntoIter {
         self.0.into_iter()
@@ -330,7 +333,7 @@ impl IntoIterator for ExcludeNewerPackage {
 
 impl<'a> IntoIterator for &'a ExcludeNewerPackage {
     type Item = (&'a PackageName, &'a ExcludeNewerOverride);
-    type IntoIter = std::collections::hash_map::Iter<'a, PackageName, ExcludeNewerOverride>;
+    type IntoIter = std::collections::btree_map::Iter<'a, PackageName, ExcludeNewerOverride>;
 
     fn into_iter(self) -> Self::IntoIter {
         self.0.iter()
@@ -409,7 +412,7 @@ pub struct ExcludeNewer {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub global: Option<ExcludeNewerValue>,
     /// Per-package timestamps that override the global timestamp.
-    #[serde(default, skip_serializing_if = "FxHashMap::is_empty")]
+    #[serde(default, skip_serializing_if = "ExcludeNewerPackage::is_empty")]
     pub package: ExcludeNewerPackage,
 }
 
