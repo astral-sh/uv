@@ -59,7 +59,7 @@ jobs:
           # uv and uv_build keep their executables in .data/scripts.
           for target in aarch64-apple-darwin x86_64-pc-windows-msvc; do
             uv run scripts/extract-wheel-binaries.py \
-              --output "unsigned/$target" wheels/"$target"/*.whl
+              --output "./unsigned/$target" wheels/"$target"/*.whl
           done
 
       - name: "Upload unsigned macOS executables"
@@ -264,7 +264,7 @@ jobs:
             for wheel in wheels/"$target"/*.whl; do
               ./uv-dev inject-signed-wheel-binaries --input "$wheel" \
                 --output "dist/$target/wheels/${wheel##*/}" \
-                --signed-binaries "signed/$target"
+                --signed-binaries "./signed/$target"
             done
           done
 
@@ -335,9 +335,10 @@ jobs:
         run: |
           set -euo pipefail
           uv run scripts/extract-wheel-binaries.py \
-            --output wheel-contents dist/wheels/*.whl
+            --output ./wheel-contents dist/wheels/*.whl
           tar xzf dist/uv-aarch64-apple-darwin.tar.gz
-          uv run scripts/verify-release-macos.py signed wheel-contents uv-aarch64-apple-darwin
+          uv run scripts/verify-release-macos.py \
+            ./signed ./wheel-contents ./uv-aarch64-apple-darwin
 
       - name: "Install and run the signed wheels"
         run: |
@@ -388,10 +389,10 @@ jobs:
         run: |
           $ErrorActionPreference = 'Stop'
           $wheels = Get-ChildItem dist/wheels/*.whl
-          uv run scripts/extract-wheel-binaries.py --output wheel-contents $wheels.FullName
+          uv run scripts/extract-wheel-binaries.py --output ./wheel-contents $wheels.FullName
           if ($LASTEXITCODE -ne 0) { throw 'Wheel extraction failed' }
-          Expand-Archive dist/uv-x86_64-pc-windows-msvc.zip archive-contents
-          ./scripts/verify-release-windows.ps1 signed wheel-contents archive-contents
+          Expand-Archive dist/uv-x86_64-pc-windows-msvc.zip ./archive-contents
+          ./scripts/verify-release-windows.ps1 ./signed ./wheel-contents ./archive-contents
 
       - name: "Install and run the signed wheels"
         shell: pwsh
