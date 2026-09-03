@@ -17062,28 +17062,28 @@ fn lock_check_allows_relaxed_exclude_newer_package() -> Result<()> {
 
     uv_snapshot!(context.filters(), context.lock()
         .arg("--exclude-newer-package")
-        .arg("idna=2024-03-25T00:00:00Z"), @"
+        .arg("project=2024-03-25T00:00:00Z"), @"
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     ");
 
-    // Exempting `idna` from the cutoff relaxes the constraint, so the existing lockfile remains
+    // Exempting `project` from the cutoff relaxes the constraint, so the existing lockfile remains
     // valid.
     uv_snapshot!(context.filters(), context.lock()
         .arg("--exclude-newer-package")
-        .arg("idna=false")
+        .arg("project=false")
         .arg("--check"), @"
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     ");
 
-    // Exempting another package does not change the cutoff for `idna`, so the existing lockfile
+    // Exempting another package does not change the cutoff for `project`, so the existing lockfile
     // remains valid.
     uv_snapshot!(context.filters(), context.lock()
         .arg("--exclude-newer-package")
-        .arg("idna=2024-03-25T00:00:00Z")
+        .arg("project=2024-03-25T00:00:00Z")
         .arg("--exclude-newer-package")
         .arg("iniconfig=false")
         .arg("--check"), @"
@@ -17095,7 +17095,7 @@ fn lock_check_allows_relaxed_exclude_newer_package() -> Result<()> {
     uv_snapshot!(context.filters(), context.lock()
         .env(EnvVars::UV_EXCLUDE_NEWER, "2024-03-26T00:00:00Z")
         .arg("--exclude-newer-package")
-        .arg("idna=2024-03-26T00:00:00Z")
+        .arg("project=2024-03-26T00:00:00Z")
         .arg("--check"), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -17105,11 +17105,11 @@ fn lock_check_allows_relaxed_exclude_newer_package() -> Result<()> {
     uv_snapshot!(context.filters(), context.lock()
         .env(EnvVars::UV_EXCLUDE_NEWER, "2024-03-26T00:00:00Z")
         .arg("--exclude-newer-package")
-        .arg("idna=2024-03-24T00:00:00Z")
+        .arg("project=2024-03-24T00:00:00Z")
         .arg("--check"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-    Resolving despite existing lockfile due to change of exclude newer timestamp from `2024-03-25T00:00:00Z` to `2024-03-24T00:00:00Z` for package `idna`
+    Resolving despite existing lockfile due to change of exclude newer timestamp from `2024-03-25T00:00:00Z` to `2024-03-24T00:00:00Z` for package `project`
     Resolved 1 package in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--check` was provided.
 
