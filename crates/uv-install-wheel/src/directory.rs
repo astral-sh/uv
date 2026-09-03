@@ -9,11 +9,9 @@ use uv_fs::link::{CopyLocks, materialize_symlink_dir};
 use crate::linker::needs_mutable_copy;
 use crate::{Error, Layout};
 
-/// Resolve installation-scheme aliases without following package directory links into the cache.
+/// Resolve scheme aliases, such as `lib64 -> lib`, while letting callers handle package links.
 ///
-/// Scheme aliases such as `lib64 -> lib` are followed. Links below a library root, such as
-/// `site-packages/numpy -> <cache>/numpy`, are handled by the caller before traversal can enter
-/// the cache. Scheme aliases must remain stable while this resolver is in use.
+/// Scheme aliases must remain stable during resolution.
 pub(crate) struct LibraryDirectories {
     /// Library roots as (logical path, resolved path) pairs.
     roots: Vec<(PathBuf, PathBuf)>,
@@ -87,8 +85,7 @@ impl LibraryDirectories {
         E: From<io::Error>,
     {
         let path = std::path::absolute(path)?;
-        // Most RECORD paths start with a known library root. Avoid inspecting the same scheme
-        // directories for every file, while still visiting every package directory below them.
+        // Skip scheme traversal for paths starting with a known library root.
         let (mut resolved, relative) = self
             .roots
             .iter()

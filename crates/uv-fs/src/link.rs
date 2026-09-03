@@ -163,11 +163,9 @@ pub struct CopyLocks {
 }
 
 impl CopyLocks {
-    /// Serialize top-level directory creation and expansion with writes to sibling entries.
+    /// Serialize changes to sibling directory entries.
     ///
     /// Lock the canonical parent so scheme aliases and case-insensitive names share a lock.
-    /// Release it before installing files beneath a real directory: real directories never become
-    /// links, and expanding a directory link leaves no directory links below it.
     pub fn with_directory_lock<T, E>(
         &self,
         path: &Path,
@@ -339,10 +337,9 @@ fn check_file_destination(path: &Path) -> io::Result<()> {
 
 /// Replace a directory symlink with real directories and symlinks to individual files.
 ///
-/// Missing paths and non-links are unchanged. The expanded directory never becomes a link again.
+/// Missing paths and non-links are unchanged.
 /// Files matching `needs_mutable_copy` are copied instead of linked.
 /// If writes can overlap, hold [`CopyLocks::with_directory_lock`] for `path` throughout this call.
-/// Replacing the link briefly removes its name before publishing the expanded directory.
 pub fn materialize_symlink_dir(
     path: &Path,
     needs_mutable_copy: impl Fn(&Path) -> bool,
