@@ -1,11 +1,9 @@
-use std::borrow::Cow;
 use std::fmt::Write;
 use std::sync::Arc;
 
 use anyhow::{Context, Result, bail};
 use console::Term;
 use owo_colors::OwoColorize;
-use tokio::sync::Semaphore;
 use tracing::{debug, info, trace};
 use uv_auth::Credentials;
 use uv_cache::Cache;
@@ -14,12 +12,12 @@ use uv_client::{
 };
 use uv_configuration::{KeyringProviderType, TrustedPublishing};
 use uv_distribution_filename::DistFilename;
-use uv_distribution_types::{IndexCapabilities, IndexLocations, IndexUrl};
+use uv_distribution_types::{IndexLocations, IndexUrl};
 use uv_errors::{ErrorOptions, Hints, write_error_chain_with_options};
 use uv_publish::{
-    CheckUrlClient, FormMetadata, PublishError, TrustedPublishResult, TrustedPublishingToken,
-    UploadDistribution, burn_trusted_publishing_token, check_trusted_publishing,
-    group_files_for_publishing, upload,
+    PublishFinalizeError, PublishOutcome, PublishSession, PublishingCredentials,
+    TrustedPublishResult, UploadDistribution, UploadOutcome, check_trusted_publishing,
+    group_files_for_publishing,
 };
 use uv_redacted::DisplaySafeUrl;
 use uv_settings::EnvironmentOptions;
@@ -90,7 +88,10 @@ pub(crate) async fn publish(
     // Sort by filename first so the stable type sort preserves filename order within each type.
     groups.sort_by(|left, right| left.raw_filename.cmp(&right.raw_filename));
     // Sort by distribution type, with wheels before source distributions.
-    groups.sort_by_key(|group| matches!(&group.filename, DistFilename::SourceDistFilename(_)));
+    groups.sort_by_key(|group| match &group.filename {
+        DistFilename::WheelFilename(_) => false,
+        DistFilename::SourceDistFilename(_) => true,
+    });
     match groups.len() {
         0 => bail!("No files found to publish"),
         1 => {
@@ -140,7 +141,7 @@ pub(crate) async fn publish(
         .client_name("oidc")
         .build()?;
 
-    // Load credentials.
+    // Load credentials and immediately transfer them to the session.
     let (publish_url, credentials) = gather_credentials(
         publish_url,
         username,
@@ -153,79 +154,51 @@ pub(crate) async fn publish(
         printer,
     )
     .await?;
-    let upload_credentials = credentials.as_credentials();
-
-    // Initialize the registry client.
-    let check_url_client = if let Some(index_url) = &check_url {
+    let mut session = PublishSession::new(
+        publish_url,
+        credentials,
+        &upload_client,
+        &oidc_client,
+        client_builder.retry_policy(),
+    );
+    if let Some(index_url) = check_url {
         let registry_client_builder =
             RegistryClientBuilder::new(client_builder.clone(), cache.clone())
                 .index_locations(index_locations)
                 .keyring(keyring_provider);
-        Some(CheckUrlClient {
-            index_url: index_url.clone(),
-            registry_client_builder,
-            client: &upload_client,
-            index_capabilities: IndexCapabilities::default(),
-            cache,
-        })
-    } else {
-        None
-    };
-
-    // Keep the publishing result so token revocation also runs after an upload or metadata error.
-    let result = publish_files(
-        &groups,
-        &publish_url,
-        client_builder,
-        &upload_client,
-        &upload_credentials,
-        check_url_client.as_ref(),
-        dry_run,
-        printer,
-    )
-    .await;
-
-    if let PublishingCredentials::TrustedPublishing(token) = &credentials
-        && let Err(err) = burn_trusted_publishing_token(token, &publish_url, &oidc_client).await
-    {
-        warn_user!(
-            "Failed to invalidate trusted publishing token. It will expire naturally. Cause: {err}"
-        );
-        debug!("Trusted publishing token revocation failed: {err:?}");
+        session = session.with_check_url(index_url, registry_client_builder, cache);
     }
 
-    result
+    // Keep the result so finalization also runs after a preparation or upload error.
+    let result = publish_files(&groups, &mut session, dry_run, printer).await;
+    let outcome = result.as_ref().copied().unwrap_or(PublishOutcome::Failed);
+    match session.finalize(outcome).await {
+        Ok(()) => {}
+        Err(PublishFinalizeError::TokenInvalidation(err)) => {
+            warn_user!(
+                "Failed to invalidate trusted publishing token. It will expire naturally. Cause: {err}"
+            );
+            debug!("Trusted publishing token revocation failed: {err:?}");
+        }
+    }
+
+    result.map(|outcome| match outcome {
+        PublishOutcome::Success | PublishOutcome::DryRun => ExitStatus::Success,
+        PublishOutcome::Failed => ExitStatus::Failure,
+    })
 }
 
 /// Publish each distribution, reporting all validation failures during a dry run.
 async fn publish_files(
     groups: &[UploadDistribution],
-    publish_url: &DisplaySafeUrl,
-    client_builder: &BaseClientBuilder<'_>,
-    upload_client: &BaseClient,
-    credentials: &Credentials,
-    check_url_client: Option<&CheckUrlClient<'_>>,
+    session: &mut PublishSession<'_>,
     dry_run: bool,
     printer: Printer,
-) -> Result<ExitStatus> {
-    // We're only checking a single URL and one at a time, so 1 permit is sufficient.
-    let download_concurrency = Semaphore::new(1);
+) -> Result<PublishOutcome> {
     let mut error_count: usize = 0;
 
     for group in groups {
-        match publish_file(
-            group,
-            publish_url,
-            client_builder,
-            upload_client,
-            credentials,
-            check_url_client,
-            &download_concurrency,
-            dry_run,
-            printer,
-        )
-        .await
-        {
+        match publish_file(group, session, dry_run, printer).await {
             Ok(()) => {}
             Err(err) => {
                 if !dry_run {
@@ -244,21 +217,20 @@ async fn publish_files(
     if error_count > 0 {
         let failed = if error_count == 1 { "file" } else { "files" };
         writeln!(printer.stderr(), "Found issues with {error_count} {failed}")?;
-        return Ok(ExitStatus::Failure);
+        return Ok(PublishOutcome::Failed);
     }
 
-    Ok(ExitStatus::Success)
+    Ok(if dry_run {
+        PublishOutcome::DryRun
+    } else {
+        PublishOutcome::Success
+    })
 }
 
 /// Check and prepare a distribution, then upload it unless this is a dry run.
 async fn publish_file(
     group: &UploadDistribution,
-    publish_url: &DisplaySafeUrl,
-    client_builder: &BaseClientBuilder<'_>,
-    upload_client: &BaseClient,
-    credentials: &Credentials,
-    check_url_client: Option<&CheckUrlClient<'_>>,
-    download_concurrency: &Semaphore,
+    session: &mut PublishSession<'_>,
     dry_run: bool,
     printer: Printer,
 ) -> Result<()> {
@@ -274,16 +246,7 @@ async fn publish_file(
 
     let reporter = Arc::new(PublishReporter::single(printer));
 
-    if let Some(check_url_client) = check_url_client
-        && uv_publish::check_url(
-            check_url_client,
-            &group.file,
-            &group.filename,
-            download_concurrency,
-            reporter.clone(),
-        )
-        .await?
-    {
+    if session.check_existing(group, reporter.clone()).await? {
         writeln!(
             printer.stderr(),
             "File {} already exists, skipping",
@@ -311,11 +274,7 @@ async fn publish_file(
         )?;
     }
 
-    // Collect the metadata for the file.
-    let form_metadata =
-        FormMetadata::read_from_file(&group.file, &group.filename, reporter.clone())
-            .await
-            .map_err(|err| PublishError::PublishPrepare(group.file.clone(), Box::new(err)))?;
+    let prepared = session.prepare(group, reporter.clone()).await?;
 
     if dry_run {
         return Ok(());
@@ -329,50 +288,21 @@ async fn publish_file(
         format!("({bytes:.1})").dimmed()
     )?;
 
-    let uploaded = upload(
-        group,
-        &form_metadata,
-        publish_url,
-        upload_client,
-        client_builder.retry_policy(),
-        credentials,
-        check_url_client,
-        download_concurrency,
-        reporter.clone(),
-    )
-    .await?;
+    let uploaded = session.upload(prepared, reporter).await?;
     info!("Upload succeeded");
 
-    if !uploaded {
-        writeln!(
-            printer.stderr(),
-            "{}",
-            "File already exists, skipping".dimmed()
-        )?;
+    match uploaded {
+        UploadOutcome::Uploaded => {}
+        UploadOutcome::AlreadyExists => {
+            writeln!(
+                printer.stderr(),
+                "{}",
+                "File already exists, skipping".dimmed()
+            )?;
+        }
     }
 
     Ok(())
-}
-
-/// Credentials for publishing, including whether they require revocation after use.
-enum PublishingCredentials {
-    /// Credentials supplied by the user or resolved by the authentication middleware.
-    Supplied(Credentials),
-    /// A short-lived token obtained through trusted publishing.
-    TrustedPublishing(TrustedPublishingToken),
-}
-
-impl PublishingCredentials {
-    /// Return the HTTP credentials to use for uploads.
-    fn as_credentials(&self) -> Cow<'_, Credentials> {
-        match self {
-            Self::Supplied(credentials) => Cow::Borrowed(credentials),
-            Self::TrustedPublishing(token) => Cow::Owned(Credentials::basic(
-                Some("__token__".to_string()),
-                Some(token.to_string()),
-            )),
-        }
-    }
 }
 
 /// Whether to allow prompting for username and password.
