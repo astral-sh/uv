@@ -59,7 +59,7 @@ jobs:
           command: sdist
           args: --out dist
       - name: "Test sdist"
-        uses: ./.github/actions/release-smoke-test
+        uses: astral-sh/github-actions/release-smoke-test@e6a0d38509bf35a70619cb422858000b0fb2930c
         with:
           image: python:3.11-bookworm@sha256:35d3a4a3d5e42e02ab916d44513a050689f12c0533d45598d229672503fe77ca
           artifacts: dist
@@ -90,7 +90,7 @@ jobs:
       - name: "Fix Cargo.lock in sdist uv-build"
         run: python scripts/repair-sdist-cargo-lock.py crates/uv-build/dist/${PACKAGE_NAME}_build-*.tar.gz
       - name: "Test sdist uv-build"
-        uses: ./.github/actions/release-smoke-test
+        uses: astral-sh/github-actions/release-smoke-test@e6a0d38509bf35a70619cb422858000b0fb2930c
         with:
           image: python:3.11-bookworm@sha256:35d3a4a3d5e42e02ab916d44513a050689f12c0533d45598d229672503fe77ca
           artifacts: crates/uv-build/dist
@@ -668,7 +668,7 @@ jobs:
         env:
           CARGO: ${{ github.workspace }}/scripts/cargo.sh
       - name: "Test wheel"
-        uses: ./.github/actions/release-smoke-test
+        uses: astral-sh/github-actions/release-smoke-test@e6a0d38509bf35a70619cb422858000b0fb2930c
         with:
           image: ${{ matrix.platform.test_image }}
           platform: ${{ matrix.platform.test_platform }}
@@ -723,7 +723,7 @@ jobs:
         env:
           CARGO: ${{ github.workspace }}/scripts/cargo.sh
       - name: "Test wheel uv-build"
-        uses: ./.github/actions/release-smoke-test
+        uses: astral-sh/github-actions/release-smoke-test@e6a0d38509bf35a70619cb422858000b0fb2930c
         with:
           image: ${{ matrix.platform.test_image }}
           platform: ${{ matrix.platform.test_platform }}
@@ -785,7 +785,7 @@ jobs:
           CARGO: ${{ github.workspace }}/scripts/cargo.sh
 
       - name: "Test wheel"
-        uses: ./.github/actions/release-smoke-test
+        uses: astral-sh/github-actions/release-smoke-test@e6a0d38509bf35a70619cb422858000b0fb2930c
         with:
           image: s390x/ubuntu:20.04@sha256:221f5f8e28d896556d0e55605cd6936450e6231544e9d83d687beae2d0e71afd
           platform: linux/s390x
@@ -840,7 +840,7 @@ jobs:
         env:
           CARGO: ${{ github.workspace }}/scripts/cargo.sh
       - name: "Test wheel uv-build"
-        uses: ./.github/actions/release-smoke-test
+        uses: astral-sh/github-actions/release-smoke-test@e6a0d38509bf35a70619cb422858000b0fb2930c
         with:
           image: s390x/ubuntu:20.04@sha256:221f5f8e28d896556d0e55605cd6936450e6231544e9d83d687beae2d0e71afd
           platform: linux/s390x
@@ -1013,7 +1013,7 @@ jobs:
         env:
           CARGO: ${{ github.workspace }}/scripts/cargo.sh
       - name: "Test wheel"
-        uses: ./.github/actions/release-smoke-test
+        uses: astral-sh/github-actions/release-smoke-test@e6a0d38509bf35a70619cb422858000b0fb2930c
         with:
           image: riscv64/ubuntu:20.04@sha256:610bedb0c5d9aeae4b45e9064e820c4e0b0f6c1d2843116b0a1ae754890951ac
           platform: linux/riscv64
@@ -1068,7 +1068,7 @@ jobs:
         env:
           CARGO: ${{ github.workspace }}/scripts/cargo.sh
       - name: "Test wheel uv-build"
-        uses: ./.github/actions/release-smoke-test
+        uses: astral-sh/github-actions/release-smoke-test@e6a0d38509bf35a70619cb422858000b0fb2930c
         with:
           image: riscv64/ubuntu:20.04@sha256:610bedb0c5d9aeae4b45e9064e820c4e0b0f6c1d2843116b0a1ae754890951ac
           platform: linux/riscv64
@@ -1123,7 +1123,7 @@ jobs:
         env:
           CARGO: ${{ github.workspace }}/scripts/cargo.sh
       - name: "Test wheel"
-        uses: ./.github/actions/release-smoke-test
+        uses: astral-sh/github-actions/release-smoke-test@e6a0d38509bf35a70619cb422858000b0fb2930c
         if: matrix.target == 'x86_64-unknown-linux-musl'
         with:
           image: alpine:3.12@sha256:c75ac27b49326926b803b9ed43bf088bc220d22556de1bc5f72d742c91398f69
@@ -1178,7 +1178,7 @@ jobs:
         env:
           CARGO: ${{ github.workspace }}/scripts/cargo.sh
       - name: "Test wheel uv-build"
-        uses: ./.github/actions/release-smoke-test
+        uses: astral-sh/github-actions/release-smoke-test@e6a0d38509bf35a70619cb422858000b0fb2930c
         if: matrix.target == 'x86_64-unknown-linux-musl'
         with:
           image: alpine:3.12@sha256:c75ac27b49326926b803b9ed43bf088bc220d22556de1bc5f72d742c91398f69
@@ -1249,7 +1249,7 @@ jobs:
         env:
           CARGO: ${{ github.workspace }}/scripts/cargo.sh
       - name: "Test wheel"
-        uses: ./.github/actions/release-smoke-test
+        uses: astral-sh/github-actions/release-smoke-test@e6a0d38509bf35a70619cb422858000b0fb2930c
         with:
           image: ${{ matrix.platform.test_image }}
           platform: ${{ matrix.platform.test_platform }}
@@ -1263,7 +1263,7 @@ jobs:
             # .venv/bin/python -m ${MODULE_NAME} --help
             .venv/bin/uvx --help
       - name: "Test wheel (manylinux)"
-        uses: ./.github/actions/release-smoke-test
+        uses: astral-sh/github-actions/release-smoke-test@e6a0d38509bf35a70619cb422858000b0fb2930c
         if: matrix.platform.arch == 'aarch64'
         with:
           image: arm64v8/ubuntu:20.04@sha256:0908a765aeb02fe4e564b543eaed1d77839b7a08de94041e24328b2cb62ac553
@@ -1321,7 +1321,7 @@ jobs:
         env:
           CARGO: ${{ github.workspace }}/scripts/cargo.sh
       - name: "Test wheel"
-        uses: ./.github/actions/release-smoke-test
+        uses: astral-sh/github-actions/release-smoke-test@e6a0d38509bf35a70619cb422858000b0fb2930c
         with:
           image: ${{ matrix.platform.test_image }}
           platform: ${{ matrix.platform.test_platform }}
@@ -1334,7 +1334,7 @@ jobs:
             # TODO(konsti): Enable this test on all platforms, currently `find_uv_bin` is failing to discover uv here.
             # .venv/bin/python -m ${MODULE_NAME}_build --help
       - name: "Test wheel (manylinux)"
-        uses: ./.github/actions/release-smoke-test
+        uses: astral-sh/github-actions/release-smoke-test@e6a0d38509bf35a70619cb422858000b0fb2930c
         if: matrix.platform.arch == 'aarch64'
         with:
           image: arm64v8/ubuntu:20.04@sha256:0908a765aeb02fe4e564b543eaed1d77839b7a08de94041e24328b2cb62ac553
