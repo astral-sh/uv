@@ -394,6 +394,59 @@ fn directory_symlink_shared_namespace() -> Result<()> {
     Ok(())
 }
 
+/// Uninstalling a namespace sibling installed by pip must preserve the original package.
+#[test]
+#[cfg(unix)]
+fn directory_symlink_shared_with_pip() -> Result<()> {
+    let context =
+        uv_test::test_context!("3.12").with_filter((r"#sha256=[a-f0-9]{64}", "#sha256=[SHA256]"));
+    let first = context.temp_dir.child("symlink_a-1.0.0-py3-none-any.whl");
+    let second = context.temp_dir.child("symlink_b-1.0.0-py3-none-any.whl");
+    write_test_wheel(first.path(), "symlink_a", [("shared/a.py", "VALUE = 1\n")])?;
+    write_test_wheel(second.path(), "symlink_b", [("shared/b.py", "VALUE = 2\n")])?;
+    context
+        .pip_install()
+        .arg(first.path())
+        .arg("pip==24.0")
+        .arg("--link-mode=symlink")
+        .assert()
+        .success();
+    let shared = context.site_packages().join("shared");
+    let cached = fs::read_link(&shared)?;
+
+    context
+        .python_command()
+        .args([
+            "-m",
+            "pip",
+            "install",
+            "--no-index",
+            "--no-deps",
+            "--no-compile",
+        ])
+        .arg(second.path())
+        .assert()
+        .success();
+    assert!(shared.is_symlink());
+    context
+        .assert_command("import shared.a, shared.b")
+        .success();
+    let digest = dirhash_path(&cached)?;
+
+    uv_snapshot!(context.filters(), context.pip_uninstall().arg("symlink-b"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Uninstalled 1 package in [TIME]
+     - symlink-b==1.0.0 (from file://[TEMP_DIR]/symlink_b-1.0.0-py3-none-any.whl#sha256=[SHA256])
+    ");
+
+    context.assert_command("import shared.a").success();
+    context.assert_command("import shared.b").failure();
+    assert!(!shared.is_symlink());
+    assert_eq!(dirhash_path(&cached)?, digest);
+    Ok(())
+}
+
 /// Relocated data follows scheme aliases without writing into a linked package's cache.
 #[test]
 #[cfg(unix)]

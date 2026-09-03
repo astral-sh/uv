@@ -7,20 +7,22 @@ use std::path::{Component, Path, PathBuf};
 use std::sync::{LazyLock, Mutex, OnceLock};
 
 use tracing::trace;
+use walkdir::WalkDir;
 
+use uv_fs::link::materialize_symlink_dir;
 use uv_fs::{remove_symlink, write_atomic_sync};
 use uv_pypi_types::Identifier;
 use uv_warnings::warn_user;
 
 use crate::directory::LibraryDirectories;
+use crate::linker::needs_mutable_copy;
 use crate::wheel::read_record;
 use crate::{Error, Layout};
 
 /// Uninstall the wheel represented by the given `.dist-info` directory.
 ///
-/// Directory links below the library roots are removed once without following RECORD paths into
-/// the cache. This relies on installers expanding directories shared by multiple wheels, so a
-/// remaining link owns only this wheel's files.
+/// Directory links containing only this wheel's files are removed without following RECORD paths
+/// into their targets. Shared links are expanded before removing recorded files.
 pub fn uninstall_wheel(
     dist_info: &Path,
     distribution: impl Display,
@@ -56,6 +58,7 @@ pub fn uninstall_wheel(
     let mut visited = BTreeSet::new();
     let mut checked_directories = HashMap::new();
     let mut resolved_parents = HashMap::new();
+    let mut record_paths = None;
     for entry in &record {
         if !is_path_in_scheme(&entry.path, site_packages, &distribution, layout) {
             continue;
@@ -67,8 +70,8 @@ pub fn uninstall_wheel(
         let (Some(parent), Some(filename)) = (normalized.parent(), normalized.file_name()) else {
             continue;
         };
-        // Reuse each parent's resolution across its RECORD entries. Uninstall only removes
-        // entries, so resolved directories cannot change identity and missing paths stay absent.
+        // Reuse each parent's resolution across its RECORD entries. Resolved directories remain
+        // real directories throughout uninstall, and missing paths stay absent.
         let resolved = match resolved_parents.entry(parent.to_path_buf()) {
             Entry::Occupied(entry) => entry.into_mut(),
             Entry::Vacant(entry) => entry.insert(libraries.resolve(parent, |directory| {
@@ -77,13 +80,25 @@ pub fn uninstall_wheel(
                 }
                 let result = match fs_err::symlink_metadata(directory) {
                     Ok(metadata) if metadata.file_type().is_symlink() => {
-                        remove_symlink(directory)?;
-                        trace!("Removed directory link: {}", directory.display());
-                        if let Some(parent) = directory.parent() {
-                            visited.insert(parent.to_path_buf());
+                        let record_paths = record_paths.get_or_insert_with(|| {
+                            record
+                                .iter()
+                                .map(|entry| normalize_path(&site_packages.join(&entry.path)))
+                                .collect()
+                        });
+                        if !directory.try_exists()? || directory_is_owned(directory, record_paths)?
+                        {
+                            remove_symlink(directory)?;
+                            trace!("Removed directory link: {}", directory.display());
+                            if let Some(parent) = directory.parent() {
+                                visited.insert(parent.to_path_buf());
+                            }
+                            dir_count += 1;
+                            ControlFlow::Break(())
+                        } else {
+                            materialize_symlink_dir(directory, needs_mutable_copy)?;
+                            ControlFlow::Continue(())
                         }
-                        dir_count += 1;
-                        ControlFlow::Break(())
                     }
                     Ok(_) => ControlFlow::Continue(()),
                     Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
@@ -197,6 +212,21 @@ pub fn uninstall_wheel(
         file_count,
         dir_count,
     })
+}
+
+/// Whether every file beneath a directory link is in this wheel's RECORD, excluding bytecode caches.
+fn directory_is_owned(directory: &Path, record_paths: &HashSet<PathBuf>) -> Result<bool, Error> {
+    for entry in WalkDir::new(directory)
+        .min_depth(1)
+        .into_iter()
+        .filter_entry(|entry| !entry.file_type().is_dir() || entry.file_name() != "__pycache__")
+    {
+        let entry = entry?;
+        if !entry.file_type().is_dir() && !record_paths.contains(entry.path()) {
+            return Ok(false);
+        }
+    }
+    Ok(true)
 }
 
 static WARNED_FOR_RECORD_ENTRY_PACKAGE: OnceLock<Mutex<HashSet<String>>> = OnceLock::new();
