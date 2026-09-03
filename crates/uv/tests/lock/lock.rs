@@ -13,7 +13,6 @@ use wiremock::{
 };
 
 use uv_fs::{Simplified, create_symlink};
-#[cfg(feature = "test-universal")]
 use uv_static::EnvVars;
 #[cfg(feature = "test-universal")]
 use uv_test::packse::PackseServer;
