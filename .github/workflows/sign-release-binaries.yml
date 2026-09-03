@@ -90,6 +90,23 @@ jobs:
     outputs:
       artifact: ${{ steps.upload.outputs.artifact-id }}
     steps:
+      - name: "Install uv"
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          version: "0.12.7"
+          enable-cache: false
+
+      - name: "Prepare the signing script at the workflow revision"
+        shell: bash
+        run: |
+          set -euo pipefail
+          for file in sign-release-macos.py sign-release-macos.py.lock; do
+            curl --fail --silent --show-error --location \
+              "https://raw.githubusercontent.com/astral-sh/uv/$GITHUB_SHA/scripts/$file" \
+              --output "$RUNNER_TEMP/$file"
+          done
+          uv sync --frozen --no-build --python 3.13 --script "$RUNNER_TEMP/sign-release-macos.py"
+
       - name: "Download unsigned executable wheel members"
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
@@ -118,53 +135,9 @@ jobs:
           AZURE_KEYVAULT_KEY_VERSION: ${{ secrets.CODESIGN_KEY_VERSION }}
           KEY_NAME: ${{ secrets.CODESIGN_KEY_NAME }}
           CERTIFICATE_SHA256: ${{ secrets.CODESIGN_CERTIFICATE_SHA256 }}
-        run: |
-          set -euo pipefail
-          for variable in STORAGE_ACCOUNT STORAGE_CONTAINER RCODESIGN_BLOB RCODESIGN_SHA256 \
-            PKCS11_BLOB PKCS11_SHA256 AZURE_KEYVAULT_NAME AZURE_KEYVAULT_KEY_VERSION \
-            KEY_NAME CERTIFICATE_SHA256; do
-            test -n "${!variable}" || { echo "Missing signing configuration: $variable" >&2; exit 1; }
-          done
-
-          # Download a signing tool from Azure Blob Storage.
-          download_blob() {
-            if ! az storage blob download --auth-mode login --only-show-errors \
-              --account-name "$STORAGE_ACCOUNT" --container-name "$STORAGE_CONTAINER" \
-              --name "$1" --file "$2" >/dev/null 2>&1; then
-              echo "Could not download a signing tool." >&2
-              exit 1
-            fi
-          }
-          download_blob "$RCODESIGN_BLOB" "$RUNNER_TEMP/rcodesign"
-          download_blob "$PKCS11_BLOB" "$RUNNER_TEMP/libakv_pkcs11.so"
-          test "$(sha256sum "$RUNNER_TEMP/rcodesign" | cut -d ' ' -f 1)" = "$RCODESIGN_SHA256"
-          test "$(sha256sum "$RUNNER_TEMP/libakv_pkcs11.so" | cut -d ' ' -f 1)" = "$PKCS11_SHA256"
-          chmod +x "$RUNNER_TEMP/rcodesign"
-
-          if ! az keyvault certificate download --only-show-errors \
-            --vault-name "$AZURE_KEYVAULT_NAME" --name "$KEY_NAME" \
-            --version "$AZURE_KEYVAULT_KEY_VERSION" --encoding PEM \
-            --file "$RUNNER_TEMP/signing-cert.pem" >/dev/null 2>&1; then
-            echo "Could not download the public signing certificate." >&2
-            exit 1
-          fi
-          certificate_sha256=$(openssl x509 -in "$RUNNER_TEMP/signing-cert.pem" -outform DER | sha256sum | cut -d ' ' -f 1)
-          test "$certificate_sha256" = "$CERTIFICATE_SHA256"
-
-          mkdir signed
-          # Carry the public certificate for native identity verification.
-          cp "$RUNNER_TEMP/signing-cert.pem" signed/certificate.pem
-          for binary in uv uvx uv-build; do
-            if ! "$RUNNER_TEMP/rcodesign" sign --config-file /dev/null \
-              --pkcs11-library "$RUNNER_TEMP/libakv_pkcs11.so" \
-              --pkcs11-certificate-file "$RUNNER_TEMP/signing-cert.pem" \
-              --pkcs11-key-label "$KEY_NAME" --code-signature-flags runtime \
-              --timestamp-url http://timestamp.apple.com/ts \
-              "unsigned/$binary" "signed/$binary" >/dev/null 2>&1; then
-              echo "Remote signing failed: $binary" >&2
-              exit 1
-            fi
-          done
+        run: >-
+          uv run --frozen --offline --no-build --python 3.13
+          --script "$RUNNER_TEMP/sign-release-macos.py" sign unsigned signed
 
       - name: "Upload signed executable wheel members"
         id: upload
@@ -328,12 +301,22 @@ jobs:
     needs: [sign-macos, assemble]
     runs-on: namespace-profile-macos-15
     steps:
-      - name: "Download the wheel extraction script at the workflow revision"
+      - name: "Install uv"
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          version: "0.12.7"
+          enable-cache: false
+
+      - name: "Prepare verification scripts at the workflow revision"
         shell: bash
-        run: >-
-          curl --fail --silent --show-error --location
-          "https://raw.githubusercontent.com/astral-sh/uv/$GITHUB_SHA/scripts/extract-wheel-binaries.py"
-          --output "$RUNNER_TEMP/extract-wheel-binaries.py"
+        run: |
+          set -euo pipefail
+          for file in extract-wheel-binaries.py sign-release-macos.py sign-release-macos.py.lock; do
+            curl --fail --silent --show-error --location \
+              "https://raw.githubusercontent.com/astral-sh/uv/$GITHUB_SHA/scripts/$file" \
+              --output "$RUNNER_TEMP/$file"
+          done
+          uv sync --frozen --no-build --python 3.13 --script "$RUNNER_TEMP/sign-release-macos.py"
 
       - name: "Download signed executables"
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
@@ -355,18 +338,8 @@ jobs:
           set -euo pipefail
           python3 "$RUNNER_TEMP/extract-wheel-binaries.py" --output wheel-contents dist/wheels/*.whl
           tar xzf dist/uv-aarch64-apple-darwin.tar.gz
-          for binary in uv uvx; do
-            cmp "signed/$binary" "uv-aarch64-apple-darwin/$binary"
-          done
-          expected_certificate=$(openssl x509 -in signed/certificate.pem -outform DER | shasum -a 256 | cut -d ' ' -f 1)
-          for binary in uv uvx uv-build; do
-            binary_path="wheel-contents/$binary"
-            cmp "signed/$binary" "$binary_path"
-            codesign --verify --strict -R 'anchor apple generic' "$binary_path"
-            codesign --display --verbose=4 "$binary_path" 2>&1 | grep -q '^Timestamp='
-            codesign --display --extract-certificates="$RUNNER_TEMP/$binary-cert-" "$binary_path"
-            test "$(shasum -a 256 "$RUNNER_TEMP/$binary-cert-0" | cut -d ' ' -f 1)" = "$expected_certificate"
-          done
+          uv run --frozen --offline --no-build --python 3.13 \
+            --script "$RUNNER_TEMP/sign-release-macos.py" verify signed wheel-contents uv-aarch64-apple-darwin
 
       - name: "Install and run the signed wheels"
         run: |
