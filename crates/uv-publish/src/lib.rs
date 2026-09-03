@@ -2164,6 +2164,7 @@ mod tests {
         .unwrap();
 
         let capture = capture.replace(&mock_server.uri(), "[SERVER]");
+        let capture = capture.replace('\\', "/");
         let capture = anstream::adapter::strip_str(&capture);
         assert_snapshot!(
             &capture,
@@ -2197,6 +2198,7 @@ mod tests {
         .unwrap();
 
         let capture = capture.replace(&mock_server.uri(), "[SERVER]");
+        let capture = capture.replace('\\', "/");
         let capture = anstream::adapter::strip_str(&capture);
         assert_snapshot!(
             &capture,
@@ -2235,6 +2237,7 @@ mod tests {
         .unwrap();
 
         let capture = capture.replace(&mock_server.uri(), "[SERVER]");
+        let capture = capture.replace('\\', "/");
         let capture = anstream::adapter::strip_str(&capture);
         assert_snapshot!(
             &capture,
@@ -2276,6 +2279,7 @@ mod tests {
         .unwrap();
 
         let capture = capture.replace(&mock_server.uri(), "[SERVER]");
+        let capture = capture.replace('\\', "/");
         let capture = anstream::adapter::strip_str(&capture);
         assert_snapshot!(
             &capture,
