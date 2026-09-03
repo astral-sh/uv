@@ -12,13 +12,11 @@ use uv_client::{
     AuthIntegration, BaseClient, BaseClientBuilder, RedirectPolicy, RegistryClientBuilder,
 };
 use uv_configuration::{KeyringProviderType, TrustedPublishing};
-use uv_distribution_filename::DistFilename;
 use uv_distribution_types::{IndexLocations, IndexUrl};
 use uv_errors::{ErrorOptions, Hints, write_error_chain_with_options};
 use uv_publish::{
-    PublishSession, TrustedPublishResult, TrustedPublishingToken, UploadDistribution,
-    UploadOutcome, burn_trusted_publishing_token, check_trusted_publishing,
-    group_files_for_publishing,
+    PreparedDistribution, PublishPreparation, PublishSession, TrustedPublishResult,
+    TrustedPublishingToken, UploadOutcome, burn_trusted_publishing_token, check_trusted_publishing,
 };
 use uv_redacted::DisplaySafeUrl;
 use uv_settings::EnvironmentOptions;
@@ -85,15 +83,8 @@ pub(crate) async fn publish(
         (publish_url, check_url)
     };
 
-    let mut groups = group_files_for_publishing(paths, no_attestations)?;
-    // Sort by filename first so the stable type sort preserves filename order within each type.
-    groups.sort_by(|left, right| left.raw_filename.cmp(&right.raw_filename));
-    // Sort by distribution type, with wheels before source distributions.
-    groups.sort_by_key(|group| match &group.filename {
-        DistFilename::WheelFilename(_) => false,
-        DistFilename::SourceDistFilename(_) => true,
-    });
-    match groups.len() {
+    let mut preparation = PublishSession::prepare(paths, no_attestations)?;
+    match preparation.len() {
         0 => bail!("No files found to publish"),
         1 => {
             if dry_run {
@@ -170,7 +161,7 @@ pub(crate) async fn publish(
     }
 
     // Keep the publishing result so token revocation also runs after an upload or metadata error.
-    let result = publish_files(&groups, &mut session, dry_run, printer).await;
+    let result = publish_files(&mut preparation, &mut session, dry_run, printer).await;
 
     if let PublishingCredentials::TrustedPublishing(token) = &credentials
         && let Err(err) = burn_trusted_publishing_token(token, &publish_url, &oidc_client).await
@@ -186,15 +177,23 @@ pub(crate) async fn publish(
 
 /// Publish each distribution, reporting all validation failures during a dry run.
 async fn publish_files(
-    groups: &[UploadDistribution],
+    preparation: &mut PublishPreparation,
     session: &mut PublishSession<'_>,
     dry_run: bool,
     printer: Printer,
 ) -> Result<ExitStatus> {
     let mut error_count: usize = 0;
 
-    for group in groups {
-        match publish_file(group, session, dry_run, printer).await {
+    loop {
+        let reporter = Arc::new(PublishReporter::single(printer, dry_run));
+        let Some(prepared) = session.prepare_next(preparation, reporter.clone()).await else {
+            break;
+        };
+        let result = match prepared {
+            Ok(prepared) => publish_file(prepared, session, reporter, dry_run, printer).await,
+            Err(err) => Err(err.into()),
+        };
+        match result {
             Ok(()) => {}
             Err(err) => {
                 if !dry_run {
@@ -219,55 +218,14 @@ async fn publish_files(
     Ok(ExitStatus::Success)
 }
 
-/// Check and prepare a distribution, then upload it unless this is a dry run.
+/// Upload a prepared distribution unless this is a dry run.
 async fn publish_file(
-    group: &UploadDistribution,
+    prepared: PreparedDistribution,
     session: &mut PublishSession<'_>,
+    reporter: Arc<PublishReporter>,
     dry_run: bool,
     printer: Printer,
 ) -> Result<()> {
-    // Check if the filename is normalized (e.g., version `2025.09.4` should be `2025.9.4`).
-    let normalized_filename = group.filename.to_string();
-    if group.raw_filename != normalized_filename {
-        warn_user_once!(
-            "`{}` has a non-normalized filename (expected `{normalized_filename}`), skipping",
-            group.raw_filename
-        );
-        return Ok(());
-    }
-
-    let reporter = Arc::new(PublishReporter::single(printer));
-
-    if session.check_existing(group, reporter.clone()).await? {
-        writeln!(
-            printer.stderr(),
-            "File {} already exists, skipping",
-            group.filename
-        )?;
-        return Ok(());
-    }
-
-    let bytes = human_readable_bytes(fs_err::metadata(&group.file)?.len());
-    if dry_run {
-        writeln!(
-            printer.stderr(),
-            "{} {} {}",
-            "Checking".bold().cyan(),
-            group.filename,
-            format!("({bytes:.1})").dimmed()
-        )?;
-    } else {
-        writeln!(
-            printer.stderr(),
-            "{} {} {}",
-            "Hashing".bold().green(),
-            group.filename,
-            format!("({bytes:.1})").dimmed()
-        )?;
-    }
-
-    let prepared = session.prepare(group, reporter.clone()).await?;
-
     if dry_run {
         return Ok(());
     }
@@ -276,8 +234,8 @@ async fn publish_file(
         printer.stderr(),
         "{} {} {}",
         "Uploading".bold().green(),
-        group.filename,
-        format!("({bytes:.1})").dimmed()
+        prepared.filename(),
+        format!("({:.1})", human_readable_bytes(prepared.size())).dimmed()
     )?;
 
     let uploaded = session.upload(prepared, reporter).await?;
