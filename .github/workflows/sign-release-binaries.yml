@@ -139,7 +139,7 @@ jobs:
           AZURE_KEYVAULT_KEY_VERSION: ${{ secrets.CODESIGN_KEY_VERSION }}
           KEY_NAME: ${{ secrets.CODESIGN_KEY_NAME }}
           CERTIFICATE_SHA256: ${{ secrets.CODESIGN_CERTIFICATE_SHA256 }}
-        run: uv run scripts/sign-release-macos.py unsigned signed
+        run: uv run scripts/sign-release-macos.py ./unsigned ./signed
 
       - name: "Upload signed executable wheel members"
         id: upload
