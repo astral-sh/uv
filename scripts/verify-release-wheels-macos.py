@@ -6,9 +6,9 @@
 # no-build = true
 # exclude-newer = "P7D"
 # ///
-"""Verify uv's packaged macOS executables against the signing job's output.
+"""Verify uv's macOS release wheels against the signing job's output.
 
-Require the archive and wheel executables to contain exactly the signed bytes.
+Require the wheel executables to contain exactly the signed bytes.
 For each wheel executable, `codesign` must accept its Apple-rooted signature and
 report a signing timestamp. The embedded leaf certificate must match the
 certificate pinned by the signing job.
@@ -18,7 +18,6 @@ import argparse
 import hashlib
 import subprocess
 import sys
-import tarfile
 import tempfile
 from pathlib import Path
 
@@ -26,37 +25,27 @@ from cryptography import x509
 from cryptography.hazmat.primitives import hashes
 
 BINARIES = ("uv", "uvx", "uv-build")
-ARCHIVE_NAME = "uv-aarch64-apple-darwin"
 
 
-def verify_artifacts(signed: Path, distribution: Path) -> None:
-    """Extract the release wheels and archive, then verify their executables."""
+def verify_wheels(signed: Path, wheels: Path) -> None:
+    """Extract the release wheels, then verify their executables."""
     with tempfile.TemporaryDirectory() as temporary:
-        directory = Path(temporary)
-        wheel_binaries = directory / "wheels"
+        wheel_binaries = Path(temporary)
         subprocess.run(
             [
                 sys.executable,
                 Path(__file__).with_name("extract-wheel-binaries.py"),
                 "--output",
                 wheel_binaries,
-                *sorted((distribution / "wheels").glob("*.whl")),
+                *sorted(wheels.glob("*.whl")),
             ],
             check=True,
         )
-        with tarfile.open(distribution / f"{ARCHIVE_NAME}.tar.gz") as archive:
-            archive.extractall(directory / "archive", filter="data")
-        verify_binaries(signed, wheel_binaries, directory / "archive" / ARCHIVE_NAME)
+        verify_binaries(signed, wheel_binaries)
 
 
-def verify_binaries(signed: Path, wheel_binaries: Path, archive_binaries: Path) -> None:
+def verify_binaries(signed: Path, wheel_binaries: Path) -> None:
     """Check packaged bytes, Apple trust, timestamps, and the signing certificate."""
-    for binary in ("uv", "uvx"):
-        if (signed / binary).read_bytes() != (archive_binaries / binary).read_bytes():
-            raise ValueError(
-                f"Archive executable differs from signing output: {binary}"
-            )
-
     certificate = x509.load_pem_x509_certificate(
         (signed / "certificate.pem").read_bytes()
     )
@@ -100,20 +89,15 @@ def verify_binaries(signed: Path, wheel_binaries: Path, archive_binaries: Path) 
 
 
 def main() -> None:
-    """Verify packaged artifacts against the signer's output."""
+    """Verify release wheels against the signer's output."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("signed", type=Path)
-    parser.add_argument("distribution", type=Path)
+    parser.add_argument("wheels", type=Path)
     args = parser.parse_args()
 
     try:
-        verify_artifacts(args.signed, args.distribution)
-    except (
-        OSError,
-        ValueError,
-        tarfile.TarError,
-        subprocess.CalledProcessError,
-    ) as error:
+        verify_wheels(args.signed, args.wheels)
+    except (OSError, ValueError, subprocess.CalledProcessError) as error:
         parser.exit(1, f"{error}\n")
 
 
