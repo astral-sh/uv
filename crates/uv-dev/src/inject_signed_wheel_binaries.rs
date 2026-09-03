@@ -24,36 +24,15 @@ pub(crate) struct InjectSignedWheelBinariesArgs {
     signed_binaries: PathBuf,
 }
 
-/// Reassemble `uv` and `uv_build` wheels with code-signed executables.
+/// Replace the executables in a `uv` or `uv_build` release wheel with code-signed copies.
 ///
-/// The release build produces file-only wheels with the relevant members arranged as:
+/// Each file under `.data/scripts` is replaced by the same-named file from `signed_binaries`;
+/// extra files in that directory are ignored. Other wheel contents and permissions are preserved,
+/// and `RECORD` is regenerated.
 ///
-/// ```text
-/// uv-{version}.data/scripts/
-/// ├── uv[.exe]
-/// ├── uvx[.exe]
-/// └── uvw.exe                 # Windows only
-/// uv-{version}.dist-info/
-/// └── RECORD
-/// uv/
-/// └── ...
-///
-/// uv_build-{version}.data/scripts/
-/// └── uv-build[.exe]
-/// uv_build-{version}.dist-info/
-/// └── RECORD
-/// uv_build/
-/// └── ...
-/// ```
-///
-/// Expects a trusted, file-only wheel and signed binaries that fit in memory. Every member under
-/// `.data/scripts` is replaced by the same-named file from `signed_binaries`; unrelated files in
-/// that directory are ignored. Other wheel contents and executable permissions are preserved, and
-/// `RECORD` is regenerated from the output contents. The caller owns artifact provenance and
-/// signature verification.
-///
-/// Input files are left unchanged. The output must not already exist and is only published once
-/// the complete wheel has been written.
+/// The wheel and binaries must be trusted and fit in memory. Signatures are not verified.
+/// Input files are unchanged. The output must not exist and is published only after the complete
+/// wheel has been written.
 pub(crate) async fn inject_signed_wheel_binaries(
     args: InjectSignedWheelBinariesArgs,
 ) -> Result<()> {
