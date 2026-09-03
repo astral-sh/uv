@@ -23,26 +23,26 @@ from cryptography.hazmat.primitives import hashes
 BINARIES = ("uv", "uvx", "uv-build")
 
 
-class SigningTool(Enum):
-    """The tools needed to sign uv's macOS executables."""
+class SigningComponent(Enum):
+    """The components needed to sign uv's macOS executables."""
 
     RCODESIGN = "RCODESIGN"
     PKCS11 = "PKCS11"
 
     def path(self, directory: Path) -> Path:
-        """Return the tool's local path in the download directory."""
+        """Return the component's local path in the download directory."""
         match self:
-            case SigningTool.RCODESIGN:
+            case SigningComponent.RCODESIGN:
                 return directory / "rcodesign"
-            case SigningTool.PKCS11:
+            case SigningComponent.PKCS11:
                 return directory / "libakv_pkcs11.so"
 
     def is_executable(self) -> bool:
-        """Return whether the downloaded tool needs executable permissions."""
+        """Return whether the downloaded component needs executable permissions."""
         match self:
-            case SigningTool.RCODESIGN:
+            case SigningComponent.RCODESIGN:
                 return True
-            case SigningTool.PKCS11:
+            case SigningComponent.PKCS11:
                 return False
 
 
@@ -62,9 +62,9 @@ def verify_sha256(path: Path, expected: str) -> None:
         raise ValueError(f"SHA-256 mismatch: {path.name}")
 
 
-def download_signing_tool(tool: SigningTool, directory: Path) -> Path:
-    """Download a pinned signing tool and return its ready-to-use path."""
-    path = tool.path(directory)
+def download_signing_component(component: SigningComponent, directory: Path) -> Path:
+    """Download a pinned signing component and return its ready-to-use path."""
+    path = component.path(directory)
     run_command(
         [
             "az",
@@ -79,14 +79,14 @@ def download_signing_tool(tool: SigningTool, directory: Path) -> Path:
             "--container-name",
             os.environ["STORAGE_CONTAINER"],
             "--name",
-            os.environ[f"{tool.value}_BLOB"],
+            os.environ[f"{component.value}_BLOB"],
             "--file",
             path,
         ],
         f"Downloading {path.name}",
     )
-    verify_sha256(path, os.environ[f"{tool.value}_SHA256"])
-    if tool.is_executable():
+    verify_sha256(path, os.environ[f"{component.value}_SHA256"])
+    if component.is_executable():
         path.chmod(0o755)
     return path
 
@@ -98,7 +98,7 @@ def certificate_sha256(path: Path) -> str:
 
 
 def sign_binaries(unsigned: Path, signed: Path) -> None:
-    """Download the pinned signing tools and certificate, then sign uv's binaries."""
+    """Download the pinned signing components and certificate, then sign uv's binaries."""
     required = (
         "STORAGE_ACCOUNT",
         "STORAGE_CONTAINER",
@@ -116,11 +116,11 @@ def sign_binaries(unsigned: Path, signed: Path) -> None:
             raise ValueError(f"Missing signing configuration: {name}")
 
     with tempfile.TemporaryDirectory() as temporary:
-        tools = Path(temporary)
-        certificate = tools / "certificate.pem"
+        components = Path(temporary)
+        certificate = components / "certificate.pem"
 
-        rcodesign = download_signing_tool(SigningTool.RCODESIGN, tools)
-        pkcs11 = download_signing_tool(SigningTool.PKCS11, tools)
+        rcodesign = download_signing_component(SigningComponent.RCODESIGN, components)
+        pkcs11 = download_signing_component(SigningComponent.PKCS11, components)
 
         run_command(
             [
