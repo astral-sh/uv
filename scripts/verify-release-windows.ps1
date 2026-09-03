@@ -3,7 +3,6 @@
 # The signing job already checked the expected publisher. Require the archive
 # and wheel executables to contain exactly the signed bytes, then check that
 # Windows trusts the wheel executables' timestamped Authenticode signatures.
-# See verify-release-macos.py for the corresponding macOS checks.
 
 param(
     [Parameter(Mandatory)]
