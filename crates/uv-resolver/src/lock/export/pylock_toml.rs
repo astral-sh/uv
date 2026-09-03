@@ -313,7 +313,7 @@ impl HashSource {
 
     /// Download or read the file and compute its hashes.
     async fn hash(self, client: &RegistryClient) -> Result<Hashes, PylockTomlErrorKind> {
-        let mut hashers = vec![Hasher::from(HashAlgorithm::Sha256)];
+        let mut hashers = [Hasher::from(HashAlgorithm::Sha256)];
         match self {
             Self::Url(url) => {
                 let response = client
@@ -360,12 +360,11 @@ impl HashSource {
                     .map_err(|err| PylockTomlErrorKind::ReadFile(path.into_boxed_path(), err))?;
             }
         }
-        Ok(Hashes::from(HashDigests::from(
-            hashers
-                .into_iter()
-                .map(HashDigest::from)
-                .collect::<Vec<_>>(),
-        )))
+        let [hasher] = hashers;
+        Ok(Hashes {
+            sha256: Some(HashDigest::from(hasher).digest),
+            ..Hashes::default()
+        })
     }
 }
 
