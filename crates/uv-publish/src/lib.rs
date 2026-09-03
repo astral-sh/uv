@@ -4,6 +4,7 @@ use std::collections::BTreeSet;
 use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use std::vec::IntoIter;
 use std::{fmt, io};
 
 use fs_err::tokio::File;
@@ -42,7 +43,7 @@ use uv_metadata::read_metadata_async_seek;
 use uv_preview::PreviewFeature;
 use uv_pypi_types::{HashAlgorithm, HashDigest, Metadata23, MetadataError};
 use uv_redacted::{DisplaySafeUrl, DisplaySafeUrlError};
-use uv_warnings::warn_user;
+use uv_warnings::{warn_user, warn_user_once};
 
 pub use crate::trusted_publishing::TrustedPublishingToken;
 use crate::trusted_publishing::pypi::PyPIPublishingService;
@@ -157,6 +158,12 @@ pub enum PublishSendError {
 }
 
 pub trait Reporter: Send + Sync + 'static {
+    fn on_prepare_start(&self, _name: &DistFilename, _size: u64) -> Result<(), fmt::Error> {
+        Ok(())
+    }
+    fn on_already_exists(&self, _name: &DistFilename) -> Result<(), fmt::Error> {
+        Ok(())
+    }
     fn on_progress(&self, name: &str, id: usize);
     fn on_upload_start(&self, name: &str, size: Option<u64>) -> usize;
     fn on_upload_progress(&self, id: usize, inc: u64);
@@ -177,13 +184,45 @@ pub enum UploadOutcome {
 
 /// A distribution whose metadata, hashes, and attestations are ready for upload.
 ///
-/// Created by [`PublishSession::prepare`]. Distribution contents are streamed from disk when
+/// Created by [`PublishSession::prepare_next`]. Distribution contents are streamed from disk when
 /// uploading; only metadata and attestations are retained between attempts.
 #[derive(Debug)]
-pub struct PreparedDistribution<'a> {
-    distribution: &'a UploadDistribution,
+pub struct PreparedDistribution {
+    file: PathBuf,
+    raw_filename: String,
+    filename: DistFilename,
+    size: u64,
     form_metadata: FormMetadata,
     attestations: Option<String>,
+}
+
+impl PreparedDistribution {
+    /// The parsed distribution filename.
+    pub fn filename(&self) -> &DistFilename {
+        &self.filename
+    }
+
+    /// The size of the distribution file in bytes.
+    pub fn size(&self) -> u64 {
+        self.size
+    }
+}
+
+/// Grouped inputs that are prepared one at a time by [`PublishSession::prepare_next`].
+pub struct PublishPreparation {
+    distributions: IntoIter<DistributionFiles>,
+}
+
+impl PublishPreparation {
+    /// The number of distributions remaining to prepare.
+    pub fn len(&self) -> usize {
+        self.distributions.len()
+    }
+
+    /// Whether all distributions have been processed.
+    pub fn is_empty(&self) -> bool {
+        self.distributions.len() == 0
+    }
 }
 
 /// Context for using a fresh registry client for check URL requests.
@@ -196,7 +235,8 @@ struct CheckUrlClient<'a> {
 
 /// Shared state for preparing and uploading a set of distributions.
 ///
-/// Files can be prepared and uploaded individually.
+/// Collect inputs with [`Self::prepare`], then alternate [`Self::prepare_next`] and
+/// [`Self::upload`] to prepare and upload each file individually.
 #[must_use]
 pub struct PublishSession<'a> {
     publish_url: DisplaySafeUrl,
@@ -302,18 +342,17 @@ impl PublishSendError {
     }
 }
 
-/// Represents a single "to-be-uploaded" distribution, along with zero
-/// or more attestations that will be uploaded alongside it.
+/// Input files associated with a single distribution, before reading their contents.
 #[derive(Debug)]
-pub struct UploadDistribution {
+struct DistributionFiles {
     /// The path to the main distribution file to upload.
-    pub file: PathBuf,
+    file: PathBuf,
     /// The raw filename of the main distribution file.
-    pub raw_filename: String,
+    raw_filename: String,
     /// The parsed filename of the main distribution file.
-    pub filename: DistFilename,
+    filename: DistFilename,
     /// Zero or more paths to PEP 740 attestations for the distribution.
-    pub attestations: Vec<PathBuf>,
+    attestations: Vec<PathBuf>,
 }
 
 /// Given a list of paths (which may contain globs), unroll them into
@@ -335,8 +374,8 @@ fn unroll_paths(paths: Vec<String>) -> Result<Vec<PathBuf>, PublishError> {
     Ok(files.into_iter().collect())
 }
 
-/// Given a flat list of input files, merge them into a list of [`UploadDistribution`]s.
-fn group_files(files: Vec<PathBuf>, no_attestations: bool) -> Vec<UploadDistribution> {
+/// Given a flat list of input files, merge them into a list of [`DistributionFiles`]s.
+fn group_files(files: Vec<PathBuf>, no_attestations: bool) -> Vec<DistributionFiles> {
     let mut groups = FxHashMap::default();
     let mut attestations_by_dist = FxHashMap::default();
     for file in files {
@@ -390,7 +429,7 @@ fn group_files(files: Vec<PathBuf>, no_attestations: bool) -> Vec<UploadDistribu
 
             groups.insert(
                 filename.clone(),
-                UploadDistribution {
+                DistributionFiles {
                     file,
                     raw_filename: filename,
                     filename: dist_filename,
@@ -413,20 +452,6 @@ fn group_files(files: Vec<PathBuf>, no_attestations: bool) -> Vec<UploadDistribu
     }
 
     groups.into_values().collect()
-}
-
-/// Collect the source distributions and wheels for publishing.
-///
-/// Returns an [`UploadDistribution`] for each distribution to be published.
-/// This group contains the path, the raw filename and the parsed filename. The raw filename is a fixup for
-/// <https://github.com/astral-sh/uv/issues/8030> caused by
-/// <https://github.com/pypa/setuptools/issues/3777> in combination with
-/// <https://github.com/pypi/warehouse/blob/50a58f3081e693a3772c0283050a275e350004bf/warehouse/forklift/legacy.py#L1133-L1155>
-pub fn group_files_for_publishing(
-    paths: Vec<String>,
-    no_attestations: bool,
-) -> Result<Vec<UploadDistribution>, PublishError> {
-    Ok(group_files(unroll_paths(paths)?, no_attestations))
 }
 
 pub enum TrustedPublishResult {
@@ -561,44 +586,112 @@ impl<'a> PublishSession<'a> {
         self
     }
 
-    /// Read a distribution's metadata, hashes, and attestations without uploading it.
-    pub async fn prepare<'distribution>(
-        &self,
-        distribution: &'distribution UploadDistribution,
-        reporter: Arc<impl Reporter>,
-    ) -> Result<PreparedDistribution<'distribution>, PublishError> {
-        let prepared: Result<_, PublishPrepareError> = async {
-            let form_metadata =
-                FormMetadata::read_from_file(&distribution.file, &distribution.filename, reporter)
-                    .await?;
+    /// Expand input globs, associate attestations, and order distributions for publishing.
+    ///
+    /// No distribution contents are read until [`Self::prepare_next`] is called. This allows
+    /// callers to upload each prepared distribution before preparing the next one.
+    pub fn prepare(
+        paths: Vec<String>,
+        no_attestations: bool,
+    ) -> Result<PublishPreparation, PublishError> {
+        let mut distributions = group_files(unroll_paths(paths)?, no_attestations);
+        // Preserve filename order within each type, with wheels before source distributions.
+        distributions.sort_by(|left, right| left.raw_filename.cmp(&right.raw_filename));
+        distributions.sort_by_key(|distribution| match &distribution.filename {
+            DistFilename::WheelFilename(_) => false,
+            DistFilename::SourceDistFilename(_) => true,
+        });
+        Ok(PublishPreparation {
+            distributions: distributions.into_iter(),
+        })
+    }
 
-            let mut attestations = Vec::with_capacity(distribution.attestations.len());
-            for attestation_path in &distribution.attestations {
-                let contents = fs_err::tokio::read_to_string(attestation_path).await?;
-                // Only validate that attestations are JSON; their interior structure is not checked.
-                let attestation =
-                    serde_json::from_str::<serde_json::Value>(&contents).map_err(|err| {
-                        PublishPrepareError::InvalidAttestation(attestation_path.clone(), err)
-                    })?;
-                attestations.push(attestation);
+    /// Prepare the next distribution, skipping non-normalized names and existing files.
+    ///
+    /// A failed file is consumed so a dry run can continue validating the remaining files.
+    /// The returned distribution owns its file information, metadata, hashes, and attestations.
+    pub async fn prepare_next(
+        &self,
+        preparation: &mut PublishPreparation,
+        reporter: Arc<impl Reporter>,
+    ) -> Option<Result<PreparedDistribution, PublishError>> {
+        loop {
+            let distribution = preparation.distributions.next()?;
+            let normalized_filename = distribution.filename.to_string();
+            if distribution.raw_filename != normalized_filename {
+                warn_user_once!(
+                    "`{}` has a non-normalized filename (expected `{normalized_filename}`), skipping",
+                    distribution.raw_filename
+                );
+                continue;
             }
 
-            // PEP 740 specifies the `attestations` field as a JSON array of attestation objects.
-            let attestations = if attestations.is_empty() {
-                None
-            } else {
-                Some(serde_json::Value::Array(attestations).to_string())
-            };
+            match self
+                .check_existing(&distribution.file, &distribution.filename, reporter.clone())
+                .await
+            {
+                Ok(true) => {
+                    if let Err(err) = reporter.on_already_exists(&distribution.filename) {
+                        return Some(Err(err.into()));
+                    }
+                    continue;
+                }
+                Ok(false) => {}
+                Err(err) => return Some(Err(err)),
+            }
 
-            Ok(PreparedDistribution {
-                distribution,
-                form_metadata,
-                attestations,
-            })
+            let size = match fs_err::tokio::metadata(&distribution.file).await {
+                Ok(metadata) => metadata.len(),
+                Err(err) => {
+                    return Some(Err(PublishError::PublishPrepare(
+                        distribution.file,
+                        Box::new(PublishPrepareError::Io(err)),
+                    )));
+                }
+            };
+            if let Err(err) = reporter.on_prepare_start(&distribution.filename, size) {
+                return Some(Err(err.into()));
+            }
+
+            let file = distribution.file.clone();
+            let prepared: Result<_, PublishPrepareError> = async {
+                let form_metadata = FormMetadata::read_from_file(
+                    &distribution.file,
+                    &distribution.filename,
+                    reporter,
+                )
+                .await?;
+
+                let mut attestations = Vec::with_capacity(distribution.attestations.len());
+                for attestation_path in &distribution.attestations {
+                    let contents = fs_err::tokio::read_to_string(attestation_path).await?;
+                    // Only validate that attestations are JSON; their interior structure is not checked.
+                    let attestation = serde_json::from_str::<serde_json::Value>(&contents)
+                        .map_err(|err| {
+                            PublishPrepareError::InvalidAttestation(attestation_path.clone(), err)
+                        })?;
+                    attestations.push(attestation);
+                }
+
+                // PEP 740 specifies the `attestations` field as a JSON array of attestation objects.
+                let attestations = if attestations.is_empty() {
+                    None
+                } else {
+                    Some(serde_json::Value::Array(attestations).to_string())
+                };
+
+                Ok(PreparedDistribution {
+                    file: distribution.file,
+                    raw_filename: distribution.raw_filename,
+                    filename: distribution.filename,
+                    size,
+                    form_metadata,
+                    attestations,
+                })
+            }
+            .await;
+            return Some(prepared.map_err(|err| PublishError::PublishPrepare(file, Box::new(err))));
         }
-        .await;
-        prepared
-            .map_err(|err| PublishError::PublishPrepare(distribution.file.clone(), Box::new(err)))
     }
 
     /// Upload a prepared distribution, reusing its metadata and attestations across attempts.
@@ -606,10 +699,9 @@ impl<'a> PublishSession<'a> {
     /// Implements a custom retry and redirect flow since streaming requests cannot be cloned.
     pub async fn upload(
         &mut self,
-        prepared: PreparedDistribution<'_>,
+        prepared: PreparedDistribution,
         reporter: Arc<impl Reporter>,
     ) -> Result<UploadOutcome, PublishError> {
-        let group = prepared.distribution;
         let mut n_past_redirections = 0;
         let max_redirects = DEFAULT_MAX_REDIRECTS;
         let mut current_registry = self.publish_url.clone();
@@ -619,7 +711,9 @@ impl<'a> PublishSession<'a> {
             let (request, idx) = self
                 .build_upload_request(&prepared, &current_registry, reporter.clone())
                 .await
-                .map_err(|err| PublishError::PublishPrepare(group.file.clone(), Box::new(err)))?;
+                .map_err(|err| {
+                    PublishError::PublishPrepare(prepared.file.clone(), Box::new(err))
+                })?;
 
             let result = request.send().await;
             let response = match result {
@@ -636,7 +730,7 @@ impl<'a> PublishSession<'a> {
                     if response.status().is_redirection() {
                         if n_past_redirections >= max_redirects {
                             return Err(PublishError::PublishSend(
-                                group.file.clone(),
+                                prepared.file.clone(),
                                 current_registry.clone().into(),
                                 PublishSendError::TooManyRedirects(n_past_redirections).into(),
                             ));
@@ -646,7 +740,7 @@ impl<'a> PublishSession<'a> {
                             .get(LOCATION)
                             .ok_or_else(|| {
                                 PublishError::PublishSend(
-                                    group.file.clone(),
+                                    prepared.file.clone(),
                                     current_registry.clone().into(),
                                     PublishSendError::RedirectNoLocation.into(),
                                 )
@@ -654,21 +748,21 @@ impl<'a> PublishSession<'a> {
                             .to_str()
                             .map_err(|err| {
                                 PublishError::PublishSend(
-                                    group.file.clone(),
+                                    prepared.file.clone(),
                                     current_registry.clone().into(),
                                     PublishSendError::RedirectLocationInvalidStr(err).into(),
                                 )
                             })?;
                         current_registry = DisplaySafeUrl::parse(location).map_err(|err| {
                             PublishError::PublishSend(
-                                group.file.clone(),
+                                prepared.file.clone(),
                                 current_registry.clone().into(),
                                 PublishSendError::RedirectInvalidLocation(err).into(),
                             )
                         })?;
                         if Realm::from(&current_registry) != Realm::from(&self.publish_url) {
                             return Err(PublishError::PublishSend(
-                                group.file.clone(),
+                                prepared.file.clone(),
                                 current_registry.clone().into(),
                                 PublishSendError::RedirectRealmMismatch(
                                     current_registry.to_string(),
@@ -697,7 +791,7 @@ impl<'a> PublishSession<'a> {
                         continue;
                     }
                     return Err(PublishError::PublishSend(
-                        group.file.clone(),
+                        prepared.file.clone(),
                         current_registry.clone().into(),
                         PublishSendError::ReqwestMiddleware(err).into(),
                     ));
@@ -713,7 +807,14 @@ impl<'a> PublishSession<'a> {
                 Err(err) => {
                     match &err {
                         PublishSendError::Status(..) | PublishSendError::StatusNoBody(..) => {
-                            if self.check_existing(group, reporter.clone()).await? {
+                            if self
+                                .check_existing(
+                                    &prepared.file,
+                                    &prepared.filename,
+                                    reporter.clone(),
+                                )
+                                .await?
+                            {
                                 // A concurrent upload succeeded, so the right file now exists.
                                 return Ok(UploadOutcome::AlreadyExists);
                             }
@@ -730,7 +831,7 @@ impl<'a> PublishSession<'a> {
                         | PublishSendError::RedirectInvalidLocation(_) => {}
                     }
                     Err(PublishError::PublishSend(
-                        group.file.clone(),
+                        prepared.file.clone(),
                         current_registry.clone().into(),
                         err.into(),
                     ))
@@ -740,9 +841,10 @@ impl<'a> PublishSession<'a> {
     }
 
     /// Check whether an identical distribution already exists at the check URL, if configured.
-    pub async fn check_existing(
+    async fn check_existing(
         &self,
-        distribution: &UploadDistribution,
+        file: &Path,
+        filename: &DistFilename,
         reporter: Arc<impl Reporter>,
     ) -> Result<bool, PublishError> {
         let Some(CheckUrlClient {
@@ -754,8 +856,6 @@ impl<'a> PublishSession<'a> {
         else {
             return Ok(false);
         };
-        let file = &distribution.file;
-        let filename = &distribution.filename;
 
         // Avoid using the PyPI 10min default cache.
         let cache_refresh = (*cache)
@@ -825,7 +925,10 @@ impl<'a> PublishSession<'a> {
             )
             .await
             .map_err(|err| {
-                PublishError::PublishPrepare(file.clone(), Box::new(PublishPrepareError::Io(err)))
+                PublishError::PublishPrepare(
+                    file.to_path_buf(),
+                    Box::new(PublishPrepareError::Io(err)),
+                )
             })?[0];
             if local_hash.digest == remote_hash.digest {
                 debug!(
@@ -1175,29 +1278,29 @@ impl PublishSession<'_> {
     /// Returns the [`RequestBuilder`] and the reporter progress bar ID.
     async fn build_upload_request(
         &self,
-        prepared: &PreparedDistribution<'_>,
+        prepared: &PreparedDistribution,
         registry: &DisplaySafeUrl,
         reporter: Arc<impl Reporter>,
     ) -> Result<(RequestBuilder<'_>, usize), PublishPrepareError> {
-        let group = prepared.distribution;
         let credentials = &self.credentials;
         let mut form = Form::new();
         for (key, value) in prepared.form_metadata.iter() {
             form = form.text(*key, value.clone());
         }
 
-        let file = File::open(&group.file).await?;
+        let file = File::open(&prepared.file).await?;
         let file_size = file.metadata().await?.len();
-        let idx = reporter.on_upload_start(&group.filename.to_string(), Some(file_size));
+        let idx = reporter.on_upload_start(&prepared.filename.to_string(), Some(file_size));
         let reader = ProgressReader::new(file, move |read| {
             reporter.on_upload_progress(idx, read as u64);
         });
         // Stream wrapping puts a static lifetime requirement on the reader (so the request doesn't have
         // a lifetime) -> callback needs to be static -> reporter reference needs to be Arc'd.
         let file_reader = Body::wrap_stream(ReaderStream::new(reader));
-        // See [`crate::group_files_for_publishing`] on `raw_filename`.
-        let part =
-            Part::stream_with_length(file_reader, file_size).file_name(group.raw_filename.clone());
+        // Preserve the original filename in the upload form for registry compatibility.
+        // See <https://github.com/astral-sh/uv/issues/8030>.
+        let part = Part::stream_with_length(file_reader, file_size)
+            .file_name(prepared.raw_filename.clone());
         form = form.part("content", part);
 
         if let Some(attestations) = &prepared.attestations {
@@ -1339,8 +1442,8 @@ mod tests {
     use uv_redacted::DisplaySafeUrl;
 
     use crate::{
-        FormMetadata, PublishError, PublishPrepareError, PublishSession, Reporter,
-        UploadDistribution, UploadOutcome, group_files, source_dist_pkg_info,
+        FormMetadata, PublishError, PublishPrepareError, PublishSession, Reporter, UploadOutcome,
+        group_files, source_dist_pkg_info,
     };
     use uv_errors::{ErrorOptions, Hints, write_error_chain_with_options};
     use wiremock::matchers::{method, path};
@@ -1450,15 +1553,8 @@ mod tests {
     async fn mock_server_upload(mock_server: &MockServer) -> Result<UploadOutcome, PublishError> {
         let raw_filename = "tqdm-4.66.1-py3-none-manylinux_2_12_x86_64.manylinux2010_x86_64.musllinux_1_1_x86_64.whl";
         let file = PathBuf::from("../../test/links/").join(raw_filename);
-        let filename = DistFilename::try_from_normalized_filename(raw_filename)
-            .expect("Valid distribution filename");
-
-        let group = UploadDistribution {
-            file,
-            raw_filename: raw_filename.to_string(),
-            filename,
-            attestations: vec![],
-        };
+        let mut preparation =
+            PublishSession::prepare(vec![file.to_string_lossy().into_owned()], false)?;
 
         let client = BaseClientBuilder::default()
             .redirect(RedirectPolicy::NoRedirect)
@@ -1470,7 +1566,10 @@ mod tests {
         let registry = DisplaySafeUrl::parse(&format!("{}/final", mock_server.uri()))
             .expect("Valid registry URL");
         let mut session = test_session(registry, &client);
-        let prepared = session.prepare(&group, Arc::new(DummyReporter)).await?;
+        let prepared = session
+            .prepare_next(&mut preparation, Arc::new(DummyReporter))
+            .await
+            .expect("Distribution should be found")?;
         session.upload(prepared, Arc::new(DummyReporter)).await
     }
 
@@ -1509,7 +1608,7 @@ mod tests {
 
             assert_debug_snapshot!(groups, @r#"
             [
-                UploadDistribution {
+                DistributionFiles {
                     file: "dist/acme-1.2.3-py3-none-any.whl",
                     raw_filename: "acme-1.2.3-py3-none-any.whl",
                     filename: WheelFilename(
@@ -1532,7 +1631,7 @@ mod tests {
                     ),
                     attestations: [],
                 },
-                UploadDistribution {
+                DistributionFiles {
                     file: "dist/acme-1.2.3.tar.gz",
                     raw_filename: "acme-1.2.3.tar.gz",
                     filename: SourceDistFilename(
@@ -1573,7 +1672,7 @@ mod tests {
 
                     assert_debug_snapshot!(groups, @r#"
                     [
-                        UploadDistribution {
+                        DistributionFiles {
                             file: "dist/acme-1.2.3-py3-none-any.whl",
                             raw_filename: "acme-1.2.3-py3-none-any.whl",
                             filename: WheelFilename(
@@ -1600,7 +1699,7 @@ mod tests {
                                 "dist/acme-1.2.3-py3-none-any.whl.publish.attestation",
                             ],
                         },
-                        UploadDistribution {
+                        DistributionFiles {
                             file: "dist/acme-1.2.3.tar.gz",
                             raw_filename: "acme-1.2.3.tar.gz",
                             filename: SourceDistFilename(
@@ -1648,7 +1747,7 @@ mod tests {
 
                     assert_debug_snapshot!(groups, @r#"
                     [
-                        UploadDistribution {
+                        DistributionFiles {
                             file: "dist/acme-1.2.3-py3-none-any.whl",
                             raw_filename: "acme-1.2.3-py3-none-any.whl",
                             filename: WheelFilename(
@@ -1671,7 +1770,7 @@ mod tests {
                             ),
                             attestations: [],
                         },
-                        UploadDistribution {
+                        DistributionFiles {
                             file: "dist/acme-1.2.3.tar.gz",
                             raw_filename: "acme-1.2.3.tar.gz",
                             filename: SourceDistFilename(
@@ -1707,7 +1806,7 @@ mod tests {
             let groups = group_files(dists.iter().map(PathBuf::from).collect(), false);
             assert_debug_snapshot!(groups, @r#"
             [
-                UploadDistribution {
+                DistributionFiles {
                     file: "dist/acme-1.2.3-py3-none-any.whl",
                     raw_filename: "acme-1.2.3-py3-none-any.whl",
                     filename: WheelFilename(
@@ -1732,7 +1831,7 @@ mod tests {
                         "dist/acme-1.2.3-py3-none-any.whl.build.attestation",
                     ],
                 },
-                UploadDistribution {
+                DistributionFiles {
                     file: "dist/acme-1.2.3.tar.gz",
                     raw_filename: "acme-1.2.3.tar.gz",
                     filename: SourceDistFilename(
@@ -1795,18 +1894,11 @@ mod tests {
     #[tokio::test]
     async fn upload_request_source_dist() {
         let _preview = uv_preview::test::with_features(&[]);
-        let group = {
-            let raw_filename = "tqdm-999.0.0.tar.gz";
-            let file = PathBuf::from("../../test/links/").join(raw_filename);
-            let filename = DistFilename::try_from_normalized_filename(raw_filename).unwrap();
-
-            UploadDistribution {
-                file,
-                raw_filename: raw_filename.to_string(),
-                filename,
-                attestations: vec![],
-            }
-        };
+        let raw_filename = "tqdm-999.0.0.tar.gz";
+        let file = PathBuf::from("../../test/links/").join(raw_filename);
+        let mut preparation =
+            PublishSession::prepare(vec![file.to_string_lossy().into_owned()], false)
+                .expect("Distribution inputs should be collected");
 
         let client = BaseClientBuilder::default()
             .redirect(RedirectPolicy::NoRedirect)
@@ -1817,8 +1909,9 @@ mod tests {
             DisplaySafeUrl::parse("https://example.org/upload").expect("Valid registry URL");
         let session = test_session(registry, &client);
         let prepared = session
-            .prepare(&group, Arc::new(DummyReporter))
+            .prepare_next(&mut preparation, Arc::new(DummyReporter))
             .await
+            .expect("Distribution should be found")
             .expect("Failed to prepare distribution");
 
         let formatted_metadata = prepared
@@ -1920,18 +2013,11 @@ mod tests {
     /// Snapshot the data we send for an upload request for a wheel.
     #[tokio::test]
     async fn upload_request_wheel() {
-        let group = {
-            let raw_filename = "tqdm-4.66.1-py3-none-manylinux_2_12_x86_64.manylinux2010_x86_64.musllinux_1_1_x86_64.whl";
-            let file = PathBuf::from("../../test/links/").join(raw_filename);
-            let filename = DistFilename::try_from_normalized_filename(raw_filename).unwrap();
-
-            UploadDistribution {
-                file,
-                raw_filename: raw_filename.to_string(),
-                filename,
-                attestations: vec![],
-            }
-        };
+        let raw_filename = "tqdm-4.66.1-py3-none-manylinux_2_12_x86_64.manylinux2010_x86_64.musllinux_1_1_x86_64.whl";
+        let file = PathBuf::from("../../test/links/").join(raw_filename);
+        let mut preparation =
+            PublishSession::prepare(vec![file.to_string_lossy().into_owned()], false)
+                .expect("Distribution inputs should be collected");
 
         let client = BaseClientBuilder::default()
             .redirect(RedirectPolicy::NoRedirect)
@@ -1942,8 +2028,9 @@ mod tests {
             DisplaySafeUrl::parse("https://example.org/upload").expect("Valid registry URL");
         let session = test_session(registry, &client);
         let prepared = session
-            .prepare(&group, Arc::new(DummyReporter))
+            .prepare_next(&mut preparation, Arc::new(DummyReporter))
             .await
+            .expect("Distribution should be found")
             .expect("Failed to prepare distribution");
 
         let formatted_metadata = prepared
