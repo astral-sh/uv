@@ -334,14 +334,7 @@ jobs:
           merge-multiple: true
 
       - name: "Verify packaged executables and signatures"
-        shell: bash
-        run: |
-          set -euo pipefail
-          uv run scripts/extract-wheel-binaries.py \
-            --output ./wheel-contents dist/wheels/*.whl
-          tar xzf dist/uv-aarch64-apple-darwin.tar.gz
-          uv run scripts/verify-release-macos.py \
-            ./signed ./wheel-contents ./uv-aarch64-apple-darwin
+        run: uv run scripts/verify-release-wheels-macos.py ./signed ./dist
 
       - name: "Install and run the signed wheels"
         run: |
@@ -389,13 +382,7 @@ jobs:
 
       - name: "Verify packaged executables and signatures"
         shell: pwsh
-        run: |
-          $ErrorActionPreference = 'Stop'
-          $wheels = Get-ChildItem dist/wheels/*.whl
-          uv run scripts/extract-wheel-binaries.py --output ./wheel-contents $wheels.FullName
-          if ($LASTEXITCODE -ne 0) { throw 'Wheel extraction failed' }
-          Expand-Archive dist/uv-x86_64-pc-windows-msvc.zip ./archive-contents
-          ./scripts/verify-release-windows.ps1 ./signed ./wheel-contents ./archive-contents
+        run: ./scripts/verify-release-wheels-windows.ps1 ./signed ./dist
 
       - name: "Install and run the signed wheels"
         shell: pwsh
