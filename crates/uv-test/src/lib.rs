@@ -57,15 +57,11 @@ const LATEST_PYTHON_3_10: &str = "3.10.21";
 ///
 /// Creates a virtual environment for the test.
 ///
-/// This macro captures the uv binary path at compile time using `env!("CARGO_BIN_EXE_uv")`,
-/// which is only available in the test crate.
+/// Resolves the uv binary path at runtime via [`get_bin!`].
 #[macro_export]
 macro_rules! test_context {
     ($python_version:expr) => {
-        $crate::TestContext::new_with_bin(
-            $python_version,
-            std::path::PathBuf::from(env!("CARGO_BIN_EXE_uv")),
-        )
+        $crate::TestContext::new_with_bin($python_version, $crate::get_bin!())
     };
 }
 
@@ -73,26 +69,26 @@ macro_rules! test_context {
 ///
 /// Unlike [`test_context!`], this does not create a virtual environment.
 ///
-/// This macro captures the uv binary path at compile time using `env!("CARGO_BIN_EXE_uv")`,
-/// which is only available in the test crate.
+/// Resolves the uv binary path at runtime via [`get_bin!`].
 #[macro_export]
 macro_rules! test_context_with_versions {
     ($python_versions:expr) => {
-        $crate::TestContext::new_with_versions_and_bin(
-            $python_versions,
-            std::path::PathBuf::from(env!("CARGO_BIN_EXE_uv")),
-        )
+        $crate::TestContext::new_with_versions_and_bin($python_versions, $crate::get_bin!())
     };
 }
 
 /// Return the path to the uv binary.
 ///
-/// This macro captures the uv binary path at compile time using `env!("CARGO_BIN_EXE_uv")`,
-/// which is only available in the test crate.
+/// Reads the path supplied by Cargo or nextest at runtime, so compiled tests
+/// remain usable when the target directory is relocated.
 #[macro_export]
 macro_rules! get_bin {
     () => {
-        std::path::PathBuf::from(env!("CARGO_BIN_EXE_uv"))
+        std::path::PathBuf::from(
+            std::env::var_os("NEXTEST_BIN_EXE_uv")
+                .or_else(|| std::env::var_os("CARGO_BIN_EXE_uv"))
+                .expect("Cargo or nextest should provide the uv binary path"),
+        )
     };
 }
 
