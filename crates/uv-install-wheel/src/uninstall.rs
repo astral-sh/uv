@@ -215,6 +215,8 @@ pub fn uninstall_wheel(
 }
 
 /// Whether every file beneath a directory link is in this wheel's RECORD, excluding bytecode caches.
+///
+/// Paths are compared lexically. Nested symlinks are treated as entries rather than followed.
 fn directory_is_owned(directory: &Path, record_paths: &HashSet<PathBuf>) -> Result<bool, Error> {
     for entry in WalkDir::new(directory)
         .min_depth(1)

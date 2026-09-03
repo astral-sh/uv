@@ -71,7 +71,8 @@ impl LibraryDirectories {
 
     /// Resolve a directory path, visiting each component below library roots before following links.
     ///
-    /// Visits run from parent to child. [`ControlFlow::Break`] stops before inspecting descendants.
+    /// Visits run from parent to child. The visitor must handle directory links before continuing
+    /// into their descendants; [`ControlFlow::Break`] skips those descendants.
     /// Callers handling files must pass the parent path, leaving the final filename unresolved.
     ///
     /// Scheme aliases are followed component by component: an alias may point below a package link,

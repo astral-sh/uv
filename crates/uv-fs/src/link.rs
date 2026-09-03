@@ -165,7 +165,7 @@ pub struct CopyLocks {
 impl CopyLocks {
     /// Serialize changes to sibling directory entries.
     ///
-    /// Lock the canonical parent so scheme aliases and case-insensitive names share a lock.
+    /// The parent must exist. Its canonical path identifies the lock, including through aliases.
     pub fn with_directory_lock<T, E>(
         &self,
         path: &Path,
@@ -195,7 +195,8 @@ impl CopyLocks {
 
     /// Publish a file without replacing a package directory during expansion.
     ///
-    /// Prepare its parent first, so it remains a real directory throughout publication.
+    /// Prepare its parent first. The operation must replace file symlinks rather than write through
+    /// them; this check only rejects directory destinations.
     pub fn with_file_write<T, E>(
         &self,
         path: &Path,
@@ -322,7 +323,7 @@ impl<'a, F> LinkOptions<'a, F> {
     }
 }
 
-/// Reject directory destinations, following links so file publication cannot hide a package tree.
+/// Reject existing directory destinations, including directory symlinks.
 fn check_file_destination(path: &Path) -> io::Result<()> {
     match fs_err::metadata(path) {
         Ok(metadata) if metadata.is_dir() => Err(io::Error::new(
@@ -338,7 +339,7 @@ fn check_file_destination(path: &Path) -> io::Result<()> {
 /// Replace a directory symlink with real directories and symlinks to individual files.
 ///
 /// Missing paths and non-links are unchanged.
-/// Files matching `needs_mutable_copy` are copied instead of linked.
+/// Source files matching `needs_mutable_copy` are copied instead of linked.
 /// If writes can overlap, hold [`CopyLocks::with_directory_lock`] for `path` throughout this call.
 pub fn materialize_symlink_dir(
     path: &Path,
