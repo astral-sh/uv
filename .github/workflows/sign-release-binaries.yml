@@ -383,6 +383,8 @@ jobs:
           path: dist
           merge-multiple: true
 
+      # The signing job checked the expected publisher. On a fresh runner, check
+      # that packaging preserved those bytes and Windows trusts their timestamped signatures.
       - name: "Verify packaged executables and signatures"
         shell: pwsh
         run: |
