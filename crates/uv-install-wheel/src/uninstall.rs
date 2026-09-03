@@ -61,7 +61,7 @@ pub fn uninstall_wheel(
             continue;
         }
 
-        // Resolve parents, removing top-level package links. Keep the final filename
+        // Resolve parents, removing directory links at any depth. Keep the final filename
         // unresolved so removing a file symlink does not remove its cache target.
         let normalized = normalize_path(&site_packages.join(&entry.path));
         let (Some(parent), Some(filename)) = (normalized.parent(), normalized.file_name()) else {

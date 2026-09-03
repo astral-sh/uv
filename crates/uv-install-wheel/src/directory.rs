@@ -50,6 +50,13 @@ impl LibraryDirectories {
     /// directories are fully expanded under their lock before traversal reaches their children.
     pub(crate) fn prepare(&self, path: &Path, locks: &CopyLocks) -> Result<(), Error> {
         let resolved = self.resolve(path, |directory| {
+            if !self
+                .roots
+                .iter()
+                .any(|(_, root)| directory.parent() == Some(root.as_path()))
+            {
+                return Ok(ControlFlow::Continue(()));
+            }
             locks.with_directory_lock(directory, || {
                 materialize_symlink_dir(directory)?;
                 fs_err::create_dir_all(directory)?;
@@ -63,10 +70,9 @@ impl LibraryDirectories {
         Ok(())
     }
 
-    /// Resolve a directory path, visiting top-level package directories before following their links.
+    /// Resolve a directory path, visiting each component below library roots before following links.
     ///
-    /// Returning [`ControlFlow::Continue`] requires the package tree to contain only real directories;
-    /// [`ControlFlow::Break`] stops before its descendants are inspected.
+    /// Visits run from parent to child. [`ControlFlow::Break`] stops before inspecting descendants.
     /// Callers handling files must pass the parent path, leaving the final filename unresolved.
     ///
     /// Scheme aliases are followed component by component: an alias may point below a package link,
@@ -108,12 +114,7 @@ impl LibraryDirectories {
                 Some(Component::Normal(_)) => {
                     resolved.push(component);
                     if self.contains(&resolved) {
-                        if self
-                            .roots
-                            .iter()
-                            .any(|(_, root)| resolved.parent() == Some(root.as_path()))
-                            && let ControlFlow::Break(value) = visit(&resolved)?
-                        {
+                        if let ControlFlow::Break(value) = visit(&resolved)? {
                             return Ok(ControlFlow::Break(value));
                         }
                         continue;
