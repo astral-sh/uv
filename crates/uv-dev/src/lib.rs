@@ -17,7 +17,6 @@ use crate::generate_options_reference::Args as GenerateOptionsReferenceArgs;
 use crate::generate_preview_features_reference::Args as GeneratePreviewFeaturesReferenceArgs;
 use crate::generate_scenarios::Args as GenerateScenarioTestsArgs;
 use crate::generate_sysconfig_mappings::Args as GenerateSysconfigMetadataArgs;
-use crate::inject_signed_wheel_binaries::InjectSignedWheelBinariesArgs;
 use crate::list_packages::ListPackagesArgs;
 #[cfg(feature = "render")]
 use crate::render_benchmarks::RenderBenchmarksArgs;
@@ -35,7 +34,6 @@ mod generate_options_reference;
 mod generate_preview_features_reference;
 mod generate_scenarios;
 mod generate_sysconfig_mappings;
-mod inject_signed_wheel_binaries;
 mod list_packages;
 mod render_benchmarks;
 mod validate_zip;
@@ -49,8 +47,6 @@ enum Cli {
     WheelMetadata(WheelMetadataArgs),
     /// Validate that a `.whl` or `.zip` file at a given URL is a valid ZIP file.
     ValidateZip(ValidateZipArgs),
-    /// Inject code-signed executables into a `uv` or `uv_build` wheel.
-    InjectSignedWheelBinaries(InjectSignedWheelBinariesArgs),
     /// Compile all `.py` to `.pyc` files in the tree.
     Compile(CompileArgs),
     /// Remove all `.pyc` in the tree.
@@ -90,9 +86,6 @@ pub async fn run() -> Result<()> {
     match cli {
         Cli::WheelMetadata(args) => wheel_metadata::wheel_metadata(args, environment).await?,
         Cli::ValidateZip(args) => validate_zip::validate_zip(args, environment).await?,
-        Cli::InjectSignedWheelBinaries(args) => {
-            inject_signed_wheel_binaries::inject_signed_wheel_binaries(args).await?;
-        }
         Cli::Compile(args) => compile::compile(args).await?,
         Cli::ClearCompile(args) => clear_compile::clear_compile(&args)?,
         Cli::ListPackages(args) => list_packages::list_packages(args, environment).await?,

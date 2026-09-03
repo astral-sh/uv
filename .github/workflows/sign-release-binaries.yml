@@ -34,11 +34,6 @@ jobs:
           checksum: "788f18abea7c5f55d6216e4f5613fd89d4d59b631efeec117b2b07fe72f1da21"
           enable-cache: false
 
-      - name: "Build the wheel replacement tool"
-        run: |
-          cargo build --locked --release --package uv-dev --features dev
-          cp target/release/uv-dev .
-
       - name: "Download unsigned macOS wheels"
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
@@ -84,9 +79,7 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: signing-assembly-${{ github.run_id }}-${{ github.run_attempt }}
-          path: |
-            wheels
-            uv-dev
+          path: wheels
           if-no-files-found: error
 
   sign-macos:
@@ -230,14 +223,28 @@ jobs:
     name: "assemble signed release wheels"
     needs: [prepare, sign-macos, sign-windows]
     runs-on: depot-ubuntu-24.04-4
+    permissions:
+      contents: read
     outputs:
       macos: ${{ steps.macos.outputs.artifact-id }}
       windows: ${{ steps.windows.outputs.artifact-id }}
     steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: "Install uv"
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          version: "0.12.7"
+          checksum: "788f18abea7c5f55d6216e4f5613fd89d4d59b631efeec117b2b07fe72f1da21"
+          enable-cache: false
+
       - name: "Download assembly inputs"
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           artifact-ids: ${{ needs.prepare.outputs.assembly }}
+          path: wheels
           merge-multiple: true
 
       - name: "Download signed macOS executables"
@@ -258,12 +265,10 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          # Artifact uploads do not preserve executable permissions.
-          chmod +x uv-dev
           for target in aarch64-apple-darwin x86_64-pc-windows-msvc; do
             mkdir -p "dist/$target"
             for wheel in wheels/"$target"/*.whl; do
-              ./uv-dev inject-signed-wheel-binaries --input "$wheel" \
+              uv run scripts/inject-signed-wheel-binaries.py --input "$wheel" \
                 --output "dist/$target/${wheel##*/}" \
                 --signed-binaries "./signed/$target"
             done
