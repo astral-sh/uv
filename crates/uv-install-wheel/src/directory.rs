@@ -14,6 +14,7 @@ use crate::{Error, Layout};
 /// `site-packages/numpy -> <cache>/numpy`, are handled by the caller before traversal can enter
 /// the cache. Scheme aliases must remain stable while this resolver is in use.
 pub(crate) struct LibraryDirectories {
+    /// Library roots as (logical path, resolved path) pairs.
     roots: Vec<(PathBuf, PathBuf)>,
 }
 
