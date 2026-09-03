@@ -87,7 +87,60 @@ where
         )
         .into());
     }
-    link_dir_entries(src, dst, options)
+    fs_err::create_dir_all(dst)?;
+    let mut state = LinkState::new(options.mode);
+    for entry in fs_err::read_dir(src)? {
+        let entry = entry?;
+        let path = entry.path();
+        let target = dst.join(entry.file_name());
+        let operation = || {
+            if !entry.file_type()?.is_dir() {
+                check_file_destination(&target)?;
+                return link_file(&path, &target, state, options).map(|state| Some(state.mode));
+            }
+            if state.mode == LinkMode::Symlink && !(options.needs_mutable_copy)(&path) {
+                match create_symlink(&path, &target) {
+                    Ok(()) => return Ok(Some(LinkMode::Symlink)),
+                    Err(err) if err.kind() == io::ErrorKind::AlreadyExists => {
+                        if options.on_existing_directory == OnExistingDirectory::Fail {
+                            return Err(LinkError::Symlink {
+                                from: path.clone(),
+                                to: target.clone(),
+                                err,
+                            });
+                        }
+                    }
+                    Err(err) => debug!(
+                        "Failed to symlink directory `{}` to `{}`: {err}; linking individual files",
+                        path.display(),
+                        target.display(),
+                    ),
+                }
+            }
+            materialize_symlink_dir(&target, &options.needs_mutable_copy)?;
+            if state.mode == LinkMode::Clone && !target.try_exists()? {
+                // Reserve the new directory until cloning finishes, without creating it first.
+                return clone_dir(&path, &target, options).map(Some);
+            }
+            fs_err::create_dir_all(&target)?;
+            Ok(None)
+        };
+        let mode = if let Some(locks) = options.copy_locks {
+            locks.with_directory_lock(&target, operation)?
+        } else {
+            operation()?
+        };
+        // Once the destination is a real directory, concurrent installers can safely merge files
+        // using the existing linker. No directory links are created beneath this point.
+        state = LinkState::new(match mode {
+            Some(mode) => mode,
+            None => match state.mode {
+                LinkMode::Clone => clone_dir(&path, &target, options)?,
+                mode => walk_and_link(&path, &target, mode, options)?,
+            },
+        });
+    }
+    Ok(state.mode)
 }
 
 /// Directory-level locks for concurrent copy operations.
@@ -282,71 +335,6 @@ fn check_file_destination(path: &Path) -> io::Result<()> {
         Err(err) if err.kind() == io::ErrorKind::NotFound => Ok(()),
         Err(err) => Err(err),
     }
-}
-
-/// Symlink top-level directories, using ordinary per-file linking for shared directories.
-fn link_dir_entries<F>(
-    src: &Path,
-    dst: &Path,
-    options: &LinkOptions<'_, F>,
-) -> Result<LinkMode, LinkError>
-where
-    F: Fn(&Path) -> bool,
-{
-    fs_err::create_dir_all(dst)?;
-    let mut state = LinkState::new(options.mode);
-    for entry in fs_err::read_dir(src)? {
-        let entry = entry?;
-        let path = entry.path();
-        let target = dst.join(entry.file_name());
-        let operation = || {
-            if !entry.file_type()?.is_dir() {
-                check_file_destination(&target)?;
-                return link_file(&path, &target, state, options).map(|state| Some(state.mode));
-            }
-            if state.mode == LinkMode::Symlink && !(options.needs_mutable_copy)(&path) {
-                match create_symlink(&path, &target) {
-                    Ok(()) => return Ok(Some(LinkMode::Symlink)),
-                    Err(err) if err.kind() == io::ErrorKind::AlreadyExists => {
-                        if options.on_existing_directory == OnExistingDirectory::Fail {
-                            return Err(LinkError::Symlink {
-                                from: path.clone(),
-                                to: target.clone(),
-                                err,
-                            });
-                        }
-                    }
-                    Err(err) => debug!(
-                        "Failed to symlink directory `{}` to `{}`: {err}; linking individual files",
-                        path.display(),
-                        target.display(),
-                    ),
-                }
-            }
-            materialize_symlink_dir(&target, &options.needs_mutable_copy)?;
-            if state.mode == LinkMode::Clone && !target.try_exists()? {
-                // Reserve the new directory until cloning finishes, without creating it first.
-                return clone_dir(&path, &target, options).map(Some);
-            }
-            fs_err::create_dir_all(&target)?;
-            Ok(None)
-        };
-        let mode = if let Some(locks) = options.copy_locks {
-            locks.with_directory_lock(&target, operation)?
-        } else {
-            operation()?
-        };
-        // Once the destination is a real directory, concurrent installers can safely merge files
-        // using the existing linker. No directory links are created beneath this point.
-        state = LinkState::new(match mode {
-            Some(mode) => mode,
-            None => match state.mode {
-                LinkMode::Clone => clone_dir(&path, &target, options)?,
-                mode => walk_and_link(&path, &target, mode, options)?,
-            },
-        });
-    }
-    Ok(state.mode)
 }
 
 /// Replace a directory symlink with real directories and symlinks to individual files.
@@ -557,6 +545,8 @@ where
 
 /// Dispatch a single file to the appropriate linking strategy based on the current state.
 ///
+/// Files matching [`LinkOptions::needs_mutable_copy`] are copied instead of hardlinked or symlinked.
+///
 /// Returns the (possibly updated) state for the next file. When a strategy fails, it
 /// transitions to [`LinkState::next_mode`] and re-dispatches through this function so the
 /// fallback chain is followed automatically.
@@ -571,9 +561,13 @@ where
 {
     match state.mode {
         LinkMode::Clone => reflink_file_with_fallback(path, target, state, options),
-        LinkMode::Hardlink => hardlink_file_with_fallback(path, target, state, options),
-        LinkMode::Symlink => symlink_file_with_fallback(path, target, state, options),
-        LinkMode::Copy => {
+        LinkMode::Hardlink if !(options.needs_mutable_copy)(path) => {
+            hardlink_file_with_fallback(path, target, state, options)
+        }
+        LinkMode::Symlink if !(options.needs_mutable_copy)(path) => {
+            symlink_file_with_fallback(path, target, state, options)
+        }
+        LinkMode::Copy | LinkMode::Hardlink | LinkMode::Symlink => {
             if options.on_existing_directory == OnExistingDirectory::Merge {
                 atomic_copy_overwrite(path, target, options)?;
             } else {
@@ -800,9 +794,6 @@ where
 }
 
 /// Attempt to hard link a single file, falling back via [`link_file`] on failure.
-///
-/// Files matching the [`LinkOptions::needs_mutable_copy`] predicate are always copied
-/// to avoid mutating the source through a hard link.
 fn hardlink_file_with_fallback<F>(
     path: &Path,
     target: &Path,
@@ -812,15 +803,6 @@ fn hardlink_file_with_fallback<F>(
 where
     F: Fn(&Path) -> bool,
 {
-    if (options.needs_mutable_copy)(path) {
-        if options.on_existing_directory == OnExistingDirectory::Merge {
-            atomic_copy_overwrite(path, target, options)?;
-        } else {
-            copy_file(path, target, options)?;
-        }
-        return Ok(state);
-    }
-
     match state.attempt {
         LinkAttempt::Initial => {
             if let Err(err) = try_hardlink_file(path, target) {
@@ -863,9 +845,6 @@ where
 }
 
 /// Attempt to symlink a single file, falling back via [`link_file`] on failure.
-///
-/// Files matching the [`LinkOptions::needs_mutable_copy`] predicate are always copied
-/// to avoid mutating the source through a symlink.
 fn symlink_file_with_fallback<F>(
     path: &Path,
     target: &Path,
@@ -875,15 +854,6 @@ fn symlink_file_with_fallback<F>(
 where
     F: Fn(&Path) -> bool,
 {
-    if (options.needs_mutable_copy)(path) {
-        if options.on_existing_directory == OnExistingDirectory::Merge {
-            atomic_copy_overwrite(path, target, options)?;
-        } else {
-            copy_file(path, target, options)?;
-        }
-        return Ok(state);
-    }
-
     match state.attempt {
         LinkAttempt::Initial => {
             if let Err(err) = create_symlink(path, target) {
