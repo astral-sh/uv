@@ -8,8 +8,9 @@
 # ///
 """Verify the signed executables in a macOS GitHub release archive.
 
-Check the archive's exact contents and checksum, then require trusted,
-timestamped signatures from the certificate pinned by the signing job.
+Use `extract-github-release-binaries.py` to check the archive's contents and
+checksum and extract its executables. Delegate byte and signature checks to
+`verify-release-binaries-macos.py`.
 """
 
 import argparse
@@ -22,7 +23,7 @@ BINARIES = ("uv", "uvx")
 
 
 def verify_archive(signed: Path, archive: Path) -> None:
-    """Extract the GitHub archive, then check its executable bytes and signatures."""
+    """Extract the GitHub archive and invoke the shared macOS executable verifier."""
     with tempfile.TemporaryDirectory() as temporary:
         archive_binaries = Path(temporary)
         subprocess.run(

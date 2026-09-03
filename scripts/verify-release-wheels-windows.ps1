@@ -1,4 +1,7 @@
-# Verify the signed executables packaged in uv's Windows release wheels.
+# Verify uv's Windows release wheels against the signing job's output.
+#
+# Extract the executables with `extract-wheel-binaries.py`, then delegate byte
+# and signature checks to `verify-release-binaries-windows.ps1`.
 
 param(
     [Parameter(Mandatory)]

@@ -1,6 +1,8 @@
 # Verify the signed executables in a Windows GitHub release archive.
-# Check the archive's exact contents and checksum, then require the signer's
-# output and publicly trusted, timestamped Authenticode signatures.
+#
+# Use `extract-github-release-binaries.py` to check the archive's contents and
+# checksum and extract its executables. Delegate byte and signature checks to
+# `verify-release-binaries-windows.ps1`.
 
 param(
     [Parameter(Mandatory)]

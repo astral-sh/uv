@@ -6,7 +6,11 @@
 # no-build = true
 # exclude-newer = "P7D"
 # ///
-"""Verify the signed executables packaged in uv's macOS release wheels."""
+"""Verify uv's macOS release wheels against the signing job's output.
+
+Extract the executables with `extract-wheel-binaries.py`, then delegate byte
+and signature checks to `verify-release-binaries-macos.py`.
+"""
 
 import argparse
 import subprocess
@@ -18,7 +22,7 @@ BINARIES = ("uv", "uvx", "uv-build")
 
 
 def verify_wheels(signed: Path, wheels: Path) -> None:
-    """Extract the wheels, then check their executable bytes and signatures."""
+    """Extract the wheels and invoke the shared macOS executable verifier."""
     with tempfile.TemporaryDirectory() as temporary:
         wheel_binaries = Path(temporary)
         subprocess.run(
