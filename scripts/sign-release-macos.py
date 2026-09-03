@@ -55,7 +55,7 @@ def verify_sha256(path: Path, expected: str) -> None:
 
 
 def download_signing_tool(tool: SigningTool, directory: Path) -> Path:
-    """Download a signing tool, verify its pinned digest, and return its path."""
+    """Download a pinned signing tool and return its ready-to-use path."""
     path = tool.path(directory)
     run_command(
         [
@@ -78,6 +78,8 @@ def download_signing_tool(tool: SigningTool, directory: Path) -> Path:
         f"Downloading {path.name}",
     )
     verify_sha256(path, os.environ[f"{tool.value}_SHA256"])
+    if tool is SigningTool.RCODESIGN:
+        path.chmod(0o755)
     return path
 
 
@@ -111,7 +113,6 @@ def sign_binaries(unsigned: Path, signed: Path) -> None:
 
         rcodesign = download_signing_tool(SigningTool.RCODESIGN, tools)
         pkcs11 = download_signing_tool(SigningTool.PKCS11, tools)
-        rcodesign.chmod(0o755)
 
         run_command(
             [
