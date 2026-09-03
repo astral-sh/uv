@@ -6,20 +6,16 @@ use assert_fs::prelude::*;
 use indoc::{formatdoc, indoc};
 #[cfg(feature = "test-universal")]
 use insta::assert_snapshot;
-use std::collections::BTreeMap;
 #[cfg(all(feature = "test-universal", feature = "test-git"))]
 use std::path::Path;
 use std::process::Stdio;
-use std::str::FromStr;
 #[cfg(feature = "test-universal")]
 use uv_fs::Simplified;
-use uv_normalize::PackageName;
-use uv_pep440::Version;
 use uv_static::EnvVars;
 #[cfg(feature = "test-universal")]
 use uv_test::copy_dir_ignore;
 use uv_test::packse::PackseServer;
-use uv_test::packse::scenario::{Package, PackageMetadata, Scenario};
+use uv_test::packse::scenario::Scenario;
 #[cfg(all(feature = "test-universal", feature = "test-git"))]
 use uv_test::{READ_ONLY_GITHUB_SSH_DEPLOY_KEY, READ_ONLY_GITHUB_TOKEN, decode_token};
 use uv_test::{apply_filters, uv_snapshot};
@@ -4235,20 +4231,17 @@ fn pep_751_no_packages() -> Result<()> {
 fn pep_751_missing_hashes() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
-    let mut scenario = Scenario::empty();
-    scenario.packages.insert(
-        PackageName::from_str("filelock")?,
-        Package {
-            versions: BTreeMap::from([(
-                Version::from_str("3.13.1")?,
-                PackageMetadata {
-                    sdist: false,
-                    wheel: true,
-                    ..PackageMetadata::default()
-                },
-            )]),
-        },
-    );
+    let scenario = toml::from_str::<Scenario>(indoc! {r#"
+        name = "pylock-missing-hashes"
+
+        [root]
+
+        [expected]
+        satisfiable = true
+
+        [packages.filelock.versions."3.13.1"]
+        sdist = false
+    "#})?;
     let server = PackseServer::from_scenario_without_hashes(&scenario);
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
@@ -4282,7 +4275,7 @@ fn pep_751_missing_hashes() -> Result<()> {
     name = "filelock"
     version = "3.13.1"
     index = "http://[LOCALHOST]/simple/"
-    wheels = [{ url = "http://[LOCALHOST]/files/filelock-3.13.1-py3-none-any.whl", upload-time = 2024-03-24T00:00:00Z, hashes = { sha256 = "54bc458b17ddc0a8dbf6d9f163f8fe7c7f9a92c558657c7146a950374e8c611c" } }]
+    wheels = [{ url = "http://[LOCALHOST]/files/filelock-3.13.1-py3-none-any.whl", upload-time = 2024-03-24T00:00:00Z, hashes = { sha256 = "abb51a8dd7ec5bce865ee4193b8ee9b577f70a175b2470c0fecf59c1758151b7" } }]
 
     ----- stderr -----
     Resolved 2 packages in [TIME]

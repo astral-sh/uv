@@ -17536,34 +17536,20 @@ fn pep_751_compile_url_sdist() -> Result<()> {
 fn pep_751_compile_missing_hashes() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
-    let mut scenario = Scenario::empty();
-    scenario.packages.insert(
-        PackageName::from_str("jinja2")?,
-        Package {
-            versions: BTreeMap::from([(
-                Version::from_str("3.1.2")?,
-                PackageMetadata {
-                    requires: vec![Requirement::from_str("markupsafe>=2.0")?],
-                    sdist: false,
-                    wheel: true,
-                    ..PackageMetadata::default()
-                },
-            )]),
-        },
-    );
-    scenario.packages.insert(
-        PackageName::from_str("markupsafe")?,
-        Package {
-            versions: BTreeMap::from([(
-                Version::from_str("2.1.5")?,
-                PackageMetadata {
-                    sdist: true,
-                    wheel: true,
-                    ..PackageMetadata::default()
-                },
-            )]),
-        },
-    );
+    let scenario = toml::from_str::<Scenario>(indoc! {r#"
+        name = "pylock-compile-missing-hashes"
+
+        [root]
+
+        [expected]
+        satisfiable = true
+
+        [packages.jinja2.versions."3.1.2"]
+        requires = ["markupsafe>=2.0"]
+        sdist = false
+
+        [packages.markupsafe.versions."2.1.5"]
+    "#})?;
     let server = PackseServer::from_scenario_without_hashes(&scenario);
 
     let requirements_in = context.temp_dir.child("requirements.in");
@@ -17586,13 +17572,13 @@ fn pep_751_compile_missing_hashes() -> Result<()> {
     [[packages]]
     name = "jinja2"
     version = "3.1.2"
-    wheels = [{ url = "http://[LOCALHOST]/files/jinja2-3.1.2-py3-none-any.whl", upload-time = 2024-03-24T00:00:00Z, hashes = { sha256 = "dd8dcbad5bb3caabfa085eec51b34df72f3d6e67e807dc705c31a76a3c0aaba1" } }]
+    wheels = [{ url = "http://[LOCALHOST]/files/jinja2-3.1.2-py3-none-any.whl", upload-time = 2024-03-24T00:00:00Z, hashes = { sha256 = "2446446d9579a73543badbd9b942fe1957d8fe416510eca5fd72b52cab3db05f" } }]
 
     [[packages]]
     name = "markupsafe"
     version = "2.1.5"
-    sdist = { url = "http://[LOCALHOST]/files/markupsafe-2.1.5.tar.gz", upload-time = 2024-03-24T00:00:00Z, hashes = { sha256 = "deb9ff5cf6b16fdf9fcc6d0968fdb47b3f9e50750471102438f0de82a6d2ccfc" } }
-    wheels = [{ url = "http://[LOCALHOST]/files/markupsafe-2.1.5-py3-none-any.whl", upload-time = 2024-03-24T00:00:00Z, hashes = { sha256 = "4076f6c7f39353c0c32478125cc09a018c0d87adf08b7a988d231031e468c9d4" } }]
+    sdist = { url = "http://[LOCALHOST]/files/markupsafe-2.1.5.tar.gz", upload-time = 2024-03-24T00:00:00Z, hashes = { sha256 = "0f037d1ac33289835e012412c0de81872d9479359e280c713d9deb2ccf30ac34" } }
+    wheels = [{ url = "http://[LOCALHOST]/files/markupsafe-2.1.5-py3-none-any.whl", upload-time = 2024-03-24T00:00:00Z, hashes = { sha256 = "d0fe66b2745bbd943b48f3229667cf4506d88136363578b94e63d384e61d4984" } }]
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
