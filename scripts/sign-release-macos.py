@@ -22,8 +22,8 @@ from cryptography.hazmat.primitives import hashes
 BINARIES = ("uv", "uvx", "uv-build")
 
 
-def run_signing_command(command: list[str | Path], description: str) -> None:
-    """Run a signing command without logging private signing configuration."""
+def run_command(command: list[str | Path], description: str) -> None:
+    """Run a command without logging private signing configuration."""
     try:
         subprocess.run(
             command, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
@@ -36,6 +36,31 @@ def verify_sha256(path: Path, expected: str) -> None:
     """Require a downloaded file to match its configured SHA-256 digest."""
     if hashlib.sha256(path.read_bytes()).hexdigest() != expected.lower():
         raise ValueError(f"SHA-256 mismatch: {path.name}")
+
+
+def download_signing_tool(name: str, path: Path) -> None:
+    """Download a configured signing-tool blob and verify its pinned digest."""
+    run_command(
+        [
+            "az",
+            "storage",
+            "blob",
+            "download",
+            "--auth-mode",
+            "login",
+            "--only-show-errors",
+            "--account-name",
+            os.environ["STORAGE_ACCOUNT"],
+            "--container-name",
+            os.environ["STORAGE_CONTAINER"],
+            "--name",
+            os.environ[f"{name}_BLOB"],
+            "--file",
+            path,
+        ],
+        f"Downloading {path.name}",
+    )
+    verify_sha256(path, os.environ[f"{name}_SHA256"])
 
 
 def certificate_sha256(path: Path) -> str:
@@ -68,31 +93,11 @@ def sign_binaries(unsigned: Path, signed: Path) -> None:
         pkcs11 = tools / "libakv_pkcs11.so"
         certificate = tools / "certificate.pem"
 
-        for name, path in (("RCODESIGN", rcodesign), ("PKCS11", pkcs11)):
-            run_signing_command(
-                [
-                    "az",
-                    "storage",
-                    "blob",
-                    "download",
-                    "--auth-mode",
-                    "login",
-                    "--only-show-errors",
-                    "--account-name",
-                    os.environ["STORAGE_ACCOUNT"],
-                    "--container-name",
-                    os.environ["STORAGE_CONTAINER"],
-                    "--name",
-                    os.environ[f"{name}_BLOB"],
-                    "--file",
-                    path,
-                ],
-                f"Downloading {path.name}",
-            )
-            verify_sha256(path, os.environ[f"{name}_SHA256"])
+        download_signing_tool("RCODESIGN", rcodesign)
+        download_signing_tool("PKCS11", pkcs11)
         rcodesign.chmod(0o755)
 
-        run_signing_command(
+        run_command(
             [
                 "az",
                 "keyvault",
@@ -118,7 +123,7 @@ def sign_binaries(unsigned: Path, signed: Path) -> None:
         signed.mkdir()
         shutil.copyfile(certificate, signed / "certificate.pem")
         for binary in BINARIES:
-            run_signing_command(
+            run_command(
                 [
                     rcodesign,
                     "sign",
