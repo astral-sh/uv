@@ -139,6 +139,7 @@ jobs:
       - release-gate
     if: ${{ inputs.tag == 'dry-run' && github.repository == 'astral-sh/uv' && github.ref == 'refs/heads/main' }}
     uses: $/.github/workflows/sign-release-binaries.yml
+    secrets: inherit
     permissions:
       contents: read
       id-token: write
