@@ -1315,6 +1315,16 @@ impl Lock {
         self
     }
 
+    /// Omit package-specific settings for packages outside the resolution.
+    #[must_use]
+    pub fn without_unused_exclude_newer_packages(mut self) -> Self {
+        self.options.exclude_newer = self
+            .options
+            .exclude_newer
+            .filter_packages(self.packages.iter().map(Package::name));
+        self
+    }
+
     /// Returns `true` if this [`Lock`] includes `provides-extra` metadata.
     pub fn supports_provides_extra(&self) -> bool {
         // `provides-extra` was added in Version 1 Revision 1.

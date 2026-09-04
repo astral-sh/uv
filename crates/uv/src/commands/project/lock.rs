@@ -1109,6 +1109,12 @@ async fn do_lock(
             .with_conflicts(conflicts)
             .with_required_environments(lock_required_environments.into_markers());
 
+            let lock = if preview.is_enabled(PreviewFeature::MissingExcludeNewerPackageLock) {
+                lock.without_unused_exclude_newer_packages()
+            } else {
+                lock
+            };
+
             let lock = if preview.is_enabled(PreviewFeature::LockWithoutMetadata) {
                 lock.without_package_metadata()
             } else {
