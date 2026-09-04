@@ -1,7 +1,7 @@
 use std::convert::Into;
 use std::fmt::Display;
 use std::path::{Path, PathBuf};
-use std::sync::LazyLock;
+use std::sync::atomic::{AtomicU32, Ordering};
 use std::time::Duration;
 use std::{env, io};
 
@@ -14,27 +14,33 @@ use windows::Win32::Foundation::ERROR_LOCK_VIOLATION;
 
 use crate::{Simplified, is_known_already_locked_error};
 
-/// Parsed value of `UV_LOCK_TIMEOUT`, with a default of 5 min.
-static LOCK_TIMEOUT: LazyLock<Duration> = LazyLock::new(|| {
-    let default_timeout = Duration::from_mins(5);
-    let Some(lock_timeout) = env::var_os(EnvVars::UV_LOCK_TIMEOUT) else {
-        return default_timeout;
-    };
+/// Default lock timeout if not specified (5 minutes).
+const DEFAULT_LOCK_TIMEOUT_SECS: u32 = 5 * 60;
 
-    if let Some(lock_timeout) = lock_timeout
-        .to_str()
-        .and_then(|lock_timeout| lock_timeout.parse::<u64>().ok())
-    {
-        Duration::from_secs(lock_timeout)
+/// Global lock timeout in seconds, configured via [`EnvironmentOptions`].
+static LOCK_TIMEOUT_SECS: AtomicU32 = AtomicU32::new(0);
+
+/// Set the lock timeout globally.
+pub fn set_lock_timeout(timeout: Duration) {
+    LOCK_TIMEOUT_SECS.store(
+        timeout.as_secs().min(u32::MAX as u64) as u32,
+        Ordering::Relaxed,
+    );
+}
+
+/// Retrieve the current lock timeout, falling back to reading `UV_LOCK_TIMEOUT` directly
+/// or defaulting to 5 minutes if unset.
+pub fn lock_timeout() -> Duration {
+    let secs = LOCK_TIMEOUT_SECS.load(Ordering::Relaxed);
+    if secs > 0 {
+        Duration::from_secs(secs as u64)
     } else {
-        warn!(
-            "Could not parse value of {} as integer: {:?}",
-            EnvVars::UV_LOCK_TIMEOUT,
-            lock_timeout
-        );
-        default_timeout
+        env::var_os(EnvVars::UV_LOCK_TIMEOUT)
+            .and_then(|v| v.to_str().and_then(|s| s.parse::<u64>().ok()))
+            .map(Duration::from_secs)
+            .unwrap_or(Duration::from_secs(DEFAULT_LOCK_TIMEOUT_SECS as u64))
     }
-});
+}
 
 #[derive(Debug, Error)]
 pub enum LockedFileError {
@@ -224,10 +230,11 @@ impl LockedFile {
         );
         let path = file.path().to_path_buf();
         let lock_exclusive = tokio::task::spawn_blocking(move || (mode.lock(&file), file));
-        let (result, file) = tokio::time::timeout(*LOCK_TIMEOUT, lock_exclusive)
+        let timeout = lock_timeout();
+        let (result, file) = tokio::time::timeout(timeout, lock_exclusive)
             .await
             .map_err(|_| LockedFileError::Timeout {
-                timeout: *LOCK_TIMEOUT,
+                timeout,
                 resource: resource.to_string(),
                 path: path.clone(),
             })??;
