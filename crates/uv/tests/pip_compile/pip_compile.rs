@@ -14100,6 +14100,76 @@ fn multiple_exact_targets_matrix() -> Result<()> {
     Ok(())
 }
 
+/// Merge annotations and extras while selecting each platform's compatible wheel.
+#[test]
+fn multiple_exact_targets_annotations() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("requirements.in")
+        .write_str("matrixwheel[feature]\nshared")?;
+    let wheels = context.temp_dir.child("wheels");
+    wheels.create_dir_all()?;
+    for (version, tag) in [
+        ("1.0.0", "py3-none-manylinux_2_17_x86_64"),
+        ("2.0.0", "py3-none-macosx_13_0_arm64"),
+    ] {
+        let (filename, wheel) = generate_wheel(
+            &PackageName::from_str("matrixwheel")?,
+            &Version::from_str(version)?,
+            &[Requirement::from_str("shared")?],
+            &BTreeMap::from([("feature".parse()?, vec![Requirement::from_str("optional")?])]),
+            None,
+            tag,
+        );
+        wheels.child(filename).write_binary(&wheel)?;
+    }
+    for name in ["shared", "optional"] {
+        let (filename, wheel) = generate_wheel(
+            &PackageName::from_str(name)?,
+            &Version::from_str("1.0.0")?,
+            &[],
+            &BTreeMap::new(),
+            None,
+            "py3-none-any",
+        );
+        wheels.child(filename).write_binary(&wheel)?;
+    }
+
+    uv_snapshot!(context.filters(), context.pip_compile()
+        .arg("requirements.in")
+        .arg("--no-index")
+        .arg("--find-links")
+        .arg("wheels")
+        .arg("--python-version")
+        .arg("3.12")
+        .arg("--python-platform")
+        .arg("x86_64-unknown-linux-gnu")
+        .arg("--python-platform")
+        .arg("aarch64-apple-darwin")
+        .arg("--no-strip-extras")
+        .arg("--no-header")
+        .arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    matrixwheel[feature]==1.0.0 ; python_full_version == '3.12.*' and implementation_name == 'cpython' and platform_machine == 'x86_64' and sys_platform == 'linux'
+        # via -r requirements.in
+    matrixwheel[feature]==2.0.0 ; python_full_version == '3.12.*' and implementation_name == 'cpython' and platform_machine == 'arm64' and sys_platform == 'darwin'
+        # via -r requirements.in
+    optional==1.0.0
+        # via matrixwheel
+    shared==1.0.0
+        # via
+        #   -r requirements.in
+        #   matrixwheel
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Resolved 3 packages in [TIME]
+    ");
+    Ok(())
+}
+
 /// An existing TOML output cannot be combined as a requirements file.
 #[test]
 fn multiple_exact_targets_configured_pylock() -> Result<()> {
@@ -14276,13 +14346,13 @@ fn multiple_exact_targets_hashes() -> Result<()> {
         .arg("--offline")
         .arg("-o")
         .arg("requirements.txt")
-        .arg("--no-header")
-        .arg("--no-annotate"), @r"
+        .arg("--no-header"), @r"
     exit_code: 0 (success)
     ----- stdout -----
     matrixwheel==1.0.0 \
         --hash=sha256:4b3d4946c60a630afe8e897cfb16650e8b766625dce3433c9cf40ddd536d621f \
         --hash=sha256:80a34531807556667dce51d54e6b807e1aa4e582da28a5fdb6396c7e40f79103
+        # via -r requirements.in
 
     ----- stderr -----
     Resolved 1 package in [TIME]
@@ -14303,6 +14373,7 @@ fn multiple_exact_targets_hashes() -> Result<()> {
     matrixwheel==1.0.0 \
         --hash=sha256:[LINUX_HASH] \
         --hash=sha256:[MACOS_HASH]
+        # via -r requirements.in
     ");
 
     Ok(())

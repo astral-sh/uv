@@ -1,4 +1,5 @@
 use std::borrow::Cow;
+use std::collections::btree_map::Entry;
 use std::collections::{BTreeMap, BTreeSet};
 
 use owo_colors::OwoColorize;
@@ -7,84 +8,35 @@ use petgraph::{Directed, Direction, Graph};
 use rustc_hash::{FxBuildHasher, FxHashMap};
 
 use uv_distribution_types::{DistributionMetadata, Name, SourceAnnotation, SourceAnnotations};
-use uv_normalize::{ExtraName, PackageName};
-use uv_pep440::Version;
+use uv_normalize::PackageName;
 use uv_pep508::MarkerTree;
 use uv_pypi_types::HashDigest;
 
-use crate::resolution::requirements_txt::RequirementsTxtComparator;
 use crate::resolution::{RequirementsTxtDist, ResolutionGraphNode};
 use crate::{ResolverEnvironment, ResolverOutput};
 
-/// A [`std::fmt::Display`] implementation for the resolution graph.
+/// A `requirements.txt` view of a resolution or a set of exact-target resolutions.
 #[derive(Debug)]
 pub struct DisplayResolutionGraph<'a> {
-    /// The underlying graph.
-    resolution: &'a ResolverOutput,
-    /// The resolver marker environment, used to determine the markers that apply to each package.
-    env: &'a ResolverEnvironment,
-    /// The packages to exclude from the output.
-    no_emit_packages: &'a [PackageName],
-    /// Whether to include hashes in the output.
-    show_hashes: bool,
-    /// Whether to include extras in the output (e.g., `black[colorama]`).
-    include_extras: bool,
-    /// Whether to include environment markers in the output (e.g., `black ; sys_platform == "win32"`).
-    include_markers: bool,
-    /// Whether to include annotations in the output, to indicate which dependency or dependencies
-    /// requested each package.
-    include_annotations: bool,
-    /// Whether to include indexes in the output, to indicate which index was used for each package.
-    include_index_annotation: bool,
-    /// The style of annotation comments, used to indicate the dependencies that requested each
-    /// package.
+    requirements: Vec<DisplayRequirement<'a>>,
     annotation_style: AnnotationStyle,
+}
+
+/// A requirement and its annotations, ready for the shared requirements formatter.
+#[derive(Debug)]
+struct DisplayRequirement<'a> {
+    dist: RequirementsTxtDist<'a>,
+    line: String,
+    hashes: Cow<'a, [HashDigest]>,
+    dependents: BTreeSet<PackageName>,
+    sources: BTreeSet<SourceAnnotation>,
+    indexes: BTreeSet<String>,
 }
 
 #[derive(Debug)]
 enum DisplayResolutionGraphNode<'dist> {
     Root,
     Dist(RequirementsTxtDist<'dist>),
-}
-
-impl<'a> DisplayResolutionGraph<'a> {
-    /// Create a new [`DisplayResolutionGraph`] for the given graph.
-    ///
-    /// Note that this panics if any of the forks in the given resolver
-    /// output contain non-empty conflicting groups. That is, when using `uv
-    /// pip compile`, specifying conflicts is not supported because their
-    /// conditional logic cannot be encoded into a `requirements.txt`.
-    #[expect(clippy::fn_params_excessive_bools)]
-    pub fn new(
-        underlying: &'a ResolverOutput,
-        env: &'a ResolverEnvironment,
-        no_emit_packages: &'a [PackageName],
-        show_hashes: bool,
-        include_extras: bool,
-        include_markers: bool,
-        include_annotations: bool,
-        include_index_annotation: bool,
-        annotation_style: AnnotationStyle,
-    ) -> Self {
-        for fork_marker in &underlying.fork_markers {
-            assert!(
-                fork_marker.conflict().is_true(),
-                "found fork marker {fork_marker:?} with non-trivial conflicting marker, \
-                 cannot display resolver output with conflicts in requirements.txt format",
-            );
-        }
-        Self {
-            resolution: underlying,
-            env,
-            no_emit_packages,
-            show_hashes,
-            include_extras,
-            include_markers,
-            include_annotations,
-            include_index_annotation,
-            annotation_style,
-        }
-    }
 }
 
 /// One exact-platform resolution and the marker that identifies its target environment.
@@ -95,16 +47,6 @@ pub struct ExactTargetOutput<'a> {
     pub selector: MarkerTree,
 }
 
-/// A single `requirements.txt` view of independently resolved target environments.
-#[derive(Debug)]
-pub struct DisplayResolutionMatrix {
-    requirements: Vec<MergedRequirement>,
-    show_hashes: bool,
-    include_annotations: bool,
-    include_index_annotation: bool,
-    annotation_style: AnnotationStyle,
-}
-
 /// An editable requirement cannot be conditional in a `requirements.txt` file.
 #[derive(Debug, thiserror::Error)]
 pub enum DisplayResolutionMatrixError {
@@ -112,60 +54,102 @@ pub enum DisplayResolutionMatrixError {
     ConditionalEditable(String),
 }
 
-#[derive(Debug, Eq, PartialEq, Ord, PartialOrd)]
-enum MergedRequirementComparator {
-    Url(String),
-    Name {
-        name: PackageName,
-        version: Version,
-        url: Option<String>,
-        extras: Vec<ExtraName>,
-    },
-}
-
-impl From<RequirementsTxtComparator<'_>> for MergedRequirementComparator {
-    fn from(comparator: RequirementsTxtComparator<'_>) -> Self {
-        match comparator {
-            RequirementsTxtComparator::Url(url) => Self::Url(url.into_owned()),
-            RequirementsTxtComparator::Name {
-                name,
-                version,
-                url,
-                extras,
-            } => Self::Name {
-                name: name.clone(),
-                version: version.clone(),
-                url: url.map(Cow::into_owned),
-                extras: extras.to_vec(),
-            },
-        }
-    }
-}
-
-#[derive(Debug)]
-struct MergedRequirement {
-    requirement: String,
-    comparator: MergedRequirementComparator,
+struct MergedRequirement<'a> {
+    requirement: DisplayRequirement<'a>,
     marker: MarkerTree,
-    intrinsic_marker: MarkerTree,
     same_intrinsic_marker: bool,
-    hashes: BTreeSet<HashDigest>,
-    dependents: BTreeSet<PackageName>,
-    sources: BTreeSet<SourceAnnotation>,
-    indexes: BTreeSet<String>,
-    editable: bool,
     targets: BTreeSet<usize>,
 }
 
-impl DisplayResolutionMatrix {
-    /// Merge independently resolved targets into one requirements list.
+impl<'a> DisplayResolutionGraph<'a> {
+    /// Create a new [`DisplayResolutionGraph`] for the given graph.
     ///
-    /// Target-specific pins receive an environment marker; common pins retain their intrinsic
-    /// marker without an additional target restriction. Hashes and annotations are combined for
-    /// identical requirements.
+    /// Panics if a fork contains conflicting groups, which cannot be represented in
+    /// `requirements.txt` output.
     #[expect(clippy::fn_params_excessive_bools)]
     pub fn new(
-        outputs: &[ExactTargetOutput<'_>],
+        resolution: &'a ResolverOutput,
+        env: &ResolverEnvironment,
+        no_emit_packages: &[PackageName],
+        show_hashes: bool,
+        include_extras: bool,
+        include_markers: bool,
+        include_annotations: bool,
+        include_index_annotation: bool,
+        annotation_style: AnnotationStyle,
+    ) -> Self {
+        for fork_marker in &resolution.fork_markers {
+            assert!(
+                fork_marker.conflict().is_true(),
+                "found fork marker {fork_marker:?} with non-trivial conflicting marker, \
+                 cannot display resolver output with conflicts in requirements.txt format",
+            );
+        }
+        let sources = if include_annotations {
+            source_annotations(resolution, env)
+        } else {
+            SourceAnnotations::default()
+        };
+        let graph = resolution.graph.map(
+            |_index, node| match node {
+                ResolutionGraphNode::Root => DisplayResolutionGraphNode::Root,
+                ResolutionGraphNode::Dist(dist) => {
+                    DisplayResolutionGraphNode::Dist(RequirementsTxtDist::from_annotated_dist(dist))
+                }
+            },
+            |_index, _edge| (),
+        );
+        let graph = if include_extras {
+            combine_extras(&graph)
+        } else {
+            strip_extras(&graph)
+        };
+        let mut requirements = Vec::new();
+        for index in graph.node_indices() {
+            let node = &graph[index];
+            if no_emit_packages.contains(node.name()) {
+                continue;
+            }
+            requirements.push(DisplayRequirement {
+                dist: node.clone(),
+                line: node
+                    .to_requirements_txt(&resolution.requires_python, include_markers)
+                    .into_owned(),
+                hashes: Cow::Borrowed(if show_hashes { node.hashes } else { &[] }),
+                dependents: if include_annotations {
+                    graph
+                        .edges_directed(index, Direction::Incoming)
+                        .map(|edge| graph[edge.source()].name().clone())
+                        .collect()
+                } else {
+                    BTreeSet::new()
+                },
+                sources: sources.get(node.name()).cloned().unwrap_or_default(),
+                indexes: if include_index_annotation {
+                    node.dist
+                        .index()
+                        .map(|index| index.without_credentials().to_string())
+                        .into_iter()
+                        .collect()
+                } else {
+                    BTreeSet::new()
+                },
+            });
+        }
+        // Preserve graph order for requirements whose comparators are equal.
+        requirements
+            .sort_by(|left, right| left.dist.to_comparator().cmp(&right.dist.to_comparator()));
+        Self {
+            requirements,
+            annotation_style,
+        }
+    }
+
+    /// Merge independently resolved targets, retaining common pins and qualifying other pins
+    /// with their target selectors. Hashes and annotations are combined for identical requirements.
+    #[expect(clippy::fn_params_excessive_bools)]
+    pub fn from_targets(
+        outputs: &[ExactTargetOutput<'a>],
         no_emit_packages: &[PackageName],
         show_hashes: bool,
         include_extras: bool,
@@ -173,179 +157,136 @@ impl DisplayResolutionMatrix {
         include_index_annotation: bool,
         annotation_style: AnnotationStyle,
     ) -> Result<Self, DisplayResolutionMatrixError> {
-        let mut requirements: BTreeMap<String, MergedRequirement> = BTreeMap::new();
-
+        let mut merged: BTreeMap<String, MergedRequirement<'a>> = BTreeMap::new();
         for (target_index, output) in outputs.iter().enumerate() {
-            let sources = if include_annotations {
-                source_annotations(output.resolution, output.environment)
-            } else {
-                SourceAnnotations::default()
-            };
-
-            let graph = output.resolution.graph.map(
-                |_index, node| match node {
-                    ResolutionGraphNode::Root => DisplayResolutionGraphNode::Root,
-                    ResolutionGraphNode::Dist(dist) => DisplayResolutionGraphNode::Dist(
-                        RequirementsTxtDist::from_annotated_dist(dist),
-                    ),
-                },
-                |_index, _edge| (),
+            // Add selectors after formatting the base requirement, so `requires-python`
+            // simplification cannot remove a target's Python-version selector.
+            let display = Self::new(
+                output.resolution,
+                output.environment,
+                no_emit_packages,
+                show_hashes,
+                include_extras,
+                false,
+                include_annotations,
+                include_index_annotation,
+                annotation_style,
             );
-            let graph = if include_extras {
-                combine_extras(&graph)
-            } else {
-                strip_extras(&graph)
-            };
-
-            for index in graph.node_indices() {
-                let node = &graph[index];
-                if no_emit_packages.contains(node.name()) {
-                    continue;
-                }
-
-                // Derive the base requirement without first simplifying a target-specific marker
-                // against `requires-python`: doing so could remove the Python-version selector.
-                let requirement = node
-                    .to_requirements_txt(&output.resolution.requires_python, false)
-                    .into_owned();
-                let marker = node.markers.and(output.selector);
+            for requirement in display.requirements {
+                let marker = requirement.dist.markers.and(output.selector);
                 if marker.is_false() {
                     continue;
                 }
-
-                let entry =
-                    requirements
-                        .entry(requirement.clone())
-                        .or_insert_with(|| MergedRequirement {
+                match merged.entry(requirement.line.clone()) {
+                    Entry::Vacant(entry) => {
+                        entry.insert(MergedRequirement {
                             requirement,
-                            comparator: node.to_comparator().into(),
-                            marker: MarkerTree::FALSE,
-                            intrinsic_marker: node.markers,
+                            marker,
                             same_intrinsic_marker: true,
-                            hashes: BTreeSet::new(),
-                            dependents: BTreeSet::new(),
-                            sources: BTreeSet::new(),
-                            indexes: BTreeSet::new(),
-                            editable: node.dist.is_editable(),
-                            targets: BTreeSet::new(),
+                            targets: BTreeSet::from([target_index]),
                         });
-                entry.marker = entry.marker.or(marker);
-                entry.same_intrinsic_marker &= entry.intrinsic_marker == node.markers;
-                entry.targets.insert(target_index);
-                if show_hashes {
-                    entry.hashes.extend(node.hashes.iter().cloned());
-                }
-                if include_annotations {
-                    entry.dependents.extend(
-                        graph
-                            .edges_directed(index, Direction::Incoming)
-                            .map(|edge| graph[edge.source()].name().clone()),
-                    );
-                    if let Some(source) = sources.get(node.name()) {
-                        entry.sources.extend(source.iter().cloned());
+                    }
+                    Entry::Occupied(mut entry) => {
+                        let entry = entry.get_mut();
+                        entry.marker = entry.marker.or(marker);
+                        entry.same_intrinsic_marker &=
+                            entry.requirement.dist.markers == requirement.dist.markers;
+                        entry.targets.insert(target_index);
+                        let hashes = entry.requirement.hashes.to_mut();
+                        hashes.extend(requirement.hashes.iter().cloned());
+                        hashes.sort_unstable();
+                        hashes.dedup();
+                        entry.requirement.dependents.extend(requirement.dependents);
+                        entry.requirement.sources.extend(requirement.sources);
+                        entry.requirement.indexes.extend(requirement.indexes);
                     }
                 }
-                if include_index_annotation && let Some(index) = node.dist.index() {
-                    entry
-                        .indexes
-                        .insert(index.without_credentials().to_string());
-                }
             }
         }
-
-        let mut requirements: Vec<_> = requirements.into_values().collect();
-        for requirement in &mut requirements {
-            if requirement.targets.len() == outputs.len() && requirement.same_intrinsic_marker {
-                // The pin is common to every target, so the matrix adds no constraint. Retain
-                // any original dependency marker rather than widening the requirement itself.
-                requirement.marker = requirement.intrinsic_marker;
+        let mut requirements = Vec::with_capacity(merged.len());
+        for MergedRequirement {
+            mut requirement,
+            mut marker,
+            same_intrinsic_marker,
+            targets,
+        } in merged.into_values()
+        {
+            if targets.len() == outputs.len() && same_intrinsic_marker {
+                // Common pins retain their original dependency markers without a target guard.
+                marker = requirement.dist.markers;
             }
-            if requirement.editable {
-                if requirement.targets.len() != outputs.len() {
+            if requirement.dist.dist.is_editable() {
+                if targets.len() != outputs.len() {
                     return Err(DisplayResolutionMatrixError::ConditionalEditable(
-                        requirement.requirement.clone(),
+                        requirement.line,
                     ));
                 }
-                // `-e` requirements cannot carry markers. An editable present in all selected
-                // targets is safe to write without a marker, as in a normal `pip compile` output.
-                requirement.marker = MarkerTree::TRUE;
+                // Editable requirements cannot carry markers.
+                marker = MarkerTree::TRUE;
             }
+            if let Some(marker) = marker.contents() {
+                requirement.line.push_str(" ; ");
+                requirement.line.push_str(&marker.to_string());
+            }
+            requirements.push(requirement);
         }
-        requirements.sort_unstable_by(|left, right| {
-            left.comparator
-                .cmp(&right.comparator)
-                .then_with(|| left.requirement.cmp(&right.requirement))
-        });
-
+        requirements
+            .sort_by(|left, right| left.dist.to_comparator().cmp(&right.dist.to_comparator()));
         Ok(Self {
             requirements,
-            show_hashes,
-            include_annotations,
-            include_index_annotation,
             annotation_style,
         })
     }
 }
 
-impl std::fmt::Display for DisplayResolutionMatrix {
+impl std::fmt::Display for DisplayResolutionGraph<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         for requirement in &self.requirements {
-            let mut line = requirement.requirement.clone();
-            if let Some(marker) = requirement.marker.contents() {
-                line.push_str(" ; ");
-                line.push_str(&marker.to_string());
+            let mut line = requirement.line.clone();
+            let has_hashes = !requirement.hashes.is_empty();
+            for hash in requirement.hashes.iter() {
+                line.push_str(" \\\n    --hash=");
+                line.push_str(&hash.to_string());
             }
 
-            let has_hashes = self.show_hashes && !requirement.hashes.is_empty();
-            if self.show_hashes {
-                for hash in &requirement.hashes {
-                    line.push_str(" \\\n    --hash=");
-                    line.push_str(&hash.to_string());
-                }
-            }
-
-            let annotation = if self.include_annotations {
-                let via = match self.annotation_style {
-                    AnnotationStyle::Line => requirement
-                        .dependents
-                        .iter()
-                        .map(ToString::to_string)
-                        .chain(requirement.sources.iter().map(ToString::to_string))
-                        .collect::<Vec<_>>(),
-                    AnnotationStyle::Split => requirement
-                        .sources
-                        .iter()
-                        .map(ToString::to_string)
-                        .chain(requirement.dependents.iter().map(ToString::to_string))
-                        .collect::<Vec<_>>(),
-                };
-                if via.is_empty() {
-                    None
-                } else {
-                    let (separator, comment) = match self.annotation_style {
-                        AnnotationStyle::Line => (
-                            if has_hashes { "\n    " } else { "  " },
-                            format!("# via {}", via.join(", ")).green().to_string(),
-                        ),
-                        AnnotationStyle::Split => {
-                            let comment = if via.len() == 1 {
-                                format!("    # via {}", via[0])
-                            } else {
-                                format!(
-                                    "    # via\n{}",
-                                    via.iter()
-                                        .map(|source| format!("    #   {source}"))
-                                        .collect::<Vec<_>>()
-                                        .join("\n")
-                                )
-                            };
-                            ("\n", comment.green().to_string())
-                        }
-                    };
-                    Some((separator, comment))
-                }
-            } else {
+            let via = match self.annotation_style {
+                AnnotationStyle::Line => requirement
+                    .dependents
+                    .iter()
+                    .map(ToString::to_string)
+                    .chain(requirement.sources.iter().map(ToString::to_string))
+                    .collect::<Vec<_>>(),
+                AnnotationStyle::Split => requirement
+                    .sources
+                    .iter()
+                    .map(ToString::to_string)
+                    .chain(requirement.dependents.iter().map(ToString::to_string))
+                    .collect::<Vec<_>>(),
+            };
+            let annotation = if via.is_empty() {
                 None
+            } else {
+                let (separator, comment) = match self.annotation_style {
+                    AnnotationStyle::Line => (
+                        if has_hashes { "\n    " } else { "  " },
+                        format!("# via {}", via.join(", ")).green().to_string(),
+                    ),
+                    AnnotationStyle::Split => {
+                        let comment = if via.len() == 1 {
+                            format!("    # via {}", via[0])
+                        } else {
+                            format!(
+                                "    # via\n{}",
+                                via.iter()
+                                    .map(|source| format!("    #   {source}"))
+                                    .collect::<Vec<_>>()
+                                    .join("\n")
+                            )
+                        };
+                        ("\n", comment.green().to_string())
+                    }
+                };
+                Some((separator, comment))
             };
 
             if let Some((separator, comment)) = annotation {
@@ -356,10 +297,8 @@ impl std::fmt::Display for DisplayResolutionMatrix {
                 writeln!(f, "{line}")?;
             }
 
-            if self.include_index_annotation {
-                for index in &requirement.indexes {
-                    writeln!(f, "{}", format!("    # from {index}").green())?;
-                }
+            for index in &requirement.indexes {
+                writeln!(f, "{}", format!("    # from {index}").green())?;
             }
         }
 
@@ -432,177 +371,6 @@ fn source_annotations(resolution: &ResolverOutput, env: &ResolverEnvironment) ->
     }
 
     sources
-}
-
-/// Write the graph in the `{name}=={version}` format of requirements.txt that pip uses.
-impl std::fmt::Display for DisplayResolutionGraph<'_> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        // Determine the annotation sources for each package.
-        let sources = if self.include_annotations {
-            source_annotations(self.resolution, self.env)
-        } else {
-            SourceAnnotations::default()
-        };
-
-        // Convert a [`petgraph::graph::Graph`] based on [`ResolutionGraphNode`] to a graph based on
-        // [`DisplayResolutionGraphNode`]. In other words: converts from [`AnnotatedDist`] to
-        // [`RequirementsTxtDist`].
-        //
-        // We assign each package its propagated markers: In `requirements.txt`, we want a flat list
-        // that for each package tells us if it should be installed on the current platform, without
-        // looking at which packages depend on it.
-        let graph = self.resolution.graph.map(
-            |_index, node| match node {
-                ResolutionGraphNode::Root => DisplayResolutionGraphNode::Root,
-                ResolutionGraphNode::Dist(dist) => {
-                    let dist = RequirementsTxtDist::from_annotated_dist(dist);
-                    DisplayResolutionGraphNode::Dist(dist)
-                }
-            },
-            // We can drop the edge markers, while retaining their existence and direction for the
-            // annotations.
-            |_index, _edge| (),
-        );
-
-        // Reduce the graph, removing or combining extras for a given package.
-        let graph = if self.include_extras {
-            combine_extras(&graph)
-        } else {
-            strip_extras(&graph)
-        };
-
-        // Collect all packages.
-        let mut nodes = graph
-            .node_indices()
-            .filter_map(|index| {
-                let dist = &graph[index];
-                let name = dist.name();
-                if self.no_emit_packages.contains(name) {
-                    return None;
-                }
-
-                Some((index, dist))
-            })
-            .collect::<Vec<_>>();
-
-        // Sort the nodes by name, but with editable packages first.
-        nodes.sort_unstable_by_key(|(index, node)| (node.to_comparator(), *index));
-
-        // Print out the dependency graph.
-        for (index, node) in nodes {
-            // Display the node itself.
-            let mut line = node
-                .to_requirements_txt(&self.resolution.requires_python, self.include_markers)
-                .to_string();
-
-            // Display the distribution hashes, if any.
-            let mut has_hashes = false;
-            if self.show_hashes {
-                for hash in node.hashes {
-                    has_hashes = true;
-                    line.push_str(" \\\n");
-                    line.push_str("    --hash=");
-                    line.push_str(&hash.to_string());
-                }
-            }
-
-            // Determine the annotation comment and separator (between comment and requirement).
-            let mut annotation = None;
-
-            // If enabled, include annotations to indicate the dependencies that requested each
-            // package (e.g., `# via mypy`).
-            if self.include_annotations {
-                // Display all dependents (i.e., all packages that depend on the current package).
-                let dependents = {
-                    let mut dependents = graph
-                        .edges_directed(index, Direction::Incoming)
-                        .map(|edge| &graph[edge.source()])
-                        .map(uv_distribution_types::Name::name)
-                        .collect::<Vec<_>>();
-                    dependents.sort_unstable();
-                    dependents.dedup();
-                    dependents
-                };
-
-                // Include all external sources (e.g., requirements files).
-                let default = BTreeSet::default();
-                let source = sources.get(node.name()).unwrap_or(&default);
-
-                match self.annotation_style {
-                    AnnotationStyle::Line => match dependents.as_slice() {
-                        [] if source.is_empty() => {}
-                        [] if source.len() == 1 => {
-                            let separator = if has_hashes { "\n    " } else { "  " };
-                            let comment = format!("# via {}", source.iter().next().unwrap())
-                                .green()
-                                .to_string();
-                            annotation = Some((separator, comment));
-                        }
-                        dependents => {
-                            let separator = if has_hashes { "\n    " } else { "  " };
-                            let dependents = dependents
-                                .iter()
-                                .map(ToString::to_string)
-                                .chain(source.iter().map(ToString::to_string))
-                                .collect::<Vec<_>>()
-                                .join(", ");
-                            let comment = format!("# via {dependents}").green().to_string();
-                            annotation = Some((separator, comment));
-                        }
-                    },
-                    AnnotationStyle::Split => match dependents.as_slice() {
-                        [] if source.is_empty() => {}
-                        [] if source.len() == 1 => {
-                            let separator = "\n";
-                            let comment = format!("    # via {}", source.iter().next().unwrap())
-                                .green()
-                                .to_string();
-                            annotation = Some((separator, comment));
-                        }
-                        [dependent] if source.is_empty() => {
-                            let separator = "\n";
-                            let comment = format!("    # via {dependent}").green().to_string();
-                            annotation = Some((separator, comment));
-                        }
-                        dependents => {
-                            let separator = "\n";
-                            let dependent = source
-                                .iter()
-                                .map(ToString::to_string)
-                                .chain(dependents.iter().map(ToString::to_string))
-                                .map(|name| format!("    #   {name}"))
-                                .collect::<Vec<_>>()
-                                .join("\n");
-                            let comment = format!("    # via\n{dependent}").green().to_string();
-                            annotation = Some((separator, comment));
-                        }
-                    },
-                }
-            }
-
-            if let Some((separator, comment)) = annotation {
-                // Assemble the line with the annotations and remove trailing whitespaces.
-                for line in format!("{line:24}{separator}{comment}").lines() {
-                    let line = line.trim_end();
-                    writeln!(f, "{line}")?;
-                }
-            } else {
-                // Write the line as is.
-                writeln!(f, "{line}")?;
-            }
-
-            // If enabled, include indexes to indicate which index was used for each package (e.g.,
-            // `# from https://pypi.org/simple`).
-            if self.include_index_annotation {
-                if let Some(index) = node.dist.index() {
-                    let url = index.without_credentials();
-                    writeln!(f, "{}", format!("    # from {url}").green())?;
-                }
-            }
-        }
-
-        Ok(())
-    }
 }
 
 /// Indicate the style of annotation comments, used to indicate the dependencies that requested each

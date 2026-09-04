@@ -10,8 +10,7 @@ use uv_pep440::Version;
 use uv_pypi_types::HashDigests;
 
 pub use crate::resolution::display::{
-    AnnotationStyle, DisplayResolutionGraph, DisplayResolutionMatrix, DisplayResolutionMatrixError,
-    ExactTargetOutput,
+    AnnotationStyle, DisplayResolutionGraph, DisplayResolutionMatrixError, ExactTargetOutput,
 };
 pub(crate) use crate::resolution::output::ResolutionGraphNode;
 pub use crate::resolution::output::{ConflictingDistributionError, ResolverOutput};

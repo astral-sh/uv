@@ -11,7 +11,7 @@ use uv_resolver::{
     Lock, LockError, Preference, PreferenceError, PylockToml, PylockTomlErrorKind, UpgradePackages,
 };
 
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default)]
 pub struct LockedRequirements {
     /// The pinned versions from the lockfile.
     pub preferences: Vec<Preference>,

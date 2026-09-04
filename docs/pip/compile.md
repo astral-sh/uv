@@ -109,8 +109,8 @@ requirements are written to stdout. A configured `output-file` also works, and a
 retains the usual `uv pip compile` behavior.
 
 If an output file already exists, its pinned versions are considered separately for each target;
-markers on the existing pins determine which targets they apply to. The compiles can share parsed
-inputs and cacheable package index metadata in one invocation.
+markers on the existing pins determine which targets they apply to. The compiles share parsed inputs
+and read the existing output once per invocation.
 
 The combined requirements are intended for the selected targets. Some differences between targets,
 such as wheel compatibility for different manylinux versions, cannot be expressed by Python

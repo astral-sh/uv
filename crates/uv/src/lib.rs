@@ -32,7 +32,7 @@ use uv_cli::{
     PythonCommand, PythonNamespace, SelfCommand, SelfNamespace, ToolCommand, ToolNamespace,
     TopLevelArgs, WorkspaceCommand, WorkspaceNamespace, compat::CompatArgs, options::ArgumentError,
 };
-use uv_client::{BaseClientBuilder, SimpleMetadataCache};
+use uv_client::BaseClientBuilder;
 use uv_configuration::min_stack_size;
 use uv_flags::EnvironmentFlags;
 use uv_fs::{CWD, Simplified, normalize_path};
@@ -773,152 +773,74 @@ async fn run_with_workspace_cache(
                 groups: args.settings.groups,
             };
 
-            let batch_mode = !args.compile_targets.is_empty();
-            if batch_mode && args.settings.universal {
-                bail!(
-                    "Multiple Python targets require exact-platform resolution; disable `--universal`"
-                );
-            }
-            let simple_metadata_cache = batch_mode.then(SimpleMetadataCache::default);
-            let mut prior_lock_snapshot =
-                batch_mode.then(commands::pip::compile::PriorLockSnapshot::default);
-            let compile_client_builder =
-                client_builder.subcommand(vec!["pip".to_owned(), "compile".to_owned()]);
-            let parsed_inputs = if batch_mode {
-                Some(
-                    commands::pip::compile::ParsedCompileInputs::from_sources(
-                        &requirements,
-                        &constraints,
-                        &overrides,
-                        &excludes,
-                        &build_constraints,
-                        &groups,
-                        &compile_client_builder
-                            .clone()
-                            .keyring(args.settings.keyring_provider),
-                    )
-                    .await?,
-                )
-            } else {
-                None
-            };
-
-            let targets = if batch_mode {
-                args.compile_targets.into_iter().map(Some).collect()
-            } else {
-                vec![None]
-            };
-            let mut exact_targets = Vec::new();
-            for target in targets {
-                let python_version = target.as_ref().map_or_else(
-                    || args.settings.python_version.clone(),
-                    |target| target.python_version.clone(),
-                );
-                let python_platform = target
-                    .as_ref()
-                    .map_or(args.settings.python_platform, |target| {
-                        target.python_platform
-                    });
-
-                let status = Box::pin(commands::pip_compile(
-                    &requirements,
-                    &constraints,
-                    &overrides,
-                    &excludes,
-                    &build_constraints,
-                    args.constraints_from_workspace.clone(),
-                    args.overrides_from_workspace.clone(),
-                    args.excludes_from_workspace.clone(),
-                    args.build_constraints_from_workspace.clone(),
-                    args.environments.clone(),
-                    args.required_environments.clone(),
-                    args.settings.extras.clone(),
-                    groups.clone(),
-                    args.settings.output_file.as_deref(),
-                    args.format,
-                    args.settings.resolution,
-                    args.settings.prerelease.clone(),
-                    args.settings.fork_strategy,
-                    args.settings.dependency_mode,
-                    args.settings.upgrade.clone(),
-                    args.settings.generate_hashes,
-                    args.settings.no_emit_package.clone(),
-                    args.settings.no_strip_extras,
-                    args.settings.no_strip_markers,
-                    !args.settings.no_annotate,
-                    !args.settings.no_header,
-                    args.settings.custom_compile_command.clone(),
-                    args.settings.emit_index_url,
-                    args.settings.emit_find_links,
-                    args.settings.emit_build_options,
-                    args.settings.emit_marker_expression,
-                    args.settings.emit_index_annotation,
-                    args.settings.index_locations.clone(),
-                    args.settings.index_strategy,
-                    args.settings.torch_backend,
-                    args.settings.cuda_driver_version.clone(),
-                    args.settings.amd_gpu_architecture,
-                    args.settings.dependency_metadata.clone(),
-                    args.settings.keyring_provider,
-                    &compile_client_builder,
-                    parsed_inputs.as_ref(),
-                    prior_lock_snapshot.as_mut(),
-                    simple_metadata_cache.clone(),
-                    batch_mode.then_some(&mut exact_targets),
-                    args.settings.config_setting.clone(),
-                    args.settings.config_settings_package.clone(),
-                    args.settings.build_isolation.clone(),
-                    &args.settings.extra_build_dependencies,
-                    &args.settings.extra_build_variables,
-                    args.settings.build_options.clone(),
-                    args.settings.install_mirrors.clone(),
-                    python_version,
-                    python_platform,
-                    globals.python_downloads,
-                    args.settings.universal,
-                    args.settings.exclude_newer.clone(),
-                    args.settings.sources.clone(),
-                    args.settings.annotation_style,
-                    args.settings.link_mode,
-                    args.settings.python.clone(),
-                    args.settings.system,
-                    globals.python_preference,
-                    globals.concurrency.clone(),
-                    globals.quiet > 0 || batch_mode,
-                    cache.clone(),
-                    workspace_cache.clone(),
-                    printer,
-                    globals.preview,
-                ))
-                .await?;
-                match status {
-                    ExitStatus::Success => {}
-                    ExitStatus::Failure | ExitStatus::Error | ExitStatus::External(_) => {
-                        return Ok(status);
-                    }
-                }
-            }
-            if batch_mode {
-                commands::pip::compile::write_pip_compile_matrix(
-                    &exact_targets,
-                    args.settings.output_file.as_deref(),
-                    &args.settings.no_emit_package,
-                    args.settings.generate_hashes,
-                    args.settings.no_strip_extras,
-                    !args.settings.no_annotate,
-                    !args.settings.no_header,
-                    args.settings.custom_compile_command,
-                    args.settings.emit_index_url,
-                    args.settings.emit_find_links,
-                    args.settings.emit_build_options,
-                    args.settings.emit_marker_expression,
-                    args.settings.emit_index_annotation,
-                    args.settings.annotation_style,
-                    globals.quiet > 0,
-                )
-                .await?;
-            }
-            Ok(ExitStatus::Success)
+            Box::pin(commands::pip_compile(
+                &requirements,
+                &constraints,
+                &overrides,
+                &excludes,
+                &build_constraints,
+                args.constraints_from_workspace,
+                args.overrides_from_workspace,
+                args.excludes_from_workspace,
+                args.build_constraints_from_workspace,
+                args.environments,
+                args.required_environments,
+                args.settings.extras,
+                groups,
+                args.settings.output_file.as_deref(),
+                args.format,
+                args.settings.resolution,
+                args.settings.prerelease,
+                args.settings.fork_strategy,
+                args.settings.dependency_mode,
+                args.settings.upgrade,
+                args.settings.generate_hashes,
+                args.settings.no_emit_package,
+                args.settings.no_strip_extras,
+                args.settings.no_strip_markers,
+                !args.settings.no_annotate,
+                !args.settings.no_header,
+                args.settings.custom_compile_command,
+                args.settings.emit_index_url,
+                args.settings.emit_find_links,
+                args.settings.emit_build_options,
+                args.settings.emit_marker_expression,
+                args.settings.emit_index_annotation,
+                args.settings.index_locations,
+                args.settings.index_strategy,
+                args.settings.torch_backend,
+                args.settings.cuda_driver_version,
+                args.settings.amd_gpu_architecture,
+                args.settings.dependency_metadata,
+                args.settings.keyring_provider,
+                &client_builder.subcommand(vec!["pip".to_owned(), "compile".to_owned()]),
+                args.settings.config_setting,
+                args.settings.config_settings_package,
+                args.settings.build_isolation.clone(),
+                &args.settings.extra_build_dependencies,
+                &args.settings.extra_build_variables,
+                args.settings.build_options,
+                args.settings.install_mirrors,
+                args.settings.python_version,
+                args.settings.python_platform,
+                args.compile_targets,
+                globals.python_downloads,
+                args.settings.universal,
+                args.settings.exclude_newer,
+                args.settings.sources,
+                args.settings.annotation_style,
+                args.settings.link_mode,
+                args.settings.python,
+                args.settings.system,
+                globals.python_preference,
+                globals.concurrency,
+                globals.quiet > 0,
+                cache,
+                workspace_cache,
+                printer,
+                globals.preview,
+            ))
+            .await
         }
         Commands::Pip(PipNamespace {
             command: PipCommand::Sync(args),

@@ -16,27 +16,6 @@ use crate::base_client::CertificateSource;
 use crate::httpcache::{AfterResponse, BeforeRequest, CachePolicy, CachePolicyBuilder};
 use crate::{BaseClient, Error, ErrorKind, OwnedArchive, ProblemDetails, RetryState};
 
-/// The cache policy associated with a returned payload, before or after archiving.
-enum PayloadCachePolicy {
-    Archived(OwnedArchive<CachePolicy>),
-    New(Box<CachePolicy>),
-}
-
-struct CachedPayload<T> {
-    payload: T,
-    cache_policy: Option<PayloadCachePolicy>,
-}
-
-impl<T> CachedPayload<T> {
-    fn into_parts(self) -> (T, Option<OwnedArchive<CachePolicy>>) {
-        let cache_policy = self.cache_policy.map(|cache_policy| match cache_policy {
-            PayloadCachePolicy::Archived(cache_policy) => cache_policy,
-            PayloadCachePolicy::New(cache_policy) => cache_policy.to_archived(),
-        });
-        (self.payload, cache_policy)
-    }
-}
-
 /// A trait the generalizes (de)serialization at a high level.
 ///
 /// The main purpose of this trait is to make the `CachedClient` work for
@@ -266,7 +245,7 @@ impl CachedClient {
         cache_entry: &CacheEntry,
         cache_control: CacheControl,
         response_callback: Callback,
-    ) -> Result<CachedPayload<Payload::Target>, CachedClientError<CallBackError>> {
+    ) -> Result<Payload::Target, CachedClientError<CallBackError>> {
         let start = Instant::now();
 
         if matches!(cache_control, CacheControl::AllowStale) {
@@ -274,12 +253,7 @@ impl CachedClient {
                 .read_and_decode_stale_cache::<Payload>(req, cache_entry)
                 .await;
             match cached {
-                Ok(Some(payload)) => {
-                    return Ok(CachedPayload {
-                        payload,
-                        cache_policy: None,
-                    });
-                }
+                Ok(Some(payload)) => return Ok(payload),
                 Ok(None) => warn!(
                     "Cached response doesn't match current request for: {}",
                     DisplaySafeUrl::from_url(req.url().clone())
@@ -332,10 +306,7 @@ impl CachedClient {
                 .await
                 .expect("cache payload decoding task panicked")
             {
-                Ok(payload) => Ok(CachedPayload {
-                    payload,
-                    cache_policy: Some(PayloadCachePolicy::Archived(cached.cache_policy)),
-                }),
+                Ok(payload) => Ok(payload),
                 Err(err) => {
                     warn!(
                         "Broken fresh cache entry (for payload) at {}, removing: {err}",
@@ -366,10 +337,7 @@ impl CachedClient {
                         .await
                         .expect("cache payload decoding task panicked")
                     {
-                        Ok(payload) => Ok(CachedPayload {
-                            payload,
-                            cache_policy: Some(PayloadCachePolicy::New(new_policy)),
-                        }),
+                        Ok(payload) => Ok(payload),
                         Err(err) => {
                             warn!(
                                 "Broken fresh cache entry after revalidation \
@@ -443,7 +411,7 @@ impl CachedClient {
             })
             .await?;
 
-        Ok(payload.payload)
+        Ok(payload)
     }
 
     async fn resend_and_heal_cache<
@@ -456,7 +424,7 @@ impl CachedClient {
         cache_entry: &CacheEntry,
         cache_control: CacheControl,
         response_callback: Callback,
-    ) -> Result<CachedPayload<Payload::Target>, CachedClientError<CallBackError>> {
+    ) -> Result<Payload::Target, CachedClientError<CallBackError>> {
         let _ = fs_err::tokio::remove_file(&cache_entry.path()).await;
         let start = Instant::now();
         let (response, cache_policy) = self.fresh_request(req, cache_control).await?;
@@ -481,7 +449,7 @@ impl CachedClient {
         start: Instant,
         response: Response,
         response_callback: Callback,
-    ) -> Result<CachedPayload<Payload::Target>, CachedClientError<CallBackError>> {
+    ) -> Result<Payload::Target, CachedClientError<CallBackError>> {
         let new_cache = info_span!("new_cache", file = %cache_entry.path().display());
         // Capture retries from the retry middleware
         let retries = response
@@ -498,10 +466,7 @@ impl CachedClient {
                 duration: start.elapsed(),
             })?;
         let Some(cache_policy) = cache_policy else {
-            return Ok(CachedPayload {
-                payload: data.into_target(),
-                cache_policy: None,
-            });
+            return Ok(data.into_target());
         };
         async {
             fs_err::tokio::create_dir_all(cache_entry.dir())
@@ -512,10 +477,7 @@ impl CachedClient {
             write_atomic(cache_entry.path(), data_with_cache_policy_bytes)
                 .await
                 .map_err(ErrorKind::CacheWrite)?;
-            Ok(CachedPayload {
-                payload: data.into_target(),
-                cache_policy: Some(PayloadCachePolicy::New(cache_policy)),
-            })
+            Ok(data.into_target())
         }
         .instrument(new_cache)
         .await
@@ -775,45 +737,6 @@ impl CachedClient {
         cache_control: CacheControl,
         response_callback: Callback,
     ) -> Result<Payload::Target, CachedClientError<CallBackError>> {
-        Ok(self
-            .get_cacheable_with_retry_inner(req, cache_entry, cache_control, response_callback)
-            .await?
-            .payload)
-    }
-
-    /// Like [`Self::get_cacheable_with_retry`], but includes the policy needed to
-    /// determine whether the response may be reused by a future request.
-    pub(crate) async fn get_cacheable_with_retry_and_policy<
-        Payload: Cacheable + 'static,
-        CallBackError: std::error::Error + 'static,
-        Callback: AsyncFn(Response) -> Result<Payload, CallBackError>,
-    >(
-        &self,
-        req: Request,
-        cache_entry: &CacheEntry,
-        cache_control: CacheControl,
-        response_callback: Callback,
-    ) -> Result<
-        (Payload::Target, Option<OwnedArchive<CachePolicy>>),
-        CachedClientError<CallBackError>,
-    > {
-        Ok(self
-            .get_cacheable_with_retry_inner(req, cache_entry, cache_control, response_callback)
-            .await?
-            .into_parts())
-    }
-
-    async fn get_cacheable_with_retry_inner<
-        Payload: Cacheable + 'static,
-        CallBackError: std::error::Error + 'static,
-        Callback: AsyncFn(Response) -> Result<Payload, CallBackError>,
-    >(
-        &self,
-        req: Request,
-        cache_entry: &CacheEntry,
-        cache_control: CacheControl,
-        response_callback: Callback,
-    ) -> Result<CachedPayload<Payload::Target>, CachedClientError<CallBackError>> {
         let mut retry_state = RetryState::start(self.uncached().retry_policy(), req.url().clone());
         loop {
             let fresh_req = req.try_clone().expect("HTTP request must be cloneable");
