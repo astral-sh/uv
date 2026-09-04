@@ -677,6 +677,8 @@ pub enum RemovalReason {
     /// The environment can be removed because it is managed by uv, e.g., a project or tool
     /// environment.
     ManagedEnvironment,
+    /// The reusable build environment is stale or incomplete.
+    StaleBuildEnvironment,
 }
 
 impl std::fmt::Display for RemovalReason {
@@ -685,6 +687,7 @@ impl std::fmt::Display for RemovalReason {
             Self::UserRequest(_) => f.write_str("requested with `--clear`"),
             Self::ManagedEnvironment => f.write_str("environment is managed by uv"),
             Self::TemporaryEnvironment => f.write_str("environment is temporary"),
+            Self::StaleBuildEnvironment => f.write_str("build environment is stale"),
         }
     }
 }

@@ -153,6 +153,87 @@ fn prune_python_downloads() -> Result<()> {
     Ok(())
 }
 
+/// `cache prune` should remove reusable build environments.
+#[test]
+fn prune_build_environments() -> Result<()> {
+    let context = uv_test::test_context!("3.12")
+        .with_filtered_counts()
+        .with_filtered_sizes_and_units()
+        // Filter the cache entry's unstable key.
+        .with_filter((
+            r"\[CACHE_DIR\](\\|\/)(build-envs-v0)(\\|\/).*",
+            "[CACHE_DIR]/$2/[ENTRY]",
+        ));
+
+    let child = context.temp_dir.child("child");
+    child.create_dir_all()?;
+    child.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "child"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+    "#})?;
+    child.child("src/child/__init__.py").touch()?;
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "parent"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["child"]
+
+        [tool.uv.sources]
+        child = { path = "child" }
+
+        [tool.uv]
+        reuse-build-environment-package = ["child"]
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+    "#})?;
+    context.temp_dir.child("src/parent/__init__.py").touch()?;
+
+    context.sync().assert().success();
+    assert!(
+        context
+            .cache_dir
+            .child("build-envs-v0")
+            .child("child")
+            .exists()
+    );
+
+    uv_snapshot!(context.filters(), context.prune().arg("--verbose"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    DEBUG Found workspace root: `[TEMP_DIR]/`
+    DEBUG Adding root workspace member: `[TEMP_DIR]/`
+    DEBUG Found workspace configuration at `[TEMP_DIR]/pyproject.toml`
+    DEBUG Searching for user configuration in: `[UV_USER_CONFIG_DIR]/uv.toml`
+    DEBUG uv [VERSION] ([COMMIT] DATE)
+    Pruning cache at: [CACHE_DIR]/
+    DEBUG Removing build environment: [CACHE_DIR]/build-envs-v0/[ENTRY]
+    Removed [N] files ([SIZE])
+    ");
+
+    assert!(
+        !context
+            .cache_dir
+            .child("build-envs-v0")
+            .child("child")
+            .exists()
+    );
+
+    Ok(())
+}
+
 /// `cache prune` should remove all cached environments from the cache.
 #[test]
 fn prune_cached_env() {

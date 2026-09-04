@@ -213,7 +213,7 @@ dependency list. For example, [`cchardet`](https://pypi.org/project/cchardet/) r
 be installed in the project environment prior to installing `cchardet`, but does not declare it as a
 build dependency.
 
-To address these issues, uv supports two separate approaches to modifying the build isolation
+To address these issues, uv supports three separate approaches to modifying the build isolation
 behavior:
 
 1. **Augmenting the list of build dependencies**: This allows you to install a package in an
@@ -222,6 +222,11 @@ behavior:
    setting. For packages like `flash-attn`, you can even enforce that those build dependencies (like
    `torch`) match the version of the package that is or will be installed in the project
    environment.
+
+1. **Reusing build environments**: This keeps builds isolated while giving native build backends a
+   stable path for their incremental caches, via the
+   [`reuse-build-environment-package`](../../reference/settings.md#reuse-build-environment-package)
+   setting.
 
 1. **Disabling build isolation for specific packages**: This allows you to install a package without
    building it in an isolated environment.
@@ -406,6 +411,60 @@ requires-dist = ["torch", "einops"]
     The `version` field in `tool.uv.dependency-metadata` is optional for registry-based
     dependencies (when omitted, uv will assume the metadata applies to all versions of the package),
     but _required_ for direct URL dependencies (like Git dependencies).
+
+### Reusing build environments
+
+!!! important
+
+    Reusing build environments is in [preview](../preview.md), and is subject to change until
+    stabilized.
+
+By default, uv creates a new temporary PEP 517 build environment for every build. Native build
+backends cache configuration that includes paths from that environment, so the cache is invalidated
+when the path changes. For example, `scikit-build-core` writes `Python_EXECUTABLE` and
+`pybind11_DIR` to `CMakeCache.txt`, while `meson-python` writes the path to `meson` and build
+dependency include directories to `build.ninja`.
+
+Add a package to `reuse-build-environment-package` to create and reuse its build environment at a
+stable, content-addressed cache path:
+
+```toml title="pyproject.toml"
+[project]
+name = "project"
+version = "0.1.0"
+requires-python = ">=3.12"
+
+[tool.uv]
+reuse-build-environment-package = ["project"]
+
+[tool.scikit-build]
+build-dir = "build/{wheel_tag}"
+
+[build-system]
+requires = ["scikit-build-core", "pybind11"]
+build-backend = "scikit_build_core.build"
+```
+
+!!! important
+
+    Both settings are required. `reuse-build-environment-package` stabilizes the build
+    environment's path, while `tool.scikit-build.build-dir` preserves the backend's build
+    directory. A temporary build directory has no incremental cache to preserve.
+
+Unlike disabling build isolation, this still uses an environment separate from the project
+environment and resolved from `build-system.requires`.
+
+uv keys the environment on the package's _declared_ build dependencies, build settings, and
+interpreter. It is recreated when any of these change. A floating requirement such as
+`setuptools>=61` resolving to a newer upstream version does not recreate it; use
+`--refresh-package <PACKAGE>` or `uv cache clean <PACKAGE>` to force a rebuild. `uv cache prune`
+also removes reused build environments, and `--no-cache` never writes them.
+
+!!! note
+
+    `uv build` builds the wheel from a source distribution extracted to a temporary directory. Its
+    build environment is not reused because the extracted source tree and build directory are
+    discarded. Use `uv build --wheel` to build from the source tree instead.
 
 ### Disabling build isolation
 

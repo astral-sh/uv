@@ -335,6 +335,8 @@ pub enum PreviewFeature {
     ArtifactHashFiltering,
     /// Enables content-addressed wheel archives in the cache.
     ContentAddressedCache,
+    /// Reuse PEP 517 build environments across invocations.
+    ReuseBuildEnvironment,
 }
 
 impl Display for PreviewFeature {

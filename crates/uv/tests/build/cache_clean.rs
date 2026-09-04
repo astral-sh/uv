@@ -6,6 +6,7 @@ use std::os::unix::fs::PermissionsExt;
 use anyhow::Result;
 use assert_cmd::prelude::*;
 use assert_fs::prelude::*;
+use indoc::indoc;
 
 #[cfg(target_os = "linux")]
 use std::process::Command;
@@ -325,6 +326,62 @@ async fn clean_force() -> Result<()> {
     Clearing cache at: [CACHE_DIR]/
     Removed [N] files ([SIZE])
     ");
+
+    Ok(())
+}
+
+/// `cache clean child` should remove that package's build environments.
+#[test]
+fn clean_package_build_environment() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let child = context.temp_dir.child("child");
+    child.create_dir_all()?;
+    child.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "child"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+    "#})?;
+    child.child("src/child/__init__.py").touch()?;
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "parent"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["child"]
+
+        [tool.uv.sources]
+        child = { path = "child" }
+
+        [tool.uv]
+        reuse-build-environment-package = ["child"]
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+    "#})?;
+    context.temp_dir.child("src/parent/__init__.py").touch()?;
+
+    context.sync().assert().success();
+
+    let build_environments = context.cache_dir.child("build-envs-v0");
+    assert!(build_environments.child("child").exists());
+
+    // Cleaning another package leaves this environment intact.
+    context.clean().arg("iniconfig").assert().success();
+    assert!(build_environments.child("child").exists());
+
+    context.clean().arg("child").assert().success();
+    assert!(!build_environments.child("child").exists());
 
     Ok(())
 }

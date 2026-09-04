@@ -307,6 +307,7 @@ async fn build_impl(
         config_setting,
         config_settings_package,
         build_isolation,
+        reuse_build_environment_package,
         extra_build_dependencies,
         extra_build_variables,
         exclude_newer,
@@ -484,6 +485,7 @@ async fn build_impl(
             build_constraints,
             build_constraints_from_workspace,
             build_isolation,
+            reuse_build_environment_package,
             extra_build_dependencies,
             extra_build_variables,
             *index_strategy,
@@ -560,6 +562,7 @@ async fn build_package(
     build_constraints: &[RequirementsSource],
     build_constraints_from_workspace: &[Requirement],
     build_isolation: &BuildIsolation,
+    reuse_build_environment_package: &[PackageName],
     extra_build_dependencies: &ExtraBuildDependencies,
     extra_build_variables: &ExtraBuildVariables,
     index_strategy: IndexStrategy,
@@ -699,7 +702,7 @@ async fn build_package(
             .into_inner();
 
     // Create a build dispatch.
-    let build_dispatch = BuildDispatch::new(
+    let mut build_dispatch = BuildDispatch::new(
         &client,
         cache,
         &build_constraints,
@@ -712,6 +715,7 @@ async fn build_package(
         config_setting,
         config_settings_package,
         types_build_isolation,
+        reuse_build_environment_package,
         &extra_build_requires,
         extra_build_variables,
         link_mode,
@@ -832,6 +836,9 @@ async fn build_package(
             let temp_dir = tempfile::tempdir_in(cache.bucket(CacheBucket::SourceDistributions))?;
             let (temp_dir, _) = uv_extract::stream::archive(reader, ext, temp_dir).await?;
 
+            // Do not cache an environment keyed on this temporary source tree.
+            build_dispatch.disable_build_environment_reuse();
+
             // Extract the top-level directory from the archive.
             let extracted = match uv_extract::strip_component(temp_dir.path()) {
                 Ok(top_level) => top_level,
@@ -938,6 +945,9 @@ async fn build_package(
             })?;
             let temp_dir = tempfile::tempdir_in(&output_dir)?;
             let (temp_dir, _) = uv_extract::stream::archive(reader, ext, temp_dir).await?;
+
+            // Do not cache an environment keyed on this temporary source tree.
+            build_dispatch.disable_build_environment_reuse();
 
             // If the source distribution has a normalized filename, check its identity.
             let source_dist = source

@@ -21,7 +21,7 @@ use uv_distribution_types::{
 use uv_fs::Simplified;
 use uv_install_wheel::LinkMode;
 use uv_installer::{InstallationStrategy, SitePackages};
-use uv_normalize::{DefaultExtras, DefaultGroups};
+use uv_normalize::{DefaultExtras, DefaultGroups, PackageName};
 use uv_pep440::Version;
 use uv_preview::{Preview, PreviewFeature};
 use uv_pypi_types::Conflicts;
@@ -75,6 +75,7 @@ pub(crate) async fn pip_sync(
     config_settings: &ConfigSettings,
     config_settings_package: &PackageConfigSettings,
     build_isolation: BuildIsolation,
+    reuse_build_environment_package: &[PackageName],
     extra_build_dependencies: &ExtraBuildDependencies,
     extra_build_variables: &ExtraBuildVariables,
     build_options: BuildOptions,
@@ -386,6 +387,7 @@ pub(crate) async fn pip_sync(
         config_settings,
         config_settings_package,
         types_build_isolation,
+        reuse_build_environment_package,
         &extra_build_requires,
         extra_build_variables,
         link_mode,
@@ -507,6 +509,7 @@ pub(crate) async fn pip_sync(
         config_settings,
         config_settings_package,
         types_build_isolation,
+        reuse_build_environment_package,
         &extra_build_requires,
         extra_build_variables,
         link_mode,

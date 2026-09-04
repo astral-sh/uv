@@ -2,6 +2,7 @@
 //!
 //! <https://packaging.python.org/en/latest/specifications/source-distribution-format/>
 
+mod build_environment;
 mod error;
 mod pipreqs;
 
@@ -48,6 +49,7 @@ use uv_types::{
 use uv_warnings::warn_user_once;
 use uv_workspace::WorkspaceCache;
 
+use crate::build_environment::{BuildEnvironment, BuildEnvironmentKey};
 pub use crate::error::{Error, MissingHeaderCause};
 
 /// The default backend to use when PEP 517 is used without a `build-system` section.
@@ -236,12 +238,32 @@ impl SourceBuildContext {
     }
 }
 
+/// Create a build environment in a temporary directory, returning the directory alongside it.
+fn create_ephemeral_venv(
+    cache: &Cache,
+    interpreter: &Interpreter,
+) -> Result<(PythonEnvironment, TempDir), Error> {
+    let venv_dir = cache.venv_dir()?;
+    let venv = uv_virtualenv::create_venv(
+        venv_dir.path(),
+        interpreter.clone(),
+        uv_virtualenv::Prompt::None,
+        false,
+        uv_virtualenv::OnExisting::Remove(uv_virtualenv::RemovalReason::TemporaryEnvironment),
+        false,
+        uv_virtualenv::Seed::Disabled,
+        false,
+    )?;
+    Ok((venv, venv_dir))
+}
+
 /// Holds the state through a series of PEP 517 frontend to backend calls or a single `setup.py`
 /// invocation.
 ///
 /// This keeps both the temp dir and the result of a potential `prepare_metadata_for_build_wheel`
 /// call which changes how we call `build_wheel`.
 pub struct SourceBuild {
+    /// Temporary PEP 517 hook output, including `get_requires_for_build_*` and metadata.
     temp_dir: TempDir,
     source_tree: PathBuf,
     config_settings: ConfigSettings,
@@ -251,6 +273,13 @@ pub struct SourceBuild {
     project: Option<Project>,
     /// The virtual environment in which to build the source distribution.
     venv: PythonEnvironment,
+    /// Set for a temporary build environment, whose directory is removed with [`SourceBuild`].
+    #[expect(dead_code, reason = "Held to defer removal until the build completes")]
+    venv_dir: Option<TempDir>,
+    /// Set for a reusable build environment, to keep another process from recreating it at the
+    /// path the backend is building against.
+    #[expect(dead_code, reason = "Held to bound the lock to the build's lifetime")]
+    build_environment_lock: Option<LockedFile>,
     /// Populated if `prepare_metadata_for_build_wheel` was called.
     ///
     /// > If the build frontend has previously called `prepare_metadata_for_build_wheel` and depends
@@ -308,7 +337,7 @@ impl SourceBuild {
         level: BuildOutput,
         credentials_cache: &CredentialsCache,
     ) -> Result<Self, Error> {
-        let temp_dir = build_context.cache().venv_dir()?;
+        let temp_dir = build_context.cache().build_dir()?;
 
         let source_tree = if let Some(subdir) = subdirectory {
             source.join(subdir)
@@ -365,27 +394,80 @@ impl SourceBuild {
             .map_ok(Requirement::from)
             .collect::<Result<Vec<_>, _>>()?;
 
-        // Create a virtual environment, or install into the shared environment if requested.
-        let venv = if let Some(venv) = build_isolation.shared_environment(package_name.as_ref()) {
-            venv.clone()
-        } else {
-            uv_virtualenv::create_venv(
-                temp_dir.path(),
-                interpreter.clone(),
-                uv_virtualenv::Prompt::None,
-                false,
-                uv_virtualenv::OnExisting::Remove(
-                    uv_virtualenv::RemovalReason::TemporaryEnvironment,
-                ),
-                false,
-                uv_virtualenv::Seed::Disabled,
-                false,
-            )?
+        // Find this package's reusable build environment.
+        let reusable = match package_name.as_ref() {
+            Some(name)
+                if build_isolation.is_isolated(Some(name))
+                    && build_context.reuse_build_environment().contains(name) =>
+            {
+                let base_python = if cfg!(unix) {
+                    interpreter.find_base_python()?
+                } else {
+                    interpreter.to_base_python()?
+                };
+                Some(BuildEnvironment::new(
+                    build_context.cache(),
+                    name,
+                    &BuildEnvironmentKey {
+                        base_python: &base_python,
+                        python_full_version: &interpreter.python_full_version().to_string(),
+                        implementation_name: interpreter.implementation_name(),
+                        source_root: &source_tree,
+                        subdirectory,
+                        no_sources: &no_sources,
+                        build_kind,
+                        pep517_backend: &pep517_backend,
+                        extra_build_dependencies: &extra_build_dependencies,
+                        config_settings: &config_settings,
+                        environment_variables: environment_variables
+                            .iter()
+                            .map(|(key, value)| (key.as_os_str(), value.as_os_str()))
+                            .collect(),
+                        index_locations: locations,
+                    },
+                ))
+            }
+            _ => None,
         };
 
-        // Set up the build environment. If build isolation is disabled, we assume the build
-        // environment is already set up.
-        if build_isolation.is_isolated(package_name.as_ref()) {
+        // Held for the lifetime of the build, so that a concurrent `--refresh` cannot recreate the
+        // environment at the path the backend is building against.
+        let build_environment_lock = match reusable.as_ref() {
+            Some(reusable) => reusable.lock().await,
+            None => None,
+        };
+
+        // `provision` is false for an existing shared or cached environment, and `venv_dir` is only
+        // set for a temporary environment.
+        let (venv, venv_dir, provision) = if let Some(venv) =
+            build_isolation.shared_environment(package_name.as_ref())
+        {
+            (venv.clone(), None, false)
+        } else if let Some(reusable) = reusable.as_ref() {
+            if let Some(venv) = reusable.reuse(build_context.cache()) {
+                (venv, None, false)
+            } else {
+                match reusable.create(interpreter) {
+                    Ok(venv) => (venv, None, true),
+                    // Fall back to a temporary environment if the cache is unusable.
+                    Err(err) => {
+                        warn!(
+                            "Failed to create a reusable build environment, falling back to a temporary environment: {err}"
+                        );
+                        let (venv, venv_dir) =
+                            create_ephemeral_venv(build_context.cache(), interpreter)?;
+                        (venv, Some(venv_dir), true)
+                    }
+                }
+            }
+        } else {
+            let (venv, venv_dir) = create_ephemeral_venv(build_context.cache(), interpreter)?;
+            (venv, Some(venv_dir), true)
+        };
+
+        // Only provision newly created isolated environments.
+        let mut installed_requirements = Vec::new();
+        if build_isolation.is_isolated(package_name.as_ref()) && provision {
             debug!("Resolving build requirements");
 
             let dependency_sources = if extra_build_dependencies.is_empty() {
@@ -403,10 +485,20 @@ impl SourceBuild {
             )
             .await?;
 
-            build_context
+            let installed = build_context
                 .install(&resolved_requirements, &venv, build_stack)
                 .await
                 .map_err(|err| Error::RequirementsInstall(dependency_sources, err.into()))?;
+
+            if reusable.is_some() {
+                installed_requirements = installed
+                    .iter()
+                    .map(ToString::to_string)
+                    .sorted_unstable()
+                    .collect();
+            }
+        } else if !provision {
+            debug!("Reusing existing build environment");
         } else {
             debug!("Proceeding without build isolation");
         }
@@ -442,10 +534,9 @@ impl SourceBuild {
             OsString::from(venv.scripts())
         };
 
-        // Create the PEP 517 build environment. If build isolation is disabled, we assume the build
-        // environment is already set up.
+        // Only create PEP 517 build environments for new isolated environments.
         let runner = PythonRunner::new(source_build_context.concurrent_build_slots.clone(), level);
-        if build_isolation.is_isolated(package_name.as_ref()) {
+        if build_isolation.is_isolated(package_name.as_ref()) && provision {
             debug!("Creating PEP 517 build environment");
 
             create_pep517_build_environment(
@@ -474,12 +565,22 @@ impl SourceBuild {
             .await?;
         }
 
+        // Mark the environment reusable only after provisioning completes.
+        if provision
+            && let Some(reusable) = reusable.as_ref()
+            && let Err(err) = reusable.commit(&installed_requirements)
+        {
+            warn!("Failed to record the reusable build environment: {err}");
+        }
+
         Ok(Self {
             temp_dir,
             source_tree,
             pep517_backend,
             project,
             venv,
+            venv_dir,
+            build_environment_lock,
             build_kind,
             level,
             config_settings,

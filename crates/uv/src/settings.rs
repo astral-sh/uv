@@ -1283,6 +1283,7 @@ impl ToolUpgradeSettings {
             config_setting,
             config_setting_package: config_settings_package,
             build_isolation,
+            build_environment_reuse,
             exclude_newer,
             link_mode,
             compile_bytecode,
@@ -1310,6 +1311,7 @@ impl ToolUpgradeSettings {
             config_setting,
             config_settings_package,
             build_isolation,
+            build_environment_reuse,
             exclude_newer,
             link_mode,
             compile_bytecode,
@@ -4491,6 +4493,7 @@ pub(crate) struct InstallerSettingsRef<'a> {
     pub(crate) config_setting: &'a ConfigSettings,
     pub(crate) config_settings_package: &'a PackageConfigSettings,
     pub(crate) build_isolation: &'a BuildIsolation,
+    pub(crate) reuse_build_environment_package: &'a [PackageName],
     pub(crate) extra_build_dependencies: &'a ExtraBuildDependencies,
     pub(crate) extra_build_variables: &'a ExtraBuildVariables,
     pub(crate) exclude_newer: &'a ExcludeNewer,
@@ -4518,6 +4521,7 @@ pub(crate) struct ResolverSettings {
     pub(crate) keyring_provider: KeyringProviderType,
     pub(crate) link_mode: LinkMode,
     pub(crate) build_isolation: BuildIsolation,
+    pub(crate) reuse_build_environment_package: Vec<PackageName>,
     pub(crate) extra_build_dependencies: ExtraBuildDependencies,
     pub(crate) extra_build_variables: ExtraBuildVariables,
     pub(crate) prerelease: Prerelease,
@@ -4623,6 +4627,9 @@ impl From<ResolverOptions> for ResolverSettings {
             config_setting: value.config_settings.unwrap_or_default(),
             config_settings_package: value.config_settings_package.unwrap_or_default(),
             build_isolation: value.build_isolation.unwrap_or_default(),
+            reuse_build_environment_package: value
+                .reuse_build_environment_package
+                .unwrap_or_default(),
             extra_build_dependencies: value.extra_build_dependencies.unwrap_or_default(),
             extra_build_variables: value.extra_build_variables.unwrap_or_default(),
             exclude_newer: ExcludeNewer::from_args(
@@ -4752,6 +4759,9 @@ impl From<ResolverInstallerOptions> for ResolverInstallerSettings {
                 keyring_provider: value.keyring_provider.unwrap_or_default(),
                 link_mode: value.link_mode.unwrap_or_default(),
                 build_isolation: value.build_isolation.unwrap_or_default(),
+                reuse_build_environment_package: value
+                    .reuse_build_environment_package
+                    .unwrap_or_default(),
                 extra_build_dependencies: value.extra_build_dependencies.unwrap_or_default(),
                 extra_build_variables: value.extra_build_variables.unwrap_or_default(),
                 prerelease: resolve_prerelease(
@@ -4795,6 +4805,7 @@ pub(crate) struct PipSettings {
     pub(crate) cuda_driver_version: Option<Version>,
     pub(crate) amd_gpu_architecture: Option<AmdGpuArchitecture>,
     pub(crate) build_isolation: BuildIsolation,
+    pub(crate) reuse_build_environment_package: Vec<PackageName>,
     pub(crate) extra_build_dependencies: ExtraBuildDependencies,
     pub(crate) extra_build_variables: ExtraBuildVariables,
     pub(crate) build_options: BuildOptions,
@@ -4868,6 +4879,7 @@ impl PipSettings {
             only_binary,
             no_build_isolation,
             no_build_isolation_package,
+            reuse_build_environment_package,
             extra_build_dependencies,
             extra_build_variables,
             strict,
@@ -4932,6 +4944,7 @@ impl PipSettings {
             config_settings_package: top_level_config_settings_package,
             no_build_isolation: top_level_no_build_isolation,
             no_build_isolation_package: top_level_no_build_isolation_package,
+            reuse_build_environment_package: top_level_reuse_build_environment_package,
             extra_build_dependencies: top_level_extra_build_dependencies,
             extra_build_variables: top_level_extra_build_variables,
             exclude_newer: top_level_exclude_newer,
@@ -4976,6 +4989,8 @@ impl PipSettings {
         let no_build_isolation = no_build_isolation.combine(top_level_no_build_isolation);
         let no_build_isolation_package =
             no_build_isolation_package.combine(top_level_no_build_isolation_package);
+        let reuse_build_environment_package =
+            reuse_build_environment_package.combine(top_level_reuse_build_environment_package);
         let extra_build_dependencies =
             extra_build_dependencies.combine(top_level_extra_build_dependencies);
         let extra_build_variables = extra_build_variables.combine(top_level_extra_build_variables);
@@ -5091,6 +5106,10 @@ impl PipSettings {
                 no_build_isolation_package.unwrap_or_default(),
             ))
             .unwrap_or_default(),
+            reuse_build_environment_package: args
+                .reuse_build_environment_package
+                .combine(reuse_build_environment_package)
+                .unwrap_or_default(),
             extra_build_dependencies: args
                 .extra_build_dependencies
                 .combine(extra_build_dependencies)
@@ -5225,6 +5244,7 @@ impl<'a> From<&'a ResolverInstallerSettings> for InstallerSettingsRef<'a> {
             config_setting: &settings.resolver.config_setting,
             config_settings_package: &settings.resolver.config_settings_package,
             build_isolation: &settings.resolver.build_isolation,
+            reuse_build_environment_package: &settings.resolver.reuse_build_environment_package,
             extra_build_dependencies: &settings.resolver.extra_build_dependencies,
             extra_build_variables: &settings.resolver.extra_build_variables,
             exclude_newer: &settings.resolver.exclude_newer,
