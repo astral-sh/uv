@@ -359,7 +359,8 @@ impl Pep723Script {
 #[derive(Debug, Deserialize, Clone)]
 #[serde(rename_all = "kebab-case")]
 pub struct Pep723Metadata {
-    pub dependencies: Option<Vec<uv_pep508::Requirement<VerbatimParsedUrl>>>,
+    #[serde(default)]
+    pub dependencies: Vec<uv_pep508::Requirement<VerbatimParsedUrl>>,
     pub requires_python: Option<VersionSpecifiers>,
     pub tool: Option<Tool>,
     /// The raw unserialized document.
