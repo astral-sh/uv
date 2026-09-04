@@ -8364,6 +8364,33 @@ fn require_hashes_build_dependencies() -> Result<()> {
     "
     );
 
+    // Build constraints retain their hashes while ignoring extras during resolution.
+    let constraints_txt = context.temp_dir.child("build_constraints.txt");
+    constraints_txt.write_str("hatchling[foo]==1.20.0 --hash=sha256:incorrect")?;
+
+    uv_snapshot!(context.pip_install()
+        .arg("--index-url").arg(server.index_url())
+        .arg("--no-binary").arg("a")
+        .arg("-r").arg("requirements.txt")
+        .arg("--require-hashes")
+        .arg("--build-constraint").arg("build_constraints.txt")
+        .arg("--reinstall")
+        .arg("--no-cache"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+      × Failed to download and build `a==1.0.0`
+      ├─▶ Failed to install requirements from `build-system.requires`
+      ├─▶ Failed to download `hatchling==1.20.0`
+      ╰─▶ Hash mismatch for `hatchling==1.20.0`
+
+          Expected:
+            sha256:incorrect
+
+          Computed:
+            sha256:872c63aa7e8aca85e8dba07b05c6a9b28d5a149fe00638f1a47e36930197248f
+    ");
+
     Ok(())
 }
 
