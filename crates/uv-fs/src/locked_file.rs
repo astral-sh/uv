@@ -22,23 +22,21 @@ static LOCK_TIMEOUT_SECS: AtomicU32 = AtomicU32::new(0);
 
 /// Set the lock timeout globally.
 pub fn set_lock_timeout(timeout: Duration) {
-    LOCK_TIMEOUT_SECS.store(
-        timeout.as_secs().min(u32::MAX as u64) as u32,
-        Ordering::Relaxed,
-    );
+    let secs = u32::try_from(timeout.as_secs()).unwrap_or(u32::MAX);
+    LOCK_TIMEOUT_SECS.store(secs, Ordering::Relaxed);
 }
 
-/// Retrieve the current lock timeout, falling back to reading `UV_LOCK_TIMEOUT` directly
+/// Retrieve the current lock timeout, falling back to reading UV_LOCK_TIMEOUT directly
 /// or defaulting to 5 minutes if unset.
-pub fn lock_timeout() -> Duration {
+pub(crate) fn lock_timeout() -> Duration {
     let secs = LOCK_TIMEOUT_SECS.load(Ordering::Relaxed);
     if secs > 0 {
-        Duration::from_secs(secs as u64)
+        Duration::from_secs(u64::from(secs))
     } else {
         env::var_os(EnvVars::UV_LOCK_TIMEOUT)
             .and_then(|v| v.to_str().and_then(|s| s.parse::<u64>().ok()))
             .map(Duration::from_secs)
-            .unwrap_or(Duration::from_secs(DEFAULT_LOCK_TIMEOUT_SECS as u64))
+            .unwrap_or(Duration::from_secs(u64::from(DEFAULT_LOCK_TIMEOUT_SECS)))
     }
 }
 
