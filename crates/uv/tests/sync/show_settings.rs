@@ -82,6 +82,7 @@ fn pip_compile_baseline() {
     }
     PipCompileSettings {
         format: None,
+        compile_targets: [],
         src_file: [
             "requirements.in",
         ],
