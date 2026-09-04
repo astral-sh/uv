@@ -12,7 +12,9 @@ use assert_cmd::assert::OutputAssertExt;
 use assert_fs::prelude::*;
 #[cfg(unix)]
 use fs_err::os::unix::fs::symlink as create_symlink;
-use fs_err::{File, create_dir, create_dir_all, read_to_string};
+use fs_err::{File, read_to_string};
+#[cfg(unix)]
+use fs_err::{create_dir, create_dir_all};
 #[cfg(feature = "test-python-managed")]
 use http::StatusCode;
 #[cfg(feature = "test-universal")]
