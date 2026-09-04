@@ -250,11 +250,12 @@ impl InstallState {
 
 /// Whether a wheel entry must remain writable without changing the cache.
 pub(crate) fn needs_mutable_copy(path: &Path) -> bool {
-    path.ends_with("RECORD")
-        || path.ends_with("__pycache__")
-        || path.extension().is_some_and(|extension| {
-            extension == "dist-info" || extension == "data" || extension == "pyc"
-        })
+    match path.extension() {
+        Some(extension) => extension == "dist-info" || extension == "data" || extension == "pyc",
+        None => path
+            .file_name()
+            .is_some_and(|filename| filename == "RECORD" || filename == "__pycache__"),
+    }
 }
 
 /// Extract a wheel by linking all of its files into site packages.
