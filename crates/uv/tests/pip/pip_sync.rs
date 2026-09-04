@@ -5621,6 +5621,55 @@ fn pep_751_requires_packages() -> Result<()> {
 }
 
 #[test]
+fn pep_751_empty_hashes() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let server = PackseServer::new("simple/single-package.toml");
+    context
+        .temp_dir
+        .child("pylock.toml")
+        .write_str(&formatdoc! {r#"
+        lock-version = "1.0"
+        created-by = "uv"
+
+        [[packages]]
+        name = "a"
+        version = "1.0.0"
+        wheels = [{{ url = "{wheel_url}", hashes = {{}} }}]
+    "#,
+            wheel_url = server.file_url("a-1.0.0-py3-none-any.whl"),
+        })?;
+
+    // Empty hash tables should warn without preventing installation by default.
+    uv_snapshot!(context.filters(), context.pip_sync()
+        .arg("--preview")
+        .arg("--offline")
+        .arg("--dry-run")
+        .arg("pylock.toml"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    warning: Empty hash tables in `pylock.toml` will be rejected in a future uv version. Rerun the original `uv export` or `uv pip compile` command to regenerate the file.
+    Would download 1 package
+    Would install 1 package
+     + a==1.0.0
+    ");
+
+    // Empty hash tables should warn even when verification is disabled.
+    uv_snapshot!(context.filters(), context.pip_sync()
+        .arg("--preview")
+        .arg("--no-verify-hashes")
+        .arg("pylock.toml"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    warning: Empty hash tables in `pylock.toml` will be rejected in a future uv version. Rerun the original `uv export` or `uv pip compile` command to regenerate the file.
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + a==1.0.0
+    ");
+
+    Ok(())
+}
+
+#[test]
 fn pep_751_validates_archive_size() -> Result<()> {
     let context = uv_test::test_context!("3.12");
     context

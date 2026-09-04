@@ -13223,6 +13223,129 @@ fn pep_751_install_path_sdist() -> Result<()> {
 }
 
 #[test]
+fn pep_751_empty_hashes() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let pylock_toml = context.temp_dir.child("pylock.toml");
+
+    allow_duplicates! {
+        for (table, filename) in [
+            ("[packages.archive]", "iniconfig-2.0.0.tar.gz"),
+            ("[packages.sdist]", "iniconfig-2.0.0.tar.gz"),
+            ("[[packages.wheels]]", "iniconfig-2.0.0-py3-none-any.whl"),
+        ] {
+            pylock_toml.write_str(&formatdoc! {r#"
+                lock-version = "1.0"
+                created-by = "uv"
+
+                [[packages]]
+                name = "iniconfig"
+                version = "2.0.0"
+                {table}
+                url = "https://example.com/{filename}"
+                hashes = {{}}
+            "#})?;
+
+            // Requiring hashes should still reject artifacts with empty hash tables.
+            uv_snapshot!(context.filters(), context.pip_install()
+                .arg("--preview")
+                .arg("--offline")
+                .arg("--dry-run")
+                .arg("--require-hashes")
+                .arg("-r")
+                .arg("pylock.toml"), @"
+            exit_code: 2 (failure)
+            ----- stderr -----
+            warning: Empty hash tables in `pylock.toml` will be rejected in a future uv version. Rerun the original `uv export` or `uv pip compile` command to regenerate the file.
+            error: In `--require-hashes` mode, all requirements must have a hash, but none were provided for: iniconfig
+            ");
+        }
+        Ok::<(), anyhow::Error>(())
+    }?;
+
+    Ok(())
+}
+
+#[test]
+fn pep_751_missing_hashes() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context.temp_dir.child("pylock.toml").write_str(indoc! {r#"
+        lock-version = "1.0"
+        created-by = "uv"
+
+        [[packages]]
+        name = "iniconfig"
+        version = "2.0.0"
+        wheels = [{ url = "https://example.com/iniconfig-2.0.0-py3-none-any.whl" }]
+    "#})?;
+
+    // Omitting the required hashes field should fail even with verification disabled.
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--preview")
+        .arg("--offline")
+        .arg("--dry-run")
+        .arg("--no-verify-hashes")
+        .arg("-r")
+        .arg("pylock.toml"), @r#"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Not a valid `pylock.toml` file: pylock.toml
+      Caused by: TOML parse error at line 7, column 11
+          |
+        7 | wheels = [{ url = "https://example.com/iniconfig-2.0.0-py3-none-any.whl" }]
+          |           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        missing field `hashes`
+    "#);
+
+    Ok(())
+}
+
+#[test]
+fn pep_751_empty_hashes_unselected_artifacts() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    fs::copy(
+        context
+            .workspace_root
+            .join("test/links/ok-1.0.0-py3-none-any.whl"),
+        context.temp_dir.child("ok-1.0.0-py3-none-any.whl"),
+    )?;
+    context.temp_dir.child("pylock.toml").write_str(indoc! {r#"
+        lock-version = "1.0"
+        created-by = "uv"
+
+        [[packages]]
+        name = "ok"
+        version = "1.0.0"
+        sdist = { url = "https://example.com/ok-1.0.0.tar.gz", hashes = {} }
+        wheels = [
+            { url = "https://example.com/ok-1.0.0-cp311-cp311-win32.whl", hashes = { sha3_256 = "0000000000000000000000000000000000000000000000000000000000000000" } },
+            { path = "ok-1.0.0-py3-none-any.whl", hashes = { sha256 = "79f0b33e6ce1e09eaa1784c8eee275dfe84d215d9c65c652f07c18e85fdaac5f" } },
+        ]
+
+        [[packages]]
+        name = "unused"
+        version = "1.0.0"
+        marker = "python_version < '3'"
+        archive = { url = "https://example.com/unused-1.0.0.tar.gz", hashes = {} }
+    "#})?;
+
+    // Empty tables on unselected artifacts should warn once without preventing installation.
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--preview")
+        .arg("--offline")
+        .arg("-r")
+        .arg("pylock.toml"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    warning: Empty hash tables in `pylock.toml` will be rejected in a future uv version. Rerun the original `uv export` or `uv pip compile` command to regenerate the file.
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + ok==1.0.0
+    ");
+
+    Ok(())
+}
+
+#[test]
 fn pep_751_unsupported_hashes() -> Result<()> {
     let context = uv_test::test_context!("3.12");
     context.temp_dir.child("pylock.toml").write_str(indoc! {r#"
