@@ -9134,6 +9134,39 @@ fn sync_active_script_environment() -> Result<()> {
 }
 
 #[test]
+fn sync_active_script_environment_non_virtualenv() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context.temp_dir.child("script.py").write_str(indoc! { r#"
+        # /// script
+        # requires-python = ">=3.12"
+        # dependencies = []
+        # ///
+        "#
+    })?;
+    let active_environment = context.temp_dir.child("active");
+    active_environment.create_dir_all()?;
+    active_environment
+        .child("important.txt")
+        .write_str("important data")?;
+
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--active")
+        .arg("--script")
+        .arg("script.py")
+        .env(EnvVars::VIRTUAL_ENV, "active"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Script environment at `[TEMP_DIR]/active` cannot be replaced because it is a non-empty directory that is not a virtual environment
+    ");
+
+    active_environment
+        .child("important.txt")
+        .assert("important data");
+
+    Ok(())
+}
+
+#[test]
 fn sync_active_script_environment_json() -> Result<()> {
     let context = uv_test::test_context_with_versions!(&["3.11", "3.12"])
         .with_filtered_virtualenv_bin()
