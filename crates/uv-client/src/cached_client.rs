@@ -222,6 +222,66 @@ impl CachedClient {
         self.0.certificate_source()
     }
 
+    /// Return a cached response without making an HTTP request, if permitted by the cache policy.
+    ///
+    /// A cache miss or stale response can be retried after acquiring the cache entry's lock.
+    #[instrument(skip_all)]
+    pub(crate) async fn get_fresh_cached<Payload: Cacheable + 'static>(
+        &self,
+        mut request: Request,
+        cache_entry: &CacheEntry,
+        cache_control: &CacheControl,
+    ) -> Option<Payload::Target> {
+        match cache_control {
+            CacheControl::AllowStale => {
+                let (_, cached) = self
+                    .read_and_decode_stale_cache::<Payload>(request, cache_entry)
+                    .await;
+                return cached.ok().flatten();
+            }
+            CacheControl::MustRevalidate => {
+                request.headers_mut().insert(
+                    http::header::CACHE_CONTROL,
+                    http::HeaderValue::from_static("no-cache"),
+                );
+            }
+            CacheControl::None | CacheControl::Override(_) => {}
+        }
+
+        // Leave corrupt entries untouched: the caller can heal them after acquiring the lock.
+        let cached =
+            DataWithCachePolicy::from_path_async(cache_entry.path(), self.0.cache_read_runtime())
+                .await
+                .ok()?;
+        match cached.cache_policy.before_request(&mut request) {
+            BeforeRequest::Fresh => {}
+            BeforeRequest::Stale(_) | BeforeRequest::NoMatch => return None,
+        }
+
+        match self
+            .0
+            .cache_read_runtime()
+            .spawn_blocking(move || Payload::from_aligned_bytes(cached.data))
+            .await
+        {
+            Ok(Ok(payload)) => Some(payload),
+            Ok(Err(err)) => {
+                warn!(
+                    "Broken fresh cache payload at {}: {err}",
+                    cache_entry.path().display()
+                );
+                None
+            }
+            Err(err) => {
+                warn!(
+                    "Failed to decode fresh cache payload at {}: {err}",
+                    cache_entry.path().display()
+                );
+                None
+            }
+        }
+    }
+
     /// Make a cached request with a custom response transformation while using
     /// the `Cacheable` trait to (de)serialize cached responses.
     ///

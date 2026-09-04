@@ -5,6 +5,11 @@ use std::env::current_dir;
 use std::fs;
 use std::process::Command;
 use std::str::FromStr;
+#[cfg(not(windows))]
+use std::sync::atomic::AtomicUsize;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Barrier};
+use std::time::Duration;
 
 use anyhow::Result;
 #[cfg(feature = "test-universal")]
@@ -16,9 +21,12 @@ use http::StatusCode;
 #[cfg(feature = "test-universal")]
 use indoc::formatdoc;
 use indoc::indoc;
+use serde_json::json;
+#[cfg(not(windows))]
+use tokio::sync::Notify;
 use url::Url;
 use wiremock::matchers::{method, path};
-use wiremock::{Mock, MockServer, ResponseTemplate};
+use wiremock::{Mock, MockServer, Request, ResponseTemplate};
 
 use uv_fs::Simplified;
 use uv_normalize::PackageName;
@@ -58,6 +66,207 @@ fn compile_requirements_in() -> Result<()> {
     ");
 
     Ok(())
+}
+
+/// Concurrent commands sharing a cache fetch a package's Simple API page only once, including
+/// when revalidating an existing entry.
+#[tokio::test]
+async fn compile_concurrent_simple_index_requests() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("requirements.in")
+        .write_str("ok==1.0.0")?;
+
+    let server = MockServer::start().await;
+    let index = simple_index_body(&server);
+    let revalidate = Arc::new(AtomicBool::new(false));
+    let revalidate_on_request = Arc::clone(&revalidate);
+    Mock::given(method("GET"))
+        .and(path("/simple/ok/"))
+        .respond_with(move |_: &Request| {
+            let response = if revalidate_on_request.load(Ordering::Relaxed) {
+                ResponseTemplate::new(304)
+            } else {
+                ResponseTemplate::new(200)
+                    .set_body_raw(index.clone(), "application/vnd.pypi.simple.v1+json")
+            };
+            response
+                .insert_header("Cache-Control", "max-age=600")
+                .insert_header("ETag", "\"v1\"")
+                .set_delay(Duration::from_millis(500))
+        })
+        .mount(&server)
+        .await;
+    mount_simple_metadata(&server).await;
+
+    let index_url = format!("{}/simple", server.uri());
+    let cold = compile_parallel_with_shared_cache(&context, &index_url, false).await?;
+    insta::assert_snapshot!(String::from_utf8_lossy(&cold), @"ok==1.0.0");
+    assert_eq!(count_simple_requests(&server).await, 1);
+
+    let warm = compile_parallel_with_shared_cache(&context, &index_url, false).await?;
+    assert_eq!(cold, warm);
+    assert_eq!(count_simple_requests(&server).await, 1);
+
+    revalidate.store(true, Ordering::Relaxed);
+    let refreshed = compile_parallel_with_shared_cache(&context, &index_url, true).await?;
+    assert_eq!(cold, refreshed);
+    assert_eq!(count_simple_requests(&server).await, 2);
+
+    Ok(())
+}
+
+/// Once a no-store response has been received, waiting compiles can fetch independently.
+#[cfg(not(windows))]
+#[tokio::test]
+async fn compile_concurrent_uncacheable_simple_index_requests() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("requirements.in")
+        .write_str("ok==1.0.0")?;
+
+    let server = MockServer::start().await;
+    let index = simple_index_body(&server);
+    let requests = Arc::new(AtomicUsize::new(0));
+    let requests_on_response = Arc::clone(&requests);
+    let second_request = Arc::new(Notify::new());
+    let second_request_on_response = Arc::clone(&second_request);
+    let index_mock = Mock::given(method("GET"))
+        .and(path("/simple/ok/"))
+        .respond_with(move |_: &Request| {
+            let response = ResponseTemplate::new(200)
+                .set_body_raw(index.clone(), "application/vnd.pypi.simple.v1+json")
+                .insert_header("Cache-Control", "no-store");
+
+            match requests_on_response.fetch_add(1, Ordering::Relaxed) {
+                0 => response.set_delay(Duration::from_millis(500)),
+                1 => {
+                    second_request_on_response.notify_one();
+                    response.set_delay(Duration::from_secs(5))
+                }
+                _ => response,
+            }
+        })
+        .expect(8)
+        .mount_as_scoped(&server)
+        .await;
+    mount_simple_metadata(&server).await;
+
+    let index_url = format!("{}/simple", server.uri());
+    let compiles = tokio::spawn(async move {
+        compile_parallel_with_shared_cache(&context, &index_url, false).await
+    });
+
+    // The first request completes before followers can proceed. Start the deadline when the
+    // second request arrives, avoiding a dependency on subprocess startup speed. The other six
+    // requests should arrive while its response is delayed; a serialized fetch would not.
+    let second_request_arrived =
+        tokio::time::timeout(Duration::from_secs(20), second_request.notified())
+            .await
+            .is_ok();
+    let concurrent = if second_request_arrived {
+        tokio::time::timeout(Duration::from_secs(4), index_mock.wait_until_satisfied())
+            .await
+            .is_ok()
+    } else {
+        false
+    };
+
+    let output = compiles.await??;
+    insta::assert_snapshot!(String::from_utf8_lossy(&output), @"ok==1.0.0");
+    assert_eq!(count_simple_requests(&server).await, 8);
+    assert!(second_request_arrived, "Expected multiple index requests");
+    assert!(
+        concurrent,
+        "No-store responses must not serialize every fetch"
+    );
+
+    Ok(())
+}
+
+fn simple_index_body(server: &MockServer) -> String {
+    let filename = "ok-1.0.0-py3-none-any.whl";
+    json!({
+        "name": "ok",
+        "files": [{
+            "filename": filename,
+            "hashes": {},
+            "url": format!("{}/files/{filename}", server.uri()),
+            "core-metadata": true,
+            "upload-time": "2024-03-24T00:00:00Z",
+        }],
+    })
+    .to_string()
+}
+
+async fn mount_simple_metadata(server: &MockServer) {
+    Mock::given(method("GET"))
+        .and(path("/files/ok-1.0.0-py3-none-any.whl.metadata"))
+        .respond_with(ResponseTemplate::new(200).set_body_string(indoc! {"
+            Metadata-Version: 2.1
+            Name: ok
+            Version: 1.0.0
+            Requires-Python: >=3.8
+        "}))
+        .mount(server)
+        .await;
+}
+
+async fn compile_parallel_with_shared_cache(
+    context: &TestContext,
+    index_url: &str,
+    refresh: bool,
+) -> Result<Vec<u8>> {
+    const COMPILES: usize = 8;
+    let barrier = Arc::new(Barrier::new(COMPILES));
+    let mut tasks = Vec::with_capacity(COMPILES);
+    for _ in 0..COMPILES {
+        let mut command = context.pip_compile();
+        command
+            .arg("requirements.in")
+            .arg("--index-url")
+            .arg(index_url)
+            .arg("--no-header")
+            .arg("--no-annotate");
+        if refresh {
+            command.arg("--refresh");
+        }
+        let barrier = Arc::clone(&barrier);
+        tasks.push(tokio::task::spawn_blocking(move || {
+            barrier.wait();
+            command.output()
+        }));
+    }
+
+    let mut outputs = Vec::with_capacity(COMPILES);
+    for task in tasks {
+        let output = task.await??;
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        outputs.push(output.stdout);
+    }
+    let first = outputs
+        .first()
+        .ok_or_else(|| anyhow::anyhow!("No compiles were started"))?;
+    for output in &outputs {
+        assert_eq!(output, first);
+    }
+    Ok(first.clone())
+}
+
+async fn count_simple_requests(server: &MockServer) -> usize {
+    server
+        .received_requests()
+        .await
+        .unwrap_or_default()
+        .iter()
+        .filter(|request| request.url.path() == "/simple/ok/")
+        .count()
 }
 
 /// Resolve a specific version of `anyio` from a `requirements.in` file with a `--annotation-style=line` flag.
