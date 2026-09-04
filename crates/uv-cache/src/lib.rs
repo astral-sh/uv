@@ -1564,22 +1564,15 @@ mod tests {
     fn test_replace_archive_link() {
         let cache = Cache::temp().unwrap();
         let link = cache.root().join("link");
-        let first = ArchiveId::new();
-        let second = ArchiveId::new();
-        fs_err::create_dir_all(cache.archive(&first)).unwrap();
-        fs_err::create_dir_all(cache.archive(&second)).unwrap();
-
-        cache.create_link(&first, &link).unwrap();
-        assert_eq!(
-            cache.resolve_link(&link).unwrap(),
-            cache.archive(&first).canonicalize().unwrap()
-        );
-
-        cache.create_link(&second, &link).unwrap();
-        assert_eq!(
-            cache.resolve_link(&link).unwrap(),
-            cache.archive(&second).canonicalize().unwrap()
-        );
+        for id in [ArchiveId::new(), ArchiveId::new()] {
+            let archive = cache.archive(&id);
+            fs_err::create_dir_all(&archive).unwrap();
+            cache.create_link(&id, &link).unwrap();
+            assert_eq!(
+                cache.resolve_link(&link).unwrap(),
+                archive.canonicalize().unwrap()
+            );
+        }
     }
 
     #[test]
