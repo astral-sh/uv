@@ -63,7 +63,8 @@ pub enum OnExistingDirectory {
     /// Fail if the destination directory already exists.
     #[default]
     Fail,
-    /// Merge into the existing directory, overwriting files atomically via temp-file renames.
+    /// Merge into the existing directory, overwriting files atomically via temporary paths
+    /// and rename.
     Merge,
 }
 
@@ -471,12 +472,12 @@ where
             Ok(()) => Ok(state.mode_working()),
             Err(err) if err.kind() == io::ErrorKind::AlreadyExists => {
                 if options.on_existing_directory == OnExistingDirectory::Merge {
-                    // File exists, overwrite atomically via temp file
-                    let parent = target.parent().unwrap();
-                    let tempdir = tempfile::tempdir_in(parent)?;
-                    let tempfile = tempdir.path().join(target.file_name().unwrap());
-                    if reflink_with_permissions(path, &tempfile).is_ok() {
-                        fs_err::rename(&tempfile, target)?;
+                    let temp_file = tempfile::Builder::new().make_in(
+                        target.parent().expect("Link path must have a parent"),
+                        |temp_path| reflink_with_permissions(path, temp_path),
+                    );
+                    if let Ok(temp_file) = temp_file {
+                        temp_file.persist(target).map_err(|err| err.error)?;
                         Ok(state.mode_working())
                     } else {
                         debug!(
@@ -507,17 +508,17 @@ where
             Ok(()) => Ok(state),
             Err(err) if err.kind() == io::ErrorKind::AlreadyExists => {
                 if options.on_existing_directory == OnExistingDirectory::Merge {
-                    let parent = target.parent().unwrap();
-                    let tempdir = tempfile::tempdir_in(parent)?;
-                    let tempfile = tempdir.path().join(target.file_name().unwrap());
-                    reflink_with_permissions(path, &tempfile).map_err(|err| {
-                        LinkError::Reflink {
+                    let temp_file = tempfile::Builder::new()
+                        .make_in(
+                            target.parent().expect("Link path must have a parent"),
+                            |temp_path| reflink_with_permissions(path, temp_path),
+                        )
+                        .map_err(|err| LinkError::Reflink {
                             from: path.to_path_buf(),
-                            to: tempfile.clone(),
+                            to: target.to_path_buf(),
                             err,
-                        }
-                    })?;
-                    fs_err::rename(&tempfile, target)?;
+                        })?;
+                    temp_file.persist(target).map_err(|err| err.error)?;
                     Ok(state)
                 } else {
                     Err(LinkError::Reflink {
@@ -605,17 +606,14 @@ where
             match reflink_copy::reflink(&src_path, &dst_path) {
                 Ok(()) => {}
                 Err(err) if err.kind() == io::ErrorKind::AlreadyExists => {
-                    // File exists, overwrite atomically via temp file
-                    let tempdir = tempfile::tempdir_in(dst)?;
-                    let tempfile = tempdir.path().join(entry.file_name());
-                    reflink_copy::reflink(&src_path, &tempfile).map_err(|err| {
-                        LinkError::Reflink {
+                    let temp_file = tempfile::Builder::new()
+                        .make_in(dst, |temp_path| reflink_copy::reflink(&src_path, temp_path))
+                        .map_err(|err| LinkError::Reflink {
                             from: src_path.clone(),
-                            to: tempfile.clone(),
+                            to: dst_path.clone(),
                             err,
-                        }
-                    })?;
-                    fs_err::rename(&tempfile, &dst_path)?;
+                        })?;
+                    temp_file.persist(&dst_path).map_err(|err| err.error)?;
                 }
                 Err(err) => {
                     return Err(LinkError::Reflink {
@@ -803,14 +801,13 @@ fn atomic_hardlink_overwrite<F>(
 where
     F: Fn(&Path) -> bool,
 {
-    // TODO(zanieb): These unwraps were copied from `uv-install-wheel`; consider propagating errors
-    // instead of panicking if `dst` has no parent or file name.
-    let parent = dst.parent().unwrap();
-    let tempdir = tempfile::tempdir_in(parent)?;
-    let tempfile = tempdir.path().join(dst.file_name().unwrap());
+    let temp_file = tempfile::Builder::new().make_in(
+        dst.parent().expect("Link path must have a parent"),
+        |temp_path| try_hardlink_file(src, temp_path),
+    );
 
-    if try_hardlink_file(src, &tempfile).is_ok() {
-        fs_err::rename(&tempfile, dst)?;
+    if let Ok(temp_file) = temp_file {
+        temp_file.persist(dst).map_err(|err| err.error)?;
         Ok(state.mode_working())
     } else {
         debug!(
@@ -863,14 +860,18 @@ fn atomic_symlink_overwrite<F>(
 where
     F: Fn(&Path) -> bool,
 {
-    // TODO(zanieb): These unwraps were copied from `uv-install-wheel`; consider propagating errors
-    // instead of panicking if `dst` has no parent or file name.
-    let parent = dst.parent().unwrap();
-    let tempdir = tempfile::tempdir_in(parent)?;
-    let tempfile = tempdir.path().join(dst.file_name().unwrap());
+    let temp_file = tempfile::Builder::new().make_in(
+        dst.parent().expect("Link path must have a parent"),
+        |temp_path| create_symlink(src, temp_path),
+    );
 
-    if create_symlink(src, &tempfile).is_ok() {
-        fs_err::rename(&tempfile, dst)?;
+    if let Ok(temp_file) = temp_file {
+        temp_file.persist(dst).map_err(|err| {
+            // TempPath uses `remove_file`, which cannot remove a directory symlink on Windows.
+            #[cfg(windows)]
+            let _ = crate::remove_symlink(err.file.path());
+            err.error
+        })?;
         Ok(state.mode_working())
     } else {
         debug!(
