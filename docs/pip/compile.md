@@ -91,8 +91,8 @@ $ uv pip compile --group some/path/pyproject.toml:foo --group other/pyproject.to
 
 ## Locking multiple target environments
 
-To compile the same inputs for several exact Python versions and platforms, repeat
-`--python-platform` and `--python-version` and provide an output filename to use as a template:
+To compile the same inputs for several exact Python versions and platforms into one
+`requirements.txt` file, repeat `--python-platform` and `--python-version`:
 
 ```console
 $ uv pip compile requirements.in \
@@ -102,17 +102,24 @@ $ uv pip compile requirements.in \
     -o requirements.txt
 ```
 
-This writes `requirements-x86_64-unknown-linux-gnu-py3_12.txt` and
-`requirements-aarch64-apple-darwin-py3_12.txt`. When either option is repeated, uv resolves every
-platform and Python version combination independently, adding the selected platform and version
-before the output filename's extension. A configured `output-file` can also provide the template;
-without one, uv requires `-o` for multiple targets. A single value retains the usual output
-behavior, including writing to stdout when no output file is provided.
+When either option is repeated, uv resolves every platform and Python version combination
+independently, then combines their pins into the specified file. Pins needed only for some targets
+are guarded by an OR of the corresponding environment markers. When `-o` is omitted, the combined
+requirements are written to stdout. A configured `output-file` also works, and a single value
+retains the usual `uv pip compile` behavior.
 
-Existing pins in each generated file remain that target's preferences; eligible identical previous
-locks can share parsed preferences. uv can also reuse parsed inputs and cacheable package index
-metadata within the invocation. Universal resolution remains a separate mode and cannot be combined
-with multiple exact targets.
+If an output file already exists, its pinned versions are considered separately for each target;
+markers on the existing pins determine which targets they apply to. The compiles can share parsed
+inputs and cacheable package index metadata in one invocation.
+
+The combined requirements are intended for the selected targets. Some differences between targets,
+such as wheel compatibility for different manylinux versions, cannot be expressed by Python
+environment markers. If two selected targets cannot be distinguished by environment markers, uv
+reports an error; run separate compiles for those targets. A multi-target compile supports
+`requirements.txt` output, not `pylock.toml`.
+
+`--universal` is a separate resolution mode that considers environments beyond the specified
+targets; it may produce different pins and cannot be combined with multiple exact targets.
 
 ## Upgrading requirements
 

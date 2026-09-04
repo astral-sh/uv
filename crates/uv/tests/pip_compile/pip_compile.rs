@@ -6,18 +6,18 @@ use std::fs;
 use std::process::Command;
 use std::str::FromStr;
 
-use anyhow::Result;
+use anyhow::{Result, bail};
 #[cfg(feature = "test-universal")]
 use assert_cmd::assert::OutputAssertExt;
+use assert_fs::fixture::ChildPath;
 use assert_fs::prelude::*;
-#[cfg(unix)]
-use fs_err::os::unix::fs::symlink as create_symlink;
 use fs_err::{File, read_to_string};
 #[cfg(feature = "test-python-managed")]
 use http::StatusCode;
 #[cfg(feature = "test-universal")]
 use indoc::formatdoc;
 use indoc::indoc;
+use sha2::{Digest, Sha256};
 use url::Url;
 use wiremock::matchers::{method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
@@ -25,14 +25,14 @@ use wiremock::{Mock, MockServer, ResponseTemplate};
 use uv_fs::Simplified;
 use uv_normalize::PackageName;
 use uv_pep440::Version;
-use uv_pep508::Requirement;
+use uv_pep508::{MarkerEnvironment, MarkerEnvironmentBuilder, MarkerTree, Requirement};
 use uv_static::EnvVars;
 
 use uv_test::archive::write_tar_gz;
 #[cfg(feature = "test-universal")]
 use uv_test::diff_snapshot;
-use uv_test::packse::PackseServer;
 use uv_test::packse::scenario::{Package, PackageMetadata, Scenario};
+use uv_test::packse::{PackseServer, generate_wheel};
 use uv_test::{DEFAULT_PYTHON_VERSION, TestContext, download_to_disk, uv_snapshot};
 
 #[test]
@@ -13839,55 +13839,90 @@ fn python_platform() -> Result<()> {
     Ok(())
 }
 
-/// A batch retains each target's platform markers and prior lock preferences.
+/// Read the requirements that would be active under native installation markers.
+fn compiled_pins_for_environment(
+    contents: &str,
+    sys_platform: &str,
+    platform_machine: &str,
+    python_version: &str,
+) -> Result<String> {
+    let (os_name, platform_system) = match sys_platform {
+        "linux" => ("posix", "Linux"),
+        "darwin" => ("posix", "Darwin"),
+        "win32" => ("nt", "Windows"),
+        _ => bail!("Unsupported test platform: {sys_platform}"),
+    };
+    let python_full_version = format!("{python_version}.0");
+    let environment = MarkerEnvironment::try_from(MarkerEnvironmentBuilder {
+        implementation_name: "cpython",
+        implementation_version: &python_full_version,
+        os_name,
+        platform_machine,
+        platform_python_implementation: "CPython",
+        platform_release: "",
+        platform_system,
+        platform_version: "",
+        python_full_version: &python_full_version,
+        python_version,
+        sys_platform,
+    })?;
+
+    let mut pins = Vec::new();
+    for line in contents.lines().filter(|line| !line.is_empty()) {
+        let mut requirement: Requirement = Requirement::from_str(line)?;
+        if requirement.marker.evaluate(&environment, &[]) {
+            requirement.marker = MarkerTree::TRUE;
+            pins.push(requirement.to_string());
+        }
+    }
+    pins.sort_unstable();
+    Ok(pins.join("\n"))
+}
+
+/// Write a wheel-only package for exact-platform resolution tests.
+fn write_matrix_wheel(wheels: &ChildPath, version: &str, tag: &str) -> Result<Vec<u8>> {
+    let (filename, wheel) = generate_wheel(
+        &PackageName::from_str("matrixwheel")?,
+        &Version::from_str(version)?,
+        &[],
+        &BTreeMap::new(),
+        None,
+        tag,
+    );
+    wheels.child(filename).write_binary(&wheel)?;
+    Ok(wheel)
+}
+
+/// Preserve target-specific previous pins while writing one marker-qualified lock.
 #[test]
 fn multiple_exact_targets() -> Result<()> {
     let context = uv_test::test_context!("3.12");
-    let requirements_in = context.temp_dir.child("requirements.in");
-    requirements_in.write_str("black")?;
-
-    let linux_output = context
+    context
         .temp_dir
-        .child("requirements-aarch64-unknown-linux-gnu-py3_12.txt");
-    linux_output.write_str("black==23.10.1\n")?;
-    let windows_output = context
-        .temp_dir
-        .child("requirements-x86_64-pc-windows-msvc-py3_12.txt");
-    windows_output.write_str("black==24.3.0\n")?;
+        .child("requirements.in")
+        .write_str("black")?;
+    let output = context.temp_dir.child("requirements.txt");
+    output.write_str(indoc! {"
+        black==23.10.1; sys_platform == 'linux' and platform_machine == 'aarch64'
+        black==24.3.0; sys_platform == 'darwin' and platform_machine == 'arm64'
+    "})?;
 
-    uv_snapshot!(context.filters(), windows_filters=false, context.pip_compile()
+    uv_snapshot!(context.filters(), context.pip_compile()
         .arg("requirements.in")
         .arg("--python-version")
         .arg("3.12")
         .arg("--python-platform")
-        .arg("aarch64-unknown-linux-gnu")
+        .arg("aarch64-manylinux_2_31")
         .arg("--python-platform")
-        .arg("x86_64-pc-windows-msvc")
+        .arg("aarch64-apple-darwin")
         .arg("-o")
         .arg("requirements.txt")
         .arg("--no-header")
         .arg("--no-annotate"), @"
     exit_code: 0 (success)
-    ----- stderr -----
-    Resolved 6 packages in [TIME]
-    Resolved 7 packages in [TIME]
-    ");
-
-    let linux_reference = context.temp_dir.child("linux-reference.txt");
-    linux_reference.write_str("black==23.10.1\n")?;
-    uv_snapshot!(context.filters(), windows_filters=false, context.pip_compile()
-        .arg("requirements.in")
-        .arg("--python-version")
-        .arg("3.12")
-        .arg("--python-platform")
-        .arg("aarch64-unknown-linux-gnu")
-        .arg("--output-file")
-        .arg("linux-reference.txt")
-        .arg("--no-header")
-        .arg("--no-annotate"), @"
-    exit_code: 0 (success)
     ----- stdout -----
-    black==23.10.1
+    black==23.10.1 ; python_full_version == '3.12.*' and implementation_name == 'cpython' and platform_machine == 'aarch64' and sys_platform == 'linux'
+    black==24.3.0 ; python_full_version == '3.12.*' and implementation_name == 'cpython' and platform_machine == 'arm64' and sys_platform == 'darwin'
     click==8.1.7
     mypy-extensions==1.0.0
     packaging==24.0
@@ -13896,95 +13931,112 @@ fn multiple_exact_targets() -> Result<()> {
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
+    Resolved 6 packages in [TIME]
     ");
 
-    let windows_reference = context.temp_dir.child("windows-reference.txt");
-    windows_reference.write_str("black==24.3.0\n")?;
-    uv_snapshot!(context.filters(), windows_filters=false, context.pip_compile()
-        .arg("requirements.in")
-        .arg("--python-version")
-        .arg("3.12")
-        .arg("--python-platform")
-        .arg("x86_64-pc-windows-msvc")
-        .arg("--output-file")
-        .arg("windows-reference.txt")
-        .arg("--no-header")
-        .arg("--no-annotate"), @"
-    exit_code: 0 (success)
-    ----- stdout -----
+    let contents = read_to_string(output.path())?;
+    insta::assert_snapshot!(
+        compiled_pins_for_environment(&contents, "linux", "aarch64", "3.12")?, @"
+    black==23.10.1
+    click==8.1.7
+    mypy-extensions==1.0.0
+    packaging==24.0
+    pathspec==0.12.1
+    platformdirs==4.2.0"
+    );
+    // Apple Silicon reports arm64 to Python even though its target triple says aarch64.
+    insta::assert_snapshot!(
+        compiled_pins_for_environment(&contents, "darwin", "arm64", "3.12")?, @"
     black==24.3.0
     click==8.1.7
-    colorama==0.4.6
     mypy-extensions==1.0.0
     packaging==24.0
     pathspec==0.12.1
-    platformdirs==4.2.0
-
-    ----- stderr -----
-    Resolved 7 packages in [TIME]
-    ");
-
-    let linux_contents = read_to_string(linux_output.path())?;
-    let windows_contents = read_to_string(windows_output.path())?;
-    assert_eq!(linux_contents, read_to_string(linux_reference.path())?);
-    assert_eq!(windows_contents, read_to_string(windows_reference.path())?);
-    assert_ne!(linux_contents, windows_contents);
-
-    // If both targets start from the same lock, they still resolve independently.
-    linux_output.write_str("black==23.10.1\n")?;
-    windows_output.write_str("black==23.10.1\n")?;
-    uv_snapshot!(context.filters(), windows_filters=false, context.pip_compile()
-        .arg("requirements.in")
-        .arg("--python-version")
-        .arg("3.12")
-        .arg("--python-platform")
-        .arg("aarch64-unknown-linux-gnu")
-        .arg("--python-platform")
-        .arg("x86_64-pc-windows-msvc")
-        .arg("-o")
-        .arg("requirements.txt")
-        .arg("--no-header")
-        .arg("--no-annotate"), @"
-    exit_code: 0 (success)
-    ----- stderr -----
-    Resolved 6 packages in [TIME]
-    Resolved 7 packages in [TIME]
-    ");
-
-    windows_reference.write_str("black==23.10.1\n")?;
-    uv_snapshot!(context.filters(), windows_filters=false, context.pip_compile()
-        .arg("requirements.in")
-        .arg("--python-version")
-        .arg("3.12")
-        .arg("--python-platform")
-        .arg("x86_64-pc-windows-msvc")
-        .arg("--output-file")
-        .arg("windows-reference.txt")
-        .arg("--no-header")
-        .arg("--no-annotate"), @"
-    exit_code: 0 (success)
-    ----- stdout -----
-    black==23.10.1
-    click==8.1.7
-    colorama==0.4.6
-    mypy-extensions==1.0.0
-    packaging==24.0
-    pathspec==0.12.1
-    platformdirs==4.2.0
-
-    ----- stderr -----
-    Resolved 7 packages in [TIME]
-    ");
-    assert_eq!(read_to_string(linux_output.path())?, linux_contents);
-    assert_eq!(
-        read_to_string(windows_output.path())?,
-        read_to_string(windows_reference.path())?
+    platformdirs==4.2.0"
     );
 
     Ok(())
 }
 
-/// Repeated platform and version options form separate exact-target resolutions.
+/// A shared pin selects both native ARM environments but not `x86_64` in stdout.
+#[test]
+fn multiple_exact_targets_stdout() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("requirements.in")
+        .write_str("idna==3.6; platform_machine == 'aarch64' or platform_machine == 'arm64'")?;
+
+    let output = uv_snapshot!(context.filters(), context.pip_compile()
+        .arg("requirements.in")
+        .arg("--python-platform")
+        .arg("x86_64-unknown-linux-gnu")
+        .arg("--python-platform")
+        .arg("aarch64-manylinux_2_31")
+        .arg("--python-platform")
+        .arg("aarch64-apple-darwin")
+        .arg("--python-version")
+        .arg("3.12")
+        .arg("--no-header")
+        .arg("--no-annotate"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    idna==3.6 ; (python_full_version == '3.12.*' and implementation_name == 'cpython' and platform_machine == 'arm64' and sys_platform == 'darwin') or (python_full_version == '3.12.*' and implementation_name == 'cpython' and platform_machine == 'aarch64' and sys_platform == 'linux')
+
+    ----- stderr -----
+    Resolved in [TIME]
+    Resolved 1 package in [TIME]
+    Resolved 1 package in [TIME]
+    ");
+
+    let contents = String::from_utf8(output.stdout)?;
+    assert_eq!(
+        compiled_pins_for_environment(&contents, "linux", "x86_64", "3.12")?,
+        ""
+    );
+    insta::assert_snapshot!(
+        compiled_pins_for_environment(&contents, "linux", "aarch64", "3.12")?, @"idna==3.6"
+    );
+    insta::assert_snapshot!(
+        compiled_pins_for_environment(&contents, "darwin", "arm64", "3.12")?, @"idna==3.6"
+    );
+
+    Ok(())
+}
+
+/// A pin shared by all targets keeps its intrinsic marker without target guards.
+#[test]
+fn multiple_exact_targets_common_marker() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("requirements.in")
+        .write_str("idna==3.6; python_version >= '3.9'")?;
+
+    uv_snapshot!(context.filters(), context.pip_compile()
+        .arg("requirements.in")
+        .arg("--python-platform")
+        .arg("aarch64-manylinux_2_31")
+        .arg("--python-platform")
+        .arg("aarch64-apple-darwin")
+        .arg("--python-version")
+        .arg("3.12")
+        .arg("--no-strip-markers")
+        .arg("--no-header")
+        .arg("--no-annotate"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    idna==3.6 ; python_full_version >= '3.9'
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Resolved 1 package in [TIME]
+    ");
+
+    Ok(())
+}
+
+/// Repeated versions and platforms form a Cartesian product in one output.
 #[test]
 fn multiple_exact_targets_matrix() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -14012,6 +14064,11 @@ fn multiple_exact_targets_matrix() -> Result<()> {
         .arg("--no-header")
         .arg("--no-annotate"), @"
     exit_code: 0 (success)
+    ----- stdout -----
+    colorama==0.4.6 ; (python_full_version == '3.10.*' and implementation_name == 'cpython' and platform_machine == 'AMD64' and sys_platform == 'win32') or (python_full_version == '3.12.*' and implementation_name == 'cpython' and platform_machine == 'AMD64' and sys_platform == 'win32') or (python_full_version == '3.10.*' and implementation_name == 'cpython' and platform_machine == 'x86_64' and sys_platform == 'win32') or (python_full_version == '3.12.*' and implementation_name == 'cpython' and platform_machine == 'x86_64' and sys_platform == 'win32')
+    idna==3.6 ; (python_full_version == '3.10.*' and implementation_name == 'cpython' and platform_machine == 'x86_64' and sys_platform == 'linux') or (python_full_version == '3.10.*' and implementation_name == 'cpython' and platform_machine == 'AMD64' and sys_platform == 'win32') or (python_full_version == '3.10.*' and implementation_name == 'cpython' and platform_machine == 'x86_64' and sys_platform == 'win32')
+    iniconfig==2.0.0 ; (python_full_version == '3.12.*' and implementation_name == 'cpython' and platform_machine == 'x86_64' and sys_platform == 'linux') or (python_full_version == '3.12.*' and implementation_name == 'cpython' and platform_machine == 'AMD64' and sys_platform == 'win32') or (python_full_version == '3.12.*' and implementation_name == 'cpython' and platform_machine == 'x86_64' and sys_platform == 'win32')
+
     ----- stderr -----
     warning: The requested Python version 3.10 is not available; 3.12.[X] will be used to build dependencies instead.
     Resolved 1 package in [TIME]
@@ -14021,28 +14078,29 @@ fn multiple_exact_targets_matrix() -> Result<()> {
     Resolved 2 packages in [TIME]
     ");
 
-    for (file_name, expected) in [
-        ("requirements-linux-py3_10.txt", "idna==3.6\n"),
-        ("requirements-linux-py3_12.txt", "iniconfig==2.0.0\n"),
-        (
-            "requirements-windows-py3_10.txt",
-            "colorama==0.4.6\nidna==3.6\n",
-        ),
-        (
-            "requirements-windows-py3_12.txt",
-            "colorama==0.4.6\niniconfig==2.0.0\n",
-        ),
-    ] {
-        assert_eq!(
-            read_to_string(context.temp_dir.child(file_name).path())?,
-            expected
-        );
-    }
+    let contents = read_to_string(context.temp_dir.child("requirements.txt").path())?;
+    insta::assert_snapshot!(
+        compiled_pins_for_environment(&contents, "linux", "x86_64", "3.10")?, @"idna==3.6"
+    );
+    insta::assert_snapshot!(
+        compiled_pins_for_environment(&contents, "linux", "x86_64", "3.12")?, @"iniconfig==2.0.0"
+    );
+    // Native Windows reports AMD64, not the x86_64 spelling in the target triple.
+    insta::assert_snapshot!(
+        compiled_pins_for_environment(&contents, "win32", "AMD64", "3.10")?, @"
+    colorama==0.4.6
+    idna==3.6"
+    );
+    insta::assert_snapshot!(
+        compiled_pins_for_environment(&contents, "win32", "AMD64", "3.12")?, @"
+    colorama==0.4.6
+    iniconfig==2.0.0"
+    );
 
     Ok(())
 }
 
-/// A configured output template supports the PEP 751 filename pattern.
+/// An existing TOML output cannot be combined as a requirements file.
 #[test]
 fn multiple_exact_targets_configured_pylock() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -14050,19 +14108,6 @@ fn multiple_exact_targets_configured_pylock() -> Result<()> {
         .temp_dir
         .child("requirements.in")
         .write_str("iniconfig==2.0.0")?;
-
-    uv_snapshot!(context.filters(), context.pip_compile()
-        .arg("requirements.in")
-        .arg("--python-platform")
-        .arg("linux")
-        .arg("--python-platform")
-        .arg("windows")
-        .arg("--offline"), @"
-    exit_code: 2 (failure)
-    ----- stderr -----
-    error: Multiple Python versions or platforms require an `--output-file` template
-    ");
-
     context
         .temp_dir
         .child("uv.toml")
@@ -14074,20 +14119,16 @@ fn multiple_exact_targets_configured_pylock() -> Result<()> {
         .arg("linux")
         .arg("--python-platform")
         .arg("windows")
-        .arg("--python-version")
-        .arg("3.12")
-        .arg("--no-header"), @"
-    exit_code: 0 (success)
+        .arg("--offline"), @"
+    exit_code: 2 (failure)
     ----- stderr -----
-    Resolved 1 package in [TIME]
-    Resolved 1 package in [TIME]
+    error: Compiling multiple Python targets to `pylock.toml` is not supported
     ");
 
-    let linux_output = read_to_string(context.temp_dir.child("pylock.linux-py3_12.toml").path())?;
-    let windows_output =
-        read_to_string(context.temp_dir.child("pylock.windows-py3_12.toml").path())?;
-    assert!(linux_output.starts_with("lock-version = \"1.0\"\n"));
-    assert_eq!(linux_output, windows_output);
+    context
+        .temp_dir
+        .child("pylock.toml")
+        .assert(predicates::path::missing());
 
     Ok(())
 }
@@ -14122,39 +14163,146 @@ fn multiple_exact_targets_universal_config() -> Result<()> {
     Ok(())
 }
 
-/// Earlier outputs can replace a file symlink before a later output follows it.
-#[cfg(unix)]
+/// Distinct wheel tags can have identical marker values but different pins.
 #[test]
-fn multiple_exact_targets_symlink_chain() -> Result<()> {
+fn multiple_exact_targets_indistinguishable_markers() -> Result<()> {
     let context = uv_test::test_context!("3.12");
     context
         .temp_dir
         .child("requirements.in")
-        .write_str("anyio==3.7.0")?;
-    let first = context
+        .write_str("matrixwheel")?;
+    let wheels = context.temp_dir.child("wheels");
+    wheels.create_dir_all()?;
+    write_matrix_wheel(&wheels, "1.0.0", "py3-none-manylinux_2_17_x86_64")?;
+    write_matrix_wheel(&wheels, "2.0.0", "py3-none-manylinux_2_31_x86_64")?;
+
+    let output = context.temp_dir.child("requirements.txt");
+    output.write_str("# Existing output\n")?;
+    uv_snapshot!(context.filters(), context.pip_compile()
+        .arg("requirements.in")
+        .arg("--no-index")
+        .arg("--find-links")
+        .arg("wheels")
+        .arg("--python-platform")
+        .arg("x86_64-manylinux_2_17")
+        .arg("--python-platform")
+        .arg("x86_64-manylinux_2_31")
+        .arg("--python-version")
+        .arg("3.12")
+        .arg("--offline")
+        .arg("-o")
+        .arg("requirements.txt")
+        .arg("--no-header")
+        .arg("--no-annotate"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    error: Exact Python targets with different wheel tags cannot be distinguished by environment markers in a single requirements file; use separate invocations and output files
+    ");
+    assert_eq!(read_to_string(output.path())?, "# Existing output\n");
+
+    Ok(())
+}
+
+/// A later target failure must not replace an existing combined output.
+#[test]
+fn multiple_exact_targets_failed_resolution_preserves_output() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context
         .temp_dir
-        .child("requirements-aarch64-unknown-linux-gnu-py3_12.txt");
-    let second = context
+        .child("requirements.in")
+        .write_str("matrixwheel")?;
+    let wheels = context.temp_dir.child("wheels");
+    wheels.create_dir_all()?;
+    write_matrix_wheel(&wheels, "1.0.0", "py3-none-manylinux_2_17_x86_64")?;
+
+    let output = context.temp_dir.child("requirements.txt");
+    output.write_str("# Existing output\n")?;
+    uv_snapshot!(context.filters(), context.pip_compile()
+        .arg("requirements.in")
+        .arg("--no-index")
+        .arg("--find-links")
+        .arg("wheels")
+        .arg("--python-platform")
+        .arg("x86_64-unknown-linux-gnu")
+        .arg("--python-platform")
+        .arg("x86_64-pc-windows-msvc")
+        .arg("--python-version")
+        .arg("3.12")
+        .arg("--offline")
+        .arg("-o")
+        .arg("requirements.txt")
+        .arg("--no-header")
+        .arg("--no-annotate"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+      × No solution found when resolving dependencies:
+      ╰─▶ Because matrixwheel==1.0.0 has no wheels with a matching platform tag (e.g., `win_amd64`) and only matrixwheel==1.0.0 is available, we can conclude that all versions of matrixwheel cannot be used.
+          And because you require matrixwheel, we can conclude that your requirements are unsatisfiable.
+
+    hint: Wheels are available for `matrixwheel` (v1.0.0) on the following platform: `manylinux_2_17_x86_64`
+    ");
+    assert_eq!(read_to_string(output.path())?, "# Existing output\n");
+
+    Ok(())
+}
+
+/// Hashes from compatible artifacts on different targets must be retained.
+#[test]
+fn multiple_exact_targets_hashes() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context
         .temp_dir
-        .child("requirements-x86_64-pc-windows-msvc-py3_12.txt");
-    let third = context.temp_dir.child("other.txt");
-    create_symlink(third.path(), second.path())?;
-    create_symlink(second.path(), first.path())?;
+        .child("requirements.in")
+        .write_str("matrixwheel")?;
+    let wheels = context.temp_dir.child("wheels");
+    wheels.create_dir_all()?;
+    let linux_wheel = write_matrix_wheel(&wheels, "1.0.0", "py3-none-manylinux_2_17_x86_64")?;
+    let macos_wheel = write_matrix_wheel(&wheels, "1.0.0", "py3-none-macosx_13_0_arm64")?;
 
     uv_snapshot!(context.filters(), context.pip_compile()
         .arg("requirements.in")
+        .arg("--no-index")
+        .arg("--find-links")
+        .arg("wheels")
+        .arg("--python-platform")
+        .arg("x86_64-unknown-linux-gnu")
+        .arg("--python-platform")
+        .arg("aarch64-apple-darwin")
         .arg("--python-version")
         .arg("3.12")
-        .arg("--python-platform")
-        .arg("aarch64-unknown-linux-gnu")
-        .arg("--python-platform")
-        .arg("x86_64-pc-windows-msvc")
+        .arg("--generate-hashes")
+        .arg("--offline")
         .arg("-o")
         .arg("requirements.txt")
-        .arg("--offline"), @"
-    exit_code: 2 (failure)
+        .arg("--no-header")
+        .arg("--no-annotate"), @r"
+    exit_code: 0 (success)
+    ----- stdout -----
+    matrixwheel==1.0.0 \
+        --hash=sha256:4b3d4946c60a630afe8e897cfb16650e8b766625dce3433c9cf40ddd536d621f \
+        --hash=sha256:80a34531807556667dce51d54e6b807e1aa4e582da28a5fdb6396c7e40f79103
+
     ----- stderr -----
-    error: Each Python target must use a different output file
+    Resolved 1 package in [TIME]
+    Resolved 1 package in [TIME]
+    ");
+
+    let contents = read_to_string(context.temp_dir.child("requirements.txt").path())?;
+    let normalized = contents
+        .replace(
+            &format!("sha256:{}", hex::encode(Sha256::digest(&linux_wheel))),
+            "sha256:[LINUX_HASH]",
+        )
+        .replace(
+            &format!("sha256:{}", hex::encode(Sha256::digest(&macos_wheel))),
+            "sha256:[MACOS_HASH]",
+        );
+    insta::assert_snapshot!(normalized, @r"
+    matrixwheel==1.0.0 \
+        --hash=sha256:[LINUX_HASH] \
+        --hash=sha256:[MACOS_HASH]
     ");
 
     Ok(())

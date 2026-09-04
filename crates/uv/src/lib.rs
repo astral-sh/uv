@@ -1,13 +1,12 @@
 #![deny(clippy::print_stdout, clippy::print_stderr)]
 
 use std::borrow::Cow;
-use std::collections::HashSet;
 use std::ffi::OsString;
 use std::fmt::Write;
 use std::io::stdout;
 #[cfg(feature = "self-update")]
 use std::ops::Bound;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::process::ExitCode;
 use std::str::FromStr;
 use std::sync::atomic::Ordering;
@@ -91,52 +90,6 @@ pub(crate) fn base_client_builder<'a>(globals: &GlobalSettings) -> BaseClientBui
     } else {
         client_builder
     }
-}
-
-/// Find an output path's identity, including symlinked parent directories.
-fn compile_output_identity(path: &Path) -> Result<PathBuf> {
-    // Keep `..` intact until resolving the parent: a symlink followed by `..` need not refer
-    // to the same directory as a lexically normalized path.
-    let path = if path.is_absolute() {
-        path.to_path_buf()
-    } else {
-        std::env::current_dir()?.join(path)
-    };
-    let file_name = path
-        .file_name()
-        .ok_or_else(|| anyhow!("Each generated output must name a file"))?;
-    let mut parent = path
-        .parent()
-        .ok_or_else(|| anyhow!("Each generated output must have a parent directory"))?;
-
-    // A later target may create the missing part of a directory tree. Resolve the longest
-    // existing ancestor so aliases through a symlink are still detected beforehand.
-    let mut missing = Vec::new();
-    let mut output_file = loop {
-        match fs_err::canonicalize(parent) {
-            Ok(parent) => break parent,
-            Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
-                let (Some(name), Some(ancestor)) = (parent.file_name(), parent.parent()) else {
-                    bail!(
-                        "Cannot resolve a parent directory for generated output {}",
-                        path.display()
-                    );
-                };
-                missing.push(name.to_os_string());
-                parent = ancestor;
-            }
-            Err(err) => return Err(err.into()),
-        }
-    };
-    for directory in missing.into_iter().rev() {
-        output_file.push(directory);
-    }
-    output_file.push(file_name);
-
-    // Reject case-only distinctions on hosts with typically case-insensitive filesystems.
-    #[cfg(any(windows, target_os = "macos"))]
-    let output_file = PathBuf::from(output_file.to_string_lossy().to_lowercase());
-    Ok(output_file)
 }
 
 /// Whether to initialize process-global state.
@@ -827,26 +780,10 @@ async fn run_with_workspace_cache(
                 );
             }
             let simple_metadata_cache = batch_mode.then(SimpleMetadataCache::default);
-            let mut prior_lock_cache =
-                batch_mode.then(commands::pip::compile::PriorLockCache::default);
+            let mut prior_lock_snapshot =
+                batch_mode.then(commands::pip::compile::PriorLockSnapshot::default);
             let compile_client_builder =
                 client_builder.subcommand(vec!["pip".to_owned(), "compile".to_owned()]);
-            let mut output_files = HashSet::new();
-            for target in &args.compile_targets {
-                // The writer follows one file symlink hop. Include both names because an
-                // earlier output may replace a later target's symlink before it is written.
-                let mut identities = HashSet::new();
-                identities.insert(compile_output_identity(&target.output_file)?);
-                if let Ok(destination) = fs_err::read_link(&target.output_file) {
-                    identities.insert(compile_output_identity(&destination)?);
-                }
-                if identities
-                    .into_iter()
-                    .any(|identity| !output_files.insert(identity))
-                {
-                    bail!("Each Python target must use a different output file");
-                }
-            }
             let parsed_inputs = if batch_mode {
                 Some(
                     commands::pip::compile::ParsedCompileInputs::from_sources(
@@ -871,12 +808,8 @@ async fn run_with_workspace_cache(
             } else {
                 vec![None]
             };
+            let mut exact_targets = Vec::new();
             for target in targets {
-                let output_file = target
-                    .as_ref()
-                    .map_or(args.settings.output_file.as_deref(), |target| {
-                        Some(target.output_file.as_path())
-                    });
                 let python_version = target.as_ref().map_or_else(
                     || args.settings.python_version.clone(),
                     |target| target.python_version.clone(),
@@ -901,7 +834,7 @@ async fn run_with_workspace_cache(
                     args.required_environments.clone(),
                     args.settings.extras.clone(),
                     groups.clone(),
-                    output_file,
+                    args.settings.output_file.as_deref(),
                     args.format,
                     args.settings.resolution,
                     args.settings.prerelease.clone(),
@@ -929,8 +862,9 @@ async fn run_with_workspace_cache(
                     args.settings.keyring_provider,
                     &compile_client_builder,
                     parsed_inputs.as_ref(),
-                    prior_lock_cache.as_mut(),
+                    prior_lock_snapshot.as_mut(),
                     simple_metadata_cache.clone(),
+                    batch_mode.then_some(&mut exact_targets),
                     args.settings.config_setting.clone(),
                     args.settings.config_settings_package.clone(),
                     args.settings.build_isolation.clone(),
@@ -963,6 +897,26 @@ async fn run_with_workspace_cache(
                         return Ok(status);
                     }
                 }
+            }
+            if batch_mode {
+                commands::pip::compile::write_pip_compile_matrix(
+                    &exact_targets,
+                    args.settings.output_file.as_deref(),
+                    &args.settings.no_emit_package,
+                    args.settings.generate_hashes,
+                    args.settings.no_strip_extras,
+                    !args.settings.no_annotate,
+                    !args.settings.no_header,
+                    args.settings.custom_compile_command,
+                    args.settings.emit_index_url,
+                    args.settings.emit_find_links,
+                    args.settings.emit_build_options,
+                    args.settings.emit_marker_expression,
+                    args.settings.emit_index_annotation,
+                    args.settings.annotation_style,
+                    globals.quiet > 0,
+                )
+                .await?;
             }
             Ok(ExitStatus::Success)
         }

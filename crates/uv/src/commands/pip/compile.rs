@@ -2,7 +2,7 @@ use std::collections::BTreeSet;
 use std::env;
 use std::ffi::OsStr;
 use std::io::Write;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::str::FromStr;
 
 use anyhow::{Result, anyhow};
@@ -29,7 +29,11 @@ use uv_fs::{CWD, Simplified};
 use uv_git::ResolvedRepositoryReference;
 use uv_install_wheel::LinkMode;
 use uv_normalize::PackageName;
-use uv_pep440::Version;
+use uv_pep440::{Version, VersionSpecifier};
+use uv_pep508::{
+    MarkerEnvironment, MarkerExpression, MarkerOperator, MarkerTree, MarkerValueString,
+    MarkerValueVersion,
+};
 use uv_preview::{Preview, PreviewFeature};
 use uv_pypi_types::{Conflicts, SupportedEnvironments};
 use uv_python::{
@@ -41,9 +45,9 @@ use uv_requirements::{
     is_pylock_toml, read_pylock_toml_requirements, read_requirements_txt,
 };
 use uv_resolver::{
-    AnnotationStyle, DependencyMode, DisplayResolutionGraph, ExcludeNewer, FlatIndex, ForkStrategy,
-    InMemoryIndex, OptionsBuilder, Prerelease, PylockToml, PythonRequirement, ResolutionMode,
-    ResolverEnvironment,
+    AnnotationStyle, DependencyMode, DisplayResolutionGraph, DisplayResolutionMatrix,
+    ExactTargetOutput, ExcludeNewer, FlatIndex, ForkStrategy, InMemoryIndex, OptionsBuilder,
+    Prerelease, PylockToml, PythonRequirement, ResolutionMode, ResolverEnvironment, ResolverOutput,
 };
 use uv_settings::PythonInstallMirrors;
 use uv_static::EnvVars;
@@ -91,102 +95,95 @@ impl ParsedCompileInputs {
     }
 }
 
-/// Successfully parsed previous locks that can be reused by exact-target compiles.
+/// The previous output, read once and used as a preference by every exact target.
 #[derive(Default)]
-pub(crate) struct PriorLockCache {
-    entries: Vec<CachedPriorLock>,
+pub(crate) struct PriorLockSnapshot {
+    locked: Option<LockedRequirements>,
 }
 
-struct CachedPriorLock {
-    format: PipCompileFormat,
-    contents: Vec<u8>,
-    parent: Option<PathBuf>,
-    locked: LockedRequirements,
-}
-
-impl PriorLockCache {
-    /// Read an existing output, reusing preferences only when its contents are identical.
+impl PriorLockSnapshot {
+    /// Parse the existing output at most once, including any recursive requirements files.
     async fn read(
         &mut self,
-        output_file: &Path,
+        output_file: Option<&Path>,
         format: PipCompileFormat,
         upgrade: &Upgrade,
     ) -> Result<LockedRequirements> {
-        if upgrade.is_all() {
-            return Ok(LockedRequirements::default());
+        if let Some(locked) = &self.locked {
+            return Ok(locked.clone());
         }
-        if output_file == Path::new("-") {
-            // The requirements reader interprets this path as stdin.
-            return read_existing_lock(output_file, format, upgrade).await;
-        }
-
-        // Read immediately before resolving this target, since a previous target may have
-        // written an output that will become a later target's previous lock.
-        let Ok(contents) = fs_err::tokio::read(output_file).await else {
-            return read_existing_lock(output_file, format, upgrade).await;
+        let locked = if let Some(output_file) = output_file.filter(|path| path.exists()) {
+            read_existing_lock(output_file, format, upgrade).await?
+        } else {
+            LockedRequirements::default()
         };
-        let parent = match format {
-            PipCompileFormat::RequirementsTxt => {
-                // Included files may differ or change independently of the output file.
-                if has_recursive_includes(&contents) {
-                    return read_existing_lock(output_file, format, upgrade).await;
-                }
-                let parent = output_file
-                    .parent()
-                    .filter(|parent| !parent.as_os_str().is_empty())
-                    .unwrap_or(&*CWD);
-                let Ok(parent) = dunce::canonicalize(parent) else {
-                    return read_existing_lock(output_file, format, upgrade).await;
-                };
-                Some(parent)
-            }
-            PipCompileFormat::PylockToml => None,
-        };
-
-        if let Some(entry) = self.entries.iter().find(|entry| {
-            entry.format == format && entry.parent == parent && entry.contents == contents
-        }) {
-            return Ok(entry.locked.clone());
-        }
-
-        // Parse the same buffer used for equality; re-reading the output here
-        // could associate newer on-disk contents with an older cache key.
-        let Ok(content) = std::str::from_utf8(&contents) else {
-            return read_existing_lock(output_file, format, upgrade).await;
-        };
-        let locked = match format {
-            PipCompileFormat::RequirementsTxt => {
-                LockedRequirements::from_requirements_txt_contents(output_file, content, upgrade)
-                    .await?
-            }
-            PipCompileFormat::PylockToml => {
-                LockedRequirements::from_pylock_toml_contents(output_file, content, upgrade)?
-            }
-        };
-        self.entries.push(CachedPriorLock {
-            format,
-            contents,
-            parent,
-            locked: locked.clone(),
-        });
+        self.locked = Some(locked.clone());
         Ok(locked)
     }
 }
 
-/// Return whether a requirements file can read another file while being parsed.
-fn has_recursive_includes(contents: &[u8]) -> bool {
-    // The file parser transcodes non-ASCII inputs, including UTF-16. A byte scan
-    // cannot reliably recognize options until that transcoding has happened.
-    if !contents.is_ascii() {
-        return true;
-    }
+/// One exact resolution to include in a combined `requirements.txt` output.
+pub(crate) struct ExactTargetResolution {
+    resolution: ResolverOutput,
+    resolver_env: ResolverEnvironment,
+    selector: MarkerTree,
+    relevant_markers: Option<MarkerTree>,
+    index_locations: IndexLocations,
+    build_options: BuildOptions,
+}
 
-    contents
-        .split(|byte| *byte == b'\n' || *byte == b'\r')
-        .map(<[u8]>::trim_ascii_start)
-        // Other options can contain recursive includes split across physical
-        // lines, or generate per-file diagnostics when parsed again.
-        .any(|line| line.starts_with(b"-") && !line.starts_with(b"--hash="))
+/// A marker for the interpreter and platform used by one exact-target resolution.
+///
+/// Wheel compatibility tags are not PEP 508 environment markers. The caller rejects
+/// overlapping selectors (for example, two manylinux versions of the same architecture).
+fn exact_target_selector(
+    marker_env: &MarkerEnvironment,
+    python_version: Option<&PythonVersion>,
+) -> MarkerTree {
+    let string_marker = |key, value: &str| {
+        MarkerTree::expression(MarkerExpression::String {
+            key,
+            operator: MarkerOperator::Equal,
+            value: value.into(),
+        })
+    };
+    let version_marker = |key, version| {
+        MarkerTree::expression(MarkerExpression::Version {
+            key,
+            specifier: VersionSpecifier::equals_version(version),
+        })
+    };
+
+    let machine = string_marker(
+        MarkerValueString::PlatformMachine,
+        marker_env.platform_machine(),
+    );
+    // Native Windows reports AMD64, while cross-platform target metadata uses x86_64.
+    let machine =
+        if marker_env.sys_platform() == "win32" && marker_env.platform_machine() == "x86_64" {
+            machine.or(string_marker(MarkerValueString::PlatformMachine, "AMD64"))
+        } else {
+            machine
+        };
+    let version = if python_version.is_some_and(|version| version.patch().is_some()) {
+        version_marker(
+            MarkerValueVersion::PythonFullVersion,
+            marker_env.python_full_version().version.clone(),
+        )
+    } else {
+        version_marker(
+            MarkerValueVersion::PythonVersion,
+            marker_env.python_version().version.clone(),
+        )
+    };
+
+    string_marker(MarkerValueString::SysPlatform, marker_env.sys_platform())
+        .and(machine)
+        .and(string_marker(
+            MarkerValueString::ImplementationName,
+            marker_env.implementation_name(),
+        ))
+        .and(version)
 }
 
 /// Load the preferred pins and Git revisions from one existing output file.
@@ -249,8 +246,9 @@ pub(crate) async fn pip_compile(
     keyring_provider: KeyringProviderType,
     client_builder: &BaseClientBuilder<'_>,
     parsed_inputs: Option<&ParsedCompileInputs>,
-    prior_lock_cache: Option<&mut PriorLockCache>,
+    prior_lock_snapshot: Option<&mut PriorLockSnapshot>,
     simple_metadata_cache: Option<SimpleMetadataCache>,
+    exact_targets: Option<&mut Vec<ExactTargetResolution>>,
     config_settings: ConfigSettings,
     config_settings_package: PackageConfigSettings,
     build_isolation: BuildIsolation,
@@ -299,6 +297,12 @@ pub(crate) async fn pip_compile(
             PipCompileFormat::RequirementsTxt
         }
     });
+
+    if exact_targets.is_some() && matches!(format, PipCompileFormat::PylockToml) {
+        return Err(anyhow!(
+            "Multiple exact Python targets cannot be written to a single `pylock.toml` file"
+        ));
+    }
 
     // If the user is exporting to PEP 751, ensure the filename matches the specification.
     if matches!(format, PipCompileFormat::PylockToml) {
@@ -567,6 +571,31 @@ pub(crate) async fn pip_compile(
         (Some(tags), ResolverEnvironment::specific(marker_env))
     };
 
+    let exact_selector = if let Some(exact_targets) = exact_targets.as_deref() {
+        let marker_env = resolver_env
+            .marker_environment()
+            .ok_or_else(|| anyhow!("Multiple Python targets require exact-platform resolution"))?;
+        // A 32-bit interpreter running on 64-bit Windows reports the host's machine (AMD64),
+        // not the interpreter's wheel architecture, so no PEP 508 marker can select it reliably.
+        if marker_env.sys_platform() == "win32" && marker_env.platform_machine() == "x86" {
+            return Err(anyhow!(
+                "A 32-bit Windows Python target cannot be distinguished by environment markers in a single requirements file"
+            ));
+        }
+        let selector = exact_target_selector(marker_env, python_version.as_ref());
+        if exact_targets
+            .iter()
+            .any(|target| !selector.is_disjoint(target.selector))
+        {
+            return Err(anyhow!(
+                "Exact Python targets with different wheel tags cannot be distinguished by environment markers in a single requirements file; use separate invocations and output files"
+            ));
+        }
+        Some(selector)
+    } else {
+        None
+    };
+
     // Generate, but don't enforce hashes for the requirements. PEP 751 _requires_ a hash to be
     // present, but otherwise, we omit them by default.
     let hasher = if generate_hashes || matches!(format, PipCompileFormat::PylockToml) {
@@ -623,12 +652,12 @@ pub(crate) async fn pip_compile(
 
     // Read the lockfile, if present.
     let LockedRequirements { preferences, git } =
-        if let Some(output_file) = output_file.filter(|output_file| output_file.exists()) {
-            if let Some(prior_lock_cache) = prior_lock_cache {
-                prior_lock_cache.read(output_file, format, &upgrade).await?
-            } else {
-                read_existing_lock(output_file, format, &upgrade).await?
-            }
+        if let Some(prior_lock_snapshot) = prior_lock_snapshot {
+            prior_lock_snapshot
+                .read(output_file, format, &upgrade)
+                .await?
+        } else if let Some(output_file) = output_file.filter(|output_file| output_file.exists()) {
+            read_existing_lock(output_file, format, &upgrade).await?
         } else {
             LockedRequirements::default()
         };
@@ -762,105 +791,64 @@ pub(crate) async fn pip_compile(
         resolution.retain_allowed_distribution_hashes(&build_options);
     }
 
+    // Keep the resolved graphs until all exact targets have succeeded. The same existing output
+    // remains available as the prior-lock preference for every target, and we write only once.
+    if let Some(exact_targets) = exact_targets {
+        let selector = exact_selector.ok_or_else(|| anyhow!("Expected an exact Python target"))?;
+        let relevant_markers = if include_marker_expression {
+            resolver_env
+                .marker_environment()
+                .map(|marker_env| {
+                    resolution
+                        .marker_tree(&top_level_index, marker_env)
+                        .map(|marker| marker.and(selector))
+                })
+                .transpose()?
+        } else {
+            None
+        };
+        operations::diagnose_resolution(resolution.diagnostics(), printer)?;
+        exact_targets.push(ExactTargetResolution {
+            resolution,
+            resolver_env,
+            selector,
+            relevant_markers,
+            index_locations,
+            build_options,
+        });
+        return Ok(ExitStatus::Success);
+    }
+
     // Write the resolved dependencies to the output channel.
     let mut writer = OutputWriter::new(!quiet || output_file.is_none(), output_file);
 
-    if include_header {
-        writeln!(
-            writer,
-            "{}",
-            "# This file was autogenerated by uv via the following command:".green()
-        )?;
-        writeln!(
-            writer,
-            "{}",
-            format!(
-                "#    {}",
-                cmd(
-                    include_index_url,
-                    include_find_links,
-                    custom_compile_command
-                )
-            )
-            .green()
-        )?;
-    }
+    write_compile_header(
+        &mut writer,
+        include_header,
+        include_index_url,
+        include_find_links,
+        custom_compile_command,
+    )?;
 
     match format {
         PipCompileFormat::RequirementsTxt => {
-            if include_marker_expression {
-                if let Some(marker_env) = resolver_env.marker_environment() {
-                    let relevant_markers = resolution.marker_tree(&top_level_index, marker_env)?;
-                    if let Some(relevant_markers) = relevant_markers.contents() {
-                        writeln!(
-                            writer,
-                            "{}",
-                            "# Pinned dependencies known to be valid for:".green()
-                        )?;
-                        writeln!(writer, "{}", format!("#    {relevant_markers}").green())?;
-                    }
-                }
-            }
-
-            let mut wrote_preamble = false;
-
-            // If necessary, include the `--index-url` and `--extra-index-url` locations.
-            if include_index_url {
-                if let Some(index) = index_locations.default_index() {
-                    writeln!(writer, "--index-url {}", index.url().verbatim())?;
-                    wrote_preamble = true;
-                }
-                let mut seen = FxHashSet::default();
-                for extra_index in index_locations.implicit_indexes() {
-                    if seen.insert(extra_index.url()) {
-                        writeln!(writer, "--extra-index-url {}", extra_index.url().verbatim())?;
-                        wrote_preamble = true;
-                    }
-                }
-            }
-
-            // If necessary, include the `--find-links` locations.
-            if include_find_links {
-                for flat_index in index_locations.flat_indexes() {
-                    writeln!(writer, "--find-links {}", flat_index.url().verbatim())?;
-                    wrote_preamble = true;
-                }
-            }
-
-            // If necessary, include the `--no-binary` and `--only-binary` options.
-            if include_build_options {
-                match build_options.no_binary() {
-                    NoBinary::None => {}
-                    NoBinary::All => {
-                        writeln!(writer, "--no-binary :all:")?;
-                        wrote_preamble = true;
-                    }
-                    NoBinary::Packages(packages) => {
-                        for package in packages {
-                            writeln!(writer, "--no-binary {package}")?;
-                            wrote_preamble = true;
-                        }
-                    }
-                }
-                match build_options.no_build() {
-                    NoBuild::None => {}
-                    NoBuild::All => {
-                        writeln!(writer, "--only-binary :all:")?;
-                        wrote_preamble = true;
-                    }
-                    NoBuild::Packages(packages) => {
-                        for package in packages {
-                            writeln!(writer, "--only-binary {package}")?;
-                            wrote_preamble = true;
-                        }
-                    }
-                }
-            }
-
-            // If we wrote an index, add a newline to separate it from the requirements
-            if wrote_preamble {
-                writeln!(writer)?;
-            }
+            let relevant_markers = if include_marker_expression {
+                resolver_env
+                    .marker_environment()
+                    .map(|marker_env| resolution.marker_tree(&top_level_index, marker_env))
+                    .transpose()?
+            } else {
+                None
+            };
+            write_requirements_preamble(
+                &mut writer,
+                relevant_markers,
+                &index_locations,
+                &build_options,
+                include_index_url,
+                include_find_links,
+                include_build_options,
+            )?;
 
             write!(
                 writer,
@@ -949,6 +937,211 @@ pub(crate) async fn pip_compile(
     operations::diagnose_resolution(resolution.diagnostics(), printer)?;
 
     Ok(ExitStatus::Success)
+}
+
+/// Write all exact-platform solutions as one marker-qualified requirements file.
+#[expect(clippy::fn_params_excessive_bools)]
+pub(crate) async fn write_pip_compile_matrix(
+    targets: &[ExactTargetResolution],
+    output_file: Option<&Path>,
+    no_emit_packages: &[PackageName],
+    generate_hashes: bool,
+    include_extras: bool,
+    include_annotations: bool,
+    include_header: bool,
+    custom_compile_command: Option<String>,
+    include_index_url: bool,
+    include_find_links: bool,
+    include_build_options: bool,
+    include_marker_expression: bool,
+    include_index_annotation: bool,
+    annotation_style: AnnotationStyle,
+    quiet: bool,
+) -> Result<()> {
+    let first = targets
+        .first()
+        .ok_or_else(|| anyhow!("Expected at least one exact Python target"))?;
+    if targets.iter().skip(1).any(|target| {
+        target.index_locations != first.index_locations
+            || target.build_options != first.build_options
+    }) {
+        return Err(anyhow!(
+            "Target-specific indexes or build options cannot be represented in a single requirements file"
+        ));
+    }
+    let outputs = targets
+        .iter()
+        .map(|target| ExactTargetOutput {
+            resolution: &target.resolution,
+            environment: &target.resolver_env,
+            selector: target.selector,
+        })
+        .collect::<Vec<_>>();
+    // Validate the merged requirements before writing anything, including stdout.
+    let display = DisplayResolutionMatrix::new(
+        &outputs,
+        no_emit_packages,
+        generate_hashes,
+        include_extras,
+        include_annotations,
+        include_index_annotation,
+        annotation_style,
+    )?;
+    let mut writer = OutputWriter::new(!quiet || output_file.is_none(), output_file);
+    write_compile_header(
+        &mut writer,
+        include_header,
+        include_index_url,
+        include_find_links,
+        custom_compile_command,
+    )?;
+
+    let relevant_markers = include_marker_expression.then(|| {
+        targets
+            .iter()
+            .filter_map(|target| target.relevant_markers)
+            .fold(MarkerTree::FALSE, MarkerTree::or)
+    });
+    write_requirements_preamble(
+        &mut writer,
+        relevant_markers,
+        &first.index_locations,
+        &first.build_options,
+        include_index_url,
+        include_find_links,
+        include_build_options,
+    )?;
+
+    write!(writer, "{display}")?;
+
+    if include_annotations {
+        let excluded = no_emit_packages
+            .iter()
+            .filter(|name| {
+                targets
+                    .iter()
+                    .any(|target| target.resolution.contains(name))
+            })
+            .collect::<Vec<_>>();
+        if !excluded.is_empty() {
+            writeln!(writer)?;
+            writeln!(
+                writer,
+                "{}",
+                "# The following packages were excluded from the output:".green()
+            )?;
+            for package in excluded {
+                writeln!(writer, "# {package}")?;
+            }
+        }
+    }
+
+    writer.commit().await?;
+    Ok(())
+}
+
+/// Write the command which generated a requirements file or `pylock.toml`.
+fn write_compile_header(
+    writer: &mut impl Write,
+    include_header: bool,
+    include_index_url: bool,
+    include_find_links: bool,
+    custom_compile_command: Option<String>,
+) -> std::io::Result<()> {
+    if include_header {
+        writeln!(
+            writer,
+            "{}",
+            "# This file was autogenerated by uv via the following command:".green()
+        )?;
+        writeln!(
+            writer,
+            "{}",
+            format!(
+                "#    {}",
+                cmd(
+                    include_index_url,
+                    include_find_links,
+                    custom_compile_command
+                )
+            )
+            .green()
+        )?;
+    }
+    Ok(())
+}
+
+/// Write the shared marker note and index/build options before pinned requirements.
+fn write_requirements_preamble(
+    writer: &mut impl Write,
+    relevant_markers: Option<MarkerTree>,
+    index_locations: &IndexLocations,
+    build_options: &BuildOptions,
+    include_index_url: bool,
+    include_find_links: bool,
+    include_build_options: bool,
+) -> std::io::Result<()> {
+    if let Some(relevant_markers) = relevant_markers.and_then(MarkerTree::contents) {
+        writeln!(
+            writer,
+            "{}",
+            "# Pinned dependencies known to be valid for:".green()
+        )?;
+        writeln!(writer, "{}", format!("#    {relevant_markers}").green())?;
+    }
+
+    let mut wrote_preamble = false;
+    if include_index_url {
+        if let Some(index) = index_locations.default_index() {
+            writeln!(writer, "--index-url {}", index.url().verbatim())?;
+            wrote_preamble = true;
+        }
+        let mut seen = FxHashSet::default();
+        for extra_index in index_locations.implicit_indexes() {
+            if seen.insert(extra_index.url()) {
+                writeln!(writer, "--extra-index-url {}", extra_index.url().verbatim())?;
+                wrote_preamble = true;
+            }
+        }
+    }
+    if include_find_links {
+        for flat_index in index_locations.flat_indexes() {
+            writeln!(writer, "--find-links {}", flat_index.url().verbatim())?;
+            wrote_preamble = true;
+        }
+    }
+    if include_build_options {
+        match build_options.no_binary() {
+            NoBinary::None => {}
+            NoBinary::All => {
+                writeln!(writer, "--no-binary :all:")?;
+                wrote_preamble = true;
+            }
+            NoBinary::Packages(packages) => {
+                for package in packages {
+                    writeln!(writer, "--no-binary {package}")?;
+                    wrote_preamble = true;
+                }
+            }
+        }
+        match build_options.no_build() {
+            NoBuild::None => {}
+            NoBuild::All => {
+                writeln!(writer, "--only-binary :all:")?;
+                wrote_preamble = true;
+            }
+            NoBuild::Packages(packages) => {
+                for package in packages {
+                    writeln!(writer, "--only-binary {package}")?;
+                    wrote_preamble = true;
+                }
+            }
+        }
+    }
+    if wrote_preamble {
+        writeln!(writer)?;
+    }
+    Ok(())
 }
 
 /// Format the uv command used to generate the output file.

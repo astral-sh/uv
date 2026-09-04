@@ -1,4 +1,5 @@
-use std::collections::BTreeSet;
+use std::borrow::Cow;
+use std::collections::{BTreeMap, BTreeSet};
 
 use owo_colors::OwoColorize;
 use petgraph::visit::EdgeRef;
@@ -6,9 +7,12 @@ use petgraph::{Directed, Direction, Graph};
 use rustc_hash::{FxBuildHasher, FxHashMap};
 
 use uv_distribution_types::{DistributionMetadata, Name, SourceAnnotation, SourceAnnotations};
-use uv_normalize::PackageName;
+use uv_normalize::{ExtraName, PackageName};
+use uv_pep440::Version;
 use uv_pep508::MarkerTree;
+use uv_pypi_types::HashDigest;
 
+use crate::resolution::requirements_txt::RequirementsTxtComparator;
 use crate::resolution::{RequirementsTxtDist, ResolutionGraphNode};
 use crate::{ResolverEnvironment, ResolverOutput};
 
@@ -83,82 +87,359 @@ impl<'a> DisplayResolutionGraph<'a> {
     }
 }
 
+/// One exact-platform resolution and the marker that identifies its target environment.
+#[derive(Debug, Clone, Copy)]
+pub struct ExactTargetOutput<'a> {
+    pub resolution: &'a ResolverOutput,
+    pub environment: &'a ResolverEnvironment,
+    pub selector: MarkerTree,
+}
+
+/// A single `requirements.txt` view of independently resolved target environments.
+#[derive(Debug)]
+pub struct DisplayResolutionMatrix {
+    requirements: Vec<MergedRequirement>,
+    show_hashes: bool,
+    include_annotations: bool,
+    include_index_annotation: bool,
+    annotation_style: AnnotationStyle,
+}
+
+/// An editable requirement cannot be conditional in a `requirements.txt` file.
+#[derive(Debug, thiserror::Error)]
+pub enum DisplayResolutionMatrixError {
+    #[error("Editable requirement `{0}` is not present in every target environment")]
+    ConditionalEditable(String),
+}
+
+#[derive(Debug, Eq, PartialEq, Ord, PartialOrd)]
+enum MergedRequirementComparator {
+    Url(String),
+    Name {
+        name: PackageName,
+        version: Version,
+        url: Option<String>,
+        extras: Vec<ExtraName>,
+    },
+}
+
+impl From<RequirementsTxtComparator<'_>> for MergedRequirementComparator {
+    fn from(comparator: RequirementsTxtComparator<'_>) -> Self {
+        match comparator {
+            RequirementsTxtComparator::Url(url) => Self::Url(url.into_owned()),
+            RequirementsTxtComparator::Name {
+                name,
+                version,
+                url,
+                extras,
+            } => Self::Name {
+                name: name.clone(),
+                version: version.clone(),
+                url: url.map(Cow::into_owned),
+                extras: extras.to_vec(),
+            },
+        }
+    }
+}
+
+#[derive(Debug)]
+struct MergedRequirement {
+    requirement: String,
+    comparator: MergedRequirementComparator,
+    marker: MarkerTree,
+    intrinsic_marker: MarkerTree,
+    same_intrinsic_marker: bool,
+    hashes: BTreeSet<HashDigest>,
+    dependents: BTreeSet<PackageName>,
+    sources: BTreeSet<SourceAnnotation>,
+    indexes: BTreeSet<String>,
+    editable: bool,
+    targets: BTreeSet<usize>,
+}
+
+impl DisplayResolutionMatrix {
+    /// Merge independently resolved targets into one requirements list.
+    ///
+    /// Target-specific pins receive an environment marker; common pins retain their intrinsic
+    /// marker without an additional target restriction. Hashes and annotations are combined for
+    /// identical requirements.
+    #[expect(clippy::fn_params_excessive_bools)]
+    pub fn new(
+        outputs: &[ExactTargetOutput<'_>],
+        no_emit_packages: &[PackageName],
+        show_hashes: bool,
+        include_extras: bool,
+        include_annotations: bool,
+        include_index_annotation: bool,
+        annotation_style: AnnotationStyle,
+    ) -> Result<Self, DisplayResolutionMatrixError> {
+        let mut requirements: BTreeMap<String, MergedRequirement> = BTreeMap::new();
+
+        for (target_index, output) in outputs.iter().enumerate() {
+            let sources = if include_annotations {
+                source_annotations(output.resolution, output.environment)
+            } else {
+                SourceAnnotations::default()
+            };
+
+            let graph = output.resolution.graph.map(
+                |_index, node| match node {
+                    ResolutionGraphNode::Root => DisplayResolutionGraphNode::Root,
+                    ResolutionGraphNode::Dist(dist) => DisplayResolutionGraphNode::Dist(
+                        RequirementsTxtDist::from_annotated_dist(dist),
+                    ),
+                },
+                |_index, _edge| (),
+            );
+            let graph = if include_extras {
+                combine_extras(&graph)
+            } else {
+                strip_extras(&graph)
+            };
+
+            for index in graph.node_indices() {
+                let node = &graph[index];
+                if no_emit_packages.contains(node.name()) {
+                    continue;
+                }
+
+                // Derive the base requirement without first simplifying a target-specific marker
+                // against `requires-python`: doing so could remove the Python-version selector.
+                let requirement = node
+                    .to_requirements_txt(&output.resolution.requires_python, false)
+                    .into_owned();
+                let marker = node.markers.and(output.selector);
+                if marker.is_false() {
+                    continue;
+                }
+
+                let entry =
+                    requirements
+                        .entry(requirement.clone())
+                        .or_insert_with(|| MergedRequirement {
+                            requirement,
+                            comparator: node.to_comparator().into(),
+                            marker: MarkerTree::FALSE,
+                            intrinsic_marker: node.markers,
+                            same_intrinsic_marker: true,
+                            hashes: BTreeSet::new(),
+                            dependents: BTreeSet::new(),
+                            sources: BTreeSet::new(),
+                            indexes: BTreeSet::new(),
+                            editable: node.dist.is_editable(),
+                            targets: BTreeSet::new(),
+                        });
+                entry.marker = entry.marker.or(marker);
+                entry.same_intrinsic_marker &= entry.intrinsic_marker == node.markers;
+                entry.targets.insert(target_index);
+                if show_hashes {
+                    entry.hashes.extend(node.hashes.iter().cloned());
+                }
+                if include_annotations {
+                    entry.dependents.extend(
+                        graph
+                            .edges_directed(index, Direction::Incoming)
+                            .map(|edge| graph[edge.source()].name().clone()),
+                    );
+                    if let Some(source) = sources.get(node.name()) {
+                        entry.sources.extend(source.iter().cloned());
+                    }
+                }
+                if include_index_annotation && let Some(index) = node.dist.index() {
+                    entry
+                        .indexes
+                        .insert(index.without_credentials().to_string());
+                }
+            }
+        }
+
+        let mut requirements: Vec<_> = requirements.into_values().collect();
+        for requirement in &mut requirements {
+            if requirement.targets.len() == outputs.len() && requirement.same_intrinsic_marker {
+                // The pin is common to every target, so the matrix adds no constraint. Retain
+                // any original dependency marker rather than widening the requirement itself.
+                requirement.marker = requirement.intrinsic_marker;
+            }
+            if requirement.editable {
+                if requirement.targets.len() != outputs.len() {
+                    return Err(DisplayResolutionMatrixError::ConditionalEditable(
+                        requirement.requirement.clone(),
+                    ));
+                }
+                // `-e` requirements cannot carry markers. An editable present in all selected
+                // targets is safe to write without a marker, as in a normal `pip compile` output.
+                requirement.marker = MarkerTree::TRUE;
+            }
+        }
+        requirements.sort_unstable_by(|left, right| {
+            left.comparator
+                .cmp(&right.comparator)
+                .then_with(|| left.requirement.cmp(&right.requirement))
+        });
+
+        Ok(Self {
+            requirements,
+            show_hashes,
+            include_annotations,
+            include_index_annotation,
+            annotation_style,
+        })
+    }
+}
+
+impl std::fmt::Display for DisplayResolutionMatrix {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        for requirement in &self.requirements {
+            let mut line = requirement.requirement.clone();
+            if let Some(marker) = requirement.marker.contents() {
+                line.push_str(" ; ");
+                line.push_str(&marker.to_string());
+            }
+
+            let has_hashes = self.show_hashes && !requirement.hashes.is_empty();
+            if self.show_hashes {
+                for hash in &requirement.hashes {
+                    line.push_str(" \\\n    --hash=");
+                    line.push_str(&hash.to_string());
+                }
+            }
+
+            let annotation = if self.include_annotations {
+                let via = match self.annotation_style {
+                    AnnotationStyle::Line => requirement
+                        .dependents
+                        .iter()
+                        .map(ToString::to_string)
+                        .chain(requirement.sources.iter().map(ToString::to_string))
+                        .collect::<Vec<_>>(),
+                    AnnotationStyle::Split => requirement
+                        .sources
+                        .iter()
+                        .map(ToString::to_string)
+                        .chain(requirement.dependents.iter().map(ToString::to_string))
+                        .collect::<Vec<_>>(),
+                };
+                if via.is_empty() {
+                    None
+                } else {
+                    let (separator, comment) = match self.annotation_style {
+                        AnnotationStyle::Line => (
+                            if has_hashes { "\n    " } else { "  " },
+                            format!("# via {}", via.join(", ")).green().to_string(),
+                        ),
+                        AnnotationStyle::Split => {
+                            let comment = if via.len() == 1 {
+                                format!("    # via {}", via[0])
+                            } else {
+                                format!(
+                                    "    # via\n{}",
+                                    via.iter()
+                                        .map(|source| format!("    #   {source}"))
+                                        .collect::<Vec<_>>()
+                                        .join("\n")
+                                )
+                            };
+                            ("\n", comment.green().to_string())
+                        }
+                    };
+                    Some((separator, comment))
+                }
+            } else {
+                None
+            };
+
+            if let Some((separator, comment)) = annotation {
+                for line in format!("{line:24}{separator}{comment}").lines() {
+                    writeln!(f, "{}", line.trim_end())?;
+                }
+            } else {
+                writeln!(f, "{line}")?;
+            }
+
+            if self.include_index_annotation {
+                for index in &requirement.indexes {
+                    writeln!(f, "{}", format!("    # from {index}").green())?;
+                }
+            }
+        }
+
+        Ok(())
+    }
+}
+
+fn source_annotations(resolution: &ResolverOutput, env: &ResolverEnvironment) -> SourceAnnotations {
+    let mut sources = SourceAnnotations::default();
+
+    for requirement in resolution
+        .requirements
+        .iter()
+        .filter(|requirement| requirement.evaluate_markers(env.marker_environment(), &[]))
+    {
+        if let Some(origin) = &requirement.origin {
+            sources.add(
+                &requirement.name,
+                SourceAnnotation::Requirement(origin.clone()),
+            );
+        }
+    }
+
+    for requirement in resolution
+        .constraints
+        .requirements()
+        .filter(|requirement| requirement.evaluate_markers(env.marker_environment(), &[]))
+    {
+        if let Some(origin) = &requirement.origin {
+            sources.add(
+                &requirement.name,
+                SourceAnnotation::Constraint(origin.clone()),
+            );
+        }
+    }
+
+    for requirement in resolution
+        .overrides
+        .global_requirements()
+        .filter(|requirement| requirement.evaluate_markers(env.marker_environment(), &[]))
+    {
+        if let Some(origin) = &requirement.origin {
+            sources.add(
+                &requirement.name,
+                SourceAnnotation::Override(origin.clone()),
+            );
+        }
+    }
+
+    for edge in resolution.graph.edge_references() {
+        let (Some(ResolutionGraphNode::Dist(parent)), Some(ResolutionGraphNode::Dist(dependency))) = (
+            resolution.graph.node_weight(edge.source()),
+            resolution.graph.node_weight(edge.target()),
+        ) else {
+            continue;
+        };
+        for requirement in resolution
+            .overrides
+            .scoped_requirements_for(&parent.name, &parent.version)
+            .filter(|requirement| requirement.name == dependency.name)
+            .filter(|requirement| requirement.evaluate_markers(env.marker_environment(), &[]))
+        {
+            if let Some(origin) = &requirement.origin {
+                sources.add(
+                    &requirement.name,
+                    SourceAnnotation::Override(origin.clone()),
+                );
+            }
+        }
+    }
+
+    sources
+}
+
 /// Write the graph in the `{name}=={version}` format of requirements.txt that pip uses.
 impl std::fmt::Display for DisplayResolutionGraph<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         // Determine the annotation sources for each package.
         let sources = if self.include_annotations {
-            let mut sources = SourceAnnotations::default();
-
-            for requirement in self.resolution.requirements.iter().filter(|requirement| {
-                requirement.evaluate_markers(self.env.marker_environment(), &[])
-            }) {
-                if let Some(origin) = &requirement.origin {
-                    sources.add(
-                        &requirement.name,
-                        SourceAnnotation::Requirement(origin.clone()),
-                    );
-                }
-            }
-
-            for requirement in self
-                .resolution
-                .constraints
-                .requirements()
-                .filter(|requirement| {
-                    requirement.evaluate_markers(self.env.marker_environment(), &[])
-                })
-            {
-                if let Some(origin) = &requirement.origin {
-                    sources.add(
-                        &requirement.name,
-                        SourceAnnotation::Constraint(origin.clone()),
-                    );
-                }
-            }
-
-            for requirement in
-                self.resolution
-                    .overrides
-                    .global_requirements()
-                    .filter(|requirement| {
-                        requirement.evaluate_markers(self.env.marker_environment(), &[])
-                    })
-            {
-                if let Some(origin) = &requirement.origin {
-                    sources.add(
-                        &requirement.name,
-                        SourceAnnotation::Override(origin.clone()),
-                    );
-                }
-            }
-
-            for edge in self.resolution.graph.edge_references() {
-                let (ResolutionGraphNode::Dist(parent), ResolutionGraphNode::Dist(dependency)) = (
-                    self.resolution.graph.node_weight(edge.source()).unwrap(),
-                    self.resolution.graph.node_weight(edge.target()).unwrap(),
-                ) else {
-                    continue;
-                };
-                for requirement in self
-                    .resolution
-                    .overrides
-                    .scoped_requirements_for(&parent.name, &parent.version)
-                    .filter(|requirement| requirement.name == dependency.name)
-                    .filter(|requirement| {
-                        requirement.evaluate_markers(self.env.marker_environment(), &[])
-                    })
-                {
-                    if let Some(origin) = &requirement.origin {
-                        sources.add(
-                            &requirement.name,
-                            SourceAnnotation::Override(origin.clone()),
-                        );
-                    }
-                }
-            }
-
-            sources
+            source_annotations(self.resolution, self.env)
         } else {
             SourceAnnotations::default()
         };
