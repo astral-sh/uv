@@ -49,7 +49,7 @@ use uv_install_wheel::LinkMode;
 use uv_normalize::{ExtraName, PackageName, PipGroupName};
 use uv_pep440::Version;
 use uv_pep508::{MarkerTree, RequirementOrigin};
-use uv_preview::Preview;
+use uv_preview::{Preview, PreviewFeature};
 use uv_pypi_types::SupportedEnvironments;
 use uv_python::{Prefix, PythonDownloads, PythonPreference, PythonVersion, Target};
 use uv_redacted::DisplaySafeUrl;
@@ -2244,29 +2244,40 @@ impl UpgradeSettings {
         args: UpgradeArgs,
         filesystem: Option<FilesystemOptions>,
         environment: EnvironmentOptions,
-    ) -> Self {
+    ) -> Result<Self> {
         let filesystem_install_mirrors = filesystem
             .as_ref()
             .map(|fs| fs.install_mirrors.clone())
             .unwrap_or_default();
-        let packages = args.packages;
-        let exclude = args.exclude;
-        let mut settings =
-            ResolverSettings::combine(ResolverOptions::default(), filesystem, &environment);
+        let UpgradeArgs {
+            packages,
+            exclude,
+            require_build_hashes,
+            no_require_build_hashes,
+        } = args;
+        let options = ResolverOptions {
+            require_build_hashes: flag(
+                require_build_hashes,
+                no_require_build_hashes,
+                "require-build-hashes",
+            )?,
+            ..ResolverOptions::default()
+        };
+        let mut settings = ResolverSettings::combine(options, filesystem, &environment);
         settings.upgrade = if packages.is_empty() {
             Upgrade::default()
         } else {
             Upgrade::from_packages(packages.clone())
         };
 
-        Self {
+        Ok(Self {
             packages,
             exclude,
             install_mirrors: environment
                 .install_mirrors
                 .combine(filesystem_install_mirrors),
             settings,
-        }
+        })
     }
 }
 
@@ -3475,6 +3486,7 @@ pub(crate) struct PipCompileSettings {
     pub(crate) overrides: Vec<PathBuf>,
     pub(crate) excludes: Vec<PathBuf>,
     pub(crate) build_constraints: Vec<PathBuf>,
+    pub(crate) build_hash_checking: HashCheckingMode,
     pub(crate) constraints_from_workspace: Vec<Requirement>,
     pub(crate) overrides_from_workspace: Vec<Override<Requirement>>,
     pub(crate) excludes_from_workspace: Vec<ExcludeDependency>,
@@ -3501,6 +3513,8 @@ impl PipCompileSettings {
             all_extras,
             no_all_extras,
             build_constraints,
+            require_build_hashes,
+            no_require_build_hashes,
             refresh,
             no_deps,
             deps,
@@ -3617,6 +3631,15 @@ impl PipCompileSettings {
                 .into_iter()
                 .filter_map(Maybe::into_option)
                 .collect(),
+            build_hash_checking: resolve_pip_build_hash_checking(
+                flag(
+                    require_build_hashes,
+                    no_require_build_hashes,
+                    "require-build-hashes",
+                )?,
+                filesystem.as_ref(),
+                &environment,
+            ),
             overrides: overrides
                 .into_iter()
                 .filter_map(Maybe::into_option)
@@ -3688,6 +3711,7 @@ pub(crate) struct PipSyncSettings {
     pub(crate) src_file: Vec<PathBuf>,
     pub(crate) constraints: Vec<PathBuf>,
     pub(crate) build_constraints: Vec<PathBuf>,
+    pub(crate) build_hash_checking: HashCheckingMode,
     pub(crate) dry_run: DryRun,
     pub(crate) refresh: Refresh,
     pub(crate) settings: PipSettings,
@@ -3704,6 +3728,8 @@ impl PipSyncSettings {
             src_file,
             constraints,
             build_constraints,
+            require_build_hashes,
+            no_require_build_hashes,
             extra,
             all_extras,
             no_all_extras,
@@ -3749,6 +3775,15 @@ impl PipSyncSettings {
                 .into_iter()
                 .filter_map(Maybe::into_option)
                 .collect(),
+            build_hash_checking: resolve_pip_build_hash_checking(
+                flag(
+                    require_build_hashes,
+                    no_require_build_hashes,
+                    "require-build-hashes",
+                )?,
+                filesystem.as_ref(),
+                &environment,
+            ),
             dry_run: DryRun::from_args(dry_run),
             refresh: Refresh::try_from(refresh)?,
             settings: PipSettings::combine(
@@ -3799,6 +3834,7 @@ pub(crate) struct PipInstallSettings {
     pub(crate) overrides: Vec<PathBuf>,
     pub(crate) excludes: Vec<PathBuf>,
     pub(crate) build_constraints: Vec<PathBuf>,
+    pub(crate) build_hash_checking: HashCheckingMode,
     pub(crate) dry_run: DryRun,
     pub(crate) constraints_from_workspace: Vec<Requirement>,
     pub(crate) overrides_from_workspace: Vec<Override<Requirement>>,
@@ -3826,6 +3862,8 @@ impl PipInstallSettings {
             overrides,
             excludes,
             build_constraints,
+            require_build_hashes,
+            no_require_build_hashes,
             extra,
             all_extras,
             no_all_extras,
@@ -3928,6 +3966,15 @@ impl PipInstallSettings {
                 .into_iter()
                 .filter_map(Maybe::into_option)
                 .collect(),
+            build_hash_checking: resolve_pip_build_hash_checking(
+                flag(
+                    require_build_hashes,
+                    no_require_build_hashes,
+                    "require-build-hashes",
+                )?,
+                filesystem.as_ref(),
+                &environment,
+            ),
             dry_run: DryRun::from_args(dry_run),
             constraints_from_workspace,
             overrides_from_workspace,
@@ -4512,6 +4559,7 @@ pub(crate) struct InstallerSettingsRef<'a> {
     pub(crate) dependency_metadata: &'a DependencyMetadata,
     pub(crate) config_setting: &'a ConfigSettings,
     pub(crate) config_settings_package: &'a PackageConfigSettings,
+    pub(crate) build_hash_checking: HashCheckingMode,
     pub(crate) build_isolation: &'a BuildIsolation,
     pub(crate) extra_build_dependencies: &'a ExtraBuildDependencies,
     pub(crate) extra_build_variables: &'a ExtraBuildVariables,
@@ -4539,6 +4587,7 @@ pub(crate) struct ResolverSettings {
     pub(crate) index_strategy: IndexStrategy,
     pub(crate) keyring_provider: KeyringProviderType,
     pub(crate) link_mode: LinkMode,
+    pub(crate) build_hash_checking: HashCheckingMode,
     pub(crate) build_isolation: BuildIsolation,
     pub(crate) extra_build_dependencies: ExtraBuildDependencies,
     pub(crate) extra_build_variables: ExtraBuildVariables,
@@ -4549,6 +4598,39 @@ pub(crate) struct ResolverSettings {
     pub(crate) cuda_driver_version: Option<Version>,
     pub(crate) amd_gpu_architecture: Option<AmdGpuArchitecture>,
     pub(crate) upgrade: Upgrade,
+}
+
+fn resolve_build_hash_checking(require_build_hashes: Option<bool>) -> HashCheckingMode {
+    if !require_build_hashes.unwrap_or_default() {
+        return HashCheckingMode::Verify;
+    }
+    if !uv_preview::is_enabled(PreviewFeature::BuildDependencyHashes) {
+        warn_user_once!(
+            "The `--require-build-hashes` option is experimental and may change without warning. Pass `--preview-features {}` to disable this warning.",
+            PreviewFeature::BuildDependencyHashes
+        );
+    }
+    HashCheckingMode::Require
+}
+
+/// Resolve the `uv pip` build-hash policy from CLI, environment, and configuration settings.
+fn resolve_pip_build_hash_checking(
+    require_build_hashes: Option<bool>,
+    filesystem: Option<&FilesystemOptions>,
+    environment: &EnvironmentOptions,
+) -> HashCheckingMode {
+    let configured = filesystem.and_then(|filesystem| {
+        filesystem
+            .pip
+            .as_ref()
+            .and_then(|pip| pip.require_build_hashes)
+            .or(filesystem.top_level.require_build_hashes)
+    });
+    resolve_build_hash_checking(
+        require_build_hashes
+            .or(environment.require_build_hashes)
+            .or(configured),
+    )
 }
 
 #[allow(deprecated)]
@@ -4600,6 +4682,9 @@ impl ResolverSettings {
         filesystem: Option<FilesystemOptions>,
         environment: &EnvironmentOptions,
     ) -> Self {
+        args.require_build_hashes = args
+            .require_build_hashes
+            .or(environment.require_build_hashes);
         args.no_binary_package = args
             .no_binary_package
             .or(environment.no_binary_package.clone());
@@ -4645,6 +4730,7 @@ impl From<ResolverOptions> for ResolverSettings {
             config_setting: value.config_settings.unwrap_or_default(),
             config_settings_package: value.config_settings_package.unwrap_or_default(),
             build_isolation: value.build_isolation.unwrap_or_default(),
+            build_hash_checking: resolve_build_hash_checking(value.require_build_hashes),
             extra_build_dependencies: value.extra_build_dependencies.unwrap_or_default(),
             extra_build_variables: value.extra_build_variables.unwrap_or_default(),
             exclude_newer: ExcludeNewer::from_args(
@@ -4730,6 +4816,9 @@ fn resolver_installer_options_with_environment(
     mut options: ResolverInstallerOptions,
     environment: &EnvironmentOptions,
 ) -> ResolverInstallerOptions {
+    options.require_build_hashes = options
+        .require_build_hashes
+        .or(environment.require_build_hashes);
     options.no_binary_package = options
         .no_binary_package
         .or(environment.no_binary_package.clone());
@@ -4774,6 +4863,7 @@ impl From<ResolverInstallerOptions> for ResolverInstallerSettings {
                 keyring_provider: value.keyring_provider.unwrap_or_default(),
                 link_mode: value.link_mode.unwrap_or_default(),
                 build_isolation: value.build_isolation.unwrap_or_default(),
+                build_hash_checking: resolve_build_hash_checking(value.require_build_hashes),
                 extra_build_dependencies: value.extra_build_dependencies.unwrap_or_default(),
                 extra_build_variables: value.extra_build_variables.unwrap_or_default(),
                 prerelease: resolve_prerelease(
@@ -4889,6 +4979,7 @@ impl PipSettings {
             no_binary,
             only_binary,
             no_build_isolation,
+            require_build_hashes: _,
             no_build_isolation_package,
             extra_build_dependencies,
             extra_build_variables,
@@ -4971,6 +5062,7 @@ impl PipSettings {
             no_binary_package: top_level_no_binary_package,
             exclude_newer_package: top_level_exclude_newer_package,
             torch_backend: top_level_torch_backend,
+            require_build_hashes: _,
         } = top_level;
 
         // Merge the top-level options (`tool.uv`) with the pip-specific options (`tool.uv.pip`),
@@ -5247,6 +5339,7 @@ impl<'a> From<&'a ResolverInstallerSettings> for InstallerSettingsRef<'a> {
             config_setting: &settings.resolver.config_setting,
             config_settings_package: &settings.resolver.config_settings_package,
             build_isolation: &settings.resolver.build_isolation,
+            build_hash_checking: settings.resolver.build_hash_checking,
             extra_build_dependencies: &settings.resolver.extra_build_dependencies,
             extra_build_variables: &settings.resolver.extra_build_variables,
             exclude_newer: &settings.resolver.exclude_newer,
@@ -5461,10 +5554,12 @@ mod tests {
             UpgradeArgs {
                 packages: vec![package.clone()],
                 exclude: Vec::new(),
+                require_build_hashes: false,
+                no_require_build_hashes: false,
             },
             None,
             EnvironmentOptions::new()?,
-        );
+        )?;
         let expected = FxHashSet::from_iter([package]);
 
         assert!(!settings.settings.upgrade.is_all());
