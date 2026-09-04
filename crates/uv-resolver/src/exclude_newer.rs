@@ -5,6 +5,7 @@ use std::{
 };
 
 use jiff::Timestamp;
+use rustc_hash::FxHashSet;
 use serde::ser::SerializeMap;
 use uv_distribution_types::{ExcludeNewerOverride, ExcludeNewerSpan, ExcludeNewerValue};
 use uv_normalize::PackageName;
@@ -488,6 +489,21 @@ impl ExcludeNewer {
     /// Returns true if this has any configuration (global or per-package).
     pub(crate) fn is_empty(&self) -> bool {
         self.global.is_none() && self.package.is_empty()
+    }
+
+    /// Filter package-specific settings to packages in the resolution.
+    #[must_use]
+    pub fn filter_packages<'a>(self, packages: impl IntoIterator<Item = &'a PackageName>) -> Self {
+        let packages = packages.into_iter().collect::<FxHashSet<_>>();
+        Self {
+            global: self.global,
+            package: ExcludeNewerPackage(
+                self.package
+                    .into_iter()
+                    .filter(|(package, _)| packages.contains(package))
+                    .collect(),
+            ),
+        }
     }
 
     /// Compare against current configuration when deciding whether a lockfile may be reused.
