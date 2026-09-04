@@ -104,10 +104,10 @@ fn compile_output_identity(path: &Path) -> Result<PathBuf> {
     };
     let file_name = path
         .file_name()
-        .ok_or_else(|| anyhow!("Each `--target` output must name a file"))?;
+        .ok_or_else(|| anyhow!("Each generated output must name a file"))?;
     let mut parent = path
         .parent()
-        .ok_or_else(|| anyhow!("Each `--target` output must have a parent directory"))?;
+        .ok_or_else(|| anyhow!("Each generated output must have a parent directory"))?;
 
     // A later target may create the missing part of a directory tree. Resolve the longest
     // existing ancestor so aliases through a symlink are still detected beforehand.
@@ -118,7 +118,7 @@ fn compile_output_identity(path: &Path) -> Result<PathBuf> {
             Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
                 let (Some(name), Some(ancestor)) = (parent.file_name(), parent.parent()) else {
                     bail!(
-                        "Cannot resolve a parent directory for `--target` output {}",
+                        "Cannot resolve a parent directory for generated output {}",
                         path.display()
                     );
                 };
@@ -822,7 +822,9 @@ async fn run_with_workspace_cache(
 
             let batch_mode = !args.compile_targets.is_empty();
             if batch_mode && args.settings.universal {
-                bail!("`--target` requires exact-platform resolution; disable `--universal`");
+                bail!(
+                    "Multiple Python targets require exact-platform resolution; disable `--universal`"
+                );
             }
             let simple_metadata_cache = batch_mode.then(SimpleMetadataCache::default);
             let mut prior_lock_cache =
@@ -842,7 +844,7 @@ async fn run_with_workspace_cache(
                     .into_iter()
                     .any(|identity| !output_files.insert(identity))
                 {
-                    bail!("Each `--target` must use a different output file");
+                    bail!("Each Python target must use a different output file");
                 }
             }
             let parsed_inputs = if batch_mode {
@@ -877,12 +879,12 @@ async fn run_with_workspace_cache(
                     });
                 let python_version = target.as_ref().map_or_else(
                     || args.settings.python_version.clone(),
-                    |target| Some(target.python_version.clone()),
+                    |target| target.python_version.clone(),
                 );
                 let python_platform = target
                     .as_ref()
                     .map_or(args.settings.python_platform, |target| {
-                        Some(target.python_platform)
+                        target.python_platform
                     });
 
                 let status = Box::pin(commands::pip_compile(

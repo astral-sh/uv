@@ -1537,33 +1537,6 @@ fn parse_maybe_string(input: &str) -> Result<Maybe<String>, String> {
     }
 }
 
-/// An exact Python environment and its compiled requirements output.
-#[derive(Debug, Clone)]
-pub struct PipCompileTarget {
-    pub python_version: PythonVersion,
-    pub python_platform: TargetTriple,
-    pub output_file: PathBuf,
-}
-
-impl FromStr for PipCompileTarget {
-    type Err = String;
-
-    fn from_str(value: &str) -> Result<Self, Self::Err> {
-        let syntax = "expected PYTHON_VERSION@PLATFORM=FILE (for example, 3.12@aarch64-apple-darwin=macos.txt)";
-        let (environment, output_file) = value.split_once('=').ok_or(syntax)?;
-        let (python_version, python_platform) = environment.split_once('@').ok_or(syntax)?;
-        if output_file.is_empty() {
-            return Err(syntax.to_string());
-        }
-
-        Ok(Self {
-            python_version: PythonVersion::from_str(python_version)?,
-            python_platform: TargetTriple::from_str(python_platform, true)?,
-            output_file: PathBuf::from(output_file),
-        })
-    }
-}
-
 #[derive(Args)]
 #[command(group = clap::ArgGroup::new("sources").required(true).multiple(true))]
 pub struct PipCompileArgs {
@@ -1694,19 +1667,11 @@ pub struct PipCompileArgs {
     ///
     /// If the file already exists, the existing versions will be preferred when resolving
     /// dependencies, unless `--upgrade` is also specified.
+    ///
+    /// If multiple Python versions or platforms are specified, this path is used as a template
+    /// for separate output files with the target appended before the extension.
     #[arg(long, short, value_hint = ValueHint::FilePath)]
     pub output_file: Option<PathBuf>,
-
-    /// Compile for an exact Python version and platform into an output file.
-    ///
-    /// May be provided more than once. Each target is resolved independently; parsed inputs
-    /// and cacheable package metadata can be reused across targets in this invocation.
-    #[arg(
-        long = "target",
-        value_name = "PYTHON_VERSION@PLATFORM=FILE",
-        conflicts_with_all = ["output_file", "python_version", "python_platform", "universal"]
-    )]
-    pub compile_targets: Vec<PipCompileTarget>,
 
     /// The format in which the resolution should be output.
     ///
@@ -1868,8 +1833,10 @@ pub struct PipCompileArgs {
     ///
     /// If a patch version is omitted, the minimum patch version is assumed. For
     /// example, `3.8` is mapped to `3.8.0`.
+    ///
+    /// May be provided multiple times to compile each version to a separate output file.
     #[arg(long, help_heading = "Python options")]
-    pub python_version: Option<PythonVersion>,
+    pub python_version: Vec<PythonVersion>,
 
     /// The platform for which requirements should be resolved.
     ///
@@ -1885,8 +1852,10 @@ pub struct PipCompileArgs {
     ///
     /// When targeting Android, the default minimum Android API level is `24`. Use
     /// `ANDROID_API_LEVEL` to specify a different minimum version, e.g., `26`.
+    ///
+    /// May be provided multiple times to compile each platform to a separate output file.
     #[arg(long)]
-    pub python_platform: Option<TargetTriple>,
+    pub python_platform: Vec<TargetTriple>,
 
     /// Perform a universal resolution, attempting to generate a single `requirements.txt` output
     /// file that is compatible with all operating systems, architectures, and Python

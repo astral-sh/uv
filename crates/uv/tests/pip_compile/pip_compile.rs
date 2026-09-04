@@ -13,8 +13,6 @@ use assert_fs::prelude::*;
 #[cfg(unix)]
 use fs_err::os::unix::fs::symlink as create_symlink;
 use fs_err::{File, read_to_string};
-#[cfg(unix)]
-use fs_err::{create_dir, create_dir_all};
 #[cfg(feature = "test-python-managed")]
 use http::StatusCode;
 #[cfg(feature = "test-universal")]
@@ -13848,17 +13846,25 @@ fn multiple_exact_targets() -> Result<()> {
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("black")?;
 
-    let linux_output = context.temp_dir.child("linux.txt");
+    let linux_output = context
+        .temp_dir
+        .child("requirements-aarch64-unknown-linux-gnu-py3_12.txt");
     linux_output.write_str("black==23.10.1\n")?;
-    let windows_output = context.temp_dir.child("windows.txt");
+    let windows_output = context
+        .temp_dir
+        .child("requirements-x86_64-pc-windows-msvc-py3_12.txt");
     windows_output.write_str("black==24.3.0\n")?;
 
     uv_snapshot!(context.filters(), windows_filters=false, context.pip_compile()
         .arg("requirements.in")
-        .arg("--target")
-        .arg("3.12@aarch64-unknown-linux-gnu=linux.txt")
-        .arg("--target")
-        .arg("3.12@x86_64-pc-windows-msvc=windows.txt")
+        .arg("--python-version")
+        .arg("3.12")
+        .arg("--python-platform")
+        .arg("aarch64-unknown-linux-gnu")
+        .arg("--python-platform")
+        .arg("x86_64-pc-windows-msvc")
+        .arg("-o")
+        .arg("requirements.txt")
         .arg("--no-header")
         .arg("--no-annotate"), @"
     exit_code: 0 (success)
@@ -13929,10 +13935,14 @@ fn multiple_exact_targets() -> Result<()> {
     windows_output.write_str("black==23.10.1\n")?;
     uv_snapshot!(context.filters(), windows_filters=false, context.pip_compile()
         .arg("requirements.in")
-        .arg("--target")
-        .arg("3.12@aarch64-unknown-linux-gnu=linux.txt")
-        .arg("--target")
-        .arg("3.12@x86_64-pc-windows-msvc=windows.txt")
+        .arg("--python-version")
+        .arg("3.12")
+        .arg("--python-platform")
+        .arg("aarch64-unknown-linux-gnu")
+        .arg("--python-platform")
+        .arg("x86_64-pc-windows-msvc")
+        .arg("-o")
+        .arg("requirements.txt")
         .arg("--no-header")
         .arg("--no-annotate"), @"
     exit_code: 0 (success)
@@ -13974,6 +13984,114 @@ fn multiple_exact_targets() -> Result<()> {
     Ok(())
 }
 
+/// Repeated platform and version options form separate exact-target resolutions.
+#[test]
+fn multiple_exact_targets_matrix() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("requirements.in")
+        .write_str(indoc! {"
+        idna==3.6; python_version < '3.11'
+        iniconfig==2.0.0; python_version >= '3.11'
+        colorama==0.4.6; sys_platform == 'win32'
+    "})?;
+
+    uv_snapshot!(context.filters(), context.pip_compile()
+        .arg("requirements.in")
+        .arg("--python-platform")
+        .arg("linux")
+        .arg("--python-platform")
+        .arg("windows")
+        .arg("--python-version")
+        .arg("3.10")
+        .arg("--python-version")
+        .arg("3.12")
+        .arg("--output-file")
+        .arg("requirements.txt")
+        .arg("--no-header")
+        .arg("--no-annotate"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    warning: The requested Python version 3.10 is not available; 3.12.[X] will be used to build dependencies instead.
+    Resolved 1 package in [TIME]
+    Resolved 1 package in [TIME]
+    warning: The requested Python version 3.10 is not available; 3.12.[X] will be used to build dependencies instead.
+    Resolved 2 packages in [TIME]
+    Resolved 2 packages in [TIME]
+    ");
+
+    for (file_name, expected) in [
+        ("requirements-linux-py3_10.txt", "idna==3.6\n"),
+        ("requirements-linux-py3_12.txt", "iniconfig==2.0.0\n"),
+        (
+            "requirements-windows-py3_10.txt",
+            "colorama==0.4.6\nidna==3.6\n",
+        ),
+        (
+            "requirements-windows-py3_12.txt",
+            "colorama==0.4.6\niniconfig==2.0.0\n",
+        ),
+    ] {
+        assert_eq!(
+            read_to_string(context.temp_dir.child(file_name).path())?,
+            expected
+        );
+    }
+
+    Ok(())
+}
+
+/// A configured output template supports the PEP 751 filename pattern.
+#[test]
+fn multiple_exact_targets_configured_pylock() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("requirements.in")
+        .write_str("iniconfig==2.0.0")?;
+
+    uv_snapshot!(context.filters(), context.pip_compile()
+        .arg("requirements.in")
+        .arg("--python-platform")
+        .arg("linux")
+        .arg("--python-platform")
+        .arg("windows")
+        .arg("--offline"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Multiple Python versions or platforms require an `--output-file` template
+    ");
+
+    context
+        .temp_dir
+        .child("uv.toml")
+        .write_str("[pip]\noutput-file = \"pylock.toml\"\n")?;
+
+    uv_snapshot!(context.filters(), context.pip_compile()
+        .arg("requirements.in")
+        .arg("--python-platform")
+        .arg("linux")
+        .arg("--python-platform")
+        .arg("windows")
+        .arg("--python-version")
+        .arg("3.12")
+        .arg("--no-header"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Resolved 1 package in [TIME]
+    ");
+
+    let linux_output = read_to_string(context.temp_dir.child("pylock.linux-py3_12.toml").path())?;
+    let windows_output =
+        read_to_string(context.temp_dir.child("pylock.windows-py3_12.toml").path())?;
+    assert!(linux_output.starts_with("lock-version = \"1.0\"\n"));
+    assert_eq!(linux_output, windows_output);
+
+    Ok(())
+}
+
 /// A configured universal resolution must not override an exact target.
 #[test]
 fn multiple_exact_targets_universal_config() -> Result<()> {
@@ -13989,40 +14107,16 @@ fn multiple_exact_targets_universal_config() -> Result<()> {
 
     uv_snapshot!(context.filters(), context.pip_compile()
         .arg("requirements.in")
-        .arg("--target")
-        .arg("3.12@aarch64-unknown-linux-gnu=linux.txt")
+        .arg("--python-platform")
+        .arg("aarch64-unknown-linux-gnu")
+        .arg("--python-platform")
+        .arg("x86_64-pc-windows-msvc")
+        .arg("-o")
+        .arg("requirements.txt")
         .arg("--offline"), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: `--target` requires exact-platform resolution; disable `--universal`
-    ");
-
-    Ok(())
-}
-
-/// A symlinked parent must still be detected when the output directory does not yet exist.
-#[cfg(unix)]
-#[test]
-fn multiple_exact_targets_aliased_outputs() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
-    context
-        .temp_dir
-        .child("requirements.in")
-        .write_str("anyio==3.7.0")?;
-    let output_dir = context.temp_dir.child("locks");
-    create_dir(output_dir.path())?;
-    create_symlink(output_dir.path(), context.temp_dir.child("alias").path())?;
-
-    uv_snapshot!(context.filters(), context.pip_compile()
-        .arg("requirements.in")
-        .arg("--target")
-        .arg("3.12@aarch64-unknown-linux-gnu=locks/new/requirements.txt")
-        .arg("--target")
-        .arg("3.12@x86_64-pc-windows-msvc=alias/new/requirements.txt")
-        .arg("--offline"), @"
-    exit_code: 2 (failure)
-    ----- stderr -----
-    error: Each `--target` must use a different output file
+    error: Multiple Python targets require exact-platform resolution; disable `--universal`
     ");
 
     Ok(())
@@ -14037,54 +14131,32 @@ fn multiple_exact_targets_symlink_chain() -> Result<()> {
         .temp_dir
         .child("requirements.in")
         .write_str("anyio==3.7.0")?;
-    let first = context.temp_dir.child("first.txt");
-    let second = context.temp_dir.child("second.txt");
-    let third = context.temp_dir.child("third.txt");
+    let first = context
+        .temp_dir
+        .child("requirements-aarch64-unknown-linux-gnu-py3_12.txt");
+    let second = context
+        .temp_dir
+        .child("requirements-x86_64-pc-windows-msvc-py3_12.txt");
+    let third = context.temp_dir.child("other.txt");
     create_symlink(third.path(), second.path())?;
     create_symlink(second.path(), first.path())?;
 
     uv_snapshot!(context.filters(), context.pip_compile()
         .arg("requirements.in")
-        .arg("--target")
-        .arg("3.12@aarch64-unknown-linux-gnu=first.txt")
-        .arg("--target")
-        .arg("3.12@x86_64-pc-windows-msvc=second.txt")
+        .arg("--python-version")
+        .arg("3.12")
+        .arg("--python-platform")
+        .arg("aarch64-unknown-linux-gnu")
+        .arg("--python-platform")
+        .arg("x86_64-pc-windows-msvc")
+        .arg("-o")
+        .arg("requirements.txt")
         .arg("--offline"), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: Each `--target` must use a different output file
+    error: Each Python target must use a different output file
     ");
 
-    Ok(())
-}
-
-/// Resolve `..` after directory symlinks, as the filesystem does when writing outputs.
-#[cfg(unix)]
-#[test]
-fn multiple_exact_targets_symlink_parent_directory() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
-    context
-        .temp_dir
-        .child("requirements.in")
-        .write_str("anyio==3.7.0")?;
-    let output_dir = context.temp_dir.child("locks");
-    let nested_dir = context.temp_dir.child("locks/nested");
-    create_dir_all(nested_dir.path())?;
-    create_symlink(nested_dir.path(), context.temp_dir.child("alias").path())?;
-
-    uv_snapshot!(context.filters(), context.pip_compile()
-        .arg("requirements.in")
-        .arg("--target")
-        .arg("3.12@aarch64-unknown-linux-gnu=alias/../requirements.txt")
-        .arg("--target")
-        .arg("3.12@x86_64-pc-windows-msvc=locks/requirements.txt")
-        .arg("--offline"), @"
-    exit_code: 2 (failure)
-    ----- stderr -----
-    error: Each `--target` must use a different output file
-    ");
-
-    assert!(!output_dir.path().join("requirements.txt").exists());
     Ok(())
 }
 

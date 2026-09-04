@@ -91,19 +91,28 @@ $ uv pip compile --group some/path/pyproject.toml:foo --group other/pyproject.to
 
 ## Locking multiple target environments
 
-To compile the same inputs for several exact Python versions and platforms, specify one output file
-per target:
+To compile the same inputs for several exact Python versions and platforms, repeat
+`--python-platform` and `--python-version` and provide an output filename to use as a template:
 
 ```console
 $ uv pip compile requirements.in \
-    --target 3.12@x86_64-unknown-linux-gnu=requirements-linux.txt \
-    --target 3.12@aarch64-apple-darwin=requirements-macos.txt
+    --python-platform x86_64-unknown-linux-gnu \
+    --python-platform aarch64-apple-darwin \
+    --python-version 3.12 \
+    -o requirements.txt
 ```
 
-Each target has an independent platform-specific resolution. Existing pins in each output file
-remain that target's preferences; identical previous locks can share parsed preferences. uv can also
-reuse parsed inputs and cacheable package index metadata within the invocation. `--target` cannot be
-combined with `--output-file`, `--python-version`, `--python-platform`, or `--universal`.
+This writes `requirements-x86_64-unknown-linux-gnu-py3_12.txt` and
+`requirements-aarch64-apple-darwin-py3_12.txt`. When either option is repeated, uv resolves every
+platform and Python version combination independently, adding the selected platform and version
+before the output filename's extension. A configured `output-file` can also provide the template;
+without one, uv requires `-o` for multiple targets. A single value retains the usual output
+behavior, including writing to stdout when no output file is provided.
+
+Existing pins in each generated file remain that target's preferences; eligible identical previous
+locks can share parsed preferences. uv can also reuse parsed inputs and cacheable package index
+metadata within the invocation. Universal resolution remains a separate mode and cannot be combined
+with multiple exact targets.
 
 ## Upgrading requirements
 

@@ -1,4 +1,5 @@
 use std::env::VarError;
+use std::ffi::OsString;
 use std::fmt;
 use std::num::NonZeroUsize;
 use std::path::{Path, PathBuf};
@@ -7,6 +8,7 @@ use std::str::FromStr;
 use std::time::Duration;
 
 use anyhow::{Result, bail};
+use clap::ValueEnum;
 use rustc_hash::FxHashSet;
 
 use uv_audit::{VulnerabilityID, VulnerabilityServiceFormat};
@@ -16,13 +18,12 @@ use uv_cli::comma::CommaSeparatedRequirements;
 use uv_cli::{
     AddArgs, AuditArgs, AuditCommonArgs, AuditOutputFormat, AuthLoginArgs, AuthLogoutArgs,
     AuthTokenArgs, ColorChoice, ExternalCommand, GlobalArgs, InitArgs, ListFormat, LockArgs, Maybe,
-    MetadataArgs, PipCheckArgs, PipCompileArgs, PipCompileTarget, PipFreezeArgs, PipInstallArgs,
-    PipListArgs, PipShowArgs, PipSyncArgs, PipTreeArgs, PipUninstallArgs,
-    ProjectDependencyGroupsArgs, PythonFindArgs, PythonInstallArgs, PythonListArgs,
-    PythonListFormat, PythonPinArgs, PythonUninstallArgs, PythonUpgradeArgs, RemoveArgs, RunArgs,
-    SyncArgs, SyncFormat, ToolAuditArgs, ToolDirArgs, ToolInstallArgs, ToolListArgs, ToolRunArgs,
-    ToolUninstallArgs, TreeArgs, TreeFormat, UpgradeArgs, VenvArgs, VersionArgs, VersionBumpSpec,
-    VersionFormat,
+    MetadataArgs, PipCheckArgs, PipCompileArgs, PipFreezeArgs, PipInstallArgs, PipListArgs,
+    PipShowArgs, PipSyncArgs, PipTreeArgs, PipUninstallArgs, ProjectDependencyGroupsArgs,
+    PythonFindArgs, PythonInstallArgs, PythonListArgs, PythonListFormat, PythonPinArgs,
+    PythonUninstallArgs, PythonUpgradeArgs, RemoveArgs, RunArgs, SyncArgs, SyncFormat,
+    ToolAuditArgs, ToolDirArgs, ToolInstallArgs, ToolListArgs, ToolRunArgs, ToolUninstallArgs,
+    TreeArgs, TreeFormat, UpgradeArgs, VenvArgs, VersionArgs, VersionBumpSpec, VersionFormat,
 };
 use uv_cli::{
     AuthorFrom, BuildArgs, BuildOptionsArgs, CheckArgs, ExcludeNewerArgs, ExportArgs, FormatArgs,
@@ -53,6 +54,7 @@ use uv_preview::Preview;
 use uv_pypi_types::SupportedEnvironments;
 use uv_python::{Prefix, PythonDownloads, PythonPreference, PythonVersion, Target};
 use uv_redacted::DisplaySafeUrl;
+use uv_requirements::is_pylock_toml;
 use uv_resolver::{
     AnnotationStyle, DependencyMode, ExcludeNewer, ExcludeNewerOverride, ExcludeNewerPackage,
     ForkStrategy, Prerelease, PrereleaseMode, PrereleasePackage, ResolutionMode,
@@ -3463,6 +3465,109 @@ fn workspace_overrides(filesystem: Option<&FilesystemOptions>) -> Vec<Override<R
     overrides
 }
 
+/// One resolved environment and its output file in a multi-target `pip compile` invocation.
+#[derive(Debug, Clone)]
+pub(crate) struct PipCompileTarget {
+    pub(crate) python_version: Option<PythonVersion>,
+    pub(crate) python_platform: Option<TargetTriple>,
+    pub(crate) output_file: PathBuf,
+}
+
+/// Validate the output template before adding target-specific suffixes.
+fn pip_compile_output_format(
+    output_file: &Path,
+    format: Option<PipCompileFormat>,
+) -> Result<PipCompileFormat> {
+    let Some(file_name) = output_file.file_name() else {
+        bail!("The output file template must name a file");
+    };
+    if file_name.eq_ignore_ascii_case("pyproject.toml") {
+        bail!(
+            "`pyproject.toml` is not a supported output format for `uv pip compile` (only `requirements.txt`-style output is supported)"
+        );
+    }
+
+    let format = format.unwrap_or_else(|| {
+        if output_file
+            .extension()
+            .is_some_and(|extension| extension.eq_ignore_ascii_case("toml"))
+        {
+            PipCompileFormat::PylockToml
+        } else {
+            PipCompileFormat::RequirementsTxt
+        }
+    });
+
+    match format {
+        PipCompileFormat::RequirementsTxt => {}
+        PipCompileFormat::PylockToml => {
+            let Some(file_name) = file_name.to_str() else {
+                bail!("The `pylock.toml` output file template must have a UTF-8 filename");
+            };
+            if !is_pylock_toml(file_name) {
+                bail!(
+                    "Expected the output filename to be `pylock.toml` or `pylock.<name>.toml`, where `<name>` is non-empty and contains no dots; found `{file_name}`"
+                );
+            }
+        }
+    }
+    Ok(format)
+}
+
+impl PipCompileTarget {
+    /// Generate a target-suffixed filename for one combination of Python and platform selectors.
+    fn from_template(
+        output_file: &Path,
+        format: PipCompileFormat,
+        python_version: Option<PythonVersion>,
+        python_platform: Option<TargetTriple>,
+    ) -> Result<Self> {
+        let Some(stem) = output_file.file_stem() else {
+            bail!("The output file template must name a file");
+        };
+        let mut suffixes = Vec::new();
+        if let Some(python_platform) = python_platform {
+            let Some(value) = python_platform.to_possible_value() else {
+                bail!("The Python platform has no output filename");
+            };
+            suffixes.push(value.get_name().to_owned());
+        }
+        if let Some(python_version) = &python_version {
+            let version: String = python_version
+                .to_string()
+                .chars()
+                .map(|character| {
+                    if character.is_ascii_alphanumeric() || matches!(character, '-' | '_') {
+                        character
+                    } else {
+                        '_'
+                    }
+                })
+                .collect();
+            suffixes.push(format!("py{version}"));
+        }
+
+        let mut file_name = OsString::from(stem);
+        // `pylock.<name>.toml` permits one dot after `pylock`, but none within `<name>`.
+        let separator = match format {
+            PipCompileFormat::PylockToml if stem == "pylock" => ".",
+            PipCompileFormat::PylockToml | PipCompileFormat::RequirementsTxt => "-",
+        };
+        file_name.push(separator);
+        file_name.push(suffixes.join("-"));
+        if let Some(extension) = output_file.extension() {
+            file_name.push(".");
+            file_name.push(extension);
+        }
+
+        Ok(Self {
+            python_version,
+            python_platform,
+            output_file: output_file.with_file_name(file_name),
+        })
+    }
+}
+
 /// The resolved settings to use for a `pip compile` invocation.
 #[derive(Debug, Clone)]
 pub(crate) struct PipCompileSettings {
@@ -3504,7 +3609,6 @@ impl PipCompileSettings {
             deps,
             group,
             output_file,
-            compile_targets,
             format,
             no_strip_extras,
             strip_extras,
@@ -3599,9 +3703,10 @@ impl PipCompileSettings {
             SupportedEnvironments::default()
         };
 
-        Ok(Self {
+        let multiple_targets = python_version.len() > 1 || python_platform.len() > 1;
+        let mut resolved = Self {
             format,
-            compile_targets,
+            compile_targets: Vec::new(),
             src_file,
             constraints: constraints
                 .into_iter()
@@ -3644,8 +3749,8 @@ impl PipCompileSettings {
                     no_header: flag(no_header, header, "header")?,
                     custom_compile_command,
                     generate_hashes: flag(generate_hashes, no_generate_hashes, "generate-hashes")?,
-                    python_version,
-                    python_platform,
+                    python_version: python_version.first().cloned(),
+                    python_platform: python_platform.first().copied(),
                     universal: flag(universal, no_universal, "universal")?,
                     no_emit_package,
                     emit_index_url: flag(emit_index_url, no_emit_index_url, "emit-index-url")?,
@@ -3672,7 +3777,39 @@ impl PipCompileSettings {
                 filesystem,
                 environment,
             ),
-        })
+        };
+
+        if multiple_targets {
+            let Some(output_file) = resolved.settings.output_file.as_deref() else {
+                bail!("Multiple Python versions or platforms require an `--output-file` template");
+            };
+            let format = pip_compile_output_format(output_file, format)?;
+            let python_versions = if python_version.is_empty() {
+                vec![resolved.settings.python_version.clone()]
+            } else {
+                python_version.into_iter().map(Some).collect()
+            };
+            let python_platforms = if python_platform.is_empty() {
+                vec![resolved.settings.python_platform]
+            } else {
+                python_platform.into_iter().map(Some).collect()
+            };
+
+            for python_platform in python_platforms {
+                for python_version in &python_versions {
+                    resolved
+                        .compile_targets
+                        .push(PipCompileTarget::from_template(
+                            output_file,
+                            format,
+                            python_version.clone(),
+                            python_platform,
+                        )?);
+                }
+            }
+        }
+
+        Ok(resolved)
     }
 }
 
