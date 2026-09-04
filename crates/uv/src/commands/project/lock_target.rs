@@ -110,7 +110,7 @@ impl<'lock> LockTarget<'lock> {
     }
 
     /// Returns the set of build constraints for the [`LockTarget`].
-    pub(crate) fn build_constraints(self) -> Vec<BuildConstraintDependency> {
+    fn build_constraints(self) -> Vec<BuildConstraintDependency> {
         match self {
             Self::Workspace(workspace) => workspace.build_constraints(),
             Self::Script(script) => script

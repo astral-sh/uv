@@ -182,6 +182,11 @@ impl HashStrategy {
         )
     }
 
+    /// Collect hashes from requirements and constraints, optionally keeping only hashes shared by
+    /// duplicate build constraints.
+    ///
+    /// When enabled, repeated registry pins must share a hash; hashes for other source identities
+    /// are merged, rejecting incompatible digests.
     fn from_requirements_with_constraint_intersection<'a>(
         requirements: impl Iterator<Item = (&'a UnresolvedRequirement, &'a [String])>,
         constraints: impl Iterator<Item = (&'a Requirement, &'a [String])>,
@@ -363,25 +368,13 @@ impl HashStrategy {
         }
     }
 
-    /// Collect supplied hashes from build constraints.
+    /// Collect supplied hashes from build constraints using the same pinning rules as regular
+    /// constraints.
     pub fn from_build_constraints(
         constraints: &Constraints,
         marker_env: Option<&ResolverMarkerEnvironment>,
         mode: HashCheckingMode,
     ) -> Result<Self, HashStrategyError> {
-        for constraint in constraints.specifications() {
-            if !constraint.hashes.is_empty()
-                && constraint
-                    .requirement
-                    .evaluate_markers(marker_env.map(ResolverMarkerEnvironment::markers), &[])
-                && Self::pin(&constraint.requirement).is_none()
-            {
-                return Err(HashStrategyError::UnpinnedRequirement(
-                    constraint.requirement.to_string(),
-                    mode,
-                ));
-            }
-        }
         Self::from_requirements_with_constraint_intersection(
             std::iter::empty(),
             constraints

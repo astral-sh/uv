@@ -741,6 +741,8 @@ pub(crate) async fn run(
                         .flatten()
                         .map(|lock| (lock, project.workspace().install_path().to_owned()));
                 }
+                // `--with` may still build an overlay under `--no-sync`. Unless explicitly frozen,
+                // use the current project build constraints, not those recorded in `uv.lock`.
                 if frozen.is_none() && !requirements.is_empty() {
                     unlocked_build_constraints = LockTarget::from(project.workspace())
                         .lower_build_constraints(

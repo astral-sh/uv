@@ -645,9 +645,8 @@ async fn build_package(
     );
 
     let hasher = if let Some(hash_checking) = hash_checking {
-        // `uv build --require-hashes` has historically required hashes only for command-line
-        // build constraints. Include hash-bearing workspace constraints without changing how
-        // un-hashed workspace constraints behave under that flag.
+        // Under `--require-hashes`, include all command-line constraints, but only workspace
+        // constraints with supplied hashes. Other workspace constraints still restrict builds.
         let hash_constraints = Constraints::from_specifications(
             build_constraints_from_workspace
                 .iter()

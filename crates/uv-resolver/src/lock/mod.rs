@@ -1683,7 +1683,7 @@ impl Lock {
                 .build_constraints
                 .iter()
                 .cloned()
-                .map(|requirement| requirement.to_absolute(root)),
+                .map(|requirement| requirement.into_absolute(root)),
         )
     }
 

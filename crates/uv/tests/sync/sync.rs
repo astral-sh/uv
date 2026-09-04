@@ -16726,11 +16726,7 @@ fn sync_frozen_workspace_member_git_credentials() -> Result<()> {
 fn build_hash_project() -> Result<(TestContext, String)> {
     let context = uv_test::test_context!("3.12");
     let mut build_hash = String::new();
-    for (name, version) in [
-        ("build-dependency", "1.0.0"),
-        ("dynamic-dependency", "1.0.0"),
-        ("project", "0.1.0"),
-    ] {
+    for (name, version) in [("build-dependency", "1.0.0"), ("project", "0.1.0")] {
         let (filename, wheel) = generate_wheel(
             &name.parse()?,
             &version.parse()?,
@@ -16767,17 +16763,10 @@ fn build_hash_project() -> Result<(TestContext, String)> {
         find-links = ["wheels"]
     "#})?;
     context.temp_dir.child("backend.py").write_str(indoc! {r#"
-        import json
-        import os
         import shutil
         from pathlib import Path
 
         import build_dependency
-
-        def get_requires_for_build_wheel(config_settings=None):
-            return json.loads(os.environ.get("UV_TEST_DYNAMIC_BUILD_REQUIRES", "[]"))
-
-        get_requires_for_build_editable = get_requires_for_build_wheel
 
         def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
             wheel = Path(__file__).parent / "wheels" / "project-0.1.0-py3-none-any.whl"
@@ -16903,37 +16892,7 @@ fn project_build_hashes_unpinned() -> Result<()> {
             {{ requirement = "build-dependency>=1", hashes = ["sha256:{}"] }},
         ]
     "#, "0".repeat(64)})?;
-    // A constraint with hashes must specify an exact version.
-    uv_snapshot!(context.filters(), context.sync(), @"
-    exit_code: 2 (failure)
-    ----- stderr -----
-    error: In `--verify-hashes` mode, all requirements must have their versions pinned with `==`, but found: build-dependency>=1
-    ");
-
-    // Hash validation retains unconstrained requirements and their extras.
-    context.temp_dir.child("pyproject.toml").write_str(
-        &context
-            .read("pyproject.toml")
-            .replace("build-dependency>=1", "build-dependency[extra]"),
-    )?;
-    uv_snapshot!(context.filters(), context.sync(), @"
-    exit_code: 2 (failure)
-    ----- stderr -----
-    error: In `--verify-hashes` mode, all requirements must have their versions pinned with `==`, but found: build-dependency[extra]
-    ");
-
-    // Constraints without hashes may use version ranges. Constraints excluded by environment
-    // markers are ignored.
-    context
-        .temp_dir
-        .child("pyproject.toml")
-        .write_str(&formatdoc! {r#"
-        {pyproject}
-        build-constraint-dependencies = [
-            "build-dependency>=1",
-            {{ requirement = "dynamic-dependency>=1 ; python_version < '2'", hashes = ["sha256:{}"] }},
-        ]
-    "#, "0".repeat(64)})?;
+    // Verify mode applies the version constraint but ignores a hash without an exact pin.
     uv_snapshot!(context.filters(), context.sync(), @"
     exit_code: 0 (success)
     ----- stderr -----
