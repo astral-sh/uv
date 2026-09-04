@@ -451,7 +451,7 @@ pub async fn add(
             let build_hasher = HashStrategy::from_constraints(
                 &build_constraints,
                 Some(&python_target.interpreter().to_resolver_marker_environment()),
-                uv_configuration::HashCheckingMode::Verify,
+                settings.resolver.build_hash_checking,
             )?;
             // Determine whether to enable build isolation.
             let environment;

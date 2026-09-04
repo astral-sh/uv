@@ -434,6 +434,7 @@ fn warn_uv_toml_masked_fields(options: &Options) {
                 compile_bytecode,
                 no_sources,
                 no_sources_package: _,
+                require_build_hashes: _,
                 upgrade,
                 upgrade_package,
                 reinstall,
@@ -751,6 +752,7 @@ pub struct EnvironmentOptions {
     pub require_metadata_range_requests: Option<bool>,
     pub hide_build_output: Option<bool>,
     pub python_arch: Option<PythonArchitecture>,
+    pub require_build_hashes: Option<bool>,
     pub python_install_bin: Option<bool>,
     pub python_install_registry: Option<bool>,
     pub python_no_registry: EnvFlag,
@@ -837,6 +839,9 @@ impl EnvironmentOptions {
         };
 
         Ok(Self {
+            require_build_hashes: parse_boolish_environment_variable(
+                EnvVars::UV_REQUIRE_BUILD_HASHES,
+            )?,
             ruff_path: parse_path_environment_variable(EnvVars::RUFF),
             ty_path: parse_path_environment_variable(EnvVars::TY),
             skip_wheel_filename_check: parse_boolish_environment_variable(

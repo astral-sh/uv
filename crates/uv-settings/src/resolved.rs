@@ -1,13 +1,14 @@
 use uv_configuration::{
-    BuildIsolation, BuildOptions, ExcludeNewer, ForkStrategy, IndexStrategy, KeyringProviderType,
-    NoBinary, NoBuild, NoSources, Prerelease, PrereleaseMode, PrereleasePackage, Reinstall,
-    ResolutionMode, Upgrade,
+    BuildIsolation, BuildOptions, ExcludeNewer, ForkStrategy, HashCheckingMode, IndexStrategy,
+    KeyringProviderType, NoBinary, NoBuild, NoSources, Prerelease, PrereleaseMode,
+    PrereleasePackage, Reinstall, ResolutionMode, Upgrade,
 };
 use uv_distribution_types::{
     ConfigSettings, DependencyMetadata, ExtraBuildVariables, IndexLocations, PackageConfigSettings,
 };
 use uv_install_wheel::LinkMode;
 use uv_pep440::Version;
+use uv_preview::PreviewFeature;
 use uv_torch::{AmdGpuArchitecture, TorchMode};
 use uv_warnings::warn_user_once;
 use uv_workspace::pyproject::ExtraBuildDependencies;
@@ -128,6 +129,7 @@ pub struct InstallerSettingsRef<'a> {
     pub dependency_metadata: &'a DependencyMetadata,
     pub config_setting: &'a ConfigSettings,
     pub config_settings_package: &'a PackageConfigSettings,
+    pub build_hash_checking: HashCheckingMode,
     pub build_isolation: &'a BuildIsolation,
     pub extra_build_dependencies: &'a ExtraBuildDependencies,
     pub extra_build_variables: &'a ExtraBuildVariables,
@@ -154,6 +156,7 @@ pub struct ResolverSettings {
     pub index_strategy: IndexStrategy,
     pub keyring_provider: KeyringProviderType,
     pub link_mode: LinkMode,
+    pub build_hash_checking: HashCheckingMode,
     pub build_isolation: BuildIsolation,
     pub extra_build_dependencies: ExtraBuildDependencies,
     pub extra_build_variables: ExtraBuildVariables,
@@ -209,6 +212,7 @@ impl From<ResolverOptions> for ResolverSettings {
             config_setting: value.config_settings.unwrap_or_default(),
             config_settings_package: value.config_settings_package.unwrap_or_default(),
             build_isolation: value.build_isolation.unwrap_or_default(),
+            build_hash_checking: resolve_build_hash_checking(value.require_build_hashes),
             extra_build_dependencies: value.extra_build_dependencies.unwrap_or_default(),
             extra_build_variables: value.extra_build_variables.unwrap_or_default(),
             exclude_newer: ExcludeNewer::from_args(
@@ -281,6 +285,7 @@ impl From<ResolverInstallerOptions> for ResolverInstallerSettings {
                 keyring_provider: value.keyring_provider.unwrap_or_default(),
                 link_mode: value.link_mode.unwrap_or_default(),
                 build_isolation: value.build_isolation.unwrap_or_default(),
+                build_hash_checking: resolve_build_hash_checking(value.require_build_hashes),
                 extra_build_dependencies: value.extra_build_dependencies.unwrap_or_default(),
                 extra_build_variables: value.extra_build_variables.unwrap_or_default(),
                 prerelease: resolve_prerelease(
@@ -313,6 +318,7 @@ impl<'a> From<&'a ResolverInstallerSettings> for InstallerSettingsRef<'a> {
             config_setting: &settings.resolver.config_setting,
             config_settings_package: &settings.resolver.config_settings_package,
             build_isolation: &settings.resolver.build_isolation,
+            build_hash_checking: settings.resolver.build_hash_checking,
             extra_build_dependencies: &settings.resolver.extra_build_dependencies,
             extra_build_variables: &settings.resolver.extra_build_variables,
             exclude_newer: &settings.resolver.exclude_newer,
@@ -323,4 +329,18 @@ impl<'a> From<&'a ResolverInstallerSettings> for InstallerSettingsRef<'a> {
             sources: settings.resolver.sources.clone(),
         }
     }
+}
+
+/// Resolve whether hashes are required for build dependencies, warning if the feature is experimental.
+pub fn resolve_build_hash_checking(require_build_hashes: Option<bool>) -> HashCheckingMode {
+    if !require_build_hashes.unwrap_or_default() {
+        return HashCheckingMode::Verify;
+    }
+    if !uv_preview::is_enabled(PreviewFeature::BuildDependencyHashes) {
+        warn_user_once!(
+            "The `--require-build-hashes` option is experimental and may change without warning. Pass `--preview-features {}` to disable this warning.",
+            PreviewFeature::BuildDependencyHashes
+        );
+    }
+    HashCheckingMode::Require
 }
