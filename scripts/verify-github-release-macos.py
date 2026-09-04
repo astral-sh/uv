@@ -6,10 +6,11 @@
 # no-build = true
 # exclude-newer = "P7D"
 # ///
-"""Verify uv's macOS release wheels against the signing job's output.
+"""Verify the signed executables in a macOS GitHub release archive.
 
-Extract the executables with `extract-wheel-binaries.py`, then delegate byte
-and signature checks to `verify-release-binaries-macos.py`.
+Use `extract-github-release-binaries.py` to check the archive's contents and
+checksum and extract its executables. Delegate byte and signature checks to
+`verify-release-binaries-macos.py`.
 """
 
 import argparse
@@ -18,20 +19,20 @@ import sys
 import tempfile
 from pathlib import Path
 
-BINARIES = ("uv", "uvx", "uv-build")
+BINARIES = ("uv", "uvx")
 
 
-def verify_wheels(signed: Path, wheels: Path) -> None:
-    """Extract the wheels and invoke the shared macOS executable verifier."""
+def verify_archive(signed: Path, archive: Path) -> None:
+    """Extract the GitHub archive and invoke the shared macOS executable verifier."""
     with tempfile.TemporaryDirectory() as temporary:
-        wheel_binaries = Path(temporary)
+        archive_binaries = Path(temporary)
         subprocess.run(
             [
                 sys.executable,
-                Path(__file__).with_name("extract-wheel-binaries.py"),
+                Path(__file__).with_name("extract-github-release-binaries.py"),
                 "--output",
-                wheel_binaries,
-                *sorted(wheels.glob("*.whl")),
+                archive_binaries,
+                archive,
             ],
             check=True,
         )
@@ -41,7 +42,7 @@ def verify_wheels(signed: Path, wheels: Path) -> None:
                 "run",
                 Path(__file__).with_name("verify-release-binaries-macos.py"),
                 signed,
-                wheel_binaries,
+                archive_binaries,
                 *BINARIES,
             ],
             check=True,
@@ -49,14 +50,14 @@ def verify_wheels(signed: Path, wheels: Path) -> None:
 
 
 def main() -> None:
-    """Verify release wheels against the signer's output."""
+    """Verify a GitHub release archive against the signer's output."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("signed", type=Path)
-    parser.add_argument("wheels", type=Path)
+    parser.add_argument("archive", type=Path)
     args = parser.parse_args()
 
     try:
-        verify_wheels(args.signed, args.wheels)
+        verify_archive(args.signed, args.archive)
     except (OSError, ValueError, subprocess.CalledProcessError) as error:
         parser.exit(1, f"{error}\n")
 
