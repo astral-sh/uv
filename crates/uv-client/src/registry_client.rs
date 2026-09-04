@@ -36,7 +36,10 @@ use uv_redacted::DisplaySafeUrl;
 use uv_small_str::SmallString;
 use uv_torch::TorchStrategy;
 
-use crate::base_client::{BaseClientBuilder, ClientBuildError, ExtraMiddleware, RedirectPolicy};
+use crate::base_client::{
+    BaseClientBuilder, ClientBuildError, ExtraMiddleware, RedirectPolicy,
+    SimpleMetadataClientContext,
+};
 use crate::cached_client::CacheControl;
 use crate::flat_index::FlatIndexEntry;
 use crate::html::SimpleDetailHTML;
@@ -49,6 +52,13 @@ use crate::{
 
 type SimpleMetadataEntry = Arc<Mutex<Option<CachedSimpleMetadata>>>;
 type SimpleMetadataMap = FxHashMap<SimpleMetadataKey, (Arc<CredentialsCache>, SimpleMetadataEntry)>;
+
+#[derive(Debug)]
+struct SimpleMetadataNamespace {
+    index_locations: IndexLocations,
+    client_context: SimpleMetadataClientContext,
+    entries: SimpleMetadataMap,
+}
 
 #[derive(Debug)]
 struct CachedSimpleMetadata {
@@ -69,16 +79,32 @@ struct SimpleMetadataKey {
 /// Each registry client can use the same raw response while applying its own
 /// target-specific wheel compatibility and resolution policy.
 #[derive(Debug, Default, Clone)]
-pub struct SimpleMetadataCache(Arc<Mutex<SimpleMetadataMap>>);
+pub struct SimpleMetadataCache(Arc<Mutex<Vec<SimpleMetadataNamespace>>>);
 
 impl SimpleMetadataCache {
     async fn entry(
         &self,
+        index_locations: &IndexLocations,
+        client_context: &SimpleMetadataClientContext,
         key: SimpleMetadataKey,
         credentials_cache: Arc<CredentialsCache>,
     ) -> SimpleMetadataEntry {
-        let mut entries = self.0.lock().await;
-        entries
+        let mut namespaces = self.0.lock().await;
+        let position = if let Some(position) = namespaces.iter().position(|namespace| {
+            namespace.index_locations == *index_locations
+                && namespace.client_context == *client_context
+        }) {
+            position
+        } else {
+            namespaces.push(SimpleMetadataNamespace {
+                index_locations: index_locations.clone(),
+                client_context: client_context.clone(),
+                entries: FxHashMap::default(),
+            });
+            namespaces.len() - 1
+        };
+        namespaces[position]
+            .entries
             .entry(key)
             // Retain the authentication context so its address cannot be reused
             // for a different client while the metadata entry remains cached.
@@ -658,8 +684,25 @@ impl RegistryClient {
                     .map(|(metadata, _)| Arc::new(metadata));
             }
 
+            // Custom HTTP clients and middleware can change request headers beyond uv's
+            // configured User-Agent, so their responses cannot be shared safely.
+            let Some(client_context) = self.client.uncached().simple_metadata_context() else {
+                return self
+                    .fetch_remote_simple_detail(
+                        package_name,
+                        &cache_entry,
+                        cache_control,
+                        simple_request,
+                        false,
+                    )
+                    .await
+                    .map(|(metadata, _)| Arc::new(metadata));
+            };
+
             let entry = simple_metadata_cache
                 .entry(
+                    &self.indexes,
+                    client_context,
                     SimpleMetadataKey {
                         package_name: package_name.clone(),
                         index: index.clone(),
@@ -738,14 +781,21 @@ impl RegistryClient {
 
     /// Build the request used for fetching a package's Simple API metadata.
     fn simple_detail_request(&self, url: &DisplaySafeUrl) -> Result<Request, Error> {
-        self.uncached_client(url)
+        let request = self
+            .uncached_client(url)
             .get(Url::from(url.clone()))
             .header("Accept-Encoding", "gzip, deflate, zstd")
-            .header("Accept", MediaType::pypi())
-            .build()
-            .map_err(|err| {
-                ErrorKind::from_reqwest(url.clone(), err, self.client.certificate_source()).into()
-            })
+            .header("Accept", MediaType::pypi());
+        // reqwest applies its default User-Agent only when sending the request. Include it
+        // now so an index's `Vary: User-Agent` is evaluated against the actual request.
+        let request = if let Some(context) = self.client.uncached().simple_metadata_context() {
+            request.header(reqwest::header::USER_AGENT, &context.user_agent)
+        } else {
+            request
+        };
+        request.build().map_err(|err| {
+            ErrorKind::from_reqwest(url.clone(), err, self.client.certificate_source()).into()
+        })
     }
 
     /// Fetch the [`SimpleDetailMetadata`] from a remote URL, using the PEP 503 Simple Repository API.
@@ -1943,7 +1993,10 @@ mod tests {
 
     use tokio::sync::Semaphore;
     use url::Url;
+    use uv_auth::{AuthPolicy, Credentials};
     use uv_normalize::PackageName;
+    use uv_pep440::Version;
+    use uv_pep508::{MarkerEnvironment, MarkerEnvironmentBuilder};
     use uv_pypi_types::{HashDigests, PypiSimpleDetail};
     use uv_redacted::DisplaySafeUrl;
     use uv_torch::{TorchBackend, TorchStrategy};
@@ -1986,6 +2039,22 @@ mod tests {
                 .index_locations(IndexLocations::new(vec![], flat_indexes, true))
                 .build()?,
         )
+    }
+
+    async fn simple_detail_versions(client: &RegistryClient) -> Result<Vec<String>, Error> {
+        let package_name = PackageName::from_str("example")?;
+        let capabilities = IndexCapabilities::default();
+        let semaphore = Semaphore::new(1);
+        let result = client
+            .simple_detail(&package_name, None, &capabilities, &semaphore)
+            .await?;
+        let Some((_, super::MetadataFormat::Simple(metadata))) = result.into_iter().next() else {
+            return Err("expected Simple API metadata".into());
+        };
+        Ok(super::OwnedArchive::deserialize(&metadata)
+            .iter()
+            .map(|distribution| distribution.version.to_string())
+            .collect())
     }
 
     async fn assert_no_index(
@@ -2169,6 +2238,139 @@ mod tests {
                 .map(|distribution| distribution.version.to_string())
                 .collect::<Vec<_>>(),
             ["2.0.0"]
+        );
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn simple_metadata_cache_isolates_index_authentication_policies() -> Result<(), Error> {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path_regex("/simple/example/"))
+            .respond_with(|request: &wiremock::Request| {
+                let version = if request.headers.contains_key("authorization") {
+                    "2.0.0"
+                } else {
+                    "1.0.0"
+                };
+                ResponseTemplate::new(200)
+                    .insert_header("Cache-Control", "max-age=600")
+                    .insert_header("Vary", "Authorization")
+                    .set_body_raw(
+                        format!(
+                            "<a href=\"https://example.org/example-{version}-py3-none-any.whl\">example-{version}-py3-none-any.whl</a>"
+                        ),
+                        "text/html",
+                    )
+            })
+            .mount(&server)
+            .await;
+
+        let index_url = IndexUrl::from_str(&format!("{}/simple", server.uri()))?;
+        let base_client_builder = BaseClientBuilder::default();
+        base_client_builder.store_credentials(
+            index_url.url(),
+            Credentials::basic(Some("user".to_owned()), Some("secret".to_owned())),
+        );
+        let simple_metadata_cache = SimpleMetadataCache::default();
+
+        let mut public_index = Index::from_index_url(index_url.clone());
+        public_index.authenticate = AuthPolicy::Never;
+        let mut private_index = Index::from_index_url(index_url);
+        private_index.authenticate = AuthPolicy::Always;
+
+        let build_client = |index| -> Result<RegistryClient, Error> {
+            Ok(
+                RegistryClientBuilder::new(base_client_builder.clone(), Cache::temp()?)
+                    .index_locations(IndexLocations::new(vec![index], vec![], false))
+                    .simple_metadata_cache(simple_metadata_cache.clone())
+                    .build()?,
+            )
+        };
+        let first = build_client(public_index)?;
+        let second = build_client(private_index)?;
+        assert_eq!(simple_detail_versions(&first).await?, ["1.0.0"]);
+        assert_eq!(simple_detail_versions(&second).await?, ["2.0.0"]);
+        assert_eq!(
+            server
+                .received_requests()
+                .await
+                .map(|requests| requests.len()),
+            Some(2)
+        );
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn simple_metadata_cache_isolates_user_agents() -> Result<(), Error> {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path_regex("/simple/example/"))
+            .respond_with(|request: &wiremock::Request| {
+                let version = if request
+                    .headers
+                    .get("user-agent")
+                    .is_some_and(|header| header.to_str().is_ok_and(|header| header.contains("3.13.0")))
+                {
+                    "2.0.0"
+                } else {
+                    "1.0.0"
+                };
+                ResponseTemplate::new(200)
+                    .insert_header("Cache-Control", "max-age=600")
+                    .insert_header("Vary", "User-Agent")
+                    .set_body_raw(
+                        format!(
+                            "<a href=\"https://example.org/example-{version}-py3-none-any.whl\">example-{version}-py3-none-any.whl</a>"
+                        ),
+                        "text/html",
+                    )
+            })
+            .mount(&server)
+            .await;
+
+        let markers_312 = MarkerEnvironment::try_from(MarkerEnvironmentBuilder {
+            implementation_name: "cpython",
+            implementation_version: "3.12.0",
+            os_name: "posix",
+            platform_machine: "x86_64",
+            platform_python_implementation: "CPython",
+            platform_release: "6.0",
+            platform_system: "Linux",
+            platform_version: "6.0",
+            python_full_version: "3.12.0",
+            python_version: "3.12",
+            sys_platform: "linux",
+        })?;
+        let version = Version::from_str("3.13.0")?;
+        let markers_313 = markers_312
+            .clone()
+            .with_implementation_version(version.clone())
+            .with_python_full_version(version)
+            .with_python_version(Version::from_str("3.13")?);
+        let index = Index::from_index_url(IndexUrl::from_str(&format!("{}/simple", server.uri()))?);
+        let base_client_builder = BaseClientBuilder::default();
+        let simple_metadata_cache = SimpleMetadataCache::default();
+        let cache = Cache::temp()?;
+        let build_client = |markers| -> Result<RegistryClient, Error> {
+            Ok(
+                RegistryClientBuilder::new(base_client_builder.clone(), cache.clone())
+                    .index_locations(IndexLocations::new(vec![index.clone()], vec![], false))
+                    .markers(markers)
+                    .simple_metadata_cache(simple_metadata_cache.clone())
+                    .build()?,
+            )
+        };
+        let first = build_client(&markers_312)?;
+        let second = build_client(&markers_313)?;
+        assert_eq!(simple_detail_versions(&first).await?, ["1.0.0"]);
+        assert_eq!(simple_detail_versions(&second).await?, ["2.0.0"]);
+        assert_eq!(
+            server
+                .received_requests()
+                .await
+                .map(|requests| requests.len()),
+            Some(2)
         );
         Ok(())
     }

@@ -86,6 +86,14 @@ pub enum AuthIntegration {
     NoAuthMiddleware,
 }
 
+/// Client settings that affect whether Simple API responses can be shared.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct SimpleMetadataClientContext {
+    pub(crate) user_agent: String,
+    keyring: KeyringProviderType,
+    preview: Preview,
+}
+
 /// A builder for an [`BaseClient`].
 #[derive(Debug, Clone)]
 pub struct BaseClientBuilder<'a> {
@@ -466,12 +474,36 @@ impl<'a> BaseClientBuilder<'a> {
         }
 
         // Use the custom client if provided, otherwise create a new one
-        let (raw_client, raw_dangerous_client, certificate_source) = match &self.custom_client {
-            Some(client) => (client.clone(), client.clone(), CertificateSource::Unknown),
-            None => {
-                self.create_secure_and_insecure_clients(self.read_timeout, self.connect_timeout)?
-            }
-        };
+        let (raw_client, raw_dangerous_client, certificate_source, simple_metadata_context) =
+            if let Some(client) = &self.custom_client {
+                (
+                    client.clone(),
+                    client.clone(),
+                    CertificateSource::Unknown,
+                    None,
+                )
+            } else {
+                let (raw_client, raw_dangerous_client, certificate_source, user_agent) = self
+                    .create_secure_and_insecure_clients(self.read_timeout, self.connect_timeout)?;
+                let simple_metadata_context =
+                    if matches!(self.auth_integration, AuthIntegration::Default)
+                        && self.extra_middleware.is_none()
+                    {
+                        Some(SimpleMetadataClientContext {
+                            user_agent,
+                            keyring: self.keyring,
+                            preview: self.preview,
+                        })
+                    } else {
+                        None
+                    };
+                (
+                    raw_client,
+                    raw_dangerous_client,
+                    certificate_source,
+                    simple_metadata_context,
+                )
+            };
 
         // Wrap in any relevant middleware and handle connectivity.
         let client = RedirectClientWithMiddleware {
@@ -499,6 +531,7 @@ impl<'a> BaseClientBuilder<'a> {
             credentials_cache: self.credentials_cache.clone(),
             certificate_source,
             cache_read_runtime: self.cache_read_runtime.clone(),
+            simple_metadata_context,
         })
     }
 
@@ -530,6 +563,15 @@ impl<'a> BaseClientBuilder<'a> {
             credentials_cache: existing.credentials_cache.clone(),
             certificate_source: existing.certificate_source,
             cache_read_runtime: self.cache_read_runtime.clone(),
+            simple_metadata_context: existing.simple_metadata_context.as_ref().and_then(
+                |context| {
+                    (matches!(self.auth_integration, AuthIntegration::Default)
+                        && self.extra_middleware.is_none()
+                        && context.keyring == self.keyring
+                        && context.preview == self.preview)
+                        .then(|| context.clone())
+                },
+            ),
         }
     }
 
@@ -537,7 +579,7 @@ impl<'a> BaseClientBuilder<'a> {
         &self,
         read_timeout: Duration,
         connect_timeout: Duration,
-    ) -> Result<(Client, Client, CertificateSource), ClientBuildError> {
+    ) -> Result<(Client, Client, CertificateSource, String), ClientBuildError> {
         // Create user agent.
         let mut user_agent_string = format!("uv/{}", version());
 
@@ -579,7 +621,12 @@ impl<'a> BaseClientBuilder<'a> {
             self.redirect_policy,
         )?;
 
-        Ok((raw_client, raw_dangerous_client, certificate_source))
+        Ok((
+            raw_client,
+            raw_dangerous_client,
+            certificate_source,
+            user_agent_string,
+        ))
     }
 
     fn create_client(
@@ -747,6 +794,8 @@ pub struct BaseClient {
     certificate_source: CertificateSource,
     /// A shared, dedicated blocking pool for short-lived cache reads.
     cache_read_runtime: Arc<CacheReadRuntime>,
+    /// The known request context for safely sharing Simple API responses.
+    simple_metadata_context: Option<SimpleMetadataClientContext>,
 }
 
 /// The certificate roots used by a [`BaseClient`].
@@ -825,6 +874,10 @@ impl BaseClient {
 
     pub(crate) fn shared_credentials_cache(&self) -> Arc<CredentialsCache> {
         Arc::clone(&self.credentials_cache)
+    }
+
+    pub(crate) fn simple_metadata_context(&self) -> Option<&SimpleMetadataClientContext> {
+        self.simple_metadata_context.as_ref()
     }
 
     pub(crate) fn certificate_source(&self) -> CertificateSource {
