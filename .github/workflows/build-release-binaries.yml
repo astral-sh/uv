@@ -142,7 +142,7 @@ jobs:
       - name: "Upload wheels"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: wheels_uv-macos-x86_64
+          name: wheels_uv-x86_64-apple-darwin
           path: dist
       - name: "Archive binary"
         run: |
@@ -158,7 +158,7 @@ jobs:
       - name: "Upload binary"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: artifacts-macos-x86_64
+          name: artifacts-x86_64-apple-darwin
           path: |
             *.tar.gz
             *.sha256
@@ -179,7 +179,7 @@ jobs:
       - name: "Upload wheels uv-build"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: wheels_uv_build-macos-x86_64
+          name: wheels_uv_build-x86_64-apple-darwin
           path: crates/uv-build/dist
 
   macos-aarch64:

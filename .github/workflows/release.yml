@@ -137,7 +137,7 @@ jobs:
     needs:
       - build-release-binaries
       - release-gate
-    if: ${{ inputs.tag == 'dry-run' && github.repository == 'astral-sh/uv' && github.ref == 'refs/heads/main' }}
+    if: ${{ github.repository == 'astral-sh/uv' && github.ref == 'refs/heads/main' }}
     uses: $/.github/workflows/sign-release-binaries.yml
     permissions:
       contents: read
@@ -147,6 +147,7 @@ jobs:
     needs:
       - plan
       - build-release-binaries
+      - sign-release-binaries
     if: ${{ needs.plan.outputs.publishing == 'true' || fromJson(needs.plan.outputs.val).ci.github.pr_run_mode == 'upload' || inputs.tag == 'dry-run' }}
     runs-on: "depot-ubuntu-latest-4"
     steps:
@@ -161,7 +162,14 @@ jobs:
       - name: Fetch local artifacts
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          pattern: artifacts-*
+          # The macOS and Windows archives come from the signing job below.
+          pattern: "artifacts-!(*-apple-darwin|*-pc-windows-msvc)"
+          path: target/distrib/
+          merge-multiple: true
+      - name: Fetch signed GitHub release archives
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          artifact-ids: ${{ needs.sign-release-binaries.outputs.github-archives }}
           path: target/distrib/
           merge-multiple: true
       - name: Generate local dist manifest
@@ -186,6 +194,7 @@ jobs:
       - build-release-binaries
       - build-docker
       - generate-checksum-manifest
+      - sign-release-binaries
     runs-on: "depot-ubuntu-latest-4"
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -202,7 +211,13 @@ jobs:
       - name: Fetch local artifacts
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          pattern: artifacts-*
+          pattern: "artifacts-!(*-apple-darwin|*-pc-windows-msvc)"
+          path: target/distrib/
+          merge-multiple: true
+      - name: Fetch signed GitHub release archives
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          artifact-ids: ${{ needs.sign-release-binaries.outputs.github-archives }}
           path: target/distrib/
           merge-multiple: true
       - id: cargo-dist
@@ -233,8 +248,9 @@ jobs:
       - build-release-binaries
       - build-docker
       - build-global-artifacts
-    # Only run if we're "publishing", and only if plan, local and global didn't fail (skipped is fine)
-    if: ${{ always() && needs.plan.result == 'success' && needs.plan.outputs.publishing == 'true' && (needs.build-global-artifacts.result == 'skipped' || needs.build-global-artifacts.result == 'success') && (needs.build-release-binaries.result == 'skipped' || needs.build-release-binaries.result == 'success') && (needs.build-docker.result == 'skipped' || needs.build-docker.result == 'success') }}
+      - sign-release-binaries
+    # Publishing requires all build and signing jobs to succeed.
+    if: ${{ needs.plan.outputs.publishing == 'true' }}
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     runs-on: "depot-ubuntu-latest-4"
@@ -252,7 +268,13 @@ jobs:
       - name: Fetch artifacts
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          pattern: artifacts-*
+          pattern: "artifacts-!(*-apple-darwin|*-pc-windows-msvc)"
+          path: target/distrib/
+          merge-multiple: true
+      - name: Fetch signed GitHub release archives
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          artifact-ids: ${{ needs.sign-release-binaries.outputs.github-archives }}
           path: target/distrib/
           merge-multiple: true
       # This is a harmless no-op for GitHub Releases, hosting for that happens in "publish-github"
@@ -277,10 +299,13 @@ jobs:
       - plan
       - host
       - release-gate
+      - sign-release-binaries
     if: ${{ !fromJson(needs.plan.outputs.val).announcement_is_prerelease || fromJson(needs.plan.outputs.val).publish_prereleases }}
     uses: $/.github/workflows/publish-pypi.yml
     with:
       plan: ${{ needs.plan.outputs.val }}
+      uv-wheels: ${{ needs.sign-release-binaries.outputs.uv-wheels }}
+      uv-build-wheels: ${{ needs.sign-release-binaries.outputs.uv-build-wheels }}
     secrets: inherit
     # publish jobs get escalated permissions
     permissions:
@@ -310,11 +335,12 @@ jobs:
       - host
       - release-gate
       - publish-pypi
+      - sign-release-binaries
     # use "always() && ..." to allow publish jobs to skip themselves (for prereleases).
     # "host" however must run to completion, no skipping allowed!
     # `publish-crates` is intentionally not a dependency: it's not
     # critical to the release and isn't idempotent on retry.
-    if: ${{ always() && needs.host.result == 'success' && needs.release-gate.result == 'success' && (needs.publish-pypi.result == 'skipped' || needs.publish-pypi.result == 'success') }}
+    if: ${{ always() && needs.host.result == 'success' && needs.release-gate.result == 'success' && needs.sign-release-binaries.result == 'success' && (needs.publish-pypi.result == 'skipped' || needs.publish-pypi.result == 'success') }}
     runs-on: "ubuntu-latest"
     environment:
       name: release
@@ -331,7 +357,13 @@ jobs:
       - name: "Download GitHub Artifacts"
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          pattern: artifacts-*
+          pattern: "artifacts-!(*-apple-darwin|*-pc-windows-msvc)"
+          path: artifacts
+          merge-multiple: true
+      - name: "Download signed GitHub release archives"
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          artifact-ids: ${{ needs.sign-release-binaries.outputs.github-archives }}
           path: artifacts
           merge-multiple: true
       - name: Cleanup
@@ -398,10 +430,12 @@ jobs:
     needs:
       - plan
       - publish-github
-    if: ${{ always() && needs.publish-github.result == 'success' }}
+      - sign-release-binaries
+    if: ${{ always() && needs.publish-github.result == 'success' && needs.sign-release-binaries.result == 'success' }}
     uses: $/.github/workflows/publish-mirror.yml
     with:
       plan: ${{ needs.plan.outputs.val }}
+      github-archives: ${{ needs.sign-release-binaries.outputs.github-archives }}
     secrets: inherit
     permissions:
       "contents": "read"
