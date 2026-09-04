@@ -667,6 +667,7 @@ pub struct ResolverOptions {
     pub link_mode: Option<LinkMode>,
     pub torch_backend: Option<TorchMode>,
     pub upgrade: Option<Upgrade>,
+    pub require_build_hashes: Option<bool>,
     pub build_isolation: Option<BuildIsolation>,
     pub no_build: Option<bool>,
     pub no_build_package: Option<Vec<PackageName>>,
@@ -700,6 +701,7 @@ pub struct ResolverInstallerOptions {
     pub dependency_metadata: Option<Vec<StaticMetadata>>,
     pub config_settings: Option<ConfigSettings>,
     pub config_settings_package: Option<PackageConfigSettings>,
+    pub require_build_hashes: Option<bool>,
     pub build_isolation: Option<BuildIsolation>,
     pub extra_build_dependencies: Option<ExtraBuildDependencies>,
     pub extra_build_variables: Option<ExtraBuildVariables>,
@@ -743,6 +745,7 @@ impl From<ResolverInstallerSchema> for ResolverInstallerOptions {
             dependency_metadata,
             config_settings,
             config_settings_package,
+            require_build_hashes,
             no_build_isolation,
             no_build_isolation_package,
             extra_build_dependencies,
@@ -780,6 +783,7 @@ impl From<ResolverInstallerSchema> for ResolverInstallerOptions {
             dependency_metadata,
             config_settings,
             config_settings_package,
+            require_build_hashes,
             build_isolation: BuildIsolation::from_args(
                 no_build_isolation,
                 no_build_isolation_package.into_iter().flatten().collect(),
@@ -1074,6 +1078,25 @@ pub struct ResolverInstallerSchema {
         "#
     )]
     pub no_build_isolation: Option<bool>,
+
+    /// Require hashes for all build dependencies.
+    ///
+    /// Hashes in `build-constraint-dependencies` are checked when downloading build dependencies.
+    /// Enable this option to reject build dependencies without hashes. Hashes in URL fragments in
+    /// `build-system.requires` also count, but hashes returned by a build backend do not.
+    ///
+    /// No hash is required when uv uses its bundled `uv_build` backend, since it is part of the uv
+    /// executable. Other source builds require build isolation.
+    /// Already-installed packages and previously built wheels are not checked.
+    ///
+    /// This setting also applies to `uv pip` commands, where it can be overridden in `[tool.uv.pip]`.
+    #[option(
+        default = "false",
+        value_type = "bool",
+        example = "require-build-hashes = true"
+    )]
+    pub require_build_hashes: Option<bool>,
+
     /// Disable isolation when building source distributions for a specific package.
     ///
     /// Assumes that the packages' build dependencies specified by [PEP 518](https://peps.python.org/pep-0518/)
@@ -1615,6 +1638,18 @@ pub struct PipOptions {
         "#
     )]
     pub no_build_isolation: Option<bool>,
+    /// Require hashes for all build dependencies in `uv pip` commands.
+    ///
+    /// Overrides `require-build-hashes` in `[tool.uv]`. This does not require hashes for runtime
+    /// dependencies; use `require-hashes` for those.
+    #[option(
+        default = "false",
+        value_type = "bool",
+        example = r#"
+            require-build-hashes = true
+        "#
+    )]
+    pub require_build_hashes: Option<bool>,
     /// Disable isolation when building source distributions for a specific package.
     ///
     /// Assumes that the packages' build dependencies specified by [PEP 518](https://peps.python.org/pep-0518/)
@@ -2233,6 +2268,7 @@ impl From<ResolverInstallerSchema> for ResolverOptions {
             dependency_metadata: value.dependency_metadata,
             config_settings: value.config_settings,
             config_settings_package: value.config_settings_package,
+            require_build_hashes: value.require_build_hashes,
             exclude_newer: value.exclude_newer,
             exclude_newer_package: value.exclude_newer_package,
             link_mode: value.link_mode,
@@ -2320,6 +2356,7 @@ pub struct ToolOptions {
     config_settings: Option<ConfigSettings>,
     config_settings_package: Option<PackageConfigSettings>,
     build_isolation: Option<BuildIsolation>,
+    require_build_hashes: Option<bool>,
     extra_build_dependencies: Option<ExtraBuildDependencies>,
     extra_build_variables: Option<ExtraBuildVariables>,
     exclude_newer: Option<ExcludeNewerOverride>,
@@ -2354,6 +2391,7 @@ pub struct ToolOptionsWire {
     config_settings: Option<ConfigSettings>,
     config_settings_package: Option<PackageConfigSettings>,
     build_isolation: Option<BuildIsolation>,
+    require_build_hashes: Option<bool>,
     extra_build_dependencies: Option<ExtraBuildDependencies>,
     extra_build_variables: Option<ExtraBuildVariables>,
     exclude_newer: Option<ExcludeNewerOverride>,
@@ -2394,6 +2432,7 @@ impl From<ResolverInstallerOptions> for ToolOptions {
             config_settings: value.config_settings,
             config_settings_package: value.config_settings_package,
             build_isolation: value.build_isolation,
+            require_build_hashes: value.require_build_hashes,
             extra_build_dependencies: value.extra_build_dependencies,
             extra_build_variables: value.extra_build_variables,
             exclude_newer: value.exclude_newer,
@@ -2445,6 +2484,7 @@ impl From<ToolOptionsWire> for ToolOptions {
             config_settings: value.config_settings,
             config_settings_package: value.config_settings_package,
             build_isolation: value.build_isolation,
+            require_build_hashes: value.require_build_hashes,
             extra_build_dependencies: value.extra_build_dependencies,
             extra_build_variables: value.extra_build_variables,
             exclude_newer,
@@ -2494,6 +2534,7 @@ impl From<ToolOptions> for ToolOptionsWire {
             config_settings: value.config_settings,
             config_settings_package: value.config_settings_package,
             build_isolation: value.build_isolation,
+            require_build_hashes: value.require_build_hashes,
             extra_build_dependencies: value.extra_build_dependencies,
             extra_build_variables: value.extra_build_variables,
             exclude_newer,
@@ -2532,6 +2573,7 @@ impl From<ToolOptions> for ResolverInstallerOptions {
             config_settings: value.config_settings,
             config_settings_package: value.config_settings_package,
             build_isolation: value.build_isolation,
+            require_build_hashes: value.require_build_hashes,
             extra_build_dependencies: value.extra_build_dependencies,
             extra_build_variables: value.extra_build_variables,
             exclude_newer: value.exclude_newer,
@@ -2593,6 +2635,7 @@ struct OptionsWire {
     config_settings: Option<ConfigSettings>,
     config_settings_package: Option<PackageConfigSettings>,
     no_build_isolation: Option<bool>,
+    require_build_hashes: Option<bool>,
     no_build_isolation_package: Option<Vec<PackageName>>,
     extra_build_dependencies: Option<ExtraBuildDependencies>,
     extra_build_variables: Option<ExtraBuildVariables>,
@@ -2700,6 +2743,7 @@ impl TryFrom<OptionsWire> for Options {
             config_settings,
             config_settings_package,
             no_build_isolation,
+            require_build_hashes,
             no_build_isolation_package,
             exclude_newer,
             exclude_newer_package,
@@ -2780,6 +2824,7 @@ impl TryFrom<OptionsWire> for Options {
                 config_settings,
                 config_settings_package,
                 no_build_isolation,
+                require_build_hashes,
                 no_build_isolation_package,
                 extra_build_dependencies,
                 extra_build_variables,

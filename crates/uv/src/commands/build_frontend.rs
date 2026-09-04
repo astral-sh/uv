@@ -322,6 +322,7 @@ async fn build_impl(
         config_setting,
         config_settings_package,
         build_isolation,
+        build_hash_checking,
         extra_build_dependencies,
         extra_build_variables,
         exclude_newer,
@@ -494,6 +495,7 @@ async fn build_impl(
             index_locations,
             client_builder.clone(),
             hash_checking,
+            *build_hash_checking,
             build_logs,
             gitignore,
             force_pep517,
@@ -572,6 +574,7 @@ async fn build_package(
     index_locations: &IndexLocations,
     client_builder: BaseClientBuilder<'_>,
     hash_checking: Option<HashCheckingMode>,
+    build_hash_checking: HashCheckingMode,
     build_logs: bool,
     gitignore: bool,
     force_pep517: bool,
@@ -664,14 +667,22 @@ async fn build_package(
             .chain(build_constraints_from_workspace.iter().cloned()),
     );
 
+    let hash_checking = match build_hash_checking {
+        HashCheckingMode::Require => Some(HashCheckingMode::Require),
+        HashCheckingMode::Verify => hash_checking,
+    };
     let hasher = if let Some(hash_checking) = hash_checking {
-        // Under `--require-hashes`, include all command-line constraints, but only workspace
-        // constraints with supplied hashes. Other workspace constraints still restrict builds.
+        // `uv build --require-hashes` requires hashes only for command-line build constraints;
+        // `--require-build-hashes` also includes workspace build constraints.
         let hash_constraints = Constraints::from_specifications(
             command_line_constraints.iter().cloned().chain(
                 build_constraints_from_workspace
                     .iter()
-                    .filter(|entry| !hash_checking.is_require() || !entry.hashes.is_empty())
+                    .filter(|entry| {
+                        !hash_checking.is_require()
+                            || build_hash_checking.is_require()
+                            || !entry.hashes.is_empty()
+                    })
                     .cloned(),
             ),
         );
@@ -742,7 +753,8 @@ async fn build_package(
         workspace_cache.clone(),
         concurrency.clone(),
         preview,
-    );
+    )
+    .with_build_hash_checking(build_hash_checking);
     let dependency_check = match types_build_isolation {
         uv_types::BuildIsolation::Isolated => None,
         uv_types::BuildIsolation::Shared(_) | uv_types::BuildIsolation::SharedPackage(..) => {
