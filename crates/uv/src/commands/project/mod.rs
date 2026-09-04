@@ -3286,10 +3286,12 @@ pub(crate) async fn script_specification(
     cache: &Cache,
     workspace_cache: &WorkspaceCache,
     credentials_cache: &CredentialsCache,
-) -> Result<Option<RequirementsSpecification>, ProjectError> {
-    let Some(dependencies) = script.metadata().dependencies.as_ref() else {
-        return Ok(None);
-    };
+) -> Result<RequirementsSpecification, ProjectError> {
+    let dependencies = script
+        .metadata()
+        .dependencies
+        .as_deref()
+        .unwrap_or_default();
 
     let script_dir = script.directory()?;
     let script_indexes = script
@@ -3419,7 +3421,7 @@ pub(crate) async fn script_specification(
         RequirementsSpecification::from_excludes(requirements, constraints, Vec::new(), Vec::new());
     specification.override_dependencies = overrides;
     specification.excludes = excludes;
-    Ok(Some(specification))
+    Ok(specification)
 }
 
 /// Determine the extra build requires for a script.

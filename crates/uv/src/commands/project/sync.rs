@@ -248,8 +248,7 @@ pub(crate) async fn sync(
                 workspace_cache,
                 client_builder.credentials_cache(),
             )
-            .await?
-            .unwrap_or_default();
+            .await?;
             let script_extra_build_requires = script_extra_build_requires(
                 script.into(),
                 &settings.resolver,
