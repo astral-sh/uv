@@ -3,6 +3,43 @@
 <!-- prettier-ignore-start -->
 
 
+## 0.12.10
+
+Released on 2026-09-04.
+
+### Enhancements
+
+- uv publish: support token burning ([#21423](https://github.com/astral-sh/uv/pull/21423))
+
+### Preview features
+
+- Omit unused `exclude-newer-package` settings ([#21455](https://github.com/astral-sh/uv/pull/21455))
+- Preserve terminal cycles in inverted dependency trees ([#21404](https://github.com/astral-sh/uv/pull/21404))
+
+### Performance
+
+- Avoid tracking unrelated extras in conflict simplification ([#21399](https://github.com/astral-sh/uv/pull/21399))
+- Hash publish artifacts in a blocking task ([#21389](https://github.com/astral-sh/uv/pull/21389))
+
+### Bug fixes
+
+- Ignore unused `exclude-newer-package` settings ([#21454](https://github.com/astral-sh/uv/pull/21454))
+- Require a project name when for `uv init` in a directory called `python` ([#21395](https://github.com/astral-sh/uv/pull/21395))
+- Sort package-specific cutoffs stored in lockfiles ([#21453](https://github.com/astral-sh/uv/pull/21453))
+
+### Other changes
+
+- Add Azure-backed release binary signing to release dry-runs ([#21418](https://github.com/astral-sh/uv/pull/21418))
+- Add a `uv-dev inject-signed-wheel-binaries` command ([#20622](https://github.com/astral-sh/uv/pull/20622))
+- Allow disabling `exclude-newer-package` during `uv lock --check` ([#21450](https://github.com/astral-sh/uv/pull/21450))
+- Allow future `exclude-newer` values during `uv lock --check` ([#19571](https://github.com/astral-sh/uv/pull/19571))
+- Allow release preparation to update the lockfile ([#21473](https://github.com/astral-sh/uv/pull/21473))
+- Exercise signing for GitHub release archives ([#21445](https://github.com/astral-sh/uv/pull/21445))
+- Upgrade Hawk to 0.1.14 ([#21463](https://github.com/astral-sh/uv/pull/21463))
+- Upgrade release preparation to uv 0.12.9 ([#21472](https://github.com/astral-sh/uv/pull/21472))
+- Use Python for signed wheel assembly ([#21448](https://github.com/astral-sh/uv/pull/21448))
+- Use the shared release smoke-test action ([#21443](https://github.com/astral-sh/uv/pull/21443))
+
 ## 0.12.9
 
 Released on 2026-09-01.
