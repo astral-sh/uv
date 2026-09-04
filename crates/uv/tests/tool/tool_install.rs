@@ -6154,8 +6154,30 @@ fn tool_install_with_build_hashes() -> Result<()> {
             });
         }
 
+        if preview == "--no-preview" {
+            // Requiring hashes rejects an otherwise valid build constraint without one.
+            fs_err::remove_file(project.child("backend-executed"))?;
+            constraints.write_str("build-dependency==1.0.0\n")?;
+            uv_snapshot!(context.filters(), install().arg("--reinstall")
+                .env(EnvVars::UV_REQUIRE_BUILD_HASHES, "true"), @"
+            exit_code: 1 (failure)
+            ----- stderr -----
+            warning: The `--require-build-hashes` option is experimental and may change without warning. Pass `--preview-features build-dependency-hashes` to disable this warning.
+              × Failed to build `hash-tool @ file://[TEMP_DIR]/project`
+              ├─▶ Failed to resolve requirements from `build-system.requires`
+              ├─▶ No solution found when resolving: `build-dependency==1.0.0`
+              ╰─▶ In `--require-hashes` mode, all requirements must be pinned upfront with `==`, but found: `build-dependency`
+            ");
+            project
+                .child("backend-executed")
+                .assert(predicate::path::missing());
+            constraints.write_str(&format!("build-dependency==1.0.0 --hash=sha256:{hash}\n"))?;
+        }
+
         // The supplied hash is checked even when it isn't required.
-        fs_err::remove_file(project.child("backend-executed"))?;
+        if preview != "--no-preview" {
+            fs_err::remove_file(project.child("backend-executed"))?;
+        }
         constraints.write_str(&format!(
             "build-dependency==1.0.0 --hash=sha256:{}\n",
             "0".repeat(64)

@@ -15,7 +15,9 @@ use url::Url;
 use wiremock::matchers::{basic_auth, body_string_contains, method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
+use uv_extract::hash::{HashReader, Hasher};
 use uv_fs::Simplified;
+use uv_pypi_types::{HashAlgorithm, HashDigest};
 use uv_static::EnvVars;
 use uv_test::packse::{PackseServer, generate_wheel};
 
@@ -17183,5 +17185,822 @@ fn project_build_hashes_run_with_stale_lock() -> Result<()> {
     package
         .child("backend-executed")
         .assert(predicate::path::exists());
+    Ok(())
+}
+#[test]
+fn project_build_hashes_uv_build() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+    "#})?;
+    context.temp_dir.child("src/project/__init__.py").touch()?;
+
+    // The bundled backend needs neither a hash nor an isolated build environment.
+    uv_snapshot!(context.filters(), context.sync().args([
+        "--offline",
+        "--no-cache",
+        "--no-build-isolation",
+        "--require-build-hashes",
+        "--preview-features=build-dependency-hashes",
+    ]), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + project==0.1.0 (from file://[TEMP_DIR]/)
+    ");
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn project_build_hashes_static_md5() -> Result<()> {
+    let (context, _) = build_hash_project()?;
+    let wheel = context
+        .temp_dir
+        .child("wheels/build_dependency-1.0.0-py3-none-any.whl");
+    let bytes = fs_err::read(wheel.path())?;
+    let mut hashers = [Hasher::from(HashAlgorithm::Md5)];
+    HashReader::new(bytes.as_slice(), &mut hashers)
+        .finish()
+        .await?;
+    let [hasher] = hashers;
+    let digest = HashDigest::from(hasher).digest;
+    let url = Url::from_file_path(wheel.path()).map_err(|()| anyhow!("absolute wheel path"))?;
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&context.read("pyproject.toml").replace(
+            "build-dependency==1.0.0",
+            &format!("build-dependency @ {url}#md5={digest}"),
+        ))?;
+    let context = context.with_filter((digest.to_string(), "[MD5_HASH]"));
+
+    // An MD5 URL fragment in `build-system.requires` does not satisfy `--require-build-hashes`.
+    uv_snapshot!(context.filters(), context.sync().arg("--require-build-hashes"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    warning: The `--require-build-hashes` option is experimental and may change without warning. Pass `--preview-features build-dependency-hashes` to disable this warning.
+    Resolved 1 package in [TIME]
+      × Failed to build `project @ file://[TEMP_DIR]/`
+      ├─▶ Failed to resolve requirements from `build-system.requires`
+      ├─▶ No solution found when resolving: `build-dependency @ file://[TEMP_DIR]/wheels/build_dependency-1.0.0-py3-none-any.whl#md5=[MD5_HASH]`
+      ╰─▶ In `--require-hashes` mode, all requirements must be pinned upfront with `==`, but found: `build-dependency`
+    ");
+    // MD5 hashes can still be checked without `--require-build-hashes`.
+    uv_snapshot!(context.filters(), context.sync(), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + project==0.1.0 (from file://[TEMP_DIR]/)
+    ");
+    Ok(())
+}
+
+#[test]
+fn project_build_hashes_add() -> Result<()> {
+    let (child, hash) = build_hash_project()?;
+    // Omit the `[project]` table so `uv add` must invoke the backend to discover the name.
+    child
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [build-system]
+        requires = ["build-dependency==1.0.0"]
+        build-backend = "backend"
+        backend-path = ["."]
+    "#})?;
+    child
+        .temp_dir
+        .child("backend.py")
+        .write_str(&child.read("backend.py").replace(
+            "import build_dependency",
+            "import build_dependency\nPath(__file__).with_name('backend-executed').touch()",
+        ))?;
+    let context = uv_test::test_context!("3.12");
+    let wheels = Url::from_directory_path(child.temp_dir.child("wheels").path())
+        .map_err(|()| anyhow!("absolute wheels path"))?;
+    let pyproject = formatdoc! {r#"
+        [project]
+        name = "root"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [tool.uv]
+        no-index = true
+        find-links = ["{wheels}"]
+        require-build-hashes = true
+    "#};
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&pyproject)?;
+    let mut filters = context.filters();
+    filters.extend(child.filters());
+    uv_snapshot!(&filters, context.add().arg(child.temp_dir.path()).arg("--no-sync").arg("--no-cache"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    warning: The `--require-build-hashes` option is experimental and may change without warning. Pass `--preview-features build-dependency-hashes` to disable this warning.
+    error: Failed to resolve requirements from `build-system.requires`
+      Caused by: No solution found when resolving: `build-dependency==1.0.0`
+      Caused by: In `--require-hashes` mode, all requirements must be pinned upfront with `==`, but found: `build-dependency`
+    ");
+
+    let constrained = formatdoc! {r#"
+        {pyproject}
+        build-constraint-dependencies = [
+            {{ requirement = "build-dependency==1.0.0", hashes = ["sha256:{hash}"] }},
+        ]
+    "#};
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&constrained.replace(&hash, &"0".repeat(64)))?;
+    uv_snapshot!(&filters, context.add().arg(child.temp_dir.path()).arg("--no-sync").arg("--no-cache"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    warning: The `--require-build-hashes` option is experimental and may change without warning. Pass `--preview-features build-dependency-hashes` to disable this warning.
+    error: Failed to install requirements from `build-system.requires`
+      Caused by: Failed to download `build-dependency==1.0.0`
+      Caused by: Hash mismatch for `build-dependency==1.0.0`
+
+        Expected:
+          sha256:0000000000000000000000000000000000000000000000000000000000000000
+
+        Computed:
+          sha256:[BUILD_HASH]
+    ");
+    child
+        .temp_dir
+        .child("backend-executed")
+        .assert(predicate::path::missing());
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&constrained)?;
+    uv_snapshot!(&filters, context.add().arg(child.temp_dir.path()).arg("--no-sync").arg("--no-cache"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    warning: The `--require-build-hashes` option is experimental and may change without warning. Pass `--preview-features build-dependency-hashes` to disable this warning.
+    Resolved 2 packages in [TIME]
+    ");
+    child
+        .temp_dir
+        .child("backend-executed")
+        .assert(predicate::path::exists());
+    Ok(())
+}
+
+#[test]
+fn project_build_hashes_missing() -> Result<()> {
+    let (context, _) = build_hash_project()?;
+    uv_snapshot!(context.filters(), context.sync().arg("--require-build-hashes"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    warning: The `--require-build-hashes` option is experimental and may change without warning. Pass `--preview-features build-dependency-hashes` to disable this warning.
+    Resolved 1 package in [TIME]
+      × Failed to build `project @ file://[TEMP_DIR]/`
+      ├─▶ Failed to resolve requirements from `build-system.requires`
+      ├─▶ No solution found when resolving: `build-dependency==1.0.0`
+      ╰─▶ In `--require-hashes` mode, all requirements must be pinned upfront with `==`, but found: `build-dependency`
+    ");
+    // The build succeeds without requiring hashes.
+    uv_snapshot!(context.filters(), context.sync().arg("--no-require-build-hashes"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + project==0.1.0 (from file://[TEMP_DIR]/)
+    ");
+    Ok(())
+}
+
+#[test]
+fn project_build_hashes_lock_dynamic_metadata() -> Result<()> {
+    let (context, hash) = build_hash_project()?;
+    context.temp_dir.child("pyproject.toml").write_str(
+        &context
+            .read("pyproject.toml")
+            .replace("version = \"0.1.0\"", "dynamic = [\"version\"]"),
+    )?;
+    uv_snapshot!(context.filters(), context.lock().arg("--require-build-hashes"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    warning: The `--require-build-hashes` option is experimental and may change without warning. Pass `--preview-features build-dependency-hashes` to disable this warning.
+      × Failed to build `project @ file://[TEMP_DIR]/`
+      ├─▶ Failed to resolve requirements from `build-system.requires`
+      ├─▶ No solution found when resolving: `build-dependency==1.0.0`
+      ╰─▶ In `--require-hashes` mode, all requirements must be pinned upfront with `==`, but found: `build-dependency`
+    ");
+    uv_snapshot!(context.filters(), context.lock().arg("--no-require-build-hashes"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+    let pyproject = context.read("pyproject.toml");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&formatdoc! {r#"
+        {pyproject}
+        build-constraint-dependencies = [
+            {{ requirement = "build-dependency==1.0.0", hashes = ["sha256:{hash}"] }},
+        ]
+    "#})?;
+    uv_snapshot!(context.filters(), context.lock().arg("--no-cache").arg("--require-build-hashes"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    warning: The `--require-build-hashes` option is experimental and may change without warning. Pass `--preview-features build-dependency-hashes` to disable this warning.
+    Resolved 1 package in [TIME]
+    ");
+    Ok(())
+}
+
+#[test]
+fn project_build_hashes_isolation() -> Result<()> {
+    for isolation in [
+        vec!["--no-build-isolation"],
+        vec!["--no-build-isolation-package", "project"],
+    ] {
+        let (context, hash) = build_hash_project()?;
+        let content = context.read("pyproject.toml");
+        context
+            .temp_dir
+            .child("pyproject.toml")
+            .write_str(&formatdoc! {r#"
+        {content}
+        build-constraint-dependencies = [
+            {{ requirement = "build-dependency==1.0.0", hashes = ["sha256:{hash}"] }},
+        ]
+    "#})?;
+        // Install the dependency so the build can run without isolation.
+        context
+            .pip_install()
+            .arg("--no-index")
+            .arg("--find-links")
+            .arg("wheels")
+            .arg("build-dependency")
+            .assert()
+            .success();
+        allow_duplicates! {
+            uv_snapshot!(context.filters(), context.sync().args(&isolation).arg("--no-cache").arg("--require-build-hashes"), @"
+            exit_code: 1 (failure)
+            ----- stderr -----
+            warning: The `--require-build-hashes` option is experimental and may change without warning. Pass `--preview-features build-dependency-hashes` to disable this warning.
+            Resolved 1 package in [TIME]
+              × Failed to build `project @ file://[TEMP_DIR]/`
+              ╰─▶ Hash verification for build dependencies requires build isolation, but build isolation is disabled
+            ");
+            uv_snapshot!(context.filters(), context.sync().args(&isolation).arg("--no-cache"), @"
+            exit_code: 0 (success)
+            ----- stderr -----
+            Resolved 1 package in [TIME]
+            Prepared 1 package in [TIME]
+            Uninstalled 1 package in [TIME]
+            Installed 1 package in [TIME]
+             - build-dependency==1.0.0
+             + project==0.1.0 (from file://[TEMP_DIR]/)
+            ");
+            uv_snapshot!(context.filters(), context.sync().args(&isolation).arg("--frozen").arg("--require-build-hashes"), @"
+            exit_code: 0 (success)
+            ----- stderr -----
+            warning: The `--require-build-hashes` option is experimental and may change without warning. Pass `--preview-features build-dependency-hashes` to disable this warning.
+            Checked 1 package in [TIME]
+            ");
+        }
+    }
+    Ok(())
+}
+
+#[tokio::test]
+async fn project_build_hashes_static_url_dynamic_requirements() -> Result<()> {
+    let (context, _) = build_hash_project()?;
+    let context = context.with_filter((
+        "WARN Range requests not supported for build_dependency-1.0.0-py3-none-any.whl; streaming wheel\n",
+        "",
+    ));
+    let wheel = context
+        .temp_dir
+        .child("wheels/build_dependency-1.0.0-py3-none-any.whl");
+    let hash = hex::encode(Sha256::digest(fs_err::read(wheel.path())?));
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/build_dependency-1.0.0-py3-none-any.whl"))
+        .respond_with(ResponseTemplate::new(200).set_body_bytes(fs_err::read(wheel.path())?))
+        .mount(&server)
+        .await;
+    let url = format!("{}/build_dependency-1.0.0-py3-none-any.whl", server.uri());
+    let pyproject = context.read("pyproject.toml").replace(
+        r#"requires = ["build-dependency==1.0.0"]"#,
+        &formatdoc! {r#"
+            requires = [
+                "build-dependency @ {url}#sha256={hash}",
+                "build-dependency @ {url}#sha256={} ; python_version < '2'",
+            ]
+        "#, "0".repeat(64)},
+    );
+    let dynamic_hash = hex::encode(Sha256::digest(fs_err::read(
+        context
+            .temp_dir
+            .child("wheels/dynamic_dependency-1.0.0-py3-none-any.whl"),
+    )?));
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&formatdoc! {r#"
+        {pyproject}
+        build-constraint-dependencies = [
+            {{ requirement = "dynamic-dependency==1.0.0", hashes = ["sha256:{dynamic_hash}"] }},
+        ]
+    "#})?;
+    // Adding backend requirements must preserve the hash from `build-system.requires`.
+    // Requirements excluded by environment markers must not add conflicting hashes or require hashes.
+    uv_snapshot!(context.filters(), context.sync().arg("--require-build-hashes").env("UV_TEST_DYNAMIC_BUILD_REQUIRES", r#"["dynamic-dependency==1.0.0", "untrusted @ https://example.com/untrusted.whl ; python_version < '2'"]"#), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    warning: The `--require-build-hashes` option is experimental and may change without warning. Pass `--preview-features build-dependency-hashes` to disable this warning.
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + project==0.1.0 (from file://[TEMP_DIR]/)
+    ");
+    Ok(())
+}
+
+#[test]
+fn project_build_hashes_untrusted_dynamic_url() -> Result<()> {
+    let (context, hash) = build_hash_project()?;
+    let content = context.read("pyproject.toml");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&formatdoc! {r#"
+        {content}
+        build-constraint-dependencies = [
+            {{ requirement = "build-dependency==1.0.0", hashes = ["sha256:{hash}"] }},
+        ]
+    "#})?;
+    let wheel = context
+        .temp_dir
+        .child("wheels/dynamic_dependency-1.0.0-py3-none-any.whl");
+    let hash = hex::encode(Sha256::digest(fs_err::read(wheel.path())?));
+    let url = Url::from_file_path(wheel.path()).expect("absolute wheel path");
+    let dynamic = json!([format!("dynamic-dependency @ {url}#sha256={hash}")]).to_string();
+    let context = context.with_filter((hash, "[DYNAMIC_HASH]"));
+    uv_snapshot!(context.filters(), context.sync().arg("--require-build-hashes").env("UV_TEST_DYNAMIC_BUILD_REQUIRES", &dynamic), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    warning: The `--require-build-hashes` option is experimental and may change without warning. Pass `--preview-features build-dependency-hashes` to disable this warning.
+    Resolved 1 package in [TIME]
+      × Failed to build `project @ file://[TEMP_DIR]/`
+      ├─▶ Failed to resolve requirements from `build-system.requires`
+      ├─▶ No solution found when resolving: `build-dependency==1.0.0`, `dynamic-dependency @ file://[TEMP_DIR]/wheels/dynamic_dependency-1.0.0-py3-none-any.whl#sha256=[DYNAMIC_HASH]`
+      ╰─▶ In `--require-hashes` mode, all requirements must be pinned upfront with `==`, but found: `dynamic-dependency`
+    ");
+    uv_snapshot!(context.filters(), context.sync().env("UV_TEST_DYNAMIC_BUILD_REQUIRES", &dynamic), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + project==0.1.0 (from file://[TEMP_DIR]/)
+    ");
+    Ok(())
+}
+
+#[test]
+fn project_build_hashes_boolean_precedence() -> Result<()> {
+    let mut results = Vec::new();
+    for command_name in ["lock", "sync"] {
+        for configured in [false, true] {
+            for environment in [None, Some("false"), Some("true")] {
+                for cli in [
+                    None,
+                    Some("--no-require-build-hashes"),
+                    Some("--require-build-hashes"),
+                ] {
+                    let (context, _) = build_hash_project()?;
+                    let pyproject = context
+                        .read("pyproject.toml")
+                        .replace("version = \"0.1.0\"", "dynamic = [\"version\"]");
+                    context
+                        .temp_dir
+                        .child("pyproject.toml")
+                        .write_str(&format!(
+                            "{pyproject}\nrequire-build-hashes = {configured}\n"
+                        ))?;
+                    let mut command = if command_name == "lock" {
+                        context.lock()
+                    } else {
+                        context.sync()
+                    };
+                    command.env_remove(EnvVars::UV_REQUIRE_BUILD_HASHES);
+                    if let Some(environment) = environment {
+                        command.env(EnvVars::UV_REQUIRE_BUILD_HASHES, environment);
+                    }
+                    if let Some(cli) = cli {
+                        command.arg(cli);
+                    }
+                    let output = command.output()?;
+                    let warnings = String::from_utf8(output.stderr)?
+                        .lines()
+                        .filter(|line| line.starts_with("warning:"))
+                        .count();
+                    results.push(format!(
+                        "{command_name} config={configured} env={environment:?} cli={cli:?}: success={}, warnings={warnings}",
+                        output.status.success()
+                    ));
+                }
+            }
+        }
+    }
+    assert_snapshot!(results.join("\n"), @r#"
+    lock config=false env=None cli=None: success=true, warnings=0
+    lock config=false env=None cli=Some("--no-require-build-hashes"): success=true, warnings=0
+    lock config=false env=None cli=Some("--require-build-hashes"): success=false, warnings=1
+    lock config=false env=Some("false") cli=None: success=true, warnings=0
+    lock config=false env=Some("false") cli=Some("--no-require-build-hashes"): success=true, warnings=0
+    lock config=false env=Some("false") cli=Some("--require-build-hashes"): success=false, warnings=1
+    lock config=false env=Some("true") cli=None: success=false, warnings=1
+    lock config=false env=Some("true") cli=Some("--no-require-build-hashes"): success=true, warnings=0
+    lock config=false env=Some("true") cli=Some("--require-build-hashes"): success=false, warnings=1
+    lock config=true env=None cli=None: success=false, warnings=1
+    lock config=true env=None cli=Some("--no-require-build-hashes"): success=true, warnings=0
+    lock config=true env=None cli=Some("--require-build-hashes"): success=false, warnings=1
+    lock config=true env=Some("false") cli=None: success=true, warnings=0
+    lock config=true env=Some("false") cli=Some("--no-require-build-hashes"): success=true, warnings=0
+    lock config=true env=Some("false") cli=Some("--require-build-hashes"): success=false, warnings=1
+    lock config=true env=Some("true") cli=None: success=false, warnings=1
+    lock config=true env=Some("true") cli=Some("--no-require-build-hashes"): success=true, warnings=0
+    lock config=true env=Some("true") cli=Some("--require-build-hashes"): success=false, warnings=1
+    sync config=false env=None cli=None: success=true, warnings=0
+    sync config=false env=None cli=Some("--no-require-build-hashes"): success=true, warnings=0
+    sync config=false env=None cli=Some("--require-build-hashes"): success=false, warnings=1
+    sync config=false env=Some("false") cli=None: success=true, warnings=0
+    sync config=false env=Some("false") cli=Some("--no-require-build-hashes"): success=true, warnings=0
+    sync config=false env=Some("false") cli=Some("--require-build-hashes"): success=false, warnings=1
+    sync config=false env=Some("true") cli=None: success=false, warnings=1
+    sync config=false env=Some("true") cli=Some("--no-require-build-hashes"): success=true, warnings=0
+    sync config=false env=Some("true") cli=Some("--require-build-hashes"): success=false, warnings=1
+    sync config=true env=None cli=None: success=false, warnings=1
+    sync config=true env=None cli=Some("--no-require-build-hashes"): success=true, warnings=0
+    sync config=true env=None cli=Some("--require-build-hashes"): success=false, warnings=1
+    sync config=true env=Some("false") cli=None: success=true, warnings=0
+    sync config=true env=Some("false") cli=Some("--no-require-build-hashes"): success=true, warnings=0
+    sync config=true env=Some("false") cli=Some("--require-build-hashes"): success=false, warnings=1
+    sync config=true env=Some("true") cli=None: success=false, warnings=1
+    sync config=true env=Some("true") cli=Some("--no-require-build-hashes"): success=true, warnings=0
+    sync config=true env=Some("true") cli=Some("--require-build-hashes"): success=false, warnings=1
+    "#);
+    Ok(())
+}
+
+#[test]
+fn project_build_hashes_run_with() -> Result<()> {
+    let (context, hash) = build_hash_project()?;
+    let package = context.temp_dir.child("package");
+    package.create_dir_all()?;
+    for entry in ["pyproject.toml", "backend.py", "wheels"] {
+        fs_err::rename(context.temp_dir.child(entry), package.child(entry))?;
+    }
+    let pyproject = context.temp_dir.child("pyproject.toml");
+    pyproject.write_str(indoc! {r#"
+        [project]
+        name = "root"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [tool.uv]
+        no-index = true
+        find-links = ["package/wheels"]
+        require-build-hashes = true
+    "#})?;
+    let root = context.read("pyproject.toml");
+    // Only the package passed with `--with` is built; the project has no build system.
+    uv_snapshot!(context.filters(), context.run().arg("--no-cache").args(["--with", "./package", "python", "-c", "import project"]), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    warning: The `--require-build-hashes` option is experimental and may change without warning. Pass `--preview-features build-dependency-hashes` to disable this warning.
+    Resolved 1 package in [TIME]
+    Checked in [TIME]
+    Resolved 1 package in [TIME]
+      × Failed to build `project @ file://[TEMP_DIR]/package`
+      ├─▶ Failed to resolve requirements from `build-system.requires`
+      ├─▶ No solution found when resolving: `build-dependency==1.0.0`
+      ╰─▶ In `--require-hashes` mode, all requirements must be pinned upfront with `==`, but found: `build-dependency`
+    ");
+
+    pyproject.write_str(&formatdoc! {r#"
+        {root}
+        build-constraint-dependencies = [
+            {{ requirement = "build-dependency==1.0.0", hashes = ["sha256:{hash}"] }},
+        ]
+    "#})?;
+    uv_snapshot!(context.filters(), context.run().arg("--no-cache").args(["--with", "./package", "python", "-c", "import project"]), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    warning: The `--require-build-hashes` option is experimental and may change without warning. Pass `--preview-features build-dependency-hashes` to disable this warning.
+    Resolved 1 package in [TIME]
+    Checked in [TIME]
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + project==0.1.0 (from file://[TEMP_DIR]/package)
+    ");
+
+    // Incorrect hashes must also be checked without `--require-build-hashes`.
+    pyproject.write_str(
+        &context
+            .read("pyproject.toml")
+            .replace(&hash, &"0".repeat(64)),
+    )?;
+    uv_snapshot!(context.filters(), context.run().arg("--no-cache").arg("--no-require-build-hashes").args(["--with", "./package", "python", "-c", "import project"]), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Checked in [TIME]
+    Resolved 1 package in [TIME]
+      × Failed to build `project @ file://[TEMP_DIR]/package`
+      ├─▶ Failed to install requirements from `build-system.requires`
+      ├─▶ Failed to download `build-dependency==1.0.0`
+      ╰─▶ Hash mismatch for `build-dependency==1.0.0`
+
+          Expected:
+            sha256:0000000000000000000000000000000000000000000000000000000000000000
+
+          Computed:
+            sha256:[BUILD_HASH]
+    ");
+    // Without a lockfile, `--no-sync` must still apply workspace build constraints to new builds.
+    fs_err::remove_file(context.temp_dir.child("uv.lock"))?;
+    uv_snapshot!(context.filters(), context.run().arg("--no-cache").arg("--no-sync").arg("--no-require-build-hashes").args(["--with", "./package", "python", "-c", "import project"]), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+      × Failed to build `project @ file://[TEMP_DIR]/package`
+      ├─▶ Failed to install requirements from `build-system.requires`
+      ├─▶ Failed to download `build-dependency==1.0.0`
+      ╰─▶ Hash mismatch for `build-dependency==1.0.0`
+
+          Expected:
+            sha256:0000000000000000000000000000000000000000000000000000000000000000
+
+          Computed:
+            sha256:[BUILD_HASH]
+    ");
+    pyproject.write_str(
+        &context
+            .read("pyproject.toml")
+            .replace(&"0".repeat(64), &hash),
+    )?;
+    uv_snapshot!(context.filters(), context.run().arg("--no-cache").arg("--no-sync").args(["--with", "./package", "python", "-c", "import project"]), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    warning: The `--require-build-hashes` option is experimental and may change without warning. Pass `--preview-features build-dependency-hashes` to disable this warning.
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + project==0.1.0 (from file://[TEMP_DIR]/package)
+    ");
+    Ok(())
+}
+
+#[test]
+fn project_build_hashes_workspace_root_policy() -> Result<()> {
+    let (context, _) = build_hash_project()?;
+    let pyproject = context.read("pyproject.toml");
+    context.temp_dir.child("pyproject.toml").write_str(&format!("{pyproject}\nrequire-build-hashes = true\n\n[tool.uv.workspace]\nmembers = [\"member\"]\n"))?;
+    let member = context.temp_dir.child("member");
+    member.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "member"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [tool.uv]
+        require-build-hashes = false
+    "#})?;
+    uv_snapshot!(context.filters(), context.sync().arg("--all-packages").current_dir(&member), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    warning: The `--require-build-hashes` option is experimental and may change without warning. Pass `--preview-features build-dependency-hashes` to disable this warning.
+    Resolved 2 packages in [TIME]
+      × Failed to build `project @ file://[TEMP_DIR]/`
+      ├─▶ Failed to resolve requirements from `build-system.requires`
+      ├─▶ No solution found when resolving: `build-dependency==1.0.0`
+      ╰─▶ In `--require-hashes` mode, all requirements must be pinned upfront with `==`, but found: `build-dependency`
+    ");
+    uv_snapshot!(context.filters(), context.sync().arg("--all-packages").env(EnvVars::UV_REQUIRE_BUILD_HASHES, "false").current_dir(&member), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + project==0.1.0 (from file://[TEMP_DIR]/)
+    ");
+    Ok(())
+}
+
+#[test]
+fn project_build_hashes_untrusted_metadata() -> Result<()> {
+    let (context, _) = build_hash_project()?;
+    let child = context
+        .temp_dir
+        .child("wheels/dynamic_dependency-1.0.0-py3-none-any.whl");
+    let child_hash = hex::encode(Sha256::digest(fs_err::read(child.path())?));
+    let child_url = Url::from_file_path(child.path()).expect("absolute wheel path");
+    let (filename, wheel) = generate_wheel(
+        &"build-dependency".parse()?,
+        &"1.0.0".parse()?,
+        &[format!("dynamic-dependency @ {child_url}#sha256={child_hash}").parse()?],
+        &BTreeMap::new(),
+        None,
+        "py3-none-any",
+    );
+    let hash = hex::encode(Sha256::digest(&wheel));
+    context
+        .temp_dir
+        .child("wheels")
+        .child(&filename)
+        .write_binary(&wheel)?;
+    let parent_url = Url::from_file_path(context.temp_dir.child("wheels").child(filename).path())
+        .expect("absolute wheel path");
+    let pyproject = context.read("pyproject.toml").replace(
+        "build-dependency==1.0.0",
+        &format!("build-dependency @ {parent_url}#sha256={hash}"),
+    );
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&pyproject)?;
+    let context = context
+        .with_filter((hash, "[PARENT_HASH]"))
+        .with_filter((child_hash, "[DYNAMIC_HASH]"));
+    uv_snapshot!(context.filters(), context.sync().arg("--require-build-hashes"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    warning: The `--require-build-hashes` option is experimental and may change without warning. Pass `--preview-features build-dependency-hashes` to disable this warning.
+    Resolved 1 package in [TIME]
+      × Failed to build `project @ file://[TEMP_DIR]/`
+      ├─▶ Failed to resolve requirements from `build-system.requires`
+      ├─▶ No solution found when resolving: `build-dependency @ file://[TEMP_DIR]/wheels/build_dependency-1.0.0-py3-none-any.whl#sha256=[PARENT_HASH]`
+      ├─▶ Failed to resolve dependencies for package `build-dependency==1.0.0`
+      ╰─▶ In `--require-hashes` mode, all requirements must be pinned upfront with `==`, but found: `dynamic-dependency`
+    ");
+    uv_snapshot!(context.filters(), context.sync(), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + project==0.1.0 (from file://[TEMP_DIR]/)
+    ");
+    Ok(())
+}
+
+#[test]
+fn project_build_hashes_workspace_consumers() -> Result<()> {
+    let (context, _) = build_hash_project()?;
+    let pyproject = context.read("pyproject.toml").replace(
+        "version = \"0.1.0\"",
+        "version = \"0.1.0\"\ndynamic = [\"dependencies\"]",
+    );
+    let hash = "0".repeat(64);
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&formatdoc! {r#"
+        {pyproject}
+        require-build-hashes = true
+        build-constraint-dependencies = [
+            {{ requirement = "build-dependency==1.0.0", hashes = ["sha256:{hash}"] }},
+        ]
+    "#})?;
+    uv_snapshot!(context.filters(), context.build().arg("--wheel"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    warning: The `--require-build-hashes` option is experimental and may change without warning. Pass `--preview-features build-dependency-hashes` to disable this warning.
+    Building wheel...
+    error: Failed to build `[TEMP_DIR]/`
+      Caused by: Failed to install requirements from `build-system.requires`
+      Caused by: Failed to download `build-dependency==1.0.0`
+      Caused by: Hash mismatch for `build-dependency==1.0.0`
+
+        Expected:
+          sha256:0000000000000000000000000000000000000000000000000000000000000000
+
+        Computed:
+          sha256:[BUILD_HASH]
+    ");
+    uv_snapshot!(context.filters(), context.pip_compile().arg("pyproject.toml"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Failed to install requirements from `build-system.requires`
+      Caused by: Failed to download `build-dependency==1.0.0`
+      Caused by: Hash mismatch for `build-dependency==1.0.0`
+
+        Expected:
+          sha256:0000000000000000000000000000000000000000000000000000000000000000
+
+        Computed:
+          sha256:[BUILD_HASH]
+    ");
+    uv_snapshot!(context.filters(), context.pip_install().arg(".").args(["--no-index", "--find-links", "wheels"]), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+      × Failed to build `project @ file://[TEMP_DIR]/`
+      ├─▶ Failed to install requirements from `build-system.requires`
+      ├─▶ Failed to download `build-dependency==1.0.0`
+      ╰─▶ Hash mismatch for `build-dependency==1.0.0`
+
+          Expected:
+            sha256:0000000000000000000000000000000000000000000000000000000000000000
+
+          Computed:
+            sha256:[BUILD_HASH]
+    ");
+    Ok(())
+}
+
+#[test]
+fn project_build_hashes_script() -> Result<()> {
+    let (context, hash) = build_hash_project()?;
+    let project_url =
+        Url::from_directory_path(context.temp_dir.path()).expect("absolute project path");
+    let script = context.temp_dir.child("script.py");
+    script.write_str(&formatdoc! {r#"
+        # /// script
+        # requires-python = ">=3.12"
+        # dependencies = ["project @ {project_url}"]
+        # [tool.uv]
+        # no-index = true
+        # find-links = ["wheels"]
+        # require-build-hashes = true
+        # build-constraint-dependencies = [
+        #     {{ requirement = "build-dependency==1.0.0", hashes = ["sha256:{}"] }},
+        # ]
+        # ///
+        import project
+    "#, "0".repeat(64)})?;
+    uv_snapshot!(context.filters(), context.run().arg("script.py"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    warning: The `--require-build-hashes` option is experimental and may change without warning. Pass `--preview-features build-dependency-hashes` to disable this warning.
+    Resolved 1 package in [TIME]
+      × Failed to build `project @ file://[TEMP_DIR]/`
+      ├─▶ Failed to install requirements from `build-system.requires`
+      ├─▶ Failed to download `build-dependency==1.0.0`
+      ╰─▶ Hash mismatch for `build-dependency==1.0.0`
+
+          Expected:
+            sha256:0000000000000000000000000000000000000000000000000000000000000000
+
+          Computed:
+            sha256:[BUILD_HASH]
+    ");
+
+    script.write_str(&context.read("script.py").replace(&"0".repeat(64), &hash))?;
+    // A script without a lockfile uses the build constraints in its inline metadata.
+    uv_snapshot!(context.filters(), context.run().arg("script.py"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    warning: The `--require-build-hashes` option is experimental and may change without warning. Pass `--preview-features build-dependency-hashes` to disable this warning.
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + project==0.1.0 (from file://[TEMP_DIR]/)
+    ");
+    uv_snapshot!(context.filters(), context.lock().arg("--script").arg("script.py"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    warning: The `--require-build-hashes` option is experimental and may change without warning. Pass `--preview-features build-dependency-hashes` to disable this warning.
+    Resolved 1 package in [TIME]
+    ");
+    // A fresh script environment must recover those hashes from the script lockfile.
+    let context = context.with_cache_dir("fresh-cache");
+    uv_snapshot!(context.filters(), context.sync().arg("--script").arg("script.py").arg("--frozen"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    warning: The `--require-build-hashes` option is experimental and may change without warning. Pass `--preview-features build-dependency-hashes` to disable this warning.
+    Creating script environment at: fresh-cache/environments-v2/script-[HASH]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + project==0.1.0 (from file://[TEMP_DIR]/)
+    ");
     Ok(())
 }

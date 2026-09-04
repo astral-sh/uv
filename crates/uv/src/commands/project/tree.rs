@@ -227,6 +227,7 @@ pub(crate) async fn tree(
                 config_setting: _,
                 config_settings_package: _,
                 build_isolation: _,
+                build_hash_checking: _,
                 extra_build_dependencies: _,
                 extra_build_variables: _,
                 exclude_newer: _,

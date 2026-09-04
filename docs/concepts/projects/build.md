@@ -73,11 +73,43 @@ build-constraint-dependencies = [
 ]
 ```
 
-Constraints with hashes must specify an exact version (using `==`) or a direct URL.
+Constraints with hashes must specify an exact version (using `==`) or a direct URL, even without
+`--require-build-hashes`.
 
 uv retains these hashes in `uv.lock` and verifies them when downloading build dependencies during
 project resolution and installation, including builds in `uv run --with` environments. These hashes
 apply to build dependencies, not the packages installed in the project environment.
+
+To require hashes for **every** build dependency, use `--require-build-hashes` with `uv lock`,
+`uv sync`, or `uv run`. You can also set `UV_REQUIRE_BUILD_HASHES=true` or configure the workspace
+root:
+
+```toml
+[tool.uv]
+require-build-hashes = true
+```
+
+This option is experimental. Enable `--preview-features build-dependency-hashes` to suppress the
+warning.
+
+Command-line flags take precedence over the environment variable, which takes precedence over
+configuration. `--no-require-build-hashes` and `UV_REQUIRE_BUILD_HASHES=false` allow build
+dependencies without hashes; provided hashes are still checked. Workspace members cannot override
+the root's configuration.
+
+With `--require-build-hashes`, provide exact versions or direct URLs and hashes for all build
+dependencies, including their dependencies. Hashes can also come from URL fragments (e.g.,
+`#sha256=...`) in `build-system.requires`. Hashes in requirements or metadata returned by a build
+backend, such as through `get_requires_for_build_wheel`, do not count: those dependencies need
+hashes from build constraints or `build-system.requires`. Requirements whose environment markers do
+not match the current environment are ignored.
+
+When uv uses its bundled `uv_build` backend, no hash is required for it: the backend is part of the
+uv executable, not a separately downloaded package.
+
+Other source builds require build isolation when build hashes are required. They fail if isolation
+is disabled with `--no-build-isolation` or `--no-build-isolation-package`. Already-installed
+packages and previously built wheels are not checked.
 
 ## Preventing publish to PyPI
 
