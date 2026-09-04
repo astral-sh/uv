@@ -3,15 +3,16 @@ use std::path::Path;
 use anyhow::Result;
 use tracing::info_span;
 
+use uv_client::{BaseClientBuilder, Connectivity};
 use uv_configuration::Upgrade;
 use uv_fs::CWD;
 use uv_git::ResolvedRepositoryReference;
-use uv_requirements_txt::RequirementsTxt;
+use uv_requirements_txt::{RequirementsTxt, SourceCache};
 use uv_resolver::{
     Lock, LockError, Preference, PreferenceError, PylockToml, PylockTomlErrorKind, UpgradePackages,
 };
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct LockedRequirements {
     /// The pinned versions from the lockfile.
     pub preferences: Vec<Preference>,
@@ -26,6 +27,68 @@ impl LockedRequirements {
             preferences,
             ..Self::default()
         }
+    }
+
+    /// Parse the previous `requirements.txt` from a previously read UTF-8 buffer.
+    pub async fn from_requirements_txt_contents(
+        output_file: &Path,
+        content: &str,
+        upgrade: &Upgrade,
+    ) -> Result<Self> {
+        if upgrade.is_all() {
+            return Ok(Self::default());
+        }
+
+        let mut source_cache = SourceCache::default();
+        let requirements_txt = RequirementsTxt::parse_str(
+            content,
+            output_file,
+            &*CWD,
+            &BaseClientBuilder::default().connectivity(Connectivity::Offline),
+            &mut source_cache,
+        )
+        .await?;
+        Ok(Self::from_preferences(preferences_from_requirements_txt(
+            requirements_txt,
+            upgrade,
+        )?))
+    }
+
+    /// Parse the previous `pylock.toml` from a previously read UTF-8 buffer.
+    pub fn from_pylock_toml_contents(
+        output_file: &Path,
+        content: &str,
+        upgrade: &Upgrade,
+    ) -> Result<Self, PylockTomlErrorKind> {
+        if upgrade.is_all() {
+            return Ok(Self::default());
+        }
+
+        let lock = info_span!("toml::from_str upgrade", path = %output_file.display())
+            .in_scope(|| toml::from_str::<PylockToml>(content))?;
+        let upgrade_packages = UpgradePackages::for_non_project(upgrade);
+
+        let mut preferences = Vec::new();
+        let mut git = Vec::new();
+
+        for package in &lock.packages {
+            // Skip the distribution if it's not included in the upgrade strategy.
+            if upgrade_packages.contains(&package.name) {
+                continue;
+            }
+
+            // Map each entry in the lockfile to a preference.
+            if let Some(preference) = Preference::from_pylock_toml(package)? {
+                preferences.push(preference);
+            }
+
+            // Map each entry in the lockfile to a Git SHA.
+            if let Some(git_ref) = package.as_git_ref()? {
+                git.push(git_ref);
+            }
+        }
+
+        Ok(Self { preferences, git })
     }
 }
 
@@ -42,6 +105,13 @@ pub async fn read_requirements_txt(
     // Parse the requirements from the lockfile.
     let requirements_txt = RequirementsTxt::parse(output_file, &*CWD).await?;
 
+    preferences_from_requirements_txt(requirements_txt, upgrade)
+}
+
+fn preferences_from_requirements_txt(
+    requirements_txt: RequirementsTxt,
+    upgrade: &Upgrade,
+) -> Result<Vec<Preference>> {
     // Map each entry in the lockfile to a preference.
     let preferences = requirements_txt
         .requirements
@@ -116,30 +186,5 @@ pub async fn read_pylock_toml_requirements(
 
     // Read the `pylock.toml` from disk, and deserialize it from TOML.
     let content = fs_err::tokio::read_to_string(&output_file).await?;
-    let lock = info_span!("toml::from_str upgrade", path = %output_file.display())
-        .in_scope(|| toml::from_str::<PylockToml>(&content))?;
-
-    let upgrade_packages = UpgradePackages::for_non_project(upgrade);
-
-    let mut preferences = Vec::new();
-    let mut git = Vec::new();
-
-    for package in &lock.packages {
-        // Skip the distribution if it's not included in the upgrade strategy.
-        if upgrade_packages.contains(&package.name) {
-            continue;
-        }
-
-        // Map each entry in the lockfile to a preference.
-        if let Some(preference) = Preference::from_pylock_toml(package)? {
-            preferences.push(preference);
-        }
-
-        // Map each entry in the lockfile to a Git SHA.
-        if let Some(git_ref) = package.as_git_ref()? {
-            git.push(git_ref);
-        }
-    }
-
-    Ok(LockedRequirements { preferences, git })
+    LockedRequirements::from_pylock_toml_contents(output_file, &content, upgrade)
 }

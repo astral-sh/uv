@@ -8,7 +8,7 @@ use async_http_range_reader::AsyncHttpRangeReader;
 use futures::{FutureExt, StreamExt, TryStreamExt};
 use http::{HeaderMap, StatusCode};
 use itertools::Either;
-use reqwest::{Proxy, Response};
+use reqwest::{Proxy, Request, Response};
 use rustc_hash::FxHashMap;
 use tokio::sync::{Mutex, Semaphore};
 use tracing::{Instrument, debug, info_span, instrument, trace, warn};
@@ -40,11 +40,53 @@ use crate::base_client::{BaseClientBuilder, ClientBuildError, ExtraMiddleware, R
 use crate::cached_client::CacheControl;
 use crate::flat_index::FlatIndexEntry;
 use crate::html::SimpleDetailHTML;
+use crate::httpcache::{BeforeRequest, CachePolicy};
 use crate::remote_metadata::wheel_metadata_from_remote_zip;
 use crate::rkyvutil::OwnedArchive;
 use crate::{
     BaseClient, CachedClient, Error, ErrorKind, FlatIndexClient, RedirectClientWithMiddleware,
 };
+
+type SimpleMetadataEntry = Arc<Mutex<Option<CachedSimpleMetadata>>>;
+type SimpleMetadataMap = FxHashMap<SimpleMetadataKey, (Arc<CredentialsCache>, SimpleMetadataEntry)>;
+
+#[derive(Debug)]
+struct CachedSimpleMetadata {
+    metadata: Arc<OwnedArchive<SimpleDetailMetadata>>,
+    cache_policy: OwnedArchive<CachePolicy>,
+}
+
+#[derive(Debug, Clone, Hash, Eq, PartialEq)]
+struct SimpleMetadataKey {
+    package_name: PackageName,
+    index: IndexUrl,
+    credentials_cache: usize,
+    cache_control_override: Option<http::HeaderValue>,
+}
+
+/// Successful Simple API responses shared across registry clients in one operation.
+///
+/// Each registry client can use the same raw response while applying its own
+/// target-specific wheel compatibility and resolution policy.
+#[derive(Debug, Default, Clone)]
+pub struct SimpleMetadataCache(Arc<Mutex<SimpleMetadataMap>>);
+
+impl SimpleMetadataCache {
+    async fn entry(
+        &self,
+        key: SimpleMetadataKey,
+        credentials_cache: Arc<CredentialsCache>,
+    ) -> SimpleMetadataEntry {
+        let mut entries = self.0.lock().await;
+        entries
+            .entry(key)
+            // Retain the authentication context so its address cannot be reused
+            // for a different client while the metadata entry remains cached.
+            .or_insert_with(|| (credentials_cache, Arc::new(Mutex::new(None))))
+            .1
+            .clone()
+    }
+}
 
 /// A builder for an [`RegistryClient`].
 #[derive(Debug, Clone)]
@@ -55,6 +97,7 @@ pub struct RegistryClientBuilder<'a> {
     cache: Cache,
     base_client_builder: BaseClientBuilder<'a>,
     metadata_range_request: MetadataRangeRequest,
+    simple_metadata_cache: Option<SimpleMetadataCache>,
 }
 
 impl<'a> RegistryClientBuilder<'a> {
@@ -67,6 +110,7 @@ impl<'a> RegistryClientBuilder<'a> {
             cache,
             base_client_builder: base_client_builder.redirect(RedirectPolicy::RetriggerMiddleware),
             metadata_range_request,
+            simple_metadata_cache: None,
         }
     }
 
@@ -103,6 +147,13 @@ impl<'a> RegistryClientBuilder<'a> {
     #[must_use]
     pub fn cache(mut self, cache: Cache) -> Self {
         self.cache = cache;
+        self
+    }
+
+    /// Share successful Simple API responses with other registry clients.
+    #[must_use]
+    pub fn simple_metadata_cache(mut self, cache: SimpleMetadataCache) -> Self {
+        self.simple_metadata_cache = Some(cache);
         self
     }
 
@@ -192,6 +243,7 @@ impl<'a> RegistryClientBuilder<'a> {
 
         let read_timeout = client.read_timeout();
         let connectivity = client.connectivity();
+        let credentials_cache = client.shared_credentials_cache();
 
         // Wrap in the cache middleware.
         let client = CachedClient::new(client);
@@ -206,6 +258,8 @@ impl<'a> RegistryClientBuilder<'a> {
             read_timeout,
             flat_indexes: Arc::default(),
             metadata_range_request: self.metadata_range_request,
+            simple_metadata_cache: self.simple_metadata_cache,
+            credentials_cache,
         })
     }
 }
@@ -231,6 +285,10 @@ pub struct RegistryClient {
     flat_indexes: Arc<Mutex<FlatIndexCache>>,
     /// The behavior when metadata range requests are unsupported.
     metadata_range_request: MetadataRangeRequest,
+    /// Optional per-operation cache of raw Simple API responses.
+    simple_metadata_cache: Option<SimpleMetadataCache>,
+    /// Distinguishes independent client authentication contexts using the same index URL.
+    credentials_cache: Arc<CredentialsCache>,
 }
 
 /// The behavior when wheel metadata cannot be fetched with HTTP range requests.
@@ -257,7 +315,7 @@ impl From<bool> for MetadataRangeRequest {
 #[derive(Debug)]
 pub enum MetadataFormat {
     /// The metadata adheres to the Simple Repository API format.
-    Simple(OwnedArchive<SimpleDetailMetadata>),
+    Simple(Arc<OwnedArchive<SimpleDetailMetadata>>),
     /// The metadata consists of a list of distributions from a "flat" index.
     Flat(Vec<FlatIndexEntry>),
 }
@@ -546,10 +604,9 @@ impl RegistryClient {
             WheelCache::Index(index).root(),
             format!("{package_name}.rkyv"),
         );
+        let cache_control_override = self.indexes.simple_api_cache_control_for(index);
         let cache_control = match self.connectivity {
-            Connectivity::Online
-                if let Some(header) = self.indexes.simple_api_cache_control_for(index) =>
-            {
+            Connectivity::Online if let Some(header) = cache_control_override.clone() => {
                 CacheControl::Override(header)
             }
             Connectivity::Online => CacheControl::from(
@@ -567,12 +624,85 @@ impl RegistryClient {
             lock_entry.lock().await.map_err(ErrorKind::CacheLock)?
         };
 
-        let result = if matches!(index, IndexUrl::Path(_)) {
-            self.fetch_local_simple_detail(package_name, &url).await
-        } else {
-            self.fetch_remote_simple_detail(package_name, &url, &cache_entry, cache_control)
-                .await
-        };
+        let result: Result<Arc<OwnedArchive<SimpleDetailMetadata>>, Error> = async {
+            if matches!(index, IndexUrl::Path(_)) {
+                return self
+                    .fetch_local_simple_detail(package_name, &url)
+                    .await
+                    .map(Arc::new);
+            }
+
+            let simple_request = self.simple_detail_request(&url)?;
+            let Some(simple_metadata_cache) = self.simple_metadata_cache.as_ref() else {
+                return self
+                    .fetch_remote_simple_detail(
+                        package_name,
+                        &cache_entry,
+                        cache_control,
+                        simple_request,
+                        false,
+                    )
+                    .await
+                    .map(|(metadata, _)| Arc::new(metadata));
+            };
+            if matches!(cache_control, CacheControl::AllowStale) {
+                return self
+                    .fetch_remote_simple_detail(
+                        package_name,
+                        &cache_entry,
+                        cache_control,
+                        simple_request,
+                        false,
+                    )
+                    .await
+                    .map(|(metadata, _)| Arc::new(metadata));
+            }
+
+            let entry = simple_metadata_cache
+                .entry(
+                    SimpleMetadataKey {
+                        package_name: package_name.clone(),
+                        index: index.clone(),
+                        credentials_cache: Arc::as_ptr(&self.credentials_cache) as usize,
+                        cache_control_override,
+                    },
+                    Arc::clone(&self.credentials_cache),
+                )
+                .await;
+            let mut cached_metadata = entry.lock().await;
+            if !matches!(cache_control, CacheControl::MustRevalidate)
+                && let Some(cached) = cached_metadata.as_ref()
+                && let Some(mut request) = simple_request.try_clone()
+                && let BeforeRequest::Fresh = cached.cache_policy.before_request(&mut request)
+            {
+                return Ok(Arc::clone(&cached.metadata));
+            }
+
+            let revalidation_request = simple_request.try_clone();
+            let (metadata, cache_policy) = self
+                .fetch_remote_simple_detail(
+                    package_name,
+                    &cache_entry,
+                    cache_control,
+                    simple_request,
+                    true,
+                )
+                .await?;
+            let metadata = Arc::new(metadata);
+            *cached_metadata = cache_policy.and_then(|cache_policy| {
+                let mut request = revalidation_request?;
+                if let BeforeRequest::Fresh = cache_policy.before_request(&mut request) {
+                    Some(CachedSimpleMetadata {
+                        metadata: Arc::clone(&metadata),
+                        cache_policy,
+                    })
+                } else {
+                    None
+                }
+            });
+            Ok(metadata)
+        }
+        .await;
 
         match result {
             Ok(metadata) => Ok(SimpleMetadataSearchOutcome::Found(metadata)),
@@ -606,23 +736,33 @@ impl RegistryClient {
         }
     }
 
-    /// Fetch the [`SimpleDetailMetadata`] from a remote URL, using the PEP 503 Simple Repository API.
-    async fn fetch_remote_simple_detail(
-        &self,
-        package_name: &PackageName,
-        url: &DisplaySafeUrl,
-        cache_entry: &CacheEntry,
-        cache_control: CacheControl,
-    ) -> Result<OwnedArchive<SimpleDetailMetadata>, Error> {
-        let simple_request = self
-            .uncached_client(url)
+    /// Build the request used for fetching a package's Simple API metadata.
+    fn simple_detail_request(&self, url: &DisplaySafeUrl) -> Result<Request, Error> {
+        self.uncached_client(url)
             .get(Url::from(url.clone()))
             .header("Accept-Encoding", "gzip, deflate, zstd")
             .header("Accept", MediaType::pypi())
             .build()
             .map_err(|err| {
-                ErrorKind::from_reqwest(url.clone(), err, self.client.certificate_source())
-            })?;
+                ErrorKind::from_reqwest(url.clone(), err, self.client.certificate_source()).into()
+            })
+    }
+
+    /// Fetch the [`SimpleDetailMetadata`] from a remote URL, using the PEP 503 Simple Repository API.
+    async fn fetch_remote_simple_detail(
+        &self,
+        package_name: &PackageName,
+        cache_entry: &CacheEntry,
+        cache_control: CacheControl,
+        simple_request: Request,
+        include_cache_policy: bool,
+    ) -> Result<
+        (
+            OwnedArchive<SimpleDetailMetadata>,
+            Option<OwnedArchive<CachePolicy>>,
+        ),
+        Error,
+    > {
         let parse_simple_response = |response: Response| {
             async {
                 // Use the response URL, rather than the request URL, as the base for relative URLs.
@@ -680,15 +820,28 @@ impl RegistryClient {
             .boxed_local()
             .instrument(info_span!("parse_simple_api", package = %package_name))
         };
-        let simple = self
-            .cached_client()
-            .get_cacheable_with_retry(
-                simple_request,
-                cache_entry,
-                cache_control,
-                parse_simple_response,
+        let simple = if include_cache_policy {
+            self.cached_client()
+                .get_cacheable_with_retry_and_policy(
+                    simple_request,
+                    cache_entry,
+                    cache_control,
+                    parse_simple_response,
+                )
+                .await?
+        } else {
+            (
+                self.cached_client()
+                    .get_cacheable_with_retry(
+                        simple_request,
+                        cache_entry,
+                        cache_control,
+                        parse_simple_response,
+                    )
+                    .await?,
+                None,
             )
-            .await?;
+        };
         Ok(simple)
     }
 
@@ -739,7 +892,7 @@ impl RegistryClient {
             let archived = self.fetch_local_simple_index(&url).await?;
             Ok(OwnedArchive::deserialize(&archived))
         } else {
-            let archived = self.fetch_remote_simple_index(&url, index_url).await?;
+            let archived = Box::pin(self.fetch_remote_simple_index(&url, index_url)).await?;
             Ok(OwnedArchive::deserialize(&archived))
         }
     }
@@ -1285,7 +1438,7 @@ impl RegistryClient {
 #[derive(Debug)]
 enum SimpleMetadataSearchOutcome {
     /// Simple metadata was found
-    Found(OwnedArchive<SimpleDetailMetadata>),
+    Found(Arc<OwnedArchive<SimpleDetailMetadata>>),
     /// Simple metadata was not found
     NotFound,
     /// A status code failure was encountered when searching for
@@ -1797,7 +1950,7 @@ mod tests {
 
     use crate::{
         BaseClientBuilder, Connectivity, RegistryClient, RegistryClientBuilder,
-        SimpleDetailMetadata, SimpleDetailMetadatum, html::SimpleDetailHTML,
+        SimpleDetailMetadata, SimpleDetailMetadatum, SimpleMetadataCache, html::SimpleDetailHTML,
     };
     use uv_cache::Cache;
     use uv_distribution_types::{
@@ -1935,6 +2088,279 @@ mod tests {
 
         assert_no_index(&registry_client, "validation", None).await?;
         assert_no_requests(&server).await;
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn simple_metadata_cache_shares_only_with_same_auth_context() -> Result<(), Error> {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path_regex("/simple/example/"))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .insert_header("Cache-Control", "max-age=600")
+                    .set_body_raw(
+                        r#"<a href="https://example.org/example-1.0.0-py3-none-any.whl">example-1.0.0-py3-none-any.whl</a>"#,
+                        "text/html",
+                    ),
+            )
+            .mount(&server)
+            .await;
+
+        let index = Index::from_index_url(IndexUrl::from_str(&format!("{}/simple", server.uri()))?);
+        let simple_metadata_cache = SimpleMetadataCache::default();
+        let base_client_builder = BaseClientBuilder::default();
+        let build_client = || -> Result<RegistryClient, Error> {
+            Ok(
+                RegistryClientBuilder::new(base_client_builder.clone(), Cache::temp()?)
+                    .index_locations(IndexLocations::new(vec![index.clone()], vec![], false))
+                    .simple_metadata_cache(simple_metadata_cache.clone())
+                    .build()?,
+            )
+        };
+        let first = build_client()?;
+        let second = build_client()?;
+        let package_name = PackageName::from_str("example")?;
+        let capabilities = IndexCapabilities::default();
+        let semaphore = Semaphore::new(2);
+
+        let (first_result, second_result) = tokio::join!(
+            first.simple_detail(&package_name, None, &capabilities, &semaphore),
+            second.simple_detail(&package_name, None, &capabilities, &semaphore)
+        );
+        assert_eq!(first_result?.len(), 1);
+        assert_eq!(second_result?.len(), 1);
+        assert_eq!(
+            server
+                .received_requests()
+                .await
+                .map(|requests| requests.len()),
+            Some(1)
+        );
+
+        // A separate client builder has a separate credentials cache, even at the same URL.
+        let unrelated = RegistryClientBuilder::new(BaseClientBuilder::default(), Cache::temp()?)
+            .index_locations(IndexLocations::new(vec![index], vec![], false))
+            .simple_metadata_cache(simple_metadata_cache)
+            .build()?;
+        server.reset().await;
+        Mock::given(method("GET"))
+            .and(path_regex("/simple/example/"))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .insert_header("Cache-Control", "max-age=600")
+                    .set_body_raw(
+                        r#"<a href="https://example.org/example-2.0.0-py3-none-any.whl">example-2.0.0-py3-none-any.whl</a>"#,
+                        "text/html",
+                    ),
+            )
+            .mount(&server)
+            .await;
+        let result = unrelated
+            .simple_detail(&package_name, None, &capabilities, &semaphore)
+            .await?;
+        let Some((_, super::MetadataFormat::Simple(metadata))) = result.into_iter().next() else {
+            return Err("expected Simple API metadata".into());
+        };
+        let metadata = super::OwnedArchive::deserialize(&metadata);
+        assert_eq!(
+            metadata
+                .iter()
+                .map(|distribution| distribution.version.to_string())
+                .collect::<Vec<_>>(),
+            ["2.0.0"]
+        );
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn simple_metadata_cache_respects_response_policy() -> Result<(), Error> {
+        for (server_cache_control, configured_cache_control) in [
+            ("no-cache", None),
+            ("no-store", None),
+            ("max-age=0", None),
+            ("max-age=600", Some("no-cache")),
+            ("max-age=600", Some("no-store")),
+        ] {
+            let server = MockServer::start().await;
+            Mock::given(method("GET"))
+                .and(path_regex("/simple/example/"))
+                .respond_with(
+                    ResponseTemplate::new(200)
+                        .insert_header("Cache-Control", server_cache_control)
+                        .set_body_raw(
+                            r#"<a href="https://example.org/example-1.0.0-py3-none-any.whl">example-1.0.0-py3-none-any.whl</a>"#,
+                            "text/html",
+                        ),
+                )
+                .mount(&server)
+                .await;
+
+            let mut index =
+                Index::from_index_url(IndexUrl::from_str(&format!("{}/simple", server.uri()))?);
+            if let Some(cache_control) = configured_cache_control {
+                index.cache_control = Some(serde_json::from_value(serde_json::json!({
+                    "api": cache_control
+                }))?);
+            }
+            let simple_metadata_cache = SimpleMetadataCache::default();
+            let base_client_builder = BaseClientBuilder::default();
+            let build_client = || -> Result<RegistryClient, Error> {
+                Ok(
+                    RegistryClientBuilder::new(base_client_builder.clone(), Cache::temp()?)
+                        .index_locations(IndexLocations::new(vec![index.clone()], vec![], false))
+                        .simple_metadata_cache(simple_metadata_cache.clone())
+                        .build()?,
+                )
+            };
+            let first = build_client()?;
+            let second = build_client()?;
+            let package_name = PackageName::from_str("example")?;
+            let capabilities = IndexCapabilities::default();
+            let semaphore = Semaphore::new(1);
+
+            assert_eq!(
+                first
+                    .simple_detail(&package_name, None, &capabilities, &semaphore)
+                    .await?
+                    .len(),
+                1
+            );
+            server.reset().await;
+            Mock::given(method("GET"))
+                .and(path_regex("/simple/example/"))
+                .respond_with(
+                    ResponseTemplate::new(200)
+                        .insert_header("Cache-Control", server_cache_control)
+                        .set_body_raw(
+                            r#"<a href="https://example.org/example-2.0.0-py3-none-any.whl">example-2.0.0-py3-none-any.whl</a>"#,
+                            "text/html",
+                        ),
+                )
+                .mount(&server)
+                .await;
+
+            let second_result = second
+                .simple_detail(&package_name, None, &capabilities, &semaphore)
+                .await?;
+            let Some((_, super::MetadataFormat::Simple(metadata))) =
+                second_result.into_iter().next()
+            else {
+                return Err("expected Simple API metadata".into());
+            };
+            let metadata = super::OwnedArchive::deserialize(&metadata);
+            assert_eq!(
+                metadata
+                    .iter()
+                    .map(|distribution| distribution.version.to_string())
+                    .collect::<Vec<_>>(),
+                ["2.0.0"]
+            );
+        }
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn simple_metadata_cache_refetches_local_index() -> Result<(), Error> {
+        let directory = tempfile::tempdir()?;
+        let simple_directory = directory.path().join("simple");
+        let package_directory = simple_directory.join("example");
+        fs_err::create_dir_all(&package_directory)?;
+        let index = Index::from_index_url(IndexUrl::parse(
+            simple_directory.to_string_lossy().as_ref(),
+            None,
+        )?);
+        let simple_metadata_cache = SimpleMetadataCache::default();
+        let base_client_builder = BaseClientBuilder::default();
+        let build_client = || -> Result<RegistryClient, Error> {
+            Ok(
+                RegistryClientBuilder::new(base_client_builder.clone(), Cache::temp()?)
+                    .index_locations(IndexLocations::new(vec![index.clone()], vec![], false))
+                    .simple_metadata_cache(simple_metadata_cache.clone())
+                    .build()?,
+            )
+        };
+        let first = build_client()?;
+        let second = build_client()?;
+        let package_name = PackageName::from_str("example")?;
+        let capabilities = IndexCapabilities::default();
+        let semaphore = Semaphore::new(1);
+
+        fs_err::write(
+            package_directory.join("index.html"),
+            r#"<a href="https://example.org/example-1.0.0-py3-none-any.whl">example-1.0.0-py3-none-any.whl</a>"#,
+        )?;
+        assert_eq!(
+            first
+                .simple_detail(&package_name, None, &capabilities, &semaphore)
+                .await?
+                .len(),
+            1
+        );
+        fs_err::write(
+            package_directory.join("index.html"),
+            r#"<a href="https://example.org/example-2.0.0-py3-none-any.whl">example-2.0.0-py3-none-any.whl</a>"#,
+        )?;
+
+        let second_result = second
+            .simple_detail(&package_name, None, &capabilities, &semaphore)
+            .await?;
+        let Some((_, super::MetadataFormat::Simple(metadata))) = second_result.into_iter().next()
+        else {
+            return Err("expected Simple API metadata".into());
+        };
+        let metadata = super::OwnedArchive::deserialize(&metadata);
+        assert_eq!(
+            metadata
+                .iter()
+                .map(|distribution| distribution.version.to_string())
+                .collect::<Vec<_>>(),
+            ["2.0.0"]
+        );
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn simple_metadata_cache_retries_failed_lookup() -> Result<(), Error> {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path_regex("/simple/example/"))
+            .respond_with(ResponseTemplate::new(404))
+            .mount(&server)
+            .await;
+
+        let index = Index::from_index_url(IndexUrl::from_str(&format!("{}/simple", server.uri()))?);
+        let client = RegistryClientBuilder::new(BaseClientBuilder::default(), Cache::temp()?)
+            .index_locations(IndexLocations::new(vec![index], vec![], false))
+            .simple_metadata_cache(SimpleMetadataCache::default())
+            .build()?;
+        let package_name = PackageName::from_str("example")?;
+        let capabilities = IndexCapabilities::default();
+        let semaphore = Semaphore::new(1);
+
+        assert!(
+            client
+                .simple_detail(&package_name, None, &capabilities, &semaphore)
+                .await
+                .is_err()
+        );
+        server.reset().await;
+        Mock::given(method("GET"))
+            .and(path_regex("/simple/example/"))
+            .respond_with(ResponseTemplate::new(200).set_body_raw(
+                r#"<a href="https://example.org/example-1.0.0-py3-none-any.whl">example-1.0.0-py3-none-any.whl</a>"#,
+                "text/html",
+            ))
+            .mount(&server)
+            .await;
+
+        assert_eq!(
+            client
+                .simple_detail(&package_name, None, &capabilities, &semaphore)
+                .await?
+                .len(),
+            1
+        );
         Ok(())
     }
 

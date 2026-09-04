@@ -89,6 +89,22 @@ $ uv pip compile --group some/path/pyproject.toml:foo --group other/pyproject.to
     `uv pip compile some/path/pyproject.toml --group foo` sources `foo`
     from `./pyproject.toml` and **not** `some/path/pyproject.toml`.
 
+## Locking multiple target environments
+
+To compile the same inputs for several exact Python versions and platforms, specify one output file
+per target:
+
+```console
+$ uv pip compile requirements.in \
+    --target 3.12@x86_64-unknown-linux-gnu=requirements-linux.txt \
+    --target 3.12@aarch64-apple-darwin=requirements-macos.txt
+```
+
+Each target has an independent platform-specific resolution. Existing pins in each output file
+remain that target's preferences; identical previous locks can share parsed preferences. uv can also
+reuse parsed inputs and cacheable package index metadata within the invocation. `--target` cannot be
+combined with `--output-file`, `--python-version`, `--python-platform`, or `--universal`.
+
 ## Upgrading requirements
 
 When using an output file, uv will consider the versions pinned in an existing output file. If a

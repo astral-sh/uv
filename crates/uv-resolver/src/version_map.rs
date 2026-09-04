@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 use std::collections::Bound;
 use std::ops::RangeBounds;
-use std::sync::OnceLock;
+use std::sync::{Arc, OnceLock};
 
 use jiff::Timestamp;
 use pubgrub::Ranges;
@@ -44,7 +44,7 @@ impl VersionMap {
     /// PEP 592: <https://peps.python.org/pep-0592/#warehouse-pypi-implementation-notes>
     #[instrument(skip_all, fields(package_name))]
     pub(crate) fn from_simple_metadata(
-        simple_metadata: OwnedArchive<SimpleDetailMetadata>,
+        simple_metadata: Arc<OwnedArchive<SimpleDetailMetadata>>,
         package_name: &PackageName,
         index: IndexUrl,
         tags: Option<Tags>,
@@ -482,7 +482,7 @@ struct VersionMapLazy {
     local: bool,
     /// The raw simple metadata from which `PrioritizedDist`s should
     /// be constructed.
-    simple_metadata: OwnedArchive<SimpleDetailMetadata>,
+    simple_metadata: Arc<OwnedArchive<SimpleDetailMetadata>>,
     /// When true, wheels aren't allowed.
     no_binary: bool,
     /// When true, source dists aren't allowed.

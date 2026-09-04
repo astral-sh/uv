@@ -823,6 +823,10 @@ impl BaseClient {
         &self.credentials_cache
     }
 
+    pub(crate) fn shared_credentials_cache(&self) -> Arc<CredentialsCache> {
+        Arc::clone(&self.credentials_cache)
+    }
+
     pub(crate) fn certificate_source(&self) -> CertificateSource {
         self.certificate_source
     }

@@ -2,7 +2,7 @@ use std::collections::BTreeSet;
 use std::env;
 use std::ffi::OsStr;
 use std::io::Write;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
 use anyhow::{Result, anyhow};
@@ -12,7 +12,7 @@ use rustc_hash::FxHashSet;
 use tracing::debug;
 
 use uv_cache::Cache;
-use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
+use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder, SimpleMetadataCache};
 use uv_configuration::{
     BuildIsolation, BuildOptions, Concurrency, Constraints, ExcludeDependency, ExtrasSpecification,
     IndexStrategy, NoBinary, NoBuild, NoSources, Override, PipCompileFormat, Reinstall, Upgrade,
@@ -59,6 +59,152 @@ use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::{ExitStatus, OutputWriter, diagnostics};
 use crate::printer::Printer;
 
+/// Inputs parsed once and reused by exact-target compiles in the same invocation.
+pub(crate) struct ParsedCompileInputs {
+    requirements: RequirementsSpecification,
+    build_constraints: Vec<NameRequirementSpecification>,
+}
+
+impl ParsedCompileInputs {
+    pub(crate) async fn from_sources(
+        requirements: &[RequirementsSource],
+        constraints: &[RequirementsSource],
+        overrides: &[RequirementsSource],
+        excludes: &[RequirementsSource],
+        build_constraints: &[RequirementsSource],
+        groups: &GroupsSpecification,
+        client_builder: &BaseClientBuilder<'_>,
+    ) -> Result<Self> {
+        Ok(Self {
+            requirements: RequirementsSpecification::from_sources(
+                requirements,
+                constraints,
+                overrides,
+                excludes,
+                Some(groups),
+                client_builder,
+            )
+            .await?,
+            build_constraints: operations::read_constraints(build_constraints, client_builder)
+                .await?,
+        })
+    }
+}
+
+/// Successfully parsed previous locks that can be reused by exact-target compiles.
+#[derive(Default)]
+pub(crate) struct PriorLockCache {
+    entries: Vec<CachedPriorLock>,
+}
+
+struct CachedPriorLock {
+    format: PipCompileFormat,
+    contents: Vec<u8>,
+    parent: Option<PathBuf>,
+    locked: LockedRequirements,
+}
+
+impl PriorLockCache {
+    /// Read an existing output, reusing preferences only when its contents are identical.
+    async fn read(
+        &mut self,
+        output_file: &Path,
+        format: PipCompileFormat,
+        upgrade: &Upgrade,
+    ) -> Result<LockedRequirements> {
+        if upgrade.is_all() {
+            return Ok(LockedRequirements::default());
+        }
+        if output_file == Path::new("-") {
+            // The requirements reader interprets this path as stdin.
+            return read_existing_lock(output_file, format, upgrade).await;
+        }
+
+        // Read immediately before resolving this target, since a previous target may have
+        // written an output that will become a later target's previous lock.
+        let Ok(contents) = fs_err::tokio::read(output_file).await else {
+            return read_existing_lock(output_file, format, upgrade).await;
+        };
+        let parent = match format {
+            PipCompileFormat::RequirementsTxt => {
+                // Included files may differ or change independently of the output file.
+                if has_recursive_includes(&contents) {
+                    return read_existing_lock(output_file, format, upgrade).await;
+                }
+                let parent = output_file
+                    .parent()
+                    .filter(|parent| !parent.as_os_str().is_empty())
+                    .unwrap_or(&*CWD);
+                let Ok(parent) = dunce::canonicalize(parent) else {
+                    return read_existing_lock(output_file, format, upgrade).await;
+                };
+                Some(parent)
+            }
+            PipCompileFormat::PylockToml => None,
+        };
+
+        if let Some(entry) = self.entries.iter().find(|entry| {
+            entry.format == format && entry.parent == parent && entry.contents == contents
+        }) {
+            return Ok(entry.locked.clone());
+        }
+
+        // Parse the same buffer used for equality; re-reading the output here
+        // could associate newer on-disk contents with an older cache key.
+        let Ok(content) = std::str::from_utf8(&contents) else {
+            return read_existing_lock(output_file, format, upgrade).await;
+        };
+        let locked = match format {
+            PipCompileFormat::RequirementsTxt => {
+                LockedRequirements::from_requirements_txt_contents(output_file, content, upgrade)
+                    .await?
+            }
+            PipCompileFormat::PylockToml => {
+                LockedRequirements::from_pylock_toml_contents(output_file, content, upgrade)?
+            }
+        };
+        self.entries.push(CachedPriorLock {
+            format,
+            contents,
+            parent,
+            locked: locked.clone(),
+        });
+        Ok(locked)
+    }
+}
+
+/// Return whether a requirements file can read another file while being parsed.
+fn has_recursive_includes(contents: &[u8]) -> bool {
+    // The file parser transcodes non-ASCII inputs, including UTF-16. A byte scan
+    // cannot reliably recognize options until that transcoding has happened.
+    if !contents.is_ascii() {
+        return true;
+    }
+
+    contents
+        .split(|byte| *byte == b'\n' || *byte == b'\r')
+        .map(<[u8]>::trim_ascii_start)
+        // Other options can contain recursive includes split across physical
+        // lines, or generate per-file diagnostics when parsed again.
+        .any(|line| line.starts_with(b"-") && !line.starts_with(b"--hash="))
+}
+
+/// Load the preferred pins and Git revisions from one existing output file.
+async fn read_existing_lock(
+    output_file: &Path,
+    format: PipCompileFormat,
+    upgrade: &Upgrade,
+) -> Result<LockedRequirements> {
+    match format {
+        PipCompileFormat::RequirementsTxt => Ok(LockedRequirements::from_preferences(
+            read_requirements_txt(output_file, upgrade).await?,
+        )),
+        PipCompileFormat::PylockToml => {
+            Ok(read_pylock_toml_requirements(output_file, upgrade).await?)
+        }
+    }
+}
+
 /// Resolve a set of requirements into a set of pinned versions.
 #[expect(clippy::fn_params_excessive_bools)]
 pub(crate) async fn pip_compile(
@@ -102,6 +248,9 @@ pub(crate) async fn pip_compile(
     dependency_metadata: DependencyMetadata,
     keyring_provider: KeyringProviderType,
     client_builder: &BaseClientBuilder<'_>,
+    parsed_inputs: Option<&ParsedCompileInputs>,
+    prior_lock_cache: Option<&mut PriorLockCache>,
+    simple_metadata_cache: Option<SimpleMetadataCache>,
     config_settings: ConfigSettings,
     config_settings_package: PackageConfigSettings,
     build_isolation: BuildIsolation,
@@ -217,15 +366,19 @@ pub(crate) async fn pip_compile(
         find_links,
         no_binary,
         no_build,
-    } = RequirementsSpecification::from_sources(
-        requirements,
-        constraints,
-        overrides,
-        excludes,
-        Some(&groups),
-        &client_builder,
-    )
-    .await?;
+    } = if let Some(parsed_inputs) = parsed_inputs {
+        parsed_inputs.requirements.clone()
+    } else {
+        RequirementsSpecification::from_sources(
+            requirements,
+            constraints,
+            overrides,
+            excludes,
+            Some(&groups),
+            &client_builder,
+        )
+        .await?
+    };
 
     override_dependencies.extend(overrides_from_workspace);
 
@@ -252,16 +405,19 @@ pub(crate) async fn pip_compile(
         .collect();
 
     // Read build constraints.
-    let build_constraints: Vec<NameRequirementSpecification> =
-        operations::read_constraints(build_constraints, &client_builder)
-            .await?
-            .into_iter()
-            .chain(
-                build_constraints_from_workspace
-                    .into_iter()
-                    .map(NameRequirementSpecification::from),
-            )
-            .collect();
+    let build_constraints = if let Some(parsed_inputs) = parsed_inputs {
+        parsed_inputs.build_constraints.clone()
+    } else {
+        operations::read_constraints(build_constraints, &client_builder).await?
+    };
+    let build_constraints: Vec<NameRequirementSpecification> = build_constraints
+        .into_iter()
+        .chain(
+            build_constraints_from_workspace
+                .into_iter()
+                .map(NameRequirementSpecification::from),
+        )
+        .collect();
 
     // If all the metadata could be statically resolved, validate that every extra was used. If we
     // need to resolve metadata via PEP 517, we don't know which extras are used until much later.
@@ -452,24 +608,26 @@ pub(crate) async fn pip_compile(
         .transpose()?;
 
     // Initialize the registry client.
-    let client = RegistryClientBuilder::new(client_builder.clone(), cache.clone())
+    let registry_client = RegistryClientBuilder::new(client_builder.clone(), cache.clone())
         .index_locations(index_locations.clone())
         .index_strategy(index_strategy)
         .torch_backend(torch_backend.clone())
         .markers(interpreter.markers())
-        .platform(interpreter.platform())
-        .build()?;
+        .platform(interpreter.platform());
+    let registry_client = if let Some(simple_metadata_cache) = simple_metadata_cache {
+        registry_client.simple_metadata_cache(simple_metadata_cache)
+    } else {
+        registry_client
+    };
+    let client = registry_client.build()?;
 
     // Read the lockfile, if present.
     let LockedRequirements { preferences, git } =
         if let Some(output_file) = output_file.filter(|output_file| output_file.exists()) {
-            match format {
-                PipCompileFormat::RequirementsTxt => LockedRequirements::from_preferences(
-                    read_requirements_txt(output_file, &upgrade).await?,
-                ),
-                PipCompileFormat::PylockToml => {
-                    read_pylock_toml_requirements(output_file, &upgrade).await?
-                }
+            if let Some(prior_lock_cache) = prior_lock_cache {
+                prior_lock_cache.read(output_file, format, &upgrade).await?
+            } else {
+                read_existing_lock(output_file, format, &upgrade).await?
             }
         } else {
             LockedRequirements::default()
