@@ -77,6 +77,38 @@ supplied hashes in `uv.lock` and checks them when it downloads pinned build depe
 project resolution or installation, including builds in `uv run --with` environments. The hashes do
 not apply to packages installed in the project environment.
 
+To require hashes for **every** build dependency, use `--require-build-hashes` on supported
+commands, including those that may build packages while updating a lockfile. You can also set
+`UV_REQUIRE_BUILD_HASHES=true` or configure the workspace root:
+
+```toml
+[tool.uv]
+require-build-hashes = true
+```
+
+This option is experimental. Enable `--preview-features build-dependency-hashes` to suppress the
+warning.
+
+Command-line flags take precedence over the environment variable, which takes precedence over
+configuration. `--no-require-build-hashes` and `UV_REQUIRE_BUILD_HASHES=false` allow build
+dependencies without hashes; provided hashes are still checked. Workspace members cannot override
+the root's configuration. For `uv pip` commands, use `[tool.uv.pip] require-build-hashes = false` to
+opt out of the top-level setting.
+
+With `--require-build-hashes`, provide exact versions or direct URLs and hashes for all build
+dependencies, including their dependencies. Hashes can also come from URL fragments (e.g.,
+`#sha256=...`) in `build-system.requires`. Hashes in requirements or metadata returned by a build
+backend, such as through `get_requires_for_build_wheel`, do not count: those dependencies need
+hashes from build constraints or `build-system.requires`. Requirements whose environment markers do
+not match the current environment are ignored.
+
+When uv uses its bundled `uv_build` backend, no hash is required for it: the backend is part of the
+uv executable, not a separately downloaded package.
+
+Other source builds require build isolation when build hashes are required. They fail if isolation
+is disabled with `--no-build-isolation` or `--no-build-isolation-package`. Already-installed
+packages and previously built wheels are not checked.
+
 ## Preventing publish to PyPI
 
 If you have internal packages that you do not want to be published, you can mark them as private:

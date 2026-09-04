@@ -1626,6 +1626,19 @@ pub struct PipCompileArgs {
     )]
     pub build_constraints: Vec<Maybe<PathBuf>>,
 
+    /// Require hashes for all build dependencies.
+    ///
+    /// Provide requirements with hashes in a file passed to `--build-constraint`. This does not
+    /// require hashes for runtime dependencies.
+    ///
+    /// No hash is required when uv uses its bundled `uv_build` backend, since it is part of the uv
+    /// executable. Other source builds fail if build isolation is disabled.
+    #[arg(long, overrides_with("no_require_build_hashes"))]
+    pub require_build_hashes: bool,
+
+    #[arg(long, overrides_with("require_build_hashes"), hide = true)]
+    pub no_require_build_hashes: bool,
+
     /// Include optional dependencies from the specified extra name; may be provided more than once.
     ///
     /// Only applies to `pyproject.toml`, `setup.py`, and `setup.cfg` sources.
@@ -2017,6 +2030,19 @@ pub struct PipSyncArgs {
     #[command(flatten)]
     pub hash_checking: HashCheckingArgs,
 
+    /// Require hashes for all build dependencies.
+    ///
+    /// Provide requirements with hashes in a file passed to `--build-constraint`. This does not
+    /// require hashes for runtime dependencies; use `--require-hashes` for those.
+    ///
+    /// No hash is required when uv uses its bundled `uv_build` backend, since it is part of the uv
+    /// executable. Other source builds fail if build isolation is disabled.
+    #[arg(long, overrides_with("no_require_build_hashes"))]
+    pub require_build_hashes: bool,
+
+    #[arg(long, overrides_with("require_build_hashes"), hide = true)]
+    pub no_require_build_hashes: bool,
+
     /// The Python interpreter into which packages should be installed.
     ///
     /// By default, syncing requires a virtual environment. A path to an alternative Python can be
@@ -2363,6 +2389,19 @@ pub struct PipInstallArgs {
 
     #[command(flatten)]
     pub hash_checking: HashCheckingArgs,
+
+    /// Require hashes for all build dependencies.
+    ///
+    /// Provide requirements with hashes in a file passed to `--build-constraint`. This does not
+    /// require hashes for runtime dependencies; use `--require-hashes` for those.
+    ///
+    /// No hash is required when uv uses its bundled `uv_build` backend, since it is part of the uv
+    /// executable. Other source builds fail if build isolation is disabled.
+    #[arg(long, overrides_with("no_require_build_hashes"))]
+    pub require_build_hashes: bool,
+
+    #[arg(long, overrides_with("require_build_hashes"), hide = true)]
+    pub no_require_build_hashes: bool,
 
     /// The Python interpreter into which packages should be installed.
     ///
@@ -4177,6 +4216,22 @@ pub struct UpgradeArgs {
     /// Exclude the named package from upgrades.
     #[arg(long, value_hint = ValueHint::Other)]
     pub exclude: Vec<PackageName>,
+
+    /// Require hashes for all build dependencies.
+    #[arg(
+        long,
+        overrides_with("no_require_build_hashes"),
+        help_heading = "Build options"
+    )]
+    pub require_build_hashes: bool,
+
+    /// Do not require hashes for every build dependency.
+    #[arg(
+        long,
+        overrides_with("require_build_hashes"),
+        help_heading = "Build options"
+    )]
+    pub no_require_build_hashes: bool,
 }
 
 #[derive(Args)]
@@ -7123,6 +7178,8 @@ pub struct HashCheckingArgs {
     /// and _all_ requirements must either be pinned to exact versions (e.g., `==1.0.0`), or be
     /// specified via direct URL.
     ///
+    /// To require hashes for all build dependencies, use `--require-build-hashes`.
+    ///
     /// Hash-checking mode introduces a number of additional constraints:
     ///
     /// - Git dependencies are not supported.
@@ -7295,6 +7352,32 @@ pub struct BuildOptionsArgs {
         value_hint = ValueHint::Other,
     )]
     no_binary_package: Vec<PackageName>,
+
+    /// Require hashes for all build dependencies.
+    ///
+    /// Hashes can be provided in `tool.uv.build-constraint-dependencies` or URL fragments
+    /// (e.g., `#sha256=...`) in `build-system.requires`. This does not require hashes for runtime
+    /// dependencies.
+    ///
+    /// This is separate from `--require-hashes`: for `uv pip` installs, that option applies to
+    /// runtime requirements; for `uv build`, it applies to command-line build constraints.
+    ///
+    /// No hash is required when uv uses its bundled `uv_build` backend, since it is part of the uv
+    /// executable. Other source builds fail if build isolation is disabled.
+    #[arg(
+        long,
+        overrides_with("no_require_build_hashes"),
+        help_heading = "Build options"
+    )]
+    pub(crate) require_build_hashes: bool,
+
+    /// Do not require hashes for every build dependency.
+    #[arg(
+        long,
+        overrides_with("require_build_hashes"),
+        help_heading = "Build options"
+    )]
+    pub(crate) no_require_build_hashes: bool,
 }
 
 /// Arguments that configure build isolation for source distributions.

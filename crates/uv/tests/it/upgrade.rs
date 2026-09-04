@@ -72,6 +72,10 @@ fn upgrade_help() {
     Options:
           --exclude <EXCLUDE>  Exclude the named package from upgrades
 
+    Build options:
+          --require-build-hashes     Require hashes for all build dependencies
+          --no-require-build-hashes  Do not require hashes for every build dependency
+
     Cache options:
       -n, --no-cache               Avoid reading from or writing to the cache, instead using a temporary
                                    directory for the duration of the operation [env: UV_NO_CACHE=]

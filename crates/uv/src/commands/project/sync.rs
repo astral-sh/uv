@@ -670,6 +670,7 @@ pub(crate) async fn do_sync<'a>(
         config_setting,
         config_settings_package,
         build_isolation,
+        build_hash_checking,
         extra_build_dependencies,
         extra_build_variables,
         exclude_newer,
@@ -711,6 +712,7 @@ pub(crate) async fn do_sync<'a>(
                 keyring_provider,
                 link_mode,
                 build_isolation: build_isolation.clone(),
+                build_hash_checking,
                 extra_build_dependencies: extra_build_dependencies.clone(),
                 extra_build_variables: extra_build_variables.clone(),
                 prerelease: Prerelease::default(),
@@ -878,7 +880,7 @@ pub(crate) async fn do_sync<'a>(
     let build_hasher = HashStrategy::from_constraints(
         &build_constraints,
         Some(&venv.interpreter().to_resolver_marker_environment()),
-        uv_configuration::HashCheckingMode::Verify,
+        build_hash_checking,
     )?;
     // Also verify artifacts in the full lockfile, including unselected extras and groups.
     let build_hasher = target

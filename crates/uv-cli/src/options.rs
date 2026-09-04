@@ -631,6 +631,8 @@ pub fn resolver_options(
         no_binary,
         binary,
         no_binary_package,
+        require_build_hashes,
+        no_require_build_hashes,
     } = build_args;
 
     ResolverOptions {
@@ -662,6 +664,11 @@ pub fn resolver_options(
             flag(no_build_isolation, build_isolation, "build-isolation")?,
             no_build_isolation_package,
         ),
+        require_build_hashes: flag(
+            require_build_hashes,
+            no_require_build_hashes,
+            "require-build-hashes",
+        )?,
         extra_build_dependencies: None,
         extra_build_variables: None,
         exclude_newer,
@@ -757,6 +764,8 @@ pub fn resolver_installer_options(
         no_binary,
         binary,
         no_binary_package,
+        require_build_hashes,
+        no_require_build_hashes,
     } = build_args;
 
     ResolverInstallerOptions {
@@ -792,6 +801,11 @@ pub fn resolver_installer_options(
             flag(no_build_isolation, build_isolation, "build-isolation")?,
             no_build_isolation_package,
         ),
+        require_build_hashes: flag(
+            require_build_hashes,
+            no_require_build_hashes,
+            "require-build-hashes",
+        )?,
         extra_build_dependencies: None,
         extra_build_variables: None,
         exclude_newer,
