@@ -147,6 +147,11 @@ impl<'a> DisplayResolutionGraph<'a> {
 
     /// Merge independently resolved targets, retaining common pins and qualifying other pins
     /// with their target selectors. Hashes and annotations are combined for identical requirements.
+    ///
+    /// Callers must provide pairwise-disjoint target selectors. A pin keeps its original dependency
+    /// marker only when it occurs in every target with the same marker; otherwise, its markers are
+    /// combined with their target selectors. Editables must occur in every target, since `-e` lines
+    /// cannot carry markers.
     #[expect(clippy::fn_params_excessive_bools)]
     pub fn from_targets(
         outputs: &[ExactTargetOutput<'a>],
@@ -249,19 +254,11 @@ impl std::fmt::Display for DisplayResolutionGraph<'_> {
                 line.push_str(&hash.to_string());
             }
 
-            let via = match self.annotation_style {
-                AnnotationStyle::Line => requirement
-                    .dependents
-                    .iter()
-                    .map(ToString::to_string)
-                    .chain(requirement.sources.iter().map(ToString::to_string))
-                    .collect::<Vec<_>>(),
-                AnnotationStyle::Split => requirement
-                    .sources
-                    .iter()
-                    .map(ToString::to_string)
-                    .chain(requirement.dependents.iter().map(ToString::to_string))
-                    .collect::<Vec<_>>(),
+            let dependents = requirement.dependents.iter().map(ToString::to_string);
+            let sources = requirement.sources.iter().map(ToString::to_string);
+            let via: Vec<_> = match self.annotation_style {
+                AnnotationStyle::Line => dependents.chain(sources).collect(),
+                AnnotationStyle::Split => sources.chain(dependents).collect(),
             };
             let annotation = if via.is_empty() {
                 None
@@ -306,6 +303,9 @@ impl std::fmt::Display for DisplayResolutionGraph<'_> {
     }
 }
 
+/// Collect requirement, constraint, and override origins active in the resolver environment.
+/// Scoped overrides contribute annotations only for matching parent-to-dependency edges in the
+/// resolved graph.
 fn source_annotations(resolution: &ResolverOutput, env: &ResolverEnvironment) -> SourceAnnotations {
     let mut sources = SourceAnnotations::default();
 

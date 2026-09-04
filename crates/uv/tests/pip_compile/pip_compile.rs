@@ -17,7 +17,6 @@ use http::StatusCode;
 #[cfg(feature = "test-universal")]
 use indoc::formatdoc;
 use indoc::indoc;
-use sha2::{Digest, Sha256};
 use url::Url;
 use wiremock::matchers::{method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
@@ -13880,7 +13879,7 @@ fn compiled_pins_for_environment(
 }
 
 /// Write a wheel-only package for exact-platform resolution tests.
-fn write_matrix_wheel(wheels: &ChildPath, version: &str, tag: &str) -> Result<Vec<u8>> {
+fn write_matrix_wheel(wheels: &ChildPath, version: &str, tag: &str) -> Result<()> {
     let (filename, wheel) = generate_wheel(
         &PackageName::from_str("matrixwheel")?,
         &Version::from_str(version)?,
@@ -13890,7 +13889,7 @@ fn write_matrix_wheel(wheels: &ChildPath, version: &str, tag: &str) -> Result<Ve
         tag,
     );
     wheels.child(filename).write_binary(&wheel)?;
-    Ok(wheel)
+    Ok(())
 }
 
 /// Preserve target-specific previous pins while writing one marker-qualified lock.
@@ -14328,10 +14327,10 @@ fn multiple_exact_targets_hashes() -> Result<()> {
         .write_str("matrixwheel")?;
     let wheels = context.temp_dir.child("wheels");
     wheels.create_dir_all()?;
-    let linux_wheel = write_matrix_wheel(&wheels, "1.0.0", "py3-none-manylinux_2_17_x86_64")?;
-    let macos_wheel = write_matrix_wheel(&wheels, "1.0.0", "py3-none-macosx_13_0_arm64")?;
+    write_matrix_wheel(&wheels, "1.0.0", "py3-none-manylinux_2_17_x86_64")?;
+    write_matrix_wheel(&wheels, "1.0.0", "py3-none-macosx_13_0_arm64")?;
 
-    uv_snapshot!(context.filters(), context.pip_compile()
+    let output = uv_snapshot!(context.filters(), context.pip_compile()
         .arg("requirements.in")
         .arg("--no-index")
         .arg("--find-links")
@@ -14360,21 +14359,7 @@ fn multiple_exact_targets_hashes() -> Result<()> {
     ");
 
     let contents = read_to_string(context.temp_dir.child("requirements.txt").path())?;
-    let normalized = contents
-        .replace(
-            &format!("sha256:{}", hex::encode(Sha256::digest(&linux_wheel))),
-            "sha256:[LINUX_HASH]",
-        )
-        .replace(
-            &format!("sha256:{}", hex::encode(Sha256::digest(&macos_wheel))),
-            "sha256:[MACOS_HASH]",
-        );
-    insta::assert_snapshot!(normalized, @r"
-    matrixwheel==1.0.0 \
-        --hash=sha256:[LINUX_HASH] \
-        --hash=sha256:[MACOS_HASH]
-        # via -r requirements.in
-    ");
+    assert_eq!(contents, String::from_utf8(output.stdout)?);
 
     Ok(())
 }
