@@ -73,11 +73,10 @@ build-constraint-dependencies = [
 ]
 ```
 
-Constraints with hashes must specify an exact version (using `==`) or a direct URL.
-
-uv retains these hashes in `uv.lock` and verifies them when downloading build dependencies during
-project resolution and installation, including builds in `uv run --with` environments. These hashes
-apply to build dependencies, not the packages installed in the project environment.
+uv retains hashes in `uv.lock` and verifies them for pinned build constraints when downloading build
+dependencies during project resolution and installation, including builds in `uv run --with`
+environments. These hashes apply to build dependencies, not the packages installed in the project
+environment.
 
 ## Preventing publish to PyPI
 

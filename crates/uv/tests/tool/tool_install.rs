@@ -6231,7 +6231,7 @@ fn tool_install_with_build_hashes() -> Result<()> {
             .assert(predicate::path::missing());
 
         // Upgrades must retain the original hashes without re-reading the constraints file.
-        fs_err::remove_file(constraints)?;
+        fs_err::remove_file(&constraints)?;
         let mut upgrade = context.tool_upgrade();
         upgrade
             .args(["hash-tool", "--reinstall", "--no-cache"])
@@ -6248,6 +6248,47 @@ fn tool_install_with_build_hashes() -> Result<()> {
         } else {
             upgrade.assert().success();
         }
+        project
+            .child("backend-executed")
+            .assert(predicate::path::exists());
+
+        // Unpinned hashes are ignored in verification mode, including when saved in a tool receipt.
+        fs_err::remove_file(project.child("backend-executed"))?;
+        constraints.write_str(&format!(
+            "build-dependency>=1.0.0 --hash=sha256:{}\n",
+            "0".repeat(64)
+        ))?;
+        install().arg("--reinstall").assert().success();
+        project
+            .child("backend-executed")
+            .assert(predicate::path::exists());
+        allow_duplicates! {
+            insta::with_settings!({ filters => context.filters() }, {
+                assert_snapshot!(context.read("tools/hash-tool/uv-receipt.toml"), @r#"
+                [tool]
+                requirements = [{ name = "hash-tool", directory = "[TEMP_DIR]/project" }]
+                build-constraint-dependencies = [{ name = "build-dependency", specifier = ">=1.0.0", hashes = ["sha256:0000000000000000000000000000000000000000000000000000000000000000"] }]
+                entrypoints = [
+                    { name = "hash-tool", install-path = "[TEMP_DIR]/bin/hash-tool", from = "hash-tool" },
+                ]
+
+                [tool.options]
+                no-index = true
+                find-links = ["file://[TEMP_DIR]/wheels"]
+                exclude-newer = "2024-03-25T00:00:00Z"
+                "#);
+            });
+        }
+
+        fs_err::remove_file(project.child("backend-executed"))?;
+        fs_err::remove_file(constraints)?;
+        context
+            .tool_upgrade()
+            .args(["hash-tool", "--reinstall", "--no-cache"])
+            .arg(preview)
+            .env(EnvVars::PATH, bin_dir.as_os_str())
+            .assert()
+            .success();
         project
             .child("backend-executed")
             .assert(predicate::path::exists());

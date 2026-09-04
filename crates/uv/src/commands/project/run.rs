@@ -506,6 +506,7 @@ pub(crate) async fn run(
     };
 
     // Discover and sync the base environment.
+    let is_script = script_interpreter.is_some();
     let temp_dir;
     let base_interpreter = if let Some(script_interpreter) = script_interpreter {
         // If we found a PEP 723 script and the user provided a project-only setting, warn.
@@ -741,6 +742,8 @@ pub(crate) async fn run(
                         .flatten()
                         .map(|lock| (lock, project.workspace().install_path().to_owned()));
                 }
+                // `--with` may still build an overlay under `--no-sync`. Unless explicitly frozen,
+                // use the current project build constraints, not those recorded in `uv.lock`.
                 if frozen.is_none() && !requirements.is_empty() {
                     unlocked_build_constraints = LockTarget::from(project.workspace())
                         .lower_build_constraints(
@@ -984,9 +987,9 @@ pub(crate) async fn run(
         Some(spec) => {
             debug!("Syncing `--with` requirements to cached environment");
 
-            // `--no-sync` can use lockfile versions as preferences while applying current project
-            // build hashes. `--frozen` continues to use the hashes recorded in the lockfile.
-            let build_constraints = if no_sync && frozen.is_none() {
+            // Project `--no-sync` uses current build constraints while keeping lockfile versions
+            // as preferences. For scripts, `--no-sync` is a no-op, so use the lockfile hashes.
+            let build_constraints = if no_sync && frozen.is_none() && !is_script {
                 unlocked_build_constraints
             } else {
                 base_lock

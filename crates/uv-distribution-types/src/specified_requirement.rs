@@ -34,9 +34,9 @@ impl NameRequirementSpecification {
 
     /// Convert the requirement to an absolute path while preserving its hashes.
     #[must_use]
-    pub fn to_absolute(self, root: &Path) -> Self {
+    pub fn into_absolute(self, root: &Path) -> Self {
         Self {
-            requirement: self.requirement.to_absolute(root),
+            requirement: self.requirement.into_absolute(root),
             hashes: self.hashes,
         }
     }

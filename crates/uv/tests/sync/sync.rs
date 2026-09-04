@@ -17,7 +17,7 @@ use wiremock::{Mock, MockServer, ResponseTemplate};
 
 use uv_fs::Simplified;
 use uv_static::EnvVars;
-use uv_test::packse::{PackseServer, generate_wheel};
+use uv_test::packse::{PackseServer, generate_wheel, generate_wheel_with_files};
 
 use uv_test::{TestContext, download_to_disk, uv_snapshot, venv_bin_path};
 
@@ -16720,11 +16720,7 @@ fn sync_frozen_workspace_member_git_credentials() -> Result<()> {
 fn build_hash_project() -> Result<(TestContext, String)> {
     let context = uv_test::test_context!("3.12");
     let mut build_hash = String::new();
-    for (name, version) in [
-        ("build-dependency", "1.0.0"),
-        ("dynamic-dependency", "1.0.0"),
-        ("project", "0.1.0"),
-    ] {
+    for (name, version) in [("build-dependency", "1.0.0"), ("project", "0.1.0")] {
         let (filename, wheel) = generate_wheel(
             &name.parse()?,
             &version.parse()?,
@@ -16761,17 +16757,10 @@ fn build_hash_project() -> Result<(TestContext, String)> {
         find-links = ["wheels"]
     "#})?;
     context.temp_dir.child("backend.py").write_str(indoc! {r#"
-        import json
-        import os
         import shutil
         from pathlib import Path
 
         import build_dependency
-
-        def get_requires_for_build_wheel(config_settings=None):
-            return json.loads(os.environ.get("UV_TEST_DYNAMIC_BUILD_REQUIRES", "[]"))
-
-        get_requires_for_build_editable = get_requires_for_build_wheel
 
         def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
             wheel = Path(__file__).parent / "wheels" / "project-0.1.0-py3-none-any.whl"
@@ -16897,37 +16886,7 @@ fn project_build_hashes_unpinned() -> Result<()> {
             {{ requirement = "build-dependency>=1", hashes = ["sha256:{}"] }},
         ]
     "#, "0".repeat(64)})?;
-    // A constraint with hashes must specify an exact version.
-    uv_snapshot!(context.filters(), context.sync(), @"
-    exit_code: 2 (failure)
-    ----- stderr -----
-    error: In `--verify-hashes` mode, all requirements must have their versions pinned with `==`, but found: build-dependency>=1
-    ");
-
-    // Hash validation retains unconstrained requirements and their extras.
-    context.temp_dir.child("pyproject.toml").write_str(
-        &context
-            .read("pyproject.toml")
-            .replace("build-dependency>=1", "build-dependency[extra]"),
-    )?;
-    uv_snapshot!(context.filters(), context.sync(), @"
-    exit_code: 2 (failure)
-    ----- stderr -----
-    error: In `--verify-hashes` mode, all requirements must have their versions pinned with `==`, but found: build-dependency[extra]
-    ");
-
-    // Constraints without hashes may use version ranges. Constraints excluded by environment
-    // markers are ignored.
-    context
-        .temp_dir
-        .child("pyproject.toml")
-        .write_str(&formatdoc! {r#"
-        {pyproject}
-        build-constraint-dependencies = [
-            "build-dependency>=1",
-            {{ requirement = "dynamic-dependency>=1 ; python_version < '2'", hashes = ["sha256:{}"] }},
-        ]
-    "#, "0".repeat(64)})?;
+    // Verify mode applies the version constraint but ignores a hash without an exact pin.
     uv_snapshot!(context.filters(), context.sync(), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -17177,5 +17136,113 @@ fn project_build_hashes_run_with_stale_lock() -> Result<()> {
     package
         .child("backend-executed")
         .assert(predicate::path::exists());
+    Ok(())
+}
+
+#[test]
+fn project_build_hashes_locked_script_run_with_no_sync() -> Result<()> {
+    let (context, hash) = build_hash_project()?;
+    let package = context.temp_dir.child("package");
+    package.create_dir_all()?;
+    for entry in ["pyproject.toml", "backend.py", "wheels"] {
+        fs_err::rename(context.temp_dir.child(entry), package.child(entry))?;
+    }
+    package.child("pyproject.toml").write_str(
+        &context
+            .read("package/pyproject.toml")
+            .replace("build-dependency==1.0.0", "build-dependency>=1"),
+    )?;
+    package
+        .child("backend.py")
+        .write_str(&context.read("package/backend.py").replace(
+            "import build_dependency",
+            "import build_dependency\nPath(__file__).with_name('backend-executed').touch()",
+        ))?;
+
+    let script = context.temp_dir.child("script.py");
+    script.write_str(&formatdoc! {r#"
+        # /// script
+        # requires-python = ">=3.12"
+        # dependencies = []
+        # [tool.uv]
+        # no-index = true
+        # find-links = ["package/wheels"]
+        # build-constraint-dependencies = [
+        #     {{ requirement = "build-dependency==1.0.0", hashes = ["sha256:{hash}"] }},
+        # ]
+        # ///
+        import project
+    "#})?;
+    uv_snapshot!(context.filters(), context.lock().args(["--script", "script.py"]), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved in [TIME]
+    ");
+    insta::with_settings!({filters => context.filters()}, {
+        assert_snapshot!(context.read("script.py.lock"), @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [manifest]
+        build-constraints = [{ name = "build-dependency", specifier = "==1.0.0", hashes = ["sha256:[BUILD_HASH]"] }]
+        "#);
+    });
+
+    let (filename, changed_wheel) = generate_wheel_with_files(
+        &"build-dependency".parse()?,
+        &"1.0.0".parse()?,
+        &[],
+        &BTreeMap::new(),
+        None,
+        "py3-none-any",
+        &[("build_dependency/changed.py", "changed = True\n")],
+    );
+    package
+        .child("wheels")
+        .child(filename)
+        .write_binary(&changed_wheel)?;
+    let changed_hash = hex::encode(Sha256::digest(&changed_wheel));
+    let (filename, newer_wheel) = generate_wheel(
+        &"build-dependency".parse()?,
+        &"2.0.0".parse()?,
+        &[],
+        &BTreeMap::new(),
+        None,
+        "py3-none-any",
+    );
+    package
+        .child("wheels")
+        .child(filename)
+        .write_binary(&newer_wheel)?;
+    let context = context.with_filter((changed_hash, "[CHANGED_BUILD_HASH]"));
+
+    // `--no-sync` is a no-op for scripts; the overlay must still use the locked version and hash.
+    uv_snapshot!(context.filters(), context.run().args([
+        "--no-sync", "--no-cache", "--with", "./package", "script.py",
+    ]), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Resolved in [TIME]
+    Checked in [TIME]
+    warning: `--no-sync` is a no-op for Python scripts with inline metadata, which always run in isolation
+    Resolved 1 package in [TIME]
+      × Failed to build `project @ file://[TEMP_DIR]/package`
+      ├─▶ Failed to install requirements from `build-system.requires`
+      ├─▶ Failed to download `build-dependency==1.0.0`
+      ╰─▶ Hash mismatch for `build-dependency==1.0.0`
+
+          Expected:
+            sha256:[BUILD_HASH]
+
+          Computed:
+            sha256:[CHANGED_BUILD_HASH]
+    ");
+    package
+        .child("backend-executed")
+        .assert(predicate::path::missing());
     Ok(())
 }
