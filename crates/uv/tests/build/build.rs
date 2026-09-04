@@ -1,15 +1,19 @@
-use anyhow::Result;
+use std::collections::BTreeMap;
+
+use anyhow::{Result, anyhow};
 use assert_cmd::assert::OutputAssertExt;
 use assert_fs::prelude::*;
 use async_zip::base::read::mem::ZipFileReader;
 use futures::executor::block_on;
 use indoc::{formatdoc, indoc};
-use insta::assert_snapshot;
+use insta::{allow_duplicates, assert_snapshot};
 use predicates::prelude::predicate;
+use sha2::{Digest, Sha256};
 use std::env::current_dir;
 use std::path::Path;
 use url::Url;
 use uv_static::EnvVars;
+use uv_test::packse::generate_wheel;
 use uv_test::{DEFAULT_PYTHON_VERSION, apply_filters, get_bin, uv_snapshot};
 use wiremock::{
     Mock, MockServer, ResponseTemplate,
@@ -3074,5 +3078,158 @@ fn build_no_gitignore() -> Result<()> {
         .child(".gitignore")
         .assert(predicate::path::missing());
 
+    Ok(())
+}
+
+#[test]
+fn build_workspace_constraint_hashes() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let mut build_hash = String::new();
+    for (name, version) in [("build-dependency", "1.0.0"), ("project", "0.1.0")] {
+        let (filename, wheel) = generate_wheel(
+            &name.parse()?,
+            &version.parse()?,
+            &[],
+            &BTreeMap::new(),
+            None,
+            "py3-none-any",
+        );
+        if name == "build-dependency" {
+            build_hash = hex::encode(Sha256::digest(&wheel));
+        }
+        context
+            .temp_dir
+            .child("wheels")
+            .child(filename)
+            .write_binary(&wheel)?;
+    }
+    context.temp_dir.child("backend.py").write_str(indoc! {r#"
+        import shutil
+        from pathlib import Path
+
+        import build_dependency
+
+        Path(__file__).with_name("backend-executed").touch()
+
+        def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
+            source = Path(__file__).parent / "wheels" / "project-0.1.0-py3-none-any.whl"
+            shutil.copyfile(source, Path(wheel_directory) / source.name)
+            return source.name
+    "#})?;
+    let pyproject = context.temp_dir.child("pyproject.toml");
+    let constraints = context.temp_dir.child("constraints.txt");
+    let incorrect_hash = "0".repeat(64);
+    for (workspace_hash, command_line_hash) in [
+        (&build_hash, &incorrect_hash),
+        (&incorrect_hash, &build_hash),
+    ] {
+        pyproject.write_str(&formatdoc! {r#"
+            [project]
+            name = "project"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+
+            [build-system]
+            requires = ["build-dependency==1.0.0"]
+            build-backend = "backend"
+            backend-path = ["."]
+
+            [tool.uv]
+            no-index = true
+            find-links = ["wheels"]
+            build-constraint-dependencies = [
+                {{ requirement = "build-dependency==1.0.0", hashes = ["sha256:{workspace_hash}"] }},
+            ]
+        "#})?;
+        constraints.write_str(&format!(
+            "build-dependency==1.0.0 --hash=sha256:{command_line_hash}\n"
+        ))?;
+
+        allow_duplicates! {
+            uv_snapshot!(context.filters(), context.build()
+                .arg("--wheel")
+                .arg("--no-cache")
+                .args(["--build-constraint", "constraints.txt"]), @"
+            exit_code: 2 (failure)
+            ----- stderr -----
+            error: Failed to build `[TEMP_DIR]/`
+              Caused by: Build constraints for build-dependency==1.0.0 have no hashes in common
+            ");
+        }
+        context
+            .temp_dir
+            .child("backend-executed")
+            .assert(predicate::path::missing());
+    }
+
+    // An explicit opt-out applies to hashes in both workspace and command-line constraints.
+    uv_snapshot!(context.filters(), context.build()
+        .arg("--wheel")
+        .arg("--no-cache")
+        .args(["--build-constraint", "constraints.txt", "--no-verify-hashes"]), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Building wheel...
+    Successfully built dist/project-0.1.0-py3-none-any.whl
+    ");
+    fs_err::remove_file(context.temp_dir.child("backend-executed"))?;
+
+    let registry_pyproject = context.read("pyproject.toml");
+    let wheel = context
+        .temp_dir
+        .child("wheels/build_dependency-1.0.0-py3-none-any.whl");
+    let wheel_url =
+        Url::from_file_path(wheel.path()).map_err(|()| anyhow!("invalid wheel path"))?;
+    let requirement = format!("build-dependency @ {wheel_url}");
+    pyproject.write_str(&formatdoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["build-dependency==1.0.0"]
+        build-backend = "backend"
+        backend-path = ["."]
+
+        [tool.uv]
+        no-index = true
+        find-links = ["wheels"]
+        build-constraint-dependencies = [
+            {{ requirement = "{requirement}", hashes = ["sha256:{incorrect_hash}"] }},
+        ]
+    "#})?;
+    constraints.write_str(&format!("{requirement} --hash=sha256:{build_hash}\n"))?;
+    uv_snapshot!(context.filters(), context.build()
+        .arg("--wheel")
+        .arg("--no-cache")
+        .args(["--build-constraint", "constraints.txt"]), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Failed to build `[TEMP_DIR]/`
+      Caused by: Build constraints for build-dependency @ file://[TEMP_DIR]/wheels/build_dependency-1.0.0-py3-none-any.whl have no hashes in common
+    ");
+    context
+        .temp_dir
+        .child("backend-executed")
+        .assert(predicate::path::missing());
+
+    constraints.write_str(&format!(
+        "build-dependency==1.0.0 --hash=sha256:{build_hash}\n"
+    ))?;
+    pyproject.write_str(&registry_pyproject.replace(&incorrect_hash, &build_hash))?;
+    uv_snapshot!(context.filters(), context.build()
+        .arg("--wheel")
+        .arg("--no-cache")
+        .args(["--build-constraint", "constraints.txt"]), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Building wheel...
+    Successfully built dist/project-0.1.0-py3-none-any.whl
+    ");
+    context
+        .temp_dir
+        .child("backend-executed")
+        .assert(predicate::path::exists());
     Ok(())
 }

@@ -58,6 +58,27 @@ that the downloaded `setuptools` distribution matches the specified hash:
 $ uv build --build-constraint constraints.txt --require-hashes
 ```
 
+### Project build dependency hashes
+
+Provide hashes in
+[`build-constraint-dependencies`](../../reference/settings.md#build-constraint-dependencies) to
+verify downloaded build dependency archives. Use a table with `requirement` and `hashes`; entries
+without hashes can be strings:
+
+```toml
+[tool.uv]
+build-constraint-dependencies = [
+    { requirement = "setuptools==68.2.2", hashes = ["sha256:b454a35605876da60632df1a60f736524eb73cc47bbc9f3f1ef1b644de74fd2a"] },
+    "wheel<1",
+]
+```
+
+Constraints with hashes must specify an exact version (using `==`) or a direct URL.
+
+uv retains these hashes in `uv.lock` and verifies them when downloading build dependencies during
+project resolution and installation, including builds in `uv run --with` environments. These hashes
+apply to build dependencies, not the packages installed in the project environment.
+
 ## Preventing publish to PyPI
 
 If you have internal packages that you do not want to be published, you can mark them as private:

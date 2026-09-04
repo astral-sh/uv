@@ -21,7 +21,7 @@ use uv_configuration::{
 use uv_dispatch::BuildDispatch;
 use uv_distribution::LoweredExtraBuildDependencies;
 use uv_distribution_types::{
-    Dist, Index, IndexUrl, Name, Requirement, Resolution, ResolvedDist, SourceDist,
+    Dist, Index, IndexUrl, Name, NameRequirementSpecification, Resolution, ResolvedDist, SourceDist,
 };
 use uv_fs::{PortablePathBuf, Simplified};
 use uv_installer::{InstallationStrategy, SitePackages};
@@ -271,10 +271,11 @@ pub(crate) async fn sync(
                         .and_then(|uv| uv.build_constraint_dependencies.as_ref())
                 })
                 .map(|constraints| {
-                    Constraints::from_requirements(
+                    Constraints::from_specifications(
                         constraints
                             .iter()
-                            .map(|constraint| Requirement::from(constraint.clone())),
+                            .cloned()
+                            .map(NameRequirementSpecification::from),
                     )
                 });
 
@@ -874,8 +875,16 @@ pub(crate) async fn do_sync<'a>(
     // Read the build constraints from the lockfile.
     let build_constraints = target.build_constraints();
 
-    // Verify build dependencies against the full lockfile, including unselected extras and groups.
-    let build_hasher = target.lock().hash_strategy(target.install_path())?;
+    let build_hasher = HashStrategy::from_build_constraints(
+        &build_constraints,
+        Some(&venv.interpreter().to_resolver_marker_environment()),
+        uv_configuration::HashCheckingMode::Verify,
+    )?;
+    // Also verify artifacts in the full lockfile, including unselected extras and groups.
+    let build_hasher = target
+        .lock()
+        .hash_strategy(target.install_path())?
+        .with_constraint_hashes(&build_hasher)?;
 
     // Resolve the flat indexes from `--find-links`.
     let flat_index = {

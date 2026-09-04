@@ -15,8 +15,8 @@ use uv_cache_key::{cache_digest, cache_name};
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
     ActiveEnvironment, Concurrency, Constraints, DependencyGroupsWithDefaults, DryRun,
-    ExtrasSpecification, GitLfsSetting, Override, PackageOverride, Reinstall, TargetTriple,
-    Upgrade,
+    ExtrasSpecification, GitLfsSetting, HashCheckingMode, Override, PackageOverride, Reinstall,
+    TargetTriple, Upgrade,
 };
 use uv_dispatch::{BuildDispatch, SharedState};
 use uv_distribution::{DistributionDatabase, LoweredExtraBuildDependencies, LoweredRequirement};
@@ -2283,6 +2283,7 @@ pub(crate) async fn resolve_names(
     requirements: Vec<UnresolvedRequirementSpecification>,
     interpreter: &Interpreter,
     settings: &ResolverInstallerSettings,
+    build_constraints: &Constraints,
     client_builder: &BaseClientBuilder<'_>,
     state: &SharedState,
     concurrency: &Concurrency,
@@ -2381,9 +2382,19 @@ pub(crate) async fn resolve_names(
     // TODO(charlie): These are all default values. We should consider whether we want to make them
     // optional on the downstream APIs.
     let hasher = HashStrategy::default();
-    let flat_index = FlatIndex::default();
-    let build_constraints = Constraints::default();
-    let build_hasher = HashStrategy::default();
+    let build_hasher = HashStrategy::from_build_constraints(
+        build_constraints,
+        Some(&interpreter.to_resolver_marker_environment()),
+        HashCheckingMode::Verify,
+    )?;
+    let flat_index = {
+        let client = FlatIndexClient::new(client.cached_client(), client.connectivity(), cache);
+        let entries = client
+            .fetch_all(index_locations.flat_indexes().map(Index::url))
+            .await
+            .map_err(Box::new)?;
+        FlatIndex::from_entries(entries, None, &hasher, build_options)
+    };
 
     // Lower the extra build dependencies, if any.
     let extra_build_requires =
@@ -2394,7 +2405,7 @@ pub(crate) async fn resolve_names(
     let build_dispatch = BuildDispatch::new(
         &client,
         cache,
-        &build_constraints,
+        build_constraints,
         interpreter,
         index_locations,
         &flat_index,
@@ -2619,7 +2630,11 @@ pub(crate) async fn resolve_environment(
         EnvironmentResolution::Specific => HashStrategy::default(),
         EnvironmentResolution::Universal => HashStrategy::collect(HashCollection::Url),
     };
-    let build_hasher = HashStrategy::default();
+    let build_hasher = HashStrategy::from_build_constraints(
+        &build_constraints,
+        Some(&interpreter.to_resolver_marker_environment()),
+        HashCheckingMode::Verify,
+    )?;
 
     // When resolving from an interpreter, we assume an empty environment, so reinstalls aren't
     // relevant. Upgrades are only relevant for universal resolutions that use an existing lock as
@@ -2784,9 +2799,13 @@ pub(crate) async fn sync_environment(
         }
     };
 
+    let build_hasher = HashStrategy::from_build_constraints(
+        &build_constraints,
+        Some(&interpreter.to_resolver_marker_environment()),
+        HashCheckingMode::Verify,
+    )?;
     // TODO(charlie): These are all default values. We should consider whether we want to make them
     // optional on the downstream APIs.
-    let build_hasher = HashStrategy::default();
     let dry_run = DryRun::default();
     let workspace_cache = WorkspaceCache::default();
 
@@ -3042,9 +3061,13 @@ pub(crate) async fn update_environment(
         .build_options(build_options.clone())
         .build();
 
+    let build_hasher = HashStrategy::from_build_constraints(
+        &build_constraints,
+        Some(&interpreter.to_resolver_marker_environment()),
+        HashCheckingMode::Verify,
+    )?;
     // TODO(charlie): These are all default values. We should consider whether we want to make them
     // optional on the downstream APIs.
-    let build_hasher = HashStrategy::default();
     let extras = ExtrasSpecification::default();
     let groups = BTreeMap::new();
     let hasher = HashStrategy::default();

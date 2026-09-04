@@ -1944,6 +1944,50 @@ async fn lock_sdist_url_locked_build_dependency_hash_mismatch() -> Result<()> {
         sentinel.exists(),
         "the upgraded build dependency was not executed"
     );
+
+    // Current explicit hashes can replace older lockfile hashes during an unlocked update.
+    fs_err::remove_file(&sentinel)?;
+    context.temp_dir.child("uv.lock").write_str(&locked)?;
+    let pyproject = context.read("pyproject.toml");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&formatdoc! {r#"
+        {pyproject}
+
+        [tool.uv]
+        build-constraint-dependencies = [
+            {{ requirement = "review-dep==1.0.0", hashes = ["sha256:{replacement_digest}"] }},
+        ]
+    "#})?;
+    Mock::given(path("/replacement-links"))
+        .respond_with(ResponseTemplate::new(200).set_body_raw(
+            format!(r#"<a href="{replacement_wheel_path}#sha256={replacement_digest}">review_dep-1.0.0-2-py3-none-any.whl</a>"#),
+            "text/html",
+        ))
+        .mount(&server)
+        .await;
+    uv_snapshot!(context.filters(), context.lock().arg("--upgrade").arg("--no-cache")
+        .arg("--no-index").arg("--find-links").arg(format!("{}/replacement-links", server.uri()))
+        .env("UV_LOCK_TEST_SENTINEL", sentinel.path()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+    assert!(sentinel.exists());
+
+    // Frozen installation enforces the updated lockfile and its explicit build constraints.
+    fs_err::remove_file(&sentinel)?;
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--no-cache").arg("--reinstall")
+        .env("UV_LOCK_TEST_SENTINEL", sentinel.path()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     ~ demo-pkg==1.0.0 (from http://[LOCALHOST]/files/demo_pkg-1.0.0.tar.gz)
+    ");
+    assert!(sentinel.exists());
     Ok(())
 }
 
