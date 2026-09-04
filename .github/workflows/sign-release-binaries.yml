@@ -1,0 +1,241 @@
+# Exercise separated macOS signing and wheel assembly with the self-signed CI certificate.
+name: "Sign release binaries (test)"
+
+on:
+  workflow_call:
+
+permissions: {}
+
+env:
+  TARGET: aarch64-apple-darwin
+  ARTIFACT_SUFFIX: aarch64-apple-darwin
+
+jobs:
+  prepare-macos:
+    name: "prepare macOS signing inputs"
+    runs-on: depot-ubuntu-24.04-4
+    steps:
+      - name: "Download unsigned wheels"
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: wheels_*-${{ env.ARTIFACT_SUFFIX }}
+          path: wheels
+          merge-multiple: true
+
+      - name: "Extract executable wheel members"
+        shell: bash
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+
+          uv_wheels=(wheels/uv-*.whl)
+          uv_build_wheels=(wheels/uv_build-*.whl)
+          if [[ ${#uv_wheels[@]} -ne 1 || ${#uv_build_wheels[@]} -ne 1 ]]; then
+            echo "Expected one uv wheel and one uv-build wheel." >&2
+            exit 1
+          fi
+
+          extract_member() {
+            local wheel="$1"
+            local distribution="$2"
+            local binary="$3"
+            local member
+
+            member="$(unzip -Z1 "$wheel" | grep -E "^${distribution}-[^/]+\.data/scripts/${binary}$")"
+            unzip -p "$wheel" "$member" > "unsigned/$binary"
+            chmod 0755 "unsigned/$binary"
+          }
+
+          mkdir -p unsigned
+          extract_member "${uv_wheels[0]}" uv uv
+          extract_member "${uv_wheels[0]}" uv uvx
+          extract_member "${uv_build_wheels[0]}" uv_build uv-build
+
+      - name: "Upload unsigned executable wheel members"
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: unsigned-macos-${{ env.TARGET }}
+          path: unsigned/*
+          if-no-files-found: error
+
+  sign-macos:
+    name: "sign macOS binaries"
+    needs: prepare-macos
+    runs-on: namespace-profile-macos-15
+    environment: release-test
+    steps:
+      - name: "Download unsigned executable wheel members"
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: unsigned-macos-${{ env.TARGET }}
+          path: unsigned
+
+      - name: "Sign executable wheel members"
+        shell: bash
+        env:
+          CODESIGN_CERTIFICATE_MACOS: ${{ secrets.CODESIGN_CERTIFICATE_MACOS }}
+          CODESIGN_CERTIFICATE_PASSWORD: ${{ secrets.CODESIGN_CERTIFICATE_PASSWORD }}
+          CODESIGN_IDENTITY_MACOS: ${{ secrets.CODESIGN_IDENTITY_MACOS }}
+        run: |
+          set -euo pipefail
+
+          certificate="$RUNNER_TEMP/codesign-test.p12"
+          keychain="$RUNNER_TEMP/codesign-test.keychain-db"
+          keychain_password="$(uuidgen | tr -d '-')"
+          trap 'security delete-keychain "$keychain" >/dev/null 2>&1 || true; rm -f "$certificate"' EXIT
+
+          printf '%s' "$CODESIGN_CERTIFICATE_MACOS" | base64 --decode > "$certificate"
+          security create-keychain -p "$keychain_password" "$keychain"
+          security set-keychain-settings -t 21600 -u "$keychain"
+          security unlock-keychain -p "$keychain_password" "$keychain"
+          security import "$certificate" \
+            -k "$keychain" \
+            -P "$CODESIGN_CERTIFICATE_PASSWORD" \
+            -f pkcs12 \
+            -T /usr/bin/codesign \
+            -T /usr/bin/security >/dev/null
+          security set-key-partition-list \
+            -S apple-tool:,apple:,codesign: \
+            -s \
+            -k "$keychain_password" \
+            "$keychain" >/dev/null
+
+          existing_keychains=()
+          while IFS= read -r existing_keychain; do
+            existing_keychain="${existing_keychain#\"}"
+            existing_keychain="${existing_keychain%\"}"
+            existing_keychains+=("$existing_keychain")
+          done < <(security list-keychains -d user | sed -E 's/^[[:space:]]+//')
+          security list-keychains -d user -s "$keychain" "${existing_keychains[@]}"
+
+          mkdir -p signed
+          for binary in uv uvx uv-build; do
+            test -f "unsigned/$binary"
+            cp "unsigned/$binary" "signed/$binary"
+            codesign \
+              --force \
+              --keychain "$keychain" \
+              --sign "$CODESIGN_IDENTITY_MACOS" \
+              --options runtime \
+              --timestamp=none \
+              "signed/$binary"
+          done
+
+      - name: "Upload signed executable wheel members"
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: signed-macos-${{ env.TARGET }}
+          path: signed/*
+          if-no-files-found: error
+
+  assemble-macos:
+    name: "assemble signed macOS artifacts"
+    needs: sign-macos
+    runs-on: depot-ubuntu-24.04-4
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: "Download unsigned wheels"
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: wheels_*-${{ env.ARTIFACT_SUFFIX }}
+          path: wheels
+          merge-multiple: true
+
+      - name: "Download signed executable wheel members"
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: signed-macos-${{ env.TARGET }}
+          path: signed
+
+      - name: "Assemble signed wheels and archive"
+        shell: bash
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+
+          uv_wheels=(wheels/uv-*.whl)
+          uv_build_wheels=(wheels/uv_build-*.whl)
+          if [[ ${#uv_wheels[@]} -ne 1 || ${#uv_build_wheels[@]} -ne 1 ]]; then
+            echo "Expected one uv wheel and one uv-build wheel." >&2
+            exit 1
+          fi
+
+          scripts/replace-wheel-binaries.sh signed dist/wheels "${uv_wheels[0]}" "${uv_build_wheels[0]}"
+          python3 scripts/check_uv_wheel_contents.py dist/wheels/*.whl
+
+          archive_name="uv-$TARGET"
+          mkdir -p "$archive_name"
+          cp signed/uv "$archive_name/uv"
+          cp signed/uvx "$archive_name/uvx"
+          chmod 0755 "$archive_name/uv" "$archive_name/uvx"
+          tar czf "dist/$archive_name.tar.gz" "$archive_name"
+          (cd dist && shasum -a 256 "$archive_name.tar.gz" > "$archive_name.tar.gz.sha256")
+
+      - name: "Upload signed macOS artifacts"
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: signed-macos-artifacts-${{ env.TARGET }}
+          path: dist
+          if-no-files-found: error
+
+  verify-macos:
+    name: "verify signed macOS artifacts"
+    needs: assemble-macos
+    runs-on: namespace-profile-macos-15
+    steps:
+      - name: "Download signed macOS artifacts"
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: signed-macos-artifacts-${{ env.TARGET }}
+          path: dist
+
+      - name: "Verify signatures and archive checksum"
+        shell: bash
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+
+          verify() {
+            local binary="$1"
+            local details
+            codesign --verify --strict --verbose=4 "$binary"
+            details="$(codesign -dv --verbose=4 "$binary" 2>&1)"
+            if grep -q 'Signature=adhoc' <<< "$details"; then
+              echo "Expected an identity signature on '$binary'." >&2
+              exit 1
+            fi
+          }
+
+          uv_wheels=(dist/wheels/uv-*.whl)
+          uv_build_wheels=(dist/wheels/uv_build-*.whl)
+          if [[ ${#uv_wheels[@]} -ne 1 || ${#uv_build_wheels[@]} -ne 1 ]]; then
+            echo "Expected one signed uv wheel and one signed uv-build wheel." >&2
+            exit 1
+          fi
+
+          extract_and_verify() {
+            local wheel="$1"
+            local distribution="$2"
+            local binary="$3"
+            local member
+            local extracted
+
+            member="$(unzip -Z1 "$wheel" | grep -E "^${distribution}-[^/]+\.data/scripts/${binary}$")"
+            extracted="$RUNNER_TEMP/$binary"
+            unzip -p "$wheel" "$member" > "$extracted"
+            chmod 0755 "$extracted"
+            verify "$extracted"
+          }
+
+          extract_and_verify "${uv_wheels[0]}" uv uv
+          extract_and_verify "${uv_wheels[0]}" uv uvx
+          extract_and_verify "${uv_build_wheels[0]}" uv_build uv-build
+
+          archive_name="uv-$TARGET"
+          (cd dist && shasum -a 256 --check "$archive_name.tar.gz.sha256")
+          tar xzf "dist/$archive_name.tar.gz" -C "$RUNNER_TEMP"
+          verify "$RUNNER_TEMP/$archive_name/uv"
+          verify "$RUNNER_TEMP/$archive_name/uvx"
