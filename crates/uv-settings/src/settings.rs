@@ -27,7 +27,9 @@ use uv_resolver::{
     serialize_exclude_newer_package_with_spans,
 };
 use uv_torch::TorchMode;
-use uv_workspace::pyproject::{ExtraBuildDependencies, OverrideDependency};
+use uv_workspace::pyproject::{
+    BuildConstraintDependency, ExtraBuildDependencies, OverrideDependency,
+};
 use uv_workspace::pyproject_mut::AddBoundsKind;
 
 use crate::{EnvironmentOptions, FilesystemOptions};
@@ -157,7 +159,7 @@ pub struct Options {
     pub constraint_dependencies: Option<Vec<Requirement<VerbatimParsedUrl>>>,
 
     #[cfg_attr(feature = "schemars", schemars(skip))]
-    pub build_constraint_dependencies: Option<Vec<Requirement<VerbatimParsedUrl>>>,
+    pub build_constraint_dependencies: Option<Vec<BuildConstraintDependency>>,
 
     #[cfg_attr(feature = "schemars", schemars(skip))]
     pub environments: Option<SupportedEnvironments>,
@@ -2635,7 +2637,7 @@ struct OptionsWire {
     override_dependencies: Option<Vec<OverrideDependency>>,
     exclude_dependencies: Option<Vec<ExcludeDependency>>,
     constraint_dependencies: Option<Vec<Requirement<VerbatimParsedUrl>>>,
-    build_constraint_dependencies: Option<Vec<Requirement<VerbatimParsedUrl>>>,
+    build_constraint_dependencies: Option<Vec<BuildConstraintDependency>>,
     environments: Option<SupportedEnvironments>,
     required_environments: Option<SupportedEnvironments>,
 
