@@ -7,8 +7,11 @@ use assert_fs::prelude::*;
 use async_zip::base::write::ZipFileWriter;
 use async_zip::{Compression, ZipEntryBuilder};
 use futures::executor::block_on;
+use indoc::indoc;
 use insta::{allow_duplicates, assert_snapshot};
 use predicates::prelude::predicate;
+use serde_json::json;
+use sha2::{Digest, Sha256};
 use wiremock::{
     Mock, MockServer, ResponseTemplate,
     matchers::{method, path},
@@ -18,6 +21,7 @@ use uv_cache::CacheBucket;
 use uv_fs::PortablePath;
 #[cfg(unix)]
 use uv_fs::create_symlink;
+use uv_test::archive::write_tar_gz;
 use uv_test::{TestContext, get_bin, uv_snapshot};
 
 /// A custom cache directory must configure commands and snapshot filters together.
@@ -356,6 +360,135 @@ fn cache_init_failure() -> Result<()> {
       Caused by: failed to create directory `[CACHE_DIR]/`: Permission denied (os error 13)
     ");
 
+    Ok(())
+}
+
+/// Index hashes must be checked before building an sdist or reading its metadata.
+#[tokio::test]
+async fn index_source_hashes() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let server = MockServer::start().await;
+    let index_url = format!("{}/simple/", server.uri());
+    let marker = context.temp_dir.child("backend-marker");
+    let wheel = context
+        .workspace_root
+        .join("test/links/ok-1.0.0-py3-none-any.whl");
+    let context = context
+        .with_env("INDEX_SOURCE_MARKER", marker.path())
+        .with_env("INDEX_SOURCE_WHEEL", wheel);
+    context
+        .temp_dir
+        .child("requirements.txt")
+        .write_str("ok==1.0.0")?;
+
+    let mut archive = Vec::new();
+    write_tar_gz(
+        &mut archive,
+        &[
+            (
+                "ok-1.0.0/pyproject.toml",
+                indoc! {r#"
+                    [build-system]
+                    requires = []
+                    build-backend = "backend"
+                    backend-path = ["."]
+                "#},
+            ),
+            (
+                "ok-1.0.0/backend.py",
+                indoc! {r#"
+                    import os
+                    import shutil
+                    from pathlib import Path
+
+                    Path(os.environ["INDEX_SOURCE_MARKER"]).write_text("executed")
+
+                    def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
+                        wheel = Path(os.environ["INDEX_SOURCE_WHEEL"])
+                        shutil.copyfile(wheel, Path(wheel_directory) / wheel.name)
+                        return wheel.name
+                "#},
+            ),
+        ],
+    )?;
+    let source_hash = hex::encode(Sha256::digest(&archive));
+    let wrong_hash = "0".repeat(64);
+    let context = context
+        .with_filter((source_hash.clone(), "[SOURCE_HASH]"))
+        .with_filter((wrong_hash.clone(), "[WRONG_HASH]"));
+    Mock::given(method("GET"))
+        .and(path("/ok-1.0.0.tar.gz"))
+        .respond_with(ResponseTemplate::new(200).set_body_bytes(archive))
+        .mount(&server)
+        .await;
+    let source_url = format!("{}/ok-1.0.0.tar.gz", server.uri());
+    let index_response = |hash: &str| {
+        ResponseTemplate::new(200).set_body_raw(
+            json!({
+                "files": [{
+                    "filename": "ok-1.0.0.tar.gz",
+                    "url": source_url,
+                    "hashes": {"sha256": hash},
+                    "upload-time": "2024-01-01T00:00:00Z"
+                }]
+            })
+            .to_string(),
+            "application/vnd.pypi.simple.v1+json",
+        )
+    };
+    let index = Mock::given(method("GET"))
+        .and(path("/simple/ok/"))
+        .respond_with(index_response(&wrong_hash))
+        .mount_as_scoped(&server)
+        .await;
+
+    uv_snapshot!(context.filters(), context.pip_sync()
+        .arg("requirements.txt").arg("--index-url").arg(&index_url), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+      × Failed to download and build `ok==1.0.0`
+      ╰─▶ Hash mismatch for `ok==1.0.0`
+
+          Expected:
+            sha256:[WRONG_HASH]
+
+          Computed:
+            sha256:[SOURCE_HASH]
+    ");
+    uv_snapshot!(context.filters(), context.pip_compile()
+        .arg("requirements.txt").arg("--index-url").arg(&index_url).arg("--no-header").arg("--generate-hashes"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+      × Failed to download and build `ok==1.0.0`
+      ╰─▶ Hash mismatch for `ok==1.0.0`
+
+          Expected:
+            sha256:[WRONG_HASH]
+
+          Computed:
+            sha256:[SOURCE_HASH]
+    ");
+    marker.assert(predicate::path::missing());
+
+    // The same source is usable once the index supplies its actual hash.
+    drop(index);
+    Mock::given(method("GET"))
+        .and(path("/simple/ok/"))
+        .respond_with(index_response(&source_hash))
+        .mount(&server)
+        .await;
+    uv_snapshot!(context.filters(), context.pip_sync()
+        .arg("requirements.txt").arg("--index-url").arg(&index_url).arg("--refresh"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + ok==1.0.0
+    ");
+    marker.assert(predicate::path::is_file());
+    context.assert_installed("ok", "1.0.0");
     Ok(())
 }
 
