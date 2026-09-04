@@ -83,7 +83,7 @@ impl Requirement {
 
     /// Convert to a [`Requirement`] with an absolute path based on the given root.
     #[must_use]
-    pub fn to_absolute(self, path: &Path) -> Self {
+    pub(crate) fn into_absolute(self, path: &Path) -> Self {
         Self {
             source: self.source.into_absolute(path),
             ..self
