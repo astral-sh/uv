@@ -28,7 +28,7 @@ pub fn set_lock_timeout(timeout: Duration) {
     LOCK_TIMEOUT_SECS.store(secs, Ordering::Relaxed);
 }
 
-/// Retrieve the current lock timeout, falling back to reading UV_LOCK_TIMEOUT directly
+/// Retrieve the current lock timeout, falling back to reading `UV_LOCK_TIMEOUT` directly
 /// or defaulting to 5 minutes if unset.
 pub(crate) fn lock_timeout() -> Duration {
     let secs = LOCK_TIMEOUT_SECS.load(Ordering::Relaxed);
