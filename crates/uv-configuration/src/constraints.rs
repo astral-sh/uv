@@ -3,19 +3,33 @@ use std::borrow::Cow;
 use either::Either;
 use rustc_hash::FxHashMap;
 
-use uv_distribution_types::{Requirement, RequirementSource};
+use uv_distribution_types::{NameRequirementSpecification, Requirement, RequirementSource};
 use uv_normalize::PackageName;
 use uv_pep508::MarkerTree;
 
 /// A set of constraints for a set of requirements.
 #[derive(Debug, Default, Clone)]
-pub struct Constraints(FxHashMap<PackageName, Vec<Requirement>>);
+pub struct Constraints {
+    /// Original declarations, before removing extras or empty constraints.
+    specifications: Vec<NameRequirementSpecification>,
+    /// Constraints grouped by package name for resolution.
+    requirements: FxHashMap<PackageName, Vec<Requirement>>,
+}
 
 impl Constraints {
     /// Create a new set of constraints from a set of requirements.
     pub fn from_requirements(requirements: impl Iterator<Item = Requirement>) -> Self {
+        Self::from_specifications(requirements.map(NameRequirementSpecification::from))
+    }
+
+    /// Create constraints while retaining their hashes and original declarations.
+    pub fn from_specifications(
+        specifications: impl IntoIterator<Item = NameRequirementSpecification>,
+    ) -> Self {
+        let specifications: Vec<_> = specifications.into_iter().collect();
         let mut constraints: FxHashMap<PackageName, Vec<Requirement>> = FxHashMap::default();
-        for requirement in requirements {
+        for specification in &specifications {
+            let requirement = &specification.requirement;
             // Skip empty constraints.
             if let RequirementSource::Registry { specifier, .. } = &requirement.source
                 && specifier.is_empty()
@@ -29,20 +43,28 @@ impl Constraints {
                 .push(Requirement {
                     // We add and apply constraints independent of their extras.
                     extras: Box::new([]),
-                    ..requirement
+                    ..requirement.clone()
                 });
         }
-        Self(constraints)
+        Self {
+            specifications,
+            requirements: constraints,
+        }
+    }
+
+    /// Return the original declarations, including hashes, in input order.
+    pub fn specifications(&self) -> impl Iterator<Item = &NameRequirementSpecification> {
+        self.specifications.iter()
     }
 
     /// Return an iterator over all [`Requirement`]s in the constraint set.
     pub fn requirements(&self) -> impl Iterator<Item = &Requirement> {
-        self.0.values().flat_map(|requirements| requirements.iter())
+        self.requirements.values().flatten()
     }
 
     /// Get the constraints for a package.
     pub fn get(&self, name: &PackageName) -> Option<&Vec<Requirement>> {
-        self.0.get(name)
+        self.requirements.get(name)
     }
 
     /// Apply the constraints to a set of requirements.
@@ -83,5 +105,52 @@ impl Constraints {
                 }),
             )))
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use anyhow::Result;
+
+    use uv_distribution_types::{NameRequirementSpecification, Requirement};
+    use uv_pep508::Requirement as Pep508Requirement;
+
+    use super::Constraints;
+
+    #[test]
+    fn preserve_specifications() -> Result<()> {
+        let specifications = [
+            NameRequirementSpecification {
+                requirement: Requirement::from("foo[bar]".parse::<Pep508Requirement<_>>()?),
+                hashes: vec!["sha256:abc".to_string()],
+            },
+            NameRequirementSpecification {
+                requirement: Requirement::from(
+                    "baz[qux]==1 ; python_version >= '3.12'".parse::<Pep508Requirement<_>>()?,
+                ),
+                hashes: vec!["sha256:def".to_string(), "sha512:abc".to_string()],
+            },
+            NameRequirementSpecification::from(Requirement::from(
+                "baz<2".parse::<Pep508Requirement<_>>()?,
+            )),
+        ];
+        let constraints = Constraints::from_specifications(specifications.clone());
+
+        assert_eq!(
+            constraints.specifications().cloned().collect::<Vec<_>>(),
+            specifications,
+        );
+        assert!(constraints.get(&"foo".parse()?).is_none());
+        insta::assert_debug_snapshot!(
+            constraints.requirements().map(ToString::to_string).collect::<Vec<_>>(),
+            @r#"
+        [
+            "baz==1 ; python_full_version >= '3.12'",
+            "baz<2",
+        ]
+        "#
+        );
+
+        Ok(())
     }
 }
