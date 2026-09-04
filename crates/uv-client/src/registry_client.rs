@@ -24,6 +24,7 @@ use uv_distribution_types::{
     IndexMetadataRef, IndexStatusCodeDecision, IndexStatusCodeStrategy, IndexUrl, Name,
     RegistryBuiltWheel, Zstd,
 };
+use uv_extract::hash::Hasher;
 use uv_git::{GIT_LFS, GitError, GitHttpSettings, GitResolver, Reporter};
 use uv_metadata::{read_metadata_async_seek, read_metadata_async_stream};
 use uv_normalize::PackageName;
@@ -1025,7 +1026,7 @@ impl RegistryClient {
         } = wheel;
 
         // If the metadata file is available at its own url (PEP 658), download it from there.
-        if file.dist_info_metadata.is_some() {
+        if let Some(hashes) = &file.dist_info_metadata {
             let mut url = url.clone();
             let path = format!("{}.metadata", url.path());
             url.set_path(&path);
@@ -1060,6 +1061,20 @@ impl RegistryClient {
                 let bytes = response.bytes().await.map_err(|err| {
                     ErrorKind::from_reqwest(url.clone(), err, self.client.certificate_source())
                 })?;
+
+                // Verify the downloaded bytes before parsing or caching the metadata.
+                for expected in hashes.iter() {
+                    let mut hasher = Hasher::from(expected.algorithm());
+                    hasher.update(&bytes);
+                    let actual = HashDigest::from(hasher);
+                    if !actual.digest.eq_ignore_ascii_case(expected.digest.as_ref()) {
+                        return Err(Error::from(ErrorKind::MetadataHashMismatch {
+                            url: url.clone(),
+                            expected: expected.clone(),
+                            actual,
+                        }));
+                    }
+                }
 
                 info_span!("parse_metadata21")
                     .in_scope(|| ResolutionMetadata::parse_metadata(bytes.as_ref()))
