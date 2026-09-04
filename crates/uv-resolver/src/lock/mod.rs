@@ -34,10 +34,10 @@ use uv_distribution_filename::{
 use uv_distribution_types::{
     BuiltDist, DependencyMetadata, DirectUrlBuiltDist, DirectUrlSourceDist, DirectorySourceDist,
     Dist, FileLocation, FirstParty, GitDirectorySourceDist, GitPathBuiltDist, GitPathSourceDist,
-    Identifier, IndexLocations, IndexMetadata, IndexUrl, Name, PYPI_URL, PathBuiltDist,
-    PathSourceDist, RegistryBuiltDist, RegistryBuiltWheel, RegistrySourceDist, RemoteSource,
-    Requirement, RequirementSource, RequiresPython, ResolvedDist, SimplifiedMarkerTree,
-    StaticMetadata, ToUrlError, UrlString,
+    Identifier, IndexLocations, IndexMetadata, IndexUrl, Name, NameRequirementSpecification,
+    PYPI_URL, PathBuiltDist, PathSourceDist, RegistryBuiltDist, RegistryBuiltWheel,
+    RegistrySourceDist, RemoteSource, Requirement, RequirementSource, RequiresPython, ResolvedDist,
+    SimplifiedMarkerTree, StaticMetadata, ToUrlError, UrlString,
 };
 use uv_fs::{PortablePath, PortablePathBuf, Simplified, normalize_path, try_relative_to_if};
 use uv_git::{RepositoryReference, ResolvedRepositoryReference};
@@ -1678,7 +1678,7 @@ impl Lock {
 
     /// Returns the build constraints that were used to generate this lock.
     pub fn build_constraints(&self, root: &Path) -> Constraints {
-        Constraints::from_requirements(
+        Constraints::from_specifications(
             self.manifest
                 .build_constraints
                 .iter()
@@ -2359,7 +2359,7 @@ impl Lock {
         constraints: &[Requirement],
         overrides: &[Override<Requirement>],
         excludes: &[ExcludeDependency],
-        build_constraints: &[Requirement],
+        build_constraints: &Constraints,
         dependency_groups: &BTreeMap<GroupName, Vec<Requirement>>,
         dependency_metadata: &DependencyMetadata,
         indexes: Option<&IndexLocations>,
@@ -2548,17 +2548,27 @@ impl Lock {
 
         // Validate that the lockfile was generated with the same build constraints.
         {
+            let normalize_build_constraint = |constraint: NameRequirementSpecification| {
+                Ok::<_, LockError>(NameRequirementSpecification {
+                    requirement: normalize_requirement(
+                        constraint.requirement,
+                        root,
+                        &self.requires_python,
+                    )?,
+                    hashes: constraint.hashes,
+                })
+            };
             let expected: BTreeSet<_> = build_constraints
-                .iter()
+                .specifications()
                 .cloned()
-                .map(|requirement| normalize_requirement(requirement, root, &self.requires_python))
+                .map(normalize_build_constraint)
                 .collect::<Result<_, _>>()?;
             let actual: BTreeSet<_> = self
                 .manifest
                 .build_constraints
                 .iter()
                 .cloned()
-                .map(|requirement| normalize_requirement(requirement, root, &self.requires_python))
+                .map(normalize_build_constraint)
                 .collect::<Result<_, _>>()?;
             if expected != actual {
                 return Ok(SatisfiesResult::MismatchedBuildConstraints(
@@ -3409,7 +3419,10 @@ pub enum SatisfiesResult<'lock> {
     /// The lockfile uses a different set of excludes.
     MismatchedExcludes(BTreeSet<ExcludeDependency>, BTreeSet<ExcludeDependency>),
     /// The lockfile uses a different set of build constraints.
-    MismatchedBuildConstraints(BTreeSet<Requirement>, BTreeSet<Requirement>),
+    MismatchedBuildConstraints(
+        BTreeSet<NameRequirementSpecification>,
+        BTreeSet<NameRequirementSpecification>,
+    ),
     /// The lockfile uses a different set of dependency groups.
     MismatchedDependencyGroups(
         BTreeMap<GroupName, BTreeSet<Requirement>>,
@@ -3578,7 +3591,7 @@ pub struct ResolverManifest {
     excludes: BTreeSet<ExcludeDependency>,
     /// The build constraints provided to the resolver.
     #[serde(default)]
-    build_constraints: BTreeSet<Requirement>,
+    build_constraints: BTreeSet<NameRequirementSpecification>,
     /// The static metadata provided to the resolver.
     #[serde(default)]
     dependency_metadata: BTreeSet<StaticMetadata>,
@@ -3593,7 +3606,7 @@ impl ResolverManifest {
         constraints: impl IntoIterator<Item = Requirement>,
         overrides: impl IntoIterator<Item = Override<Requirement>>,
         excludes: impl IntoIterator<Item = ExcludeDependency>,
-        build_constraints: impl IntoIterator<Item = Requirement>,
+        build_constraints: impl IntoIterator<Item = NameRequirementSpecification>,
         dependency_groups: impl IntoIterator<Item = (GroupName, Vec<Requirement>)>,
         dependency_metadata: impl IntoIterator<Item = StaticMetadata>,
     ) -> Self {

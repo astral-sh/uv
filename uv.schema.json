@@ -44,10 +44,10 @@
       ]
     },
     "build-constraint-dependencies": {
-      "description": "PEP 508-style requirements, e.g., `ruff==0.5.0`, or `ruff @ https://...`.",
+      "description": "Constraints to apply when solving build dependencies.\n\nBuild constraints are used to restrict the versions of build dependencies that are selected\nwhen building a package during resolution or installation.\n\nIncluding a package as a constraint will _not_ trigger installation of the package during\na build; instead, the package must be requested elsewhere in the project's build dependency\ngraph.\n\n!!! note\n    In `uv lock`, `uv sync`, and `uv run`, uv will only read `build-constraint-dependencies` from\n    the `pyproject.toml` at the workspace root, and will ignore any declarations in other\n    workspace members or `uv.toml` files.\n\nHashes can be included to verify downloaded build dependency archives. To provide hashes,\nuse a table with `requirement` and `hashes`. uv records these hashes in `uv.lock`.",
       "type": ["array", "null"],
       "items": {
-        "type": "string"
+        "$ref": "#/definitions/BuildConstraintDependency"
       }
     },
     "cache-dir": {
@@ -774,6 +774,36 @@
         }
       }
     },
+    "BuildConstraintDependency": {
+      "description": "A build constraint, optionally accompanied by archive hashes.",
+      "anyOf": [
+        {
+          "description": "A PEP 508 requirement without additional hashes.",
+          "allOf": [
+            {
+              "$ref": "#/definitions/Requirement"
+            }
+          ]
+        },
+        {
+          "description": "A PEP 508 requirement and its archive hashes.",
+          "type": "object",
+          "properties": {
+            "hashes": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "requirement": {
+              "$ref": "#/definitions/Requirement"
+            }
+          },
+          "additionalProperties": false,
+          "required": ["requirement", "hashes"]
+        }
+      ]
+    },
     "CacheKey": {
       "anyOf": [
         {
@@ -911,6 +941,7 @@
       ]
     },
     "ExcludeNewerPackage": {
+      "description": "Package-specific `exclude-newer` settings.\n\nEntries are stored in package-name order for deterministic serialization.",
       "type": "object",
       "additionalProperties": {
         "$ref": "#/definitions/ExcludeNewerOverride"

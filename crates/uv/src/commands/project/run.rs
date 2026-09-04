@@ -25,7 +25,7 @@ use uv_configuration::{
     InstallOptions, TargetTriple,
 };
 use uv_distribution::LoweredExtraBuildDependencies;
-use uv_distribution_types::Requirement;
+use uv_distribution_types::NameRequirementSpecification;
 use uv_fs::which::is_executable;
 use uv_fs::{PythonExt, Simplified, create_symlink};
 use uv_installer::{InstallationStrategy, SatisfiesResult, SitePackages};
@@ -176,6 +176,7 @@ pub(crate) async fn run(
 
     // The lockfile used for the base environment.
     let mut base_lock: Option<(Lock, PathBuf)> = None;
+    let mut unlocked_build_constraints = Constraints::default();
 
     // Determine whether the command to execute is a PEP 723 script.
     let temp_dir;
@@ -361,6 +362,26 @@ pub(crate) async fn run(
                 }
             }
 
+            // Preserve constraints for `--with` even when the script omits `dependencies`.
+            unlocked_build_constraints = script
+                .metadata()
+                .tool
+                .as_ref()
+                .and_then(|tool| {
+                    tool.uv
+                        .as_ref()
+                        .and_then(|uv| uv.build_constraint_dependencies.as_ref())
+                })
+                .map(|constraints| {
+                    Constraints::from_specifications(
+                        constraints
+                            .iter()
+                            .cloned()
+                            .map(NameRequirementSpecification::from),
+                    )
+                })
+                .unwrap_or_default();
+
             // Install the script requirements, if necessary. Otherwise, use an isolated environment.
             if let Some(spec) = script_specification(
                 (&script).into(),
@@ -397,23 +418,6 @@ pub(crate) async fn run(
                 .await?
                 .into_environment()?;
 
-                let build_constraints = script
-                    .metadata()
-                    .tool
-                    .as_ref()
-                    .and_then(|tool| {
-                        tool.uv
-                            .as_ref()
-                            .and_then(|uv| uv.build_constraint_dependencies.as_ref())
-                    })
-                    .map(|constraints| {
-                        Constraints::from_requirements(
-                            constraints
-                                .iter()
-                                .map(|constraint| Requirement::from(constraint.clone())),
-                        )
-                    });
-
                 let _lock = environment
                     .lock()
                     .await
@@ -428,7 +432,7 @@ pub(crate) async fn run(
                     modifications,
                     python_platform.as_ref(),
                     SourceTreeEditablePolicy::Project,
-                    build_constraints.unwrap_or_default(),
+                    unlocked_build_constraints.clone(),
                     script_extra_build_requires,
                     &settings,
                     &client_builder,
@@ -737,6 +741,17 @@ pub(crate) async fn run(
                         .flatten()
                         .map(|lock| (lock, project.workspace().install_path().to_owned()));
                 }
+                if frozen.is_none() && !requirements.is_empty() {
+                    unlocked_build_constraints = LockTarget::from(project.workspace())
+                        .lower_build_constraints(
+                            &settings.resolver.index_locations,
+                            &settings.resolver.sources,
+                            &cache,
+                            workspace_cache,
+                            client_builder.credentials_cache(),
+                        )
+                        .await?;
+                }
             } else {
                 let _lock = venv
                     .lock()
@@ -969,10 +984,16 @@ pub(crate) async fn run(
         Some(spec) => {
             debug!("Syncing `--with` requirements to cached environment");
 
-            // Read the build constraints from the lock file.
-            let build_constraints = base_lock
-                .as_ref()
-                .map(|(lock, path)| lock.build_constraints(path));
+            // `--no-sync` can use lockfile versions as preferences while applying current project
+            // build hashes. `--frozen` continues to use the hashes recorded in the lockfile.
+            let build_constraints = if no_sync && frozen.is_none() {
+                unlocked_build_constraints
+            } else {
+                base_lock
+                    .as_ref()
+                    .map(|(lock, path)| lock.build_constraints(path))
+                    .unwrap_or(unlocked_build_constraints)
+            };
 
             // Read the preferences.
             let spec = EnvironmentSpecification::from(spec).with_preferences(
@@ -992,7 +1013,7 @@ pub(crate) async fn run(
 
             let result = CachedEnvironment::from_spec(
                 spec,
-                build_constraints.unwrap_or_default(),
+                build_constraints,
                 &base_interpreter,
                 python_platform.as_ref(),
                 &settings,

@@ -85,7 +85,7 @@ pub(crate) async fn pip_install(
     constraints_from_workspace: Vec<Requirement>,
     overrides_from_workspace: Vec<Override<Requirement>>,
     excludes_from_workspace: Vec<ExcludeDependency>,
-    build_constraints_from_workspace: Vec<Requirement>,
+    build_constraints_from_workspace: Vec<NameRequirementSpecification>,
     editable: Option<EditableMode>,
     extras: &ExtrasSpecification,
     groups: &GroupsSpecification,
@@ -200,12 +200,7 @@ pub(crate) async fn pip_install(
         operations::read_constraints(build_constraints, &client_builder)
             .await?
             .into_iter()
-            .chain(
-                build_constraints_from_workspace
-                    .iter()
-                    .cloned()
-                    .map(NameRequirementSpecification::from),
-            ),
+            .chain(build_constraints_from_workspace.iter().cloned()),
     );
 
     // Detect the current Python interpreter.
@@ -472,21 +467,16 @@ pub(crate) async fn pip_install(
         }
     };
 
-    // Enforce (but never require) the build constraints, if `--require-hashes` or `--verify-hashes`
-    // is provided. _Requiring_ hashes would be too strict, and would break with pip.
+    // Verify supplied build hashes unless hash verification was explicitly disabled.
     let build_hasher = if hash_checking.is_some() {
-        HashStrategy::from_requirements(
-            std::iter::empty(),
-            build_constraints
-                .specifications()
-                .map(|entry| (&entry.requirement, entry.hashes.as_slice())),
+        HashStrategy::from_build_constraints(
+            &build_constraints,
             Some(&marker_env),
             HashCheckingMode::Verify,
         )?
     } else {
         HashStrategy::default()
     };
-
     // Initialize any shared state.
     let state = SharedState::default();
 

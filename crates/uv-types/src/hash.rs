@@ -5,7 +5,7 @@ use std::sync::Arc;
 
 use rustc_hash::FxHashMap;
 
-use uv_configuration::HashCheckingMode;
+use uv_configuration::{Constraints, HashCheckingMode};
 use uv_distribution_types::{
     DistributionMetadata, HashGeneration, HashPolicy, Name, Requirement, RequirementSource,
     Resolution, UnresolvedRequirement, VersionId,
@@ -173,6 +173,22 @@ impl HashStrategy {
         marker_env: Option<&ResolverMarkerEnvironment>,
         mode: HashCheckingMode,
     ) -> Result<Self, HashStrategyError> {
+        Self::from_requirements_with_constraint_intersection(
+            requirements,
+            constraints,
+            marker_env,
+            mode,
+            false,
+        )
+    }
+
+    fn from_requirements_with_constraint_intersection<'a>(
+        requirements: impl Iterator<Item = (&'a UnresolvedRequirement, &'a [String])>,
+        constraints: impl Iterator<Item = (&'a Requirement, &'a [String])>,
+        marker_env: Option<&ResolverMarkerEnvironment>,
+        mode: HashCheckingMode,
+        intersect_constraints: bool,
+    ) -> Result<Self, HashStrategyError> {
         let mut constraint_hashes = FxHashMap::<VersionId, Vec<HashDigest>>::default();
 
         // First, index the constraints by name.
@@ -209,6 +225,31 @@ impl HashStrategy {
             }
 
             if digests.is_empty() {
+                continue;
+            }
+
+            if intersect_constraints && let Some(existing) = constraint_hashes.get_mut(&id) {
+                match &id {
+                    VersionId::NameVersion { .. } => {
+                        existing.retain(|digest| digests.contains(digest));
+                        if existing.is_empty() {
+                            return Err(HashStrategyError::ConflictingConstraintHashes(
+                                requirement.to_string(),
+                            ));
+                        }
+                    }
+                    VersionId::ArchiveUrl { .. } => {
+                        merge_digests(existing, &digests, requirement)?;
+                    }
+                    VersionId::Git { .. }
+                    | VersionId::Path { .. }
+                    | VersionId::Directory { .. }
+                    | VersionId::Unknown { .. } => {
+                        merge_digests(existing, &digests, requirement).map_err(|_| {
+                            HashStrategyError::ConflictingConstraintHashes(requirement.to_string())
+                        })?;
+                    }
+                }
                 continue;
             }
 
@@ -320,6 +361,36 @@ impl HashStrategy {
             HashCheckingMode::Verify => Ok(Self::verify(Arc::new(hashes))),
             HashCheckingMode::Require => Ok(Self::require(Arc::new(hashes))),
         }
+    }
+
+    /// Collect supplied hashes from build constraints.
+    pub fn from_build_constraints(
+        constraints: &Constraints,
+        marker_env: Option<&ResolverMarkerEnvironment>,
+        mode: HashCheckingMode,
+    ) -> Result<Self, HashStrategyError> {
+        for constraint in constraints.specifications() {
+            if !constraint.hashes.is_empty()
+                && constraint
+                    .requirement
+                    .evaluate_markers(marker_env.map(ResolverMarkerEnvironment::markers), &[])
+                && Self::pin(&constraint.requirement).is_none()
+            {
+                return Err(HashStrategyError::UnpinnedRequirement(
+                    constraint.requirement.to_string(),
+                    mode,
+                ));
+            }
+        }
+        Self::from_requirements_with_constraint_intersection(
+            std::iter::empty(),
+            constraints
+                .specifications()
+                .map(|entry| (&entry.requirement, entry.hashes.as_slice())),
+            marker_env,
+            mode,
+            true,
+        )
     }
 
     /// Generate the required hashes from a [`Resolution`].
@@ -526,6 +597,8 @@ pub enum HashStrategyError {
         "In `{1}` mode, all requirements must have a hash, but there were no overlapping hashes between the requirements and constraints for: {0}"
     )]
     NoIntersection(String, HashCheckingMode),
+    #[error("Build constraints for {0} have no hashes in common")]
+    ConflictingConstraintHashes(String),
 }
 
 #[cfg(test)]

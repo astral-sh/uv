@@ -150,6 +150,11 @@ pub(crate) async fn install(
     .await?
     .into_interpreter();
 
+    let receipt_build_constraints =
+        operations::read_constraints(build_constraints, &client_builder).await?;
+    let build_constraints =
+        Constraints::from_specifications(receipt_build_constraints.iter().cloned());
+
     // If the user passed, e.g., `ruff@latest`, refresh the cache.
     let refresh = if request.is_latest() {
         refresh.combine(Refresh::All(Timestamp::now()))
@@ -187,6 +192,7 @@ pub(crate) async fn install(
                 requirements,
                 &interpreter,
                 &settings,
+                &build_constraints,
                 &client_builder,
                 &state,
                 &concurrency,
@@ -376,6 +382,7 @@ pub(crate) async fn install(
                 spec.requirements.clone(),
                 &interpreter,
                 &settings,
+                &build_constraints,
                 &client_builder,
                 &state,
                 &concurrency,
@@ -432,6 +439,7 @@ pub(crate) async fn install(
         spec.overrides,
         &interpreter,
         &settings,
+        &build_constraints,
         &client_builder,
         &state,
         &concurrency,
@@ -445,14 +453,6 @@ pub(crate) async fn install(
 
     // Resolve the excludes.
     let receipt_excludes = spec.excludes.clone();
-
-    // Resolve the build constraints.
-    let receipt_build_constraints =
-        operations::read_constraints(build_constraints, &client_builder)
-            .await?
-            .into_iter()
-            .map(|constraint| constraint.requirement)
-            .collect::<Vec<_>>();
 
     // Convert to tool options.
     let options = ToolOptions::from(options);
@@ -532,7 +532,7 @@ pub(crate) async fn install(
                 &receipt_constraints,
                 &receipt_overrides,
                 &receipt_excludes,
-                &receipt_build_constraints,
+                &build_constraints,
                 &refresh,
                 validation_interpreter,
                 &settings.resolver,
@@ -712,7 +712,7 @@ pub(crate) async fn install(
                     environment.interpreter(),
                     python_platform.as_ref(),
                     SourceTreeEditablePolicy::Tool,
-                    Constraints::from_requirements(receipt_build_constraints.iter().cloned()),
+                    build_constraints.clone(),
                     &settings.resolver,
                     &client_builder,
                     &state,
@@ -823,7 +823,7 @@ pub(crate) async fn install(
                     &resolution,
                     hash_strategy,
                     Modifications::Exact,
-                    Constraints::from_requirements(receipt_build_constraints.iter().cloned()),
+                    build_constraints.clone(),
                     (&settings).into(),
                     &client_builder,
                     &state,
@@ -844,7 +844,7 @@ pub(crate) async fn install(
                 Modifications::Exact,
                 python_platform.as_ref(),
                 SourceTreeEditablePolicy::Tool,
-                Constraints::from_requirements(receipt_build_constraints.iter().cloned()),
+                build_constraints.clone(),
                 ExtraBuildRequires::default(),
                 &settings,
                 &client_builder,
@@ -916,7 +916,7 @@ pub(crate) async fn install(
                 &interpreter,
                 python_platform.as_ref(),
                 SourceTreeEditablePolicy::Tool,
-                Constraints::from_requirements(receipt_build_constraints.iter().cloned()),
+                build_constraints.clone(),
                 &settings.resolver,
                 &client_builder,
                 &state,
@@ -971,9 +971,7 @@ pub(crate) async fn install(
                             &interpreter,
                             python_platform.as_ref(),
                             SourceTreeEditablePolicy::Tool,
-                            Constraints::from_requirements(
-                                receipt_build_constraints.iter().cloned(),
-                            ),
+                            build_constraints.clone(),
                             &settings.resolver,
                             &client_builder,
                             &state,
@@ -1036,7 +1034,7 @@ pub(crate) async fn install(
             &resolution,
             hash_strategy,
             Modifications::Exact,
-            Constraints::from_requirements(receipt_build_constraints.iter().cloned()),
+            build_constraints.clone(),
             (&settings).into(),
             &client_builder,
             &state,

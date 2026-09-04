@@ -9,9 +9,13 @@ use tracing::info_span;
 
 use uv_auth::CredentialsCache;
 use uv_cache::Cache;
-use uv_configuration::{DependencyGroupsWithDefaults, ExcludeDependency, NoSources, Upgrade};
+use uv_configuration::{
+    Constraints, DependencyGroupsWithDefaults, ExcludeDependency, NoSources, Upgrade,
+};
 use uv_distribution::LoweredRequirement;
-use uv_distribution_types::{Index, IndexLocations, Requirement, RequiresPython};
+use uv_distribution_types::{
+    Index, IndexLocations, NameRequirementSpecification, Requirement, RequiresPython,
+};
 use uv_normalize::{GroupName, PackageName};
 use uv_pep508::RequirementOrigin;
 use uv_pypi_types::{Conflicts, SupportedEnvironments, VerbatimParsedUrl};
@@ -20,7 +24,7 @@ use uv_scripts::Pep723Script;
 use uv_workspace::dependency_groups::{
     DependencyGroupError, FlatDependencyGroup, FlatDependencyGroups,
 };
-use uv_workspace::pyproject::OverrideDependency;
+use uv_workspace::pyproject::{BuildConstraintDependency, OverrideDependency};
 use uv_workspace::{Editability, Workspace, WorkspaceCache, WorkspaceMember};
 
 use crate::commands::project::{ProjectError, find_requires_python};
@@ -106,7 +110,7 @@ impl<'lock> LockTarget<'lock> {
     }
 
     /// Returns the set of build constraints for the [`LockTarget`].
-    pub(crate) fn build_constraints(self) -> Vec<uv_pep508::Requirement<VerbatimParsedUrl>> {
+    pub(crate) fn build_constraints(self) -> Vec<BuildConstraintDependency> {
         match self {
             Self::Workspace(workspace) => workspace.build_constraints(),
             Self::Script(script) => script
@@ -377,6 +381,38 @@ impl<'lock> LockTarget<'lock> {
         let encoded = lock.to_toml()?;
         fs_err::tokio::write(self.lock_path(), encoded).await?;
         Ok(())
+    }
+
+    /// Lower build constraints without losing hashes when a source expands into multiple requirements.
+    pub(crate) async fn lower_build_constraints(
+        self,
+        locations: &IndexLocations,
+        sources: &NoSources,
+        cache: &Cache,
+        workspace_cache: &WorkspaceCache,
+        credentials_cache: &CredentialsCache,
+    ) -> Result<Constraints, uv_distribution::MetadataError> {
+        let mut constraints = Vec::new();
+        for constraint in self.build_constraints() {
+            let (requirement, hashes) = constraint.into_parts();
+            constraints.extend(
+                self.lower(
+                    vec![requirement],
+                    locations,
+                    sources,
+                    cache,
+                    workspace_cache,
+                    credentials_cache,
+                )
+                .await?
+                .into_iter()
+                .map(|requirement| NameRequirementSpecification {
+                    requirement,
+                    hashes: hashes.clone(),
+                }),
+            );
+        }
+        Ok(Constraints::from_specifications(constraints))
     }
 
     /// Lower the requirements for the [`LockTarget`], relative to the target root.
