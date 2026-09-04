@@ -1,4 +1,4 @@
-use std::io;
+use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
@@ -314,20 +314,20 @@ fn replace_with_symlink_dir(src: &Path, dst: &Path) -> std::io::Result<()> {
 
 /// Create a symlink at `dst` pointing to `src`, replacing any existing symlink if necessary.
 ///
-/// On Unix, this method creates a temporary file, then moves it into place.
+/// On Unix, existing links are replaced atomically.
 #[cfg(unix)]
 pub fn replace_symlink(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> std::io::Result<()> {
     // Attempt to create the symlink directly.
     match fs_err::os::unix::fs::symlink(src.as_ref(), dst.as_ref()) {
         Ok(()) => Ok(()),
         Err(err) if err.kind() == std::io::ErrorKind::AlreadyExists => {
-            // Create a symlink, using a temporary file to ensure atomicity.
-            let temp_dir = tempfile::tempdir_in(dst.as_ref().parent().unwrap())?;
-            let temp_file = temp_dir.path().join("link");
-            fs_err::os::unix::fs::symlink(src, &temp_file)?;
-
-            // Move the symlink into the target location.
-            fs_err::rename(&temp_file, dst.as_ref())?;
+            let temp_file = tempfile::Builder::new().make_in(
+                dst.as_ref()
+                    .parent()
+                    .expect("Symlink path must have a parent"),
+                |path| fs_err::os::unix::fs::symlink(src.as_ref(), path),
+            )?;
+            fs_err::rename(temp_file.path(), dst.as_ref())?;
 
             Ok(())
         }
@@ -505,12 +505,12 @@ pub async fn write_atomic(path: impl AsRef<Path>, data: impl AsRef<[u8]>) -> std
 
 /// Write `data` to `path` atomically using a temporary file and atomic rename.
 pub fn write_atomic_sync(path: impl AsRef<Path>, data: impl AsRef<[u8]>) -> std::io::Result<()> {
-    let temp_file = tempfile_in(
+    let mut temp_file = tempfile_in(
         path.as_ref()
             .parent()
             .expect("Write path must have a parent"),
     )?;
-    fs_err::write(&temp_file, &data)?;
+    temp_file.write_all(data.as_ref())?;
     persist_with_retry_sync(temp_file, path.as_ref())
 }
 
