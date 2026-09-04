@@ -6,7 +6,9 @@ use std::time::Duration;
 use std::{env, io};
 
 use thiserror::Error;
-use tracing::{debug, error, info, trace, warn};
+#[cfg(unix)]
+use tracing::warn;
+use tracing::{debug, error, info, trace};
 
 use uv_static::EnvVars;
 #[cfg(windows)]
