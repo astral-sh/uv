@@ -3,6 +3,32 @@
 <!-- prettier-ignore-start -->
 
 
+## 0.12.10
+
+Released on 2026-09-04.
+
+### Enhancements
+
+- Attempt to revoke short-lived PyPI trusted-publishing tokens after `uv publish` completes, including when publishing fails ([#21423](https://github.com/astral-sh/uv/pull/21423))
+
+### Preview features
+
+- Omit `exclude-newer-package` settings for packages outside the resolution from `uv.lock` with the `missing-exclude-newer-package-lock` preview feature ([#21455](https://github.com/astral-sh/uv/pull/21455))
+- Show terminal dependency cycles in `uv tree --invert` output ([#21404](https://github.com/astral-sh/uv/pull/21404))
+
+### Performance
+
+- Speed up locking large workspaces with conflicts by excluding unrelated extras and dependency groups from conflict simplification ([#21399](https://github.com/astral-sh/uv/pull/21399))
+- Speed up `uv publish` by hashing each artifact in a single blocking task and reusing the buffer across reads ([#21389](https://github.com/astral-sh/uv/pull/21389))
+
+### Bug fixes
+
+- Prevent `--locked` from failing when `exclude-newer-package` settings differ only for packages outside the resolution ([#21454](https://github.com/astral-sh/uv/pull/21454))
+- Allow `uv lock --check` to reuse a lockfile when an absolute `exclude-newer` cutoff is moved later ([#19571](https://github.com/astral-sh/uv/pull/19571))
+- Allow `uv lock --check` to reuse a lockfile when a package-specific `exclude-newer` cutoff is disabled ([#21450](https://github.com/astral-sh/uv/pull/21450))
+- Require an explicit `--name` when `uv init` would infer a project name reserved for a Python interpreter ([#21395](https://github.com/astral-sh/uv/pull/21395))
+- Write package-specific `exclude-newer` cutoffs to `uv.lock` in a deterministic order ([#21453](https://github.com/astral-sh/uv/pull/21453))
+
 ## 0.12.9
 
 Released on 2026-09-01.

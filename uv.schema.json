@@ -911,6 +911,7 @@
       ]
     },
     "ExcludeNewerPackage": {
+      "description": "Package-specific `exclude-newer` settings.\n\nEntries are stored in package-name order for deterministic serialization.",
       "type": "object",
       "additionalProperties": {
         "$ref": "#/definitions/ExcludeNewerOverride"
@@ -1827,7 +1828,8 @@
             "tar-codec",
             "index-by-name",
             "artifact-hash-filtering",
-            "content-addressed-cache"
+            "content-addressed-cache",
+            "missing-exclude-newer-package-lock"
           ]
         },
         {
