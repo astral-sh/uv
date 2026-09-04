@@ -514,6 +514,10 @@
         "$ref": "#/definitions/PackageName"
       }
     },
+    "require-build-hashes": {
+      "description": "Require hashes for all build dependencies.\n\nHashes in `build-constraint-dependencies` are checked when downloading build dependencies.\nEnable this option to reject build dependencies without hashes. Hashes in URL fragments in\n`build-system.requires` also count, but hashes returned by a build backend do not.\n\nNo hash is required when uv uses its bundled `uv_build` backend, since it is part of the uv\nexecutable. Other source builds require build isolation. Already-installed packages and\npreviously built wheels are not checked.\n\nThis setting does not apply to `uv pip` commands.",
+      "type": ["boolean", "null"]
+    },
     "required-environments": {
       "description": "A list of environment markers, e.g., `sys_platform == 'darwin'.",
       "type": ["array", "null"],
@@ -1858,7 +1862,8 @@
             "tar-codec",
             "index-by-name",
             "artifact-hash-filtering",
-            "content-addressed-cache"
+            "content-addressed-cache",
+            "build-dependency-hashes"
           ]
         },
         {

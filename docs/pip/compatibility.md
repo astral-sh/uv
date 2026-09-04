@@ -421,6 +421,25 @@ not when provided via `--constraint` on the command line.
 For example, to ensure that `setuptools 60.0.0` is used to build any packages with a build
 dependency on `setuptools`, use `--build-constraint`, rather than `--constraint`.
 
+To require hashes for every build dependency, use `--require-build-hashes` with `uv pip install` or
+`uv pip sync`. Provide requirements with exact versions or direct URLs and `--hash` entries in the
+build constraints file:
+
+```console
+$ uv pip install -r requirements.txt --build-constraint build-constraints.txt --require-build-hashes
+```
+
+This option is experimental. Enable `--preview-features build-dependency-hashes` to suppress the
+warning. No hash is required when uv uses its bundled `uv_build` backend, since it is part of the uv
+executable. Other source builds fail if build isolation is disabled with `--no-build-isolation` or
+`--no-build-isolation-package`. This option does not require hashes for runtime dependencies; use
+`--require-hashes` for those.
+
+Set `UV_REQUIRE_BUILD_HASHES=true` to require build hashes across project, build, tool, and pip
+commands, including `uv pip compile`. Set it to `false` to disable the requirement, or pass
+`--no-require-build-hashes` to override it for `uv pip install` or `uv pip sync`. The project
+setting `require-build-hashes` does not control pip commands.
+
 ## `pip compile` defaults
 
 There are a few small but notable differences in the default behaviors of `pip compile` and

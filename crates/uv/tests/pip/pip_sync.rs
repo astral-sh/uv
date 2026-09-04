@@ -5330,14 +5330,26 @@ fn compatible_build_constraint() -> Result<()> {
     requirements_txt.write_str("requests==1.2")?;
 
     let constraints_txt = context.temp_dir.child("build_constraints.txt");
-    // Verify mode ignores hashes on unpinned constraints and does not activate extras.
-    constraints_txt.write_str("setuptools[foo]>=40 --hash=sha256:incorrect")?;
+    constraints_txt.write_str("setuptools[foo]>=40")?;
 
     uv_snapshot!(context.pip_sync()
         .arg("requirements.txt")
         .arg("--verify-hashes")
         .arg("--build-constraint")
-        .arg("build_constraints.txt"), @"
+        .arg("build_constraints.txt")
+        .env(EnvVars::UV_REQUIRE_BUILD_HASHES, "true"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    warning: The `--require-build-hashes` option is experimental and may change without warning. Pass `--preview-features build-dependency-hashes` to disable this warning.
+    error: In `--require-hashes` mode, all requirements must have their versions pinned with `==`, but found: setuptools[foo]>=40
+    ");
+
+    uv_snapshot!(context.pip_sync()
+        .arg("requirements.txt")
+        .arg("--build-constraint")
+        .arg("build_constraints.txt")
+        .arg("--require-build-hashes")
+        .arg("--no-require-build-hashes"), @"
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]

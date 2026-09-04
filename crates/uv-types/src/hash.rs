@@ -133,13 +133,13 @@ impl HashStrategy {
         mut self,
         requirements: impl Iterator<Item = &'a Requirement>,
     ) -> Result<Self, HashStrategyError> {
-        match &mut self.verification {
-            HashVerification::None => {}
-            HashVerification::IfPresent(existing) | HashVerification::Required(existing) => {
-                if let Some(hashes) = Self::augment_hashes(existing, requirements)? {
-                    *existing = Arc::new(hashes);
-                }
-            }
+        let (existing, mode) = match &mut self.verification {
+            HashVerification::None => return Ok(self),
+            HashVerification::IfPresent(existing) => (existing, HashCheckingMode::Verify),
+            HashVerification::Required(existing) => (existing, HashCheckingMode::Require),
+        };
+        if let Some(hashes) = Self::augment_hashes(existing, requirements, mode)? {
+            *existing = Arc::new(hashes);
         }
         Ok(self)
     }
@@ -363,7 +363,10 @@ impl HashStrategy {
         }
     }
 
-    /// Collect supplied hashes from build constraints.
+    /// Collect hashes from build constraints for verifying build dependencies.
+    ///
+    /// [`HashCheckingMode::Require`] requires hashes for every build dependency. Hashes from URL
+    /// fragments in `build-system.requires` can be added during resolution.
     pub fn from_build_constraints(
         constraints: &Constraints,
         marker_env: Option<&ResolverMarkerEnvironment>,
@@ -431,13 +434,22 @@ impl HashStrategy {
     fn augment_hashes<'a>(
         existing: &FxHashMap<VersionId, Vec<HashDigest>>,
         requirements: impl Iterator<Item = &'a Requirement>,
+        mode: HashCheckingMode,
     ) -> Result<Option<FxHashMap<VersionId, Vec<HashDigest>>>, HashStrategyError> {
         let mut hashes = None;
 
         for requirement in requirements {
-            let Some((id, digests)) = Self::requirement_hashes(requirement) else {
+            let Some((id, mut digests)) = Self::requirement_hashes(requirement) else {
                 continue;
             };
+            // When hashes are required, MD5 is not sufficient. Ignore it here so a URL with
+            // only an MD5 hash still needs another supplied hash.
+            if mode.is_require() {
+                digests.retain(|digest| digest.algorithm() != HashAlgorithm::Md5);
+                if digests.is_empty() {
+                    continue;
+                }
+            }
             let current = hashes.as_ref().unwrap_or(existing);
             let current_digests = current.get(&id);
             let mut merged = current_digests.cloned().unwrap_or_default();

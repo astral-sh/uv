@@ -24,9 +24,9 @@ use uv_cli::{
     TreeArgs, TreeFormat, UpgradeArgs, VenvArgs, VersionArgs, VersionBumpSpec, VersionFormat,
 };
 use uv_cli::{
-    AuthorFrom, BuildArgs, BuildOptionsArgs, CheckArgs, ExcludeNewerArgs, ExportArgs, FormatArgs,
-    HashCheckingArgs, PackageExcludeNewerArgs, PublishArgs, PythonDirArgs, RegistryClientArgs,
-    ResolverArgs, ResolverInstallerArgs, ToolUpgradeArgs,
+    AuthorFrom, BuildArgs, BuildHashArgs, BuildOptionsArgs, CheckArgs, ExcludeNewerArgs,
+    ExportArgs, FormatArgs, HashCheckingArgs, PackageExcludeNewerArgs, PublishArgs, PythonDirArgs,
+    RegistryClientArgs, ResolverArgs, ResolverInstallerArgs, ToolUpgradeArgs,
     options::{
         Flag, FlagSource, IntoPipOptions, check_conflicts, flag, resolve_flag, resolve_flag_pair,
         resolver_installer_options, resolver_options,
@@ -48,7 +48,7 @@ use uv_install_wheel::LinkMode;
 use uv_normalize::{ExtraName, PackageName, PipGroupName};
 use uv_pep440::Version;
 use uv_pep508::{MarkerTree, RequirementOrigin};
-use uv_preview::Preview;
+use uv_preview::{Preview, PreviewFeature};
 use uv_pypi_types::SupportedEnvironments;
 use uv_python::{Prefix, PythonDownloads, PythonPreference, PythonVersion, Target};
 use uv_redacted::DisplaySafeUrl;
@@ -801,6 +801,11 @@ impl RunSettings {
         environment: EnvironmentOptions,
     ) -> anyhow::Result<Self> {
         let RunArgs {
+            build_hashes:
+                BuildHashArgs {
+                    require_build_hashes,
+                    no_require_build_hashes,
+                },
             extra,
             all_extras,
             no_extra,
@@ -940,12 +945,19 @@ impl RunSettings {
             python: python.and_then(Maybe::into_option),
             python_platform,
             refresh: Refresh::try_from(refresh)?,
-            settings: ResolverInstallerSettings::resolve(
-                installer,
-                build,
-                filesystem,
-                &environment,
-            )?,
+            settings: {
+                let mut options = resolver_installer_options(
+                    installer,
+                    build,
+                    configured_indexes(filesystem.as_ref()),
+                )?;
+                options.require_build_hashes = flag(
+                    require_build_hashes,
+                    no_require_build_hashes,
+                    "require-build-hashes",
+                )?;
+                ResolverInstallerSettings::combine(options, filesystem, &environment)
+            },
             env_file: EnvFile::from_args(env_file, no_env_file),
             install_mirrors: environment
                 .install_mirrors
@@ -1962,6 +1974,11 @@ impl SyncSettings {
         environment: EnvironmentOptions,
     ) -> anyhow::Result<Self> {
         let SyncArgs {
+            build_hashes:
+                BuildHashArgs {
+                    require_build_hashes,
+                    no_require_build_hashes,
+                },
             extra,
             all_extras,
             no_extra,
@@ -2015,8 +2032,14 @@ impl SyncSettings {
             .unwrap_or_default();
 
         let malware_settings = MalwareCheckSettings::resolve(filesystem.as_ref(), &environment);
-        let settings =
-            ResolverInstallerSettings::resolve(installer, build, filesystem, &environment)?;
+        let mut options =
+            resolver_installer_options(installer, build, configured_indexes(filesystem.as_ref()))?;
+        options.require_build_hashes = flag(
+            require_build_hashes,
+            no_require_build_hashes,
+            "require-build-hashes",
+        )?;
+        let settings = ResolverInstallerSettings::combine(options, filesystem, &environment);
 
         let check = flag(check, no_check, "check")?.unwrap_or_default();
         let dry_run = if check {
@@ -2170,6 +2193,11 @@ impl LockSettings {
         environment: EnvironmentOptions,
     ) -> anyhow::Result<Self> {
         let LockArgs {
+            build_hashes:
+                BuildHashArgs {
+                    require_build_hashes,
+                    no_require_build_hashes,
+                },
             check,
             locked,
             no_locked,
@@ -2220,7 +2248,16 @@ impl LockSettings {
             script,
             python: python.and_then(Maybe::into_option),
             refresh: Refresh::try_from(refresh)?,
-            settings: ResolverSettings::resolve(resolver, build, filesystem, &environment)?,
+            settings: {
+                let mut options =
+                    resolver_options(resolver, build, configured_indexes(filesystem.as_ref()))?;
+                options.require_build_hashes = flag(
+                    require_build_hashes,
+                    no_require_build_hashes,
+                    "require-build-hashes",
+                )?;
+                ResolverSettings::combine(options, filesystem, &environment)
+            },
             install_mirrors: environment
                 .install_mirrors
                 .combine(filesystem_install_mirrors),
@@ -3471,6 +3508,7 @@ pub(crate) struct PipCompileSettings {
     pub(crate) overrides: Vec<PathBuf>,
     pub(crate) excludes: Vec<PathBuf>,
     pub(crate) build_constraints: Vec<PathBuf>,
+    pub(crate) build_hash_checking: HashCheckingMode,
     pub(crate) constraints_from_workspace: Vec<Requirement>,
     pub(crate) overrides_from_workspace: Vec<Override<Requirement>>,
     pub(crate) excludes_from_workspace: Vec<ExcludeDependency>,
@@ -3613,6 +3651,7 @@ impl PipCompileSettings {
                 .into_iter()
                 .filter_map(Maybe::into_option)
                 .collect(),
+            build_hash_checking: resolve_build_hash_checking(environment.require_build_hashes),
             overrides: overrides
                 .into_iter()
                 .filter_map(Maybe::into_option)
@@ -3684,6 +3723,7 @@ pub(crate) struct PipSyncSettings {
     pub(crate) src_file: Vec<PathBuf>,
     pub(crate) constraints: Vec<PathBuf>,
     pub(crate) build_constraints: Vec<PathBuf>,
+    pub(crate) build_hash_checking: HashCheckingMode,
     pub(crate) dry_run: DryRun,
     pub(crate) refresh: Refresh,
     pub(crate) settings: PipSettings,
@@ -3700,6 +3740,8 @@ impl PipSyncSettings {
             src_file,
             constraints,
             build_constraints,
+            require_build_hashes,
+            no_require_build_hashes,
             extra,
             all_extras,
             no_all_extras,
@@ -3745,6 +3787,14 @@ impl PipSyncSettings {
                 .into_iter()
                 .filter_map(Maybe::into_option)
                 .collect(),
+            build_hash_checking: resolve_build_hash_checking(
+                flag(
+                    require_build_hashes,
+                    no_require_build_hashes,
+                    "require-build-hashes",
+                )?
+                .or(environment.require_build_hashes),
+            ),
             dry_run: DryRun::from_args(dry_run),
             refresh: Refresh::try_from(refresh)?,
             settings: PipSettings::combine(
@@ -3795,6 +3845,7 @@ pub(crate) struct PipInstallSettings {
     pub(crate) overrides: Vec<PathBuf>,
     pub(crate) excludes: Vec<PathBuf>,
     pub(crate) build_constraints: Vec<PathBuf>,
+    pub(crate) build_hash_checking: HashCheckingMode,
     pub(crate) dry_run: DryRun,
     pub(crate) constraints_from_workspace: Vec<Requirement>,
     pub(crate) overrides_from_workspace: Vec<Override<Requirement>>,
@@ -3822,6 +3873,8 @@ impl PipInstallSettings {
             overrides,
             excludes,
             build_constraints,
+            require_build_hashes,
+            no_require_build_hashes,
             extra,
             all_extras,
             no_all_extras,
@@ -3924,6 +3977,14 @@ impl PipInstallSettings {
                 .into_iter()
                 .filter_map(Maybe::into_option)
                 .collect(),
+            build_hash_checking: resolve_build_hash_checking(
+                flag(
+                    require_build_hashes,
+                    no_require_build_hashes,
+                    "require-build-hashes",
+                )?
+                .or(environment.require_build_hashes),
+            ),
             dry_run: DryRun::from_args(dry_run),
             constraints_from_workspace,
             overrides_from_workspace,
@@ -4508,6 +4569,7 @@ pub(crate) struct InstallerSettingsRef<'a> {
     pub(crate) dependency_metadata: &'a DependencyMetadata,
     pub(crate) config_setting: &'a ConfigSettings,
     pub(crate) config_settings_package: &'a PackageConfigSettings,
+    pub(crate) build_hash_checking: HashCheckingMode,
     pub(crate) build_isolation: &'a BuildIsolation,
     pub(crate) extra_build_dependencies: &'a ExtraBuildDependencies,
     pub(crate) extra_build_variables: &'a ExtraBuildVariables,
@@ -4535,6 +4597,7 @@ pub(crate) struct ResolverSettings {
     pub(crate) index_strategy: IndexStrategy,
     pub(crate) keyring_provider: KeyringProviderType,
     pub(crate) link_mode: LinkMode,
+    pub(crate) build_hash_checking: HashCheckingMode,
     pub(crate) build_isolation: BuildIsolation,
     pub(crate) extra_build_dependencies: ExtraBuildDependencies,
     pub(crate) extra_build_variables: ExtraBuildVariables,
@@ -4545,6 +4608,19 @@ pub(crate) struct ResolverSettings {
     pub(crate) cuda_driver_version: Option<Version>,
     pub(crate) amd_gpu_architecture: Option<AmdGpuArchitecture>,
     pub(crate) upgrade: Upgrade,
+}
+
+fn resolve_build_hash_checking(require_build_hashes: Option<bool>) -> HashCheckingMode {
+    if !require_build_hashes.unwrap_or_default() {
+        return HashCheckingMode::Verify;
+    }
+    if !uv_preview::is_enabled(PreviewFeature::BuildDependencyHashes) {
+        warn_user_once!(
+            "The `--require-build-hashes` option is experimental and may change without warning. Pass `--preview-features {}` to disable this warning.",
+            PreviewFeature::BuildDependencyHashes
+        );
+    }
+    HashCheckingMode::Require
 }
 
 #[allow(deprecated)]
@@ -4596,6 +4672,9 @@ impl ResolverSettings {
         filesystem: Option<FilesystemOptions>,
         environment: &EnvironmentOptions,
     ) -> Self {
+        args.require_build_hashes = args
+            .require_build_hashes
+            .or(environment.require_build_hashes);
         args.no_binary_package = args
             .no_binary_package
             .or(environment.no_binary_package.clone());
@@ -4641,6 +4720,7 @@ impl From<ResolverOptions> for ResolverSettings {
             config_setting: value.config_settings.unwrap_or_default(),
             config_settings_package: value.config_settings_package.unwrap_or_default(),
             build_isolation: value.build_isolation.unwrap_or_default(),
+            build_hash_checking: resolve_build_hash_checking(value.require_build_hashes),
             extra_build_dependencies: value.extra_build_dependencies.unwrap_or_default(),
             extra_build_variables: value.extra_build_variables.unwrap_or_default(),
             exclude_newer: ExcludeNewer::from_args(
@@ -4726,6 +4806,9 @@ fn resolver_installer_options_with_environment(
     mut options: ResolverInstallerOptions,
     environment: &EnvironmentOptions,
 ) -> ResolverInstallerOptions {
+    options.require_build_hashes = options
+        .require_build_hashes
+        .or(environment.require_build_hashes);
     options.no_binary_package = options
         .no_binary_package
         .or(environment.no_binary_package.clone());
@@ -4770,6 +4853,7 @@ impl From<ResolverInstallerOptions> for ResolverInstallerSettings {
                 keyring_provider: value.keyring_provider.unwrap_or_default(),
                 link_mode: value.link_mode.unwrap_or_default(),
                 build_isolation: value.build_isolation.unwrap_or_default(),
+                build_hash_checking: resolve_build_hash_checking(value.require_build_hashes),
                 extra_build_dependencies: value.extra_build_dependencies.unwrap_or_default(),
                 extra_build_variables: value.extra_build_variables.unwrap_or_default(),
                 prerelease: resolve_prerelease(
@@ -4967,6 +5051,7 @@ impl PipSettings {
             no_binary_package: top_level_no_binary_package,
             exclude_newer_package: top_level_exclude_newer_package,
             torch_backend: top_level_torch_backend,
+            require_build_hashes: _,
         } = top_level;
 
         // Merge the top-level options (`tool.uv`) with the pip-specific options (`tool.uv.pip`),
@@ -5243,6 +5328,7 @@ impl<'a> From<&'a ResolverInstallerSettings> for InstallerSettingsRef<'a> {
             config_setting: &settings.resolver.config_setting,
             config_settings_package: &settings.resolver.config_settings_package,
             build_isolation: &settings.resolver.build_isolation,
+            build_hash_checking: settings.resolver.build_hash_checking,
             extra_build_dependencies: &settings.resolver.extra_build_dependencies,
             extra_build_variables: &settings.resolver.extra_build_variables,
             exclude_newer: &settings.resolver.exclude_newer,

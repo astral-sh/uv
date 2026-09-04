@@ -40,7 +40,7 @@ use uv_resolver::{
 };
 use uv_types::{
     AnyErrorBuild, BuildArena, BuildContext, BuildIsolation, BuildStack, EmptyInstalledPackages,
-    HashStrategy, InFlight, ResolvedRequirements, SourceTreeEditablePolicy,
+    HashStrategy, HashVerification, InFlight, ResolvedRequirements, SourceTreeEditablePolicy,
 };
 use uv_workspace::WorkspaceCache;
 
@@ -125,6 +125,7 @@ pub struct BuildDispatch<'a> {
     config_settings: &'a ConfigSettings,
     config_settings_package: &'a PackageConfigSettings,
     hasher: &'a HashStrategy,
+    require_build_hashes: bool,
     exclude_newer: ExcludeNewer,
     source_build_context: SourceBuildContext,
     build_extra_env_vars: FxHashMap<OsString, OsString>,
@@ -179,6 +180,7 @@ impl<'a> BuildDispatch<'a> {
             link_mode,
             build_options,
             hasher,
+            require_build_hashes: matches!(hasher.verification(), HashVerification::Required(_)),
             exclude_newer,
             source_build_context: SourceBuildContext::new(concurrency.builds_semaphore.clone()),
             build_extra_env_vars: FxHashMap::default(),
@@ -202,6 +204,14 @@ impl<'a> BuildDispatch<'a> {
             .into_iter()
             .map(|(key, value)| (key.as_ref().to_owned(), value.as_ref().to_owned()))
             .collect();
+        self
+    }
+
+    /// Override the required build-hash policy when hash checking was requested by the legacy
+    /// `uv build --require-hashes` option rather than `--require-build-hashes`.
+    #[must_use]
+    pub fn with_require_build_hashes(mut self, require: bool) -> Self {
+        self.require_build_hashes = require;
         self
     }
 }
@@ -242,6 +252,10 @@ impl BuildContext for BuildDispatch<'_> {
         self.build_isolation
     }
 
+    fn require_build_hashes(&self) -> bool {
+        self.require_build_hashes
+    }
+
     fn config_settings(&self) -> &ConfigSettings {
         self.config_settings
     }
@@ -277,6 +291,7 @@ impl BuildContext for BuildDispatch<'_> {
     async fn resolve<'data>(
         &'data self,
         requirements: &'data [Requirement],
+        hasher: Option<&'data HashStrategy>,
         build_stack: &'data BuildStack,
     ) -> Result<ResolvedRequirements, BuildDispatchError> {
         let python_requirement = PythonRequirement::from_interpreter(self.interpreter);
@@ -289,11 +304,17 @@ impl BuildContext for BuildDispatch<'_> {
         // its URL allow-list check. This mirrors what the project resolver does in
         // `uv_requirements::LookaheadResolver` and prevents a `DisallowedUrl` error when one
         // `build-system.requires` entry pulls in another URL dependency.
-        let hasher = self
-            .hasher
-            .clone()
-            .augment_with_requirements(requirements.iter())
-            .map_err(uv_requirements::Error::from)?;
+        let active_requirements = requirements.iter().filter(|requirement| {
+            requirement.evaluate_markers(Some(self.interpreter.markers()), &[])
+        });
+        let require_declared_hashes = hasher.is_some() && self.require_build_hashes;
+        let hasher = hasher.unwrap_or(self.hasher).clone();
+        let hasher = if require_declared_hashes {
+            hasher.augment_with_metadata_requirements(active_requirements)
+        } else {
+            hasher.augment_with_requirements(active_requirements)
+        }
+        .map_err(uv_requirements::Error::from)?;
         let overrides = Overrides::default();
         let excludes = Excludes::default();
         let (lookaheads, hasher) = LookaheadResolver::new(

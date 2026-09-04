@@ -2017,6 +2017,20 @@ pub struct PipSyncArgs {
     #[command(flatten)]
     pub hash_checking: HashCheckingArgs,
 
+    /// Require hashes for all build dependencies.
+    ///
+    /// Provide requirements with hashes in a file passed to `--build-constraint`. This does not
+    /// require hashes for runtime dependencies; use `--require-hashes` for those.
+    ///
+    /// No hash is required when uv uses its bundled `uv_build` backend, since it is part of the uv
+    /// executable. Other source builds fail if build isolation is disabled with
+    /// `--no-build-isolation` or `--no-build-isolation-package`.
+    #[arg(long, overrides_with("no_require_build_hashes"))]
+    pub require_build_hashes: bool,
+
+    #[arg(long, overrides_with("require_build_hashes"), hide = true)]
+    pub no_require_build_hashes: bool,
+
     /// The Python interpreter into which packages should be installed.
     ///
     /// By default, syncing requires a virtual environment. A path to an alternative Python can be
@@ -2363,6 +2377,20 @@ pub struct PipInstallArgs {
 
     #[command(flatten)]
     pub hash_checking: HashCheckingArgs,
+
+    /// Require hashes for all build dependencies.
+    ///
+    /// Provide requirements with hashes in a file passed to `--build-constraint`. This does not
+    /// require hashes for runtime dependencies; use `--require-hashes` for those.
+    ///
+    /// No hash is required when uv uses its bundled `uv_build` backend, since it is part of the uv
+    /// executable. Other source builds fail if build isolation is disabled with
+    /// `--no-build-isolation` or `--no-build-isolation-package`.
+    #[arg(long, overrides_with("no_require_build_hashes"))]
+    pub require_build_hashes: bool,
+
+    #[arg(long, overrides_with("require_build_hashes"), hide = true)]
+    pub no_require_build_hashes: bool,
 
     /// The Python interpreter into which packages should be installed.
     ///
@@ -3515,6 +3543,9 @@ pub struct InitArgs {
 
 #[derive(Args)]
 pub struct RunArgs {
+    #[command(flatten)]
+    pub build_hashes: BuildHashArgs,
+
     /// Include optional dependencies from the specified extra name.
     ///
     /// May be provided more than once.
@@ -3794,6 +3825,9 @@ pub struct RunArgs {
 
 #[derive(Args)]
 pub struct SyncArgs {
+    #[command(flatten)]
+    pub build_hashes: BuildHashArgs,
+
     /// Include optional dependencies from the specified extra name.
     ///
     /// May be provided more than once.
@@ -4083,6 +4117,9 @@ pub struct SyncArgs {
 
 #[derive(Args)]
 pub struct LockArgs {
+    #[command(flatten)]
+    pub build_hashes: BuildHashArgs,
+
     /// Check if the lockfile is up-to-date.
     ///
     /// Asserts that the `uv.lock` would remain unchanged after a resolution. If the lockfile is
@@ -7155,6 +7192,35 @@ pub struct HashCheckingArgs {
         overrides_with("verify_hashes"),
     )]
     pub no_verify_hashes: bool,
+}
+
+/// Arguments that configure hash checking for build dependencies.
+#[derive(Args)]
+#[group(skip)]
+pub struct BuildHashArgs {
+    /// Require hashes for all build dependencies.
+    ///
+    /// Hashes can be provided in `tool.uv.build-constraint-dependencies` or URL fragments
+    /// (e.g., `#sha256=...`) in `build-system.requires`. This does not require hashes for runtime
+    /// dependencies.
+    ///
+    /// No hash is required when uv uses its bundled `uv_build` backend, since it is part of the uv
+    /// executable. Other source builds fail if build isolation is disabled with
+    /// `--no-build-isolation` or `--no-build-isolation-package`.
+    #[arg(
+        long,
+        overrides_with("no_require_build_hashes"),
+        help_heading = "Build options"
+    )]
+    pub require_build_hashes: bool,
+
+    /// Do not require hashes for every build dependency.
+    #[arg(
+        long,
+        overrides_with("require_build_hashes"),
+        help_heading = "Build options"
+    )]
+    pub no_require_build_hashes: bool,
 }
 
 /// Arguments that filter packages by upload date.

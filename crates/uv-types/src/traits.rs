@@ -19,7 +19,7 @@ use uv_normalize::PackageName;
 use uv_python::{Interpreter, PythonEnvironment};
 use uv_workspace::WorkspaceCache;
 
-use crate::{BuildArena, BuildIsolation, ResolvedRequirements};
+use crate::{BuildArena, BuildIsolation, HashStrategy, ResolvedRequirements};
 
 /// Controls how source tree requirements influence workspace-member editability during lowering.
 #[derive(Debug, Clone, Copy, Default, Eq, PartialEq)]
@@ -119,6 +119,9 @@ pub trait BuildContext {
     /// The isolation mode used for building source distributions.
     fn build_isolation(&self) -> BuildIsolation<'_>;
 
+    /// Whether the required build-hash policy is enabled for build dependencies.
+    fn require_build_hashes(&self) -> bool;
+
     /// The [`ConfigSettings`] used to build distributions.
     fn config_settings(&self) -> &ConfigSettings;
 
@@ -145,10 +148,16 @@ pub trait BuildContext {
     /// Get the extra build variables.
     fn extra_build_variables(&self) -> &ExtraBuildVariables;
 
-    /// Resolve the given requirements into a ready-to-install set of package versions.
+    /// Resolve build requirements.
+    ///
+    /// Pass `None` for the initial requirements, such as `build-system.requires`. When adding
+    /// requirements returned by a build backend, pass the previous resolution's [`HashStrategy`]
+    /// to preserve the hashes already collected. When hashes are required, backend output cannot
+    /// add hashes to this set.
     fn resolve<'a>(
         &'a self,
         requirements: &'a [Requirement],
+        hasher: Option<&'a HashStrategy>,
         build_stack: &'a BuildStack,
     ) -> impl Future<Output = Result<ResolvedRequirements, impl IsBuildBackendError>> + 'a;
 

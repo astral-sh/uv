@@ -1,6 +1,6 @@
 use std::borrow::Cow;
 
-use uv_configuration::TargetTriple;
+use uv_configuration::{HashCheckingMode, TargetTriple};
 use uv_platform_tags::{Tags, TagsError, TagsOptions};
 use uv_pypi_types::ResolverMarkerEnvironment;
 use uv_python::{Interpreter, PythonVersion};
@@ -17,6 +17,18 @@ pub(crate) mod show;
 pub(crate) mod sync;
 pub(crate) mod tree;
 pub(crate) mod uninstall;
+
+/// Require build hashes independently of runtime checking. Otherwise, verify supplied build
+/// hashes only when runtime checking is enabled.
+fn resolve_build_hash_checking(
+    hash_checking: Option<HashCheckingMode>,
+    build_hash_checking: HashCheckingMode,
+) -> Option<HashCheckingMode> {
+    match build_hash_checking {
+        HashCheckingMode::Require => Some(HashCheckingMode::Require),
+        HashCheckingMode::Verify => hash_checking.map(|_| HashCheckingMode::Verify),
+    }
+}
 
 pub(crate) fn resolution_markers(
     python_version: Option<&PythonVersion>,
