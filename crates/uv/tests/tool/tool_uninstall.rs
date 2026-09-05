@@ -170,3 +170,26 @@ fn tool_uninstall_all_missing_receipt() {
     Removed dangling environment for `black`
     ");
 }
+
+#[test]
+fn tool_uninstall_malformed_receipt() {
+    let context = uv_test::test_context!("3.12")
+        .with_filtered_exe_suffix()
+        .with_tool_dirs();
+    let tool_dir = context.temp_dir.child("tools");
+
+    // Install `black`
+    context
+        .tool_install()
+        .arg("black==24.2.0")
+        .assert()
+        .success();
+
+    fs_err::write(tool_dir.join("black").join("uv-receipt.toml"), "invalid\n").unwrap();
+
+    uv_snapshot!(context.filters(), context.tool_uninstall().arg("black"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Removed dangling environment for `black`
+    ");
+}
