@@ -11220,7 +11220,9 @@ fn lock_exclusion() -> Result<()> {
     uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: Unable to find lockfile at `uv.lock`, but `--locked` was provided. To create a lockfile, run `uv lock` or `uv sync` without the flag.
+    error: Unable to find lockfile at `uv.lock`, but `--locked` was provided.
+
+    hint: To create a lockfile, run `uv lock --no-locked`.
     ");
 
     Ok(())
@@ -16835,7 +16837,9 @@ fn check_no_lock() -> Result<()> {
         .arg("--check"), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: Unable to find lockfile at `uv.lock`, but `--check` was provided. To create a lockfile, run `uv lock` or `uv sync` without the flag.
+    error: Unable to find lockfile at `uv.lock`, but `--check` was provided.
+
+    hint: To create a lockfile, run `uv lock --no-locked`.
     ");
     Ok(())
 }
@@ -39819,7 +39823,7 @@ fn lock_frozen_overrides_locked_environment() -> Result<()> {
     Ok(())
 }
 
-/// Errors identify the flag or environment variable that enabled frozen mode.
+/// Errors identify the active source and suggest overriding that mode when retrying the command.
 #[cfg(feature = "test-universal")]
 #[test]
 fn lock_frozen_errors_report_source() -> Result<()> {
@@ -39835,22 +39839,64 @@ fn lock_frozen_errors_report_source() -> Result<()> {
     uv_snapshot!(context.filters(), context.lock().arg("--frozen"), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: Unable to find lockfile at `uv.lock`, but `--frozen` was provided. To create a lockfile, run `uv lock` or `uv sync` without the flag.
+    error: Unable to find lockfile at `uv.lock`, but `--frozen` was provided.
+
+    hint: To create a lockfile, run `uv lock --no-frozen`.
     ");
 
     uv_snapshot!(context.filters(), context.lock().arg("--check-exists"), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: Unable to find lockfile at `uv.lock`, but `--check-exists` was provided. To create a lockfile, run `uv lock` or `uv sync` without the flag.
+    error: Unable to find lockfile at `uv.lock`, but `--check-exists` was provided.
+
+    hint: To create a lockfile, run `uv lock --no-frozen`.
     ");
 
     uv_snapshot!(context.filters(), context.lock().env(EnvVars::UV_FROZEN, "1"), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: Unable to find lockfile at `uv.lock`, but `UV_FROZEN=1` was provided. To create a lockfile, run `uv lock` or `uv sync` without the flag.
+    error: Unable to find lockfile at `uv.lock`, but `UV_FROZEN=1` was provided.
+
+    hint: To create a lockfile, run `uv lock --no-frozen`.
     ");
 
-    context.lock().assert().success();
+    // The hint targets the active mode, even when its CLI flag masks the other environment setting.
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--frozen")
+        .env(EnvVars::UV_LOCKED, "1")
+        .env(EnvVars::UV_FROZEN, "1"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    warning: Ignoring `UV_LOCKED` because `--frozen` was provided
+    error: Unable to find lockfile at `uv.lock`, but `--frozen` was provided.
+
+    hint: To create a lockfile, run `uv lock --no-frozen`.
+    ");
+
+    // Disabling frozen mode exposes the independent locked setting and its corresponding hint.
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--frozen")
+        .arg("--no-frozen")
+        .env(EnvVars::UV_LOCKED, "1")
+        .env(EnvVars::UV_FROZEN, "1"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Unable to find lockfile at `uv.lock`, but `UV_LOCKED=1` was provided.
+
+    hint: To create a lockfile, run `uv lock --no-locked`.
+    ");
+
+    // Applying both hints to the original command creates the missing lockfile.
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--frozen")
+        .arg("--no-frozen")
+        .arg("--no-locked")
+        .env(EnvVars::UV_LOCKED, "1")
+        .env(EnvVars::UV_FROZEN, "1"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
     let lock = context.read("uv.lock");
 
     // Rename the project so it is missing from the existing lockfile.

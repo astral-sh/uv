@@ -208,6 +208,7 @@ pub(crate) async fn lock(
     // Perform the lock operation.
     match Box::pin(
         LockOperation::new(
+            LockCommand::Lock,
             mode,
             &settings,
             &client_builder,
@@ -277,6 +278,42 @@ pub(crate) async fn lock(
     }
 }
 
+/// The command that requested a lock operation.
+#[derive(Debug, Clone, Copy)]
+pub(crate) enum LockCommand {
+    Add,
+    Audit,
+    Check,
+    Export,
+    Lock,
+    Remove,
+    Run,
+    Sync,
+    Tree,
+    Upgrade,
+    Version,
+    WorkspaceMetadata,
+}
+
+impl std::fmt::Display for LockCommand {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            Self::Add => "add",
+            Self::Audit => "audit",
+            Self::Check => "check",
+            Self::Export => "export",
+            Self::Lock => "lock",
+            Self::Remove => "remove",
+            Self::Run => "run",
+            Self::Sync => "sync",
+            Self::Tree => "tree",
+            Self::Upgrade => "upgrade",
+            Self::Version => "version",
+            Self::WorkspaceMetadata => "workspace metadata",
+        })
+    }
+}
+
 #[derive(Debug, Clone, Copy)]
 pub(crate) enum LockMode<'env> {
     /// Write the lockfile to disk.
@@ -291,6 +328,7 @@ pub(crate) enum LockMode<'env> {
 
 /// A lock operation.
 pub(crate) struct LockOperation<'env> {
+    command: LockCommand,
     mode: LockMode<'env>,
     constraints: Vec<NameRequirementSpecification>,
     refresh: Option<&'env Refresh>,
@@ -309,6 +347,7 @@ pub(crate) struct LockOperation<'env> {
 impl<'env> LockOperation<'env> {
     /// Initialize a [`LockOperation`].
     pub(crate) fn new(
+        command: LockCommand,
         mode: LockMode<'env>,
         settings: &'env ResolverSettings,
         client_builder: &'env BaseClientBuilder<'env>,
@@ -321,6 +360,7 @@ impl<'env> LockOperation<'env> {
         preview: Preview,
     ) -> Self {
         Self {
+            command,
             mode,
             constraints: vec![],
             refresh: None,
@@ -371,10 +411,11 @@ impl<'env> LockOperation<'env> {
             LockMode::Frozen(source) => {
                 // Read the existing lockfile, but don't attempt to lock the project.
                 let lock_filename = target.lock_filename();
-                let existing = target
-                    .read()
-                    .await?
-                    .ok_or(ProjectError::MissingLockfile(source, lock_filename))?;
+                let existing = target.read().await?.ok_or(ProjectError::MissingLockfile(
+                    source,
+                    lock_filename,
+                    self.command,
+                ))?;
 
                 // Check if the discovered workspace members match the locked workspace members.
                 if let LockTarget::Workspace(workspace) = target {
@@ -398,6 +439,7 @@ impl<'env> LockOperation<'env> {
                     return Err(ProjectError::MissingLockfile(
                         lock_source.into(),
                         lock_filename,
+                        self.command,
                     ));
                 };
 

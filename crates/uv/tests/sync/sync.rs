@@ -411,7 +411,9 @@ fn locked() -> Result<()> {
     uv_snapshot!(context.filters(), context.sync().arg("--locked"), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: Unable to find lockfile at `uv.lock`, but `--locked` was provided. To create a lockfile, run `uv lock` or `uv sync` without the flag.
+    error: Unable to find lockfile at `uv.lock`, but `--locked` was provided.
+
+    hint: To create a lockfile, run `uv sync --no-locked`.
     ");
 
     // Lock the initial requirements.
@@ -481,7 +483,9 @@ fn frozen() -> Result<()> {
     uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: Unable to find lockfile at `uv.lock`, but `--frozen` was provided. To create a lockfile, run `uv lock` or `uv sync` without the flag.
+    error: Unable to find lockfile at `uv.lock`, but `--frozen` was provided.
+
+    hint: To create a lockfile, run `uv sync --no-frozen`.
     ");
 
     context.lock().assert().success();

@@ -16,7 +16,7 @@ use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceCache};
 use crate::commands::pip::loggers::DefaultResolveLogger;
 use crate::commands::pip::operations::Modifications;
 use crate::commands::project::install_target::InstallTarget;
-use crate::commands::project::lock::{LockMode, LockOperation};
+use crate::commands::project::lock::{LockCommand, LockMode, LockOperation};
 use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{
     LinkErrorReporting, ProjectEnvironment, ProjectEnvironmentPolicy, ProjectError,
@@ -145,6 +145,7 @@ pub(crate) async fn metadata(
     // Perform the lock operation.
     match Box::pin(
         LockOperation::new(
+            LockCommand::WorkspaceMetadata,
             mode,
             &settings,
             &client_builder,

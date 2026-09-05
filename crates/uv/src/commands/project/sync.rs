@@ -49,7 +49,7 @@ use crate::commands::pip::operations::{ChangedDist, Changelog, Modifications};
 use crate::commands::pip::resolution_markers;
 use crate::commands::pip::{operations, resolution_tags};
 use crate::commands::project::install_target::InstallTarget;
-use crate::commands::project::lock::{LockMode, LockOperation, LockResult};
+use crate::commands::project::lock::{LockCommand, LockMode, LockOperation, LockResult};
 use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{
     EnvironmentUpdate, LinkErrorReporting, MalwareFindings, PlatformState, ProjectEnvironment,
@@ -358,6 +358,7 @@ pub(crate) async fn sync(
 
     let outcome = match Box::pin(
         LockOperation::new(
+            LockCommand::Sync,
             mode,
             &settings.resolver,
             &client_builder,

@@ -27,7 +27,7 @@ use uv_workspace::{
 };
 
 use crate::commands::pip::loggers::DefaultResolveLogger;
-use crate::commands::project::lock::{LockEvent, LockMode, LockOperation, LockResult};
+use crate::commands::project::lock::{LockCommand, LockEvent, LockMode, LockOperation, LockResult};
 use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{
     ProjectEnvironmentPolicy, ProjectError, ProjectInterpreter, UniversalState, WorkspacePython,
@@ -398,6 +398,7 @@ pub(crate) async fn upgrade(
 
     let result = match Box::pin(
         LockOperation::new(
+            LockCommand::Upgrade,
             LockMode::DryRun(&interpreter),
             &settings,
             &client_builder,

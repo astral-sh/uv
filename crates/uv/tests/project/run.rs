@@ -2544,7 +2544,9 @@ fn run_locked() -> Result<()> {
     uv_snapshot!(context.filters(), context.run().arg("--locked").arg("--").arg("python").arg("--version"), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: Unable to find lockfile at `uv.lock`, but `--locked` was provided. To create a lockfile, run `uv lock` or `uv sync` without the flag.
+    error: Unable to find lockfile at `uv.lock`, but `--locked` was provided.
+
+    hint: To create a lockfile, run `uv run --no-locked`.
     ");
 
     // Lock the initial requirements.
@@ -2703,7 +2705,9 @@ fn run_frozen() -> Result<()> {
     uv_snapshot!(context.filters(), context.run().arg("--frozen").arg("--").arg("python").arg("--version"), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: Unable to find lockfile at `uv.lock`, but `--frozen` was provided. To create a lockfile, run `uv lock` or `uv sync` without the flag.
+    error: Unable to find lockfile at `uv.lock`, but `--frozen` was provided.
+
+    hint: To create a lockfile, run `uv run --no-frozen`.
     ");
 
     context.lock().assert().success();

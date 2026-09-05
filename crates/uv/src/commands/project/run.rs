@@ -68,7 +68,7 @@ use crate::commands::pip::loggers::{
 use crate::commands::pip::operations::Modifications;
 use crate::commands::project::environment::{CachedEnvironment, EphemeralEnvironment};
 use crate::commands::project::install_target::InstallTarget;
-use crate::commands::project::lock::LockMode;
+use crate::commands::project::lock::{LockCommand, LockMode};
 use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{
     EnvironmentSpecification, LinkErrorReporting, PreferenceLocation, ProjectEnvironment,
@@ -244,6 +244,7 @@ pub(crate) async fn run(
             // Generate a lockfile.
             let lock = match Box::pin(
                 project::lock::LockOperation::new(
+                    LockCommand::Run,
                     mode,
                     &settings.resolver,
                     &client_builder,
@@ -759,6 +760,7 @@ pub(crate) async fn run(
 
                 let result = match Box::pin(
                     project::lock::LockOperation::new(
+                        LockCommand::Run,
                         mode,
                         &settings.resolver,
                         &client_builder,

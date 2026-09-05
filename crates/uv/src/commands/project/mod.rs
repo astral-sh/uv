@@ -60,6 +60,7 @@ use uv_workspace::{ProjectEnvironmentSelection, RequiresPythonSources, Workspace
 use crate::commands::pip::loggers::{InstallLogger, ResolveLogger};
 use crate::commands::pip::operations::{Changelog, Modifications};
 use crate::commands::project::install_target::InstallTarget;
+use crate::commands::project::lock::LockCommand;
 use crate::commands::reporters::{PythonDownloadReporter, ResolverReporter};
 use crate::commands::{capitalize, conjunction, pip};
 use crate::printer::Printer;
@@ -125,10 +126,8 @@ pub(crate) enum ProjectError {
     )]
     LockFormat(PathBuf, usize, LockedSource),
 
-    #[error(
-        "Unable to find lockfile at `{1}`, but {0} was provided. To create a lockfile, run `uv lock` or `uv sync` without the flag."
-    )]
-    MissingLockfile(MissingLockfileSource, PathBuf),
+    #[error("Unable to find lockfile at `{1}`, but {0} was provided.")]
+    MissingLockfile(MissingLockfileSource, PathBuf, LockCommand),
 
     #[error(
         "The lockfile at `uv.lock` needs to be updated, but {1} was provided: Missing workspace member `{0}`."
@@ -409,6 +408,14 @@ impl uv_errors::Hint for ProjectError {
             Self::LockFormat(..) => uv_errors::Hints::from(
                 "To regenerate the lockfile, run `uv lock --refresh --preview-features lockfile-format-check`.",
             ),
+            Self::MissingLockfile(source, _, command) => match source {
+                MissingLockfileSource::Frozen(_) => uv_errors::Hints::from(format!(
+                    "To create a lockfile, run `uv {command} --no-frozen`.",
+                )),
+                MissingLockfileSource::Locked(_) => uv_errors::Hints::from(format!(
+                    "To create a lockfile, run `uv {command} --no-locked`.",
+                )),
+            },
             Self::OverlappingMarkers(_, rhs, replacement) => {
                 uv_errors::Hints::from(format!("replace `{rhs}` with `{replacement}`"))
             }
