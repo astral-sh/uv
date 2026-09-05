@@ -1707,6 +1707,7 @@ async fn run_with_workspace_cache(
                 &overrides,
                 &excludes,
                 &build_constraints,
+                args.system_site_packages,
                 &entrypoints,
                 args.lfs,
                 args.python,
