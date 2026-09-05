@@ -6,6 +6,7 @@ use std::str::FromStr;
 
 use fs_err::File;
 use tracing::{instrument, trace};
+use walkdir::WalkDir;
 
 use uv_distribution_filename::WheelFilename;
 use uv_pep440::Version;
@@ -79,6 +80,30 @@ pub fn install_wheel<Cache: serde::Serialize, Build: serde::Serialize>(
 
         if version != filename.version && version != filename.version.clone().without_local() {
             return Err(Error::MismatchedVersion(version, filename.version.clone()));
+        }
+    }
+
+    // Validate `.data` before linking the wheel into site-packages. Distribution metadata in a
+    // data scheme could otherwise replace the metadata that was just validated or inject another
+    // installed distribution.
+    let data_dir = wheel.join(format!("{dist_info_prefix}.data"));
+    if data_dir.is_dir() {
+        for entry in WalkDir::new(&data_dir).min_depth(1) {
+            let entry = entry?;
+            if entry
+                .path()
+                .extension()
+                .and_then(|extension| extension.to_str())
+                .is_some_and(|extension| {
+                    extension.eq_ignore_ascii_case("dist-info")
+                        || extension.eq_ignore_ascii_case("egg-info")
+                })
+            {
+                return Err(Error::InvalidWheel(format!(
+                    "Wheel data directory must not contain distribution metadata: {}",
+                    entry.file_name().display()
+                )));
+            }
         }
     }
 
