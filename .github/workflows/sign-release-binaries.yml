@@ -138,7 +138,7 @@ jobs:
         env:
           STORAGE_ACCOUNT: ${{ secrets.CODESIGN_STORAGE_ACCOUNT }}
           STORAGE_CONTAINER: ${{ secrets.CODESIGN_STORAGE_CONTAINER }}
-          # rcodesign reads RCODESIGN_* as configuration, so keep download settings separate.
+          # N.B. rcodesign reads RCODESIGN_* as configuration, avoid using that prefix
           COMPONENT_RCODESIGN_BLOB: ${{ secrets.CODESIGN_COMPONENT_RCODESIGN_BLOB }}
           COMPONENT_RCODESIGN_SHA256: ${{ secrets.CODESIGN_COMPONENT_RCODESIGN_SHA256 }}
           COMPONENT_PKCS11_BLOB: ${{ secrets.CODESIGN_COMPONENT_PKCS11_BLOB }}
