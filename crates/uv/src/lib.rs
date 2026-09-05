@@ -188,6 +188,10 @@ async fn run_with_workspace_cache(
     // Load environment variables not handled by Clap.
     let environment = EnvironmentOptions::new()?;
 
+    if let Some(lock_timeout) = environment.lock_timeout {
+        uv_fs::set_lock_timeout(lock_timeout);
+    }
+
     // Resolve preview flags before config discovery for decisions that affect the discovery root.
     let early_preview = settings::resolve_preview(&cli.top_level.global_args, None, &environment)?;
 
