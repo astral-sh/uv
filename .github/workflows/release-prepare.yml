@@ -18,10 +18,11 @@ jobs:
   prepare-release:
     if: github.repository == 'astral-sh/uv'
     runs-on: ubuntu-latest
-    environment: automations
     permissions:
       contents: read
-      id-token: write # for the credential broker
+      pull-requests: read
+    outputs:
+      artifact-id: ${{ steps.upload-release.outputs.artifact-id }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -38,17 +39,6 @@ jobs:
         with:
           save-if: false
 
-      - name: "Get uv token"
-        id: token
-        uses: open-security-tools/ost-simple-sts@9e012247e07c39080fb6a832dbfbcfeacebc19c4
-        with:
-          exchange-url: ${{ secrets.STS_API_URL }}/exchange
-          audience: ${{ secrets.STS_API_URL }}
-          repository: astral-sh/uv
-          permissions: |
-            contents: write
-            pull_requests: write
-
       - name: "Configure Git"
         run: |
           git config user.name "astral-automations-bot[bot]"
@@ -62,9 +52,84 @@ jobs:
             ./scripts/release.sh
           fi
         env:
-          GITHUB_TOKEN: ${{ steps.token.outputs.token }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           INPUT_VERSION: ${{ inputs.version }}
-          INPUT_BUMP: ${{ inputs.bump }}
+
+      - name: "Bundle prepared release"
+        run: |
+          branch="$(git branch --show-current)"
+          git -c core.hooksPath=/dev/null bundle create \
+            "$RUNNER_TEMP/prepared-release.bundle" \
+            "$GITHUB_SHA..refs/heads/$branch"
+
+      - name: "Upload prepared release"
+        id: upload-release
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: prepared-release-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/prepared-release.bundle
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 1
+
+  rewrite-changelog:
+    needs: prepare-release
+    runs-on: ubuntu-latest
+    environment: automations
+    permissions:
+      contents: read
+    outputs:
+      artifact-id: ${{ steps.upload-release.outputs.artifact-id }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        with:
+          version: "latest"
+          enable-cache: false
+
+      - name: "Download prepared release"
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          artifact-ids: ${{ needs.prepare-release.outputs.artifact-id }}
+          path: ${{ runner.temp }}/prepared-release
+
+      - name: "Import prepared release"
+        env:
+          GIT_CONFIG_GLOBAL: /dev/null
+          GIT_CONFIG_NOSYSTEM: "1"
+        run: |
+          bundle="$RUNNER_TEMP/prepared-release/prepared-release.bundle"
+          git -c core.hooksPath=/dev/null bundle verify "$bundle"
+
+          heads="$(git bundle list-heads "$bundle")"
+          if [ -z "$heads" ] || [ "$(printf '%s\n' "$heads" | wc -l)" -ne 1 ]; then
+            echo "Expected exactly one release ref in the bundle." >&2
+            exit 1
+          fi
+          read -r prepared_head prepared_ref <<< "$heads"
+          case "$prepared_ref" in
+            refs/heads/release/*) ;;
+            *)
+              echo "Expected a release ref in the bundle: $prepared_ref" >&2
+              exit 1
+              ;;
+          esac
+          git check-ref-format "$prepared_ref"
+
+          git -c core.hooksPath=/dev/null fetch --no-tags "$bundle" "$prepared_ref"
+          if [ "$(git rev-parse 'FETCH_HEAD^{commit}')" != "$prepared_head" ] ||
+            [ "$(git rev-list --parents -n 1 "$prepared_head")" != \
+              "$prepared_head $GITHUB_SHA" ]; then
+            echo "The prepared release does not extend the trusted workflow revision." >&2
+            exit 1
+          fi
+
+          git update-ref "$prepared_ref" "$prepared_head"
+          git checkout --quiet "${prepared_ref#refs/heads/}"
 
       - name: "Prepare Codex prompt"
         run: |
@@ -105,20 +170,172 @@ jobs:
           if git diff --quiet -- CHANGELOG.md && git diff --cached --quiet -- CHANGELOG.md; then
             echo "Codex left the generated changelog unchanged."
           else
-            git -c core.hooksPath=/dev/null commit --only --message "Rewrite changelog" -- CHANGELOG.md
+            git \
+              -c core.hooksPath=/dev/null \
+              -c user.name="astral-automations-bot[bot]" \
+              -c user.email="305554984+astral-automations-bot[bot]@users.noreply.github.com" \
+              commit --only --message "Rewrite changelog" -- CHANGELOG.md
           fi
 
-      - name: "Create or update pull request"
+      - name: "Bundle rewritten release"
         run: |
           branch="$(git branch --show-current)"
-          git push --force \
-            "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" \
-            HEAD:"$branch"
+          git -c core.hooksPath=/dev/null bundle create \
+            "$RUNNER_TEMP/rewritten-release.bundle" \
+            "$GITHUB_SHA..refs/heads/$branch"
+
+      - name: "Upload rewritten release"
+        id: upload-release
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: rewritten-release-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/rewritten-release.bundle
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 1
+
+  create-pull-request:
+    needs: [prepare-release, rewrite-changelog]
+    runs-on: ubuntu-slim
+    environment: automations
+    permissions:
+      contents: read
+      id-token: write # for the credential broker
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: "Download prepared release"
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          artifact-ids: ${{ needs.prepare-release.outputs.artifact-id }}
+          path: ${{ runner.temp }}/prepared-release
+
+      - name: "Download rewritten release"
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          artifact-ids: ${{ needs.rewrite-changelog.outputs.artifact-id }}
+          path: ${{ runner.temp }}/rewritten-release
+
+      - name: "Verify rewritten release"
+        id: verify
+        env:
+          GIT_CONFIG_GLOBAL: /dev/null
+          GIT_CONFIG_NOSYSTEM: "1"
+        run: |
+          prepared_bundle="$RUNNER_TEMP/prepared-release/prepared-release.bundle"
+          rewritten_bundle="$RUNNER_TEMP/rewritten-release/rewritten-release.bundle"
+
+          git -c core.hooksPath=/dev/null bundle verify "$prepared_bundle"
+          prepared_heads="$(git bundle list-heads "$prepared_bundle")"
+          if [ -z "$prepared_heads" ] ||
+            [ "$(printf '%s\n' "$prepared_heads" | wc -l)" -ne 1 ]; then
+            echo "Expected exactly one prepared release ref." >&2
+            exit 1
+          fi
+          read -r prepared_head prepared_ref <<< "$prepared_heads"
+          case "$prepared_ref" in
+            refs/heads/release/*) ;;
+            *)
+              echo "Expected a prepared release ref: $prepared_ref" >&2
+              exit 1
+              ;;
+          esac
+          git check-ref-format "$prepared_ref"
+          git -c core.hooksPath=/dev/null fetch --no-tags "$prepared_bundle" "$prepared_ref"
+          if [ "$(git rev-parse 'FETCH_HEAD^{commit}')" != "$prepared_head" ] ||
+            [ "$(git rev-list --parents -n 1 "$prepared_head")" != \
+              "$prepared_head $GITHUB_SHA" ]; then
+            echo "The prepared release does not extend the trusted workflow revision." >&2
+            exit 1
+          fi
+
+          release_version="${prepared_ref#refs/heads/release/}"
+          if [ "$(git show --no-patch --format=%s "$prepared_head")" != \
+            "Bump version to $release_version" ] ||
+            [ "$(git show --no-patch --format=%ae "$prepared_head")" != \
+              "305554984+astral-automations-bot[bot]@users.noreply.github.com" ] ||
+            [ "$(git show --no-patch --format=%ce "$prepared_head")" != \
+              "305554984+astral-automations-bot[bot]@users.noreply.github.com" ]; then
+            echo "The prepared release commit has unexpected metadata." >&2
+            exit 1
+          fi
+
+          git -c core.hooksPath=/dev/null bundle verify "$rewritten_bundle"
+          rewritten_heads="$(git bundle list-heads "$rewritten_bundle")"
+          if [ -z "$rewritten_heads" ] ||
+            [ "$(printf '%s\n' "$rewritten_heads" | wc -l)" -ne 1 ]; then
+            echo "Expected exactly one rewritten release ref." >&2
+            exit 1
+          fi
+          read -r rewritten_head rewritten_ref <<< "$rewritten_heads"
+          if [ "$rewritten_ref" != "$prepared_ref" ]; then
+            echo "The rewritten release ref does not match the prepared release." >&2
+            exit 1
+          fi
+          git -c core.hooksPath=/dev/null fetch --no-tags "$rewritten_bundle" "$rewritten_ref"
+          if [ "$(git rev-parse 'FETCH_HEAD^{commit}')" != "$rewritten_head" ]; then
+            echo "The rewritten release head does not match its bundle." >&2
+            exit 1
+          fi
+
+          if [ "$rewritten_head" != "$prepared_head" ]; then
+            if [ "$(git rev-list --parents -n 1 "$rewritten_head")" != \
+              "$rewritten_head $prepared_head" ] ||
+              [ "$(git show --no-patch --format=%s "$rewritten_head")" != \
+                "Rewrite changelog" ] ||
+              [ "$(git show --no-patch --format=%ae "$rewritten_head")" != \
+                "305554984+astral-automations-bot[bot]@users.noreply.github.com" ] ||
+              [ "$(git show --no-patch --format=%ce "$rewritten_head")" != \
+                "305554984+astral-automations-bot[bot]@users.noreply.github.com" ]; then
+              echo "The changelog rewrite does not extend the prepared release." >&2
+              exit 1
+            fi
+            if [ "$(git diff --no-renames --name-only "$prepared_head" "$rewritten_head")" != \
+              "CHANGELOG.md" ]; then
+              echo "The changelog rewrite changes a protected or unrelated file." >&2
+              exit 1
+            fi
+            if git diff --no-renames --raw "$prepared_head" "$rewritten_head" |
+              grep -Eq '^:[0-7]+ (120000|160000) '; then
+              echo "The changelog rewrite introduces a symbolic link or Git submodule." >&2
+              exit 1
+            fi
+          fi
+
+          git diff --check "$GITHUB_SHA" "$rewritten_head"
+          echo "head_sha=$rewritten_head" >> "$GITHUB_OUTPUT"
+          echo "branch=${rewritten_ref#refs/heads/}" >> "$GITHUB_OUTPUT"
+
+      - name: "Get uv token"
+        id: token
+        uses: open-security-tools/ost-simple-sts@9e012247e07c39080fb6a832dbfbcfeacebc19c4
+        with:
+          exchange-url: ${{ secrets.STS_API_URL }}/exchange
+          audience: ${{ secrets.STS_API_URL }}
+          repository: astral-sh/uv
+          permissions: |
+            contents: write
+            pull_requests: write
+
+      - name: "Create or update pull request"
+        env:
+          GIT_CONFIG_GLOBAL: /dev/null
+          GIT_CONFIG_NOSYSTEM: "1"
+          GH_TOKEN: ${{ steps.token.outputs.token }}
+          RELEASE_HEAD: ${{ steps.verify.outputs.head_sha }}
+          RELEASE_BRANCH: ${{ steps.verify.outputs.branch }}
+        run: |
+          git -c core.hooksPath=/dev/null push --force \
+            "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" \
+            "$RELEASE_HEAD:refs/heads/$RELEASE_BRANCH"
 
           pull_request="$(
             gh pr list \
               --base main \
-              --head "$branch" \
+              --head "$RELEASE_BRANCH" \
               --state open \
               --json url \
               --jq '.[0].url'
@@ -128,8 +345,6 @@ jobs:
           else
             gh pr create \
               --base main \
-              --head "$branch" \
+              --head "$RELEASE_BRANCH" \
               --fill-first
           fi
-        env:
-          GITHUB_TOKEN: ${{ steps.token.outputs.token }}
