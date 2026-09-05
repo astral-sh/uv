@@ -360,6 +360,22 @@ pub struct Hashes {
 }
 
 impl Hashes {
+    /// Returns `true` if no hashes are present.
+    pub fn is_empty(&self) -> bool {
+        let Self {
+            md5,
+            sha256,
+            sha384,
+            sha512,
+            blake2b,
+        } = self;
+        md5.is_none()
+            && sha256.is_none()
+            && sha384.is_none()
+            && sha512.is_none()
+            && blake2b.is_none()
+    }
+
     /// Parse the hash from a fragment, as in: `sha256=6088930bfe239f0e6710546ab9c19c9ef35e29792895fed6e6e31a023a182a61`
     pub fn parse_fragment(fragment: &str) -> Result<Self, HashError> {
         let mut parts = fragment.split('=');
