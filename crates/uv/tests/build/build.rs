@@ -1336,6 +1336,9 @@ fn build_sha() -> Result<()> {
         [build-system]
         requires = ["hatchling"]
         build-backend = "hatchling.build"
+
+        [tool.uv]
+        build-constraint-dependencies = ["packaging"]
         "#,
     )?;
 
@@ -1346,8 +1349,18 @@ fn build_sha() -> Result<()> {
         .touch()?;
     project.child("README").touch()?;
 
-    // Reject an incorrect hash.
+    // Validate the original declaration, including extras, before dropping empty constraints.
     let constraints = project.child("constraints.txt");
+    constraints.write_str("hatchling[foo]")?;
+
+    uv_snapshot!(context.filters(), context.build().arg("--build-constraint").arg("constraints.txt").arg("--require-hashes").current_dir(&project), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Failed to build `[TEMP_DIR]/project`
+      Caused by: In `--require-hashes` mode, all requirements must have their versions pinned with `==`, but found: hatchling[foo]
+    ");
+
+    // Reject an incorrect hash.
     constraints.write_str(indoc::indoc! {r"
         hatchling==1.22.4 \
             --hash=sha256:a248cb506794bececcddeddb1678bc722f9cfcacf02f98f7c0af6b9ed893caf2 \

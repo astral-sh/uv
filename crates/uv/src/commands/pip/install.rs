@@ -196,7 +196,7 @@ pub(crate) async fn pip_install(
         .collect();
 
     // Read build constraints.
-    let build_constraints: Vec<NameRequirementSpecification> =
+    let build_constraints = Constraints::from_specifications(
         operations::read_constraints(build_constraints, &client_builder)
             .await?
             .into_iter()
@@ -205,8 +205,8 @@ pub(crate) async fn pip_install(
                     .iter()
                     .cloned()
                     .map(NameRequirementSpecification::from),
-            )
-            .collect();
+            ),
+    );
 
     // Detect the current Python interpreter.
     let environment = if target.is_some() || prefix.is_some() {
@@ -478,7 +478,7 @@ pub(crate) async fn pip_install(
         HashStrategy::from_requirements(
             std::iter::empty(),
             build_constraints
-                .iter()
+                .specifications()
                 .map(|entry| (&entry.requirement, entry.hashes.as_slice())),
             Some(&marker_env),
             HashCheckingMode::Verify,
@@ -486,11 +486,6 @@ pub(crate) async fn pip_install(
     } else {
         HashStrategy::default()
     };
-    let build_constraints = Constraints::from_requirements(
-        build_constraints
-            .iter()
-            .map(|constraint| constraint.requirement.clone()),
-    );
 
     // Initialize any shared state.
     let state = SharedState::default();

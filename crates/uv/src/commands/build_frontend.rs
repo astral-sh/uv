@@ -24,7 +24,7 @@ use uv_distribution_filename::{
 };
 use uv_distribution_types::{
     ConfigSettings, DependencyMetadata, ExtraBuildVariables, Index, IndexLocations,
-    PackageConfigSettings, Requirement, SourceDist,
+    NameRequirementSpecification, PackageConfigSettings, Requirement, SourceDist,
 };
 use uv_errors::{ErrorOptions, Hint, Hints, write_error_chain_with_options};
 use uv_fs::{Simplified, normalize_path, relative_to};
@@ -652,11 +652,13 @@ async fn build_package(
         HashStrategy::default()
     };
 
-    let build_constraints = Constraints::from_requirements(
-        build_constraints
-            .into_iter()
-            .map(|constraint| constraint.requirement)
-            .chain(build_constraints_from_workspace.iter().cloned()),
+    let build_constraints = Constraints::from_specifications(
+        build_constraints.into_iter().chain(
+            build_constraints_from_workspace
+                .iter()
+                .cloned()
+                .map(NameRequirementSpecification::from),
+        ),
     );
 
     // Initialize the registry client.
