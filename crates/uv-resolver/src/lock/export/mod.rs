@@ -570,8 +570,6 @@ fn conflict_marker_reachability<'lock>(
                 Entry::Occupied(mut existing) => {
                     let child_map = existing.get_mut();
                     for (key, value) in parent_map {
-                        let mut after = child_map.get(&key).copied().unwrap_or(MarkerTree::FALSE);
-                        after = after.or(value);
                         let child_marker = child_map.entry(key).or_insert(MarkerTree::FALSE);
                         *child_marker = child_marker.or(value);
                     }
