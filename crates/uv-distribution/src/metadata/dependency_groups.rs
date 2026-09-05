@@ -160,6 +160,7 @@ impl SourcedDependencyGroups {
                         project_indexes,
                         None,
                         Some(&name),
+                        None,
                         locations,
                         project.workspace(),
                         git_member,
