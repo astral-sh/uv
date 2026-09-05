@@ -134,23 +134,18 @@ pub(crate) fn simplify_conflict_markers(
         })
         .collect();
 
-    let mut seen: FxHashSet<NodeIndex> = FxHashSet::default();
     while let Some(parent_index) = queue.pop() {
         let extra = graph[parent_index]
             .package_extra_names()
             .map(ConflictItemRef::from);
-        if let Some(item) = extra.filter(|item| relevant.contains(item)) {
-            for set in activated
-                .entry(parent_index)
-                .or_insert_with(|| vec![FxHashSet::default()])
-            {
-                set.insert(item);
-            }
-        }
         let group = graph[parent_index]
             .package_group_names()
             .map(ConflictItemRef::from);
-        if let Some(item) = group.filter(|item| relevant.contains(item)) {
+        for item in extra
+            .into_iter()
+            .chain(group)
+            .filter(|item| relevant.contains(item))
+        {
             for set in activated
                 .entry(parent_index)
                 .or_insert_with(|| vec![FxHashSet::default()])
@@ -164,29 +159,14 @@ pub(crate) fn simplify_conflict_markers(
             .unwrap_or_else(|| vec![FxHashSet::default()]);
         for child_edge in graph.edges_directed(parent_index, Direction::Outgoing) {
             let mut change = false;
+            let existing = activated.entry(child_edge.target()).or_default();
             for set in &sets {
-                let existing = activated.entry(child_edge.target()).or_default();
-                // This is doing a linear scan for testing membership, which
-                // is non-ideal. But it's not actually clear that there's a
-                // strictly better alternative without a real workload being
-                // slow because of this. Namely, we are checking whether the
-                // _set_ being inserted is equivalent to an existing set. So
-                // instead of, say, `Vec<FxHashSet<ConflictItemRef>>`, we could
-                // have `BTreeSet<BTreeSet<ConflictItemRef>>`. But this in turn
-                // makes mutating the elements in each set (done above) more
-                // difficult and likely require more allocations.
-                //
-                // So if this does result in a perf slowdown on some real
-                // work-load, I think the first step would be to re-examine
-                // whether we're doing more work than we need to be doing. If
-                // we aren't, then we might want a more purpose-built data
-                // structure for this.
                 if !existing.contains(set) {
                     existing.push(set.clone());
                     change = true;
                 }
             }
-            if seen.insert(child_edge.target()) || change {
+            if change {
                 queue.push(child_edge.target());
             }
         }
