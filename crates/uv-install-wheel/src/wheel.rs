@@ -14,6 +14,7 @@ use sha2::{Digest, Sha256};
 use tracing::{debug, instrument, trace, warn};
 use walkdir::WalkDir;
 
+use uv_fs::link::CopyLocks;
 use uv_fs::{PortablePath, Simplified, normalize_path_under, persist_with_retry_sync, relative_to};
 use uv_normalize::PackageName;
 use uv_pypi_types::DirectUrl;
@@ -21,6 +22,7 @@ use uv_shell::escape_posix_for_single_quotes;
 use uv_trampoline_builder::windows_script_launcher;
 use uv_warnings::warn_user_once;
 
+use crate::directory::LibraryDirectories;
 use crate::record::RecordEntry;
 use crate::script::{EntryPoints, Script};
 use crate::{Error, Layout};
@@ -337,10 +339,16 @@ pub(crate) fn write_script_entrypoints(
     entrypoints: &[Script],
     record: &mut Vec<RecordEntry>,
     is_gui: bool,
+    locks: &CopyLocks,
 ) -> Result<(), Error> {
     for script in entrypoints {
         let script = ValidatedScript::try_from_script(script, layout)?;
         let entrypoint_relative = script.relative_to_site_package(site_packages)?;
+        if let Some(parent) = script.as_path().parent()
+            && parent != layout.scheme.scripts
+        {
+            LibraryDirectories::new(layout)?.prepare(parent, locks)?;
+        }
 
         // Generate the launcher script.
         let launcher_executable = get_script_executable(&layout.sys_executable, is_gui);
@@ -352,22 +360,15 @@ pub(crate) fn write_script_entrypoints(
         );
 
         // If necessary, wrap the launcher script in a Windows launcher binary.
-        if cfg!(windows) {
-            write_file_recorded(
-                site_packages,
-                &entrypoint_relative,
-                &windows_script_launcher(&launcher_python_script, is_gui, &launcher_executable)?,
-                record,
-            )?;
+        let launcher = if cfg!(windows) {
+            windows_script_launcher(&launcher_python_script, is_gui, &launcher_executable)?
         } else {
-            write_file_recorded(
-                site_packages,
-                &entrypoint_relative,
-                &launcher_python_script,
-                record,
-            )?;
+            launcher_python_script.into_bytes()
+        };
+        locks.with_file_write(&site_packages.join(&entrypoint_relative), || {
+            write_file_recorded(site_packages, &entrypoint_relative, &launcher, record)?;
 
-            // Make the launcher executable.
+            // Make the launcher executable before another installation can replace it.
             #[cfg(unix)]
             {
                 use std::fs::Permissions;
@@ -379,7 +380,8 @@ pub(crate) fn write_script_entrypoints(
                     fs::set_permissions(path, Permissions::from_mode(permissions.mode() | 0o111))?;
                 }
             }
-        }
+            Ok::<_, Error>(())
+        })?;
     }
     Ok(())
 }
@@ -467,12 +469,13 @@ pub(crate) enum LibKind {
 fn move_folder_recorded(
     src_dir: &Path,
     dest_dir: &Path,
-    scripts: &Path,
+    layout: &Layout,
     site_packages: &Path,
     record: &mut [RecordEntry],
+    locks: &CopyLocks,
 ) -> Result<(), Error> {
     let mut rename_or_copy = RenameOrCopy::default();
-    fs::create_dir_all(dest_dir)?;
+    let directories = LibraryDirectories::new(layout)?;
     for entry in WalkDir::new(src_dir) {
         let entry = entry?;
         let src = entry.path();
@@ -488,10 +491,10 @@ fn move_folder_recorded(
             .expect("prefix must not change");
         let target = dest_dir.join(relative_to_data);
         if entry.file_type().is_dir() {
-            fs::create_dir_all(&target)?;
+            directories.prepare(&target, locks)?;
         } else {
-            validate_data_script_destination(&target, scripts)?;
-            rename_or_copy.rename_or_copy(src, &target)?;
+            validate_data_script_destination(&target, &layout.scheme.scripts)?;
+            rename_or_copy.rename_or_copy(src, &target, locks)?;
             let entry = record
                 .iter_mut()
                 .find(|entry| Path::new(&entry.path) == relative_to_site_packages)
@@ -517,6 +520,7 @@ fn install_script(
     record: &mut [RecordEntry],
     file: &DirEntry,
     #[allow(unused)] rename_or_copy: &mut RenameOrCopy,
+    locks: &CopyLocks,
 ) -> Result<(), Error> {
     let file_type = file.file_type()?;
 
@@ -612,23 +616,23 @@ fn install_script(
         let mut target = uv_fs::tempfile_in(&layout.scheme.scripts)?;
         let size_and_encoded_hash = copy_and_hash(&mut start.chain(script), &mut target)?;
 
-        persist_with_retry_sync(target, &script_absolute)?;
-        fs::remove_file(&path)?;
-
-        // Make the script executable. We just created the file, so we can set permissions directly.
+        // Set permissions on the temporary file before publishing it.
         #[cfg(unix)]
         {
             use std::fs::Permissions;
             use std::os::unix::fs::PermissionsExt;
 
-            let permissions = fs::metadata(&script_absolute)?.permissions();
+            let permissions = target.as_file().metadata()?.permissions();
             if permissions.mode() & 0o111 != 0o111 {
-                fs::set_permissions(
-                    script_absolute,
-                    Permissions::from_mode(permissions.mode() | 0o111),
-                )?;
+                target
+                    .as_file()
+                    .set_permissions(Permissions::from_mode(permissions.mode() | 0o111))?;
             }
         }
+        locks.with_file_write(&script_absolute, || {
+            persist_with_retry_sync(target, &script_absolute)
+        })?;
+        fs::remove_file(&path)?;
 
         Some(size_and_encoded_hash)
     } else {
@@ -646,7 +650,7 @@ fn install_script(
             if permissions.mode() & 0o111 == 0o111 {
                 // If the permissions are already executable, we don't need to change them.
                 // We fall back to copy when the file is on another drive.
-                rename_or_copy.rename_or_copy(&path, &script_absolute)?;
+                rename_or_copy.rename_or_copy(&path, &script_absolute, locks)?;
             } else {
                 // If we have to modify the permissions, copy the file, since we might not own it,
                 // and we may not be allowed to change permissions on an unowned moved file.
@@ -657,12 +661,12 @@ fn install_script(
                     permissions.mode()
                 );
 
-                uv_fs::copy_atomic_sync(&path, &script_absolute)?;
-
-                fs::set_permissions(
-                    script_absolute,
-                    Permissions::from_mode(permissions.mode() | 0o111),
-                )?;
+                let target = uv_fs::tempfile_in(&layout.scheme.scripts)?;
+                fs::copy(&path, &target)?;
+                fs::set_permissions(&target, Permissions::from_mode(permissions.mode() | 0o111))?;
+                locks.with_file_write(&script_absolute, || {
+                    persist_with_retry_sync(target, &script_absolute)
+                })?;
             }
         }
 
@@ -671,17 +675,24 @@ fn install_script(
             // Here, two wrappers over rename are clashing: We want to retry for security software
             // blocking the file, but we also need the copy fallback is the problem was trying to
             // move a file cross-drive.
-            match uv_fs::with_retry_sync(&path, &script_absolute, "renaming", || {
-                fs_err::rename(&path, &script_absolute)
-            }) {
-                Ok(()) => (),
-                Err(err) => {
-                    debug!("Failed to rename, falling back to copy: {err}");
-                    uv_fs::with_retry_sync(&path, &script_absolute, "copying", || {
-                        fs_err::copy(&path, &script_absolute)?;
-                        Ok(())
-                    })?;
-                }
+            let renamed = locks.with_file_write(&script_absolute, || {
+                Ok::<_, io::Error>(uv_fs::with_retry_sync(
+                    &path,
+                    &script_absolute,
+                    "renaming",
+                    || fs_err::rename(&path, &script_absolute),
+                ))
+            })?;
+            if let Err(err) = renamed {
+                debug!("Failed to rename, falling back to copy: {err}");
+                let target = uv_fs::tempfile_in(&layout.scheme.scripts)?;
+                uv_fs::with_retry_sync(&path, &script_absolute, "copying", || {
+                    fs_err::copy(&path, &target)?;
+                    Ok(())
+                })?;
+                locks.with_file_write(&script_absolute, || {
+                    persist_with_retry_sync(target, &script_absolute)
+                })?;
             }
         }
 
@@ -723,6 +734,7 @@ pub(crate) fn install_data(
     console_scripts: &[Script],
     gui_scripts: &[Script],
     record: &mut [RecordEntry],
+    locks: &CopyLocks,
 ) -> Result<(), Error> {
     for entry in fs::read_dir(data_dir)? {
         let entry = entry?;
@@ -739,9 +751,10 @@ pub(crate) fn install_data(
                 move_folder_recorded(
                     &path,
                     &layout.scheme.data,
-                    &layout.scheme.scripts,
+                    layout,
                     site_packages,
                     record,
+                    locks,
                 )?;
             }
             Some("scripts") => {
@@ -773,7 +786,7 @@ pub(crate) fn install_data(
 
                     // Create the scripts directory, if it doesn't exist.
                     if !initialized {
-                        fs::create_dir_all(&layout.scheme.scripts)?;
+                        LibraryDirectories::new(layout)?.prepare(&layout.scheme.scripts, locks)?;
                         initialized = true;
                     }
 
@@ -784,6 +797,7 @@ pub(crate) fn install_data(
                         record,
                         &file,
                         &mut rename_or_copy,
+                        locks,
                     )?;
                 }
             }
@@ -794,13 +808,7 @@ pub(crate) fn install_data(
                     "Installing data/headers to {}",
                     target_path.user_display()
                 );
-                move_folder_recorded(
-                    &path,
-                    &target_path,
-                    &layout.scheme.scripts,
-                    site_packages,
-                    record,
-                )?;
+                move_folder_recorded(&path, &target_path, layout, site_packages, record, locks)?;
             }
             Some("purelib") => {
                 trace!(
@@ -811,9 +819,10 @@ pub(crate) fn install_data(
                 move_folder_recorded(
                     &path,
                     &layout.scheme.purelib,
-                    &layout.scheme.scripts,
+                    layout,
                     site_packages,
                     record,
+                    locks,
                 )?;
             }
             Some("platlib") => {
@@ -825,9 +834,10 @@ pub(crate) fn install_data(
                 move_folder_recorded(
                     &path,
                     &layout.scheme.platlib,
-                    &layout.scheme.scripts,
+                    layout,
                     site_packages,
                     record,
+                    locks,
                 )?;
             }
             _ => {
@@ -1201,22 +1211,28 @@ impl RenameOrCopy {
     /// Try to rename, and on failure, copy.
     ///
     /// Usually, source and target are on the same device, so we can rename, but if that fails, we
-    /// have to copy. If renaming failed once, we switch to copy permanently.
-    fn rename_or_copy(&mut self, from: impl AsRef<Path>, to: impl AsRef<Path>) -> io::Result<()> {
-        match self {
-            Self::Rename => match fs_err::rename(from.as_ref(), to.as_ref()) {
-                Ok(()) => {}
+    /// have to copy. If renaming failed once, we switch to copy permanently. Copies replace the
+    /// destination atomically so an existing file symlink is never followed into the wheel cache.
+    fn rename_or_copy(&mut self, from: &Path, to: &Path, locks: &CopyLocks) -> io::Result<()> {
+        if let Self::Rename = self {
+            // Distinguish a directory conflict from a rename failure that permits copying.
+            match locks.with_file_write(to, || Ok::<_, io::Error>(fs_err::rename(from, to)))? {
+                Ok(()) => return Ok(()),
                 Err(err) => {
                     *self = Self::Copy;
                     debug!("Failed to rename, falling back to copy: {err}");
-                    fs_err::copy(from.as_ref(), to.as_ref())?;
                 }
-            },
-            Self::Copy => {
-                fs_err::copy(from.as_ref(), to.as_ref())?;
             }
         }
-        Ok(())
+        let parent = to.parent().ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "Copy destination has no parent",
+            )
+        })?;
+        let target = uv_fs::tempfile_in(parent)?;
+        fs::copy(from, &target)?;
+        locks.with_file_write(to, || persist_with_retry_sync(target, to))
     }
 }
 
@@ -1228,12 +1244,39 @@ mod test {
 
     use anyhow::Result;
     use assert_fs::prelude::*;
+    #[cfg(unix)]
+    use fs_err::os::unix::fs::symlink;
     use indoc::{formatdoc, indoc};
 
+    #[cfg(unix)]
+    use super::RenameOrCopy;
     use super::{
         Error, RecordEntry, Script, WheelFile, format_shebang, get_script_executable,
         parse_email_message_file, parse_scripts, read_record, write_installer_metadata,
     };
+    #[cfg(unix)]
+    use uv_fs::link::CopyLocks;
+
+    #[cfg(unix)]
+    #[test]
+    fn copy_data_over_existing_symlink() -> Result<()> {
+        let temporary = assert_fs::TempDir::new()?;
+        let source = temporary.child("source");
+        let cached = temporary.child("cached");
+        let target = temporary.child("target");
+        source.write_str("new data")?;
+        cached.write_str("cached data")?;
+        symlink(cached.path(), target.path())?;
+
+        // Exercise the fallback without requiring two filesystems in the test environment.
+        RenameOrCopy::Copy.rename_or_copy(source.path(), target.path(), &CopyLocks::default())?;
+
+        assert!(!target.path().is_symlink());
+        target.assert("new data");
+        cached.assert("cached data");
+        source.assert("new data");
+        Ok(())
+    }
 
     #[test]
     fn test_parse_email_message_file() {

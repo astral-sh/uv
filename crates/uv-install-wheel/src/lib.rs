@@ -19,6 +19,7 @@ pub use wheel::{
     WheelFile, read_record, read_record_into_iter, reserved_script_name, validate_and_heal_record,
 };
 
+mod directory;
 mod install;
 mod linker;
 mod record;

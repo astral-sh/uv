@@ -80,10 +80,67 @@ pub fn link_dir<F>(
 where
     F: Fn(&Path) -> bool,
 {
-    match options.mode {
-        LinkMode::Clone => clone_dir(src, dst, options),
-        mode => walk_and_link(src, dst, mode, options),
+    if same_file::is_same_file(src, dst).unwrap_or(false) {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "Cannot link a directory onto itself",
+        )
+        .into());
     }
+    fs_err::create_dir_all(dst)?;
+    let mut state = LinkState::new(options.mode);
+    for entry in fs_err::read_dir(src)? {
+        let entry = entry?;
+        let path = entry.path();
+        let target = dst.join(entry.file_name());
+        let operation = || {
+            if !entry.file_type()?.is_dir() {
+                check_file_destination(&target)?;
+                return link_file(&path, &target, state, options).map(|state| Some(state.mode));
+            }
+            if state.mode == LinkMode::Symlink && !(options.needs_mutable_copy)(&path) {
+                match create_symlink(&path, &target) {
+                    Ok(()) => return Ok(Some(LinkMode::Symlink)),
+                    Err(err) if err.kind() == io::ErrorKind::AlreadyExists => {
+                        if options.on_existing_directory == OnExistingDirectory::Fail {
+                            return Err(LinkError::Symlink {
+                                from: path.clone(),
+                                to: target.clone(),
+                                err,
+                            });
+                        }
+                    }
+                    Err(err) => debug!(
+                        "Failed to symlink directory `{}` to `{}`: {err}; linking individual files",
+                        path.display(),
+                        target.display(),
+                    ),
+                }
+            }
+            materialize_symlink_dir(&target, &options.needs_mutable_copy)?;
+            if state.mode == LinkMode::Clone && !target.try_exists()? {
+                // Reserve the new directory until cloning finishes, without creating it first.
+                return clone_dir(&path, &target, options).map(Some);
+            }
+            fs_err::create_dir_all(&target)?;
+            Ok(None)
+        };
+        let mode = if let Some(locks) = options.copy_locks {
+            locks.with_directory_lock(&target, operation)?
+        } else {
+            operation()?
+        };
+        // Once the destination is a real directory, concurrent installers can safely merge files
+        // using the existing linker. No directory links are created beneath this point.
+        state = LinkState::new(match mode {
+            Some(mode) => mode,
+            None => match state.mode {
+                LinkMode::Clone => clone_dir(&path, &target, options)?,
+                mode => walk_and_link(&path, &target, mode, options)?,
+            },
+        });
+    }
+    Ok(state.mode)
 }
 
 /// Directory-level locks for concurrent copy operations.
@@ -93,15 +150,67 @@ where
 ///
 /// These locks are used whenever a file is physically copied, regardless of the requested
 /// [`LinkMode`], as all modes can fallback to copying.
+/// Directory entry operations can copy files while holding a lock, so they use separate locks.
 ///
 /// The intended pattern for usage is to create a [`CopyLocks`] instance then share it across all
 /// [`link_dir`] invocations that may conflict via [`LinkOptions::with_copy_locks`].
 #[derive(Debug, Default)]
 pub struct CopyLocks {
-    dir_locks: Mutex<FxHashMap<PathBuf, Arc<Mutex<()>>>>,
+    /// Serialize non-atomic file copies into the same directory.
+    file_copy_locks: Mutex<FxHashMap<PathBuf, Arc<Mutex<()>>>>,
+    /// Serialize entry creation and replacement while directory links are created or expanded.
+    directory_entry_locks: Mutex<FxHashMap<PathBuf, Arc<Mutex<()>>>>,
 }
 
 impl CopyLocks {
+    /// Serialize changes to sibling directory entries.
+    ///
+    /// The parent must exist. Its canonical path identifies the lock, including through aliases.
+    pub fn with_directory_lock<T, E>(
+        &self,
+        path: &Path,
+        operation: impl FnOnce() -> Result<T, E>,
+    ) -> Result<T, E>
+    where
+        E: From<io::Error>,
+    {
+        let parent = path.parent().unwrap_or(path);
+        let parent = fs_err::canonicalize(if parent.as_os_str().is_empty() {
+            Path::new(".")
+        } else {
+            parent
+        })?;
+        let lock = self
+            .directory_entry_locks
+            .lock()
+            .map_err(|err| io::Error::other(err.to_string()))?
+            .entry(parent)
+            .or_default()
+            .clone();
+        let _guard = lock
+            .lock()
+            .map_err(|err| io::Error::other(err.to_string()))?;
+        operation()
+    }
+
+    /// Publish a file without replacing a package directory during expansion.
+    ///
+    /// Prepare its parent first. The operation must replace file symlinks rather than write through
+    /// them; this check only rejects directory destinations.
+    pub fn with_file_write<T, E>(
+        &self,
+        path: &Path,
+        operation: impl FnOnce() -> Result<T, E>,
+    ) -> Result<T, E>
+    where
+        E: From<io::Error>,
+    {
+        self.with_directory_lock(path, || {
+            check_file_destination(path)?;
+            operation()
+        })
+    }
+
     /// Copy a file with directory-level synchronization.
     ///
     /// Acquires a lock on the parent directory before copying to prevent concurrent writes to the
@@ -111,7 +220,7 @@ impl CopyLocks {
         // TODO(zanieb): This unwrap was copied from `uv-install-wheel`; consider propagating the
         // error instead of panicking if `to` has no parent.
         let dir_lock = {
-            let mut locks_guard = self.dir_locks.lock().unwrap();
+            let mut locks_guard = self.file_copy_locks.lock().unwrap();
             locks_guard
                 .entry(to.parent().unwrap().to_path_buf())
                 .or_insert_with(|| Arc::new(Mutex::new(())))
@@ -163,6 +272,9 @@ impl<'a, F> LinkOptions<'a, F> {
     /// Files matching this predicate will use [`LinkMode::Copy`] instead when using
     /// [`LinkMode::Hardlink`] or [`LinkMode::Symlink`] are requested.
     ///
+    /// In [`LinkMode::Symlink`], also select top-level directories containing mutable files to
+    /// prevent linking the directory without inspecting its contents.
+    ///
     /// Has no effect when using [`LinkMode::Copy`] or [`LinkMode::Clone`], since the linked file is
     /// already mutable without affecting source.
     pub fn with_mutable_copy_filter<G>(self, f: G) -> LinkOptions<'a, G>
@@ -182,24 +294,19 @@ impl<'a, F> LinkOptions<'a, F> {
     /// When provided, file copy operations will acquire a directory-level lock before writing. This
     /// prevents corruption when multiple installations run concurrently.
     #[must_use]
-    pub fn with_copy_locks(self, locks: &'a CopyLocks) -> Self {
-        LinkOptions {
-            mode: self.mode,
-            needs_mutable_copy: self.needs_mutable_copy,
-            copy_locks: Some(locks),
-            on_existing_directory: self.on_existing_directory,
-        }
+    pub fn with_copy_locks(mut self, locks: &'a CopyLocks) -> Self {
+        self.copy_locks = Some(locks);
+        self
     }
 
     /// Set the behavior when the destination directory already exists.
     #[must_use]
-    pub fn with_on_existing_directory(self, on_existing_directory: OnExistingDirectory) -> Self {
-        LinkOptions {
-            mode: self.mode,
-            needs_mutable_copy: self.needs_mutable_copy,
-            copy_locks: self.copy_locks,
-            on_existing_directory,
-        }
+    pub fn with_on_existing_directory(
+        mut self,
+        on_existing_directory: OnExistingDirectory,
+    ) -> Self {
+        self.on_existing_directory = on_existing_directory;
+        self
     }
 
     /// Copy a file, using synchronized copy if locks are configured.
@@ -214,6 +321,54 @@ impl<'a, F> LinkOptions<'a, F> {
             Ok(())
         }
     }
+}
+
+/// Reject existing directory destinations, including directory symlinks.
+fn check_file_destination(path: &Path) -> io::Result<()> {
+    match fs_err::metadata(path) {
+        Ok(metadata) if metadata.is_dir() => Err(io::Error::new(
+            io::ErrorKind::IsADirectory,
+            format!("Cannot replace directory `{}` with a file", path.display()),
+        )),
+        Ok(_) => Ok(()),
+        Err(err) if err.kind() == io::ErrorKind::NotFound => Ok(()),
+        Err(err) => Err(err),
+    }
+}
+
+/// Replace a directory symlink with real directories and symlinks to individual files.
+///
+/// Missing paths and non-links are unchanged.
+/// Source files matching `needs_mutable_copy` are copied instead of linked.
+/// If writes can overlap, hold [`CopyLocks::with_directory_lock`] for `path` throughout this call.
+pub fn materialize_symlink_dir(
+    path: &Path,
+    needs_mutable_copy: impl Fn(&Path) -> bool,
+) -> Result<(), LinkError> {
+    match fs_err::symlink_metadata(path) {
+        Ok(metadata) if metadata.file_type().is_symlink() => {}
+        Ok(_) => return Ok(()),
+        Err(err) if err.kind() == io::ErrorKind::NotFound => return Ok(()),
+        Err(err) => return Err(err.into()),
+    }
+    let source = fs_err::canonicalize(path)?;
+    let parent = path
+        .parent()
+        .ok_or_else(|| io::Error::other("Directory link has no parent"))?;
+    let temporary = tempfile::tempdir_in(parent)?;
+    walk_and_link(
+        &source,
+        temporary.path(),
+        LinkMode::Symlink,
+        &LinkOptions::new(LinkMode::Symlink).with_mutable_copy_filter(needs_mutable_copy),
+    )?;
+    crate::remove_symlink(path)?;
+    if let Err(err) = fs_err::rename(temporary.path(), path) {
+        // Restore the link if publishing the expanded directory failed.
+        let _ = create_symlink(&source, path);
+        return Err(err.into());
+    }
+    Ok(())
 }
 
 /// Whether the current linking strategy has been confirmed to work.
@@ -388,6 +543,8 @@ where
 
 /// Dispatch a single file to the appropriate linking strategy based on the current state.
 ///
+/// Files matching [`LinkOptions::needs_mutable_copy`] are copied instead of hardlinked or symlinked.
+///
 /// Returns the (possibly updated) state for the next file. When a strategy fails, it
 /// transitions to [`LinkState::next_mode`] and re-dispatches through this function so the
 /// fallback chain is followed automatically.
@@ -402,9 +559,13 @@ where
 {
     match state.mode {
         LinkMode::Clone => reflink_file_with_fallback(path, target, state, options),
-        LinkMode::Hardlink => hardlink_file_with_fallback(path, target, state, options),
-        LinkMode::Symlink => symlink_file_with_fallback(path, target, state, options),
-        LinkMode::Copy => {
+        LinkMode::Hardlink if !(options.needs_mutable_copy)(path) => {
+            hardlink_file_with_fallback(path, target, state, options)
+        }
+        LinkMode::Symlink if !(options.needs_mutable_copy)(path) => {
+            symlink_file_with_fallback(path, target, state, options)
+        }
+        LinkMode::Copy | LinkMode::Hardlink | LinkMode::Symlink => {
             if options.on_existing_directory == OnExistingDirectory::Merge {
                 atomic_copy_overwrite(path, target, options)?;
             } else {
@@ -631,9 +792,6 @@ where
 }
 
 /// Attempt to hard link a single file, falling back via [`link_file`] on failure.
-///
-/// Files matching the [`LinkOptions::needs_mutable_copy`] predicate are always copied
-/// to avoid mutating the source through a hard link.
 fn hardlink_file_with_fallback<F>(
     path: &Path,
     target: &Path,
@@ -643,11 +801,6 @@ fn hardlink_file_with_fallback<F>(
 where
     F: Fn(&Path) -> bool,
 {
-    if (options.needs_mutable_copy)(path) {
-        copy_file(path, target, options)?;
-        return Ok(state);
-    }
-
     match state.attempt {
         LinkAttempt::Initial => {
             if let Err(err) = try_hardlink_file(path, target) {
@@ -690,9 +843,6 @@ where
 }
 
 /// Attempt to symlink a single file, falling back via [`link_file`] on failure.
-///
-/// Files matching the [`LinkOptions::needs_mutable_copy`] predicate are always copied
-/// to avoid mutating the source through a symlink.
 fn symlink_file_with_fallback<F>(
     path: &Path,
     target: &Path,
@@ -702,11 +852,6 @@ fn symlink_file_with_fallback<F>(
 where
     F: Fn(&Path) -> bool,
 {
-    if (options.needs_mutable_copy)(path) {
-        copy_file(path, target, options)?;
-        return Ok(state);
-    }
-
     match state.attempt {
         LinkAttempt::Initial => {
             if let Err(err) = create_symlink(path, target) {
@@ -908,6 +1053,8 @@ fn create_symlink(original: &Path, link: &Path) -> io::Result<()> {
 #[expect(clippy::print_stderr)]
 mod tests {
     use std::assert_matches;
+    #[cfg(target_os = "macos")]
+    use std::{fs::Permissions, os::unix::fs::PermissionsExt};
 
     use super::*;
     use tempfile::TempDir;
@@ -1027,6 +1174,7 @@ mod tests {
         // If symlink succeeded, verify files are symlinks
         if result == LinkMode::Symlink {
             assert!(dst_dir.path().join("file1.txt").is_symlink());
+            assert!(dst_dir.path().join("subdir").is_symlink());
         }
     }
 
@@ -1727,20 +1875,31 @@ mod tests {
 
     #[test]
     #[cfg(target_os = "macos")]
-    fn test_macos_clone_directory_recursive() {
+    fn test_macos_clone_directory_recursive() -> io::Result<()> {
         // Test the macOS-specific directory cloning via clonefile
         let src_dir = test_tempdir();
         let dst_dir = test_tempdir();
 
         create_test_tree(src_dir.path());
+        fs_err::set_permissions(src_dir.path().join("subdir"), Permissions::from_mode(0o700))?;
 
         // On macOS with APFS, this should use clonefile for entire directories
         let options = LinkOptions::new(LinkMode::Clone);
-        let result = link_dir(src_dir.path(), dst_dir.path(), &options).unwrap();
+        let result =
+            link_dir(src_dir.path(), dst_dir.path(), &options).map_err(io::Error::other)?;
 
         // On APFS, should succeed with Clone mode
         assert_eq!(result, LinkMode::Clone);
         verify_test_tree(dst_dir.path());
+        // Cloning the entire directory preserves its permissions.
+        assert_eq!(
+            fs_err::metadata(dst_dir.path().join("subdir"))?
+                .permissions()
+                .mode()
+                & 0o777,
+            0o700,
+        );
+        Ok(())
     }
 
     #[test]
