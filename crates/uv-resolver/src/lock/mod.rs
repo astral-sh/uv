@@ -2739,10 +2739,13 @@ impl Lock {
             if let Source::Registry(index) = &package.id.source {
                 match index {
                     RegistrySource::Url(url) => {
-                        if remotes
-                            .as_ref()
-                            .is_some_and(|remotes| !remotes.contains(url))
-                        {
+                        if remotes.as_ref().is_some_and(|remotes| {
+                            !remotes.contains(url)
+                                && !remotes.iter().any(|r| {
+                                    r.as_str().trim_end_matches('/')
+                                        == url.as_str().trim_end_matches('/')
+                                })
+                        }) {
                             let name = &package.id.name;
                             let version = &package
                                 .id
