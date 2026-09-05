@@ -2233,6 +2233,8 @@ impl LockSettings {
 pub(crate) struct UpgradeSettings {
     pub(crate) packages: Vec<PackageName>,
     pub(crate) exclude: Vec<PackageName>,
+    pub(crate) package: Option<PackageName>,
+    pub(crate) all_packages: bool,
     pub(crate) install_mirrors: PythonInstallMirrors,
     pub(crate) settings: ResolverSettings,
 }
@@ -2250,6 +2252,8 @@ impl UpgradeSettings {
             .unwrap_or_default();
         let packages = args.packages;
         let exclude = args.exclude;
+        let package = args.package;
+        let all_packages = args.all_packages;
         let mut settings =
             ResolverSettings::combine(ResolverOptions::default(), filesystem, &environment);
         settings.upgrade = if packages.is_empty() {
@@ -2261,6 +2265,8 @@ impl UpgradeSettings {
         Self {
             packages,
             exclude,
+            package,
+            all_packages,
             install_mirrors: environment
                 .install_mirrors
                 .combine(filesystem_install_mirrors),
@@ -5439,6 +5445,8 @@ mod tests {
             UpgradeArgs {
                 packages: vec![package.clone()],
                 exclude: Vec::new(),
+                all_packages: false,
+                package: None,
             },
             None,
             EnvironmentOptions::new()?,
