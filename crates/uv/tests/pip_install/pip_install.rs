@@ -8354,7 +8354,45 @@ fn require_hashes_build_dependencies() -> Result<()> {
         .arg("--no-binary").arg("a")
         .arg("-r")
         .arg("requirements.txt")
-        .arg("--require-hashes"), @"
+        .arg("--require-hashes")
+        .arg("--require-build-hashes"), @r"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    warning: The `--require-build-hashes` option is experimental and may change without warning. Pass `--preview-features build-dependency-hashes` to disable this warning.
+    Resolved 1 package in [TIME]
+      × Failed to download and build `a==1.0.0`
+      ├─▶ Failed to resolve requirements from `build-system.requires`
+      ├─▶ No solution found when resolving: `hatchling`
+      ╰─▶ In `--require-hashes` mode, all requirements must be pinned upfront with `==`, but found: `hatchling`
+    "
+    );
+
+    uv_snapshot!(context.pip_install()
+        .arg("--index-url").arg(server.index_url())
+        .arg("--no-binary").arg("a")
+        .arg("-r")
+        .arg("requirements.txt")
+        .arg("--require-hashes")
+        .arg("--require-build-hashes")
+        .arg("--preview-features").arg("build-dependency-hashes"), @r"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+      × Failed to download and build `a==1.0.0`
+      ├─▶ Failed to resolve requirements from `build-system.requires`
+      ├─▶ No solution found when resolving: `hatchling`
+      ╰─▶ In `--require-hashes` mode, all requirements must be pinned upfront with `==`, but found: `hatchling`
+    "
+    );
+
+    uv_snapshot!(context.pip_install()
+        .arg("--index-url").arg(server.index_url())
+        .arg("--no-binary").arg("a")
+        .arg("-r")
+        .arg("requirements.txt")
+        .arg("--require-hashes")
+        .arg("--require-build-hashes")
+        .arg("--no-require-build-hashes"), @"
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
@@ -10028,6 +10066,38 @@ fn compatible_build_constraint() -> Result<()> {
         .arg("requests==1.2")
         .arg("--build-constraint")
         .arg("build_constraints.txt"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + requests==1.2.0
+    "
+    );
+
+    Ok(())
+}
+
+/// Include a `build_constraints.txt` file with hashes for the build dependencies.
+#[test]
+fn require_build_hashes_from_build_constraint() -> Result<()> {
+    let context = uv_test::test_context!("3.9");
+
+    let constraints_txt = context.temp_dir.child("build_constraints.txt");
+    constraints_txt.write_str(indoc::indoc! {r"
+        setuptools==69.0.2 \
+            --hash=sha256:1e8fdff6797d3865f37397be788a4e3cba233608e9b509382a2777d25ebde7f2
+        wheel==0.42.0 \
+            --hash=sha256:177f9c9b0d45c47873b619f5b650346d632cdc35fb5e4d25058e09c9e581433d
+    "})?;
+
+    uv_snapshot!(context.pip_install()
+        .arg("requests==1.2")
+        .arg("--build-constraint")
+        .arg("build_constraints.txt")
+        .arg("--require-build-hashes")
+        .arg("--preview-features")
+        .arg("build-dependency-hashes"), @"
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
