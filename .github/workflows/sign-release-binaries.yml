@@ -129,9 +129,9 @@ jobs:
       - name: "Log in to Azure with GitHub OIDC"
         uses: azure/login@7ddb5af1ef8758cf1353cf3b42f940aee27ba21c # v3
         with:
-          client-id: ${{ secrets.AZURE_CLIENT_ID_MACOS }}
-          tenant-id: ${{ secrets.AZURE_TENANT_ID_MACOS }}
-          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID_MACOS }}
+          client-id: ${{ secrets.CODESIGN_AZURE_CLIENT_ID_MACOS }}
+          tenant-id: ${{ secrets.CODESIGN_AZURE_TENANT_ID_MACOS }}
+          subscription-id: ${{ secrets.CODESIGN_AZURE_SUBSCRIPTION_ID_MACOS }}
 
       - name: "Sign executable wheel members through Azure Key Vault"
         shell: bash
@@ -139,13 +139,13 @@ jobs:
           STORAGE_ACCOUNT: ${{ secrets.CODESIGN_STORAGE_ACCOUNT }}
           STORAGE_CONTAINER: ${{ secrets.CODESIGN_STORAGE_CONTAINER }}
           # rcodesign reads RCODESIGN_* as configuration, so keep download settings separate.
-          COMPONENT_RCODESIGN_BLOB: ${{ secrets.CODESIGN_RCODESIGN_BLOB }}
-          COMPONENT_RCODESIGN_SHA256: ${{ secrets.CODESIGN_RCODESIGN_SHA256 }}
-          COMPONENT_PKCS11_BLOB: ${{ secrets.CODESIGN_PKCS11_BLOB }}
-          COMPONENT_PKCS11_SHA256: ${{ secrets.CODESIGN_PKCS11_SHA256 }}
+          COMPONENT_RCODESIGN_BLOB: ${{ secrets.CODESIGN_COMPONENT_RCODESIGN_BLOB }}
+          COMPONENT_RCODESIGN_SHA256: ${{ secrets.CODESIGN_COMPONENT_RCODESIGN_SHA256 }}
+          COMPONENT_PKCS11_BLOB: ${{ secrets.CODESIGN_COMPONENT_PKCS11_BLOB }}
+          COMPONENT_PKCS11_SHA256: ${{ secrets.CODESIGN_COMPONENT_PKCS11_SHA256 }}
           AZURE_CREDENTIAL_KIND: azurecli
-          AZURE_KEYVAULT_NAME: ${{ secrets.CODESIGN_KEY_VAULT }}
-          AZURE_KEYVAULT_KEY_VERSION: ${{ secrets.CODESIGN_KEY_VERSION }}
+          AZURE_KEYVAULT_NAME: ${{ secrets.CODESIGN_AZURE_KEYVAULT_NAME }}
+          AZURE_KEYVAULT_KEY_VERSION: ${{ secrets.CODESIGN_AZURE_KEYVAULT_KEY_VERSION }}
           KEY_NAME: ${{ secrets.CODESIGN_KEY_NAME }}
           CERTIFICATE_SHA256: ${{ secrets.CODESIGN_CERTIFICATE_SHA256 }}
         run: uv run scripts/sign-release-macos.py ./unsigned ./signed
@@ -179,9 +179,9 @@ jobs:
       - name: "Log in to Azure with GitHub OIDC"
         uses: azure/login@7ddb5af1ef8758cf1353cf3b42f940aee27ba21c # v3
         with:
-          client-id: ${{ secrets.AZURE_CLIENT_ID_WINDOWS }}
-          tenant-id: ${{ secrets.AZURE_TENANT_ID_WINDOWS }}
-          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID_WINDOWS }}
+          client-id: ${{ secrets.CODESIGN_AZURE_CLIENT_ID_WINDOWS }}
+          tenant-id: ${{ secrets.CODESIGN_AZURE_TENANT_ID_WINDOWS }}
+          subscription-id: ${{ secrets.CODESIGN_AZURE_SUBSCRIPTION_ID_WINDOWS }}
 
       - name: "Copy executable wheel members for signing"
         shell: pwsh
@@ -195,8 +195,8 @@ jobs:
         uses: azure/artifact-signing-action@c7ab2a863ab5f9a846ddb8265964877ef296ee82 # v2
         with:
           endpoint: ${{ secrets.CODESIGN_ENDPOINT }}
-          signing-account-name: ${{ secrets.CODESIGN_ACCOUNT }}
-          certificate-profile-name: ${{ secrets.CODESIGN_CERTIFICATE_PROFILE }}
+          signing-account-name: ${{ secrets.CODESIGN_SIGNING_ACCOUNT_NAME }}
+          certificate-profile-name: ${{ secrets.CODESIGN_CERTIFICATE_PROFILE_NAME }}
           files: |
             ${{ github.workspace }}/signed/uv.exe
             ${{ github.workspace }}/signed/uvx.exe
