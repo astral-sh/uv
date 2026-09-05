@@ -6107,6 +6107,7 @@ dependencies = [
  "uv-pypi-types",
  "uv-python",
  "uv-resolver",
+ "uv-test",
  "uv-types",
  "uv-workspace",
 ]
