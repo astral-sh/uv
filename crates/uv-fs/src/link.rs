@@ -136,6 +136,9 @@ pub struct LinkOptions<'a, F = fn(&Path) -> bool> {
     /// Predicate that returns `true` for files that need a mutable (safe to
     /// write) copy. Only applied in [`LinkMode::Hardlink`] and [`LinkMode::Symlink`] modes.
     needs_mutable_copy: F,
+    /// Predicate that returns `true` for paths that should be included.
+    /// Excluding a directory also excludes its entire subtree.
+    filter: Option<fn(&Path) -> bool>,
     /// Optional locks for synchronized copying during concurrent operations.
     copy_locks: Option<&'a CopyLocks>,
     /// What to do when the destination directory already exists.
@@ -148,6 +151,7 @@ impl LinkOptions<'static> {
         Self {
             mode,
             needs_mutable_copy: |_| false,
+            filter: None,
             copy_locks: None,
             on_existing_directory: OnExistingDirectory::default(),
         }
@@ -172,8 +176,21 @@ impl<'a, F> LinkOptions<'a, F> {
         LinkOptions {
             mode: self.mode,
             needs_mutable_copy: f,
+            filter: self.filter,
             copy_locks: self.copy_locks,
             on_existing_directory: self.on_existing_directory,
+        }
+    }
+
+    /// Set a predicate for paths that should be included during linking.
+    ///
+    /// Paths for which the predicate returns `false` are skipped. When a directory is skipped,
+    /// its entire subtree is excluded.
+    #[must_use]
+    pub fn with_filter(self, filter: fn(&Path) -> bool) -> Self {
+        Self {
+            filter: Some(filter),
+            ..self
         }
     }
 
@@ -186,6 +203,7 @@ impl<'a, F> LinkOptions<'a, F> {
         LinkOptions {
             mode: self.mode,
             needs_mutable_copy: self.needs_mutable_copy,
+            filter: self.filter,
             copy_locks: Some(locks),
             on_existing_directory: self.on_existing_directory,
         }
@@ -197,6 +215,7 @@ impl<'a, F> LinkOptions<'a, F> {
         LinkOptions {
             mode: self.mode,
             needs_mutable_copy: self.needs_mutable_copy,
+            filter: self.filter,
             copy_locks: self.copy_locks,
             on_existing_directory,
         }
@@ -330,7 +349,7 @@ where
 {
     // On macOS, try to clone the entire directory in one syscall.
     #[cfg(target_os = "macos")]
-    {
+    if options.filter.is_none() {
         match try_clone_dir_recursive(src, dst, options) {
             Ok(()) => return Ok(LinkMode::Clone),
             Err(e) => {
@@ -362,7 +381,12 @@ where
 {
     let mut state = LinkState::new(mode);
 
-    for entry in WalkDir::new(src) {
+    for entry in WalkDir::new(src).into_iter().filter_entry(|entry| {
+        options
+            .filter
+            .as_ref()
+            .is_none_or(|filter| filter(entry.path()))
+    }) {
         let entry = entry.map_err(|err| LinkError::WalkDir {
             path: src.to_path_buf(),
             err,
@@ -983,6 +1007,34 @@ mod tests {
 
         assert_eq!(result, LinkMode::Copy);
         verify_test_tree(dst_dir.path());
+    }
+
+    #[test]
+    fn test_link_dir_filter() {
+        let src_dir = test_tempdir();
+        create_test_tree(src_dir.path());
+
+        for mode in [
+            LinkMode::Copy,
+            LinkMode::Hardlink,
+            LinkMode::Clone,
+            LinkMode::Symlink,
+        ] {
+            let dst_dir = test_tempdir();
+            // An existing destination would force macOS's whole-directory clone to fall back,
+            // hiding regressions where that fast path ignores the filter.
+            let destination = dst_dir.path().join("filtered");
+            let options = LinkOptions::new(mode).with_filter(|path: &Path| {
+                !path.ends_with("file2.txt") && !path.ends_with("subdir")
+            });
+
+            link_dir(src_dir.path(), &destination, &options)
+                .expect("directory linking should succeed");
+
+            assert!(destination.join("file1.txt").is_file());
+            assert!(!destination.join("file2.txt").exists());
+            assert!(!destination.join("subdir").exists());
+        }
     }
 
     #[test]

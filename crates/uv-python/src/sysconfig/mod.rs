@@ -40,6 +40,8 @@ mod generated_mappings;
 mod parser;
 mod replacements;
 
+const RELOCATABLE_PREFIX: &str = "__UV_PYTHON_INSTALL_PREFIX__";
+
 /// Update the `sysconfig` data in a Python installation.
 pub(crate) fn update_sysconfig(
     install_root: &Path,
@@ -88,6 +90,59 @@ pub(crate) fn update_sysconfig(
             file.sync_data()?;
         }
     }
+
+    Ok(())
+}
+
+/// Make a Python installation's `sysconfig` data follow its location.
+pub(crate) fn make_sysconfig_relocatable(
+    install_root: &Path,
+    major: u8,
+    minor: u8,
+    suffix: &str,
+) -> Result<(), Error> {
+    let install_root = std::path::absolute(install_root)?;
+    let sysconfigdata = find_sysconfigdata(&install_root, major, minor, suffix)?;
+    trace!(
+        "Making `sysconfig` data relocatable at: {}",
+        sysconfigdata.display()
+    );
+
+    let contents = fs_err::read_to_string(&sysconfigdata)?;
+    let mut data = SysconfigData::from_str(&contents)?;
+    let Some((_, Value::String(previous_prefix))) =
+        data.iter_mut().find(|(key, _)| key.as_str() == "prefix")
+    else {
+        return Err(Error::MissingSysconfigPrefix);
+    };
+    let previous_prefix = std::mem::replace(previous_prefix, RELOCATABLE_PREFIX.to_string());
+
+    for (_, value) in data.iter_mut() {
+        if let Value::String(value) = value {
+            *value = value.replace(&previous_prefix, RELOCATABLE_PREFIX);
+        }
+    }
+
+    let mut file = fs_err::OpenOptions::new()
+        .write(true)
+        .truncate(true)
+        .open(&sysconfigdata)?;
+    file.write_all(data.to_string_pretty()?.as_bytes())?;
+    file.write_all(
+        br#"
+_uv_path = __import__("os").path
+_uv_previous_prefix = build_time_vars["prefix"]
+_uv_current_prefix = _uv_path.dirname(
+    _uv_path.dirname(_uv_path.dirname(_uv_path.abspath(__file__)))
+)
+for _uv_key, _uv_value in build_time_vars.items():
+    if isinstance(_uv_value, str):
+        build_time_vars[_uv_key] = _uv_value.replace(
+            _uv_previous_prefix, _uv_current_prefix
+        )
+"#,
+    )?;
+    file.sync_data()?;
 
     Ok(())
 }
@@ -274,6 +329,8 @@ pub enum Error {
     MissingLib(PathBuf),
     #[error("Python installation is missing a `_sysconfigdata_` file")]
     MissingSysconfigdata,
+    #[error("Python installation's `_sysconfigdata_` is missing its installation prefix")]
+    MissingSysconfigPrefix,
     #[error(transparent)]
     Parse(#[from] ParseError),
     #[error(transparent)]
@@ -317,6 +374,44 @@ mod tests {
             "base": "/real/prefix/base",
             "exec_prefix": "/real/prefix/exec_prefix",
             "prefix": "/real/prefix/prefix"
+        }
+        "#);
+
+        Ok(())
+    }
+
+    #[test]
+    fn relocate_sysconfig_preserves_install_paths() -> Result<(), Error> {
+        let root = tempfile::tempdir()?;
+        let lib = root.path().join("lib/python3.12");
+        fs_err::create_dir_all(&lib)?;
+        let sysconfigdata = lib.join("_sysconfigdata_test.py");
+        fs_err::write(
+            &sysconfigdata,
+            indoc! {r#"
+                # system configuration generated and used by the sysconfig module
+                build_time_vars = {
+                    "BINDIR": "/source/python/bin",
+                    "CONFIG_ARGS": "--prefix=/install",
+                    "INSTALL": "/usr/bin/install -c",
+                    "WASM_ASSETS_DIR": "./install",
+                    "prefix": "/source/python"
+                }
+            "#},
+        )?;
+
+        make_sysconfig_relocatable(root.path(), 3, 12, "")?;
+
+        let contents = fs_err::read_to_string(&sysconfigdata)?;
+        let data = SysconfigData::from_str(&contents)?;
+        insta::assert_snapshot!(data.to_string_pretty()?, @r#"
+        # system configuration generated and used by the sysconfig module
+        build_time_vars = {
+            "BINDIR": "__UV_PYTHON_INSTALL_PREFIX__/bin",
+            "CONFIG_ARGS": "--prefix=/install",
+            "INSTALL": "/usr/bin/install -c",
+            "WASM_ASSETS_DIR": "./install",
+            "prefix": "__UV_PYTHON_INSTALL_PREFIX__"
         }
         "#);
 

@@ -220,6 +220,77 @@ fn sync_centralized_env_survives_python_patch_upgrade() -> Result<()> {
 }
 
 #[test]
+#[cfg(feature = "test-python-managed")]
+fn sync_centralized_portable_env_is_not_upgradeable() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&[])
+        .with_managed_python_dirs()
+        .with_python_download_cache()
+        .with_filtered_centralized_environment_hashes();
+    context.python_install().arg("3.12.9").assert().success();
+    write_project(&context, ">=3.12", &[])?;
+
+    let previews = "centralized-project-envs,portable-envs,relocatable-envs-default";
+    context
+        .sync()
+        .arg("--python")
+        .arg("3.12")
+        .arg("--managed-python")
+        .arg("--preview-features")
+        .arg(previews)
+        .assert()
+        .success();
+
+    let link = context.temp_dir.child(".venv");
+    let environment = fs_err::read_link(link.path())?;
+    insta::with_settings!({ filters => context.filters() }, {
+        assert_snapshot!(environment.portable_display(), @"[CACHE_DIR]/environments-v2/project-cp3.12.9-[HASH]");
+    });
+
+    // An explicit relocatable `uv venv` uses the same non-upgradeable identity without relying on
+    // relocatable environments being enabled by default.
+    context
+        .venv()
+        .arg("--python")
+        .arg("3.12")
+        .arg("--relocatable")
+        .arg("--preview-features")
+        .arg("centralized-project-envs,portable-envs")
+        .assert()
+        .success();
+    assert_eq!(fs_err::read_link(link.path())?, environment);
+
+    let marker = environment.join("portable-marker");
+    fs_err::write(&marker, "")?;
+
+    context.python_install().arg("3.12.11").assert().success();
+    let python = uv_test::venv_bin_path(&environment)
+        .join(format!("python{}", std::env::consts::EXE_SUFFIX));
+    uv_snapshot!(context.filters(), Command::new(&python).arg("--version"), @r#"
+    exit_code: 0 (success)
+    ----- stdout -----
+    Python 3.12.9
+    "#);
+
+    fs_err::remove_dir_all(context.temp_dir.child("managed").path())?;
+
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--offline")
+        .arg("--python")
+        .arg("3.12")
+        .arg("--managed-python")
+        .arg("--preview-features")
+        .arg(previews), @r#"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Checked in [TIME]
+    "#);
+    assert!(marker.is_file());
+
+    Ok(())
+}
+
+#[test]
 fn sync_centralized_env_avoids_project_name_collisions() -> Result<()> {
     let context = uv_test::test_context_with_versions!(&["3.12"]);
     let project_a = context.temp_dir.child("project-a");

@@ -1,15 +1,18 @@
-use std::{io::ErrorKind, path::PathBuf};
+use std::{
+    io::ErrorKind,
+    path::{Path, PathBuf},
+};
 
 use uv_fs::Simplified as _;
 use uv_warnings::warn_user;
 
 use crate::managed::ManagedPythonInstallation;
 
-pub(crate) fn patch_dylib_install_name(dylib: PathBuf) -> Result<(), Error> {
+pub(crate) fn patch_dylib_install_name(dylib: &Path, install_name: &Path) -> Result<(), Error> {
     let output = match std::process::Command::new("install_name_tool")
         .arg("-id")
-        .arg(&dylib)
-        .arg(&dylib)
+        .arg(install_name)
+        .arg(dylib)
         .output()
     {
         Ok(output) => output,
@@ -25,7 +28,10 @@ pub(crate) fn patch_dylib_install_name(dylib: PathBuf) -> Result<(), Error> {
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr).into_owned();
-        return Err(Error::RenameError { dylib, stderr });
+        return Err(Error::RenameError {
+            dylib: dylib.to_path_buf(),
+            stderr,
+        });
     }
 
     Ok(())

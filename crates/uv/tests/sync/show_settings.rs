@@ -3768,6 +3768,7 @@ fn preview_features() {
     +            GcsEndpoint,
     +            AdjustUlimit,
     +            SpecialCondaEnvNames,
+    +            PortableEnvs,
     +            RelocatableEnvsDefault,
     +            PublishRequireNormalized,
     +            AuditCommand,
