@@ -1165,6 +1165,134 @@ fn requirements_txt_frozen_workspace_member_group_precedence() -> Result<()> {
     Ok(())
 }
 
+/// Frozen exports can select a member from the lockfile without its manifest.
+#[cfg(feature = "test-universal")]
+#[test]
+fn requirements_txt_frozen_workspace_missing_member() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+            [project]
+            name = "root"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+
+            [dependency-groups]
+            dev = ["packaging"]
+
+            [tool.uv]
+            default-groups = "all"
+
+            [tool.uv.workspace]
+            members = ["child"]
+        "#})?;
+
+    let child = context.temp_dir.child("child");
+    child.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "child"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["typing-extensions"]
+
+        [project.optional-dependencies]
+        optional = ["sniffio"]
+
+        [dependency-groups]
+        dev = ["iniconfig"]
+        tools = ["idna"]
+
+        [tool.uv]
+        default-groups = ["tools"]
+    "#})?;
+
+    context.lock().assert().success();
+
+    // Use the member's configured defaults while its manifest is available.
+    uv_snapshot!(context.filters(), context.export()
+        .arg("--frozen")
+        .arg("--no-header")
+        .arg("--no-hashes")
+        .arg("--no-annotate")
+        .arg("--package").arg("child"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    idna==3.6
+    typing-extensions==4.10.0
+    ");
+
+    fs_err::remove_dir_all(child.path())?;
+
+    // Without a member manifest, use the standard defaults, not the root's defaults.
+    uv_snapshot!(context.filters(), context.export()
+        .arg("--frozen")
+        .arg("--no-header")
+        .arg("--no-hashes")
+        .arg("--no-annotate")
+        .arg("--package").arg("child"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    iniconfig==2.0.0
+    typing-extensions==4.10.0
+    ");
+
+    uv_snapshot!(context.filters(), context.export()
+        .arg("--frozen")
+        .arg("--no-header")
+        .arg("--no-hashes")
+        .arg("--no-annotate")
+        .arg("--package").arg("child")
+        .arg("--no-default-groups"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    typing-extensions==4.10.0
+    ");
+
+    uv_snapshot!(context.filters(), context.export()
+        .arg("--frozen")
+        .arg("--no-header")
+        .arg("--no-hashes")
+        .arg("--no-annotate")
+        .arg("--package").arg("child")
+        .arg("--no-default-groups")
+        .arg("--extra").arg("optional"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    sniffio==1.3.1
+    typing-extensions==4.10.0
+    ");
+
+    // The member's locked group still takes precedence over the root's group.
+    uv_snapshot!(context.filters(), context.export()
+        .arg("--frozen")
+        .arg("--no-header")
+        .arg("--no-hashes")
+        .arg("--no-annotate")
+        .arg("--package").arg("child")
+        .arg("--only-group").arg("dev"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    iniconfig==2.0.0
+    ");
+
+    uv_snapshot!(context.filters(), context.export()
+        .arg("--frozen")
+        .arg("--no-header")
+        .arg("--no-hashes")
+        .arg("--no-annotate")
+        .arg("--package").arg("child")
+        .arg("--only-group").arg("tools"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    idna==3.6
+    ");
+
+    Ok(())
+}
+
 #[cfg(feature = "test-universal")]
 #[test]
 fn allrequirements_txt_() -> Result<()> {
