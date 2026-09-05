@@ -9,7 +9,7 @@ use reqwest_retry::policies::ExponentialBackoff;
 use reqwest_retry::{
     RetryPolicy, Retryable, RetryableStrategy, default_on_request_error, default_on_request_success,
 };
-use rustls::{AlertDescription, Error as RustlsError};
+use rustls::Error as RustlsError;
 use tracing::{debug, trace};
 use url::Url;
 
@@ -273,32 +273,21 @@ fn is_retryable_status_error(reqwest_err: &reqwest::Error) -> bool {
         || status == StatusCode::TOO_MANY_REQUESTS
 }
 
+/// Whether a request failed because the TLS handshake produced a fatal verdict: uv rejected the
+/// peer's certificate, or the peer sent an alert to abort the handshake. These are deterministic,
+/// so we treat them as fatal rather than retrying. Transient handshake failures instead surface as
+/// [`io::Error`]s, handled by [`retryable_on_request_failure`].
 fn is_tls_certificate_error(reqwest_err: &reqwest::Error) -> bool {
     let Some(rustls_error) = find_source::<RustlsError>(reqwest_err) else {
         return false;
     };
 
-    // TODO(konsti): https://github.com/seanmonstar/reqwest/issues/2819#issuecomment-5032072023
-    match rustls_error {
-        RustlsError::InvalidCertificate(_) | RustlsError::NoCertificatesPresented => true,
-        RustlsError::AlertReceived(alert) => matches!(
-            alert,
-            AlertDescription::AccessDenied
-                | AlertDescription::BadCertificate
-                | AlertDescription::BadCertificateHashValue
-                | AlertDescription::BadCertificateStatusResponse
-                | AlertDescription::CertificateExpired
-                | AlertDescription::CertificateRequired
-                | AlertDescription::CertificateRevoked
-                | AlertDescription::CertificateUnknown
-                | AlertDescription::CertificateUnobtainable
-                | AlertDescription::DecryptError
-                | AlertDescription::NoCertificate
-                | AlertDescription::UnknownCA
-                | AlertDescription::UnsupportedCertificate
-        ),
-        _ => false,
-    }
+    matches!(
+        rustls_error,
+        RustlsError::InvalidCertificate(_)
+            | RustlsError::NoCertificatesPresented
+            | RustlsError::AlertReceived(_)
+    )
 }
 
 /// Finds the request URL for diagnostics, including transparent middleware and retry wrappers.
