@@ -2,7 +2,7 @@ use assert_cmd::assert::OutputAssertExt;
 use assert_fs::fixture::{FileTouch, FileWriteStr, PathChild};
 use fs_err::OpenOptions;
 use indoc::{formatdoc, indoc};
-use serde_json::json;
+use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use std::env::current_dir;
 use std::io::Write;
@@ -10,7 +10,7 @@ use std::path::{Path, PathBuf};
 use uv_static::EnvVars;
 use uv_test::{uv_snapshot, venv_bin_path};
 use wiremock::matchers::{basic_auth, body_json, method, path};
-use wiremock::{Mock, MockServer, ResponseTemplate};
+use wiremock::{Mock, MockServer, Request, ResponseTemplate};
 
 fn test_link(filename: &str) -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -36,6 +36,16 @@ fn basic_package_sdist() -> PathBuf {
 
 fn basic_package_wheel() -> PathBuf {
     test_link("basic_package-0.1.0-py3-none-any.whl")
+}
+
+/// Read the JSON attestations field from a recorded multipart upload.
+fn upload_attestations(request: &Request) -> Option<Value> {
+    let body = String::from_utf8_lossy(&request.body);
+    let (_, field) = body.split_once("name=\"attestations\"\r\n\r\n")?;
+    let (attestations, _) = field
+        .split_once("\r\n")
+        .expect("Multipart field is terminated");
+    Some(serde_json::from_str(attestations).expect("Attestations are JSON"))
 }
 
 #[test]
@@ -1056,6 +1066,117 @@ fn dry_run_reports_all_errors() {
       Caused by: unable to locate the end of central directory record
     Found issues with 2 files
     "
+    );
+}
+
+/// Preparation validates attestations, including during dry runs, unless they are disabled.
+#[tokio::test]
+async fn publish_invalid_attestations() {
+    let context = uv_test::test_context!("3.12").with_filtered_sizes();
+    let server = MockServer::start().await;
+    let app_attestation = context
+        .temp_dir
+        .child("basic_app-0.1.0-py3-none-any.whl.publish.attestation");
+    app_attestation
+        .write_str("{")
+        .expect("Failed to write attestation");
+    let ok_attestation = context
+        .temp_dir
+        .child("ok-1.0.0-py3-none-any.whl.publish.attestation");
+    ok_attestation
+        .write_str("{")
+        .expect("Failed to write attestation");
+
+    Mock::given(method("POST"))
+        .and(path("/upload"))
+        .and(basic_auth("__token__", "dummy"))
+        .respond_with(ResponseTemplate::new(200))
+        .expect(0)
+        .mount(&server)
+        .await;
+
+    uv_snapshot!(context.filters(), context.publish()
+        .arg("--token")
+        .arg("dummy")
+        .arg("--publish-url")
+        .arg(format!("{}/upload", server.uri()))
+        .arg(basic_app_wheel())
+        .arg(app_attestation.path()), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    Publishing 1 file to http://[LOCALHOST]/upload
+    Hashing basic_app-0.1.0-py3-none-any.whl ([SIZE]KiB)
+    error: Failed to publish: `[WORKSPACE]/test/links/basic_app-0.1.0-py3-none-any.whl`
+      Caused by: Invalid PEP 740 attestation (not JSON): `[TEMP_DIR]/basic_app-0.1.0-py3-none-any.whl.publish.attestation`
+      Caused by: EOF while parsing an object at line 1 column 1
+    ");
+
+    uv_snapshot!(context.filters(), context.publish()
+        .arg("--dry-run")
+        .arg("--token")
+        .arg("dummy")
+        .arg("--publish-url")
+        .arg(format!("{}/upload", server.uri()))
+        .arg(basic_app_wheel())
+        .arg(app_attestation.path())
+        .arg(dummy_wheel())
+        .arg(ok_attestation.path()), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Checking 2 files against http://[LOCALHOST]/upload
+    Checking basic_app-0.1.0-py3-none-any.whl ([SIZE]KiB)
+    error: Failed to publish: `[WORKSPACE]/test/links/basic_app-0.1.0-py3-none-any.whl`
+      Caused by: Invalid PEP 740 attestation (not JSON): `[TEMP_DIR]/basic_app-0.1.0-py3-none-any.whl.publish.attestation`
+      Caused by: EOF while parsing an object at line 1 column 1
+    Checking ok-1.0.0-py3-none-any.whl ([SIZE]B)
+    error: Failed to publish: `[WORKSPACE]/test/links/ok-1.0.0-py3-none-any.whl`
+      Caused by: Invalid PEP 740 attestation (not JSON): `[TEMP_DIR]/ok-1.0.0-py3-none-any.whl.publish.attestation`
+      Caused by: EOF while parsing an object at line 1 column 1
+    Found issues with 2 files
+    ");
+
+    server.verify().await;
+    server.reset().await;
+    Mock::given(method("POST"))
+        .and(path("/upload"))
+        .and(basic_auth("__token__", "dummy"))
+        .respond_with(ResponseTemplate::new(200))
+        .expect(2)
+        .mount(&server)
+        .await;
+
+    uv_snapshot!(context.filters(), context.publish()
+        .arg("--no-attestations")
+        .arg("--token")
+        .arg("dummy")
+        .arg("--publish-url")
+        .arg(format!("{}/upload", server.uri()))
+        .arg(basic_app_wheel())
+        .arg(app_attestation.path())
+        .arg(dummy_wheel())
+        .arg(ok_attestation.path()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Publishing 2 files to http://[LOCALHOST]/upload
+    Hashing basic_app-0.1.0-py3-none-any.whl ([SIZE]KiB)
+    Uploading basic_app-0.1.0-py3-none-any.whl ([SIZE]KiB)
+    Hashing ok-1.0.0-py3-none-any.whl ([SIZE]B)
+    Uploading ok-1.0.0-py3-none-any.whl ([SIZE]B)
+    "
+    );
+
+    let requests = server
+        .received_requests()
+        .await
+        .expect("Request recording is enabled");
+    insta::assert_json_snapshot!(
+        requests.iter().map(upload_attestations).collect::<Vec<_>>(),
+        @r#"
+    [
+      null,
+      null
+    ]
+    "#
     );
 }
 

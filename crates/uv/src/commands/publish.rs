@@ -17,7 +17,7 @@ use uv_distribution_filename::DistFilename;
 use uv_distribution_types::{IndexCapabilities, IndexLocations, IndexUrl};
 use uv_errors::{ErrorOptions, Hints, write_error_chain_with_options};
 use uv_publish::{
-    CheckUrlClient, FormMetadata, PublishError, TrustedPublishResult, TrustedPublishingToken,
+    CheckUrlClient, PreparedDistribution, TrustedPublishResult, TrustedPublishingToken,
     UploadDistribution, burn_trusted_publishing_token, check_trusted_publishing,
     group_files_for_publishing, upload,
 };
@@ -311,11 +311,7 @@ async fn publish_file(
         )?;
     }
 
-    // Collect the metadata for the file.
-    let form_metadata =
-        FormMetadata::read_from_file(&group.file, &group.filename, reporter.clone())
-            .await
-            .map_err(|err| PublishError::PublishPrepare(group.file.clone(), Box::new(err)))?;
+    let prepared = PreparedDistribution::read_from_file(group, reporter.clone()).await?;
 
     if dry_run {
         return Ok(());
@@ -330,8 +326,7 @@ async fn publish_file(
     )?;
 
     let uploaded = upload(
-        group,
-        &form_metadata,
+        prepared,
         publish_url,
         upload_client,
         client_builder.retry_policy(),
