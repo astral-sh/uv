@@ -532,7 +532,13 @@ impl AuthMiddleware {
             return next.run(request, extensions).await;
         };
         let url = DisplaySafeUrl::from_url(request.url().clone());
-        if matches!(auth_policy, AuthPolicy::Always) && !credentials.is_authenticated() {
+        // Dependabot intercepts HTTP requests and injects credentials, which means that we
+        // cannot eagerly enforce an `AuthPolicy` as we don't know whether credentials will be
+        // added outside of uv.
+        if matches!(auth_policy, AuthPolicy::Always)
+            && !credentials.is_authenticated()
+            && !*IS_DEPENDABOT
+        {
             return Err(Error::Middleware(format_err!(
                 "Incomplete credentials for {url}"
             )));

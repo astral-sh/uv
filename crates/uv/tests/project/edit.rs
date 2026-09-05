@@ -13639,6 +13639,91 @@ fn add_auth_policy_always_with_username_no_password() -> Result<()> {
     Ok(())
 }
 
+/// In authentication "always", requests without credentials are still sent
+/// when running under Dependabot, which injects credentials outside of uv.
+#[tokio::test]
+async fn add_auth_policy_always_without_credentials_dependabot() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let proxy = crate::pypi_proxy::start().await;
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(&formatdoc!(
+        r#"
+        [project]
+        name = "foo"
+        version = "1.0.0"
+        requires-python = ">=3.11, <4"
+        dependencies = []
+
+        [[tool.uv.index]]
+        name = "my-index"
+        url = "{proxy_uri}/simple"
+        authenticate = "always"
+        default = true
+        "#,
+        proxy_uri = proxy.uri()
+    ))?;
+
+    uv_snapshot!(context.filters(), context.add().arg("anyio")
+        .env(EnvVars::DEPENDABOT, "true"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==4.3.0
+     + idna==3.6
+     + sniffio==1.3.1
+    "
+    );
+
+    context.assert_command("import anyio").success();
+    Ok(())
+}
+
+/// In authentication "always", requests with a username but no discoverable
+/// password are still sent when running under Dependabot, which injects
+/// credentials outside of uv.
+#[tokio::test]
+async fn add_auth_policy_always_with_username_no_password_dependabot() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let proxy = crate::pypi_proxy::start().await;
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(&formatdoc!(
+        r#"
+        [project]
+        name = "foo"
+        version = "1.0.0"
+        requires-python = ">=3.11, <4"
+        dependencies = []
+
+        [[tool.uv.index]]
+        name = "my-index"
+        url = "{index_url}"
+        authenticate = "always"
+        default = true
+        "#,
+        index_url = proxy.username_url("public", "/simple")
+    ))?;
+
+    uv_snapshot!(context.filters(), context.add().arg("anyio")
+        .env(EnvVars::DEPENDABOT, "true"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==4.3.0
+     + idna==3.6
+     + sniffio==1.3.1
+    "
+    );
+
+    context.assert_command("import anyio").success();
+    Ok(())
+}
+
 /// In authentication "never", even if the correct credentials are supplied
 /// in the URL, no authenticated requests will be allowed.
 #[tokio::test]
