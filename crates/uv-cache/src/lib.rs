@@ -102,6 +102,16 @@ impl CacheEntry {
         )
         .await?)
     }
+
+    /// Try to acquire the [`CacheEntry`] as an exclusive lock without waiting.
+    pub fn try_lock(&self) -> Result<Option<LockedFile>, Error> {
+        fs_err::create_dir_all(self.dir())?;
+        Ok(LockedFile::acquire_no_wait(
+            self.path(),
+            LockedFileMode::Exclusive,
+            self.path().display(),
+        ))
+    }
 }
 
 impl AsRef<Path> for CacheEntry {

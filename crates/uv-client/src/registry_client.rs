@@ -560,14 +560,13 @@ impl RegistryClient {
             Connectivity::Offline => CacheControl::AllowStale,
         };
 
-        // Acquire an advisory lock, to guard against concurrent writes.
-        #[cfg(windows)]
-        let _lock = {
-            let lock_entry = cache_entry.with_file(format!("{package_name}.lock"));
-            lock_entry.lock().await.map_err(ErrorKind::CacheLock)?
-        };
-
         let result = if matches!(index, IndexUrl::Path(_)) {
+            // Reading a local index needs no cache entry, but retain the existing lock on Windows.
+            #[cfg(windows)]
+            let _lock = {
+                let lock_entry = cache_entry.with_file(format!("{package_name}.lock"));
+                lock_entry.lock().await.map_err(ErrorKind::CacheLock)?
+            };
             self.fetch_local_simple_detail(package_name, &url).await
         } else {
             self.fetch_remote_simple_detail(package_name, &url, &cache_entry, cache_control)
@@ -623,6 +622,80 @@ impl RegistryClient {
             .map_err(|err| {
                 ErrorKind::from_reqwest(url.clone(), err, self.client.certificate_source())
             })?;
+
+        // Fresh cache entries don't need to wait on another process. On Windows, retain the
+        // existing lock around cache reads so they cannot race with a file replacement.
+        if !cfg!(windows)
+            && !self.cache.is_temporary()
+            && !self.connectivity.is_offline()
+            && let Some(request) = simple_request.try_clone()
+            && let Some(cached) = self
+                .cached_client()
+                .get_fresh_cached::<OwnedArchive<SimpleDetailMetadata>>(
+                    request,
+                    cache_entry,
+                    &cache_control,
+                )
+                .await
+        {
+            return Ok(cached);
+        }
+
+        // Only persistent online caches can share a fetch between processes. Temporary caches
+        // are private to an invocation; Windows still needs its existing write lock for them.
+        let (lock, waited) =
+            if cfg!(windows) || (!self.cache.is_temporary() && !self.connectivity.is_offline()) {
+                let lock_entry = cache_entry.with_file(format!("{package_name}.lock"));
+                if !cfg!(windows)
+                    && let Some(lock) = lock_entry.try_lock().map_err(ErrorKind::CacheLock)?
+                {
+                    (Some(lock), false)
+                } else {
+                    (
+                        Some(lock_entry.lock().await.map_err(ErrorKind::CacheLock)?),
+                        !cfg!(windows),
+                    )
+                }
+            } else {
+                (None, false)
+            };
+
+        // A preceding process may have refreshed this package while we waited. Honor this
+        // invocation's refresh cutoff, but don't revalidate a newer entry unnecessarily.
+        let cache_control = if matches!(cache_control, CacheControl::MustRevalidate)
+            && self
+                .cache
+                .freshness(cache_entry, Some(package_name), None)
+                .map_err(ErrorKind::Io)?
+                .is_fresh()
+        {
+            CacheControl::None
+        } else {
+            cache_control
+        };
+
+        let _lock = if waited {
+            if let Some(request) = simple_request.try_clone()
+                && let Some(cached) = self
+                    .cached_client()
+                    .get_fresh_cached::<OwnedArchive<SimpleDetailMetadata>>(
+                        request,
+                        cache_entry,
+                        &cache_control,
+                    )
+                    .await
+            {
+                return Ok(cached);
+            }
+
+            // If the preceding request left no reusable entry (for example, `no-store` or an
+            // immediately stale response), fetching under the lock would serialize every waiter.
+            drop(lock);
+            None
+        } else {
+            lock
+        };
+
         let parse_simple_response = |response: Response| {
             async {
                 // Use the response URL, rather than the request URL, as the base for relative URLs.
