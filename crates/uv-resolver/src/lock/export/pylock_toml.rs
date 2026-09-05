@@ -10,6 +10,7 @@ use jiff::civil::{Date, DateTime, Time};
 use jiff::tz::{Offset, TimeZone};
 use petgraph::graph::NodeIndex;
 use serde::Deserialize;
+use toml::Table as TomlTable;
 use toml_edit::{Array, ArrayOfTables, Item, Table, Value, value};
 use url::Url;
 
@@ -37,6 +38,7 @@ use uv_platform_tags::{TagCompatibility, TagPriority, Tags};
 use uv_pypi_types::{HashDigests, Hashes, ParsedGitDirectoryUrl, VcsKind};
 use uv_redacted::DisplaySafeUrl;
 use uv_small_str::SmallString;
+use uv_warnings::warn_user_once;
 
 use crate::lock::export::ExportableRequirements;
 use crate::lock::{Source, WheelTagHint, is_wheel_unreachable};
@@ -265,6 +267,21 @@ where
     Ok(version)
 }
 
+/// Deserialize artifact [`Hashes`], warning about invalid empty tables.
+fn deserialize_hashes<'de, D>(deserializer: D) -> Result<Hashes, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    // Check the original table, since `Hashes` discards unsupported algorithms.
+    let hashes = TomlTable::deserialize(deserializer)?;
+    if hashes.is_empty() {
+        warn_user_once!(
+            "Empty hash tables in `pylock.toml` will be rejected in a future uv version. Rerun the original `uv export` or `uv pip compile` command to regenerate the file."
+        );
+    }
+    hashes.try_into().map_err(serde::de::Error::custom)
+}
+
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub struct PylockTomlPackage {
@@ -343,6 +360,7 @@ struct PylockTomlArchive {
     upload_time: Option<Timestamp>,
     #[serde(skip_serializing_if = "Option::is_none")]
     subdirectory: Option<PortablePathBuf>,
+    #[serde(deserialize_with = "deserialize_hashes")]
     hashes: Hashes,
 }
 
@@ -364,6 +382,7 @@ struct PylockTomlSdist {
     upload_time: Option<Timestamp>,
     #[serde(skip_serializing_if = "Option::is_none")]
     size: Option<u64>,
+    #[serde(deserialize_with = "deserialize_hashes")]
     hashes: Hashes,
 }
 
@@ -385,6 +404,7 @@ struct PylockTomlWheel {
     upload_time: Option<Timestamp>,
     #[serde(skip_serializing_if = "Option::is_none")]
     size: Option<u64>,
+    #[serde(deserialize_with = "deserialize_hashes")]
     hashes: Hashes,
 }
 
