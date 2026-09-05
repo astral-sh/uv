@@ -15707,6 +15707,64 @@ fn toggle_workspace_editable() -> Result<()> {
     Ok(())
 }
 
+/// The editable install should be repaired if its `.pth` file is missing.
+///
+/// See: <https://github.com/astral-sh/uv/issues/20945>
+#[test]
+fn sync_reinstalls_editable_when_pth_missing() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+        "#,
+    )?;
+    context
+        .temp_dir
+        .child("src")
+        .child("project")
+        .child("__init__.py")
+        .touch()?;
+
+    uv_snapshot!(context.filters(), context.sync(), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + project==0.1.0 (from file://[TEMP_DIR]/)
+    ");
+
+    let pth = context.site_packages().join("project.pth");
+    assert!(pth.is_file());
+
+    // Remove the `.pth` file; the distribution metadata remains intact, so the
+    // editable install must be repaired on the next sync.
+    fs_err::remove_file(&pth)?;
+
+    uv_snapshot!(context.filters(), context.sync(), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     ~ project==0.1.0 (from file://[TEMP_DIR]/)
+    ");
+
+    // The `.pth` file should be restored.
+    assert!(pth.is_file());
+
+    Ok(())
+}
+
 #[test]
 #[cfg(not(windows))]
 fn workspace_editable_conflict() -> Result<()> {
