@@ -119,6 +119,7 @@ fn init_application() -> Result<()> {
 
     let pyproject_toml = child.join("pyproject.toml");
     let init_py = child.join("src").join("foo").join("__init__.py");
+    let main_py = child.join("src").join("foo").join("__main__.py");
 
     uv_snapshot!(context.filters(), context.init().current_dir(&child).arg("--app"), @"
     exit_code: 0 (success)
@@ -162,6 +163,19 @@ fn init_application() -> Result<()> {
         );
     });
 
+    let main = fs_err::read_to_string(main_py)?;
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            main, @r#"
+        from foo import main
+
+        main()
+        "#
+        );
+    });
+
     uv_snapshot!(context.filters(), context.run().current_dir(&child).arg("foo"), @"
     exit_code: 0 (success)
     ----- stdout -----
@@ -175,6 +189,17 @@ fn init_application() -> Result<()> {
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + foo==0.1.0 (from file://[TEMP_DIR]/foo)
+    ");
+
+    uv_snapshot!(context.filters(), context.run().current_dir(&child).arg("python").arg("-m").arg("foo"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    Hello from foo!
+
+    ----- stderr -----
+    warning: `VIRTUAL_ENV=[VENV]/` does not match the project environment path `.venv` and will be ignored; use `--active` to target the active environment instead
+    Resolved 1 package in [TIME]
+    Checked 1 package in [TIME]
     ");
 
     Ok(())
@@ -292,6 +317,7 @@ fn init_application_package() -> Result<()> {
 
     let pyproject_toml = child.join("pyproject.toml");
     let init_py = child.join("src").join("foo").join("__init__.py");
+    let main_py = child.join("src").join("foo").join("__main__.py");
 
     uv_snapshot!(context.filters(), context.init().current_dir(&child).arg("--app").arg("--package"), @"
     exit_code: 0 (success)
@@ -331,6 +357,19 @@ fn init_application_package() -> Result<()> {
             init, @r#"
         def main() -> None:
             print("Hello from foo!")
+        "#
+        );
+    });
+
+    let main = fs_err::read_to_string(main_py)?;
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            main, @r#"
+        from foo import main
+
+        main()
         "#
         );
     });
@@ -412,6 +451,11 @@ fn init_library() -> Result<()> {
             py_typed, @""
         );
     });
+
+    assert!(
+        !child.join("src").join("foo").join("__main__.py").exists(),
+        "Libraries should not include a `__main__.py`"
+    );
 
     uv_snapshot!(context.filters(), context.run().current_dir(&child).arg("python").arg("-c").arg("import foo; print(foo.hello())"), @"
     exit_code: 0 (success)
@@ -3340,6 +3384,7 @@ fn init_app_build_backend_maturin() -> Result<()> {
 
     let pyproject_toml = child.join("pyproject.toml");
     let init_py = child.join("src").join("foo").join("__init__.py");
+    let main_py = child.join("src").join("foo").join("__main__.py");
     let pyi_file = child.join("src").join("foo").join("_core.pyi");
     let lib_core = child.join("src").join("lib.rs");
     let build_file = child.join("Cargo.toml");
@@ -3394,6 +3439,19 @@ fn init_app_build_backend_maturin() -> Result<()> {
         def main() -> None:
             print(hello_from_bin())
         "
+        );
+    });
+
+    let main = fs_err::read_to_string(main_py)?;
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            main, @r#"
+        from foo import main
+
+        main()
+        "#
         );
     });
 
@@ -3467,6 +3525,7 @@ fn init_app_build_backend_scikit() -> Result<()> {
 
     let pyproject_toml = child.join("pyproject.toml");
     let init_py = child.join("src").join("foo").join("__init__.py");
+    let main_py = child.join("src").join("foo").join("__main__.py");
     let pyi_file = child.join("src").join("foo").join("_core.pyi");
     let lib_core = child.join("src").join("main.cpp");
     let build_file = child.join("CMakeLists.txt");
@@ -3520,6 +3579,19 @@ fn init_app_build_backend_scikit() -> Result<()> {
         def main() -> None:
             print(hello_from_bin())
         "
+        );
+    });
+
+    let main = fs_err::read_to_string(main_py)?;
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            main, @r#"
+        from foo import main
+
+        main()
+        "#
         );
     });
 
