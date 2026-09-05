@@ -46,8 +46,8 @@ class SigningComponent(Enum):
                 return False
 
 
-def run_command(command: list[str | Path], description: str) -> None:
-    """Run a command without logging private signing configuration."""
+def run_azure_command(command: list[str | Path], description: str) -> None:
+    """Run an Azure download without logging private account or vault details."""
     try:
         subprocess.run(
             command, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
@@ -65,7 +65,7 @@ def verify_sha256(path: Path, expected: str) -> None:
 def download_signing_component(component: SigningComponent, directory: Path) -> Path:
     """Download a pinned signing component and return its ready-to-use path."""
     path = component.path(directory)
-    run_command(
+    run_azure_command(
         [
             "az",
             "storage",
@@ -122,7 +122,7 @@ def sign_binaries(unsigned: Path, signed: Path) -> None:
         rcodesign = download_signing_component(SigningComponent.RCODESIGN, components)
         pkcs11 = download_signing_component(SigningComponent.PKCS11, components)
 
-        run_command(
+        run_azure_command(
             [
                 "az",
                 "keyvault",
@@ -148,27 +148,30 @@ def sign_binaries(unsigned: Path, signed: Path) -> None:
         signed.mkdir()
         shutil.copyfile(certificate, signed / "certificate.pem")
         for binary in BINARIES:
-            run_command(
-                [
-                    rcodesign,
-                    "sign",
-                    "--config-file",
-                    "/dev/null",
-                    "--pkcs11-library",
-                    pkcs11,
-                    "--pkcs11-certificate-file",
-                    certificate,
-                    "--pkcs11-key-label",
-                    os.environ["KEY_NAME"],
-                    "--code-signature-flags",
-                    "runtime",
-                    "--timestamp-url",
-                    "http://timestamp.apple.com/ts",
-                    unsigned / binary,
-                    signed / binary,
-                ],
-                f"Signing {binary}",
-            )
+            try:
+                subprocess.run(
+                    [
+                        rcodesign,
+                        "sign",
+                        "--config-file",
+                        "/dev/null",
+                        "--pkcs11-library",
+                        pkcs11,
+                        "--pkcs11-certificate-file",
+                        certificate,
+                        "--pkcs11-key-label",
+                        os.environ["KEY_NAME"],
+                        "--code-signature-flags",
+                        "runtime",
+                        "--timestamp-url",
+                        "http://timestamp.apple.com/ts",
+                        unsigned / binary,
+                        signed / binary,
+                    ],
+                    check=True,
+                )
+            except subprocess.CalledProcessError:
+                raise RuntimeError(f"Signing {binary} failed") from None
 
 
 def main() -> None:
