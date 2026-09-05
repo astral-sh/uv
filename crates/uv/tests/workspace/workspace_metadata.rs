@@ -707,7 +707,7 @@ dependencies = [
         insta::assert_json_snapshot!(parent_node["dependencies"], @r#"
         [
           {
-            "id": "metadata-child==0.1.0@path+[TEMP_DIR]/metadata_child-0.1.0-py3-none-any.whl",
+            "id": "metadata-child==0.1.0@path+[TEMP_DIR]/project/../metadata_child-0.1.0-py3-none-any.whl",
             "marker": "sys_platform == 'linux'"
           }
         ]

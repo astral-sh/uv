@@ -80,6 +80,18 @@ impl Metadata {
     /// Lower without considering `tool.uv` in `pyproject.toml`, used for index and other archive
     /// dependencies.
     pub(crate) fn from_metadata23(metadata: ResolutionMetadata) -> Self {
+        // Build backends may convert relative paths to absolute file URLs.
+        // Write dependency paths relative to the lockfile so it remains portable.
+        Self::from_resolution_metadata(metadata).with_force_relative(true)
+    }
+
+    /// Lower metadata selected from `tool.uv.dependency-metadata`.
+    pub(crate) fn from_dependency_metadata(metadata: ResolutionMetadata) -> Self {
+        Self::from_resolution_metadata(metadata).with_force_relative(false)
+    }
+
+    /// Lower package metadata without selecting an output path policy.
+    fn from_resolution_metadata(metadata: ResolutionMetadata) -> Self {
         Self {
             name: metadata.name,
             version: metadata.version,
@@ -141,7 +153,24 @@ impl Metadata {
             provides_extra,
             dependency_groups,
             dynamic,
-        })
+        }
+        .with_force_relative(true))
+    }
+
+    /// Set whether local dependency sources should be represented by relative paths.
+    ///
+    /// Disabling this restores each URL's original path spelling preference.
+    #[must_use]
+    pub fn with_force_relative(mut self, force_relative: bool) -> Self {
+        for requirement in self.requires_dist.iter_mut().chain(
+            self.dependency_groups
+                .values_mut()
+                .flat_map(|requirements| requirements.iter_mut()),
+        ) {
+            requirement.set_force_relative(force_relative);
+        }
+
+        self
     }
 }
 
