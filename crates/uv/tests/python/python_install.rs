@@ -2189,6 +2189,48 @@ fn python_install_default_prerelease() {
     bin_python_default.assert(predicate::path::exists());
 }
 
+/// `--default` with an explicit patch moves the default executables to that patch, even
+/// when a newer patch of the same minor version is already the default. Without bypassing
+/// the minor version link the executables keep resolving to the newer patch.
+///
+/// <https://github.com/astral-sh/uv/issues/21125>
+#[test]
+fn python_install_default_older_patch() {
+    let context = uv_test::test_context_with_versions!(&[])
+        .with_filtered_python_keys()
+        .with_filtered_exe_suffix()
+        .with_managed_python_dirs()
+        .with_python_download_cache();
+
+    context
+        .python_install()
+        .arg("--default")
+        .arg("3.12.8")
+        .assert()
+        .success();
+
+    context
+        .python_install()
+        .arg("--default")
+        .arg("3.12.6")
+        .assert()
+        .success();
+
+    let bin_python = context
+        .bin_dir
+        .child(format!("python3{}", std::env::consts::EXE_SUFFIX));
+
+    if cfg!(unix) {
+        insta::with_settings!({
+            filters => context.filters(),
+        }, {
+            insta::assert_snapshot!(
+                canonicalize_link_path(&bin_python), @"[TEMP_DIR]/managed/cpython-3.12.6-[PLATFORM]/bin/python3.12"
+            );
+        });
+    }
+}
+
 #[test]
 fn python_install_default_from_env() {
     let context = uv_test::test_context_with_versions!(&[])

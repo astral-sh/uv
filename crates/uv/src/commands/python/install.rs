@@ -442,6 +442,26 @@ async fn perform_install(
         })
         .collect::<IndexSet<_>>();
 
+    // An explicit patch request pins the executables to that patch instead of routing
+    // them through the shared minor version link, which would leave them resolving to
+    // whichever patch that link already targets.
+    let requested_patch_versions = requests
+        .iter()
+        .filter_map(|request| {
+            if let PythonRequest::Version(VersionRequest::MajorMinorPatch(
+                major,
+                minor,
+                patch,
+                ..,
+            )) = request.python_request()
+            {
+                uv_pep440::Version::from_str(&format!("{major}.{minor}.{patch}")).ok()
+            } else {
+                None
+            }
+        })
+        .collect::<IndexSet<_>>();
+
     if let PythonUpgrade::Enabled(source) = upgrade {
         if let Some(request) = requests.iter().find(|request| {
             request.request.includes_patch() || request.request.includes_prerelease()
@@ -683,8 +703,11 @@ async fn perform_install(
             e.warn_user(installation);
         }
 
-        let upgradeable = (default || is_default_install)
-            || requested_minor_versions.contains(&installation.key().version().python_version());
+        let upgradeable = !requested_patch_versions
+            .contains(&installation.key().version().python_full_version())
+            && ((default || is_default_install)
+                || requested_minor_versions
+                    .contains(&installation.key().version().python_version()));
 
         if let Some(bin_dir) = bin_dir.as_ref() {
             create_bin_links(
