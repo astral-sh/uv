@@ -1585,12 +1585,20 @@ pub struct PipCompileArgs {
     #[arg(
         long,
         alias = "override",
+        value_parser = parse_maybe_file_path,
+        value_hint = ValueHint::FilePath,
+    )]
+    pub overrides: Vec<Maybe<PathBuf>>,
+
+    #[arg(
+        long = "override-env",
+        hide = true,
         env = EnvVars::UV_OVERRIDE,
         value_delimiter = ' ',
         value_parser = parse_maybe_file_path,
         value_hint = ValueHint::FilePath,
     )]
-    pub overrides: Vec<Maybe<PathBuf>>,
+    pub overrides_from_env: Vec<Maybe<PathBuf>>,
 
     /// Exclude packages from resolution using the given requirements files.
     ///
@@ -2282,12 +2290,20 @@ pub struct PipInstallArgs {
     #[arg(
         long,
         alias = "override",
+        value_parser = parse_maybe_file_path,
+        value_hint = ValueHint::FilePath,
+    )]
+    pub overrides: Vec<Maybe<PathBuf>>,
+
+    #[arg(
+        long = "override-env",
+        hide = true,
         env = EnvVars::UV_OVERRIDE,
         value_delimiter = ' ',
         value_parser = parse_maybe_file_path,
         value_hint = ValueHint::FilePath,
     )]
-    pub overrides: Vec<Maybe<PathBuf>>,
+    pub overrides_from_env: Vec<Maybe<PathBuf>>,
 
     /// Exclude packages from resolution using the given requirements files.
     ///
