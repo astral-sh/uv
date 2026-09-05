@@ -72,9 +72,9 @@ use crate::commands::project::lock::LockMode;
 use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{
     EnvironmentSpecification, LinkErrorReporting, PreferenceLocation, ProjectEnvironment,
-    ProjectError, ScriptEnvironment, ScriptInterpreter, UniversalState, WorkspacePython,
-    default_dependency_groups, script_extra_build_requires, script_specification,
-    update_environment, validate_project_requires_python,
+    ProjectError, ScriptEnvironment, UniversalState, WorkspacePython, default_dependency_groups,
+    script_extra_build_requires, script_specification, update_environment,
+    validate_project_requires_python,
 };
 use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::{ExitStatus, diagnostics, project, read_env_files};
@@ -178,7 +178,6 @@ pub(crate) async fn run(
     let mut base_lock: Option<(Lock, PathBuf)> = None;
 
     // Determine whether the command to execute is a PEP 723 script.
-    let temp_dir;
     let script_interpreter = if let Some(script) = script {
         match &script {
             Pep723Item::Script(script) => {
@@ -361,8 +360,16 @@ pub(crate) async fn run(
                 }
             }
 
-            // Install the script requirements, if necessary. Otherwise, use an isolated environment.
-            if let Some(spec) = script_specification(
+            // Install the script requirements, if necessary.
+            let spec = script_specification(
+                (&script).into(),
+                &settings.resolver,
+                &cache,
+                workspace_cache,
+                client_builder.credentials_cache(),
+            )
+            .await?;
+            let script_extra_build_requires = script_extra_build_requires(
                 (&script).into(),
                 &settings.resolver,
                 &cache,
@@ -370,131 +377,88 @@ pub(crate) async fn run(
                 client_builder.credentials_cache(),
             )
             .await?
-            {
-                let script_extra_build_requires = script_extra_build_requires(
-                    (&script).into(),
-                    &settings.resolver,
-                    &cache,
-                    workspace_cache,
-                    client_builder.credentials_cache(),
-                )
-                .await?
-                .into_inner();
-                let environment = ScriptEnvironment::get_or_init(
-                    (&script).into(),
-                    python.as_deref().map(PythonRequest::parse),
-                    &client_builder,
-                    python_preference,
-                    python_downloads,
-                    &install_mirrors,
-                    no_sync,
-                    config_discovery,
-                    active.map_or(Some(false), Some),
-                    &cache,
-                    DryRun::Disabled,
-                    printer,
-                )
-                .await?
-                .into_environment()?;
+            .into_inner();
+            let environment = ScriptEnvironment::get_or_init(
+                (&script).into(),
+                python.as_deref().map(PythonRequest::parse),
+                &client_builder,
+                python_preference,
+                python_downloads,
+                &install_mirrors,
+                no_sync,
+                config_discovery,
+                active.map_or(Some(false), Some),
+                &cache,
+                DryRun::Disabled,
+                printer,
+            )
+            .await?
+            .into_environment()?;
 
-                let build_constraints = script
-                    .metadata()
-                    .tool
-                    .as_ref()
-                    .and_then(|tool| {
-                        tool.uv
-                            .as_ref()
-                            .and_then(|uv| uv.build_constraint_dependencies.as_ref())
-                    })
-                    .map(|constraints| {
-                        Constraints::from_requirements(
-                            constraints
-                                .iter()
-                                .map(|constraint| Requirement::from(constraint.clone())),
-                        )
-                    });
+            let build_constraints = script
+                .metadata()
+                .tool
+                .as_ref()
+                .and_then(|tool| {
+                    tool.uv
+                        .as_ref()
+                        .and_then(|uv| uv.build_constraint_dependencies.as_ref())
+                })
+                .map(|constraints| {
+                    Constraints::from_requirements(
+                        constraints
+                            .iter()
+                            .map(|constraint| Requirement::from(constraint.clone())),
+                    )
+                });
 
-                let _lock = environment
-                    .lock()
-                    .await
-                    .inspect_err(|err| {
-                        warn!("Failed to acquire environment lock: {err}");
-                    })
-                    .ok();
-
-                match update_environment(
-                    environment,
-                    spec,
-                    modifications,
-                    python_platform.as_ref(),
-                    SourceTreeEditablePolicy::Project,
-                    build_constraints.unwrap_or_default(),
-                    script_extra_build_requires,
-                    &settings,
-                    &client_builder,
-                    &sync_state,
-                    if show_resolution {
-                        Box::new(DefaultResolveLogger)
-                    } else {
-                        Box::new(SummaryResolveLogger)
-                    },
-                    if show_resolution {
-                        Box::new(DefaultInstallLogger)
-                    } else {
-                        Box::new(SummaryInstallLogger)
-                    },
-                    installer_metadata,
-                    &concurrency,
-                    &cache,
-                    workspace_cache,
-                    DryRun::Disabled,
-                    printer,
-                    preview,
-                )
+            let _lock = environment
+                .lock()
                 .await
-                {
-                    Ok(update) => Some(update.into_environment().into_interpreter()),
-                    Err(ProjectError::Operation(err)) => {
-                        return diagnostics::OperationDiagnostic::default()
-                            .with_context("script")
-                            .report(err)
-                            .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
-                    }
-                    Err(err) => return Err(err.into()),
+                .inspect_err(|err| {
+                    warn!("Failed to acquire environment lock: {err}");
+                })
+                .ok();
+
+            match update_environment(
+                environment,
+                spec,
+                modifications,
+                python_platform.as_ref(),
+                SourceTreeEditablePolicy::Project,
+                build_constraints.unwrap_or_default(),
+                script_extra_build_requires,
+                &settings,
+                &client_builder,
+                &sync_state,
+                if show_resolution {
+                    Box::new(DefaultResolveLogger)
+                } else {
+                    Box::new(SummaryResolveLogger)
+                },
+                if show_resolution {
+                    Box::new(DefaultInstallLogger)
+                } else {
+                    Box::new(SummaryInstallLogger)
+                },
+                installer_metadata,
+                &concurrency,
+                &cache,
+                workspace_cache,
+                DryRun::Disabled,
+                printer,
+                preview,
+            )
+            .await
+            {
+                Ok(update) => Some(update.into_environment().into_interpreter()),
+                Err(ProjectError::Operation(err)) => {
+                    return diagnostics::OperationDiagnostic::default()
+                        .with_context("script")
+                        .report(err)
+                        .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
                 }
-            } else {
-                // Create a virtual environment.
-                let interpreter = ScriptInterpreter::discover(
-                    (&script).into(),
-                    python.as_deref().map(PythonRequest::parse),
-                    &client_builder,
-                    python_preference,
-                    python_downloads,
-                    &install_mirrors,
-                    no_sync,
-                    config_discovery,
-                    active.map_or(Some(false), Some),
-                    &cache,
-                    printer,
-                )
-                .await?
-                .into_interpreter();
-
-                temp_dir = cache.venv_dir()?;
-                let environment = uv_virtualenv::create_venv(
-                    temp_dir.path(),
-                    interpreter,
-                    uv_virtualenv::Prompt::None,
-                    false,
-                    uv_virtualenv::OnExisting::Remove(
-                        uv_virtualenv::RemovalReason::TemporaryEnvironment,
-                    ),
-                    false,
-                    uv_virtualenv::Seed::Disabled,
-                    false,
-                )?;
-
-                Some(environment.into_interpreter())
+                Err(err) => return Err(err.into()),
             }
         }
     } else {

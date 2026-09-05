@@ -382,12 +382,15 @@ fn run_pep723_script() -> Result<()> {
     Checked 4 packages in [TIME]
     ");
 
-    // If the script contains a PEP 723 tag, it can omit the dependencies field.
+    // Omitting the dependencies field should retain previously installed script requirements,
+    // just like an empty dependency list.
     let test_script = context.temp_dir.child("main.py");
     test_script.write_str(indoc! { r#"
         # /// script
         # requires-python = ">=3.11"
         # ///
+
+        import iniconfig
 
         print("Hello, world!")
        "#
@@ -497,6 +500,42 @@ fn run_pep723_script() -> Result<()> {
     ----- stderr -----
     error: The script contains multiple PEP 723 metadata blocks
     ");
+
+    Ok(())
+}
+
+/// Omitting dependencies should use the cached or explicitly requested active environment.
+#[test]
+fn run_pep723_script_without_dependencies() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context.temp_dir.child("main.py").write_str(indoc! { r#"
+        # /// script
+        # requires-python = ">=3.12"
+        # ///
+
+        import sys
+
+        print(sys.prefix)
+        "#
+    })?;
+
+    uv_snapshot!(context.filters(), context.run().arg("main.py"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    [CACHE_DIR]/environments-v2/main-[HASH]
+    ");
+
+    uv_snapshot!(context.filters(), context.run().arg("--active").arg("--no-sync").arg("main.py")
+        .env(EnvVars::VIRTUAL_ENV, "active"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    [TEMP_DIR]/active
+
+    ----- stderr -----
+    warning: `--no-sync` is a no-op for Python scripts with inline metadata, which always run in isolation
+    ");
+
+    assert!(!context.temp_dir.child("main.py.lock").exists());
 
     Ok(())
 }
