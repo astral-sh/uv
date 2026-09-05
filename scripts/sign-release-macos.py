@@ -79,13 +79,13 @@ def download_signing_component(component: SigningComponent, directory: Path) -> 
             "--container-name",
             os.environ["STORAGE_CONTAINER"],
             "--name",
-            os.environ[f"{component.value}_BLOB"],
+            os.environ[f"COMPONENT_{component.value}_BLOB"],
             "--file",
             path,
         ],
         f"Downloading {path.name}",
     )
-    verify_sha256(path, os.environ[f"{component.value}_SHA256"])
+    verify_sha256(path, os.environ[f"COMPONENT_{component.value}_SHA256"])
     if component.is_executable():
         path.chmod(0o755)
     return path
@@ -102,10 +102,10 @@ def sign_binaries(unsigned: Path, signed: Path) -> None:
     required = (
         "STORAGE_ACCOUNT",
         "STORAGE_CONTAINER",
-        "RCODESIGN_BLOB",
-        "RCODESIGN_SHA256",
-        "PKCS11_BLOB",
-        "PKCS11_SHA256",
+        "COMPONENT_RCODESIGN_BLOB",
+        "COMPONENT_RCODESIGN_SHA256",
+        "COMPONENT_PKCS11_BLOB",
+        "COMPONENT_PKCS11_SHA256",
         "AZURE_KEYVAULT_NAME",
         "AZURE_KEYVAULT_KEY_VERSION",
         "KEY_NAME",
