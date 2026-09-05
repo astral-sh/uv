@@ -551,7 +551,6 @@ async fn do_lock(
     let overrides = target.overrides();
     let excludes = target.exclude_dependencies();
     let constraints = target.constraints();
-    let build_constraints = target.build_constraints();
     let dependency_groups = target.dependency_groups()?;
     let source_trees = vec![];
 
@@ -617,8 +616,7 @@ async fn do_lock(
         )
         .await?;
     let build_constraints = target
-        .lower(
-            build_constraints,
+        .lower_build_constraints(
             index_locations,
             sources,
             cache,
@@ -830,9 +828,14 @@ async fn do_lock(
         .build();
     let hasher = HashStrategy::generate(HashGeneration::Url);
 
+    let build_hasher = HashStrategy::from_build_constraints(
+        &build_constraints,
+        Some(&interpreter.to_resolver_marker_environment()),
+        uv_configuration::HashCheckingMode::Verify,
+    )?;
+
     // TODO(charlie): These are all default values. We should consider whether we want to make them
     // optional on the downstream APIs.
-    let build_hasher = HashStrategy::default();
     let extras = ExtrasSpecification::default();
     let groups = BTreeMap::new();
 
@@ -873,14 +876,11 @@ async fn do_lock(
     }
     .into_inner();
 
-    // Convert to the `Constraints` format.
-    let dispatch_constraints = Constraints::from_requirements(build_constraints.iter().cloned());
-
     // Create a build dispatch.
     let build_dispatch = BuildDispatch::new(
         &client,
         cache,
-        &dispatch_constraints,
+        &build_constraints,
         interpreter,
         index_locations,
         &flat_index,
@@ -1092,7 +1092,7 @@ async fn do_lock(
                 constraints,
                 overrides,
                 excludes.clone(),
-                build_constraints,
+                build_constraints.specifications().cloned(),
                 dependency_groups,
                 dependency_metadata.values().cloned(),
             )
@@ -1163,7 +1163,7 @@ impl ValidatedLock {
         constraints: &[Requirement],
         overrides: &[Override<Requirement>],
         excludes: &[ExcludeDependency],
-        build_constraints: &[Requirement],
+        build_constraints: &Constraints,
         conflicts: &Conflicts,
         environments: Option<&SupportedEnvironments>,
         required_environments: Option<&SupportedEnvironments>,

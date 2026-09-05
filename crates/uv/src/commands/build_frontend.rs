@@ -24,7 +24,7 @@ use uv_distribution_filename::{
 };
 use uv_distribution_types::{
     ConfigSettings, DependencyMetadata, ExtraBuildVariables, Index, IndexLocations,
-    NameRequirementSpecification, PackageConfigSettings, Requirement, SourceDist,
+    NameRequirementSpecification, PackageConfigSettings, SourceDist,
 };
 use uv_errors::{ErrorOptions, Hint, Hints, write_error_chain_with_options};
 use uv_fs::{Simplified, normalize_path, relative_to};
@@ -202,7 +202,7 @@ pub(crate) async fn build_frontend(
     force_pep517: bool,
     clear: bool,
     build_constraints: Vec<RequirementsSource>,
-    build_constraints_from_workspace: Vec<Requirement>,
+    build_constraints_from_workspace: Vec<NameRequirementSpecification>,
     hash_checking: Option<HashCheckingMode>,
     python: Option<String>,
     install_mirrors: PythonInstallMirrors,
@@ -280,7 +280,7 @@ async fn build_impl(
     force_pep517: bool,
     clear: bool,
     build_constraints: &[RequirementsSource],
-    build_constraints_from_workspace: &[Requirement],
+    build_constraints_from_workspace: &[NameRequirementSpecification],
     hash_checking: Option<HashCheckingMode>,
     python_request: Option<&str>,
     install_mirrors: PythonInstallMirrors,
@@ -558,7 +558,7 @@ async fn build_package(
     force_pep517: bool,
     clear: bool,
     build_constraints: &[RequirementsSource],
-    build_constraints_from_workspace: &[Requirement],
+    build_constraints_from_workspace: &[NameRequirementSpecification],
     build_isolation: &BuildIsolation,
     extra_build_dependencies: &ExtraBuildDependencies,
     extra_build_variables: &ExtraBuildVariables,
@@ -635,31 +635,33 @@ async fn build_package(
     .into_interpreter();
 
     // Read build constraints.
-    let build_constraints =
+    let command_line_constraints =
         operations::read_constraints(build_constraints, &client_builder).await?;
+    let build_constraints = Constraints::from_specifications(
+        command_line_constraints
+            .iter()
+            .cloned()
+            .chain(build_constraints_from_workspace.iter().cloned()),
+    );
 
-    // Collect the set of required hashes.
     let hasher = if let Some(hash_checking) = hash_checking {
-        HashStrategy::from_requirements(
-            std::iter::empty(),
-            build_constraints
+        // Under `--require-hashes`, include all command-line constraints, but only workspace
+        // constraints with supplied hashes. Other workspace constraints still restrict builds.
+        let hash_constraints = Constraints::from_specifications(
+            build_constraints_from_workspace
                 .iter()
-                .map(|entry| (&entry.requirement, entry.hashes.as_slice())),
+                .filter(|entry| !hash_checking.is_require() || !entry.hashes.is_empty())
+                .cloned()
+                .chain(command_line_constraints.iter().cloned()),
+        );
+        HashStrategy::from_build_constraints(
+            &hash_constraints,
             Some(&interpreter.to_resolver_marker_environment()),
             hash_checking,
         )?
     } else {
         HashStrategy::default()
     };
-
-    let build_constraints = Constraints::from_specifications(
-        build_constraints.into_iter().chain(
-            build_constraints_from_workspace
-                .iter()
-                .cloned()
-                .map(NameRequirementSpecification::from),
-        ),
-    );
 
     // Initialize the registry client.
     let client = RegistryClientBuilder::new(client_builder.clone(), cache.clone())

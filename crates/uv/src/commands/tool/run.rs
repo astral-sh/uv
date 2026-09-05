@@ -778,6 +778,10 @@ async fn get_or_create_environment(
     .await?
     .into_interpreter();
 
+    let build_constraints = Constraints::from_specifications(
+        operations::read_constraints(build_constraints, client_builder).await?,
+    );
+
     let from = match request {
         ToolRequest::Python {
             executable: request_executable,
@@ -817,6 +821,7 @@ async fn get_or_create_environment(
                         vec![spec],
                         &interpreter,
                         settings,
+                        &build_constraints,
                         client_builder,
                         &state,
                         concurrency,
@@ -978,6 +983,7 @@ async fn get_or_create_environment(
                 spec.requirements.clone(),
                 &interpreter,
                 settings,
+                &build_constraints,
                 client_builder,
                 &state,
                 concurrency,
@@ -1005,6 +1011,7 @@ async fn get_or_create_environment(
         spec.overrides.clone(),
         &interpreter,
         settings,
+        &build_constraints,
         client_builder,
         &state,
         concurrency,
@@ -1104,14 +1111,6 @@ async fn get_or_create_environment(
             .collect(),
         ..spec
     });
-
-    // Read the `--build-constraints` requirements.
-    let build_constraints = Constraints::from_requirements(
-        operations::read_constraints(build_constraints, client_builder)
-            .await?
-            .into_iter()
-            .map(|constraint| constraint.requirement),
-    );
 
     // TODO(zanieb): When implementing project-level tools, discover the project and check if it has the tool.
     // TODO(zanieb): Determine if we should layer on top of the project environment if it is present.

@@ -16,9 +16,8 @@ use uv_cache::Cache;
 use uv_cache_key::RepositoryUrl;
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
-    Concurrency, Constraints, DependencyGroups, DependencyGroupsWithDefaults, DevMode, DryRun,
-    EditableMode, ExtrasSpecification, ExtrasSpecificationWithDefaults, GitLfsSetting,
-    InstallOptions, NoSources,
+    Concurrency, DependencyGroups, DependencyGroupsWithDefaults, DevMode, DryRun, EditableMode,
+    ExtrasSpecification, ExtrasSpecificationWithDefaults, GitLfsSetting, InstallOptions, NoSources,
 };
 use uv_dispatch::BuildDispatch;
 use uv_distribution::{DistributionDatabase, LoweredExtraBuildDependencies};
@@ -387,8 +386,6 @@ pub(crate) async fn add(
         if !unnamed.is_empty() {
             // TODO(charlie): These are all default values. We should consider whether we want to
             // make them optional on the downstream APIs.
-            let build_constraints = Constraints::default();
-            let build_hasher = HashStrategy::default();
             let hasher = HashStrategy::default();
             let sources = NoSources::None;
 
@@ -400,6 +397,20 @@ pub(crate) async fn add(
                 .platform(target.interpreter().platform())
                 .build()?;
 
+            let build_constraints = LockTarget::from(&target)
+                .lower_build_constraints(
+                    &settings.resolver.index_locations,
+                    &settings.resolver.sources,
+                    cache,
+                    &WorkspaceCache::default(),
+                    client.credentials_cache(),
+                )
+                .await?;
+            let build_hasher = HashStrategy::from_build_constraints(
+                &build_constraints,
+                Some(&target.interpreter().to_resolver_marker_environment()),
+                uv_configuration::HashCheckingMode::Verify,
+            )?;
             // Determine whether to enable build isolation.
             let environment;
             let build_isolation = match &settings.resolver.build_isolation {

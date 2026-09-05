@@ -21,7 +21,7 @@ use thiserror::Error;
 use tracing::instrument;
 use uv_build_backend::BuildBackendSettings;
 use uv_configuration::{ExcludeDependency, GitLfsSetting, Override};
-use uv_distribution_types::{Index, IndexName, RequirementSource};
+use uv_distribution_types::{Index, IndexName, NameRequirementSpecification, RequirementSource};
 use uv_fs::{PortablePathBuf, try_relative_to_if};
 use uv_git_types::GitReference;
 use uv_macros::OptionsMetadata;
@@ -287,6 +287,43 @@ where
 
 /// An override dependency before source lowering.
 pub type OverrideDependency = Override<uv_pep508::Requirement<VerbatimParsedUrl>>;
+
+/// A build constraint, optionally accompanied by archive hashes.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(untagged, deny_unknown_fields)]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+pub enum BuildConstraintDependency {
+    /// A PEP 508 requirement without additional hashes.
+    Requirement(uv_pep508::Requirement<VerbatimParsedUrl>),
+    /// A PEP 508 requirement and its archive hashes.
+    WithHashes {
+        requirement: uv_pep508::Requirement<VerbatimParsedUrl>,
+        hashes: Vec<String>,
+    },
+}
+
+impl BuildConstraintDependency {
+    /// Return the requirement and any hashes attached to it.
+    pub fn into_parts(self) -> (uv_pep508::Requirement<VerbatimParsedUrl>, Vec<String>) {
+        match self {
+            Self::Requirement(requirement) => (requirement, Vec::new()),
+            Self::WithHashes {
+                requirement,
+                hashes,
+            } => (requirement, hashes),
+        }
+    }
+}
+
+impl From<BuildConstraintDependency> for NameRequirementSpecification {
+    fn from(value: BuildConstraintDependency) -> Self {
+        let (requirement, hashes) = value.into_parts();
+        Self {
+            requirement: requirement.into(),
+            hashes,
+        }
+    }
+}
 
 // NOTE(charlie): When adding fields to this struct, mark them as ignored on `Options` in
 // `crates/uv-settings/src/settings.rs`.
@@ -561,24 +598,19 @@ pub struct ToolUv {
     ///     In `uv lock`, `uv sync`, and `uv run`, uv will only read `build-constraint-dependencies` from
     ///     the `pyproject.toml` at the workspace root, and will ignore any declarations in other
     ///     workspace members or `uv.toml` files.
-    #[cfg_attr(
-        feature = "schemars",
-        schemars(
-            with = "Option<Vec<String>>",
-            description = "PEP 508-style requirements, e.g., `ruff==0.5.0`, or `ruff @ https://...`."
-        )
-    )]
+    ///
+    /// Hashes can be included to verify downloaded build dependency archives. To provide hashes,
+    /// use a table with `requirement` and `hashes`. uv records these hashes in `uv.lock`.
     #[option(
         default = "[]",
-        value_type = "list[str]",
+        value_type = "list[str | dict]",
         example = r#"
             # Ensure that the setuptools v60.0.0 is used whenever a package has a build dependency
             # on setuptools.
             build-constraint-dependencies = ["setuptools==60.0.0"]
         "#
     )]
-    pub(crate) build_constraint_dependencies:
-        Option<Vec<uv_pep508::Requirement<VerbatimParsedUrl>>>,
+    pub(crate) build_constraint_dependencies: Option<Vec<BuildConstraintDependency>>,
 
     /// A list of supported environments against which to resolve dependencies.
     ///
