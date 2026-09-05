@@ -282,6 +282,14 @@ pub(crate) async fn add(
 
         if frozen.is_some() || no_sync {
             // Discover the interpreter.
+            // `--no-sync` does not touch the project environment. If the user did not pass
+            // `--active`/`--no-active`, treat a mismatched `VIRTUAL_ENV` as ignored without
+            // warning (see astral-sh/uv#7073).
+            let active = if no_sync {
+                active.or(Some(false))
+            } else {
+                active
+            };
             let workspace_python = WorkspacePython::from_request(
                 python.as_deref().map(PythonRequest::parse),
                 Some(project.workspace()),
