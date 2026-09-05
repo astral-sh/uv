@@ -7,6 +7,7 @@
 //!  * `-r`
 //!  * `-c`
 //!  * `--hash` (postfix)
+//!  * `--config-settings` (per requirement)
 //!  * `-e`
 //!
 //! Unsupported:
@@ -50,7 +51,8 @@ use uv_client::{BaseClient, ClientBuildError};
 use uv_client::{BaseClientBuilder, Connectivity};
 use uv_configuration::{NoBinary, NoBuild, PackageNameSpecifier};
 use uv_distribution_types::{
-    Requirement, UnresolvedRequirement, UnresolvedRequirementSpecification,
+    ConfigSettingEntry, ConfigSettings, Requirement, UnresolvedRequirement,
+    UnresolvedRequirementSpecification,
 };
 use uv_fs::{Simplified, normalize_path};
 use uv_pep508::{Pep508Error, RequirementOrigin, VerbatimUrl, expand_env_vars};
@@ -104,14 +106,16 @@ enum RequirementsTxtStatement {
     UnsupportedOption(UnsupportedOption),
 }
 
-/// A [Requirement] with additional metadata from the `requirements.txt`, currently only hashes but in
-/// the future also editable and similar information.
+/// A [`Requirement`] with additional metadata from `requirements.txt`, including hashes and build
+/// settings.
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub struct RequirementEntry {
     /// The actual PEP 508 requirement.
     pub requirement: RequirementsTxtRequirement,
     /// Hashes of the downloadable packages.
     pub hashes: Vec<String>,
+    /// Settings to pass to the build backend for this requirement.
+    pub config_settings: Option<ConfigSettings>,
 }
 
 // We place the impl here instead of next to `UnresolvedRequirementSpecification` because
@@ -138,6 +142,7 @@ impl From<RequirementsTxtRequirement> for UnresolvedRequirementSpecification {
         Self::from(RequirementEntry {
             requirement: value,
             hashes: vec![],
+            config_settings: None,
         })
     }
 }
@@ -699,6 +704,12 @@ fn parse_entry(
     }
 
     let start = s.cursor();
+    let mut leading_config_settings = Vec::new();
+    while let Some(option) = eat_config_setting_option(s) {
+        leading_config_settings.push(parse_config_setting(option, content, s)?);
+        eat_wrappable_whitespace(s);
+    }
+
     Ok(Some(if s.eat_if("-r") || s.eat_if("--requirement") {
         let filename = parse_value("--requirement", content, s, |c: char| !is_terminal(c))?;
         let filename = unquote(filename)
@@ -744,21 +755,24 @@ fn parse_entry(
             Some(requirements_txt)
         };
 
-        let (mut requirement, hashes) =
-            parse_requirement_and_hashes(s, content, source, working_dir, true)?;
-        requirement
-            .make_editable()
-            .map_err(|source| RequirementsTxtParserError::NonEditable {
+        let mut entry = parse_requirement_and_options(
+            s,
+            content,
+            source,
+            working_dir,
+            true,
+            leading_config_settings,
+        )?;
+        entry.requirement.make_editable().map_err(|source| {
+            RequirementsTxtParserError::NonEditable {
                 source,
-                requirement: requirement.to_string(),
+                requirement: entry.requirement.to_string(),
                 start,
                 end: s.cursor(),
                 line: calculate_row_column(content, start).0,
-            })?;
-        RequirementsTxtStatement::EditableRequirementEntry(RequirementEntry {
-            requirement,
-            hashes,
-        })
+            }
+        })?;
+        RequirementsTxtStatement::EditableRequirementEntry(entry)
     } else if s.eat_if("-i") || s.eat_if("--index-url") {
         let given = parse_value("--index-url", content, s, |c: char| !is_terminal(c))?;
         let given = unquote(given)
@@ -895,12 +909,15 @@ fn parse_entry(
             Some(requirements_txt)
         };
 
-        let (requirement, hashes) =
-            parse_requirement_and_hashes(s, content, source, working_dir, false)?;
-        RequirementsTxtStatement::RequirementEntry(RequirementEntry {
-            requirement,
-            hashes,
-        })
+        let entry = parse_requirement_and_options(
+            s,
+            content,
+            source,
+            working_dir,
+            false,
+            leading_config_settings,
+        )?;
+        RequirementsTxtStatement::RequirementEntry(entry)
     } else if let Some(char) = s.peek() {
         // Identify an unsupported option, like `--trusted-host`.
         if let Some(option) = UnsupportedOption::iter().find(|option| s.eat_if(option.name())) {
@@ -960,18 +977,19 @@ fn eat_trailing_line(content: &str, s: &mut Scanner) -> Result<(), RequirementsT
     Ok(())
 }
 
-/// Parse a PEP 508 requirement with optional trailing hashes
-fn parse_requirement_and_hashes(
+/// Parse a PEP 508 requirement with optional trailing hashes and build settings.
+fn parse_requirement_and_options(
     s: &mut Scanner,
     content: &str,
     source: Option<&Path>,
     working_dir: &Path,
     editable: bool,
-) -> Result<(RequirementsTxtRequirement, Vec<String>), RequirementsTxtParserError> {
+    mut config_settings: Vec<ConfigSettingEntry>,
+) -> Result<RequirementEntry, RequirementsTxtParserError> {
     // PEP 508 requirement
     let start = s.cursor();
     // Termination: s.eat() eventually becomes None
-    let (end, has_hashes) = loop {
+    let (end, has_options) = loop {
         let end = s.cursor();
 
         //  We look for the end of the line ...
@@ -982,9 +1000,9 @@ fn parse_requirement_and_hashes(
             s.eat_if('\n'); // Support `\r\n` but also accept stray `\r`
             break (end, false);
         }
-        // ... or `--hash`, an escaped newline or a comment separated by whitespace ...
+        // ... or a requirement option, an escaped newline, or a comment separated by whitespace ...
         if !eat_wrappable_whitespace(s).is_empty() {
-            if s.after().starts_with("--") {
+            if s.after().starts_with("--") || s.after().starts_with("-C") {
                 break (end, true);
             } else if s.eat_if('#') {
                 s.eat_until(['\r', '\n']);
@@ -1037,39 +1055,71 @@ fn parse_requirement_and_hashes(
             end,
         })?;
 
-    let hashes = if has_hashes {
-        parse_hashes(content, s)?
-    } else {
-        Vec::new()
-    };
-    Ok((requirement, hashes))
+    let mut hashes = Vec::new();
+    if has_options {
+        loop {
+            if s.eat_if("--hash") {
+                let hash = parse_value("--hash", content, s, |c: char| !c.is_whitespace())?;
+                hashes.push(hash.to_string());
+            } else if let Some(option) = eat_config_setting_option(s) {
+                config_settings.push(parse_config_setting(option, content, s)?);
+            } else {
+                let (line, column) = calculate_row_column(content, s.cursor());
+                return Err(RequirementsTxtParserError::Parser {
+                    message: format!(
+                        "Expected `--hash` or `--config-settings`, found `{:?}`",
+                        s.eat_while(|c: char| !c.is_whitespace())
+                    ),
+                    line,
+                    column,
+                });
+            }
+
+            eat_wrappable_whitespace(s);
+            if !s.after().starts_with("--") && !s.after().starts_with("-C") {
+                break;
+            }
+        }
+    }
+
+    let config_settings = (!config_settings.is_empty())
+        .then(|| config_settings.into_iter().collect::<ConfigSettings>());
+    Ok(RequirementEntry {
+        requirement,
+        hashes,
+        config_settings,
+    })
 }
 
-/// Parse `--hash=... --hash ...` after a requirement
-fn parse_hashes(content: &str, s: &mut Scanner) -> Result<Vec<String>, RequirementsTxtParserError> {
-    let mut hashes = Vec::new();
-    if !s.eat_if("--hash") {
-        let (line, column) = calculate_row_column(content, s.cursor());
-        return Err(RequirementsTxtParserError::Parser {
-            message: format!(
-                "Expected `--hash`, found `{:?}`",
-                s.eat_while(|c: char| !c.is_whitespace())
-            ),
+/// Consume a supported spelling of the option, leaving its separator and value for parsing.
+fn eat_config_setting_option(s: &mut Scanner) -> Option<&'static str> {
+    for option in ["--config-settings", "--config-setting", "-C"] {
+        if let Some(remainder) = s.after().strip_prefix(option)
+            && remainder.starts_with(['=', ' ', '\t'])
+        {
+            s.eat_if(option);
+            return Some(option);
+        }
+    }
+    None
+}
+
+/// Parse one `KEY=VALUE` build configuration setting.
+fn parse_config_setting(
+    option: &str,
+    content: &str,
+    s: &mut Scanner,
+) -> Result<ConfigSettingEntry, RequirementsTxtParserError> {
+    let start = s.cursor();
+    let value = parse_value(option, content, s, |c: char| !c.is_whitespace())?;
+    ConfigSettingEntry::from_str(value).map_err(|message| {
+        let (line, column) = calculate_row_column(content, start);
+        RequirementsTxtParserError::Parser {
+            message,
             line,
             column,
-        });
-    }
-    let hash = parse_value("--hash", content, s, |c: char| !c.is_whitespace())?;
-    hashes.push(hash.to_string());
-    loop {
-        eat_wrappable_whitespace(s);
-        if !s.eat_if("--hash") {
-            break;
         }
-        let hash = parse_value("--hash", content, s, |c: char| !c.is_whitespace())?;
-        hashes.push(hash.to_string());
-    }
-    Ok(hashes)
+    })
 }
 
 /// In `-<key>=<value>` or `-<key> value`, this parses the part after the key
@@ -2102,6 +2152,7 @@ mod test {
                             },
                         ),
                         hashes: [],
+                        config_settings: None,
                     },
                 ],
                 constraints: [],
@@ -2163,6 +2214,7 @@ mod test {
                             },
                         ),
                         hashes: [],
+                        config_settings: None,
                     },
                 ],
                 constraints: [],
@@ -2272,6 +2324,7 @@ mod test {
                             },
                         ),
                         hashes: [],
+                        config_settings: None,
                     },
                 ],
                 index_url: None,
@@ -2379,6 +2432,7 @@ mod test {
                             },
                         ),
                         hashes: [],
+                        config_settings: None,
                     },
                     RequirementEntry {
                         requirement: Named(
@@ -2410,6 +2464,7 @@ mod test {
                         hashes: [
                             "sha256:1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
                         ],
+                        config_settings: None,
                     },
                     RequirementEntry {
                         requirement: Named(
@@ -2441,6 +2496,7 @@ mod test {
                         hashes: [
                             "sha256:fedcba0987654321fedcba0987654321fedcba0987654321fedcba0987654321",
                         ],
+                        config_settings: None,
                     },
                     RequirementEntry {
                         requirement: Named(
@@ -2470,6 +2526,7 @@ mod test {
                             },
                         ),
                         hashes: [],
+                        config_settings: None,
                     },
                     RequirementEntry {
                         requirement: Named(
@@ -2499,6 +2556,7 @@ mod test {
                             },
                         ),
                         hashes: [],
+                        config_settings: None,
                     },
                 ],
                 constraints: [],
@@ -2624,6 +2682,7 @@ mod test {
                             },
                         ),
                         hashes: [],
+                        config_settings: None,
                     },
                     RequirementEntry {
                         requirement: Unnamed(
@@ -2674,6 +2733,7 @@ mod test {
                             },
                         ),
                         hashes: [],
+                        config_settings: None,
                     },
                     RequirementEntry {
                         requirement: Unnamed(
@@ -2728,6 +2788,7 @@ mod test {
                             },
                         ),
                         hashes: [],
+                        config_settings: None,
                     },
                     RequirementEntry {
                         requirement: Unnamed(
@@ -2778,6 +2839,7 @@ mod test {
                             },
                         ),
                         hashes: [],
+                        config_settings: None,
                     },
                     RequirementEntry {
                         requirement: Unnamed(
@@ -2828,6 +2890,7 @@ mod test {
                             },
                         ),
                         hashes: [],
+                        config_settings: None,
                     },
                     RequirementEntry {
                         requirement: Unnamed(
@@ -2882,6 +2945,7 @@ mod test {
                             },
                         ),
                         hashes: [],
+                        config_settings: None,
                     },
                 ],
                 constraints: [],
@@ -2943,6 +3007,67 @@ mod test {
             filters => filters
         }, {
             insta::assert_snapshot!(errors, @"Expected '=' or whitespace, found Some('-') at <REQUIREMENTS_TXT>:1:20");
+        });
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn requirement_config_settings() -> Result<()> {
+        let temp_dir = assert_fs::TempDir::new()?;
+        let package = temp_dir.child("package");
+        package.create_dir_all()?;
+
+        let requirements_txt = temp_dir.child("requirements.txt");
+        requirements_txt.write_str(indoc! {r"
+            flask==3.0.0 --hash=sha256:deadbeef --config-settings=build-option=fast -C build-option=small
+            --config-settings editable_mode=compat -e ./package
+        "})?;
+
+        let requirements = RequirementsTxt::parse(requirements_txt.path(), temp_dir.path()).await?;
+
+        insta::assert_snapshot!(
+            requirements.requirements[0]
+                .config_settings
+                .as_ref()
+                .map(super::ConfigSettings::escape_for_python)
+                .unwrap_or_default(),
+            @r#"{"build-option":["fast","small"]}"#
+        );
+        insta::assert_debug_snapshot!(requirements.requirements[0].hashes, @r#"
+        [
+            "sha256:deadbeef",
+        ]
+        "#);
+        insta::assert_snapshot!(
+            requirements.editables[0]
+                .config_settings
+                .as_ref()
+                .map(super::ConfigSettings::escape_for_python)
+                .unwrap_or_default(),
+            @r#"{"editable_mode":"compat"}"#
+        );
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn malformed_config_setting() -> Result<()> {
+        let temp_dir = assert_fs::TempDir::new()?;
+        let requirements_txt = temp_dir.child("requirements.txt");
+        requirements_txt.write_str("flask --config-settings=invalid")?;
+
+        let error = RequirementsTxt::parse(requirements_txt.path(), temp_dir.path())
+            .await
+            .unwrap_err();
+        let errors = anyhow::Error::new(error).chain().join("\n");
+
+        let requirement_txt = regex::escape(&requirements_txt.path().user_display().to_string());
+        let filters = vec![(requirement_txt.as_str(), "<REQUIREMENTS_TXT>")];
+        insta::with_settings!({
+            filters => filters
+        }, {
+            insta::assert_snapshot!(errors, @"Invalid config setting: invalid (expected `KEY=VALUE`) at <REQUIREMENTS_TXT>:1:24");
         });
 
         Ok(())

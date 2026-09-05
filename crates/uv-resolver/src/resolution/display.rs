@@ -5,7 +5,9 @@ use petgraph::visit::EdgeRef;
 use petgraph::{Directed, Direction, Graph};
 use rustc_hash::{FxBuildHasher, FxHashMap};
 
-use uv_distribution_types::{DistributionMetadata, Name, SourceAnnotation, SourceAnnotations};
+use uv_distribution_types::{
+    DistributionMetadata, Name, PackageConfigSettings, SourceAnnotation, SourceAnnotations,
+};
 use uv_normalize::PackageName;
 use uv_pep508::MarkerTree;
 
@@ -21,6 +23,8 @@ pub struct DisplayResolutionGraph<'a> {
     env: &'a ResolverEnvironment,
     /// The packages to exclude from the output.
     no_emit_packages: &'a [PackageName],
+    /// Package-specific build settings to preserve in the requirements output.
+    config_settings_package: &'a PackageConfigSettings,
     /// Whether to include hashes in the output.
     show_hashes: bool,
     /// Whether to include extras in the output (e.g., `black[colorama]`).
@@ -55,6 +59,7 @@ impl<'a> DisplayResolutionGraph<'a> {
         underlying: &'a ResolverOutput,
         env: &'a ResolverEnvironment,
         no_emit_packages: &'a [PackageName],
+        config_settings_package: &'a PackageConfigSettings,
         show_hashes: bool,
         include_extras: bool,
         include_markers: bool,
@@ -73,6 +78,7 @@ impl<'a> DisplayResolutionGraph<'a> {
             resolution: underlying,
             env,
             no_emit_packages,
+            config_settings_package,
             show_hashes,
             include_extras,
             include_markers,
@@ -213,6 +219,15 @@ impl std::fmt::Display for DisplayResolutionGraph<'_> {
             let mut line = node
                 .to_requirements_txt(&self.resolution.requires_python, self.include_markers)
                 .to_string();
+
+            if let Some(config_settings) = self.config_settings_package.get(node.name()) {
+                for (key, value) in config_settings.iter() {
+                    line.push_str(" --config-settings=");
+                    line.push_str(key);
+                    line.push('=');
+                    line.push_str(value);
+                }
+            }
 
             // Display the distribution hashes, if any.
             let mut has_hashes = false;

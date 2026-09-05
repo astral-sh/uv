@@ -126,6 +126,7 @@ pub(crate) async fn pip_sync(
         find_links,
         no_binary,
         no_build,
+        config_settings_package: requirements_config_settings_package,
         extras: _,
     } = operations::read_requirements(
         requirements,
@@ -265,6 +266,9 @@ pub(crate) async fn pip_sync(
         python_platform.as_ref(),
         interpreter,
     )?;
+    let config_settings_package = config_settings_package
+        .clone()
+        .merge(requirements_config_settings_package.evaluate(Some(&marker_env)));
 
     // Collect the set of required hashes.
     let hasher = if let Some(hash_checking) = hash_checking {
@@ -384,7 +388,7 @@ pub(crate) async fn pip_sync(
         state.clone(),
         index_strategy,
         config_settings,
-        config_settings_package,
+        &config_settings_package,
         types_build_isolation,
         &extra_build_requires,
         extra_build_variables,
@@ -505,7 +509,7 @@ pub(crate) async fn pip_sync(
         state.clone(),
         index_strategy,
         config_settings,
-        config_settings_package,
+        &config_settings_package,
         types_build_isolation,
         &extra_build_requires,
         extra_build_variables,
