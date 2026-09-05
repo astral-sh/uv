@@ -16596,3 +16596,54 @@ fn compile_bytecode_excludes_stdlib() -> Result<()> {
 
     Ok(())
 }
+
+#[test]
+fn pip_install_overrides_path_with_spaces_via_cli() -> Result<()> {
+    // Regression for https://github.com/astral-sh/uv/issues/21477
+    // A CLI --override path containing spaces must be treated as a single path,
+    // not split on whitespace. Only UV_OVERRIDE env var should split on spaces.
+    let context = uv_test::test_context!("3.12");
+
+    // Create an overrides file under a directory whose name contains a space.
+    let spaced_dir = context.temp_dir.child("my overrides");
+    spaced_dir.create_dir_all()?;
+    let overrides_txt = spaced_dir.child("overrides.txt");
+    overrides_txt.write_str("anyio==4.0.0")?;
+
+    // Install with --override pointing at the spaced path. Before the fix this
+    // was split into two bogus paths and failed with "No such file or directory".
+    context
+        .pip_install()
+        .arg("anyio==3.7.0")
+        .arg("--override")
+        .arg(overrides_txt.path())
+        .arg("--no-deps")
+        .assert()
+        .success();
+
+    Ok(())
+}
+
+#[test]
+fn pip_install_overrides_env_var_still_splits_on_spaces() -> Result<()> {
+    // UV_OVERRIDE should still accept multiple space-separated files.
+    let context = uv_test::test_context!("3.12");
+
+    let a_txt = context.temp_dir.child("a.txt");
+    a_txt.write_str("anyio==4.0.0")?;
+    let b_txt = context.temp_dir.child("b.txt");
+    b_txt.write_str("idna==3.6")?;
+
+    // Pass two overrides via the env var as a single space-separated string.
+    let combined = format!("{} {}", a_txt.path().display(), b_txt.path().display());
+    context
+        .pip_install()
+        .arg("anyio==3.7.0")
+        .arg("idna==3.6")
+        .env(EnvVars::UV_OVERRIDE, combined)
+        .arg("--no-deps")
+        .assert()
+        .success();
+
+    Ok(())
+}
