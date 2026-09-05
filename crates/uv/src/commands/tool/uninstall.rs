@@ -1,4 +1,5 @@
 use std::fmt::Write;
+use std::str::FromStr;
 
 use anyhow::{Result, bail};
 use itertools::Itertools;
@@ -102,6 +103,7 @@ async fn do_uninstall(
     let mut dangling = false;
     let mut entrypoints = if names.is_empty() {
         let mut entrypoints = vec![];
+        dangling = remove_invalid_tool_directories(installed_tools, printer)?;
         for (name, receipt) in installed_tools.tools()? {
             let Ok(receipt) = receipt else {
                 // If the tool is not installed properly, attempt to remove the environment anyway.
@@ -181,6 +183,35 @@ async fn do_uninstall(
     )?;
 
     Ok(())
+}
+
+/// Remove tool directories whose names cannot be parsed as a [`PackageName`], returning whether any
+/// were removed. Ignore their receipts, which may have been copied from another tool and refer to
+/// executables that are still in use.
+fn remove_invalid_tool_directories(
+    installed_tools: &InstalledTools,
+    printer: Printer,
+) -> Result<bool> {
+    // Preserve trailing dots and spaces in directory names by using verbatim paths on Windows.
+    let root = fs_err::canonicalize(installed_tools.root())?;
+    let mut removed = false;
+    for directory in uv_fs::directories(root)? {
+        if directory
+            .file_name()
+            .and_then(|name| name.to_str())
+            .is_some_and(|name| PackageName::from_str(name).is_ok())
+        {
+            continue;
+        }
+        uv_fs::remove_virtualenv(&directory)?;
+        writeln!(
+            printer.stderr(),
+            "Removed dangling tool directory `{}`",
+            directory.user_display()
+        )?;
+        removed = true;
+    }
+    Ok(removed)
 }
 
 /// Uninstall a tool.
