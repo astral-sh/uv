@@ -1,4 +1,18 @@
 [
+  ["arcpy", "arcgis"],
+  ["absl", "absl-py"],
+  ["auth0", "auth0-python"],
+  ["bs4", "beautifulsoup4"],
+  ["cv2", "opencv-python"],
+  ["docx", "python-docx"],
+  ["dotenv", "python-dotenv"],
+  ["fitz", "pymupdf"],
+  ["git", "gitpython"],
+  ["msoffcrypto", "msoffcrypto-tool"],
+  ["pil", "pillow"],
+  ["skgstat", "scikit-gstat"],
+  ["skimage", "scikit-image"],
   ["sklearn", "scikit-learn"],
-  ["dotenv", "python-dotenv"]
+  ["xrspatial", "xarray-spatial"],
+  ["yaml", "pyyaml"],
 ]
