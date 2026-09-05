@@ -108,7 +108,6 @@ impl_combine_or!(NonZeroUsize);
 impl_combine_or!(PathBuf);
 impl_combine_or!(PipExtraIndex);
 impl_combine_or!(PipFindLinks);
-impl_combine_or!(PipIndex);
 impl_combine_or!(PrereleaseMode);
 impl_combine_or!(PreviewOption);
 impl_combine_or!(ProxyUrl);
@@ -125,6 +124,15 @@ impl_combine_or!(TorchMode);
 impl_combine_or!(TrustedPublishing);
 impl_combine_or!(Url);
 impl_combine_or!(bool);
+
+impl Combine for Option<PipIndex> {
+    fn combine(self, other: Self) -> Self {
+        match (self, other) {
+            (Some(index), Some(other)) => Some(index.with_credentials_from(&other)),
+            (index, other) => index.or(other),
+        }
+    }
+}
 
 impl<T> Combine for Option<Vec<T>> {
     /// Combine two vectors by extending the vector in `self` with the vector in `other`, if they're
