@@ -8,6 +8,9 @@ debug/
 target-alpine/
 target/
 
+# JavaScript formatting tools
+/node_modules/
+
 # Bootstrapped Python versions
 /bin/
 
