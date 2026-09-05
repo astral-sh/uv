@@ -245,6 +245,11 @@ pub(crate) async fn metadata(
                 )
                 .await
                 .context("Failed to collect module owners")?;
+                if sync.is_some() {
+                    // Prime the interpreter cache so we don't have to query on the next uv
+                    // invocation.
+                    environment.interpreter().cache_virtualenv(cache)?;
+                }
                 export = export
                     .with_environment(&environment)
                     .with_module_owners(module_owners);
