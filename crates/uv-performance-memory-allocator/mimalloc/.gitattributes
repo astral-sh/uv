@@ -1,0 +1,2 @@
+# Preserve upstream formatting in vendored mimalloc sources.
+**/* whitespace=-trailing-space
