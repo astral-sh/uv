@@ -240,9 +240,29 @@ fn validate_data_script_destination(target: &Path, scripts: &Path) -> Result<(),
     };
 
     let normalized_name = name.to_ascii_lowercase();
-    let normalized_name = normalized_name
-        .strip_suffix(".exe")
-        .unwrap_or(&normalized_name);
+
+    let normalized_name = cfg_select! {
+        // On Windows, check (and strip) any prefix matching a common extension
+        // suffix. This ensures that we reject e.g. `python.bat`, which Windows
+        // would otherwise execute as `python`.
+        // NOTE: This is a heuristic, since whether or not a suffix
+        // implies executable intent is a properly of a given shell on Windows,
+        // not the system itself.
+        windows => {
+            uv_fs::EXE_SUFFIXES
+                .iter()
+                .find_map(|extension| normalized_name.strip_suffix(extension))
+                .unwrap_or(&normalized_name)
+        },
+        // On all other platforms, strip `.exe` if present.
+        // We could probably remove this.
+        _ => {
+            normalized_name
+                .strip_suffix(".exe")
+                .unwrap_or(&normalized_name)
+        }
+    };
+
     if let Some(reserved) = reserved_script_name(normalized_name) {
         return Err(Error::ReservedScriptName {
             reserved: reserved.to_string(),
