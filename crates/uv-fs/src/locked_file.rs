@@ -107,11 +107,20 @@ impl LockedFileMode {
     /// [rust-lang/rust#148325]: https://github.com/rust-lang/rust/issues/148325
     #[cfg(not(target_os = "android"))]
     fn try_lock(self, file: &fs_err::File) -> Result<(), std::fs::TryLockError> {
-        match self {
-            Self::Exclusive => file.try_lock()?,
-            Self::Shared => file.try_lock_shared()?,
+        loop {
+            let res = match self {
+                Self::Exclusive => file.try_lock(),
+                Self::Shared => file.try_lock_shared(),
+            };
+            match res {
+                Err(std::fs::TryLockError::Error(err))
+                    if err.kind() == io::ErrorKind::Interrupted =>
+                {
+                    continue;
+                }
+                other => return other,
+            }
         }
-        Ok(())
     }
 
     /// Try to lock the file and return an error if the lock is already acquired by another process
@@ -130,13 +139,18 @@ impl LockedFileMode {
             Self::Exclusive => rustix::fs::FlockOperation::NonBlockingLockExclusive,
             Self::Shared => rustix::fs::FlockOperation::NonBlockingLockShared,
         };
-        rustix::fs::flock(file.as_fd(), operation).map_err(|errno| {
-            if errno == rustix::io::Errno::WOULDBLOCK {
-                std::fs::TryLockError::WouldBlock
-            } else {
-                std::fs::TryLockError::Error(io::Error::from_raw_os_error(errno.raw_os_error()))
+        loop {
+            match rustix::fs::flock(file.as_fd(), operation) {
+                Ok(()) => return Ok(()),
+                Err(rustix::io::Errno::INTR) => continue,
+                Err(rustix::io::Errno::WOULDBLOCK) => return Err(std::fs::TryLockError::WouldBlock),
+                Err(errno) => {
+                    return Err(std::fs::TryLockError::Error(io::Error::from_raw_os_error(
+                        errno.raw_os_error(),
+                    )));
+                }
             }
-        })
+        }
     }
 
     /// Lock the file, blocking until the lock becomes available if necessary.
@@ -147,11 +161,16 @@ impl LockedFileMode {
     /// [rust-lang/rust#148325]: https://github.com/rust-lang/rust/issues/148325
     #[cfg(not(target_os = "android"))]
     fn lock(self, file: &fs_err::File) -> Result<(), io::Error> {
-        match self {
-            Self::Exclusive => file.lock()?,
-            Self::Shared => file.lock_shared()?,
+        loop {
+            let res = match self {
+                Self::Exclusive => file.lock(),
+                Self::Shared => file.lock_shared(),
+            };
+            match res {
+                Err(err) if err.kind() == io::ErrorKind::Interrupted => continue,
+                other => return other,
+            }
         }
-        Ok(())
     }
 
     /// Lock the file, blocking until the lock becomes available if necessary.
@@ -169,8 +188,13 @@ impl LockedFileMode {
             Self::Exclusive => rustix::fs::FlockOperation::LockExclusive,
             Self::Shared => rustix::fs::FlockOperation::LockShared,
         };
-        rustix::fs::flock(file.as_fd(), operation)
-            .map_err(|errno| io::Error::from_raw_os_error(errno.raw_os_error()))
+        loop {
+            match rustix::fs::flock(file.as_fd(), operation) {
+                Ok(()) => return Ok(()),
+                Err(rustix::io::Errno::INTR) => continue,
+                Err(errno) => return Err(io::Error::from_raw_os_error(errno.raw_os_error())),
+            }
+        }
     }
 }
 
