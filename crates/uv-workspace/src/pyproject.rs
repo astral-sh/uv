@@ -141,6 +141,19 @@ impl PyProjectToml {
         }
     }
 
+    /// Return the `requires-python` setting for a dependency group, if any.
+    pub fn dependency_group_requires_python(
+        &self,
+        group: &GroupName,
+    ) -> Option<&VersionSpecifiers> {
+        self.tool
+            .as_ref()
+            .and_then(|tool| tool.uv.as_ref())
+            .and_then(|uv| uv.dependency_groups.as_ref())
+            .and_then(|groups| groups.inner().get(group))
+            .and_then(|settings| settings.requires_python.as_ref())
+    }
+
     /// Returns the set of conflicts for the project.
     pub(crate) fn conflicts(&self) -> Result<Conflicts, ConflictError> {
         let empty = Conflicts::empty();
@@ -731,6 +744,14 @@ impl ToolUvSources {
     /// Returns the underlying `BTreeMap` of package names to sources.
     pub fn inner(&self) -> &BTreeMap<PackageName, Sources> {
         &self.0
+    }
+
+    /// Retain only sources for which `predicate` returns `true`.
+    pub fn retain(&mut self, mut predicate: impl FnMut(&PackageName, &Source) -> bool) {
+        self.0.retain(|name, sources| {
+            sources.0.retain(|source| predicate(name, source));
+            !sources.0.is_empty()
+        });
     }
 
     /// Convert the [`ToolUvSources`] into its inner `BTreeMap`.
