@@ -112,14 +112,12 @@ impl LockedFileMode {
                 Self::Exclusive => file.try_lock(),
                 Self::Shared => file.try_lock_shared(),
             };
-            match res {
-                Err(std::fs::TryLockError::Error(err))
-                    if err.kind() == io::ErrorKind::Interrupted =>
-                {
+            if let Err(std::fs::TryLockError::Error(ref err)) = res {
+                if err.kind() == io::ErrorKind::Interrupted {
                     continue;
                 }
-                other => return other,
             }
+            return res;
         }
     }
 
@@ -142,8 +140,10 @@ impl LockedFileMode {
         loop {
             match rustix::fs::flock(file.as_fd(), operation) {
                 Ok(()) => return Ok(()),
-                Err(rustix::io::Errno::INTR) => continue,
-                Err(rustix::io::Errno::WOULDBLOCK) => return Err(std::fs::TryLockError::WouldBlock),
+                Err(rustix::io::Errno::INTR) => {}
+                Err(rustix::io::Errno::WOULDBLOCK) => {
+                    return Err(std::fs::TryLockError::WouldBlock);
+                }
                 Err(errno) => {
                     return Err(std::fs::TryLockError::Error(io::Error::from_raw_os_error(
                         errno.raw_os_error(),
@@ -166,10 +166,12 @@ impl LockedFileMode {
                 Self::Exclusive => file.lock(),
                 Self::Shared => file.lock_shared(),
             };
-            match res {
-                Err(err) if err.kind() == io::ErrorKind::Interrupted => continue,
-                other => return other,
+            if let Err(ref err) = res {
+                if err.kind() == io::ErrorKind::Interrupted {
+                    continue;
+                }
             }
+            return res;
         }
     }
 
@@ -191,7 +193,7 @@ impl LockedFileMode {
         loop {
             match rustix::fs::flock(file.as_fd(), operation) {
                 Ok(()) => return Ok(()),
-                Err(rustix::io::Errno::INTR) => continue,
+                Err(rustix::io::Errno::INTR) => {}
                 Err(errno) => return Err(io::Error::from_raw_os_error(errno.raw_os_error())),
             }
         }
