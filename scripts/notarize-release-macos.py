@@ -1,6 +1,6 @@
 # /// script
 # requires-python = ">=3.12"
-# dependencies = ["boto3==1.43.83"]
+# dependencies = ["boto3"]
 #
 # [tool.uv]
 # no-build = true
