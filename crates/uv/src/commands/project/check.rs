@@ -511,7 +511,7 @@ pub(crate) async fn check(
                 python_downloads,
                 no_sync,
                 config_discovery,
-                ActiveEnvironment::Default,
+                ActiveEnvironment::Warn,
                 cache,
                 DryRun::Disabled,
                 LinkErrorReporting::User,
@@ -542,7 +542,7 @@ pub(crate) async fn check(
                     python_downloads,
                     &install_mirrors,
                     ProjectEnvironmentPolicy::Optional,
-                    ActiveEnvironment::Default,
+                    ActiveEnvironment::Warn,
                     cache,
                     printer,
                 )

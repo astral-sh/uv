@@ -960,14 +960,14 @@ impl Workspace {
                     return ProjectEnvironmentSelection::Active(from_virtual_env);
                 }
                 ActiveEnvironment::Ignore => {}
-                ActiveEnvironment::Default if !matches_project => {
+                ActiveEnvironment::Warn if !matches_project => {
                     warn_user_once!(
                         "`VIRTUAL_ENV={}` does not match the project environment path `{}` and will be ignored; use `--active` to target the active environment instead",
                         from_virtual_env.user_display(),
                         project_environment_path.user_display()
                     );
                 }
-                ActiveEnvironment::Default => {}
+                ActiveEnvironment::Warn => {}
             }
         } else {
             if active == ActiveEnvironment::Prefer {

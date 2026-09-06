@@ -3,7 +3,7 @@
 pub enum ActiveEnvironment {
     /// Ignore a mismatched active environment and warn.
     #[default]
-    Default,
+    Warn,
     /// Ignore the active environment without warning.
     Ignore,
     /// Prefer the active environment, if one is set.
@@ -15,7 +15,7 @@ impl ActiveEnvironment {
     #[must_use]
     pub fn without_warning(self) -> Self {
         match self {
-            Self::Default | Self::Ignore => Self::Ignore,
+            Self::Warn | Self::Ignore => Self::Ignore,
             Self::Prefer => Self::Prefer,
         }
     }
@@ -24,7 +24,7 @@ impl ActiveEnvironment {
 impl From<Option<bool>> for ActiveEnvironment {
     fn from(active: Option<bool>) -> Self {
         match active {
-            None => Self::Default,
+            None => Self::Warn,
             Some(false) => Self::Ignore,
             Some(true) => Self::Prefer,
         }
