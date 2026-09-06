@@ -65,8 +65,6 @@ fn unzip_inner(
     target: &Path,
     hash_contents: bool,
 ) -> Result<UnzipOutput, Error> {
-    let (reader, _) = reader.into_parts();
-
     // Parse the central directory once, then clone the archive reader per Rayon worker so
     // extraction stays parallel for already-downloaded wheels. AllowStdIo adapts synchronous
     // file I/O to async_zip; extraction itself runs on blocking and Rayon threads.
