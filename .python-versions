@@ -15,10 +15,6 @@
 3.10.21
 3.9.25
 3.8.20
-# The following versions are needed for tests with exact patch requests
-3.13.2
-3.12.9
-3.9.21
 # The following is needed for `==3.13` request tests
 3.13.0
 # Pre-release versions required for testing
