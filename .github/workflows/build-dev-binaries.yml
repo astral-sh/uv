@@ -28,9 +28,6 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: "Install mold"
-        run: ./scripts/install-mold.sh
-
       - name: "Install Rust toolchain"
         run: rustup toolchain install --profile minimal
 
@@ -58,13 +55,12 @@ jobs:
     runs-on: github-ubuntu-24.04-aarch64-4
     env:
       RUSTC_BOOTSTRAP: 1
+      # Use rustc's bundled LLD instead of the system linker.
+      RUSTFLAGS: -Z unstable-options -C linker-features=+lld -C link-self-contained=+linker
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-
-      - name: "Install mold"
-        run: ./scripts/install-mold.sh
 
       - name: "Install Rust toolchain"
         run: rustup toolchain install --profile minimal
@@ -97,9 +93,6 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-
-      - name: "Install mold"
-        run: ./scripts/install-mold.sh
 
       - name: "Setup armv7"
         run: |
@@ -144,13 +137,12 @@ jobs:
     runs-on: github-ubuntu-24.04-x86_64-8
     env:
       RUSTC_BOOTSTRAP: 1
+      # Use rustc's bundled LLD instead of the system linker.
+      RUSTFLAGS: -Z unstable-options -C linker-features=+lld -C link-self-contained=+linker
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-
-      - name: "Install mold"
-        run: ./scripts/install-mold.sh
 
       - name: "Setup musl"
         run: sudo apt-get install musl-tools
@@ -345,8 +337,6 @@ jobs:
         run: rustup default ${MSRV}
         env:
           MSRV: ${{ steps.msrv.outputs.value }}
-      - name: "Install mold"
-        run: ./scripts/install-mold.sh
       - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
         with:
           save-if: ${{ inputs.save-rust-cache == 'true' }}
