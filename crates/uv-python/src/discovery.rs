@@ -1058,9 +1058,25 @@ impl Error {
             // When querying the Python interpreter fails, we will only raise errors that demonstrate that something is broken
             // If the Python interpreter returned a bad response, we'll continue searching for one that works
             Self::Query(err, _, source) => match &**err {
-                InterpreterError::Encode(_)
-                | InterpreterError::Io(_)
-                | InterpreterError::SpawnFailed { .. } => true,
+                InterpreterError::Encode(_) | InterpreterError::Io(_) => true,
+                InterpreterError::SpawnFailed { path, err } => match source {
+                    PythonSource::SearchPath | PythonSource::SearchPathFirst => {
+                        debug!(
+                            "Skipping unexecutable interpreter at {} from {source}: {err}",
+                            path.display()
+                        );
+                        false
+                    }
+                    PythonSource::ProvidedPath
+                    | PythonSource::ActiveEnvironment
+                    | PythonSource::CondaPrefix
+                    | PythonSource::BaseCondaPrefix
+                    | PythonSource::DiscoveredEnvironment
+                    | PythonSource::Registry
+                    | PythonSource::MicrosoftStore
+                    | PythonSource::Managed
+                    | PythonSource::ParentInterpreter => true,
+                },
                 InterpreterError::UnexpectedResponse(UnexpectedResponseError { path, .. })
                 | InterpreterError::StatusCode(StatusCodeError { path, .. }) => {
                     debug!(
@@ -3859,6 +3875,39 @@ mod tests {
         PythonExecutableGroup, PythonPreference, PythonSource, PythonVariant, QueryStrategy,
         python_installations_from_executables, sort_installations_by_key,
     };
+
+    #[test]
+    fn interpreter_spawn_failures_are_noncritical_only_on_search_path() {
+        for (source, is_critical) in [
+            (PythonSource::SearchPath, false),
+            (PythonSource::SearchPathFirst, false),
+            (PythonSource::ProvidedPath, true),
+            (PythonSource::ActiveEnvironment, true),
+            (PythonSource::CondaPrefix, true),
+            (PythonSource::BaseCondaPrefix, true),
+            (PythonSource::DiscoveredEnvironment, true),
+            (PythonSource::Registry, true),
+            (PythonSource::MicrosoftStore, true),
+            (PythonSource::Managed, true),
+            (PythonSource::ParentInterpreter, true),
+        ] {
+            let path = PathBuf::from("python");
+            let error = Error::Query(
+                Box::new(InterpreterError::SpawnFailed {
+                    path: path.clone(),
+                    err: io::Error::other("unsupported executable format"),
+                }),
+                path,
+                source,
+            );
+
+            assert_eq!(
+                error.is_critical(),
+                is_critical,
+                "unexpected criticality for {source}",
+            );
+        }
+    }
 
     // Testing this at a higher level would necessitate relying on filesystem ordering.
     #[test]
