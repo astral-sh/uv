@@ -1,4 +1,5 @@
 # Sign and verify uv's macOS and Windows wheels and GitHub release archives.
+# Notarize the signed macOS executables before packaging them.
 name: "Sign release binaries"
 
 on:
@@ -122,7 +123,7 @@ jobs:
           if-no-files-found: error
 
   sign-macos:
-    name: "sign macos binaries"
+    name: "sign and notarize macos binaries"
     needs: prepare
     if: ${{ github.repository == 'astral-sh/uv' && github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' }}
     runs-on: ubuntu-24.04
@@ -180,6 +181,28 @@ jobs:
           while read -r target; do
             uv run scripts/sign-release-macos.py "./unsigned/$target" "./signed/$target"
           done < <(jq -r '.[].target' <<< "$TARGETS")
+
+      - name: "Check out notarization helper"
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          repository: openai/codex
+          ref: d58a64e690508a752c6a5a466ea752808849b7e2
+          path: codex-notary
+          sparse-checkout: .github/scripts/macos-signing
+          persist-credentials: false
+
+      - name: "Notarize signed macOS executables"
+        shell: bash
+        env:
+          AZURE_KEYVAULT_NAME: ${{ secrets.CODESIGN_AZURE_KEYVAULT_NAME }}
+          APPLE_NOTARIZATION_AKV_KEY_NAME: ${{ secrets.CODESIGN_APPLE_NOTARIZATION_AKV_KEY_NAME }}
+          APPLE_NOTARIZATION_AKV_KEY_VERSION: ${{ secrets.CODESIGN_APPLE_NOTARIZATION_AKV_KEY_VERSION }}
+        run: |
+          set -euo pipefail
+          archive="${RUNNER_TEMP}/uv-notarization.zip"
+          (cd signed && zip -q "$archive" uv uvx uv-build)
+          python3 codex-notary/.github/scripts/macos-signing/notarize_with_akv.py \
+            --file "$archive"
 
       - name: "Upload signed executable wheel members"
         id: upload
