@@ -299,7 +299,8 @@ pub(crate) async fn add(
                 python_downloads,
                 &install_mirrors,
                 ProjectEnvironmentPolicy::Optional,
-                active,
+                // Suppress warnings about the active environment when we won't modify it.
+                active.or(Some(false)),
                 cache,
                 printer,
             )
