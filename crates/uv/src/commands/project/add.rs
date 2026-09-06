@@ -16,9 +16,9 @@ use uv_cache::Cache;
 use uv_cache_key::RepositoryUrl;
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
-    Concurrency, Constraints, DependencyGroups, DependencyGroupsWithDefaults, DevMode, DryRun,
-    EditableMode, ExtrasSpecification, ExtrasSpecificationWithDefaults, GitLfsSetting,
-    InstallOptions, NoSources,
+    ActiveEnvironment, Concurrency, Constraints, DependencyGroups, DependencyGroupsWithDefaults,
+    DevMode, DryRun, EditableMode, ExtrasSpecification, ExtrasSpecificationWithDefaults,
+    GitLfsSetting, InstallOptions, NoSources,
 };
 use uv_dispatch::BuildDispatch;
 use uv_distribution::{DistributionDatabase, LoweredExtraBuildDependencies};
@@ -72,7 +72,7 @@ pub(crate) async fn add(
     project_dir: &Path,
     lock_check: LockCheck,
     frozen: Option<FrozenSource>,
-    active: Option<bool>,
+    active: ActiveEnvironment,
     no_sync: bool,
     no_install_project: bool,
     only_install_project: bool,
@@ -300,7 +300,7 @@ pub(crate) async fn add(
                 &install_mirrors,
                 ProjectEnvironmentPolicy::Optional,
                 // Suppress warnings about the active environment when we won't modify it.
-                active.or(Some(false)),
+                active.without_warning(),
                 cache,
                 printer,
             )

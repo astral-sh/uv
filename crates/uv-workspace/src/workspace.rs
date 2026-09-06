@@ -16,7 +16,7 @@ use rustc_hash::{FxHashSet, FxHasher};
 use tracing::{debug, trace, warn};
 
 use uv_cache::Cache;
-use uv_configuration::{DependencyGroupsWithDefaults, ExcludeDependency};
+use uv_configuration::{ActiveEnvironment, DependencyGroupsWithDefaults, ExcludeDependency};
 use uv_distribution_types::{Index, Requirement, RequirementSource};
 use uv_fs::{CWD, Simplified, normalize_path};
 use uv_normalize::{DEV_DEPENDENCIES, GroupName, PackageName};
@@ -897,10 +897,10 @@ impl Workspace {
     /// If `UV_PROJECT_ENVIRONMENT` is set, it will take precedence. If a relative path is provided,
     /// it is resolved relative to the install path.
     ///
-    /// If `active` is `true`, the `VIRTUAL_ENV` variable will be preferred. If it is `false`, any
-    /// warnings about mismatch between the active environment and the project environment will be
-    /// silenced.
-    pub fn environment_selection(&self, active: Option<bool>) -> ProjectEnvironmentSelection {
+    /// If `active` is [`ActiveEnvironment::Prefer`], the `VIRTUAL_ENV` variable will be preferred.
+    /// If it is [`ActiveEnvironment::Ignore`], warnings about mismatches between the active
+    /// environment and the project environment will be silenced.
+    pub fn environment_selection(&self, active: ActiveEnvironment) -> ProjectEnvironmentSelection {
         /// Resolve the `UV_PROJECT_ENVIRONMENT` value, if any.
         fn from_project_environment_variable(workspace: &Workspace) -> Option<PathBuf> {
             let value = std::env::var_os(EnvVars::UV_PROJECT_ENVIRONMENT)?;
@@ -949,7 +949,7 @@ impl Workspace {
                 uv_fs::is_same_file_allow_missing(&from_virtual_env, &project_environment_path)
                     .unwrap_or(false);
             match active {
-                Some(true) => {
+                ActiveEnvironment::Prefer => {
                     if !matches_project {
                         debug!(
                             "Using active virtual environment `{}` instead of project environment `{}`",
@@ -959,18 +959,18 @@ impl Workspace {
                     }
                     return ProjectEnvironmentSelection::Active(from_virtual_env);
                 }
-                Some(false) => {}
-                None if !matches_project => {
+                ActiveEnvironment::Ignore => {}
+                ActiveEnvironment::Default if !matches_project => {
                     warn_user_once!(
                         "`VIRTUAL_ENV={}` does not match the project environment path `{}` and will be ignored; use `--active` to target the active environment instead",
                         from_virtual_env.user_display(),
                         project_environment_path.user_display()
                     );
                 }
-                None => {}
+                ActiveEnvironment::Default => {}
             }
         } else {
-            if active.unwrap_or_default() {
+            if active == ActiveEnvironment::Prefer {
                 debug!(
                     "Use of the active virtual environment was requested, but `VIRTUAL_ENV` is not set"
                 );

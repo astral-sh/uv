@@ -775,7 +775,7 @@ fn version_baseline() {
         dry_run: false,
         lock_check: Disabled,
         frozen: None,
-        active: None,
+        active: Default,
         no_sync: false,
         package: None,
         python: None,

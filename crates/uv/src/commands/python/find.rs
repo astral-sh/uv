@@ -4,7 +4,7 @@ use std::path::Path;
 
 use uv_cache::Cache;
 use uv_client::BaseClientBuilder;
-use uv_configuration::DependencyGroupsWithDefaults;
+use uv_configuration::{ActiveEnvironment, DependencyGroupsWithDefaults};
 use uv_errors::ErrorWithHints;
 use uv_fs::Simplified;
 use uv_python::{
@@ -157,7 +157,7 @@ pub(crate) async fn find_script(
         &PythonInstallMirrors::default(),
         false,
         config_discovery,
-        Some(false),
+        ActiveEnvironment::Ignore,
         cache,
         printer,
     )

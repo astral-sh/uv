@@ -14,9 +14,9 @@ use uv_cache::Cache;
 use uv_cli::SyncFormat;
 use uv_client::{BaseClientBuilder, CachedClient, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
-    Concurrency, Constraints, DependencyGroups, DependencyGroupsWithDefaults, DryRun, EditableMode,
-    ExtrasSpecification, ExtrasSpecificationWithDefaults, HashCheckingMode, InstallOptions,
-    TargetTriple, Upgrade,
+    ActiveEnvironment, Concurrency, Constraints, DependencyGroups, DependencyGroupsWithDefaults,
+    DryRun, EditableMode, ExtrasSpecification, ExtrasSpecificationWithDefaults, HashCheckingMode,
+    InstallOptions, TargetTriple, Upgrade,
 };
 use uv_dispatch::BuildDispatch;
 use uv_distribution::LoweredExtraBuildDependencies;
@@ -69,7 +69,7 @@ pub(crate) async fn sync(
     lock_check: LockCheck,
     frozen: Option<FrozenSource>,
     dry_run: DryRun,
-    active: Option<bool>,
+    active: ActiveEnvironment,
     all_packages: bool,
     package: Vec<PackageName>,
     extras: ExtrasSpecification,

@@ -34,11 +34,12 @@ use uv_cli::{
 };
 use uv_client::{Certificates, Connectivity, MetadataRangeRequest};
 use uv_configuration::{
-    BuildIsolation, BuildOptions, Concurrency, DependencyGroups, DevMode, DryRun, EditableMode,
-    EnvFile, ExcludeDependency, ExportFormat, ExtrasSpecification, GitLfsSetting, HashCheckingMode,
-    IndexStrategy, InstallOptions, KeyringProviderType, NoBinary, NoBuild, NoSources, Override,
-    PackageOverride, PipCompileFormat, ProjectBuildBackend, ProxyUrl, Reinstall, RequiredVersion,
-    TargetTriple, TrustedHost, TrustedPublishing, Upgrade, VersionControlSystem,
+    ActiveEnvironment, BuildIsolation, BuildOptions, Concurrency, DependencyGroups, DevMode,
+    DryRun, EditableMode, EnvFile, ExcludeDependency, ExportFormat, ExtrasSpecification,
+    GitLfsSetting, HashCheckingMode, IndexStrategy, InstallOptions, KeyringProviderType, NoBinary,
+    NoBuild, NoSources, Override, PackageOverride, PipCompileFormat, ProjectBuildBackend, ProxyUrl,
+    Reinstall, RequiredVersion, TargetTriple, TrustedHost, TrustedPublishing, Upgrade,
+    VersionControlSystem,
 };
 use uv_distribution_types::{
     ConfigSettings, DependencyMetadata, ExtraBuildVariables, Index, IndexLocations, IndexUrl,
@@ -773,7 +774,7 @@ pub(crate) struct RunSettings {
     pub(crate) all_packages: bool,
     pub(crate) package: Option<PackageName>,
     pub(crate) no_project: bool,
-    pub(crate) active: Option<bool>,
+    pub(crate) active: ActiveEnvironment,
     pub(crate) no_sync: bool,
     pub(crate) python: Option<String>,
     pub(crate) python_platform: Option<TargetTriple>,
@@ -936,7 +937,7 @@ impl RunSettings {
             package,
             no_project,
             no_sync: no_sync.is_enabled(),
-            active: flag(active, no_active, "active")?,
+            active: flag(active, no_active, "active")?.into(),
             python: python.and_then(Maybe::into_option),
             python_platform,
             refresh: Refresh::try_from(refresh)?,
@@ -1937,7 +1938,7 @@ pub(crate) struct SyncSettings {
     pub(super) frozen: Option<FrozenSource>,
     pub(super) dry_run: DryRun,
     pub(super) script: Option<PathBuf>,
-    pub(super) active: Option<bool>,
+    pub(super) active: ActiveEnvironment,
     pub(super) extras: ExtrasSpecification,
     pub(super) groups: DependencyGroups,
     pub(super) editable: Option<EditableMode>,
@@ -2094,7 +2095,7 @@ impl SyncSettings {
             frozen,
             dry_run,
             script,
-            active: flag(active, no_active, "active")?,
+            active: flag(active, no_active, "active")?.into(),
             extras: ExtrasSpecification::from_args(
                 extra.unwrap_or_default(),
                 no_extra,
@@ -2278,7 +2279,7 @@ pub(crate) struct MetadataSettings {
     pub(crate) frozen: Option<FrozenSource>,
     pub(crate) dry_run: DryRun,
     pub(crate) sync: Option<Modifications>,
-    pub(crate) active: bool,
+    pub(crate) active: ActiveEnvironment,
     pub(crate) python: Option<String>,
     pub(crate) install_mirrors: PythonInstallMirrors,
     pub(crate) refresh: Refresh,
@@ -2332,7 +2333,7 @@ impl MetadataSettings {
             } else {
                 Modifications::Sufficient
             }),
-            active,
+            active: Some(active).into(),
             python: python.and_then(Maybe::into_option),
             refresh: Refresh::try_from(refresh)?,
             settings: ResolverSettings::resolve(resolver, build, filesystem, &environment)?,
@@ -2350,7 +2351,7 @@ impl MetadataSettings {
 pub(crate) struct AddSettings {
     pub(crate) lock_check: LockCheck,
     pub(crate) frozen: Option<FrozenSource>,
-    pub(crate) active: Option<bool>,
+    pub(crate) active: ActiveEnvironment,
     pub(crate) no_sync: bool,
     pub(crate) packages: Vec<String>,
     pub(crate) requirements: Vec<PathBuf>,
@@ -2569,7 +2570,7 @@ impl AddSettings {
         let only_install_local = only_install_local.is_enabled();
 
         let malware_settings = MalwareCheckSettings::resolve(filesystem.as_ref(), &environment);
-        let active = flag(active, no_active, "active")?;
+        let active = flag(active, no_active, "active")?.into();
         let workspace = flag(workspace, no_workspace, "workspace")?;
         let editable = EditableMode::from_args(
             flag(editable.into(), no_editable.into(), "editable")?,
@@ -2630,7 +2631,7 @@ impl AddSettings {
 pub(crate) struct RemoveSettings {
     pub(super) lock_check: LockCheck,
     pub(super) frozen: Option<FrozenSource>,
-    pub(super) active: Option<bool>,
+    pub(super) active: ActiveEnvironment,
     pub(super) no_sync: bool,
     pub(super) packages: Vec<PackageName>,
     pub(super) dependency_type: DependencyType,
@@ -2708,7 +2709,7 @@ impl RemoveSettings {
         Ok(Self {
             lock_check: locked,
             frozen,
-            active: flag(active, no_active, "active")?,
+            active: flag(active, no_active, "active")?.into(),
             no_sync: no_sync.is_enabled(),
             packages,
             dependency_type,
@@ -2740,7 +2741,7 @@ pub(crate) struct VersionSettings {
     pub(crate) dry_run: bool,
     pub(crate) lock_check: LockCheck,
     pub(crate) frozen: Option<FrozenSource>,
-    pub(crate) active: Option<bool>,
+    pub(crate) active: ActiveEnvironment,
     pub(crate) no_sync: bool,
     pub(crate) package: Option<PackageName>,
     pub(crate) python: Option<String>,
@@ -2802,7 +2803,7 @@ impl VersionSettings {
             dry_run,
             lock_check: locked,
             frozen,
-            active: flag(active, no_active, "active")?,
+            active: flag(active, no_active, "active")?.into(),
             no_sync: no_sync.is_enabled(),
             package,
             python: python.and_then(Maybe::into_option),

@@ -12,8 +12,8 @@ use tracing::debug;
 use uv_cache::{Cache, Refresh};
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
-    Concurrency, Constraints, DependencyGroupsWithDefaults, DryRun, ExcludeDependency,
-    ExtrasSpecification, Override, PackageOverride, Reinstall, Upgrade,
+    ActiveEnvironment, Concurrency, Constraints, DependencyGroupsWithDefaults, DryRun,
+    ExcludeDependency, ExtrasSpecification, Override, PackageOverride, Reinstall, Upgrade,
 };
 use uv_dispatch::BuildDispatch;
 use uv_distribution::{DistributionDatabase, LoweredExtraBuildDependencies};
@@ -169,7 +169,7 @@ pub(crate) async fn lock(
                     python_downloads,
                     &install_mirrors,
                     ProjectEnvironmentPolicy::Optional,
-                    Some(false),
+                    ActiveEnvironment::Ignore,
                     cache,
                     printer,
                 )
@@ -185,7 +185,7 @@ pub(crate) async fn lock(
                 &install_mirrors,
                 false,
                 config_discovery,
-                Some(false),
+                ActiveEnvironment::Ignore,
                 cache,
                 printer,
             )

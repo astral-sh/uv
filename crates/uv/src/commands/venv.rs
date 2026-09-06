@@ -11,8 +11,8 @@ use tracing::warn;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
-    BuildOptions, Concurrency, Constraints, DependencyGroups, DryRun, IndexStrategy,
-    KeyringProviderType, NoBinary, NoBuild, NoSources,
+    ActiveEnvironment, BuildOptions, Concurrency, Constraints, DependencyGroups, DryRun,
+    IndexStrategy, KeyringProviderType, NoBinary, NoBuild, NoSources,
 };
 use uv_dispatch::{BuildDispatch, SharedState};
 use uv_distribution_types::{
@@ -131,7 +131,12 @@ pub(crate) async fn venv(
         .as_ref()
         .map(VirtualProject::workspace)
         .filter(|workspace| path.is_none() && workspace.install_path() == project_dir)
-        .map(|workspace| (workspace, workspace.environment_selection(Some(false))));
+        .map(|workspace| {
+            (
+                workspace,
+                workspace.environment_selection(ActiveEnvironment::Ignore),
+            )
+        });
 
     let centralized_workspace = project_environment
         .as_ref()

@@ -12,7 +12,8 @@ use rustc_hash::FxHashSet;
 use uv_cache::Cache;
 use uv_client::BaseClientBuilder;
 use uv_configuration::{
-    Concurrency, DependencyGroups, EditableMode, ExportFormat, ExtrasSpecification, InstallOptions,
+    ActiveEnvironment, Concurrency, DependencyGroups, EditableMode, ExportFormat,
+    ExtrasSpecification, InstallOptions,
 };
 use uv_distribution_types::Verbatim;
 use uv_normalize::{DefaultExtras, DefaultGroups, PackageName};
@@ -175,7 +176,7 @@ pub(crate) async fn export(
                 &install_mirrors,
                 false,
                 config_discovery,
-                Some(false),
+                ActiveEnvironment::Ignore,
                 cache,
                 printer,
             )
@@ -199,7 +200,7 @@ pub(crate) async fn export(
                     python_downloads,
                     &install_mirrors,
                     ProjectEnvironmentPolicy::Optional,
-                    Some(false),
+                    ActiveEnvironment::Ignore,
                     cache,
                     printer,
                 )

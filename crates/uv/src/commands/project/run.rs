@@ -21,8 +21,8 @@ use uv_cache::Cache;
 use uv_cli::{ExternalCommand, GlobalArgs};
 use uv_client::BaseClientBuilder;
 use uv_configuration::{
-    Concurrency, Constraints, DependencyGroups, DryRun, EditableMode, EnvFile, ExtrasSpecification,
-    InstallOptions, TargetTriple,
+    ActiveEnvironment, Concurrency, Constraints, DependencyGroups, DryRun, EditableMode, EnvFile,
+    ExtrasSpecification, InstallOptions, TargetTriple,
 };
 use uv_distribution::LoweredExtraBuildDependencies;
 use uv_distribution_types::Requirement;
@@ -94,7 +94,7 @@ pub(crate) async fn run(
     show_resolution: bool,
     lock_check: LockCheck,
     frozen: Option<FrozenSource>,
-    active: Option<bool>,
+    active: ActiveEnvironment,
     no_sync: bool,
     isolated: bool,
     all_packages: bool,
@@ -216,7 +216,7 @@ pub(crate) async fn run(
                 &install_mirrors,
                 no_sync,
                 config_discovery,
-                active.map_or(Some(false), Some),
+                active.without_warning(),
                 &cache,
                 DryRun::Disabled,
                 printer,
@@ -389,7 +389,7 @@ pub(crate) async fn run(
                     &install_mirrors,
                     no_sync,
                     config_discovery,
-                    active.map_or(Some(false), Some),
+                    active.without_warning(),
                     &cache,
                     DryRun::Disabled,
                     printer,
@@ -473,7 +473,7 @@ pub(crate) async fn run(
                     &install_mirrors,
                     no_sync,
                     config_discovery,
-                    active.map_or(Some(false), Some),
+                    active.without_warning(),
                     &cache,
                     printer,
                 )

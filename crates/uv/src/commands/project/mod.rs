@@ -14,8 +14,9 @@ use uv_cache::{Cache, CacheBucket};
 use uv_cache_key::{cache_digest, cache_name};
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
-    Concurrency, Constraints, DependencyGroupsWithDefaults, DryRun, ExtrasSpecification,
-    GitLfsSetting, Override, PackageOverride, Reinstall, TargetTriple, Upgrade,
+    ActiveEnvironment, Concurrency, Constraints, DependencyGroupsWithDefaults, DryRun,
+    ExtrasSpecification, GitLfsSetting, Override, PackageOverride, Reinstall, TargetTriple,
+    Upgrade,
 };
 use uv_dispatch::{BuildDispatch, SharedState};
 use uv_distribution::{DistributionDatabase, LoweredExtraBuildDependencies, LoweredRequirement};
@@ -707,7 +708,7 @@ impl ScriptInterpreter {
     /// If `--active` is set, the active virtual environment will be preferred.
     ///
     /// See: [`Workspace::environment_selection`].
-    fn root(script: Pep723ItemRef<'_>, active: Option<bool>, cache: &Cache) -> PathBuf {
+    fn root(script: Pep723ItemRef<'_>, active: ActiveEnvironment, cache: &Cache) -> PathBuf {
         /// Resolve the `VIRTUAL_ENV` variable, if any.
         fn from_virtual_env_variable() -> Option<PathBuf> {
             let value = std::env::var_os(EnvVars::VIRTUAL_ENV)?;
@@ -757,7 +758,7 @@ impl ScriptInterpreter {
         if let Some(from_virtual_env) = from_virtual_env_variable() {
             if !uv_fs::is_same_file_allow_missing(&from_virtual_env, &cache_env).unwrap_or(false) {
                 match active {
-                    Some(true) => {
+                    ActiveEnvironment::Prefer => {
                         debug!(
                             "Using active virtual environment `{}` instead of script environment `{}`",
                             from_virtual_env.user_display(),
@@ -765,8 +766,8 @@ impl ScriptInterpreter {
                         );
                         return from_virtual_env;
                     }
-                    Some(false) => {}
-                    None => {
+                    ActiveEnvironment::Ignore => {}
+                    ActiveEnvironment::Default => {
                         warn_user_once!(
                             "`VIRTUAL_ENV={}` does not match the script environment path `{}` and will be ignored; use `--active` to target the active environment instead",
                             from_virtual_env.user_display(),
@@ -776,7 +777,7 @@ impl ScriptInterpreter {
                 }
             }
         } else {
-            if active.unwrap_or_default() {
+            if active == ActiveEnvironment::Prefer {
                 debug!(
                     "Use of the active virtual environment was requested, but `VIRTUAL_ENV` is not set"
                 );
@@ -790,7 +791,7 @@ impl ScriptInterpreter {
     /// Discover an existing script environment without selecting or downloading an interpreter.
     pub(crate) fn discover_existing(
         script: Pep723ItemRef<'_>,
-        active: Option<bool>,
+        active: ActiveEnvironment,
         cache: &Cache,
     ) -> Option<PythonEnvironment> {
         let root = Self::root(script, active, cache);
@@ -814,7 +815,7 @@ impl ScriptInterpreter {
         install_mirrors: &PythonInstallMirrors,
         keep_incompatible: bool,
         config_discovery: ConfigDiscovery,
-        active: Option<bool>,
+        active: ActiveEnvironment,
         cache: &Cache,
         printer: Printer,
     ) -> Result<Self, ProjectError> {
@@ -1382,7 +1383,7 @@ impl ProjectInterpreter {
     /// Discover an existing project environment without selecting or downloading an interpreter.
     pub(crate) fn discover_existing(
         workspace: &Workspace,
-        active: Option<bool>,
+        active: ActiveEnvironment,
         cache: &Cache,
     ) -> Result<Option<PythonEnvironment>, ProjectError> {
         let selection = workspace.environment_selection(active);
@@ -1416,7 +1417,7 @@ impl ProjectInterpreter {
         python_downloads: PythonDownloads,
         install_mirrors: &PythonInstallMirrors,
         policy: ProjectEnvironmentPolicy,
-        active: Option<bool>,
+        active: ActiveEnvironment,
         cache: &Cache,
         printer: Printer,
     ) -> Result<Self, ProjectError> {
@@ -1838,7 +1839,7 @@ impl ProjectEnvironment {
         python_downloads: PythonDownloads,
         no_sync: bool,
         config_discovery: ConfigDiscovery,
-        active: Option<bool>,
+        active: ActiveEnvironment,
         cache: &Cache,
         dry_run: DryRun,
         link_error_reporting: LinkErrorReporting,
@@ -2128,7 +2129,7 @@ impl ScriptEnvironment {
         install_mirrors: &PythonInstallMirrors,
         no_sync: bool,
         config_discovery: ConfigDiscovery,
-        active: Option<bool>,
+        active: ActiveEnvironment,
         cache: &Cache,
         dry_run: DryRun,
         printer: Printer,
