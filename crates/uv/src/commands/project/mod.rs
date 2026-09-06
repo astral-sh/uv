@@ -245,6 +245,9 @@ pub(crate) enum ProjectError {
     #[error("Project virtual environment directory `{0}` cannot be used because {1}")]
     InvalidProjectEnvironmentDir(PathBuf, String),
 
+    #[error("Script virtual environment directory `{0}` cannot be used because {1}")]
+    InvalidScriptEnvironmentDir(PathBuf, String),
+
     #[error("Failed to parse `uv.lock`")]
     UvLockParse(#[source] toml::de::Error),
 
@@ -2152,6 +2155,18 @@ impl ScriptEnvironment {
             ScriptInterpreter::Interpreter(interpreter) => {
                 let root = ScriptInterpreter::root(script, active, cache);
 
+                // The derived cache entry belongs to uv, but an active environment can point
+                // outside the cache and is only replaced if it is a virtual environment.
+                let clear_non_virtualenv =
+                    if root == ScriptInterpreter::root(script, Some(false), cache) {
+                        ClearNonVirtualenv::Allow
+                    } else {
+                        ClearNonVirtualenv::Error
+                    };
+                let replace_environment =
+                    uv_fs::would_replace_virtualenv(&root, clear_non_virtualenv)
+                        .map_err(|err| invalid_script_environment(&root, &err))?;
+
                 // Determine a prompt for the environment, in order of preference:
                 //
                 // 1) The name of the script
@@ -2178,7 +2193,7 @@ impl ScriptEnvironment {
                         uv_virtualenv::Seed::Disabled,
                         upgradeable,
                     )?;
-                    return Ok(if root.exists() {
+                    return Ok(if replace_environment {
                         Self::WouldReplace(root, environment, temp_dir)
                     } else {
                         Self::WouldCreate(root, environment, temp_dir)
@@ -2186,16 +2201,20 @@ impl ScriptEnvironment {
                 }
 
                 // Remove the existing virtual environment.
-                let replaced = match uv_fs::remove_virtualenv(&root, ClearNonVirtualenv::Allow) {
-                    Ok(()) => {
-                        debug!(
-                            "Removed virtual environment at: {}",
-                            root.user_display().cyan()
-                        );
-                        true
+                let replaced = if replace_environment {
+                    match uv_fs::remove_virtualenv(&root, clear_non_virtualenv) {
+                        Ok(()) => {
+                            debug!(
+                                "Removed virtual environment at: {}",
+                                root.user_display().cyan()
+                            );
+                            true
+                        }
+                        Err(err) if err.kind() == io::ErrorKind::NotFound => false,
+                        Err(err) => return Err(invalid_script_environment(&root, &err)),
                     }
-                    Err(err) if err.kind() == std::io::ErrorKind::NotFound => false,
-                    Err(err) => return Err(uv_virtualenv::Error::from(err).into()),
+                } else {
+                    false
                 };
 
                 debug!(
@@ -2208,9 +2227,7 @@ impl ScriptEnvironment {
                     interpreter,
                     prompt,
                     false,
-                    uv_virtualenv::OnExisting::Remove(
-                        uv_virtualenv::RemovalReason::ManagedEnvironment,
-                    ),
+                    uv_virtualenv::OnExisting::Fail,
                     false,
                     uv_virtualenv::Seed::Disabled,
                     upgradeable,
@@ -3575,4 +3592,15 @@ fn format_optional_requires_python_sources(
     }
     // Otherwise don't elaborate
     String::new()
+}
+
+fn invalid_script_environment(root: &Path, err: &io::Error) -> ProjectError {
+    ProjectError::InvalidScriptEnvironmentDir(
+        root.to_path_buf(),
+        if err.kind() == io::ErrorKind::InvalidInput {
+            "it is not a virtual environment".to_string()
+        } else {
+            format!("uv cannot determine if it is a virtual environment: {err}")
+        },
+    )
 }
