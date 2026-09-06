@@ -16718,3 +16718,115 @@ fn sync_frozen_workspace_member_git_credentials() -> Result<()> {
 
     Ok(())
 }
+
+/// Regression test for #11390: some build backends (e.g. `maturin`, `setuptools-rust`) write
+/// generated files -- such as a compiled extension module -- directly into the source tree as a
+/// side effect of an editable build. If such a file is later lost (e.g. via `git clean -fdx`, or
+/// by deleting `.venv` and re-syncing into a fresh one), `uv sync` must notice that the cached
+/// build is no longer valid and re-invoke the build backend, rather than treating the missing
+/// output as if nothing had changed.
+///
+/// This also guards against the opposite failure mode: since the generated file is itself listed
+/// in `cache-keys`, and it did not yet exist before the very first build, a naive fix could cause
+/// uv to think the source is out-of-date (and thus needlessly rebuild) on *every* subsequent sync.
+#[test]
+fn sync_editable_rebuild_after_generated_file_deleted() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["hatchling"]
+        backend-path = ["."]
+        build-backend = "build_backend"
+
+        [tool.uv]
+        cache-keys = [{ file = "pyproject.toml" }, { file = "src/project/_generated.py" }]
+    "#})?;
+
+    // A build backend that, like `maturin`'s editable builds, writes a generated file into the
+    // source tree as a side effect of building, in addition to producing the wheel itself. It
+    // also records how many times it has been invoked, in a file that is *not* a cache key, so
+    // the test can tell whether a given `uv sync` actually triggered a rebuild.
+    let build_backend = context.temp_dir.child("build_backend.py");
+    build_backend.write_str(indoc! {r#"
+        import pathlib
+        from hatchling.build import *
+        from hatchling.build import build_editable as _build_editable
+
+        def build_editable(wheel_directory, config_settings=None, metadata_directory=None):
+            pathlib.Path("src/project/_generated.py").write_text("VALUE = 1\n")
+            counter = pathlib.Path("build_count.txt")
+            count = int(counter.read_text()) if counter.exists() else 0
+            counter.write_text(str(count + 1))
+            return _build_editable(wheel_directory, config_settings, metadata_directory)
+    "#})?;
+
+    context
+        .temp_dir
+        .child("src")
+        .child("project")
+        .child("__init__.py")
+        .touch()?;
+
+    let generated = context
+        .temp_dir
+        .child("src")
+        .child("project")
+        .child("_generated.py");
+    let build_count_path = context.temp_dir.child("build_count.txt");
+    let build_count = || -> Result<u32> { Ok(fs_err::read_to_string(&build_count_path)?.parse()?) };
+
+    // First sync: the build backend runs and generates `_generated.py`.
+    context.sync().assert().success();
+    assert!(
+        generated.exists(),
+        "generated file should exist after the first sync"
+    );
+    assert_eq!(build_count()?, 1);
+
+    // Second sync: nothing changed, so the cached build should be reused, and the build backend
+    // should *not* be invoked again -- even though the generated file (an output, not an input)
+    // now exists where it didn't before the first build.
+    context.sync().assert().success();
+    assert!(generated.exists());
+    assert_eq!(
+        build_count()?,
+        1,
+        "the cached build should have been reused"
+    );
+
+    // Simulate the generated file being lost, e.g. via `git clean -fdx` or a `.venv` rebuild.
+    fs_err::remove_file(generated.path())?;
+    assert!(!generated.exists());
+
+    // Third sync: none of the cache-key *inputs* changed, but uv must still detect that the
+    // build's *output* is missing and re-invoke the build backend to restore it.
+    context.sync().assert().success();
+    assert!(
+        generated.exists(),
+        "uv should have rebuilt after the generated file was deleted"
+    );
+    assert_eq!(
+        build_count()?,
+        2,
+        "uv should have rebuilt after the generated file was deleted"
+    );
+
+    // Fourth sync: the generated file is back in place, so the cache should be considered fresh
+    // again.
+    context.sync().assert().success();
+    assert!(generated.exists());
+    assert_eq!(
+        build_count()?,
+        2,
+        "the cached build should have been reused"
+    );
+
+    Ok(())
+}

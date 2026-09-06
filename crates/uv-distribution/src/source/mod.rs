@@ -1387,7 +1387,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             return Err(Error::HashesNotSupportedSourceTree(source.to_string()));
         }
 
-        let cache_shard = self.build_context.cache().shard(
+        let revision_shard = self.build_context.cache().shard(
             CacheBucket::SourceDistributions,
             if resource.editable.unwrap_or(false) {
                 WheelCache::Editable(resource.url).root()
@@ -1397,19 +1397,19 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         );
 
         // Acquire the advisory lock.
-        let _lock = cache_shard.lock().await.map_err(Error::CacheLock)?;
+        let _lock = revision_shard.lock().await.map_err(Error::CacheLock)?;
 
         // Fetch the revision for the source distribution.
         let LocalRevisionPointer {
             cache_info,
             revision,
         } = self
-            .source_tree_revision(source, resource, &cache_shard)
+            .source_tree_revision(source, resource, &revision_shard)
             .await?;
 
         // Scope all operations to the revision. Within the revision, there's no need to check for
         // freshness, since entries have to be fresher than the revision itself.
-        let cache_shard = cache_shard.shard(revision.id());
+        let cache_shard = revision_shard.shard(revision.id());
 
         // If there are build settings or extra build dependencies, we need to scope to a cache shard.
         let config_settings = self.config_settings_for(source.name());
@@ -1460,6 +1460,23 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 reporter.on_build_complete(source, task);
             }
         }
+
+        // Recompute the cache info now that the build has completed. Some build backends (e.g.,
+        // `maturin`, `setuptools-rust`) write generated files (like a compiled extension module)
+        // directly into the source tree as a side effect of an (editable) build. The pre-build
+        // `cache_info` fetched above only reflects the source tree as it looked *before* the
+        // build ran, so persisting it as-is would leave future freshness checks unable to notice
+        // if such generated files are later modified or deleted: from the cache's perspective,
+        // they would look identical to files that never existed. Re-snapshotting here ensures the
+        // recorded `cache_info` reflects reality post-build, so that a later `uv sync` can tell
+        // the difference.
+        let cache_info = CacheInfo::from_directory(resource.install_path)?;
+        LocalRevisionPointer {
+            cache_info: cache_info.clone(),
+            revision: revision.clone(),
+        }
+        .write_to(&revision_shard.entry(LOCAL_REVISION))
+        .await?;
 
         // Store the metadata.
         let metadata_entry = cache_shard.entry(METADATA);
