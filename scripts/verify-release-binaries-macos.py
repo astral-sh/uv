@@ -43,7 +43,7 @@ def verify_binaries(signed: Path, directory: Path, binaries: list[str]) -> None:
                     "--verify",
                     "--strict",
                     "-R",
-                    "anchor apple generic",
+                    "=anchor apple generic",
                     path,
                 ],
                 check=True,
