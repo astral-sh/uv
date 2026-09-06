@@ -487,8 +487,8 @@ fn sync_recovers_incomplete_centralized_environment() -> Result<()> {
     let target = fs_err::read_link(link.path())?;
 
     // Simulate a mangled environment (e.g., due to interruption).
-    uv_fs::remove_virtualenv(link.path())?;
-    uv_fs::remove_virtualenv(&target)?;
+    uv_fs::remove_virtualenv(link.path(), uv_fs::ClearNonVirtualenv::Allow)?;
+    uv_fs::remove_virtualenv(&target, uv_fs::ClearNonVirtualenv::Allow)?;
     fs_err::create_dir(&target)?;
     uv_fs::cachedir::ensure_tag(&target)?;
     fs_err::write(target.join(".gitignore"), "*")?;

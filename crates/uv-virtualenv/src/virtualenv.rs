@@ -15,7 +15,7 @@ use owo_colors::OwoColorize;
 use tracing::{debug, trace};
 
 use crate::{Error, Prompt};
-use uv_fs::{CWD, PythonExt, Simplified, cachedir};
+use uv_fs::{CWD, ClearNonVirtualenv, PythonExt, Simplified, cachedir};
 use uv_platform_tags::Os;
 use uv_preview::PreviewFeature;
 use uv_pypi_types::Scheme;
@@ -144,20 +144,22 @@ pub(crate) fn create(
                     debug!("Allowing existing {name} due to `--allow-existing`");
                 }
                 OnExisting::Remove(reason) => {
-                    if !is_virtualenv
-                        && let RemovalReason::UserRequest(clear_non_virtualenv) = reason
-                    {
-                        match clear_non_virtualenv {
-                            ClearNonVirtualenv::Allow => {}
-                            ClearNonVirtualenv::Error => {
-                                return Err(Error::ClearNonVirtualenv {
-                                    path: location.to_path_buf(),
-                                });
-                            }
+                    let clear_non_virtualenv = match reason {
+                        RemovalReason::UserRequest(clear_non_virtualenv) => clear_non_virtualenv,
+                        RemovalReason::TemporaryEnvironment | RemovalReason::ManagedEnvironment => {
+                            ClearNonVirtualenv::Allow
                         }
-                    }
+                    };
                     debug!("Removing existing {name} ({reason})");
-                    uv_fs::clear_virtualenv(location)?;
+                    uv_fs::clear_virtualenv(location, clear_non_virtualenv).map_err(|err| {
+                        if err.kind() == io::ErrorKind::InvalidInput {
+                            Error::ClearNonVirtualenv {
+                                path: location.to_path_buf(),
+                            }
+                        } else {
+                            Error::Io(err)
+                        }
+                    })?;
                 }
                 OnExisting::Fail => return err,
                 // If not a virtual environment, fail without prompting.
@@ -166,7 +168,7 @@ pub(crate) fn create(
                     match confirm_clear(location, name)? {
                         Some(true) => {
                             debug!("Removing existing {name} due to confirmation");
-                            uv_fs::clear_virtualenv(location)?;
+                            uv_fs::clear_virtualenv(location, ClearNonVirtualenv::Error)?;
                         }
                         Some(false) => return err,
                         // When we don't have a TTY, require `--clear` explicitly.
@@ -660,22 +662,16 @@ fn confirm_clear(location: &Path, name: &'static str) -> Result<Option<bool>, io
 }
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
-pub enum ClearNonVirtualenv {
-    /// Allow clearing a non-virtual environment directory.
-    Allow,
-    /// Refuse to clear a non-virtual environment directory.
-    Error,
-}
-
-#[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub enum RemovalReason {
     /// The removal was explicitly requested, i.e., with `--clear`.
     UserRequest(ClearNonVirtualenv),
     /// The environment can be removed because it is considered temporary, e.g., a build
-    /// environment.
+    /// environment. This authorizes the removal of content that are not virtual environments
+    /// so a caller must only use it for paths that uv owns.
     TemporaryEnvironment,
     /// The environment can be removed because it is managed by uv, e.g., a project or tool
-    /// environment.
+    /// environment. This authorizes the removal of content that are not virtual environments
+    /// so a caller must only use it for paths that uv owns.
     ManagedEnvironment,
 }
 

@@ -24,7 +24,9 @@ use uv_distribution_types::{
     IndexUrlError, Requirement, RequiresPython, Resolution, UnresolvedRequirement,
     UnresolvedRequirementSpecification,
 };
-use uv_fs::{CWD, LockedFile, LockedFileError, LockedFileMode, Simplified, verbatim_path};
+use uv_fs::{
+    CWD, ClearNonVirtualenv, LockedFile, LockedFileError, LockedFileMode, Simplified, verbatim_path,
+};
 use uv_git::ResolvedRepositoryReference;
 use uv_installer::{InstallationStrategy, SatisfiesResult, SitePackages};
 use uv_normalize::{DEV_DEPENDENCIES, DefaultGroups, ExtraName, GroupName, PackageName};
@@ -1319,7 +1321,7 @@ pub(crate) fn update_project_environment_link(
 
     if fs_err::symlink_metadata(&link).is_ok_and(|metadata| metadata.is_dir()) {
         if uv_fs::is_virtualenv_base(&link) {
-            if let Err(err) = uv_fs::remove_virtualenv(&link) {
+            if let Err(err) = uv_fs::remove_virtualenv(&link, ClearNonVirtualenv::Error) {
                 report_error(format_args!(
                     "Failed to remove existing local virtual environment: {err}"
                 ));
@@ -1988,13 +1990,14 @@ impl ProjectEnvironment {
                 if replace_environment {
                     // Remove centralized references directly to preserve their cached targets.
                     let removed = if centralized_environment_reference {
-                        match uv_fs::remove_virtualenv(&root) {
+                        match uv_fs::remove_virtualenv(&root, ClearNonVirtualenv::Allow) {
                             Ok(()) => true,
                             Err(err) if err.kind() == std::io::ErrorKind::NotFound => false,
                             Err(err) => return Err(uv_virtualenv::Error::from(err).into()),
                         }
                     } else {
-                        uv_fs::clear_virtualenv(&root).map_err(uv_virtualenv::Error::from)?
+                        uv_fs::clear_virtualenv(&root, ClearNonVirtualenv::Allow)
+                            .map_err(uv_virtualenv::Error::from)?
                     };
                     if removed {
                         let removed_entry = if centralized_environment_reference {
@@ -2201,7 +2204,7 @@ impl ScriptEnvironment {
                 }
 
                 // Remove the existing virtual environment.
-                let replaced = match uv_fs::remove_virtualenv(&root) {
+                let replaced = match uv_fs::remove_virtualenv(&root, ClearNonVirtualenv::Allow) {
                     Ok(()) => {
                         debug!(
                             "Removed virtual environment at: {}",

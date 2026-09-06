@@ -7830,7 +7830,7 @@ fn run_centralized_environment_path_file() -> Result<()> {
 
     // Point the path file at an environment outside the centralized store.
     let environment = context.temp_dir.child(".venv");
-    uv_fs::remove_virtualenv(environment.path())?;
+    uv_fs::remove_virtualenv(environment.path(), uv_fs::ClearNonVirtualenv::Allow)?;
     let external = context.temp_dir.child("external");
     context
         .venv()
