@@ -163,8 +163,6 @@ def sign_binaries(unsigned: Path, signed: Path) -> None:
                         os.environ["KEY_NAME"],
                         "--code-signature-flags",
                         "runtime",
-                        "--timestamp-url",
-                        "http://timestamp.apple.com/ts",
                         unsigned / binary,
                         signed / binary,
                     ],
