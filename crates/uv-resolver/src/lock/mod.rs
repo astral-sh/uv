@@ -151,7 +151,10 @@ static X86_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
         "platform_machine == 'i686' or platform_machine == 'i386' or platform_machine == 'win32' or platform_machine == 'x86'",
     )
     .unwrap();
-    UniversalMarker::new(pep508, ConflictMarker::TRUE)
+    let mut marker = UniversalMarker::new(pep508, ConflictMarker::TRUE);
+    // A 32-bit interpreter can report the host's 64-bit architecture in `platform_machine`.
+    marker.or(*X86_64_MARKERS);
+    marker
 });
 static PPC64LE_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
     let pep508 = MarkerTree::from_str("platform_machine == 'ppc64le'").unwrap();
