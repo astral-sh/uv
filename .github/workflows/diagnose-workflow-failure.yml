@@ -114,7 +114,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           openai-api-key: ${{ secrets.OPENAI_API_KEY }}
-          codex-version: "0.146.0"
+          codex-version: "0.147.0"
           codex-home: "agents/codex"
           effort: high
           permission-profile: "workflow-failure"

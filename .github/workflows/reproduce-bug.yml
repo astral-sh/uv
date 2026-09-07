@@ -120,7 +120,7 @@ jobs:
           UV_CACHE_DIR: ${{ runner.temp }}/uv-reproduce-cache
         with:
           openai-api-key: ${{ secrets.OPENAI_API_KEY }}
-          codex-version: "0.146.0"
+          codex-version: "0.147.0"
           codex-home: "agents/codex"
           effort: high
           permission-profile: "reproduce-bug"
@@ -271,7 +271,7 @@ jobs:
           UV_CACHE_DIR: ${{ runner.temp }}/uv-create-test-cache
         with:
           openai-api-key: ${{ secrets.OPENAI_API_KEY }}
-          codex-version: "0.146.0"
+          codex-version: "0.147.0"
           codex-home: "agents/codex"
           effort: high
           permission-profile: "create-bug-test"
