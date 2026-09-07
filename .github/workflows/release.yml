@@ -254,8 +254,8 @@ jobs:
       - build-docker
       - build-global-artifacts
       - sign-release-binaries
-    # Publishing requires all build and signing jobs to succeed.
-    if: ${{ needs.plan.outputs.publishing == 'true' }}
+    # Only run if we're publishing and the required builds and signing succeeded (skipped builds are fine).
+    if: ${{ always() && needs.plan.result == 'success' && needs.plan.outputs.publishing == 'true' && needs.sign-release-binaries.result == 'success' && (needs.build-global-artifacts.result == 'skipped' || needs.build-global-artifacts.result == 'success') && (needs.build-release-binaries.result == 'skipped' || needs.build-release-binaries.result == 'success') && (needs.build-docker.result == 'skipped' || needs.build-docker.result == 'success') }}
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     runs-on: "depot-ubuntu-latest-4"
