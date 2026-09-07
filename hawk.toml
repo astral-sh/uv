@@ -177,14 +177,6 @@ reason = "read by the platform directory implementation"
 [[override]]
 lint = "hawk::dead_public"
 crate = "uv_static"
-item = "env_vars::EnvVars::PYC_INVALIDATION_MODE"
-kind = "inherent_associated_constant"
-level = "expect"
-reason = "read by the embedded bytecode compilation helper"
-
-[[override]]
-lint = "hawk::dead_public"
-crate = "uv_static"
 item = "env_vars::EnvVars::VIRTUAL_ENV_DISABLE_PROMPT"
 kind = "inherent_associated_constant"
 level = "expect"

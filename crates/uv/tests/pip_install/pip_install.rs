@@ -38,19 +38,31 @@ use uv_test::{
 };
 
 fn write_many_files_wheel(path: &Path, source_files: usize) -> Result<()> {
+    write_test_wheel(
+        path,
+        "large_wheel",
+        (0..source_files).map(|index| (format!("large_wheel/module_{index:05}.py"), "VALUE = 1\n")),
+    )
+}
+
+fn write_test_wheel(
+    path: &Path,
+    name: &str,
+    files: impl IntoIterator<Item = (impl AsRef<str>, impl AsRef<str>)>,
+) -> Result<()> {
     let mut writer = ZipFileWriter::new(Vec::new());
     let mut record = String::new();
 
-    for index in 0..source_files {
-        let name = format!("large_wheel/module_{index:05}.py");
-        let entry = ZipEntryBuilder::new(name.clone().into(), Compression::Stored);
-        block_on(writer.write_entry_whole(entry, b"VALUE = 1\n"))?;
+    for (name, contents) in files {
+        let name = name.as_ref();
+        let entry = ZipEntryBuilder::new(name.into(), Compression::Stored);
+        block_on(writer.write_entry_whole(entry, contents.as_ref().as_bytes()))?;
         writeln!(record, "{name},,")?;
     }
 
-    let metadata = indoc! {"
+    let metadata = formatdoc! {"
         Metadata-Version: 2.1
-        Name: large-wheel
+        Name: {name}
         Version: 1.0.0
     "};
     let wheel = indoc! {"
@@ -60,16 +72,19 @@ fn write_many_files_wheel(path: &Path, source_files: usize) -> Result<()> {
         Tag: py3-none-any
     "};
     for (name, contents) in [
-        ("large_wheel-1.0.0.dist-info/METADATA", metadata),
-        ("large_wheel-1.0.0.dist-info/WHEEL", wheel),
+        (
+            format!("{name}-1.0.0.dist-info/METADATA"),
+            metadata.as_str(),
+        ),
+        (format!("{name}-1.0.0.dist-info/WHEEL"), wheel),
     ] {
-        let entry = ZipEntryBuilder::new(name.into(), Compression::Stored);
+        let entry = ZipEntryBuilder::new(name.clone().into(), Compression::Stored);
         block_on(writer.write_entry_whole(entry, contents.as_bytes()))?;
         writeln!(record, "{name},,")?;
     }
-    record.push_str("large_wheel-1.0.0.dist-info/RECORD,,\n");
+    writeln!(record, "{name}-1.0.0.dist-info/RECORD,,")?;
     let entry = ZipEntryBuilder::new(
-        "large_wheel-1.0.0.dist-info/RECORD".into(),
+        format!("{name}-1.0.0.dist-info/RECORD").into(),
         Compression::Stored,
     );
     block_on(writer.write_entry_whole(entry, record.as_bytes()))?;
@@ -350,6 +365,233 @@ fn compile_bytecode_with_symlink_link_mode() {
             .join("__init__.cpython-312.pyc")
             .exists()
     );
+}
+
+/// Merging shared directories must not write through file links into the cache.
+#[test]
+#[cfg(unix)]
+fn directory_symlink_shared_namespace() -> Result<()> {
+    for link_mode in ["symlink", "hardlink"] {
+        let context = uv_test::test_context!("3.12");
+        let first = context.temp_dir.child("symlink_a-1.0.0-py3-none-any.whl");
+        let second = context.temp_dir.child("symlink_b-1.0.0-py3-none-any.whl");
+        write_test_wheel(
+            first.path(),
+            "symlink_a",
+            [
+                ("shared/a.py", "VALUE = 1\n"),
+                ("shared/RECORD", "original\n"),
+            ],
+        )?;
+        write_test_wheel(
+            second.path(),
+            "symlink_b",
+            [
+                ("shared/a.py", "VALUE = 12345\n"),
+                ("shared/b.py", "VALUE = 2\n"),
+                ("shared/RECORD", "replacement\n"),
+            ],
+        )?;
+        context
+            .pip_install()
+            .arg(first.path())
+            .arg("--link-mode=symlink")
+            .arg("--compile-bytecode")
+            .assert()
+            .success();
+        let shared = context.site_packages().join("shared");
+        let cached = fs::read_link(&shared)?;
+        let digest = dirhash_path(&cached)?;
+        let bytecode = shared.join("__pycache__/a.cpython-312.pyc");
+        let original_bytecode = fs::read(&bytecode)?;
+
+        allow_duplicates! {
+            uv_snapshot!(context.filters(), context.pip_install()
+                .arg(second.path()).arg("--link-mode").arg(link_mode)
+                .arg("--compile-bytecode")
+                .env(EnvVars::PYC_INVALIDATION_MODE, "CHECKED_HASH"), @"
+            exit_code: 0 (success)
+            ----- stderr -----
+            Resolved 1 package in [TIME]
+            Prepared 1 package in [TIME]
+            Installed 1 package in [TIME]
+            Bytecode compiled 2 files in [TIME]
+             + symlink-b==1.0.0 (from file://[TEMP_DIR]/symlink_b-1.0.0-py3-none-any.whl)
+            ");
+        }
+        assert!(!shared.is_symlink());
+        assert!(!bytecode.is_symlink());
+        assert_ne!(fs::read(&bytecode)?, original_bytecode);
+        assert_eq!(fs::read_to_string(shared.join("RECORD"))?, "replacement\n");
+        context
+            .assert_command("import shared.a, shared.b")
+            .success();
+        context.pip_uninstall().arg("symlink-a").assert().success();
+        context.assert_command("import shared.b").success();
+        assert_eq!(dirhash_path(&cached)?, digest);
+    }
+    Ok(())
+}
+
+/// Uninstalling a namespace sibling installed by pip must preserve the original package.
+#[test]
+#[cfg(unix)]
+fn directory_symlink_shared_with_pip() -> Result<()> {
+    let context =
+        uv_test::test_context!("3.12").with_filter((r"#sha256=[a-f0-9]{64}", "#sha256=[SHA256]"));
+    let first = context.temp_dir.child("symlink_a-1.0.0-py3-none-any.whl");
+    let second = context.temp_dir.child("symlink_b-1.0.0-py3-none-any.whl");
+    write_test_wheel(first.path(), "symlink_a", [("shared/a.py", "VALUE = 1\n")])?;
+    write_test_wheel(second.path(), "symlink_b", [("shared/b.py", "VALUE = 2\n")])?;
+    context
+        .pip_install()
+        .arg(first.path())
+        .arg("pip==24.0")
+        .arg("--link-mode=symlink")
+        .assert()
+        .success();
+    let shared = context.site_packages().join("shared");
+    let cached = fs::read_link(&shared)?;
+
+    context
+        .python_command()
+        .args([
+            "-m",
+            "pip",
+            "install",
+            "--no-index",
+            "--no-deps",
+            "--no-compile",
+        ])
+        .arg(second.path())
+        .assert()
+        .success();
+    assert!(shared.is_symlink());
+    context
+        .assert_command("import shared.a, shared.b")
+        .success();
+    let digest = dirhash_path(&cached)?;
+
+    uv_snapshot!(context.filters(), context.pip_uninstall().arg("symlink-b"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Uninstalled 1 package in [TIME]
+     - symlink-b==1.0.0 (from file://[TEMP_DIR]/symlink_b-1.0.0-py3-none-any.whl#sha256=[SHA256])
+    ");
+
+    context.assert_command("import shared.a").success();
+    context.assert_command("import shared.b").failure();
+    assert!(!shared.is_symlink());
+    assert_eq!(dirhash_path(&cached)?, digest);
+    Ok(())
+}
+
+/// Relocated data follows scheme aliases without writing into a linked package's cache.
+#[test]
+#[cfg(unix)]
+fn directory_symlink_data_data() -> Result<()> {
+    let context = uv_test::test_context!("3.12").with_env(EnvVars::UV_LINK_MODE, "symlink");
+    let first = context.temp_dir.child("symlink_a-1.0.0-py3-none-any.whl");
+    let second = context.temp_dir.child("symlink_b-1.0.0-py3-none-any.whl");
+    write_test_wheel(
+        first.path(),
+        "symlink_a",
+        [("shared/original.py", "VALUE = 1\n")],
+    )?;
+    write_test_wheel(
+        second.path(),
+        "symlink_b",
+        [(
+            "symlink_b-1.0.0.data/data/lib64/python3.12/site-packages/shared/added.py",
+            "VALUE = 2\n",
+        )],
+    )?;
+    let alias = context.venv.join("lib64");
+    if !alias.is_symlink() {
+        symlink("lib", &alias)?;
+    }
+    context.pip_install().arg(first.path()).assert().success();
+    let shared = context.site_packages().join("shared");
+    let cached = fs::read_link(&shared)?;
+    let digest = dirhash_path(&cached)?;
+
+    uv_snapshot!(context.filters(), context.pip_install().arg(second.path()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + symlink-b==1.0.0 (from file://[TEMP_DIR]/symlink_b-1.0.0-py3-none-any.whl)
+    ");
+    assert!(!shared.is_symlink());
+    assert!(alias.is_symlink());
+    context
+        .assert_command("import shared.original, shared.added")
+        .success();
+    context.pip_uninstall().arg("symlink-b").assert().success();
+    assert!(!shared.join("added.py").exists());
+    assert_eq!(dirhash_path(&cached)?, digest);
+    Ok(())
+}
+
+/// Generated scripts expand an overlapping package directory in a `--target` installation.
+#[test]
+#[cfg(unix)]
+fn directory_symlink_target_scripts() -> Result<()> {
+    let context = uv_test::test_context!("3.12")
+        .with_env(EnvVars::UV_LINK_MODE, "symlink")
+        .with_filtered_python_names()
+        .with_filtered_virtualenv_bin()
+        .with_filtered_exe_suffix();
+    let target = context.temp_dir.child("target");
+    let first = context.temp_dir.child("symlink_a-1.0.0-py3-none-any.whl");
+    let second = context.temp_dir.child("symlink_b-1.0.0-py3-none-any.whl");
+    write_test_wheel(
+        first.path(),
+        "symlink_a",
+        [("bin/nested/payload.py", "VALUE = 1\n")],
+    )?;
+    write_test_wheel(
+        second.path(),
+        "symlink_b",
+        [
+            ("symlink_b.py", "def main(): print('hello')\n"),
+            (
+                "symlink_b-1.0.0.dist-info/entry_points.txt",
+                "[console_scripts]\nnested/symlink-script = symlink_b:main\n",
+            ),
+        ],
+    )?;
+    context
+        .pip_install()
+        .arg(first.path())
+        .arg("--target")
+        .arg(target.path())
+        .assert()
+        .success();
+    let scripts = target.join("bin");
+    let cached = fs::read_link(&scripts)?;
+    let digest = dirhash_path(&cached)?;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg(second.path()).arg("--target").arg(target.path()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: .venv/[BIN]/[PYTHON]
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + symlink-b==1.0.0 (from file://[TEMP_DIR]/symlink_b-1.0.0-py3-none-any.whl)
+    ");
+    assert!(!scripts.is_symlink());
+    assert!(!scripts.join("nested").is_symlink());
+    Command::new(scripts.join("nested/symlink-script"))
+        .env(EnvVars::PYTHONPATH, target.path())
+        .assert()
+        .success()
+        .stdout("hello\n");
+    assert_eq!(dirhash_path(&cached)?, digest);
+    Ok(())
 }
 
 /// Compile bytecode when installing into a relative `--target` or `--prefix` path.
@@ -15017,6 +15259,8 @@ fn pip_install_build_dependencies_respect_locked_versions() -> Result<()> {
 #[test]
 fn overlapping_packages_warning() -> Result<()> {
     let context = uv_test::test_context!("3.12");
+    #[cfg(unix)]
+    let context = context.with_env(EnvVars::UV_LINK_MODE, "symlink");
 
     let built_by_uv = context.workspace_root.join("test/packages/built-by-uv");
 
@@ -15146,6 +15390,8 @@ fn overlapping_packages_warning() -> Result<()> {
 #[test]
 fn overlapping_empty_init_py() -> Result<()> {
     let context = uv_test::test_context!("3.12");
+    #[cfg(unix)]
+    let context = context.with_env(EnvVars::UV_LINK_MODE, "symlink");
 
     let gpu_a = context.temp_dir.child("gpu-a");
     gpu_a.child("pyproject.toml").write_str(
@@ -15228,6 +15474,8 @@ fn overlapping_empty_init_py() -> Result<()> {
 #[test]
 fn overlapping_nested_files() -> Result<()> {
     let context = uv_test::test_context!("3.12");
+    #[cfg(unix)]
+    let context = context.with_env(EnvVars::UV_LINK_MODE, "symlink");
 
     let gpu_a = context.temp_dir.child("gpu-a");
     gpu_a.child("pyproject.toml").write_str(

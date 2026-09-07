@@ -11,6 +11,7 @@ use uv_distribution_filename::WheelFilename;
 use uv_pep440::Version;
 use uv_pypi_types::{DirectUrl, Metadata10};
 
+use crate::directory::LibraryDirectories;
 use crate::linker::{InstallState, LinkMode, link_wheel_files};
 use crate::wheel::{
     LibKind, ValidatedWheel, WheelFile, dist_info_metadata, find_dist_info, install_data,
@@ -99,13 +100,14 @@ pub fn install_wheel<Cache: serde::Serialize, Build: serde::Serialize>(
 
     let (console_scripts, gui_scripts) =
         parse_scripts(wheel, &dist_info_prefix, None, layout.python_version.1)?;
+    let locks = state.copy_locks();
 
     if console_scripts.is_empty() && gui_scripts.is_empty() {
         trace!(?name, "No entrypoints");
     } else {
         trace!(?name, "Writing entrypoints");
 
-        fs_err::create_dir_all(&layout.scheme.scripts)?;
+        LibraryDirectories::new(layout)?.prepare(&layout.scheme.scripts, locks)?;
         write_script_entrypoints(
             layout,
             relocatable,
@@ -113,6 +115,7 @@ pub fn install_wheel<Cache: serde::Serialize, Build: serde::Serialize>(
             &console_scripts,
             &mut record,
             false,
+            locks,
         )?;
         write_script_entrypoints(
             layout,
@@ -121,6 +124,7 @@ pub fn install_wheel<Cache: serde::Serialize, Build: serde::Serialize>(
             &gui_scripts,
             &mut record,
             true,
+            locks,
         )?;
     }
 
@@ -137,6 +141,7 @@ pub fn install_wheel<Cache: serde::Serialize, Build: serde::Serialize>(
             &console_scripts,
             &gui_scripts,
             &mut record,
+            locks,
         )?;
         // 2.c If applicable, update scripts starting with #!python to point to the correct interpreter.
         // Script are unsupported through data
