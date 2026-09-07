@@ -174,52 +174,73 @@ pub(crate) async fn metadata(
                 },
             };
             let mut export = metadata_for_target(install_target)?;
-            let environment = if sync.is_some() {
-                Some(match target {
-                    LockTarget::Workspace(workspace) => ProjectEnvironment::get_or_init(
-                        workspace,
-                        &groups,
-                        python.as_deref().map(PythonRequest::parse),
-                        &install_mirrors,
-                        &client_builder,
-                        python_preference,
-                        python_downloads,
-                        false,
-                        config_discovery,
-                        active,
-                        cache,
-                        DryRun::Disabled,
-                        LinkErrorReporting::User,
-                        printer,
-                    )
-                    .await?
-                    .into_environment()?,
-                    LockTarget::Script(script) => ScriptEnvironment::get_or_init(
-                        script.into(),
-                        python.as_deref().map(PythonRequest::parse),
-                        &client_builder,
-                        python_preference,
-                        python_downloads,
-                        &install_mirrors,
-                        false,
-                        config_discovery,
-                        active,
-                        cache,
-                        DryRun::Disabled,
-                        printer,
-                    )
-                    .await?
-                    .into_environment()?,
-                })
+            let (environment, environment_created) = if sync.is_some() {
+                let (environment, environment_created) = match target {
+                    LockTarget::Workspace(workspace) => {
+                        let environment = ProjectEnvironment::get_or_init(
+                            workspace,
+                            &groups,
+                            python.as_deref().map(PythonRequest::parse),
+                            &install_mirrors,
+                            &client_builder,
+                            python_preference,
+                            python_downloads,
+                            false,
+                            config_discovery,
+                            active,
+                            cache,
+                            DryRun::Disabled,
+                            LinkErrorReporting::User,
+                            printer,
+                        )
+                        .await?;
+                        let environment_created = match environment {
+                            ProjectEnvironment::Existing(_) => false,
+                            ProjectEnvironment::Replaced(_) | ProjectEnvironment::Created(_) => {
+                                true
+                            }
+                            ProjectEnvironment::WouldReplace(_, _, _)
+                            | ProjectEnvironment::WouldCreate(_, _, _) => false,
+                        };
+                        (environment.into_environment()?, environment_created)
+                    }
+                    LockTarget::Script(script) => {
+                        let environment = ScriptEnvironment::get_or_init(
+                            script.into(),
+                            python.as_deref().map(PythonRequest::parse),
+                            &client_builder,
+                            python_preference,
+                            python_downloads,
+                            &install_mirrors,
+                            false,
+                            config_discovery,
+                            active,
+                            cache,
+                            DryRun::Disabled,
+                            printer,
+                        )
+                        .await?;
+                        let environment_created = match environment {
+                            ScriptEnvironment::Existing(_) => false,
+                            ScriptEnvironment::Replaced(_) | ScriptEnvironment::Created(_) => true,
+                            ScriptEnvironment::WouldReplace(_, _, _)
+                            | ScriptEnvironment::WouldCreate(_, _, _) => false,
+                        };
+                        (environment.into_environment()?, environment_created)
+                    }
+                };
+                (Some(environment), environment_created)
             } else {
-                match target {
+                let environment = match target {
                     LockTarget::Workspace(workspace) => {
                         ProjectInterpreter::discover_existing(workspace, active, cache)?
                     }
                     LockTarget::Script(script) => {
                         ScriptInterpreter::discover_existing(script.into(), active, cache)
                     }
-                }
+                };
+                // The environment is always discovered, never created.
+                (environment, false)
             };
 
             if let Some(environment) = environment {
@@ -245,7 +266,7 @@ pub(crate) async fn metadata(
                 )
                 .await
                 .context("Failed to collect module owners")?;
-                if sync.is_some() {
+                if environment_created {
                     // Prime the interpreter cache so we don't have to query on the next uv
                     // invocation.
                     environment.interpreter().cache_virtualenv(cache)?;
