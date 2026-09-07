@@ -19,6 +19,7 @@ import sys
 import tempfile
 from pathlib import Path
 
+
 def verify_archive(signed: Path, archive: Path) -> None:
     """Extract the GitHub archive and invoke the shared macOS executable verifier."""
     with tempfile.TemporaryDirectory() as temporary:

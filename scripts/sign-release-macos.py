@@ -20,6 +20,7 @@ from pathlib import Path
 from cryptography import x509
 from cryptography.hazmat.primitives import hashes
 
+
 class SigningComponent(Enum):
     """The components needed to sign uv's macOS executables."""
 
