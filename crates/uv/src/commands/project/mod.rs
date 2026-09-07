@@ -45,8 +45,8 @@ use uv_requirements::{
     read_lock_requirements,
 };
 use uv_resolver::{
-    FlatIndex, Installable, Lock, LockParseError, OptionsBuilder, Preference, PythonRequirement,
-    ResolverEnvironment, ResolverOutput,
+    DependencyMode, FlatIndex, Installable, Lock, LockParseError, OptionsBuilder, Preference,
+    PythonRequirement, ResolverEnvironment, ResolverOutput,
 };
 use uv_scripts::Pep723ItemRef;
 use uv_settings::PythonInstallMirrors;
@@ -2963,6 +2963,7 @@ pub(crate) async fn update_environment(
             &overrides,
             &override_dependencies,
             &excludes,
+            DependencyMode::Transitive,
             InstallationStrategy::Permissive,
             &marker_env,
             &tags,

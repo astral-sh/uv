@@ -9,12 +9,18 @@ pub enum DependencyMode {
 
 impl DependencyMode {
     /// Returns `true` if transitive dependencies should be included.
-    pub(crate) fn is_transitive(self) -> bool {
-        matches!(self, Self::Transitive)
+    pub fn is_transitive(self) -> bool {
+        match self {
+            Self::Transitive => true,
+            Self::Direct => false,
+        }
     }
 
-    /// Returns `true` if (only) direct dependencies should be excluded.
-    pub(crate) fn is_direct(self) -> bool {
-        matches!(self, Self::Direct)
+    /// Returns `true` if only direct dependencies should be included.
+    pub fn is_direct(self) -> bool {
+        match self {
+            Self::Transitive => false,
+            Self::Direct => true,
+        }
     }
 }

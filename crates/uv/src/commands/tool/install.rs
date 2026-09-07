@@ -9,8 +9,8 @@ use uv_cache::{Cache, Refresh};
 use uv_cache_info::Timestamp;
 use uv_client::{BaseClientBuilder, RegistryClientBuilder};
 use uv_configuration::{
-    Concurrency, Constraints, DryRun, Excludes, GitLfsSetting, HashCheckingMode, Overrides,
-    Reinstall, TargetTriple, Upgrade,
+    Concurrency, Constraints, DependencyMode, DryRun, Excludes, GitLfsSetting, HashCheckingMode,
+    Overrides, Reinstall, TargetTriple, Upgrade,
 };
 use uv_distribution::LoweredExtraBuildDependencies;
 use uv_distribution_types::{
@@ -617,6 +617,7 @@ pub(crate) async fn install(
                         receipt_constraints.iter().chain(latest.iter()),
                         &Overrides::from_requirements(receipt_overrides.clone()),
                         &Excludes::from_entries(receipt_excludes.iter().cloned()),
+                        DependencyMode::Transitive,
                         InstallationStrategy::Permissive,
                         &markers,
                         &tags,

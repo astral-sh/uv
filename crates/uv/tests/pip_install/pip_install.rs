@@ -4191,6 +4191,106 @@ fn no_deps() {
     context.assert_command("import flask").failure();
 }
 
+/// Ignore unsatisfied dependencies when checking an installed package with `--no-deps`, while
+/// retaining diagnostics in strict mode.
+#[test]
+fn no_deps_installed() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let wheel = indoc! {"
+        Wheel-Version: 1.0
+        Root-Is-Purelib: true
+        Tag: py3-none-any
+    "};
+    let parent = context.site_packages().join("parent-1.0.0.dist-info");
+    fs::create_dir_all(&parent)?;
+    fs::write(parent.join("WHEEL"), wheel)?;
+    fs::write(
+        parent.join("METADATA"),
+        indoc! {"
+            Metadata-Version: 2.1
+            Name: parent
+            Version: 1.0.0
+            Requires-Dist: child>=2
+        "},
+    )?;
+
+    // The missing dependency should not cause resolution when dependencies are disabled.
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("parent")
+        .arg("--no-deps")
+        .arg("--no-index"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Checked 1 package in [TIME]
+    ");
+
+    // Strict mode must still report missing dependencies after the installation check.
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("parent")
+        .arg("--no-deps")
+        .arg("--no-index")
+        .arg("--strict"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Checked 1 package in [TIME]
+    warning: The package `parent` requires `child>=2`, but it's not installed
+    ");
+
+    // Without `--no-deps`, the missing dependency must still trigger resolution.
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("parent")
+        .arg("--no-index"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because child was not found in the provided package locations and parent==1.0.0 depends on child>=2, we can conclude that parent==1.0.0 cannot be used.
+          And because parent was not found in the provided package locations and you require parent, we can conclude that your requirements are unsatisfiable.
+
+    hint: Packages were unavailable because index lookups were disabled and no additional package locations were provided (try: `--find-links <uri>`)
+    ");
+
+    let child = context.site_packages().join("child-1.0.0.dist-info");
+    fs::create_dir_all(&child)?;
+    fs::write(child.join("WHEEL"), wheel)?;
+    fs::write(
+        child.join("METADATA"),
+        indoc! {"
+            Metadata-Version: 2.1
+            Name: child
+            Version: 1.0.0
+        "},
+    )?;
+
+    // Incompatible installed dependencies should likewise be diagnosed without resolution.
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("parent")
+        .arg("--no-deps")
+        .arg("--no-index")
+        .arg("--strict"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Checked 1 package in [TIME]
+    warning: The package `parent` requires `child>=2`, but `1.0.0` is installed
+    ");
+
+    // Constraints on direct requirements must still be checked with dependencies disabled.
+    let constraints_txt = context.temp_dir.child("constraints.txt");
+    constraints_txt.write_str("parent==2.0.0")?;
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("parent==1.0.0")
+        .arg("--no-deps")
+        .arg("--no-index")
+        .arg("--constraint")
+        .arg("constraints.txt"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because you require parent==1.0.0 and parent==2.0.0, we can conclude that your requirements are unsatisfiable.
+    ");
+
+    Ok(())
+}
+
 /// Install an editable package from the command line into a virtual environment, ignoring its
 /// dependencies.
 #[test]

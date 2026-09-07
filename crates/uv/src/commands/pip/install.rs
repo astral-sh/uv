@@ -342,6 +342,7 @@ pub(crate) async fn pip_install(
             &overrides,
             &override_dependencies,
             &excludes,
+            dependency_mode,
             InstallationStrategy::Permissive,
             &marker_env,
             &tags,
