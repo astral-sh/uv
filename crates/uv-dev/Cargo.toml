@@ -81,9 +81,14 @@ name = "uv-dev"
 required-features = ["dev"]
 
 [features]
-default = ["performance"]
+# `uv-client` is declared with `default-features = false` at the workspace level, so a TLS
+# backend has to be re-enabled here for the dev CLI to make HTTPS requests (e.g. `generate-all`
+# fetches Python build metadata). Default to `rustls-tls`, matching the `uv` binary.
+default = ["performance", "rustls-tls"]
 # Actually build the dev CLI.
 dev = []
+rustls-tls = ["uv-client/rustls-tls", "uv-cli/rustls-tls"]
+native-tls = ["uv-client/native-tls", "uv-cli/native-tls"]
 performance = ["performance-memory-allocator"]
 performance-memory-allocator = ["dep:uv-performance-memory-allocator"]
 render = ["poloto", "resvg", "tagu"]

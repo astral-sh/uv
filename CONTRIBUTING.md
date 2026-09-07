@@ -60,6 +60,24 @@ winget install NASM.NASM
 After installation, add `C:\Program Files\NASM` to your `PATH`. While the prebuilt blob will not be
 used when NASM is found, you can guarantee this behavior by setting `AWS_LC_SYS_PREBUILT_NASM=0`.
 
+### Building against OpenSSL
+
+By default, uv uses `rustls` (with `aws-lc-rs`) for TLS. It can instead be built against the
+system's native TLS stack (OpenSSL), for example to inherit the system crypto policy for FIPS or
+post-quantum requirements:
+
+```shell
+cargo build -p uv --no-default-features --features native-tls
+```
+
+This backend links against OpenSSL through the [`openssl`](https://docs.rs/openssl/latest/openssl/)
+crate. By default it uses the system OpenSSL, which needs the OpenSSL headers and `pkg-config` (e.g.
+`sudo apt install pkg-config libssl-dev` or `sudo dnf install pkg-config openssl-devel`).
+Alternatively, `openssl-sys` can build a vendored copy of OpenSSL, which is compiled from source and
+therefore requires a C compiler and Perl (and NASM on Windows); see the
+[`openssl` crate documentation](https://docs.rs/openssl/latest/openssl/) for system-versus-vendored
+builds and the relevant environment variables.
+
 ## Testing
 
 For running tests, we recommend [nextest](https://nexte.st/).

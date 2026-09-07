@@ -32,7 +32,9 @@ use uv_cli::{
         resolver_installer_options, resolver_options,
     },
 };
-use uv_client::{Certificates, Connectivity, MetadataRangeRequest};
+#[cfg(feature = "rustls-tls")]
+use uv_client::Certificates;
+use uv_client::{Connectivity, MetadataRangeRequest};
 use uv_configuration::{
     ActiveEnvironment, BuildIsolation, BuildOptions, Concurrency, DependencyGroups, DevMode,
     DryRun, EditableMode, EnvFile, ExcludeDependency, ExportFormat, ExtrasSpecification,
@@ -276,6 +278,7 @@ pub(crate) struct NetworkSettings {
     pub(super) connectivity: Connectivity,
     pub(super) offline: Flag,
     pub(super) system_certs: bool,
+    #[cfg(feature = "rustls-tls")]
     pub(super) custom_certificates: Option<Certificates>,
     pub(super) http_proxy: Option<ProxyUrl>,
     pub(super) https_proxy: Option<ProxyUrl>,
@@ -394,15 +397,20 @@ impl NetworkSettings {
         let https_proxy = workspace.and_then(|workspace| workspace.globals.https_proxy.clone());
         let no_proxy = workspace.and_then(|workspace| workspace.globals.no_proxy.clone());
 
+        // Only rustls consumes uv's custom certificates; other backends use the system store.
+        #[cfg(feature = "rustls-tls")]
         let custom_certificates = custom_certificate_file
             .map(Certificates::from_file)
             .transpose()?
             .or_else(Certificates::from_env);
+        #[cfg(not(feature = "rustls-tls"))]
+        let _ = custom_certificate_file;
 
         Ok(Self {
             connectivity,
             offline,
             system_certs,
+            #[cfg(feature = "rustls-tls")]
             custom_certificates,
             http_proxy,
             https_proxy,

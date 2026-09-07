@@ -1,9 +1,12 @@
 use std::net::SocketAddr;
+#[cfg(feature = "rustls-tls")]
 use std::path::PathBuf;
+#[cfg(feature = "rustls-tls")]
 use std::sync::Arc;
 
 use anyhow::{Context, Result};
 use futures::future;
+use http_body_util::combinators::BoxBody;
 use http_body_util::{BodyExt, Full};
 use hyper::body::{Bytes, Incoming};
 use hyper::header::USER_AGENT;
@@ -11,20 +14,71 @@ use hyper::service::service_fn;
 use hyper::{Request, Response};
 use hyper_util::rt::{TokioExecutor, TokioIo};
 use hyper_util::server::conn::auto::Builder;
+#[cfg(feature = "rustls-tls")]
 use rcgen::{
     BasicConstraints, Certificate, CertificateParams, CustomExtension, DnType,
     ExtendedKeyUsagePurpose, IsCa, Issuer, KeyPair, KeyUsagePurpose, SanType, date_time_ymd,
 };
+#[cfg(feature = "rustls-tls")]
 use rustls::pki_types::{CertificateDer, PrivateKeyDer};
+#[cfg(feature = "rustls-tls")]
 use rustls::server::WebPkiClientVerifier;
+#[cfg(feature = "rustls-tls")]
 use rustls::{RootCertStore, ServerConfig};
 use tokio::net::TcpListener;
 use tokio::task::JoinHandle;
+#[cfg(feature = "rustls-tls")]
 use tokio_rustls::TlsAcceptor;
 
+#[cfg(feature = "rustls-tls")]
 use uv_fs::Simplified;
 
+/// Handles a single request by echoing back the `User-Agent` header.
+fn echo_user_agent(
+    req: &Request<Incoming>,
+) -> future::Ready<Result<Response<BoxBody<Bytes, hyper::Error>>, hyper::Error>> {
+    // Get User Agent Header and send it back in the response
+    let user_agent = req
+        .headers()
+        .get(USER_AGENT)
+        .and_then(|v| v.to_str().ok())
+        .map(ToString::to_string)
+        .unwrap_or_default(); // Empty Default
+    let response_content = Full::new(Bytes::from(user_agent))
+        .map_err(|_| unreachable!())
+        .boxed();
+    future::ok::<_, hyper::Error>(Response::new(response_content))
+}
+
+/// Single Request HTTP server that echoes the User Agent Header.
+pub(crate) async fn start_http_user_agent_server() -> Result<(JoinHandle<Result<()>>, SocketAddr)> {
+    let listener = TcpListener::bind("127.0.0.1:0").await?;
+    let addr = listener.local_addr()?;
+
+    let server_task = tokio::spawn(async move {
+        let svc = service_fn(|req: Request<Incoming>| echo_user_agent(&req));
+
+        let (tcp_stream, _remote_addr) = listener
+            .accept()
+            .await
+            .context("Failed to accept TCP connection")?;
+
+        let socket = TokioIo::new(tcp_stream);
+        tokio::task::spawn(async move {
+            Builder::new(TokioExecutor::new())
+                .serve_connection(socket, svc)
+                .await
+                .expect("HTTP Server Started");
+        });
+
+        Ok(())
+    });
+
+    Ok((server_task, addr))
+}
+
 /// An issued certificate, together with the subject keypair.
+#[cfg(feature = "rustls-tls")]
 #[derive(Debug)]
 pub(crate) struct SelfSigned {
     /// An issued certificate.
@@ -36,6 +90,7 @@ pub(crate) struct SelfSigned {
 /// Defines the base location for temporary generated certs.
 ///
 /// See [`TestContext::test_bucket_dir`] for implementation rationale.
+#[cfg(feature = "rustls-tls")]
 pub(crate) fn test_cert_dir() -> PathBuf {
     std::env::temp_dir()
         .simple_canonicalize()
@@ -51,12 +106,14 @@ pub(crate) fn test_cert_dir() -> PathBuf {
 /// The client certificate is for `uv-test-client` issued by this CA.
 ///
 /// Use sparingly as generation of these certs is a very slow operation.
+#[cfg(feature = "rustls-tls")]
 pub(crate) fn generate_self_signed_certs_with_ca() -> Result<(SelfSigned, SelfSigned, SelfSigned)> {
     generate_self_signed_certs_with_ca_custom_extensions(Vec::new())
 }
 
 /// Like [`generate_self_signed_certs_with_ca`], but the server certificate is
 /// already expired (`not_after` is in the past).
+#[cfg(feature = "rustls-tls")]
 pub(crate) fn generate_expired_self_signed_certs_with_ca()
 -> Result<(SelfSigned, SelfSigned, SelfSigned)> {
     generate_self_signed_certs_with_ca_impl(Vec::new(), (2020, 1, 1), (2021, 1, 1))
@@ -64,6 +121,7 @@ pub(crate) fn generate_expired_self_signed_certs_with_ca()
 
 /// Like [`generate_self_signed_certs_with_ca`], but the CA certificate contains
 /// additional custom extensions.
+#[cfg(feature = "rustls-tls")]
 pub(crate) fn generate_self_signed_certs_with_ca_custom_extensions(
     custom_extensions: Vec<CustomExtension>,
 ) -> Result<(SelfSigned, SelfSigned, SelfSigned)> {
@@ -72,6 +130,7 @@ pub(crate) fn generate_self_signed_certs_with_ca_custom_extensions(
 
 /// Generates a self-signed root CA, server certificate, and client certificate,
 /// with a configurable validity period for the server certificate.
+#[cfg(feature = "rustls-tls")]
 fn generate_self_signed_certs_with_ca_impl(
     ca_custom_extensions: Vec<CustomExtension>,
     server_not_before: (i32, u8, u8),
@@ -176,6 +235,7 @@ fn generate_self_signed_certs_with_ca_impl(
     Ok((ca_self_signed, server_self_signed, client_self_signed))
 }
 
+#[cfg(feature = "rustls-tls")]
 #[derive(Default)]
 pub(crate) struct TestServerBuilder<'a> {
     // CA certificate
@@ -186,6 +246,7 @@ pub(crate) struct TestServerBuilder<'a> {
     mutual_tls: bool,
 }
 
+#[cfg(feature = "rustls-tls")]
 impl<'a> TestServerBuilder<'a> {
     pub(crate) fn new() -> Self {
         Self {
@@ -215,7 +276,7 @@ impl<'a> TestServerBuilder<'a> {
         self
     }
 
-    /// Starts the HTTP(S) server with optional mTLS enforcement.
+    /// Starts the HTTPS server with optional mTLS enforcement.
     pub(crate) async fn start(self) -> Result<(JoinHandle<Result<()>>, SocketAddr)> {
         // Validate builder input combinations
         if self.ca_cert.is_some() && self.server_cert.is_none() {
@@ -267,27 +328,9 @@ impl<'a> TestServerBuilder<'a> {
             None
         };
 
-        // Setup Response Handler
-        let svc_fn = |req: Request<Incoming>| {
-            // Get User Agent Header and send it back in the response
-            let user_agent = req
-                .headers()
-                .get(USER_AGENT)
-                .and_then(|v| v.to_str().ok())
-                .map(ToString::to_string)
-                .unwrap_or_default(); // Empty Default
-            let response_content = Full::new(Bytes::from(user_agent))
-                .map_err(|_| unreachable!())
-                .boxed();
-            // If we ever want a true echo server, we can use instead
-            // let response_content = req.into_body().boxed();
-            // although uv-client doesn't expose post currently.
-            future::ok::<_, hyper::Error>(Response::new(response_content))
-        };
-
         // Spawn the server loop in a background task
         let server_task = tokio::spawn(async move {
-            let svc = service_fn(move |req: Request<Incoming>| svc_fn(req));
+            let svc = service_fn(|req: Request<Incoming>| echo_user_agent(&req));
 
             let (tcp_stream, _remote_addr) = listener
                 .accept()
@@ -327,12 +370,8 @@ impl<'a> TestServerBuilder<'a> {
     }
 }
 
-/// Single Request HTTP server that echoes the User Agent Header.
-pub(crate) async fn start_http_user_agent_server() -> Result<(JoinHandle<Result<()>>, SocketAddr)> {
-    TestServerBuilder::new().start().await
-}
-
 /// Single Request HTTPS server that echoes the User Agent Header.
+#[cfg(feature = "rustls-tls")]
 pub(crate) async fn start_https_user_agent_server(
     server_cert: &SelfSigned,
 ) -> Result<(JoinHandle<Result<()>>, SocketAddr)> {
@@ -343,6 +382,7 @@ pub(crate) async fn start_https_user_agent_server(
 }
 
 /// Single Request HTTPS mTLS server that echoes the User Agent Header.
+#[cfg(feature = "rustls-tls")]
 pub(crate) async fn start_https_mtls_user_agent_server(
     ca_cert: &SelfSigned,
     server_cert: &SelfSigned,

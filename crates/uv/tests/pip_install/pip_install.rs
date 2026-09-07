@@ -14742,6 +14742,7 @@ fn offline_refresh_conflict_verbose() {
     ----- stderr -----
     DEBUG Searching for user configuration in: `[UV_USER_CONFIG_DIR]/uv.toml`
     DEBUG uv [VERSION] ([COMMIT] DATE)
+    TRACE TLS backend: rustls (aws-lc-rs)
     error: the argument `--offline` cannot be used with `--refresh`
     ");
 }

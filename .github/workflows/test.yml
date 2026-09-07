@@ -152,6 +152,64 @@ jobs:
           if-no-files-found: ignore
           retention-days: 14
 
+  cargo-test-native-tls:
+    timeout-minutes: 10
+    runs-on: depot-ubuntu-24.04-16
+    name: "cargo test native-tls"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: "Install OpenSSL headers"
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends pkg-config libssl-dev
+
+      - name: "Install mold"
+        run: ./scripts/install-mold.sh
+
+      - name: "Install Rust toolchain"
+        run: rustup toolchain install --profile minimal
+
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        id: rust-cache
+        with:
+          # Separate cache from the default-backend jobs: native-tls builds a
+          # different dependency graph (OpenSSL instead of rustls/aws-lc-rs).
+          prefix-key: v1-rust-native-tls
+          key: ${{ hashFiles('Cargo.toml') }}
+          save-if: ${{ inputs.save-rust-cache == 'true' }}
+
+      - name: "Install cargo nextest"
+        uses: taiki-e/install-action@6c6fd71fe4fb72c3697d269963d0e15df8adedad # v2.85.10
+        with:
+          tool: cargo-nextest
+
+      - name: "Cargo test"
+        env:
+          RUST_BACKTRACE: 1
+        # All backend-specific code lives in `uv-client`; run its unit and
+        # integration tests against the native-tls (OpenSSL) backend.
+        run: |
+          cargo nextest run \
+            --cargo-profile fast-build-nightly \
+            -Z panic-abort-tests \
+            -Z checksum-freshness \
+            -p uv-client \
+            --no-default-features \
+            --features native-tls \
+            --profile ci-linux
+
+      - name: "Upload JUnit results"
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: junit-results-native-tls
+          path: target/nextest/ci*/junit.xml
+          if-no-files-found: ignore
+          retention-days: 14
+
   cargo-test-macos:
     timeout-minutes: 20
     # Only run macOS tests on main without opt-in
@@ -227,7 +285,7 @@ jobs:
             -Z panic-abort-tests \
             -Z checksum-freshness \
             --no-default-features \
-            --features test-python,test-python-managed,test-pypi,test-git,test-git-lfs,performance,test-crates-io,native-auth,apple-native \
+            --features rustls-tls,test-python,test-python-managed,test-pypi,test-git,test-git-lfs,performance,test-crates-io,native-auth,apple-native \
             --workspace \
             --profile ci-macos
 
@@ -338,7 +396,7 @@ jobs:
             -Z panic-abort-tests \
             -Z checksum-freshness \
             --no-default-features \
-            --features test-python,test-pypi,test-python-managed,test-windows-registry,native-auth,windows-native \
+            --features rustls-tls,test-python,test-pypi,test-python-managed,test-windows-registry,native-auth,windows-native \
             --workspace \
             --profile ci-windows \
             --partition hash:${{ matrix.partition }}/3

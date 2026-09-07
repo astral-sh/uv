@@ -1,3 +1,12 @@
+// The `uv-dev` binary makes HTTPS requests (e.g. `generate-all`), so it must link a TLS backend.
+// `rustls-tls` is the default; downstream rebuilds can swap in the native stack via
+// `--no-default-features --features native-tls`. Reject a build that would link no TLS stack at all.
+#[cfg(not(any(feature = "rustls-tls", feature = "native-tls")))]
+compile_error!(
+    "a TLS backend is required: build with the default `rustls-tls` feature, \
+     or `--no-default-features --features native-tls`"
+);
+
 use std::env;
 
 use anyhow::Result;

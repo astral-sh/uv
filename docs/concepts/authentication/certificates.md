@@ -8,6 +8,12 @@ are used to verify the identity of these servers, ensuring that connections are 
 uv uses [`rustls`](https://github.com/rustls/rustls), a memory-safe TLS implementation written in
 Rust, with [`aws-lc-rs`](https://github.com/aws/aws-lc-rs) as the cryptography provider.
 
+!!! note
+
+    uv can also be built against the system's native TLS stack (OpenSSL) instead of `rustls` — for
+    example, to meet FIPS or post-quantum cryptography requirements. This changes how certificates
+    are configured; see [System certificates](#system-certificates).
+
 uv supports the following X.509 certificate signature algorithms:
 
 - ECDSA (P-256, P-384, P-521) with SHA-256, SHA-384, or SHA-512
@@ -29,6 +35,17 @@ or set [`system-certs = true`](../../reference/settings.md#system-certs) in `uv.
 When using system certificates, certificate verification is performed by
 [`rustls-platform-verifier`](https://github.com/rustls/rustls-platform-verifier), which delegates to
 the operating system's certificate verifier.
+
+!!! note "OpenSSL builds"
+
+    When uv is built against the system's native TLS stack (OpenSSL) rather than the default
+    `rustls` backend, the platform's native certificate store is **always** used. Because there is
+    no bundled-certificate mode to switch away from, the
+    [`--system-certs`](../../reference/cli.md#uv) option, the
+    [`UV_SYSTEM_CERTS`](../../reference/environment.md#uv_system_certs) environment variable, and the
+    [`system-certs`](../../reference/settings.md#system-certs) setting all behave differently than on
+    the default build: they are accepted for compatibility but have no effect. Custom certificates
+    (`SSL_CERT_FILE`/`SSL_CERT_DIR`) and mTLS (`SSL_CLIENT_CERT`) continue to work on all builds.
 
 ## Custom certificates
 

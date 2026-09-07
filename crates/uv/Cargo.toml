@@ -157,8 +157,12 @@ nix = { workspace = true }
 uv-unix = { workspace = true }
 
 [features]
-default = ["performance", "test-defaults"]
+default = ["rustls-tls", "performance", "test-defaults"]
+rustls-tls = ["uv-client/rustls-tls", "uv-cli/rustls-tls"]
 native-auth = []
+# Use the system's native TLS stack (e.g., OpenSSL) instead of rustls.
+# Intended for downstream rebuilds that require FIPS compliance or PQC support.
+native-tls = ["uv-client/native-tls", "uv-cli/native-tls"]
 # Use better memory allocators, etc.
 performance = ["performance-memory-allocator"]
 performance-memory-allocator = ["dep:uv-performance-memory-allocator"]
