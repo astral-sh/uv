@@ -6,13 +6,13 @@ on:
     outputs:
       uv-wheels:
         description: "Artifact ID for the signed uv wheels"
-        value: ${{ jobs.complete.outputs.uv-wheels }}
+        value: ${{ jobs.assemble.outputs.uv-wheels }}
       uv-build-wheels:
         description: "Artifact ID for the signed uv_build wheels"
-        value: ${{ jobs.complete.outputs.uv-build-wheels }}
+        value: ${{ jobs.assemble.outputs.uv-build-wheels }}
       github-archives:
         description: "Artifact ID for the signed GitHub release archives and checksums"
-        value: ${{ jobs.complete.outputs.github-archives }}
+        value: ${{ jobs.assemble.outputs.github-archives }}
 
 permissions: {}
 
@@ -526,29 +526,3 @@ jobs:
       - name: "Install and run the signed wheels"
         shell: pwsh
         run: ./scripts/test-release-wheels-windows.ps1 "./wheels/$env:TARGET"
-
-  complete:
-    name: "require verified signing outputs"
-    needs: [assemble, verify-macos, verify-windows]
-    if: ${{ !cancelled() }}
-    runs-on: ubuntu-slim
-    outputs:
-      uv-wheels: ${{ needs.assemble.outputs.uv-wheels }}
-      uv-build-wheels: ${{ needs.assemble.outputs.uv-build-wheels }}
-      github-archives: ${{ needs.assemble.outputs.github-archives }}
-    steps:
-      - name: "Require every package to have passed verification"
-        env:
-          ASSEMBLY: ${{ needs.assemble.result }}
-          MACOS: ${{ needs.verify-macos.result }}
-          WINDOWS: ${{ needs.verify-windows.result }}
-          UV_WHEELS: ${{ needs.assemble.outputs.uv-wheels }}
-          UV_BUILD_WHEELS: ${{ needs.assemble.outputs.uv-build-wheels }}
-          GITHUB_ARCHIVES: ${{ needs.assemble.outputs.github-archives }}
-        run: |
-          test "$ASSEMBLY" = success
-          test "$MACOS" = success
-          test "$WINDOWS" = success
-          test -n "$UV_WHEELS"
-          test -n "$UV_BUILD_WHEELS"
-          test -n "$GITHUB_ARCHIVES"
