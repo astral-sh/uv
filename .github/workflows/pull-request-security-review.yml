@@ -83,7 +83,7 @@ jobs:
           TMPDIR: ${{ runner.temp }}/codex-security
         with:
           openai-api-key: ${{ secrets.OPENAI_API_KEY }}
-          codex-version: "0.146.0"
+          codex-version: "0.147.0"
           codex-home: "agents/codex"
           effort: high
           permission-profile: "pull-request-review"
