@@ -421,7 +421,7 @@ jobs:
         uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
         with:
           version: "0.12.10"
-          checksum: ${{ matrix.platform.uv-checksum }}
+          checksum: "51c6170e8e3a01cef9f33b94f582b7b81ac65046f55d40afb35f9cff5a68c179"
           enable-cache: false
 
       - name: "Download signed executables"
@@ -477,11 +477,21 @@ jobs:
           python-version: "3.13"
           architecture: ${{ matrix.platform.python-architecture }}
 
-      - name: "Install uv"
+      # setup-uv downloads for the runner architecture, not the wheel target.
+      - name: "Install uv on Windows x64"
+        if: ${{ runner.arch == 'X64' }}
         uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
         with:
           version: "0.12.10"
-          checksum: ${{ matrix.platform.uv-checksum }}
+          checksum: "f65744f94072152b1f86ba2aace4d01f1124d9a8ecb235805039e3718c36cac2"
+          enable-cache: false
+
+      - name: "Install uv on Windows ARM64"
+        if: ${{ runner.arch == 'ARM64' }}
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          version: "0.12.10"
+          checksum: "ee985c51c0c9c1f82267a5d80f959b34a7ff888c109182bd3b2b35c4661bbcde"
           enable-cache: false
 
       - name: "Download signed executables"
