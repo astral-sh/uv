@@ -127,7 +127,7 @@ jobs:
           merge-multiple: true
 
       - name: "Log in to Azure with GitHub OIDC"
-        uses: azure/login@7ddb5af1ef8758cf1353cf3b42f940aee27ba21c # v3
+        uses: azure/login@f5d393ae46f8fde4be8b75f32e3fc50e654ad0ca # v3.0.1
         with:
           client-id: ${{ secrets.CODESIGN_AZURE_CLIENT_ID_MACOS }}
           tenant-id: ${{ secrets.CODESIGN_AZURE_TENANT_ID_MACOS }}
@@ -177,7 +177,7 @@ jobs:
           merge-multiple: true
 
       - name: "Log in to Azure with GitHub OIDC"
-        uses: azure/login@7ddb5af1ef8758cf1353cf3b42f940aee27ba21c # v3
+        uses: azure/login@f5d393ae46f8fde4be8b75f32e3fc50e654ad0ca # v3.0.1
         with:
           client-id: ${{ secrets.CODESIGN_AZURE_CLIENT_ID_WINDOWS }}
           tenant-id: ${{ secrets.CODESIGN_AZURE_TENANT_ID_WINDOWS }}
