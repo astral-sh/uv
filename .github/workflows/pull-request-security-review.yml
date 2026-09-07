@@ -37,7 +37,7 @@ jobs:
 
       - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
         with:
-          version: "0.12.7"
+          version: "0.12.10"
 
       - name: "Install Codex Security plugin"
         run: ./agents/scripts/install-codex-security.sh
@@ -116,7 +116,7 @@ jobs:
 
       - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
         with:
-          version: "0.12.7"
+          version: "0.12.10"
 
       - name: "Prepare review findings"
         id: comments
