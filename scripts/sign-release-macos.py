@@ -20,9 +20,6 @@ from pathlib import Path
 from cryptography import x509
 from cryptography.hazmat.primitives import hashes
 
-BINARIES = ("uv", "uvx", "uv-build")
-
-
 class SigningComponent(Enum):
     """The components needed to sign uv's macOS executables."""
 
@@ -147,7 +144,8 @@ def sign_binaries(unsigned: Path, signed: Path) -> None:
 
         signed.mkdir()
         shutil.copyfile(certificate, signed / "certificate.pem")
-        for binary in BINARIES:
+        for source in sorted(unsigned.iterdir()):
+            binary = source.name
             try:
                 subprocess.run(
                     [
@@ -163,7 +161,7 @@ def sign_binaries(unsigned: Path, signed: Path) -> None:
                         os.environ["KEY_NAME"],
                         "--code-signature-flags",
                         "runtime",
-                        unsigned / binary,
+                        source,
                         signed / binary,
                     ],
                     check=True,
