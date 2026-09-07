@@ -20,7 +20,7 @@ try {
     if ($LASTEXITCODE -ne 0) { throw 'GitHub release archive extraction failed' }
 
     & "$PSScriptRoot/verify-release-binaries-windows.ps1" -Signed $Signed `
-        -BinaryDirectory $archiveBinaries -Binaries @(Get-ChildItem $archiveBinaries -Name)
+        -BinaryDirectory $archiveBinaries -Binaries @(Get-ChildItem $archiveBinaries -Name -Force)
 }
 finally {
     Remove-Item $archiveBinaries -Recurse -Force
