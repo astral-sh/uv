@@ -193,13 +193,12 @@ impl PythonVersionFile {
                 );
                 let versions = content
                     .lines()
+                    .map(str::trim)
                     .filter(|line| {
                         // Skip comments and empty lines.
-                        let trimmed = line.trim();
-                        !(trimmed.is_empty() || trimmed.starts_with('#'))
+                        !(line.is_empty() || line.starts_with('#'))
                     })
-                    .map(ToString::to_string)
-                    .map(|version| PythonRequest::parse(&version))
+                    .map(PythonRequest::parse)
                     .filter(|request| {
                         if let PythonRequest::ExecutableName(name) = request {
                             warn_user_once!(
@@ -299,5 +298,46 @@ impl PythonVersionFile {
                 .as_bytes(),
         )
         .await
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use assert_fs::{TempDir, fixture::FileWriteStr, prelude::PathChild};
+
+    use super::*;
+
+    #[tokio::test]
+    async fn trims_whitespace_in_version_files() -> anyhow::Result<()> {
+        let tempdir = TempDir::new()?;
+
+        for (filename, contents, expected) in [
+            (
+                PYTHON_VERSION_FILENAME,
+                "  3.12  \n\t3.13\t\n  # comment\n",
+                vec![PythonRequest::parse("3.12"), PythonRequest::parse("3.13")],
+            ),
+            (
+                PYTHON_VERSIONS_FILENAME,
+                "  3.12\n3.13\n  3.14\n",
+                vec![
+                    PythonRequest::parse("3.12"),
+                    PythonRequest::parse("3.13"),
+                    PythonRequest::parse("3.14"),
+                ],
+            ),
+        ] {
+            let path = tempdir.child(filename);
+            path.write_str(contents)?;
+
+            let Some(version_file) = PythonVersionFile::try_from_path(path.to_path_buf()).await?
+            else {
+                anyhow::bail!("version file was not found: {}", path.display());
+            };
+
+            assert_eq!(version_file.into_versions(), expected);
+        }
+
+        Ok(())
     }
 }
