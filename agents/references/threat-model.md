@@ -1,18 +1,23 @@
-# 1. Overview
+# uv CLI threat model
+
+## Overview
 
 uv is a Rust CLI that resolves, builds, installs, manages, and publishes Python packages; downloads
 runtimes; and updates itself. It runs with the developer's or CI worker's access to files, networks,
 repositories, credentials, secrets, and OpenID Connect (OIDC) tokens.
 
 A behavior is a security issue only when an independent attacker controls a concrete input, current
-uv code or repository automation uses that input to cross a boundary defined below, and the crossing
-gives the attacker new power or harms a protected asset. Trusted-source compromise, intended
-behavior, and correctness defects that give an attacker no new power are not security issues.
+uv code uses that input to cross a boundary defined below, and the crossing gives the attacker new
+power or harms a protected asset. Trusted-source compromise, intended behavior, and correctness
+defects that give an attacker no new power are not security issues.
 
-# 2. Trust boundaries and assumptions
+The GitHub repository and its automation have a separate
+[repository threat model](repository-threat-model.md).
 
-TLS roots, secure operator-selected mirrors, configured runners, and their intended protocol
-behavior are **trust roots**; their compromise or misconfiguration alone is not a uv flaw.
+## Trust boundaries and assumptions
+
+TLS roots, secure operator-selected mirrors, and their intended protocol behavior are **trust
+roots**; their compromise or misconfiguration alone is not a uv flaw.
 
 Packages and their sources (indexes, Git repositories, and files) are trusted during initial
 resolution or explicit lock updates. During a locked operation, the lockfile's sources, object IDs,
@@ -20,17 +25,15 @@ and hashes are authoritative; uv must not replace them in response to upstream c
 
 - **Attacker-controlled:** files and metadata from an untrusted publisher; public package-name
   registrations; remote Git repositories or refs controlled by an untrusted owner; unauthenticated
-  network responses; archives; malformed protocol data; and changes from an untrusted contributor
-  that a privileged workflow runs before review.
-- **Trusted local input for the product threat model:** the entire machine on which uv runs,
-  including all environment variables; the filesystem and its links; local project files such as
-  `pyproject.toml`, `uv.toml`, requirements, lockfiles, scripts, `.python-version`, and workspace
-  members; installed programs and interpreters; virtual environments; PATH; network and proxy
-  configuration; certificates; credentials; keyring providers; caches; and install directories. CLI
-  flags, explicit requirements and scripts, maintainer-supplied workflow dispatch inputs, and
-  choices such as `--allow-insecure-host`, `--no-index`, `--no-sources`, `--no-build`,
-  `--only-binary`, and `--require-hashes` are also trusted. `--no-project`, `--no-config`, and
-  similar isolation options require uv to ignore relevant inputs.
+  network responses; archives; and malformed protocol data.
+- **Trusted local input:** the entire machine on which uv runs, including all environment variables;
+  the filesystem and its links; local project files such as `pyproject.toml`, `uv.toml`,
+  requirements, lockfiles, scripts, `.python-version`, and workspace members; installed programs and
+  interpreters; virtual environments; PATH; network and proxy configuration; certificates;
+  credentials; keyring providers; caches; and install directories. CLI flags, explicit requirements
+  and scripts, and choices such as `--allow-insecure-host`, `--no-index`, `--no-sources`,
+  `--no-build`, `--only-binary`, and `--require-hashes` are also trusted. `--no-project`,
+  `--no-config`, and similar isolation options require uv to ignore relevant inputs.
 
 - uv is not normally installed setuid. Running uv as root is not considered a route to local
   privilege escalation. Selected packages may run arbitrary code. Interpreter startup, `.pth`
@@ -45,9 +48,7 @@ and hashes are authoritative; uv must not replace them in response to upstream c
   Operations that rely on `PATH` lookup or explicit relative paths are not security issues because
   `PATH`, `CWD`, and the filesystem are trusted local input. This includes placing `CWD` on `PATH`.
 
-# 3. Threat models and security invariants
-
-## 3.1 Product threat model: uv
+## Security invariants
 
 The uv product runs on a trusted machine while processing package, Git, archive, and protocol data
 from independent suppliers. Its security goal is to preserve the operator's choices about sources,
@@ -122,43 +123,18 @@ integrity, credentials, execution, and filesystem destinations while handling th
   protocol data remains attacker-controlled. A one-shot parser panic is a correctness bug, not a
   security issue.
 
-## 3.2 Repository threat model: GitHub
-
-The GitHub repository holds uv's source, build and release workflows, and maintainer automation.
-Maintainers, reviewed changes, protected refs, repository settings, configured runners and
-environments, and explicitly trusted third-party actions are trusted. Untrusted inputs include
-public contributions, workflow inputs supplied by untrusted actors, third-party refs or actions
-outside that trust set, and artifacts passed from untrusted jobs. The protected assets are source
-history, release artifacts, publishing credentials and OIDC tokens, repository writes, and
-downstream users.
-
-First-party repositories used by uv automation, including `astral-sh/uv-dev` and
-`astral-sh/crates-policies`, are trusted sources when their relevant branches and workflow
-dispatches are restricted to trusted uv maintainers.
-
-- **CI and releases:** Privileged workflows do not execute attacker-controlled code or promote
-  attacker-controlled artifacts before review or explicit authorization. Untrusted code or refs must
-  not run with privileged permissions or influence artifacts or other output consumed by a
-  privileged step. The boundary is crossed when this gives the attacker a specific credential,
-  permission, or privileged action that causes harm. The boundary depends on what starts each
-  workflow, which code and artifacts each job accepts, and which permissions, credentials, and
-  runners those jobs receive. Unpinned dependencies, mutable inputs, secret-shaped strings, and
-  broad permissions do not cross it by themselves.
-
-# 4. Severity calibration
+## Severity calibration
 
 - **Critical:** With few prerequisites and safe defaults, a remote attacker or actor at a lower
-  privilege level compromises updates, runtimes, releases, broad credentials, or arbitrary files
-  without first compromising a declared trust root.
+  privilege level compromises updates, runtimes, broad credentials, or arbitrary files without first
+  compromising a declared trust root.
 - **High:** A complete, demonstrated path from independent attacker input crosses a stated integrity
   or privilege boundary, grants material new power, and causes substantial confidentiality or
   integrity harm. It cannot depend on a trusted maintainer selecting malicious input, trust-root
   compromise, or power the attacker already has. Examples: bypass a trusted required hash to
   substitute attacker-controlled bytes that uv builds, installs, or executes; execute attacker bytes
-  instead of a documented full 40-hex immutable Git pin; or automatically run mutable third-party
-  code in a scheduled workflow with repository-write, publishing, or equivalent credentials. A hash
-  bypass that meets these criteria can qualify as High without a separate privileged consumer or
-  credential.
+  instead of a documented full 40-hex immutable Git pin. A hash bypass that meets these criteria can
+  qualify as High without a separate privileged consumer or credential.
 - **Medium:** A real but limited boundary crossing, an uncommon realistic setup, limited credential
   or filesystem effect, reliable resource exhaustion from remote data that has no authority under a
   locked operation, or premature execution that violates an effective explicit policy. Examples:
