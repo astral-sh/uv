@@ -44,6 +44,7 @@ uv is backed by [Astral](https://astral.sh), the creators of
 ## Installation
 
 #### Install with [Harbor](https://github.com/kauanmezavila/harbor)
+
 ```bash
 harbor install astral-sh/uv@latest
 ```
