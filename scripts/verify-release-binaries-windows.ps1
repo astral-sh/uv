@@ -20,6 +20,11 @@ $signtool = Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\bin\*\$archi
     Sort-Object FullName -Descending | Select-Object -First 1 -ExpandProperty FullName
 if (-not $signtool) { throw 'signtool.exe not found in Windows SDK' }
 
+$found = @(Get-ChildItem $BinaryDirectory | Select-Object -ExpandProperty Name)
+if ($found.Count -ne $Binaries.Count -or @($found | Where-Object { $_ -notin $Binaries }).Count -ne 0) {
+    throw "Unexpected packaged executables: $($found -join ', ')"
+}
+
 foreach ($binary in $Binaries) {
     $binaryPath = (Get-Item "$BinaryDirectory/$binary").FullName
     if ((Get-FileHash "$Signed/$binary").Hash -ne (Get-FileHash $binaryPath).Hash) {
