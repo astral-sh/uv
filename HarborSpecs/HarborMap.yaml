@@ -1,0 +1,27 @@
+project: uv
+description: An extremely fast Python package and project manager, written in Rust.
+
+variants:
+  - type: url
+    url: https://astral.sh/uv/install.sh
+    command: curl -LsSf https://astral.sh/uv/install.sh | sh
+    version: 1.0.0
+    os: mac
+    architecture: any
+    runtime:
+
+  - type: url
+    url: https://astral.sh/uv/install.sh
+    command: curl -LsSf https://astral.sh/uv/install.sh | sh
+    version: 1.0.0
+    os: linux
+    architecture: any
+    runtime:
+
+  - type: url
+    url: https://astral.sh/uv/install.ps1
+    command: powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
+    version: 1.0.0
+    os: windows
+    architecture: any
+    runtime:
