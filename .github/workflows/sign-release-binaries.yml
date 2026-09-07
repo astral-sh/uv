@@ -219,11 +219,12 @@ jobs:
         env:
           TARGETS: ${{ needs.prepare.outputs.windows }}
         run: |
+          $ErrorActionPreference = 'Stop'
           foreach ($platform in ($env:TARGETS | ConvertFrom-Json)) {
             $target = $platform.target
             New-Item "signed/$target" -ItemType Directory -Force | Out-Null
-            foreach ($binary in @('uv.exe', 'uvx.exe', 'uvw.exe', 'uv-build.exe')) {
-              Copy-Item "unsigned/$target/$binary" "signed/$target/$binary"
+            foreach ($binary in (Get-ChildItem "unsigned/$target" -File -Force)) {
+              Copy-Item $binary.FullName "signed/$target/$($binary.Name)"
             }
           }
 
@@ -253,8 +254,8 @@ jobs:
           $ErrorActionPreference = 'Stop'
           if (-not $env:CERTIFICATE_SUBJECT) { throw 'Missing signing certificate subject' }
           foreach ($platform in ($env:TARGETS | ConvertFrom-Json)) {
-            foreach ($binary in @('uv.exe', 'uvx.exe', 'uvw.exe', 'uv-build.exe')) {
-              $path = "signed/$($platform.target)/$binary"
+            foreach ($binary in (Get-ChildItem "signed/$($platform.target)" -File -Force)) {
+              $path = $binary.FullName
               $signature = Get-AuthenticodeSignature $path
               if ($signature.Status -ne 'Valid' -or $null -eq $signature.TimeStamperCertificate -or
                   $signature.SignerCertificate.Subject -ne $env:CERTIFICATE_SUBJECT) {

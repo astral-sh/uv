@@ -26,6 +26,9 @@ from cryptography.hazmat.primitives import hashes
 
 def verify_binaries(signed: Path, directory: Path, binaries: list[str]) -> None:
     """Check packaged bytes, Apple trust, timestamps, and the signing certificate."""
+    found = {path.name for path in directory.iterdir()}
+    if found != set(binaries):
+        raise ValueError(f"Unexpected packaged executables: {sorted(found)}")
     certificate = x509.load_pem_x509_certificate(
         (signed / "certificate.pem").read_bytes()
     )

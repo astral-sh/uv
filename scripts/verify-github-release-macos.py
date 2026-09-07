@@ -19,8 +19,6 @@ import sys
 import tempfile
 from pathlib import Path
 
-BINARIES = ("uv", "uvx")
-
 
 def verify_archive(signed: Path, archive: Path) -> None:
     """Extract the GitHub archive and invoke the shared macOS executable verifier."""
@@ -43,7 +41,7 @@ def verify_archive(signed: Path, archive: Path) -> None:
                 Path(__file__).with_name("verify-release-binaries-macos.py"),
                 signed,
                 archive_binaries,
-                *BINARIES,
+                *sorted(path.name for path in archive_binaries.iterdir()),
             ],
             check=True,
         )
