@@ -107,7 +107,7 @@ impl Interpreter {
     pub fn clear_cache(executable: impl AsRef<Path>, cache: &Cache) -> Result<(), Error> {
         let absolute = std::path::absolute(executable.as_ref())?;
         let canonical = canonicalize_executable(&absolute)?;
-        let cache_entry = InterpreterInfo::cache_entry(&absolute, &canonical, cache)?;
+        let cache_entry = InterpreterInfo::cache_entry(&absolute, &canonical, cache);
 
         match fs::remove_file(cache_entry.path()) {
             Ok(()) => Ok(()),
@@ -1051,7 +1051,7 @@ impl InterpreterInfo {
     fn cache(&self, cache: &Cache) -> Result<(), Error> {
         let absolute = std::path::absolute(&self.sys_executable)?;
         let canonical = canonicalize_executable(&absolute)?;
-        let cache_entry = Self::cache_entry(&absolute, &canonical, cache)?;
+        let cache_entry = Self::cache_entry(&absolute, &canonical, cache);
         let modified = Timestamp::from_path(&canonical)?;
         self.write_cache(&cache_entry, modified)
     }
@@ -1233,24 +1233,21 @@ impl InterpreterInfo {
     }
 
     /// Return the cache entry for an interpreter's absolute and canonical executable paths.
-    fn cache_entry(absolute: &Path, canonical: &Path, cache: &Cache) -> Result<CacheEntry, Error> {
+    fn cache_entry(absolute: &Path, canonical: &Path, cache: &Cache) -> CacheEntry {
         let python_executable = env::var_os(EnvVars::PYTHONEXECUTABLE).map(PathBuf::from);
         let pyvenv_launcher = env::var_os(EnvVars::PYVENV_LAUNCHER).map(PathBuf::from);
-        let key = cache_digest(&(absolute, canonical, &python_executable, &pyvenv_launcher));
-        // Keep the original values: relative and absolute overrides can behave differently in
-        // CPython. Relative overrides also depend on the working directory, including an empty
-        // `__PYVENV_LAUNCHER__` consumed by `site.py` on older macOS Pythons.
-        let key = if python_executable
-            .iter()
-            .chain(pyvenv_launcher.iter())
-            .any(|path| path.is_relative())
-        {
-            cache_digest(&(key, env::current_dir()?))
-        } else {
-            key
-        };
-
-        let entry = cache.entry(
+        // We use the absolute path for the cache entry to avoid cache collisions for relative
+        // paths. But we don't want to query the executable with symbolic links resolved because
+        // that can change reported values, e.g., `sys.executable`. We include the canonical
+        // path in the cache entry as well, otherwise we can have cache collisions if an
+        // absolute path refers to different interpreters with matching ctimes, e.g., if you
+        // have a `.venv/bin/python` pointing to both Python 3.12 and Python 3.13 that were
+        // modified at the same time.
+        //
+        // Launcher overrides can also change the reported executable and virtual environment
+        // without changing either executable path.
+        let file_stem = cache_digest(&(absolute, canonical, &python_executable, &pyvenv_launcher));
+        cache.entry(
             CacheBucket::Interpreter,
             // Shard interpreter metadata by host architecture, operating system, and version, to
             // invalidate the cache (e.g.) on OS upgrades.
@@ -1263,19 +1260,8 @@ impl InterpreterInfo {
                     .map(|os_release| os_release.to_string())
                     .unwrap_or_default(),
             )),
-            // We use the absolute path for the cache entry to avoid cache collisions for relative
-            // paths. But we don't want to query the executable with symbolic links resolved because
-            // that can change reported values, e.g., `sys.executable`. We include the canonical
-            // path in the cache entry as well, otherwise we can have cache collisions if an
-            // absolute path refers to different interpreters with matching ctimes, e.g., if you
-            // have a `.venv/bin/python` pointing to both Python 3.12 and Python 3.13 that were
-            // modified at the same time.
-            //
-            // Launcher overrides can also change the reported executable and virtual environment
-            // without changing either executable path.
-            format!("{key}.msgpack"),
-        );
-        Ok(entry)
+            format!("{file_stem}.msgpack"),
+        )
     }
 
     /// A wrapper around [`markers::query_interpreter_info`] to cache the computed markers.
@@ -1311,7 +1297,7 @@ impl InterpreterInfo {
         };
 
         let canonical = canonicalize_executable(&absolute).map_err(handle_io_error)?;
-        let cache_entry = Self::cache_entry(&absolute, &canonical, cache)?;
+        let cache_entry = Self::cache_entry(&absolute, &canonical, cache);
 
         // We check the timestamp of the canonicalized executable to check if an underlying
         // interpreter has been modified.
