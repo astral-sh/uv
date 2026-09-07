@@ -63,8 +63,9 @@ def signing_plan() -> dict[str, list[dict[str, str]]]:
 
 
 def main() -> None:
-    """Print the signing matrices as one JSON workflow output."""
-    print(json.dumps(signing_plan(), separators=(",", ":")))
+    """Print one GitHub Actions output for each signing matrix."""
+    for system, platforms in signing_plan().items():
+        print(f"{system}={json.dumps(platforms, separators=(',', ':'))}")
 
 
 if __name__ == "__main__":

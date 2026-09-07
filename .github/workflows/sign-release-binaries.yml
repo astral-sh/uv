@@ -29,7 +29,8 @@ jobs:
     permissions:
       contents: read
     outputs:
-      targets: ${{ steps.targets.outputs.plan }}
+      macos: ${{ steps.targets.outputs.macos }}
+      windows: ${{ steps.targets.outputs.windows }}
       unsigned-macos: ${{ steps.macos.outputs.artifact-id }}
       unsigned-windows: ${{ steps.windows.outputs.artifact-id }}
       assembly: ${{ steps.assembly.outputs.artifact-id }}
@@ -47,7 +48,7 @@ jobs:
 
       - name: "Plan signed release targets"
         id: targets
-        run: echo "plan=$(uv run scripts/plan-release-signing.py)" >> "$GITHUB_OUTPUT"
+        run: uv run scripts/plan-release-signing.py >> "$GITHUB_OUTPUT"
 
       - name: "Download unsigned macOS wheels"
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
@@ -78,18 +79,20 @@ jobs:
       - name: "Extract executable wheel members"
         shell: bash
         env:
-          TARGETS: ${{ steps.targets.outputs.plan }}
+          MACOS_TARGETS: ${{ steps.targets.outputs.macos }}
+          WINDOWS_TARGETS: ${{ steps.targets.outputs.windows }}
         run: |
           set -euo pipefail
           # uv and uv_build keep their executables in .data/scripts.
           for system in macos windows; do
+            if [[ "$system" == macos ]]; then targets=$MACOS_TARGETS; else targets=$WINDOWS_TARGETS; fi
             while read -r target; do
               mkdir -p "wheels/$target"
               cp wheel-artifacts/"wheels_uv-$target"/*.whl "wheels/$target/"
               cp wheel-artifacts/"wheels_uv_build-$target"/*.whl "wheels/$target/"
               uv run scripts/extract-wheel-binaries.py \
                 --output "./unsigned/$system/$target" wheels/"$target"/*.whl
-            done < <(jq -r --arg system "$system" '.[$system][].target' <<< "$TARGETS")
+            done < <(jq -r '.[].target' <<< "$targets")
           done
 
       - name: "Upload unsigned macOS executables"
@@ -158,7 +161,7 @@ jobs:
       - name: "Sign executable wheel members through Azure Key Vault"
         shell: bash
         env:
-          TARGETS: ${{ toJSON(fromJSON(needs.prepare.outputs.targets).macos) }}
+          TARGETS: ${{ needs.prepare.outputs.macos }}
           STORAGE_ACCOUNT: ${{ secrets.CODESIGN_STORAGE_ACCOUNT }}
           STORAGE_CONTAINER: ${{ secrets.CODESIGN_STORAGE_CONTAINER }}
           # N.B. rcodesign reads RCODESIGN_* as configuration, avoid using that prefix
@@ -214,7 +217,7 @@ jobs:
       - name: "Copy executable wheel members for signing"
         shell: pwsh
         env:
-          TARGETS: ${{ toJSON(fromJSON(needs.prepare.outputs.targets).windows) }}
+          TARGETS: ${{ needs.prepare.outputs.windows }}
         run: |
           foreach ($platform in ($env:TARGETS | ConvertFrom-Json)) {
             $target = $platform.target
@@ -244,7 +247,7 @@ jobs:
       - name: "Verify signed executable identities"
         shell: pwsh
         env:
-          TARGETS: ${{ toJSON(fromJSON(needs.prepare.outputs.targets).windows) }}
+          TARGETS: ${{ needs.prepare.outputs.windows }}
           CERTIFICATE_SUBJECT: ${{ secrets.CODESIGN_CERTIFICATE_SUBJECT }}
         run: |
           $ErrorActionPreference = 'Stop'
@@ -315,12 +318,14 @@ jobs:
       - name: "Replace executable wheel members"
         shell: bash
         env:
-          TARGETS: ${{ needs.prepare.outputs.targets }}
+          MACOS_TARGETS: ${{ needs.prepare.outputs.macos }}
+          WINDOWS_TARGETS: ${{ needs.prepare.outputs.windows }}
         run: |
           set -euo pipefail
           shopt -s failglob
           mkdir -p signed-pypi/uv signed-pypi/uv_build
           for system in macos windows; do
+            if [[ "$system" == macos ]]; then targets=$MACOS_TARGETS; else targets=$WINDOWS_TARGETS; fi
             while read -r target; do
               mkdir -p "signed-wheels/$system/$target"
               for package in uv uv_build; do
@@ -332,7 +337,7 @@ jobs:
                   --output "$output" --signed-binaries "./signed/$target"
                 cp "$output" "signed-pypi/$package/"
               done
-            done < <(jq -r --arg system "$system" '.[$system][].target' <<< "$TARGETS")
+            done < <(jq -r '.[].target' <<< "$targets")
           done
           uv run --no-project scripts/check_uv_wheel_contents.py \
             signed-pypi/uv/*.whl signed-pypi/uv_build/*.whl
@@ -340,18 +345,20 @@ jobs:
       - name: "Replace GitHub release archive executables"
         shell: bash
         env:
-          TARGETS: ${{ needs.prepare.outputs.targets }}
+          MACOS_TARGETS: ${{ needs.prepare.outputs.macos }}
+          WINDOWS_TARGETS: ${{ needs.prepare.outputs.windows }}
         run: |
           set -euo pipefail
           for system in macos windows; do
             if [[ "$system" == macos ]]; then extension=tar.gz; else extension=zip; fi
+            if [[ "$system" == macos ]]; then targets=$MACOS_TARGETS; else targets=$WINDOWS_TARGETS; fi
             while read -r target; do
               uv run scripts/extract-wheel-binaries.py \
                 --output "./unsigned/$target" wheels/"$target"/*.whl
               uv run scripts/inject-signed-github-release-binaries.py \
                 "./github-archives/uv-$target.$extension" \
                 "./unsigned/$target" "./signed/$target" ./signed-github-archives
-            done < <(jq -r --arg system "$system" '.[$system][].target' <<< "$TARGETS")
+            done < <(jq -r '.[].target' <<< "$targets")
           done
 
       - name: "Upload signed macOS wheels"
@@ -400,7 +407,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        platform: ${{ fromJSON(needs.prepare.outputs.targets).macos }}
+        platform: ${{ fromJSON(needs.prepare.outputs.macos) }}
     runs-on: ${{ matrix.platform.runner }}
     permissions:
       contents: read
@@ -460,7 +467,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        platform: ${{ fromJSON(needs.prepare.outputs.targets).windows }}
+        platform: ${{ fromJSON(needs.prepare.outputs.windows) }}
     runs-on: ${{ matrix.platform.runner }}
     permissions:
       contents: read
