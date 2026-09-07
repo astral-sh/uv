@@ -4,6 +4,9 @@
 
 The GitHub repository holds source code, build and release workflows, and maintainer automation.
 
+The repository-specific section below may add or override trust assumptions and boundaries. When it
+differs from a generic section, the repository-specific rule takes precedence for that repository.
+
 A behavior is a security issue only when an independent attacker controls a concrete input,
 repository automation uses that input to cross a boundary defined below, and the crossing grants new
 power (such as repository write access), exposes publishing credentials or OpenID Connect (OIDC)
@@ -30,6 +33,12 @@ action that causes harm. The boundary depends on what starts each workflow, whic
 each job accepts, and which permissions, credentials, and runners those jobs receive. Unpinned
 dependencies, mutable inputs, secret-shaped strings, and broad permissions do not cross it by
 themselves.
+
+## Repository-specific additions
+
+When copying this threat model, keep the generic sections unchanged and add repository-specific
+trust assumptions or security boundaries here. If a generic assumption does not apply, name it and
+state the conditions for the local exception.
 
 ## Severity calibration
 
