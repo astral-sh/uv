@@ -834,6 +834,13 @@ impl EnvVars {
     #[attr_added_in("0.7.21")]
     pub const UV_HTTP_RETRIES: &'static str = "UV_HTTP_RETRIES";
 
+    /// On Windows, the maximum time, in seconds, spent waiting to retry file moves blocked by
+    /// another process. (default: 10 s)
+    ///
+    /// Antivirus and EDR software can temporarily lock files while scanning them.
+    #[attr_added_in("next release")]
+    pub const UV_FILE_MOVE_RETRY_TIMEOUT: &'static str = "UV_FILE_MOVE_RETRY_TIMEOUT";
+
     /// Timeout (in seconds) for HTTP requests. Equivalent to `UV_HTTP_TIMEOUT`.
     #[attr_added_in("0.1.6")]
     pub const UV_REQUEST_TIMEOUT: &'static str = "UV_REQUEST_TIMEOUT";
