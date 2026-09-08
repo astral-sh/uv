@@ -365,7 +365,7 @@ pub struct GlobalArgs {
     pub show_settings: bool,
 
     /// On Windows, the maximum time, in seconds, spent waiting to retry file moves blocked by
-    /// another process. [env: UV_FILE_MOVE_RETRY_TIMEOUT=]
+    /// another process.
     ///
     /// Antivirus and EDR software can temporarily lock files while scanning them.
     #[arg(
