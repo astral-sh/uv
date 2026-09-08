@@ -917,15 +917,7 @@ impl Cache {
                 Ok(())
             }
             Err(err) if err.kind() == io::ErrorKind::AlreadyExists => {
-                // Write to a temporary file, then move it into place.
-                let temp_dir = tempfile::tempdir_in(dst.as_ref().parent().unwrap())?;
-                let temp_file = temp_dir.path().join("link");
-                fs_err::write(&temp_file, contents.as_bytes())?;
-
-                // Move the symlink into the target location.
-                fs_err::rename(&temp_file, dst.as_ref())?;
-
-                Ok(())
+                uv_fs::write_atomic_sync(dst, contents.as_bytes())
             }
             Err(err) => Err(err),
         }
@@ -964,22 +956,7 @@ impl Cache {
         // Construct the relative link target.
         let src = uv_fs::relative_to(self.archive(id), dst_parent)?;
 
-        // Attempt to create the symlink directly.
-        match fs_err::os::unix::fs::symlink(&src, dst) {
-            Ok(()) => Ok(()),
-            Err(err) if err.kind() == io::ErrorKind::AlreadyExists => {
-                // Create a symlink, using a temporary file to ensure atomicity.
-                let temp_dir = tempfile::tempdir_in(dst_parent)?;
-                let temp_file = temp_dir.path().join("link");
-                fs_err::os::unix::fs::symlink(&src, &temp_file)?;
-
-                // Move the symlink into the target location.
-                fs_err::rename(&temp_file, dst)?;
-
-                Ok(())
-            }
-            Err(err) => Err(err),
-        }
+        uv_fs::replace_symlink(&src, dst)
     }
 
     /// Resolve an archive link, returning the fully-resolved path.
@@ -1571,7 +1548,7 @@ mod tests {
 
     use crate::ArchiveId;
 
-    use super::Link;
+    use super::{Cache, Link};
 
     #[test]
     fn test_link_round_trip() {
@@ -1581,6 +1558,21 @@ mod tests {
         let parsed = Link::from_str(&s).unwrap();
         assert_eq!(link.id, parsed.id);
         assert_eq!(link.version, parsed.version);
+    }
+
+    #[test]
+    fn test_replace_archive_link() {
+        let cache = Cache::temp().unwrap();
+        let link = cache.root().join("link");
+        for id in [ArchiveId::new(), ArchiveId::new()] {
+            let archive = cache.archive(&id);
+            fs_err::create_dir_all(&archive).unwrap();
+            cache.create_link(&id, &link).unwrap();
+            assert_eq!(
+                cache.resolve_link(&link).unwrap(),
+                archive.canonicalize().unwrap()
+            );
+        }
     }
 
     #[test]
