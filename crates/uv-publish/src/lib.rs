@@ -164,6 +164,58 @@ pub trait Reporter: Send + Sync + 'static {
     fn on_hash_complete(&self, id: usize);
 }
 
+/// A distribution whose metadata, hashes, and attestations are ready for upload.
+///
+/// Created by [`Self::read_from_file`]. Distribution contents are streamed from disk when
+/// uploading; only metadata and attestations are retained between attempts.
+#[derive(Debug)]
+pub struct PreparedDistribution<'a> {
+    distribution: &'a UploadDistribution,
+    form_metadata: FormMetadata,
+    attestations: Option<String>,
+}
+
+impl<'a> PreparedDistribution<'a> {
+    /// Read a distribution's metadata, hashes, and attestations without uploading it.
+    pub async fn read_from_file(
+        distribution: &'a UploadDistribution,
+        reporter: Arc<impl Reporter>,
+    ) -> Result<Self, PublishError> {
+        let prepared: Result<_, PublishPrepareError> = async {
+            let form_metadata =
+                FormMetadata::read_from_file(&distribution.file, &distribution.filename, reporter)
+                    .await?;
+
+            let mut attestations = Vec::with_capacity(distribution.attestations.len());
+            for attestation_path in &distribution.attestations {
+                let contents = fs_err::tokio::read_to_string(attestation_path).await?;
+                // Only validate that attestations are JSON; their interior structure is not checked.
+                let attestation =
+                    serde_json::from_str::<serde_json::Value>(&contents).map_err(|err| {
+                        PublishPrepareError::InvalidAttestation(attestation_path.clone(), err)
+                    })?;
+                attestations.push(attestation);
+            }
+
+            // PEP 740 specifies the `attestations` field as a JSON array of attestation objects.
+            let attestations = if attestations.is_empty() {
+                None
+            } else {
+                Some(serde_json::Value::Array(attestations).to_string())
+            };
+
+            Ok(Self {
+                distribution,
+                form_metadata,
+                attestations,
+            })
+        }
+        .await;
+        prepared
+            .map_err(|err| PublishError::PublishPrepare(distribution.file.clone(), Box::new(err)))
+    }
+}
+
 /// Context for using a fresh registry client for check URL requests.
 pub struct CheckUrlClient<'a> {
     pub index_url: IndexUrl,
@@ -383,7 +435,7 @@ fn group_files(files: Vec<PathBuf>, no_attestations: bool) -> Vec<UploadDistribu
 
 /// Collect the source distributions and wheels for publishing.
 ///
-/// Returns an [`UploadGroup`] for each distribution to be published.
+/// Returns an [`UploadDistribution`] for each distribution to be published.
 /// This group contains the path, the raw filename and the parsed filename. The raw filename is a fixup for
 /// <https://github.com/astral-sh/uv/issues/8030> caused by
 /// <https://github.com/pypa/setuptools/issues/3777> in combination with
@@ -489,14 +541,13 @@ pub async fn burn_trusted_publishing_token(
         .await
 }
 
-/// Upload a file to a registry.
+/// Upload a prepared distribution, reusing its metadata and attestations across attempts.
 ///
 /// Returns `true` if the file was newly uploaded and `false` if it already existed.
 ///
 /// Implements a custom retry flow since the request isn't cloneable.
 pub async fn upload(
-    group: &UploadDistribution,
-    form_metadata: &FormMetadata,
+    prepared: PreparedDistribution<'_>,
     registry: &DisplaySafeUrl,
     client: &BaseClient,
     retry_policy: ExponentialBackoff,
@@ -505,6 +556,7 @@ pub async fn upload(
     download_concurrency: &Semaphore,
     reporter: Arc<impl Reporter>,
 ) -> Result<bool, PublishError> {
+    let group = prepared.distribution;
     let mut n_past_redirections = 0;
     let max_redirects = DEFAULT_MAX_REDIRECTS;
     let mut current_registry = registry.clone();
@@ -512,11 +564,10 @@ pub async fn upload(
 
     loop {
         let (request, idx) = build_upload_request(
-            group,
+            &prepared,
             &current_registry,
             client,
             credentials,
-            form_metadata,
             reporter.clone(),
         )
         .await
@@ -904,13 +955,13 @@ async fn metadata(file: &Path, filename: &DistFilename) -> Result<Metadata23, Pu
 }
 
 #[derive(Debug, Clone)]
-pub struct FormMetadata(Vec<(&'static str, String)>);
+struct FormMetadata(Vec<(&'static str, String)>);
 
 impl FormMetadata {
     /// Collect the non-file fields for the multipart request from the package METADATA.
     ///
     /// Reference implementation: <https://github.com/pypi/warehouse/blob/d2c36d992cf9168e0518201d998b2707a3ef1e72/warehouse/forklift/legacy.py#L1376-L1430>
-    pub async fn read_from_file(
+    async fn read_from_file(
         file: &Path,
         filename: &DistFilename,
         reporter: Arc<impl Reporter>,
@@ -1070,15 +1121,15 @@ impl<'a> IntoIterator for &'a FormMetadata {
 ///
 /// Returns the [`RequestBuilder`] and the reporter progress bar ID.
 async fn build_upload_request<'a>(
-    group: &UploadDistribution,
+    prepared: &PreparedDistribution<'_>,
     registry: &DisplaySafeUrl,
     client: &'a BaseClient,
     credentials: &Credentials,
-    form_metadata: &FormMetadata,
     reporter: Arc<impl Reporter>,
 ) -> Result<(RequestBuilder<'a>, usize), PublishPrepareError> {
+    let group = prepared.distribution;
     let mut form = reqwest::multipart::Form::new();
-    for (key, value) in form_metadata.iter() {
+    for (key, value) in prepared.form_metadata.iter() {
         form = form.text(*key, value.clone());
     }
 
@@ -1091,26 +1142,13 @@ async fn build_upload_request<'a>(
     // Stream wrapping puts a static lifetime requirement on the reader (so the request doesn't have
     // a lifetime) -> callback needs to be static -> reporter reference needs to be Arc'd.
     let file_reader = Body::wrap_stream(ReaderStream::new(reader));
-    // See [`files_for_publishing`] on `raw_filename`
+    // See [`crate::group_files_for_publishing`] on `raw_filename`.
     let part =
         Part::stream_with_length(file_reader, file_size).file_name(group.raw_filename.clone());
     form = form.part("content", part);
 
-    let mut attestations = vec![];
-    for attestation_path in &group.attestations {
-        let contents = fs_err::read_to_string(attestation_path)?;
-        // NOTE: We don't currently validate the interior structure of an attestation beyond being
-        // valid JSON. We could validate it pretty easily in the future.
-        let raw_attestation = serde_json::from_str::<serde_json::Value>(&contents)
-            .map_err(|err| PublishPrepareError::InvalidAttestation(attestation_path.into(), err))?;
-        attestations.push(raw_attestation);
-    }
-
-    if !attestations.is_empty() {
-        // PEP 740 specifies the `attestations` field as a JSON array of attestation objects.
-        let attestations_json =
-            serde_json::to_string(&attestations).expect("Round-trip of PEP 740 attestation failed");
-        form = form.text("attestations", attestations_json);
+    if let Some(attestations) = &prepared.attestations {
+        form = form.text("attestations", attestations.clone());
     }
 
     // If we have a username but no password, attach the username to the URL so the authentication
@@ -1244,8 +1282,8 @@ mod tests {
     use uv_redacted::DisplaySafeUrl;
 
     use crate::{
-        FormMetadata, PublishError, PublishPrepareError, Reporter, UploadDistribution,
-        build_upload_request, group_files, source_dist_pkg_info, upload,
+        FormMetadata, PreparedDistribution, PublishError, PublishPrepareError, Reporter,
+        UploadDistribution, build_upload_request, group_files, source_dist_pkg_info, upload,
     };
     use tokio::sync::Semaphore;
     use uv_errors::{ErrorOptions, Hints, write_error_chain_with_options};
@@ -1356,10 +1394,9 @@ mod tests {
             attestations: vec![],
         };
 
-        let form_metadata =
-            FormMetadata::read_from_file(&group.file, &group.filename, Arc::new(DummyReporter))
-                .await
-                .unwrap();
+        let prepared = PreparedDistribution::read_from_file(&group, Arc::new(DummyReporter))
+            .await
+            .expect("Distribution preparation failed");
 
         let client = BaseClientBuilder::default()
             .redirect(RedirectPolicy::NoRedirect)
@@ -1371,8 +1408,7 @@ mod tests {
         let download_concurrency = Arc::new(Semaphore::new(1));
         let registry = DisplaySafeUrl::parse(&format!("{}/final", mock_server.uri())).unwrap();
         upload(
-            &group,
-            &form_metadata,
+            prepared,
             &registry,
             &client,
             client.retry_policy(),
@@ -1719,12 +1755,12 @@ mod tests {
             }
         };
 
-        let form_metadata =
-            FormMetadata::read_from_file(&group.file, &group.filename, Arc::new(DummyReporter))
-                .await
-                .unwrap();
+        let prepared = PreparedDistribution::read_from_file(&group, Arc::new(DummyReporter))
+            .await
+            .expect("Distribution preparation failed");
 
-        let formatted_metadata = form_metadata
+        let formatted_metadata = prepared
+            .form_metadata
             .iter()
             .map(|(k, v)| format!("{k}: {v}"))
             .join("\n");
@@ -1783,11 +1819,10 @@ mod tests {
             .build()
             .expect("failed to build base client");
         let (request, _) = build_upload_request(
-            &group,
+            &prepared,
             &DisplaySafeUrl::parse("https://example.org/upload").unwrap(),
             &client,
             &Credentials::basic(Some("ferris".to_string()), Some("F3RR!S".to_string())),
-            &form_metadata,
             Arc::new(DummyReporter),
         )
         .await
@@ -1844,12 +1879,12 @@ mod tests {
             }
         };
 
-        let form_metadata =
-            FormMetadata::read_from_file(&group.file, &group.filename, Arc::new(DummyReporter))
-                .await
-                .unwrap();
+        let prepared = PreparedDistribution::read_from_file(&group, Arc::new(DummyReporter))
+            .await
+            .expect("Distribution preparation failed");
 
-        let formatted_metadata = form_metadata
+        let formatted_metadata = prepared
+            .form_metadata
             .iter()
             .map(|(k, v)| format!("{k}: {v}"))
             .join("\n");
@@ -1946,11 +1981,10 @@ mod tests {
             .build()
             .expect("failed to build base client");
         let (request, _) = build_upload_request(
-            &group,
+            &prepared,
             &DisplaySafeUrl::parse("https://example.org/upload").unwrap(),
             &client,
             &Credentials::basic(Some("ferris".to_string()), Some("F3RR!S".to_string())),
-            &form_metadata,
             Arc::new(DummyReporter),
         )
         .await
