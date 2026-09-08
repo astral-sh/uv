@@ -73,6 +73,7 @@ struct ServerIndex {
 /// When [`PackseServer`] is dropped, the background thread and server are shut down.
 pub struct PackseServer {
     server: HttpServer,
+    index: Arc<ServerIndex>,
 }
 
 impl PackseServer {
@@ -105,11 +106,12 @@ impl PackseServer {
 
     fn start(scenario: &Scenario, hashes: bool) -> Self {
         let index = Arc::new(build_server_index(scenario));
+        let server_index = Arc::clone(&index);
         let server = HttpServer::start(move |request, server_uri| {
-            handle_request(request, server_uri, &index, hashes)
+            handle_request(request, server_uri, &server_index, hashes)
         });
 
-        Self { server }
+        Self { server, index }
     }
 
     /// The Simple API index URL (e.g., `http://127.0.0.1:PORT/simple/`).
@@ -120,6 +122,15 @@ impl PackseServer {
     /// Return the URL for a generated distribution file.
     pub fn file_url(&self, filename: &str) -> String {
         format!("{}/files/{filename}", self.server.url())
+    }
+
+    /// Return the filename and advertised SHA-256 digest of each distribution.
+    pub fn files(&self) -> impl Iterator<Item = (&str, &str)> {
+        self.index
+            .packages
+            .values()
+            .flat_map(|package| package.dists.iter())
+            .map(|dist| (dist.filename.as_str(), dist.sha256.as_str()))
     }
 }
 
