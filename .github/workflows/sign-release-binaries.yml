@@ -1,5 +1,4 @@
 # Sign and verify uv's macOS and Windows wheels and GitHub release archives.
-# Notarize the signed macOS executables before packaging them.
 name: "Sign release binaries"
 
 on:
