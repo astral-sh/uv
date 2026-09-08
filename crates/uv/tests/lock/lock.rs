@@ -1645,13 +1645,13 @@ async fn lock_sdist_url_locked_build_dependency_hash_mismatch() -> Result<()> {
             "upload-time": "2024-01-01T00:00:00Z",
         }],
     });
-    Mock::given(method("GET"))
+    let package_index = Mock::given(method("GET"))
         .and(path("/simple/review-dep/"))
         .respond_with(ResponseTemplate::new(200).set_body_raw(
             simple_index.to_string(),
             "application/vnd.pypi.simple.v1+json",
         ))
-        .mount(&server)
+        .mount_as_scoped(&server)
         .await;
     Mock::given(method("GET"))
         .and(path(format!("{wheel_path}.metadata")))
@@ -1752,6 +1752,45 @@ async fn lock_sdist_url_locked_build_dependency_hash_mismatch() -> Result<()> {
     sentinel.assert("");
     assert_eq!(context.read("uv.lock"), locked);
     fs_err::remove_file(&sentinel)?;
+
+    // Keep the configured index unchanged, but require build resolution to use `--find-links`.
+    drop(package_index);
+
+    // Both locked and unlocked validation must prefer the trusted build dependency from
+    // `--find-links`, even when another wheel has a higher build tag.
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--no-cache")
+        .arg("--find-links").arg(format!("{}/links", server.uri()))
+        .env("UV_LOCK_TEST_SENTINEL", sentinel.path()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+    assert!(
+        !sentinel.exists(),
+        "the replacement build dependency was executed"
+    );
+    assert_eq!(context.read("uv.lock"), locked);
+
+    uv_snapshot!(context.filters(), context.lock().arg("--no-cache")
+        .arg("--find-links").arg(format!("{}/links", server.uri()))
+        .env("UV_LOCK_TEST_SENTINEL", sentinel.path()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+    assert!(
+        !sentinel.exists(),
+        "the replacement build dependency was executed"
+    );
+    assert_eq!(context.read("uv.lock"), locked);
+    Mock::given(method("GET"))
+        .and(path("/simple/review-dep/"))
+        .respond_with(ResponseTemplate::new(200).set_body_raw(
+            simple_index.to_string(),
+            "application/vnd.pypi.simple.v1+json",
+        ))
+        .mount(&server)
+        .await;
 
     drop(trusted_wheel);
     let replacement_wheel = Mock::given(method("GET"))
@@ -1896,6 +1935,7 @@ async fn lock_sdist_url_locked_build_dependency_hash_mismatch() -> Result<()> {
 
     // Explicitly unlocked resolution retains its existing update policy.
     uv_snapshot!(context.filters(), context.lock().arg("--upgrade").arg("--no-cache")
+        .arg("--no-index").arg("--find-links").arg(format!("{}/links", server.uri()))
         .env("UV_LOCK_TEST_SENTINEL", sentinel.path()), @"
     exit_code: 0 (success)
     ----- stderr -----

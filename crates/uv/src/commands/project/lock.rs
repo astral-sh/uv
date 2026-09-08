@@ -855,13 +855,14 @@ async fn do_lock(
     let groups = BTreeMap::new();
 
     // Resolve the flat indexes from `--find-links`.
-    let flat_index = {
+    let flat_index_entries = {
         let client = FlatIndexClient::new(client.cached_client(), client.connectivity(), cache);
-        let entries = client
+        client
             .fetch_all(index_locations.flat_indexes().map(Index::url))
-            .await?;
-        FlatIndex::from_entries(entries, None, &hasher, build_options)
+            .await?
     };
+    let flat_index =
+        FlatIndex::from_entries(flat_index_entries.clone(), None, &hasher, build_options);
 
     // Lower the extra build dependencies.
     let extra_build_requires = match &target {
@@ -894,40 +895,44 @@ async fn do_lock(
     // Convert to the `Constraints` format.
     let dispatch_constraints = Constraints::from_requirements(build_constraints.iter().cloned());
 
-    // Create at most two build contexts: one while checking the existing lockfile, and another
-    // only if a fresh resolution is needed. They may enforce different hashes, so each gets a
-    // fresh in-memory index and in-flight cache.
-    let make_build_dispatch = |build_hasher| {
-        BuildDispatch::new(
-            &client,
-            cache,
-            &dispatch_constraints,
-            interpreter,
-            index_locations,
-            &flat_index,
-            dependency_metadata,
-            state.fork().into_inner(),
-            *index_strategy,
-            config_setting,
-            config_settings_package,
-            build_isolation,
-            &extra_build_requires,
-            extra_build_variables,
-            *link_mode,
-            build_options,
-            build_hasher,
-            exclude_newer.clone(),
-            sources.clone(),
-            SourceTreeEditablePolicy::Project,
-            workspace_cache.clone(),
-            concurrency.clone(),
-            preview,
-        )
-    };
+    // Create a build dispatch for fresh resolution.
+    let build_dispatch = BuildDispatch::new(
+        &client,
+        cache,
+        &dispatch_constraints,
+        interpreter,
+        index_locations,
+        &flat_index,
+        dependency_metadata,
+        state.fork().into_inner(),
+        *index_strategy,
+        config_setting,
+        config_settings_package,
+        build_isolation,
+        &extra_build_requires,
+        extra_build_variables,
+        *link_mode,
+        build_options,
+        &resolution_build_hasher,
+        exclude_newer.clone(),
+        sources.clone(),
+        SourceTreeEditablePolicy::Project,
+        workspace_cache.clone(),
+        concurrency.clone(),
+        preview,
+    );
 
     // If any of the resolution-determining settings changed, invalidate the lock.
     let existing_lock = if let Some(existing_lock) = existing_lock {
-        let validation_build_dispatch = make_build_dispatch(&locked_build_hasher);
+        // Rank build dependencies using the same hashes that validation will enforce.
+        let locked_flat_index = FlatIndex::from_entries(
+            flat_index_entries,
+            None,
+            &locked_build_hasher,
+            build_options,
+        );
+        let validation_build_dispatch =
+            build_dispatch.fork(&locked_build_hasher, &locked_flat_index);
         let database = DistributionDatabase::new(
             &client,
             &validation_build_dispatch,
@@ -999,7 +1004,6 @@ async fn do_lock(
         // The lockfile did not contain enough information to obtain a resolution, fallback
         // to a fresh resolve.
         _ => {
-            let build_dispatch = make_build_dispatch(&resolution_build_hasher);
             let database = DistributionDatabase::new(
                 &client,
                 &build_dispatch,
