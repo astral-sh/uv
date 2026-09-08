@@ -13,8 +13,8 @@ exclude-newer = "0001-01-01T00:00:00Z" # This has no effect and is included for 
 exclude-newer-span = "P7D"
 
 [options.exclude-newer-package]
-astral-dev-toolchain-cargo-shear = "2026-08-27T04:00:00Z"
 astral-dev-toolchain-cargo-dist = "2026-08-28T04:00:00Z"
+astral-dev-toolchain-cargo-shear = "2026-08-27T04:00:00Z"
 
 [[package]]
 name = "annotated-doc"
@@ -1749,7 +1749,7 @@ wheels = [
 
 [[package]]
 name = "uv"
-version = "0.12.10"
+version = "0.12.11"
 source = { editable = "." }
 
 [package.dev-dependencies]
