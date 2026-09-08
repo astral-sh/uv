@@ -122,7 +122,7 @@ jobs:
           if-no-files-found: error
 
   sign-macos:
-    name: "sign macos binaries"
+    name: "sign and notarize macos binaries"
     needs: prepare
     if: ${{ github.repository == 'astral-sh/uv' && github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' }}
     runs-on: ubuntu-24.04
@@ -180,6 +180,13 @@ jobs:
           while read -r target; do
             uv run scripts/sign-release-macos.py "./unsigned/$target" "./signed/$target"
           done < <(jq -r '.[].target' <<< "$TARGETS")
+
+      - name: "Notarize signed macOS executables"
+        shell: bash
+        env:
+          AZURE_KEYVAULT_NAME: ${{ secrets.CODESIGN_AZURE_KEYVAULT_NAME }}
+          APPLE_NOTARIZATION_AKV_KEY_NAME: ${{ secrets.CODESIGN_APPLE_NOTARIZATION_AKV_KEY_NAME }}
+        run: uv run scripts/notarize-release-macos.py ./signed
 
       - name: "Upload signed executable wheel members"
         id: upload
