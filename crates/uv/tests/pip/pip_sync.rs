@@ -3293,7 +3293,7 @@ fn require_hashes_in_requirements_txt() -> Result<()> {
         .arg("requirements.txt"), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: In `--require-hashes` mode, registry requirements must be pinned with `==` or `===`, but found: anyio
+    error: In `--require-hashes` mode, all requirements must have their versions pinned with `==`, but found: anyio
     "
     );
 
@@ -3342,7 +3342,7 @@ fn require_hashes_missing_version() -> Result<()> {
         .arg("--require-hashes"), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: In `--require-hashes` mode, registry requirements must be pinned with `==` or `===`, but found: anyio
+    error: In `--require-hashes` mode, all requirements must have their versions pinned with `==`, but found: anyio
     "
     );
 
@@ -3377,7 +3377,7 @@ fn require_hashes_invalid_operator() -> Result<()> {
         .arg("--require-hashes"), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: In `--require-hashes` mode, registry requirements must be pinned with `==` or `===`, but found: anyio>4.0.0
+    error: In `--require-hashes` mode, all requirements must have their versions pinned with `==`, but found: anyio>4.0.0
     "
     );
 
@@ -4127,7 +4127,7 @@ fn require_hashes_repeated_dependency() -> Result<()> {
         .arg("--require-hashes"), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: In `--require-hashes` mode, registry requirements must be pinned with `==` or `===`, but found: anyio
+    error: In `--require-hashes` mode, all requirements must have their versions pinned with `==`, but found: anyio
     "
     );
 
@@ -4141,7 +4141,7 @@ fn require_hashes_repeated_dependency() -> Result<()> {
         .arg("--require-hashes"), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: In `--require-hashes` mode, registry requirements must be pinned with `==` or `===`, but found: anyio
+    error: In `--require-hashes` mode, all requirements must have their versions pinned with `==`, but found: anyio
     "
     );
 

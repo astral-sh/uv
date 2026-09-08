@@ -524,7 +524,7 @@ pub enum HashStrategyError {
     #[error("Conflicting archive URL hashes for `{0}`: `{1}` conflicts with `{2}`")]
     ConflictingArchiveUrlHashes(String, HashDigest, HashDigest),
     #[error(
-        "In `{1}` mode, registry requirements must be pinned with `==` or `===`, but found: {0}"
+        "In `{1}` mode, all requirements must have their versions pinned with `==`, but found: {0}"
     )]
     UnpinnedRequirement(String, HashCheckingMode),
     #[error(

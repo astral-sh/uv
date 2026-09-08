@@ -1208,7 +1208,7 @@ fn install_require_hashes_in_requirements_txt() -> Result<()> {
         .arg("--strict"), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: In `--require-hashes` mode, registry requirements must be pinned with `==` or `===`, but found: iniconfig
+    error: In `--require-hashes` mode, all requirements must have their versions pinned with `==`, but found: iniconfig
     "
     );
 
@@ -8459,7 +8459,7 @@ fn require_hashes_missing_dependency() -> Result<()> {
         .arg("--require-hashes"), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: In `--require-hashes` mode, all requirements must be pinned and hashed upfront, but found: `markupsafe`
+    error: In `--require-hashes` mode, all requirements must be pinned upfront with `==`, but found: `markupsafe`
     "
     );
 
@@ -8542,7 +8542,7 @@ fn require_hashes_constraint() -> Result<()> {
         .arg(constraints_txt.path()), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: In `--require-hashes` mode, registry requirements must be pinned with `==` or `===`, but found: anyio
+    error: In `--require-hashes` mode, all requirements must have their versions pinned with `==`, but found: anyio
     "
     );
 
@@ -8754,7 +8754,7 @@ fn require_hashes_override() -> Result<()> {
         .arg(overrides_txt.path()), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: In `--require-hashes` mode, registry requirements must be pinned with `==` or `===`, but found: anyio
+    error: In `--require-hashes` mode, all requirements must have their versions pinned with `==`, but found: anyio
     "
     );
 
