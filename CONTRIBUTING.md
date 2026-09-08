@@ -139,20 +139,6 @@ cargo run -- venv
 cargo run -- pip install requests
 ```
 
-### Debug information
-
-Development and test builds use `line-tables-only` debug information by default to speed up
-compilation while preserving file names and line numbers for backtraces and source-line stepping. To
-inspect local variables in a debugger, enable full debug information:
-
-```shell
-CARGO_PROFILE_DEV_DEBUG=full cargo run -- venv
-CARGO_PROFILE_TEST_DEBUG=full cargo nextest run -E 'test(test_name)'
-```
-
-Use the `no-debug` profile to omit debug information entirely. Both the default and `no-debug`
-profiles retain debug assertions and leave optimizations disabled.
-
 ## Formatting
 
 ```shell
