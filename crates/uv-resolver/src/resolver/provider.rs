@@ -121,7 +121,7 @@ pub struct DefaultResolverProvider<'a, Context: BuildContext> {
     tags: Option<Tags>,
     requires_python: RequiresPython,
     allowed_yanks: AllowedYanks,
-    hasher: HashStrategy,
+    hasher: &'a HashStrategy,
     exclude_newer: ExcludeNewer,
     available_version_cutoff: Option<jiff::Timestamp>,
     index_locations: &'a IndexLocations,
@@ -149,7 +149,7 @@ impl<'a, Context: BuildContext> DefaultResolverProvider<'a, Context> {
             tags: tags.cloned(),
             requires_python: requires_python.clone(),
             allowed_yanks,
-            hasher: hasher.clone(),
+            hasher,
             exclude_newer,
             available_version_cutoff: std::env::var(EnvVars::UV_TEST_AVAILABLE_VERSION_CUTOFF)
                 .ok()
@@ -200,7 +200,7 @@ impl<Context: BuildContext> ResolverProvider for DefaultResolverProvider<'_, Con
                 FlatDistributions::from_entries(
                     entries.iter().cloned(),
                     self.tags.as_ref(),
-                    &self.hasher,
+                    self.hasher,
                     self.build_options,
                 )
             });
@@ -234,7 +234,7 @@ impl<Context: BuildContext> ResolverProvider for DefaultResolverProvider<'_, Con
                             MetadataFormat::Flat(metadata) => VersionMap::from_flat_metadata(
                                 metadata,
                                 self.tags.as_ref(),
-                                &self.hasher,
+                                self.hasher,
                                 self.build_options,
                             ),
                         }

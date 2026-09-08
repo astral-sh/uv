@@ -841,10 +841,9 @@ async fn do_lock(
     // A fresh resolution retains those hashes under `--locked`, but an explicitly unlocked update
     // must be able to replace them. Build dependencies follow the same choice without generating
     // hashes for artifacts absent from the lockfile.
-    let resolution_build_hasher = if matches!(mode, LockMode::Locked(..)) {
-        locked_build_hasher.clone()
-    } else {
-        HashStrategy::default()
+    let resolution_build_hasher = match mode {
+        LockMode::Locked(..) => &locked_build_hasher,
+        LockMode::Write(_) | LockMode::DryRun(_) | LockMode::Frozen(_) => &HashStrategy::default(),
     };
     let hasher = HashStrategy::generate(HashGeneration::Url)
         .with_verification(resolution_build_hasher.verification().clone());
@@ -912,7 +911,7 @@ async fn do_lock(
         extra_build_variables,
         *link_mode,
         build_options,
-        &resolution_build_hasher,
+        resolution_build_hasher,
         exclude_newer.clone(),
         sources.clone(),
         SourceTreeEditablePolicy::Project,
