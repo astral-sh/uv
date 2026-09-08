@@ -1,5 +1,5 @@
 use std::env;
-use std::fmt::Write;
+use std::fmt::{self, Write};
 use std::ops::Deref;
 use std::sync::LazyLock;
 use std::sync::{Arc, Mutex};
@@ -693,24 +693,54 @@ impl uv_python::downloads::Reporter for PythonDownloadReporter {
 #[derive(Debug)]
 pub(crate) struct PublishReporter {
     reporter: ProgressReporter,
+    dry_run: bool,
 }
 
 impl PublishReporter {
     /// Initialize a [`PublishReporter`] for a single upload.
-    pub(crate) fn single(printer: Printer) -> Self {
-        Self::new(printer, None)
+    pub(crate) fn single(printer: Printer, dry_run: bool) -> Self {
+        Self::new(printer, None, dry_run)
     }
 
     /// Initialize a [`PublishReporter`] for multiple uploads.
-    fn new(printer: Printer, length: Option<u64>) -> Self {
+    fn new(printer: Printer, length: Option<u64>, dry_run: bool) -> Self {
         let multi_progress = MultiProgress::with_draw_target(printer.target());
         let root = multi_progress.add(ProgressBar::with_draw_target(length, printer.target()));
         let reporter = ProgressReporter::new(root, multi_progress, printer);
-        Self { reporter }
+        Self { reporter, dry_run }
     }
 }
 
 impl uv_publish::Reporter for PublishReporter {
+    fn on_validation_start(&self, name: &DistFilename, size: u64) -> Result<(), fmt::Error> {
+        let bytes = human_readable_bytes(size);
+        if self.dry_run {
+            writeln!(
+                self.reporter.printer.stderr(),
+                "{} {name} {}",
+                "Checking".bold().cyan(),
+                format!("({bytes:.1})").dimmed()
+            )
+        } else {
+            writeln!(
+                self.reporter.printer.stderr(),
+                "{} {name} {}",
+                "Hashing".bold().green(),
+                format!("({bytes:.1})").dimmed()
+            )
+        }
+    }
+
+    fn on_upload_ready(&self, name: &DistFilename, size: u64) -> Result<(), fmt::Error> {
+        let bytes = human_readable_bytes(size);
+        writeln!(
+            self.reporter.printer.stderr(),
+            "{} {name} {}",
+            "Uploading".bold().green(),
+            format!("({bytes:.1})").dimmed()
+        )
+    }
+
     fn on_progress(&self, _name: &str, id: usize) {
         self.reporter.on_download_complete(id);
     }
