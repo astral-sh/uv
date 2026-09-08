@@ -405,10 +405,8 @@ impl HashStrategy {
                 };
 
                 // Must be pinned to a specific version.
-                let is_pinned = match specifier.operator() {
-                    Operator::Equal | Operator::ExactEqual => true,
-                    _ => false,
-                };
+                let is_pinned =
+                    matches!(specifier.operator(), Operator::Equal | Operator::ExactEqual);
                 if !is_pinned {
                     return None;
                 }
