@@ -1072,7 +1072,11 @@ mod tests {
         let total_delay: std::time::Duration = std::iter::from_fn(|| backoff.next()).sum();
 
         assert!(total_delay <= DEFAULT_FILE_MOVE_RETRY_TIMEOUT);
-        assert!(total_delay >= DEFAULT_FILE_MOVE_RETRY_TIMEOUT.saturating_sub(std::time::Duration::from_secs(1)));
+        assert!(
+            total_delay
+                >= DEFAULT_FILE_MOVE_RETRY_TIMEOUT
+                    .saturating_sub(std::time::Duration::from_secs(1))
+        );
     }
 
     #[test]
