@@ -98,6 +98,17 @@ impl HashStrategy {
                 if let Some(hashes) = hashes.get(&id) {
                     return hash_policy(&id, hashes);
                 }
+                // A public version pin also admits local versions. Verify their distributions
+                // against the public version's hashes when no exact local-version pin exists.
+                if let VersionId::NameVersion(name, version) = &id
+                    && version.is_local()
+                    && let Some(hashes) = hashes.get(&VersionId::from_registry(
+                        name.clone(),
+                        version.clone().without_local(),
+                    ))
+                {
+                    return HashPolicy::Any(hashes);
+                }
             }
             HashVerification::Required(hashes) => {
                 let id = id();
@@ -658,6 +669,38 @@ mod tests {
             HashPolicy::Generate(HashGeneration::All)
         );
 
+        Ok(())
+    }
+
+    #[test]
+    fn verify_local_registry_version_prefers_its_exact_hashes()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let name: PackageName = "hash-probe".parse()?;
+        let public_version: Version = "1.0.0".parse()?;
+        let local_version: Version = "1.0.0+local".parse()?;
+        let other_local_version: Version = "1.0.0+other".parse()?;
+        let public_digest = HashDigest::from_str("sha256:123")?;
+        let local_digest = HashDigest::from_str("sha256:456")?;
+        let hashes = FxHashMap::from_iter([
+            (
+                VersionId::from_registry(name.clone(), public_version.clone()),
+                vec![public_digest.clone()],
+            ),
+            (
+                VersionId::from_registry(name.clone(), local_version.clone()),
+                vec![local_digest.clone()],
+            ),
+        ]);
+        let strategy = HashStrategy::verify(Arc::new(hashes));
+
+        assert_eq!(
+            strategy.get_package(&name, &local_version),
+            HashPolicy::Any(slice::from_ref(&local_digest))
+        );
+        assert_eq!(
+            strategy.get_package(&name, &other_local_version),
+            HashPolicy::Any(slice::from_ref(&public_digest))
+        );
         Ok(())
     }
 

@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::fmt::Write;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -31,7 +32,7 @@ use uv_test::archive::write_tar_gz;
 #[cfg(feature = "test-git")]
 use uv_test::decode_token;
 use uv_test::find_links::FindLinksServer;
-use uv_test::packse::PackseServer;
+use uv_test::packse::{PackseServer, generate_wheel};
 use uv_test::{
     DEFAULT_PYTHON_VERSION, TestContext, apply_filters, download_to_disk, get_bin, uv_snapshot,
     venv_bin_path,
@@ -9208,7 +9209,60 @@ fn verify_hashes_exact_equal() -> Result<()> {
             ");
         }
     }
+/// A public version pin's hash must also protect a selected local version.
+#[test]
+fn verify_hashes_public_pin_local_version() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let name = "hash-probe".parse()?;
+    let public_version = "1.0.0".parse()?;
+    let local_version = "1.0.0+local".parse()?;
+    let (_, public_wheel) = generate_wheel(
+        &name,
+        &public_version,
+        &[],
+        &BTreeMap::default(),
+        None,
+        "py3-none-any",
+    );
+    let (local_wheel_filename, local_wheel) = generate_wheel(
+        &name,
+        &local_version,
+        &[],
+        &BTreeMap::default(),
+        None,
+        "py3-none-any",
+    );
+    let public_hash = hex::encode(Sha256::digest(&public_wheel));
+    let local_hash = hex::encode(Sha256::digest(&local_wheel));
+    let context = context
+        .with_filter((public_hash.clone(), "[PUBLIC_HASH]"))
+        .with_filter((local_hash.clone(), "[LOCAL_HASH]"));
 
+    let links = context.temp_dir.child("links");
+    links.create_dir_all()?;
+    fs::write(links.child(local_wheel_filename).path(), local_wheel)?;
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str(&format!("hash-probe==1.0.0 --hash=sha256:{public_hash}"))?;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("-r")
+        .arg("requirements.txt")
+        .arg("--no-index")
+        .arg("--find-links")
+        .arg(links.path())
+        .arg("--verify-hashes"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+      × Failed to download `hash-probe==1.0.0+local`
+      ╰─▶ Hash mismatch for `hash-probe==1.0.0+local`
+
+          Expected:
+            sha256:[PUBLIC_HASH]
+
+          Computed:
+            sha256:[LOCAL_HASH]
+    ");
     Ok(())
 }
 
