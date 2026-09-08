@@ -60,10 +60,9 @@ $ uv build --build-constraint constraints.txt --require-hashes
 
 ### Project build dependency hashes
 
-Provide hashes in
-[`build-constraint-dependencies`](../../reference/settings.md#build-constraint-dependencies) to
-verify downloaded build dependency archives. Use a table with `requirement` and `hashes`; entries
-without hashes can be strings:
+Projects can also specify build constraints in
+[`build-constraint-dependencies`](../../reference/settings.md#build-constraint-dependencies). To
+verify a downloaded build dependency, provide its `requirement` and `hashes` in a table:
 
 ```toml
 [tool.uv]
@@ -73,10 +72,10 @@ build-constraint-dependencies = [
 ]
 ```
 
-uv retains hashes in `uv.lock` and verifies them for pinned build constraints when downloading build
-dependencies during project resolution and installation, including builds in `uv run --with`
-environments. These hashes apply to build dependencies, not the packages installed in the project
-environment.
+An entry without hashes can be written as a string, as shown with `wheel<1` above. uv records the
+supplied hashes in `uv.lock` and checks them when it downloads pinned build dependencies during
+project resolution or installation, including builds in `uv run --with` environments. The hashes do
+not apply to packages installed in the project environment.
 
 ## Preventing publish to PyPI
 
