@@ -58,7 +58,11 @@ def azure_json(*arguments: str) -> dict:
 
 
 def notarization_key() -> tuple[str, str, str]:
-    """Resolve the current key version and its Apple key and issuer IDs."""
+    """Resolve the current key version and its Apple key and issuer IDs.
+
+    The key URL is an identifier, not an access credential. Azure CLI uses the
+    workflow's existing Azure login to read key metadata and sign requests.
+    """
     vault = os.environ["AZURE_KEYVAULT_NAME"]
     name = os.environ["APPLE_NOTARIZATION_AKV_KEY_NAME"]
     key = azure_json(
