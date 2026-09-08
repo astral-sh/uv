@@ -184,7 +184,7 @@ impl HashStrategy {
             }
 
             // Every constraint must be a pinned version.
-            let Some(id) = Self::pin(requirement) else {
+            let Some(id) = Self::pin(requirement, mode) else {
                 if mode.is_require() {
                     return Err(HashStrategyError::UnpinnedRequirement(
                         requirement.to_string(),
@@ -227,7 +227,7 @@ impl HashStrategy {
             // Every requirement must be either a pinned version or a direct URL.
             let id = match &requirement {
                 UnresolvedRequirement::Named(requirement) => {
-                    if let Some(id) = Self::pin(requirement) {
+                    if let Some(id) = Self::pin(requirement, mode) {
                         id
                     } else {
                         if mode.is_require() {
@@ -391,12 +391,12 @@ impl HashStrategy {
             return None;
         }
         digests.sort_unstable();
-        let id = Self::pin(requirement)?;
+        let id = Self::pin(requirement, HashCheckingMode::Require)?;
         Some((id, digests))
     }
 
     /// Pin a [`Requirement`] to a [`VersionId`], if possible.
-    fn pin(requirement: &Requirement) -> Option<VersionId> {
+    fn pin(requirement: &Requirement, mode: HashCheckingMode) -> Option<VersionId> {
         match &requirement.source {
             RequirementSource::Registry { specifier, .. } => {
                 // Must be a single specifier.
@@ -404,8 +404,17 @@ impl HashStrategy {
                     return None;
                 };
 
-                // Must be pinned to a specific version.
-                if *specifier.operator() != uv_pep440::Operator::Equal {
+                // Arbitrary equality pins a single version, but `--require-hashes` needs `==`.
+                let is_pinned = match mode {
+                    HashCheckingMode::Verify => {
+                        *specifier.operator() == uv_pep440::Operator::Equal
+                            || *specifier.operator() == uv_pep440::Operator::ExactEqual
+                    }
+                    HashCheckingMode::Require => {
+                        *specifier.operator() == uv_pep440::Operator::Equal
+                    }
+                };
+                if !is_pinned {
                     return None;
                 }
 

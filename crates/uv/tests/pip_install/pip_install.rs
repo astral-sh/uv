@@ -9075,6 +9075,39 @@ fn verify_hashes_mismatch() -> Result<()> {
     Ok(())
 }
 
+/// Verify hashes on arbitrary-equality pins.
+#[test]
+fn verify_hashes_exact_equal() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str(
+        "ok===1.0.0 --hash=sha256:0000000000000000000000000000000000000000000000000000000000000000",
+    )?;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("-r")
+        .arg("requirements.txt")
+        .arg("--no-index")
+        .arg("--find-links")
+        .arg(context.workspace_root.join("test/links/"))
+        .arg("--verify-hashes"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+      × Failed to download `ok==1.0.0`
+      ╰─▶ Hash mismatch for `ok==1.0.0`
+
+          Expected:
+            sha256:0000000000000000000000000000000000000000000000000000000000000000
+
+          Computed:
+            sha256:79f0b33e6ce1e09eaa1784c8eee275dfe84d215d9c65c652f07c18e85fdaac5f
+    ");
+
+    Ok(())
+}
+
 /// Provide the correct hash with `--verify-hashes`.
 #[test]
 fn verify_hashes_match() -> Result<()> {
