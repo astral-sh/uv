@@ -2,6 +2,7 @@ mod trusted_publishing;
 
 use std::borrow::Cow;
 use std::collections::BTreeSet;
+use std::fmt::Display;
 use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -212,6 +213,16 @@ pub enum PublishOutcome {
     Failed,
     /// Validation succeeded without uploading any files.
     DryRun,
+}
+
+impl Display for PublishOutcome {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Success => write!(f, "success"),
+            Self::Failed => write!(f, "failed"),
+            Self::DryRun => write!(f, "dry-run"),
+        }
+    }
 }
 
 /// A failure while finalizing a publishing session.
@@ -923,7 +934,7 @@ impl<'a> PublishSession<'a> {
     ///
     /// A successful invalidation request does not guarantee that the token was revoked.
     pub async fn finalize(self, outcome: PublishOutcome) -> Result<(), PublishFinalizeError> {
-        debug!("Finalizing publishing session: {outcome:?}");
+        debug!("Finalizing publishing session: {outcome}");
         match self.credentials {
             PublishingCredentials::Supplied(_) => Ok(()),
             PublishingCredentials::TrustedPublishing(token) => {
