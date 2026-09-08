@@ -314,10 +314,9 @@ fn replace_with_symlink_dir(src: &Path, dst: &Path) -> std::io::Result<()> {
 
 /// Create a symlink at `dst` pointing to `src`, replacing any existing symlink if necessary.
 ///
-/// On Unix, existing links are replaced atomically.
+/// On Unix, this method creates a temporary file, then moves it into place.
 #[cfg(unix)]
 pub fn replace_symlink(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> std::io::Result<()> {
-    // Attempt to create the symlink directly.
     match fs_err::os::unix::fs::symlink(src.as_ref(), dst.as_ref()) {
         Ok(()) => Ok(()),
         Err(err) if err.kind() == std::io::ErrorKind::AlreadyExists => {

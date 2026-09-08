@@ -796,6 +796,7 @@ fn atomic_hardlink_overwrite(
     dst: &Path,
     state: LinkState,
 ) -> Result<LinkState, LinkError> {
+    // TODO(zanieb): Consider propagating an error instead of panicking if `dst` has no parent.
     if let Ok(temp_file) = tempfile::Builder::new().make_in(
         dst.parent().expect("Link path must have a parent"),
         |temp_path| try_hardlink_file(src, temp_path),
@@ -833,6 +834,7 @@ fn atomic_symlink_overwrite(
     dst: &Path,
     state: LinkState,
 ) -> Result<LinkState, LinkError> {
+    // TODO(zanieb): Consider propagating an error instead of panicking if `dst` has no parent.
     if let Ok(temp_file) = tempfile::Builder::new().make_in(
         dst.parent().expect("Link path must have a parent"),
         |temp_path| create_symlink(src, temp_path),
