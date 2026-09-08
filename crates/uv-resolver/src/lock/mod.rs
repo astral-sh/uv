@@ -34,10 +34,10 @@ use uv_distribution_filename::{
 use uv_distribution_types::{
     BuiltDist, DependencyMetadata, DirectUrlBuiltDist, DirectUrlSourceDist, DirectorySourceDist,
     Dist, FileLocation, FirstParty, GitDirectorySourceDist, GitPathBuiltDist, GitPathSourceDist,
-    Identifier, IndexLocations, IndexMetadata, IndexUrl, Name, PYPI_URL, PathBuiltDist,
+    HashPolicy, Identifier, IndexLocations, IndexMetadata, IndexUrl, Name, PYPI_URL, PathBuiltDist,
     PathSourceDist, RegistryBuiltDist, RegistryBuiltWheel, RegistrySourceDist, RemoteSource,
     Requirement, RequirementSource, RequiresPython, ResolvedDist, SimplifiedMarkerTree,
-    StaticMetadata, ToUrlError, UrlString,
+    StaticMetadata, ToUrlError, UrlString, VersionId,
 };
 use uv_fs::{PortablePath, PortablePathBuf, Simplified, normalize_path, try_relative_to_if};
 use uv_git::{RepositoryReference, ResolvedRepositoryReference};
@@ -1366,6 +1366,58 @@ impl Lock {
     /// Returns the [`Package`] entries in this lock.
     pub fn packages(&self) -> &[Package] {
         &self.packages
+    }
+
+    /// Return a [`HashStrategy`] that verifies artifacts recorded in this lockfile.
+    ///
+    /// Artifacts absent from the lockfile do not require hashes. This strategy does not generate
+    /// hashes for those artifacts.
+    pub fn hash_strategy(&self, root: &Path) -> Result<HashStrategy, LockError> {
+        let mut hashes: FxHashMap<VersionId, Vec<HashDigest>> = FxHashMap::default();
+
+        for package in &self.packages {
+            let (id, package_hashes) = match &package.id.source {
+                Source::Registry(_) => {
+                    let Some(version) = &package.id.version else {
+                        continue;
+                    };
+                    (
+                        VersionId::from_registry(package.id.name.clone(), version.clone()),
+                        package.hashes(),
+                    )
+                }
+                Source::Direct(url, source) => (
+                    VersionId::from_archive(
+                        url.to_url().map_err(LockErrorKind::InvalidUrl)?,
+                        source.subdirectory.clone().map(Path::into_path_buf),
+                    ),
+                    package.hashes(),
+                ),
+                Source::Path(path) => (
+                    VersionId::from_path(&absolute_path(root, path)?),
+                    package.hashes(),
+                ),
+                Source::Git(..)
+                | Source::Directory(_)
+                | Source::Editable(_)
+                | Source::Virtual(_) => continue,
+            };
+            if package_hashes.is_empty() {
+                continue;
+            }
+            let digests = hashes.entry(id).or_default();
+            for hash in package_hashes {
+                if !digests.contains(&hash) {
+                    digests.push(hash);
+                }
+            }
+        }
+
+        if hashes.is_empty() {
+            Ok(HashStrategy::default())
+        } else {
+            Ok(HashStrategy::verify(Arc::new(hashes)))
+        }
     }
 
     /// Return whether every registry artifact in the lockfile has a hash using its index's
@@ -3212,13 +3264,22 @@ impl Lock {
         index: &InMemoryIndex,
         database: &DistributionDatabase<'_, Context>,
     ) -> Result<DistributionMetadata, LockError> {
-        let HashedDist { dist, .. } = package.to_dist(
+        let HashedDist { dist, hashes } = package.to_dist(
             root,
             TagPolicy::Preferred(tags),
             build_options,
             markers,
             FirstParty::No,
         )?;
+        let locked_hashes = match (&package.id.source, &dist) {
+            (Source::Direct(..) | Source::Path(_), Dist::Source(_)) if !hashes.is_empty() => {
+                Some(HashPolicy::All(hashes.as_slice()))
+            }
+            (Source::Registry(_), Dist::Source(_)) if !hashes.is_empty() => {
+                Some(HashPolicy::Any(hashes.as_slice()))
+            }
+            _ => None,
+        };
         let id = dist.distribution_id();
         if let Some(archive) = index
             .distributions()
@@ -3231,12 +3292,13 @@ impl Lock {
                     None
                 }
             })
+            && locked_hashes.is_none_or(|policy| policy.matches(archive.hashes.as_slice()))
         {
             return Ok(archive.metadata.clone());
         }
 
         let archive = database
-            .get_or_build_wheel_metadata(&dist, hasher.get(&dist))
+            .get_or_build_wheel_metadata(&dist, locked_hashes.unwrap_or_else(|| hasher.get(&dist)))
             .await
             .map_err(|err| LockErrorKind::Resolution {
                 id: package.id.clone(),
@@ -8049,6 +8111,54 @@ mod tests {
         assert!(GitSource::from_url(&url).is_ok());
 
         Ok(())
+    }
+
+    #[test]
+    fn hash_strategy_includes_direct_and_local_wheels() {
+        let lock: Lock = toml::from_str(
+            r#"
+version = 1
+revision = 3
+requires-python = ">=3.12"
+
+[[package]]
+name = "remote"
+version = "1.0.0"
+source = { url = "https://example.com/remote-1.0.0-py3-none-any.whl" }
+wheels = [{ filename = "remote-1.0.0-py3-none-any.whl", hash = "sha256:53a42340ae36747fb1471f9b4b7958be1f6e2e5fc234f931aafa3e454fd31dfb" }]
+
+[[package]]
+name = "local"
+version = "1.0.0"
+source = { path = "local-1.0.0-py3-none-any.whl" }
+wheels = [{ filename = "local-1.0.0-py3-none-any.whl", hash = "sha256:53a42340ae36747fb1471f9b4b7958be1f6e2e5fc234f931aafa3e454fd31dfb" }]
+"#,
+        )
+        .expect("valid lock");
+        let root = std::env::current_dir().expect("current directory");
+        let hasher = lock.hash_strategy(&root).expect("valid source paths");
+        let digest = HashDigest::from_str(
+            "sha256:53a42340ae36747fb1471f9b4b7958be1f6e2e5fc234f931aafa3e454fd31dfb",
+        )
+        .expect("valid digest");
+        let remote = "https://example.com/remote-1.0.0-py3-none-any.whl"
+            .parse()
+            .expect("valid URL");
+        let local = DisplaySafeUrl::from_file_path(root.join("local-1.0.0-py3-none-any.whl"))
+            .expect("valid file URL");
+        let unknown = "https://example.com/unknown-1.0.0-py3-none-any.whl"
+            .parse()
+            .expect("valid URL");
+        assert_eq!(hasher.generation(), None);
+        assert_eq!(
+            hasher.get_url(&remote),
+            HashPolicy::All(slice::from_ref(&digest))
+        );
+        assert_eq!(
+            hasher.get_url(&local),
+            HashPolicy::All(slice::from_ref(&digest))
+        );
+        assert_eq!(hasher.get_url(&unknown), HashPolicy::None);
     }
 
     #[test]

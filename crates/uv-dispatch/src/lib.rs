@@ -107,6 +107,7 @@ impl IsBuildBackendError for BuildDispatchError {
 
 /// The main implementation of [`BuildContext`], used by the CLI, see [`BuildContext`]
 /// documentation.
+#[derive(Clone)]
 pub struct BuildDispatch<'a> {
     client: &'a RegistryClient,
     cache: &'a Cache,
@@ -187,6 +188,30 @@ impl<'a> BuildDispatch<'a> {
             workspace_cache,
             concurrency,
             preview,
+        }
+    }
+
+    /// Fork the dispatch with a different hash strategy and its corresponding flat index.
+    ///
+    /// The flat index must use the same hash verification policy as `hasher`. In-memory resolution,
+    /// download, and build caches are reset, since they may depend on the previous policy.
+    #[must_use]
+    pub fn fork<'fork>(
+        &'fork self,
+        hasher: &'fork HashStrategy,
+        flat_index: &'fork FlatIndex,
+    ) -> BuildDispatch<'fork> {
+        BuildDispatch {
+            hasher,
+            flat_index,
+            shared_state: SharedState {
+                build_arena: BuildArena::default(),
+                ..self.shared_state.fork()
+            },
+            source_build_context: SourceBuildContext::new(
+                self.concurrency.builds_semaphore.clone(),
+            ),
+            ..self.clone()
         }
     }
 

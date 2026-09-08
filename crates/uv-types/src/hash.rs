@@ -58,7 +58,7 @@ impl HashStrategy {
 
     /// Set verification independently of hash generation.
     #[must_use]
-    fn with_verification(mut self, verification: HashVerification) -> Self {
+    pub fn with_verification(mut self, verification: HashVerification) -> Self {
         self.verification = verification;
         self
     }
@@ -631,6 +631,18 @@ mod tests {
             strategy.get_url(&url),
             HashPolicy::All(slice::from_ref(&digest))
         );
+        for fragment in [
+            "#subdirectory=.",
+            "#subdirectory=./",
+            "#subdirectory=",
+            "#subdirectory=nested/..",
+        ] {
+            let root_url = format!("{url}{fragment}").parse()?;
+            assert_eq!(
+                strategy.get_url(&root_url),
+                HashPolicy::All(slice::from_ref(&digest))
+            );
+        }
         assert_eq!(
             strategy.get_url(&unknown_url),
             HashPolicy::Generate(HashGeneration::All)
