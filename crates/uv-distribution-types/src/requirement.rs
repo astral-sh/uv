@@ -93,13 +93,6 @@ impl Requirement {
     /// Set whether this requirement's local source should be represented by a relative path.
     ///
     /// When `false`, preserve the original input's path preference. Non-local sources are unchanged.
-    #[must_use]
-    pub fn with_force_relative(mut self, force_relative: bool) -> Self {
-        self.set_force_relative(force_relative);
-        self
-    }
-
-    /// Set whether this requirement's local source should be represented by a relative path.
     pub fn set_force_relative(&mut self, force_relative: bool) {
         if let RequirementSource::Path { url, .. } | RequirementSource::Directory { url, .. } =
             &mut self.source

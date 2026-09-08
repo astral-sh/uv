@@ -43,7 +43,9 @@ impl Urls {
         let mut regular: FxHashMap<PackageName, Vec<VerbatimParsedUrl>> = FxHashMap::default();
         let mut overrides = ForkMap::default();
 
-        // Add requirement and constraint URLs, replaying authored local paths last.
+        // Merge requirement and constraint URLs in their original order. Then replay requirements
+        // which aren't forced-relative (user-provided) to allow the URL spelling to take precedence.
+        // Partitioning (instead of appending) would impact unrelated merging semantics.
         for (requirement, force_relative) in manifest
             .requirements_no_overrides(env, dependencies)
             .map(|requirement| (requirement, true))
@@ -71,6 +73,8 @@ impl Urls {
                     ParsedUrl::Path(_) | ParsedUrl::Directory(_)
                 )
             {
+                // Force relative paths for the initial merge so replayed user-provided requirements
+                // determine the final path preference.
                 url.verbatim = url.verbatim.with_force_relative(true);
             }
 
@@ -81,6 +85,7 @@ impl Urls {
             {
                 // Allow editables to override non-editables.
                 let previous_editable = package_url.is_editable();
+                // The last specified URL spelling wins.
                 *package_url = url;
                 if previous_editable {
                     if let VerbatimParsedUrl {
