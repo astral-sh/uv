@@ -5,7 +5,7 @@ pub use exclude_newer::{
     ExcludeNewerValueWithSpanRef, serialize_exclude_newer_package_with_spans,
 };
 pub use exclusions::Exclusions;
-pub use flat_index::{FlatDistributions, FlatIndex};
+pub use flat_index::FlatIndex;
 pub use fork_strategy::ForkStrategy;
 pub use lock::{
     CanonicalLockError, DependencySelection, Installable, InstallableRootKind, Lock, LockError,
