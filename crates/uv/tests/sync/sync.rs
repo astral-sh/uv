@@ -16761,6 +16761,7 @@ fn build_hash_project() -> Result<(TestContext, String)> {
         from pathlib import Path
 
         import build_dependency
+        Path(__file__).with_name('backend-executed').touch()
 
         def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
             wheel = Path(__file__).parent / "wheels" / "project-0.1.0-py3-none-any.whl"
@@ -16771,6 +16772,17 @@ fn build_hash_project() -> Result<(TestContext, String)> {
     "#})?;
     let context = context.with_filter((build_hash.clone(), "[BUILD_HASH]"));
     Ok((context, build_hash))
+}
+
+/// A project with an in-tree backend in a subdirectory for `--with` tests.
+fn build_hash_project_in_subdirectory() -> Result<(TestContext, String)> {
+    let (context, hash) = build_hash_project()?;
+    let package = context.temp_dir.child("package");
+    package.create_dir_all()?;
+    for entry in ["pyproject.toml", "backend.py", "wheels"] {
+        fs_err::rename(context.temp_dir.child(entry), package.child(entry))?;
+    }
+    Ok((context, hash))
 }
 
 #[test]
@@ -16900,15 +16912,9 @@ fn project_build_hashes_unpinned() -> Result<()> {
 
 #[test]
 fn project_build_hashes_pip() -> Result<()> {
+    // `pip install` and `pip sync` construct separate build hash strategies.
     for command_name in ["install", "sync"] {
         let (context, hash) = build_hash_project()?;
-        context
-            .temp_dir
-            .child("backend.py")
-            .write_str(&context.read("backend.py").replace(
-                "import build_dependency",
-                "import build_dependency\nPath(__file__).with_name('backend-executed').touch()",
-            ))?;
         context
             .temp_dir
             .child("requirements.txt")
@@ -16938,7 +16944,8 @@ fn project_build_hashes_pip() -> Result<()> {
         // Provided build hashes are checked independently of runtime hash checking.
         allow_duplicates! {
             uv_snapshot!(context.filters(), command()
-                .args(["--build-constraint", "build-constraints.txt"]), @"
+                .arg("--build-constraint")
+                .arg(constraints.path()), @"
             exit_code: 1 (failure)
             ----- stderr -----
             Resolved 1 package in [TIME]
@@ -16962,7 +16969,8 @@ fn project_build_hashes_pip() -> Result<()> {
         constraints.write_str(&format!("build-dependency==1.0.0 --hash=sha256:{hash}\n"))?;
         allow_duplicates! {
             uv_snapshot!(context.filters(), command()
-                .args(["--build-constraint", "build-constraints.txt"]), @"
+                .arg("--build-constraint")
+                .arg(constraints.path()), @"
             exit_code: 0 (success)
             ----- stderr -----
             Resolved 1 package in [TIME]
@@ -16983,7 +16991,9 @@ fn project_build_hashes_pip() -> Result<()> {
         // The explicit opt-out permits the mismatched hash while still building the package.
         allow_duplicates! {
             uv_snapshot!(context.filters(), command()
-                .args(["--build-constraint", "build-constraints.txt", "--no-verify-hashes", "--reinstall"]), @"
+                .arg("--build-constraint")
+                .arg(constraints.path())
+                .args(["--no-verify-hashes", "--reinstall"]), @"
             exit_code: 0 (success)
             ----- stderr -----
             Resolved 1 package in [TIME]
@@ -17004,13 +17014,6 @@ fn project_build_hashes_pip() -> Result<()> {
 #[test]
 fn project_build_hashes_script_run_with() -> Result<()> {
     let (context, hash) = build_hash_project()?;
-    context
-        .temp_dir
-        .child("backend.py")
-        .write_str(&context.read("backend.py").replace(
-            "import build_dependency",
-            "import build_dependency\nPath(__file__).with_name('backend-executed').touch()",
-        ))?;
     let script = context.temp_dir.child("script.py");
     let metadata = formatdoc! {r#"
         # /// script
@@ -17066,18 +17069,8 @@ fn project_build_hashes_script_run_with() -> Result<()> {
 
 #[test]
 fn project_build_hashes_run_with_stale_lock() -> Result<()> {
-    let (context, hash) = build_hash_project()?;
+    let (context, hash) = build_hash_project_in_subdirectory()?;
     let package = context.temp_dir.child("package");
-    package.create_dir_all()?;
-    for entry in ["pyproject.toml", "backend.py", "wheels"] {
-        fs_err::rename(context.temp_dir.child(entry), package.child(entry))?;
-    }
-    package
-        .child("backend.py")
-        .write_str(&context.read("package/backend.py").replace(
-            "import build_dependency",
-            "import build_dependency\nPath(__file__).with_name('backend-executed').touch()",
-        ))?;
     let pyproject = context.temp_dir.child("pyproject.toml");
     pyproject.write_str(&formatdoc! {r#"
         [project]
@@ -17141,24 +17134,13 @@ fn project_build_hashes_run_with_stale_lock() -> Result<()> {
 
 #[test]
 fn project_build_hashes_locked_script_run_with_no_sync() -> Result<()> {
-    let (context, hash) = build_hash_project()?;
+    let (context, hash) = build_hash_project_in_subdirectory()?;
     let package = context.temp_dir.child("package");
-    package.create_dir_all()?;
-    for entry in ["pyproject.toml", "backend.py", "wheels"] {
-        fs_err::rename(context.temp_dir.child(entry), package.child(entry))?;
-    }
     package.child("pyproject.toml").write_str(
         &context
             .read("package/pyproject.toml")
             .replace("build-dependency==1.0.0", "build-dependency>=1"),
     )?;
-    package
-        .child("backend.py")
-        .write_str(&context.read("package/backend.py").replace(
-            "import build_dependency",
-            "import build_dependency\nPath(__file__).with_name('backend-executed').touch()",
-        ))?;
-
     let script = context.temp_dir.child("script.py");
     script.write_str(&formatdoc! {r#"
         # /// script
