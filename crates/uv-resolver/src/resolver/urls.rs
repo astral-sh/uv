@@ -76,7 +76,7 @@ impl Urls {
 
         // Add all URLs from overrides. If there is an override URL, all other URLs from
         // requirements and constraints are moot and will be removed.
-        for requirement in manifest.overrides(env, dependencies) {
+        for requirement in manifest.overrides(env) {
             let Some(url) = requirement.source.to_verbatim_parsed_url() else {
                 // Registry requirement
                 continue;

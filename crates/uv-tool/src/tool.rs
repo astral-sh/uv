@@ -241,19 +241,15 @@ impl Tool {
             });
         }
 
-        let overrides = self.modifiers.override_entries().collect::<Vec<_>>();
+        let overrides = self
+            .modifiers
+            .override_entries()
+            .map(|r#override| {
+                serde::Serialize::serialize(&r#override, toml_edit::ser::ValueSerializer::new())
+            })
+            .collect::<Result<Vec<_>, _>>()?;
         if !overrides.is_empty() {
             table.insert("overrides", {
-                let overrides = overrides
-                    .into_iter()
-                    .map(|r#override| {
-                        serde::Serialize::serialize(
-                            &r#override,
-                            toml_edit::ser::ValueSerializer::new(),
-                        )
-                    })
-                    .collect::<Result<Vec<_>, _>>()?;
-
                 let overrides = match overrides.as_slice() {
                     [] => Array::new(),
                     [r#override] => Array::from_iter([r#override]),
@@ -263,19 +259,15 @@ impl Tool {
             });
         }
 
-        let excludes = self.modifiers.exclusion_entries().collect::<Vec<_>>();
+        let excludes = self
+            .modifiers
+            .exclusion_entries()
+            .map(|r#exclude| {
+                serde::Serialize::serialize(&r#exclude, toml_edit::ser::ValueSerializer::new())
+            })
+            .collect::<Result<Vec<_>, _>>()?;
         if !excludes.is_empty() {
             table.insert("excludes", {
-                let excludes = excludes
-                    .into_iter()
-                    .map(|r#exclude| {
-                        serde::Serialize::serialize(
-                            &r#exclude,
-                            toml_edit::ser::ValueSerializer::new(),
-                        )
-                    })
-                    .collect::<Result<Vec<_>, _>>()?;
-
                 let excludes = match excludes.as_slice() {
                     [] => Array::new(),
                     [r#exclude] => Array::from_iter([r#exclude]),

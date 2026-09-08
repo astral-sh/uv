@@ -234,12 +234,10 @@ fn write_manifest(writer: &mut LockWriter, manifest: &ResolverManifest) -> Resul
     let overrides = manifest
         .modifiers
         .override_entries()
-        .cloned()
         .collect::<BTreeSet<_>>();
     let excludes = manifest
         .modifiers
         .exclusion_entries()
-        .cloned()
         .collect::<BTreeSet<_>>();
     write_serialized_non_empty_array(writer, "overrides", &overrides)?;
     write_serialized_non_empty_array(writer, "excludes", &excludes)?;

@@ -34,11 +34,11 @@ use uv_cli::{
 };
 use uv_client::{Certificates, Connectivity, MetadataRangeRequest};
 use uv_configuration::{
-    BuildIsolation, BuildOptions, Concurrency, DependencyGroups, DependencyModifiers, DevMode,
-    DryRun, EditableMode, EnvFile, ExportFormat, ExtrasSpecification, GitLfsSetting,
-    HashCheckingMode, IndexStrategy, InstallOptions, KeyringProviderType, NoBinary, NoBuild,
-    NoSources, PipCompileFormat, ProjectBuildBackend, ProxyUrl, Reinstall, RequiredVersion,
-    TargetTriple, TrustedHost, TrustedPublishing, Upgrade, VersionControlSystem,
+    ActiveEnvironment, BuildIsolation, BuildOptions, Concurrency, DependencyGroups,
+    DependencyModifiers, DevMode, DryRun, EditableMode, EnvFile, ExportFormat, ExtrasSpecification,
+    GitLfsSetting, HashCheckingMode, IndexStrategy, InstallOptions, KeyringProviderType, NoBinary,
+    NoBuild, NoSources, PipCompileFormat, ProjectBuildBackend, ProxyUrl, Reinstall,
+    RequiredVersion, TargetTriple, TrustedHost, TrustedPublishing, Upgrade, VersionControlSystem,
 };
 use uv_distribution_types::{
     ConfigSettings, DependencyMetadata, ExtraBuildVariables, Index, IndexLocations, IndexUrl,

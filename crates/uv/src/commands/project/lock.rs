@@ -12,7 +12,7 @@ use tracing::debug;
 use uv_cache::{Cache, Refresh};
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
-    Concurrency, Constraints, DependencyGroupsWithDefaults, DependencyModifiers,
+    ActiveEnvironment, Concurrency, Constraints, DependencyGroupsWithDefaults, DependencyModifiers,
     DependencyOverride, DryRun, ExtrasSpecification, PackageOverride, Reinstall, Upgrade,
 };
 use uv_dispatch::BuildDispatch;

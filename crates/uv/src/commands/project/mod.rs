@@ -14,7 +14,7 @@ use uv_cache::{Cache, CacheBucket};
 use uv_cache_key::{cache_digest, cache_name};
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
-    Concurrency, Constraints, DependencyGroupsWithDefaults, DependencyModifiers,
+    ActiveEnvironment, Concurrency, Constraints, DependencyGroupsWithDefaults, DependencyModifiers,
     DependencyOverride, DryRun, ExtrasSpecification, GitLfsSetting, PackageOverride, Reinstall,
     TargetTriple, Upgrade,
 };

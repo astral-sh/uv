@@ -111,7 +111,7 @@ impl Manifest {
         mode: DependencyMode,
     ) -> impl Iterator<Item = Cow<'a, Requirement>> + 'a {
         self.requirements_no_overrides(env, mode)
-            .chain(self.overrides(env, mode))
+            .chain(self.overrides(env))
     }
 
     /// Return all requirements that affect manifest-wide candidate selection policy.
@@ -193,28 +193,11 @@ impl Manifest {
     pub(crate) fn overrides<'a>(
         &'a self,
         env: &'a ResolverEnvironment,
-        mode: DependencyMode,
     ) -> impl Iterator<Item = Cow<'a, Requirement>> + 'a {
-        match mode {
-            // Include all direct and transitive requirements, with constraints and overrides applied.
-            DependencyMode::Transitive => Either::Left(
-                self.modifiers
-                    .global_overrides()
-                    .filter(move |requirement| {
-                        requirement.evaluate_markers(env.marker_environment(), &[])
-                    })
-                    .map(Cow::Borrowed),
-            ),
-            // Include direct requirements, with constraints and overrides applied.
-            DependencyMode::Direct => Either::Right(
-                self.modifiers
-                    .global_overrides()
-                    .filter(move |requirement| {
-                        requirement.evaluate_markers(env.marker_environment(), &[])
-                    })
-                    .map(Cow::Borrowed),
-            ),
-        }
+        self.modifiers
+            .global_overrides()
+            .filter(move |requirement| requirement.evaluate_markers(env.marker_environment(), &[]))
+            .map(Cow::Borrowed)
     }
 
     /// Return an iterator over the names of all user-provided requirements.

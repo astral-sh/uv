@@ -625,8 +625,8 @@ impl RequirementsSpecification {
             let source = Self::from_source_with_cache(source, client_builder, &mut cache).await?;
             spec.overrides.extend(source.requirements);
             spec.overrides.extend(source.overrides);
-            spec.modifiers
-                .extend_overrides(source.modifiers.override_entries().cloned())?;
+            let (overrides, _) = source.modifiers.into_parts();
+            spec.modifiers.extend_overrides(overrides)?;
 
             if let Some(index_url) = source.index_url {
                 if let Some(existing) = spec.index_url
@@ -663,8 +663,8 @@ impl RequirementsSpecification {
                     }
                 }
             }
-            spec.modifiers
-                .extend_exclusions(source.modifiers.exclusion_entries().cloned());
+            let (_, exclusions) = source.modifiers.into_parts();
+            spec.modifiers.extend_exclusions(exclusions);
         }
 
         Ok(spec)

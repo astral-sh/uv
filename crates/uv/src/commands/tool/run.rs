@@ -15,7 +15,9 @@ use uv_cache::{Cache, Refresh};
 use uv_cache_info::Timestamp;
 use uv_cli::ExternalCommand;
 use uv_client::{BaseClientBuilder, RegistryClientBuilder};
-use uv_configuration::{Concurrency, Constraints, DependencyMode, DependencyOverride, GitLfsSetting, TargetTriple};
+use uv_configuration::{
+    Concurrency, Constraints, DependencyMode, DependencyOverride, GitLfsSetting, TargetTriple,
+};
 use uv_distribution::LoweredExtraBuildDependencies;
 use uv_distribution_types::InstalledDist;
 use uv_distribution_types::{
@@ -1075,7 +1077,7 @@ async fn get_or_create_environment(
                             requirements.iter(),
                             constraints.iter().chain(latest.iter()),
                             &modifiers,
-            DependencyMode::Transitive,
+                            DependencyMode::Transitive,
                             InstallationStrategy::Permissive,
                             &markers,
                             &tags,
