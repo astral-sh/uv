@@ -9209,6 +9209,10 @@ fn verify_hashes_exact_equal() -> Result<()> {
             ");
         }
     }
+
+    Ok(())
+}
+
 /// A public version pin's hash must also protect a selected local version.
 #[test]
 fn verify_hashes_public_pin_local_version() -> Result<()> {
@@ -9263,6 +9267,29 @@ fn verify_hashes_public_pin_local_version() -> Result<()> {
           Computed:
             sha256:[LOCAL_HASH]
     ");
+
+    // A hash for `==1.0.0+local` takes precedence over the hash for `==1.0.0`.
+    let constraints_txt = context.temp_dir.child("constraints.txt");
+    constraints_txt.write_str(&format!(
+        "hash-probe==1.0.0+local --hash=sha256:{local_hash}"
+    ))?;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("-r")
+        .arg("requirements.txt")
+        .arg("-c")
+        .arg("constraints.txt")
+        .arg("--no-index")
+        .arg("--find-links")
+        .arg(links.path())
+        .arg("--verify-hashes"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + hash-probe==1.0.0+local
+    ");
+
     Ok(())
 }
 
