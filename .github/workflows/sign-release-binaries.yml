@@ -187,7 +187,6 @@ jobs:
         env:
           AZURE_KEYVAULT_NAME: ${{ secrets.CODESIGN_AZURE_KEYVAULT_NAME }}
           APPLE_NOTARIZATION_AKV_KEY_NAME: ${{ secrets.CODESIGN_APPLE_NOTARIZATION_AKV_KEY_NAME }}
-          APPLE_NOTARIZATION_AKV_KEY_VERSION: ${{ secrets.CODESIGN_APPLE_NOTARIZATION_AKV_KEY_VERSION }}
         run: uv run scripts/notarize-release-macos.py ./signed
 
       - name: "Upload signed executable wheel members"

@@ -49,10 +49,9 @@ def azure_json(*arguments: str) -> dict:
 
 
 def notarization_key() -> tuple[str, str, str]:
-    """Read Apple's key and issuer IDs from the pinned Astral Key Vault key."""
+    """Resolve the current key version and its Apple key and issuer IDs."""
     vault = os.environ["AZURE_KEYVAULT_NAME"]
     name = os.environ["APPLE_NOTARIZATION_AKV_KEY_NAME"]
-    version = os.environ["APPLE_NOTARIZATION_AKV_KEY_VERSION"]
     key = azure_json(
         "keyvault",
         "key",
@@ -61,15 +60,10 @@ def notarization_key() -> tuple[str, str, str]:
         vault,
         "--name",
         name,
-        "--version",
-        version,
         "--query",
         '{url:key.kid,key_id:tags."apple-key-id",issuer:tags."apple-issuer-id"}',
     )
-    url = key["url"]
-    if url.lower() != f"https://{vault}.vault.azure.net/keys/{name}/{version}".lower():
-        raise ValueError("Unexpected Azure notarization key version")
-    return url, key["key_id"], key["issuer"]
+    return key["url"], key["key_id"], key["issuer"]
 
 
 def apple_token(key_url: str, key_id: str, issuer: str) -> str:
