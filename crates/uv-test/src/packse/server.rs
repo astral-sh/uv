@@ -36,7 +36,7 @@ struct DistInfo {
     filename: String,
     sha256: String,
     requires_python: Option<VersionSpecifiers>,
-    upload_time: &'static str,
+    upload_time: Option<String>,
     yanked: bool,
 }
 
@@ -132,7 +132,7 @@ fn build_server_index(scenario: &Scenario) -> ServerIndex {
         let mut dists = Vec::new();
 
         for (version, meta) in &package.versions {
-            if meta.wheel {
+            if let Some(wheel_metadata) = &meta.wheel {
                 let tags = if meta.wheel_tags.is_empty() {
                     vec!["py3-none-any"]
                 } else {
@@ -154,13 +154,13 @@ fn build_server_index(scenario: &Scenario) -> ServerIndex {
                         filename,
                         sha256,
                         requires_python: meta.requires_python.clone(),
-                        upload_time: PACKSE_UPLOAD_TIME,
+                        upload_time: wheel_metadata.upload_time.clone(),
                         yanked: meta.yanked,
                     });
                 }
             }
 
-            if meta.sdist {
+            if let Some(sdist_metadata) = &meta.sdist {
                 let (filename, bytes) = generate_sdist(
                     package_name,
                     version,
@@ -174,7 +174,7 @@ fn build_server_index(scenario: &Scenario) -> ServerIndex {
                     filename,
                     sha256,
                     requires_python: meta.requires_python.clone(),
-                    upload_time: PACKSE_UPLOAD_TIME,
+                    upload_time: sdist_metadata.upload_time.clone(),
                     yanked: meta.yanked,
                 });
             }
@@ -203,7 +203,7 @@ fn build_server_index(scenario: &Scenario) -> ServerIndex {
                 filename: artifact.filename.to_string(),
                 sha256: artifact.sha256.to_string(),
                 requires_python: None,
-                upload_time: PACKSE_UPLOAD_TIME,
+                upload_time: None,
                 yanked: false,
             });
     }
@@ -355,7 +355,7 @@ fn build_simple_api_response(
                 "filename": dist.filename,
                 "url": url,
                 "hashes": {},
-                "upload-time": dist.upload_time,
+                "upload-time": dist.upload_time.as_deref().unwrap_or(PACKSE_UPLOAD_TIME),
             });
             if hashes {
                 file_obj["hashes"] = json!({ "sha256": dist.sha256 });
@@ -428,6 +428,67 @@ mod tests {
                 .iter()
                 .all(|artifact| !artifact.is_loaded())
         );
+    }
+
+    #[tokio::test]
+    async fn serves_artifact_upload_times() -> Result<()> {
+        let scenario = toml::from_str::<Scenario>(
+            r#"
+name = "artifact-upload-times"
+
+[root]
+requires = ["a"]
+
+[expected]
+satisfiable = true
+
+[packages.a.versions."1.0.0"]
+sdist = { upload_time = "2024-03-23T00:00:00Z" }
+wheel = { upload_time = "2024-03-26T00:00:00Z" }
+wheel_tags = ["py3-none-any", "cp312-abi3-win_amd64"]
+
+[packages.b.versions."1.0.0"]
+sdist = false
+wheel = {}
+
+[packages.c.versions."1.0.0"]
+wheel = false
+"#,
+        )?;
+        let server = PackseServer::from_scenario(&scenario);
+
+        let a: serde_json::Value = reqwest::get(format!("{}a/", server.index_url()))
+            .await?
+            .json()
+            .await?;
+        assert_eq!(a["files"].as_array().map(Vec::len), Some(3));
+        assert_eq!(a["files"][0]["filename"], "a-1.0.0-py3-none-any.whl");
+        assert_eq!(a["files"][0]["upload-time"], "2024-03-26T00:00:00Z");
+        assert_eq!(
+            a["files"][1]["filename"],
+            "a-1.0.0-cp312-abi3-win_amd64.whl"
+        );
+        assert_eq!(a["files"][1]["upload-time"], "2024-03-26T00:00:00Z");
+        assert_eq!(a["files"][2]["filename"], "a-1.0.0.tar.gz");
+        assert_eq!(a["files"][2]["upload-time"], "2024-03-23T00:00:00Z");
+
+        let b: serde_json::Value = reqwest::get(format!("{}b/", server.index_url()))
+            .await?
+            .json()
+            .await?;
+        assert_eq!(b["files"].as_array().map(Vec::len), Some(1));
+        assert_eq!(b["files"][0]["filename"], "b-1.0.0-py3-none-any.whl");
+        assert_eq!(b["files"][0]["upload-time"], "2024-03-24T00:00:00Z");
+
+        let c: serde_json::Value = reqwest::get(format!("{}c/", server.index_url()))
+            .await?
+            .json()
+            .await?;
+        assert_eq!(c["files"].as_array().map(Vec::len), Some(1));
+        assert_eq!(c["files"][0]["filename"], "c-1.0.0.tar.gz");
+        assert_eq!(c["files"][0]["upload-time"], "2024-03-24T00:00:00Z");
+
+        Ok(())
     }
 
     #[tokio::test]

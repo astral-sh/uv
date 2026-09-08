@@ -106,13 +106,19 @@ pub struct PackageMetadata {
     #[serde(default)]
     pub extras: BTreeMap<ExtraName, Vec<Requirement>>,
 
-    /// Whether to produce a source distribution.
-    #[serde(default = "default_true")]
-    pub sdist: bool,
+    /// Whether to produce a source distribution, and optionally its metadata.
+    #[serde(
+        default = "default_artifact",
+        deserialize_with = "deserialize_artifact"
+    )]
+    pub sdist: Option<ArtifactMetadata>,
 
-    /// Whether to produce a wheel.
-    #[serde(default = "default_true")]
-    pub wheel: bool,
+    /// Whether to produce wheels, and optionally their shared metadata.
+    #[serde(
+        default = "default_artifact",
+        deserialize_with = "deserialize_artifact"
+    )]
+    pub wheel: Option<ArtifactMetadata>,
 
     /// Whether this version is yanked.
     #[serde(default)]
@@ -122,6 +128,33 @@ pub struct PackageMetadata {
     /// An empty list means produce only the default `py3-none-any` wheel.
     #[serde(default)]
     pub wheel_tags: Vec<WheelTag>,
+}
+
+fn deserialize_artifact<'de, D>(
+    deserializer: D,
+) -> std::result::Result<Option<ArtifactMetadata>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    #[derive(Debug, Deserialize)]
+    #[serde(untagged)]
+    enum Helper {
+        Bool(bool),
+        Metadata(ArtifactMetadata),
+    }
+
+    match Helper::deserialize(deserializer)? {
+        Helper::Bool(false) => Ok(None),
+        Helper::Bool(true) => Ok(Some(ArtifactMetadata::default())),
+        Helper::Metadata(metadata) => Ok(Some(metadata)),
+    }
+}
+
+/// Metadata advertised for an artifact by the Packse Simple API.
+#[derive(Debug, Default, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ArtifactMetadata {
+    pub upload_time: Option<String>,
 }
 
 /// A validated three-component compatibility tag for generated wheels.
@@ -294,8 +327,9 @@ fn default_requires_python() -> Option<VersionSpecifiers> {
     Some(VersionSpecifiers::from_str(">=3.12").expect("default requires-python should be valid"))
 }
 
-fn default_true() -> bool {
-    true
+#[expect(clippy::unnecessary_wraps)] // Must return `Option` for serde `default`
+fn default_artifact() -> Option<ArtifactMetadata> {
+    Some(ArtifactMetadata::default())
 }
 
 fn default_python() -> PythonVersion {

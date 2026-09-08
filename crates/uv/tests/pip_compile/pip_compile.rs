@@ -32,7 +32,7 @@ use uv_test::archive::write_tar_gz;
 #[cfg(feature = "test-universal")]
 use uv_test::diff_snapshot;
 use uv_test::packse::PackseServer;
-use uv_test::packse::scenario::{Package, PackageMetadata, Scenario};
+use uv_test::packse::scenario::{ArtifactMetadata, Package, PackageMetadata, Scenario};
 use uv_test::{DEFAULT_PYTHON_VERSION, TestContext, download_to_disk, uv_snapshot};
 
 #[test]
@@ -378,8 +378,7 @@ fn compile_constraints_many_versions() -> Result<()> {
             version.clone(),
             PackageMetadata {
                 requires: vec![Requirement::from_str(&format!("dependency=={version}"))?],
-                sdist: false,
-                wheel: true,
+                wheel: Some(ArtifactMetadata::default()),
                 ..PackageMetadata::default()
             },
         );
@@ -398,8 +397,7 @@ fn compile_constraints_many_versions() -> Result<()> {
             versions: BTreeMap::from([(
                 Version::from_str("2.0.0")?,
                 PackageMetadata {
-                    sdist: false,
-                    wheel: true,
+                    wheel: Some(ArtifactMetadata::default()),
                     ..PackageMetadata::default()
                 },
             )]),
@@ -9919,8 +9917,7 @@ fn universal_marker_propagation() -> Result<()> {
                     Version::from_str("2.0.0")?,
                     PackageMetadata {
                         requires_python: None,
-                        sdist: false,
-                        wheel: true,
+                        wheel: Some(ArtifactMetadata::default()),
                         ..PackageMetadata::default()
                     },
                 ),
@@ -9928,8 +9925,7 @@ fn universal_marker_propagation() -> Result<()> {
                     Version::from_str("2.2.0")?,
                     PackageMetadata {
                         requires_python: None,
-                        sdist: false,
-                        wheel: true,
+                        wheel: Some(ArtifactMetadata::default()),
                         ..PackageMetadata::default()
                     },
                 ),
@@ -9945,8 +9941,7 @@ fn universal_marker_propagation() -> Result<()> {
                     PackageMetadata {
                         requires_python: None,
                         requires: vec![Requirement::from_str("torch==2.0.0")?],
-                        sdist: false,
-                        wheel: true,
+                        wheel: Some(ArtifactMetadata::default()),
                         ..PackageMetadata::default()
                     },
                 ),
@@ -9955,8 +9950,7 @@ fn universal_marker_propagation() -> Result<()> {
                     PackageMetadata {
                         requires_python: None,
                         requires: vec![Requirement::from_str("torch==2.2.0")?],
-                        sdist: false,
-                        wheel: true,
+                        wheel: Some(ArtifactMetadata::default()),
                         ..PackageMetadata::default()
                     },
                 ),
@@ -11204,14 +11198,14 @@ fn editable_scoped_exclusion_lowest_direct() -> Result<()> {
                 (
                     Version::from_str("1.0.0")?,
                     PackageMetadata {
-                        wheel: true,
+                        wheel: Some(ArtifactMetadata::default()),
                         ..PackageMetadata::default()
                     },
                 ),
                 (
                     Version::from_str("2.0.0")?,
                     PackageMetadata {
-                        wheel: true,
+                        wheel: Some(ArtifactMetadata::default()),
                         ..PackageMetadata::default()
                     },
                 ),
@@ -11225,7 +11219,7 @@ fn editable_scoped_exclusion_lowest_direct() -> Result<()> {
                 Version::from_str("1.0.0")?,
                 PackageMetadata {
                     requires: vec![Requirement::from_str("foo>=1")?],
-                    wheel: true,
+                    wheel: Some(ArtifactMetadata::default()),
                     ..PackageMetadata::default()
                 },
             )]),
@@ -11354,7 +11348,7 @@ fn scoped_exclusion_recursive_extra() -> Result<()> {
                         Requirement::from_str("parent[foo]")?,
                         Requirement::from_str("child==1.0.0 ; extra == 'foo'")?,
                     ],
-                    wheel: true,
+                    wheel: Some(ArtifactMetadata::default()),
                     ..PackageMetadata::default()
                 },
             )]),
@@ -11409,14 +11403,14 @@ fn shadowed_scoped_override_candidate_policy() -> Result<()> {
                 (
                     Version::from_str("1.0.0")?,
                     PackageMetadata {
-                        wheel: true,
+                        wheel: Some(ArtifactMetadata::default()),
                         ..PackageMetadata::default()
                     },
                 ),
                 (
                     Version::from_str("2.0.0rc1")?,
                     PackageMetadata {
-                        wheel: true,
+                        wheel: Some(ArtifactMetadata::default()),
                         ..PackageMetadata::default()
                     },
                 ),
@@ -11429,7 +11423,7 @@ fn shadowed_scoped_override_candidate_policy() -> Result<()> {
             versions: BTreeMap::from([(
                 Version::from_str("1.0.0")?,
                 PackageMetadata {
-                    wheel: true,
+                    wheel: Some(ArtifactMetadata::default()),
                     ..PackageMetadata::default()
                 },
             )]),
@@ -11442,14 +11436,14 @@ fn shadowed_scoped_override_candidate_policy() -> Result<()> {
                 (
                     Version::from_str("1.0.0")?,
                     PackageMetadata {
-                        wheel: true,
+                        wheel: Some(ArtifactMetadata::default()),
                         ..PackageMetadata::default()
                     },
                 ),
                 (
                     Version::from_str("2.0.0")?,
                     PackageMetadata {
-                        wheel: true,
+                        wheel: Some(ArtifactMetadata::default()),
                         yanked: true,
                         ..PackageMetadata::default()
                     },
@@ -11468,7 +11462,7 @@ fn shadowed_scoped_override_candidate_policy() -> Result<()> {
                         Requirement::from_str("yanked-target>=1")?,
                         Requirement::from_str("existing>=1")?,
                     ],
-                    wheel: true,
+                    wheel: Some(ArtifactMetadata::default()),
                     ..PackageMetadata::default()
                 },
             )]),
@@ -11540,14 +11534,14 @@ fn inactive_scoped_override_does_not_enable_prerelease() -> Result<()> {
                 (
                     Version::from_str("1.0.0")?,
                     PackageMetadata {
-                        wheel: true,
+                        wheel: Some(ArtifactMetadata::default()),
                         ..PackageMetadata::default()
                     },
                 ),
                 (
                     Version::from_str("2.0.0rc1")?,
                     PackageMetadata {
-                        wheel: true,
+                        wheel: Some(ArtifactMetadata::default()),
                         ..PackageMetadata::default()
                     },
                 ),
@@ -11562,7 +11556,7 @@ fn inactive_scoped_override_does_not_enable_prerelease() -> Result<()> {
                     Version::from_str("1.0.0")?,
                     PackageMetadata {
                         requires: vec![Requirement::from_str("target>=1")?],
-                        wheel: true,
+                        wheel: Some(ArtifactMetadata::default()),
                         ..PackageMetadata::default()
                     },
                 ),
@@ -11570,7 +11564,7 @@ fn inactive_scoped_override_does_not_enable_prerelease() -> Result<()> {
                     Version::from_str("2.0.0")?,
                     PackageMetadata {
                         requires: vec![Requirement::from_str("target>=1")?],
-                        wheel: true,
+                        wheel: Some(ArtifactMetadata::default()),
                         ..PackageMetadata::default()
                     },
                 ),
