@@ -118,7 +118,7 @@ pub enum ResolveError {
     InvalidVersion(#[from] uv_pep440::VersionSpecifierBuildError),
 
     #[error(
-        "In `--require-hashes` mode, all requirements must be pinned upfront with `==`, but found: `{0}`"
+        "In `--require-hashes` mode, all requirements must be pinned and hashed upfront, but found: `{0}`"
     )]
     UnhashedPackage(PackageName),
 

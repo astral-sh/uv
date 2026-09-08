@@ -11,7 +11,7 @@ use uv_distribution_types::{
     Resolution, UnresolvedRequirement, VersionId,
 };
 use uv_normalize::PackageName;
-use uv_pep440::Version;
+use uv_pep440::{Operator, Version};
 use uv_pypi_types::{HashAlgorithm, HashDigest, HashDigests, HashError, ResolverMarkerEnvironment};
 use uv_redacted::DisplaySafeUrl;
 
@@ -184,7 +184,7 @@ impl HashStrategy {
             }
 
             // Every constraint must be a pinned version.
-            let Some(id) = Self::pin(requirement, mode) else {
+            let Some(id) = Self::pin(requirement) else {
                 if mode.is_require() {
                     return Err(HashStrategyError::UnpinnedRequirement(
                         requirement.to_string(),
@@ -227,7 +227,7 @@ impl HashStrategy {
             // Every requirement must be either a pinned version or a direct URL.
             let id = match &requirement {
                 UnresolvedRequirement::Named(requirement) => {
-                    if let Some(id) = Self::pin(requirement, mode) {
+                    if let Some(id) = Self::pin(requirement) {
                         id
                     } else {
                         if mode.is_require() {
@@ -391,12 +391,12 @@ impl HashStrategy {
             return None;
         }
         digests.sort_unstable();
-        let id = Self::pin(requirement, HashCheckingMode::Require)?;
+        let id = Self::pin(requirement)?;
         Some((id, digests))
     }
 
     /// Pin a [`Requirement`] to a [`VersionId`], if possible.
-    fn pin(requirement: &Requirement, mode: HashCheckingMode) -> Option<VersionId> {
+    fn pin(requirement: &Requirement) -> Option<VersionId> {
         match &requirement.source {
             RequirementSource::Registry { specifier, .. } => {
                 // Must be a single specifier.
@@ -404,15 +404,17 @@ impl HashStrategy {
                     return None;
                 };
 
-                // Arbitrary equality pins a single version, but `--require-hashes` needs `==`.
-                let is_pinned = match mode {
-                    HashCheckingMode::Verify => {
-                        *specifier.operator() == uv_pep440::Operator::Equal
-                            || *specifier.operator() == uv_pep440::Operator::ExactEqual
-                    }
-                    HashCheckingMode::Require => {
-                        *specifier.operator() == uv_pep440::Operator::Equal
-                    }
+                // Must be pinned to a specific version.
+                let is_pinned = match specifier.operator() {
+                    Operator::Equal | Operator::ExactEqual => true,
+                    Operator::EqualStar
+                    | Operator::NotEqual
+                    | Operator::NotEqualStar
+                    | Operator::TildeEqual
+                    | Operator::LessThan
+                    | Operator::LessThanEqual
+                    | Operator::GreaterThan
+                    | Operator::GreaterThanEqual => false,
                 };
                 if !is_pinned {
                     return None;
@@ -522,7 +524,7 @@ pub enum HashStrategyError {
     #[error("Conflicting archive URL hashes for `{0}`: `{1}` conflicts with `{2}`")]
     ConflictingArchiveUrlHashes(String, HashDigest, HashDigest),
     #[error(
-        "In `{1}` mode, all requirements must have their versions pinned with `==`, but found: {0}"
+        "In `{1}` mode, registry requirements must be pinned with `==` or `===`, but found: {0}"
     )]
     UnpinnedRequirement(String, HashCheckingMode),
     #[error(

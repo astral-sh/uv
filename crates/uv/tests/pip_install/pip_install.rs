@@ -1208,7 +1208,7 @@ fn install_require_hashes_in_requirements_txt() -> Result<()> {
         .arg("--strict"), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: In `--require-hashes` mode, all requirements must have their versions pinned with `==`, but found: iniconfig
+    error: In `--require-hashes` mode, registry requirements must be pinned with `==` or `===`, but found: iniconfig
     "
     );
 
@@ -8459,7 +8459,7 @@ fn require_hashes_missing_dependency() -> Result<()> {
         .arg("--require-hashes"), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: In `--require-hashes` mode, all requirements must be pinned upfront with `==`, but found: `markupsafe`
+    error: In `--require-hashes` mode, all requirements must be pinned and hashed upfront, but found: `markupsafe`
     "
     );
 
@@ -8542,7 +8542,7 @@ fn require_hashes_constraint() -> Result<()> {
         .arg(constraints_txt.path()), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: In `--require-hashes` mode, all requirements must have their versions pinned with `==`, but found: anyio
+    error: In `--require-hashes` mode, registry requirements must be pinned with `==` or `===`, but found: anyio
     "
     );
 
@@ -8754,7 +8754,7 @@ fn require_hashes_override() -> Result<()> {
         .arg(overrides_txt.path()), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: In `--require-hashes` mode, all requirements must have their versions pinned with `==`, but found: anyio
+    error: In `--require-hashes` mode, registry requirements must be pinned with `==` or `===`, but found: anyio
     "
     );
 
@@ -9075,7 +9075,7 @@ fn verify_hashes_mismatch() -> Result<()> {
     Ok(())
 }
 
-/// Verify hashes on arbitrary-equality pins.
+/// Verify hashes on arbitrary-equality pins in both checking modes.
 #[test]
 fn verify_hashes_exact_equal() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -9085,25 +9085,29 @@ fn verify_hashes_exact_equal() -> Result<()> {
         "ok===1.0.0 --hash=sha256:0000000000000000000000000000000000000000000000000000000000000000",
     )?;
 
-    uv_snapshot!(context.filters(), context.pip_install()
-        .arg("-r")
-        .arg("requirements.txt")
-        .arg("--no-index")
-        .arg("--find-links")
-        .arg(context.workspace_root.join("test/links/"))
-        .arg("--verify-hashes"), @"
-    exit_code: 1 (failure)
-    ----- stderr -----
-    Resolved 1 package in [TIME]
-      × Failed to download `ok==1.0.0`
-      ╰─▶ Hash mismatch for `ok==1.0.0`
+    allow_duplicates! {
+        for hash_mode in ["--verify-hashes", "--require-hashes"] {
+            uv_snapshot!(context.filters(), context.pip_install()
+                .arg("-r")
+                .arg("requirements.txt")
+                .arg("--no-index")
+                .arg("--find-links")
+                .arg(context.workspace_root.join("test/links/"))
+                .arg(hash_mode), @"
+            exit_code: 1 (failure)
+            ----- stderr -----
+            Resolved 1 package in [TIME]
+              × Failed to download `ok==1.0.0`
+              ╰─▶ Hash mismatch for `ok==1.0.0`
 
-          Expected:
-            sha256:0000000000000000000000000000000000000000000000000000000000000000
+                  Expected:
+                    sha256:0000000000000000000000000000000000000000000000000000000000000000
 
-          Computed:
-            sha256:79f0b33e6ce1e09eaa1784c8eee275dfe84d215d9c65c652f07c18e85fdaac5f
-    ");
+                  Computed:
+                    sha256:79f0b33e6ce1e09eaa1784c8eee275dfe84d215d9c65c652f07c18e85fdaac5f
+            ");
+        }
+    }
 
     Ok(())
 }

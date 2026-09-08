@@ -1442,7 +1442,7 @@ fn build_sha() -> Result<()> {
     error: Failed to build `[TEMP_DIR]/project`
       Caused by: Failed to resolve requirements from `build-system.requires`
       Caused by: No solution found when resolving: `hatchling`
-      Caused by: In `--require-hashes` mode, all requirements must be pinned upfront with `==`, but found: `hatchling`
+      Caused by: In `--require-hashes` mode, all requirements must be pinned and hashed upfront, but found: `hatchling`
     ");
 
     project
