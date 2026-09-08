@@ -98,6 +98,17 @@ impl HashStrategy {
                 if let Some(hashes) = hashes.get(&id) {
                     return hash_policy(&id, hashes);
                 }
+                // `==1.0.0` can also select `1.0.0+local`. If the local version has no hash
+                // of its own, check it against the hash for `1.0.0`.
+                if let VersionId::NameVersion(name, version) = &id
+                    && version.is_local()
+                    && let Some(hashes) = hashes.get(&VersionId::from_registry(
+                        name.clone(),
+                        version.clone().without_local(),
+                    ))
+                {
+                    return HashPolicy::Any(hashes);
+                }
             }
             HashVerification::Required(hashes) => {
                 let id = id();
