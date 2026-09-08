@@ -154,8 +154,11 @@ def notarize(signed: Path) -> None:
                     path.chmod(0o755)
                     output.write(path, path.relative_to(signed))
 
+        # Include upload time in the budget so polling uses an unexpired token.
+        deadline = time.monotonic() + 600
+        token = apple_token(key_url, key_id, issuer)
         submission = apple_json(
-            apple_token(key_url, key_id, issuer),
+            token,
             body={
                 "submissionName": archive.name,
                 "sha256": hashlib.sha256(archive.read_bytes()).hexdigest(),
@@ -176,9 +179,9 @@ def notarize(signed: Path) -> None:
         except (BotoCoreError, ClientError):
             raise RuntimeError("Apple notarization upload failed") from None
 
-        token = apple_token(key_url, key_id, issuer)
-        deadline = time.monotonic() + 600
         while True:
+            if time.monotonic() >= deadline:
+                raise TimeoutError(f"Apple notarization timed out: {submission_id}")
             status = apple_json(token, f"/{submission_id}")["data"]["attributes"][
                 "status"
             ]
@@ -200,8 +203,6 @@ def notarize(signed: Path) -> None:
                     raise ValueError(f"Apple notarization {status}: {submission_id}")
                 print(f"Apple notarization accepted: {submission_id}")
                 return
-            if time.monotonic() >= deadline:
-                raise TimeoutError(f"Apple notarization timed out: {submission_id}")
             time.sleep(10)
 
 
