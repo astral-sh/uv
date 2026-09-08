@@ -28,6 +28,7 @@ import tempfile
 import time
 import urllib.error
 import urllib.request
+from dataclasses import dataclass
 from pathlib import Path
 from zipfile import ZIP_DEFLATED, ZipFile
 
@@ -36,6 +37,17 @@ from botocore.config import Config
 from botocore.exceptions import BotoCoreError, ClientError
 
 NOTARY_URL = "https://appstoreconnect.apple.com/notary/v2/submissions"
+
+
+@dataclass(frozen=True)
+class NotarizationKey:
+    """An App Store Connect key in Azure Key Vault."""
+
+    # Versioned Azure Key Vault URL used for signing. Azure CLI authenticates
+    # requests using the workflow's existing Azure login.
+    url: str
+    key_id: str
+    issuer: str
 
 
 def base64url(value: bytes) -> str:
@@ -57,12 +69,8 @@ def azure_json(*arguments: str) -> dict:
     return json.loads(result.stdout)
 
 
-def notarization_key() -> tuple[str, str, str]:
-    """Resolve the current key version and its Apple key and issuer IDs.
-
-    The key URL is an identifier, not an access credential. Azure CLI uses the
-    workflow's existing Azure login to read key metadata and sign requests.
-    """
+def notarization_key() -> NotarizationKey:
+    """Resolve the current key version and its Apple key and issuer IDs."""
     vault = os.environ["AZURE_KEYVAULT_NAME"]
     name = os.environ["APPLE_NOTARIZATION_AKV_KEY_NAME"]
     key = azure_json(
@@ -76,15 +84,15 @@ def notarization_key() -> tuple[str, str, str]:
         "--query",
         '{url:key.kid,key_id:tags."apple-key-id",issuer:tags."apple-issuer-id"}',
     )
-    return key["url"], key["key_id"], key["issuer"]
+    return NotarizationKey(url=key["url"], key_id=key["key_id"], issuer=key["issuer"])
 
 
-def apple_token(key_url: str, key_id: str, issuer: str) -> str:
+def apple_token(key: NotarizationKey) -> str:
     """Sign a short-lived Notary API token without exporting the Apple private key."""
     now = int(time.time())
-    header = {"alg": "ES256", "kid": key_id, "typ": "JWT"}
+    header = {"alg": "ES256", "kid": key.key_id, "typ": "JWT"}
     claims = {
-        "iss": issuer,
+        "iss": key.issuer,
         "iat": now,
         "exp": now + 15 * 60,
         "aud": "appstoreconnect-v1",
@@ -99,7 +107,7 @@ def apple_token(key_url: str, key_id: str, issuer: str) -> str:
         "--method",
         "post",
         "--url",
-        f"{key_url}/sign?api-version=7.4",
+        f"{key.url}/sign?api-version=7.4",
         "--resource",
         "https://vault.azure.net",
         "--headers",
@@ -114,7 +122,7 @@ def apple_token(key_url: str, key_id: str, issuer: str) -> str:
             }
         ),
     )
-    if signature["kid"] != key_url:
+    if signature["kid"] != key.url:
         raise ValueError("Azure signed with an unexpected notarization key")
     if len(base64.urlsafe_b64decode(signature["value"] + "==")) != 64:
         raise ValueError("Azure returned an invalid ES256 signature")
@@ -141,7 +149,7 @@ def apple_json(token: str, suffix: str = "", body: dict | None = None) -> dict:
 
 def notarize(signed: Path) -> None:
     """Submit all targets' signed binaries together and wait for Apple's acceptance."""
-    key_url, key_id, issuer = notarization_key()
+    key = notarization_key()
     with tempfile.TemporaryDirectory(dir=os.environ.get("RUNNER_TEMP")) as temporary:
         # Apple requires a supported container: ZIP, disk image, or signed flat
         # installer package. This ZIP is only for submission; distribution uses
@@ -156,7 +164,7 @@ def notarize(signed: Path) -> None:
 
         # Include upload time in the budget so polling uses an unexpired token.
         deadline = time.monotonic() + 600
-        token = apple_token(key_url, key_id, issuer)
+        token = apple_token(key)
         submission = apple_json(
             token,
             body={
