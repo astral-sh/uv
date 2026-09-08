@@ -38,7 +38,7 @@ use uv_python::{
 };
 use uv_redacted::DisplaySafeUrl;
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
-use uv_resolver::{Installable, Lock, Preference};
+use uv_resolver::{DependencyMode, Installable, Lock, Preference};
 use uv_scripts::{Pep723Error, Pep723Item, Pep723Metadata, Pep723Script};
 use uv_settings::{
     EnvironmentOptions, FilesystemOptions, MalwareCheckSettings, PythonInstallMirrors,
@@ -1367,6 +1367,7 @@ fn can_skip_ephemeral(
         &spec.overrides,
         &spec.override_dependencies,
         &spec.excludes,
+        DependencyMode::Transitive,
         InstallationStrategy::Permissive,
         &markers,
         tags,
