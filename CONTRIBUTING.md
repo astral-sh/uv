@@ -139,21 +139,19 @@ cargo run -- venv
 cargo run -- pip install requests
 ```
 
-### Faster development builds
+### Debug information
 
-The `line-tables` profile reduces debug information to speed up compilation while preserving file
-names and line numbers for backtraces and source-line stepping. It omits the type and variable
-information needed to inspect local variables in a debugger.
+Development and test builds use `line-tables-only` debug information by default to speed up
+compilation while preserving file names and line numbers for backtraces and source-line stepping. To
+inspect local variables in a debugger, enable full debug information:
 
 ```shell
-cargo run --profile line-tables -- venv
-cargo nextest run --cargo-profile line-tables -E 'test(test_name)'
+CARGO_PROFILE_DEV_DEBUG=full cargo run -- venv
+CARGO_PROFILE_TEST_DEBUG=full cargo nextest run -E 'test(test_name)'
 ```
 
-Use the existing `no-debug` profile to omit debug information entirely, or the default development
-profile when you need full debugger support. Both `line-tables` and `no-debug` retain debug
-assertions and leave optimizations disabled. Use the same profile across edits to reuse its build
-artifacts.
+Use the `no-debug` profile to omit debug information entirely. Both the default and `no-debug`
+profiles retain debug assertions and leave optimizations disabled.
 
 ## Formatting
 

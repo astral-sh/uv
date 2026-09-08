@@ -382,6 +382,10 @@ use_self = "warn"
 # Diagnostics are not actionable: Enable once https://github.com/rust-lang/rust-clippy/issues/13774 is resolved.
 large_stack_arrays = "allow"
 
+# Retain file names and line numbers for backtraces without full debug information.
+[profile.dev]
+debug = "line-tables-only"
+
 [profile.release]
 strip = true
 lto = "fat"
@@ -444,11 +448,6 @@ strip = "debuginfo"
 [profile.fast-build-nightly]
 inherits = "fast-build"
 panic = "abort"
-
-# Profile for faster development builds with backtraces and source-line stepping.
-[profile.line-tables]
-inherits = "dev"
-debug = "line-tables-only"
 
 # Profile for faster builds: Skip debug info generation, for faster
 # builds of smaller binaries.
