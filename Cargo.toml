@@ -445,6 +445,11 @@ strip = "debuginfo"
 inherits = "fast-build"
 panic = "abort"
 
+# Profile for faster development builds with backtraces and source-line stepping.
+[profile.line-tables]
+inherits = "dev"
+debug = "line-tables-only"
+
 # Profile for faster builds: Skip debug info generation, for faster
 # builds of smaller binaries.
 [profile.no-debug]
