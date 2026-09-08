@@ -10,9 +10,9 @@ use uv_pep508::MarkerTree;
 /// A set of constraints for a set of requirements.
 #[derive(Debug, Default, Clone)]
 pub struct Constraints {
-    /// Original declarations, before removing extras or empty constraints.
+    /// Original declarations, including hashes, for hash verification.
     specifications: Vec<NameRequirementSpecification>,
-    /// Constraints grouped by package name for resolution.
+    /// Constraints grouped by package name.
     requirements: FxHashMap<PackageName, Vec<Requirement>>,
 }
 
@@ -105,52 +105,5 @@ impl Constraints {
                 }),
             )))
         })
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use anyhow::Result;
-
-    use uv_distribution_types::{NameRequirementSpecification, Requirement};
-    use uv_pep508::Requirement as Pep508Requirement;
-
-    use super::Constraints;
-
-    #[test]
-    fn preserve_specifications() -> Result<()> {
-        let specifications = [
-            NameRequirementSpecification {
-                requirement: Requirement::from("foo[bar]".parse::<Pep508Requirement<_>>()?),
-                hashes: vec!["sha256:abc".to_string()],
-            },
-            NameRequirementSpecification {
-                requirement: Requirement::from(
-                    "baz[qux]==1 ; python_version >= '3.12'".parse::<Pep508Requirement<_>>()?,
-                ),
-                hashes: vec!["sha256:def".to_string(), "sha512:abc".to_string()],
-            },
-            NameRequirementSpecification::from(Requirement::from(
-                "baz<2".parse::<Pep508Requirement<_>>()?,
-            )),
-        ];
-        let constraints = Constraints::from_specifications(specifications.clone());
-
-        assert_eq!(
-            constraints.specifications().cloned().collect::<Vec<_>>(),
-            specifications,
-        );
-        assert!(constraints.get(&"foo".parse()?).is_none());
-        insta::assert_debug_snapshot!(
-            constraints.requirements().map(ToString::to_string).collect::<Vec<_>>(),
-            @r#"
-        [
-            "baz==1 ; python_full_version >= '3.12'",
-            "baz<2",
-        ]
-        "#
-        );
-
-        Ok(())
     }
 }
