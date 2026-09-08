@@ -644,13 +644,19 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             }
         }
 
-        let metadata = self
+        let ArchiveMetadata { metadata, hashes } = self
             .builder
             .download_and_build_metadata(source, hashes, &self.client)
             .boxed_local()
             .await?;
 
-        Ok(metadata)
+        // This also handles external dependencies, so force relative paths by default.
+        // For explicit inputs and current project/workspace metadata, this is later overridden with
+        // `with_force_relative(false)` to respect the user's relative/absolute path preference.
+        Ok(ArchiveMetadata {
+            metadata: metadata.with_force_relative(true),
+            hashes,
+        })
     }
 
     /// Return the [`RequiresDist`] from a `pyproject.toml`, if it can be statically extracted.

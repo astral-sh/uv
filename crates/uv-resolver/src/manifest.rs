@@ -66,10 +66,7 @@ impl Manifest {
         lookaheads: Vec<RequestedRequirements>,
     ) -> Self {
         Self {
-            requirements: requirements
-                .into_iter()
-                .map(|requirement| requirement.with_force_relative(false))
-                .collect(),
+            requirements,
             constraints,
             overrides,
             excludes,
@@ -84,10 +81,7 @@ impl Manifest {
 
     pub fn simple(requirements: Vec<Requirement>) -> Self {
         Self {
-            requirements: requirements
-                .into_iter()
-                .map(|requirement| requirement.with_force_relative(false))
-                .collect(),
+            requirements,
             constraints: Constraints::default(),
             overrides: Overrides::default(),
             excludes: Excludes::default(),
@@ -107,6 +101,8 @@ impl Manifest {
 
     #[must_use]
     pub fn with_lookaheads(mut self, mut lookaheads: Vec<RequestedRequirements>) -> Self {
+        // Package metadata defaults to forced-relative paths. Restore the user's path preference for
+        // the current project and workspace members before merging requirement URLs.
         for lookahead in &mut lookaheads {
             if self.workspace_members.contains(lookahead.package())
                 || self.project.as_ref() == Some(lookahead.package())
