@@ -729,16 +729,16 @@ impl VersionMapLazy {
         excluded: bool,
         upload_time: Option<i64>,
     ) -> SourceDistCompatibility {
-        // Check if builds are disabled
-        if self.no_build {
-            return SourceDistCompatibility::Incompatible(IncompatibleSource::NoBuild);
-        }
-
         // Check if after upload time cutoff
         if excluded {
             return SourceDistCompatibility::Incompatible(IncompatibleSource::ExcludeNewer(
                 upload_time,
             ));
+        }
+
+        // Check if builds are disabled
+        if self.no_build {
+            return SourceDistCompatibility::Incompatible(IncompatibleSource::NoBuild);
         }
 
         // Check if yanked
@@ -790,14 +790,14 @@ impl VersionMapLazy {
         excluded: bool,
         upload_time: Option<i64>,
     ) -> WheelCompatibility {
-        // Check if binaries are disabled
-        if self.no_binary {
-            return WheelCompatibility::Incompatible(IncompatibleWheel::NoBinary);
-        }
-
         // Check if after upload time cutoff
         if excluded {
             return WheelCompatibility::Incompatible(IncompatibleWheel::ExcludeNewer(upload_time));
+        }
+
+        // Check if binaries are disabled
+        if self.no_binary {
+            return WheelCompatibility::Incompatible(IncompatibleWheel::NoBinary);
         }
 
         // Check if yanked
