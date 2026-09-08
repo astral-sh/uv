@@ -13355,7 +13355,7 @@ fn pep_751_empty_hashes() -> Result<()> {
                 .arg("pylock.toml"), @"
             exit_code: 2 (failure)
             ----- stderr -----
-            warning: Empty hash tables in `pylock.toml` will be rejected in a future uv version. Rerun the original `uv export` or `uv pip compile` command to regenerate the file.
+            warning: Empty hash tables in `pylock.toml` will be rejected in a future uv version. Run the original `uv export` or `uv pip compile` command to regenerate the file.
             error: In `--require-hashes` mode, all requirements must have a hash, but none were provided for: iniconfig
             ");
         }
@@ -13436,7 +13436,7 @@ fn pep_751_empty_hashes_unselected_artifacts() -> Result<()> {
         .arg("pylock.toml"), @"
     exit_code: 0 (success)
     ----- stderr -----
-    warning: Empty hash tables in `pylock.toml` will be rejected in a future uv version. Rerun the original `uv export` or `uv pip compile` command to regenerate the file.
+    warning: Empty hash tables in `pylock.toml` will be rejected in a future uv version. Run the original `uv export` or `uv pip compile` command to regenerate the file.
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + ok==1.0.0
