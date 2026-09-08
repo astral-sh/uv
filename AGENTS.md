@@ -3,9 +3,6 @@
 - ALWAYS check whether the behavior of a new test is already covered by an existing test
 - PREFER integration tests, e.g., at `it/...` over unit tests
 - PREFER running specific tests over running the entire test suite
-- PREFER the default development and test profiles for local builds and tests; `fast-build` is
-  intended for full-suite CI runs
-- Reuse the selected profile across iterations to avoid rebuilding artifacts
 - PREFER `insta` snapshots following patterns in nearby tests over substring assertions
 - When making changes for Windows from Unix, use `cargo xwin clippy` to check compilation
 - NEVER perform builds with the release profile, unless asked or reproducing performance issues
