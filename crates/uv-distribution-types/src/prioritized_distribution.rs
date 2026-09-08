@@ -540,7 +540,12 @@ impl PrioritizedDist {
             adjusted_wheels.push(wheel.clone());
         }
 
-        let sdist = self.0.source.as_ref().map(|(sdist, _)| sdist.clone());
+        let sdist = self
+            .0
+            .source
+            .as_ref()
+            .filter(|(_, compatibility)| !compatibility.is_excluded())
+            .map(|(sdist, _)| sdist.clone());
         Some(RegistryBuiltDist {
             wheels: adjusted_wheels,
             best_wheel_index: adjusted_best_index,
@@ -565,6 +570,7 @@ impl PrioritizedDist {
             .0
             .wheels
             .iter()
+            .filter(|(_, compatibility)| !compatibility.is_excluded())
             .map(|(wheel, _)| wheel.clone())
             .collect();
         Some(sdist)
