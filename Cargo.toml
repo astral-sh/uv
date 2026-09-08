@@ -382,7 +382,10 @@ use_self = "warn"
 # Diagnostics are not actionable: Enable once https://github.com/rust-lang/rust-clippy/issues/13774 is resolved.
 large_stack_arrays = "allow"
 
-# Retain file names and line numbers for backtraces without full debug information.
+# Skip type and variable debug information to speed up local builds while retaining
+# file names and line numbers for backtraces. This reduced total time by 20% versus
+# full debug information in one warm edit/build/test replay on macOS:
+# https://github.com/astral-sh/uv/pull/21546
 [profile.dev]
 debug = "line-tables-only"
 
