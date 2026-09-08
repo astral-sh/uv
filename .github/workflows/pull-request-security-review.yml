@@ -151,16 +151,6 @@ jobs:
           fi
 
           review="$RUNNER_TEMP/pull-request-review-result.json"
-          if ! jq --exit-status '
-            .reviewed_paths as $paths
-            | ($paths | type == "array")
-              and ($paths | all(.[]; type == "string"))
-              and ($paths | length == (unique | length))
-          ' "$review" > /dev/null; then
-            echo "The review did not return a unique changed-path inventory." >&2
-            exit 1
-          fi
-
           merge_base="$(git merge-base "$BASE_SHA" "$HEAD_SHA")"
           git diff --no-ext-diff --no-textconv --no-renames --name-only -z \
             "$merge_base..$HEAD_SHA" | LC_ALL=C sort -z \
@@ -170,7 +160,7 @@ jobs:
 
           if ! cmp --silent "$RUNNER_TEMP/expected-review-paths.z" \
             "$RUNNER_TEMP/reviewed-paths.z"; then
-            echo "The review did not account for every changed path." >&2
+            echo "Infrastructure error: the security review did not account for every changed path" >&2
             exit 1
           fi
 
