@@ -25,7 +25,6 @@ import boto3
 from botocore.config import Config
 from botocore.exceptions import BotoCoreError, ClientError
 
-BINARIES = ("uv", "uvx", "uv-build")
 NOTARY_URL = "https://appstoreconnect.apple.com/notary/v2/submissions"
 
 
@@ -127,15 +126,15 @@ def apple_json(token: str, suffix: str = "", body: dict | None = None) -> dict:
 
 
 def notarize(signed: Path) -> None:
-    """Submit uv's signed binaries and wait for Apple's acceptance."""
+    """Submit all targets' signed binaries together and wait for Apple's acceptance."""
     key_url, key_id, issuer = notarization_key()
     with tempfile.TemporaryDirectory(dir=os.environ.get("RUNNER_TEMP")) as temporary:
         archive = Path(temporary) / "uv-notarization.zip"
         with ZipFile(archive, "w", compression=ZIP_DEFLATED) as output:
-            for binary in BINARIES:
-                path = signed / binary
-                path.chmod(0o755)
-                output.write(path, binary)
+            for target in sorted(signed.iterdir()):
+                for path in sorted(target.iterdir()):
+                    path.chmod(0o755)
+                    output.write(path, path.relative_to(signed))
 
         submission = apple_json(
             apple_token(key_url, key_id, issuer),
