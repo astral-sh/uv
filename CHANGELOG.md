@@ -7,37 +7,32 @@
 
 Released on 2026-09-08.
 
+### Preview features
+
+- Generate missing artifact hashes when exporting `pylock.toml` files to ensure they conform to PEP 751 ([#20146](https://github.com/astral-sh/uv/pull/20146))
+- Warn when `pylock.toml` artifact hash tables are empty, which will be rejected in a future uv release ([#21462](https://github.com/astral-sh/uv/pull/21462))
+
 ### Performance
 
-- Avoid per-file temporary directories for merged copies ([#21468](https://github.com/astral-sh/uv/pull/21468))
-- Create atomic replacement links without temporary directories ([#21478](https://github.com/astral-sh/uv/pull/21478))
-- Respect `--no-deps` when checking installed requirements ([#21523](https://github.com/astral-sh/uv/pull/21523))
-- Reuse ZIP readers across extraction jobs ([#21499](https://github.com/astral-sh/uv/pull/21499))
-- Use papaya without fast-barrier ([#21437](https://github.com/astral-sh/uv/pull/21437))
-- Use positioned reads for seekable ZIP extraction ([#21500](https://github.com/astral-sh/uv/pull/21500))
+- Speed up installs that overwrite existing files by eliminating per-file temporary directories for atomic hard-link, symlink, and reflink replacements ([#21478](https://github.com/astral-sh/uv/pull/21478))
+- Speed up installs that merge copied wheels into existing environments by replacing per-file temporary directories with adjacent temporary files ([#21468](https://github.com/astral-sh/uv/pull/21468))
+- Speed up local wheel installs by replacing the shared ZIP cursor lock with positioned reads ([#21500](https://github.com/astral-sh/uv/pull/21500))
+- Speed up local wheel installs by reusing ZIP readers and buffers across extracted files ([#21499](https://github.com/astral-sh/uv/pull/21499))
+- Avoid transitive dependency checks and unnecessary resolution when `uv pip install --no-deps` finds the requested packages already installed ([#21523](https://github.com/astral-sh/uv/pull/21523))
 
 ### Bug fixes
 
-- Avoid virtual environment warnings when editing without sync ([#21496](https://github.com/astral-sh/uv/pull/21496))
-- Fix PowerShell activator UNC path handling ([#19159](https://github.com/astral-sh/uv/pull/19159))
-- Generate hashes for pylock.toml exports when they are missing ([#20146](https://github.com/astral-sh/uv/pull/20146))
-- Trim whitespace when parsing Python version files ([#21529](https://github.com/astral-sh/uv/pull/21529))
-- Verify hashes for local versions matching public pins ([#21544](https://github.com/astral-sh/uv/pull/21544))
-- Verify hashes on arbitrary-equality pins ([#21543](https://github.com/astral-sh/uv/pull/21543))
-- Warn on unqueryable interpreters in `uv python list` ([#21498](https://github.com/astral-sh/uv/pull/21498))
-- Warn when pylock artifact hash tables are empty ([#21462](https://github.com/astral-sh/uv/pull/21462))
+- Verify source archives against hashes recorded in `uv.lock` before reading their metadata or running their build backends ([#21223](https://github.com/astral-sh/uv/pull/21223))
+- Verify supplied hashes for registry requirements pinned with `===` under both `--verify-hashes` and `--require-hashes` ([#21543](https://github.com/astral-sh/uv/pull/21543))
+- Apply hashes from public-version pins to matching local versions when no exact local-version hash is provided ([#21544](https://github.com/astral-sh/uv/pull/21544))
+- Support PowerShell virtual environment activation from UNC paths, including WSL paths ([#19159](https://github.com/astral-sh/uv/pull/19159))
+- Trim surrounding whitespace from entries in `.python-version` and `.python-versions` files ([#21529](https://github.com/astral-sh/uv/pull/21529))
+- Suppress `VIRTUAL_ENV` mismatch warnings for `uv add --no-sync`, `uv remove --no-sync`, and `uv add --frozen` ([#21496](https://github.com/astral-sh/uv/pull/21496))
+- Warn and continue when `uv python list` cannot query an interpreter ([#21498](https://github.com/astral-sh/uv/pull/21498))
 
 ### Documentation
 
-- Fix syntax highlighting in `exclude-newer` docs ([#21534](https://github.com/astral-sh/uv/pull/21534))
-
-### Other changes
-
-- Pin uv archive checksums for remaining 0.12.10 installs ([#21524](https://github.com/astral-sh/uv/pull/21524))
-- Separate the repository threat model from uv's CLI model ([#21527](https://github.com/astral-sh/uv/pull/21527))
-- Sign release binaries from the wheel inventory ([#21526](https://github.com/astral-sh/uv/pull/21526))
-- Verify all macOS and Windows release targets in dry-runs ([#21525](https://github.com/astral-sh/uv/pull/21525))
-- Verify locked source archives before building metadata ([#21223](https://github.com/astral-sh/uv/pull/21223))
+- Restore TOML syntax highlighting for `exclude-newer` examples ([#21534](https://github.com/astral-sh/uv/pull/21534))
 
 ## 0.12.10
 
