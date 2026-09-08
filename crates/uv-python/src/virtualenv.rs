@@ -229,7 +229,7 @@ impl PyVenvConfiguration {
         let mut uv = false;
         let mut relocatable = false;
         let mut seed = false;
-        let mut include_system_site_packages = true;
+        let mut include_system_site_packages = false;
         let mut version = None;
 
         // Per https://snarky.ca/how-virtual-environments-work/, the `pyvenv.cfg` file is not a
@@ -441,5 +441,31 @@ mod tests {
                 version = 3.9.0
             "}
         );
+    }
+
+    #[test]
+    fn test_parse_include_system_site_packages() {
+        let tempdir = tempdir().unwrap();
+        let cfg = tempdir.path().join("pyvenv.cfg");
+
+        for (content, expected) in [
+            ("home = /path/to/python\nversion = 3.9.0\n", false),
+            (
+                "home = /path/to/python\nversion = 3.9.0\ninclude-system-site-packages = false\n",
+                false,
+            ),
+            (
+                "home = /path/to/python\nversion = 3.9.0\ninclude-system-site-packages = true\n",
+                true,
+            ),
+        ] {
+            fs::write(&cfg, content).unwrap();
+            let configuration = PyVenvConfiguration::parse(&cfg).unwrap();
+            assert_eq!(
+                configuration.include_system_site_packages(),
+                expected,
+                "unexpected include-system-site-packages value for {content:?}"
+            );
+        }
     }
 }
