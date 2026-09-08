@@ -855,14 +855,13 @@ async fn do_lock(
     let groups = BTreeMap::new();
 
     // Resolve the flat indexes from `--find-links`.
-    let flat_index_entries = {
+    let flat_index = {
         let client = FlatIndexClient::new(client.cached_client(), client.connectivity(), cache);
-        client
+        let entries = client
             .fetch_all(index_locations.flat_indexes().map(Index::url))
-            .await?
+            .await?;
+        FlatIndex::from_entries(entries)
     };
-    let flat_index =
-        FlatIndex::from_entries(flat_index_entries.clone(), None, &hasher, build_options);
 
     // Lower the extra build dependencies.
     let extra_build_requires = match &target {
@@ -924,15 +923,7 @@ async fn do_lock(
 
     // If any of the resolution-determining settings changed, invalidate the lock.
     let existing_lock = if let Some(existing_lock) = existing_lock {
-        // Rank build dependencies using the same hashes that validation will enforce.
-        let locked_flat_index = FlatIndex::from_entries(
-            flat_index_entries,
-            None,
-            &locked_build_hasher,
-            build_options,
-        );
-        let validation_build_dispatch =
-            build_dispatch.fork(&locked_build_hasher, &locked_flat_index);
+        let validation_build_dispatch = build_dispatch.fork(&locked_build_hasher);
         let database = DistributionDatabase::new(
             &client,
             &validation_build_dispatch,

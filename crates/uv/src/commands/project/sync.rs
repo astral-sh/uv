@@ -883,7 +883,7 @@ pub(crate) async fn do_sync<'a>(
         let entries = client
             .fetch_all(index_locations.flat_indexes().map(Index::url))
             .await?;
-        FlatIndex::from_entries(entries, Some(&tags), &build_hasher, build_options)
+        FlatIndex::from_entries(entries)
     };
 
     // Create a build dispatch.

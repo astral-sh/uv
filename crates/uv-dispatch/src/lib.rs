@@ -191,19 +191,14 @@ impl<'a> BuildDispatch<'a> {
         }
     }
 
-    /// Fork the dispatch with a different hash strategy and its corresponding flat index.
+    /// Fork the dispatch with a different hash strategy.
     ///
-    /// The flat index must use the same hash verification policy as `hasher`. In-memory resolution,
-    /// download, and build caches are reset, since they may depend on the previous policy.
+    /// In-memory resolution, download, and build caches are reset, since they may depend on the
+    /// previous policy.
     #[must_use]
-    pub fn fork<'fork>(
-        &'fork self,
-        hasher: &'fork HashStrategy,
-        flat_index: &'fork FlatIndex,
-    ) -> BuildDispatch<'fork> {
+    pub fn fork<'fork>(&'fork self, hasher: &'fork HashStrategy) -> BuildDispatch<'fork> {
         BuildDispatch {
             hasher,
-            flat_index,
             shared_state: SharedState {
                 build_arena: BuildArena::default(),
                 ..self.shared_state.fork()

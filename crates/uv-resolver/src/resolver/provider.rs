@@ -17,7 +17,7 @@ use uv_static::EnvVars;
 use uv_types::{BuildContext, HashStrategy};
 
 use crate::ExcludeNewer;
-use crate::flat_index::FlatIndex;
+use crate::flat_index::{FlatDistributions, FlatIndex};
 use crate::version_map::VersionMap;
 use crate::yanks::AllowedYanks;
 
@@ -117,7 +117,7 @@ pub struct DefaultResolverProvider<'a, Context: BuildContext> {
     /// The [`DistributionDatabase`] used to build source distributions.
     fetcher: DistributionDatabase<'a, Context>,
     /// These are the entries from `--find-links` that act as overrides for index responses.
-    flat_index: FlatIndex,
+    flat_index: &'a FlatIndex,
     tags: Option<Tags>,
     requires_python: RequiresPython,
     allowed_yanks: AllowedYanks,
@@ -145,7 +145,7 @@ impl<'a, Context: BuildContext> DefaultResolverProvider<'a, Context> {
     ) -> Self {
         Self {
             fetcher,
-            flat_index: flat_index.clone(),
+            flat_index,
             tags: tags.cloned(),
             requires_python: requires_python.clone(),
             allowed_yanks,
@@ -193,7 +193,17 @@ impl<Context: BuildContext> ResolverProvider for DefaultResolverProvider<'_, Con
             .await;
 
         // If a package is pinned to an explicit index, ignore any `--find-links` entries.
-        let flat_index = index.is_none().then_some(&self.flat_index);
+        let flat_index = index.is_none().then_some(self.flat_index);
+        let flat_distributions = flat_index
+            .and_then(|flat_index| flat_index.get(package_name))
+            .map(|entries| {
+                FlatDistributions::from_entries(
+                    entries.iter().cloned(),
+                    self.tags.as_ref(),
+                    &self.hasher,
+                    self.build_options,
+                )
+            });
 
         match result {
             Ok(results) => Ok(VersionsResponse::Found(
@@ -218,9 +228,7 @@ impl<Context: BuildContext> ResolverProvider for DefaultResolverProvider<'_, Con
                                 self.hasher.clone(),
                                 included_version_cutoff,
                                 available_version_cutoff,
-                                flat_index
-                                    .and_then(|flat_index| flat_index.get(package_name))
-                                    .cloned(),
+                                flat_distributions.clone(),
                                 self.build_options,
                             ),
                             MetadataFormat::Flat(metadata) => VersionMap::from_flat_metadata(
@@ -235,20 +243,14 @@ impl<Context: BuildContext> ResolverProvider for DefaultResolverProvider<'_, Con
             )),
             Err(err) => match err.kind() {
                 uv_client::ErrorKind::RemotePackageNotFound(_) => {
-                    if let Some(flat_index) = flat_index
-                        .and_then(|flat_index| flat_index.get(package_name))
-                        .cloned()
-                    {
+                    if let Some(flat_index) = flat_distributions {
                         Ok(VersionsResponse::Found(vec![VersionMap::from(flat_index)]))
                     } else {
                         Ok(VersionsResponse::NotFound)
                     }
                 }
                 uv_client::ErrorKind::NoIndex(_) => {
-                    if let Some(flat_index) = flat_index
-                        .and_then(|flat_index| flat_index.get(package_name))
-                        .cloned()
-                    {
+                    if let Some(flat_index) = flat_distributions {
                         Ok(VersionsResponse::Found(vec![VersionMap::from(flat_index)]))
                     } else if flat_index.is_some_and(FlatIndex::offline) {
                         Ok(VersionsResponse::Offline)
@@ -257,10 +259,7 @@ impl<Context: BuildContext> ResolverProvider for DefaultResolverProvider<'_, Con
                     }
                 }
                 uv_client::ErrorKind::Offline(_) => {
-                    if let Some(flat_index) = flat_index
-                        .and_then(|flat_index| flat_index.get(package_name))
-                        .cloned()
-                    {
+                    if let Some(flat_index) = flat_distributions {
                         Ok(VersionsResponse::Found(vec![VersionMap::from(flat_index)]))
                     } else {
                         Ok(VersionsResponse::Offline)
