@@ -7,7 +7,9 @@ use anyhow::{Context, Result};
 use fs_err as fs;
 use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
 
-use uv_configuration::{DependencyModifierScope, DependencyModifiers, DependencyMode, DependencyOverride};
+use uv_configuration::{
+    DependencyMode, DependencyModifierScope, DependencyModifiers, DependencyOverride,
+};
 use uv_distribution_filename::EggInfoFilename;
 use uv_distribution_types::{
     ConfigSettings, DependencyMetadata, Diagnostic, ExtraBuildRequires, ExtraBuildVariables,
