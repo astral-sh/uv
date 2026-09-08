@@ -407,14 +407,7 @@ impl HashStrategy {
                 // Must be pinned to a specific version.
                 let is_pinned = match specifier.operator() {
                     Operator::Equal | Operator::ExactEqual => true,
-                    Operator::EqualStar
-                    | Operator::NotEqual
-                    | Operator::NotEqualStar
-                    | Operator::TildeEqual
-                    | Operator::LessThan
-                    | Operator::LessThanEqual
-                    | Operator::GreaterThan
-                    | Operator::GreaterThanEqual => false,
+                    _ => false,
                 };
                 if !is_pinned {
                     return None;
