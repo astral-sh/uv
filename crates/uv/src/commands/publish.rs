@@ -1,4 +1,3 @@
-use std::borrow::Cow;
 use std::fmt::Write;
 use std::sync::Arc;
 
@@ -15,8 +14,8 @@ use uv_configuration::{KeyringProviderType, TrustedPublishing};
 use uv_distribution_types::{IndexLocations, IndexUrl};
 use uv_errors::{ErrorOptions, Hints, write_error_chain_with_options};
 use uv_publish::{
-    PreparedDistribution, PublishSession, TrustedPublishResult, TrustedPublishingToken,
-    UploadOutcome, burn_trusted_publishing_token, check_trusted_publishing,
+    PreparedDistribution, PublishFinalizeError, PublishOutcome, PublishSession,
+    PublishingCredentials, TrustedPublishResult, UploadOutcome, check_trusted_publishing,
 };
 use uv_redacted::DisplaySafeUrl;
 use uv_settings::EnvironmentOptions;
@@ -133,7 +132,7 @@ pub(crate) async fn publish(
         .client_name("oidc")
         .build()?;
 
-    // Load credentials.
+    // Load credentials and immediately transfer them to the session.
     let (publish_url, credentials) = gather_credentials(
         publish_url,
         username,
@@ -147,9 +146,10 @@ pub(crate) async fn publish(
     )
     .await?;
     let mut session = PublishSession::new(
-        publish_url.clone(),
-        credentials.as_credentials().into_owned(),
+        publish_url,
+        credentials,
         &upload_client,
+        &oidc_client,
         client_builder.retry_policy(),
     );
     if let Some(index_url) = check_url {
@@ -160,19 +160,23 @@ pub(crate) async fn publish(
         session = session.with_check_url(index_url, registry_client_builder, cache);
     }
 
-    // Keep the publishing result so token revocation also runs after an upload or metadata error.
+    // Keep the result so finalization also runs after a preparation or upload error.
     let result = publish_files(distributions, &mut session, dry_run, printer).await;
-
-    if let PublishingCredentials::TrustedPublishing(token) = &credentials
-        && let Err(err) = burn_trusted_publishing_token(token, &publish_url, &oidc_client).await
-    {
-        warn_user!(
-            "Failed to invalidate trusted publishing token. It will expire naturally. Cause: {err}"
-        );
-        debug!("Trusted publishing token revocation failed: {err:?}");
+    let outcome = result.as_ref().copied().unwrap_or(PublishOutcome::Failed);
+    match session.finalize(outcome).await {
+        Ok(()) => {}
+        Err(PublishFinalizeError::TokenInvalidation(err)) => {
+            warn_user!(
+                "Failed to invalidate trusted publishing token. It will expire naturally. Cause: {err}"
+            );
+            debug!("Trusted publishing token revocation failed: {err:?}");
+        }
     }
 
-    result
+    result.map(|outcome| match outcome {
+        PublishOutcome::Success | PublishOutcome::DryRun => ExitStatus::Success,
+        PublishOutcome::Failed => ExitStatus::Failure,
+    })
 }
 
 /// Publish each distribution, reporting all validation failures during a dry run.
@@ -181,7 +185,7 @@ async fn publish_files(
     session: &mut PublishSession<'_>,
     dry_run: bool,
     printer: Printer,
-) -> Result<ExitStatus> {
+) -> Result<PublishOutcome> {
     let mut error_count: usize = 0;
 
     for prepared in distributions {
@@ -205,10 +209,14 @@ async fn publish_files(
     if error_count > 0 {
         let failed = if error_count == 1 { "file" } else { "files" };
         writeln!(printer.stderr(), "Found issues with {error_count} {failed}")?;
-        return Ok(ExitStatus::Failure);
+        return Ok(PublishOutcome::Failed);
     }
 
-    Ok(ExitStatus::Success)
+    Ok(if dry_run {
+        PublishOutcome::DryRun
+    } else {
+        PublishOutcome::Success
+    })
 }
 
 /// Upload a prepared distribution unless this is a dry run.
@@ -257,27 +265,6 @@ async fn publish_file(
     }
 
     Ok(())
-}
-
-/// Credentials for publishing, including whether they require revocation after use.
-enum PublishingCredentials {
-    /// Credentials supplied by the user or resolved by the authentication middleware.
-    Supplied(Credentials),
-    /// A short-lived token obtained through trusted publishing.
-    TrustedPublishing(TrustedPublishingToken),
-}
-
-impl PublishingCredentials {
-    /// Return the HTTP credentials to use for uploads.
-    fn as_credentials(&self) -> Cow<'_, Credentials> {
-        match self {
-            Self::Supplied(credentials) => Cow::Borrowed(credentials),
-            Self::TrustedPublishing(token) => Cow::Owned(Credentials::basic(
-                Some("__token__".to_string()),
-                Some(token.to_string()),
-            )),
-        }
-    }
 }
 
 /// Whether to allow prompting for username and password.
