@@ -58,9 +58,6 @@ enum VenvError {
     #[error("Failed to install seed packages into virtual environment")]
     Seed(#[source] AnyErrorBuild),
 
-    #[error("Failed to extract interpreter tags for installing seed packages")]
-    Tags(#[source] uv_platform_tags::TagsError),
-
     #[error("Failed to resolve `--find-links` entry")]
     FlatIndex(#[source] uv_client::FlatIndexError),
 }
@@ -304,18 +301,12 @@ pub(crate) async fn venv(
 
         // Resolve the flat indexes from `--find-links`.
         let flat_index = {
-            let tags = interpreter.tags().map_err(VenvError::Tags)?;
             let client = FlatIndexClient::new(client.cached_client(), client.connectivity(), cache);
             let entries = client
                 .fetch_all(index_locations.flat_indexes().map(Index::url))
                 .await
                 .map_err(VenvError::FlatIndex)?;
-            FlatIndex::from_entries(
-                entries,
-                Some(tags),
-                &HashStrategy::default(),
-                &BuildOptions::new(NoBinary::None, NoBuild::All),
-            )
+            FlatIndex::from_entries(entries)
         };
 
         // Initialize any shared state.
