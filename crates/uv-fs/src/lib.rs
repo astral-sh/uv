@@ -6,6 +6,8 @@ use std::time::SystemTime;
 use std::os::unix::fs::MetadataExt;
 #[cfg(windows)]
 use std::os::windows::io::AsRawHandle;
+#[cfg(windows)]
+use std::sync::atomic::{AtomicU64, Ordering};
 
 #[cfg(target_os = "linux")]
 use std::time::{Duration, UNIX_EPOCH};
@@ -522,16 +524,32 @@ pub fn copy_atomic_sync(from: impl AsRef<Path>, to: impl AsRef<Path>) -> std::io
 }
 
 #[cfg(windows)]
+const DEFAULT_FILE_MOVE_RETRY_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
+
+#[cfg(windows)]
+static FILE_MOVE_RETRY_TIMEOUT_SECONDS: AtomicU64 =
+    AtomicU64::new(DEFAULT_FILE_MOVE_RETRY_TIMEOUT.as_secs());
+
+/// Set the maximum total delay between retries of file moves blocked by other processes.
+pub fn set_file_move_retry_timeout(timeout: std::time::Duration) {
+    #[cfg(windows)]
+    FILE_MOVE_RETRY_TIMEOUT_SECONDS.store(timeout.as_secs(), Ordering::Relaxed);
+
+    #[cfg(not(windows))]
+    let _ = timeout;
+}
+
+#[cfg(windows)]
 fn backoff_file_move() -> backon::ExponentialBackoff {
     use backon::BackoffBuilder;
-    // This amounts to 10 total seconds of trying the operation.
-    // We retry 10 times, starting at 10*(2^0) milliseconds for the first retry, doubling with each
-    // retry, so the last (10th) one will take about 10*(2^9) milliseconds ~= 5 seconds. All other
-    // attempts combined should equal the length of the last attempt (because it's a sum of powers
-    // of 2), so 10 seconds overall.
+
+    let timeout =
+        std::time::Duration::from_secs(FILE_MOVE_RETRY_TIMEOUT_SECONDS.load(Ordering::Relaxed));
     backon::ExponentialBuilder::default()
         .with_min_delay(std::time::Duration::from_millis(10))
-        .with_max_times(10)
+        .with_max_delay(std::time::Duration::from_secs(1))
+        .without_max_times()
+        .with_total_delay(Some(timeout))
         .build()
 }
 
@@ -1046,6 +1064,20 @@ mod tests {
     use std::assert_matches;
 
     use super::*;
+
+    #[cfg(windows)]
+    #[test]
+    fn file_move_backoff_respects_default_timeout() {
+        let mut backoff = backoff_file_move();
+        let total_delay: std::time::Duration = std::iter::from_fn(|| backoff.next()).sum();
+
+        assert!(total_delay <= DEFAULT_FILE_MOVE_RETRY_TIMEOUT);
+        assert!(
+            total_delay
+                >= DEFAULT_FILE_MOVE_RETRY_TIMEOUT
+                    .saturating_sub(std::time::Duration::from_secs(1))
+        );
+    }
 
     #[test]
     fn remove_symlink_removes_directory_link_without_removing_target() -> io::Result<()> {

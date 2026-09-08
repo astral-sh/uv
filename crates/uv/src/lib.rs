@@ -10,6 +10,7 @@ use std::path::Path;
 use std::process::ExitCode;
 use std::str::FromStr;
 use std::sync::atomic::Ordering;
+use std::time::Duration;
 
 use anyhow::{Result, anyhow, bail};
 use clap::error::{ContextKind, ContextValue};
@@ -147,6 +148,10 @@ async fn run_with_workspace_cache(
     global_initialization: GlobalInitialization,
     workspace_cache: WorkspaceCache,
 ) -> Result<ExitStatus> {
+    if let Some(timeout) = cli.top_level.global_args.file_move_retry_timeout {
+        uv_fs::set_file_move_retry_timeout(Duration::from_secs(timeout));
+    }
+
     let config_discovery = ConfigDiscovery::from_args(cli.top_level.no_config);
 
     // Configure color before resolving settings so argument errors retain their styling.

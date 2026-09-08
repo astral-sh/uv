@@ -1,6 +1,27 @@
+use assert_cmd::assert::OutputAssertExt;
 use uv_static::EnvVars;
 
 use uv_test::uv_snapshot;
+
+#[test]
+fn file_move_retry_timeout_is_configurable() {
+    let context = uv_test::test_context_with_versions!(&[]);
+
+    context
+        .command()
+        .arg("--file-move-retry-timeout")
+        .arg("20")
+        .arg("--version")
+        .assert()
+        .success();
+
+    context
+        .command()
+        .env(EnvVars::UV_FILE_MOVE_RETRY_TIMEOUT, "20")
+        .arg("--version")
+        .assert()
+        .success();
+}
 
 #[test]
 fn cert_is_limited_to_pip() {
