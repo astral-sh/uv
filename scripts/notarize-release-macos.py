@@ -39,7 +39,7 @@ from botocore.exceptions import BotoCoreError, ClientError
 NOTARY_URL = "https://appstoreconnect.apple.com/notary/v2/submissions"
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class NotarizationKey:
     """An App Store Connect key in Azure Key Vault."""
 
