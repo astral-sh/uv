@@ -5,7 +5,17 @@
 # [tool.uv]
 # no-build = true
 # ///
-"""Notarize uv's signed macOS release binaries with Astral's Azure key."""
+"""Submit signed macOS executables to Apple's notarization service.
+
+Apple scans software for malware and signing issues. On acceptance, it publishes
+tickets that Gatekeeper can retrieve online when users run the binaries.
+Standalone executables cannot have tickets stapled to them, so uv relies on
+that online lookup even when the binaries are distributed in wheels or archives.
+
+This script uploads all signed macOS targets and waits for Apple's result.
+It authenticates to the Notary API using an App Store Connect key in Azure Key
+Vault, which signs API tokens without exposing the private key.
+"""
 
 import argparse
 import base64
@@ -129,6 +139,10 @@ def notarize(signed: Path) -> None:
     """Submit all targets' signed binaries together and wait for Apple's acceptance."""
     key_url, key_id, issuer = notarization_key()
     with tempfile.TemporaryDirectory(dir=os.environ.get("RUNNER_TEMP")) as temporary:
+        # Apple requires a supported container: ZIP, disk image, or signed flat
+        # installer package. This ZIP is only for submission; distribution uses
+        # the wheels and release archives assembled later.
+        # https://developer.apple.com/documentation/security/customizing-the-notarization-workflow
         archive = Path(temporary) / "uv-notarization.zip"
         with ZipFile(archive, "w", compression=ZIP_DEFLATED) as output:
             for target in sorted(signed.iterdir()):
