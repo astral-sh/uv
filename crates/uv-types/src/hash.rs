@@ -11,7 +11,7 @@ use uv_distribution_types::{
     Resolution, UnresolvedRequirement, VersionId,
 };
 use uv_normalize::PackageName;
-use uv_pep440::Version;
+use uv_pep440::{Operator, Version};
 use uv_pypi_types::{HashAlgorithm, HashDigest, HashDigests, HashError, ResolverMarkerEnvironment};
 use uv_redacted::DisplaySafeUrl;
 
@@ -405,7 +405,9 @@ impl HashStrategy {
                 };
 
                 // Must be pinned to a specific version.
-                if *specifier.operator() != uv_pep440::Operator::Equal {
+                let is_pinned =
+                    matches!(specifier.operator(), Operator::Equal | Operator::ExactEqual);
+                if !is_pinned {
                     return None;
                 }
 
