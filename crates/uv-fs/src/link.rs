@@ -2,6 +2,8 @@
 //! copying) when link methods are unsupported.
 
 use std::io;
+#[cfg(target_os = "linux")]
+use std::os::fd::OwnedFd;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
@@ -361,6 +363,8 @@ where
     F: Fn(&Path) -> bool,
 {
     let mut state = LinkState::new(mode);
+    #[cfg(target_os = "linux")]
+    let mut hardlinker = Hardlinker::default();
 
     for entry in WalkDir::new(src) {
         let entry = entry.map_err(|err| LinkError::WalkDir {
@@ -376,6 +380,14 @@ where
             fs_err::create_dir_all(&target).map_err(|err| LinkError::CreateDir {
                 path: target.clone(),
                 err,
+            })?;
+            continue;
+        }
+
+        #[cfg(target_os = "linux")]
+        if state.mode == LinkMode::Hardlink {
+            state = hardlink_file_with_fallback(path, &target, state, options, |path, target| {
+                hardlinker.link(path, target)
             })?;
             continue;
         }
@@ -402,7 +414,9 @@ where
 {
     match state.mode {
         LinkMode::Clone => reflink_file_with_fallback(path, target, state, options),
-        LinkMode::Hardlink => hardlink_file_with_fallback(path, target, state, options),
+        LinkMode::Hardlink => {
+            hardlink_file_with_fallback(path, target, state, options, try_hardlink_file)
+        }
         LinkMode::Symlink => symlink_file_with_fallback(path, target, state, options),
         LinkMode::Copy => {
             if options.on_existing_directory == OnExistingDirectory::Merge {
@@ -639,6 +653,7 @@ fn hardlink_file_with_fallback<F>(
     target: &Path,
     state: LinkState,
     options: &LinkOptions<'_, F>,
+    hardlink: impl FnOnce(&Path, &Path) -> io::Result<()>,
 ) -> Result<LinkState, LinkError>
 where
     F: Fn(&Path) -> bool,
@@ -650,7 +665,7 @@ where
 
     match state.attempt {
         LinkAttempt::Initial => {
-            if let Err(err) = try_hardlink_file(path, target) {
+            if let Err(err) = hardlink(path, target) {
                 if err.kind() == io::ErrorKind::AlreadyExists
                     && options.on_existing_directory == OnExistingDirectory::Merge
                 {
@@ -674,7 +689,7 @@ where
             }
         }
         LinkAttempt::Subsequent => {
-            if let Err(err) = try_hardlink_file(path, target) {
+            if let Err(err) = hardlink(path, target) {
                 if err.kind() == io::ErrorKind::AlreadyExists
                     && options.on_existing_directory == OnExistingDirectory::Merge
                 {
@@ -763,6 +778,76 @@ where
             to: target.to_path_buf(),
             err,
         })
+}
+
+/// Reuse parent directory handles when hard linking adjacent files on Linux.
+///
+/// Keep only the most recent pair so deeply nested trees cannot exhaust file descriptors.
+#[cfg(target_os = "linux")]
+#[derive(Default)]
+struct Hardlinker {
+    directories: Option<HardlinkDirectories>,
+}
+
+#[cfg(target_os = "linux")]
+struct HardlinkDirectories {
+    source_path: PathBuf,
+    target_path: PathBuf,
+    source: OwnedFd,
+    target: OwnedFd,
+}
+
+#[cfg(target_os = "linux")]
+impl HardlinkDirectories {
+    /// Open directories for path lookup without requiring read access to the destination.
+    fn open(source_path: &Path, target_path: &Path) -> io::Result<Self> {
+        let flags =
+            rustix::fs::OFlags::PATH | rustix::fs::OFlags::DIRECTORY | rustix::fs::OFlags::CLOEXEC;
+        Ok(Self {
+            source_path: source_path.to_path_buf(),
+            target_path: target_path.to_path_buf(),
+            source: rustix::fs::open(source_path, flags, rustix::fs::Mode::empty())?,
+            target: rustix::fs::open(target_path, flags, rustix::fs::Mode::empty())?,
+        })
+    }
+}
+
+#[cfg(target_os = "linux")]
+impl Hardlinker {
+    /// Link by basename, retaining the path-based fallback and its error context.
+    fn link(&mut self, source: &Path, target: &Path) -> io::Result<()> {
+        if let (Some(source_parent), Some(target_parent), Some(source_name), Some(target_name)) = (
+            source.parent(),
+            target.parent(),
+            source.file_name(),
+            target.file_name(),
+        ) {
+            if self.directories.as_ref().is_none_or(|directories| {
+                directories.source_path.as_os_str() != source_parent.as_os_str()
+                    || directories.target_path.as_os_str() != target_parent.as_os_str()
+            }) {
+                self.directories = HardlinkDirectories::open(source_parent, target_parent).ok();
+            }
+
+            if let Some(directories) = &self.directories
+                && rustix::fs::linkat(
+                    &directories.source,
+                    source_name,
+                    &directories.target,
+                    target_name,
+                    // Like link(2), link the symlink itself instead of its target.
+                    rustix::fs::AtFlags::empty(),
+                )
+                .is_ok()
+            {
+                return Ok(());
+            }
+        }
+
+        // Retry failures through the existing path, including the link-count limit recovery.
+        // Failure to open directory handles must not prevent a path-based link from working.
+        try_hardlink_file(source, target)
+    }
 }
 
 /// Try to create a hard link, handling `TooManyLinks` (EMLINK/`ERROR_TOO_MANY_LINKS`)
@@ -908,6 +993,8 @@ fn create_symlink(original: &Path, link: &Path) -> io::Result<()> {
 #[expect(clippy::print_stderr)]
 mod tests {
     use std::assert_matches;
+    #[cfg(target_os = "linux")]
+    use std::os::unix::fs::MetadataExt;
 
     use super::*;
     use tempfile::TempDir;
@@ -1007,6 +1094,50 @@ mod tests {
             let dst_meta = fs_err::metadata(dst_dir.path().join("file1.txt")).unwrap();
             assert_eq!(src_meta.ino(), dst_meta.ino());
         }
+    }
+
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn test_hardlink_preserves_source_symlinks() {
+        let root = test_tempdir();
+        let source = root.path().join("source");
+        let target = root.path().join("target");
+        fs_err::create_dir_all(source.join("package")).unwrap();
+        fs_err::create_dir_all(&target).unwrap();
+        fs_err::write(source.join("package/file.txt"), "content").unwrap();
+        fs_err::os::unix::fs::symlink("package/file.txt", source.join("file-link")).unwrap();
+        fs_err::os::unix::fs::symlink("package", source.join("directory-link")).unwrap();
+        fs_err::os::unix::fs::symlink("missing", source.join("dangling-link")).unwrap();
+
+        // The source's ancestors and the destination root may be directory symlinks.
+        let source_parent_alias = root.path().join("source-parent-alias");
+        let target_alias = root.path().join("target-alias");
+        fs_err::os::unix::fs::symlink(root.path(), &source_parent_alias).unwrap();
+        fs_err::os::unix::fs::symlink(&target, &target_alias).unwrap();
+
+        let options = LinkOptions::new(LinkMode::Hardlink);
+        let result =
+            link_dir(&source_parent_alias.join("source"), &target_alias, &options).unwrap();
+        assert_eq!(result, LinkMode::Hardlink);
+
+        for name in ["file-link", "directory-link", "dangling-link"] {
+            assert_eq!(
+                fs_err::read_link(source.join(name)).unwrap(),
+                fs_err::read_link(target.join(name)).unwrap(),
+            );
+            assert_eq!(
+                fs_err::symlink_metadata(source.join(name)).unwrap().ino(),
+                fs_err::symlink_metadata(target.join(name)).unwrap().ino(),
+            );
+        }
+        assert_eq!(
+            fs_err::metadata(source.join("package/file.txt"))
+                .unwrap()
+                .ino(),
+            fs_err::metadata(target.join("package/file.txt"))
+                .unwrap()
+                .ino(),
+        );
     }
 
     #[test]
