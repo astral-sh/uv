@@ -29,6 +29,7 @@ jobs:
     outputs:
       macos: ${{ steps.targets.outputs.macos }}
       windows: ${{ steps.targets.outputs.windows }}
+      artifacts: ${{ steps.targets.outputs.artifacts }}
       unsigned-macos: ${{ steps.macos.outputs.artifact-id }}
       unsigned-windows: ${{ steps.windows.outputs.artifact-id }}
       assembly: ${{ steps.assembly.outputs.artifact-id }}
@@ -36,10 +37,6 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-
-      - name: "Set up shared release signing scripts"
-        id: setup-signing
-        uses: astral-sh/github-actions/setup-release-signing@934ca980760605f3123072c179273cddf3d5528c # shared release signing actions
 
       - name: "Install uv"
         uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
@@ -78,32 +75,18 @@ jobs:
           path: github-archives
           merge-multiple: true
 
-      - name: "Extract executable wheel members"
-        shell: bash
-        env:
-          RELEASE_SIGNING_SCRIPTS: ${{ steps.setup-signing.outputs.scripts }}
-          MACOS_TARGETS: ${{ steps.targets.outputs.macos }}
-          WINDOWS_TARGETS: ${{ steps.targets.outputs.windows }}
-        run: |
-          set -euo pipefail
-          # uv and uv_build keep their executables in .data/scripts.
-          for system in macos windows; do
-            if [[ "$system" == macos ]]; then targets=$MACOS_TARGETS; else targets=$WINDOWS_TARGETS; fi
-            while read -r target; do
-              mkdir -p "wheels/$target"
-              cp wheel-artifacts/"wheels_uv-$target"/*.whl "wheels/$target/"
-              cp wheel-artifacts/"wheels_uv_build-$target"/*.whl "wheels/$target/"
-              uv run "$RELEASE_SIGNING_SCRIPTS/extract-wheel-binaries.py" \
-                --output "./unsigned/$system/$target" wheels/"$target"/*.whl
-            done < <(jq -r '.[].target' <<< "$targets")
-          done
+      - name: "Prepare release signing inputs"
+        uses: astral-sh/github-actions/prepare-release-signing@457c54e3c8eba6b65e8b47ea07efed62ccc86d91 # shared release signing actions
+        with:
+          targets: ${{ steps.targets.outputs.artifacts }}
+          output-directory: prepared
 
       - name: "Upload unsigned macOS executables"
         id: macos
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: unsigned-macos-${{ github.run_id }}-${{ github.run_attempt }}
-          path: unsigned/macos
+          path: prepared/unsigned/macos
           if-no-files-found: error
 
       - name: "Upload unsigned Windows executables"
@@ -111,7 +94,7 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: unsigned-windows-${{ github.run_id }}-${{ github.run_attempt }}
-          path: unsigned/windows
+          path: prepared/unsigned/windows
           if-no-files-found: error
 
       - name: "Upload assembly inputs"
@@ -120,8 +103,8 @@ jobs:
         with:
           name: signing-assembly-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
-            wheels
-            github-archives
+            prepared/wheels
+            prepared/github-archives
           if-no-files-found: error
 
   sign-macos:
@@ -143,7 +126,7 @@ jobs:
           merge-multiple: true
 
       - name: "Sign and notarize macOS executables"
-        uses: astral-sh/github-actions/sign-macos@934ca980760605f3123072c179273cddf3d5528c # shared release signing actions
+        uses: astral-sh/github-actions/sign-macos@457c54e3c8eba6b65e8b47ea07efed62ccc86d91 # shared release signing actions
         with:
           unsigned-directory: ${{ github.workspace }}/unsigned
           signed-directory: ${{ github.workspace }}/signed
@@ -189,7 +172,7 @@ jobs:
           merge-multiple: true
 
       - name: "Sign and verify Windows executable identities"
-        uses: astral-sh/github-actions/sign-windows@934ca980760605f3123072c179273cddf3d5528c # shared release signing actions
+        uses: astral-sh/github-actions/sign-windows@457c54e3c8eba6b65e8b47ea07efed62ccc86d91 # shared release signing actions
         with:
           unsigned-directory: ${{ github.workspace }}/unsigned
           signed-directory: ${{ github.workspace }}/signed
@@ -226,10 +209,6 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: "Set up shared release signing scripts"
-        id: setup-signing
-        uses: astral-sh/github-actions/setup-release-signing@934ca980760605f3123072c179273cddf3d5528c # shared release signing actions
-
       - name: "Install uv"
         uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
         with:
@@ -241,6 +220,7 @@ jobs:
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           artifact-ids: ${{ needs.prepare.outputs.assembly }}
+          path: prepared
           merge-multiple: true
 
       - name: "Download signed macOS executables"
@@ -257,60 +237,23 @@ jobs:
           path: signed
           merge-multiple: true
 
-      - name: "Replace executable wheel members"
-        shell: bash
-        env:
-          RELEASE_SIGNING_SCRIPTS: ${{ steps.setup-signing.outputs.scripts }}
-          MACOS_TARGETS: ${{ needs.prepare.outputs.macos }}
-          WINDOWS_TARGETS: ${{ needs.prepare.outputs.windows }}
-        run: |
-          set -euo pipefail
-          shopt -s failglob
-          mkdir -p signed-pypi/uv signed-pypi/uv_build
-          for system in macos windows; do
-            if [[ "$system" == macos ]]; then targets=$MACOS_TARGETS; else targets=$WINDOWS_TARGETS; fi
-            while read -r target; do
-              mkdir -p "signed-wheels/$system/$target"
-              for package in uv uv_build; do
-                wheels=(wheels/"$target"/"$package"-*.whl)
-                [[ ${#wheels[@]} -eq 1 ]] || { echo "Expected one $package wheel for $target" >&2; exit 1; }
-                wheel=${wheels[0]}
-                output="signed-wheels/$system/$target/${wheel##*/}"
-                uv run "$RELEASE_SIGNING_SCRIPTS/inject-signed-wheel-binaries.py" --input "$wheel" \
-                  --output "$output" --signed-binaries "./signed/$target"
-                cp "$output" "signed-pypi/$package/"
-              done
-            done < <(jq -r '.[].target' <<< "$targets")
-          done
-          uv run --no-project scripts/check_uv_wheel_contents.py \
-            signed-pypi/uv/*.whl signed-pypi/uv_build/*.whl
+      - name: "Assemble signed release artifacts"
+        uses: astral-sh/github-actions/assemble-signed-release@457c54e3c8eba6b65e8b47ea07efed62ccc86d91 # shared release signing actions
+        with:
+          targets: ${{ needs.prepare.outputs.artifacts }}
+          prepared-directory: prepared
+          signed-directory: signed
+          output-directory: signed-artifacts
 
-      - name: "Replace GitHub release archive executables"
-        shell: bash
-        env:
-          RELEASE_SIGNING_SCRIPTS: ${{ steps.setup-signing.outputs.scripts }}
-          MACOS_TARGETS: ${{ needs.prepare.outputs.macos }}
-          WINDOWS_TARGETS: ${{ needs.prepare.outputs.windows }}
-        run: |
-          set -euo pipefail
-          for system in macos windows; do
-            if [[ "$system" == macos ]]; then extension=tar.gz; else extension=zip; fi
-            if [[ "$system" == macos ]]; then targets=$MACOS_TARGETS; else targets=$WINDOWS_TARGETS; fi
-            while read -r target; do
-              uv run "$RELEASE_SIGNING_SCRIPTS/extract-wheel-binaries.py" \
-                --output "./unsigned/$target" wheels/"$target"/*.whl
-              uv run scripts/inject-signed-github-release-binaries.py \
-                "./github-archives/uv-$target.$extension" \
-                "./unsigned/$target" "./signed/$target" ./signed-github-archives
-            done < <(jq -r '.[].target' <<< "$targets")
-          done
+      - name: "Check uv wheel contents"
+        run: uv run --no-project scripts/check_uv_wheel_contents.py signed-artifacts/pypi/uv/*.whl signed-artifacts/pypi/uv_build/*.whl
 
       - name: "Upload signed macOS wheels"
         id: macos-wheels
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: signed-macos-wheels-${{ github.run_id }}-${{ github.run_attempt }}
-          path: signed-wheels/macos
+          path: signed-artifacts/wheels/macos
           if-no-files-found: error
 
       - name: "Upload signed Windows wheels"
@@ -318,7 +261,7 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: signed-windows-wheels-${{ github.run_id }}-${{ github.run_attempt }}
-          path: signed-wheels/windows
+          path: signed-artifacts/wheels/windows
           if-no-files-found: error
 
       - name: "Upload signed uv wheels"
@@ -326,7 +269,7 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: signed-uv-wheels-${{ github.run_id }}-${{ github.run_attempt }}
-          path: signed-pypi/uv
+          path: signed-artifacts/pypi/uv
           if-no-files-found: error
 
       - name: "Upload signed uv_build wheels"
@@ -334,7 +277,7 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: signed-uv-build-wheels-${{ github.run_id }}-${{ github.run_attempt }}
-          path: signed-pypi/uv_build
+          path: signed-artifacts/pypi/uv_build
           if-no-files-found: error
 
       - name: "Upload signed GitHub release archives"
@@ -342,7 +285,7 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: signed-github-release-archives-${{ github.run_id }}-${{ github.run_attempt }}
-          path: signed-github-archives/*
+          path: signed-artifacts/github-archives/*
           if-no-files-found: error
 
   verify-macos:
@@ -361,10 +304,6 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-
-      - name: "Set up shared release signing scripts"
-        id: setup-signing
-        uses: astral-sh/github-actions/setup-release-signing@934ca980760605f3123072c179273cddf3d5528c # shared release signing actions
 
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
@@ -393,11 +332,6 @@ jobs:
           path: wheels
           merge-multiple: true
 
-      - name: "Verify packaged executables and signatures"
-        env:
-          RELEASE_SIGNING_SCRIPTS: ${{ steps.setup-signing.outputs.scripts }}
-        run: uv run scripts/verify-release-wheels-macos.py "./signed/$TARGET" "./wheels/$TARGET"
-
       - name: "Download signed GitHub release archives"
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
@@ -405,10 +339,13 @@ jobs:
           path: github-archives
           merge-multiple: true
 
-      - name: "Verify GitHub release archive"
-        env:
-          RELEASE_SIGNING_SCRIPTS: ${{ steps.setup-signing.outputs.scripts }}
-        run: uv run scripts/verify-github-release-macos.py "./signed/$TARGET" "./github-archives/uv-$TARGET.tar.gz"
+      - name: "Verify signed release artifacts"
+        uses: astral-sh/github-actions/verify-release@457c54e3c8eba6b65e8b47ea07efed62ccc86d91 # shared release signing actions
+        with:
+          target: ${{ toJSON(matrix.platform) }}
+          signed-directory: signed/${{ matrix.platform.target }}
+          wheels-directory: wheels/${{ matrix.platform.target }}
+          github-archives-directory: github-archives
 
       - name: "Install and run the signed wheels"
         run: ./scripts/test-release-wheels-macos.sh "./wheels/$TARGET"
@@ -429,10 +366,6 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-
-      - name: "Set up shared release signing scripts"
-        id: setup-signing
-        uses: astral-sh/github-actions/setup-release-signing@934ca980760605f3123072c179273cddf3d5528c # shared release signing actions
 
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
@@ -471,12 +404,6 @@ jobs:
           path: wheels
           merge-multiple: true
 
-      - name: "Verify packaged executables and signatures"
-        shell: pwsh
-        env:
-          RELEASE_SIGNING_SCRIPTS: ${{ steps.setup-signing.outputs.scripts }}
-        run: ./scripts/verify-release-wheels-windows.ps1 "./signed/$env:TARGET" "./wheels/$env:TARGET"
-
       - name: "Download signed GitHub release archives"
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
@@ -484,11 +411,13 @@ jobs:
           path: github-archives
           merge-multiple: true
 
-      - name: "Verify GitHub release archive"
-        shell: pwsh
-        env:
-          RELEASE_SIGNING_SCRIPTS: ${{ steps.setup-signing.outputs.scripts }}
-        run: ./scripts/verify-github-release-windows.ps1 "./signed/$env:TARGET" "./github-archives/uv-${env:TARGET}.zip"
+      - name: "Verify signed release artifacts"
+        uses: astral-sh/github-actions/verify-release@457c54e3c8eba6b65e8b47ea07efed62ccc86d91 # shared release signing actions
+        with:
+          target: ${{ toJSON(matrix.platform) }}
+          signed-directory: signed/${{ matrix.platform.target }}
+          wheels-directory: wheels/${{ matrix.platform.target }}
+          github-archives-directory: github-archives
 
       - name: "Install and run the signed wheels"
         shell: pwsh
