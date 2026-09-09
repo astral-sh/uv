@@ -54,7 +54,7 @@ use crate::commands::project::{
     script_extra_build_requires,
 };
 use crate::commands::reporters::{PythonDownloadReporter, ResolverReporter};
-use crate::commands::{ExitStatus, ScriptPath, UvError, diagnostics, pip};
+use crate::commands::{ExitStatus, ScriptPath, UvError, pip};
 use crate::printer::Printer;
 use crate::settings::{FrozenSource, LockCheck, LockedSource, ResolverSettings};
 
@@ -270,7 +270,6 @@ pub(crate) async fn lock(
         Err(err @ (ProjectError::LockMismatch(..) | ProjectError::LockFormat(..))) => {
             Err(UvError::user(err).into())
         }
-        Err(ProjectError::Operation(err)) => Err(diagnostics::operation_error(err, None).into()),
         Err(err) => Err(UvError::from(err).into()),
     }
 }

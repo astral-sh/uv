@@ -31,10 +31,10 @@ use crate::commands::project::install_target::InstallTarget;
 use crate::commands::project::lock::{LockMode, LockOperation};
 use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{
-    ProjectEnvironmentPolicy, ProjectError, ProjectInterpreter, ScriptInterpreter, UniversalState,
+    ProjectEnvironmentPolicy, ProjectInterpreter, ScriptInterpreter, UniversalState,
     WorkspacePython, default_dependency_groups, detect_conflicts,
 };
-use crate::commands::{ExitStatus, OutputWriter, diagnostics};
+use crate::commands::{ExitStatus, OutputWriter, UvError};
 use crate::printer::Printer;
 use crate::settings::{FrozenSource, LockCheck, ResolverSettings};
 
@@ -246,10 +246,7 @@ pub(crate) async fn export(
     .await
     {
         Ok(result) => result.into_lock(),
-        Err(ProjectError::Operation(err)) => {
-            return Err(diagnostics::operation_error(err, None).into());
-        }
-        Err(err) => return Err(err.into()),
+        Err(err) => return Err(UvError::from(err).into()),
     };
 
     // Identify the installation target.

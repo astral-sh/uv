@@ -47,7 +47,7 @@ use crate::commands::pip::operations::{report_interpreter, report_target_environ
 use crate::commands::pip::{operations, resolution_markers, resolution_tags};
 use crate::commands::pylock::{read_pylock_toml, resolve_pylock_toml};
 use crate::commands::reporters::PythonDownloadReporter;
-use crate::commands::{ExitStatus, diagnostics};
+use crate::commands::{ExitStatus, UvError};
 use crate::printer::Printer;
 
 /// Install a set of locked requirements into the current Python environment.
@@ -481,7 +481,7 @@ pub(crate) async fn pip_sync(
         {
             Ok((resolution, hasher)) => (Resolution::from(resolution), hasher),
             Err(err) => {
-                return Err(diagnostics::operation_error(err, None).into());
+                return Err(UvError::from(err).into());
             }
         };
 
@@ -546,7 +546,7 @@ pub(crate) async fn pip_sync(
     {
         Ok(_) => {}
         Err(err) => {
-            return Err(diagnostics::operation_error(err, None).into());
+            return Err(UvError::from(err).into());
         }
     }
 

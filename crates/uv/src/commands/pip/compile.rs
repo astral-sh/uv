@@ -56,7 +56,7 @@ use uv_workspace::pyproject::ExtraBuildDependencies;
 use crate::commands::pip::loggers::DefaultResolveLogger;
 use crate::commands::pip::{operations, resolution_markers, resolution_tags};
 use crate::commands::reporters::PythonDownloadReporter;
-use crate::commands::{ExitStatus, OutputWriter, diagnostics};
+use crate::commands::{ExitStatus, OutputWriter, UvError};
 use crate::printer::Printer;
 
 /// Resolve a set of requirements into a set of pinned versions.
@@ -594,7 +594,7 @@ pub(crate) async fn pip_compile(
     {
         Ok((resolution, _)) => resolution,
         Err(err) => {
-            return Err(diagnostics::operation_error(err, None).into());
+            return Err(UvError::from(err).into());
         }
     };
 

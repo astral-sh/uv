@@ -56,7 +56,7 @@ use crate::commands::project::{
     ProjectError, ScriptEnvironment, UniversalState, default_dependency_groups, detect_conflicts,
     script_extra_build_requires, script_specification, update_environment,
 };
-use crate::commands::{ExitStatus, UvError, diagnostics};
+use crate::commands::{ExitStatus, UvError};
 use crate::printer::Printer;
 use crate::settings::{
     FrozenSource, InstallerSettingsRef, LockCheck, LockedSource, ResolverInstallerSettings,
@@ -323,14 +323,9 @@ pub(crate) async fn sync(
                         output_format,
                         printer,
                     )?;
-                    return Err(diagnostics::operation_error(
-                        operations::Error::OutdatedEnvironment(changelog),
-                        None,
-                    )
-                    .into());
-                }
-                Err(ProjectError::Operation(err)) => {
-                    return Err(diagnostics::operation_error(err, None).into());
+                    return Err(
+                        UvError::from(operations::Error::OutdatedEnvironment(changelog)).into(),
+                    );
                 }
                 Err(err) => return Err(UvError::from(err).into()),
             }
@@ -375,7 +370,7 @@ pub(crate) async fn sync(
     {
         Ok(result) => Outcome::Success(result),
         Err(ProjectError::Operation(err)) => {
-            return Err(diagnostics::operation_error(err, None).into());
+            return Err(UvError::from(err).into());
         }
         Err(err @ ProjectError::LockFormat(..)) => return Err(UvError::user(err).into()),
         Err(ProjectError::LockMismatch(prev, cur, lock_source)) => {
@@ -455,14 +450,7 @@ pub(crate) async fn sync(
                 output_format,
                 printer,
             )?;
-            return Err(diagnostics::operation_error(
-                operations::Error::OutdatedEnvironment(changelog),
-                None,
-            )
-            .into());
-        }
-        Err(ProjectError::Operation(err)) => {
-            return Err(diagnostics::operation_error(err, None).into());
+            return Err(UvError::from(operations::Error::OutdatedEnvironment(changelog)).into());
         }
         Err(err) => return Err(UvError::from(err).into()),
     };

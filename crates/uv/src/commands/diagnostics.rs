@@ -3,7 +3,6 @@ use std::sync::LazyLock;
 
 use owo_colors::OwoColorize;
 use rustc_hash::FxHashMap;
-use thiserror::Error;
 use version_ranges::Ranges;
 
 use uv_distribution_types::{DerivationChain, DerivationStep};
@@ -11,7 +10,6 @@ use uv_errors::{Hinted, Hints};
 use uv_normalize::PackageName;
 use uv_pep440::{Version, strip_local_version_sentinels};
 
-use crate::commands::UvError;
 use crate::commands::pip;
 use crate::commands::pip::install::ExternallyManagedError;
 use crate::commands::pip::operations::ExtrasWithoutSourceError;
@@ -37,53 +35,6 @@ static SUGGESTIONS: LazyLock<FxHashMap<PackageName, PackageName>> = LazyLock::ne
         })
         .collect()
 });
-
-/// A no-solution failure with its command-specific heading.
-#[derive(Debug, Error)]
-#[error("{header}")]
-struct NoSolutionDiagnostic {
-    header: uv_resolver::NoSolutionHeader,
-    #[source]
-    cause: pip::operations::Error,
-}
-
-/// Add command-specific context and classify an operation error.
-pub(crate) fn operation_error(
-    error: pip::operations::Error,
-    context: Option<&'static str>,
-) -> UvError {
-    let is_user_failure = error.is_user_failure();
-    let error = match error {
-        pip::operations::Error::Resolve(uv_resolver::ResolveError::NoSolution(cause)) => {
-            let header = uv_resolver::NoSolutionHeader::new(cause.environment().clone());
-            let header = if let Some(context) = context {
-                header.with_context(context)
-            } else {
-                header
-            };
-            anyhow::Error::new(NoSolutionDiagnostic {
-                header,
-                cause: pip::operations::Error::Resolve(uv_resolver::ResolveError::NoSolution(
-                    cause,
-                )),
-            })
-        }
-        pip::operations::Error::Requirements(error) => {
-            let error = anyhow::Error::new(pip::operations::Error::Requirements(error));
-            if let Some(context) = context {
-                error.context(format!("Failed to resolve {context} requirement"))
-            } else {
-                error
-            }
-        }
-        error => anyhow::Error::new(error),
-    };
-    if is_user_failure {
-        UvError::user(error)
-    } else {
-        UvError::unexpected(error)
-    }
-}
 
 /// Format an error chain with the default user-facing hints and output settings.
 pub(crate) fn write_error_chain(err: &anyhow::Error, printer: Printer) -> std::fmt::Result {

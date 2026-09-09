@@ -62,7 +62,7 @@ use crate::commands::project::{
     default_dependency_groups, init_script_python_requirement,
 };
 use crate::commands::reporters::{PythonDownloadReporter, ResolverReporter};
-use crate::commands::{ExitStatus, ScriptPath, UvError, diagnostics, project};
+use crate::commands::{ExitStatus, ScriptPath, UvError, project};
 use crate::printer::Printer;
 use crate::settings::{FrozenSource, LockCheck, ResolverInstallerSettings};
 
@@ -820,7 +820,7 @@ pub(crate) async fn add(
                 ProjectError::Operation(err) => {
                     let standard_library_package =
                         standard_library_package(&err, &edits, python_minor);
-                    Err(diagnostics::operation_error(err, None)
+                    Err(UvError::from(err)
                         .map_user(|cause| {
                             AddDependencyError {
                                 cause,

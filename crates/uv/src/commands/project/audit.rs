@@ -4,14 +4,14 @@ use std::fmt::Write as _;
 use std::path::Path;
 
 use crate::commands::ExitStatus;
-use crate::commands::diagnostics;
+use crate::commands::UvError;
 use crate::commands::pip::loggers::DefaultResolveLogger;
 use crate::commands::pip::resolution_markers;
 use crate::commands::project::default_dependency_groups;
 use crate::commands::project::lock::{LockMode, LockOperation};
 use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{
-    ProjectEnvironmentPolicy, ProjectError, ProjectInterpreter, ScriptInterpreter, UniversalState,
+    ProjectEnvironmentPolicy, ProjectInterpreter, ScriptInterpreter, UniversalState,
     WorkspacePython,
 };
 use crate::commands::reporters::AuditReporter;
@@ -202,10 +202,7 @@ pub(crate) async fn audit(
     .await
     {
         Ok(result) => result.into_lock(),
-        Err(ProjectError::Operation(err)) => {
-            return Err(diagnostics::operation_error(err, None).into());
-        }
-        Err(err) => return Err(err.into()),
+        Err(err) => return Err(UvError::from(err).into()),
     };
 
     // Determine the markers to use for resolution.

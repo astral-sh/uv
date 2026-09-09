@@ -54,9 +54,7 @@ use crate::commands::project::{
 use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::tool::common::{ToolPython, matching_packages, refine_interpreter};
 use crate::commands::tool::{Target, ToolRequest};
-use crate::commands::{
-    UvError, diagnostics, project::environment::CachedEnvironment, read_env_files,
-};
+use crate::commands::{UvError, project::environment::CachedEnvironment, read_env_files};
 use crate::printer::Printer;
 use crate::settings::ResolverInstallerSettings;
 use crate::settings::ResolverSettings;
@@ -335,7 +333,7 @@ pub(crate) async fn run(
             // If the user ran `uvx run ...`, the `run` is likely a mistake. Show a dedicated hint.
             if from.is_none() && invocation_source == ToolRunCommand::Uvx && target == "run" {
                 let rest = args.iter().map(|s| s.to_string_lossy()).join(" ");
-                return Err(diagnostics::operation_error(err, Some("tool"))
+                return Err(UvError::from_operation_with_context(err, "tool")
                     .map_user(|cause| {
                         ToolRunUsageError {
                             cause,
@@ -347,7 +345,7 @@ pub(crate) async fn run(
             }
 
             if let Some(verbose_flag) = find_verbose_flag(args) {
-                return Err(diagnostics::operation_error(err, None)
+                return Err(UvError::from(err)
                     .map_user(|cause| {
                         ToolRunUsageError {
                             cause,
@@ -362,13 +360,13 @@ pub(crate) async fn run(
                     .into());
             }
 
-            return Err(diagnostics::operation_error(err, Some("tool")).into());
+            return Err(UvError::from_operation_with_context(err, "tool").into());
         }
 
         Err(ProjectError::Requirements(err)) => {
-            return Err(diagnostics::operation_error(
+            return Err(UvError::from_operation_with_context(
                 operations::Error::Requirements(err),
-                Some("`--with`"),
+                "`--with`",
             )
             .into());
         }

@@ -32,9 +32,9 @@ use crate::commands::pip::loggers::DefaultResolveLogger;
 use crate::commands::project::lock::{LockEvent, LockMode, LockOperation, LockResult};
 use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{
-    ProjectEnvironmentPolicy, ProjectError, ProjectInterpreter, UniversalState, WorkspacePython,
+    ProjectEnvironmentPolicy, ProjectInterpreter, UniversalState, WorkspacePython,
 };
-use crate::commands::{ExitStatus, diagnostics};
+use crate::commands::{ExitStatus, UvError};
 use crate::printer::Printer;
 use crate::settings::ResolverSettings;
 
@@ -417,10 +417,7 @@ pub(crate) async fn upgrade(
     .await
     {
         Ok(result) => result,
-        Err(ProjectError::Operation(err)) => {
-            return Err(diagnostics::operation_error(err, None).into());
-        }
-        Err(err) => return Err(err.into()),
+        Err(err) => return Err(UvError::from(err).into()),
     };
 
     let lock = result.lock();

@@ -35,7 +35,7 @@ use crate::commands::project::{
     ProjectInterpreter, ScriptInterpreter, UniversalState, WorkspacePython,
     default_dependency_groups,
 };
-use crate::commands::{ExitStatus, diagnostics, project};
+use crate::commands::{ExitStatus, UvError, project};
 use crate::printer::Printer;
 use crate::settings::{FrozenSource, LockCheck, ResolverInstallerSettings};
 
@@ -334,10 +334,7 @@ pub(crate) async fn remove(
     .await
     {
         Ok(result) => result.into_lock(),
-        Err(ProjectError::Operation(err)) => {
-            return Err(diagnostics::operation_error(err, None).into());
-        }
-        Err(err) => return Err(err.into()),
+        Err(err) => return Err(UvError::from(err).into()),
     };
 
     let AddTarget::Project(project, environment) = target else {
@@ -390,10 +387,7 @@ pub(crate) async fn remove(
     .await
     {
         Ok(_) => {}
-        Err(ProjectError::Operation(err)) => {
-            return Err(diagnostics::operation_error(err, None).into());
-        }
-        Err(err) => return Err(err.into()),
+        Err(err) => return Err(UvError::from(err).into()),
     }
 
     Ok(ExitStatus::Success)

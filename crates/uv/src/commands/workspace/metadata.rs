@@ -22,7 +22,7 @@ use crate::commands::project::{
     LinkErrorReporting, ProjectEnvironment, ProjectEnvironmentPolicy, ProjectError,
     ProjectInterpreter, ScriptEnvironment, ScriptInterpreter, UniversalState, WorkspacePython,
 };
-use crate::commands::{ExitStatus, UvError, diagnostics};
+use crate::commands::{ExitStatus, UvError};
 use crate::printer::{Printer, Stdout};
 use crate::settings::{FrozenSource, LockCheck, ResolverSettings};
 
@@ -253,7 +253,6 @@ pub(crate) async fn metadata(
             print_metadata(&export, printer)
         }
         Err(err @ ProjectError::LockMismatch(..)) => Err(UvError::user(err).into()),
-        Err(ProjectError::Operation(err)) => Err(diagnostics::operation_error(err, None).into()),
         Err(err) => Err(UvError::from(err).into()),
     }
 }

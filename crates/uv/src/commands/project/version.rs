@@ -39,7 +39,7 @@ use crate::commands::project::{
     LinkErrorReporting, ProjectEnvironment, ProjectEnvironmentPolicy, ProjectError,
     ProjectInterpreter, UniversalState, WorkspacePython, default_dependency_groups,
 };
-use crate::commands::{ExitStatus, diagnostics, project};
+use crate::commands::{ExitStatus, UvError, project};
 use crate::printer::Printer;
 use crate::settings::{FrozenSource, LockCheck, ResolverInstallerSettings};
 
@@ -502,10 +502,7 @@ async fn print_frozen_version(
     .await
     {
         Ok(result) => result.into_lock(),
-        Err(ProjectError::Operation(err)) => {
-            return Err(diagnostics::operation_error(err, None).into());
-        }
-        Err(err) => return Err(err.into()),
+        Err(err) => return Err(UvError::from(err).into()),
     };
 
     // Try to find the package of interest in the lock
@@ -647,10 +644,7 @@ async fn lock_and_sync(
     .await
     {
         Ok(result) => result.into_lock(),
-        Err(ProjectError::Operation(err)) => {
-            return Err(diagnostics::operation_error(err, None).into());
-        }
-        Err(err) => return Err(err.into()),
+        Err(err) => return Err(UvError::from(err).into()),
     };
 
     let AddTarget::Project(project, environment) = target else {
@@ -705,10 +699,7 @@ async fn lock_and_sync(
     .await
     {
         Ok(_) => {}
-        Err(ProjectError::Operation(err)) => {
-            return Err(diagnostics::operation_error(err, None).into());
-        }
-        Err(err) => return Err(err.into()),
+        Err(err) => return Err(UvError::from(err).into()),
     }
 
     Ok(ExitStatus::Success)

@@ -49,7 +49,7 @@ use crate::commands::tool::common::{
     tool_environment_spec,
 };
 use crate::commands::tool::{Target, ToolRequest};
-use crate::commands::{diagnostics, reporters::PythonDownloadReporter};
+use crate::commands::{UvError, reporters::PythonDownloadReporter};
 use crate::printer::Printer;
 use crate::settings::{ResolverInstallerSettings, ResolverSettings};
 
@@ -727,10 +727,7 @@ pub(crate) async fn install(
                 .await
                 {
                     Ok(resolution) => resolution,
-                    Err(ProjectError::Operation(err)) => {
-                        return Err(diagnostics::operation_error(err, None).into());
-                    }
-                    Err(err) => return Err(err.into()),
+                    Err(err) => return Err(UvError::from(err).into()),
                 };
                 let tool_lock = ToolLock::from_resolution(
                     &tool_dir,
@@ -861,10 +858,7 @@ pub(crate) async fn install(
             .await
             {
                 Ok(update) => update,
-                Err(ProjectError::Operation(err)) => {
-                    return Err(diagnostics::operation_error(err, None).into());
-                }
-                Err(err) => return Err(err.into()),
+                Err(err) => return Err(UvError::from(err).into()),
             };
             (update.environment, None)
         };
@@ -951,7 +945,7 @@ pub(crate) async fn install(
                         .await
                         .ok()
                         .flatten() else {
-                            return Err(diagnostics::operation_error(err, None).into());
+                            return Err(UvError::from(err).into());
                         };
 
                         debug!(
@@ -982,10 +976,7 @@ pub(crate) async fn install(
                         .await
                         {
                             Ok(resolution) => (resolution, interpreter),
-                            Err(ProjectError::Operation(err)) => {
-                                return Err(diagnostics::operation_error(err, None).into());
-                            }
-                            Err(err) => return Err(err.into()),
+                            Err(err) => return Err(UvError::from(err).into()),
                         }
                     }
                     err => return Err(err.into()),
@@ -1047,10 +1038,7 @@ pub(crate) async fn install(
             let _ = installed_tools.remove_environment(package_name);
         }) {
             Ok(environment) => (environment, tool_lock),
-            Err(ProjectError::Operation(err)) => {
-                return Err(diagnostics::operation_error(err, None).into());
-            }
-            Err(err) => return Err(err.into()),
+            Err(err) => return Err(UvError::from(err).into()),
         }
     };
 

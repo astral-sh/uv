@@ -151,6 +151,46 @@ impl UvError {
         Self::Unexpected(error)
     }
 
+    /// Classify an operation error with command-specific resolution context.
+    pub(crate) fn from_operation_with_context(
+        error: pip::operations::Error,
+        context: &'static str,
+    ) -> Self {
+        Self::from_operation(error, Some(context))
+    }
+
+    fn from_operation(error: pip::operations::Error, context: Option<&'static str>) -> Self {
+        let is_user_failure = error.is_user_failure();
+        let error = match error {
+            pip::operations::Error::Resolve(uv_resolver::ResolveError::NoSolution(cause)) => {
+                let header = uv_resolver::NoSolutionHeader::new(cause.environment().clone());
+                let header = if let Some(context) = context {
+                    header.with_context(context)
+                } else {
+                    header
+                };
+                anyhow::Error::new(pip::operations::Error::Resolve(
+                    uv_resolver::ResolveError::NoSolution(cause),
+                ))
+                .context(header)
+            }
+            pip::operations::Error::Requirements(error) => {
+                let error = anyhow::Error::new(pip::operations::Error::Requirements(error));
+                if let Some(context) = context {
+                    error.context(format!("Failed to resolve {context} requirement"))
+                } else {
+                    error
+                }
+            }
+            error => anyhow::Error::new(error),
+        };
+        if is_user_failure {
+            Self::user(error)
+        } else {
+            Self::unexpected(error)
+        }
+    }
+
     /// Add command-specific context to a user error without changing unexpected errors.
     pub(crate) fn map_user(self, context: impl FnOnce(anyhow::Error) -> anyhow::Error) -> Self {
         match self {
@@ -181,11 +221,43 @@ impl From<project::ProjectError> for UvError {
 impl From<pip::operations::Error> for UvError {
     /// Classify an operation error at the point where it leaves its command.
     fn from(error: pip::operations::Error) -> Self {
-        if error.is_user_failure() {
-            Self::user(error)
-        } else {
-            Self::unexpected(error.into())
+        Self::from_operation(error, None)
+    }
+}
+
+#[cfg(test)]
+mod error_tests {
+    use std::io::{Error, ErrorKind};
+
+    use super::{UvError, pip, project};
+
+    #[test]
+    fn contextual_operations_keep_their_classification_and_cause() {
+        for (kind, user_failure) in [
+            (ErrorKind::NotFound, true),
+            (ErrorKind::PermissionDenied, false),
+        ] {
+            let error = pip::operations::Error::Requirements(uv_requirements::Error::Io(
+                Error::new(kind, "requirements failure"),
+            ));
+            let error = UvError::from_operation_with_context(error, "tool");
+            let ((UvError::User(error), true) | (UvError::Unexpected(error), false)) =
+                (error, user_failure)
+            else {
+                panic!("operation classification changed with context");
+            };
+            assert_eq!(error.to_string(), "Failed to resolve tool requirement");
+            assert!(error.downcast_ref::<pip::operations::Error>().is_some());
         }
+    }
+
+    #[test]
+    fn project_requirements_use_operation_classification() {
+        let error = project::ProjectError::Requirements(uv_requirements::Error::Io(Error::new(
+            ErrorKind::NotFound,
+            "requirements failure",
+        )));
+        assert!(matches!(UvError::from(error), UvError::User(_)));
     }
 }
 
