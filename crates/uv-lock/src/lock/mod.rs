@@ -22,9 +22,9 @@ use url::Url;
 
 use uv_cache_key::RepositoryUrl;
 use uv_configuration::{
-    BuildOptions, Constraints, DependencyGroupsWithDefaults, DependencyExclusion, ExcludeNewer,
+    BuildOptions, Constraints, DependencyGroupsWithDefaults, ExcludeDependency, ExcludeNewer,
     ExcludeNewerPackage, ExtrasSpecificationWithDefaults, ForkStrategy, InstallTarget,
-    DependencyOverride, DependencyModifiers, PackageDependencyOverride, Prerelease, PrereleaseMode, PrereleasePackage,
+    Override, DependencyModifiers, PackageOverride, Prerelease, PrereleaseMode, PrereleasePackage,
     DependencyModifierScope, ResolutionMode, ScopedOverrideSourceError,
 };
 use uv_distribution::{
@@ -4108,39 +4108,44 @@ impl Lock {
         };
 
         // Validate that the lockfile was generated with the same dependency modifiers.
-        let normalized_modifiers = {
-            let normalize = |modifiers: &DependencyModifiers| -> Result<_, LockError> {
-                let overrides = modifiers
-                    .override_entries()
-                    .cloned()
-                    .map(|entry| {
-                        entry.try_map_requirements(|requirement| {
-                            normalize_requirement(requirement, root, &self.requires_python)
-                        })
-                    })
-                    .collect::<Result<BTreeSet<_>, _>>()?;
-                let exclusions = modifiers.exclusion_entries().cloned().collect();
-                Ok((overrides, exclusions))
+        let normalized_overrides = {
+            let normalize = |entry: &Override| {
+                entry.clone().try_map_requirements(|requirement| {
+                    normalize_requirement(requirement, root, &self.requires_python)
+                })
             };
-            let expected = normalize(modifiers)?;
-            let actual = normalize(&self.manifest.modifiers)?;
+            let expected = (
+                modifiers
+                    .override_entries()
+                    .map(normalize)
+                    .collect::<Result<BTreeSet<_>, _>>()?,
+                modifiers.exclusion_entries().cloned().collect(),
+            );
+            let actual = (
+                self.manifest
+                    .overrides
+                    .iter()
+                    .map(normalize)
+                    .collect::<Result<BTreeSet<_>, _>>()?,
+                self.manifest.excludes.clone(),
+            );
             if expected != actual {
                 return Ok(SatisfiesResult::MismatchedDependencyModifiers(
                     expected, actual,
                 ));
             }
-            expected
+            expected.0
         };
 
-        // Validate that the lockfile was generated with the same excludes.
-        {
-            let expected: BTreeSet<_> = excludes.iter().cloned().collect();
-            let actual: BTreeSet<_> = self.manifest.excludes.iter().cloned().collect();
-            if expected != actual {
-                return Ok(SatisfiesResult::MismatchedExcludes(expected, actual));
-            }
-        }
-
+        let dependency_modifiers = if allow_missing_package_metadata {
+            DependencyModifiers::from_parts(
+                normalized_overrides,
+                modifiers.exclusion_entries().cloned(),
+            )
+            .map_err(LockErrorKind::InvalidScopedOverride)?
+        } else {
+            DependencyModifiers::default()
+        };
         let mut source_tree_metadata = FxHashMap::default();
 
         // Validate that the lockfile was generated with the same build constraints.
@@ -5863,8 +5868,8 @@ pub enum SatisfiesResult<'lock> {
     MismatchedConstraints(BTreeSet<Requirement>, BTreeSet<Requirement>),
     /// The lockfile uses a different set of dependency modifiers.
     MismatchedDependencyModifiers(
-        (BTreeSet<DependencyOverride>, BTreeSet<DependencyExclusion>),
-        (BTreeSet<DependencyOverride>, BTreeSet<DependencyExclusion>),
+        (BTreeSet<Override>, BTreeSet<ExcludeDependency>),
+        (BTreeSet<Override>, BTreeSet<ExcludeDependency>),
     ),
     /// The lockfile uses a different set of build constraints.
     MismatchedBuildConstraints(
@@ -6013,7 +6018,7 @@ impl From<ExcludeNewer> for ExcludeNewerWire {
     }
 }
 
-#[derive(Clone, Default, serde::Deserialize, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, serde::Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "kebab-case")]
 pub struct ResolverManifest {
     /// The workspace members included in the lockfile.
@@ -6035,39 +6040,18 @@ pub struct ResolverManifest {
     /// The constraints provided to the resolver.
     #[serde(default)]
     constraints: BTreeSet<Requirement>,
-    /// The dependency modifiers provided to the resolver.
-    #[serde(flatten)]
-    modifiers: DependencyModifiers,
+    /// The overrides provided to the resolver.
+    #[serde(default)]
+    overrides: BTreeSet<Override>,
+    /// The excludes provided to the resolver.
+    #[serde(default)]
+    excludes: BTreeSet<ExcludeDependency>,
     /// The build constraints provided to the resolver.
     #[serde(default)]
     build_constraints: BTreeSet<NameRequirementSpecification>,
     /// The static metadata provided to the resolver.
     #[serde(default)]
     dependency_metadata: BTreeSet<StaticMetadata>,
-}
-
-/// Custom `Debug` to show dependency modifiers as flattened, deterministically ordered fields in
-/// lock deserialization snapshots.
-impl Debug for ResolverManifest {
-    fn fmt(&self, formatter: &mut Formatter<'_>) -> std::fmt::Result {
-        formatter
-            .debug_struct("ResolverManifest")
-            .field("members", &self.members)
-            .field("requirements", &self.requirements)
-            .field("dependency_groups", &self.dependency_groups)
-            .field("constraints", &self.constraints)
-            .field(
-                "overrides",
-                &self.modifiers.override_entries().collect::<BTreeSet<_>>(),
-            )
-            .field(
-                "excludes",
-                &self.modifiers.exclusion_entries().collect::<BTreeSet<_>>(),
-            )
-            .field("build_constraints", &self.build_constraints)
-            .field("dependency_metadata", &self.dependency_metadata)
-            .finish()
-    }
 }
 
 impl ResolverManifest {
@@ -6082,11 +6066,13 @@ impl ResolverManifest {
         dependency_groups: impl IntoIterator<Item = (GroupName, Vec<Requirement>)>,
         dependency_metadata: impl IntoIterator<Item = StaticMetadata>,
     ) -> Self {
+        let (overrides, excludes) = modifiers.into_parts();
         Self {
             members: members.into_iter().collect(),
             requirements: requirements.into_iter().collect(),
             constraints: constraints.into_iter().collect(),
-            modifiers,
+            overrides: overrides.into_iter().collect(),
+            excludes: excludes.into_iter().collect(),
             build_constraints: build_constraints.into_iter().collect(),
             dependency_groups: dependency_groups
                 .into_iter()
@@ -6098,7 +6084,6 @@ impl ResolverManifest {
 
     /// Convert the manifest to a relative form using the given workspace.
     pub fn relative_to(self, root: &Path) -> Result<Self, io::Error> {
-        let (overrides, exclusions) = self.modifiers.into_parts();
         Ok(Self {
             members: self.members,
             requirements: self
@@ -6111,16 +6096,14 @@ impl ResolverManifest {
                 .into_iter()
                 .map(|requirement| requirement.relative_to(root))
                 .collect::<Result<BTreeSet<_>, _>>()?,
-            modifiers: DependencyModifiers::from_parts(
-                overrides
-                    .into_iter()
-                    .map(|entry| {
-                        entry.try_map_requirements(|requirement| requirement.relative_to(root))
-                    })
-                    .collect::<Result<Vec<_>, io::Error>>()?,
-                exclusions,
-            )
-            .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?,
+            overrides: self
+                .overrides
+                .into_iter()
+                .map(|entry| {
+                    entry.try_map_requirements(|requirement| requirement.relative_to(root))
+                })
+                .collect::<Result<BTreeSet<_>, io::Error>>()?,
+            excludes: self.excludes,
             build_constraints: self
                 .build_constraints
                 .into_iter()

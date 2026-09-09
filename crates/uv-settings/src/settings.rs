@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 
 use uv_cache_info::CacheKey;
 use uv_configuration::{
-    AnnotationStyle, BuildIsolation, DependencyExclusion, ExcludeNewerPackage, ForkStrategy,
+    AnnotationStyle, BuildIsolation, ExcludeDependency, ExcludeNewerPackage, ForkStrategy,
     IndexStrategy, KeyringProviderType, PackageNameSpecifier, PrereleaseMode, PrereleasePackage,
     ProxyUrl, Reinstall, RequiredVersion, ResolutionMode, TargetTriple, TrustedHost,
     TrustedPublishing, Upgrade, serialize_exclude_newer_package_with_spans,
@@ -26,7 +26,7 @@ use uv_python::{PythonDownloads, PythonPreference, PythonVersion};
 use uv_redacted::DisplaySafeUrl;
 use uv_torch::TorchMode;
 use uv_workspace::pyproject::{
-    BuildConstraintDependency, ExtraBuildDependencies, UnresolvedDependencyOverride,
+    BuildConstraintDependency, ExtraBuildDependencies, OverrideDependency,
 };
 use uv_workspace::pyproject_mut::AddBoundsKind;
 
@@ -148,10 +148,10 @@ pub struct Options {
     // `crates/uv-workspace/src/pyproject.rs`. The documentation lives on that struct.
     // They're respected in both `pyproject.toml` and `uv.toml` files.
     #[cfg_attr(feature = "schemars", schemars(skip))]
-    pub override_dependencies: Option<Vec<UnresolvedDependencyOverride>>,
+    pub override_dependencies: Option<Vec<OverrideDependency>>,
 
     #[cfg_attr(feature = "schemars", schemars(skip))]
-    pub exclude_dependencies: Option<Vec<DependencyExclusion>>,
+    pub exclude_dependencies: Option<Vec<ExcludeDependency>>,
 
     #[cfg_attr(feature = "schemars", schemars(skip))]
     pub constraint_dependencies: Option<Vec<Requirement<VerbatimParsedUrl>>>,
@@ -2635,8 +2635,8 @@ struct OptionsWire {
     // NOTE(charlie): These fields are shared with `ToolUv` in
     // `crates/uv-workspace/src/pyproject.rs`. The documentation lives on that struct.
     // They're respected in both `pyproject.toml` and `uv.toml` files.
-    override_dependencies: Option<Vec<UnresolvedDependencyOverride>>,
-    exclude_dependencies: Option<Vec<DependencyExclusion>>,
+    override_dependencies: Option<Vec<OverrideDependency>>,
+    exclude_dependencies: Option<Vec<ExcludeDependency>>,
     constraint_dependencies: Option<Vec<Requirement<VerbatimParsedUrl>>>,
     build_constraint_dependencies: Option<Vec<BuildConstraintDependency>>,
     environments: Option<SupportedEnvironments>,

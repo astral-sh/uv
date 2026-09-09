@@ -10,8 +10,8 @@ use uv_cache::{Cache, Refresh};
 use uv_cache_info::Timestamp;
 use uv_client::{BaseClientBuilder, RegistryClientBuilder};
 use uv_configuration::{
-    Concurrency, Constraints, DependencyMode, DependencyOverride, DryRun, GitLfsSetting,
-    HashCheckingMode, Reinstall, TargetTriple, Upgrade,
+    Concurrency, Constraints, DependencyMode, DryRun, GitLfsSetting, HashCheckingMode, Override,
+    Reinstall, TargetTriple, Upgrade,
 };
 use uv_distribution::LoweredExtraBuildDependencies;
 use uv_distribution_types::{
@@ -456,12 +456,8 @@ pub(crate) async fn install(
     .await?;
 
     let mut receipt_modifiers = spec.modifiers.clone();
-    receipt_modifiers.extend_overrides(
-        receipt_overrides
-            .iter()
-            .cloned()
-            .map(DependencyOverride::requirement),
-    )?;
+    receipt_modifiers
+        .extend_overrides(receipt_overrides.iter().cloned().map(Override::requirement))?;
 
     // Convert to tool options.
     let options = ToolOptions::from(options);

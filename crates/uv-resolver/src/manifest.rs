@@ -139,7 +139,7 @@ impl Manifest {
         self.requirements(env, mode).chain(
             self.modifiers
                 .scoped_overrides()
-                .map(|(_, _, requirement)| Cow::Borrowed(requirement))
+                .map(Cow::Borrowed)
                 .filter(move |requirement| {
                     requirement.evaluate_markers(env.marker_environment(), &[])
                 }),
