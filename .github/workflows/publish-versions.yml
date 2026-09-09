@@ -15,6 +15,7 @@ permissions: {}
 
 env:
   ACTIONS_CACHE_MODE: none
+  UV_LOCKED: 1
 
 jobs:
   publish-versions:
@@ -37,6 +38,8 @@ jobs:
       - name: "Install uv"
         uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
         with:
+          version: "0.12.10"
+          checksum: "173d95a0c32d18c896c46ba6fafbf3cf9c14ab74b033f81b76c883ef492a976b"
           enable-cache: false
 
       - name: "Update versions"

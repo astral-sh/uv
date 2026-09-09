@@ -14,8 +14,9 @@ use uv_cache::{Cache, CacheBucket};
 use uv_cache_key::{cache_digest, cache_name};
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
-    Concurrency, Constraints, DependencyGroupsWithDefaults, DryRun, ExtrasSpecification,
-    GitLfsSetting, Override, PackageOverride, Reinstall, TargetTriple, Upgrade,
+    ActiveEnvironment, Concurrency, Constraints, DependencyGroupsWithDefaults, DryRun,
+    ExtrasSpecification, GitLfsSetting, Override, PackageOverride, Reinstall, TargetTriple,
+    Upgrade,
 };
 use uv_dispatch::{BuildDispatch, SharedState};
 use uv_distribution::{DistributionDatabase, LoweredExtraBuildDependencies, LoweredRequirement};
@@ -44,13 +45,13 @@ use uv_requirements::{
     read_lock_requirements,
 };
 use uv_resolver::{
-    FlatIndex, Installable, Lock, LockParseError, OptionsBuilder, Preference, PythonRequirement,
-    ResolverEnvironment, ResolverOutput,
+    DependencyMode, FlatIndex, Installable, Lock, LockParseError, OptionsBuilder, Preference,
+    PythonRequirement, ResolverEnvironment, ResolverOutput,
 };
 use uv_scripts::Pep723ItemRef;
 use uv_settings::PythonInstallMirrors;
 use uv_static::EnvVars;
-use uv_torch::{TorchSource, TorchStrategy, TorchStrategyError};
+use uv_torch::{TorchStrategy, TorchStrategyError};
 use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy, SourceTreeEditablePolicy};
 use uv_warnings::{warn_user, warn_user_once};
 use uv_workspace::dependency_groups::DependencyGroupError;
@@ -64,8 +65,7 @@ use crate::commands::reporters::{PythonDownloadReporter, ResolverReporter};
 use crate::commands::{capitalize, conjunction, pip};
 use crate::printer::Printer;
 use crate::settings::{
-    FrozenSource, InstallerSettingsRef, LockCheckSource, ResolverInstallerSettings,
-    ResolverSettings,
+    FrozenSource, InstallerSettingsRef, LockedSource, ResolverInstallerSettings, ResolverSettings,
 };
 
 pub(crate) mod add;
@@ -89,66 +89,42 @@ pub(crate) mod version;
 /// The source of a missing lockfile error.
 #[derive(Debug, Clone, Copy)]
 pub(crate) enum MissingLockfileSource {
-    /// The `--frozen` flag was provided.
-    Frozen,
-    /// The `UV_FROZEN` environment variable was set.
-    FrozenEnv,
-    /// The `frozen` option was set via workspace configuration.
-    FrozenConfiguration,
-    /// The `--locked` flag was provided.
-    Locked,
-    /// The `UV_LOCKED` environment variable was set.
-    LockedEnv,
-    /// The `locked` option was set via workspace configuration.
-    LockedConfiguration,
-    /// The `--check` flag was provided.
-    Check,
+    /// Frozen mode required an existing lockfile.
+    Frozen(FrozenSource),
+    /// A lock check required an existing lockfile.
+    Locked(LockedSource),
 }
 
 impl std::fmt::Display for MissingLockfileSource {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Frozen => write!(f, "`--frozen`"),
-            Self::FrozenEnv => write!(f, "`UV_FROZEN=1`"),
-            Self::FrozenConfiguration => write!(f, "`frozen` (workspace configuration)"),
-            Self::Locked => write!(f, "`--locked`"),
-            Self::LockedEnv => write!(f, "`UV_LOCKED=1`"),
-            Self::LockedConfiguration => write!(f, "`locked` (workspace configuration)"),
-            Self::Check => write!(f, "`--check`"),
+            Self::Frozen(source) => write!(f, "`{source}`"),
+            Self::Locked(source) => write!(f, "`{source}`"),
         }
     }
 }
 
-impl From<LockCheckSource> for MissingLockfileSource {
-    fn from(source: LockCheckSource) -> Self {
-        match source {
-            LockCheckSource::LockedCli => Self::Locked,
-            LockCheckSource::LockedEnv => Self::LockedEnv,
-            LockCheckSource::LockedConfiguration => Self::LockedConfiguration,
-            LockCheckSource::Check => Self::Check,
-        }
+impl From<LockedSource> for MissingLockfileSource {
+    fn from(source: LockedSource) -> Self {
+        Self::Locked(source)
     }
 }
 
 impl From<FrozenSource> for MissingLockfileSource {
     fn from(source: FrozenSource) -> Self {
-        match source {
-            FrozenSource::Cli => Self::Frozen,
-            FrozenSource::Env => Self::FrozenEnv,
-            FrozenSource::Configuration => Self::FrozenConfiguration,
-        }
+        Self::Frozen(source)
     }
 }
 
 #[derive(thiserror::Error, Debug)]
 pub(crate) enum ProjectError {
     #[error("The lockfile at `uv.lock` needs to be updated, but `{2}` was provided.")]
-    LockMismatch(Option<Box<Lock>>, Box<Lock>, LockCheckSource),
+    LockMismatch(Option<Box<Lock>>, Box<Lock>, LockedSource),
 
     #[error(
         "The lockfile at `{0}` has non-canonical formatting at line {1}, but `{2}` was provided."
     )]
-    LockFormat(PathBuf, usize, LockCheckSource),
+    LockFormat(PathBuf, usize, LockedSource),
 
     #[error(
         "Unable to find lockfile at `{1}`, but {0} was provided. To create a lockfile, run `uv lock` or `uv sync` without the flag."
@@ -156,9 +132,9 @@ pub(crate) enum ProjectError {
     MissingLockfile(MissingLockfileSource, PathBuf),
 
     #[error(
-        "The lockfile at `uv.lock` needs to be updated, but `--frozen` was provided: Missing workspace member `{0}`."
+        "The lockfile at `uv.lock` needs to be updated, but {1} was provided: Missing workspace member `{0}`."
     )]
-    LockWorkspaceMismatch(PackageName),
+    LockWorkspaceMismatch(PackageName, MissingLockfileSource),
 
     #[error(
         "The lockfile at `uv.lock` uses an unsupported schema version (v{1}, but only v{0} is supported). Downgrade to a compatible uv version, or remove the `uv.lock` prior to running `uv lock` or `uv sync`."
@@ -735,7 +711,7 @@ impl ScriptInterpreter {
     /// If `--active` is set, the active virtual environment will be preferred.
     ///
     /// See: [`Workspace::environment_selection`].
-    fn root(script: Pep723ItemRef<'_>, active: Option<bool>, cache: &Cache) -> PathBuf {
+    fn root(script: Pep723ItemRef<'_>, active: ActiveEnvironment, cache: &Cache) -> PathBuf {
         /// Resolve the `VIRTUAL_ENV` variable, if any.
         fn from_virtual_env_variable() -> Option<PathBuf> {
             let value = std::env::var_os(EnvVars::VIRTUAL_ENV)?;
@@ -785,7 +761,7 @@ impl ScriptInterpreter {
         if let Some(from_virtual_env) = from_virtual_env_variable() {
             if !uv_fs::is_same_file_allow_missing(&from_virtual_env, &cache_env).unwrap_or(false) {
                 match active {
-                    Some(true) => {
+                    ActiveEnvironment::Prefer => {
                         debug!(
                             "Using active virtual environment `{}` instead of script environment `{}`",
                             from_virtual_env.user_display(),
@@ -793,8 +769,8 @@ impl ScriptInterpreter {
                         );
                         return from_virtual_env;
                     }
-                    Some(false) => {}
-                    None => {
+                    ActiveEnvironment::Ignore => {}
+                    ActiveEnvironment::Warn => {
                         warn_user_once!(
                             "`VIRTUAL_ENV={}` does not match the script environment path `{}` and will be ignored; use `--active` to target the active environment instead",
                             from_virtual_env.user_display(),
@@ -804,7 +780,7 @@ impl ScriptInterpreter {
                 }
             }
         } else {
-            if active.unwrap_or_default() {
+            if active == ActiveEnvironment::Prefer {
                 debug!(
                     "Use of the active virtual environment was requested, but `VIRTUAL_ENV` is not set"
                 );
@@ -818,7 +794,7 @@ impl ScriptInterpreter {
     /// Discover an existing script environment without selecting or downloading an interpreter.
     pub(crate) fn discover_existing(
         script: Pep723ItemRef<'_>,
-        active: Option<bool>,
+        active: ActiveEnvironment,
         cache: &Cache,
     ) -> Option<PythonEnvironment> {
         let root = Self::root(script, active, cache);
@@ -842,7 +818,7 @@ impl ScriptInterpreter {
         install_mirrors: &PythonInstallMirrors,
         keep_incompatible: bool,
         config_discovery: ConfigDiscovery,
-        active: Option<bool>,
+        active: ActiveEnvironment,
         cache: &Cache,
         printer: Printer,
     ) -> Result<Self, ProjectError> {
@@ -1410,7 +1386,7 @@ impl ProjectInterpreter {
     /// Discover an existing project environment without selecting or downloading an interpreter.
     pub(crate) fn discover_existing(
         workspace: &Workspace,
-        active: Option<bool>,
+        active: ActiveEnvironment,
         cache: &Cache,
     ) -> Result<Option<PythonEnvironment>, ProjectError> {
         let selection = workspace.environment_selection(active);
@@ -1444,7 +1420,7 @@ impl ProjectInterpreter {
         python_downloads: PythonDownloads,
         install_mirrors: &PythonInstallMirrors,
         policy: ProjectEnvironmentPolicy,
-        active: Option<bool>,
+        active: ActiveEnvironment,
         cache: &Cache,
         printer: Printer,
     ) -> Result<Self, ProjectError> {
@@ -1866,7 +1842,7 @@ impl ProjectEnvironment {
         python_downloads: PythonDownloads,
         no_sync: bool,
         config_discovery: ConfigDiscovery,
-        active: Option<bool>,
+        active: ActiveEnvironment,
         cache: &Cache,
         dry_run: DryRun,
         link_error_reporting: LinkErrorReporting,
@@ -2156,7 +2132,7 @@ impl ScriptEnvironment {
         install_mirrors: &PythonInstallMirrors,
         no_sync: bool,
         config_discovery: ConfigDiscovery,
-        active: Option<bool>,
+        active: ActiveEnvironment,
         cache: &Cache,
         dry_run: DryRun,
         printer: Printer,
@@ -2371,16 +2347,8 @@ pub(crate) async fn resolve_names(
     // Determine the PyTorch backend.
     let torch_backend = match torch_backend
         .map(|mode| {
-            let source = if uv_auth::PyxTokenStore::from_settings()
-                .is_ok_and(|store| store.has_credentials())
-            {
-                TorchSource::Pyx
-            } else {
-                TorchSource::default()
-            };
             TorchStrategy::from_mode(
                 mode,
-                source,
                 interpreter.platform().os(),
                 cuda_driver_version.clone(),
                 *amd_gpu_architecture,
@@ -2605,16 +2573,8 @@ pub(crate) async fn resolve_environment(
     // Determine the PyTorch backend.
     let torch_backend = torch_backend
         .map(|mode| {
-            let source = if uv_auth::PyxTokenStore::from_settings()
-                .is_ok_and(|store| store.has_credentials())
-            {
-                TorchSource::Pyx
-            } else {
-                TorchSource::default()
-            };
             TorchStrategy::from_mode(
                 mode,
-                source,
                 python_platform
                     .map(|t| t.platform())
                     .as_ref()
@@ -2665,7 +2625,7 @@ pub(crate) async fn resolve_environment(
     let groups = BTreeMap::new();
     let hasher = match resolution_scope {
         EnvironmentResolution::Specific => HashStrategy::default(),
-        EnvironmentResolution::Universal => HashStrategy::Generate(HashGeneration::Url),
+        EnvironmentResolution::Universal => HashStrategy::generate(HashGeneration::Url),
     };
     let build_hasher = HashStrategy::default();
 
@@ -2702,7 +2662,7 @@ pub(crate) async fn resolve_environment(
         let entries = client
             .fetch_all(index_locations.flat_indexes().map(Index::url))
             .await?;
-        FlatIndex::from_entries(entries, tags.as_deref(), &hasher, build_options)
+        FlatIndex::from_entries(entries)
     };
 
     // Lower the extra build dependencies, if any.
@@ -2844,7 +2804,7 @@ pub(crate) async fn sync_environment(
         let entries = client
             .fetch_all(index_locations.flat_indexes().map(Index::url))
             .await?;
-        FlatIndex::from_entries(entries, Some(tags), &hasher, build_options)
+        FlatIndex::from_entries(entries)
     };
 
     // Lower the extra build dependencies, if any.
@@ -3012,6 +2972,7 @@ pub(crate) async fn update_environment(
             &overrides,
             &override_dependencies,
             &excludes,
+            DependencyMode::Transitive,
             InstallationStrategy::Permissive,
             &marker_env,
             &tags,
@@ -3050,16 +3011,8 @@ pub(crate) async fn update_environment(
     // Determine the PyTorch backend.
     let torch_backend = torch_backend
         .map(|mode| {
-            let source = if uv_auth::PyxTokenStore::from_settings()
-                .is_ok_and(|store| store.has_credentials())
-            {
-                TorchSource::Pyx
-            } else {
-                TorchSource::default()
-            };
             TorchStrategy::from_mode(
                 mode,
-                source,
                 python_platform
                     .map(|t| t.platform())
                     .as_ref()
@@ -3116,7 +3069,7 @@ pub(crate) async fn update_environment(
         let entries = client
             .fetch_all(index_locations.flat_indexes().map(Index::url))
             .await?;
-        FlatIndex::from_entries(entries, Some(&tags), &hasher, build_options)
+        FlatIndex::from_entries(entries)
     };
 
     // Create a build dispatch.

@@ -1,8 +1,10 @@
+pub use active_environment::*;
 pub use authentication::*;
 pub use build_options::*;
 pub use concurrency::*;
 pub use constraints::*;
 pub use dependency_groups::*;
+pub use dependency_mode::*;
 pub use dry_run::*;
 pub use editable::*;
 pub use env_file::*;
@@ -25,11 +27,13 @@ pub use trusted_host::*;
 pub use trusted_publishing::*;
 pub use vcs::*;
 
+mod active_environment;
 mod authentication;
 mod build_options;
 mod concurrency;
 mod constraints;
 mod dependency_groups;
+mod dependency_mode;
 mod dry_run;
 mod editable;
 mod env_file;

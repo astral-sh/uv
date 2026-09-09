@@ -8,8 +8,8 @@ use uv_cache::Cache;
 use uv_cli::ColorChoice;
 use uv_client::BaseClientBuilder;
 use uv_configuration::{
-    Concurrency, DependencyGroups, DependencyGroupsWithDefaults, DryRun, ExtrasSpecification,
-    InstallOptions,
+    ActiveEnvironment, Concurrency, DependencyGroups, DependencyGroupsWithDefaults, DryRun,
+    ExtrasSpecification, InstallOptions,
 };
 use uv_fs::normalize_path;
 use uv_normalize::{DEV_DEPENDENCIES, DefaultExtras, PackageName};
@@ -295,7 +295,7 @@ pub(crate) async fn check(
                 &install_mirrors,
                 false,
                 config_discovery,
-                Some(false),
+                ActiveEnvironment::Ignore,
                 cache,
                 printer,
             )
@@ -375,7 +375,7 @@ pub(crate) async fn check(
                 &install_mirrors,
                 no_sync,
                 config_discovery,
-                Some(false),
+                ActiveEnvironment::Ignore,
                 cache,
                 DryRun::Disabled,
                 printer,
@@ -511,7 +511,7 @@ pub(crate) async fn check(
                 python_downloads,
                 no_sync,
                 config_discovery,
-                None,
+                ActiveEnvironment::Warn,
                 cache,
                 DryRun::Disabled,
                 LinkErrorReporting::User,
@@ -542,7 +542,7 @@ pub(crate) async fn check(
                     python_downloads,
                     &install_mirrors,
                     ProjectEnvironmentPolicy::Optional,
-                    None,
+                    ActiveEnvironment::Warn,
                     cache,
                     printer,
                 )

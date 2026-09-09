@@ -85,7 +85,9 @@ Ok(
                 source: Editable(
                     "path/to/dir",
                 ),
-            }: 0,
+            }: PackageIndex(
+                0,
+            ),
         },
         manifest: ResolverManifest {
             members: {},

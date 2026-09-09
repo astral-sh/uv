@@ -4,7 +4,7 @@ use std::path::Path;
 use anyhow::{Context, Result};
 use uv_cache::{Cache, Refresh};
 use uv_client::BaseClientBuilder;
-use uv_configuration::{Concurrency, DependencyGroupsWithDefaults, DryRun};
+use uv_configuration::{ActiveEnvironment, Concurrency, DependencyGroupsWithDefaults, DryRun};
 use uv_preview::{Preview, PreviewFeature};
 use uv_python::{ConfigDiscovery, PythonDownloads, PythonPreference, PythonRequest};
 use uv_resolver::Metadata;
@@ -36,7 +36,7 @@ pub(crate) async fn metadata(
     dry_run: DryRun,
     refresh: Refresh,
     sync: Option<Modifications>,
-    active: bool,
+    active: ActiveEnvironment,
     python: Option<String>,
     install_mirrors: PythonInstallMirrors,
     malware_settings: MalwareCheckSettings,
@@ -91,7 +91,7 @@ pub(crate) async fn metadata(
                 &install_mirrors,
                 false,
                 config_discovery,
-                Some(active),
+                active,
                 cache,
                 printer,
             )
@@ -119,7 +119,7 @@ pub(crate) async fn metadata(
                     } else {
                         ProjectEnvironmentPolicy::Optional
                     },
-                    Some(active),
+                    active,
                     cache,
                     printer,
                 )
@@ -186,7 +186,7 @@ pub(crate) async fn metadata(
                         python_downloads,
                         false,
                         config_discovery,
-                        Some(active),
+                        active,
                         cache,
                         DryRun::Disabled,
                         LinkErrorReporting::User,
@@ -203,7 +203,7 @@ pub(crate) async fn metadata(
                         &install_mirrors,
                         false,
                         config_discovery,
-                        Some(active),
+                        active,
                         cache,
                         DryRun::Disabled,
                         printer,
@@ -214,10 +214,10 @@ pub(crate) async fn metadata(
             } else {
                 match target {
                     LockTarget::Workspace(workspace) => {
-                        ProjectInterpreter::discover_existing(workspace, Some(active), cache)?
+                        ProjectInterpreter::discover_existing(workspace, active, cache)?
                     }
                     LockTarget::Script(script) => {
-                        ScriptInterpreter::discover_existing(script.into(), Some(active), cache)
+                        ScriptInterpreter::discover_existing(script.into(), active, cache)
                     }
                 }
             };

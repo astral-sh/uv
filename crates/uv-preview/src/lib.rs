@@ -267,8 +267,6 @@ pub enum PreviewFeature {
     SbomExport,
     /// Allows using `uv auth helper` as a credential helper for external tools.
     AuthHelper,
-    /// Allows publishing directly to a package index.
-    DirectPublish,
     /// Uses the directory containing a local `uv run` target, rather than the current working
     /// directory, as the starting point for project and workspace discovery. This feature takes
     /// effect before configuration is loaded.
@@ -335,6 +333,11 @@ pub enum PreviewFeature {
     IndexByName,
     /// Restricts generated requirement hashes to artifacts allowed by binary and build policies.
     ArtifactHashFiltering,
+    /// Enables content-addressed wheel archives in the cache.
+    ContentAddressedCache,
+    /// Exclude `exclude-newer-package` entries from the lockfile when not included in the
+    /// project's resolved dependencies.
+    MissingExcludeNewerPackageLock,
 }
 
 impl Display for PreviewFeature {

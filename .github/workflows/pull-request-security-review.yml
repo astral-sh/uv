@@ -3,12 +3,15 @@ on:
 
 permissions: {}
 
+env:
+  UV_LOCKED: 1
+
 jobs:
   review:
     name: "security review"
     runs-on: ubuntu-latest
     environment: automations
-    timeout-minutes: 20
+    timeout-minutes: 30
     permissions:
       contents: read
       issues: read
@@ -34,7 +37,8 @@ jobs:
 
       - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
         with:
-          version: "0.12.5"
+          version: "0.12.10"
+          checksum: "173d95a0c32d18c896c46ba6fafbf3cf9c14ab74b033f81b76c883ef492a976b"
 
       - name: "Install Codex Security plugin"
         run: ./agents/scripts/install-codex-security.sh
@@ -80,7 +84,7 @@ jobs:
           TMPDIR: ${{ runner.temp }}/codex-security
         with:
           openai-api-key: ${{ secrets.OPENAI_API_KEY }}
-          codex-version: "0.146.0"
+          codex-version: "0.147.0"
           codex-home: "agents/codex"
           effort: high
           permission-profile: "pull-request-review"
@@ -113,7 +117,8 @@ jobs:
 
       - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
         with:
-          version: "0.12.5"
+          version: "0.12.10"
+          checksum: "173d95a0c32d18c896c46ba6fafbf3cf9c14ab74b033f81b76c883ef492a976b"
 
       - name: "Prepare review findings"
         id: comments

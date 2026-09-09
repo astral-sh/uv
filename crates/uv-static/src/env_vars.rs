@@ -141,6 +141,13 @@ impl EnvVars {
     #[attr_added_in("0.1.34")]
     pub const UV_REQUIRE_HASHES: &'static str = "UV_REQUIRE_HASHES";
 
+    /// Require wheel metadata to be fetched with HTTP range requests when separate metadata is
+    /// unavailable. If set to `true`, uv will fail instead of downloading the entire wheel.
+    #[attr_hidden]
+    #[attr_added_in("0.12.8")]
+    pub const UV_REQUIRE_METADATA_RANGE_REQUESTS: &'static str =
+        "UV_REQUIRE_METADATA_RANGE_REQUESTS";
+
     /// Equivalent to the `--constraints` command-line argument. If set, uv will use this
     /// file as the constraints file. Uses space-separated list of files.
     #[attr_added_in("0.1.36")]
@@ -312,13 +319,15 @@ impl EnvVars {
     #[attr_added_in("0.5.30")]
     pub const UV_NO_BINARY_PACKAGE: &'static str = "UV_NO_BINARY_PACKAGE";
 
-    /// Equivalent to the `--no-build` command-line argument. If set, uv will not build
-    /// source distributions.
+    /// Equivalent to the `--no-build` command-line argument. If set, uv will not build source
+    /// distributions. First-party packages, such as projects in the workspace, will still be
+    /// built.
     #[attr_added_in("0.1.40")]
     pub const UV_NO_BUILD: &'static str = "UV_NO_BUILD";
 
-    /// Equivalent to the `--no-build-package` command line argument. If set, uv will
-    /// not build source distributions for the given space-delimited list of packages.
+    /// Equivalent to the `--no-build-package` command line argument. If set, uv will not build
+    /// source distributions for the given space-delimited list of packages. First-party packages,
+    /// such as projects in the workspace, will still be built.
     #[attr_added_in("0.6.5")]
     pub const UV_NO_BUILD_PACKAGE: &'static str = "UV_NO_BUILD_PACKAGE";
 
@@ -1444,14 +1453,6 @@ impl EnvVars {
     #[attr_added_in("0.11.14")]
     pub const UV_AZURE_ENDPOINT_URL: &'static str = "UV_AZURE_ENDPOINT_URL";
 
-    /// The URL of the pyx Simple API server.
-    #[attr_added_in("0.8.15")]
-    pub const PYX_API_URL: &'static str = "PYX_API_URL";
-
-    /// The domain of the pyx CDN.
-    #[attr_added_in("0.8.15")]
-    pub const PYX_CDN_DOMAIN: &'static str = "PYX_CDN_DOMAIN";
-
     /// The pyx API key (e.g., `sk-pyx-...`).
     #[attr_added_in("0.8.15")]
     pub const PYX_API_KEY: &'static str = "PYX_API_KEY";
@@ -1469,10 +1470,6 @@ impl EnvVars {
     #[attr_hidden]
     #[attr_added_in("0.8.15")]
     pub const UV_AUTH_TOKEN: &'static str = "UV_AUTH_TOKEN";
-
-    /// Specifies the directory where uv stores pyx credentials.
-    #[attr_added_in("0.8.15")]
-    pub const PYX_CREDENTIALS_DIR: &'static str = "PYX_CREDENTIALS_DIR";
 
     /// The AWS region to use when signing S3 requests.
     #[attr_added_in("0.8.21")]

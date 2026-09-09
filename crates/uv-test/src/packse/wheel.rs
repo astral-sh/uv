@@ -33,12 +33,27 @@ pub fn generate_wheel(
     requires_python: Option<&VersionSpecifiers>,
     tag: &str,
 ) -> (String, Vec<u8>) {
+    generate_wheel_with_files(name, version, requires, extras, requires_python, tag, &[])
+}
+
+/// Generate a wheel (`.whl`) with additional files as an in-memory ZIP archive.
+///
+/// Returns `(filename, bytes)`.
+pub fn generate_wheel_with_files(
+    name: &PackageName,
+    version: &Version,
+    requires: &[Requirement],
+    extras: &BTreeMap<ExtraName, Vec<Requirement>>,
+    requires_python: Option<&VersionSpecifiers>,
+    tag: &str,
+    files: &[(&str, &str)],
+) -> (String, Vec<u8>) {
     let normalized = name.as_dist_info_name();
     let dist_info = format!("{normalized}-{version}.dist-info");
 
     let mut zip = ZipFileWriter::new(Vec::new());
 
-    let entries = [
+    let mut entries = vec![
         (
             format!("{normalized}/__init__.py"),
             format!("__version__ = \"{version}\"\n"),
@@ -57,6 +72,11 @@ pub fn generate_wheel(
             ),
         ),
     ];
+    entries.extend(
+        files
+            .iter()
+            .map(|(path, contents)| ((*path).to_string(), (*contents).to_string())),
+    );
     for (path, contents) in &entries {
         let entry = ZipEntryBuilder::new(path.clone().into(), ZipCompression::Stored);
         block_on(zip.write_entry_whole(entry, contents.as_bytes()))

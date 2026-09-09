@@ -4,7 +4,7 @@ build-backend = "maturin"
 
 [project]
 name = "uv"
-version = "0.12.5"
+version = "0.12.11"
 description = "An extremely fast Python package and project manager, written in Rust."
 authors = [{ name = "Astral Software Inc.", email = "hey@astral.sh" }]
 requires-python = ">=3.8"
@@ -119,15 +119,18 @@ release = [
   "rooster==0.1.1",
 ]
 check = [
+    "astral-dev-toolchain-cargo-shear>=1.13.4",
     "ruff>=0.16.2",
     "ty>=0.0.69",
     "typos>=1.49.0",
     "validate-pyproject[all,store]>=0.25",
 ]
+dev = [
+    "astral-dev-toolchain-cargo-dist>=0.32.0",
+]
 
 [tool.uv]
 no-build = true
-exclude-newer = "P7D"
 cache-keys = [
     { file = "pyproject.toml" },
     { file = "Cargo.toml" },
@@ -135,6 +138,11 @@ cache-keys = [
     { file = "crates/**/*.rs" },
     { file = "crates/**/Cargo.toml" },
 ]
+exclude-newer = "P7D"
+
+[tool.uv.exclude-newer-package]
+astral-dev-toolchain-cargo-shear = "2026-08-27T04:00:00Z"
+astral-dev-toolchain-cargo-dist = "2026-08-28T04:00:00Z"
 
 [tool.uv.dependency-groups]
 docs = { requires-python = ">=3.12" }

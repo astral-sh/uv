@@ -30,6 +30,7 @@ use itertools::Itertools;
 use predicates::prelude::predicate;
 use regex::{Regex, regex};
 use tokio::io::AsyncWriteExt;
+use walkdir::WalkDir;
 
 use uv_cache::{Cache, CacheBucket};
 use uv_fs::Simplified;
@@ -45,7 +46,7 @@ static TEST_TIMESTAMP: &str = "2024-03-25T00:00:00Z";
 pub const DEFAULT_PYTHON_VERSION: &str = "3.12";
 
 // The expected latest patch version for each Python minor version.
-const LATEST_PYTHON_3_15: &str = "3.15.0rc1";
+const LATEST_PYTHON_3_15: &str = "3.15.0rc2";
 const LATEST_PYTHON_3_14: &str = "3.14.7";
 const LATEST_PYTHON_3_13: &str = "3.13.15";
 pub const LATEST_PYTHON_3_12: &str = "3.12.14";
@@ -56,15 +57,11 @@ const LATEST_PYTHON_3_10: &str = "3.10.21";
 ///
 /// Creates a virtual environment for the test.
 ///
-/// This macro captures the uv binary path at compile time using `env!("CARGO_BIN_EXE_uv")`,
-/// which is only available in the test crate.
+/// Resolves the uv binary path at runtime via [`get_bin!`].
 #[macro_export]
 macro_rules! test_context {
     ($python_version:expr) => {
-        $crate::TestContext::new_with_bin(
-            $python_version,
-            std::path::PathBuf::from(env!("CARGO_BIN_EXE_uv")),
-        )
+        $crate::TestContext::new_with_bin($python_version, $crate::get_bin!())
     };
 }
 
@@ -72,26 +69,28 @@ macro_rules! test_context {
 ///
 /// Unlike [`test_context!`], this does not create a virtual environment.
 ///
-/// This macro captures the uv binary path at compile time using `env!("CARGO_BIN_EXE_uv")`,
-/// which is only available in the test crate.
+/// Resolves the uv binary path at runtime via [`get_bin!`].
 #[macro_export]
 macro_rules! test_context_with_versions {
     ($python_versions:expr) => {
-        $crate::TestContext::new_with_versions_and_bin(
-            $python_versions,
-            std::path::PathBuf::from(env!("CARGO_BIN_EXE_uv")),
-        )
+        $crate::TestContext::new_with_versions_and_bin($python_versions, $crate::get_bin!())
     };
 }
 
 /// Return the path to the uv binary.
 ///
-/// This macro captures the uv binary path at compile time using `env!("CARGO_BIN_EXE_uv")`,
-/// which is only available in the test crate.
+/// Reads the path supplied by Cargo or nextest at runtime, so compiled tests
+/// remain usable when the target directory is relocated.
+///
+/// This path is only available in the `uv` package's integration tests and benchmarks.
 #[macro_export]
 macro_rules! get_bin {
     () => {
-        std::path::PathBuf::from(env!("CARGO_BIN_EXE_uv"))
+        std::path::PathBuf::from(
+            std::env::var_os("NEXTEST_BIN_EXE_uv")
+                .or_else(|| std::env::var_os("CARGO_BIN_EXE_uv"))
+                .expect("Cargo or nextest should provide the uv binary path"),
+        )
     };
 }
 
@@ -194,6 +193,27 @@ impl TestContext {
                 .insert(0, (pattern, "[CACHE_DIR]/".to_string()));
         }
 
+        self
+    }
+
+    /// Return the sorted paths of all regular files in a cache bucket.
+    pub fn cache_files(&self, bucket: CacheBucket) -> anyhow::Result<Vec<PathBuf>> {
+        let cache = Cache::from_path(self.cache_dir.path());
+        let mut files = Vec::new();
+        for entry in WalkDir::new(cache.bucket(bucket)).min_depth(1) {
+            let entry = entry?;
+            if entry.file_type().is_file() {
+                files.push(entry.path().to_path_buf());
+            }
+        }
+        files.sort();
+        Ok(files)
+    }
+
+    /// Set an environment variable for all commands created from this context.
+    #[must_use]
+    pub fn with_env(mut self, key: impl Into<OsString>, value: impl Into<OsString>) -> Self {
+        self.extra_env.push((key.into(), value.into()));
         self
     }
 
@@ -431,7 +451,10 @@ impl TestContext {
             "/[BIN]/".to_string(),
         ));
         self.filters.push((
-            format!(r"[\\/]{}", venv_bin_path(PathBuf::new()).to_string_lossy()),
+            format!(
+                r"[\\/]{}\b",
+                venv_bin_path(PathBuf::new()).to_string_lossy()
+            ),
             "/[BIN]".to_string(),
         ));
         self
@@ -1177,6 +1200,13 @@ impl TestContext {
     pub fn command(&self) -> Command {
         let mut command = self.new_command();
         self.add_shared_options(&mut command, true);
+        command
+    }
+
+    /// Create a command for an external program with the test environment.
+    pub fn external_command(&self, program: impl AsRef<Path>) -> Command {
+        let mut command = Self::new_command_with(program.as_ref());
+        self.add_shared_env(&mut command, false);
         command
     }
 

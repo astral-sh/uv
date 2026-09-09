@@ -1,3 +1,6 @@
+#[cfg(unix)]
+use std::os::unix::fs::PermissionsExt;
+
 use uv_platform::{Arch, Os};
 use uv_static::EnvVars;
 
@@ -98,9 +101,7 @@ fn python_list() {
 
 #[cfg(unix)]
 #[test]
-fn python_list_ignores_noncritical_explicit_path_errors() -> Result<()> {
-    use std::os::unix::fs::PermissionsExt;
-
+fn python_list_warns_on_noncritical_explicit_path_errors() -> Result<()> {
     let context = uv_test::test_context_with_versions!(&[]);
     let contents = r"#!/bin/sh
     echo 'error: intentionally broken python executable' >&2
@@ -116,6 +117,12 @@ fn python_list_ignores_noncritical_explicit_path_errors() -> Result<()> {
         .arg(&python)
         .arg("--only-installed"), @"
     exit_code: 0 (success)
+    ----- stderr -----
+    warning: Failed to inspect Python interpreter from provided path at `python`
+      Caused by: Querying Python at `[TEMP_DIR]/python` failed with exit status exit status: 1
+
+        [stderr]
+        error: intentionally broken python executable
     ");
 
     let environment = context.temp_dir.join("environment");
@@ -128,6 +135,92 @@ fn python_list_ignores_noncritical_explicit_path_errors() -> Result<()> {
         .arg(&environment)
         .arg("--only-installed"), @"
     exit_code: 0 (success)
+    ----- stderr -----
+    warning: Failed to inspect Python interpreter from provided path at `environment`
+      Caused by: Querying Python at `[TEMP_DIR]/environment/bin/python` failed with exit status exit status: 1
+
+        [stderr]
+        error: intentionally broken python executable
+    ");
+
+    Ok(())
+}
+
+#[cfg(target_os = "macos")]
+#[test]
+fn python_list_warns_on_non_native_search_path_interpreters() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&["3.12"])
+        .with_filtered_python_symlinks()
+        .with_filtered_python_keys()
+        .with_collapsed_whitespace();
+
+    let foreign_bin = context.temp_dir.join("foreign-bin");
+    fs_err::create_dir_all(&foreign_bin)?;
+
+    // A 64-bit PowerPC Mach-O cannot execute on supported macOS architectures.
+    let foreign_python = foreign_bin.join("python");
+    fs_err::write(
+        &foreign_python,
+        [
+            0xcf, 0xfa, 0xed, 0xfe, 0x12, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x02, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00,
+        ],
+    )?;
+    let mut permissions = fs_err::metadata(&foreign_python)?.permissions();
+    permissions.set_mode(0o755);
+    fs_err::set_permissions(&foreign_python, permissions)?;
+
+    let python_search_path = std::env::join_paths(
+        std::iter::once(foreign_bin).chain(std::env::split_paths(&context.python_path())),
+    )?;
+
+    uv_snapshot!(context.filters(), context.python_list()
+        .arg("--only-installed")
+        .env(EnvVars::UV_PYTHON_SEARCH_PATH, &python_search_path), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    cpython-3.12.[X]-[PLATFORM] [PYTHON-3.12]
+
+    ----- stderr -----
+    warning: Failed to inspect Python interpreter from first executable in the search path at `foreign-bin/python`
+     Caused by: Failed to query Python interpreter at `[TEMP_DIR]/foreign-bin/python`
+     Caused by: Bad CPU type in executable (os error 86)
+    ");
+
+    uv_snapshot!(context.filters(), context.python_list()
+        .arg("--only-installed")
+        .arg("--quiet")
+        .env(EnvVars::UV_PYTHON_SEARCH_PATH, &python_search_path), @"
+    exit_code: 0 (success)
+    ");
+
+    uv_snapshot!(context.filters(), context.python_list()
+        .arg(&foreign_python)
+        .arg("--only-installed"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    warning: Failed to inspect Python interpreter from provided path at `foreign-bin/python`
+     Caused by: Failed to query Python interpreter at `[TEMP_DIR]/foreign-bin/python`
+     Caused by: Bad CPU type in executable (os error 86)
+    ");
+
+    uv_snapshot!(context.filters(), context.python_find()
+        .env(EnvVars::UV_PYTHON_SEARCH_PATH, &python_search_path), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Failed to inspect Python interpreter from first executable in the search path at `foreign-bin/python`
+     Caused by: Failed to query Python interpreter at `[TEMP_DIR]/foreign-bin/python`
+     Caused by: Bad CPU type in executable (os error 86)
+    ");
+
+    uv_snapshot!(context.filters(), context.python_find()
+        .arg(&foreign_python), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Failed to inspect Python interpreter from provided path at `foreign-bin/python`
+     Caused by: Failed to query Python interpreter at `[TEMP_DIR]/foreign-bin/python`
+     Caused by: Bad CPU type in executable (os error 86)
     ");
 
     Ok(())

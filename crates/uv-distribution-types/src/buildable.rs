@@ -69,6 +69,14 @@ impl BuildableSource<'_> {
         }
     }
 
+    /// Returns `true` if the source is a first-party workspace member.
+    pub fn is_first_party(&self) -> bool {
+        match self {
+            Self::Dist(dist) => dist.is_first_party(),
+            Self::Url(_) => false,
+        }
+    }
+
     /// Return true if the source refers to a local source tree (i.e., a directory).
     pub fn is_source_tree(&self) -> bool {
         match self {

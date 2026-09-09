@@ -21,8 +21,8 @@ use uv_cache::Cache;
 use uv_cli::{ExternalCommand, GlobalArgs};
 use uv_client::BaseClientBuilder;
 use uv_configuration::{
-    Concurrency, Constraints, DependencyGroups, DryRun, EditableMode, EnvFile, ExtrasSpecification,
-    InstallOptions, TargetTriple,
+    ActiveEnvironment, Concurrency, Constraints, DependencyGroups, DryRun, EditableMode, EnvFile,
+    ExtrasSpecification, InstallOptions, TargetTriple,
 };
 use uv_distribution::LoweredExtraBuildDependencies;
 use uv_distribution_types::Requirement;
@@ -38,7 +38,7 @@ use uv_python::{
 };
 use uv_redacted::DisplaySafeUrl;
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
-use uv_resolver::{Installable, Lock, Preference};
+use uv_resolver::{DependencyMode, Installable, Lock, Preference};
 use uv_scripts::{Pep723Error, Pep723Item, Pep723Metadata, Pep723Script};
 use uv_settings::{
     EnvironmentOptions, FilesystemOptions, MalwareCheckSettings, PythonInstallMirrors,
@@ -80,7 +80,7 @@ use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::{ExitStatus, diagnostics, project, read_env_files};
 use crate::printer::Printer;
 use crate::settings::{
-    FrozenSource, GlobalSettings, LockCheck, LockCheckSource, ResolverInstallerSettings,
+    FrozenSource, GlobalSettings, LockCheck, LockedSource, ResolverInstallerSettings,
     ResolverSettings,
 };
 
@@ -94,7 +94,7 @@ pub(crate) async fn run(
     show_resolution: bool,
     lock_check: LockCheck,
     frozen: Option<FrozenSource>,
-    active: Option<bool>,
+    active: ActiveEnvironment,
     no_sync: bool,
     isolated: bool,
     all_packages: bool,
@@ -216,7 +216,7 @@ pub(crate) async fn run(
                 &install_mirrors,
                 no_sync,
                 config_discovery,
-                active.map_or(Some(false), Some),
+                active.without_warning(),
                 &cache,
                 DryRun::Disabled,
                 printer,
@@ -326,17 +326,17 @@ pub(crate) async fn run(
             Some(environment.into_interpreter())
         } else {
             // If no lockfile is found, error for `--locked` and `--frozen` when provided
-            // via CLI. For environment variables and configuration, warn instead to avoid
+            // via CLI. For environment variables, warn instead to avoid
             // breaking users who set `UV_LOCKED=1` globally.
             if let LockCheck::Enabled(lock_check) = lock_check {
                 match lock_check {
-                    LockCheckSource::LockedCli | LockCheckSource::Check => {
+                    LockedSource::Cli(_) => {
                         bail!(
                             "Unable to find lockfile for Python script, but `{lock_check}` was provided. To create a lockfile, run `{}`.",
                             "uv lock --script".green(),
                         );
                     }
-                    LockCheckSource::LockedEnv | LockCheckSource::LockedConfiguration => {
+                    LockedSource::Env => {
                         warn_user!(
                             "No lockfile found for Python script (ignoring `{lock_check}`); run `{}` to generate a lockfile",
                             "uv lock --script".green(),
@@ -346,13 +346,13 @@ pub(crate) async fn run(
             }
             if let Some(frozen_source) = frozen {
                 match frozen_source {
-                    FrozenSource::Cli => {
+                    FrozenSource::Cli(_) => {
                         bail!(
-                            "Unable to find lockfile for Python script, but `--frozen` was provided. To create a lockfile, run `{}`.",
+                            "Unable to find lockfile for Python script, but `{frozen_source}` was provided. To create a lockfile, run `{}`.",
                             "uv lock --script".green(),
                         );
                     }
-                    FrozenSource::Env | FrozenSource::Configuration => {
+                    FrozenSource::Env => {
                         warn_user!(
                             "No lockfile found for Python script (ignoring `--frozen`); run `{}` to generate a lockfile",
                             "uv lock --script".green(),
@@ -389,7 +389,7 @@ pub(crate) async fn run(
                     &install_mirrors,
                     no_sync,
                     config_discovery,
-                    active.map_or(Some(false), Some),
+                    active.without_warning(),
                     &cache,
                     DryRun::Disabled,
                     printer,
@@ -473,7 +473,7 @@ pub(crate) async fn run(
                     &install_mirrors,
                     no_sync,
                     config_discovery,
-                    active.map_or(Some(false), Some),
+                    active.without_warning(),
                     &cache,
                     printer,
                 )
@@ -1367,6 +1367,7 @@ fn can_skip_ephemeral(
         &spec.overrides,
         &spec.override_dependencies,
         &spec.excludes,
+        DependencyMode::Transitive,
         InstallationStrategy::Permissive,
         &markers,
         tags,

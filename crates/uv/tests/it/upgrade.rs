@@ -480,7 +480,6 @@ fn upgrade_updates_requirement_without_updating_lockfile_or_environment() -> Res
         @"
     exit_code: 0 (success)
     ----- stderr -----
-    Resolving despite existing lockfile due to change of exclude newer timestamp from `2021-01-01T00:00:00Z` to `2024-03-25T00:00:00Z`
     Resolved 4 packages in [TIME]
     Update anyio v2.0.0 -> v4.3.0
     Updated requirement: `anyio<=2` -> `anyio<=4.3.0`

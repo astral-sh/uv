@@ -1,6 +1,6 @@
 [package]
 name = "uv-distribution"
-version = "0.0.72"
+version = "0.0.78"
 description = "This is an internal component crate of uv"
 edition = { workspace = true }
 rust-version = { workspace = true }
@@ -36,6 +36,7 @@ uv-normalize = { workspace = true }
 uv-pep440 = { workspace = true }
 uv-pep508 = { workspace = true }
 uv-platform-tags = { workspace = true }
+uv-preview = { workspace = true }
 uv-pypi-types = { workspace = true }
 uv-python = { workspace = true }
 uv-redacted = { workspace = true }
@@ -47,6 +48,7 @@ either = { workspace = true }
 fs-err = { workspace = true }
 futures = { workspace = true }
 owo-colors = { workspace = true }
+rayon = { workspace = true }
 reqwest = { workspace = true }
 reqwest-middleware = { workspace = true }
 rmp-serde = { workspace = true }
@@ -62,6 +64,8 @@ url = { workspace = true }
 walkdir = { workspace = true }
 
 [dev-dependencies]
+uv-preview = { workspace = true, features = ["testing"] }
+
 indoc = { workspace = true }
 insta = { workspace = true }
 

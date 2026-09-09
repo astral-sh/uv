@@ -29,6 +29,7 @@ env:
   CARGO_NET_RETRY: 10
   CARGO_TERM_COLOR: always
   RUSTUP_MAX_RETRIES: 10
+  UV_LOCKED: 1
 
 permissions:
   contents: read
@@ -58,13 +59,20 @@ jobs:
           command: sdist
           args: --out dist
       - name: "Test sdist"
-        run: |
-          # We can't use `--find-links` here, since we need maturin, which means no `--no-index`, and without that option
-          # we run the risk that pip pull uv from PyPI instead.
-          pip install dist/${PACKAGE_NAME}-*.tar.gz --force-reinstall
-          ${MODULE_NAME} --help
-          python -m ${MODULE_NAME} --help
-          uvx --help
+        uses: astral-sh/github-actions/release-smoke-test@76d2758fc5c4394ada46510f46605deb7cec477e
+        with:
+          image: python:3.11-bookworm@sha256:35d3a4a3d5e42e02ab916d44513a050689f12c0533d45598d229672503fe77ca
+          artifacts: dist
+          rust-toolchain: rust-toolchain.toml
+          run: |
+            apt-get update
+            apt-get install -y --no-install-recommends cmake
+            # We can't use `--find-links` here, since we need maturin, which means no `--no-index`, and without that option
+            # we run the risk that pip pull uv from PyPI instead.
+            pip install /dist/${PACKAGE_NAME}-*.tar.gz --force-reinstall
+            ${MODULE_NAME} --help
+            python -m ${MODULE_NAME} --help
+            uvx --help
       - name: "Upload sdist"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
@@ -82,10 +90,17 @@ jobs:
       - name: "Fix Cargo.lock in sdist uv-build"
         run: python scripts/repair-sdist-cargo-lock.py crates/uv-build/dist/${PACKAGE_NAME}_build-*.tar.gz
       - name: "Test sdist uv-build"
-        run: |
-          pip install crates/uv-build/dist/${PACKAGE_NAME}_build-*.tar.gz --force-reinstall
-          ${MODULE_NAME}-build --help
-          python -m ${MODULE_NAME}_build --help
+        uses: astral-sh/github-actions/release-smoke-test@76d2758fc5c4394ada46510f46605deb7cec477e
+        with:
+          image: python:3.11-bookworm@sha256:35d3a4a3d5e42e02ab916d44513a050689f12c0533d45598d229672503fe77ca
+          artifacts: crates/uv-build/dist
+          rust-toolchain: crates/uv-build/rust-toolchain.toml
+          run: |
+            apt-get update
+            apt-get install -y --no-install-recommends cmake
+            pip install /dist/${PACKAGE_NAME}_build-*.tar.gz --force-reinstall
+            ${MODULE_NAME}-build --help
+            python -m ${MODULE_NAME}_build --help
       - name: "Upload sdist uv-build"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
@@ -127,7 +142,7 @@ jobs:
       - name: "Upload wheels"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: wheels_uv-macos-x86_64
+          name: wheels_uv-x86_64-apple-darwin
           path: dist
       - name: "Archive binary"
         run: |
@@ -143,7 +158,7 @@ jobs:
       - name: "Upload binary"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: artifacts-macos-x86_64
+          name: artifacts-x86_64-apple-darwin
           path: |
             *.tar.gz
             *.sha256
@@ -164,7 +179,7 @@ jobs:
       - name: "Upload wheels uv-build"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: wheels_uv_build-macos-x86_64
+          name: wheels_uv_build-x86_64-apple-darwin
           path: crates/uv-build/dist
 
   macos-aarch64:
@@ -270,19 +285,16 @@ jobs:
 
   windows:
     name: ${{ matrix.platform.target }}
-    runs-on: ${{ matrix.platform.runner }}
+    runs-on: namespace-profile-windows-2022-x86-64-16x32
     strategy:
       matrix:
         platform:
           - target: x86_64-pc-windows-msvc
             arch: x64
-            runner: github-windows-2025-x86_64-8
           - target: i686-pc-windows-msvc
             arch: x86
-            runner: github-windows-2025-x86_64-8
           - target: aarch64-pc-windows-msvc
-            arch: arm64
-            runner: github-windows-11-aarch64-8
+            arch: x64
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -304,7 +316,18 @@ jobs:
         # See: https://aws.github.io/aws-lc-rs/requirements/windows.html#build-requirements
         if: contains(matrix.platform.target, 'x86') || contains(matrix.platform.target, 'i686')
         run: |
-          winget install NASM.NASM --accept-source-agreements --accept-package-agreements
+          # Namespace runners do not include winget.
+          $version = '3.02'
+          $sha256 = '0DDB40310861EB29F4D649FEB9466779982A2D251C0DB2B9CF0D21CF591171F3'
+          $installer = Join-Path $env:RUNNER_TEMP "nasm-${version}-installer-x64.exe"
+          Invoke-WebRequest "https://www.nasm.us/pub/nasm/releasebuilds/$version/win64/nasm-${version}-installer-x64.exe" -OutFile $installer
+          if ((Get-FileHash $installer -Algorithm SHA256).Hash -ne $sha256) {
+            throw 'NASM installer checksum mismatch'
+          }
+          $installation = Start-Process $installer -ArgumentList '/S' -Wait -PassThru
+          if ($installation.ExitCode -ne 0) {
+            throw "NASM installation failed: $($installation.ExitCode)"
+          }
           echo "C:\Program Files\NASM" | Out-File -FilePath $env:GITHUB_PATH -Append
       - name: "Install LLVM profiling tools"
         if: ${{ matrix.platform.target == 'x86_64-pc-windows-msvc' }}
@@ -352,6 +375,8 @@ jobs:
             fi
           done
       - name: "Test wheel"
+        # We test aarch64 on a native runner in a separate job.
+        if: matrix.platform.target != 'aarch64-pc-windows-msvc'
         shell: bash
         run: |
           pip install ${PACKAGE_NAME} --no-index --find-links dist/ --force-reinstall
@@ -393,6 +418,8 @@ jobs:
         env:
           CARGO: ${{ github.workspace }}/scripts/cargo.cmd
       - name: "Test wheel uv-build"
+        # We test aarch64 on a native runner in a separate job.
+        if: matrix.platform.target != 'aarch64-pc-windows-msvc'
         shell: bash
         run: |
           pip install ${PACKAGE_NAME}_build --no-index --find-links crates/uv-build/dist --force-reinstall
@@ -403,6 +430,36 @@ jobs:
         with:
           name: wheels_uv_build-${{ matrix.platform.target }}
           path: crates/uv-build/dist
+
+  test-windows-aarch64:
+    name: "test aarch64-pc-windows-msvc wheels"
+    needs: windows
+    runs-on: github-windows-11-aarch64-8
+    steps:
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          cache: ""
+          python-version: ${{ env.PYTHON_VERSION }}
+          architecture: arm64
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: wheels_*-aarch64-pc-windows-msvc
+          path: dist
+          merge-multiple: true
+      - name: "Test wheel"
+        shell: bash
+        run: |
+          pip install ${PACKAGE_NAME} --no-index --find-links dist/ --force-reinstall
+          ${MODULE_NAME} --help
+          python -m ${MODULE_NAME} --help
+          uvx --help
+          uvw --help
+      - name: "Test wheel uv-build"
+        shell: bash
+        run: |
+          pip install ${PACKAGE_NAME}_build --no-index --find-links dist/ --force-reinstall
+          ${MODULE_NAME}-build --help
+          python -m ${MODULE_NAME}_build --help
 
   linux:
     name: ${{ matrix.target }}
@@ -543,6 +600,8 @@ jobs:
           # PGO requires a native runner; the 32-bit ARM targets are cross-compiled.
           - target: aarch64-unknown-linux-gnu
             arch: aarch64
+            test_image: arm64v8/ubuntu:20.04@sha256:0908a765aeb02fe4e564b543eaed1d77839b7a08de94041e24328b2cb62ac553
+            test_platform: linux/arm64
             runner: depot-ubuntu-24.04-arm-8
             pgo: true
             # see https://github.com/astral-sh/ruff/issues/3791
@@ -552,11 +611,15 @@ jobs:
             manylinux: 2_28
           - target: armv7-unknown-linux-gnueabihf
             arch: armv7
+            test_image: arm32v7/ubuntu:20.04@sha256:d9a6ab6baaf86907ea1d46f0cbc87547920077c9c6017721faed6eeb51e9aa7e
+            test_platform: linux/arm/v7
             runner: depot-ubuntu-24.04-8
             pgo: false
             manylinux: 2_17
           - target: arm-unknown-linux-musleabihf
             arch: arm
+            test_image: balenalib/rpi-raspbian:bullseye@sha256:851cfc48b26f6413a72a7f6873a7624ba2a427048976f6ab4483f72fe165d4f1
+            test_platform: linux/arm/v6
             runner: depot-ubuntu-24.04-8
             pgo: false
             # Special case: armv6l is linux_armv6l, no manylinux or musllinux.
@@ -604,24 +667,21 @@ jobs:
             fi
         env:
           CARGO: ${{ github.workspace }}/scripts/cargo.sh
-      - uses: uraimo/run-on-arch-action@f9b26e3a1a408d5fd530d20c17b9f3f4428ff8d9 # v3.1.0
-        name: "Test wheel"
+      - name: "Test wheel"
+        uses: astral-sh/github-actions/release-smoke-test@76d2758fc5c4394ada46510f46605deb7cec477e
         with:
-          arch: ${{ matrix.platform.arch == 'arm' && 'armv6' || matrix.platform.arch }}
-          distro: ${{ matrix.platform.arch == 'arm' && 'bullseye' || 'ubuntu20.04' }}
-          install: |
+          image: ${{ matrix.platform.test_image }}
+          platform: ${{ matrix.platform.test_platform }}
+          artifacts: dist
+          run: |
             apt-get update
             apt-get install -y --no-install-recommends python3 python3-pip python-is-python3
-            pip3 install -U pip
-          run: |
-            pip install ${PACKAGE_NAME} --no-index --find-links dist/ --force-reinstall
+            pip3 install --upgrade --require-hashes -r /pip-requirements.txt
+            pip install ${PACKAGE_NAME} --no-index --find-links /dist --force-reinstall
             ${MODULE_NAME} --help
             # TODO(konsti): Enable this test on all platforms, currently `find_uv_bin` is failing to discover uv here.
             # python -m ${MODULE_NAME} --help
             uvx --help
-          env: |
-            PACKAGE_NAME: ${{ env.PACKAGE_NAME }}
-            MODULE_NAME: ${{ env.MODULE_NAME }}
       - name: "Upload wheels"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
@@ -662,23 +722,20 @@ jobs:
             scripts/install-cargo-extensions.sh
         env:
           CARGO: ${{ github.workspace }}/scripts/cargo.sh
-      - uses: uraimo/run-on-arch-action@f9b26e3a1a408d5fd530d20c17b9f3f4428ff8d9 # v3.1.0
-        name: "Test wheel uv-build"
+      - name: "Test wheel uv-build"
+        uses: astral-sh/github-actions/release-smoke-test@76d2758fc5c4394ada46510f46605deb7cec477e
         with:
-          arch: ${{ matrix.platform.arch == 'arm' && 'armv6' || matrix.platform.arch }}
-          distro: ${{ matrix.platform.arch == 'arm' && 'bullseye' || 'ubuntu20.04' }}
-          install: |
+          image: ${{ matrix.platform.test_image }}
+          platform: ${{ matrix.platform.test_platform }}
+          artifacts: crates/uv-build/dist
+          run: |
             apt-get update
             apt-get install -y --no-install-recommends python3 python3-pip python-is-python3
-            pip3 install -U pip
-          run: |
-            pip install ${PACKAGE_NAME}_build --no-index --find-links crates/uv-build/dist --force-reinstall
+            pip3 install --upgrade --require-hashes -r /pip-requirements.txt
+            pip install ${PACKAGE_NAME}_build --no-index --find-links /dist --force-reinstall
             ${MODULE_NAME}-build --help
             # TODO(konsti): Enable this test on all platforms, currently `find_uv_bin` is failing to discover uv here.
             # python -m ${MODULE_NAME}_build --help
-          env: |
-            PACKAGE_NAME: ${{ env.PACKAGE_NAME }}
-            MODULE_NAME: ${{ env.MODULE_NAME }}
       - name: "Upload wheels uv-build"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
@@ -727,24 +784,21 @@ jobs:
         env:
           CARGO: ${{ github.workspace }}/scripts/cargo.sh
 
-      - uses: uraimo/run-on-arch-action@f9b26e3a1a408d5fd530d20c17b9f3f4428ff8d9 # v3.1.0
-        name: "Test wheel"
+      - name: "Test wheel"
+        uses: astral-sh/github-actions/release-smoke-test@76d2758fc5c4394ada46510f46605deb7cec477e
         with:
-          arch: ${{ matrix.platform.arch }}
-          distro: ubuntu20.04
-          install: |
+          image: s390x/ubuntu:20.04@sha256:221f5f8e28d896556d0e55605cd6936450e6231544e9d83d687beae2d0e71afd
+          platform: linux/s390x
+          artifacts: dist
+          run: |
             apt-get update
             apt-get install -y --no-install-recommends python3 python3-pip python-is-python3
-            pip3 install -U pip
-          run: |
-            pip install ${PACKAGE_NAME} --no-index --find-links dist/ --force-reinstall
+            pip3 install --upgrade --require-hashes -r /pip-requirements.txt
+            pip install ${PACKAGE_NAME} --no-index --find-links /dist --force-reinstall
             ${MODULE_NAME} --help
             # TODO(konsti): Enable this test on all platforms, currently `find_uv_bin` is failing to discover uv here.
             # python -m ${MODULE_NAME} --help
             uvx --help
-          env: |
-            PACKAGE_NAME: ${{ env.PACKAGE_NAME }}
-            MODULE_NAME: ${{ env.MODULE_NAME }}
       - name: "Upload wheels"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
@@ -785,23 +839,20 @@ jobs:
             scripts/install-cargo-extensions.sh
         env:
           CARGO: ${{ github.workspace }}/scripts/cargo.sh
-      - uses: uraimo/run-on-arch-action@f9b26e3a1a408d5fd530d20c17b9f3f4428ff8d9 # v3.1.0
-        name: "Test wheel uv-build"
+      - name: "Test wheel uv-build"
+        uses: astral-sh/github-actions/release-smoke-test@76d2758fc5c4394ada46510f46605deb7cec477e
         with:
-          arch: ${{ matrix.platform.arch }}
-          distro: ubuntu20.04
-          install: |
+          image: s390x/ubuntu:20.04@sha256:221f5f8e28d896556d0e55605cd6936450e6231544e9d83d687beae2d0e71afd
+          platform: linux/s390x
+          artifacts: crates/uv-build/dist
+          run: |
             apt-get update
             apt-get install -y --no-install-recommends python3 python3-pip python-is-python3
-            pip3 install -U pip
-          run: |
-            pip install ${PACKAGE_NAME}-build --no-index --find-links crates/uv-build/dist --force-reinstall
+            pip3 install --upgrade --require-hashes -r /pip-requirements.txt
+            pip install ${PACKAGE_NAME}-build --no-index --find-links /dist --force-reinstall
             ${MODULE_NAME}-build --help
             # TODO(konsti): Enable this test on all platforms, currently `find_uv_bin` is failing to discover uv here.
             # python -m ${MODULE_NAME}-build --help
-          env: |
-            PACKAGE_NAME: ${{ env.PACKAGE_NAME }}
-            MODULE_NAME: ${{ env.MODULE_NAME }}
       - name: "Upload wheels uv-build"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
@@ -961,25 +1012,21 @@ jobs:
             scripts/install-cargo-extensions.sh
         env:
           CARGO: ${{ github.workspace }}/scripts/cargo.sh
-      - uses: uraimo/run-on-arch-action@f9b26e3a1a408d5fd530d20c17b9f3f4428ff8d9 # v3.1.0
-        name: "Test wheel"
+      - name: "Test wheel"
+        uses: astral-sh/github-actions/release-smoke-test@76d2758fc5c4394ada46510f46605deb7cec477e
         with:
-          arch: ${{ matrix.platform.arch }}
-          distro: ubuntu20.04
-          githubToken: ${{ github.token }}
-          install: |
+          image: riscv64/ubuntu:20.04@sha256:610bedb0c5d9aeae4b45e9064e820c4e0b0f6c1d2843116b0a1ae754890951ac
+          platform: linux/riscv64
+          artifacts: dist
+          run: |
             apt-get update
             apt-get install -y --no-install-recommends python3 python3-pip python-is-python3
-            pip3 install -U pip
-          run: |
-            pip install ${PACKAGE_NAME} --no-index --find-links dist/ --force-reinstall
+            pip3 install --upgrade --require-hashes -r /pip-requirements.txt
+            pip install ${PACKAGE_NAME} --no-index --find-links /dist --force-reinstall
             ${MODULE_NAME} --help
             # TODO(konsti): Enable this test on all platforms, currently `find_uv_bin` is failing to discover uv here.
             # python -m ${MODULE_NAME} --help
             uvx --help
-          env: |
-            PACKAGE_NAME: ${{ env.PACKAGE_NAME }}
-            MODULE_NAME: ${{ env.MODULE_NAME }}
       - name: "Upload wheels"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
@@ -1020,24 +1067,20 @@ jobs:
             scripts/install-cargo-extensions.sh
         env:
           CARGO: ${{ github.workspace }}/scripts/cargo.sh
-      - uses: uraimo/run-on-arch-action@f9b26e3a1a408d5fd530d20c17b9f3f4428ff8d9 # v3.1.0
-        name: "Test wheel uv-build"
+      - name: "Test wheel uv-build"
+        uses: astral-sh/github-actions/release-smoke-test@76d2758fc5c4394ada46510f46605deb7cec477e
         with:
-          arch: ${{ matrix.platform.arch }}
-          distro: ubuntu20.04
-          githubToken: ${{ github.token }}
-          install: |
+          image: riscv64/ubuntu:20.04@sha256:610bedb0c5d9aeae4b45e9064e820c4e0b0f6c1d2843116b0a1ae754890951ac
+          platform: linux/riscv64
+          artifacts: crates/uv-build/dist
+          run: |
             apt-get update
             apt-get install -y --no-install-recommends python3 python3-pip python-is-python3
-            pip3 install -U pip
-          run: |
-            pip install ${PACKAGE_NAME}-build --no-index --find-links crates/uv-build/dist --force-reinstall
+            pip3 install --upgrade --require-hashes -r /pip-requirements.txt
+            pip install ${PACKAGE_NAME}-build --no-index --find-links /dist --force-reinstall
             ${MODULE_NAME}-build --help
             # TODO(konsti): Enable this test on all platforms, currently `find_uv_bin` is failing to discover uv here.
             # python -m ${MODULE_NAME}-build --help
-          env: |
-            PACKAGE_NAME: ${{ env.PACKAGE_NAME }}
-            MODULE_NAME: ${{ env.MODULE_NAME }}
       - name: "Upload wheels uv-build"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
@@ -1080,18 +1123,20 @@ jobs:
         env:
           CARGO: ${{ github.workspace }}/scripts/cargo.sh
       - name: "Test wheel"
+        uses: astral-sh/github-actions/release-smoke-test@76d2758fc5c4394ada46510f46605deb7cec477e
         if: matrix.target == 'x86_64-unknown-linux-musl'
-        run: |
-          docker run --rm -v ${{ github.workspace }}:/io -w /io --env MODULE_NAME --env PACKAGE_NAME alpine:3.12 sh -c "
-            apk add python3 py3-pip;
-            python3 -m venv .venv;
-            .venv/bin/pip install --upgrade pip;
-            .venv/bin/pip install ${PACKAGE_NAME} --no-index --find-links dist/ --force-reinstall;
-            .venv/bin/${MODULE_NAME} --help;
+        with:
+          image: alpine:3.12@sha256:c75ac27b49326926b803b9ed43bf088bc220d22556de1bc5f72d742c91398f69
+          artifacts: dist
+          run: |
+            apk add python3 py3-pip
+            python3 -m venv .venv
+            .venv/bin/pip install --upgrade --require-hashes -r /pip-requirements.txt
+            .venv/bin/pip install ${PACKAGE_NAME} --no-index --find-links /dist/ --force-reinstall
+            .venv/bin/${MODULE_NAME} --help
             # TODO(konsti): Enable this test on all platforms, currently `find_uv_bin` is failing to discover uv here.
-            # .venv/bin/python -m ${MODULE_NAME} --help;
-            .venv/bin/uvx --help;
-          "
+            # .venv/bin/python -m ${MODULE_NAME} --help
+            .venv/bin/uvx --help
       - name: "Upload wheels"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
@@ -1133,17 +1178,19 @@ jobs:
         env:
           CARGO: ${{ github.workspace }}/scripts/cargo.sh
       - name: "Test wheel uv-build"
+        uses: astral-sh/github-actions/release-smoke-test@76d2758fc5c4394ada46510f46605deb7cec477e
         if: matrix.target == 'x86_64-unknown-linux-musl'
-        run: |
-          docker run --rm -v ${{ github.workspace }}:/io -w /io --env MODULE_NAME --env PACKAGE_NAME alpine:3.12 sh -c "
-            apk add python3 py3-pip;
-            python3 -m venv .venv;
-            .venv/bin/pip install --upgrade pip;
-            .venv/bin/pip install ${PACKAGE_NAME}-build --no-index --find-links crates/uv-build/dist --force-reinstall;
-            .venv/bin/${MODULE_NAME}-build --help;
+        with:
+          image: alpine:3.12@sha256:c75ac27b49326926b803b9ed43bf088bc220d22556de1bc5f72d742c91398f69
+          artifacts: crates/uv-build/dist
+          run: |
+            apk add python3 py3-pip
+            python3 -m venv .venv
+            .venv/bin/pip install --upgrade --require-hashes -r /pip-requirements.txt
+            .venv/bin/pip install ${PACKAGE_NAME}-build --no-index --find-links /dist --force-reinstall
+            .venv/bin/${MODULE_NAME}-build --help
             # TODO(konsti): Enable this test on all platforms, currently `find_uv_bin` is failing to discover uv here.
-            # .venv/bin/python -m ${MODULE_NAME}_build --help;
-          "
+            # .venv/bin/python -m ${MODULE_NAME}_build --help
       - name: "Upload wheels uv-build"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
@@ -1160,11 +1207,17 @@ jobs:
         platform:
           - target: aarch64-unknown-linux-musl
             arch: aarch64
+            test_image: arm64v8/alpine:latest@sha256:65b6d5e8cc3010146b8b28cad29473b67883635fbedc9851f05ac83fb713ebdb
+            test_platform: linux/arm64
             maturin_docker_options: -e JEMALLOC_SYS_WITH_LG_PAGE=16
           - target: armv7-unknown-linux-musleabihf
             arch: armv7
+            test_image: arm32v7/alpine:latest@sha256:8cc6ea3910f429645e27a90f51b73fb499e9136d12f11973ef233db7f4223967
+            test_platform: linux/arm/v7
           - target: riscv64gc-unknown-linux-musl
             arch: riscv64
+            test_image: riscv64/alpine:latest@sha256:e7eb5d29759ca6c5622f8940faa8142a9316799aec31291c075a1847a20f28e6
+            test_platform: linux/riscv64
       fail-fast: false
 
     steps:
@@ -1195,42 +1248,36 @@ jobs:
             scripts/install-cargo-extensions.sh
         env:
           CARGO: ${{ github.workspace }}/scripts/cargo.sh
-      - uses: uraimo/run-on-arch-action@f9b26e3a1a408d5fd530d20c17b9f3f4428ff8d9 # v3.1.0
-        name: "Test wheel"
+      - name: "Test wheel"
+        uses: astral-sh/github-actions/release-smoke-test@76d2758fc5c4394ada46510f46605deb7cec477e
         with:
-          arch: ${{ matrix.platform.arch }}
-          distro: alpine_latest
-          install: |
-            apk add python3
+          image: ${{ matrix.platform.test_image }}
+          platform: ${{ matrix.platform.test_platform }}
+          artifacts: dist
           run: |
+            apk add python3
             python -m venv .venv
-            .venv/bin/pip install ${PACKAGE_NAME} --no-index --find-links dist/ --force-reinstall
+            .venv/bin/pip install ${PACKAGE_NAME} --no-index --find-links /dist --force-reinstall
             .venv/bin/${MODULE_NAME} --help
             # TODO(konsti): Enable this test on all platforms, currently `find_uv_bin` is failing to discover uv here.
             # .venv/bin/python -m ${MODULE_NAME} --help
             .venv/bin/uvx --help
-          env: |
-            PACKAGE_NAME: ${{ env.PACKAGE_NAME }}
-            MODULE_NAME: ${{ env.MODULE_NAME }}
-      - uses: uraimo/run-on-arch-action@f9b26e3a1a408d5fd530d20c17b9f3f4428ff8d9 # v3.1.0
-        name: "Test wheel (manylinux)"
+      - name: "Test wheel (manylinux)"
+        uses: astral-sh/github-actions/release-smoke-test@76d2758fc5c4394ada46510f46605deb7cec477e
         if: matrix.platform.arch == 'aarch64'
         with:
-          arch: aarch64
-          distro: ubuntu20.04
-          install: |
+          image: arm64v8/ubuntu:20.04@sha256:0908a765aeb02fe4e564b543eaed1d77839b7a08de94041e24328b2cb62ac553
+          platform: linux/arm64
+          artifacts: dist
+          run: |
             apt-get update
             apt-get install -y --no-install-recommends python3 python3-pip python-is-python3
-            pip3 install -U pip
-          run: |
-            pip install ${PACKAGE_NAME} --no-index --find-links dist/ --force-reinstall
+            pip3 install --upgrade --require-hashes -r /pip-requirements.txt
+            pip install ${PACKAGE_NAME} --no-index --find-links /dist --force-reinstall
             ${MODULE_NAME} --help
             # TODO(konsti): Enable this test on all platforms, currently `find_uv_bin` is failing to discover uv here.
             # python -m ${MODULE_NAME} --help
             uvx --help
-          env: |
-            PACKAGE_NAME: ${{ env.PACKAGE_NAME }}
-            MODULE_NAME: ${{ env.MODULE_NAME }}
       - name: "Upload wheels"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
@@ -1273,40 +1320,34 @@ jobs:
             scripts/install-cargo-extensions.sh
         env:
           CARGO: ${{ github.workspace }}/scripts/cargo.sh
-      - uses: uraimo/run-on-arch-action@f9b26e3a1a408d5fd530d20c17b9f3f4428ff8d9 # v3.1.0
-        name: "Test wheel"
+      - name: "Test wheel"
+        uses: astral-sh/github-actions/release-smoke-test@76d2758fc5c4394ada46510f46605deb7cec477e
         with:
-          arch: ${{ matrix.platform.arch }}
-          distro: alpine_latest
-          install: |
-            apk add python3
+          image: ${{ matrix.platform.test_image }}
+          platform: ${{ matrix.platform.test_platform }}
+          artifacts: crates/uv-build/dist
           run: |
+            apk add python3
             python -m venv .venv
-            .venv/bin/pip install ${PACKAGE_NAME}-build --no-index --find-links crates/uv-build/dist --force-reinstall
+            .venv/bin/pip install ${PACKAGE_NAME}-build --no-index --find-links /dist --force-reinstall
             .venv/bin/${MODULE_NAME}-build --help
             # TODO(konsti): Enable this test on all platforms, currently `find_uv_bin` is failing to discover uv here.
             # .venv/bin/python -m ${MODULE_NAME}_build --help
-          env: |
-            PACKAGE_NAME: ${{ env.PACKAGE_NAME }}
-            MODULE_NAME: ${{ env.MODULE_NAME }}
-      - uses: uraimo/run-on-arch-action@f9b26e3a1a408d5fd530d20c17b9f3f4428ff8d9 # v3.1.0
-        name: "Test wheel (manylinux)"
+      - name: "Test wheel (manylinux)"
+        uses: astral-sh/github-actions/release-smoke-test@76d2758fc5c4394ada46510f46605deb7cec477e
         if: matrix.platform.arch == 'aarch64'
         with:
-          arch: aarch64
-          distro: ubuntu20.04
-          install: |
+          image: arm64v8/ubuntu:20.04@sha256:0908a765aeb02fe4e564b543eaed1d77839b7a08de94041e24328b2cb62ac553
+          platform: linux/arm64
+          artifacts: crates/uv-build/dist
+          run: |
             apt-get update
             apt-get install -y --no-install-recommends python3 python3-pip python-is-python3
-            pip3 install -U pip
-          run: |
-            pip install ${PACKAGE_NAME}-build --no-index --find-links crates/uv-build/dist --force-reinstall
+            pip3 install --upgrade --require-hashes -r /pip-requirements.txt
+            pip install ${PACKAGE_NAME}-build --no-index --find-links /dist --force-reinstall
             ${MODULE_NAME}-build --help
             # TODO(konsti): Enable this test on all platforms, currently `find_uv_bin` is failing to discover uv here.
             # python -m ${MODULE_NAME}_build --help
-          env: |
-            PACKAGE_NAME: ${{ env.PACKAGE_NAME }}
-            MODULE_NAME: ${{ env.MODULE_NAME }}
       - name: "Upload wheels"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:

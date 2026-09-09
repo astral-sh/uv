@@ -29,8 +29,8 @@ use uv_cache::Cache;
 use uv_cli::AuditOutputFormat;
 use uv_client::{BaseClientBuilder, CachedClient, RegistryClientBuilder};
 use uv_configuration::{
-    Concurrency, DependencyGroups, DependencyGroupsWithDefaults, ExtrasSpecification,
-    ExtrasSpecificationWithDefaults, TargetTriple,
+    ActiveEnvironment, Concurrency, DependencyGroups, DependencyGroupsWithDefaults,
+    ExtrasSpecification, ExtrasSpecificationWithDefaults, TargetTriple,
 };
 use uv_distribution_types::{IndexCapabilities, IndexUrl};
 use uv_fs::{CWD, find_git_repository_root, relative_to};
@@ -134,7 +134,7 @@ pub(crate) async fn audit(
                 &install_mirrors,
                 false,
                 config_discovery,
-                Some(false),
+                ActiveEnvironment::Ignore,
                 &cache,
                 printer,
             )
@@ -158,7 +158,7 @@ pub(crate) async fn audit(
                     python_downloads,
                     &install_mirrors,
                     ProjectEnvironmentPolicy::Optional,
-                    Some(false),
+                    ActiveEnvironment::Ignore,
                     &cache,
                     printer,
                 )

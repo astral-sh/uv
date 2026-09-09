@@ -2,15 +2,15 @@ use assert_cmd::assert::OutputAssertExt;
 use assert_fs::fixture::{FileTouch, FileWriteStr, PathChild};
 use fs_err::OpenOptions;
 use indoc::{formatdoc, indoc};
-use serde_json::json;
+use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use std::env::current_dir;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use uv_static::EnvVars;
 use uv_test::{uv_snapshot, venv_bin_path};
-use wiremock::matchers::{basic_auth, method, path};
-use wiremock::{Mock, MockServer, ResponseTemplate};
+use wiremock::matchers::{basic_auth, body_json, method, path};
+use wiremock::{Mock, MockServer, Request, ResponseTemplate};
 
 fn test_link(filename: &str) -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -36,6 +36,39 @@ fn basic_package_sdist() -> PathBuf {
 
 fn basic_package_wheel() -> PathBuf {
     test_link("basic_package-0.1.0-py3-none-any.whl")
+}
+
+/// Read the JSON attestations field from a recorded multipart upload.
+fn upload_attestations(request: &Request) -> Option<Value> {
+    let body = String::from_utf8_lossy(&request.body);
+    let (_, field) = body.split_once("name=\"attestations\"\r\n\r\n")?;
+    let (attestations, _) = field
+        .split_once("\r\n")
+        .expect("Multipart field is terminated");
+    Some(serde_json::from_str(attestations).expect("Attestations are JSON"))
+}
+
+/// Mock token acquisition and invalidation for the expected number of publishing runs.
+async fn mock_trusted_publishing(server: &MockServer, runs: u64) {
+    Mock::given(method("GET"))
+        .and(path("/_/oidc/audience"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({ "audience": "pypi" })))
+        .expect(runs)
+        .mount(server)
+        .await;
+    Mock::given(method("POST"))
+        .and(path("/_/oidc/mint-token"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({ "token": "apitoken" })))
+        .expect(runs)
+        .mount(server)
+        .await;
+    Mock::given(method("POST"))
+        .and(path("/_/oidc/burn-token"))
+        .and(body_json(json!({ "token": "apitoken" })))
+        .respond_with(ResponseTemplate::new(202))
+        .expect(runs)
+        .mount(server)
+        .await;
 }
 
 #[test]
@@ -615,7 +648,7 @@ async fn check_url_missing_package_follows_redirect() {
     );
 }
 
-/// Native GitLab CI trusted publishing using `PYPI_ID_TOKEN`
+/// Native GitLab CI trusted publishing using `PYPI_ID_TOKEN` revokes the token after all uploads.
 #[tokio::test]
 async fn gitlab_trusted_publishing_pypi_id_token() {
     let context = uv_test::test_context!("3.12").with_filtered_sizes();
@@ -645,23 +678,51 @@ async fn gitlab_trusted_publishing_pypi_id_token() {
         .and(path("/upload"))
         .and(basic_auth("__token__", "apitoken"))
         .respond_with(ResponseTemplate::new(200))
+        .expect(2)
         .mount(&server)
         .await;
 
+    Mock::given(method("POST"))
+        .and(path("/_/oidc/burn-token"))
+        .and(body_json(json!({ "token": "apitoken" })))
+        .respond_with(ResponseTemplate::new(202))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    // Trusted publishing is detected automatically without an explicit flag.
     uv_snapshot!(context.filters(), context.publish()
-        .arg("--trusted-publishing")
-        .arg("always")
         .arg("--publish-url")
         .arg(format!("{}/upload", server.uri()))
         .arg(dummy_wheel())
+        .arg(basic_app_wheel())
         .env(EnvVars::GITLAB_CI, "true")
         .env(EnvVars::PYPI_ID_TOKEN, "gitlab-oidc-jwt"), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Publishing 1 file to http://[LOCALHOST]/upload
+    Publishing 2 files to http://[LOCALHOST]/upload
+    Hashing basic_app-0.1.0-py3-none-any.whl ([SIZE]KiB)
+    Uploading basic_app-0.1.0-py3-none-any.whl ([SIZE]KiB)
     Hashing ok-1.0.0-py3-none-any.whl ([SIZE]B)
     Uploading ok-1.0.0-py3-none-any.whl ([SIZE]B)
     "
+    );
+
+    let requests = server
+        .received_requests()
+        .await
+        .expect("Request recording is enabled");
+    insta::assert_debug_snapshot!(
+        requests.iter().map(|request| request.url.path()).collect::<Vec<_>>(),
+        @r#"
+    [
+        "/_/oidc/audience",
+        "/_/oidc/mint-token",
+        "/upload",
+        "/upload",
+        "/_/oidc/burn-token",
+    ]
+    "#
     );
 }
 
@@ -696,6 +757,15 @@ async fn gitlab_trusted_publishing_testpypi_id_token() {
         .and(path("/upload"))
         .and(basic_auth("__token__", "apitoken"))
         .respond_with(ResponseTemplate::new(200))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    Mock::given(method("POST"))
+        .and(path("/_/oidc/burn-token"))
+        .and(body_json(json!({ "token": "apitoken" })))
+        .respond_with(ResponseTemplate::new(202))
+        .expect(1)
         .mount(&server)
         .await;
 
@@ -717,60 +787,372 @@ async fn gitlab_trusted_publishing_testpypi_id_token() {
     );
 }
 
+/// Failure to revoke a token must not change the outcome of publishing.
 #[tokio::test]
-async fn direct_publish_redacts_presigned_upload_url() {
+async fn trusted_publishing_burn_failure() {
     let context = uv_test::test_context!("3.12").with_filtered_sizes();
     let server = MockServer::start().await;
 
-    let upload_url = format!(
-        "{}/s3/ok-1.0.0-py3-none-any.whl?X-Amz-Credential=credential&X-Amz-Signature=signature&X-Amz-Security-Token=token",
-        server.uri()
-    );
-
-    Mock::given(method("POST"))
-        .and(path("/upload/reserve"))
-        .respond_with(ResponseTemplate::new(201).set_body_json(json!({
-            "upload_url": upload_url,
-        })))
-        .mount(&server)
-        .await;
-    Mock::given(method("PUT"))
-        .and(path("/s3/ok-1.0.0-py3-none-any.whl"))
-        .respond_with(ResponseTemplate::new(200))
+    Mock::given(method("GET"))
+        .and(path("/_/oidc/audience"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({ "audience": "pypi" })))
+        .expect(2)
         .mount(&server)
         .await;
     Mock::given(method("POST"))
-        .and(path("/upload/finalize"))
+        .and(path("/_/oidc/mint-token"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({ "token": "apitoken" })))
+        .expect(2)
+        .mount(&server)
+        .await;
+    Mock::given(method("POST"))
+        .and(path("/_/oidc/burn-token"))
+        .and(body_json(json!({ "token": "apitoken" })))
+        // An index implementing the minting API may not support token revocation yet.
+        // Response bodies must not be logged, as they could echo the token.
+        .respond_with(ResponseTemplate::new(404).set_body_raw("apitoken", "text/plain"))
+        .expect(2)
+        .mount(&server)
+        .await;
+    Mock::given(method("POST"))
+        .and(path("/upload"))
+        .and(basic_auth("__token__", "apitoken"))
         .respond_with(ResponseTemplate::new(200))
+        .up_to_n_times(1)
+        .expect(1)
         .mount(&server)
         .await;
 
     uv_snapshot!(context.filters(), context.publish()
-        .arg("--preview-features")
-        .arg("direct-publish")
-        .arg("--direct")
-        .arg("-u")
-        .arg("dummy")
-        .arg("-p")
-        .arg("dummy")
+        .arg("--trusted-publishing")
+        .arg("always")
         .arg("--publish-url")
         .arg(format!("{}/upload", server.uri()))
         .arg(dummy_wheel())
-        .env(EnvVars::RUST_LOG, "uv_publish=debug"), @"
+        .env(EnvVars::GITLAB_CI, "true")
+        .env(EnvVars::PYPI_ID_TOKEN, "gitlab-oidc-jwt"), @"
     exit_code: 0 (success)
     ----- stderr -----
     Publishing 1 file to http://[LOCALHOST]/upload
     Hashing ok-1.0.0-py3-none-any.whl ([SIZE]B)
-    DEBUG Hashing [WORKSPACE]/test/links/ok-1.0.0-py3-none-any.whl
     Uploading ok-1.0.0-py3-none-any.whl ([SIZE]B)
-    DEBUG Reserving upload slot at http://[LOCALHOST]/upload/reserve
-    DEBUG Using HTTP Basic authentication
-    DEBUG Got pre-signed URL for upload: http://[LOCALHOST]/s3/ok-1.0.0-py3-none-any.whl?X-Amz-Credential=****&X-Amz-Signature=****&X-Amz-Security-Token=****
-    DEBUG S3 upload complete for ok-1.0.0-py3-none-any.whl
-    DEBUG Finalizing upload at http://[LOCALHOST]/upload/finalize
-    DEBUG Using HTTP Basic authentication
-    DEBUG Response code for http://[LOCALHOST]/upload/finalize: 200 OK
-    DEBUG Upload finalized for ok-1.0.0-py3-none-any.whl
+    warning: Failed to invalidate trusted publishing token. It will expire naturally. Cause: Failed to fetch: `http://[LOCALHOST]/_/oidc/burn-token`
+    "
+    );
+
+    Mock::given(method("POST"))
+        .and(path("/upload"))
+        .and(basic_auth("__token__", "apitoken"))
+        .respond_with(ResponseTemplate::new(400).set_body_raw("Upload failed", "text/plain"))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    uv_snapshot!(context.filters(), context.publish()
+        .arg("--trusted-publishing")
+        .arg("always")
+        .arg("--publish-url")
+        .arg(format!("{}/upload", server.uri()))
+        .arg(dummy_wheel())
+        .env(EnvVars::GITLAB_CI, "true")
+        .env(EnvVars::PYPI_ID_TOKEN, "gitlab-oidc-jwt"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    Publishing 1 file to http://[LOCALHOST]/upload
+    Hashing ok-1.0.0-py3-none-any.whl ([SIZE]B)
+    Uploading ok-1.0.0-py3-none-any.whl ([SIZE]B)
+    warning: Failed to invalidate trusted publishing token. It will expire naturally. Cause: Failed to fetch: `http://[LOCALHOST]/_/oidc/burn-token`
+    error: Failed to publish `[WORKSPACE]/test/links/ok-1.0.0-py3-none-any.whl` to http://[LOCALHOST]/upload
+      Caused by: Server returned status code 400 Bad Request. Server says: Upload failed
+    "
+    );
+}
+
+/// A token is revoked even if reading distribution metadata fails before the upload.
+#[tokio::test]
+async fn trusted_publishing_burn_after_prepare_failure() {
+    let context = uv_test::test_context!("3.12").with_filtered_sizes();
+    let server = MockServer::start().await;
+    let wheel = context.temp_dir.child("a-1.0.0-py3-none-any.whl");
+    wheel.touch().expect("Failed to create wheel");
+
+    Mock::given(method("GET"))
+        .and(path("/_/oidc/audience"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({ "audience": "pypi" })))
+        .expect(2)
+        .mount(&server)
+        .await;
+    Mock::given(method("POST"))
+        .and(path("/_/oidc/mint-token"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({ "token": "apitoken" })))
+        .expect(2)
+        .mount(&server)
+        .await;
+    Mock::given(method("POST"))
+        .and(path("/_/oidc/burn-token"))
+        .and(body_json(json!({ "token": "apitoken" })))
+        .respond_with(ResponseTemplate::new(202))
+        .expect(2)
+        .mount(&server)
+        .await;
+    Mock::given(method("POST"))
+        .and(path("/upload"))
+        .and(basic_auth("__token__", "apitoken"))
+        .respond_with(ResponseTemplate::new(200))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    uv_snapshot!(context.filters(), context.publish()
+        .arg("--trusted-publishing")
+        .arg("always")
+        .arg("--publish-url")
+        .arg(format!("{}/upload", server.uri()))
+        .arg(wheel.path())
+        .env(EnvVars::GITLAB_CI, "true")
+        .env(EnvVars::PYPI_ID_TOKEN, "gitlab-oidc-jwt"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    Publishing 1 file to http://[LOCALHOST]/upload
+    Hashing a-1.0.0-py3-none-any.whl ([SIZE]B)
+    error: Failed to publish: `a-1.0.0-py3-none-any.whl`
+      Caused by: Failed to read metadata
+      Caused by: Failed to read from zip file
+      Caused by: unable to locate the end of central directory record
+    "
+    );
+
+    // Preparation remains per-file: the valid wheel uploads before a later preparation fails.
+    let later_wheel = context.temp_dir.child("z-1.0.0-py3-none-any.whl");
+    later_wheel.touch().expect("Failed to create wheel");
+    uv_snapshot!(context.filters(), context.publish()
+        .arg("--trusted-publishing")
+        .arg("always")
+        .arg("--publish-url")
+        .arg(format!("{}/upload", server.uri()))
+        .arg(dummy_wheel())
+        .arg(later_wheel.path())
+        .env(EnvVars::GITLAB_CI, "true")
+        .env(EnvVars::PYPI_ID_TOKEN, "gitlab-oidc-jwt"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    Publishing 2 files to http://[LOCALHOST]/upload
+    Hashing ok-1.0.0-py3-none-any.whl ([SIZE]B)
+    Uploading ok-1.0.0-py3-none-any.whl ([SIZE]B)
+    Hashing z-1.0.0-py3-none-any.whl ([SIZE]B)
+    error: Failed to publish: `z-1.0.0-py3-none-any.whl`
+      Caused by: Failed to read metadata
+      Caused by: Failed to read from zip file
+      Caused by: unable to locate the end of central directory record
+    "
+    );
+
+    let requests = server
+        .received_requests()
+        .await
+        .expect("Request recording is enabled");
+    insta::assert_debug_snapshot!(
+        requests.iter().map(|request| request.url.path()).collect::<Vec<_>>(),
+        @r#"
+    [
+        "/_/oidc/audience",
+        "/_/oidc/mint-token",
+        "/_/oidc/burn-token",
+        "/_/oidc/audience",
+        "/_/oidc/mint-token",
+        "/upload",
+        "/_/oidc/burn-token",
+    ]
+    "#
+    );
+}
+
+/// Both successful and failed dry runs finalize the session without uploading.
+#[tokio::test]
+async fn trusted_publishing_dry_run() {
+    let context = uv_test::test_context!("3.12").with_filtered_sizes();
+    let server = MockServer::start().await;
+
+    mock_trusted_publishing(&server, 2).await;
+    Mock::given(method("POST"))
+        .and(path("/upload"))
+        .respond_with(ResponseTemplate::new(200))
+        .expect(0)
+        .mount(&server)
+        .await;
+
+    uv_snapshot!(context.filters(), context.publish()
+        .arg("--dry-run")
+        .arg("--trusted-publishing")
+        .arg("always")
+        .arg("--publish-url")
+        .arg(format!("{}/upload", server.uri()))
+        .arg(dummy_wheel())
+        .env(EnvVars::GITLAB_CI, "true")
+        .env(EnvVars::PYPI_ID_TOKEN, "gitlab-oidc-jwt"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Checking 1 file against http://[LOCALHOST]/upload
+    Checking ok-1.0.0-py3-none-any.whl ([SIZE]B)
+    "
+    );
+
+    let wheel = context.temp_dir.child("a-1.0.0-py3-none-any.whl");
+    wheel.touch().expect("Failed to create wheel");
+    uv_snapshot!(context.filters(), context.publish()
+        .arg("--dry-run")
+        .arg("--trusted-publishing")
+        .arg("always")
+        .arg("--publish-url")
+        .arg(format!("{}/upload", server.uri()))
+        .arg(wheel.path())
+        .env(EnvVars::GITLAB_CI, "true")
+        .env(EnvVars::PYPI_ID_TOKEN, "gitlab-oidc-jwt"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Checking 1 file against http://[LOCALHOST]/upload
+    Checking a-1.0.0-py3-none-any.whl ([SIZE]B)
+    error: Failed to publish: `a-1.0.0-py3-none-any.whl`
+      Caused by: Failed to read metadata
+      Caused by: Failed to read from zip file
+      Caused by: unable to locate the end of central directory record
+    Found issues with 1 file
+    "
+    );
+
+    let requests = server
+        .received_requests()
+        .await
+        .expect("Request recording is enabled");
+    insta::assert_debug_snapshot!(
+        requests.iter().map(|request| request.url.path()).collect::<Vec<_>>(),
+        @r#"
+    [
+        "/_/oidc/audience",
+        "/_/oidc/mint-token",
+        "/_/oidc/burn-token",
+        "/_/oidc/audience",
+        "/_/oidc/mint-token",
+        "/_/oidc/burn-token",
+    ]
+    "#
+    );
+}
+
+/// Skipped files are not prepared, and the session still invalidates its token.
+#[tokio::test]
+async fn trusted_publishing_all_skipped() {
+    let context = uv_test::test_context!("3.12").with_filtered_sizes();
+    let server = MockServer::start().await;
+    let non_normalized = context.temp_dir.child("ok-1.01.0-py3-none-any.whl");
+    non_normalized.touch().expect("Failed to create wheel");
+    let attestation = context
+        .temp_dir
+        .child("ok-1.0.0-py3-none-any.whl.publish.attestation");
+    attestation
+        .write_str("not JSON")
+        .expect("Failed to write attestation");
+
+    mock_trusted_publishing(&server, 1).await;
+    Mock::given(method("POST"))
+        .and(path("/upload"))
+        .respond_with(ResponseTemplate::new(200))
+        .expect(0)
+        .mount(&server)
+        .await;
+
+    let sha256 = hex::encode(Sha256::digest(
+        fs_err::read(dummy_wheel()).expect("Failed to read wheel"),
+    ));
+    Mock::given(method("GET"))
+        .and(path("/simple/ok/"))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_raw(
+                json!({
+                    "files": [{
+                        "filename": "ok-1.0.0-py3-none-any.whl",
+                        "hashes": { "sha256": sha256 },
+                        "url": format!("{}/ok-1.0.0-py3-none-any.whl", server.uri()),
+                    }]
+                })
+                .to_string(),
+                "application/vnd.pypi.simple.v1+json",
+            ),
+        )
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    uv_snapshot!(context.filters(), context.publish()
+        .arg("--trusted-publishing")
+        .arg("always")
+        .arg("--publish-url")
+        .arg(format!("{}/upload", server.uri()))
+        .arg("--check-url")
+        .arg(format!("{}/simple/", server.uri()))
+        .arg(dummy_wheel())
+        .arg(attestation.path())
+        .arg(non_normalized.path())
+        .env(EnvVars::GITLAB_CI, "true")
+        .env(EnvVars::PYPI_ID_TOKEN, "gitlab-oidc-jwt"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Publishing 2 files to http://[LOCALHOST]/upload
+    File ok-1.0.0-py3-none-any.whl already exists, skipping
+    warning: `ok-1.01.0-py3-none-any.whl` has a non-normalized filename (expected `ok-1.1.0-py3-none-any.whl`), skipping
+    "
+    );
+
+    let requests = server
+        .received_requests()
+        .await
+        .expect("Request recording is enabled");
+    insta::assert_debug_snapshot!(
+        requests.iter().map(|request| request.url.path()).collect::<Vec<_>>(),
+        @r#"
+    [
+        "/_/oidc/audience",
+        "/_/oidc/mint-token",
+        "/simple/ok/",
+        "/_/oidc/burn-token",
+    ]
+    "#
+    );
+}
+
+/// Explicit credentials are not revoked, even in a trusted publishing environment.
+#[tokio::test]
+async fn trusted_publishing_does_not_burn_explicit_token() {
+    let context = uv_test::test_context!("3.12").with_filtered_sizes();
+    let server = MockServer::start().await;
+
+    Mock::given(method("POST"))
+        .and(path("/_/oidc/burn-token"))
+        .respond_with(ResponseTemplate::new(202))
+        .expect(0)
+        .mount(&server)
+        .await;
+    Mock::given(method("POST"))
+        .and(path("/upload"))
+        .and(basic_auth("__token__", "explicit-token"))
+        .respond_with(ResponseTemplate::new(200))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    uv_snapshot!(context.filters(), context.publish()
+        .arg("--token")
+        .arg("explicit-token")
+        .arg("--publish-url")
+        .arg(format!("{}/upload", server.uri()))
+        .arg(dummy_wheel())
+        .env(EnvVars::GITLAB_CI, "true")
+        .env(EnvVars::PYPI_ID_TOKEN, "gitlab-oidc-jwt"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Publishing 1 file to http://[LOCALHOST]/upload
+    Hashing ok-1.0.0-py3-none-any.whl ([SIZE]B)
+    Uploading ok-1.0.0-py3-none-any.whl ([SIZE]B)
     "
     );
 }
@@ -809,7 +1191,7 @@ async fn upload_error_pypi_json() {
     );
 }
 
-/// pyx returns `application/problem+json` errors with RFC 9457 Problem Details.
+/// Handle `application/problem+json` errors with RFC 9457 Problem Details.
 #[tokio::test]
 async fn upload_error_problem_details() {
     let context = uv_test::test_context!("3.12").with_filtered_sizes();
@@ -839,6 +1221,33 @@ async fn upload_error_problem_details() {
     Uploading ok-1.0.0-py3-none-any.whl ([SIZE]B)
     error: Failed to publish `[WORKSPACE]/test/links/ok-1.0.0-py3-none-any.whl` to http://[LOCALHOST]/upload
       Caused by: Server returned status code 400 Bad Request. Server message: Bad Request, Missing required field `name`
+    "
+    );
+}
+
+/// A dry run checks valid distribution metadata without uploading the file.
+#[tokio::test]
+async fn dry_run_does_not_upload() {
+    let context = uv_test::test_context!("3.12").with_filtered_sizes();
+    let server = MockServer::start().await;
+
+    Mock::given(method("POST"))
+        .respond_with(ResponseTemplate::new(200))
+        .expect(0)
+        .mount(&server)
+        .await;
+
+    uv_snapshot!(context.filters(), context.publish()
+        .arg("--dry-run")
+        .arg("--publish-url")
+        .arg(format!("{}/upload", server.uri()))
+        .arg("--token")
+        .arg("dummy")
+        .arg(dummy_wheel()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Checking 1 file against http://[LOCALHOST]/upload
+    Checking ok-1.0.0-py3-none-any.whl ([SIZE]B)
     "
     );
 }
@@ -878,6 +1287,117 @@ fn dry_run_reports_all_errors() {
       Caused by: unable to locate the end of central directory record
     Found issues with 2 files
     "
+    );
+}
+
+/// Preparation validates attestations, including during dry runs, unless they are disabled.
+#[tokio::test]
+async fn publish_invalid_attestations() {
+    let context = uv_test::test_context!("3.12").with_filtered_sizes();
+    let server = MockServer::start().await;
+    let app_attestation = context
+        .temp_dir
+        .child("basic_app-0.1.0-py3-none-any.whl.publish.attestation");
+    app_attestation
+        .write_str("{")
+        .expect("Failed to write attestation");
+    let ok_attestation = context
+        .temp_dir
+        .child("ok-1.0.0-py3-none-any.whl.publish.attestation");
+    ok_attestation
+        .write_str("{")
+        .expect("Failed to write attestation");
+
+    Mock::given(method("POST"))
+        .and(path("/upload"))
+        .and(basic_auth("__token__", "dummy"))
+        .respond_with(ResponseTemplate::new(200))
+        .expect(0)
+        .mount(&server)
+        .await;
+
+    uv_snapshot!(context.filters(), context.publish()
+        .arg("--token")
+        .arg("dummy")
+        .arg("--publish-url")
+        .arg(format!("{}/upload", server.uri()))
+        .arg(basic_app_wheel())
+        .arg(app_attestation.path()), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    Publishing 1 file to http://[LOCALHOST]/upload
+    Hashing basic_app-0.1.0-py3-none-any.whl ([SIZE]KiB)
+    error: Failed to publish: `[WORKSPACE]/test/links/basic_app-0.1.0-py3-none-any.whl`
+      Caused by: Invalid PEP 740 attestation (not JSON): `[TEMP_DIR]/basic_app-0.1.0-py3-none-any.whl.publish.attestation`
+      Caused by: EOF while parsing an object at line 1 column 1
+    ");
+
+    uv_snapshot!(context.filters(), context.publish()
+        .arg("--dry-run")
+        .arg("--token")
+        .arg("dummy")
+        .arg("--publish-url")
+        .arg(format!("{}/upload", server.uri()))
+        .arg(basic_app_wheel())
+        .arg(app_attestation.path())
+        .arg(dummy_wheel())
+        .arg(ok_attestation.path()), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Checking 2 files against http://[LOCALHOST]/upload
+    Checking basic_app-0.1.0-py3-none-any.whl ([SIZE]KiB)
+    error: Failed to publish: `[WORKSPACE]/test/links/basic_app-0.1.0-py3-none-any.whl`
+      Caused by: Invalid PEP 740 attestation (not JSON): `[TEMP_DIR]/basic_app-0.1.0-py3-none-any.whl.publish.attestation`
+      Caused by: EOF while parsing an object at line 1 column 1
+    Checking ok-1.0.0-py3-none-any.whl ([SIZE]B)
+    error: Failed to publish: `[WORKSPACE]/test/links/ok-1.0.0-py3-none-any.whl`
+      Caused by: Invalid PEP 740 attestation (not JSON): `[TEMP_DIR]/ok-1.0.0-py3-none-any.whl.publish.attestation`
+      Caused by: EOF while parsing an object at line 1 column 1
+    Found issues with 2 files
+    ");
+
+    server.verify().await;
+    server.reset().await;
+    Mock::given(method("POST"))
+        .and(path("/upload"))
+        .and(basic_auth("__token__", "dummy"))
+        .respond_with(ResponseTemplate::new(200))
+        .expect(2)
+        .mount(&server)
+        .await;
+
+    uv_snapshot!(context.filters(), context.publish()
+        .arg("--no-attestations")
+        .arg("--token")
+        .arg("dummy")
+        .arg("--publish-url")
+        .arg(format!("{}/upload", server.uri()))
+        .arg(basic_app_wheel())
+        .arg(app_attestation.path())
+        .arg(dummy_wheel())
+        .arg(ok_attestation.path()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Publishing 2 files to http://[LOCALHOST]/upload
+    Hashing basic_app-0.1.0-py3-none-any.whl ([SIZE]KiB)
+    Uploading basic_app-0.1.0-py3-none-any.whl ([SIZE]KiB)
+    Hashing ok-1.0.0-py3-none-any.whl ([SIZE]B)
+    Uploading ok-1.0.0-py3-none-any.whl ([SIZE]B)
+    "
+    );
+
+    let requests = server
+        .received_requests()
+        .await
+        .expect("Request recording is enabled");
+    insta::assert_json_snapshot!(
+        requests.iter().map(upload_attestations).collect::<Vec<_>>(),
+        @r#"
+    [
+      null,
+      null
+    ]
+    "#
     );
 }
 

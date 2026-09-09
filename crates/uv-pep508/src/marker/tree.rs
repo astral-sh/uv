@@ -842,13 +842,19 @@ impl MarkerTree {
     /// Returns a new marker tree that combines this one with the given one via a conjunction.
     #[must_use]
     pub fn and(self, tree: Self) -> Self {
-        Self(INTERNER.lock().and(self.0, tree.0))
+        if let Some(node) = self.0.and_trivial(tree.0) {
+            return Self(node);
+        }
+        Self(INTERNER.lock().and_nontrivial(self.0, tree.0))
     }
 
     /// Returns a new marker tree that combines this one with the given one via a disjunction.
     #[must_use]
     pub fn or(self, tree: Self) -> Self {
-        Self(INTERNER.lock().or(self.0, tree.0))
+        if let Some(node) = self.0.or_trivial(tree.0) {
+            return Self(node);
+        }
+        Self(INTERNER.lock().or_nontrivial(self.0, tree.0))
     }
 
     /// Returns a marker equivalent to the implication of this one and the given consequent.
@@ -870,7 +876,10 @@ impl MarkerTree {
     /// false negatives, i.e. it may not be able to detect that two markers are disjoint for
     /// complex expressions.
     pub fn is_disjoint(self, other: Self) -> bool {
-        INTERNER.lock().is_disjoint(self.0, other.0)
+        if let Some(disjoint) = self.0.is_disjoint_trivial(other.0) {
+            return disjoint;
+        }
+        INTERNER.lock().is_disjoint_nontrivial(self.0, other.0)
     }
 
     /// Returns the contents of this marker tree, if it contains at least one expression.

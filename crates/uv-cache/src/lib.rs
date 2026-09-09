@@ -18,10 +18,10 @@ pub use crate::by_timestamp::CachedByTimestamp;
 #[cfg(feature = "clap")]
 pub use crate::cli::CacheArgs;
 use crate::removal::Remover;
-pub use crate::removal::{Removal, RemovalMode};
+pub use crate::removal::{Removal, RemovalAccounting};
 pub use crate::wheel::WheelCache;
 use crate::wheel::WheelCacheKind;
-pub use archive::ArchiveId;
+pub use archive::{ArchiveFileId, ArchiveId};
 
 mod archive;
 mod by_timestamp;
@@ -175,7 +175,7 @@ pub struct Cache {
     /// uv process.
     lock_file: Option<Arc<LockedFile>>,
     /// The storage accounting used when removing cache entries.
-    removal_mode: RemovalMode,
+    removal_accounting: RemovalAccounting,
 }
 
 impl Cache {
@@ -186,7 +186,7 @@ impl Cache {
             refresh: Refresh::None(Timestamp::now()),
             temp_dir: None,
             lock_file: None,
-            removal_mode: RemovalMode::Logical,
+            removal_accounting: RemovalAccounting::Coarse,
         }
     }
 
@@ -198,7 +198,7 @@ impl Cache {
             refresh: Refresh::None(Timestamp::now()),
             temp_dir: Some(Arc::new(temp_dir)),
             lock_file: None,
-            removal_mode: RemovalMode::Logical,
+            removal_accounting: RemovalAccounting::Coarse,
         })
     }
 
@@ -210,22 +210,24 @@ impl Cache {
 
     /// Set the storage accounting used when removing cache entries.
     ///
-    /// Falls back to logical accounting when physical accounting is unsupported.
+    /// Falls back to [`RemovalAccounting::Coarse`] when fine-grained accounting is unsupported.
     #[must_use]
-    pub fn with_removal_mode(self, removal_mode: RemovalMode) -> Self {
-        let removal_mode = match removal_mode {
-            RemovalMode::Physical if !uv_fs::supports_physical_space() => RemovalMode::Logical,
-            removal_mode => removal_mode,
+    pub fn with_removal_accounting(self, removal_accounting: RemovalAccounting) -> Self {
+        let removal_accounting = match removal_accounting {
+            RemovalAccounting::Fine if !uv_fs::supports_fine_grained_accounting() => {
+                RemovalAccounting::Coarse
+            }
+            removal_accounting => removal_accounting,
         };
         Self {
-            removal_mode,
+            removal_accounting,
             ..self
         }
     }
 
-    /// Create an empty removal summary using the cache's configured accounting mode.
+    /// Create an empty removal summary using the cache's configured accounting.
     pub fn removal(&self) -> Removal {
-        Removal::new(self.removal_mode)
+        Removal::new(self.removal_accounting)
     }
 
     /// Acquire a lock that allows removing entries from the cache.
@@ -235,7 +237,7 @@ impl Cache {
             refresh,
             temp_dir,
             lock_file,
-            removal_mode,
+            removal_accounting,
         } = self;
 
         // Release the existing lock, avoid deadlocks from a cloned cache.
@@ -258,7 +260,7 @@ impl Cache {
             refresh,
             temp_dir,
             lock_file: Some(Arc::new(lock_file)),
-            removal_mode,
+            removal_accounting,
         })
     }
 
@@ -271,7 +273,7 @@ impl Cache {
             refresh,
             temp_dir,
             lock_file,
-            removal_mode,
+            removal_accounting,
         } = self;
 
         match LockedFile::acquire_no_wait(
@@ -284,14 +286,14 @@ impl Cache {
                 refresh,
                 temp_dir,
                 lock_file: Some(Arc::new(lock_file)),
-                removal_mode,
+                removal_accounting,
             }),
             None => Err(Self {
                 root,
                 refresh,
                 temp_dir,
                 lock_file,
-                removal_mode,
+                removal_accounting,
             }),
         }
     }
@@ -324,6 +326,11 @@ impl Cache {
     /// Return the path to an archive in the cache.
     pub fn archive(&self, id: &ArchiveId) -> PathBuf {
         self.bucket(CacheBucket::Archive).join(id)
+    }
+
+    /// Return the path to an archive file in the cache.
+    pub fn archive_file(&self, id: &ArchiveFileId) -> PathBuf {
+        self.bucket(CacheBucket::Files).join(id)
     }
 
     /// Create a temporary directory to be used as a Python virtual environment.
@@ -407,13 +414,38 @@ impl Cache {
         path: impl AsRef<Path>,
     ) -> io::Result<ArchiveId> {
         // Create a unique ID for the artifact.
-        // TODO(charlie): Support content-addressed persistence via SHAs.
         let id = ArchiveId::new();
 
         // Move the temporary directory into the directory store.
         let archive_entry = self.entry(CacheBucket::Archive, "", &id);
         fs_err::create_dir_all(archive_entry.dir())?;
         uv_fs::rename_with_retry(temp_dir.as_ref(), archive_entry.path()).await?;
+
+        // Create a symlink to the directory store.
+        fs_err::create_dir_all(path.as_ref().parent().expect("Cache entry to have parent"))?;
+        self.create_link(&id, path.as_ref())?;
+
+        Ok(id)
+    }
+
+    /// Persist a temporary directory to the artifact store under a caller-selected ID.
+    ///
+    /// If another writer has already persisted the same ID, discard `temp_dir` and link `path` to
+    /// the existing archive entry. The ID must therefore uniquely identify the directory contents.
+    pub async fn persist_with_id(
+        &self,
+        temp_dir: tempfile::TempDir,
+        path: impl AsRef<Path>,
+        id: ArchiveId,
+    ) -> io::Result<ArchiveId> {
+        // Move the temporary directory into the directory store.
+        let archive_entry = self.entry(CacheBucket::Archive, "", &id);
+        fs_err::create_dir_all(archive_entry.dir())?;
+        if let Err(err) = uv_fs::rename_with_retry(temp_dir.path(), archive_entry.path()).await {
+            if !archive_entry.path().is_dir() {
+                return Err(err);
+            }
+        }
 
         // Create a symlink to the directory store.
         fs_err::create_dir_all(path.as_ref().parent().expect("Cache entry to have parent"))?;
@@ -551,7 +583,7 @@ impl Cache {
     pub fn clear(self, reporter: Box<dyn CleanReporter>) -> Result<Removal, io::Error> {
         // Remove everything but `.lock`, Windows does not allow removal of a locked file
         let mut removal = Remover::new(reporter)
-            .with_removal_mode(self.removal_mode)
+            .with_removal_accounting(self.removal_accounting)
             .rm_rf(&self.root, true)?;
         let Self {
             root, lock_file, ..
@@ -582,6 +614,8 @@ impl Cache {
 
     /// Remove a package from the cache.
     ///
+    /// Unreferenced file objects are removed separately by [`Cache::prune_archive_files`].
+    ///
     /// Returns the number of entries removed from the cache.
     pub fn remove(&self, name: &PackageName) -> io::Result<Removal> {
         // Collect the set of referenced archives.
@@ -606,6 +640,58 @@ impl Cache {
             if target.starts_with(&archive_root) && references.iter().all(|path| !path.exists()) {
                 debug!("Removing dangling cache entry: {}", target.display());
                 summary += self.remove_path(target)?;
+            }
+        }
+
+        Ok(summary)
+    }
+
+    /// Remove file objects with no hardlinks outside the files bucket.
+    ///
+    /// Archives refer to these objects via hardlinks, independently of the installation link mode.
+    /// Installed copies and reflinks remain valid when the cached file is removed, so they do not
+    /// need to keep the file object alive.
+    pub fn prune_archive_files(&self) -> Result<Removal, io::Error> {
+        let root = self.bucket(CacheBucket::Files);
+        if !root.exists() {
+            return Ok(self.removal());
+        }
+
+        let mut summary = self.removal();
+        let mut directories = Vec::new();
+        let mut entries = walkdir::WalkDir::new(&root).min_depth(1).into_iter();
+        while let Some(entry) = entries.next() {
+            let entry = entry?;
+            if entry.file_type().is_file() {
+                match uv_fs::hardlink_count(entry.path()) {
+                    Ok(1) => summary += self.remove_path(entry.path())?,
+                    Ok(_) => {}
+                    Err(err) if err.kind() == io::ErrorKind::NotFound => {}
+                    Err(err) => return Err(err),
+                }
+            } else if entry.file_type().is_dir() {
+                if let Some(files) = uv_fs::files_with_one_hardlink(entry.path())? {
+                    entries.skip_current_dir();
+                    for file in files {
+                        summary += self.remove_path(file)?;
+                    }
+                }
+                directories.push(entry.into_path());
+            }
+        }
+        // The walk visits parents first so the bulk path can skip their contents.
+        // Remove directories in reverse order so children are removed before parents.
+        for directory in directories.into_iter().rev() {
+            match fs_err::remove_dir(directory) {
+                Ok(()) => {
+                    summary.num_dirs += 1;
+                }
+                Err(err)
+                    if matches!(
+                        err.kind(),
+                        io::ErrorKind::DirectoryNotEmpty | io::ErrorKind::NotFound
+                    ) => {}
+                Err(err) => return Err(err),
             }
         }
 
@@ -739,13 +825,15 @@ impl Cache {
             Err(err) => return Err(err),
         }
 
+        summary += self.prune_archive_files()?;
+
         Ok(summary)
     }
 
     /// Remove a cache path using the cache's configured storage accounting.
     pub fn remove_path(&self, path: impl AsRef<Path>) -> io::Result<Removal> {
         Remover::default()
-            .with_removal_mode(self.removal_mode)
+            .with_removal_accounting(self.removal_accounting)
             .rm_rf(path, false)
     }
 
@@ -829,15 +917,7 @@ impl Cache {
                 Ok(())
             }
             Err(err) if err.kind() == io::ErrorKind::AlreadyExists => {
-                // Write to a temporary file, then move it into place.
-                let temp_dir = tempfile::tempdir_in(dst.as_ref().parent().unwrap())?;
-                let temp_file = temp_dir.path().join("link");
-                fs_err::write(&temp_file, contents.as_bytes())?;
-
-                // Move the symlink into the target location.
-                fs_err::rename(&temp_file, dst.as_ref())?;
-
-                Ok(())
+                uv_fs::write_atomic_sync(dst, contents.as_bytes())
             }
             Err(err) => Err(err),
         }
@@ -876,22 +956,7 @@ impl Cache {
         // Construct the relative link target.
         let src = uv_fs::relative_to(self.archive(id), dst_parent)?;
 
-        // Attempt to create the symlink directly.
-        match fs_err::os::unix::fs::symlink(&src, dst) {
-            Ok(()) => Ok(()),
-            Err(err) if err.kind() == io::ErrorKind::AlreadyExists => {
-                // Create a symlink, using a temporary file to ensure atomicity.
-                let temp_dir = tempfile::tempdir_in(dst_parent)?;
-                let temp_file = temp_dir.path().join("link");
-                fs_err::os::unix::fs::symlink(&src, &temp_file)?;
-
-                // Move the symlink into the target location.
-                fs_err::rename(&temp_file, dst)?;
-
-                Ok(())
-            }
-            Err(err) => Err(err),
-        }
+        uv_fs::replace_symlink(&src, dst)
     }
 
     /// Resolve an archive link, returning the fully-resolved path.
@@ -1213,6 +1278,8 @@ pub enum CacheBucket {
     /// that cache entries can be atomically replaced and removed, as storing directories in the
     /// other buckets directly would make atomic operations impossible.
     Archive,
+    /// Content-addressed files that are hardlinked into cached archives.
+    Files,
     /// Ephemeral virtual environments used to execute PEP 517 builds and other operations.
     Builds,
     /// Reusable virtual environments for Python tools and projects.
@@ -1248,6 +1315,7 @@ impl CacheBucket {
             // Note that when bumping this, you'll also need to bump
             // `ARCHIVE_VERSION` in `crates/uv-cache/src/lib.rs`.
             Self::Archive => "archive-v0",
+            Self::Files => "files-v0",
             Self::Builds => "builds-v0",
             Self::Environments => "environments-v2",
             Self::Python => "python-v0",
@@ -1357,6 +1425,7 @@ impl CacheBucket {
             Self::Git
             | Self::Interpreter
             | Self::Archive
+            | Self::Files
             | Self::Builds
             | Self::Environments
             | Self::Python
@@ -1378,6 +1447,7 @@ impl CacheBucket {
             Self::Interpreter,
             Self::Simple,
             Self::Archive,
+            Self::Files,
             Self::Builds,
             Self::Environments,
             Self::Python,
@@ -1478,7 +1548,7 @@ mod tests {
 
     use crate::ArchiveId;
 
-    use super::Link;
+    use super::{Cache, Link};
 
     #[test]
     fn test_link_round_trip() {
@@ -1488,6 +1558,21 @@ mod tests {
         let parsed = Link::from_str(&s).unwrap();
         assert_eq!(link.id, parsed.id);
         assert_eq!(link.version, parsed.version);
+    }
+
+    #[test]
+    fn test_replace_archive_link() {
+        let cache = Cache::temp().unwrap();
+        let link = cache.root().join("link");
+        for id in [ArchiveId::new(), ArchiveId::new()] {
+            let archive = cache.archive(&id);
+            fs_err::create_dir_all(&archive).unwrap();
+            cache.create_link(&id, &link).unwrap();
+            assert_eq!(
+                cache.resolve_link(&link).unwrap(),
+                archive.canonicalize().unwrap()
+            );
+        }
     }
 
     #[test]

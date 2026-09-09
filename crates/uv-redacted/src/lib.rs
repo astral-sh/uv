@@ -8,6 +8,7 @@ use thiserror::Error;
 use url::Url;
 
 const SENSITIVE_QUERY_PARAMETERS: &[&str] = &[
+    "sig",
     "X-Amz-Credential",
     "X-Amz-Security-Token",
     "X-Amz-Signature",
@@ -543,6 +544,27 @@ mod tests {
             log_safe_url.to_string(),
             "https://bucket.s3.amazonaws.com/dist.whl?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=****&X-Amz-Date=20260424T120000Z&X-Amz-Expires=300&X-Amz-SignedHeaders=host&X-Amz-Signature=****&X-Amz-Security-Token=****"
         );
+    }
+
+    #[test]
+    fn redact_azure_shared_access_signature() -> Result<(), DisplaySafeUrlError> {
+        let url = DisplaySafeUrl::parse(
+            "https://example.blob.core.windows.net/dist.whl?sv=2026-01-01&sig=signature&sp=r",
+        )?;
+        assert_eq!(
+            url.to_string(),
+            "https://example.blob.core.windows.net/dist.whl?sv=2026-01-01&sig=****&sp=r"
+        );
+        assert_eq!(
+            url.redact_in(&format!("failed to fetch '{}'", url.as_str())),
+            "failed to fetch 'https://example.blob.core.windows.net/dist.whl?sv=2026-01-01&sig=****&sp=r'"
+        );
+        // Formatting must not alter the signature used in actual requests.
+        assert_eq!(
+            url.as_str(),
+            "https://example.blob.core.windows.net/dist.whl?sv=2026-01-01&sig=signature&sp=r"
+        );
+        Ok(())
     }
 
     #[test]

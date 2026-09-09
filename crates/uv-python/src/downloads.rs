@@ -15,6 +15,7 @@ use reqwest::Response;
 use reqwest_retry::RetryError;
 use reqwest_retry::policies::ExponentialBackoff;
 use serde::{Deserialize, Serialize};
+use tempfile::TempDir;
 use thiserror::Error;
 use tokio::io::{AsyncRead, AsyncWriteExt, BufWriter, ReadBuf};
 use tokio_util::compat::FuturesAsyncReadCompatExt;
@@ -1260,7 +1261,7 @@ impl ManagedPythonDownload {
 
         let temp_dir = tempfile::tempdir_in(scratch_dir).map_err(Error::DownloadDirError)?;
 
-        if let Some(python_builds_dir) =
+        let temp_dir = if let Some(python_builds_dir) =
             env::var_os(EnvVars::UV_PYTHON_CACHE_DIR).filter(|s| !s.is_empty())
         {
             let python_builds_dir = PathBuf::from(python_builds_dir);
@@ -1319,14 +1320,14 @@ impl ManagedPythonDownload {
             // Extract the downloaded archive into a temporary directory.
             self.extract_reader(
                 reader,
-                temp_dir.path(),
+                temp_dir,
                 &filename,
                 ext,
                 size,
                 reporter,
                 Direction::Extract,
             )
-            .await?;
+            .await?
         } else {
             // Avoid overlong log lines
             debug!("Downloading {url}");
@@ -1338,15 +1339,15 @@ impl ManagedPythonDownload {
             let (reader, size) = read_url(&url, client).await?;
             self.extract_reader(
                 reader,
-                temp_dir.path(),
+                temp_dir,
                 &filename,
                 ext,
                 size,
                 reporter,
                 Direction::Download,
             )
-            .await?;
-        }
+            .await?
+        };
 
         // Extract the top-level directory.
         let mut extracted = match uv_extract::strip_component(temp_dir.path()) {
@@ -1468,13 +1469,13 @@ impl ManagedPythonDownload {
     async fn extract_reader(
         &self,
         reader: impl AsyncRead + Unpin,
-        target: &Path,
+        target: TempDir,
         filename: &String,
         ext: SourceDistExtension,
         size: Option<u64>,
         reporter: Option<&dyn Reporter>,
         direction: Direction,
-    ) -> Result<(), Error> {
+    ) -> Result<TempDir, Error> {
         let mut hashers = if self.sha256.is_some() {
             vec![Hasher::from(HashAlgorithm::Sha256)]
         } else {
@@ -1482,18 +1483,20 @@ impl ManagedPythonDownload {
         };
         let mut hasher = uv_extract::hash::HashReader::new(reader, &mut hashers);
 
-        if let Some(reporter) = reporter {
+        let target = if let Some(reporter) = reporter {
             let progress_key = reporter.on_request_start(direction, &self.key, size);
             let mut reader = ProgressReader::new(&mut hasher, progress_key, reporter);
-            uv_extract::stream::archive(&mut reader, ext, target)
+            let (target, _) = uv_extract::stream::archive(&mut reader, ext, target)
                 .await
                 .map_err(|err| Error::ExtractError(filename.to_owned(), err))?;
             reporter.on_request_complete(direction, progress_key);
+            target
         } else {
-            uv_extract::stream::archive(&mut hasher, ext, target)
+            let (target, _) = uv_extract::stream::archive(&mut hasher, ext, target)
                 .await
                 .map_err(|err| Error::ExtractError(filename.to_owned(), err))?;
-        }
+            target
+        };
         hasher.finish().await.map_err(Error::HashExhaustion)?;
 
         // Check the hash
@@ -1508,7 +1511,7 @@ impl ManagedPythonDownload {
             }
         }
 
-        Ok(())
+        Ok(target)
     }
 
     #[cfg(test)]

@@ -12,8 +12,8 @@ use tracing::debug;
 use uv_cache::{Cache, Refresh};
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
-    Concurrency, Constraints, DependencyGroupsWithDefaults, DryRun, ExcludeDependency,
-    ExtrasSpecification, Override, PackageOverride, Reinstall, Upgrade,
+    ActiveEnvironment, Concurrency, Constraints, DependencyGroupsWithDefaults, DryRun,
+    ExcludeDependency, ExtrasSpecification, Override, PackageOverride, Reinstall, Upgrade,
 };
 use uv_dispatch::BuildDispatch;
 use uv_distribution::{DistributionDatabase, LoweredExtraBuildDependencies};
@@ -56,7 +56,7 @@ use crate::commands::project::{
 use crate::commands::reporters::{PythonDownloadReporter, ResolverReporter};
 use crate::commands::{ExitStatus, ScriptPath, UvError, diagnostics, pip};
 use crate::printer::Printer;
-use crate::settings::{FrozenSource, LockCheck, LockCheckSource, ResolverSettings};
+use crate::settings::{FrozenSource, LockCheck, LockedSource, ResolverSettings};
 
 /// The result of running a lock operation.
 #[derive(Debug, Clone)]
@@ -169,7 +169,7 @@ pub(crate) async fn lock(
                     python_downloads,
                     &install_mirrors,
                     ProjectEnvironmentPolicy::Optional,
-                    Some(false),
+                    ActiveEnvironment::Ignore,
                     cache,
                     printer,
                 )
@@ -185,7 +185,7 @@ pub(crate) async fn lock(
                 &install_mirrors,
                 false,
                 config_discovery,
-                Some(false),
+                ActiveEnvironment::Ignore,
                 cache,
                 printer,
             )
@@ -230,19 +230,10 @@ pub(crate) async fn lock(
     {
         Ok(lock) => {
             if let Some(frozen_source) = frozen {
-                match frozen_source {
-                    FrozenSource::Cli => {
-                        warn_user!(
-                            "The lockfile at `uv.lock` was only checked for validity, not whether it is up-to-date, because `--frozen` was provided; use `--check` instead"
-                        );
-                    }
-                    FrozenSource::Env | FrozenSource::Configuration => {
-                        warn_user!(
-                            "The lockfile at `uv.lock` was only checked for validity, not whether it is up-to-date, because {} was provided; use `--check` instead",
-                            MissingLockfileSource::from(frozen_source)
-                        );
-                    }
-                }
+                warn_user!(
+                    "The lockfile at `uv.lock` was only checked for validity, not whether it is up-to-date, because {} was provided; use `--check` instead",
+                    MissingLockfileSource::from(frozen_source)
+                );
             }
 
             if dry_run.enabled() {
@@ -293,7 +284,7 @@ pub(crate) enum LockMode<'env> {
     /// Perform a resolution, but don't write the lockfile to disk.
     DryRun(&'env Interpreter),
     /// Error if the lockfile is not up-to-date with the project requirements.
-    Locked(&'env Interpreter, LockCheckSource),
+    Locked(&'env Interpreter, LockedSource),
     /// Use the existing lockfile without performing a resolution.
     Frozen(MissingLockfileSource),
 }
@@ -390,9 +381,11 @@ impl<'env> LockOperation<'env> {
                     for package_name in workspace.packages().keys() {
                         existing
                             .find_by_name(package_name)
-                            .map_err(|_| ProjectError::LockWorkspaceMismatch(package_name.clone()))?
+                            .map_err(|_| {
+                                ProjectError::LockWorkspaceMismatch(package_name.clone(), source)
+                            })?
                             .ok_or_else(|| {
-                                ProjectError::LockWorkspaceMismatch(package_name.clone())
+                                ProjectError::LockWorkspaceMismatch(package_name.clone(), source)
                             })?;
                     }
                 }
@@ -425,6 +418,7 @@ impl<'env> LockOperation<'env> {
                     target,
                     interpreter,
                     Some(existing),
+                    self.mode,
                     check_lockfile_contents,
                     self.constraints,
                     self.refresh,
@@ -478,6 +472,7 @@ impl<'env> LockOperation<'env> {
                     target,
                     interpreter,
                     existing,
+                    self.mode,
                     check_lockfile_contents,
                     self.constraints,
                     self.refresh,
@@ -511,6 +506,7 @@ async fn do_lock(
     target: LockTarget<'_>,
     interpreter: &Interpreter,
     existing_lock: Option<Lock>,
+    mode: LockMode<'_>,
     check_lockfile_contents: Option<String>,
     external: Vec<NameRequirementSpecification>,
     refresh: Option<&Refresh>,
@@ -836,11 +832,25 @@ async fn do_lock(
         .build_options(build_options.clone())
         .artifact_environments(artifact_environments.clone())
         .build();
-    let hasher = HashStrategy::Generate(HashGeneration::Url);
+    // Checking an existing lockfile may build metadata and install build dependencies. Verify any
+    // artifacts recorded in that lockfile, including for an ordinary unlocked command.
+    let locked_build_hasher = if let Some(existing_lock) = existing_lock.as_ref() {
+        existing_lock.hash_strategy(target.install_path())?
+    } else {
+        HashStrategy::default()
+    };
+    // A fresh resolution retains those hashes under `--locked`, but an explicitly unlocked update
+    // must be able to replace them. Build dependencies follow the same choice without generating
+    // hashes for artifacts absent from the lockfile.
+    let resolution_build_hasher = match mode {
+        LockMode::Locked(..) => &locked_build_hasher,
+        LockMode::Write(_) | LockMode::DryRun(_) | LockMode::Frozen(_) => &HashStrategy::default(),
+    };
+    let hasher = HashStrategy::generate(HashGeneration::Url)
+        .with_verification(resolution_build_hasher.verification().clone());
 
     // TODO(charlie): These are all default values. We should consider whether we want to make them
     // optional on the downstream APIs.
-    let build_hasher = HashStrategy::default();
     let extras = ExtrasSpecification::default();
     let groups = BTreeMap::new();
 
@@ -850,7 +860,7 @@ async fn do_lock(
         let entries = client
             .fetch_all(index_locations.flat_indexes().map(Index::url))
             .await?;
-        FlatIndex::from_entries(entries, None, &hasher, build_options)
+        FlatIndex::from_entries(entries)
     };
 
     // Lower the extra build dependencies.
@@ -884,7 +894,7 @@ async fn do_lock(
     // Convert to the `Constraints` format.
     let dispatch_constraints = Constraints::from_requirements(build_constraints.iter().cloned());
 
-    // Create a build dispatch.
+    // Create a build dispatch for fresh resolution.
     let build_dispatch = BuildDispatch::new(
         &client,
         cache,
@@ -902,7 +912,7 @@ async fn do_lock(
         extra_build_variables,
         *link_mode,
         build_options,
-        &build_hasher,
+        resolution_build_hasher,
         exclude_newer.clone(),
         sources.clone(),
         SourceTreeEditablePolicy::Project,
@@ -911,15 +921,15 @@ async fn do_lock(
         preview,
     );
 
-    let database = DistributionDatabase::new(
-        &client,
-        &build_dispatch,
-        concurrency.downloads_semaphore.clone(),
-    );
-
     // If any of the resolution-determining settings changed, invalidate the lock.
     let existing_lock = if let Some(existing_lock) = existing_lock {
-        match ValidatedLock::validate(
+        let validation_build_dispatch = build_dispatch.fork(&locked_build_hasher);
+        let database = DistributionDatabase::new(
+            &client,
+            &validation_build_dispatch,
+            concurrency.downloads_semaphore.clone(),
+        );
+        match Box::pin(ValidatedLock::validate(
             existing_lock,
             target.install_path(),
             packages,
@@ -946,7 +956,7 @@ async fn do_lock(
             &database,
             preview,
             printer,
-        )
+        ))
         .await
         {
             Ok(result) => Some(result),
@@ -985,6 +995,12 @@ async fn do_lock(
         // The lockfile did not contain enough information to obtain a resolution, fallback
         // to a fresh resolve.
         _ => {
+            let database = DistributionDatabase::new(
+                &client,
+                &build_dispatch,
+                concurrency.downloads_semaphore.clone(),
+            );
+
             // Determine whether we can reuse the existing package versions.
             let versions_lock = existing_lock.as_ref().and_then(|lock| match &lock {
                 ValidatedLock::Satisfies(lock) => Some(lock),
@@ -1117,6 +1133,12 @@ async fn do_lock(
             .with_conflicts(conflicts)
             .with_required_environments(lock_required_environments.into_markers());
 
+            let lock = if preview.is_enabled(PreviewFeature::MissingExcludeNewerPackageLock) {
+                lock.without_unused_exclude_newer_packages()
+            } else {
+                lock
+            };
+
             let lock = if preview.is_enabled(PreviewFeature::LockWithoutMetadata) {
                 lock.without_package_metadata()
             } else {
@@ -1204,7 +1226,18 @@ impl ValidatedLock {
             );
             return Ok(Self::Unusable(lock));
         }
-        if let Some(change) = lock.exclude_newer().compare(&options.exclude_newer) {
+        // Ignore package-specific settings that cannot affect the existing resolution. If the
+        // package is added to the requirements, the requirement checks below will invalidate the
+        // lockfile instead.
+        let locked_exclude_newer = lock
+            .exclude_newer()
+            .clone()
+            .filter_packages(lock.packages().iter().map(Package::name));
+        let exclude_newer = options
+            .exclude_newer
+            .clone()
+            .filter_packages(lock.packages().iter().map(Package::name));
+        if let Some(change) = locked_exclude_newer.compare(&exclude_newer) {
             // If a relative value is used, we won't invalidate on every tick of the clock unless
             // the span duration changed or some other operation causes a new resolution
             if !change.is_relative_timestamp_change() {

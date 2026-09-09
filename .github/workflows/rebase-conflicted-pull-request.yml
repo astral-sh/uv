@@ -25,6 +25,9 @@ on:
 
 permissions: {}
 
+env:
+  UV_LOCKED: 1
+
 jobs:
   rebase:
     name: "Rebase pull request #${{ inputs.number }}"
@@ -45,7 +48,7 @@ jobs:
         run: rustup show
 
       - name: Restore Rust cache
-        uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
           prefix-key: v1-rust-workspace
           cache-workspace-crates: "true"
@@ -110,7 +113,7 @@ jobs:
           TMPDIR: ${{ runner.temp }}
         with:
           openai-api-key: ${{ secrets.OPENAI_API_KEY }}
-          codex-version: "0.146.0"
+          codex-version: "0.147.0"
           model: gpt-5.6-sol
           effort: high
           codex-home: "${{ runner.temp }}/codex-home"

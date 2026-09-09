@@ -11,8 +11,8 @@ use tracing::warn;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
-    BuildOptions, Concurrency, Constraints, DependencyGroups, DryRun, IndexStrategy,
-    KeyringProviderType, NoBinary, NoBuild, NoSources,
+    ActiveEnvironment, BuildOptions, Concurrency, Constraints, DependencyGroups, DryRun,
+    IndexStrategy, KeyringProviderType, NoBinary, NoBuild, NoSources,
 };
 use uv_dispatch::{BuildDispatch, SharedState};
 use uv_distribution_types::{
@@ -57,9 +57,6 @@ enum VenvError {
 
     #[error("Failed to install seed packages into virtual environment")]
     Seed(#[source] AnyErrorBuild),
-
-    #[error("Failed to extract interpreter tags for installing seed packages")]
-    Tags(#[source] uv_platform_tags::TagsError),
 
     #[error("Failed to resolve `--find-links` entry")]
     FlatIndex(#[source] uv_client::FlatIndexError),
@@ -131,7 +128,12 @@ pub(crate) async fn venv(
         .as_ref()
         .map(VirtualProject::workspace)
         .filter(|workspace| path.is_none() && workspace.install_path() == project_dir)
-        .map(|workspace| (workspace, workspace.environment_selection(Some(false))));
+        .map(|workspace| {
+            (
+                workspace,
+                workspace.environment_selection(ActiveEnvironment::Ignore),
+            )
+        });
 
     let centralized_workspace = project_environment
         .as_ref()
@@ -299,18 +301,12 @@ pub(crate) async fn venv(
 
         // Resolve the flat indexes from `--find-links`.
         let flat_index = {
-            let tags = interpreter.tags().map_err(VenvError::Tags)?;
             let client = FlatIndexClient::new(client.cached_client(), client.connectivity(), cache);
             let entries = client
                 .fetch_all(index_locations.flat_indexes().map(Index::url))
                 .await
                 .map_err(VenvError::FlatIndex)?;
-            FlatIndex::from_entries(
-                entries,
-                Some(tags),
-                &HashStrategy::None,
-                &BuildOptions::new(NoBinary::None, NoBuild::All),
-            )
+            FlatIndex::from_entries(entries)
         };
 
         // Initialize any shared state.

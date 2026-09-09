@@ -11,134 +11,165 @@ use uv_distribution_types::{
     Resolution, UnresolvedRequirement, VersionId,
 };
 use uv_normalize::PackageName;
-use uv_pep440::Version;
+use uv_pep440::{Operator, Version};
 use uv_pypi_types::{HashAlgorithm, HashDigest, HashDigests, HashError, ResolverMarkerEnvironment};
 use uv_redacted::DisplaySafeUrl;
 
+/// Hash generation and verification policies for a resolution.
+///
+/// Verification takes precedence for distributions with trusted hashes. The generation policy
+/// applies to the remaining distributions.
 #[derive(Debug, Default, Clone)]
-pub enum HashStrategy {
-    /// No hash policy is specified.
+pub struct HashStrategy {
+    generation: Option<HashGeneration>,
+    verification: HashVerification,
+}
+
+/// The trusted hashes to enforce when retrieving distributions.
+#[derive(Debug, Default, Clone)]
+pub enum HashVerification {
+    /// Hashes do not need to be validated.
     #[default]
     None,
-    /// Hashes should be generated (specifically, a SHA-256 hash), but not validated.
-    Generate(HashGeneration),
-    /// Hashes should be validated, if present, but ignored if absent.
-    ///
-    /// If necessary, hashes should be generated to ensure that the archive is valid.
-    Verify(Arc<FxHashMap<VersionId, Vec<HashDigest>>>),
-    /// Hashes should be validated against a pre-defined list of hashes.
-    ///
-    /// If necessary, hashes should be generated to ensure that the archive is valid.
-    Require(Arc<FxHashMap<VersionId, Vec<HashDigest>>>),
+    /// Validate known hashes, without requiring hashes for other distributions.
+    IfPresent(Arc<FxHashMap<VersionId, Vec<HashDigest>>>),
+    /// Every distribution must have a matching trusted hash.
+    Required(Arc<FxHashMap<VersionId, Vec<HashDigest>>>),
 }
 
 impl HashStrategy {
+    /// Generate hashes according to the given policy.
+    pub fn generate(generation: HashGeneration) -> Self {
+        Self {
+            generation: Some(generation),
+            ..Self::default()
+        }
+    }
+
+    /// Validate hashes when present.
+    pub fn verify(hashes: Arc<FxHashMap<VersionId, Vec<HashDigest>>>) -> Self {
+        Self::default().with_verification(HashVerification::IfPresent(hashes))
+    }
+
+    /// Require a matching trusted hash for every distribution.
+    fn require(hashes: Arc<FxHashMap<VersionId, Vec<HashDigest>>>) -> Self {
+        Self::default().with_verification(HashVerification::Required(hashes))
+    }
+
+    /// Set verification independently of hash generation.
+    #[must_use]
+    pub fn with_verification(mut self, verification: HashVerification) -> Self {
+        self.verification = verification;
+        self
+    }
+
+    /// Return the hash generation policy.
+    pub fn generation(&self) -> Option<HashGeneration> {
+        self.generation
+    }
+
+    /// Return the hash verification policy.
+    pub fn verification(&self) -> &HashVerification {
+        &self.verification
+    }
+
     /// Return the [`HashPolicy`] for the given distribution.
     pub fn get<T: DistributionMetadata>(&self, distribution: &T) -> HashPolicy<'_> {
-        match self {
-            Self::None => HashPolicy::None,
-            Self::Generate(mode) => HashPolicy::Generate(*mode),
-            Self::Verify(hashes) => {
-                let id = distribution.version_id();
-                if let Some(hashes) = hashes.get(&id) {
-                    hash_policy(&id, hashes.as_slice())
-                } else {
-                    HashPolicy::None
-                }
-            }
-            Self::Require(hashes) => {
-                let id = distribution.version_id();
-                hash_policy(&id, hashes.get(&id).map(Vec::as_slice).unwrap_or_default())
-            }
-        }
+        self.get_id(|| distribution.version_id())
     }
 
     /// Return the [`HashPolicy`] for the given registry-based package.
     pub fn get_package(&self, name: &PackageName, version: &Version) -> HashPolicy<'_> {
-        let id = VersionId::from_registry(name.clone(), version.clone());
-        match self {
-            Self::None => HashPolicy::None,
-            Self::Generate(mode) => HashPolicy::Generate(*mode),
-            Self::Verify(hashes) => {
-                if let Some(hashes) = hashes.get(&id) {
-                    HashPolicy::Any(hashes.as_slice())
-                } else {
-                    HashPolicy::None
-                }
-            }
-            Self::Require(hashes) => {
-                HashPolicy::Any(hashes.get(&id).map(Vec::as_slice).unwrap_or_default())
-            }
-        }
+        self.get_id(|| VersionId::from_registry(name.clone(), version.clone()))
     }
 
     /// Return the [`HashPolicy`] for the given direct URL package.
     ///
     /// A direct URL identifies a single concrete artifact, so every provided digest must match.
     pub fn get_url(&self, url: &DisplaySafeUrl) -> HashPolicy<'_> {
-        let id = VersionId::from_url(url);
-        match self {
-            Self::None => HashPolicy::None,
-            Self::Generate(mode) => HashPolicy::Generate(*mode),
-            Self::Verify(hashes) => {
+        self.get_id(|| VersionId::from_url(url))
+    }
+
+    /// Construct an identity only when verification requires a lookup.
+    fn get_id(&self, id: impl FnOnce() -> VersionId) -> HashPolicy<'_> {
+        match &self.verification {
+            HashVerification::IfPresent(hashes) => {
+                let id = id();
                 if let Some(hashes) = hashes.get(&id) {
-                    HashPolicy::All(hashes.as_slice())
-                } else {
-                    HashPolicy::None
+                    return hash_policy(&id, hashes);
+                }
+                // `==1.0.0` can also select `1.0.0+local`. If the local version has no hash
+                // of its own, check it against the hash for `1.0.0`.
+                if let VersionId::NameVersion(name, version) = &id
+                    && version.is_local()
+                    && let Some(hashes) = hashes.get(&VersionId::from_registry(
+                        name.clone(),
+                        version.clone().without_local(),
+                    ))
+                {
+                    return HashPolicy::Any(hashes);
                 }
             }
-            Self::Require(hashes) => {
-                HashPolicy::All(hashes.get(&id).map(Vec::as_slice).unwrap_or_default())
+            HashVerification::Required(hashes) => {
+                let id = id();
+                return hash_policy(&id, hashes.get(&id).map(Vec::as_slice).unwrap_or_default());
             }
+            HashVerification::None => {}
         }
+        self.generation
+            .map_or(HashPolicy::None, HashPolicy::Generate)
     }
 
     /// Returns `true` if the given registry-based package is allowed.
     pub fn allows_package(&self, name: &PackageName, version: &Version) -> bool {
-        match self {
-            Self::None => true,
-            Self::Generate(_) => true,
-            Self::Verify(_) => true,
-            Self::Require(hashes) => {
+        match &self.verification {
+            HashVerification::Required(hashes) => {
                 hashes.contains_key(&VersionId::from_registry(name.clone(), version.clone()))
             }
+            HashVerification::None | HashVerification::IfPresent(_) => true,
         }
     }
 
     /// Returns `true` if the given direct URL package is allowed.
     pub fn allows_url(&self, url: &DisplaySafeUrl) -> bool {
-        match self {
-            Self::None => true,
-            Self::Generate(_) => true,
-            Self::Verify(_) => true,
-            Self::Require(hashes) => hashes.contains_key(&VersionId::from_url(url)),
+        match &self.verification {
+            HashVerification::Required(hashes) => hashes.contains_key(&VersionId::from_url(url)),
+            HashVerification::None | HashVerification::IfPresent(_) => true,
         }
     }
 
     /// Return a [`HashStrategy`] augmented with archive URL hashes discovered in additional
     /// requirements after the initial command-line parse.
     pub fn augment_with_requirements<'a>(
+        mut self,
+        requirements: impl Iterator<Item = &'a Requirement>,
+    ) -> Result<Self, HashStrategyError> {
+        match &mut self.verification {
+            HashVerification::None => {}
+            HashVerification::IfPresent(existing) | HashVerification::Required(existing) => {
+                if let Some(hashes) = Self::augment_hashes(existing, requirements)? {
+                    *existing = Arc::new(hashes);
+                }
+            }
+        }
+        Ok(self)
+    }
+
+    /// Return a [`HashStrategy`] augmented with archive URL hashes discovered in distribution
+    /// metadata.
+    ///
+    /// Required-hash verification is intentionally a closed set. In that mode, distribution
+    /// untrusted metadata cannot authorize a requirement that was absent from the input hash set.
+    /// Explicit requirements, such as `build-system.requires` and user-provided metadata, can still
+    /// contribute hashes via [`Self::augment_with_requirements`].
+    pub fn augment_with_metadata_requirements<'a>(
         self,
         requirements: impl Iterator<Item = &'a Requirement>,
     ) -> Result<Self, HashStrategyError> {
-        Ok(match self {
-            Self::None => Self::None,
-            Self::Generate(mode) => Self::Generate(mode),
-            Self::Verify(existing) => {
-                if let Some(hashes) = Self::augment_hashes(existing.as_ref(), requirements)? {
-                    Self::Verify(Arc::new(hashes))
-                } else {
-                    Self::Verify(existing)
-                }
-            }
-            Self::Require(existing) => {
-                if let Some(hashes) = Self::augment_hashes(existing.as_ref(), requirements)? {
-                    Self::Require(Arc::new(hashes))
-                } else {
-                    Self::Require(existing)
-                }
-            }
-        })
+        if matches!(&self.verification, HashVerification::Required(_)) {
+            return Ok(self);
+        }
+        self.augment_with_requirements(requirements)
     }
 
     /// Generate the required hashes from a set of [`UnresolvedRequirement`] entries.
@@ -297,8 +328,8 @@ impl HashStrategy {
             .chain(requirement_hashes)
             .collect();
         match mode {
-            HashCheckingMode::Verify => Ok(Self::Verify(Arc::new(hashes))),
-            HashCheckingMode::Require => Ok(Self::Require(Arc::new(hashes))),
+            HashCheckingMode::Verify => Ok(Self::verify(Arc::new(hashes))),
+            HashCheckingMode::Require => Ok(Self::require(Arc::new(hashes))),
         }
     }
 
@@ -324,8 +355,8 @@ impl HashStrategy {
         }
 
         match mode {
-            HashCheckingMode::Verify => Ok(Self::Verify(Arc::new(hashes))),
-            HashCheckingMode::Require => Ok(Self::Require(Arc::new(hashes))),
+            HashCheckingMode::Verify => Ok(Self::verify(Arc::new(hashes))),
+            HashCheckingMode::Require => Ok(Self::require(Arc::new(hashes))),
         }
     }
 
@@ -385,7 +416,9 @@ impl HashStrategy {
                 };
 
                 // Must be pinned to a specific version.
-                if *specifier.operator() != uv_pep440::Operator::Equal {
+                let is_pinned =
+                    matches!(specifier.operator(), Operator::Equal | Operator::ExactEqual);
+                if !is_pinned {
                     return None;
                 }
 
@@ -510,15 +543,23 @@ pub enum HashStrategyError {
 
 #[cfg(test)]
 mod tests {
+    use std::slice;
     use std::str::FromStr;
+    use std::sync::Arc;
+
+    use rustc_hash::FxHashMap;
     use uv_configuration::HashCheckingMode;
     use uv_distribution_filename::DistExtension;
     use uv_distribution_types::{
-        HashPolicy, Requirement, RequirementSource, UnresolvedRequirement,
+        HashGeneration, HashPolicy, Requirement, RequirementSource, UnresolvedRequirement,
+        VersionId,
     };
+    use uv_normalize::PackageName;
+    use uv_pep440::Version;
     use uv_pypi_types::HashDigest;
+    use uv_redacted::DisplaySafeUrl;
 
-    use super::HashStrategy;
+    use super::{HashStrategy, HashVerification};
 
     fn requirement(url: &str) -> Requirement {
         Requirement {
@@ -576,5 +617,73 @@ mod tests {
             };
             assert_eq!(hasher.get_url(url), HashPolicy::All(expected.as_slice()));
         }
+    }
+
+    #[test]
+    fn generate_and_verify_validates_known_hashes_and_generates_unknown_hashes()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let url: DisplaySafeUrl = "https://example.com/anyio-4.0.0.tar.gz".parse()?;
+        let unknown_url: DisplaySafeUrl = "https://example.com/anyio-4.1.0.tar.gz".parse()?;
+        let name: PackageName = "anyio".parse()?;
+        let version: Version = "4.0.0".parse()?;
+        let unknown_version: Version = "4.1.0".parse()?;
+        let digest = HashDigest::from_str(
+            "sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f",
+        )?;
+        let hashes = FxHashMap::from_iter([
+            (VersionId::from_url(&url), vec![digest.clone()]),
+            (
+                VersionId::from_registry(name.clone(), version.clone()),
+                vec![digest.clone()],
+            ),
+        ]);
+        let strategy = HashStrategy::generate(HashGeneration::All)
+            .with_verification(HashVerification::IfPresent(Arc::new(hashes)));
+
+        assert_eq!(
+            strategy.get_url(&url),
+            HashPolicy::All(slice::from_ref(&digest))
+        );
+        for fragment in [
+            "#subdirectory=.",
+            "#subdirectory=./",
+            "#subdirectory=",
+            "#subdirectory=nested/..",
+        ] {
+            let root_url = format!("{url}{fragment}").parse()?;
+            assert_eq!(
+                strategy.get_url(&root_url),
+                HashPolicy::All(slice::from_ref(&digest))
+            );
+        }
+        assert_eq!(
+            strategy.get_url(&unknown_url),
+            HashPolicy::Generate(HashGeneration::All)
+        );
+        assert_eq!(
+            strategy.get_package(&name, &version),
+            HashPolicy::Any(slice::from_ref(&digest))
+        );
+        assert_eq!(
+            strategy.get_package(&name, &unknown_version),
+            HashPolicy::Generate(HashGeneration::All)
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn required_hashes_take_precedence_over_generation() -> Result<(), Box<dyn std::error::Error>> {
+        let url: DisplaySafeUrl = "https://example.com/anyio-4.0.0.tar.gz".parse()?;
+        let name: PackageName = "anyio".parse()?;
+        let version: Version = "4.0.0".parse()?;
+        let strategy = HashStrategy::generate(HashGeneration::All)
+            .with_verification(HashVerification::Required(Arc::default()));
+
+        assert_eq!(strategy.get_url(&url), HashPolicy::All(&[]));
+        assert_eq!(strategy.get_package(&name, &version), HashPolicy::Any(&[]));
+        assert!(!strategy.allows_url(&url));
+        assert!(!strategy.allows_package(&name, &version));
+        Ok(())
     }
 }

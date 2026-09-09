@@ -107,6 +107,7 @@ impl IsBuildBackendError for BuildDispatchError {
 
 /// The main implementation of [`BuildContext`], used by the CLI, see [`BuildContext`]
 /// documentation.
+#[derive(Clone)]
 pub struct BuildDispatch<'a> {
     client: &'a RegistryClient,
     cache: &'a Cache,
@@ -187,6 +188,25 @@ impl<'a> BuildDispatch<'a> {
             workspace_cache,
             concurrency,
             preview,
+        }
+    }
+
+    /// Fork the dispatch with a different hash strategy.
+    ///
+    /// In-memory resolution, download, and build caches are reset, since they may depend on the
+    /// previous policy.
+    #[must_use]
+    pub fn fork<'fork>(&'fork self, hasher: &'fork HashStrategy) -> BuildDispatch<'fork> {
+        BuildDispatch {
+            hasher,
+            shared_state: SharedState {
+                build_arena: BuildArena::default(),
+                ..self.shared_state.fork()
+            },
+            source_build_context: SourceBuildContext::new(
+                self.concurrency.builds_semaphore.clone(),
+            ),
+            ..self.clone()
         }
     }
 
@@ -301,6 +321,7 @@ impl BuildContext for BuildDispatch<'_> {
             self.constraints,
             &overrides,
             &excludes,
+            self.dependency_metadata,
             &hasher,
             &self.shared_state.index,
             DistributionDatabase::new(
@@ -509,22 +530,6 @@ impl BuildContext for BuildDispatch<'_> {
                 VersionOrUrlRef::Version(version) => Some(version),
                 VersionOrUrlRef::Url(_) => None,
             });
-
-        // Note we can only prevent builds by name for packages with names
-        // unless all builds are disabled.
-        if self
-            .build_options
-            .no_build_requirement(dist_name)
-            // We always allow editable builds
-            && !matches!(build_kind, BuildKind::Editable)
-        {
-            let err = if let Some(dist) = dist {
-                uv_build_frontend::Error::NoSourceDistBuild(dist.name().clone())
-            } else {
-                uv_build_frontend::Error::NoSourceDistBuilds
-            };
-            return Err(err);
-        }
 
         // Push the current distribution onto the build stack, to prevent cyclic dependencies.
         if let Some(dist) = dist {

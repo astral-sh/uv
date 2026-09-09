@@ -5,8 +5,7 @@
     "labels": {
       "type": "array",
       "items": { "type": "string" },
-      "maxItems": 3,
-      "uniqueItems": true
+      "maxItems": 3
     },
     "summary": { "type": "string" }
   },

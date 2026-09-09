@@ -599,6 +599,7 @@ async fn perform_install(
 
     // Download and unpack the Python versions concurrently
     let reporter = PythonDownloadReporter::new(printer, Some(downloads.len() as u64));
+    let replacements = changelog.existing.clone();
 
     let mut tasks = futures::stream::iter(&downloads)
         .map(async |download| {
@@ -610,7 +611,7 @@ async fn perform_install(
                         &retry_policy,
                         installations_dir,
                         &scratch_dir,
-                        reinstall,
+                        reinstall || replacements.contains(download.key()),
                         python_install_mirror.as_deref(),
                         pypy_install_mirror.as_deref(),
                         Some(&reporter),

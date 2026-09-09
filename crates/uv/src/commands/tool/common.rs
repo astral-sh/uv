@@ -464,7 +464,7 @@ impl ToolLock {
             .index_strategy(*index_strategy)
             .build_options(build_options.clone())
             .build();
-        let hasher = HashStrategy::Generate(HashGeneration::Url);
+        let hasher = HashStrategy::generate(HashGeneration::Url);
         let build_hasher = HashStrategy::default();
 
         let flat_index = {
@@ -472,7 +472,7 @@ impl ToolLock {
             let entries = client
                 .fetch_all(index_locations.flat_indexes().map(Index::url))
                 .await?;
-            FlatIndex::from_entries(entries, None, &hasher, build_options)
+            FlatIndex::from_entries(entries)
         };
 
         let extra_build_requires =

@@ -2,9 +2,11 @@
 # requires-python = ">=3.12"
 # dependencies = [
 #     "httpx[socks]>=0.28.1,<0.29",
+#     "keyring",
+#     "keyrings-alt",
 #     "packaging>=24.1,<25",
-#     "pypi-attestations==0.0.28",
-#     "sigstore==4.4.0",
+#     "pypi-attestations>=0.0.28",
+#     "sigstore>=4.4.0",
 # ]
 # [tool.uv]
 # no-build = true
@@ -18,7 +20,7 @@ different options of passing credentials.
 
 Locally, execute the credentials setting script, then run:
 ```shell
-uv run scripts/publish/test_publish.py local
+uv run --locked scripts/publish/test_publish.py local
 ```
 
 # Setup
@@ -32,10 +34,8 @@ This project also uses token authentication since it's the only thing that PyPI
 supports, but they both CLI options.
 
 **pypi-keyring**
-```console
-uv pip install keyring
-keyring set https://test.pypi.org/legacy/?astral-test-keyring __token__
-```
+Set `UV_TEST_PUBLISH_KEYRING` to the dedicated TestPyPI token. The harness stores it
+in a temporary keyring.
 The query parameter a horrible hack stolen from
 https://github.com/pypa/twine/issues/565#issue-555219267
 to prevent the other projects from implicitly using the same credentials.
@@ -77,10 +77,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from shutil import rmtree
 from subprocess import PIPE, check_call, run
-from tempfile import gettempdir
+from tempfile import TemporaryDirectory, gettempdir
 from time import sleep
 
 import httpx
+from keyrings.alt.file import PlaintextKeyring
 from packaging.utils import (
     parse_sdist_filename,
     parse_wheel_filename,
@@ -337,9 +338,6 @@ def build_project_at_version(
         # Add all supported metadata
         + PYPROJECT_TAIL
     )
-    if index_declaration := all_targets[target].index_declaration():
-        toml += index_declaration
-
     project_root.joinpath("pyproject.toml").write_text(toml)
     shutil.copy(
         cwd.parent.parent.joinpath("LICENSE-APACHE"),
@@ -360,8 +358,19 @@ def build_project_at_version(
         )
         init_py.write_text("x = 1")
 
-    # Build the project, explicitly overriding no-build from the project's pyproject.toml
-    check_call([uv, "build", "--build"], cwd=project_root)
+    check_call(
+        [
+            uv,
+            "build",
+            "--build-constraint",
+            cwd / "build-requirements.txt",
+            "--require-hashes",
+        ],
+        cwd=project_root,
+    )
+    # Publication-only indexes must not participate in building fixtures.
+    if index_declaration := all_targets[target].index_declaration():
+        project_root.joinpath("pyproject.toml").write_text(toml + index_declaration)
     # Test that we ignore unknown any file.
     project_root.joinpath("dist").joinpath(".DS_Store").touch()
 
@@ -767,12 +776,26 @@ def target_configuration(target: str) -> tuple[dict[str, str], list[str]]:
     return env, extra_args
 
 
-def plan_test(target: str, uv: Path) -> Plan:
+def plan_test(target: str, uv: Path, keyring_directory: Path) -> Plan:
     """
     Create a test plan for the given target.
     """
     configuration = all_targets[target]
     env, extra_args = target_configuration(target)
+    if target == "pypi-keyring":
+        keyring_file = str(keyring_directory / "keyring.cfg")
+        keyring = PlaintextKeyring().with_properties(file_path=keyring_file)
+        keyring.set_password(
+            configuration.publish_url,
+            "__token__",
+            os.environ["UV_TEST_PUBLISH_KEYRING"],
+        )
+        env.update(
+            {
+                "PYTHON_KEYRING_BACKEND": "keyrings.alt.file.PlaintextKeyring",
+                "KEYRING_PROPERTY_FILE_PATH": keyring_file,
+            }
+        )
     return Plan(
         uv=uv,
         target=target,
@@ -811,12 +834,13 @@ def main():
     else:
         targets = args.targets
 
-    for project_name in targets:
-        plan = plan_test(project_name, uv)
-        # Each publish gets its own client, since we may need to introduce
-        # target-specific authentication.
-        with httpx.Client(timeout=120) as client:
-            test_publish_project(plan, client)
+    with TemporaryDirectory(prefix="uv-publish-keyring-") as temporary:
+        for project_name in targets:
+            plan = plan_test(project_name, uv, Path(temporary))
+            # Each publish gets its own client, since we may need to introduce
+            # target-specific authentication.
+            with httpx.Client(timeout=120) as client:
+                test_publish_project(plan, client)
 
 
 if __name__ == "__main__":

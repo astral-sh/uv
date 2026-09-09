@@ -203,11 +203,6 @@ impl Error {
         ErrorKind::BadHtml { source: err, url }.into()
     }
 
-    /// Create a new error from a `MessagePack` parsing error.
-    pub(crate) fn from_msgpack_err(err: rmp_serde::decode::Error, url: DisplaySafeUrl) -> Self {
-        ErrorKind::BadMessagePack { source: err, url }.into()
-    }
-
     /// Create an [`Error`] from a [`reqwest_middleware::Error`].
     pub(crate) fn from_reqwest_middleware(
         url: DisplaySafeUrl,
@@ -468,14 +463,11 @@ pub enum ErrorKind {
         url: DisplaySafeUrl,
     },
 
-    #[error("Received some unexpected MessagePack from {}", url)]
-    BadMessagePack {
-        source: rmp_serde::decode::Error,
-        url: DisplaySafeUrl,
-    },
-
     #[error("Failed to read zip with range requests: `{0}`")]
     AsyncHttpRangeReader(DisplaySafeUrl, #[source] AsyncHttpRangeReaderError),
+
+    #[error("Wheel metadata range requests are required, but not supported for: `{0}`")]
+    MetadataRangeRequestsRequired(DisplaySafeUrl, #[source] Box<Error>),
 
     #[error("{0} is not a valid wheel filename")]
     WheelFilename(#[source] WheelFilenameError),

@@ -34,7 +34,7 @@ fn prune_no_op() -> Result<()> {
     Ok(())
 }
 
-/// `cache prune` should report physical space for hardlinks only when the preview is enabled.
+/// Cache pruning should not count storage retained by another hardlink.
 #[cfg(unix)]
 #[test]
 fn prune_hardlinked_file() -> Result<()> {
@@ -52,11 +52,12 @@ fn prune_hardlinked_file() -> Result<()> {
     stale.create_dir_all()?;
     fs_err::hard_link(&retained, stale.child("hardlinked.bin"))?;
 
+    // Counting the externally retained hardlink would incorrectly report 1.0MiB.
     uv_snapshot!(context.filters(), context.prune(), @"
     exit_code: 0 (success)
     ----- stderr -----
     Pruning cache at: [CACHE_DIR]/
-    Removed 1 file (1.0MiB)
+    Removed 1 file (0B)
     ");
 
     stale.create_dir_all()?;
@@ -124,7 +125,7 @@ fn prune_stale_directory() -> Result<()> {
     DEBUG uv [VERSION] ([COMMIT] DATE)
     Pruning cache at: [CACHE_DIR]/
     DEBUG Removing dangling cache bucket: [CACHE_DIR]/simple-v4
-    Removed 1 directory
+    Removed 1 directory (0B)
     ");
 
     Ok(())
@@ -282,7 +283,7 @@ async fn prune_force() -> Result<()> {
     DEBUG Cache is currently in use, proceeding due to `--force`
     Pruning cache at: [CACHE_DIR]/
     DEBUG Removing dangling cache bucket: [CACHE_DIR]/simple-v4
-    Removed 1 directory
+    Removed 1 directory (0B)
     ");
 
     Ok(())
@@ -457,6 +458,108 @@ fn prune_stale_revision() -> Result<()> {
 
     uv_snapshot!(context.filters(), context
         .pip_install()
+        .arg("."), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + project==0.1.0 (from file://[TEMP_DIR]/)
+    ");
+
+    Ok(())
+}
+
+/// Content-addressed cache entries should remain reachable across equivalent stale revisions.
+#[test]
+fn prune_stale_revision_content_addressed_cache() -> Result<()> {
+    let context = uv_test::test_context!("3.12")
+        .with_filtered_file_counts()
+        .with_filtered_sizes_and_units()
+        // The cache entry does not have a stable key, so we filter it out.
+        .with_filter((
+            r"\[CACHE_DIR\](\\|\/)(.*?)(\\|\/).*",
+            "[CACHE_DIR]/$2/[ENTRY]",
+        ));
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+        "#,
+    )?;
+
+    context
+        .temp_dir
+        .child("src")
+        .child("project")
+        .child("__init__.py")
+        .touch()?;
+    context.temp_dir.child("README").touch()?;
+
+    // Install the same package twice, with `--reinstall`.
+    uv_snapshot!(context.filters(), context
+        .pip_install()
+        .env(EnvVars::UV_PREVIEW_FEATURES, "content-addressed-cache")
+        .arg(".")
+        .arg("--reinstall"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + project==0.1.0 (from file://[TEMP_DIR]/)
+    ");
+
+    uv_snapshot!(context.filters(), context
+        .pip_install()
+        .env(EnvVars::UV_PREVIEW_FEATURES, "content-addressed-cache")
+        .arg(".")
+        .arg("--reinstall"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     ~ project==0.1.0 (from file://[TEMP_DIR]/)
+    ");
+
+    // Pruning should remove the unused revision but retain the shared archive.
+    uv_snapshot!(context.filters(), context.prune().arg("--verbose"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    DEBUG Found workspace root: `[TEMP_DIR]/`
+    DEBUG Adding root workspace member: `[TEMP_DIR]/`
+    DEBUG Skipping `pyproject.toml` in `[TEMP_DIR]/` (no `[tool]` section)
+    DEBUG Searching for user configuration in: `[UV_USER_CONFIG_DIR]/uv.toml`
+    DEBUG uv [VERSION] ([COMMIT] DATE)
+    Pruning cache at: [CACHE_DIR]/
+    DEBUG Removing dangling source revision: [CACHE_DIR]/sdists-v9/[ENTRY]
+    Removed [N] files ([SIZE])
+    ");
+
+    // Uninstall and reinstall the package. We should use the cached version.
+    uv_snapshot!(context.filters(), context
+        .pip_uninstall()
+        .arg("."), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Uninstalled 1 package in [TIME]
+     - project==0.1.0 (from file://[TEMP_DIR]/)
+    ");
+
+    uv_snapshot!(context.filters(), context
+        .pip_install()
+        .env(EnvVars::UV_PREVIEW_FEATURES, "content-addressed-cache")
         .arg("."), @"
     exit_code: 0 (success)
     ----- stderr -----

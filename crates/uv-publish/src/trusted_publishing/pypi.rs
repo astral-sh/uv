@@ -7,8 +7,8 @@ use uv_client::BaseClient;
 use uv_redacted::DisplaySafeUrl;
 
 use crate::trusted_publishing::{
-    Audience, MintTokenRequest, PublishToken, TrustedPublishingError, TrustedPublishingService,
-    decode_oidc_token,
+    Audience, BurnTokenRequest, MintTokenRequest, PublishToken, TrustedPublishingError,
+    TrustedPublishingService, TrustedPublishingToken, decode_oidc_token,
 };
 
 pub(crate) struct PyPIPublishingService<'a> {
@@ -28,6 +28,35 @@ impl<'a> PyPIPublishingService<'a> {
 impl TrustedPublishingService for PyPIPublishingService<'_> {
     fn client(&self) -> &ClientWithMiddleware {
         self.client
+    }
+
+    async fn burn_token(
+        &self,
+        token: &TrustedPublishingToken,
+    ) -> Result<(), TrustedPublishingError> {
+        // Prefer HTTPS for token revocation; allow HTTP only in test builds.
+        let scheme = if cfg!(feature = "test") {
+            self.registry.scheme()
+        } else {
+            "https"
+        };
+        let burn_token_url = DisplaySafeUrl::parse(&format!(
+            "{}://{}/_/oidc/burn-token",
+            scheme,
+            self.registry.authority()
+        ))?;
+        debug!("Requesting revocation of the trusted publishing upload token at {burn_token_url}");
+        self.client
+            .post(Url::from(burn_token_url.clone()))
+            .json(&BurnTokenRequest { token })
+            .send()
+            .await
+            .map_err(|err| TrustedPublishingError::ReqwestMiddleware(burn_token_url.clone(), err))?
+            .error_for_status()
+            .map_err(|err| TrustedPublishingError::Reqwest(burn_token_url, err))?;
+
+        // PyPI returns HTTP 202 regardless of whether the token was revoked.
+        Ok(())
     }
 
     async fn audience(&self) -> Result<String, super::TrustedPublishingError> {

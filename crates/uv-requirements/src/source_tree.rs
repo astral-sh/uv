@@ -18,7 +18,7 @@ use uv_pep508::RequirementOrigin;
 use uv_pypi_types::PyProjectToml;
 use uv_redacted::DisplaySafeUrl;
 use uv_resolver::{InMemoryIndex, MetadataResponse};
-use uv_types::{BuildContext, HashStrategy};
+use uv_types::{BuildContext, HashStrategy, HashVerification};
 
 #[derive(Debug, Clone)]
 pub enum SourceTree {
@@ -205,16 +205,20 @@ impl<'a, Context: BuildContext> SourceTreeResolver<'a, Context> {
 
         // Determine the hash policy. Since we don't have a package name, we perform a
         // manual match.
-        let hashes = match self.hasher {
-            HashStrategy::None => HashPolicy::None,
-            HashStrategy::Generate(mode) => HashPolicy::Generate(*mode),
-            HashStrategy::Verify(_) => HashPolicy::Generate(HashGeneration::All),
-            HashStrategy::Require(_) => {
+        let hashes = match self.hasher.verification() {
+            HashVerification::Required(_) => {
                 return Err(anyhow::anyhow!(
                     "Hash-checking is not supported for local directories: {}",
                     path.user_display()
                 ));
             }
+            HashVerification::IfPresent(_) => {
+                HashPolicy::Generate(self.hasher.generation().unwrap_or(HashGeneration::All))
+            }
+            HashVerification::None => self
+                .hasher
+                .generation()
+                .map_or(HashPolicy::None, HashPolicy::Generate),
         };
 
         // Fetch the metadata for the distribution.

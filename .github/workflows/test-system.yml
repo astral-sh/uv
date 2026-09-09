@@ -9,6 +9,9 @@ on:
 permissions:
   contents: read
 
+env:
+  UV_LOCKED: 1
+
 jobs:
   system-test-debian:
     timeout-minutes: 10

@@ -72,6 +72,164 @@ fn sync_rejects_invalid_torch_backend_index() -> Result<()> {
     Ok(())
 }
 
+/// Explicit lock modes override conflicting environment variables without updating the lockfile.
+#[test]
+fn sync_lock_flags_override_environment() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+    "#})?;
+    context.lock().assert().success();
+    let lock = context.read("uv.lock");
+
+    // Make the lockfile stale so the two modes have different observable behavior.
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.2.0"
+        requires-python = ">=3.12"
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--frozen")
+        .env(EnvVars::UV_LOCKED, "1"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    warning: Ignoring `UV_LOCKED` because `--frozen` was provided
+    Checked in [TIME]
+    ");
+    assert_eq!(context.read("uv.lock"), lock);
+
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--locked")
+        .env(EnvVars::UV_FROZEN, "1"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    warning: Ignoring `UV_FROZEN` because `--locked` was provided
+    Resolved 1 package in [TIME]
+    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+
+    hint: To update the lockfile, run `uv lock`.
+    ");
+    assert_eq!(context.read("uv.lock"), lock);
+
+    // An explicit mode also takes precedence when both environment variables are enabled.
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--frozen")
+        .env(EnvVars::UV_LOCKED, "1")
+        .env(EnvVars::UV_FROZEN, "1"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    warning: Ignoring `UV_LOCKED` because `--frozen` was provided
+    Checked in [TIME]
+    ");
+
+    // Matching or disabled environment values do not require a warning.
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--frozen")
+        .env(EnvVars::UV_LOCKED, "0")
+        .env(EnvVars::UV_FROZEN, "1"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Checked in [TIME]
+    ");
+    assert_eq!(context.read("uv.lock"), lock);
+
+    Ok(())
+}
+
+/// A negation disables only its own lock mode, leaving the other environment setting intact.
+#[test]
+fn sync_no_lock_flags_override_environment() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+    "#})?;
+    context.lock().assert().success();
+    let lock = context.read("uv.lock");
+
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.2.0"
+        requires-python = ">=3.12"
+    "#})?;
+
+    // Negating locked mode preserves `UV_FROZEN` and reuses the stale lockfile.
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--no-locked")
+        .env(EnvVars::UV_LOCKED, "1")
+        .env(EnvVars::UV_FROZEN, "1"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Checked in [TIME]
+    ");
+    assert_eq!(context.read("uv.lock"), lock);
+
+    // Negating frozen mode preserves `UV_LOCKED`, which rejects the stale lockfile.
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--no-frozen")
+        .env(EnvVars::UV_LOCKED, "1")
+        .env(EnvVars::UV_FROZEN, "1"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    error: The lockfile at `uv.lock` needs to be updated, but `UV_LOCKED=1` was provided.
+
+    hint: To update the lockfile, run `uv lock`.
+    ");
+    assert_eq!(context.read("uv.lock"), lock);
+
+    // Negating both modes permits the lockfile update without changing the environment variables.
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--no-locked")
+        .arg("--no-frozen")
+        .env(EnvVars::UV_LOCKED, "1")
+        .env(EnvVars::UV_FROZEN, "1"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Checked in [TIME]
+    ");
+    assert_ne!(context.read("uv.lock"), lock);
+
+    Ok(())
+}
+
+/// Conflicting lock modes from the same source still fail.
+#[test]
+fn sync_lock_flags_conflict() {
+    let context = uv_test::test_context_with_versions!(&[]);
+
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--locked")
+        .arg("--frozen"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: the argument '--locked' cannot be used with '--frozen'
+
+    Usage: uv sync --cache-dir [CACHE_DIR] --locked --exclude-newer <EXCLUDE_NEWER>
+
+    For more information, try '--help'.
+    ");
+
+    uv_snapshot!(context.filters(), context.sync()
+        .env(EnvVars::UV_LOCKED, "1")
+        .env(EnvVars::UV_FROZEN, "1"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: the argument `UV_LOCKED` (environment variable) cannot be used with `UV_FROZEN` (environment variable)
+    ");
+}
+
 /// Installing a project does not distribute its unbounded build-system requirement.
 #[test]
 fn sync_unbounded_build_backend() -> Result<()> {
@@ -5915,9 +6073,10 @@ fn no_install_package() -> Result<()> {
     Ok(())
 }
 
-/// Ensure that `--no-build` isn't enforced for projects that aren't installed in the first place.
+/// Ensure that `--no-build` allows first-party projects and that `--no-install-project` still
+/// skips them.
 #[test]
-fn no_install_project_no_build() -> Result<()> {
+fn project_no_build() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
@@ -5934,29 +6093,36 @@ fn no_install_project_no_build() -> Result<()> {
         build-backend = "uv_build"
         "#,
     )?;
+    context
+        .temp_dir
+        .child("src")
+        .child("project")
+        .child("__init__.py")
+        .touch()?;
 
     // Generate a lockfile.
     context.lock().assert().success();
 
-    // `--no-build` should raise an error, since we try to install the project.
+    // `--no-build` should allow building the first-party project.
     uv_snapshot!(context.filters(), context.sync().arg("--no-build"), @"
-    exit_code: 2 (failure)
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    error: Distribution `project==0.1.0 @ editable+.` can't be installed because it is marked as `--no-build` but has no binary distribution
+    Prepared 4 packages in [TIME]
+    Installed 4 packages in [TIME]
+     + anyio==3.7.0
+     + idna==3.6
+     + project==0.1.0 (from file://[TEMP_DIR]/)
+     + sniffio==1.3.1
     ");
 
-    // But it's fine to combine `--no-install-project` with `--no-build`. We shouldn't error, since
-    // we aren't building the project.
+    // `--no-install-project` should still skip the project.
     uv_snapshot!(context.filters(), context.sync().arg("--no-install-project").arg("--no-build").arg("--locked"), @"
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    Prepared 3 packages in [TIME]
-    Installed 3 packages in [TIME]
-     + anyio==3.7.0
-     + idna==3.6
-     + sniffio==1.3.1
+    Uninstalled 1 package in [TIME]
+     - project==0.1.0 (from file://[TEMP_DIR]/)
     ");
 
     Ok(())
@@ -7874,6 +8040,50 @@ fn no_build_error() -> Result<()> {
 }
 
 #[test]
+fn no_build_path_dependency() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let child = context.temp_dir.child("child");
+    child.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "child"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+    "#})?;
+    child.child("src/child/__init__.py").touch()?;
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+            [project]
+            name = "project"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+            dependencies = ["child"]
+
+            [tool.uv.sources]
+            child = { path = "child" }
+        "#})?;
+
+    context.lock().assert().success();
+
+    // Path dependencies are not first-party unless they are workspace members.
+    uv_snapshot!(context.filters(), context.sync().arg("--no-build"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    error: Distribution `child==0.1.0 @ directory+child` can't be installed because it is marked as `--no-build` but has no binary distribution
+    ");
+
+    Ok(())
+}
+
+#[test]
 fn sync_wheel_url_source_error() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
@@ -8330,7 +8540,8 @@ fn sync_no_editable() -> Result<()> {
     let init = src.child("__init__.py");
     init.touch()?;
 
-    uv_snapshot!(context.filters(), context.sync().arg("--no-editable"), @"
+    // `--no-build` should allow building first-party workspace packages in non-editable mode.
+    uv_snapshot!(context.filters(), context.sync().arg("--no-editable").arg("--no-build"), @"
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
@@ -11194,19 +11405,16 @@ fn url_hash_mismatch() -> Result<()> {
 
     // Running `uv sync` should fail.
     uv_snapshot!(context.filters(), context.sync(), @"
-    exit_code: 1 (failure)
+    exit_code: 2 (failure)
     ----- stderr -----
-    Resolved 2 packages in [TIME]
-      × Failed to download and build `iniconfig @ https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz`
-      ╰─▶ Hash mismatch for `iniconfig @ https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz`
+    error: Failed to generate package metadata for `iniconfig==2.0.0 @ direct+https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz`
+      Caused by: Hash mismatch for `iniconfig @ https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz`
 
-          Expected:
-            sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b4
+        Expected:
+          sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b4
 
-          Computed:
-            sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3
-
-    hint: `iniconfig` was included because `project` (v0.1.0) depends on `iniconfig`
+        Computed:
+          sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3
     ");
 
     Ok(())
@@ -11263,21 +11471,18 @@ fn path_hash_mismatch() -> Result<()> {
         requires-dist = [{ name = "iniconfig", path = "iniconfig-2.0.0.tar.gz" }]
     "#})?;
 
-    // Running `uv sync` should fail.
+    // Reject the archive while validating lockfile metadata, before it can be built.
     uv_snapshot!(context.filters(), context.sync(), @"
-    exit_code: 1 (failure)
+    exit_code: 2 (failure)
     ----- stderr -----
-    Resolved 2 packages in [TIME]
-      × Failed to build `iniconfig @ file://[TEMP_DIR]/iniconfig-2.0.0.tar.gz`
-      ╰─▶ Hash mismatch for `iniconfig @ file://[TEMP_DIR]/iniconfig-2.0.0.tar.gz`
+    error: Failed to generate package metadata for `iniconfig==2.0.0 @ path+iniconfig-2.0.0.tar.gz`
+      Caused by: Hash mismatch for `iniconfig @ file://[TEMP_DIR]/iniconfig-2.0.0.tar.gz`
 
-          Expected:
-            sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b4
+        Expected:
+          sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b4
 
-          Computed:
-            sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3
-
-    hint: `iniconfig` was included because `project` (v0.1.0) depends on `iniconfig`
+        Computed:
+          sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3
     ");
 
     Ok(())
@@ -14964,19 +15169,13 @@ fn sync_extra_build_dependencies_cache() -> Result<()> {
     Ok(())
 }
 
-/// Sync with an index which serves zstd-compressed wheels.
+/// Ignore deprecated pyx-specific zstd wheel metadata and install the ordinary wheel from an
+/// existing lockfile.
 #[tokio::test]
-async fn sync_zstd_wheel() -> Result<()> {
-    use serde_json::json;
-    use wiremock::{
-        Mock, MockServer, ResponseTemplate,
-        matchers::{method, path},
-    };
-
+async fn sync_deprecated_zstd_wheel() -> Result<()> {
     let context = uv_test::test_context!("3.13");
     let server = MockServer::start().await;
 
-    // Copy the wheel files to serve them
     let wheel_path = context
         .temp_dir
         .child("basic_package-0.1.0-py3-none-any.whl");
@@ -14987,63 +15186,17 @@ async fn sync_zstd_wheel() -> Result<()> {
         &wheel_path,
     )?;
 
-    let zstd_wheel_path = context
-        .temp_dir
-        .child("basic_package-0.1.0-py3-none-any.whl.tar.zst");
-    fs_err::copy(
-        context
-            .workspace_root
-            .join("test/links/basic_package-0.1.0-py3-none-any.whl.tar.zst"),
-        &zstd_wheel_path,
-    )?;
-
-    let wheel_url = format!(
-        "{}/files/basic_package-0.1.0-py3-none-any.whl",
-        server.uri()
-    );
-
-    // Serve the uncompressed wheel file
+    // Only the ordinary wheel is available.
     Mock::given(method("GET"))
         .and(path("/files/basic_package-0.1.0-py3-none-any.whl"))
         .respond_with(ResponseTemplate::new(200).set_body_bytes(fs_err::read(&wheel_path)?))
+        .expect(1)
         .mount(&server)
         .await;
-
-    // Serve the zstd-compressed wheel file
     Mock::given(method("GET"))
         .and(path("/files/basic_package-0.1.0-py3-none-any.whl.tar.zst"))
-        .respond_with(ResponseTemplate::new(200).set_body_bytes(fs_err::read(&zstd_wheel_path)?))
-        .mount(&server)
-        .await;
-
-    // JSON API response with zstd metadata
-    let simple_index = json!({
-        "meta": {
-            "api-version": "1.1"
-        },
-        "name": "basic-package",
-        "files": [{
-            "filename": "basic_package-0.1.0-py3-none-any.whl",
-            "url": wheel_url,
-            "hashes": {
-                "sha256": "7b6229db79b5800e4e98a351b5628c1c8a944533a2d428aeeaa7275a30d4ea82"
-            },
-            "size": 1548,
-            "zstd": {
-                "hashes": {
-                    "sha256": "21c09ddf899e2ecc0a3d0a0ae8fb44ba50b839b899a0db47f5d30c5cc55e60c4"
-                },
-                "size": 786
-            }
-        }]
-    });
-
-    Mock::given(method("GET"))
-        .and(path("/simple/basic-package/"))
-        .respond_with(ResponseTemplate::new(200).set_body_raw(
-            simple_index.to_string().into_bytes(),
-            "application/vnd.pyx.simple.v1+json",
-        ))
+        .respond_with(ResponseTemplate::new(403))
+        .expect(0)
         .mount(&server)
         .await;
 
@@ -15065,10 +15218,34 @@ async fn sync_zstd_wheel() -> Result<()> {
         server.uri()
     })?;
 
-    uv_snapshot!(context.filters(), context.sync().env_remove(EnvVars::UV_EXCLUDE_NEWER), @"
+    context.temp_dir.child("uv.lock").write_str(&formatdoc! {r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.13"
+
+        [[package]]
+        name = "basic-package"
+        version = "0.1.0"
+        source = {{ registry = "{server}/simple" }}
+        wheels = [
+            {{ url = "{server}/files/basic_package-0.1.0-py3-none-any.whl", hash = "sha256:7b6229db79b5800e4e98a351b5628c1c8a944533a2d428aeeaa7275a30d4ea82", size = 1548, zstd = {{ hash = "sha256:21c09ddf899e2ecc0a3d0a0ae8fb44ba50b839b899a0db47f5d30c5cc55e60c4", size = 786 }} }},
+        ]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = {{ virtual = "." }}
+        dependencies = [
+            {{ name = "basic-package" }},
+        ]
+
+        [package.metadata]
+        requires-dist = [{{ name = "basic-package", index = "{server}/simple" }}]
+        "#, server = server.uri()})?;
+
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Resolved 2 packages in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + basic-package==0.1.0
@@ -15110,7 +15287,7 @@ async fn sync_non_pep625_sdist() -> Result<()> {
         .and(path("/simple/basic-package/"))
         .respond_with(ResponseTemplate::new(200).set_body_raw(
             simple_index.to_string().into_bytes(),
-            "application/vnd.pyx.simple.v1+json",
+            "application/vnd.pypi.simple.v1+json",
         ))
         .mount(&server)
         .await;
@@ -15209,7 +15386,7 @@ async fn sync_non_pep625_sdist_with_compatible_wheel() -> Result<()> {
         .and(path("/simple/basic-package/"))
         .respond_with(ResponseTemplate::new(200).set_body_raw(
             simple_index.to_string().into_bytes(),
-            "application/vnd.pyx.simple.v1+json",
+            "application/vnd.pypi.simple.v1+json",
         ))
         .mount(&server)
         .await;

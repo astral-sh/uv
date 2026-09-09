@@ -1,27 +1,34 @@
 use anyhow::Result;
-#[cfg(feature = "test-universal")]
 use assert_cmd::assert::OutputAssertExt;
 use assert_fs::prelude::*;
+#[cfg(feature = "test-universal")]
+use async_zip::base::write::ZipFileWriter;
+#[cfg(feature = "test-universal")]
+use async_zip::{Compression, ZipEntryBuilder};
 use indoc::{formatdoc, indoc};
 use insta::assert_snapshot;
 #[cfg(feature = "test-universal")]
 use serde_json::json;
 #[cfg(feature = "test-universal")]
+use sha2::{Digest, Sha256};
 use url::Url;
+#[cfg(feature = "test-universal")]
+use walkdir::WalkDir;
 #[cfg(feature = "test-universal")]
 use wiremock::{
     Mock, MockServer, ResponseTemplate,
     matchers::{method, path},
 };
 
-use uv_fs::Simplified;
-#[cfg(feature = "test-universal")]
+use uv_fs::{Simplified, create_symlink};
 use uv_static::EnvVars;
 #[cfg(feature = "test-universal")]
+use uv_test::archive::write_tar_gz;
+#[cfg(feature = "test-universal")]
 use uv_test::packse::PackseServer;
-use uv_test::uv_snapshot;
 #[cfg(all(feature = "test-universal", feature = "test-git"))]
 use uv_test::{READ_ONLY_GITHUB_TOKEN, decode_token};
+use uv_test::{diff_snapshot, uv_snapshot};
 #[cfg(feature = "test-universal")]
 use uv_test::{download_to_disk, venv_bin_path};
 
@@ -1488,6 +1495,1363 @@ fn lock_sdist_url() -> Result<()> {
     Checked 1 package in [TIME]
     ");
 
+    Ok(())
+}
+
+/// Create a deterministic source archive with an in-tree backend and a side effect on import.
+#[cfg(feature = "test-universal")]
+fn locked_source_archive(side_effect: &str, subdirectory: &str) -> Result<Vec<u8>> {
+    let pyproject = indoc! {r#"
+        [build-system]
+        requires = []
+        build-backend = "backend"
+        backend-path = ["."]
+    "#};
+    let backend = formatdoc! {r#"
+        import os
+        from pathlib import Path
+
+        {side_effect}
+
+        def prepare_metadata_for_build_wheel(metadata_directory, config_settings=None):
+            dist_info = Path(metadata_directory) / "demo_pkg-1.0.0.dist-info"
+            dist_info.mkdir()
+            (dist_info / "METADATA").write_text(
+                "Metadata-Version: 2.2\nName: demo-pkg\nVersion: 1.0.0\n"
+            )
+            return dist_info.name
+    "#};
+    let mut archive = Vec::new();
+    write_tar_gz(
+        &mut archive,
+        &[
+            (
+                &format!("demo_pkg-1.0.0/{subdirectory}pyproject.toml"),
+                pyproject,
+            ),
+            (
+                &format!("demo_pkg-1.0.0/{subdirectory}backend.py"),
+                backend.as_str(),
+            ),
+        ],
+    )?;
+    Ok(archive)
+}
+
+/// Create a deterministic wheel whose module can be imported by a source build backend.
+#[cfg(feature = "test-universal")]
+async fn locked_build_dependency_wheel(module: &str) -> Result<Vec<u8>> {
+    let mut writer = ZipFileWriter::new(Vec::new());
+    for (name, contents) in [
+        ("review_dep.py", module),
+        (
+            "review_dep-1.0.0.dist-info/METADATA",
+            "Metadata-Version: 2.2\nName: review-dep\nVersion: 1.0.0\n",
+        ),
+        (
+            "review_dep-1.0.0.dist-info/WHEEL",
+            "Wheel-Version: 1.0\nGenerator: uv-test\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
+        ),
+        (
+            "review_dep-1.0.0.dist-info/RECORD",
+            "review_dep.py,,\nreview_dep-1.0.0.dist-info/METADATA,,\nreview_dep-1.0.0.dist-info/WHEEL,,\nreview_dep-1.0.0.dist-info/RECORD,,\n",
+        ),
+    ] {
+        writer
+            .write_entry_whole(
+                ZipEntryBuilder::new(name.into(), Compression::Stored),
+                contents.as_bytes(),
+            )
+            .await?;
+    }
+    Ok(writer.close().await?)
+}
+
+/// A known locked build dependency must be verified before its code enters an isolated build.
+#[cfg(feature = "test-universal")]
+#[tokio::test]
+async fn lock_sdist_url_locked_build_dependency_hash_mismatch() -> Result<()> {
+    let context = uv_test::test_context!("3.12")
+        .with_filtered_python_names()
+        .with_filtered_virtualenv_bin()
+        .with_filtered_exe_suffix();
+    let server = MockServer::start().await;
+    let archive_path = "/files/demo_pkg-1.0.0.tar.gz";
+    let archive_url = format!("{}{archive_path}", server.uri());
+    let wheel_path = "/files/review_dep-1.0.0-py3-none-any.whl";
+    let sentinel = context.temp_dir.child("backend-executed");
+    let trusted = locked_build_dependency_wheel("pass\n").await?;
+    let replacement = locked_build_dependency_wheel(indoc! {r#"
+        import os
+        from pathlib import Path
+        Path(os.environ["UV_LOCK_TEST_SENTINEL"]).write_text("executed\n")
+    "#})
+    .await?;
+    let trusted_digest = hex::encode(Sha256::digest(&trusted));
+    let mut source = Vec::new();
+    write_tar_gz(
+        &mut source,
+        &[
+            (
+                "demo_pkg-1.0.0/pyproject.toml",
+                indoc! {r#"
+            [build-system]
+            requires = ["review-dep==1.0.0"]
+            build-backend = "backend"
+            backend-path = ["."]
+        "#},
+            ),
+            (
+                "demo_pkg-1.0.0/backend.py",
+                indoc! {r#"
+            import os
+            from pathlib import Path
+            from zipfile import ZipFile
+
+            def prepare_metadata_for_build_wheel(metadata_directory, config_settings=None):
+                import review_dep
+                dist_info = Path(metadata_directory) / "demo_pkg-1.0.0.dist-info"
+                dist_info.mkdir()
+                (dist_info / "METADATA").write_text(
+                    "Metadata-Version: 2.2\nName: demo-pkg\nVersion: 1.0.0\n"
+                )
+                return dist_info.name
+
+            def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
+                import review_dep
+                Path(os.environ["UV_LOCK_TEST_SENTINEL"]).touch()
+                filename = "demo_pkg-1.0.0-py3-none-any.whl"
+                dist_info = "demo_pkg-1.0.0.dist-info"
+                with ZipFile(Path(wheel_directory) / filename, "w") as wheel:
+                    wheel.writestr("demo_pkg.py", "__version__ = '1.0.0'\n")
+                    wheel.writestr(f"{dist_info}/METADATA", "Metadata-Version: 2.2\nName: demo-pkg\nVersion: 1.0.0\n")
+                    wheel.writestr(f"{dist_info}/WHEEL", "Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n")
+                    wheel.writestr(f"{dist_info}/RECORD", f"demo_pkg.py,,\n{dist_info}/METADATA,,\n{dist_info}/WHEEL,,\n{dist_info}/RECORD,,\n")
+                return filename
+        "#},
+            ),
+        ],
+    )?;
+
+    let simple_index = json!({
+        "meta": { "api-version": "1.0" },
+        "name": "review-dep",
+        "files": [{
+            "filename": "review_dep-1.0.0-py3-none-any.whl",
+            "url": format!("{}{wheel_path}", server.uri()),
+            "hashes": { "sha256": trusted_digest },
+            "core-metadata": true,
+            "upload-time": "2024-01-01T00:00:00Z",
+        }],
+    });
+    let package_index = Mock::given(method("GET"))
+        .and(path("/simple/review-dep/"))
+        .respond_with(ResponseTemplate::new(200).set_body_raw(
+            simple_index.to_string(),
+            "application/vnd.pypi.simple.v1+json",
+        ))
+        .mount_as_scoped(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path(format!("{wheel_path}.metadata")))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_string("Metadata-Version: 2.2\nName: review-dep\nVersion: 1.0.0\n"),
+        )
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path(archive_path))
+        .respond_with(ResponseTemplate::new(200).set_body_bytes(source))
+        .mount(&server)
+        .await;
+    let trusted_wheel = Mock::given(method("GET"))
+        .and(path(wheel_path))
+        .respond_with(ResponseTemplate::new(200).set_body_bytes(trusted.clone()))
+        .mount_as_scoped(&server)
+        .await;
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&formatdoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["demo-pkg @ {archive_url}"]
+
+        [project.optional-dependencies]
+        build = ["review-dep==1.0.0"]
+
+        [[tool.uv.index]]
+        url = "{}/simple"
+        default = true
+    "#, server.uri()})?;
+    uv_snapshot!(context.filters(), context.lock().arg("--no-cache"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+    let locked = context.read("uv.lock");
+    assert!(locked.contains(&trusted_digest));
+    assert!(!sentinel.exists(), "locking built a wheel");
+
+    // Build successfully with the trusted wheel, without installing the extra in the main environment.
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--no-cache")
+        .env("UV_LOCK_TEST_SENTINEL", sentinel.path()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + demo-pkg==1.0.0 (from http://[LOCALHOST]/files/demo_pkg-1.0.0.tar.gz)
+    ");
+    sentinel.assert("");
+    context.assert_installed("demo_pkg", "1.0.0");
+    context
+        .assert_command(
+            "from importlib.util import find_spec; assert find_spec('review_dep') is None",
+        )
+        .success();
+    fs_err::remove_file(&sentinel)?;
+
+    // Prefer a locked wheel over a higher build tag whose advertised hash is not in the lockfile.
+    let trusted_wheel_path = "/files/review_dep-1.0.0-1-py3-none-any.whl";
+    let replacement_wheel_path = "/files/review_dep-1.0.0-2-py3-none-any.whl";
+    let replacement_digest = hex::encode(Sha256::digest(&replacement));
+    Mock::given(path("/links"))
+        .respond_with(ResponseTemplate::new(200).set_body_raw(
+            formatdoc! {r#"
+                <a href="{trusted_wheel_path}#sha256={trusted_digest}">review_dep-1.0.0-1-py3-none-any.whl</a>
+                <a href="{replacement_wheel_path}#sha256={replacement_digest}">review_dep-1.0.0-2-py3-none-any.whl</a>
+            "#},
+            "text/html",
+        ))
+        .mount(&server)
+        .await;
+    Mock::given(path(trusted_wheel_path))
+        .respond_with(ResponseTemplate::new(200).set_body_bytes(trusted))
+        .mount(&server)
+        .await;
+    Mock::given(path(replacement_wheel_path))
+        .respond_with(ResponseTemplate::new(200).set_body_bytes(replacement.clone()))
+        .mount(&server)
+        .await;
+
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--no-cache").arg("--reinstall")
+        .arg("--no-index").arg("--find-links").arg(format!("{}/links", server.uri()))
+        .env("UV_LOCK_TEST_SENTINEL", sentinel.path()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     ~ demo-pkg==1.0.0 (from http://[LOCALHOST]/files/demo_pkg-1.0.0.tar.gz)
+    ");
+    sentinel.assert("");
+    assert_eq!(context.read("uv.lock"), locked);
+    fs_err::remove_file(&sentinel)?;
+
+    // Keep the configured index unchanged, but require build resolution to use `--find-links`.
+    drop(package_index);
+
+    // Both locked and unlocked validation must prefer the trusted build dependency from
+    // `--find-links`, even when another wheel has a higher build tag.
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--no-cache")
+        .arg("--find-links").arg(format!("{}/links", server.uri()))
+        .env("UV_LOCK_TEST_SENTINEL", sentinel.path()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+    assert!(
+        !sentinel.exists(),
+        "the replacement build dependency was executed"
+    );
+    assert_eq!(context.read("uv.lock"), locked);
+
+    uv_snapshot!(context.filters(), context.lock().arg("--no-cache")
+        .arg("--find-links").arg(format!("{}/links", server.uri()))
+        .env("UV_LOCK_TEST_SENTINEL", sentinel.path()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+    assert!(
+        !sentinel.exists(),
+        "the replacement build dependency was executed"
+    );
+    assert_eq!(context.read("uv.lock"), locked);
+    Mock::given(method("GET"))
+        .and(path("/simple/review-dep/"))
+        .respond_with(ResponseTemplate::new(200).set_body_raw(
+            simple_index.to_string(),
+            "application/vnd.pypi.simple.v1+json",
+        ))
+        .mount(&server)
+        .await;
+
+    drop(trusted_wheel);
+    let replacement_wheel = Mock::given(method("GET"))
+        .and(path(wheel_path))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .insert_header("cache-control", "max-age=31536000")
+                .set_body_bytes(replacement),
+        )
+        .mount_as_scoped(&server)
+        .await;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--no-cache")
+        .env("UV_LOCK_TEST_SENTINEL", sentinel.path()), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Failed to generate package metadata for `demo-pkg==1.0.0 @ direct+http://[LOCALHOST]/files/demo_pkg-1.0.0.tar.gz`
+      Caused by: Failed to install requirements from `build-system.requires`
+      Caused by: Failed to download `review-dep==1.0.0`
+      Caused by: Hash mismatch for `review-dep==1.0.0`
+
+        Expected:
+          sha256:53a42340ae36747fb1471f9b4b7958be1f6e2e5fc234f931aafa3e454fd31dfb
+
+        Computed:
+          sha256:1aa0f7263e4991934282ab8912e95fdd34f24459d7c4f8b845c2281a04c89807
+    ");
+    assert!(
+        !sentinel.exists(),
+        "the locked build dependency was executed"
+    );
+
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--refresh").arg("--no-cache")
+        .env("UV_LOCK_TEST_SENTINEL", sentinel.path()), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+      × Failed to download and build `demo-pkg @ http://[LOCALHOST]/files/demo_pkg-1.0.0.tar.gz`
+      ├─▶ Failed to install requirements from `build-system.requires`
+      ├─▶ Failed to download `review-dep==1.0.0`
+      ╰─▶ Hash mismatch for `review-dep==1.0.0`
+
+          Expected:
+            sha256:53a42340ae36747fb1471f9b4b7958be1f6e2e5fc234f931aafa3e454fd31dfb
+
+          Computed:
+            sha256:1aa0f7263e4991934282ab8912e95fdd34f24459d7c4f8b845c2281a04c89807
+    ");
+    assert!(
+        !sentinel.exists(),
+        "the refreshed build dependency was executed"
+    );
+
+    uv_snapshot!(context.filters(), context.sync().arg("--no-cache")
+        .env("UV_LOCK_TEST_SENTINEL", sentinel.path()), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Failed to generate package metadata for `demo-pkg==1.0.0 @ direct+http://[LOCALHOST]/files/demo_pkg-1.0.0.tar.gz`
+      Caused by: Failed to install requirements from `build-system.requires`
+      Caused by: Failed to download `review-dep==1.0.0`
+      Caused by: Hash mismatch for `review-dep==1.0.0`
+
+        Expected:
+          sha256:53a42340ae36747fb1471f9b4b7958be1f6e2e5fc234f931aafa3e454fd31dfb
+
+        Computed:
+          sha256:1aa0f7263e4991934282ab8912e95fdd34f24459d7c4f8b845c2281a04c89807
+    ");
+    assert!(
+        !sentinel.exists(),
+        "the default synced build dependency was executed"
+    );
+    assert_eq!(context.read("uv.lock"), locked);
+
+    // Skip metadata validation and force a fresh installation build from the unchanged source.
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--no-cache").arg("--reinstall")
+        .env("UV_LOCK_TEST_SENTINEL", sentinel.path()), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+      × Failed to download and build `demo-pkg @ http://[LOCALHOST]/files/demo_pkg-1.0.0.tar.gz`
+      ├─▶ Failed to install requirements from `build-system.requires`
+      ├─▶ Failed to download `review-dep==1.0.0`
+      ╰─▶ Hash mismatch for `review-dep==1.0.0`
+
+          Expected:
+            sha256:53a42340ae36747fb1471f9b4b7958be1f6e2e5fc234f931aafa3e454fd31dfb
+
+          Computed:
+            sha256:1aa0f7263e4991934282ab8912e95fdd34f24459d7c4f8b845c2281a04c89807
+
+    hint: `demo-pkg` was included because `project` (v0.1.0) depends on `demo-pkg`
+    ");
+    assert!(
+        !sentinel.exists(),
+        "the frozen synced build dependency was executed"
+    );
+    assert_eq!(context.read("uv.lock"), locked);
+
+    // Seed the shared wheel cache without applying the lockfile's hashes or installing the extra.
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("review-dep==1.0.0")
+        .arg("--index-url").arg(format!("{}/simple", server.uri()))
+        .arg("--target").arg(context.temp_dir.child("cache-seed").path()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: .venv/[BIN]/[PYTHON]
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + review-dep==1.0.0
+    ");
+    assert!(!sentinel.exists());
+
+    // A hash mismatch without another wheel download must come from the cached replacement.
+    let request_count = replacement_wheel.received_requests().await.len();
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen")
+        .arg("--reinstall-package").arg("demo-pkg")
+        .env("UV_LOCK_TEST_SENTINEL", sentinel.path()), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+      × Failed to download and build `demo-pkg @ http://[LOCALHOST]/files/demo_pkg-1.0.0.tar.gz`
+      ├─▶ Failed to install requirements from `build-system.requires`
+      ├─▶ Failed to download `review-dep==1.0.0`
+      ╰─▶ Hash mismatch for `review-dep==1.0.0`
+
+          Expected:
+            sha256:53a42340ae36747fb1471f9b4b7958be1f6e2e5fc234f931aafa3e454fd31dfb
+
+          Computed:
+            sha256:1aa0f7263e4991934282ab8912e95fdd34f24459d7c4f8b845c2281a04c89807
+
+    hint: `demo-pkg` was included because `project` (v0.1.0) depends on `demo-pkg`
+    ");
+    assert!(
+        !sentinel.exists(),
+        "the cached build dependency was executed"
+    );
+    assert_eq!(context.read("uv.lock"), locked);
+    assert_eq!(
+        replacement_wheel.received_requests().await.len(),
+        request_count
+    );
+
+    // Explicitly unlocked resolution retains its existing update policy.
+    uv_snapshot!(context.filters(), context.lock().arg("--upgrade").arg("--no-cache")
+        .arg("--no-index").arg("--find-links").arg(format!("{}/links", server.uri()))
+        .env("UV_LOCK_TEST_SENTINEL", sentinel.path()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+    assert!(
+        sentinel.exists(),
+        "the upgraded build dependency was not executed"
+    );
+    Ok(())
+}
+
+/// Validate a locked source archive before invoking its potentially untrusted build backend.
+#[cfg(feature = "test-universal")]
+#[tokio::test]
+async fn lock_sdist_url_locked_hash_mismatch() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let server = MockServer::start().await;
+    let archive_path = "/files/demo_pkg-1.0.0.tar.gz";
+    let archive_url = format!("{}{archive_path}", server.uri());
+    let sentinel = context.temp_dir.child("backend-executed");
+
+    let trusted_archive = locked_source_archive("pass", "")?;
+    let replacement_archive = locked_source_archive(
+        r#"Path(os.environ["UV_LOCK_TEST_SENTINEL"]).write_text("executed\n")"#,
+        "",
+    )?;
+
+    Mock::given(method("GET"))
+        .and(path(archive_path))
+        .respond_with(ResponseTemplate::new(200).set_body_bytes(trusted_archive))
+        .mount(&server)
+        .await;
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&formatdoc! {r#"
+            [project]
+            name = "project"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+            dependencies = ["demo-pkg @ {archive_url}"]
+        "#})?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--no-cache"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(context.read("uv.lock"), @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[package]]
+        name = "demo-pkg"
+        version = "1.0.0"
+        source = { url = "http://[LOCALHOST]/files/demo_pkg-1.0.0.tar.gz" }
+        sdist = { hash = "sha256:93703857ad8ea956f6661f1d78d445be4340afa15f8b87bf1f3a79621068847f" }
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "demo-pkg" },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "demo-pkg", url = "http://[LOCALHOST]/files/demo_pkg-1.0.0.tar.gz" }]
+        "#);
+    });
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--locked")
+        .arg("--refresh")
+        .arg("--no-cache"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+    assert!(!sentinel.exists(), "the trusted backend created a sentinel");
+
+    server.reset().await;
+    Mock::given(method("GET"))
+        .and(path(archive_path))
+        .respond_with(ResponseTemplate::new(200).set_body_bytes(replacement_archive))
+        .mount(&server)
+        .await;
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--locked")
+        .arg("--no-cache")
+        .env("UV_LOCK_TEST_SENTINEL", sentinel.path()), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Failed to generate package metadata for `demo-pkg==1.0.0 @ direct+http://[LOCALHOST]/files/demo_pkg-1.0.0.tar.gz`
+      Caused by: Hash mismatch for `demo-pkg @ http://[LOCALHOST]/files/demo_pkg-1.0.0.tar.gz`
+
+        Expected:
+          sha256:93703857ad8ea956f6661f1d78d445be4340afa15f8b87bf1f3a79621068847f
+
+        Computed:
+          sha256:883b65920e21bce11c2697819dab77eb70e18d810b2746f49e46155d6ca527bc
+    ");
+    assert!(!sentinel.exists(), "the locked build backend was executed");
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--locked")
+        .arg("--refresh")
+        .arg("--no-cache")
+        .env("UV_LOCK_TEST_SENTINEL", sentinel.path()), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+      × Failed to download and build `demo-pkg @ http://[LOCALHOST]/files/demo_pkg-1.0.0.tar.gz`
+      ╰─▶ Hash mismatch for `demo-pkg @ http://[LOCALHOST]/files/demo_pkg-1.0.0.tar.gz`
+
+          Expected:
+            sha256:93703857ad8ea956f6661f1d78d445be4340afa15f8b87bf1f3a79621068847f
+
+          Computed:
+            sha256:883b65920e21bce11c2697819dab77eb70e18d810b2746f49e46155d6ca527bc
+    ");
+    assert!(
+        !sentinel.exists(),
+        "the refreshed locked build backend was executed"
+    );
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--locked")
+        .arg("--upgrade-package")
+        .arg("demo-pkg")
+        .arg("--no-cache")
+        .env("UV_LOCK_TEST_SENTINEL", sentinel.path()), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+      × Failed to download and build `demo-pkg @ http://[LOCALHOST]/files/demo_pkg-1.0.0.tar.gz`
+      ╰─▶ Hash mismatch for `demo-pkg @ http://[LOCALHOST]/files/demo_pkg-1.0.0.tar.gz`
+
+          Expected:
+            sha256:93703857ad8ea956f6661f1d78d445be4340afa15f8b87bf1f3a79621068847f
+
+          Computed:
+            sha256:883b65920e21bce11c2697819dab77eb70e18d810b2746f49e46155d6ca527bc
+    ");
+    assert!(
+        !sentinel.exists(),
+        "the upgraded locked build backend was executed"
+    );
+
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--no-cache")
+        .env("UV_LOCK_TEST_SENTINEL", sentinel.path()), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Failed to generate package metadata for `demo-pkg==1.0.0 @ direct+http://[LOCALHOST]/files/demo_pkg-1.0.0.tar.gz`
+      Caused by: Hash mismatch for `demo-pkg @ http://[LOCALHOST]/files/demo_pkg-1.0.0.tar.gz`
+
+        Expected:
+          sha256:93703857ad8ea956f6661f1d78d445be4340afa15f8b87bf1f3a79621068847f
+
+        Computed:
+          sha256:883b65920e21bce11c2697819dab77eb70e18d810b2746f49e46155d6ca527bc
+    ");
+    assert!(
+        !sentinel.exists(),
+        "the default synced build backend was executed"
+    );
+
+    // An explicitly requested upgrade is allowed to replace the trusted lockfile hash.
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--upgrade-package")
+        .arg("demo-pkg")
+        .arg("--no-cache")
+        .env("UV_LOCK_TEST_SENTINEL", sentinel.path()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+    assert!(
+        sentinel.exists(),
+        "the upgraded build backend was not executed"
+    );
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(context.read("uv.lock"), @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[package]]
+        name = "demo-pkg"
+        version = "1.0.0"
+        source = { url = "http://[LOCALHOST]/files/demo_pkg-1.0.0.tar.gz" }
+        sdist = { hash = "sha256:883b65920e21bce11c2697819dab77eb70e18d810b2746f49e46155d6ca527bc" }
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "demo-pkg" },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "demo-pkg", url = "http://[LOCALHOST]/files/demo_pkg-1.0.0.tar.gz" }]
+        "#);
+    });
+
+    Ok(())
+}
+
+/// A changed index hash must not replace the trusted lockfile hash.
+#[cfg(feature = "test-universal")]
+#[tokio::test]
+async fn lock_sdist_registry_changed_index_locked_hash_mismatch() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let server = MockServer::start().await;
+    let archive_path = "/files/demo_pkg-1.0.0.tar.gz";
+    let archive_url = format!("{}{archive_path}", server.uri());
+    let sentinel = context.temp_dir.child("backend-executed");
+    let trusted_archive = locked_source_archive("pass", "")?;
+    let replacement_archive = locked_source_archive(
+        r#"Path(os.environ["UV_LOCK_TEST_SENTINEL"]).write_text("executed\n")"#,
+        "",
+    )?;
+    let trusted_digest = hex::encode(Sha256::digest(&trusted_archive));
+
+    let mut simple_index = json!({
+        "meta": { "api-version": "1.0" },
+        "name": "demo-pkg",
+        "files": [{
+            "filename": "demo_pkg-1.0.0.tar.gz",
+            "url": archive_url,
+            "hashes": { "sha256": trusted_digest },
+            "upload-time": "2024-01-01T00:00:00Z",
+        }],
+    });
+    Mock::given(method("GET"))
+        .and(path("/simple/demo-pkg/"))
+        .respond_with(ResponseTemplate::new(200).set_body_raw(
+            simple_index.to_string(),
+            "application/vnd.pypi.simple.v1+json",
+        ))
+        .mount(&server)
+        .await;
+
+    Mock::given(method("GET"))
+        .and(path(archive_path))
+        .respond_with(ResponseTemplate::new(200).set_body_bytes(trusted_archive))
+        .mount(&server)
+        .await;
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(&formatdoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["demo-pkg==1.0.0"]
+
+        [[tool.uv.index]]
+        url = "{}/simple"
+        default = true
+    "#, server.uri()})?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--no-cache"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+    let locked = context.read("uv.lock");
+
+    server.reset().await;
+    simple_index["files"][0]["hashes"] =
+        json!({ "sha256": hex::encode(Sha256::digest(&replacement_archive)) });
+    Mock::given(method("GET"))
+        .and(path("/simple/demo-pkg/"))
+        .respond_with(ResponseTemplate::new(200).set_body_raw(
+            simple_index.to_string(),
+            "application/vnd.pypi.simple.v1+json",
+        ))
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path(archive_path))
+        .respond_with(ResponseTemplate::new(200).set_body_bytes(replacement_archive))
+        .mount(&server)
+        .await;
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--locked")
+        .arg("--refresh")
+        .env("UV_LOCK_TEST_SENTINEL", sentinel.path()), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+      × Failed to download and build `demo-pkg==1.0.0`
+      ╰─▶ Hash mismatch for `demo-pkg==1.0.0`
+
+          Expected:
+            sha256:93703857ad8ea956f6661f1d78d445be4340afa15f8b87bf1f3a79621068847f
+
+          Computed:
+            sha256:883b65920e21bce11c2697819dab77eb70e18d810b2746f49e46155d6ca527bc
+
+    hint: `demo-pkg` (v1.0.0) was included because `project` (v0.1.0) depends on `demo-pkg==1.0.0`
+    ");
+    assert!(
+        !sentinel.exists(),
+        "the replaced build backend was executed"
+    );
+    assert_eq!(context.read("uv.lock"), locked);
+
+    Ok(())
+}
+
+/// Omitting an index hash must not disable lockfile hash verification.
+#[cfg(feature = "test-universal")]
+#[tokio::test]
+async fn lock_sdist_registry_missing_index_locked_hash_mismatch() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let server = MockServer::start().await;
+    let archive_path = "/files/demo_pkg-1.0.0.tar.gz";
+    let archive_url = format!("{}{archive_path}", server.uri());
+    let sentinel = context.temp_dir.child("backend-executed");
+    let trusted_archive = locked_source_archive("pass", "")?;
+    let replacement_archive = locked_source_archive(
+        r#"Path(os.environ["UV_LOCK_TEST_SENTINEL"]).write_text("executed\n")"#,
+        "",
+    )?;
+    let trusted_digest = hex::encode(Sha256::digest(&trusted_archive));
+
+    let mut simple_index = json!({
+        "meta": { "api-version": "1.0" },
+        "name": "demo-pkg",
+        "files": [{
+            "filename": "demo_pkg-1.0.0.tar.gz",
+            "url": archive_url,
+            "hashes": { "sha256": trusted_digest },
+            "upload-time": "2024-01-01T00:00:00Z",
+        }],
+    });
+    Mock::given(method("GET"))
+        .and(path("/simple/demo-pkg/"))
+        .respond_with(ResponseTemplate::new(200).set_body_raw(
+            simple_index.to_string(),
+            "application/vnd.pypi.simple.v1+json",
+        ))
+        .mount(&server)
+        .await;
+
+    Mock::given(method("GET"))
+        .and(path(archive_path))
+        .respond_with(ResponseTemplate::new(200).set_body_bytes(trusted_archive))
+        .mount(&server)
+        .await;
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(&formatdoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["demo-pkg==1.0.0"]
+
+        [[tool.uv.index]]
+        url = "{}/simple"
+        default = true
+    "#, server.uri()})?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--no-cache"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+    let locked = context.read("uv.lock");
+
+    server.reset().await;
+    simple_index["files"][0]["hashes"] = json!({});
+    Mock::given(method("GET"))
+        .and(path("/simple/demo-pkg/"))
+        .respond_with(ResponseTemplate::new(200).set_body_raw(
+            simple_index.to_string(),
+            "application/vnd.pypi.simple.v1+json",
+        ))
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path(archive_path))
+        .respond_with(ResponseTemplate::new(200).set_body_bytes(replacement_archive))
+        .mount(&server)
+        .await;
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--locked")
+        .arg("--refresh")
+        .env("UV_LOCK_TEST_SENTINEL", sentinel.path()), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+      × Failed to download and build `demo-pkg==1.0.0`
+      ╰─▶ Hash mismatch for `demo-pkg==1.0.0`
+
+          Expected:
+            sha256:93703857ad8ea956f6661f1d78d445be4340afa15f8b87bf1f3a79621068847f
+
+          Computed:
+            sha256:883b65920e21bce11c2697819dab77eb70e18d810b2746f49e46155d6ca527bc
+
+    hint: `demo-pkg` (v1.0.0) was included because `project` (v0.1.0) depends on `demo-pkg==1.0.0`
+    ");
+    assert!(
+        !sentinel.exists(),
+        "the replaced build backend was executed"
+    );
+    assert_eq!(context.read("uv.lock"), locked);
+
+    Ok(())
+}
+
+/// A root subdirectory must retain the archive's trusted hash after lockfile normalization.
+#[cfg(feature = "test-universal")]
+#[tokio::test]
+async fn lock_sdist_url_root_subdirectory_locked_hash_mismatch() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let server = MockServer::start().await;
+    let archive_path = "/files/demo_pkg-1.0.0.tar.gz";
+    let archive_url = format!("{}{archive_path}", server.uri());
+    let sentinel = context.temp_dir.child("backend-executed");
+    let trusted_archive = locked_source_archive("pass", "")?;
+    let replacement_archive = locked_source_archive(
+        r#"Path(os.environ["UV_LOCK_TEST_SENTINEL"]).write_text("executed\n")"#,
+        "",
+    )?;
+
+    Mock::given(method("GET"))
+        .and(path(archive_path))
+        .respond_with(ResponseTemplate::new(200).set_body_bytes(trusted_archive))
+        .mount(&server)
+        .await;
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(&formatdoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["demo-pkg @ {archive_url}#subdirectory=."]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--no-cache"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+    let locked = context.read("uv.lock");
+
+    server.reset().await;
+    Mock::given(method("GET"))
+        .and(path(archive_path))
+        .respond_with(ResponseTemplate::new(200).set_body_bytes(replacement_archive))
+        .mount(&server)
+        .await;
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--locked")
+        .arg("--refresh")
+        .env("UV_LOCK_TEST_SENTINEL", sentinel.path()), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+      × Failed to download and build `demo-pkg @ http://[LOCALHOST]/files/demo_pkg-1.0.0.tar.gz#subdirectory=.`
+      ╰─▶ Hash mismatch for `demo-pkg @ http://[LOCALHOST]/files/demo_pkg-1.0.0.tar.gz#subdirectory=.`
+
+          Expected:
+            sha256:93703857ad8ea956f6661f1d78d445be4340afa15f8b87bf1f3a79621068847f
+
+          Computed:
+            sha256:883b65920e21bce11c2697819dab77eb70e18d810b2746f49e46155d6ca527bc
+    ");
+    assert!(
+        !sentinel.exists(),
+        "the replaced build backend was executed"
+    );
+    assert_eq!(context.read("uv.lock"), locked);
+
+    Ok(())
+}
+
+/// A rejected source archive must not be persisted to the cache.
+#[cfg(feature = "test-universal")]
+#[tokio::test]
+async fn lock_sdist_url_rejected_archive_not_cached() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let server = MockServer::start().await;
+    let archive_path = "/files/demo_pkg-1.0.0.tar.gz";
+    let archive_url = format!("{}{archive_path}", server.uri());
+    let sentinel = context.temp_dir.child("backend-executed");
+    let trusted_archive = locked_source_archive("pass", "")?;
+    let replacement_archive = locked_source_archive(
+        r#"Path(os.environ["UV_LOCK_TEST_SENTINEL"]).write_text("executed\n")"#,
+        "",
+    )?;
+    let malformed_archive = b"not an archive";
+
+    Mock::given(method("GET"))
+        .and(path(archive_path))
+        .respond_with(ResponseTemplate::new(200).set_body_bytes(trusted_archive))
+        .mount(&server)
+        .await;
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(&formatdoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["demo-pkg @ {archive_url}"]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--no-cache"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+    let locked = context.read("uv.lock");
+
+    server.reset().await;
+    Mock::given(method("GET"))
+        .and(path(archive_path))
+        .respond_with(ResponseTemplate::new(200).set_body_bytes(replacement_archive))
+        .mount(&server)
+        .await;
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--locked")
+        .arg("--refresh")
+        .env("UV_LOCK_TEST_SENTINEL", sentinel.path()), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+      × Failed to download and build `demo-pkg @ http://[LOCALHOST]/files/demo_pkg-1.0.0.tar.gz`
+      ╰─▶ Hash mismatch for `demo-pkg @ http://[LOCALHOST]/files/demo_pkg-1.0.0.tar.gz`
+
+          Expected:
+            sha256:93703857ad8ea956f6661f1d78d445be4340afa15f8b87bf1f3a79621068847f
+
+          Computed:
+            sha256:883b65920e21bce11c2697819dab77eb70e18d810b2746f49e46155d6ca527bc
+    ");
+    assert!(
+        !sentinel.exists(),
+        "the replaced build backend was executed"
+    );
+    assert_eq!(context.read("uv.lock"), locked);
+    for entry in WalkDir::new(context.cache_dir.path()) {
+        let entry = entry?;
+        assert_ne!(
+            entry.file_name(),
+            "backend.py",
+            "the rejected archive was retained in the cache"
+        );
+        assert_ne!(
+            entry.file_name(),
+            "revision.http",
+            "the rejected archive was persisted to the cache"
+        );
+    }
+
+    // Malformed replacements fail immediately during extraction, before cache persistence.
+    server.reset().await;
+    Mock::given(method("GET"))
+        .and(path(archive_path))
+        .respond_with(ResponseTemplate::new(200).set_body_bytes(malformed_archive))
+        .mount(&server)
+        .await;
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--locked")
+        .arg("--refresh")
+        .env("UV_LOCK_TEST_SENTINEL", sentinel.path()), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+      × Failed to download and build `demo-pkg @ http://[LOCALHOST]/files/demo_pkg-1.0.0.tar.gz`
+      ├─▶ Failed to extract archive: demo-pkg @ http://[LOCALHOST]/files/demo_pkg-1.0.0.tar.gz
+      ├─▶ I/O operation failed during extraction
+      ╰─▶ Invalid gzip header
+    ");
+    assert!(
+        !sentinel.exists(),
+        "the replaced build backend was executed"
+    );
+    assert_eq!(context.read("uv.lock"), locked);
+    for entry in WalkDir::new(context.cache_dir.path()) {
+        let entry = entry?;
+        assert_ne!(
+            entry.file_name(),
+            "backend.py",
+            "the rejected archive was retained in the cache"
+        );
+        assert_ne!(
+            entry.file_name(),
+            "revision.http",
+            "the rejected archive was persisted to the cache"
+        );
+    }
+
+    Ok(())
+}
+
+/// Equivalent subdirectory spellings must retain the hash of an already-locked archive.
+#[cfg(feature = "test-universal")]
+#[tokio::test]
+async fn lock_sdist_url_equivalent_subdirectory_locked_hash_mismatch() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let server = MockServer::start().await;
+    let archive_path = "/files/demo_pkg-1.0.0.tar.gz";
+    let archive_url = format!("{}{archive_path}", server.uri());
+    let sentinel = context.temp_dir.child("backend-executed");
+    let trusted_archive = locked_source_archive("pass", "nested/")?;
+    let replacement_archive = locked_source_archive(
+        r#"Path(os.environ["UV_LOCK_TEST_SENTINEL"]).write_text("executed\n")"#,
+        "nested/",
+    )?;
+
+    Mock::given(method("GET"))
+        .and(path(archive_path))
+        .respond_with(ResponseTemplate::new(200).set_body_bytes(trusted_archive))
+        .mount(&server)
+        .await;
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(&formatdoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["demo-pkg @ {archive_url}#subdirectory=nested"]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--no-cache"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+    let locked = context.read("uv.lock");
+
+    // Change only the spelling of the already-locked source directory.
+    pyproject_toml.write_str(
+        &context
+            .read("pyproject.toml")
+            .replace("#subdirectory=nested", "#subdirectory=nested/../nested"),
+    )?;
+
+    server.reset().await;
+    Mock::given(method("GET"))
+        .and(path(archive_path))
+        .respond_with(ResponseTemplate::new(200).set_body_bytes(replacement_archive))
+        .mount(&server)
+        .await;
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--locked")
+        .arg("--refresh")
+        .env("UV_LOCK_TEST_SENTINEL", sentinel.path()), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+      × Failed to download and build `demo-pkg @ http://[LOCALHOST]/files/demo_pkg-1.0.0.tar.gz#subdirectory=nested/../nested`
+      ╰─▶ Hash mismatch for `demo-pkg @ http://[LOCALHOST]/files/demo_pkg-1.0.0.tar.gz#subdirectory=nested/../nested`
+
+          Expected:
+            sha256:09c631b3e8d48a04c4d7e3bc64d61dbc10a6b89131dffadd885eccb3ffa5e455
+
+          Computed:
+            sha256:4d8741dcbddac394ac2680d99589d36c9d8fd7b3b19665531de9cc02550ec5eb
+    ");
+    assert!(
+        !sentinel.exists(),
+        "the replaced build backend was executed"
+    );
+    assert_eq!(context.read("uv.lock"), locked);
+
+    Ok(())
+}
+
+/// Existing-lock validation and locked resolution must verify local source archives.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_sdist_path_locked_hash_mismatch() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let archive = context.temp_dir.child("demo_pkg-1.0.0.tar.gz");
+    let sentinel = context.temp_dir.child("backend-executed");
+    let trusted = locked_source_archive("pass", "")?;
+    let replacement = locked_source_archive(
+        r#"Path(os.environ["UV_LOCK_TEST_SENTINEL"]).write_text("executed\n")"#,
+        "",
+    )?;
+
+    archive.write_binary(&trusted)?;
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["demo-pkg"]
+
+        [tool.uv.sources]
+        demo-pkg = { path = "demo_pkg-1.0.0.tar.gz" }
+    "#})?;
+    uv_snapshot!(context.filters(), context.lock().arg("--no-cache"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+    let locked = context.read("uv.lock");
+
+    archive.write_binary(&replacement)?;
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--no-cache")
+        .env("UV_LOCK_TEST_SENTINEL", sentinel.path()), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Failed to generate package metadata for `demo-pkg==1.0.0 @ path+demo_pkg-1.0.0.tar.gz`
+      Caused by: Hash mismatch for `demo-pkg @ file://[TEMP_DIR]/demo_pkg-1.0.0.tar.gz`
+
+        Expected:
+          sha256:93703857ad8ea956f6661f1d78d445be4340afa15f8b87bf1f3a79621068847f
+
+        Computed:
+          sha256:883b65920e21bce11c2697819dab77eb70e18d810b2746f49e46155d6ca527bc
+    ");
+    assert!(!sentinel.exists(), "the locked backend was executed");
+
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--refresh").arg("--no-cache")
+        .env("UV_LOCK_TEST_SENTINEL", sentinel.path()), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+      × Failed to build `demo-pkg @ file://[TEMP_DIR]/demo_pkg-1.0.0.tar.gz`
+      ╰─▶ Hash mismatch for `demo-pkg @ file://[TEMP_DIR]/demo_pkg-1.0.0.tar.gz`
+
+          Expected:
+            sha256:93703857ad8ea956f6661f1d78d445be4340afa15f8b87bf1f3a79621068847f
+
+          Computed:
+            sha256:883b65920e21bce11c2697819dab77eb70e18d810b2746f49e46155d6ca527bc
+    ");
+    assert!(!sentinel.exists(), "the refreshed backend was executed");
+
+    assert_eq!(context.read("uv.lock"), locked);
+
+    // An explicitly unlocked upgrade can accept new archive contents.
+    uv_snapshot!(context.filters(), context.lock().arg("--upgrade-package").arg("demo-pkg").arg("--no-cache")
+        .env("UV_LOCK_TEST_SENTINEL", sentinel.path()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+    assert!(sentinel.exists(), "the upgraded backend was not executed");
+    assert_ne!(context.read("uv.lock"), locked);
+    Ok(())
+}
+
+/// A frozen sync must reject a replaced local archive before persisting it to the cache.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_sdist_path_rejected_archive_not_cached() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let archive = context.temp_dir.child("demo_pkg-1.0.0.tar.gz");
+    let sentinel = context.temp_dir.child("backend-executed");
+    let trusted = locked_source_archive("pass", "")?;
+    let replacement = locked_source_archive(
+        r#"Path(os.environ["UV_LOCK_TEST_SENTINEL"]).write_text("executed\n")"#,
+        "",
+    )?;
+
+    archive.write_binary(&trusted)?;
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["demo-pkg"]
+
+        [tool.uv.sources]
+        demo-pkg = { path = "demo_pkg-1.0.0.tar.gz" }
+    "#})?;
+    uv_snapshot!(context.filters(), context.lock().arg("--no-cache"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+    let locked = context.read("uv.lock");
+
+    archive.write_binary(&replacement)?;
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen")
+        .env("UV_LOCK_TEST_SENTINEL", sentinel.path()), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+      × Failed to build `demo-pkg @ file://[TEMP_DIR]/demo_pkg-1.0.0.tar.gz`
+      ╰─▶ Hash mismatch for `demo-pkg @ file://[TEMP_DIR]/demo_pkg-1.0.0.tar.gz`
+
+          Expected:
+            sha256:93703857ad8ea956f6661f1d78d445be4340afa15f8b87bf1f3a79621068847f
+
+          Computed:
+            sha256:883b65920e21bce11c2697819dab77eb70e18d810b2746f49e46155d6ca527bc
+
+    hint: `demo-pkg` was included because `project` (v0.1.0) depends on `demo-pkg`
+    ");
+    assert!(
+        !sentinel.exists(),
+        "the replacement build backend was executed"
+    );
+    assert_eq!(context.read("uv.lock"), locked);
+    for entry in WalkDir::new(context.cache_dir.path()) {
+        assert_ne!(
+            entry?.file_name(),
+            "backend.py",
+            "the rejected archive was retained in the cache"
+        );
+    }
+    Ok(())
+}
+
+/// Reusing a pruned source revision must not populate it with different archive contents.
+#[cfg(feature = "test-universal")]
+#[tokio::test]
+async fn lock_sdist_url_cache_heal_hash_mismatch() -> Result<()> {
+    let context = uv_test::test_context!("3.12")
+        .with_filtered_file_counts()
+        .with_filtered_sizes_and_units();
+    let server = MockServer::start().await;
+    let archive_path = "/files/demo_pkg-1.0.0.tar.gz";
+    let archive_url = format!("{}{archive_path}", server.uri());
+    let sentinel = context.temp_dir.child("backend-executed");
+    let trusted = locked_source_archive("pass", "")?;
+    let replacement = locked_source_archive(
+        r#"Path(os.environ["UV_LOCK_TEST_SENTINEL"]).write_text("executed\n")"#,
+        "",
+    )?;
+    Mock::given(method("GET"))
+        .and(path(archive_path))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .insert_header("cache-control", "max-age=31536000")
+                .set_body_bytes(trusted),
+        )
+        .mount(&server)
+        .await;
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&formatdoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["demo-pkg @ {archive_url}"]
+    "#})?;
+    uv_snapshot!(context.filters(), context.lock(), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    // Pruning retains the revision and metadata, but removes the extracted source tree.
+    uv_snapshot!(context.filters(), context.prune().arg("--ci"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Pruning cache at: [CACHE_DIR]/
+    Removed [N] files ([SIZE])
+    ");
+
+    server.reset().await;
+    Mock::given(method("GET"))
+        .and(path(archive_path))
+        .respond_with(ResponseTemplate::new(200).set_body_bytes(replacement))
+        .mount(&server)
+        .await;
+
+    // Installation must repair the source tree before it can build a wheel. The cached revision's
+    // hashes still apply, even though this command does not use the lockfile.
+    uv_snapshot!(context.filters(), context.pip_install().arg(&archive_url)
+        .env_remove(EnvVars::RUST_LOG)
+        .env("UV_LOCK_TEST_SENTINEL", sentinel.path()), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+      × Failed to download and build `demo-pkg @ http://[LOCALHOST]/files/demo_pkg-1.0.0.tar.gz`
+      ╰─▶ Attempted to re-extract the source distribution for `demo-pkg @ http://[LOCALHOST]/files/demo_pkg-1.0.0.tar.gz`, but the sha256 hash didn't match. Run `uv cache clean` to clear the cache.
+    ");
+    assert!(
+        !sentinel.exists(),
+        "the replacement build backend was executed"
+    );
+    for entry in WalkDir::new(context.cache_dir.path()) {
+        assert_ne!(
+            entry?.file_name(),
+            "backend.py",
+            "cache repair retained the replacement"
+        );
+    }
     Ok(())
 }
 
@@ -8321,6 +9685,971 @@ fn lock_relative_and_absolute_paths() -> Result<()> {
     Ok(())
 }
 
+/// Check path spelling for editable and non-editable sources in separate marker branches.
+#[test]
+fn lock_relative_and_absolute_paths_disjoint_markers() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let child = context.temp_dir.child("child");
+    child.child("src/child/__init__.py").touch()?;
+    child.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "child"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+    "#})?;
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&formatdoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["child"]
+
+        [tool.uv.sources]
+        child = [
+            {{ path = "child", editable = true, marker = "sys_platform == 'darwin'" }},
+            {{ path = '{}', editable = false, marker = "sys_platform != 'darwin'" }},
+        ]
+    "#,
+            child.path().display()
+        })?;
+
+    context.lock().assert().success();
+
+    let lock = context.read("uv.lock");
+    let sources = lock
+        .lines()
+        .filter(|line| line.contains("directory = ") || line.contains("editable = "))
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    // Each branch keeps its own path spelling in packages, dependencies, and metadata.
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(sources, @r#"
+        source = { directory = "[TEMP_DIR]/child" }
+        source = { editable = "child" }
+            { name = "child", version = "0.1.0", source = { directory = "[TEMP_DIR]/child" }, marker = "sys_platform != 'darwin'" },
+            { name = "child", version = "0.1.0", source = { editable = "child" }, marker = "sys_platform == 'darwin'" },
+            { name = "child", marker = "sys_platform != 'darwin'", directory = "[TEMP_DIR]/child" },
+            { name = "child", marker = "sys_platform == 'darwin'", editable = "child" },
+        "#);
+    });
+
+    context.lock().arg("--check").assert().success();
+
+    Ok(())
+}
+
+/// Poetry's generated URLs must not override authored relative or absolute source paths.
+///
+/// Note: Currently broken.
+/// See: <https://github.com/astral-sh/uv/issues/20477>
+#[test]
+fn lock_relative_transitive_poetry_paths() -> Result<()> {
+    let context = uv_test::test_context!("3.12").with_exclude_newer("2026-07-10T00:00:00Z");
+
+    let absolute_child = context.temp_dir.child("absolute-child");
+    let editable_child = context.temp_dir.child("editable-child");
+    let project = context.temp_dir.child("project");
+    project.child("pyproject.toml").write_str(&formatdoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["parent", "editable-child", "absolute-child"]
+
+        [tool.uv.sources]
+        parent = {{ path = "../parent", editable = true }}
+        editable-child = {{ path = "../editable-child", editable = true }}
+        absolute-child = {{ path = '{}' }}
+    "#,
+        absolute_child.path().display()
+    })?;
+
+    let parent = context.temp_dir.child("parent");
+    parent.child("parent/__init__.py").touch()?;
+    parent.child("pyproject.toml").write_str(indoc! {r#"
+        [tool.poetry]
+        name = "parent"
+        version = "0.1.0"
+        description = ""
+        packages = [{ include = "parent" }]
+
+        [tool.poetry.dependencies]
+        python = ">=3.12,<3.13"
+
+        [build-system]
+        requires = ["poetry-core"]
+        build-backend = "poetry.core.masonry.api"
+    "#})?;
+
+    absolute_child.child("absolute_child/__init__.py").touch()?;
+    absolute_child
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+            [project]
+            name = "absolute-child"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+
+            [build-system]
+            requires = ["hatchling"]
+            build-backend = "hatchling.build"
+        "#})?;
+
+    editable_child.child("editable_child/__init__.py").touch()?;
+    editable_child
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+            [project]
+            name = "editable-child"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+
+            [build-system]
+            requires = ["hatchling"]
+            build-backend = "hatchling.build"
+        "#})?;
+
+    context
+        .lock()
+        .current_dir(project.path())
+        .assert()
+        .success();
+
+    let lock = context.read("project/uv.lock");
+
+    parent.child("pyproject.toml").write_str(indoc! {r#"
+        [tool.poetry]
+        name = "parent"
+        version = "0.1.0"
+        description = ""
+        packages = [{ include = "parent" }]
+
+        [tool.poetry.dependencies]
+        python = ">=3.12,<3.13"
+        editable-child = { path = "../editable-child", develop = true }
+        absolute-child = { path = "../absolute-child" }
+
+        [build-system]
+        requires = ["poetry-core"]
+        build-backend = "poetry.core.masonry.api"
+    "#})?;
+
+    context
+        .lock()
+        .current_dir(project.path())
+        .assert()
+        .success();
+
+    // The root's sources must stay unchanged; Poetry's requirement paths should be relative.
+    let new_lock = context.read("project/uv.lock");
+    let diff = diff_snapshot(&lock, &new_lock, 3);
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(diff, @r#"
+        --- old
+        +++ new
+        @@ -13,12 +13,22 @@
+         [[package]]
+         name = "editable-child"
+         version = "0.1.0"
+        -source = { editable = "../editable-child" }
+        +source = { editable = "[TEMP_DIR]/editable-child" }
+
+         [[package]]
+         name = "parent"
+         version = "0.1.0"
+         source = { editable = "../parent" }
+        +dependencies = [
+        +    { name = "absolute-child" },
+        +    { name = "editable-child" },
+        +]
+        +
+        +[package.metadata]
+        +requires-dist = [
+        +    { name = "absolute-child", directory = "[TEMP_DIR]/absolute-child" },
+        +    { name = "editable-child", directory = "[TEMP_DIR]/editable-child" },
+        +]
+
+         [[package]]
+         name = "project"
+        "#);
+    });
+
+    // Cached Poetry metadata must preserve the same paths when the lockfile is recreated.
+    fs_err::remove_file(project.child("uv.lock").path())?;
+    context
+        .lock()
+        .current_dir(project.path())
+        .assert()
+        .success();
+    assert_eq!(new_lock, context.read("project/uv.lock"));
+
+    project.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["parent"]
+
+        [tool.uv.sources]
+        parent = { path = "../parent", editable = true }
+    "#})?;
+
+    context
+        .lock()
+        .current_dir(project.path())
+        .assert()
+        .success();
+
+    // Without direct sources, both children should use relative, non-editable paths.
+    let backend_only_lock = context.read("project/uv.lock");
+    let diff = diff_snapshot(&new_lock, &backend_only_lock, 3);
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(diff, @r#"
+        --- old
+        +++ new
+        @@ -13,7 +13,7 @@
+         [[package]]
+         name = "editable-child"
+         version = "0.1.0"
+        -source = { editable = "[TEMP_DIR]/editable-child" }
+        +source = { directory = "[TEMP_DIR]/editable-child" }
+
+         [[package]]
+         name = "parent"
+        @@ -35,14 +35,8 @@
+         version = "0.1.0"
+         source = { virtual = "." }
+         dependencies = [
+        -    { name = "absolute-child" },
+        -    { name = "editable-child" },
+             { name = "parent" },
+         ]
+
+         [package.metadata]
+        -requires-dist = [
+        -    { name = "absolute-child", directory = "[TEMP_DIR]/absolute-child" },
+        -    { name = "editable-child", editable = "../editable-child" },
+        -    { name = "parent", editable = "../parent" },
+        -]
+        +requires-dist = [{ name = "parent", editable = "../parent" }]
+        "#);
+    });
+
+    Ok(())
+}
+
+/// Check workspace paths when a dependency reports an equivalent absolute file URL.
+///
+/// Note: Currently broken.
+/// See: <https://github.com/astral-sh/uv/issues/20477>
+#[test]
+fn lock_relative_transitive_workspace_paths() -> Result<()> {
+    let context = uv_test::test_context!("3.12").with_exclude_newer("2026-07-10T00:00:00Z");
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [tool.uv.workspace]
+        members = ["member"]
+
+        [tool.uv.sources]
+        intermediate = { path = "intermediate", editable = true }
+        shared-dependency = { path = "shared-dependency" }
+    "#})?;
+
+    let member = context.temp_dir.child("member");
+    member.child("member/__init__.py").touch()?;
+    member.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "member"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["intermediate", "shared-dependency"]
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+    "#})?;
+
+    let shared_dependency = context.temp_dir.child("shared-dependency");
+
+    let intermediate = context.temp_dir.child("intermediate");
+    intermediate.child("intermediate/__init__.py").touch()?;
+    intermediate.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "intermediate"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+    "#})?;
+
+    shared_dependency
+        .child("shared_dependency/__init__.py")
+        .touch()?;
+    shared_dependency
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+            [project]
+            name = "shared-dependency"
+            version = "0.1.0"
+
+            [build-system]
+            requires = ["hatchling"]
+            build-backend = "hatchling.build"
+        "#})?;
+
+    context.lock().assert().success();
+
+    let lock = context.read("uv.lock");
+
+    let shared_dependency_alias = context.temp_dir.child("shared-dependency-alias");
+    create_symlink(shared_dependency.path(), shared_dependency_alias.path())?;
+    let shared_dependency_url = Url::from_file_path(shared_dependency_alias.path())
+        .map_err(|()| anyhow::anyhow!("shared dependency path is not a valid file URL"))?;
+
+    intermediate
+        .child("pyproject.toml")
+        .write_str(&formatdoc! {r#"
+        [project]
+        name = "intermediate"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["shared-dependency @ {shared_dependency_url}"]
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+    "#})?;
+
+    context.lock().assert().success();
+
+    // Keep the workspace path and the intermediate's metadata alias relative to the lockfile.
+    let new_lock = context.read("uv.lock");
+    let diff = diff_snapshot(&lock, &new_lock, 3);
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(diff, @r#"
+        --- old
+        +++ new
+        @@ -14,6 +14,12 @@
+         name = "intermediate"
+         version = "0.1.0"
+         source = { editable = "intermediate" }
+        +dependencies = [
+        +    { name = "shared-dependency" },
+        +]
+        +
+        +[package.metadata]
+        +requires-dist = [{ name = "shared-dependency", directory = "[TEMP_DIR]/shared-dependency-alias" }]
+
+         [[package]]
+         name = "member"
+        @@ -33,4 +39,4 @@
+         [[package]]
+         name = "shared-dependency"
+         version = "0.1.0"
+        -source = { directory = "shared-dependency" }
+        +source = { directory = "[TEMP_DIR]/shared-dependency-alias" }
+        "#);
+    });
+
+    // The recorded alias must still match the intermediate's unchanged metadata.
+    context
+        .lock()
+        .arg("--check")
+        .arg("--offline")
+        .arg("--no-cache")
+        .assert()
+        .success();
+
+    Ok(())
+}
+
+/// Check local archive paths when a dependency reports equivalent absolute file URLs.
+///
+/// Note: Currently broken.
+/// See: <https://github.com/astral-sh/uv/issues/20477>
+#[test]
+fn lock_relative_transitive_archive_paths() -> Result<()> {
+    let context = uv_test::test_context!("3.13").with_exclude_newer("2026-07-10T00:00:00Z");
+
+    let wheel = context.temp_dir.child("wheels/ok-1.0.0-py3-none-any.whl");
+    context.temp_dir.child("wheels").create_dir_all()?;
+    fs_err::copy(
+        context
+            .workspace_root
+            .join("test/links/ok-1.0.0-py3-none-any.whl"),
+        wheel.path(),
+    )?;
+    let wheel_url = Url::from_file_path(wheel.path())
+        .map_err(|()| anyhow::anyhow!("wheel path is not a valid file URL"))?;
+
+    let source_archive = context
+        .temp_dir
+        .child("archives/basic_package-0.1.0.tar.gz");
+    context.temp_dir.child("archives").create_dir_all()?;
+    fs_err::copy(
+        context
+            .workspace_root
+            .join("test/links/basic_package-0.1.0.tar.gz"),
+        source_archive.path(),
+    )?;
+    let source_archive_url = Url::from_file_path(source_archive.path())
+        .map_err(|()| anyhow::anyhow!("source archive path is not a valid file URL"))?;
+
+    let project = context.temp_dir.child("project");
+    project.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.13"
+        dependencies = ["parent", "ok", "basic-package"]
+
+        [tool.uv.sources]
+        parent = { path = "../parent", editable = true }
+        ok = { path = "../wheels/ok-1.0.0-py3-none-any.whl" }
+        basic-package = { path = "../archives/basic_package-0.1.0.tar.gz" }
+    "#})?;
+
+    let parent = context.temp_dir.child("parent");
+    parent.child("parent/__init__.py").touch()?;
+    parent.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "parent"
+        version = "0.1.0"
+        requires-python = ">=3.13"
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+    "#})?;
+
+    context
+        .lock()
+        .current_dir(project.path())
+        .assert()
+        .success();
+
+    let lock = context.read("project/uv.lock");
+
+    parent.child("pyproject.toml").write_str(&formatdoc! {r#"
+        [project]
+        name = "parent"
+        version = "0.1.0"
+        requires-python = ">=3.13"
+        dependencies = [
+            "ok @ {wheel_url}",
+            "basic-package @ {source_archive_url}",
+        ]
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+    "#})?;
+
+    context
+        .lock()
+        .current_dir(project.path())
+        .assert()
+        .success();
+
+    // Root-selected wheel and sdist paths must stay relative in packages and metadata.
+    let new_lock = context.read("project/uv.lock");
+    let diff = diff_snapshot(&lock, &new_lock, 3);
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(diff, @r#"
+        --- old
+        +++ new
+        @@ -8,13 +8,13 @@
+         [[package]]
+         name = "basic-package"
+         version = "0.1.0"
+        -source = { path = "../archives/basic_package-0.1.0.tar.gz" }
+        +source = { path = "[TEMP_DIR]/archives/basic_package-0.1.0.tar.gz" }
+         sdist = { hash = "sha256:af478ff91ec60856c99a540b8df13d756513bebb65bc301fb27e0d1f974532b4" }
+
+         [[package]]
+         name = "ok"
+         version = "1.0.0"
+        -source = { path = "../wheels/ok-1.0.0-py3-none-any.whl" }
+        +source = { path = "[TEMP_DIR]/wheels/ok-1.0.0-py3-none-any.whl" }
+         wheels = [
+             { filename = "ok-1.0.0-py3-none-any.whl", hash = "sha256:79f0b33e6ce1e09eaa1784c8eee275dfe84d215d9c65c652f07c18e85fdaac5f" },
+         ]
+        @@ -23,6 +23,16 @@
+         name = "parent"
+         version = "0.1.0"
+         source = { editable = "../parent" }
+        +dependencies = [
+        +    { name = "basic-package" },
+        +    { name = "ok" },
+        +]
+        +
+        +[package.metadata]
+        +requires-dist = [
+        +    { name = "basic-package", path = "[TEMP_DIR]/archives/basic_package-0.1.0.tar.gz" },
+        +    { name = "ok", path = "[TEMP_DIR]/wheels/ok-1.0.0-py3-none-any.whl" },
+        +]
+
+         [[package]]
+         name = "project"
+        "#);
+    });
+
+    project.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.13"
+        dependencies = ["parent"]
+
+        [tool.uv.sources]
+        parent = { path = "../parent", editable = true }
+    "#})?;
+
+    context
+        .lock()
+        .current_dir(project.path())
+        .assert()
+        .success();
+
+    let backend_only_lock = context.read("project/uv.lock");
+    let archive_paths = backend_only_lock
+        .lines()
+        .filter(|line| line.contains("path = "))
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    // Metadata-only wheel and sdist paths must be relative in packages and requirements.
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(archive_paths, @r#"
+        source = { path = "[TEMP_DIR]/archives/basic_package-0.1.0.tar.gz" }
+        source = { path = "[TEMP_DIR]/wheels/ok-1.0.0-py3-none-any.whl" }
+            { name = "basic-package", path = "[TEMP_DIR]/archives/basic_package-0.1.0.tar.gz" },
+            { name = "ok", path = "[TEMP_DIR]/wheels/ok-1.0.0-py3-none-any.whl" },
+        "#);
+    });
+
+    Ok(())
+}
+
+/// Preserve local path intent across configured, workspace, and backend metadata.
+///
+/// Note: Currently broken: backend paths stay absolute and override the configured source.
+#[test]
+fn lock_relative_inactive_dependency_metadata_paths() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let child = context.temp_dir.child("child");
+    child.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "child"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+    "#})?;
+    let child_url = Url::from_file_path(child.path())
+        .map_err(|()| anyhow::anyhow!("child path is not a valid file URL"))?;
+
+    let active_child = context.temp_dir.child("active-child");
+    active_child.child("active_child/__init__.py").touch()?;
+    active_child.child("pyproject.toml").write_str(indoc! {r#"
+            [project]
+            name = "active-child"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+
+            [build-system]
+            requires = ["hatchling"]
+            build-backend = "hatchling.build"
+        "#})?;
+    let active_child_url = Url::from_file_path(active_child.path())
+        .map_err(|()| anyhow::anyhow!("active child path is not a valid file URL"))?;
+
+    let relative_child = context.temp_dir.child("relative-child");
+    relative_child.child("relative_child/__init__.py").touch()?;
+    relative_child
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+            [project]
+            name = "relative-child"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+
+            [build-system]
+            requires = ["hatchling"]
+            build-backend = "hatchling.build"
+        "#})?;
+    let relative_child_url = Url::from_file_path(relative_child.path())
+        .map_err(|()| anyhow::anyhow!("relative child path is not a valid file URL"))?;
+    let relative_child_alias = context.temp_dir.child("relative-child-alias");
+    create_symlink(relative_child.path(), relative_child_alias.path())?;
+    let relative_child_alias_url = Url::from_file_path(relative_child_alias.path())
+        .map_err(|()| anyhow::anyhow!("relative child alias is not a valid file URL"))?;
+
+    // Discover the ordinary parent through configured metadata to keep the baseline deterministic.
+    let parent = context.temp_dir.child("parent");
+    let parent_url = Url::from_file_path(parent.path())
+        .map_err(|()| anyhow::anyhow!("parent path is not a valid file URL"))?;
+
+    let project = indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "authored-parent",
+            "member",
+        ]
+
+        [tool.uv.workspace]
+        members = ["member"]
+
+        [tool.uv.sources]
+        authored-parent = { path = "authored-parent" }
+        member = { workspace = true }
+
+        [[tool.uv.dependency-metadata]]
+        name = "authored-parent"
+        version = "0.1.0"
+    "#};
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(&formatdoc! {r"
+        {project}
+        requires-dist = []
+    "})?;
+
+    context
+        .temp_dir
+        .child("authored-parent/pyproject.toml")
+        .write_str(indoc! {r#"
+            [project]
+            name = "authored-parent"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+            dynamic = ["dependencies"]
+        "#})?;
+
+    let member = context.temp_dir.child("member");
+    member.child("member/__init__.py").touch()?;
+    member.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "member"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+    "#})?;
+
+    parent.child("parent/__init__.py").touch()?;
+    parent.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "parent"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+    "#})?;
+
+    context.lock().assert().success();
+
+    let baseline_lock = context.read("uv.lock");
+
+    pyproject_toml.write_str(&formatdoc! {r#"
+        {project}
+        requires-dist = [
+            "active-child @ {active_child_url}",
+            "child @ {child_url}; python_version < '0'",
+            "parent @ {parent_url}",
+            "relative-child @ ${{UV_TEST_CONFIGURED_CHILD_URL}}",
+        ]
+    "#})?;
+
+    member.child("pyproject.toml").write_str(&formatdoc! {r#"
+        [project]
+        name = "member"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["child @ {child_url}; python_version < '0'"]
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+    "#})?;
+
+    context
+        .lock()
+        .env("UV_TEST_CONFIGURED_CHILD_URL", relative_child_url.as_str())
+        .assert()
+        .success();
+
+    let lock = context.read("uv.lock");
+    let diff = diff_snapshot(&baseline_lock, &lock, 3);
+
+    // Explicit absolute inputs, including inactive requirements, must stay absolute.
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(diff, @r#"
+        --- old
+        +++ new
+        @@ -14,17 +14,44 @@
+         [[manifest.dependency-metadata]]
+         name = "authored-parent"
+         version = "0.1.0"
+        +requires-dist = ["active-child @ file://[TEMP_DIR]/active-child", "child @ file://[TEMP_DIR]/child ; python_full_version < '0'", "parent @ file://[TEMP_DIR]/parent", "relative-child @ file://[TEMP_DIR]/relative-child"]
+        +
+        +[[package]]
+        +name = "active-child"
+        +version = "0.1.0"
+        +source = { directory = "[TEMP_DIR]/active-child" }
+
+         [[package]]
+         name = "authored-parent"
+         version = "0.1.0"
+         source = { directory = "authored-parent" }
+        +dependencies = [
+        +    { name = "active-child" },
+        +    { name = "parent" },
+        +    { name = "relative-child" },
+        +]
+        +
+        +[package.metadata]
+        +requires-dist = [
+        +    { name = "active-child", directory = "[TEMP_DIR]/active-child" },
+        +    { name = "child", marker = "python_full_version < '0'", directory = "[TEMP_DIR]/child" },
+        +    { name = "parent", directory = "[TEMP_DIR]/parent" },
+        +    { name = "relative-child", directory = "relative-child" },
+        +]
+
+         [[package]]
+         name = "member"
+         version = "0.1.0"
+         source = { editable = "member" }
+
+        +[package.metadata]
+        +requires-dist = [{ name = "child", marker = "python_full_version < '0'", directory = "[TEMP_DIR]/child" }]
+        +
+        +[[package]]
+        +name = "parent"
+        +version = "0.1.0"
+        +source = { directory = "[TEMP_DIR]/parent" }
+        +
+         [[package]]
+         name = "project"
+         version = "0.1.0"
+        @@ -39,3 +66,8 @@
+             { name = "authored-parent", directory = "authored-parent" },
+             { name = "member", editable = "member" },
+         ]
+        +
+        +[[package]]
+        +name = "relative-child"
+        +version = "0.1.0"
+        +source = { directory = "relative-child" }
+        "#);
+    });
+
+    parent.child("pyproject.toml").write_str(&formatdoc! {r#"
+        [project]
+        name = "parent"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["relative-child @ {relative_child_alias_url}"]
+
+        [project.optional-dependencies]
+        unused = ["child @ {child_url}"]
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+    "#})?;
+
+    context
+        .lock()
+        .env("UV_TEST_CONFIGURED_CHILD_URL", relative_child_url.as_str())
+        .assert()
+        .success();
+
+    let new_lock = context.read("uv.lock");
+    let diff = diff_snapshot(&lock, &new_lock, 3);
+
+    // Keep the configured `relative-child` source unchanged. Backend requirements should use
+    // `relative-child-alias` and `child`, both relative to the lockfile.
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(diff, @r#"
+        --- old
+        +++ new
+        @@ -51,6 +51,16 @@
+         name = "parent"
+         version = "0.1.0"
+         source = { directory = "[TEMP_DIR]/parent" }
+        +dependencies = [
+        +    { name = "relative-child" },
+        +]
+        +
+        +[package.metadata]
+        +requires-dist = [
+        +    { name = "child", marker = "extra == 'unused'", directory = "[TEMP_DIR]/child" },
+        +    { name = "relative-child", directory = "[TEMP_DIR]/relative-child-alias" },
+        +]
+        +provides-extras = ["unused"]
+
+         [[package]]
+         name = "project"
+        @@ -70,4 +80,4 @@
+         [[package]]
+         name = "relative-child"
+         version = "0.1.0"
+        -source = { directory = "relative-child" }
+        +source = { directory = "[TEMP_DIR]/relative-child-alias" }
+        "#);
+    });
+
+    Ok(())
+}
+
+/// Ignored metadata overrides must not make backend paths appear user-authored.
+///
+/// Note: Currently broken: backend paths stay absolute when configured metadata is ignored.
+#[test]
+fn lock_ignored_dependency_metadata_paths() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let active_child = context.temp_dir.child("active-child");
+    active_child.child("src/active_child/__init__.py").touch()?;
+    active_child.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "active-child"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+    "#})?;
+    let inactive_child = context.temp_dir.child("inactive-child");
+    inactive_child
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "inactive-child"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+    "#})?;
+    let active_child_url = Url::from_file_path(active_child.path())
+        .map_err(|()| anyhow::anyhow!("active child path is not a valid file URL"))?;
+    let inactive_child_url = Url::from_file_path(inactive_child.path())
+        .map_err(|()| anyhow::anyhow!("inactive child path is not a valid file URL"))?;
+
+    let parent = context.temp_dir.child("parent");
+    parent.child("src/parent/__init__.py").touch()?;
+    parent.child("pyproject.toml").write_str(&formatdoc! {r#"
+        [project]
+        name = "parent"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "active-child @ {active_child_url}",
+            "inactive-child @ {inactive_child_url}; python_version < '0'",
+        ]
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+    "#})?;
+
+    let project = indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["parent"]
+
+        [tool.uv.sources]
+        parent = { path = "parent" }
+    "#};
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(&formatdoc! {r#"
+        {project}
+
+        [[tool.uv.dependency-metadata]]
+        name = "parent"
+        requires-dist = []
+    "#})?;
+
+    let child_paths = |lock: &str| {
+        lock.lines()
+            .filter(|line| line.contains("directory = ") && line.contains("child"))
+            .collect::<Vec<_>>()
+            .join("\n")
+    };
+
+    context.lock().assert().success();
+    let paths = child_paths(&context.read("uv.lock"));
+
+    // Active and inactive backend paths stay relative when metadata overrides are ignored.
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(paths, @r#"
+        source = { directory = "[TEMP_DIR]/active-child" }
+            { name = "active-child", directory = "[TEMP_DIR]/active-child" },
+            { name = "inactive-child", marker = "python_full_version < '0'", directory = "[TEMP_DIR]/inactive-child" },
+        "#);
+    });
+
+    // Multiple entries are also unusable before the directory's version is known.
+    pyproject_toml.write_str(&formatdoc! {r#"
+        {project}
+
+        [[tool.uv.dependency-metadata]]
+        name = "parent"
+        version = "0.1.0"
+        requires-dist = []
+
+        [[tool.uv.dependency-metadata]]
+        name = "parent"
+        version = "0.2.0"
+        requires-dist = []
+    "#})?;
+    fs_err::remove_file(context.temp_dir.child("uv.lock").path())?;
+    context.lock().assert().success();
+    assert_eq!(paths, child_paths(&context.read("uv.lock")));
+
+    Ok(())
+}
+
 /// Check PEP 508 URL handling when they contain variables
 #[cfg(feature = "test-universal")]
 #[test]
@@ -9624,125 +11953,6 @@ async fn lock_index_hash_algorithm_missing() -> Result<()> {
     warning: Setting `hash-algorithm` on configured indexes is experimental and may change without warning. Pass `--preview-features index-hash-algorithm` to disable this warning.
     error: The index `http://[LOCALHOST]/simple` requires `sha256` hashes, but `basic_package-0.1.0-py3-none-any.whl` does not provide one
     ");
-
-    Ok(())
-}
-
-/// Lock with an index which serves zstd-compressed wheels.
-#[cfg(feature = "test-universal")]
-#[tokio::test]
-async fn lock_zstd_wheel() -> Result<()> {
-    let context = uv_test::test_context!("3.13");
-    let server = MockServer::start().await;
-
-    // Copy the wheel to serve it
-    let wheel_path = context
-        .temp_dir
-        .child("basic_package-0.1.0-py3-none-any.whl");
-    fs_err::copy(
-        context
-            .workspace_root
-            .join("test/links/basic_package-0.1.0-py3-none-any.whl"),
-        &wheel_path,
-    )?;
-
-    let wheel_url = format!(
-        "{}/files/basic_package-0.1.0-py3-none-any.whl",
-        server.uri()
-    );
-
-    // Serve the wheel file
-    Mock::given(method("GET"))
-        .and(path("/files/basic_package-0.1.0-py3-none-any.whl"))
-        .respond_with(ResponseTemplate::new(200).set_body_bytes(fs_err::read(&wheel_path)?))
-        .mount(&server)
-        .await;
-
-    // JSON API response with zstd metadata
-    let simple_index = json!({
-        "meta": {
-            "api-version": "1.1"
-        },
-        "name": "basic-package",
-        "files": [{
-            "filename": "basic_package-0.1.0-py3-none-any.whl",
-            "url": wheel_url,
-            "hashes": {
-                "sha256": "7b6229db79b5800e4e98a351b5628c1c8a944533a2d428aeeaa7275a30d4ea82"
-            },
-            "size": 1548,
-            "zstd": {
-                "hashes": {
-                    "sha256": "21c09ddf899e2ecc0a3d0a0ae8fb44ba50b839b899a0db47f5d30c5cc55e60c4"
-                },
-                "size": 786
-            }
-        }]
-    });
-
-    Mock::given(method("GET"))
-        .and(path("/simple/basic-package/"))
-        .respond_with(ResponseTemplate::new(200).set_body_raw(
-            simple_index.to_string().into_bytes(),
-            "application/vnd.pyx.simple.v1+json",
-        ))
-        .mount(&server)
-        .await;
-
-    let pyproject_toml = context.temp_dir.child("pyproject.toml");
-    pyproject_toml.write_str(&formatdoc! { r#"
-        [project]
-        name = "project"
-        version = "0.1.0"
-        requires-python = ">=3.13"
-        dependencies = ["basic-package"]
-
-        [tool.uv.sources]
-        basic-package = {{ index = "test-registry" }}
-
-        [[tool.uv.index]]
-        name = "test-registry"
-        url = "{}/simple"
-        "#,
-        server.uri()
-    })?;
-
-    uv_snapshot!(context.filters(), context.lock().env_remove(EnvVars::UV_EXCLUDE_NEWER), @"
-    exit_code: 0 (success)
-    ----- stderr -----
-    Resolved 2 packages in [TIME]
-    ");
-
-    let lock = context.read("uv.lock");
-    insta::with_settings!({
-        filters => context.filters(),
-    }, {
-        assert_snapshot!(
-            lock, @r#"
-        version = 1
-        revision = 3
-        requires-python = ">=3.13"
-
-        [[package]]
-        name = "basic-package"
-        version = "0.1.0"
-        source = { registry = "http://[LOCALHOST]/simple" }
-        wheels = [
-            { url = "http://[LOCALHOST]/files/basic_package-0.1.0-py3-none-any.whl", hash = "sha256:7b6229db79b5800e4e98a351b5628c1c8a944533a2d428aeeaa7275a30d4ea82", size = 1548, zstd = { hash = "sha256:21c09ddf899e2ecc0a3d0a0ae8fb44ba50b839b899a0db47f5d30c5cc55e60c4", size = 786 } },
-        ]
-
-        [[package]]
-        name = "project"
-        version = "0.1.0"
-        source = { virtual = "." }
-        dependencies = [
-            { name = "basic-package" },
-        ]
-
-        [package.metadata]
-        requires-dist = [{ name = "basic-package", index = "http://[LOCALHOST]/simple" }]
-        "#);
-    });
 
     Ok(())
 }
@@ -16119,12 +18329,168 @@ fn check_unformatted_lock() -> Result<()> {
     Ok(())
 }
 
-/// This checks that markers that normalize to 'false', which are serialized
-/// to the lockfile as `python_full_version < '0'`, get read back as false.
-/// Otherwise `uv lock --check` will always fail.
+/// Checks that a later `exclude-newer` cutoff does not invalidate a lock until a refresh occurs,
+/// while a more restrictive cutoff still requires an update.
 #[cfg(feature = "test-universal")]
 #[test]
-fn normalize_false_marker_dependency_groups() -> Result<()> {
+fn lock_reuses_newer_exclude_newer_timestamp() -> Result<()> {
+    let context = uv_test::test_context!("3.12").with_exclude_newer("2024-03-25T00:00:00Z");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.11"
+        dependencies = []
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+
+    let lock = context.read("uv.lock");
+
+    uv_snapshot!(context.filters(), context.lock()
+        .env(EnvVars::UV_EXCLUDE_NEWER, "2024-03-26T00:00:00Z")
+        .arg("--check"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+
+    uv_snapshot!(context.filters(), context.lock()
+        .env(EnvVars::UV_EXCLUDE_NEWER, "2024-03-24T00:00:00Z")
+        .arg("--check"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Resolving despite existing lockfile due to change of exclude newer timestamp from `2024-03-25T00:00:00Z` to `2024-03-24T00:00:00Z`
+    Resolved 1 package in [TIME]
+    error: The lockfile at `uv.lock` needs to be updated, but `--check` was provided.
+
+    hint: To update the lockfile, run `uv lock`.
+    ");
+
+    uv_snapshot!(context.filters(), context.lock()
+        .env(EnvVars::UV_EXCLUDE_NEWER, "2024-03-26T00:00:00Z"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+
+    assert_eq!(context.read("uv.lock"), lock);
+
+    uv_snapshot!(context.filters(), context.lock()
+        .env(EnvVars::UV_EXCLUDE_NEWER, "2024-03-26T00:00:00Z")
+        .arg("--refresh"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+
+    assert_snapshot!(context.read("uv.lock"), @r#"
+    version = 1
+    revision = 3
+    requires-python = ">=3.11"
+
+    [options]
+    exclude-newer = "2024-03-26T00:00:00Z"
+
+    [[package]]
+    name = "project"
+    version = "0.1.0"
+    source = { virtual = "." }
+    "#);
+
+    Ok(())
+}
+
+/// Checks that compatible global and package-specific cutoffs and disabling a package cutoff do
+/// not mask a more restrictive package-specific `exclude-newer` cutoff.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_check_allows_relaxed_exclude_newer_package() -> Result<()> {
+    let context = uv_test::test_context!("3.12").with_exclude_newer("2024-03-25T00:00:00Z");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.11"
+        dependencies = []
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--exclude-newer-package")
+        .arg("project=2024-03-25T00:00:00Z"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+
+    // Exempting `project` from the cutoff relaxes the constraint, so the existing lockfile remains
+    // valid.
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--exclude-newer-package")
+        .arg("project=false")
+        .arg("--check"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+
+    // Exempting another package does not change the cutoff for `project`, so the existing lockfile
+    // remains valid.
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--exclude-newer-package")
+        .arg("project=2024-03-25T00:00:00Z")
+        .arg("--exclude-newer-package")
+        .arg("iniconfig=false")
+        .arg("--check"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+
+    uv_snapshot!(context.filters(), context.lock()
+        .env(EnvVars::UV_EXCLUDE_NEWER, "2024-03-26T00:00:00Z")
+        .arg("--exclude-newer-package")
+        .arg("project=2024-03-26T00:00:00Z")
+        .arg("--check"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+
+    uv_snapshot!(context.filters(), context.lock()
+        .env(EnvVars::UV_EXCLUDE_NEWER, "2024-03-26T00:00:00Z")
+        .arg("--exclude-newer-package")
+        .arg("project=2024-03-24T00:00:00Z")
+        .arg("--check"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Resolving despite existing lockfile due to change of exclude newer timestamp from `2024-03-25T00:00:00Z` to `2024-03-24T00:00:00Z` for package `project`
+    Resolved 1 package in [TIME]
+    error: The lockfile at `uv.lock` needs to be updated, but `--check` was provided.
+
+    hint: To update the lockfile, run `uv lock`.
+    ");
+
+    Ok(())
+}
+
+/// Checks that relaxing a package-specific cutoff does not prevent `--upgrade` from upgrading the
+/// package.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_upgrade_with_relaxed_exclude_newer_package() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
@@ -16134,12 +18500,58 @@ fn normalize_false_marker_dependency_groups() -> Result<()> {
         name = "project"
         version = "0.1.0"
         requires-python = ">=3.11"
-        [dependency-groups]
-        dev = [
-            "pytest;python_full_version>'3.8' and python_full_version<'3.6'"
-        ]
+        dependencies = ["idna"]
         "#,
     )?;
+
+    // Lock `idna` against a restrictive package-specific cutoff.
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--exclude-newer-package")
+        .arg("idna=2022-04-04T12:00:00Z"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    // Relaxing the cutoff must not prevent `--upgrade` from discarding the locked version.
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--exclude-newer-package")
+        .arg("idna=false")
+        .arg("--upgrade"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Updated idna v3.3 -> v3.6
+    ");
+
+    Ok(())
+}
+
+/// This checks that markers that normalize to 'false', which are serialized
+/// to the lockfile as `python_full_version < '0'`, get read back as false.
+/// Otherwise `uv lock --check` will always fail.
+#[cfg(feature = "test-universal")]
+#[test]
+fn normalize_false_marker_dependency_groups() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let local = context.temp_dir.child("local");
+    local.create_dir_all()?;
+    let local_url = Url::from_file_path(local.path())
+        .map_err(|()| anyhow::anyhow!("local path is not a valid file URL"))?;
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(&formatdoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.11"
+        [dependency-groups]
+        dev = [
+            "pytest;python_full_version>'3.8' and python_full_version<'3.6'",
+            "local @ {local_url} ; python_full_version>'3.8' and python_full_version<'3.6'",
+        ]
+    "#})?;
 
     uv_snapshot!(context.filters(), context.lock(), @"
     exit_code: 0 (success)
@@ -16175,7 +18587,10 @@ fn normalize_false_marker_dependency_groups() -> Result<()> {
         [package.metadata]
 
         [package.metadata.requires-dev]
-        dev = [{ name = "pytest", marker = "python_version < '0'" }]
+        dev = [
+            { name = "local", marker = "python_version < '0'", directory = "[TEMP_DIR]/local" },
+            { name = "pytest", marker = "python_version < '0'" },
+        ]
         "#
         );
     });
@@ -25469,10 +27884,12 @@ fn lock_strip_fragment() -> Result<()> {
     Resolved 2 packages in [TIME]
     ");
 
-    // Install from the lockfile.
+    // Locked validation can read only the wheel metadata. Install from the fragment-free URL in
+    // the lockfile, preparing the wheel if it was only cached under the original URL.
     uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @"
     exit_code: 0 (success)
     ----- stderr -----
+    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + iniconfig==2.0.0 (from https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl)
     ");
@@ -36393,6 +38810,222 @@ fn lock_exclude_newer_package_disable() -> Result<()> {
     Ok(())
 }
 
+/// Test the ordering of package-specific cutoffs in the lockfile.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_exclude_newer_package_order() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context
+        .lock()
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .arg("--offline")
+        .arg("--exclude-newer-package")
+        .arg("tqdm=2022-09-04T00:00:00Z")
+        .arg("--exclude-newer-package")
+        .arg("requests=2022-04-04T12:00:00Z"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(context.read("uv.lock"), @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+
+        [options]
+
+        [options.exclude-newer-package]
+        requests = "2022-04-04T12:00:00Z"
+        tqdm = "2022-09-04T00:00:00Z"
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        "#);
+    });
+
+    Ok(())
+}
+
+/// Test that exclude-newer-package settings for packages outside the resolution are ignored.
+#[test]
+fn lock_exclude_newer_package_absent() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context
+        .lock()
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .arg("--exclude-newer-package")
+        .arg("idna=false"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(context.read("uv.lock"), @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+
+        [options]
+
+        [options.exclude-newer-package]
+        idna = false
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        "#);
+    });
+
+    // Changing an irrelevant package-specific setting from `false` to a timestamp does not
+    // invalidate the lock.
+    uv_snapshot!(context.filters(), context
+        .lock()
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .arg("--locked")
+        .arg("--exclude-newer-package")
+        .arg("idna=2022-04-04T12:00:00Z"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+
+    // Nor does removing the irrelevant setting.
+    uv_snapshot!(context.filters(), context
+        .lock()
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .arg("--locked"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+
+    // Recreate the lock with a global timestamp and a package-specific exemption.
+    fs_err::remove_file(context.temp_dir.child("uv.lock"))?;
+    uv_snapshot!(context.filters(), context
+        .lock()
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .arg("--exclude-newer")
+        .arg("2022-04-04T12:00:00Z")
+        .arg("--exclude-newer-package")
+        .arg("idna=false"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+
+    // Inverting the settings still invalidates the lock because the global setting is relevant.
+    uv_snapshot!(context.filters(), context
+        .lock()
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .arg("--locked")
+        .arg("--exclude-newer")
+        .arg("false")
+        .arg("--exclude-newer-package")
+        .arg("idna=2022-04-04T12:00:00Z"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Resolving despite existing lockfile due to removal of global exclude newer
+    Resolved 1 package in [TIME]
+    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+
+    hint: To update the lockfile, run `uv lock`.
+    ");
+
+    Ok(())
+}
+
+/// Test that exclude-newer-package settings for packages outside the resolution are omitted in
+/// preview.
+#[test]
+fn lock_exclude_newer_package_absent_preview() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context
+        .lock()
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .arg("--preview-features")
+        .arg("missing-exclude-newer-package-lock")
+        .arg("--exclude-newer-package")
+        .arg("idna=false"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(context.read("uv.lock"), @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        "#);
+    });
+
+    uv_snapshot!(context.filters(), context
+        .lock()
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .arg("--locked")
+        .arg("--preview-features")
+        .arg("missing-exclude-newer-package-lock"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+
+    Ok(())
+}
+
 /// Test that exclude-newer-package is properly serialized in the lockfile.
 #[cfg(feature = "test-universal")]
 #[test]
@@ -38341,6 +40974,286 @@ fn lock_tilde_equal_version_u64_max_rejected() -> Result<()> {
           bar ~=18446744073709551615.0
               ^^^^^^^^^^^^^^^^^^^^^^^^
     "#);
+
+    Ok(())
+}
+
+/// Negating locked mode permits lockfile changes despite `UV_LOCKED` or an earlier CLI flag.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_no_locked() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+    "#})?;
+
+    // Negating the CLI flag must also suppress the environment value when creating a lockfile.
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--locked")
+        .arg("--no-locked")
+        .env(EnvVars::UV_LOCKED, "1"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+    assert!(context.temp_dir.child("uv.lock").exists());
+
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.2.0"
+        requires-python = ">=3.12"
+    "#})?;
+
+    // The negation also overrides the `--check` spelling and allows a stale lockfile to update.
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--check")
+        .arg("--no-locked"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Updated project v0.1.0 -> v0.2.0
+    ");
+    let lock = context.read("uv.lock");
+
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.3.0"
+        requires-python = ">=3.12"
+    "#})?;
+
+    // A later positive flag restores the check and must leave the stale lockfile unchanged.
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--no-locked")
+        .arg("--check"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    error: The lockfile at `uv.lock` needs to be updated, but `--check` was provided.
+
+    hint: To update the lockfile, run `uv lock`.
+    ");
+    assert_eq!(context.read("uv.lock"), lock);
+
+    Ok(())
+}
+
+/// Negating frozen mode permits lockfile changes despite `UV_FROZEN` or an earlier CLI flag.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_no_frozen() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+    "#})?;
+
+    // Negating the CLI flag must also suppress the environment value when creating a lockfile.
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--frozen")
+        .arg("--no-frozen")
+        .env(EnvVars::UV_FROZEN, "1"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+    assert!(context.temp_dir.child("uv.lock").exists());
+
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.2.0"
+        requires-python = ">=3.12"
+    "#})?;
+
+    // The negation also overrides the `--check-exists` spelling and permits re-locking.
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--check-exists")
+        .arg("--no-frozen"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Updated project v0.1.0 -> v0.2.0
+    ");
+    let lock = context.read("uv.lock");
+
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.3.0"
+        requires-python = ">=3.12"
+    "#})?;
+
+    // A later positive flag restores frozen mode and keeps using the existing lockfile.
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--no-frozen")
+        .arg("--check-exists"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    warning: The lockfile at `uv.lock` was only checked for validity, not whether it is up-to-date, because `--check-exists` was provided; use `--check` instead
+    ");
+    assert_eq!(context.read("uv.lock"), lock);
+
+    Ok(())
+}
+
+/// `--check` overrides `UV_FROZEN` when checking a stale lockfile.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_check_overrides_frozen_environment() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+    "#})?;
+    context.lock().assert().success();
+    let lock = context.read("uv.lock");
+
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.2.0"
+        requires-python = ">=3.12"
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--check")
+        .env(EnvVars::UV_FROZEN, "1"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    warning: Ignoring `UV_FROZEN` because `--check` was provided
+    Resolved 1 package in [TIME]
+    error: The lockfile at `uv.lock` needs to be updated, but `--check` was provided.
+
+    hint: To update the lockfile, run `uv lock`.
+    ");
+    assert_eq!(context.read("uv.lock"), lock);
+
+    Ok(())
+}
+
+/// Both spellings of the frozen flag override `UV_LOCKED` without checking lockfile freshness.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_frozen_overrides_locked_environment() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+    "#})?;
+    context.lock().assert().success();
+    let lock = context.read("uv.lock");
+
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.2.0"
+        requires-python = ">=3.12"
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--frozen")
+        .env(EnvVars::UV_LOCKED, "1"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    warning: Ignoring `UV_LOCKED` because `--frozen` was provided
+    warning: The lockfile at `uv.lock` was only checked for validity, not whether it is up-to-date, because `--frozen` was provided; use `--check` instead
+    ");
+    assert_eq!(context.read("uv.lock"), lock);
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--check-exists")
+        .env(EnvVars::UV_LOCKED, "1"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    warning: Ignoring `UV_LOCKED` because `--check-exists` was provided
+    warning: The lockfile at `uv.lock` was only checked for validity, not whether it is up-to-date, because `--check-exists` was provided; use `--check` instead
+    ");
+    assert_eq!(context.read("uv.lock"), lock);
+
+    Ok(())
+}
+
+/// Errors identify the flag or environment variable that enabled frozen mode.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_frozen_errors_report_source() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--frozen"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Unable to find lockfile at `uv.lock`, but `--frozen` was provided. To create a lockfile, run `uv lock` or `uv sync` without the flag.
+    ");
+
+    uv_snapshot!(context.filters(), context.lock().arg("--check-exists"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Unable to find lockfile at `uv.lock`, but `--check-exists` was provided. To create a lockfile, run `uv lock` or `uv sync` without the flag.
+    ");
+
+    uv_snapshot!(context.filters(), context.lock().env(EnvVars::UV_FROZEN, "1"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Unable to find lockfile at `uv.lock`, but `UV_FROZEN=1` was provided. To create a lockfile, run `uv lock` or `uv sync` without the flag.
+    ");
+
+    context.lock().assert().success();
+    let lock = context.read("uv.lock");
+
+    // Rename the project so it is missing from the existing lockfile.
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "renamed"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--frozen"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: The lockfile at `uv.lock` needs to be updated, but `--frozen` was provided: Missing workspace member `renamed`.
+
+    hint: To update the lockfile, run `uv lock`.
+    ");
+
+    uv_snapshot!(context.filters(), context.lock().arg("--check-exists"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: The lockfile at `uv.lock` needs to be updated, but `--check-exists` was provided: Missing workspace member `renamed`.
+
+    hint: To update the lockfile, run `uv lock`.
+    ");
+
+    uv_snapshot!(context.filters(), context.lock().env(EnvVars::UV_FROZEN, "1"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: The lockfile at `uv.lock` needs to be updated, but `UV_FROZEN=1` was provided: Missing workspace member `renamed`.
+
+    hint: To update the lockfile, run `uv lock`.
+    ");
+    assert_eq!(context.read("uv.lock"), lock);
 
     Ok(())
 }

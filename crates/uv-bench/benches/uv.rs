@@ -2,9 +2,10 @@
 // https://github.com/rust-lang/rust/issues/64402
 extern crate uv_performance_memory_allocator;
 
+use std::env;
 use std::fmt::Write;
 use std::hint::black_box;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::str::FromStr;
 
 use async_zip::base::write::ZipFileWriter;
@@ -20,6 +21,7 @@ use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity, RegistryClientBuilder};
 use uv_distribution_filename::{SourceDistExtension, WheelFilename};
 use uv_distribution_types::Requirement;
+use uv_extract::dirhash::UnhashedFile;
 use uv_install_wheel::{InstallState, Layout, LinkMode};
 use uv_preview::{MaybePreviewFeature, Preview, PreviewFeature};
 use uv_pypi_types::Scheme;
@@ -31,6 +33,14 @@ const MANY_FILES_WHEEL_FILE_COUNT: usize = 10_000;
 const MANY_FILES_SDIST_TOP_LEVEL: &str = "manyfiles-0.0.0";
 const MANY_FILES_SDIST_FILE_COUNT: usize = 10_000;
 const SHA256_BENCHMARK_SIZE: usize = 1024 * 1024;
+
+fn is_codspeed_simulation() -> bool {
+    // CodSpeed reports Simulation as `instrumentation` in current versions.
+    matches!(
+        env::var("CODSPEED_RUNNER_MODE").as_deref(),
+        Ok("instrumentation" | "simulation")
+    )
+}
 
 fn hash_sha256(c: &mut Criterion<WallTime>) {
     let bytes = vec![0_u8; SHA256_BENCHMARK_SIZE];
@@ -133,11 +143,11 @@ fn unpack_sdist_many_files(c: &mut Criterion<WallTime>) {
                 )
             },
             |(archive, extracted_sdist)| {
-                let files = runtime
+                let (extracted_sdist, files) = runtime
                     .block_on(uv_extract::stream::archive(
                         archive,
                         SourceDistExtension::TarGz,
-                        extracted_sdist.path(),
+                        extracted_sdist,
                     ))
                     .expect("Failed to unpack sdist");
                 let source_tree = uv_extract::strip_component(extracted_sdist.path())
@@ -154,6 +164,10 @@ fn unpack_sdist_many_files(c: &mut Criterion<WallTime>) {
 }
 
 fn unzip_wheel_many_files(c: &mut Criterion<WallTime>) {
+    if is_codspeed_simulation() {
+        return;
+    }
+
     let archive = create_many_files_wheel();
 
     c.bench_function("unzip_wheel_many_files", |b| {
@@ -175,6 +189,10 @@ fn unzip_wheel_many_files(c: &mut Criterion<WallTime>) {
 }
 
 fn prepare_wheel_many_files(c: &mut Criterion<WallTime>) {
+    if is_codspeed_simulation() {
+        return;
+    }
+
     let archive = create_many_files_wheel();
     let filename =
         WheelFilename::from_str(MANY_FILES_WHEEL_FILENAME).expect("Invalid wheel filename");
@@ -247,10 +265,14 @@ fn prepare_wheel(
     archive: fs_err::File,
     extracted_wheel: &Path,
     filename: &WheelFilename,
-) -> Vec<(PathBuf, u64)> {
+) -> Vec<UnhashedFile> {
     let files = uv_extract::unzip(archive, extracted_wheel).expect("Failed to extract wheel");
-    uv_install_wheel::validate_and_heal_record(extracted_wheel, files.iter(), filename)
-        .expect("Failed to validate wheel");
+    uv_install_wheel::validate_and_heal_record(
+        extracted_wheel,
+        files.iter().map(|file| (file.path(), file.size())),
+        filename,
+    )
+    .expect("Failed to validate wheel");
     files
 }
 

@@ -4668,6 +4668,46 @@ fn run_active_script_environment() -> Result<()> {
     Ok(())
 }
 
+/// Regression test for <https://github.com/astral-sh/uv/issues/21364>.
+#[test]
+fn run_active_script_environment_non_virtualenv() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let test_script = context.temp_dir.child("main.py");
+    test_script.write_str(indoc! { r#"
+        # /// script
+        # requires-python = ">=3.12"
+        # dependencies = []
+        # ///
+
+        print("Hello, world!")
+       "#
+    })?;
+
+    let active_environment = context.temp_dir.child("foo");
+    active_environment.create_dir_all()?;
+    active_environment
+        .child("important.txt")
+        .write_str("important data")?;
+
+    context
+        .run()
+        .arg("--active")
+        .arg("--script")
+        .arg("main.py")
+        .env(EnvVars::VIRTUAL_ENV, "foo")
+        .assert()
+        .success();
+
+    active_environment.assert(predicate::path::is_dir());
+    // Silently deleting user data outside a virtual environment is undesirable.
+    active_environment
+        .child("important.txt")
+        .assert(predicate::path::missing());
+
+    Ok(())
+}
+
 #[test]
 #[cfg(not(windows))]
 fn run_gui_script_explicit_stdin_unix() -> Result<()> {
@@ -5796,13 +5836,12 @@ fn detect_infinite_recursion() -> Result<()> {
 
     fs_err::set_permissions(test_script.path(), PermissionsExt::from_mode(0o0744))?;
 
-    let mut cmd = std::process::Command::new(test_script.as_os_str());
-    context.add_shared_env(&mut cmd, false);
+    let mut command = context.external_command(&test_script);
 
     // Set the max recursion depth to a lower amount to speed up testing.
-    cmd.env(EnvVars::UV_RUN_MAX_RECURSION_DEPTH, "5");
+    command.env(EnvVars::UV_RUN_MAX_RECURSION_DEPTH, "5");
 
-    uv_snapshot!(context.filters(), cmd, @"
+    uv_snapshot!(context.filters(), command, @"
     exit_code: 2 (failure)
     ----- stderr -----
     error: `uv run` was recursively invoked 6 times which exceeds the limit of 5

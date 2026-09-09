@@ -7,6 +7,9 @@ on:
 
 permissions: {}
 
+env:
+  UV_LOCKED: 1
+
 jobs:
   update:
     if: github.repository == 'astral-sh/uv' && !github.event.issue.pull_request
@@ -202,7 +205,7 @@ jobs:
           TMPDIR: ${{ runner.temp }}
         with:
           openai-api-key: ${{ secrets.OPENAI_API_KEY }}
-          codex-version: "0.146.0"
+          codex-version: "0.147.0"
           codex-home: "agents/codex"
           effort: high
           permission-profile: "issue-triage"

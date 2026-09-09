@@ -677,14 +677,22 @@ pub struct VersionArgs {
     ///
     /// Requires that the lockfile is up-to-date. If the lockfile is missing or needs to be updated,
     /// uv will exit with an error.
-    #[arg(long, conflicts_with_all = ["frozen", "upgrade"])]
+    #[arg(long, conflicts_with_all = ["frozen", "upgrade"], overrides_with = "no_locked")]
     pub locked: bool,
+
+    /// Disable locked mode, overriding `UV_LOCKED`.
+    #[arg(long, overrides_with = "locked", hide = true)]
+    pub no_locked: bool,
 
     /// Update the version without re-locking the project [env: UV_FROZEN=]
     ///
     /// The project environment will not be synced.
-    #[arg(long, conflicts_with_all = ["locked", "upgrade", "no_sources"])]
+    #[arg(long, conflicts_with_all = ["locked", "upgrade", "no_sources"], overrides_with = "no_frozen")]
     pub frozen: bool,
+
+    /// Disable frozen mode, overriding `UV_FROZEN`.
+    #[arg(long, overrides_with = "frozen", hide = true)]
+    pub no_frozen: bool,
 
     #[command(flatten)]
     pub installer: ResolverInstallerArgs,
@@ -3671,8 +3679,12 @@ pub struct RunArgs {
     ///
     /// Requires that the lockfile is up-to-date. If the lockfile is missing or
     /// needs to be updated, uv will exit with an error.
-    #[arg(long, conflicts_with_all = ["frozen", "upgrade"])]
+    #[arg(long, conflicts_with_all = ["frozen", "upgrade"], overrides_with = "no_locked")]
     pub locked: bool,
+
+    /// Disable locked mode, overriding `UV_LOCKED`.
+    #[arg(long, overrides_with = "locked", hide = true)]
+    pub no_locked: bool,
 
     /// Run without updating the `uv.lock` file [env: UV_FROZEN=]
     ///
@@ -3680,8 +3692,12 @@ pub struct RunArgs {
     /// source of truth. If the lockfile is missing, uv will exit with an error. If the
     /// `pyproject.toml` includes changes to dependencies that have not been included in the
     /// lockfile yet, they will not be present in the environment.
-    #[arg(long, conflicts_with_all = ["locked", "upgrade", "no_sources"])]
+    #[arg(long, conflicts_with_all = ["locked", "upgrade", "no_sources"], overrides_with = "no_frozen")]
     pub frozen: bool,
+
+    /// Disable frozen mode, overriding `UV_FROZEN`.
+    #[arg(long, overrides_with = "frozen", hide = true)]
+    pub no_frozen: bool,
 
     /// Run the given path as a Python script.
     ///
@@ -3948,8 +3964,12 @@ pub struct SyncArgs {
     ///
     /// Requires that the lockfile is up-to-date. If the lockfile is missing or needs to be updated,
     /// uv will exit with an error.
-    #[arg(long, conflicts_with_all = ["frozen", "upgrade"])]
+    #[arg(long, conflicts_with_all = ["frozen", "upgrade"], overrides_with = "no_locked")]
     pub locked: bool,
+
+    /// Disable locked mode, overriding `UV_LOCKED`.
+    #[arg(long, overrides_with = "locked", hide = true)]
+    pub no_locked: bool,
 
     /// Sync without updating the `uv.lock` file [env: UV_FROZEN=]
     ///
@@ -3957,8 +3977,12 @@ pub struct SyncArgs {
     /// source of truth. If the lockfile is missing, uv will exit with an error. If the
     /// `pyproject.toml` includes changes to dependencies that have not been included in the
     /// lockfile yet, they will not be present in the environment.
-    #[arg(long, conflicts_with_all = ["locked", "upgrade", "no_sources"])]
+    #[arg(long, conflicts_with_all = ["locked", "upgrade", "no_sources"], overrides_with = "no_frozen")]
     pub frozen: bool,
+
+    /// Disable frozen mode, overriding `UV_FROZEN`.
+    #[arg(long, overrides_with = "frozen", hide = true)]
+    pub no_frozen: bool,
 
     /// Perform a dry run, without writing the lockfile or modifying the project environment.
     ///
@@ -4083,7 +4107,7 @@ pub struct LockArgs {
     /// missing or needs to be updated, uv will exit with an error.
     ///
     /// Equivalent to `--locked`.
-    #[arg(long, value_parser = clap::builder::BoolishValueParser::new(), conflicts_with_all = ["check_exists", "upgrade"], overrides_with = "check")]
+    #[arg(long, value_parser = clap::builder::BoolishValueParser::new(), conflicts_with_all = ["check_exists", "upgrade"], overrides_with_all = ["check", "no_locked"])]
     pub check: bool,
 
     /// Check if the lockfile is up-to-date [env: UV_LOCKED=]
@@ -4092,14 +4116,26 @@ pub struct LockArgs {
     /// missing or needs to be updated, uv will exit with an error.
     ///
     /// Equivalent to `--check`.
-    #[arg(long, conflicts_with_all = ["check_exists", "upgrade"], hide = true)]
+    #[arg(long, conflicts_with_all = ["check_exists", "upgrade"], hide = true, overrides_with = "no_locked")]
     pub locked: bool,
+
+    /// Disable locked mode, overriding `UV_LOCKED`.
+    #[arg(long, overrides_with_all = ["locked", "check"], hide = true)]
+    pub no_locked: bool,
 
     /// Assert that a `uv.lock` exists without checking if it is up-to-date [env: UV_FROZEN=]
     ///
     /// Equivalent to `--frozen`.
-    #[arg(long, alias = "frozen", conflicts_with_all = ["check", "locked"])]
+    #[arg(long, conflicts_with_all = ["check", "locked"], overrides_with = "no_frozen")]
     pub check_exists: bool,
+
+    /// Equivalent to `--check-exists`.
+    #[arg(long, hide = true, conflicts_with_all = ["check_exists", "check", "locked", "dry_run"], overrides_with = "no_frozen")]
+    pub frozen: bool,
+
+    /// Disable frozen mode, overriding `UV_FROZEN`.
+    #[arg(long, overrides_with_all = ["frozen", "check_exists"], hide = true)]
+    pub no_frozen: bool,
 
     /// Perform a dry run, without writing the lockfile.
     ///
@@ -4312,14 +4348,22 @@ pub struct AddArgs {
     ///
     /// Requires that the lockfile is up-to-date. If the lockfile is missing or needs to be updated,
     /// uv will exit with an error.
-    #[arg(long, conflicts_with_all = ["frozen", "upgrade"])]
+    #[arg(long, conflicts_with_all = ["frozen", "upgrade"], overrides_with = "no_locked")]
     pub locked: bool,
+
+    /// Disable locked mode, overriding `UV_LOCKED`.
+    #[arg(long, overrides_with = "locked", hide = true)]
+    pub no_locked: bool,
 
     /// Add dependencies without re-locking the project [env: UV_FROZEN=]
     ///
     /// The project environment will not be synced.
-    #[arg(long, conflicts_with_all = ["locked", "upgrade", "no_sources"])]
+    #[arg(long, conflicts_with_all = ["locked", "upgrade", "no_sources"], overrides_with = "no_frozen")]
     pub frozen: bool,
+
+    /// Disable frozen mode, overriding `UV_FROZEN`.
+    #[arg(long, overrides_with = "frozen", hide = true)]
+    pub no_frozen: bool,
 
     /// Prefer the active virtual environment over the project's virtual environment.
     ///
@@ -4563,14 +4607,22 @@ pub struct RemoveArgs {
     ///
     /// Requires that the lockfile is up-to-date. If the lockfile is missing or needs to be updated,
     /// uv will exit with an error.
-    #[arg(long, conflicts_with_all = ["frozen", "upgrade"])]
+    #[arg(long, conflicts_with_all = ["frozen", "upgrade"], overrides_with = "no_locked")]
     pub locked: bool,
+
+    /// Disable locked mode, overriding `UV_LOCKED`.
+    #[arg(long, overrides_with = "locked", hide = true)]
+    pub no_locked: bool,
 
     /// Remove dependencies without re-locking the project [env: UV_FROZEN=]
     ///
     /// The project environment will not be synced.
-    #[arg(long, conflicts_with_all = ["locked", "upgrade", "no_sources"])]
+    #[arg(long, conflicts_with_all = ["locked", "upgrade", "no_sources"], overrides_with = "no_frozen")]
     pub frozen: bool,
+
+    /// Disable frozen mode, overriding `UV_FROZEN`.
+    #[arg(long, overrides_with = "frozen", hide = true)]
+    pub no_frozen: bool,
 
     #[command(flatten)]
     pub installer: ResolverInstallerArgs,
@@ -4632,14 +4684,22 @@ pub struct TreeArgs {
     ///
     /// Requires that the lockfile is up-to-date. If the lockfile is missing or needs to be updated,
     /// uv will exit with an error.
-    #[arg(long, conflicts_with_all = ["frozen", "upgrade"])]
+    #[arg(long, conflicts_with_all = ["frozen", "upgrade"], overrides_with = "no_locked")]
     pub locked: bool,
+
+    /// Disable locked mode, overriding `UV_LOCKED`.
+    #[arg(long, overrides_with = "locked", hide = true)]
+    pub no_locked: bool,
 
     /// Display the requirements without locking the project [env: UV_FROZEN=]
     ///
     /// If the lockfile is missing, uv will exit with an error.
-    #[arg(long, conflicts_with_all = ["locked", "upgrade", "no_sources"])]
+    #[arg(long, conflicts_with_all = ["locked", "upgrade", "no_sources"], overrides_with = "no_frozen")]
     pub frozen: bool,
+
+    /// Disable frozen mode, overriding `UV_FROZEN`.
+    #[arg(long, overrides_with = "frozen", hide = true)]
+    pub no_frozen: bool,
 
     #[command(flatten)]
     pub build: BuildOptionsArgs,
@@ -4903,14 +4963,22 @@ pub struct ExportArgs {
     ///
     /// Requires that the lockfile is up-to-date. If the lockfile is missing or needs to be updated,
     /// uv will exit with an error.
-    #[arg(long, conflicts_with_all = ["frozen", "upgrade"])]
+    #[arg(long, conflicts_with_all = ["frozen", "upgrade"], overrides_with = "no_locked")]
     pub locked: bool,
+
+    /// Disable locked mode, overriding `UV_LOCKED`.
+    #[arg(long, overrides_with = "locked", hide = true)]
+    pub no_locked: bool,
 
     /// Do not update the `uv.lock` before exporting [env: UV_FROZEN=]
     ///
     /// If a `uv.lock` does not exist, uv will exit with an error.
-    #[arg(long, conflicts_with_all = ["locked", "upgrade", "no_sources"])]
+    #[arg(long, conflicts_with_all = ["locked", "upgrade", "no_sources"], overrides_with = "no_frozen")]
     pub frozen: bool,
+
+    /// Disable frozen mode, overriding `UV_FROZEN`.
+    #[arg(long, overrides_with = "frozen", hide = true)]
+    pub no_frozen: bool,
 
     #[command(flatten)]
     pub resolver: ResolverArgs,
@@ -5106,8 +5174,12 @@ pub struct CheckArgs {
     ///
     /// Requires that the lockfile is up-to-date. If the lockfile is missing or needs to be updated,
     /// uv will exit with an error.
-    #[arg(long, conflicts_with_all = ["frozen", "upgrade"])]
+    #[arg(long, conflicts_with_all = ["frozen", "upgrade"], overrides_with = "no_locked")]
     pub locked: bool,
+
+    /// Disable locked mode, overriding `UV_LOCKED`.
+    #[arg(long, overrides_with = "locked", hide = true)]
+    pub no_locked: bool,
 
     /// Sync without updating the `uv.lock` file [env: UV_FROZEN=]
     ///
@@ -5115,8 +5187,12 @@ pub struct CheckArgs {
     /// source of truth. If the lockfile is missing, uv will exit with an error. If the
     /// `pyproject.toml` includes changes to dependencies that have not been included in the
     /// lockfile yet, they will not be present in the environment.
-    #[arg(long, conflicts_with_all = ["locked", "upgrade", "no_sources"])]
+    #[arg(long, conflicts_with_all = ["locked", "upgrade", "no_sources"], overrides_with = "no_frozen")]
     pub frozen: bool,
+
+    /// Disable frozen mode, overriding `UV_FROZEN`.
+    #[arg(long, overrides_with = "frozen", hide = true)]
+    pub no_frozen: bool,
 
     /// Avoid syncing the virtual environment [env: UV_NO_SYNC=]
     #[arg(long)]
@@ -5286,14 +5362,22 @@ pub struct AuditArgs {
     ///
     /// Requires that the lockfile is up-to-date. If the lockfile is missing or needs to be updated,
     /// uv will exit with an error.
-    #[arg(long, conflicts_with_all = ["frozen", "upgrade"])]
+    #[arg(long, conflicts_with_all = ["frozen", "upgrade"], overrides_with = "no_locked")]
     pub locked: bool,
+
+    /// Disable locked mode, overriding `UV_LOCKED`.
+    #[arg(long, overrides_with = "locked", hide = true)]
+    pub no_locked: bool,
 
     /// Audit the requirements without locking the project [env: UV_FROZEN=]
     ///
     /// If the lockfile is missing, uv will exit with an error.
-    #[arg(long, conflicts_with_all = ["locked", "upgrade", "no_sources"])]
+    #[arg(long, conflicts_with_all = ["locked", "upgrade", "no_sources"], overrides_with = "no_frozen")]
     pub frozen: bool,
+
+    /// Disable frozen mode, overriding `UV_FROZEN`.
+    #[arg(long, overrides_with = "frozen", hide = true)]
+    pub no_frozen: bool,
 
     #[command(flatten)]
     pub audit: AuditCommonArgs,
@@ -5357,7 +5441,7 @@ pub enum AuthCommand {
     ///
     /// Credentials are only stored in this directory when the plaintext backend is used, as
     /// opposed to the native backend, which uses the system keyring.
-    Dir(AuthDirArgs),
+    Dir,
     /// Act as a credential helper for external tools.
     ///
     /// Implements the Bazel credential helper protocol to provide credentials
@@ -6683,13 +6767,6 @@ pub struct AuthTokenArgs {
 }
 
 #[derive(Args)]
-pub struct AuthDirArgs {
-    /// The domain or URL of the service to lookup.
-    #[arg(value_hint = ValueHint::Url)]
-    pub service: Option<Service>,
-}
-
-#[derive(Args)]
 pub struct AuthHelperArgs {
     #[command(subcommand)]
     pub command: AuthHelperCommand,
@@ -7188,8 +7265,9 @@ pub struct BuildOptionsArgs {
     /// Don't build source distributions.
     ///
     /// When enabled, uv will reuse cached wheels from previously built source distributions, but
-    /// operations that require building a source distribution will exit with an error. uv may
-    /// still build editable requirements, and their build backends may run arbitrary Python code.
+    /// operations that require building a source distribution will exit with an error. First-party
+    /// packages, such as projects in the workspace, will still be built. uv will also still build
+    /// editable requirements, and their build backends may run arbitrary Python code.
     #[arg(
         long,
         env = EnvVars::UV_NO_BUILD,
@@ -7208,6 +7286,8 @@ pub struct BuildOptionsArgs {
     build: bool,
 
     /// Don't build source distributions for a specific package [env: `UV_NO_BUILD_PACKAGE`=]
+    ///
+    /// First-party packages, such as projects in the workspace, will still be built.
     #[arg(
         long,
         help_heading = "Build options",
@@ -7742,8 +7822,7 @@ pub struct PublishArgs {
     /// again, to handle cases where the identical file was uploaded twice in parallel.
     ///
     /// The exact behavior will vary based on the index. When uploading to PyPI, uploading the same
-    /// file succeeds even without `--check-url`, while most other indexes error. When uploading to
-    /// pyx, the index URL can be inferred automatically from the publish URL.
+    /// file succeeds even without `--check-url`, while most other indexes error.
     ///
     /// The index must provide one of the supported hashes (SHA-256, SHA-384, or SHA-512).
     #[arg(long, env = EnvVars::UV_PUBLISH_CHECK_URL, hide_env_values = true)]
@@ -7754,8 +7833,8 @@ pub struct PublishArgs {
 
     /// Perform a dry run without uploading files.
     ///
-    /// When enabled, the command will check for existing files if `--check-url` is provided,
-    /// and will perform validation against the index if supported, but will not upload any files.
+    /// The command checks the distribution metadata locally, and checks for existing files if
+    /// `--check-url` or `--index` is provided, but will not upload any files.
     #[arg(long)]
     pub dry_run: bool,
 
@@ -7765,13 +7844,6 @@ pub struct PublishArgs {
     /// that is published.
     #[arg(long, env = EnvVars::UV_PUBLISH_NO_ATTESTATIONS)]
     pub no_attestations: bool,
-
-    /// Use direct upload to the registry.
-    ///
-    /// When enabled, the publish command will use a direct two-phase upload protocol
-    /// that uploads files directly to storage, bypassing the registry's upload endpoint.
-    #[arg(long, hide = true)]
-    pub direct: bool,
 }
 
 #[derive(Args)]
@@ -7811,12 +7883,20 @@ pub struct MetadataArgs {
     ///
     /// Asserts that the `uv.lock` would remain unchanged after a resolution. If the lockfile is
     /// missing or needs to be updated, uv will exit with an error.
-    #[arg(long, conflicts_with_all = ["frozen", "upgrade"])]
+    #[arg(long, conflicts_with_all = ["frozen", "upgrade"], overrides_with = "no_locked")]
     pub locked: bool,
 
+    /// Disable locked mode, overriding `UV_LOCKED`.
+    #[arg(long, overrides_with = "locked", hide = true)]
+    pub no_locked: bool,
+
     /// Assert that a `uv.lock` exists without checking if it is up-to-date [env: UV_FROZEN=]
-    #[arg(long, conflicts_with_all = ["locked"])]
+    #[arg(long, conflicts_with_all = ["locked"], overrides_with = "no_frozen")]
     pub frozen: bool,
+
+    /// Disable frozen mode, overriding `UV_FROZEN`.
+    #[arg(long, overrides_with = "frozen", hide = true)]
+    pub no_frozen: bool,
 
     /// Perform a dry run, without writing the lockfile.
     ///

@@ -650,7 +650,7 @@ async fn build_package(
             hash_checking,
         )?
     } else {
-        HashStrategy::None
+        HashStrategy::default()
     };
 
     let build_constraints = Constraints::from_requirements(
@@ -689,7 +689,7 @@ async fn build_package(
         let entries = client
             .fetch_all(index_locations.flat_indexes().map(Index::url))
             .await?;
-        FlatIndex::from_entries(entries, None, &hasher, build_options)
+        FlatIndex::from_entries(entries)
     };
 
     // Initialize any shared state.
@@ -831,7 +831,7 @@ async fn build_package(
             let ext = SourceDistExtension::from_path(path.as_path())
                 .map_err(|err| Error::InvalidSourceDistExt(path.user_display().to_string(), err))?;
             let temp_dir = tempfile::tempdir_in(cache.bucket(CacheBucket::SourceDistributions))?;
-            uv_extract::stream::archive(reader, ext, temp_dir.path()).await?;
+            let (temp_dir, _) = uv_extract::stream::archive(reader, ext, temp_dir).await?;
 
             // Extract the top-level directory from the archive.
             let extracted = match uv_extract::strip_component(temp_dir.path()) {
@@ -938,7 +938,7 @@ async fn build_package(
                 Error::InvalidSourceDistExt(source.path().user_display().to_string(), err)
             })?;
             let temp_dir = tempfile::tempdir_in(&output_dir)?;
-            uv_extract::stream::archive(reader, ext, temp_dir.path()).await?;
+            let (temp_dir, _) = uv_extract::stream::archive(reader, ext, temp_dir).await?;
 
             // If the source distribution has a normalized filename, check its identity.
             let source_dist = source

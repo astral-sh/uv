@@ -17,6 +17,8 @@ permissions: {}
 env:
   UV_REPOSITORY_ID: "699532645"
   AUTOMATIONS_BOT_ID: "305554984"
+  UV_SECURITY_PUBLISH_LABEL: "bot:promote"
+  UV_LOCKED: 1
 
 concurrency:
   group: promote-pull-request-${{ inputs.pull_request }}
@@ -128,6 +130,10 @@ jobs:
           echo "approval_id=$(jq --raw-output '.id' <<< "$approval")" >> "$GITHUB_OUTPUT"
 
           if [ "$GITHUB_REPOSITORY" = "astral-sh/uv-security" ]; then
+            if ! jq --exit-status --arg label "$UV_SECURITY_PUBLISH_LABEL" \
+              '.labels | any(.name == $label)' <<< "$source_pull_request" > /dev/null; then
+              reject "The private pull request requires the $UV_SECURITY_PUBLISH_LABEL label."
+            fi
             promoter_permission=$(gh api --method GET "repos/$GITHUB_REPOSITORY/collaborators/$promoter/permission")
             if ! jq --exit-status \
               '.permission == "admin" or .permission == "maintain" or .permission == "write"' \
@@ -465,6 +471,10 @@ jobs:
           fi
 
           if [ "$GITHUB_REPOSITORY" = "astral-sh/uv-security" ]; then
+            if ! jq --exit-status --arg label "$UV_SECURITY_PUBLISH_LABEL" \
+              '.labels | any(.name == $label)' <<< "$source_pull_request" > /dev/null; then
+              reject "The private pull request requires the $UV_SECURITY_PUBLISH_LABEL label."
+            fi
             promoter_permission=$(gh api --method GET "repos/$GITHUB_REPOSITORY/collaborators/$PROMOTER/permission")
             if ! jq --exit-status \
               '.permission == "admin" or .permission == "maintain" or .permission == "write"' \
@@ -568,6 +578,10 @@ jobs:
                   <<< "$current_pull_request" > /dev/null; then
                   reject "The private pull request or its approval changed before publication."
                 fi
+                if ! jq --exit-status --arg label "$UV_SECURITY_PUBLISH_LABEL" \
+                  '.labels | any(.name == $label)' <<< "$current_pull_request" > /dev/null; then
+                  reject "The private pull request requires the $UV_SECURITY_PUBLISH_LABEL label."
+                fi
 
                 promotion_git push --force-with-lease="refs/heads/$HEAD_REF:" \
                   https://github.com/astral-sh/uv.git "$PROMOTED_HEAD:refs/heads/$HEAD_REF"
@@ -612,8 +626,8 @@ jobs:
 
           upstream_number=$(jq --exit-status --raw-output '.number | select(type == "number")' <<< "$upstream_pull_request")
 
-          if jq --exit-status '.labels | length > 0' <<< "$source_pull_request" > /dev/null; then
-            jq '{labels: [.labels[].name]}' <<< "$source_pull_request" |
+          if jq --exit-status '.labels | any(.name | startswith("bot:") | not)' <<< "$source_pull_request" > /dev/null; then
+            jq '{labels: [.labels[].name | select(startswith("bot:") | not)]}' <<< "$source_pull_request" |
               gh api \
                 --method POST \
                 "repos/astral-sh/uv/issues/$upstream_number/labels" \

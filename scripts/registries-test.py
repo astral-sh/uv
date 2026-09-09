@@ -8,6 +8,14 @@ To configure a registry, set the following environment variables:
     `UV_TEST_<registry_name>_URL`         URL for the registry
     `UV_TEST_<registry_name>_TOKEN`       authentication token
 
+For public registries that do not require authentication, set:
+
+    `UV_TEST_<registry_name>_PUBLIC`      `true`
+
+To fail instead of streaming the entire wheel when metadata range requests are unsupported, set:
+
+    `UV_TEST_<registry_name>_REQUIRE_METADATA_RANGE_REQUESTS`  `true`
+
 The username defaults to "__token__" but can be optionally set with:
     `UV_TEST_<registry_name>_USERNAME`
 
@@ -176,27 +184,31 @@ def run_test(
     registry_url: str,
     package: str,
     username: str,
-    token: str,
+    token: str | None,
     verbosity: int,
     timeout: int,
     requires_python: str,
     auth_method: str,
+    require_metadata_range_requests: bool,
 ) -> bool:
     print(uv)
     """Attempt to install a package from this registry."""
-    print(
-        f"{registry_name} -- Running test for {registry_url} with username {username}"
-    )
+    if token:
+        print(
+            f"{registry_name} -- Running test for {registry_url} with username {username}"
+        )
+    else:
+        print(f"{registry_name} -- Running public test for {registry_url}")
     if package == DEFAULT_PKG_NAME:
         print(
             f"** Using default test package name: {package}. To choose a different package, set UV_TEST_{registry_name.upper()}_PKG"
         )
     print(f"\nAttempting to install {package}")
 
-    if auth_method == "env":
+    if token and auth_method == "env":
         env[f"UV_INDEX_{registry_name.upper()}_USERNAME"] = username
         env[f"UV_INDEX_{registry_name.upper()}_PASSWORD"] = token
-    elif auth_method == "text-store":
+    elif token and auth_method == "text-store":
         # Use uv's text store for authentication
         subprocess.check_call(
             [
@@ -211,7 +223,7 @@ def run_test(
             ],
             env=env,
         )
-    else:
+    elif token:
         raise ValueError(f"Unknown authentication method: {auth_method}")
 
     with tempfile.TemporaryDirectory() as project_dir:
@@ -221,6 +233,12 @@ def run_test(
         if verbosity:
             cmd.extend(["-" + "v" * verbosity])
 
+        command_env = env.copy()
+        # Each test creates a project without a lockfile; ignore the runner's locked mode.
+        command_env.pop("UV_LOCKED", None)
+        if require_metadata_range_requests:
+            command_env["UV_REQUIRE_METADATA_RANGE_REQUESTS"] = "true"
+
         result = None
         try:
             result = subprocess.run(
@@ -229,7 +247,7 @@ def run_test(
                 text=True,
                 timeout=timeout,
                 check=False,
-                env=env,
+                env=command_env,
             )
 
             if result.returncode != 0:
@@ -364,7 +382,10 @@ def main() -> None:
         print("----------------")
 
         token = env.get(f"UV_TEST_{registry_name.upper()}_TOKEN")
-        if not token:
+        public = (
+            env.get(f"UV_TEST_{registry_name.upper()}_PUBLIC", "").lower() == "true"
+        )
+        if not token and not public:
             if args.all:
                 print(
                     f"{Fore.RED}{registry_name}: UV_TEST_{registry_name.upper()}_TOKEN contained no token. Required by --all"
@@ -393,12 +414,17 @@ def main() -> None:
             args.timeout,
             args.required_python,
             args.auth_method,
+            env.get(
+                f"UV_TEST_{registry_name.upper()}_REQUIRE_METADATA_RANGE_REQUESTS",
+                "",
+            ).lower()
+            == "true",
         ):
             passed.append(registry_name)
         else:
             failed.append(registry_name)
 
-        untested_registries.remove(registry_name)
+        untested_registries.discard(registry_name)
 
     total = len(passed) + len(failed)
 
@@ -431,6 +457,7 @@ def main() -> None:
         print("\nNo tests were run - have you defined at least one registry?")
         print("     * UV_TEST_<registry_name>_URL")
         print("     * UV_TEST_<registry_name>_TOKEN")
+        print("     * UV_TEST_<registry_name>_PUBLIC=true (for public registries)")
         print(
             "     * UV_TEST_<registry_name>_PKG (the private package to test installing)"
         )

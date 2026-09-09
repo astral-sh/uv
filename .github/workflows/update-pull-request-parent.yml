@@ -37,6 +37,9 @@ on:
 
 permissions: {}
 
+env:
+  UV_LOCKED: 1
+
 jobs:
   update:
     name: "Update parent of pull request #${{ inputs.number }}"

@@ -1,6 +1,6 @@
 [package]
 name = "uv-test"
-version = "0.0.72"
+version = "0.0.78"
 description = "This is an internal component crate of uv"
 edition = { workspace = true }
 rust-version = { workspace = true }
@@ -62,4 +62,5 @@ tokio = { workspace = true }
 tokio-util = { workspace = true }
 toml = { workspace = true }
 url = { workspace = true }
+walkdir = { workspace = true }
 wiremock = { workspace = true }

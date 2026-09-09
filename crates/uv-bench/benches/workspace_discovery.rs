@@ -352,6 +352,8 @@ fn run_python_version_cli(workspace_dir: &str, cache_dir: &str, offline: bool) -
     let mut args = vec![
         "uv",
         "run",
+        // The synthetic workspace needs to create and update its own lockfile.
+        "--no-locked",
         "--directory",
         workspace_dir,
         "--cache-dir",

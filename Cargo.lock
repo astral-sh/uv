@@ -96,7 +96,7 @@ version = "1.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "40c48f72fd53cd289104fc64099abca73db4166ad86ea0b4341abe65af83dadc"
 dependencies = [
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -107,7 +107,7 @@ checksum = "291e6a250ff86cd4a820112fb8898808a366d8f9f58ce16d1f538353ad55747d"
 dependencies = [
  "anstyle",
  "once_cell_polyfill",
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -127,9 +127,9 @@ dependencies = [
 
 [[package]]
 name = "archive-trait"
-version = "0.0.13"
+version = "0.0.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dc23b595ad4092163eaf9c0c7532dd5b6d82274c21560c97dc03fa4e4f09e645"
+checksum = "c6080ea14ccf9019d7ce572c319e581c20a805c9bdc6dbfb9b988da003cbd1a3"
 dependencies = [
  "cap-std",
  "thiserror",
@@ -286,18 +286,18 @@ dependencies = [
 
 [[package]]
 name = "astral-tl"
-version = "0.7.11"
+version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d90933ffb0f97e2fc2e0de21da9d3f20597b804012d199843a6fe7c2810d28f3"
+checksum = "04d4bb5df351abb6758a04240b0193794ddaf34a7c0b9452fab3c25dcce39e88"
 dependencies = [
  "memchr",
 ]
 
 [[package]]
 name = "astral-tokio-tar"
-version = "0.6.4"
+version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b18457efd137254e016bbde5e1d88df61c4e1a5ae2223746e56123bac6af2463"
+checksum = "6f2e989b33246fe9240d39accf4dd9a01e0b6c1f3ce9dd095e0a47fa02505523"
 dependencies = [
  "futures-core",
  "libc",
@@ -307,6 +307,7 @@ dependencies = [
  "tokio",
  "tokio-stream",
  "xattr",
+ "zerocopy",
 ]
 
 [[package]]
@@ -320,9 +321,9 @@ dependencies = [
 
 [[package]]
 name = "astral_async_http_range_reader"
-version = "0.11.0"
+version = "0.11.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4a8647866aee8d9707ae6ccc35205803a6df47c0ba83c5339ea6061b79131e4f"
+checksum = "1d5ba70a583d0819c44078238014752e85ebca0cb398ab712bbd2e40fb754b80"
 dependencies = [
  "astral-reqwest-middleware",
  "futures",
@@ -652,9 +653,9 @@ checksum = "5d20789868f4b01b2f2caec9f5c4e0213b41e3e5702a50157d699ae31ced2fcb"
 
 [[package]]
 name = "bytecheck"
-version = "0.8.2"
+version = "0.8.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0caa33a2c0edca0419d15ac723dff03f1956f7978329b1e3b5fdaaaed9d3ca8b"
+checksum = "26333eeac754f0ad8a6bcd0eb0ac012156302e4e16b852b72ee399aea4f12c29"
 dependencies = [
  "bytecheck_derive",
  "ptr_meta",
@@ -664,13 +665,13 @@ dependencies = [
 
 [[package]]
 name = "bytecheck_derive"
-version = "0.8.2"
+version = "0.8.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "89385e82b5d1821d2219e0b095efa2cc1f246cbf99080f3be46a1a85c0d392d9"
+checksum = "46d07918caa9eeaaf06b7873925c53a61daac173539b4f7715090745e44e4e69"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.118",
+ "syn 3.0.3",
 ]
 
 [[package]]
@@ -708,9 +709,9 @@ dependencies = [
 
 [[package]]
 name = "cap-primitives"
-version = "4.0.2"
+version = "4.0.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cdadbd7c002d3a484b35243669abdae85a0ebaded5a61117169dc3400f9a7ff0"
+checksum = "8b5f74729fd2f44701d1a8eb47e906cdb3ccd9ec0f02baad85a744b791940b18"
 dependencies = [
  "ambient-authority",
  "fs-set-times",
@@ -720,15 +721,15 @@ dependencies = [
  "maybe-owned",
  "rustix",
  "rustix-linux-procfs",
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
  "winx",
 ]
 
 [[package]]
 name = "cap-std"
-version = "4.0.2"
+version = "4.0.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7281235d6e96d3544ca18bba9049be92f4190f8d923e3caef1b5f66cfa752608"
+checksum = "c1ec78e242cfa2cfe276807ac2ecc00315a6c97786977414bcd1c3963b6c91b8"
 dependencies = [
  "cap-primitives",
  "io-extras",
@@ -848,9 +849,9 @@ dependencies = [
 
 [[package]]
 name = "clap"
-version = "4.6.5"
+version = "4.6.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "301b56658598e48f3648647ac6fc887be7e7108eddfa4e9b63fcf3ec58c0cadf"
+checksum = "473c7e07f409a8d772161724aa8db6a765a2532a70f9667eeb7b49d3d02fbdca"
 dependencies = [
  "clap_builder",
  "clap_derive",
@@ -858,9 +859,9 @@ dependencies = [
 
 [[package]]
 name = "clap_builder"
-version = "4.6.5"
+version = "4.6.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "94a65403d1a1bd28f7dc68eb8506e8874808ee5eecb59298de588e2e1407a078"
+checksum = "7b48fea5a88e9ae728a2dcbedbfc0e730f7d60da42e1cb049a83c9fb8b789889"
 dependencies = [
  "anstream",
  "anstyle",
@@ -1010,7 +1011,7 @@ version = "3.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "faf9468729b8cbcea668e36183cb69d317348c2e08e994829fb56ebfdfbaac34"
 dependencies = [
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -1297,9 +1298,9 @@ dependencies = [
 
 [[package]]
 name = "data-encoding"
-version = "2.11.0"
+version = "2.11.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a4ae5f15dda3c708c0ade84bfee31ccab44a3da4f88015ed22f63732abe300c8"
+checksum = "4583a4551df46e2792f82ceeac45e850d2e2d5debba0b91f102385cda5b11f06"
 
 [[package]]
 name = "data-url"
@@ -1445,7 +1446,7 @@ dependencies = [
  "libc",
  "option-ext",
  "redox_users",
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -1537,9 +1538,9 @@ dependencies = [
 
 [[package]]
 name = "encoding_rs_io"
-version = "0.1.7"
+version = "0.1.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1cc3c5651fb62ab8aa3103998dade57efdd028544bd300516baa31840c252a83"
+checksum = "fba3fe847045ecff794b9c138293a80db914678c453ad63fbf0c6a9eb6e00b22"
 dependencies = [
  "encoding_rs",
 ]
@@ -1618,7 +1619,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb"
 dependencies = [
  "libc",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -1979,9 +1980,9 @@ checksum = "e4eba85ea1d0a966a983acd07deee566e67395d2d96b6fb39e62b5a833f1eb0b"
 
 [[package]]
 name = "globset"
-version = "0.4.19"
+version = "0.4.20"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e47d37d2ae4464254884b60ab7071be2b876a9c35b696bd018ddcc76847309cd"
+checksum = "07c34a9410465b45bd9787443bc7370f37735bad04b0f0cd57ff1a3186c98988"
 dependencies = [
  "aho-corasick",
  "bstr",
@@ -2370,9 +2371,9 @@ dependencies = [
 
 [[package]]
 name = "ignore"
-version = "0.4.31"
+version = "0.4.33"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7f8a7b8211e695a1d0cd91cace480d4d0bd57667ab10277cc412c5f7f4884f83"
+checksum = "00b69833ed729dc5aa7d19541d96d6cf8e9137194207a04916d658e43168402f"
 dependencies = [
  "crossbeam-deque",
  "globset",
@@ -2512,15 +2513,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "is-docker"
-version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "928bae27f42bc99b60d9ac7334e3a21d10ad8f1835a4e12ec3ec0464765ed1b3"
-dependencies = [
- "once_cell",
-]
-
-[[package]]
 name = "is-terminal"
 version = "0.4.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2528,17 +2520,7 @@ checksum = "3640c1c38b8e4e43584d8df18be5fc6b0aa314ce6ebf51b53313d4306cca8e46"
 dependencies = [
  "hermit-abi",
  "libc",
- "windows-sys 0.61.2",
-]
-
-[[package]]
-name = "is-wsl"
-version = "0.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "173609498df190136aa7dea1a91db051746d339e18476eed5ca40521f02d7aa5"
-dependencies = [
- "is-docker",
- "once_cell",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -2706,7 +2688,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "160f2eade097f30263b548aae5deb12ad349c909baa710fa24b92c9090b2e006"
 dependencies = [
  "scopeguard",
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -2947,7 +2929,7 @@ version = "0.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "536bfad37a309d62069485248eeaba1e8d9853aaf951caaeaed0585a95346f08"
 dependencies = [
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -3026,7 +3008,7 @@ version = "0.50.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7957b9740744892f114936ab4a57b3f487491bbeafaf8083688b16841a4240e5"
 dependencies = [
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -3178,16 +3160,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d6790f58c7ff633d8771f42965289203411a5e5c68388703c06e14f24770b41e"
 
 [[package]]
-name = "open"
-version = "5.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a0b3d059e795d52b8a72fef45658620edd4d9c359b338564aa14391ffa511ed5"
-dependencies = [
- "is-wsl",
- "libc",
-]
-
-[[package]]
 name = "openssl-probe"
 version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3245,9 +3217,9 @@ checksum = "d211803b9b6b570f68772237e415a029d5a50c65d382910b879fb19d3271f94d"
 
 [[package]]
 name = "papaya"
-version = "0.2.4"
+version = "0.2.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "997ee03cd38c01469a7046643714f0ad28880bcb9e6679ff0666e24817ca19b7"
+checksum = "da2442474a9404698c42509b8967f437249dbc7b50493e83020333d3943ec0ae"
 dependencies = [
  "equivalent",
  "seize",
@@ -3752,7 +3724,7 @@ dependencies = [
  "once_cell",
  "socket2",
  "tracing",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -3949,9 +3921,9 @@ dependencies = [
 
 [[package]]
 name = "regex-automata"
-version = "0.4.16"
+version = "0.4.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8fcfdb36bda0c880c5931cdc7a2bcdc8ba4556847b9d912bca70bc94708711ad"
+checksum = "ad8553b9b26413251cbf30e620595c7a41b3887f03da04579c0e6b0d6a06b4b2"
 dependencies = [
  "aho-corasick",
  "memchr",
@@ -4219,9 +4191,9 @@ dependencies = [
 
 [[package]]
 name = "rkyv"
-version = "0.8.17"
+version = "0.8.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "815cc8a37159a463064825246cadb07961e25cd9885908606f6d08a98d8f8874"
+checksum = "d9776093b7ca170454ab1406954f7b7d97a57c51dc6c0642957fb2ef25c2d399"
 dependencies = [
  "bytecheck",
  "bytes",
@@ -4239,13 +4211,13 @@ dependencies = [
 
 [[package]]
 name = "rkyv_derive"
-version = "0.8.17"
+version = "0.8.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c0ed1a78a1b19d184b0daa629dd9a024573173ec7d485b287cb369fb3607cc1c"
+checksum = "1c25ef604ac7dd839d44d64648952ea23c97866f124ff671b0ed2cf3ad9bb06e"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.118",
+ "syn 3.0.3",
 ]
 
 [[package]]
@@ -4347,7 +4319,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -4415,7 +4387,7 @@ dependencies = [
  "security-framework",
  "security-framework-sys",
  "webpki-root-certs",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -4618,10 +4590,6 @@ name = "seize"
 version = "0.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5b55fb86dfd3a2f5f76ea78310a88f96c4ea21a3031f8d212443d56123fd0521"
-dependencies = [
- "libc",
- "windows-sys 0.61.2",
-]
 
 [[package]]
 name = "self-replace"
@@ -4866,9 +4834,9 @@ checksum = "bbbb5d9659141646ae647b42fe094daf6c6192d1620870b449d9557f748b2daa"
 
 [[package]]
 name = "similar"
-version = "3.1.1"
+version = "3.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e6505efef05804732ed8a3f2d4f279429eb485bd69d5b0cc6b19cc02005cda16"
+checksum = "85ee016af5d736b69fc89e19254540fa4b5f5492853fb5503920f084011c78b6"
 dependencies = [
  "bstr",
 ]
@@ -4922,14 +4890,14 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3a766e1110788c36f4fa1c2b71b387a7815aa65f88ce0229841826633d93723e"
 dependencies = [
  "libc",
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
 name = "spdx"
-version = "0.13.4"
+version = "0.13.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a8da593e30beb790fc9424502eb898320b44e5eb30367dbda1c1edde8e2f32d7"
+checksum = "081670c233dfbed55690cc0cd38424e0e24ac1b2673d0b408b3f7b684738dfa9"
 dependencies = [
  "smallvec",
 ]
@@ -5125,9 +5093,9 @@ checksum = "eddb6b06d20fba9ed21fca3d696ee1b6e870bca0bcf9fa2971f6ae2436de576a"
 
 [[package]]
 name = "tar-codec"
-version = "0.0.13"
+version = "0.0.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f718b1f470b8ff575d12c85c33bdc8b33743009669c7a5e1923b6583235a2258"
+checksum = "7ea42eb144d30fcbf32c26dfea8959175bb8335bfb7b18d20c6ed32edecf0551"
 dependencies = [
  "archive-trait",
  "tar-framing",
@@ -5137,9 +5105,9 @@ dependencies = [
 
 [[package]]
 name = "tar-framing"
-version = "0.0.13"
+version = "0.0.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5aca504a58616b04eb381819c4ddfdf87b6d35f6699090e68d8b40954fb42da7"
+checksum = "783223a7a6590be4227cb821e7ce80372575511f67c824921aba0752d8ad5573"
 dependencies = [
  "thiserror",
  "tokio",
@@ -5168,10 +5136,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "32497e9a4c7b38532efcdebeef879707aa9f794296a4f0244f6f69e9bc8574bd"
 dependencies = [
  "fastrand",
- "getrandom 0.4.3",
+ "getrandom 0.3.4",
  "once_cell",
  "rustix",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -5181,7 +5149,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "230a1b821ccbd75b185820a1f1ff7b14d21da1e442e22c0863ea5f08771a8874"
 dependencies = [
  "rustix",
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -5739,7 +5707,7 @@ checksum = "f2f6fb2847f6742cd76af783a2a2c49e9375d0a111c7bef6f71cd9e738c72d6e"
 dependencies = [
  "memoffset",
  "tempfile",
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -5905,16 +5873,14 @@ dependencies = [
 
 [[package]]
 name = "uv"
-version = "0.12.5"
+version = "0.12.11"
 dependencies = [
  "anstream",
  "anyhow",
  "assert_cmd",
  "assert_fs",
- "astral-tokio-tar",
  "astral-version-ranges",
  "astral_async_zip",
- "async-compression",
  "axoupdater",
  "backon",
  "byteorder",
@@ -5945,7 +5911,6 @@ dependencies = [
  "jiff",
  "miette",
  "nix 0.31.3",
- "open",
  "owo-colors",
  "petgraph",
  "predicates",
@@ -5973,7 +5938,6 @@ dependencies = [
  "tracing-tree",
  "unicode-width 0.2.2",
  "url",
- "uuid",
  "uv-audit",
  "uv-auth",
  "uv-bin-install",
@@ -6035,7 +5999,7 @@ dependencies = [
 
 [[package]]
 name = "uv-audit"
-version = "0.0.72"
+version = "0.0.78"
 dependencies = [
  "astral-reqwest-middleware",
  "clap",
@@ -6066,25 +6030,21 @@ dependencies = [
 
 [[package]]
 name = "uv-auth"
-version = "0.0.72"
+version = "0.0.78"
 dependencies = [
  "anyhow",
- "arcstr",
  "astral-reqwest-middleware",
  "async-trait",
  "base64 0.22.1",
- "etcetera",
  "fs-err",
  "http",
  "insta",
- "jiff",
  "percent-encoding",
  "reqsign",
  "reqwest",
  "rustc-hash",
  "schemars",
  "serde",
- "serde_json",
  "tempfile",
  "test-log",
  "thiserror",
@@ -6092,7 +6052,6 @@ dependencies = [
  "toml",
  "tracing",
  "url",
- "uv-cache-key",
  "uv-fs",
  "uv-keyring",
  "uv-netrc",
@@ -6108,7 +6067,7 @@ dependencies = [
 
 [[package]]
 name = "uv-bench"
-version = "0.0.72"
+version = "0.0.78"
 dependencies = [
  "anyhow",
  "astral_async_zip",
@@ -6118,7 +6077,6 @@ dependencies = [
  "fs-err",
  "futures",
  "jiff",
- "rmp-serde",
  "serde_json",
  "sha2 0.11.0",
  "tar-codec",
@@ -6151,7 +6109,7 @@ dependencies = [
 
 [[package]]
 name = "uv-bin-install"
-version = "0.0.72"
+version = "0.0.78"
 dependencies = [
  "astral-reqwest-middleware",
  "astral-reqwest-retry",
@@ -6179,7 +6137,7 @@ dependencies = [
 
 [[package]]
 name = "uv-build"
-version = "0.12.5"
+version = "0.12.11"
 dependencies = [
  "anstream",
  "anyhow",
@@ -6194,7 +6152,7 @@ dependencies = [
 
 [[package]]
 name = "uv-build-backend"
-version = "0.0.72"
+version = "0.0.78"
 dependencies = [
  "anstream",
  "astral-tokio-tar",
@@ -6244,7 +6202,7 @@ dependencies = [
 
 [[package]]
 name = "uv-build-frontend"
-version = "0.0.72"
+version = "0.0.78"
 dependencies = [
  "anstream",
  "fs-err",
@@ -6283,7 +6241,7 @@ dependencies = [
 
 [[package]]
 name = "uv-cache"
-version = "0.0.72"
+version = "0.0.78"
 dependencies = [
  "clap",
  "fs-err",
@@ -6309,7 +6267,7 @@ dependencies = [
 
 [[package]]
 name = "uv-cache-info"
-version = "0.0.72"
+version = "0.0.78"
 dependencies = [
  "anyhow",
  "fs-err",
@@ -6326,7 +6284,7 @@ dependencies = [
 
 [[package]]
 name = "uv-cache-key"
-version = "0.0.72"
+version = "0.0.78"
 dependencies = [
  "hex",
  "memchr",
@@ -6338,7 +6296,7 @@ dependencies = [
 
 [[package]]
 name = "uv-cli"
-version = "0.0.72"
+version = "0.0.78"
 dependencies = [
  "anstream",
  "anyhow",
@@ -6371,7 +6329,7 @@ dependencies = [
 
 [[package]]
 name = "uv-client"
-version = "0.0.72"
+version = "0.0.78"
 dependencies = [
  "anyhow",
  "astral-reqwest-middleware",
@@ -6414,6 +6372,7 @@ dependencies = [
  "tokio-rustls",
  "tokio-util",
  "tracing",
+ "tracing-test",
  "url",
  "uv-auth",
  "uv-cache",
@@ -6445,7 +6404,7 @@ dependencies = [
 
 [[package]]
 name = "uv-configuration"
-version = "0.0.72"
+version = "0.0.78"
 dependencies = [
  "anyhow",
  "clap",
@@ -6480,14 +6439,14 @@ dependencies = [
 
 [[package]]
 name = "uv-console"
-version = "0.0.72"
+version = "0.0.78"
 dependencies = [
  "console",
 ]
 
 [[package]]
 name = "uv-dev"
-version = "0.0.72"
+version = "0.0.78"
 dependencies = [
  "anstream",
  "anyhow",
@@ -6543,7 +6502,7 @@ dependencies = [
 
 [[package]]
 name = "uv-dirs"
-version = "0.0.72"
+version = "0.0.78"
 dependencies = [
  "assert_fs",
  "etcetera",
@@ -6555,7 +6514,7 @@ dependencies = [
 
 [[package]]
 name = "uv-dispatch"
-version = "0.0.72"
+version = "0.0.78"
 dependencies = [
  "anyhow",
  "futures",
@@ -6589,7 +6548,7 @@ dependencies = [
 
 [[package]]
 name = "uv-distribution"
-version = "0.0.72"
+version = "0.0.78"
 dependencies = [
  "anyhow",
  "astral-reqwest-middleware",
@@ -6599,6 +6558,7 @@ dependencies = [
  "indoc",
  "insta",
  "owo-colors",
+ "rayon",
  "reqwest",
  "rmp-serde",
  "rustc-hash",
@@ -6630,6 +6590,7 @@ dependencies = [
  "uv-pep440",
  "uv-pep508",
  "uv-platform-tags",
+ "uv-preview",
  "uv-pypi-types",
  "uv-python",
  "uv-redacted",
@@ -6640,7 +6601,7 @@ dependencies = [
 
 [[package]]
 name = "uv-distribution-filename"
-version = "0.0.72"
+version = "0.0.78"
 dependencies = [
  "insta",
  "memchr",
@@ -6657,7 +6618,7 @@ dependencies = [
 
 [[package]]
 name = "uv-distribution-types"
-version = "0.0.72"
+version = "0.0.78"
 dependencies = [
  "arcstr",
  "astral-version-ranges",
@@ -6699,7 +6660,7 @@ dependencies = [
 
 [[package]]
 name = "uv-errors"
-version = "0.0.72"
+version = "0.0.78"
 dependencies = [
  "anstream",
  "anyhow",
@@ -6714,7 +6675,7 @@ dependencies = [
 
 [[package]]
 name = "uv-extract"
-version = "0.0.72"
+version = "0.0.78"
 dependencies = [
  "anyhow",
  "astral-tokio-tar",
@@ -6749,7 +6710,7 @@ dependencies = [
 
 [[package]]
 name = "uv-fastid"
-version = "0.0.72"
+version = "0.0.78"
 dependencies = [
  "rand 0.9.4",
  "serde",
@@ -6758,14 +6719,14 @@ dependencies = [
 
 [[package]]
 name = "uv-flags"
-version = "0.0.72"
+version = "0.0.78"
 dependencies = [
  "bitflags 2.13.1",
 ]
 
 [[package]]
 name = "uv-fs"
-version = "0.0.72"
+version = "0.0.78"
 dependencies = [
  "backon",
  "clap",
@@ -6798,7 +6759,7 @@ dependencies = [
 
 [[package]]
 name = "uv-git"
-version = "0.0.72"
+version = "0.0.78"
 dependencies = [
  "anyhow",
  "astral-reqwest-middleware",
@@ -6824,7 +6785,7 @@ dependencies = [
 
 [[package]]
 name = "uv-git-types"
-version = "0.0.72"
+version = "0.0.78"
 dependencies = [
  "percent-encoding",
  "serde",
@@ -6838,7 +6799,7 @@ dependencies = [
 
 [[package]]
 name = "uv-globfilter"
-version = "0.0.72"
+version = "0.0.78"
 dependencies = [
  "anstream",
  "fs-err",
@@ -6855,7 +6816,7 @@ dependencies = [
 
 [[package]]
 name = "uv-install-wheel"
-version = "0.0.72"
+version = "0.0.78"
 dependencies = [
  "anyhow",
  "assert_fs",
@@ -6892,7 +6853,7 @@ dependencies = [
 
 [[package]]
 name = "uv-installer"
-version = "0.0.72"
+version = "0.0.78"
 dependencies = [
  "anstream",
  "anyhow",
@@ -6936,7 +6897,7 @@ dependencies = [
 
 [[package]]
 name = "uv-keyring"
-version = "0.0.72"
+version = "0.0.78"
 dependencies = [
  "async-trait",
  "byteorder",
@@ -6952,7 +6913,7 @@ dependencies = [
 
 [[package]]
 name = "uv-logging"
-version = "0.0.72"
+version = "0.0.78"
 dependencies = [
  "anstream",
  "jiff",
@@ -6963,7 +6924,7 @@ dependencies = [
 
 [[package]]
 name = "uv-macros"
-version = "0.0.72"
+version = "0.0.78"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -6974,7 +6935,7 @@ dependencies = [
 
 [[package]]
 name = "uv-metadata"
-version = "0.0.72"
+version = "0.0.78"
 dependencies = [
  "astral_async_zip",
  "fs-err",
@@ -6990,7 +6951,7 @@ dependencies = [
 
 [[package]]
 name = "uv-netrc"
-version = "0.0.72"
+version = "0.0.78"
 dependencies = [
  "fs-err",
  "shellexpand",
@@ -7000,7 +6961,7 @@ dependencies = [
 
 [[package]]
 name = "uv-normalize"
-version = "0.0.72"
+version = "0.0.78"
 dependencies = [
  "rkyv",
  "schemars",
@@ -7010,7 +6971,7 @@ dependencies = [
 
 [[package]]
 name = "uv-once-map"
-version = "0.0.72"
+version = "0.0.78"
 dependencies = [
  "futures",
  "papaya",
@@ -7019,14 +6980,14 @@ dependencies = [
 
 [[package]]
 name = "uv-options-metadata"
-version = "0.0.72"
+version = "0.0.78"
 dependencies = [
  "serde",
 ]
 
 [[package]]
 name = "uv-pep440"
-version = "0.0.72"
+version = "0.0.78"
 dependencies = [
  "astral-version-ranges",
  "indoc",
@@ -7040,7 +7001,7 @@ dependencies = [
 
 [[package]]
 name = "uv-pep508"
-version = "0.0.72"
+version = "0.0.78"
 dependencies = [
  "arcstr",
  "astral-version-ranges",
@@ -7070,7 +7031,7 @@ dependencies = [
 
 [[package]]
 name = "uv-performance-memory-allocator"
-version = "0.0.72"
+version = "0.0.78"
 dependencies = [
  "mimalloc",
  "tikv-jemallocator",
@@ -7078,7 +7039,7 @@ dependencies = [
 
 [[package]]
 name = "uv-platform"
-version = "0.0.72"
+version = "0.0.78"
 dependencies = [
  "fs-err",
  "goblin",
@@ -7099,7 +7060,7 @@ dependencies = [
 
 [[package]]
 name = "uv-platform-tags"
-version = "0.0.72"
+version = "0.0.78"
 dependencies = [
  "bitflags 2.13.1",
  "insta",
@@ -7113,7 +7074,7 @@ dependencies = [
 
 [[package]]
 name = "uv-preview"
-version = "0.0.72"
+version = "0.0.78"
 dependencies = [
  "enumflags2",
  "itertools 0.14.0",
@@ -7127,7 +7088,7 @@ dependencies = [
 
 [[package]]
 name = "uv-publish"
-version = "0.0.72"
+version = "0.0.78"
 dependencies = [
  "ambient-id",
  "anstream",
@@ -7173,7 +7134,7 @@ dependencies = [
 
 [[package]]
 name = "uv-pypi-types"
-version = "0.0.72"
+version = "0.0.78"
 dependencies = [
  "anyhow",
  "hashbrown 0.17.1",
@@ -7206,7 +7167,7 @@ dependencies = [
 
 [[package]]
 name = "uv-python"
-version = "0.0.72"
+version = "0.0.78"
 dependencies = [
  "anyhow",
  "assert_fs",
@@ -7270,7 +7231,7 @@ dependencies = [
 
 [[package]]
 name = "uv-redacted"
-version = "0.0.72"
+version = "0.0.78"
 dependencies = [
  "ref-cast",
  "schemars",
@@ -7281,7 +7242,7 @@ dependencies = [
 
 [[package]]
 name = "uv-requirements"
-version = "0.0.72"
+version = "0.0.78"
 dependencies = [
  "anyhow",
  "configparser",
@@ -7315,7 +7276,7 @@ dependencies = [
 
 [[package]]
 name = "uv-requirements-txt"
-version = "0.0.72"
+version = "0.0.78"
 dependencies = [
  "anyhow",
  "assert_fs",
@@ -7349,7 +7310,7 @@ dependencies = [
 
 [[package]]
 name = "uv-resolver"
-version = "0.0.72"
+version = "0.0.78"
 dependencies = [
  "arcstr",
  "astral-pubgrub",
@@ -7380,6 +7341,7 @@ dependencies = [
  "thiserror",
  "tokio",
  "tokio-stream",
+ "tokio-util",
  "toml",
  "toml_edit",
  "toml_parser",
@@ -7394,6 +7356,7 @@ dependencies = [
  "uv-distribution-filename",
  "uv-distribution-types",
  "uv-errors",
+ "uv-extract",
  "uv-flags",
  "uv-fs",
  "uv-git",
@@ -7420,7 +7383,7 @@ dependencies = [
 
 [[package]]
 name = "uv-scripts"
-version = "0.0.72"
+version = "0.0.78"
 dependencies = [
  "fs-err",
  "indoc",
@@ -7445,7 +7408,7 @@ dependencies = [
 
 [[package]]
 name = "uv-settings"
-version = "0.0.72"
+version = "0.0.78"
 dependencies = [
  "clap",
  "fs-err",
@@ -7484,7 +7447,7 @@ dependencies = [
 
 [[package]]
 name = "uv-shell"
-version = "0.0.72"
+version = "0.0.78"
 dependencies = [
  "anyhow",
  "fs-err",
@@ -7501,7 +7464,7 @@ dependencies = [
 
 [[package]]
 name = "uv-small-str"
-version = "0.0.72"
+version = "0.0.78"
 dependencies = [
  "arcstr",
  "rkyv",
@@ -7511,7 +7474,7 @@ dependencies = [
 
 [[package]]
 name = "uv-state"
-version = "0.0.72"
+version = "0.0.78"
 dependencies = [
  "tempfile",
  "uv-dirs",
@@ -7519,7 +7482,7 @@ dependencies = [
 
 [[package]]
 name = "uv-static"
-version = "0.0.72"
+version = "0.0.78"
 dependencies = [
  "thiserror",
  "uv-macros",
@@ -7527,7 +7490,7 @@ dependencies = [
 
 [[package]]
 name = "uv-test"
-version = "0.0.72"
+version = "0.0.78"
 dependencies = [
  "anyhow",
  "assert_cmd",
@@ -7549,7 +7512,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2 0.11.0",
- "similar 3.1.1",
+ "similar 3.1.2",
  "tar-codec",
  "tempfile",
  "tokio",
@@ -7568,19 +7531,20 @@ dependencies = [
  "uv-python",
  "uv-static",
  "uv-version",
+ "walkdir",
  "wiremock",
 ]
 
 [[package]]
 name = "uv-toml"
-version = "0.0.72"
+version = "0.0.78"
 dependencies = [
  "serde",
 ]
 
 [[package]]
 name = "uv-tool"
-version = "0.0.72"
+version = "0.0.78"
 dependencies = [
  "fs-err",
  "owo-colors",
@@ -7606,11 +7570,12 @@ dependencies = [
  "uv-state",
  "uv-static",
  "uv-virtualenv",
+ "uv-warnings",
 ]
 
 [[package]]
 name = "uv-torch"
-version = "0.0.72"
+version = "0.0.78"
 dependencies = [
  "clap",
  "fs-err",
@@ -7623,13 +7588,12 @@ dependencies = [
  "uv-normalize",
  "uv-pep440",
  "uv-platform-tags",
- "uv-static",
  "windows",
 ]
 
 [[package]]
 name = "uv-trampoline-builder"
-version = "0.0.72"
+version = "0.0.78"
 dependencies = [
  "anyhow",
  "assert_cmd",
@@ -7648,7 +7612,7 @@ dependencies = [
 
 [[package]]
 name = "uv-types"
-version = "0.0.72"
+version = "0.0.78"
 dependencies = [
  "anyhow",
  "papaya",
@@ -7671,7 +7635,7 @@ dependencies = [
 
 [[package]]
 name = "uv-unix"
-version = "0.0.72"
+version = "0.0.78"
 dependencies = [
  "nix 0.31.3",
  "thiserror",
@@ -7679,11 +7643,11 @@ dependencies = [
 
 [[package]]
 name = "uv-version"
-version = "0.12.5"
+version = "0.12.11"
 
 [[package]]
 name = "uv-virtualenv"
-version = "0.0.72"
+version = "0.0.78"
 dependencies = [
  "console",
  "fs-err",
@@ -7705,7 +7669,7 @@ dependencies = [
 
 [[package]]
 name = "uv-warnings"
-version = "0.0.72"
+version = "0.0.78"
 dependencies = [
  "anstream",
  "anyhow",
@@ -7717,7 +7681,7 @@ dependencies = [
 
 [[package]]
 name = "uv-windows"
-version = "0.0.72"
+version = "0.0.78"
 dependencies = [
  "arrayvec",
  "windows",
@@ -7725,7 +7689,7 @@ dependencies = [
 
 [[package]]
 name = "uv-workspace"
-version = "0.0.72"
+version = "0.0.78"
 dependencies = [
  "anyhow",
  "assert_fs",
@@ -7973,7 +7937,7 @@ version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
 dependencies = [
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -8460,18 +8424,18 @@ dependencies = [
 
 [[package]]
 name = "zerocopy"
-version = "0.8.42"
+version = "0.8.56"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f2578b716f8a7a858b7f02d5bd870c14bf4ddbbcf3a4c05414ba6503640505e3"
+checksum = "556764e583adb45a9f8d413c2a147fa7e8d821e48e12b14fd560b607998b75eb"
 dependencies = [
  "zerocopy-derive",
 ]
 
 [[package]]
 name = "zerocopy-derive"
-version = "0.8.42"
+version = "0.8.56"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7e6cc098ea4d3bd6246687de65af3f920c430e236bee1e3bf2e441463f08a02f"
+checksum = "f2ab42fc20575779bd240faa45f94a74256f755c0fa9e89f0ede20d91d0cdfc1"
 dependencies = [
  "proc-macro2",
  "quote",

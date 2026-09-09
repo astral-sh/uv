@@ -1,4 +1,5 @@
 use std::borrow::Cow;
+use std::cmp::Ordering;
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::error::Error;
 use std::fmt::{Debug, Display, Formatter};
@@ -32,11 +33,11 @@ use uv_distribution_filename::{
 };
 use uv_distribution_types::{
     BuiltDist, DependencyMetadata, DirectUrlBuiltDist, DirectUrlSourceDist, DirectorySourceDist,
-    Dist, FileLocation, GitDirectorySourceDist, GitPathBuiltDist, GitPathSourceDist, Identifier,
-    IndexLocations, IndexMetadata, IndexUrl, Name, PYPI_URL, PathBuiltDist, PathSourceDist,
-    RegistryBuiltDist, RegistryBuiltWheel, RegistrySourceDist, RemoteSource, Requirement,
-    RequirementSource, RequiresPython, ResolvedDist, SimplifiedMarkerTree, StaticMetadata,
-    ToUrlError, UrlString,
+    Dist, FileLocation, FirstParty, GitDirectorySourceDist, GitPathBuiltDist, GitPathSourceDist,
+    HashPolicy, Identifier, IndexLocations, IndexMetadata, IndexUrl, Name, PYPI_URL, PathBuiltDist,
+    PathSourceDist, RegistryBuiltDist, RegistryBuiltWheel, RegistrySourceDist, RemoteSource,
+    Requirement, RequirementSource, RequiresPython, ResolvedDist, SimplifiedMarkerTree,
+    StaticMetadata, ToUrlError, UrlString, VersionId,
 };
 use uv_fs::{PortablePath, PortablePathBuf, Simplified, normalize_path, try_relative_to_if};
 use uv_git::{RepositoryReference, ResolvedRepositoryReference};
@@ -331,7 +332,7 @@ pub struct Lock {
     /// this map, and that every dependency for every package has an ID
     /// that exists in this map. That is, there are no dependencies that don't
     /// have a corresponding locked package entry in the same lockfile.
-    by_id: FxHashMap<PackageId, usize>,
+    by_id: FxHashMap<PackageId, PackageIndex>,
     /// The input requirements to the resolution.
     manifest: ResolverManifest,
 }
@@ -1200,8 +1201,8 @@ impl Lock {
         // Check for duplicate package IDs and also build up the map for
         // packages keyed by their ID.
         let mut by_id = FxHashMap::default();
-        for (i, dist) in packages.iter().enumerate() {
-            if by_id.insert(dist.id.clone(), i).is_some() {
+        for (index, dist) in packages.iter().enumerate() {
+            if by_id.insert(dist.id.clone(), PackageIndex(index)).is_some() {
                 return Err(LockErrorKind::DuplicatePackage {
                     id: dist.id.clone(),
                 }
@@ -1239,15 +1240,21 @@ impl Lock {
         // Check that every dependency has an entry in `by_id`. If any don't,
         // it implies we somehow have a dependency with no corresponding locked
         // package.
-        for dist in &packages {
-            for dependency in dist.all_dependencies() {
-                if !by_id.contains_key(&dependency.package_id) {
+        for dist in &mut packages {
+            for dependency in dist
+                .dependencies
+                .iter_mut()
+                .chain(dist.optional_dependencies.values_mut().flatten())
+                .chain(dist.dependency_groups.values_mut().flatten())
+            {
+                let Some(&index) = by_id.get(&dependency.package_id) else {
                     return Err(LockErrorKind::UnrecognizedDependency {
                         id: dist.id.clone(),
                         dependency: dependency.clone(),
                     }
                     .into());
-                }
+                };
+                dependency.index = index;
             }
 
             // Also check that our sources are consistent with whether we have
@@ -1308,6 +1315,16 @@ impl Lock {
         self
     }
 
+    /// Omit package-specific settings for packages outside the resolution.
+    #[must_use]
+    pub fn without_unused_exclude_newer_packages(mut self) -> Self {
+        self.options.exclude_newer = self
+            .options
+            .exclude_newer
+            .filter_packages(self.packages.iter().map(Package::name));
+        self
+    }
+
     /// Returns `true` if this [`Lock`] includes `provides-extra` metadata.
     pub fn supports_provides_extra(&self) -> bool {
         // `provides-extra` was added in Version 1 Revision 1.
@@ -1351,6 +1368,58 @@ impl Lock {
         &self.packages
     }
 
+    /// Return a [`HashStrategy`] that verifies artifacts recorded in this lockfile.
+    ///
+    /// Artifacts absent from the lockfile do not require hashes. This strategy does not generate
+    /// hashes for those artifacts.
+    pub fn hash_strategy(&self, root: &Path) -> Result<HashStrategy, LockError> {
+        let mut hashes: FxHashMap<VersionId, Vec<HashDigest>> = FxHashMap::default();
+
+        for package in &self.packages {
+            let (id, package_hashes) = match &package.id.source {
+                Source::Registry(_) => {
+                    let Some(version) = &package.id.version else {
+                        continue;
+                    };
+                    (
+                        VersionId::from_registry(package.id.name.clone(), version.clone()),
+                        package.hashes(),
+                    )
+                }
+                Source::Direct(url, source) => (
+                    VersionId::from_archive(
+                        url.to_url().map_err(LockErrorKind::InvalidUrl)?,
+                        source.subdirectory.clone().map(Path::into_path_buf),
+                    ),
+                    package.hashes(),
+                ),
+                Source::Path(path) => (
+                    VersionId::from_path(&absolute_path(root, path)?),
+                    package.hashes(),
+                ),
+                Source::Git(..)
+                | Source::Directory(_)
+                | Source::Editable(_)
+                | Source::Virtual(_) => continue,
+            };
+            if package_hashes.is_empty() {
+                continue;
+            }
+            let digests = hashes.entry(id).or_default();
+            for hash in package_hashes {
+                if !digests.contains(&hash) {
+                    digests.push(hash);
+                }
+            }
+        }
+
+        if hashes.is_empty() {
+            Ok(HashStrategy::default())
+        } else {
+            Ok(HashStrategy::verify(Arc::new(hashes)))
+        }
+    }
+
     /// Return whether every registry artifact in the lockfile has a hash using its index's
     /// required algorithm, if any.
     pub fn satisfies_hash_algorithms(
@@ -1371,13 +1440,10 @@ impl Lock {
                 |hash: Option<&Hash>| hash.is_none_or(|hash| hash.0.algorithm != algorithm);
 
             if package.sdist.iter().any(|sdist| mismatched(sdist.hash()))
-                || package.wheels.iter().any(|wheel| {
-                    mismatched(wheel.hash.as_ref())
-                        || wheel
-                            .zstd
-                            .as_ref()
-                            .is_some_and(|zstd| mismatched(zstd.hash.as_ref()))
-                })
+                || package
+                    .wheels
+                    .iter()
+                    .any(|wheel| mismatched(wheel.hash.as_ref()))
             {
                 return Ok(false);
             }
@@ -1434,6 +1500,12 @@ impl Lock {
     /// Returns the workspace members that were used to generate this lock.
     pub fn members(&self) -> &BTreeSet<PackageName> {
         &self.manifest.members
+    }
+
+    /// Returns `true` if the package is a workspace member.
+    fn is_workspace_member(&self, package: &Package) -> bool {
+        self.members().contains(&package.id.name)
+            || self.members().is_empty() && self.root().is_some_and(|root| root.id == package.id)
     }
 
     /// Returns the root requirements that were used to generate this lock.
@@ -1595,7 +1667,7 @@ impl Lock {
                 continue;
             }
 
-            let package = self.find_by_id(&dependency.package_id);
+            let package = self.package(dependency.index);
             if selected
                 .as_ref()
                 .is_some_and(|selected| selected.package.id != package.id)
@@ -1644,7 +1716,7 @@ impl Lock {
                 continue;
             }
 
-            let package = self.find_by_id(&dependency.package_id);
+            let package = self.package(dependency.index);
             if selected
                 .as_ref()
                 .is_some_and(|selected| selected.package.id != package.id)
@@ -1726,48 +1798,52 @@ impl Lock {
     {
         // Enqueue a dependency for auditability checks: base package (no extra) first, then each activated extra.
         fn enqueue_dep<'lock>(
-            lock: &'lock Lock,
-            seen: &mut FxHashSet<(&'lock PackageId, Option<&'lock ExtraName>)>,
-            queue: &mut VecDeque<(&'lock Package, Option<&'lock ExtraName>)>,
+            seen: &mut FxHashSet<(PackageIndex, Option<&'lock ExtraName>)>,
+            queue: &mut VecDeque<(PackageIndex, Option<&'lock ExtraName>)>,
             dep: &'lock Dependency,
         ) {
-            let dep_pkg = lock.find_by_id(&dep.package_id);
             for maybe_extra in std::iter::once(None).chain(dep.extra.iter().map(Some)) {
-                if seen.insert((&dep.package_id, maybe_extra)) {
-                    queue.push_back((dep_pkg, maybe_extra));
+                if seen.insert((dep.index, maybe_extra)) {
+                    queue.push_back((dep.index, maybe_extra));
                 }
             }
         }
 
         // Identify workspace members (the implicit root counts for single-member workspaces).
-        let workspace_member_ids: FxHashSet<&PackageId> = if self.members().is_empty() {
-            self.root().into_iter().map(|package| &package.id).collect()
+        let workspace_members: FxHashSet<PackageIndex> = if self.members().is_empty() {
+            self.root()
+                .into_iter()
+                .map(|package| self.by_id[&package.id])
+                .collect()
         } else {
             self.packages
                 .iter()
-                .filter(|package| self.members().contains(&package.id.name))
-                .map(|package| &package.id)
+                .enumerate()
+                .filter(|(_, package)| self.members().contains(&package.id.name))
+                .map(|(index, _)| PackageIndex(index))
                 .collect()
         };
 
         // Lockfile traversal state: (package, optional extra to activate on that package).
-        let mut queue: VecDeque<(&Package, Option<&ExtraName>)> = VecDeque::new();
-        let mut seen: FxHashSet<(&PackageId, Option<&ExtraName>)> = FxHashSet::default();
+        let mut queue: VecDeque<(PackageIndex, Option<&ExtraName>)> = VecDeque::new();
+        let mut seen: FxHashSet<(PackageIndex, Option<&ExtraName>)> = FxHashSet::default();
 
         // Seed from workspace members. Always queue with `None` so that we can traverse
         // their dependency groups; only queue extras when prod mode is active.
-        for package in self
+        for (index, package) in self
             .packages
             .iter()
-            .filter(|p| workspace_member_ids.contains(&p.id))
+            .enumerate()
+            .filter(|(index, _)| workspace_members.contains(&PackageIndex(*index)))
         {
-            if seen.insert((&package.id, None)) {
-                queue.push_back((package, None));
+            let index = PackageIndex(index);
+            if seen.insert((index, None)) {
+                queue.push_back((index, None));
             }
             if groups.prod() {
                 for extra in extras.extra_names(package.optional_dependencies.keys()) {
-                    if seen.insert((&package.id, Some(extra))) {
-                        queue.push_back((package, Some(extra)));
+                    if seen.insert((index, Some(extra))) {
+                        queue.push_back((index, Some(extra)));
                     }
                 }
             }
@@ -1775,17 +1851,19 @@ impl Lock {
 
         // Seed from requirements attached directly to the lock (e.g., PEP 723 scripts).
         for requirement in self.requirements() {
-            for package in self
+            for (index, _) in self
                 .packages
                 .iter()
-                .filter(|p| p.id.name == requirement.name)
+                .enumerate()
+                .filter(|(_, package)| package.id.name == requirement.name)
             {
-                if seen.insert((&package.id, None)) {
-                    queue.push_back((package, None));
+                let index = PackageIndex(index);
+                if seen.insert((index, None)) {
+                    queue.push_back((index, None));
                 }
                 for extra in &*requirement.extras {
-                    if seen.insert((&package.id, Some(extra))) {
-                        queue.push_back((package, Some(extra)));
+                    if seen.insert((index, Some(extra))) {
+                        queue.push_back((index, Some(extra)));
                     }
                 }
             }
@@ -1798,25 +1876,28 @@ impl Lock {
                 continue;
             }
             for requirement in requirements {
-                for package in self
+                for (index, _) in self
                     .packages
                     .iter()
-                    .filter(|p| p.id.name == requirement.name)
+                    .enumerate()
+                    .filter(|(_, package)| package.id.name == requirement.name)
                 {
-                    if seen.insert((&package.id, None)) {
-                        queue.push_back((package, None));
+                    let index = PackageIndex(index);
+                    if seen.insert((index, None)) {
+                        queue.push_back((index, None));
                     }
                     for extra in &*requirement.extras {
-                        if seen.insert((&package.id, Some(extra))) {
-                            queue.push_back((package, Some(extra)));
+                        if seen.insert((index, Some(extra))) {
+                            queue.push_back((index, Some(extra)));
                         }
                     }
                 }
             }
         }
 
-        while let Some((package, extra)) = queue.pop_front() {
-            let is_member = workspace_member_ids.contains(&package.id);
+        while let Some((index, extra)) = queue.pop_front() {
+            let package = self.package(index);
+            let is_member = workspace_members.contains(&index);
 
             // Collect non-workspace packages that have version information
             // and pass the caller's filter.
@@ -1839,7 +1920,7 @@ impl Lock {
                     .filter(|(group, _)| groups.contains(group))
                     .flat_map(|(_, deps)| deps)
                 {
-                    enqueue_dep(self, &mut seen, &mut queue, dep);
+                    enqueue_dep(&mut seen, &mut queue, dep);
                 }
             }
 
@@ -1856,7 +1937,7 @@ impl Lock {
             };
 
             for dep in dependencies {
-                enqueue_dep(self, &mut seen, &mut queue, dep);
+                enqueue_dep(&mut seen, &mut queue, dep);
             }
         }
     }
@@ -2059,10 +2140,9 @@ impl Lock {
         Ok(found_dist)
     }
 
-    fn find_by_id(&self, id: &PackageId) -> &Package {
-        let index = *self.by_id.get(id).expect("locked package for ID");
-
-        (self.packages.get(index).expect("valid index for package")) as _
+    /// Return the [`Package`] at an index in this lock's package ordering.
+    fn package(&self, index: PackageIndex) -> &Package {
+        &self.packages[index.0]
     }
 
     /// Return a [`SatisfiesResult`] if the given extras do not match the [`Package`] metadata.
@@ -2355,10 +2435,11 @@ impl Lock {
     ) -> Result<SatisfiesResult<'_>, LockError> {
         let allow_missing_package_metadata =
             allow_missing_package_metadata && self.supports_missing_package_metadata();
-        let mut queue: VecDeque<&Package> = VecDeque::new();
+        let mut queue: VecDeque<PackageIndex> = VecDeque::new();
         let mut seen = FxHashSet::default();
         let mut activated_extras: FxHashMap<PackageId, BTreeSet<ExtraName>> = FxHashMap::default();
-        let mut validated_extras: FxHashMap<PackageId, BTreeSet<ExtraName>> = FxHashMap::default();
+        let mut validated_extras: FxHashMap<PackageIndex, BTreeSet<ExtraName>> =
+            FxHashMap::default();
 
         // Validate that the lockfile was generated with the same root members.
         {
@@ -2645,8 +2726,9 @@ impl Lock {
                 return Ok(SatisfiesResult::MissingRoot(root_name.clone()));
             };
 
-            if seen.insert(&root.id) {
-                queue.push_back(root);
+            let package_index = self.by_id[&root.id];
+            if seen.insert(package_index) {
+                queue.push_back(package_index);
             }
         }
 
@@ -2695,14 +2777,16 @@ impl Lock {
                         .or_default()
                         .extend(requirement.extras.iter().cloned());
 
-                    if seen.insert(&package.id) {
-                        queue.push_back(package);
+                    let package_index = self.by_id[&package.id];
+                    if seen.insert(package_index) {
+                        queue.push_back(package_index);
                     }
                 }
             }
         }
 
-        while let Some(package) = queue.pop_front() {
+        while let Some(package_index) = queue.pop_front() {
+            let package = self.package(package_index);
             // If the lockfile references an index that was not provided, we can't validate it.
             if let Source::Registry(index) = &package.id.source {
                 match index {
@@ -3014,7 +3098,7 @@ impl Lock {
             // Revisit an already-validated dependency if another parent activated more extras.
             // Empty extras have no locked edges, so their activation is otherwise order-dependent.
             validated_extras.insert(
-                package.id.clone(),
+                package_index,
                 activated_extras
                     .get(&package.id)
                     .cloned()
@@ -3022,12 +3106,11 @@ impl Lock {
             );
             for dependency in package.all_dependencies() {
                 let needs_extra_validation = validated_extras
-                    .get(&dependency.package_id)
+                    .get(&dependency.index)
                     .zip(activated_extras.get(&dependency.package_id))
                     .is_some_and(|(validated, activated)| !activated.is_subset(validated));
-                if seen.insert(&dependency.package_id) || needs_extra_validation {
-                    let dependency_package = self.find_by_id(&dependency.package_id);
-                    queue.push_back(dependency_package);
+                if seen.insert(dependency.index) || needs_extra_validation {
+                    queue.push_back(dependency.index);
                 }
             }
         }
@@ -3181,8 +3264,22 @@ impl Lock {
         index: &InMemoryIndex,
         database: &DistributionDatabase<'_, Context>,
     ) -> Result<DistributionMetadata, LockError> {
-        let HashedDist { dist, .. } =
-            package.to_dist(root, TagPolicy::Preferred(tags), build_options, markers)?;
+        let HashedDist { dist, hashes } = package.to_dist(
+            root,
+            TagPolicy::Preferred(tags),
+            build_options,
+            markers,
+            FirstParty::No,
+        )?;
+        let locked_hashes = match (&package.id.source, &dist) {
+            (Source::Direct(..) | Source::Path(_), Dist::Source(_)) if !hashes.is_empty() => {
+                Some(HashPolicy::All(hashes.as_slice()))
+            }
+            (Source::Registry(_), Dist::Source(_)) if !hashes.is_empty() => {
+                Some(HashPolicy::Any(hashes.as_slice()))
+            }
+            _ => None,
+        };
         let id = dist.distribution_id();
         if let Some(archive) = index
             .distributions()
@@ -3195,12 +3292,13 @@ impl Lock {
                     None
                 }
             })
+            && locked_hashes.is_none_or(|policy| policy.matches(archive.hashes.as_slice()))
         {
             return Ok(archive.metadata.clone());
         }
 
         let archive = database
-            .get_or_build_wheel_metadata(&dist, hasher.get(&dist))
+            .get_or_build_wheel_metadata(&dist, locked_hashes.unwrap_or_else(|| hasher.get(&dist)))
             .await
             .map_err(|err| LockErrorKind::Resolution {
                 id: package.id.clone(),
@@ -3865,6 +3963,7 @@ impl Package {
         tag_policy: TagPolicy<'_>,
         build_options: &BuildOptions,
         markers: &MarkerEnvironment,
+        first_party: FirstParty,
     ) -> Result<HashedDist, LockError> {
         let no_binary = build_options.no_binary_package(&self.id.name);
         let no_build = build_options.no_build_package(&self.id.name);
@@ -3873,14 +3972,7 @@ impl Package {
             if let Some(best_wheel_index) = self.find_best_wheel(tag_policy) {
                 let hashes = {
                     let wheel = &self.wheels[best_wheel_index];
-                    HashDigests::from(
-                        wheel
-                            .hash
-                            .iter()
-                            .chain(wheel.zstd.iter().flat_map(|z| z.hash.iter()))
-                            .map(|h| h.0.clone())
-                            .collect::<Vec<_>>(),
-                    )
+                    HashDigests::from(wheel.hash.iter().map(|h| h.0.clone()).collect::<Vec<_>>())
                 };
 
                 let dist = match &self.id.source {
@@ -3995,11 +4087,11 @@ impl Package {
             }
         }
 
-        if let Some(sdist) = self.to_source_dist(workspace_root)? {
-            // Even with `--no-build`, allow virtual packages. (In the future, we may want to allow
-            // any local source tree, or at least editable source trees, which we allow in
-            // `uv pip`.)
-            if !no_build || sdist.is_virtual() {
+        if let Some(sdist) = self.to_source_dist(workspace_root, first_party)? {
+            // Even with `--no-build`, allow virtual packages and first-party workspace members. In
+            // the future, we may want to allow any local source tree, or at least editable source
+            // trees, as we do in `uv pip`.
+            if !no_build || sdist.is_virtual() || sdist.is_first_party() {
                 let hashes = self
                     .sdist
                     .as_ref()
@@ -4072,6 +4164,7 @@ impl Package {
     fn to_source_dist(
         &self,
         workspace_root: &Path,
+        first_party: FirstParty,
     ) -> Result<Option<uv_distribution_types::SourceDist>, LockError> {
         let sdist = match &self.id.source {
             Source::Path(path) => {
@@ -4111,6 +4204,7 @@ impl Package {
                     install_path: install_path.into_boxed_path(),
                     editable: Some(false),
                     r#virtual: Some(false),
+                    first_party,
                 };
                 uv_distribution_types::SourceDist::Directory(dir_dist)
             }
@@ -4123,6 +4217,7 @@ impl Package {
                     install_path: install_path.into_boxed_path(),
                     editable: Some(true),
                     r#virtual: Some(false),
+                    first_party,
                 };
                 uv_distribution_types::SourceDist::Directory(dir_dist)
             }
@@ -4135,6 +4230,7 @@ impl Package {
                     install_path: install_path.into_boxed_path(),
                     editable: Some(false),
                     r#virtual: Some(true),
+                    first_party,
                 };
                 uv_distribution_types::SourceDist::Directory(dir_dist)
             }
@@ -4466,9 +4562,6 @@ impl Package {
         }
         for wheel in &self.wheels {
             hashes.extend(wheel.hash.as_ref().map(|h| h.0.clone()));
-            if let Some(zstd) = wheel.zstd.as_ref() {
-                hashes.extend(zstd.hash.as_ref().map(|h| h.0.clone()));
-            }
         }
         HashDigests::from(hashes)
     }
@@ -5888,12 +5981,6 @@ fn locked_git_url(
     url
 }
 
-#[derive(Clone, Debug, serde::Deserialize, PartialEq, Eq)]
-struct ZstdWheel {
-    hash: Option<Hash>,
-    size: Option<u64>,
-}
-
 /// Inspired by: <https://discuss.python.org/t/lock-files-again-but-this-time-w-sdists/46593>
 #[derive(Clone, Debug, serde::Deserialize, PartialEq, Eq)]
 #[serde(try_from = "WheelWire")]
@@ -5924,8 +6011,6 @@ struct Wheel {
     /// deserialization time. Not being able to extract a wheel filename from a
     /// wheel URL is thus a deserialization error.
     filename: WheelFilename,
-    /// The zstandard-compressed wheel metadata, if any.
-    zstd: Option<ZstdWheel>,
 }
 
 impl Wheel {
@@ -6056,26 +6141,12 @@ impl Wheel {
             .map(Timestamp::from_millisecond)
             .transpose()
             .map_err(LockErrorKind::InvalidTimestamp)?;
-        let zstd = if let Some(zstd) = wheel.file.zstd.as_ref() {
-            Some(ZstdWheel {
-                hash: select_registry_hash(
-                    &zstd.hashes,
-                    &wheel.index,
-                    index_locations,
-                    wheel.file.filename.as_ref(),
-                )?,
-                size: zstd.size,
-            })
-        } else {
-            None
-        };
         Ok(Self {
             url,
             hash,
             size,
             upload_time,
             filename,
-            zstd,
         })
     }
 
@@ -6088,7 +6159,6 @@ impl Wheel {
             size: None,
             upload_time: None,
             filename: direct_dist.filename.clone(),
-            zstd: None,
         }
     }
 
@@ -6101,7 +6171,6 @@ impl Wheel {
             size: None,
             upload_time: None,
             filename: path_dist.filename.clone(),
-            zstd: None,
         }
     }
 
@@ -6114,7 +6183,6 @@ impl Wheel {
             size: None,
             upload_time: None,
             filename: path_dist.filename.clone(),
-            zstd: None,
         }
     }
 
@@ -6148,14 +6216,7 @@ impl Wheel {
                     upload_time_utc_ms: self.upload_time.map(Timestamp::as_millisecond),
                     url: file_location,
                     yanked: None,
-                    zstd: self
-                        .zstd
-                        .as_ref()
-                        .map(|zstd| uv_distribution_types::Zstd {
-                            hashes: zstd.hash.iter().map(|h| h.0.clone()).collect(),
-                            size: zstd.size,
-                        })
-                        .map(Box::new),
+                    zstd: None,
                 });
                 let index = IndexUrl::from(VerbatimUrl::from_url(
                     url.to_url().map_err(LockErrorKind::InvalidUrl)?,
@@ -6199,14 +6260,7 @@ impl Wheel {
                     upload_time_utc_ms: self.upload_time.map(Timestamp::as_millisecond),
                     url: file_location,
                     yanked: None,
-                    zstd: self
-                        .zstd
-                        .as_ref()
-                        .map(|zstd| uv_distribution_types::Zstd {
-                            hashes: zstd.hash.iter().map(|h| h.0.clone()).collect(),
-                            size: zstd.size,
-                        })
-                        .map(Box::new),
+                    zstd: None,
                 });
                 let index = IndexUrl::from(
                     VerbatimUrl::from_absolute_path(root.join(index_path))
@@ -6223,6 +6277,7 @@ impl Wheel {
     }
 }
 
+/// Unknown fields, including deprecated pyx-specific zstd wheel metadata, are intentionally ignored.
 #[derive(Clone, Debug, serde::Deserialize)]
 #[serde(rename_all = "kebab-case")]
 struct WheelWire {
@@ -6244,9 +6299,6 @@ struct WheelWire {
     /// This is only present for wheels that come from registries.
     #[serde(alias = "upload_time")]
     upload_time: Option<Timestamp>,
-    /// The zstandard-compressed wheel metadata, if any.
-    #[serde(alias = "zstd")]
-    zstd: Option<ZstdWheel>,
 }
 
 #[derive(Clone, Debug, serde::Deserialize, PartialEq, Eq)]
@@ -6315,16 +6367,23 @@ impl TryFrom<WheelWire> for Wheel {
             hash: wire.hash,
             size: wire.size,
             upload_time: wire.upload_time,
-            zstd: wire.zstd,
             filename,
         })
     }
 }
 
+/// The position of a package in [`Lock::packages`], valid only for that lock's ordering.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+struct PackageIndex(usize);
+
 /// A single dependency of a package in a lockfile.
-#[derive(Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
+#[derive(Clone, Debug, Eq)]
 pub struct Dependency {
     package_id: PackageId,
+    /// The target's position in [`Lock::packages`], initialized by [`Lock::new`].
+    /// This cache is excluded from equality and ordering, since the position can differ between
+    /// locks that contain the same dependency.
+    index: PackageIndex,
     extra: BTreeSet<ExtraName>,
     /// A marker simplified from the PEP 508 marker in `complexified_marker`
     /// by assuming `requires-python` and the PEP 508 portion of the parent package's reachability
@@ -6363,6 +6422,7 @@ impl Dependency {
         let complexified_marker = simplified_marker.into_marker(requires_python);
         Self {
             package_id,
+            index: PackageIndex(0),
             extra,
             simplified_marker,
             complexified_marker: UniversalMarker::from_combined(complexified_marker),
@@ -6377,6 +6437,38 @@ impl Dependency {
     /// Returns the extras specified on this dependency.
     pub fn extra(&self) -> &BTreeSet<ExtraName> {
         &self.extra
+    }
+}
+
+impl PartialEq for Dependency {
+    fn eq(&self, other: &Self) -> bool {
+        self.package_id == other.package_id
+            && self.extra == other.extra
+            && self.simplified_marker == other.simplified_marker
+            && self.complexified_marker == other.complexified_marker
+    }
+}
+
+impl PartialOrd for Dependency {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for Dependency {
+    fn cmp(&self, other: &Self) -> Ordering {
+        (
+            &self.package_id,
+            &self.extra,
+            &self.simplified_marker,
+            &self.complexified_marker,
+        )
+            .cmp(&(
+                &other.package_id,
+                &other.extra,
+                &other.simplified_marker,
+                &other.complexified_marker,
+            ))
     }
 }
 
@@ -6434,6 +6526,7 @@ impl DependencyWire {
             };
         Ok(Dependency {
             package_id: self.package_id.unwire(unambiguous_package_ids)?,
+            index: PackageIndex(0),
             extra: self.extra,
             simplified_marker,
             complexified_marker,
@@ -8018,6 +8111,54 @@ mod tests {
         assert!(GitSource::from_url(&url).is_ok());
 
         Ok(())
+    }
+
+    #[test]
+    fn hash_strategy_includes_direct_and_local_wheels() {
+        let lock: Lock = toml::from_str(
+            r#"
+version = 1
+revision = 3
+requires-python = ">=3.12"
+
+[[package]]
+name = "remote"
+version = "1.0.0"
+source = { url = "https://example.com/remote-1.0.0-py3-none-any.whl" }
+wheels = [{ filename = "remote-1.0.0-py3-none-any.whl", hash = "sha256:53a42340ae36747fb1471f9b4b7958be1f6e2e5fc234f931aafa3e454fd31dfb" }]
+
+[[package]]
+name = "local"
+version = "1.0.0"
+source = { path = "local-1.0.0-py3-none-any.whl" }
+wheels = [{ filename = "local-1.0.0-py3-none-any.whl", hash = "sha256:53a42340ae36747fb1471f9b4b7958be1f6e2e5fc234f931aafa3e454fd31dfb" }]
+"#,
+        )
+        .expect("valid lock");
+        let root = std::env::current_dir().expect("current directory");
+        let hasher = lock.hash_strategy(&root).expect("valid source paths");
+        let digest = HashDigest::from_str(
+            "sha256:53a42340ae36747fb1471f9b4b7958be1f6e2e5fc234f931aafa3e454fd31dfb",
+        )
+        .expect("valid digest");
+        let remote = "https://example.com/remote-1.0.0-py3-none-any.whl"
+            .parse()
+            .expect("valid URL");
+        let local = DisplaySafeUrl::from_file_path(root.join("local-1.0.0-py3-none-any.whl"))
+            .expect("valid file URL");
+        let unknown = "https://example.com/unknown-1.0.0-py3-none-any.whl"
+            .parse()
+            .expect("valid URL");
+        assert_eq!(hasher.generation(), None);
+        assert_eq!(
+            hasher.get_url(&remote),
+            HashPolicy::All(slice::from_ref(&digest))
+        );
+        assert_eq!(
+            hasher.get_url(&local),
+            HashPolicy::All(slice::from_ref(&digest))
+        );
+        assert_eq!(hasher.get_url(&unknown), HashPolicy::None);
     }
 
     #[test]

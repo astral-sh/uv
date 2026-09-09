@@ -63,7 +63,7 @@ pub enum OnExistingDirectory {
     /// Fail if the destination directory already exists.
     #[default]
     Fail,
-    /// Merge into the existing directory, overwriting files atomically via temp-file renames.
+    /// Merge into the existing directory, overwriting files via atomic renames.
     Merge,
 }
 
@@ -88,11 +88,12 @@ where
 
 /// Directory-level locks for concurrent copy operations.
 ///
-/// Copying is the only non-atomic [`LinkMode`]: it creates a file then writes bytes, so concurrent
-/// copies to the same directory can produce corrupted files.
+/// Copying directly to the destination creates a file then writes bytes, so concurrent copies to
+/// the same directory can produce corrupted files.
 ///
-/// These locks are used whenever a file is physically copied, regardless of the requested
-/// [`LinkMode`], as all modes can fallback to copying.
+/// These locks are used for copies that write directly to their destination. When merging,
+/// copies are written to unique temporary files and then published atomically, so they don't
+/// require synchronization.
 ///
 /// The intended pattern for usage is to create a [`CopyLocks`] instance then share it across all
 /// [`link_dir`] invocations that may conflict via [`LinkOptions::with_copy_locks`].
@@ -179,8 +180,8 @@ impl<'a, F> LinkOptions<'a, F> {
 
     /// Set the locks for synchronized copying.
     ///
-    /// When provided, file copy operations will acquire a directory-level lock before writing. This
-    /// prevents corruption when multiple installations run concurrently.
+    /// When provided, copies that write directly to their destination acquire a directory-level
+    /// lock before writing. This prevents corruption when multiple installations run concurrently.
     #[must_use]
     pub fn with_copy_locks(self, locks: &'a CopyLocks) -> Self {
         LinkOptions {
@@ -406,7 +407,7 @@ where
         LinkMode::Symlink => symlink_file_with_fallback(path, target, state, options),
         LinkMode::Copy => {
             if options.on_existing_directory == OnExistingDirectory::Merge {
-                atomic_copy_overwrite(path, target, options)?;
+                atomic_copy_overwrite(path, target)?;
             } else {
                 copy_file(path, target, options)?;
             }
@@ -471,12 +472,11 @@ where
             Ok(()) => Ok(state.mode_working()),
             Err(err) if err.kind() == io::ErrorKind::AlreadyExists => {
                 if options.on_existing_directory == OnExistingDirectory::Merge {
-                    // File exists, overwrite atomically via temp file
-                    let parent = target.parent().unwrap();
-                    let tempdir = tempfile::tempdir_in(parent)?;
-                    let tempfile = tempdir.path().join(target.file_name().unwrap());
-                    if reflink_with_permissions(path, &tempfile).is_ok() {
-                        fs_err::rename(&tempfile, target)?;
+                    if let Ok(temp_file) = tempfile::Builder::new().make_in(
+                        target.parent().expect("Link path must have a parent"),
+                        |temp_path| reflink_with_permissions(path, temp_path),
+                    ) {
+                        fs_err::rename(temp_file.path(), target)?;
                         Ok(state.mode_working())
                     } else {
                         debug!(
@@ -507,17 +507,17 @@ where
             Ok(()) => Ok(state),
             Err(err) if err.kind() == io::ErrorKind::AlreadyExists => {
                 if options.on_existing_directory == OnExistingDirectory::Merge {
-                    let parent = target.parent().unwrap();
-                    let tempdir = tempfile::tempdir_in(parent)?;
-                    let tempfile = tempdir.path().join(target.file_name().unwrap());
-                    reflink_with_permissions(path, &tempfile).map_err(|err| {
-                        LinkError::Reflink {
+                    let temp_file = tempfile::Builder::new()
+                        .make_in(
+                            target.parent().expect("Link path must have a parent"),
+                            |temp_path| reflink_with_permissions(path, temp_path),
+                        )
+                        .map_err(|err| LinkError::Reflink {
                             from: path.to_path_buf(),
-                            to: tempfile.clone(),
+                            to: target.to_path_buf(),
                             err,
-                        }
-                    })?;
-                    fs_err::rename(&tempfile, target)?;
+                        })?;
+                    fs_err::rename(temp_file.path(), target)?;
                     Ok(state)
                 } else {
                     Err(LinkError::Reflink {
@@ -605,17 +605,14 @@ where
             match reflink_copy::reflink(&src_path, &dst_path) {
                 Ok(()) => {}
                 Err(err) if err.kind() == io::ErrorKind::AlreadyExists => {
-                    // File exists, overwrite atomically via temp file
-                    let tempdir = tempfile::tempdir_in(dst)?;
-                    let tempfile = tempdir.path().join(entry.file_name());
-                    reflink_copy::reflink(&src_path, &tempfile).map_err(|err| {
-                        LinkError::Reflink {
+                    let temp_file = tempfile::Builder::new()
+                        .make_in(dst, |temp_path| reflink_copy::reflink(&src_path, temp_path))
+                        .map_err(|err| LinkError::Reflink {
                             from: src_path.clone(),
-                            to: tempfile.clone(),
+                            to: dst_path.clone(),
                             err,
-                        }
-                    })?;
-                    fs_err::rename(&tempfile, &dst_path)?;
+                        })?;
+                    fs_err::rename(temp_file.path(), &dst_path)?;
                 }
                 Err(err) => {
                     return Err(LinkError::Reflink {
@@ -654,7 +651,7 @@ where
                 if err.kind() == io::ErrorKind::AlreadyExists
                     && options.on_existing_directory == OnExistingDirectory::Merge
                 {
-                    atomic_hardlink_overwrite(path, target, state, options)
+                    atomic_hardlink_overwrite(path, target, state)
                 } else {
                     debug!(
                         "Failed to hard link `{}` to `{}`: {}; falling back to copy",
@@ -678,7 +675,7 @@ where
                 if err.kind() == io::ErrorKind::AlreadyExists
                     && options.on_existing_directory == OnExistingDirectory::Merge
                 {
-                    atomic_hardlink_overwrite(path, target, state, options)
+                    atomic_hardlink_overwrite(path, target, state)
                 } else {
                     Err(LinkError::Io(err))
                 }
@@ -713,7 +710,7 @@ where
                 if err.kind() == io::ErrorKind::AlreadyExists
                     && options.on_existing_directory == OnExistingDirectory::Merge
                 {
-                    atomic_symlink_overwrite(path, target, state, options)
+                    atomic_symlink_overwrite(path, target, state)
                 } else {
                     debug!(
                         "Failed to symlink `{}` to `{}`: {}; falling back to copy",
@@ -737,7 +734,7 @@ where
                 if err.kind() == io::ErrorKind::AlreadyExists
                     && options.on_existing_directory == OnExistingDirectory::Merge
                 {
-                    atomic_symlink_overwrite(path, target, state, options)
+                    atomic_symlink_overwrite(path, target, state)
                 } else {
                     Err(LinkError::Symlink {
                         from: path.to_path_buf(),
@@ -794,23 +791,18 @@ fn try_hardlink_file(src: &Path, dst: &Path) -> io::Result<()> {
 }
 
 /// Atomically overwrite an existing file with a hard link.
-fn atomic_hardlink_overwrite<F>(
+fn atomic_hardlink_overwrite(
     src: &Path,
     dst: &Path,
     state: LinkState,
-    options: &LinkOptions<'_, F>,
-) -> Result<LinkState, LinkError>
-where
-    F: Fn(&Path) -> bool,
-{
-    // TODO(zanieb): These unwraps were copied from `uv-install-wheel`; consider propagating errors
-    // instead of panicking if `dst` has no parent or file name.
-    let parent = dst.parent().unwrap();
-    let tempdir = tempfile::tempdir_in(parent)?;
-    let tempfile = tempdir.path().join(dst.file_name().unwrap());
-
-    if try_hardlink_file(src, &tempfile).is_ok() {
-        fs_err::rename(&tempfile, dst)?;
+) -> Result<LinkState, LinkError> {
+    // TODO(zanieb): Consider propagating an error instead of panicking if `dst` has no parent.
+    if let Ok(temp_file) = tempfile::Builder::new().make_in(
+        dst.parent().expect("Link path must have a parent"),
+        |temp_path| try_hardlink_file(src, temp_path),
+    ) {
+        // `persist` resets Windows file attributes, which are shared with the source.
+        fs_err::rename(temp_file.path(), dst)?;
         Ok(state.mode_working())
     } else {
         debug!(
@@ -823,54 +815,37 @@ where
             If this is intentional, set `export UV_LINK_MODE=copy` or use `--link-mode=copy` to suppress this warning."
         );
         let state = state.next_mode();
-        atomic_copy_overwrite(src, dst, options)?;
+        atomic_copy_overwrite(src, dst)?;
         Ok(state)
     }
 }
 
 /// Atomically overwrite an existing file with a copy.
-fn atomic_copy_overwrite<F>(
-    src: &Path,
-    dst: &Path,
-    options: &LinkOptions<'_, F>,
-) -> Result<(), LinkError>
-where
-    F: Fn(&Path) -> bool,
-{
-    // TODO(zanieb): These unwraps were copied from `uv-install-wheel`; consider propagating errors
-    // instead of panicking if `dst` has no parent or file name.
-    let parent = dst.parent().unwrap();
-    let tempdir = tempfile::tempdir_in(parent)?;
-    let tempfile = tempdir.path().join(dst.file_name().unwrap());
-
-    options
-        .copy_file(src, &tempfile)
-        .map_err(|err| LinkError::Copy {
-            to: tempfile.clone(),
-            err,
-        })?;
-    fs_err::rename(&tempfile, dst)?;
-    Ok(())
+fn atomic_copy_overwrite(src: &Path, dst: &Path) -> Result<(), LinkError> {
+    crate::copy_atomic_sync(src, dst).map_err(|err| LinkError::Copy {
+        to: dst.to_path_buf(),
+        err,
+    })
 }
 
 /// Atomically overwrite an existing file with a symlink.
-fn atomic_symlink_overwrite<F>(
+fn atomic_symlink_overwrite(
     src: &Path,
     dst: &Path,
     state: LinkState,
-    options: &LinkOptions<'_, F>,
-) -> Result<LinkState, LinkError>
-where
-    F: Fn(&Path) -> bool,
-{
-    // TODO(zanieb): These unwraps were copied from `uv-install-wheel`; consider propagating errors
-    // instead of panicking if `dst` has no parent or file name.
-    let parent = dst.parent().unwrap();
-    let tempdir = tempfile::tempdir_in(parent)?;
-    let tempfile = tempdir.path().join(dst.file_name().unwrap());
-
-    if create_symlink(src, &tempfile).is_ok() {
-        fs_err::rename(&tempfile, dst)?;
+) -> Result<LinkState, LinkError> {
+    // TODO(zanieb): Consider propagating an error instead of panicking if `dst` has no parent.
+    if let Ok(temp_file) = tempfile::Builder::new().make_in(
+        dst.parent().expect("Link path must have a parent"),
+        |temp_path| create_symlink(src, temp_path),
+    ) {
+        let result = fs_err::rename(temp_file.path(), dst);
+        // TempPath uses `remove_file`, which cannot remove a directory symlink on Windows.
+        #[cfg(windows)]
+        if result.is_err() {
+            let _ = crate::remove_symlink(temp_file.path());
+        }
+        result?;
         Ok(state.mode_working())
     } else {
         debug!(
@@ -883,7 +858,7 @@ where
             If this is intentional, set `export UV_LINK_MODE=copy` or use `--link-mode=copy` to suppress this warning."
         );
         let state = state.next_mode();
-        atomic_copy_overwrite(src, dst, options)?;
+        atomic_copy_overwrite(src, dst)?;
         Ok(state)
     }
 }
@@ -908,6 +883,8 @@ fn create_symlink(original: &Path, link: &Path) -> io::Result<()> {
 #[expect(clippy::print_stderr)]
 mod tests {
     use std::assert_matches;
+    #[cfg(unix)]
+    use std::os::unix::fs::PermissionsExt;
 
     use super::*;
     use tempfile::TempDir;
@@ -1354,6 +1331,44 @@ mod tests {
         );
     }
 
+    #[cfg(unix)]
+    #[test]
+    fn test_copy_merge_replaces_symlink_and_preserves_permissions() -> Result<(), LinkError> {
+        let src_dir = test_tempdir();
+        let dst_dir = test_tempdir();
+
+        let source = src_dir.path().join("script");
+        fs_err::write(&source, "new content")?;
+        fs_err::set_permissions(&source, std::fs::Permissions::from_mode(0o751))?;
+
+        let destination = dst_dir.path().join("script");
+        fs_err::write(dst_dir.path().join("original"), "original content")?;
+        fs_err::os::unix::fs::symlink("original", &destination)?;
+
+        let locks = CopyLocks::default();
+        let options = LinkOptions::new(LinkMode::Copy)
+            .with_copy_locks(&locks)
+            .with_on_existing_directory(OnExistingDirectory::Merge);
+        assert_eq!(
+            link_dir(src_dir.path(), dst_dir.path(), &options)?,
+            LinkMode::Copy
+        );
+
+        assert!(fs_err::symlink_metadata(&destination)?.is_file());
+        assert_eq!(fs_err::read_to_string(&destination)?, "new content");
+        assert_eq!(
+            fs_err::metadata(&destination)?.permissions().mode() & 0o777,
+            0o751
+        );
+        assert_eq!(
+            fs_err::read_to_string(dst_dir.path().join("original"))?,
+            "original content"
+        );
+        assert_eq!(fs_err::read_dir(dst_dir.path())?.count(), 2);
+
+        Ok(())
+    }
+
     #[test]
     fn test_fail_mode_errors_on_existing_hardlink() {
         let src_dir = test_tempdir();
@@ -1502,11 +1517,21 @@ mod tests {
         fs_err::create_dir_all(dst_dir.path()).unwrap();
         fs_err::write(dst_dir.path().join("file1.txt"), "old").unwrap();
 
+        let source = src_dir.path().join("file1.txt");
+        let original_permissions = fs_err::metadata(&source).unwrap().permissions();
+        let mut permissions = original_permissions.clone();
+        permissions.set_readonly(true);
+        fs_err::set_permissions(&source, permissions).unwrap();
+
         let options = LinkOptions::new(LinkMode::Hardlink)
             .with_on_existing_directory(OnExistingDirectory::Merge);
         let result = link_dir(src_dir.path(), dst_dir.path(), &options).unwrap();
 
         assert!(result == LinkMode::Hardlink || result == LinkMode::Copy);
+
+        let source_is_readonly = fs_err::metadata(&source).unwrap().permissions().readonly();
+        fs_err::set_permissions(&source, original_permissions).unwrap();
+        assert!(source_is_readonly);
 
         // Content should be overwritten
         assert_eq!(

@@ -8,7 +8,9 @@ use anyhow::{Context, Result, anyhow, bail};
 use itertools::Itertools;
 use uv_cache::{Cache, Refresh};
 use uv_client::BaseClientBuilder;
-use uv_configuration::{Concurrency, DependencyGroupsWithDefaults, DryRun, Upgrade};
+use uv_configuration::{
+    ActiveEnvironment, Concurrency, DependencyGroupsWithDefaults, DryRun, Upgrade,
+};
 use uv_distribution::{ArchiveMetadata, Metadata};
 use uv_distribution_types::{Identifier, RequiresPython};
 use uv_normalize::PackageName;
@@ -220,7 +222,7 @@ pub(crate) async fn upgrade(
             python_downloads,
             &install_mirrors,
             ProjectEnvironmentPolicy::Optional,
-            Some(false),
+            ActiveEnvironment::Ignore,
             cache,
             printer,
         )
@@ -379,7 +381,7 @@ pub(crate) async fn upgrade(
             python_downloads,
             &install_mirrors,
             ProjectEnvironmentPolicy::Optional,
-            Some(false),
+            ActiveEnvironment::Ignore,
             &cache,
             printer,
         )

@@ -1,4 +1,3 @@
-pub use dependency_mode::DependencyMode;
 pub use error::{ErrorTree, NoSolutionError, NoSolutionHeader, ResolveError};
 pub use exclude_newer::{
     ExcludeNewer, ExcludeNewerChange, ExcludeNewerOverrideChange, ExcludeNewerPackage,
@@ -6,7 +5,7 @@ pub use exclude_newer::{
     ExcludeNewerValueWithSpanRef, serialize_exclude_newer_package_with_spans,
 };
 pub use exclusions::Exclusions;
-pub use flat_index::{FlatDistributions, FlatIndex};
+pub use flat_index::FlatIndex;
 pub use fork_strategy::ForkStrategy;
 pub use lock::{
     CanonicalLockError, DependencySelection, Installable, InstallableRootKind, Lock, LockError,
@@ -32,6 +31,7 @@ pub use resolver::{
 pub(crate) use universal_marker::ConflictMarker;
 pub use universal_marker::UniversalMarker;
 pub use upgrade::UpgradePackages;
+pub use uv_configuration::DependencyMode;
 pub use uv_distribution_types::{ExcludeNewerOverride, ExcludeNewerSpan, ExcludeNewerValue};
 pub use version_map::VersionMap;
 pub use yanks::AllowedYanks;
@@ -46,7 +46,6 @@ type FxHashbrownSet<T> = hashbrown::HashSet<T, rustc_hash::FxBuildHasher>;
 type FxHashbrownMap<K, V> = hashbrown::HashMap<K, V, rustc_hash::FxBuildHasher>;
 
 mod candidate_selector;
-mod dependency_mode;
 mod dependency_provider;
 mod error;
 mod exclude_newer;

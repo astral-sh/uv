@@ -4306,7 +4306,7 @@ fn add_frozen() -> Result<()> {
         dependencies = []
     "#})?;
 
-    uv_snapshot!(context.filters(), context.add().arg("anyio==3.7.0").arg("--frozen"), @"
+    uv_snapshot!(context.filters(), context.add().arg("anyio==3.7.0").arg("--frozen").env(EnvVars::VIRTUAL_ENV, "active"), @"
     exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
@@ -4380,6 +4380,117 @@ fn add_no_sync() -> Result<()> {
 
     assert!(context.temp_dir.join("uv.lock").exists());
     assert!(!context.venv.exists());
+
+    Ok(())
+}
+
+/// Editing without synchronization does not target either virtual environment.
+#[test]
+fn edit_no_sync_active_environment_mismatch() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    fs_err::remove_dir_all(&context.venv)?;
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+    "#})?;
+
+    fs_err::copy(
+        context
+            .workspace_root
+            .join("test/links/ok-1.0.0-py3-none-any.whl"),
+        context.temp_dir.join("ok-1.0.0-py3-none-any.whl"),
+    )?;
+
+    uv_snapshot!(context.filters(), context
+        .add()
+        .arg("./ok-1.0.0-py3-none-any.whl")
+        .arg("--no-sync")
+        .arg("--offline")
+        .env(EnvVars::VIRTUAL_ENV, "active"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Resolved 2 packages in [TIME]
+    ");
+
+    assert!(!context.venv.exists());
+
+    uv_snapshot!(context.filters(), context
+        .remove()
+        .arg("ok")
+        .arg("--no-sync")
+        .arg("--offline")
+        .env(EnvVars::VIRTUAL_ENV, "active"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Resolved 1 package in [TIME]
+    ");
+
+    assert!(!context.venv.exists());
+
+    context
+        .venv()
+        .arg("active")
+        .arg("--python")
+        .arg("3.12")
+        .assert()
+        .success();
+
+    // An explicitly requested active environment still determines the interpreter.
+    uv_snapshot!(context.filters(), context
+        .add()
+        .arg("./ok-1.0.0-py3-none-any.whl")
+        .arg("--no-sync")
+        .arg("--offline")
+        .arg("--active")
+        .env(EnvVars::VIRTUAL_ENV, "active")
+        .env(EnvVars::UV_PYTHON_SEARCH_PATH, ""), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    assert!(!context.venv.exists());
+
+    uv_snapshot!(context.filters(), context
+        .remove()
+        .arg("ok")
+        .arg("--no-sync")
+        .arg("--offline")
+        .arg("--active")
+        .env(EnvVars::VIRTUAL_ENV, "active")
+        .env(EnvVars::UV_PYTHON_SEARCH_PATH, ""), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+
+    assert!(!context.venv.exists());
+
+    // Commands that synchronize the project environment must retain the mismatch warning.
+    uv_snapshot!(context.filters(), context
+        .sync()
+        .arg("--offline")
+        .env(EnvVars::VIRTUAL_ENV, "active"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    warning: `VIRTUAL_ENV=active` does not match the project environment path `.venv` and will be ignored; use `--active` to target the active environment instead
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment at: .venv
+    Resolved 1 package in [TIME]
+    Checked in [TIME]
+    ");
+
+    assert!(context.venv.exists());
 
     Ok(())
 }

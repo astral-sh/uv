@@ -1912,6 +1912,53 @@ fn path_with_trailing_space_gives_proper_error() {
     // Note the extra trailing `/` in the snapshot is due to the filters, not the actual output.
 }
 
+/// Activate a virtual environment through a UNC path.
+///
+/// Requires `UV_INTERNAL__TEST_SMB_FS`.
+#[test]
+#[cfg(windows)]
+fn create_venv_powershell_unc() -> Result<()> {
+    let Some(smb_fs) = std::env::var_os(EnvVars::UV_INTERNAL__TEST_SMB_FS) else {
+        return Ok(());
+    };
+    let temp_dir = assert_fs::TempDir::new_in(smb_fs)?;
+    let venv_dir = temp_dir.child("test env");
+    let context =
+        uv_test::test_context_with_versions!(&["3.12"]).with_filtered_path(temp_dir.path(), "SMB");
+
+    context
+        .venv()
+        .arg(venv_dir.path())
+        .arg("--python")
+        .arg("3.12")
+        .assert()
+        .success();
+
+    uv_snapshot!(context.filters(), context.external_command("powershell.exe")
+        .arg("-NoProfile")
+        .arg("-NonInteractive")
+        .arg("-ExecutionPolicy")
+        .arg("Bypass")
+        .arg("-Command")
+        .arg(indoc! {r#"
+            $ErrorActionPreference = "Stop"
+            . $env:UV_TEST_ACTIVATE
+            $env:VIRTUAL_ENV
+            & $env:UV_TEST_BIN python find
+            exit $LASTEXITCODE
+        "#})
+        .env("UV_TEST_ACTIVATE", venv_dir.child("Scripts/activate.ps1").path())
+        .env("UV_TEST_BIN", uv_test::get_bin!())
+        .env(EnvVars::UV_CACHE_DIR, context.cache_dir.path()), @r"
+    exit_code: 0 (success)
+    ----- stdout -----
+    [SMB]/test env
+    [SMB]/test env/Scripts/python.exe
+    ");
+
+    Ok(())
+}
+
 /// Check that the activate script still works with the path contains an apostrophe.
 #[test]
 #[cfg(target_os = "linux")]

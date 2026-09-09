@@ -685,15 +685,10 @@ fn python_pin_resolve() {
 }
 
 #[test]
-fn python_pin_with_comments() -> Result<()> {
+fn python_pin_with_comments_and_whitespace() -> Result<()> {
     let context = uv_test::test_context_with_versions!(&[]);
 
-    let content = indoc::indoc! {r"
-        3.12
-
-        # 3.11
-        3.10
-    "};
+    let content = "  python3.12  \n \t\n  # 3.11\n\tpython3.10\t\n";
 
     let version_file = context.temp_dir.child(PYTHON_VERSION_FILENAME);
     version_file.write_str(content)?;

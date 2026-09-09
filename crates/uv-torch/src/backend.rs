@@ -36,7 +36,6 @@
 //! OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 //! ```
 
-use std::borrow::Cow;
 use std::str::FromStr;
 use std::sync::LazyLock;
 
@@ -48,7 +47,6 @@ use uv_pep440::Version;
 use uv_platform_tags::Os;
 
 use crate::accelerator::{Accelerator, AcceleratorError, AmdGpuArchitecture};
-use uv_static::EnvVars;
 
 /// The strategy to use when determining the appropriate PyTorch index.
 #[derive(Debug, Copy, Clone, Eq, PartialEq, serde::Deserialize, serde::Serialize)]
@@ -198,15 +196,6 @@ pub enum TorchMode {
     Xpu,
 }
 
-#[derive(Debug, Default, Copy, Clone, Eq, PartialEq)]
-pub enum TorchSource {
-    /// Download PyTorch builds from the official PyTorch index.
-    #[default]
-    PyTorch,
-    /// Download PyTorch builds from the pyx index.
-    Pyx,
-}
-
 /// The strategy to use when determining the appropriate PyTorch index.
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub enum TorchStrategy {
@@ -214,26 +203,19 @@ pub enum TorchStrategy {
     Cuda {
         os: Os,
         driver_version: Version,
-        source: TorchSource,
         indexes: Box<[IndexUrl]>,
     },
     /// Select the appropriate PyTorch index based on the operating system and AMD GPU architecture (e.g., `gfx1100`).
     Amd {
         os: Os,
         gpu_architecture: AmdGpuArchitecture,
-        source: TorchSource,
         indexes: Box<[IndexUrl]>,
     },
     /// Select the appropriate PyTorch index based on the operating system and Intel GPU presence.
-    Xpu {
-        os: Os,
-        source: TorchSource,
-        indexes: Box<[IndexUrl]>,
-    },
+    Xpu { os: Os, indexes: Box<[IndexUrl]> },
     /// Use the specified PyTorch index.
     Backend {
         backend: TorchBackend,
-        source: TorchSource,
         indexes: Box<[IndexUrl]>,
     },
 }
@@ -256,7 +238,6 @@ impl TorchStrategy {
     /// configured, uv appends the selected backend to it.
     pub fn from_mode(
         mode: TorchMode,
-        source: TorchSource,
         os: &Os,
         cuda_driver_version: Option<Version>,
         amd_gpu_architecture: Option<AmdGpuArchitecture>,
@@ -268,102 +249,96 @@ impl TorchStrategy {
             TorchMode::Auto => {
                 match Accelerator::detect(cuda_driver_version, amd_gpu_architecture)? {
                     Some(Accelerator::Cuda { driver_version }) => {
-                        let indexes = Self::cuda_indexes(os, &driver_version, source, index_base)?;
+                        let indexes = Self::cuda_indexes(os, &driver_version, index_base)?;
                         Ok(Self::Cuda {
                             os: os.clone(),
                             driver_version,
-                            source,
                             indexes,
                         })
                     }
                     Some(Accelerator::Amd { gpu_architecture }) => {
-                        let indexes = Self::amd_indexes(os, gpu_architecture, source, index_base)?;
+                        let indexes = Self::amd_indexes(os, gpu_architecture, index_base)?;
                         Ok(Self::Amd {
                             os: os.clone(),
                             gpu_architecture,
-                            source,
                             indexes,
                         })
                     }
                     Some(Accelerator::Xpu) => {
-                        let indexes = Self::xpu_indexes(os, source, index_base)?;
+                        let indexes = Self::xpu_indexes(os, index_base)?;
                         Ok(Self::Xpu {
                             os: os.clone(),
-                            source,
                             indexes,
                         })
                     }
-                    None => Self::backend(TorchBackend::Cpu, source, index_base),
+                    None => Self::backend(TorchBackend::Cpu, index_base),
                 }
             }
-            TorchMode::Cpu => Self::backend(TorchBackend::Cpu, source, index_base),
-            TorchMode::Cu132 => Self::backend(TorchBackend::Cu132, source, index_base),
-            TorchMode::Cu130 => Self::backend(TorchBackend::Cu130, source, index_base),
-            TorchMode::Cu129 => Self::backend(TorchBackend::Cu129, source, index_base),
-            TorchMode::Cu128 => Self::backend(TorchBackend::Cu128, source, index_base),
-            TorchMode::Cu126 => Self::backend(TorchBackend::Cu126, source, index_base),
-            TorchMode::Cu125 => Self::backend(TorchBackend::Cu125, source, index_base),
-            TorchMode::Cu124 => Self::backend(TorchBackend::Cu124, source, index_base),
-            TorchMode::Cu123 => Self::backend(TorchBackend::Cu123, source, index_base),
-            TorchMode::Cu122 => Self::backend(TorchBackend::Cu122, source, index_base),
-            TorchMode::Cu121 => Self::backend(TorchBackend::Cu121, source, index_base),
-            TorchMode::Cu120 => Self::backend(TorchBackend::Cu120, source, index_base),
-            TorchMode::Cu118 => Self::backend(TorchBackend::Cu118, source, index_base),
-            TorchMode::Cu117 => Self::backend(TorchBackend::Cu117, source, index_base),
-            TorchMode::Cu116 => Self::backend(TorchBackend::Cu116, source, index_base),
-            TorchMode::Cu115 => Self::backend(TorchBackend::Cu115, source, index_base),
-            TorchMode::Cu114 => Self::backend(TorchBackend::Cu114, source, index_base),
-            TorchMode::Cu113 => Self::backend(TorchBackend::Cu113, source, index_base),
-            TorchMode::Cu112 => Self::backend(TorchBackend::Cu112, source, index_base),
-            TorchMode::Cu111 => Self::backend(TorchBackend::Cu111, source, index_base),
-            TorchMode::Cu110 => Self::backend(TorchBackend::Cu110, source, index_base),
-            TorchMode::Cu102 => Self::backend(TorchBackend::Cu102, source, index_base),
-            TorchMode::Cu101 => Self::backend(TorchBackend::Cu101, source, index_base),
-            TorchMode::Cu100 => Self::backend(TorchBackend::Cu100, source, index_base),
-            TorchMode::Cu92 => Self::backend(TorchBackend::Cu92, source, index_base),
-            TorchMode::Cu91 => Self::backend(TorchBackend::Cu91, source, index_base),
-            TorchMode::Cu90 => Self::backend(TorchBackend::Cu90, source, index_base),
-            TorchMode::Cu80 => Self::backend(TorchBackend::Cu80, source, index_base),
-            TorchMode::Rocm72 => Self::backend(TorchBackend::Rocm72, source, index_base),
-            TorchMode::Rocm71 => Self::backend(TorchBackend::Rocm71, source, index_base),
-            TorchMode::Rocm70 => Self::backend(TorchBackend::Rocm70, source, index_base),
-            TorchMode::Rocm64 => Self::backend(TorchBackend::Rocm64, source, index_base),
-            TorchMode::Rocm63 => Self::backend(TorchBackend::Rocm63, source, index_base),
-            TorchMode::Rocm624 => Self::backend(TorchBackend::Rocm624, source, index_base),
-            TorchMode::Rocm62 => Self::backend(TorchBackend::Rocm62, source, index_base),
-            TorchMode::Rocm61 => Self::backend(TorchBackend::Rocm61, source, index_base),
-            TorchMode::Rocm60 => Self::backend(TorchBackend::Rocm60, source, index_base),
-            TorchMode::Rocm57 => Self::backend(TorchBackend::Rocm57, source, index_base),
-            TorchMode::Rocm56 => Self::backend(TorchBackend::Rocm56, source, index_base),
-            TorchMode::Rocm55 => Self::backend(TorchBackend::Rocm55, source, index_base),
-            TorchMode::Rocm542 => Self::backend(TorchBackend::Rocm542, source, index_base),
-            TorchMode::Rocm54 => Self::backend(TorchBackend::Rocm54, source, index_base),
-            TorchMode::Rocm53 => Self::backend(TorchBackend::Rocm53, source, index_base),
-            TorchMode::Rocm52 => Self::backend(TorchBackend::Rocm52, source, index_base),
-            TorchMode::Rocm511 => Self::backend(TorchBackend::Rocm511, source, index_base),
-            TorchMode::Rocm42 => Self::backend(TorchBackend::Rocm42, source, index_base),
-            TorchMode::Rocm41 => Self::backend(TorchBackend::Rocm41, source, index_base),
-            TorchMode::Rocm401 => Self::backend(TorchBackend::Rocm401, source, index_base),
-            TorchMode::Xpu => Self::backend(TorchBackend::Xpu, source, index_base),
+            TorchMode::Cpu => Self::backend(TorchBackend::Cpu, index_base),
+            TorchMode::Cu132 => Self::backend(TorchBackend::Cu132, index_base),
+            TorchMode::Cu130 => Self::backend(TorchBackend::Cu130, index_base),
+            TorchMode::Cu129 => Self::backend(TorchBackend::Cu129, index_base),
+            TorchMode::Cu128 => Self::backend(TorchBackend::Cu128, index_base),
+            TorchMode::Cu126 => Self::backend(TorchBackend::Cu126, index_base),
+            TorchMode::Cu125 => Self::backend(TorchBackend::Cu125, index_base),
+            TorchMode::Cu124 => Self::backend(TorchBackend::Cu124, index_base),
+            TorchMode::Cu123 => Self::backend(TorchBackend::Cu123, index_base),
+            TorchMode::Cu122 => Self::backend(TorchBackend::Cu122, index_base),
+            TorchMode::Cu121 => Self::backend(TorchBackend::Cu121, index_base),
+            TorchMode::Cu120 => Self::backend(TorchBackend::Cu120, index_base),
+            TorchMode::Cu118 => Self::backend(TorchBackend::Cu118, index_base),
+            TorchMode::Cu117 => Self::backend(TorchBackend::Cu117, index_base),
+            TorchMode::Cu116 => Self::backend(TorchBackend::Cu116, index_base),
+            TorchMode::Cu115 => Self::backend(TorchBackend::Cu115, index_base),
+            TorchMode::Cu114 => Self::backend(TorchBackend::Cu114, index_base),
+            TorchMode::Cu113 => Self::backend(TorchBackend::Cu113, index_base),
+            TorchMode::Cu112 => Self::backend(TorchBackend::Cu112, index_base),
+            TorchMode::Cu111 => Self::backend(TorchBackend::Cu111, index_base),
+            TorchMode::Cu110 => Self::backend(TorchBackend::Cu110, index_base),
+            TorchMode::Cu102 => Self::backend(TorchBackend::Cu102, index_base),
+            TorchMode::Cu101 => Self::backend(TorchBackend::Cu101, index_base),
+            TorchMode::Cu100 => Self::backend(TorchBackend::Cu100, index_base),
+            TorchMode::Cu92 => Self::backend(TorchBackend::Cu92, index_base),
+            TorchMode::Cu91 => Self::backend(TorchBackend::Cu91, index_base),
+            TorchMode::Cu90 => Self::backend(TorchBackend::Cu90, index_base),
+            TorchMode::Cu80 => Self::backend(TorchBackend::Cu80, index_base),
+            TorchMode::Rocm72 => Self::backend(TorchBackend::Rocm72, index_base),
+            TorchMode::Rocm71 => Self::backend(TorchBackend::Rocm71, index_base),
+            TorchMode::Rocm70 => Self::backend(TorchBackend::Rocm70, index_base),
+            TorchMode::Rocm64 => Self::backend(TorchBackend::Rocm64, index_base),
+            TorchMode::Rocm63 => Self::backend(TorchBackend::Rocm63, index_base),
+            TorchMode::Rocm624 => Self::backend(TorchBackend::Rocm624, index_base),
+            TorchMode::Rocm62 => Self::backend(TorchBackend::Rocm62, index_base),
+            TorchMode::Rocm61 => Self::backend(TorchBackend::Rocm61, index_base),
+            TorchMode::Rocm60 => Self::backend(TorchBackend::Rocm60, index_base),
+            TorchMode::Rocm57 => Self::backend(TorchBackend::Rocm57, index_base),
+            TorchMode::Rocm56 => Self::backend(TorchBackend::Rocm56, index_base),
+            TorchMode::Rocm55 => Self::backend(TorchBackend::Rocm55, index_base),
+            TorchMode::Rocm542 => Self::backend(TorchBackend::Rocm542, index_base),
+            TorchMode::Rocm54 => Self::backend(TorchBackend::Rocm54, index_base),
+            TorchMode::Rocm53 => Self::backend(TorchBackend::Rocm53, index_base),
+            TorchMode::Rocm52 => Self::backend(TorchBackend::Rocm52, index_base),
+            TorchMode::Rocm511 => Self::backend(TorchBackend::Rocm511, index_base),
+            TorchMode::Rocm42 => Self::backend(TorchBackend::Rocm42, index_base),
+            TorchMode::Rocm41 => Self::backend(TorchBackend::Rocm41, index_base),
+            TorchMode::Rocm401 => Self::backend(TorchBackend::Rocm401, index_base),
+            TorchMode::Xpu => Self::backend(TorchBackend::Xpu, index_base),
         }
     }
 
     fn backend(
         backend: TorchBackend,
-        source: TorchSource,
         configured_index_base: Option<&str>,
     ) -> Result<Self, TorchStrategyError> {
         Ok(Self::Backend {
             backend,
-            source,
-            indexes: Self::indexes(std::iter::once(backend), source, configured_index_base)?,
+            indexes: Self::indexes(std::iter::once(backend), configured_index_base)?,
         })
     }
 
     fn cuda_indexes(
         os: &Os,
         driver_version: &Version,
-        source: TorchSource,
         configured_index_base: Option<&str>,
     ) -> Result<Box<[IndexUrl]>, TorchStrategyError> {
         match os {
@@ -373,7 +348,6 @@ impl TorchStrategy {
                     .filter(|(_, version)| driver_version >= version)
                     .map(|(backend, _)| *backend)
                     .chain(std::iter::once(TorchBackend::Cpu)),
-                source,
                 configured_index_base,
             ),
             Os::Windows => Self::indexes(
@@ -382,7 +356,6 @@ impl TorchStrategy {
                     .filter(|(_, version)| driver_version >= version)
                     .map(|(backend, _)| *backend)
                     .chain(std::iter::once(TorchBackend::Cpu)),
-                source,
                 configured_index_base,
             ),
             Os::Macos { .. }
@@ -395,18 +368,15 @@ impl TorchStrategy {
             | Os::Android { .. }
             | Os::Pyodide { .. }
             | Os::PyEmscripten { .. }
-            | Os::Ios { .. } => Self::indexes(
-                std::iter::once(TorchBackend::Cpu),
-                source,
-                configured_index_base,
-            ),
+            | Os::Ios { .. } => {
+                Self::indexes(std::iter::once(TorchBackend::Cpu), configured_index_base)
+            }
         }
     }
 
     fn amd_indexes(
         os: &Os,
         gpu_architecture: AmdGpuArchitecture,
-        source: TorchSource,
         configured_index_base: Option<&str>,
     ) -> Result<Box<[IndexUrl]>, TorchStrategyError> {
         match os {
@@ -416,7 +386,6 @@ impl TorchStrategy {
                     .filter(|(_, architecture)| gpu_architecture == *architecture)
                     .map(|(backend, _)| *backend)
                     .chain(std::iter::once(TorchBackend::Cpu)),
-                source,
                 configured_index_base,
             ),
             Os::Windows
@@ -430,25 +399,20 @@ impl TorchStrategy {
             | Os::Android { .. }
             | Os::Pyodide { .. }
             | Os::PyEmscripten { .. }
-            | Os::Ios { .. } => Self::indexes(
-                std::iter::once(TorchBackend::Cpu),
-                source,
-                configured_index_base,
-            ),
+            | Os::Ios { .. } => {
+                Self::indexes(std::iter::once(TorchBackend::Cpu), configured_index_base)
+            }
         }
     }
 
     fn xpu_indexes(
         os: &Os,
-        source: TorchSource,
         configured_index_base: Option<&str>,
     ) -> Result<Box<[IndexUrl]>, TorchStrategyError> {
         match os {
-            Os::Manylinux { .. } | Os::Windows => Self::indexes(
-                std::iter::once(TorchBackend::Xpu),
-                source,
-                configured_index_base,
-            ),
+            Os::Manylinux { .. } | Os::Windows => {
+                Self::indexes(std::iter::once(TorchBackend::Xpu), configured_index_base)
+            }
             Os::Musllinux { .. }
             | Os::Macos { .. }
             | Os::FreeBsd { .. }
@@ -460,115 +424,58 @@ impl TorchStrategy {
             | Os::Android { .. }
             | Os::Pyodide { .. }
             | Os::PyEmscripten { .. }
-            | Os::Ios { .. } => Self::indexes(
-                std::iter::once(TorchBackend::Cpu),
-                source,
-                configured_index_base,
-            ),
+            | Os::Ios { .. } => {
+                Self::indexes(std::iter::once(TorchBackend::Cpu), configured_index_base)
+            }
         }
     }
 
     fn indexes(
         backends: impl IntoIterator<Item = TorchBackend>,
-        source: TorchSource,
         configured_index_base: Option<&str>,
     ) -> Result<Box<[IndexUrl]>, TorchStrategyError> {
-        let index_base = Self::index_base(source, configured_index_base);
+        let index_base = Self::index_base(configured_index_base);
         backends
             .into_iter()
             .map(|backend| {
                 backend
-                    .index_url(&index_base)
+                    .index_url(index_base)
                     .map_err(TorchStrategyError::IndexUrl)
             })
             .collect()
     }
 
-    fn index_base(source: TorchSource, configured_index_base: Option<&str>) -> Cow<'_, str> {
-        configured_index_base.map_or_else(
-            || match source {
-                TorchSource::PyTorch => Cow::Borrowed(PYTORCH_INDEX_BASE_URL),
-                TorchSource::Pyx => Cow::Owned(format!("{}/simple/astral-sh", *PYX_API_BASE_URL)),
-            },
-            Cow::Borrowed,
-        )
+    fn index_base(configured_index_base: Option<&str>) -> &str {
+        configured_index_base.unwrap_or(PYTORCH_INDEX_BASE_URL)
     }
 
     /// Returns `true` if the [`TorchStrategy`] applies to the given [`PackageName`].
     pub fn applies_to(&self, package_name: &PackageName) -> bool {
-        let source = match self {
-            Self::Cuda { source, .. } => *source,
-            Self::Amd { source, .. } => *source,
-            Self::Xpu { source, .. } => *source,
-            Self::Backend { source, .. } => *source,
-        };
-        match source {
-            TorchSource::PyTorch => {
-                matches!(
-                    package_name.as_str(),
-                    "fbgemm-gpu"
-                        | "fbgemm-gpu-genai"
-                        | "pytorch-triton"
-                        | "pytorch-triton-rocm"
-                        | "pytorch-triton-xpu"
-                        | "torch"
-                        | "torch-tensorrt"
-                        | "torchao"
-                        | "torcharrow"
-                        | "torchaudio"
-                        | "torchcodec"
-                        | "torchcsprng"
-                        | "torchdistx"
-                        | "torchrec"
-                        | "torchserve"
-                        | "torchtext"
-                        | "torchtune"
-                        | "torchvision"
-                        | "triton"
-                        | "triton-rocm"
-                        | "triton-xpu"
-                        | "xformers"
-                )
-            }
-            TorchSource::Pyx => {
-                matches!(
-                    package_name.as_str(),
-                    "deepspeed"
-                        | "fbgemm-gpu"
-                        | "fbgemm-gpu-genai"
-                        | "flash-attn"
-                        | "flash-attn-3"
-                        | "megablocks"
-                        | "natten"
-                        | "pyg-lib"
-                        | "pytorch-triton"
-                        | "pytorch-triton-rocm"
-                        | "pytorch-triton-xpu"
-                        | "torch"
-                        | "torch-cluster"
-                        | "torch-scatter"
-                        | "torch-sparse"
-                        | "torch-spline-conv"
-                        | "torch-tensorrt"
-                        | "torchao"
-                        | "torcharrow"
-                        | "torchaudio"
-                        | "torchcodec"
-                        | "torchcsprng"
-                        | "torchdistx"
-                        | "torchrec"
-                        | "torchserve"
-                        | "torchtext"
-                        | "torchtune"
-                        | "torchvision"
-                        | "triton"
-                        | "triton-rocm"
-                        | "triton-xpu"
-                        | "vllm"
-                        | "xformers"
-                )
-            }
-        }
+        matches!(
+            package_name.as_str(),
+            "fbgemm-gpu"
+                | "fbgemm-gpu-genai"
+                | "pytorch-triton"
+                | "pytorch-triton-rocm"
+                | "pytorch-triton-xpu"
+                | "torch"
+                | "torch-tensorrt"
+                | "torchao"
+                | "torcharrow"
+                | "torchaudio"
+                | "torchcodec"
+                | "torchcsprng"
+                | "torchdistx"
+                | "torchrec"
+                | "torchserve"
+                | "torchtext"
+                | "torchtune"
+                | "torchvision"
+                | "triton"
+                | "triton-rocm"
+                | "triton-xpu"
+                | "xformers"
+        )
     }
 
     /// Returns `true` if the given [`PackageName`] has a system dependency (e.g., CUDA or ROCm).
@@ -688,17 +595,6 @@ impl TorchBackend {
             // E.g., `https://download.pytorch.org/whl/cu124`
             let mut path_segments = index.path_segments()?;
             if path_segments.next() != Some("whl") {
-                return None;
-            }
-            path_segments.next()?
-        // TODO(zanieb): We should consolidate this with `is_known_url` somehow
-        } else if index.host_str() == PYX_API_BASE_URL.strip_prefix("https://") {
-            // E.g., `https://api.pyx.dev/simple/astral-sh/cu124`
-            let mut path_segments = index.path_segments()?;
-            if path_segments.next() != Some("simple") {
-                return None;
-            }
-            if path_segments.next() != Some("astral-sh") {
                 return None;
             }
             path_segments.next()?
@@ -1009,9 +905,3 @@ static LINUX_AMD_GPU_DRIVERS: LazyLock<[(TorchBackend, AmdGpuArchitecture); 93]>
     });
 
 const PYTORCH_INDEX_BASE_URL: &str = "https://download.pytorch.org/whl/";
-
-static PYX_API_BASE_URL: LazyLock<Cow<'static, str>> = LazyLock::new(|| {
-    std::env::var(EnvVars::PYX_API_URL)
-        .map(Cow::Owned)
-        .unwrap_or(Cow::Borrowed("https://api.pyx.dev"))
-});

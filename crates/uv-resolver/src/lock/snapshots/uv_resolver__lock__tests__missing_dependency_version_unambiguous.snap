@@ -153,6 +153,9 @@ Ok(
                                 ),
                             ),
                         },
+                        index: PackageIndex(
+                            0,
+                        ),
                         extra: {},
                         simplified_marker: SimplifiedMarkerTree(
                             true,
@@ -184,7 +187,9 @@ Ok(
                         ),
                     ),
                 ),
-            }: 0,
+            }: PackageIndex(
+                0,
+            ),
             PackageId {
                 name: PackageName(
                     "b",
@@ -199,7 +204,9 @@ Ok(
                         ),
                     ),
                 ),
-            }: 1,
+            }: PackageIndex(
+                1,
+            ),
         },
         manifest: ResolverManifest {
             members: {},

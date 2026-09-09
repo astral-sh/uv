@@ -2,6 +2,7 @@ use std::fmt::{Display, Formatter};
 use std::path::{Path, PathBuf};
 
 use uv_cache_key::{CanonicalUrl, RepositoryUrl};
+use uv_fs::normalize_path;
 use uv_git_types::GitUrl;
 
 use uv_normalize::PackageName;
@@ -107,6 +108,11 @@ impl VersionId {
 
     /// Create a new [`VersionId`] from an archive URL.
     pub fn from_archive(location: DisplaySafeUrl, subdirectory: Option<PathBuf>) -> Self {
+        // Use the same lexical normalization as the resolver's source comparison. Equivalent
+        // subdirectories must not lose their trusted hashes during lowering or lockfile reads.
+        let subdirectory = subdirectory
+            .map(|path| normalize_path(path).into_owned())
+            .filter(|path| !path.as_os_str().is_empty());
         Self::ArchiveUrl {
             location: CanonicalUrl::new(location),
             subdirectory,

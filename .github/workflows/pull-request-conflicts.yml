@@ -29,6 +29,9 @@ concurrency:
   # Let an in-progress rebase finish; newer pushes replace the single pending run.
   cancel-in-progress: false
 
+env:
+  UV_LOCKED: 1
+
 jobs:
   identify:
     name: Identify conflicted pull requests

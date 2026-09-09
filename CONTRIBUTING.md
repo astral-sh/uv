@@ -156,9 +156,9 @@ docker run --rm -v .:/src/ -w /src/ node:alpine npx prettier@3.9.0 --write .
 
 ## Linting
 
-Linting requires [shellcheck](https://github.com/koalaman/shellcheck) and
-[cargo-shear](https://github.com/Boshen/cargo-shear) to be installed separately. Validating
-`pyproject.toml` against the checked-in uv schema also requires [jq](https://jqlang.org/).
+Linting requires [shellcheck](https://github.com/koalaman/shellcheck) to be installed separately.
+Validating `pyproject.toml` against the checked-in uv schema also requires
+[jq](https://jqlang.org/).
 
 ```shell
 # Rust
@@ -183,7 +183,7 @@ shellcheck <script>
 uv run --only-group=check typos
 
 # Unused Rust dependencies
-cargo shear
+uv run --only-group=check cargo-shear
 ```
 
 ### Compiling for Windows from Unix

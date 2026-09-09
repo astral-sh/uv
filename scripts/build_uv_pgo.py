@@ -372,6 +372,8 @@ def run_workloads(
         raise RuntimeError(f"uv binary not found: {binary}")
 
     training_environment = environment.copy()
+    # Training creates lockfiles for the corpus independently of CI's locked mode.
+    training_environment.pop("UV_LOCKED", None)
     training_environment.pop("UV_OFFLINE", None)
     training_environment.update(
         {

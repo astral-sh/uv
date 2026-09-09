@@ -365,7 +365,7 @@ fn workspace_list_scripts() -> Result<()> {
     Ok(())
 }
 
-/// Explicit script discovery should identify both the invalid script and the workspace root.
+/// Script discovery should warn about invalid metadata and continue listing valid scripts.
 #[test]
 fn workspace_list_scripts_invalid_metadata() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -381,6 +381,14 @@ fn workspace_list_scripts_invalid_metadata() -> Result<()> {
         "#})?;
     context
         .temp_dir
+        .child("scripts/valid-script.py")
+        .write_str(indoc::indoc! {r"
+            # /// script
+            # dependencies = []
+            # ///
+        "})?;
+    context
+        .temp_dir
         .child("fixtures/invalid-script.py")
         .write_str(indoc::indoc! {r"
             # /// script
@@ -393,12 +401,39 @@ fn workspace_list_scripts_invalid_metadata() -> Result<()> {
         "})?;
 
     uv_snapshot!(context.filters(), context.workspace_list().arg("--scripts"), @"
-    exit_code: 2 (failure)
+    exit_code: 0 (success)
+    ----- stdout -----
+    scripts/valid-script.py
+
     ----- stderr -----
     warning: The `--scripts` option is experimental and may change without warning. Pass `--preview-features workspace-list-scripts` to disable this warning.
-    error: Failed to discover PEP 723 scripts under workspace root `[TEMP_DIR]/`
-      Caused by: Failed to parse PEP 723 script: [TEMP_DIR]/fixtures/invalid-script.py
-      Caused by: The script contains multiple PEP 723 metadata blocks
+    warning: Skipping invalid PEP 723 script `[TEMP_DIR]/fixtures/invalid-script.py`: The script contains multiple PEP 723 metadata blocks
+    ");
+
+    // Invalid TOML should also be skipped, including when the preview feature is enabled.
+    context
+        .temp_dir
+        .child("fixtures/invalid-script.py")
+        .write_str(indoc::indoc! {r"
+            # /// script
+            # dependencies = [
+            # ///
+        "})?;
+
+    uv_snapshot!(context.filters(), context.workspace_list()
+        .arg("--scripts")
+        .arg("--preview-features")
+        .arg("workspace-list-scripts"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    scripts/valid-script.py
+
+    ----- stderr -----
+    warning: Skipping invalid PEP 723 script `[TEMP_DIR]/fixtures/invalid-script.py`: TOML parse error at line 1, column 17
+      |
+    1 | dependencies = [
+      |                 ^
+    unclosed array, expected `]`
     ");
 
     Ok(())

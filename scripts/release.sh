@@ -22,7 +22,7 @@ uv run "$project_root/scripts/generate-crate-readmes.py"
 echo "Updating lockfiles..."
 cargo update -p uv
 pushd crates/uv-trampoline; cargo update -p uv-trampoline; popd
-uv lock --default-index https://pypi.org/simple
+uv lock --no-locked --default-index https://pypi.org/simple
 
 echo "Generating JSON schema..."
 cargo dev generate-json-schema

@@ -22,7 +22,7 @@ use uv_distribution_types::{
 use uv_preview::Preview;
 use uv_python::{Interpreter, PythonEnvironment, canonicalize_executable};
 use uv_settings::MalwareCheckSettings;
-use uv_types::{HashStrategy, SourceTreeEditablePolicy};
+use uv_types::{HashStrategy, HashVerification, SourceTreeEditablePolicy};
 use uv_workspace::WorkspaceCache;
 
 /// An ephemeral [`PythonEnvironment`] for running an individual command.
@@ -121,12 +121,12 @@ fn cached_environment_resolution_hash(
     resolution_hash: String,
     hash_strategy: &HashStrategy,
 ) -> String {
-    match hash_strategy {
+    match hash_strategy.verification() {
         // Preserve existing cache identities for environments materialized without verification.
-        HashStrategy::None | HashStrategy::Generate(_) => resolution_hash,
+        HashVerification::None => resolution_hash,
         // Never reuse an environment materialized without hash verification for a lock-backed
         // resolution with the same distributions and expected hashes.
-        HashStrategy::Verify(_) | HashStrategy::Require(_) => {
+        HashVerification::IfPresent(_) | HashVerification::Required(_) => {
             hash_digest(&("verify", resolution_hash))
         }
     }
@@ -416,10 +416,10 @@ mod tests {
     fn verified_cached_environment_uses_separate_resolution_hash() {
         let resolution_hash = hash_digest(&["ty==0.0.17"]);
         let unverified =
-            cached_environment_resolution_hash(resolution_hash.clone(), &HashStrategy::None);
+            cached_environment_resolution_hash(resolution_hash.clone(), &HashStrategy::default());
         let verified = cached_environment_resolution_hash(
             resolution_hash.clone(),
-            &HashStrategy::Verify(Arc::default()),
+            &HashStrategy::verify(Arc::default()),
         );
 
         assert_eq!(unverified, resolution_hash);

@@ -149,13 +149,17 @@ impl InternerGuard<'_> {
         }
 
         // Insert the node.
-        let id = self
-            .state
-            .unique
-            .entry(node.clone())
-            .or_insert_with(|| NodeId::new(self.shared.nodes.push(node), false));
+        // Probing before inserting keeps the clone off the common path where an isomorphic node
+        // has already been interned. Cloning a [`Node`] copies every outgoing edge range.
+        let id = if let Some(&id) = self.state.unique.get(&node) {
+            id
+        } else {
+            let id = NodeId::new(self.shared.nodes.push(node.clone()), false);
+            self.state.unique.insert(node, id);
+            id
+        };
 
-        if flipped { id.not() } else { *id }
+        if flipped { id.not() } else { id }
     }
 
     /// Returns a decision node for a single marker expression.
@@ -348,30 +352,34 @@ impl InternerGuard<'_> {
     }
 
     /// Returns a decision node representing the disjunction of two nodes.
-    pub(crate) fn or(&mut self, xi: NodeId, yi: NodeId) -> NodeId {
+    fn or(&mut self, xi: NodeId, yi: NodeId) -> NodeId {
         // We take advantage of cheap negation here and implement OR in terms
         // of it's De Morgan complement.
         self.and(xi.not(), yi.not()).not()
     }
 
+    /// Returns a decision node representing the disjunction of two nodes known not to have a
+    /// trivial disjunction.
+    pub(crate) fn or_nontrivial(&mut self, xi: NodeId, yi: NodeId) -> NodeId {
+        self.and_nontrivial(xi.not(), yi.not()).not()
+    }
+
     /// Returns a decision node representing the conjunction of two nodes.
-    pub(crate) fn and(&mut self, xi: NodeId, yi: NodeId) -> NodeId {
-        if xi.is_true() {
-            return yi;
+    fn and(&mut self, xi: NodeId, yi: NodeId) -> NodeId {
+        if let Some(result) = xi.and_trivial(yi) {
+            return result;
         }
-        if yi.is_true() {
-            return xi;
-        }
-        if xi == yi {
-            return xi;
-        }
-        if xi.is_false() || yi.is_false() {
-            return NodeId::FALSE;
-        }
-        // `X and not X` is `false` by definition.
-        if xi.not() == yi {
-            return NodeId::FALSE;
-        }
+
+        self.and_nontrivial(xi, yi)
+    }
+
+    /// Returns a decision node representing the conjunction of two nodes known not to have a
+    /// trivial conjunction.
+    pub(crate) fn and_nontrivial(&mut self, xi: NodeId, yi: NodeId) -> NodeId {
+        debug_assert!(
+            xi.and_trivial(yi).is_none(),
+            "`and_nontrivial` requires a non-trivial conjunction"
+        );
 
         // The operation was memoized.
         if let Some(result) = self.state.cache.get(&(xi, yi)) {
@@ -433,23 +441,11 @@ impl InternerGuard<'_> {
 
     /// Returns `true` if there is no environment in which both marker trees can apply,
     /// i.e. their conjunction is always `false`.
-    pub(crate) fn is_disjoint(&mut self, xi: NodeId, yi: NodeId) -> bool {
-        // `false` is disjoint with any marker.
-        if xi.is_false() || yi.is_false() {
-            return true;
-        }
-        // `true` is not disjoint with any marker except `false`.
-        if xi.is_true() || yi.is_true() {
-            return false;
-        }
-        // `X` and `X` are not disjoint.
-        if xi == yi {
-            return false;
-        }
-        // `X` and `not X` are disjoint by definition.
-        if xi.not() == yi {
-            return true;
-        }
+    pub(crate) fn is_disjoint_nontrivial(&mut self, xi: NodeId, yi: NodeId) -> bool {
+        debug_assert!(
+            xi.is_disjoint_trivial(yi).is_none(),
+            "`is_disjoint_nontrivial` requires non-trivial disjointness"
+        );
 
         let (x, y) = (self.shared.node(xi), self.shared.node(yi));
 
@@ -1289,6 +1285,37 @@ impl NodeId {
     pub(crate) fn is_true(self) -> bool {
         self == Self::TRUE
     }
+
+    /// Returns the conjunction if it can be determined without inspecting the interner.
+    pub(crate) fn and_trivial(self, other: Self) -> Option<Self> {
+        if self.is_true() {
+            return Some(other);
+        }
+        if other.is_true() {
+            return Some(self);
+        }
+        if self == other {
+            return Some(self);
+        }
+        if self.is_false() || other.is_false() {
+            return Some(Self::FALSE);
+        }
+        // `X and not X` is `false` by definition.
+        if self.not() == other {
+            return Some(Self::FALSE);
+        }
+        None
+    }
+
+    /// Returns the disjunction if it can be determined without inspecting the interner.
+    pub(crate) fn or_trivial(self, other: Self) -> Option<Self> {
+        self.not().and_trivial(other.not()).map(Self::not)
+    }
+
+    /// Returns whether the nodes are disjoint if that can be determined without the interner.
+    pub(crate) fn is_disjoint_trivial(self, other: Self) -> Option<bool> {
+        self.and_trivial(other).map(Self::is_false)
+    }
 }
 
 /// A [`SmallVec`] with enough elements to hold two constant edges, as well as the
@@ -1572,7 +1599,7 @@ impl Edges {
                     Some((range, prev)) if *prev == node && can_conjoin(range, &intersection) => {
                         *range = range.union(&intersection);
                     }
-                    _ => combined.push((intersection.clone(), node)),
+                    _ => combined.push((intersection, node)),
                 }
             }
         }

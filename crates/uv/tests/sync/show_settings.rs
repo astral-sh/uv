@@ -57,6 +57,7 @@ fn pip_compile_baseline() {
             read_timeout: [TIME],
             connect_timeout: [TIME],
             retries: 3,
+            metadata_range_request: Fallback,
         },
         concurrency: Concurrency {
             downloads: 50,
@@ -262,6 +263,7 @@ fn publish_resolved_settings() -> anyhow::Result<()> {
             read_timeout: [TIME],
             connect_timeout: [TIME],
             retries: 3,
+            metadata_range_request: Fallback,
         },
         concurrency: Concurrency {
             downloads: 50,
@@ -297,7 +299,6 @@ fn publish_resolved_settings() -> anyhow::Result<()> {
         index: None,
         dry_run: false,
         no_attestations: false,
-        direct: false,
         publish_url: DisplaySafeUrl {
             scheme: "https",
             cannot_be_a_base: false,
@@ -429,6 +430,7 @@ fn pip_install_baseline() {
             read_timeout: [TIME],
             connect_timeout: [TIME],
             retries: 3,
+            metadata_range_request: Fallback,
         },
         concurrency: Concurrency {
             downloads: 50,
@@ -617,6 +619,7 @@ fn lock_baseline() {
             read_timeout: [TIME],
             connect_timeout: [TIME],
             retries: 3,
+            metadata_range_request: Fallback,
         },
         concurrency: Concurrency {
             downloads: 50,
@@ -744,6 +747,7 @@ fn version_baseline() {
             read_timeout: [TIME],
             connect_timeout: [TIME],
             retries: 3,
+            metadata_range_request: Fallback,
         },
         concurrency: Concurrency {
             downloads: 50,
@@ -774,7 +778,7 @@ fn version_baseline() {
         dry_run: false,
         lock_check: Disabled,
         frozen: None,
-        active: None,
+        active: Warn,
         no_sync: false,
         package: None,
         python: None,
@@ -886,6 +890,7 @@ fn tool_install_baseline() {
             read_timeout: [TIME],
             connect_timeout: [TIME],
             retries: 3,
+            metadata_range_request: Fallback,
         },
         concurrency: Concurrency {
             downloads: 50,
@@ -3763,7 +3768,6 @@ fn preview_features() {
     +            WorkspaceList,
     +            SbomExport,
     +            AuthHelper,
-    +            DirectPublish,
     +            TargetWorkspaceDiscovery,
     +            MetadataJson,
     +            GcsEndpoint,
@@ -3790,6 +3794,8 @@ fn preview_features() {
     +            TarCodec,
     +            IndexByName,
     +            ArtifactHashFiltering,
+    +            ContentAddressedCache,
+    +            MissingExcludeNewerPackageLock,
     +        ],
          },
          python_preference: Managed,

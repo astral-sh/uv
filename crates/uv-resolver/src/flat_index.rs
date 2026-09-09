@@ -17,12 +17,11 @@ use uv_platform_tags::{TagCompatibility, Tags};
 use uv_pypi_types::HashDigest;
 use uv_types::HashStrategy;
 
-/// A set of [`PrioritizedDist`] from a `--find-links` entry, indexed by [`PackageName`]
-/// and [`Version`].
+/// Unfiltered entries from `--find-links`, indexed by [`PackageName`].
 #[derive(Debug, Clone, Default)]
 pub struct FlatIndex {
-    /// The list of [`FlatDistributions`] from the `--find-links` entries, indexed by package name.
-    index: FxHashMap<PackageName, FlatDistributions>,
+    /// Entries are ranked using each resolver's platform and hash policies when requested.
+    index: FxHashMap<PackageName, Vec<FlatIndexEntry>>,
     /// Whether any `--find-links` entries could not be resolved due to a lack of network
     /// connectivity.
     offline: bool,
@@ -31,28 +30,23 @@ pub struct FlatIndex {
 impl FlatIndex {
     /// Collect all files from a `--find-links` target into a [`FlatIndex`].
     #[instrument(skip_all)]
-    pub fn from_entries(
-        entries: FlatIndexEntries,
-        tags: Option<&Tags>,
-        hasher: &HashStrategy,
-        build_options: &BuildOptions,
-    ) -> Self {
-        // Collect compatible distributions.
-        let mut index = FxHashMap::<PackageName, FlatDistributions>::default();
+    pub fn from_entries(entries: FlatIndexEntries) -> Self {
+        let mut index = FxHashMap::<PackageName, Vec<FlatIndexEntry>>::default();
         let (entries, offline) = entries.into_parts();
 
         for entry in entries {
-            let (filename, file, index_url) = entry.into_parts();
-            let distributions = index.entry(filename.name().clone()).or_default();
-            distributions.add_file(file, filename, tags, hasher, build_options, index_url);
+            index
+                .entry(entry.filename().name().clone())
+                .or_default()
+                .push(entry);
         }
 
         Self { index, offline }
     }
 
-    /// Get the [`FlatDistributions`] for the given package name.
-    pub(crate) fn get(&self, package_name: &PackageName) -> Option<&FlatDistributions> {
-        self.index.get(package_name)
+    /// Get the unfiltered entries for the given package name.
+    pub(crate) fn get(&self, package_name: &PackageName) -> Option<&[FlatIndexEntry]> {
+        self.index.get(package_name).map(Vec::as_slice)
     }
 
     /// Whether any `--find-links` entries could not be resolved due to a lack of network
@@ -65,13 +59,13 @@ impl FlatIndex {
 /// A set of [`PrioritizedDist`] from a `--find-links` entry for a single package, indexed
 /// by [`Version`].
 #[derive(Debug, Clone, Default)]
-pub struct FlatDistributions(BTreeMap<Version, PrioritizedDist>);
+pub(crate) struct FlatDistributions(BTreeMap<Version, PrioritizedDist>);
 
 impl FlatDistributions {
-    /// Collect all files from a `--find-links` target into a [`FlatIndex`].
+    /// Rank the entries for a package using the resolver's platform and hash policies.
     #[instrument(skip_all)]
     pub(crate) fn from_entries(
-        entries: Vec<FlatIndexEntry>,
+        entries: impl IntoIterator<Item = FlatIndexEntry>,
         tags: Option<&Tags>,
         hasher: &HashStrategy,
         build_options: &BuildOptions,
@@ -247,12 +241,5 @@ impl IntoIterator for FlatDistributions {
 impl From<FlatDistributions> for BTreeMap<Version, PrioritizedDist> {
     fn from(distributions: FlatDistributions) -> Self {
         distributions.0
-    }
-}
-
-/// For external users.
-impl From<BTreeMap<Version, PrioritizedDist>> for FlatDistributions {
-    fn from(distributions: BTreeMap<Version, PrioritizedDist>) -> Self {
-        Self(distributions)
     }
 }
