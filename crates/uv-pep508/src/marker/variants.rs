@@ -9,6 +9,8 @@ use thiserror::Error;
 /// A segment of a variant uses invalid characters.
 #[derive(Error, Debug)]
 pub enum VariantParseError {
+    #[error("Variant {0} must not be empty")]
+    Empty(&'static str),
     /// The namespace segment of a variant failed to parse.
     #[error(
         "Invalid character `{invalid}` in variant namespace, only [a-z0-9_] are allowed: {input}"
@@ -29,9 +31,7 @@ pub enum VariantParseError {
         /// The invalid input string.
         input: String,
     },
-    #[error(
-        "Invalid character `{invalid}` in variant value, only [a-z0-9_.,!>~<=] are allowed: {input}"
-    )]
+    #[error("Invalid character `{invalid}` in variant value, only [a-z0-9_.] are allowed: {input}")]
     /// The value segment of a variant failed to parse.
     Value {
         /// The character outside the allowed character range.
@@ -56,6 +56,9 @@ impl FromStr for VariantNamespace {
 
     fn from_str(input: &str) -> Result<Self, Self::Err> {
         let input = input.trim();
+        if input.is_empty() {
+            return Err(VariantParseError::Empty("namespace"));
+        }
         if let Some(invalid) = input
             .chars()
             .find(|c| !(c.is_ascii_lowercase() || c.is_ascii_digit() || *c == '_'))
@@ -101,6 +104,9 @@ impl FromStr for VariantFeature {
 
     fn from_str(input: &str) -> Result<Self, Self::Err> {
         let input = input.trim();
+        if input.is_empty() {
+            return Err(VariantParseError::Empty("feature"));
+        }
         if let Some(invalid) = input
             .chars()
             .find(|c| !(c.is_ascii_lowercase() || c.is_ascii_digit() || *c == '_'))
@@ -146,11 +152,13 @@ impl FromStr for VariantValue {
 
     fn from_str(input: &str) -> Result<Self, Self::Err> {
         let input = input.trim();
-        if let Some(invalid) = input.chars().find(|c| {
-            !(c.is_ascii_lowercase()
-                || c.is_ascii_digit()
-                || matches!(*c, '_' | '.' | ',' | '!' | '>' | '~' | '<' | '='))
-        }) {
+        if input.is_empty() {
+            return Err(VariantParseError::Empty("value"));
+        }
+        if let Some(invalid) = input
+            .chars()
+            .find(|c| !(c.is_ascii_lowercase() || c.is_ascii_digit() || matches!(*c, '_' | '.')))
+        {
             return Err(VariantParseError::Value {
                 invalid,
                 input: input.to_string(),
@@ -174,5 +182,37 @@ impl<'de> Deserialize<'de> for VariantValue {
 impl Display for VariantValue {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         Display::fmt(&self.0, f)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{VariantFeature, VariantNamespace, VariantValue};
+
+    #[test]
+    fn pep825_property_components() -> Result<(), Box<dyn std::error::Error>> {
+        let errors = [
+            "".parse::<VariantNamespace>()
+                .map(|value| value.to_string())
+                .map_err(|error| error.to_string()),
+            " ".parse::<VariantFeature>()
+                .map(|value| value.to_string())
+                .map_err(|error| error.to_string()),
+            "".parse::<VariantValue>()
+                .map(|value| value.to_string())
+                .map_err(|error| error.to_string()),
+            ">=12.8"
+                .parse::<VariantValue>()
+                .map(|value| value.to_string())
+                .map_err(|error| error.to_string()),
+            "12,13"
+                .parse::<VariantValue>()
+                .map(|value| value.to_string())
+                .map_err(|error| error.to_string()),
+        ];
+        insta::assert_debug_snapshot!(errors);
+        assert_eq!(" 12.8 ".parse::<VariantValue>()?.to_string(), "12.8");
+        assert_eq!("x86_64".parse::<VariantNamespace>()?.to_string(), "x86_64");
+        Ok(())
     }
 }
