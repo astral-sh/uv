@@ -11,7 +11,7 @@ The executables in our macOS and Windows release archives and `uv` and `uv_build
 
 ### Bug fixes
 
-- Exclude post-cutoff wheels and source distributions from lockfiles and generated requirement hashes when artifacts for the same package version straddle an `exclude-newer` cutoff, including with `--no-build`, `--only-binary`, or `--no-binary` ([#21539](https://github.com/astral-sh/uv/pull/21539))
+- Exclude distributions uploaded after the `exclude-newer` cutoff from lockfiles and generated requirement hashes ([#21539](https://github.com/astral-sh/uv/pull/21539))
 
 ## 0.12.11
 
