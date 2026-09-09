@@ -19,8 +19,6 @@ permissions: {}
 env:
   ACTIONS_CACHE_MODE: none
   UV_LOCKED: "1"
-  # Keep Azure CLI response metadata out of the workflow log.
-  AZURE_CORE_OUTPUT: none
 
 jobs:
   prepare:
@@ -41,7 +39,7 @@ jobs:
 
       - name: "Set up shared release signing scripts"
         id: setup-signing
-        uses: astral-sh/github-actions/setup-release-signing@f6d0962615c86d7d8b3154b4128fee20f04fe26d # shared release signing actions
+        uses: astral-sh/github-actions/setup-release-signing@934ca980760605f3123072c179273cddf3d5528c # shared release signing actions
 
       - name: "Install uv"
         uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
@@ -133,26 +131,10 @@ jobs:
     runs-on: ubuntu-24.04
     environment: release
     permissions:
-      contents: read
       id-token: write
     outputs:
       artifact: ${{ steps.upload.outputs.artifact-id }}
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-
-      - name: "Set up shared release signing scripts"
-        id: setup-signing
-        uses: astral-sh/github-actions/setup-release-signing@f6d0962615c86d7d8b3154b4128fee20f04fe26d # shared release signing actions
-
-      - name: "Install uv"
-        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
-        with:
-          version: "0.12.10"
-          checksum: "173d95a0c32d18c896c46ba6fafbf3cf9c14ab74b033f81b76c883ef492a976b"
-          enable-cache: false
-
       - name: "Download unsigned executable wheel members"
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
@@ -160,44 +142,25 @@ jobs:
           path: unsigned
           merge-multiple: true
 
-      - name: "Log in to Azure with GitHub OIDC"
-        uses: azure/login@f5d393ae46f8fde4be8b75f32e3fc50e654ad0ca # v3.0.1
+      - name: "Sign and notarize macOS executables"
+        uses: astral-sh/github-actions/sign-macos@934ca980760605f3123072c179273cddf3d5528c # shared release signing actions
         with:
-          client-id: ${{ secrets.CODESIGN_AZURE_CLIENT_ID_MACOS }}
-          tenant-id: ${{ secrets.CODESIGN_AZURE_TENANT_ID_MACOS }}
-          subscription-id: ${{ secrets.CODESIGN_AZURE_SUBSCRIPTION_ID_MACOS }}
-
-      - name: "Sign executable wheel members through Azure Key Vault"
-        shell: bash
-        env:
-          RELEASE_SIGNING_SCRIPTS: ${{ steps.setup-signing.outputs.scripts }}
-          TARGETS: ${{ needs.prepare.outputs.macos }}
-          STORAGE_ACCOUNT: ${{ secrets.CODESIGN_STORAGE_ACCOUNT }}
-          STORAGE_CONTAINER: ${{ secrets.CODESIGN_STORAGE_CONTAINER }}
-          # N.B. rcodesign reads RCODESIGN_* as configuration, avoid using that prefix
-          COMPONENT_RCODESIGN_BLOB: ${{ secrets.CODESIGN_COMPONENT_RCODESIGN_BLOB }}
-          COMPONENT_RCODESIGN_SHA256: ${{ secrets.CODESIGN_COMPONENT_RCODESIGN_SHA256 }}
-          COMPONENT_PKCS11_BLOB: ${{ secrets.CODESIGN_COMPONENT_PKCS11_BLOB }}
-          COMPONENT_PKCS11_SHA256: ${{ secrets.CODESIGN_COMPONENT_PKCS11_SHA256 }}
-          AZURE_CREDENTIAL_KIND: azurecli
-          AZURE_KEYVAULT_NAME: ${{ secrets.CODESIGN_AZURE_KEYVAULT_NAME }}
-          AZURE_KEYVAULT_KEY_VERSION: ${{ secrets.CODESIGN_AZURE_KEYVAULT_KEY_VERSION }}
-          KEY_NAME: ${{ secrets.CODESIGN_KEY_NAME }}
-          CERTIFICATE_SHA256: ${{ secrets.CODESIGN_CERTIFICATE_SHA256 }}
-        run: |
-          set -euo pipefail
-          mkdir signed
-          while read -r target; do
-            uv run "$RELEASE_SIGNING_SCRIPTS/sign-release-macos.py" "./unsigned/$target" "./signed/$target"
-          done < <(jq -r '.[].target' <<< "$TARGETS")
-
-      - name: "Notarize signed macOS executables"
-        shell: bash
-        env:
-          RELEASE_SIGNING_SCRIPTS: ${{ steps.setup-signing.outputs.scripts }}
-          AZURE_KEYVAULT_NAME: ${{ secrets.CODESIGN_AZURE_KEYVAULT_NAME }}
-          APPLE_NOTARIZATION_AKV_KEY_NAME: ${{ secrets.CODESIGN_APPLE_NOTARIZATION_AKV_KEY_NAME }}
-        run: uv run "$RELEASE_SIGNING_SCRIPTS/notarize-release-macos.py" ./signed
+          unsigned-directory: ${{ github.workspace }}/unsigned
+          signed-directory: ${{ github.workspace }}/signed
+          azure-client-id: ${{ secrets.CODESIGN_AZURE_CLIENT_ID_MACOS }}
+          azure-tenant-id: ${{ secrets.CODESIGN_AZURE_TENANT_ID_MACOS }}
+          azure-subscription-id: ${{ secrets.CODESIGN_AZURE_SUBSCRIPTION_ID_MACOS }}
+          storage-account: ${{ secrets.CODESIGN_STORAGE_ACCOUNT }}
+          storage-container: ${{ secrets.CODESIGN_STORAGE_CONTAINER }}
+          component-rcodesign-blob: ${{ secrets.CODESIGN_COMPONENT_RCODESIGN_BLOB }}
+          component-rcodesign-sha256: ${{ secrets.CODESIGN_COMPONENT_RCODESIGN_SHA256 }}
+          component-pkcs11-blob: ${{ secrets.CODESIGN_COMPONENT_PKCS11_BLOB }}
+          component-pkcs11-sha256: ${{ secrets.CODESIGN_COMPONENT_PKCS11_SHA256 }}
+          azure-keyvault-name: ${{ secrets.CODESIGN_AZURE_KEYVAULT_NAME }}
+          azure-keyvault-key-version: ${{ secrets.CODESIGN_AZURE_KEYVAULT_KEY_VERSION }}
+          key-name: ${{ secrets.CODESIGN_KEY_NAME }}
+          certificate-sha256: ${{ secrets.CODESIGN_CERTIFICATE_SHA256 }}
+          apple-notarization-akv-key-name: ${{ secrets.CODESIGN_APPLE_NOTARIZATION_AKV_KEY_NAME }}
 
       - name: "Upload signed executable wheel members"
         id: upload
@@ -225,31 +188,14 @@ jobs:
           path: unsigned
           merge-multiple: true
 
-      - name: "Log in to Azure with GitHub OIDC"
-        uses: azure/login@f5d393ae46f8fde4be8b75f32e3fc50e654ad0ca # v3.0.1
-        with:
-          client-id: ${{ secrets.CODESIGN_AZURE_CLIENT_ID_WINDOWS }}
-          tenant-id: ${{ secrets.CODESIGN_AZURE_TENANT_ID_WINDOWS }}
-          subscription-id: ${{ secrets.CODESIGN_AZURE_SUBSCRIPTION_ID_WINDOWS }}
-
-      - name: "Copy executable wheel members for signing"
-        shell: pwsh
-        env:
-          TARGETS: ${{ needs.prepare.outputs.windows }}
-        run: |
-          $ErrorActionPreference = 'Stop'
-          foreach ($platform in ($env:TARGETS | ConvertFrom-Json)) {
-            $target = $platform.target
-            New-Item "signed/$target" -ItemType Directory -Force | Out-Null
-            foreach ($binary in (Get-ChildItem "unsigned/$target" -File -Force)) {
-              Copy-Item $binary.FullName "signed/$target/$($binary.Name)"
-            }
-          }
-
       - name: "Sign and verify Windows executable identities"
-        uses: astral-sh/github-actions/sign-windows@f6d0962615c86d7d8b3154b4128fee20f04fe26d # shared release signing actions
+        uses: astral-sh/github-actions/sign-windows@934ca980760605f3123072c179273cddf3d5528c # shared release signing actions
         with:
-          directory: ${{ github.workspace }}/signed
+          unsigned-directory: ${{ github.workspace }}/unsigned
+          signed-directory: ${{ github.workspace }}/signed
+          azure-client-id: ${{ secrets.CODESIGN_AZURE_CLIENT_ID_WINDOWS }}
+          azure-tenant-id: ${{ secrets.CODESIGN_AZURE_TENANT_ID_WINDOWS }}
+          azure-subscription-id: ${{ secrets.CODESIGN_AZURE_SUBSCRIPTION_ID_WINDOWS }}
           endpoint: ${{ secrets.CODESIGN_ENDPOINT }}
           signing-account-name: ${{ secrets.CODESIGN_SIGNING_ACCOUNT_NAME }}
           certificate-profile-name: ${{ secrets.CODESIGN_CERTIFICATE_PROFILE_NAME }}
@@ -282,7 +228,7 @@ jobs:
 
       - name: "Set up shared release signing scripts"
         id: setup-signing
-        uses: astral-sh/github-actions/setup-release-signing@f6d0962615c86d7d8b3154b4128fee20f04fe26d # shared release signing actions
+        uses: astral-sh/github-actions/setup-release-signing@934ca980760605f3123072c179273cddf3d5528c # shared release signing actions
 
       - name: "Install uv"
         uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
@@ -418,7 +364,7 @@ jobs:
 
       - name: "Set up shared release signing scripts"
         id: setup-signing
-        uses: astral-sh/github-actions/setup-release-signing@f6d0962615c86d7d8b3154b4128fee20f04fe26d # shared release signing actions
+        uses: astral-sh/github-actions/setup-release-signing@934ca980760605f3123072c179273cddf3d5528c # shared release signing actions
 
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
@@ -486,7 +432,7 @@ jobs:
 
       - name: "Set up shared release signing scripts"
         id: setup-signing
-        uses: astral-sh/github-actions/setup-release-signing@f6d0962615c86d7d8b3154b4128fee20f04fe26d # shared release signing actions
+        uses: astral-sh/github-actions/setup-release-signing@934ca980760605f3123072c179273cddf3d5528c # shared release signing actions
 
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
