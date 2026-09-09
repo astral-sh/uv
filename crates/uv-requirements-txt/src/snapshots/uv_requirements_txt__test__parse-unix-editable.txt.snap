@@ -46,6 +46,7 @@ RequirementsTxt {
                                 "./editable",
                             ),
                             expanded: false,
+                            force_relative: false,
                         },
                     },
                     extras: [
@@ -106,6 +107,7 @@ RequirementsTxt {
                                 "./editable",
                             ),
                             expanded: false,
+                            force_relative: false,
                         },
                     },
                     extras: [
@@ -166,6 +168,7 @@ RequirementsTxt {
                                 "./editable",
                             ),
                             expanded: false,
+                            force_relative: false,
                         },
                     },
                     extras: [
@@ -226,6 +229,7 @@ RequirementsTxt {
                                 "./editable",
                             ),
                             expanded: false,
+                            force_relative: false,
                         },
                     },
                     extras: [
@@ -286,6 +290,7 @@ RequirementsTxt {
                                 "./editable",
                             ),
                             expanded: false,
+                            force_relative: false,
                         },
                     },
                     extras: [],
@@ -339,6 +344,7 @@ RequirementsTxt {
                                 "./editable[d",
                             ),
                             expanded: false,
+                            force_relative: false,
                         },
                     },
                     extras: [],
@@ -392,6 +398,7 @@ RequirementsTxt {
                                 "./editable",
                             ),
                             expanded: false,
+                            force_relative: false,
                         },
                     },
                     extras: [],
@@ -445,6 +452,7 @@ RequirementsTxt {
                                 "./editable",
                             ),
                             expanded: false,
+                            force_relative: false,
                         },
                     },
                     extras: [],

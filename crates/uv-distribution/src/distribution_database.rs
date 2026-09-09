@@ -181,7 +181,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             .dependency_metadata()
             .get(dist.name(), Some(dist.version()))
         {
-            return Ok(ArchiveMetadata::from_metadata23(metadata));
+            return Ok(Metadata::from_dependency_metadata(metadata).into());
         }
 
         let metadata = dist
@@ -565,15 +565,12 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 .dependency_metadata()
                 .get(dist.name(), Some(dist.version()))
             {
-                metadata
+                Metadata::from_dependency_metadata(metadata)
             } else {
-                wheel.metadata()?
+                Metadata::from_metadata23(wheel.metadata()?)
             };
             let hashes = wheel.hashes;
-            return Ok(ArchiveMetadata {
-                metadata: Metadata::from_metadata23(metadata),
-                hashes,
-            });
+            return Ok(ArchiveMetadata { metadata, hashes });
         }
 
         // If the metadata was provided by the user directly, prefer it.
@@ -582,7 +579,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             .dependency_metadata()
             .get(dist.name(), Some(dist.version()))
         {
-            return Ok(ArchiveMetadata::from_metadata23(metadata));
+            return Ok(Metadata::from_dependency_metadata(metadata).into());
         }
 
         let result = self
@@ -643,17 +640,23 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 // commits.
                 self.builder.resolve_revision(source, &self.client).await?;
 
-                return Ok(ArchiveMetadata::from_metadata23(metadata));
+                return Ok(Metadata::from_dependency_metadata(metadata).into());
             }
         }
 
-        let metadata = self
+        let ArchiveMetadata { metadata, hashes } = self
             .builder
             .download_and_build_metadata(source, hashes, &self.client)
             .boxed_local()
             .await?;
 
-        Ok(metadata)
+        // This also handles external dependencies, so force relative paths by default.
+        // For explicit inputs and current project/workspace metadata, this is later overridden with
+        // `with_force_relative(false)` to respect the user's relative/absolute path preference.
+        Ok(ArchiveMetadata {
+            metadata: metadata.with_force_relative(true),
+            hashes,
+        })
     }
 
     /// Return the [`RequiresDist`] from a `pyproject.toml`, if it can be statically extracted.

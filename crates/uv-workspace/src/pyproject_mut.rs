@@ -532,7 +532,7 @@ impl PyProjectTomlMut {
 
         let url = if let IndexUrl::Path(url) = &index.url
             && let Ok(path) = url.to_file_path()
-            && let Ok(path) = try_relative_to_if(path, root_dir, !url.was_given_absolute())
+            && let Ok(path) = try_relative_to_if(path, root_dir, url.prefers_relative())
         {
             PortablePath::from(&path).to_string()
         } else {
