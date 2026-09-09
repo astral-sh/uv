@@ -1888,8 +1888,16 @@ async fn lock_sdist_url_locked_build_dependency_hash_mismatch() -> Result<()> {
     assert_eq!(context.read("uv.lock"), locked);
 
     // Seed the shared wheel cache without applying the lockfile's hashes or installing the extra.
+    // Supply the replacement's hash explicitly because the index advertises the original hash.
+    context
+        .temp_dir
+        .child("cache-seed.txt")
+        .write_str(&format!(
+            "review-dep==1.0.0 --hash=sha256:{replacement_digest}"
+        ))?;
     uv_snapshot!(context.filters(), context.pip_install()
-        .arg("review-dep==1.0.0")
+        .arg("-r").arg("cache-seed.txt")
+        .arg("--verify-hashes")
         .arg("--index-url").arg(format!("{}/simple", server.uri()))
         .arg("--target").arg(context.temp_dir.child("cache-seed").path()), @"
     exit_code: 0 (success)
