@@ -376,20 +376,15 @@ jobs:
           artifact-ids: ${{ needs.host.outputs.github-artifacts }}
           path: artifacts
           merge-multiple: true
-      - name: "Read release asset names"
-        id: assets
-        shell: bash
-        run: |
-          jq -r '(["dist-manifest.json"] + [.releases[].artifacts[]])[] | "artifacts/\(.)"' artifacts/dist-manifest.json > "$RUNNER_TEMP/release-assets.txt"
-          {
-            echo 'attestation-paths<<EOF'
-            jq -r '.github_attestations_filters[] | "artifacts/\(.)"' artifacts/dist-manifest.json
-            echo EOF
-          } >> "$GITHUB_OUTPUT"
       - name: Attest
         uses: actions/attest-build-provenance@00014ed6ed5efc5b1ab7f7f34a39eb55d41aa4f8
         with:
-          subject-path: ${{ steps.assets.outputs.attestation-paths }}
+          subject-path: |
+            artifacts/*.json
+            artifacts/*.sh
+            artifacts/*.ps1
+            artifacts/*.zip
+            artifacts/*.tar.gz
       - name: Get release token
         id: release-token
         uses: open-security-tools/ost-simple-sts@974a63a2daaaa40f7c6dec40d334f3da4421469e
@@ -413,6 +408,7 @@ jobs:
           # Write and read notes from a file to avoid quoting breaking things
           echo "$ANNOUNCEMENT_BODY" > $RUNNER_TEMP/notes.txt
 
+          jq -r '(["dist-manifest.json"] + [.releases[].artifacts[]])[] | "artifacts/\(.)"' artifacts/dist-manifest.json > "$RUNNER_TEMP/release-assets.txt"
           mapfile -t assets < "$RUNNER_TEMP/release-assets.txt"
           gh release create "${NEEDS_PLAN_OUTPUTS_TAG}" --target "$RELEASE_COMMIT" $PRERELEASE_FLAG --title "$ANNOUNCEMENT_TITLE" --notes-file "$RUNNER_TEMP/notes.txt" "${assets[@]}"
 
