@@ -1,0 +1,206 @@
+{
+  "version": 2,
+  "repositories": {
+    "uv": {
+      "name": "astral-sh/uv",
+      "id": 699532645,
+      "oidc_subject": "legacy"
+    },
+    "uv-dev": {
+      "name": "astral-sh/uv-dev",
+      "id": 1302176231,
+      "oidc_subject": "immutable",
+      "owner_id": 115962839
+    },
+    "uv-security": {
+      "name": "astral-sh/uv-security",
+      "id": 1333576902,
+      "oidc_subject": "immutable",
+      "owner_id": 115962839
+    }
+  },
+  "installations": {
+    "automations": 146796415
+  },
+  "rules": [
+    {
+      "caller": "uv",
+      "environment": "release",
+      "caller_workflow": "release.yml",
+      "on": ["workflow_dispatch"],
+      "permissions": { "contents": "write", "workflows": "write" },
+      "target": "uv"
+    },
+    {
+      "caller": "uv",
+      "environment": "automations",
+      "caller_workflow": "release-prepare.yml",
+      "on": ["workflow_dispatch"],
+      "permissions": { "contents": "write", "pull_requests": "write" },
+      "target": "uv"
+    },
+    {
+      "caller": "uv-dev",
+      "environment": "automations",
+      "caller_workflow": "promote-pull-request.yml",
+      "on": ["workflow_dispatch"],
+      "permissions": {
+        "contents": "write",
+        "pull_requests": "write",
+        "workflows": "write"
+      },
+      "targets": ["uv", "uv-dev"],
+      "installation": "automations"
+    },
+    {
+      "caller": "uv-security",
+      "environment": "automations",
+      "caller_workflow": "promote-pull-request.yml",
+      "on": ["workflow_dispatch"],
+      "permissions": {
+        "contents": "write",
+        "pull_requests": "write",
+        "workflows": "write"
+      },
+      "targets": ["uv", "uv-security"],
+      "installation": "automations"
+    },
+    {
+      "caller": "uv",
+      "environment": "automations",
+      "caller_workflow": "issue-triage.yml",
+      "on": ["issues", "workflow_dispatch"],
+      "permissions": { "contents": "write", "issues": "write" },
+      "targets": ["uv", "uv-dev"],
+      "installation": "automations"
+    },
+    {
+      "caller": "uv",
+      "environment": "automations",
+      "caller_workflow": "update-issue-context.yml",
+      "on": ["issue_comment"],
+      "permissions": { "contents": "write" },
+      "target": "uv-dev"
+    },
+    {
+      "caller": "uv",
+      "environment": "automations",
+      "caller_workflow": "issue-triage.yml",
+      "reusable_workflow": "reproduce-bug.yml",
+      "on": ["issues", "workflow_dispatch"],
+      "permissions": { "contents": "write", "pull_requests": "write" },
+      "target": "uv-dev"
+    },
+    {
+      "caller": "uv",
+      "environment": "automations",
+      "caller_workflow": "issue-triage.yml",
+      "reusable_workflow": "fix-bug.yml",
+      "on": ["issues", "workflow_dispatch"],
+      "permissions": { "contents": "write", "pull_requests": "write" },
+      "target": "uv-dev"
+    },
+    {
+      "caller": "uv",
+      "environment": "automations",
+      "caller_workflow": "reproduce-bug.yml",
+      "on": ["workflow_dispatch"],
+      "permissions": { "contents": "write", "pull_requests": "write" },
+      "target": "uv-dev"
+    },
+    {
+      "caller": "uv",
+      "environment": "automations",
+      "caller_workflow": "sync-python-releases.yml",
+      "on": ["schedule", "workflow_dispatch"],
+      "permissions": { "contents": "write", "pull_requests": "write" },
+      "target": "uv"
+    },
+    {
+      "caller": "uv",
+      "environment": "automations",
+      "caller_workflow": "sync-uv-dev.yml",
+      "on": ["push", "workflow_dispatch"],
+      "permissions": { "contents": "write", "workflows": "write" },
+      "target": "uv-dev"
+    },
+    {
+      "caller": "uv",
+      "environment": "automations",
+      "caller_workflow": "sync-uv-security.yml",
+      "on": ["push", "workflow_dispatch"],
+      "permissions": { "contents": "write", "workflows": "write" },
+      "target": "uv-security"
+    },
+    {
+      "caller": "uv",
+      "environment": "automations",
+      "caller_ref": "refs/pull/*/merge",
+      "caller_workflow": "ci.yml",
+      "reusable_workflow": "pull-request-security-review.yml",
+      "on": ["pull_request"],
+      "permissions": { "pull_requests": "write" },
+      "target": "uv"
+    },
+    {
+      "caller": "uv-dev",
+      "environment": "automations",
+      "caller_workflow": "pull-request-conflicts.yml",
+      "reusable_workflow": "rebase-conflicted-pull-request.yml",
+      "on": ["push", "workflow_dispatch"],
+      "permissions": { "contents": "write", "workflows": "write" },
+      "target": "uv-dev"
+    },
+    {
+      "caller": "uv",
+      "environment": "automations",
+      "caller_workflow": "pull-request-conflicts.yml",
+      "reusable_workflow": "rebase-conflicted-pull-request.yml",
+      "on": ["push", "workflow_dispatch"],
+      "permissions": { "contents": "write", "workflows": "write" },
+      "targets": ["uv", "uv-dev"],
+      "installation": "automations"
+    },
+    {
+      "caller": "uv-dev",
+      "environment": "automations",
+      "caller_workflow": "diagnose-workflow-failure.yml",
+      "on": ["workflow_dispatch"],
+      "permissions": {
+        "actions": "write",
+        "issues": "write",
+        "pull_requests": "read"
+      },
+      "target": "uv-dev"
+    },
+    {
+      "caller": "uv-dev",
+      "environment": "automations",
+      "caller_workflow": "pull-request-labels.yml",
+      "on": ["workflow_dispatch"],
+      "permissions": { "pull_requests": "write" },
+      "target": "uv-dev"
+    },
+    {
+      "caller": "uv",
+      "environment": "automations",
+      "caller_workflow": "pull-request-labels.yml",
+      "on": ["workflow_dispatch"],
+      "permissions": { "pull_requests": "write" },
+      "target": "uv"
+    },
+    {
+      "caller": "uv",
+      "environment": "automations",
+      "caller_workflow": "diagnose-workflow-failure.yml",
+      "on": ["workflow_dispatch"],
+      "permissions": {
+        "actions": "write",
+        "issues": "write",
+        "pull_requests": "read"
+      },
+      "targets": ["uv", "uv-dev"],
+      "installation": "automations"
+    }
+  ]
+}
