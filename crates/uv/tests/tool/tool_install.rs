@@ -2801,7 +2801,7 @@ fn tool_install_force() {
     }, {
         // Should run black in the virtual environment
         assert_snapshot!(fs_err::read_to_string(executable).unwrap(), @r#"
-        #![TEMP_DIR]/tools/black/bin/python3
+        #![TEMP_DIR]/tools/black/bin/python
         # -*- coding: utf-8 -*-
         import sys
         from black import patched_main
