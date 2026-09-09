@@ -90,6 +90,100 @@ pub(super) fn write_metadata(context: &TestContext, variants: Value) -> Result<(
     Ok(())
 }
 
+/// Variant wheels from find-links require the preview feature, including in universal exports.
+#[test]
+fn wheel_variants_preview_find_links() -> Result<()> {
+    let context = uv_test::test_context!("3.12").with_filter((r"[a-f0-9]{64}", "[HASH]"));
+    write_wheel(&context, "example", Some("null"), json!({}), &[], None)?;
+    write_wheel(&context, "example", None, json!({}), &[], None)?;
+    write_metadata(&context, json!({"null": {}}))?;
+    context
+        .temp_dir
+        .child("requirements.in")
+        .write_str("example")?;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("example").arg("--no-index").arg("--find-links").arg(context.temp_dir.path())
+        .env("UV_VARIANT_LOCK", context.temp_dir.child("missing.toml").path()), @r###"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + example==1.0.0
+    "###);
+    uv_snapshot!(context.filters(), context.python_command().arg("-c").arg(indoc! {r#"
+        import example
+        from pathlib import Path
+        print(Path(example.__file__).with_name("selected.txt").read_text())
+    "#}), @r###"
+    exit_code: 0 (success)
+    ----- stdout -----
+    nonvariant build 0
+    "###);
+    uv_snapshot!(context.filters(), context.pip_compile()
+        .arg("requirements.in").arg("--no-index").arg("--find-links").arg(context.temp_dir.path())
+        .arg("--universal").arg("--no-header").arg("-o").arg("pylock.toml")
+        .env("UV_VARIANT_LOCK", context.temp_dir.child("missing.toml").path()), @r###"
+    exit_code: 0 (success)
+    ----- stdout -----
+    lock-version = "1.0"
+    created-by = "uv"
+    requires-python = ">=3.12"
+
+    [[packages]]
+    name = "example"
+    version = "1.0.0"
+    wheels = [{ url = "file://[TEMP_DIR]/example-1.0.0-py3-none-any.whl", hashes = { sha256 = "[HASH]" } }]
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    "###);
+    Ok(())
+}
+
+/// Direct wheel requirements and cached wheels must not bypass the opt-in.
+#[test]
+fn wheel_variants_preview_direct() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    write_wheel(&context, "example", Some("null"), json!({}), &[], None)?;
+    let filename = "example-1.0.0-py3-none-any-null.whl";
+    context
+        .temp_dir
+        .child("requirements.txt")
+        .write_str(filename)?;
+
+    uv_snapshot!(context.filters(), context.pip_install().arg(filename), @r###"
+    exit_code: 1 (failure)
+    ----- stderr -----
+      × Failed to read `example @ file://[TEMP_DIR]/example-1.0.0-py3-none-any-null.whl`
+      ╰─▶ Wheel variants require `--preview-features wheel-variants`
+    "###);
+    uv_snapshot!(context.filters(), context.pip_sync().arg("requirements.txt"), @r###"
+    exit_code: 1 (failure)
+    ----- stderr -----
+      × Failed to read `example @ file://[TEMP_DIR]/example-1.0.0-py3-none-any-null.whl`
+      ╰─▶ Wheel variants require `--preview-features wheel-variants`
+    "###);
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--preview-features").arg("wheel-variants").arg(filename), @r###"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + example==1.0.0 (from file://[TEMP_DIR]/example-1.0.0-py3-none-any-null.whl)
+    "###);
+    uv_snapshot!(context.filters(), context.pip_sync()
+        .arg("requirements.txt").arg("--reinstall"), @r###"
+    exit_code: 1 (failure)
+    ----- stderr -----
+      × Failed to read `example @ file://[TEMP_DIR]/example-1.0.0-py3-none-any-null.whl`
+      ╰─▶ Wheel variants require `--preview-features wheel-variants`
+    "###);
+    Ok(())
+}
+
 #[test]
 fn pep825_selection_and_markers() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -151,7 +245,7 @@ fn pep825_selection_and_markers() -> Result<()> {
             "null": {},
         }),
     )?;
-    uv_snapshot!(context.filters(), context.pip_install()
+    uv_snapshot!(context.filters(), context.pip_install().arg("--preview-features").arg("wheel-variants")
         .arg("example").arg("--no-index").arg("--find-links").arg(context.temp_dir.path())
         .env("UV_VARIANT_LOCK", context.temp_dir.child("target.toml").path()), @r###"
     exit_code: 0 (success)
@@ -200,7 +294,7 @@ fn pep825_null_fallback() -> Result<()> {
         &context,
         json!({"unsupported": {"gpu": {"cuda": ["14.0"]}}, "null": {}}),
     )?;
-    uv_snapshot!(context.filters(), context.pip_install()
+    uv_snapshot!(context.filters(), context.pip_install().arg("--preview-features").arg("wheel-variants")
         .arg("example").arg("--no-index").arg("--find-links").arg(context.temp_dir.path())
         .env("UV_VARIANT_LOCK", context.temp_dir.child("target.toml").path()), @r###"
     exit_code: 0 (success)
@@ -231,7 +325,7 @@ fn pep825_invalid_metadata_fallback() -> Result<()> {
         .temp_dir
         .child("example-1.0.0-variants.json")
         .write_str(r#"{"$schema": "unsupported"}"#)?;
-    uv_snapshot!(context.filters(), context.pip_install()
+    uv_snapshot!(context.filters(), context.pip_install().arg("--preview-features").arg("wheel-variants")
         .arg("example").arg("--no-index").arg("--find-links").arg(context.temp_dir.path()), @r###"
     exit_code: 0 (success)
     ----- stderr -----
@@ -282,7 +376,7 @@ fn pep825_project_sync() -> Result<()> {
         requires-python = ">=3.12"
         dependencies = ["example"]
     "#})?;
-    uv_snapshot!(context.filters(), context.sync()
+    uv_snapshot!(context.filters(), context.sync().arg("--preview-features").arg("wheel-variants")
         .arg("--no-index").arg("--find-links").arg(context.temp_dir.path())
         .env("UV_VARIANT_LOCK", context.temp_dir.child("target.toml").path()), @r###"
     exit_code: 0 (success)
@@ -292,6 +386,14 @@ fn pep825_project_sync() -> Result<()> {
     Installed 2 packages in [TIME]
      + example==1.0.0
      + supported==1.0.0
+    "###);
+    // Reusing the lockfile still requires opting in, even when the wheels are already installed.
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen")
+        .env("UV_VARIANT_LOCK", context.temp_dir.child("missing.toml").path()), @r###"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Failed to parse `uv.lock`
+      Caused by: This lockfile uses wheel variants; pass `--preview-features wheel-variants` to use it
     "###);
     // A changed host can change the dependency set without changing the selected label.
     context.temp_dir.child("target.toml").write_str(indoc! {r#"
@@ -304,7 +406,7 @@ fn pep825_project_sync() -> Result<()> {
         [provider.properties]
         cuda = ["14.0"]
     "#})?;
-    uv_snapshot!(context.filters(), context.sync().arg("--locked")
+    uv_snapshot!(context.filters(), context.sync().arg("--preview-features").arg("wheel-variants").arg("--locked")
         .arg("--no-index").arg("--find-links").arg(context.temp_dir.path())
         .env("UV_VARIANT_LOCK", context.temp_dir.child("target.toml").path()), @r###"
     exit_code: 0 (success)

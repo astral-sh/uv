@@ -10,6 +10,8 @@ use uv_test::{TestContext, uv_snapshot};
 fn command(context: &TestContext, server: &PackseServer, cpu_level: u8) -> Command {
     let mut command = context.pip_install();
     command
+        .arg("--preview-features")
+        .arg("wheel-variants")
         .arg("--index-url")
         .arg(server.index_url())
         .env("PROVIDER_CPU_LEVEL", cpu_level.to_string())
@@ -32,6 +34,69 @@ fn installed_variants(context: &TestContext) -> Command {
             print(f"{dist.metadata['Name']}=={dist.version} ({label})")
     "#});
     command
+}
+
+/// Enabling variants must not change later commands using the same cache without the preview
+/// feature. An invalid provider setting detects accidental provider execution.
+#[test]
+fn wheel_variants_preview_registry() {
+    let context = uv_test::test_context!("3.12");
+    let server = PackseServer::new("variants/variants-basic.toml");
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("cpu-first").arg("blas-first").arg("--index-url").arg(server.index_url())
+        .env("PROVIDER_CPU_LEVEL", "invalid"), @r###"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + blas-first==1.0.0
+     + cpu-first==1.0.0
+    "###);
+    uv_snapshot!(context.filters(), installed_variants(&context), @r###"
+    exit_code: 0 (success)
+    ----- stdout -----
+    blas-first==1.0.0 (non-variant)
+    cpu-first==1.0.0 (non-variant)
+    "###);
+
+    uv_snapshot!(context.filters(), command(&context, &server, 3)
+        .arg("cpu-first").arg("blas-first").arg("--reinstall"), @r###"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Uninstalled 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     ~ blas-first==1.0.0
+     ~ cpu-first==1.0.0
+    "###);
+    uv_snapshot!(context.filters(), installed_variants(&context), @r###"
+    exit_code: 0 (success)
+    ----- stdout -----
+    blas-first==1.0.0 (openblas_v2)
+    cpu-first==1.0.0 (closedblas_v3)
+    "###);
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("cpu-first").arg("blas-first").arg("--index-url").arg(server.index_url())
+        .arg("--reinstall").env("PROVIDER_CPU_LEVEL", "invalid"), @r###"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Uninstalled 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     ~ blas-first==1.0.0
+     ~ cpu-first==1.0.0
+    "###);
+    uv_snapshot!(context.filters(), installed_variants(&context), @r###"
+    exit_code: 0 (success)
+    ----- stdout -----
+    blas-first==1.0.0 (non-variant)
+    cpu-first==1.0.0 (non-variant)
+    "###);
 }
 
 /// Namespace order determines whether CPU level or BLAS library wins. The library's build-time

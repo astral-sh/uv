@@ -5,6 +5,7 @@ set -ex
 cargo build
 uv="$(pwd)/target/debug/uv"
 unset VIRTUAL_ENV
+export UV_PREVIEW_FEATURES=wheel-variants
 export RUST_LOG=uv_distribution_types=debug,uv_distribution::distribution_database=debug
 
 # 1. Single platform

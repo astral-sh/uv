@@ -15,6 +15,17 @@ pub enum IndexEntryFilename {
 }
 
 impl IndexEntryFilename {
+    /// Whether this is a variant wheel or its index metadata.
+    pub fn is_variant(&self) -> bool {
+        match self {
+            Self::DistFilename(DistFilename::WheelFilename(filename)) => {
+                filename.variant().is_some()
+            }
+            Self::DistFilename(DistFilename::SourceDistFilename(_)) => false,
+            Self::VariantJson(_) => true,
+        }
+    }
+
     pub fn name(&self) -> &PackageName {
         match self {
             Self::DistFilename(filename) => filename.name(),
