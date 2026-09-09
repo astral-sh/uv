@@ -53,26 +53,26 @@ jobs:
       - name: "Download unsigned macOS wheels"
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          pattern: unsigned-wheels-*-*-apple-darwin
+          pattern: build-wheels-*-*-apple-darwin
           path: wheel-artifacts
 
       - name: "Download unsigned Windows wheels"
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          pattern: unsigned-wheels-*-*-pc-windows-msvc
+          pattern: build-wheels-*-*-pc-windows-msvc
           path: wheel-artifacts
 
       - name: "Download unsigned macOS GitHub release archives"
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          pattern: unsigned-github-archives-*-apple-darwin
+          pattern: build-github-archives-*-apple-darwin
           path: github-archives
           merge-multiple: true
 
       - name: "Download unsigned Windows GitHub release archives"
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          pattern: unsigned-github-archives-*-pc-windows-msvc
+          pattern: build-github-archives-*-pc-windows-msvc
           path: github-archives
           merge-multiple: true
 
@@ -88,8 +88,8 @@ jobs:
             if [[ "$system" == macos ]]; then targets=$MACOS_TARGETS; else targets=$WINDOWS_TARGETS; fi
             while read -r target; do
               mkdir -p "wheels/$target"
-              cp wheel-artifacts/"unsigned-wheels-uv-$target"/*.whl "wheels/$target/"
-              cp wheel-artifacts/"unsigned-wheels-uv_build-$target"/*.whl "wheels/$target/"
+              cp wheel-artifacts/"build-wheels-uv-$target"/*.whl "wheels/$target/"
+              cp wheel-artifacts/"build-wheels-uv_build-$target"/*.whl "wheels/$target/"
               uv run scripts/extract-wheel-binaries.py \
                 --output "./unsigned/$system/$target" wheels/"$target"/*.whl
             done < <(jq -r '.[].target' <<< "$targets")
