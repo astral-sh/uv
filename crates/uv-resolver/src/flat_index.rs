@@ -169,11 +169,11 @@ impl FlatDistributions {
         }
 
         // Check if hashes line up
-        let hash_policy = hasher.get_package(&filename.name, &filename.version);
-        let hash = if hash_policy.requires_validation() {
+        let hash_request = hasher.get_package(&filename.name, &filename.version);
+        let hash = if hash_request.requires_validation() {
             if hashes.is_empty() {
                 HashComparison::Missing
-            } else if hash_policy.matches(hashes) {
+            } else if hash_request.matches(hashes) {
                 HashComparison::Matched
             } else {
                 HashComparison::Mismatched
@@ -209,11 +209,11 @@ impl FlatDistributions {
         };
 
         // Check if hashes line up.
-        let hash_policy = hasher.get_package(&filename.name, &filename.version);
-        let hash = if hash_policy.requires_validation() {
+        let hash_request = hasher.get_package(&filename.name, &filename.version);
+        let hash = if hash_request.requires_validation() {
             if hashes.is_empty() {
                 HashComparison::Missing
-            } else if hash_policy.matches(hashes) {
+            } else if hash_request.matches(hashes) {
                 HashComparison::Matched
             } else {
                 HashComparison::Mismatched

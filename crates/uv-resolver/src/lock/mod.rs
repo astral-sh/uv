@@ -32,12 +32,13 @@ use uv_distribution_filename::{
     BuildTag, DistExtension, ExtensionError, SourceDistExtension, WheelFilename,
 };
 use uv_distribution_types::{
-    BuiltDist, DependencyMetadata, DirectUrlBuiltDist, DirectUrlSourceDist, DirectorySourceDist,
-    Dist, FileLocation, FirstParty, GitDirectorySourceDist, GitPathBuiltDist, GitPathSourceDist,
-    HashPolicy, Identifier, IndexLocations, IndexMetadata, IndexUrl, Name, PYPI_URL, PathBuiltDist,
-    PathSourceDist, RegistryBuiltDist, RegistryBuiltWheel, RegistrySourceDist, RemoteSource,
-    Requirement, RequirementSource, RequiresPython, ResolvedDist, SimplifiedMarkerTree,
-    StaticMetadata, ToUrlError, UrlString, VersionId,
+    ArchiveHashRequest, BuiltDist, DependencyMetadata, DirectUrlBuiltDist, DirectUrlSourceDist,
+    DirectorySourceDist, Dist, FileLocation, FirstParty, GitDirectorySourceDist, GitPathBuiltDist,
+    GitPathSourceDist, HashValidation, Identifier, IndexLocations, IndexMetadata, IndexUrl,
+    MetadataHashRequest, Name, PYPI_URL, PathBuiltDist, PathSourceDist, RegistryBuiltDist,
+    RegistryBuiltWheel, RegistrySourceDist, RemoteSource, Requirement, RequirementSource,
+    RequiresPython, ResolvedDist, SimplifiedMarkerTree, StaticMetadata, ToUrlError, UrlString,
+    VersionId,
 };
 use uv_fs::{PortablePath, PortablePathBuf, Simplified, normalize_path, try_relative_to_if};
 use uv_git::{RepositoryReference, ResolvedRepositoryReference};
@@ -3273,10 +3274,10 @@ impl Lock {
         )?;
         let locked_hashes = match (&package.id.source, &dist) {
             (Source::Direct(..) | Source::Path(_), Dist::Source(_)) if !hashes.is_empty() => {
-                Some(HashPolicy::All(hashes.as_slice()))
+                Some(HashValidation::All(hashes.as_slice()))
             }
             (Source::Registry(_), Dist::Source(_)) if !hashes.is_empty() => {
-                Some(HashPolicy::Any(hashes.as_slice()))
+                Some(HashValidation::Any(hashes.as_slice()))
             }
             _ => None,
         };
@@ -3292,13 +3293,23 @@ impl Lock {
                     None
                 }
             })
-            && locked_hashes.is_none_or(|policy| policy.matches(archive.hashes.as_slice()))
+            && locked_hashes.is_none_or(|validation| {
+                ArchiveHashRequest::from(validation).matches(archive.hashes.as_slice())
+            })
         {
             return Ok(archive.metadata.clone());
         }
 
+        let metadata_hashes = if let Some(validation) = locked_hashes {
+            MetadataHashRequest {
+                collection: hasher.collection(),
+                validation,
+            }
+        } else {
+            hasher.get_metadata(&dist)
+        };
         let archive = database
-            .get_or_build_wheel_metadata(&dist, locked_hashes.unwrap_or_else(|| hasher.get(&dist)))
+            .get_or_build_wheel_metadata(&dist, metadata_hashes)
             .await
             .map_err(|err| LockErrorKind::Resolution {
                 id: package.id.clone(),
@@ -8145,16 +8156,16 @@ wheels = [{ filename = "local-1.0.0-py3-none-any.whl", hash = "sha256:53a42340ae
         let unknown = "https://example.com/unknown-1.0.0-py3-none-any.whl"
             .parse()
             .expect("valid URL");
-        assert_eq!(hasher.generation(), None);
+        assert_eq!(hasher.collection(), None);
         assert_eq!(
             hasher.get_url(&remote),
-            HashPolicy::All(slice::from_ref(&digest))
+            ArchiveHashRequest::All(slice::from_ref(&digest))
         );
         assert_eq!(
             hasher.get_url(&local),
-            HashPolicy::All(slice::from_ref(&digest))
+            ArchiveHashRequest::All(slice::from_ref(&digest))
         );
-        assert_eq!(hasher.get_url(&unknown), HashPolicy::None);
+        assert_eq!(hasher.get_url(&unknown), ArchiveHashRequest::None);
     }
 
     #[test]

@@ -7,21 +7,21 @@ use rustc_hash::FxHashMap;
 
 use uv_configuration::HashCheckingMode;
 use uv_distribution_types::{
-    DistributionMetadata, HashGeneration, HashPolicy, Name, Requirement, RequirementSource,
-    Resolution, UnresolvedRequirement, VersionId,
+    ArchiveHashRequest, DistributionMetadata, HashCollection, HashValidation, MetadataHashRequest,
+    Name, Requirement, RequirementSource, Resolution, UnresolvedRequirement, VersionId,
 };
 use uv_normalize::PackageName;
 use uv_pep440::{Operator, Version};
 use uv_pypi_types::{HashAlgorithm, HashDigest, HashDigests, HashError, ResolverMarkerEnvironment};
 use uv_redacted::DisplaySafeUrl;
 
-/// Hash generation and verification policies for a resolution.
+/// Hash collection and verification policies for a resolution.
 ///
-/// Verification takes precedence for distributions with trusted hashes. The generation policy
+/// Verification takes precedence for distributions with trusted hashes. The collection policy
 /// applies to the remaining distributions.
 #[derive(Debug, Default, Clone)]
 pub struct HashStrategy {
-    generation: Option<HashGeneration>,
+    collection: Option<HashCollection>,
     verification: HashVerification,
 }
 
@@ -38,10 +38,10 @@ pub enum HashVerification {
 }
 
 impl HashStrategy {
-    /// Generate hashes according to the given policy.
-    pub fn generate(generation: HashGeneration) -> Self {
+    /// Collect declared hashes for resolution, computing missing hashes according to the policy.
+    pub fn collect(collection: HashCollection) -> Self {
         Self {
-            generation: Some(generation),
+            collection: Some(collection),
             ..Self::default()
         }
     }
@@ -56,16 +56,16 @@ impl HashStrategy {
         Self::default().with_verification(HashVerification::Required(hashes))
     }
 
-    /// Set verification independently of hash generation.
+    /// Set verification independently of hash collection.
     #[must_use]
     pub fn with_verification(mut self, verification: HashVerification) -> Self {
         self.verification = verification;
         self
     }
 
-    /// Return the hash generation policy.
-    pub fn generation(&self) -> Option<HashGeneration> {
-        self.generation
+    /// Return the hash collection policy.
+    pub fn collection(&self) -> Option<HashCollection> {
+        self.collection
     }
 
     /// Return the hash verification policy.
@@ -73,30 +73,60 @@ impl HashStrategy {
         &self.verification
     }
 
-    /// Return the [`HashPolicy`] for the given distribution.
-    pub fn get<T: DistributionMetadata>(&self, distribution: &T) -> HashPolicy<'_> {
-        self.get_id(|| distribution.version_id())
+    /// Return the [`ArchiveHashRequest`] for the given distribution.
+    pub fn get<T: DistributionMetadata>(&self, distribution: &T) -> ArchiveHashRequest<'_> {
+        self.get_archive_request(|| distribution.version_id())
     }
 
-    /// Return the [`HashPolicy`] for the given registry-based package.
-    pub fn get_package(&self, name: &PackageName, version: &Version) -> HashPolicy<'_> {
-        self.get_id(|| VersionId::from_registry(name.clone(), version.clone()))
+    /// Return the [`MetadataHashRequest`] for retrieving the given distribution's metadata.
+    pub fn get_metadata<T: DistributionMetadata>(
+        &self,
+        distribution: &T,
+    ) -> MetadataHashRequest<'_> {
+        MetadataHashRequest {
+            collection: self.collection,
+            validation: self.get_validation(|| distribution.version_id()),
+        }
     }
 
-    /// Return the [`HashPolicy`] for the given direct URL package.
+    /// Return the [`ArchiveHashRequest`] for the given registry-based package.
+    pub fn get_package(&self, name: &PackageName, version: &Version) -> ArchiveHashRequest<'_> {
+        self.get_archive_request(|| VersionId::from_registry(name.clone(), version.clone()))
+    }
+
+    /// Return the [`ArchiveHashRequest`] for the given direct URL package.
     ///
     /// A direct URL identifies a single concrete artifact, so every provided digest must match.
-    pub fn get_url(&self, url: &DisplaySafeUrl) -> HashPolicy<'_> {
-        self.get_id(|| VersionId::from_url(url))
+    pub fn get_url(&self, url: &DisplaySafeUrl) -> ArchiveHashRequest<'_> {
+        self.get_archive_request(|| VersionId::from_url(url))
+    }
+
+    /// Return the [`MetadataHashRequest`] for a URL whose package name is not yet known.
+    pub fn get_url_metadata(&self, url: &DisplaySafeUrl) -> MetadataHashRequest<'_> {
+        MetadataHashRequest {
+            collection: self.collection,
+            validation: self.get_validation(|| VersionId::from_url(url)),
+        }
+    }
+
+    /// Return the archive hash request for a distribution.
+    fn get_archive_request(&self, id: impl FnOnce() -> VersionId) -> ArchiveHashRequest<'_> {
+        let validation = self.get_validation(id);
+        match validation {
+            HashValidation::None => self
+                .collection
+                .map_or(ArchiveHashRequest::None, |_| ArchiveHashRequest::Generate),
+            HashValidation::Any(_) | HashValidation::All(_) => validation.into(),
+        }
     }
 
     /// Construct an identity only when verification requires a lookup.
-    fn get_id(&self, id: impl FnOnce() -> VersionId) -> HashPolicy<'_> {
+    fn get_validation(&self, id: impl FnOnce() -> VersionId) -> HashValidation<'_> {
         match &self.verification {
             HashVerification::IfPresent(hashes) => {
                 let id = id();
                 if let Some(hashes) = hashes.get(&id) {
-                    return hash_policy(&id, hashes);
+                    return hash_validation(&id, hashes);
                 }
                 // `==1.0.0` can also select `1.0.0+local`. If the local version has no hash
                 // of its own, check it against the hash for `1.0.0`.
@@ -107,17 +137,19 @@ impl HashStrategy {
                         version.clone().without_local(),
                     ))
                 {
-                    return HashPolicy::Any(hashes);
+                    return HashValidation::Any(hashes);
                 }
             }
             HashVerification::Required(hashes) => {
                 let id = id();
-                return hash_policy(&id, hashes.get(&id).map(Vec::as_slice).unwrap_or_default());
+                return hash_validation(
+                    &id,
+                    hashes.get(&id).map(Vec::as_slice).unwrap_or_default(),
+                );
             }
             HashVerification::None => {}
         }
-        self.generation
-            .map_or(HashPolicy::None, HashPolicy::Generate)
+        HashValidation::None
     }
 
     /// Returns `true` if the given registry-based package is allowed.
@@ -172,7 +204,7 @@ impl HashStrategy {
         self.augment_with_requirements(requirements)
     }
 
-    /// Generate the required hashes from a set of [`UnresolvedRequirement`] entries.
+    /// Read the required hashes from a set of [`UnresolvedRequirement`] entries.
     ///
     /// When the environment is not given, this treats all marker expressions
     /// that reference the environment as true. In other words, it does
@@ -333,7 +365,7 @@ impl HashStrategy {
         }
     }
 
-    /// Generate the required hashes from a [`Resolution`].
+    /// Read the required hashes from a [`Resolution`].
     pub fn from_resolution(
         resolution: &Resolution,
         mode: HashCheckingMode,
@@ -451,14 +483,14 @@ impl HashStrategy {
     }
 }
 
-fn hash_policy<'a>(id: &VersionId, digests: &'a [HashDigest]) -> HashPolicy<'a> {
+fn hash_validation<'a>(id: &VersionId, digests: &'a [HashDigest]) -> HashValidation<'a> {
     match id {
-        VersionId::NameVersion { .. } => HashPolicy::Any(digests),
+        VersionId::NameVersion { .. } => HashValidation::Any(digests),
         VersionId::ArchiveUrl { .. }
         | VersionId::Git { .. }
         | VersionId::Path { .. }
         | VersionId::Directory { .. }
-        | VersionId::Unknown { .. } => HashPolicy::All(digests),
+        | VersionId::Unknown { .. } => HashValidation::All(digests),
     }
 }
 
@@ -551,8 +583,8 @@ mod tests {
     use uv_configuration::HashCheckingMode;
     use uv_distribution_filename::DistExtension;
     use uv_distribution_types::{
-        HashGeneration, HashPolicy, Requirement, RequirementSource, UnresolvedRequirement,
-        VersionId,
+        ArchiveHashRequest, HashCollection, HashValidation, MetadataHashRequest, Requirement,
+        RequirementSource, UnresolvedRequirement, VersionId,
     };
     use uv_normalize::PackageName;
     use uv_pep440::Version;
@@ -615,7 +647,10 @@ mod tests {
             let RequirementSource::Url { url, .. } = &requirement.source else {
                 panic!("expected direct URL requirement");
             };
-            assert_eq!(hasher.get_url(url), HashPolicy::All(expected.as_slice()));
+            assert_eq!(
+                hasher.get_url(url),
+                ArchiveHashRequest::All(expected.as_slice())
+            );
         }
     }
 
@@ -637,12 +672,12 @@ mod tests {
                 vec![digest.clone()],
             ),
         ]);
-        let strategy = HashStrategy::generate(HashGeneration::All)
+        let strategy = HashStrategy::collect(HashCollection::All)
             .with_verification(HashVerification::IfPresent(Arc::new(hashes)));
 
         assert_eq!(
             strategy.get_url(&url),
-            HashPolicy::All(slice::from_ref(&digest))
+            ArchiveHashRequest::All(slice::from_ref(&digest))
         );
         for fragment in [
             "#subdirectory=.",
@@ -653,35 +688,56 @@ mod tests {
             let root_url = format!("{url}{fragment}").parse()?;
             assert_eq!(
                 strategy.get_url(&root_url),
-                HashPolicy::All(slice::from_ref(&digest))
+                ArchiveHashRequest::All(slice::from_ref(&digest))
             );
         }
+        assert_eq!(strategy.get_url(&unknown_url), ArchiveHashRequest::Generate);
         assert_eq!(
-            strategy.get_url(&unknown_url),
-            HashPolicy::Generate(HashGeneration::All)
+            strategy.get_url_metadata(&unknown_url),
+            MetadataHashRequest {
+                collection: Some(HashCollection::All),
+                validation: HashValidation::None,
+            }
+        );
+        assert_eq!(
+            strategy.get_url_metadata(&url),
+            MetadataHashRequest {
+                collection: Some(HashCollection::All),
+                validation: HashValidation::All(slice::from_ref(&digest)),
+            }
         );
         assert_eq!(
             strategy.get_package(&name, &version),
-            HashPolicy::Any(slice::from_ref(&digest))
+            ArchiveHashRequest::Any(slice::from_ref(&digest))
         );
         assert_eq!(
             strategy.get_package(&name, &unknown_version),
-            HashPolicy::Generate(HashGeneration::All)
+            ArchiveHashRequest::Generate
         );
 
         Ok(())
     }
 
     #[test]
-    fn required_hashes_take_precedence_over_generation() -> Result<(), Box<dyn std::error::Error>> {
+    fn required_hashes_take_precedence_over_collection() -> Result<(), Box<dyn std::error::Error>> {
         let url: DisplaySafeUrl = "https://example.com/anyio-4.0.0.tar.gz".parse()?;
         let name: PackageName = "anyio".parse()?;
         let version: Version = "4.0.0".parse()?;
-        let strategy = HashStrategy::generate(HashGeneration::All)
+        let strategy = HashStrategy::collect(HashCollection::All)
             .with_verification(HashVerification::Required(Arc::default()));
 
-        assert_eq!(strategy.get_url(&url), HashPolicy::All(&[]));
-        assert_eq!(strategy.get_package(&name, &version), HashPolicy::Any(&[]));
+        assert_eq!(strategy.get_url(&url), ArchiveHashRequest::All(&[]));
+        assert_eq!(
+            strategy.get_url_metadata(&url),
+            MetadataHashRequest {
+                collection: Some(HashCollection::All),
+                validation: HashValidation::All(&[]),
+            }
+        );
+        assert_eq!(
+            strategy.get_package(&name, &version),
+            ArchiveHashRequest::Any(&[])
+        );
         assert!(!strategy.allows_url(&url));
         assert!(!strategy.allows_package(&name, &version));
         Ok(())

@@ -763,14 +763,14 @@ impl VersionMapLazy {
         }
 
         // Check if hashes line up. If hashes aren't required, they're considered matching.
-        let hash_policy = self.hasher.get_package(&filename.name, &filename.version);
-        let required_hashes = hash_policy.digests();
+        let hash_request = self.hasher.get_package(&filename.name, &filename.version);
+        let required_hashes = hash_request.digests();
         let hash = if required_hashes.is_empty() {
             HashComparison::Matched
         } else {
             if hashes.is_empty() {
                 HashComparison::Missing
-            } else if hash_policy.matches(hashes) {
+            } else if hash_request.matches(hashes) {
                 HashComparison::Matched
             } else {
                 HashComparison::Mismatched
@@ -827,14 +827,14 @@ impl VersionMapLazy {
         };
 
         // Check if hashes line up. If hashes aren't required, they're considered matching.
-        let hash_policy = self.hasher.get_package(name, version);
-        let required_hashes = hash_policy.digests();
+        let hash_request = self.hasher.get_package(name, version);
+        let required_hashes = hash_request.digests();
         let hash = if required_hashes.is_empty() {
             HashComparison::Matched
         } else {
             if hashes.is_empty() {
                 HashComparison::Missing
-            } else if hash_policy.matches(hashes) {
+            } else if hash_request.matches(hashes) {
                 HashComparison::Matched
             } else {
                 HashComparison::Mismatched

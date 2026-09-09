@@ -10,7 +10,8 @@ use uv_configuration::ExtrasSpecification;
 use uv_distribution::{DistributionDatabase, FlatRequiresDist, Reporter, RequiresDist};
 use uv_distribution_types::Requirement;
 use uv_distribution_types::{
-    BuildableSource, DirectorySourceUrl, HashGeneration, HashPolicy, Identifier, SourceUrl,
+    BuildableSource, DirectorySourceUrl, HashCollection, HashValidation, Identifier,
+    MetadataHashRequest, SourceUrl,
 };
 use uv_fs::Simplified;
 use uv_normalize::{ExtraName, PackageName};
@@ -203,9 +204,9 @@ impl<'a, Context: BuildContext> SourceTreeResolver<'a, Context> {
             editable: None,
         });
 
-        // Determine the hash policy. Since we don't have a package name, we perform a
+        // Determine the hash request. Since we don't have a package name, we perform a
         // manual match.
-        let hashes = match self.hasher.verification() {
+        let collection = match self.hasher.verification() {
             HashVerification::Required(_) => {
                 return Err(anyhow::anyhow!(
                     "Hash-checking is not supported for local directories: {}",
@@ -213,12 +214,13 @@ impl<'a, Context: BuildContext> SourceTreeResolver<'a, Context> {
                 ));
             }
             HashVerification::IfPresent(_) => {
-                HashPolicy::Generate(self.hasher.generation().unwrap_or(HashGeneration::All))
+                Some(self.hasher.collection().unwrap_or(HashCollection::All))
             }
-            HashVerification::None => self
-                .hasher
-                .generation()
-                .map_or(HashPolicy::None, HashPolicy::Generate),
+            HashVerification::None => self.hasher.collection(),
+        };
+        let hashes = MetadataHashRequest {
+            collection,
+            validation: HashValidation::None,
         };
 
         // Fetch the metadata for the distribution.
