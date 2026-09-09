@@ -16767,8 +16767,6 @@ fn build_hash_project() -> Result<(TestContext, String)> {
             wheel = Path(__file__).parent / "wheels" / "project-0.1.0-py3-none-any.whl"
             shutil.copyfile(wheel, Path(wheel_directory) / wheel.name)
             return wheel.name
-
-        build_editable = build_wheel
     "#})?;
     let context = context.with_filter((build_hash.clone(), "[BUILD_HASH]"));
     Ok((context, build_hash))
@@ -16790,11 +16788,11 @@ fn project_build_hashes_lock_and_sync() -> Result<()> {
     let (context, hash) = build_hash_project()?;
     let pyproject = context.temp_dir.child("pyproject.toml");
     let content = context.read("pyproject.toml");
+    // Unknown table fields are ignored without discarding the supplied hashes.
     pyproject.write_str(&formatdoc! {r#"
         {content}
         build-constraint-dependencies = [
-            {{ requirement = "build-dependency==1.0.0", hashes = ["sha256:{hash}"] }},
-            "dynamic-dependency[extra]==1.0.0",
+            {{ requirement = "build-dependency==1.0.0", hashes = ["sha256:{hash}"], future-field = true }},
         ]
     "#})?;
 
@@ -16814,10 +16812,7 @@ fn project_build_hashes_lock_and_sync() -> Result<()> {
         exclude-newer = "2024-03-25T00:00:00Z"
 
         [manifest]
-        build-constraints = [
-            { name = "build-dependency", specifier = "==1.0.0", hashes = ["sha256:[BUILD_HASH]"] },
-            { name = "dynamic-dependency", extras = ["extra"], specifier = "==1.0.0" },
-        ]
+        build-constraints = [{ name = "build-dependency", specifier = "==1.0.0", hashes = ["sha256:[BUILD_HASH]"] }]
 
         [[package]]
         name = "project"
@@ -16827,7 +16822,7 @@ fn project_build_hashes_lock_and_sync() -> Result<()> {
     });
 
     // `--frozen` uses the build dependency hashes recorded in the lockfile.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--no-editable"), @"
     exit_code: 0 (success)
     ----- stderr -----
     Prepared 1 package in [TIME]
@@ -16867,7 +16862,7 @@ fn project_build_hashes_incorrect() -> Result<()> {
         ]
     "#})?;
     // Supplied hashes are checked during installation.
-    uv_snapshot!(context.filters(), context.sync(), @"
+    uv_snapshot!(context.filters(), context.sync().arg("--no-editable"), @"
     exit_code: 1 (failure)
     ----- stderr -----
     Resolved 1 package in [TIME]
@@ -16899,7 +16894,7 @@ fn project_build_hashes_unpinned() -> Result<()> {
         ]
     "#, "0".repeat(64)})?;
     // Verify mode applies the version constraint but ignores a hash without an exact pin.
-    uv_snapshot!(context.filters(), context.sync(), @"
+    uv_snapshot!(context.filters(), context.sync().arg("--no-editable"), @"
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]

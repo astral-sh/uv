@@ -648,13 +648,14 @@ async fn build_package(
         // Under `--require-hashes`, include all command-line constraints, but only workspace
         // constraints with supplied hashes. Other workspace constraints still restrict builds.
         let hash_constraints = Constraints::from_specifications(
-            build_constraints_from_workspace
-                .iter()
-                .filter(|entry| !hash_checking.is_require() || !entry.hashes.is_empty())
-                .cloned()
-                .chain(command_line_constraints.iter().cloned()),
+            command_line_constraints.iter().cloned().chain(
+                build_constraints_from_workspace
+                    .iter()
+                    .filter(|entry| !hash_checking.is_require() || !entry.hashes.is_empty())
+                    .cloned(),
+            ),
         );
-        HashStrategy::from_build_constraints(
+        HashStrategy::from_constraints(
             &hash_constraints,
             Some(&interpreter.to_resolver_marker_environment()),
             hash_checking,

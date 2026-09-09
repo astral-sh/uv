@@ -3103,6 +3103,7 @@ fn build_workspace_constraint_hashes() -> Result<()> {
             .child(filename)
             .write_binary(&wheel)?;
     }
+    let context = context.with_filter((build_hash.clone(), "[BUILD_HASH]"));
     context.temp_dir.child("backend.py").write_str(indoc! {r#"
         import shutil
         from pathlib import Path
@@ -3141,14 +3142,47 @@ fn build_workspace_constraint_hashes() -> Result<()> {
         "build-dependency==1.0.0 --hash=sha256:{build_hash}\n"
     ))?;
 
+    // Workspace hashes are checked even without command-line constraints.
+    uv_snapshot!(context.filters(), context.build()
+        .arg("--wheel")
+        .arg("--no-cache"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    Building wheel...
+    error: Failed to build `[TEMP_DIR]/`
+      Caused by: Failed to install requirements from `build-system.requires`
+      Caused by: Failed to download `build-dependency==1.0.0`
+      Caused by: Hash mismatch for `build-dependency==1.0.0`
+
+        Expected:
+          sha256:0000000000000000000000000000000000000000000000000000000000000000
+
+        Computed:
+          sha256:[BUILD_HASH]
+    ");
+    context
+        .temp_dir
+        .child("backend-executed")
+        .assert(predicate::path::missing());
+
+    // Workspace constraints follow command-line constraints, so their hashes take precedence.
     uv_snapshot!(context.filters(), context.build()
         .arg("--wheel")
         .arg("--no-cache")
         .args(["--build-constraint", "constraints.txt"]), @"
     exit_code: 2 (failure)
     ----- stderr -----
+    Building wheel...
     error: Failed to build `[TEMP_DIR]/`
-      Caused by: Build constraints for build-dependency==1.0.0 have no hashes in common
+      Caused by: Failed to install requirements from `build-system.requires`
+      Caused by: Failed to download `build-dependency==1.0.0`
+      Caused by: Hash mismatch for `build-dependency==1.0.0`
+
+        Expected:
+          sha256:0000000000000000000000000000000000000000000000000000000000000000
+
+        Computed:
+          sha256:[BUILD_HASH]
     ");
     context
         .temp_dir
@@ -3185,16 +3219,26 @@ fn build_workspace_constraint_hashes() -> Result<()> {
         .args(["--build-constraint", "constraints.txt"]), @"
     exit_code: 2 (failure)
     ----- stderr -----
+    Building wheel...
     error: Failed to build `[TEMP_DIR]/`
-      Caused by: Build constraints for build-dependency @ file://[TEMP_DIR]/wheels/build_dependency-1.0.0-py3-none-any.whl have no hashes in common
+      Caused by: Failed to install requirements from `build-system.requires`
+      Caused by: Failed to read `build-dependency @ file://[TEMP_DIR]/wheels/build_dependency-1.0.0-py3-none-any.whl`
+      Caused by: Hash mismatch for `build-dependency @ file://[TEMP_DIR]/wheels/build_dependency-1.0.0-py3-none-any.whl`
+
+        Expected:
+          sha256:0000000000000000000000000000000000000000000000000000000000000000
+
+        Computed:
+          sha256:[BUILD_HASH]
     ");
     context
         .temp_dir
         .child("backend-executed")
         .assert(predicate::path::missing());
 
+    // A correct workspace hash also takes precedence over an incorrect command-line hash.
     constraints.write_str(&format!(
-        "build-dependency==1.0.0 --hash=sha256:{build_hash}\n"
+        "build-dependency==1.0.0 --hash=sha256:{incorrect_hash}\n"
     ))?;
     pyproject.write_str(&registry_pyproject.replace(&incorrect_hash, &build_hash))?;
     uv_snapshot!(context.filters(), context.build()

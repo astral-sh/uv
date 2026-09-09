@@ -290,7 +290,7 @@ pub type OverrideDependency = Override<uv_pep508::Requirement<VerbatimParsedUrl>
 
 /// A build constraint, optionally accompanied by archive hashes.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(untagged, deny_unknown_fields)]
+#[serde(untagged)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub enum BuildConstraintDependency {
     /// A PEP 508 requirement without additional hashes.

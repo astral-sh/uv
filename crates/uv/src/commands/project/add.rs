@@ -408,7 +408,7 @@ pub(crate) async fn add(
                     client.credentials_cache(),
                 )
                 .await?;
-            let build_hasher = HashStrategy::from_build_constraints(
+            let build_hasher = HashStrategy::from_constraints(
                 &build_constraints,
                 Some(&target.interpreter().to_resolver_marker_environment()),
                 uv_configuration::HashCheckingMode::Verify,

@@ -505,7 +505,7 @@ pub(crate) async fn pip_compile(
     };
 
     // Verify hashes on pinned build constraints, if any.
-    let build_hashes = HashStrategy::from_build_constraints(
+    let build_hashes = HashStrategy::from_constraints(
         &build_constraints,
         Some(&interpreter.to_resolver_marker_environment()),
         HashCheckingMode::Verify,

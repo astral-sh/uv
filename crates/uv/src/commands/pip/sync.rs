@@ -347,7 +347,7 @@ pub(crate) async fn pip_sync(
 
     // Verify supplied build hashes unless hash verification was explicitly disabled.
     let build_hasher = if hash_checking.is_some() {
-        HashStrategy::from_build_constraints(
+        HashStrategy::from_constraints(
             &build_constraints,
             Some(&marker_env),
             HashCheckingMode::Verify,

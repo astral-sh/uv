@@ -987,8 +987,10 @@ pub(crate) async fn run(
         Some(spec) => {
             debug!("Syncing `--with` requirements to cached environment");
 
-            // Project `--no-sync` uses current build constraints while keeping lockfile versions
-            // as preferences. For scripts, `--no-sync` is a no-op, so use the lockfile hashes.
+            // Project `--no-sync` skips updating the base environment, but `--with` may still build
+            // packages in a separate environment. In these cases, unless frozen, use current project
+            // constraints; any existing lockfile supplies only version preferences. Frozen runs and
+            // scripts use the recorded constraints when using a lockfile.
             let build_constraints = if no_sync && frozen.is_none() && !is_script {
                 unlocked_build_constraints
             } else {

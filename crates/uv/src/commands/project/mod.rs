@@ -2382,7 +2382,7 @@ pub(crate) async fn resolve_names(
     // TODO(charlie): These are all default values. We should consider whether we want to make them
     // optional on the downstream APIs.
     let hasher = HashStrategy::default();
-    let build_hasher = HashStrategy::from_build_constraints(
+    let build_hasher = HashStrategy::from_constraints(
         build_constraints,
         Some(&interpreter.to_resolver_marker_environment()),
         HashCheckingMode::Verify,
@@ -2393,7 +2393,7 @@ pub(crate) async fn resolve_names(
             .fetch_all(index_locations.flat_indexes().map(Index::url))
             .await
             .map_err(Box::new)?;
-        FlatIndex::from_entries(entries, None, &hasher, build_options)
+        FlatIndex::from_entries(entries)
     };
 
     // Lower the extra build dependencies, if any.
@@ -2630,7 +2630,7 @@ pub(crate) async fn resolve_environment(
         EnvironmentResolution::Specific => HashStrategy::default(),
         EnvironmentResolution::Universal => HashStrategy::collect(HashCollection::Url),
     };
-    let build_hasher = HashStrategy::from_build_constraints(
+    let build_hasher = HashStrategy::from_constraints(
         &build_constraints,
         Some(&interpreter.to_resolver_marker_environment()),
         HashCheckingMode::Verify,
@@ -2799,7 +2799,7 @@ pub(crate) async fn sync_environment(
         }
     };
 
-    let build_hasher = HashStrategy::from_build_constraints(
+    let build_hasher = HashStrategy::from_constraints(
         &build_constraints,
         Some(&interpreter.to_resolver_marker_environment()),
         HashCheckingMode::Verify,
@@ -3061,7 +3061,7 @@ pub(crate) async fn update_environment(
         .build_options(build_options.clone())
         .build();
 
-    let build_hasher = HashStrategy::from_build_constraints(
+    let build_hasher = HashStrategy::from_constraints(
         &build_constraints,
         Some(&interpreter.to_resolver_marker_environment()),
         HashCheckingMode::Verify,

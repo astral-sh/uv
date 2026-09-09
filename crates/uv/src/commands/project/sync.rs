@@ -875,7 +875,7 @@ pub(crate) async fn do_sync<'a>(
     // Read the build constraints from the lockfile.
     let build_constraints = target.build_constraints();
 
-    let build_hasher = HashStrategy::from_build_constraints(
+    let build_hasher = HashStrategy::from_constraints(
         &build_constraints,
         Some(&venv.interpreter().to_resolver_marker_environment()),
         uv_configuration::HashCheckingMode::Verify,

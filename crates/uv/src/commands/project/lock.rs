@@ -833,7 +833,7 @@ async fn do_lock(
     // artifacts recorded in that lockfile, including for an ordinary unlocked command.
     let (locked_hasher, locked_build_hasher) = if let Some(existing_lock) = existing_lock.as_ref() {
         let locked_hasher = existing_lock.hash_strategy(target.install_path())?;
-        let build_hasher = HashStrategy::from_build_constraints(
+        let build_hasher = HashStrategy::from_constraints(
             &existing_lock.build_constraints(target.install_path()),
             Some(&interpreter.to_resolver_marker_environment()),
             uv_configuration::HashCheckingMode::Verify,
@@ -855,7 +855,7 @@ async fn do_lock(
     let hasher = HashStrategy::collect(HashCollection::Url)
         .with_verification(resolution_hasher.verification().clone());
 
-    let build_hasher = HashStrategy::from_build_constraints(
+    let build_hasher = HashStrategy::from_constraints(
         &build_constraints,
         Some(&interpreter.to_resolver_marker_environment()),
         uv_configuration::HashCheckingMode::Verify,
