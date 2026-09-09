@@ -213,7 +213,7 @@ jobs:
   build-binary-macos-x86_64:
     name: "macos x86_64"
     timeout-minutes: 10
-    runs-on: macos-latest-large # github-macos-14-x86_64-12
+    runs-on: namespace-profile-macos-15
     env:
       RUSTC_BOOTSTRAP: 1
     steps:
@@ -222,7 +222,9 @@ jobs:
           persist-credentials: false
 
       - name: "Install Rust toolchain"
-        run: rustup toolchain install --profile minimal
+        run: |
+          rustup toolchain install --profile minimal
+          rustup target add x86_64-apple-darwin
 
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
@@ -231,15 +233,20 @@ jobs:
           save-if: ${{ inputs.save-rust-cache == 'true' }}
           cache-bin: false
       - name: "Build"
-        run: cargo build --profile no-debug-nightly -Z checksum-freshness --bin uv --bin uvx
+        run: cargo build --profile no-debug-nightly -Z checksum-freshness --target x86_64-apple-darwin --bin uv --bin uvx
+
+      - name: "Verify binary architecture"
+        run: |
+          test "$(lipo -archs target/x86_64-apple-darwin/no-debug-nightly/uv)" = x86_64
+          test "$(lipo -archs target/x86_64-apple-darwin/no-debug-nightly/uvx)" = x86_64
 
       - name: "Upload binary"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: uv-macos-x86_64-${{ github.sha }}
           path: |
-            ./target/no-debug-nightly/uv
-            ./target/no-debug-nightly/uvx
+            ./target/x86_64-apple-darwin/no-debug-nightly/uv
+            ./target/x86_64-apple-darwin/no-debug-nightly/uvx
           retention-days: 1
 
   build-binary-windows-x86_64:
