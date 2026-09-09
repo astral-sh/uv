@@ -776,6 +776,13 @@ impl TestContext {
         self
     }
 
+    /// Add custom filters to the `TestContext`.
+    #[must_use]
+    pub fn with_filters(mut self, filters: impl IntoIterator<Item = (String, String)>) -> Self {
+        self.filters.extend(filters);
+        self
+    }
+
     // Unsets the git credential helper using temp home gitconfig
     #[must_use]
     pub fn with_unset_git_credential_helper(self) -> Self {
