@@ -9,6 +9,7 @@
 # Requires `gh` and `jq`.
 
 set -euo pipefail
+SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 
 if [ -z "${COMMIT:-}" ]; then
     echo "COMMIT is required."
@@ -57,7 +58,7 @@ for artifact in archives global; do
 done
 
 MANIFEST="artifacts/dist-manifest.json"
-jq -r '(["dist-manifest.json"] + [.releases[].artifacts[]])[] | "artifacts/\(.)"' "$MANIFEST" > release-assets.txt
+"$SCRIPT_DIR/dist-manifest-to-files.sh" "$MANIFEST" > release-assets.txt
 assets=()
 while IFS= read -r asset; do
     assets+=("$asset")
