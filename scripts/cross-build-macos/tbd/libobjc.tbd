@@ -1,0 +1,37 @@
+--- !tapi-tbd
+tbd-version:     4
+targets:         [ x86_64-macos, arm64-macos ]
+install-name:    '/usr/lib/libobjc.A.dylib'
+exports:
+  - targets:     [ x86_64-macos, arm64-macos ]
+    symbols:     [ _objc_msgSend, _objc_msgSendSuper, _objc_msgSendSuper2,
+                   _objc_alloc, _objc_alloc_init, _objc_autoreleasePoolPush,
+                   _objc_autoreleasePoolPop, _objc_release, _objc_retain,
+                   _objc_retainAutorelease, _objc_retainAutoreleasedReturnValue,
+                   _objc_autoreleaseReturnValue, _objc_getClass, _objc_lookUpClass,
+                   _sel_registerName, _sel_getName, _class_getName,
+                   _class_getSuperclass, _object_getClass, _protocol_getName,
+                   _objc_enumerationMutation, _objc_opt_self,
+                   _objc_opt_new, _objc_opt_class, _objc_opt_isKindOfClass,
+                   _objc_opt_respondsToSelector, _objc_storeStrong,
+                   _objc_setProperty_nonatomic, _objc_getProperty,
+                   _objc_destroyWeak, _objc_initWeak, _objc_loadWeakRetained,
+                   _objc_msgSend_stret, _objc_msgSendSuper_stret,
+                   _objc_exception_throw, _objc_exception_rethrow,
+                   _objc_begin_catch, _objc_end_catch,
+                   _objc_sync_enter, _objc_sync_exit,
+                   _object_getInstanceVariable, _object_setInstanceVariable,
+                   _class_addMethod, _class_addIvar, _class_addProtocol,
+                   _class_replaceMethod, _class_getInstanceMethod,
+                   _class_getClassMethod, _class_conformsToProtocol,
+                   _class_respondsToSelector, _class_getInstanceVariable,
+                   _method_getImplementation, _method_getName,
+                   _method_getTypeEncoding, _method_setImplementation,
+                   _ivar_getName, _ivar_getOffset, _ivar_getTypeEncoding,
+                   _protocol_getMethodDescription, _protocol_conformsToProtocol,
+                   _sel_isEqual, _class_getProperty, _property_getName,
+                   _property_getAttributes, _objc_allocateClassPair,
+                   _objc_registerClassPair, _objc_disposeClassPair,
+                   _NSSelectorFromString, _NSStringFromSelector,
+                   _NSStringFromClass ]
+...
