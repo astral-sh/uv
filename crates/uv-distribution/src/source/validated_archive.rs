@@ -61,8 +61,9 @@ impl ValidatedSourceArchive {
             validation.hash_policy
         };
 
-        // Include every algorithm needed to validate the archive or repair an old revision.
-        let mut algorithms = hash_policy.algorithms();
+        // Include the caller's algorithms alongside any index algorithms selected for validation.
+        let mut algorithms = validation.hash_policy.algorithms();
+        algorithms.extend(hash_policy.algorithms());
         algorithms.extend_from_slice(validation.extra_algorithms);
         algorithms.extend(validation.existing_hashes.iter().map(HashDigest::algorithm));
         algorithms.sort();

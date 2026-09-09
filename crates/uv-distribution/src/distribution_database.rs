@@ -1140,6 +1140,8 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             .map(PathArchivePointer::into_archive)
             .filter(|archive| archive.has_digests(hashes));
 
+        // Index hashes may replace `Generate`, but the caller still needs its SHA-256.
+        let caller_hashes = hashes;
         let hashes = if let BuiltDist::Registry(wheels) = dist {
             hashes.with_index_hashes(wheels.best_wheel().file.hashes.as_slice())
         } else {
@@ -1200,8 +1202,11 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             )
             .map_err(Error::CacheWrite)?;
 
-            // Create a hasher for each hash algorithm.
-            let algorithms = hashes.algorithms();
+            // Include the caller's algorithms alongside any index algorithms selected for validation.
+            let mut algorithms = caller_hashes.algorithms();
+            algorithms.extend(hashes.algorithms());
+            algorithms.sort();
+            algorithms.dedup();
             let mut hashers = algorithms.into_iter().map(Hasher::from).collect::<Vec<_>>();
             let mut hasher = uv_extract::hash::HashReader::new(file, &mut hashers);
 
