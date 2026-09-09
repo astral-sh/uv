@@ -3952,14 +3952,14 @@ fn require_hashes_wheel_path_blake2b_mismatch() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
     Resolved 1 package in [TIME]
-      × Failed to read `tqdm @ file://[WORKSPACE]/test/links/tqdm-1000.0.0-py3-none-any.whl`
-      ╰─▶ Hash mismatch for `tqdm @ file://[WORKSPACE]/test/links/tqdm-1000.0.0-py3-none-any.whl`
+    error: Failed to read `tqdm @ file://[WORKSPACE]/test/links/tqdm-1000.0.0-py3-none-any.whl`
+      Caused by: Hash mismatch for `tqdm @ file://[WORKSPACE]/test/links/tqdm-1000.0.0-py3-none-any.whl`
 
-          Expected:
-            blake2b:ad611597f5e771ac942d300426f16a38f1579ab572bf4bca968a53709db0a292
+        Expected:
+          blake2b:ad611597f5e771ac942d300426f16a38f1579ab572bf4bca968a53709db0a292
 
-          Computed:
-            blake2b:fd611597f5e771ac942d300426f16a38f1579ab572bf4bca968a53709db0a292
+        Computed:
+          blake2b:fd611597f5e771ac942d300426f16a38f1579ab572bf4bca968a53709db0a292
     "
     );
 
@@ -4447,14 +4447,14 @@ fn require_hashes_find_links_no_hash() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
     Resolved 1 package in [TIME]
-      × Failed to download `basic-package==0.1.0`
-      ╰─▶ Hash mismatch for `basic-package==0.1.0`
+    error: Failed to download `basic-package==0.1.0`
+      Caused by: Hash mismatch for `basic-package==0.1.0`
 
         Expected:
           sha256:123
 
-          Computed:
-            sha256:7b6229db79b5800e4e98a351b5628c1c8a944533a2d428aeeaa7275a30d4ea82
+        Computed:
+          sha256:7b6229db79b5800e4e98a351b5628c1c8a944533a2d428aeeaa7275a30d4ea82
     "
     );
 
@@ -4476,14 +4476,14 @@ fn require_hashes_find_links_no_hash() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
     Resolved 1 package in [TIME]
-      × Failed to download `basic-package==0.1.0`
-      ╰─▶ Hash mismatch for `basic-package==0.1.0`
+    error: Failed to download `basic-package==0.1.0`
+      Caused by: Hash mismatch for `basic-package==0.1.0`
 
-          Expected:
-            sha256:af478ff91ec60856c99a540b8df13d756513bebb65bc301fb27e0d1f974532b4
+        Expected:
+          sha256:af478ff91ec60856c99a540b8df13d756513bebb65bc301fb27e0d1f974532b4
 
-          Computed:
-            sha256:7b6229db79b5800e4e98a351b5628c1c8a944533a2d428aeeaa7275a30d4ea82
+        Computed:
+          sha256:7b6229db79b5800e4e98a351b5628c1c8a944533a2d428aeeaa7275a30d4ea82
     "
     );
 
@@ -4506,10 +4506,10 @@ fn require_hashes_find_links_no_hash() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
     Resolved 1 package in [TIME]
-      × Failed to download and build `basic-package==0.1.0`
-      ├─▶ Failed to resolve requirements from `build-system.requires`
-      ├─▶ No solution found when resolving: `uv-build>=0.8.3, <0.9.0`
-      ╰─▶ Because uv-build was not found in the package registry and you require uv-build>=0.8.3,<0.9.0, we can conclude that your requirements are unsatisfiable.
+    error: Failed to download and build `basic-package==0.1.0`
+      Caused by: Failed to resolve requirements from `build-system.requires`
+      Caused by: No solution found when resolving: `uv-build>=0.8.3, <0.9.0`
+      Caused by: Because uv-build was not found in the package registry and you require uv-build>=0.8.3,<0.9.0, we can conclude that your requirements are unsatisfiable.
     "
     );
 
@@ -5719,12 +5719,12 @@ fn pep_751_validates_remote_archive_size() -> Result<()> {
 
     uv_snapshot!(context.filters(), context.pip_sync()
         .arg("--preview")
-        .arg("pylock.toml"), @r#"
+        .arg("pylock.toml"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × Failed to download `a @ http://[LOCALHOST]/files/a-1.0.0-py3-none-any.whl`
-      ╰─▶ Size mismatch for `a @ http://[LOCALHOST]/files/a-1.0.0-py3-none-any.whl`: expected 1 bytes, but downloaded 921 bytes
-    "#);
+    error: Failed to download `a @ http://[LOCALHOST]/files/a-1.0.0-py3-none-any.whl`
+      Caused by: Size mismatch for `a @ http://[LOCALHOST]/files/a-1.0.0-py3-none-any.whl`: expected 1 bytes, but downloaded 921 bytes
+    ");
 
     context.temp_dir.child("pylock.toml").write_str(&formatdoc! {
         r#"
@@ -5741,12 +5741,12 @@ fn pep_751_validates_remote_archive_size() -> Result<()> {
 
     uv_snapshot!(context.filters(), context.pip_sync()
         .arg("--preview")
-        .arg("pylock.toml"), @r#"
+        .arg("pylock.toml"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × Failed to download `a==1.0.0`
-      ╰─▶ Size mismatch for `a==1.0.0`: expected 1 bytes, but downloaded 921 bytes
-    "#);
+    error: Failed to download `a==1.0.0`
+      Caused by: Size mismatch for `a==1.0.0`: expected 1 bytes, but downloaded 921 bytes
+    ");
 
     context.temp_dir.child("pylock.toml").write_str(&formatdoc! {
         r#"
@@ -5766,8 +5766,8 @@ fn pep_751_validates_remote_archive_size() -> Result<()> {
         .arg("pylock.toml"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × Failed to download and build `a==1.0.0`
-      ╰─▶ Size mismatch for `a==1.0.0`: expected 1 bytes, but downloaded 607 bytes
+    error: Failed to download and build `a==1.0.0`
+      Caused by: Size mismatch for `a==1.0.0`: expected 1 bytes, but downloaded 607 bytes
     ");
 
     Ok(())
@@ -5801,12 +5801,12 @@ fn pep_751_validates_cached_remote_archive_size() -> Result<()> {
         .arg("--preview")
         .arg("--offline")
         .arg("--reinstall")
-        .arg("pylock.toml"), @r#"
+        .arg("pylock.toml"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × Failed to download `a @ http://[LOCALHOST]/files/a-1.0.0-py3-none-any.whl`
-      ╰─▶ Size mismatch for `a @ http://[LOCALHOST]/files/a-1.0.0-py3-none-any.whl`: expected 1 bytes, but downloaded 921 bytes
-    "#);
+    error: Failed to download `a @ http://[LOCALHOST]/files/a-1.0.0-py3-none-any.whl`
+      Caused by: Size mismatch for `a @ http://[LOCALHOST]/files/a-1.0.0-py3-none-any.whl`: expected 1 bytes, but downloaded 921 bytes
+    ");
 
     Ok(())
 }

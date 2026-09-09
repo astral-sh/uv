@@ -10096,39 +10096,21 @@ fn sync_derivation_chain() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
     Resolved 2 packages in [TIME]
-      × Failed to build `wsgiref==0.1.2`
-      ├─▶ The build backend returned an error
-      ╰─▶ Call to `setuptools.build_meta:__legacy__.build_wheel` failed (exit status: 1)
-
-          [stderr]
-          Traceback (most recent call last):
-            File "<string>", line 14, in <module>
-            File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 325, in get_requires_for_build_wheel
-              return self._get_build_requires(config_settings, requirements=['wheel'])
-                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-            File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 295, in _get_build_requires
-              self.run_setup()
-            File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 487, in run_setup
-              super().run_setup(setup_script=setup_script)
-            File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 311, in run_setup
-              exec(code, locals())
-            File "<string>", line 5, in <module>
-            File "[CACHE_DIR]/[TMP]/src/ez_setup/__init__.py", line 170
-              print "Setuptools version",version,"or greater has been installed."
-              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-          SyntaxError: Missing parentheses in call to 'print'. Did you mean print(...)?
+    error: Failed to build `wsgiref==0.1.2`
+      Caused by: The build backend returned an error
+      Caused by: Call to `setuptools.build_meta:__legacy__.build_wheel` failed (exit status: 1)
 
         [stderr]
         Traceback (most recent call last):
           File "<string>", line 14, in <module>
-          File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 325, in get_requires_for_build_wheel
+          File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 325, in get_requires_for_build_wheel
             return self._get_build_requires(config_settings, requirements=['wheel'])
                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-          File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 295, in _get_build_requires
+          File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 295, in _get_build_requires
             self.run_setup()
-          File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 487, in run_setup
+          File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 487, in run_setup
             super().run_setup(setup_script=setup_script)
-          File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 311, in run_setup
+          File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 311, in run_setup
             exec(code, locals())
           File "<string>", line 5, in <module>
           File "[CACHE_DIR]/[TMP]/src/ez_setup/__init__.py", line 170
@@ -10169,39 +10151,21 @@ fn sync_derivation_chain_extra() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
     Resolved 2 packages in [TIME]
-      × Failed to build `wsgiref==0.1.2`
-      ├─▶ The build backend returned an error
-      ╰─▶ Call to `setuptools.build_meta:__legacy__.build_wheel` failed (exit status: 1)
-
-          [stderr]
-          Traceback (most recent call last):
-            File "<string>", line 14, in <module>
-            File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 325, in get_requires_for_build_wheel
-              return self._get_build_requires(config_settings, requirements=['wheel'])
-                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-            File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 295, in _get_build_requires
-              self.run_setup()
-            File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 487, in run_setup
-              super().run_setup(setup_script=setup_script)
-            File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 311, in run_setup
-              exec(code, locals())
-            File "<string>", line 5, in <module>
-            File "[CACHE_DIR]/[TMP]/src/ez_setup/__init__.py", line 170
-              print "Setuptools version",version,"or greater has been installed."
-              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-          SyntaxError: Missing parentheses in call to 'print'. Did you mean print(...)?
+    error: Failed to build `wsgiref==0.1.2`
+      Caused by: The build backend returned an error
+      Caused by: Call to `setuptools.build_meta:__legacy__.build_wheel` failed (exit status: 1)
 
         [stderr]
         Traceback (most recent call last):
           File "<string>", line 14, in <module>
-          File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 325, in get_requires_for_build_wheel
+          File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 325, in get_requires_for_build_wheel
             return self._get_build_requires(config_settings, requirements=['wheel'])
                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-          File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 295, in _get_build_requires
+          File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 295, in _get_build_requires
             self.run_setup()
-          File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 487, in run_setup
+          File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 487, in run_setup
             super().run_setup(setup_script=setup_script)
-          File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 311, in run_setup
+          File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 311, in run_setup
             exec(code, locals())
           File "<string>", line 5, in <module>
           File "[CACHE_DIR]/[TMP]/src/ez_setup/__init__.py", line 170
@@ -10244,39 +10208,21 @@ fn sync_derivation_chain_group() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
     Resolved 2 packages in [TIME]
-      × Failed to build `wsgiref==0.1.2`
-      ├─▶ The build backend returned an error
-      ╰─▶ Call to `setuptools.build_meta:__legacy__.build_wheel` failed (exit status: 1)
-
-          [stderr]
-          Traceback (most recent call last):
-            File "<string>", line 14, in <module>
-            File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 325, in get_requires_for_build_wheel
-              return self._get_build_requires(config_settings, requirements=['wheel'])
-                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-            File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 295, in _get_build_requires
-              self.run_setup()
-            File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 487, in run_setup
-              super().run_setup(setup_script=setup_script)
-            File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 311, in run_setup
-              exec(code, locals())
-            File "<string>", line 5, in <module>
-            File "[CACHE_DIR]/[TMP]/src/ez_setup/__init__.py", line 170
-              print "Setuptools version",version,"or greater has been installed."
-              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-          SyntaxError: Missing parentheses in call to 'print'. Did you mean print(...)?
+    error: Failed to build `wsgiref==0.1.2`
+      Caused by: The build backend returned an error
+      Caused by: Call to `setuptools.build_meta:__legacy__.build_wheel` failed (exit status: 1)
 
         [stderr]
         Traceback (most recent call last):
           File "<string>", line 14, in <module>
-          File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 325, in get_requires_for_build_wheel
+          File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 325, in get_requires_for_build_wheel
             return self._get_build_requires(config_settings, requirements=['wheel'])
                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-          File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 295, in _get_build_requires
+          File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 295, in _get_build_requires
             self.run_setup()
-          File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 487, in run_setup
+          File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 487, in run_setup
             super().run_setup(setup_script=setup_script)
-          File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 311, in run_setup
+          File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 311, in run_setup
             exec(code, locals())
           File "<string>", line 5, in <module>
           File "[CACHE_DIR]/[TMP]/src/ez_setup/__init__.py", line 170
@@ -14319,15 +14265,12 @@ fn sync_build_dependencies_respect_locked_versions() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
     Resolved [N] packages in [TIME]
-      × Failed to build `child @ file://[TEMP_DIR]/child`
-      ├─▶ The build backend returned an error
-      ╰─▶ Call to `build_backend.build_wheel` failed (exit status: 1)
-
-          [stderr]
-          Expected `a` version 0.1 but got 0.3.0
+    error: Failed to build `child @ file://[TEMP_DIR]/child`
+      Caused by: The build backend returned an error
+      Caused by: Call to `build_backend.build_wheel` failed (exit status: 1)
 
         [stderr]
-        Expected `anyio` version 3.0 but got 4.3.0
+        Expected `a` version 0.1 but got 0.3.0
 
     hint: `child` was included because `parent` (v0.1.0) depends on `child`
 
@@ -14381,15 +14324,12 @@ fn sync_build_dependencies_respect_locked_versions() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
     Resolved [N] packages in [TIME]
-      × Failed to build `child @ file://[TEMP_DIR]/child`
-      ├─▶ The build backend returned an error
-      ╰─▶ Call to `build_backend.build_wheel` failed (exit status: 1)
-
-          [stderr]
-          Expected `a` version 0.2 but got 0.1.0
+    error: Failed to build `child @ file://[TEMP_DIR]/child`
+      Caused by: The build backend returned an error
+      Caused by: Call to `build_backend.build_wheel` failed (exit status: 1)
 
         [stderr]
-        Expected `anyio` version 4.0 but got 3.7.1
+        Expected `a` version 0.2 but got 0.1.0
 
     hint: `child` was included because `parent` (v0.1.0) depends on `child`
 
@@ -14443,10 +14383,10 @@ fn sync_build_dependencies_respect_locked_versions() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
     Resolved [N] packages in [TIME]
-      × Failed to build `child @ file://[TEMP_DIR]/child`
-      ├─▶ Failed to resolve requirements from `build-system.requires` and `extra-build-dependencies`
-      ├─▶ No solution found when resolving: `hatchling`, `a<0.3, >0.15`, `a==0.1.0 (index: http://[LOCALHOST]/simple/)`
-      ╰─▶ you require a<0.3 and a>0.15, which are incompatible
+    error: Failed to build `child @ file://[TEMP_DIR]/child`
+      Caused by: Failed to resolve requirements from `build-system.requires` and `extra-build-dependencies`
+      Caused by: No solution found when resolving: `hatchling`, `a<0.3, >0.15`, `a==0.1.0 (index: http://[LOCALHOST]/simple/)`
+      Caused by: you require a<0.3 and a>0.15, which are incompatible
 
     hint: `child` was included because `parent` (v0.1.0) depends on `child`
     ");
@@ -15361,9 +15301,9 @@ async fn sync_non_pep625_sdist() -> Result<()> {
     uv_snapshot!(context.filters(), context.sync().env_remove(EnvVars::UV_EXCLUDE_NEWER), @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because basic-package==0.1.0 has a non-PEP 625-compliant source distribution filename and only basic-package==0.1.0 is available, we can conclude that all versions of basic-package cannot be used.
-          And because your project depends on basic-package, we can conclude that your project's requirements are unsatisfiable.
+    error: No solution found when resolving dependencies:
+      Caused by: Because basic-package==0.1.0 has a non-PEP 625-compliant source distribution filename and only basic-package==0.1.0 is available, we can conclude that all versions of basic-package cannot be used.
+        And because your project depends on basic-package, we can conclude that your project's requirements are unsatisfiable.
 
     hint: `basic-package` was found on http://[LOCALHOST]/simple, but not at the requested version (basic-package==0.1.0). A compatible version may be available on a subsequent index (e.g., https://pypi.org/simple). By default, uv will only consider versions that are published on the first index that contains a given package, to avoid dependency confusion attacks. If all indexes are equally trusted, use `--index-strategy unsafe-best-match` to consider all versions from all indexes, regardless of the order in which they were defined.
     ");

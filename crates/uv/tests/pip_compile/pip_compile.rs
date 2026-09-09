@@ -3957,13 +3957,13 @@ fn compile_yanked_version_indirect() -> Result<()> {
             .arg("requirements.in"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because attrs==21.1.0 was yanked (reason: Installable but not importable on Python 3.4) and only the following versions of attrs are available:
-              attrs<=20.3.0
-              attrs==21.1.0
-              attrs>=21.2.0
-          we can conclude that attrs>20.3.0,<21.2.0 cannot be used.
-          And because you require attrs>20.3.0,<21.2.0, we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving dependencies:
+      Caused by: Because attrs==21.1.0 was yanked (reason: Installable but not importable on Python 3.4) and only the following versions of attrs are available:
+            attrs<=20.3.0
+            attrs==21.1.0
+            attrs>=21.2.0
+        we can conclude that attrs>20.3.0,<21.2.0 cannot be used.
+        And because you require attrs>20.3.0,<21.2.0, we can conclude that your requirements are unsatisfiable.
     "
     );
 
@@ -7681,8 +7681,8 @@ fn offline_registry_prerelease() -> Result<()> {
             .arg("--offline"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because flask was not found in the cache and you require flask==2.0.0rc1, we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving dependencies:
+      Caused by: Because flask was not found in the cache and you require flask==2.0.0rc1, we can conclude that your requirements are unsatisfiable.
 
     hint: Packages were unavailable because the network was disabled. When the network is disabled, registry packages may only be read from the cache.
     ");
@@ -11509,8 +11509,8 @@ fn compile_pyproject_toml_recursive_extra_self_constraint() -> Result<()> {
         .arg("--no-build"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because recursive-demo depends on recursive-demo{sys_platform == 'darwin'}>=2 and recursive-demo{sys_platform == 'darwin'}==1.0.0, we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving dependencies:
+      Caused by: Because recursive-demo depends on recursive-demo{sys_platform == 'darwin'}>=2 and recursive-demo{sys_platform == 'darwin'}==1.0.0, we can conclude that your requirements are unsatisfiable.
     ");
 
     // Resolving the package itself expands recursive extras inside the resolver instead.
@@ -11522,9 +11522,9 @@ fn compile_pyproject_toml_recursive_extra_self_constraint() -> Result<()> {
         .arg("--no-build"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because only recursive-demo[outer]==1.0.0 is available and recursive-demo[outer]==1.0.0 depends on recursive-demo{sys_platform == 'darwin'}>=2, we can conclude that all versions of recursive-demo[outer] cannot be used.
-          And because you require recursive-demo[outer], we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving dependencies:
+      Caused by: Because only recursive-demo[outer]==1.0.0 is available and recursive-demo[outer]==1.0.0 depends on recursive-demo{sys_platform == 'darwin'}>=2, we can conclude that all versions of recursive-demo[outer] cannot be used.
+        And because you require recursive-demo[outer], we can conclude that your requirements are unsatisfiable.
     ");
 
     // Both recursive edges intersect Python >=3.12, but their conjunction only applies below
@@ -14236,8 +14236,8 @@ fn no_version_for_direct_dependency() -> Result<()> {
         .arg("--offline"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ you require pypyp==1 and pypyp>=1.2, which are incompatible
+    error: No solution found when resolving dependencies:
+      Caused by: you require pypyp==1 and pypyp>=1.2, which are incompatible
     "
     );
 
@@ -14845,9 +14845,9 @@ fn no_binary_only_binary() -> Result<()> {
         .arg(":all:"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because source-distribution==0.0.1 has no usable wheels and only source-distribution>=0.0.1 is available, we can conclude that source-distribution<=0.0.1 cannot be used.
-          And because you require source-distribution<=0.0.1, we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving dependencies:
+      Caused by: Because source-distribution==0.0.1 has no usable wheels and only source-distribution>=0.0.1 is available, we can conclude that source-distribution<=0.0.1 cannot be used.
+        And because you require source-distribution<=0.0.1, we can conclude that your requirements are unsatisfiable.
 
     hint: Wheels are required for `source-distribution` because building from source is disabled for all packages (i.e., with `--no-build`)
     "
@@ -15419,9 +15419,9 @@ fn universal_required_environment() -> Result<()> {
         .env_remove(EnvVars::UV_EXCLUDE_NEWER), @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × No solution found when resolving dependencies for split (markers: platform_machine == 'arm64'):
-      ╰─▶ Because a==1.0.0 has no `platform_machine == 'arm64'`-compatible wheels and only a==1.0.0 is available, we can conclude that all versions of a cannot be used.
-          And because project depends on a, we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving dependencies for split (markers: platform_machine == 'arm64'):
+      Caused by: Because a==1.0.0 has no `platform_machine == 'arm64'`-compatible wheels and only a==1.0.0 is available, we can conclude that all versions of a cannot be used.
+        And because project depends on a, we can conclude that your requirements are unsatisfiable.
     ");
 
     Ok(())
@@ -15997,39 +15997,21 @@ fn compile_derivation_chain() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_compile().arg("pyproject.toml"), @r#"
     exit_code: 1 (failure)
     ----- stderr -----
-      × Failed to build `wsgiref==0.1.2`
-      ├─▶ The build backend returned an error
-      ╰─▶ Call to `setuptools.build_meta:__legacy__.build_wheel` failed (exit status: 1)
-
-          [stderr]
-          Traceback (most recent call last):
-            File "<string>", line 14, in <module>
-            File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 325, in get_requires_for_build_wheel
-              return self._get_build_requires(config_settings, requirements=['wheel'])
-                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-            File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 295, in _get_build_requires
-              self.run_setup()
-            File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 487, in run_setup
-              super().run_setup(setup_script=setup_script)
-            File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 311, in run_setup
-              exec(code, locals())
-            File "<string>", line 5, in <module>
-            File "[CACHE_DIR]/[TMP]/src/ez_setup/__init__.py", line 170
-              print "Setuptools version",version,"or greater has been installed."
-              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-          SyntaxError: Missing parentheses in call to 'print'. Did you mean print(...)?
+    error: Failed to build `wsgiref==0.1.2`
+      Caused by: The build backend returned an error
+      Caused by: Call to `setuptools.build_meta:__legacy__.build_wheel` failed (exit status: 1)
 
         [stderr]
         Traceback (most recent call last):
           File "<string>", line 14, in <module>
-          File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 325, in get_requires_for_build_wheel
+          File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 325, in get_requires_for_build_wheel
             return self._get_build_requires(config_settings, requirements=['wheel'])
                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-          File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 295, in _get_build_requires
+          File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 295, in _get_build_requires
             self.run_setup()
-          File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 487, in run_setup
+          File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 487, in run_setup
             super().run_setup(setup_script=setup_script)
-          File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 311, in run_setup
+          File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 311, in run_setup
             exec(code, locals())
           File "<string>", line 5, in <module>
           File "[CACHE_DIR]/[TMP]/src/ez_setup/__init__.py", line 170
@@ -16060,12 +16042,12 @@ fn invalid_platform() -> Result<()> {
         .arg("requirements.in"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because open3d<=0.15.2 has no wheels with a matching Python ABI tag (e.g., `cp310`) and only the following versions of open3d are available:
-              open3d<=0.15.2
-              open3d>=0.16.0
-          we can conclude that open3d<0.16.0 cannot be used.
-          And because open3d>=0.16.0 has no wheels with a matching platform tag (e.g., `manylinux_2_17_x86_64`) and you require open3d, we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving dependencies:
+      Caused by: Because open3d<=0.15.2 has no wheels with a matching Python ABI tag (e.g., `cp310`) and only the following versions of open3d are available:
+            open3d<=0.15.2
+            open3d>=0.16.0
+        we can conclude that open3d<0.16.0 cannot be used.
+        And because open3d>=0.16.0 has no wheels with a matching platform tag (e.g., `manylinux_2_17_x86_64`) and you require open3d, we can conclude that your requirements are unsatisfiable.
 
     hint: You require CPython 3.10 (`cp310`), but we only found wheels for `open3d` (v0.15.2) with the following Python ABI tags: `cp36m`, `cp37m`, `cp38`, `cp39`
 
@@ -18917,9 +18899,9 @@ fn incompatible_cuda() -> Result<()> {
         .arg("3.11"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because torchvision==0.17.1+cu118 depends on system:cuda==11.8 and torch>=2.2.1+cu121 depends on system:cuda==12.1, we can conclude that torch>=2.2.1+cu121 and torchvision==0.17.1+cu118 are incompatible.
-          And because you require torch==2.2.1+cu121 and torchvision==0.17.1+cu118, we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving dependencies:
+      Caused by: Because torchvision==0.17.1+cu118 depends on system:cuda==11.8 and torch>=2.2.1+cu121 depends on system:cuda==12.1, we can conclude that torch>=2.2.1+cu121 and torchvision==0.17.1+cu118 are incompatible.
+        And because you require torch==2.2.1+cu121 and torchvision==0.17.1+cu118, we can conclude that your requirements are unsatisfiable.
     ");
 
     Ok(())

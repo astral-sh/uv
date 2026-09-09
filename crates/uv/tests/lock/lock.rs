@@ -1826,16 +1826,16 @@ async fn lock_sdist_url_locked_build_dependency_hash_mismatch() -> Result<()> {
         .env("UV_LOCK_TEST_SENTINEL", sentinel.path()), @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × Failed to download and build `demo-pkg @ http://[LOCALHOST]/files/demo_pkg-1.0.0.tar.gz`
-      ├─▶ Failed to install requirements from `build-system.requires`
-      ├─▶ Failed to download `review-dep==1.0.0`
-      ╰─▶ Hash mismatch for `review-dep==1.0.0`
+    error: Failed to download and build `demo-pkg @ http://[LOCALHOST]/files/demo_pkg-1.0.0.tar.gz`
+      Caused by: Failed to install requirements from `build-system.requires`
+      Caused by: Failed to download `review-dep==1.0.0`
+      Caused by: Hash mismatch for `review-dep==1.0.0`
 
-          Expected:
-            sha256:53a42340ae36747fb1471f9b4b7958be1f6e2e5fc234f931aafa3e454fd31dfb
+        Expected:
+          sha256:53a42340ae36747fb1471f9b4b7958be1f6e2e5fc234f931aafa3e454fd31dfb
 
-          Computed:
-            sha256:1aa0f7263e4991934282ab8912e95fdd34f24459d7c4f8b845c2281a04c89807
+        Computed:
+          sha256:1aa0f7263e4991934282ab8912e95fdd34f24459d7c4f8b845c2281a04c89807
     ");
     assert!(
         !sentinel.exists(),
@@ -1868,16 +1868,16 @@ async fn lock_sdist_url_locked_build_dependency_hash_mismatch() -> Result<()> {
         .env("UV_LOCK_TEST_SENTINEL", sentinel.path()), @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × Failed to download and build `demo-pkg @ http://[LOCALHOST]/files/demo_pkg-1.0.0.tar.gz`
-      ├─▶ Failed to install requirements from `build-system.requires`
-      ├─▶ Failed to download `review-dep==1.0.0`
-      ╰─▶ Hash mismatch for `review-dep==1.0.0`
+    error: Failed to download and build `demo-pkg @ http://[LOCALHOST]/files/demo_pkg-1.0.0.tar.gz`
+      Caused by: Failed to install requirements from `build-system.requires`
+      Caused by: Failed to download `review-dep==1.0.0`
+      Caused by: Hash mismatch for `review-dep==1.0.0`
 
-          Expected:
-            sha256:53a42340ae36747fb1471f9b4b7958be1f6e2e5fc234f931aafa3e454fd31dfb
+        Expected:
+          sha256:53a42340ae36747fb1471f9b4b7958be1f6e2e5fc234f931aafa3e454fd31dfb
 
-          Computed:
-            sha256:1aa0f7263e4991934282ab8912e95fdd34f24459d7c4f8b845c2281a04c89807
+        Computed:
+          sha256:1aa0f7263e4991934282ab8912e95fdd34f24459d7c4f8b845c2281a04c89807
 
     hint: `demo-pkg` was included because `project` (v0.1.0) depends on `demo-pkg`
     ");
@@ -1909,16 +1909,16 @@ async fn lock_sdist_url_locked_build_dependency_hash_mismatch() -> Result<()> {
         .env("UV_LOCK_TEST_SENTINEL", sentinel.path()), @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × Failed to download and build `demo-pkg @ http://[LOCALHOST]/files/demo_pkg-1.0.0.tar.gz`
-      ├─▶ Failed to install requirements from `build-system.requires`
-      ├─▶ Failed to download `review-dep==1.0.0`
-      ╰─▶ Hash mismatch for `review-dep==1.0.0`
+    error: Failed to download and build `demo-pkg @ http://[LOCALHOST]/files/demo_pkg-1.0.0.tar.gz`
+      Caused by: Failed to install requirements from `build-system.requires`
+      Caused by: Failed to download `review-dep==1.0.0`
+      Caused by: Hash mismatch for `review-dep==1.0.0`
 
-          Expected:
-            sha256:53a42340ae36747fb1471f9b4b7958be1f6e2e5fc234f931aafa3e454fd31dfb
+        Expected:
+          sha256:53a42340ae36747fb1471f9b4b7958be1f6e2e5fc234f931aafa3e454fd31dfb
 
-          Computed:
-            sha256:1aa0f7263e4991934282ab8912e95fdd34f24459d7c4f8b845c2281a04c89807
+        Computed:
+          sha256:1aa0f7263e4991934282ab8912e95fdd34f24459d7c4f8b845c2281a04c89807
 
     hint: `demo-pkg` was included because `project` (v0.1.0) depends on `demo-pkg`
     ");
@@ -2057,14 +2057,14 @@ async fn lock_sdist_url_locked_hash_mismatch() -> Result<()> {
         .env("UV_LOCK_TEST_SENTINEL", sentinel.path()), @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × Failed to download and build `demo-pkg @ http://[LOCALHOST]/files/demo_pkg-1.0.0.tar.gz`
-      ╰─▶ Hash mismatch for `demo-pkg @ http://[LOCALHOST]/files/demo_pkg-1.0.0.tar.gz`
+    error: Failed to download and build `demo-pkg @ http://[LOCALHOST]/files/demo_pkg-1.0.0.tar.gz`
+      Caused by: Hash mismatch for `demo-pkg @ http://[LOCALHOST]/files/demo_pkg-1.0.0.tar.gz`
 
-          Expected:
-            sha256:93703857ad8ea956f6661f1d78d445be4340afa15f8b87bf1f3a79621068847f
+        Expected:
+          sha256:93703857ad8ea956f6661f1d78d445be4340afa15f8b87bf1f3a79621068847f
 
-          Computed:
-            sha256:883b65920e21bce11c2697819dab77eb70e18d810b2746f49e46155d6ca527bc
+        Computed:
+          sha256:883b65920e21bce11c2697819dab77eb70e18d810b2746f49e46155d6ca527bc
     ");
     assert!(
         !sentinel.exists(),
@@ -2079,14 +2079,14 @@ async fn lock_sdist_url_locked_hash_mismatch() -> Result<()> {
         .env("UV_LOCK_TEST_SENTINEL", sentinel.path()), @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × Failed to download and build `demo-pkg @ http://[LOCALHOST]/files/demo_pkg-1.0.0.tar.gz`
-      ╰─▶ Hash mismatch for `demo-pkg @ http://[LOCALHOST]/files/demo_pkg-1.0.0.tar.gz`
+    error: Failed to download and build `demo-pkg @ http://[LOCALHOST]/files/demo_pkg-1.0.0.tar.gz`
+      Caused by: Hash mismatch for `demo-pkg @ http://[LOCALHOST]/files/demo_pkg-1.0.0.tar.gz`
 
-          Expected:
-            sha256:93703857ad8ea956f6661f1d78d445be4340afa15f8b87bf1f3a79621068847f
+        Expected:
+          sha256:93703857ad8ea956f6661f1d78d445be4340afa15f8b87bf1f3a79621068847f
 
-          Computed:
-            sha256:883b65920e21bce11c2697819dab77eb70e18d810b2746f49e46155d6ca527bc
+        Computed:
+          sha256:883b65920e21bce11c2697819dab77eb70e18d810b2746f49e46155d6ca527bc
     ");
     assert!(
         !sentinel.exists(),
@@ -2244,14 +2244,14 @@ async fn lock_sdist_registry_changed_index_locked_hash_mismatch() -> Result<()> 
         .env("UV_LOCK_TEST_SENTINEL", sentinel.path()), @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × Failed to download and build `demo-pkg==1.0.0`
-      ╰─▶ Hash mismatch for `demo-pkg==1.0.0`
+    error: Failed to download and build `demo-pkg==1.0.0`
+      Caused by: Hash mismatch for `demo-pkg==1.0.0`
 
-          Expected:
-            sha256:93703857ad8ea956f6661f1d78d445be4340afa15f8b87bf1f3a79621068847f
+        Expected:
+          sha256:93703857ad8ea956f6661f1d78d445be4340afa15f8b87bf1f3a79621068847f
 
-          Computed:
-            sha256:883b65920e21bce11c2697819dab77eb70e18d810b2746f49e46155d6ca527bc
+        Computed:
+          sha256:883b65920e21bce11c2697819dab77eb70e18d810b2746f49e46155d6ca527bc
 
     hint: `demo-pkg` (v1.0.0) was included because `project` (v0.1.0) depends on `demo-pkg==1.0.0`
     ");
@@ -2347,14 +2347,14 @@ async fn lock_sdist_registry_missing_index_locked_hash_mismatch() -> Result<()> 
         .env("UV_LOCK_TEST_SENTINEL", sentinel.path()), @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × Failed to download and build `demo-pkg==1.0.0`
-      ╰─▶ Hash mismatch for `demo-pkg==1.0.0`
+    error: Failed to download and build `demo-pkg==1.0.0`
+      Caused by: Hash mismatch for `demo-pkg==1.0.0`
 
-          Expected:
-            sha256:93703857ad8ea956f6661f1d78d445be4340afa15f8b87bf1f3a79621068847f
+        Expected:
+          sha256:93703857ad8ea956f6661f1d78d445be4340afa15f8b87bf1f3a79621068847f
 
-          Computed:
-            sha256:883b65920e21bce11c2697819dab77eb70e18d810b2746f49e46155d6ca527bc
+        Computed:
+          sha256:883b65920e21bce11c2697819dab77eb70e18d810b2746f49e46155d6ca527bc
 
     hint: `demo-pkg` (v1.0.0) was included because `project` (v0.1.0) depends on `demo-pkg==1.0.0`
     ");
@@ -2417,14 +2417,14 @@ async fn lock_sdist_url_root_subdirectory_locked_hash_mismatch() -> Result<()> {
         .env("UV_LOCK_TEST_SENTINEL", sentinel.path()), @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × Failed to download and build `demo-pkg @ http://[LOCALHOST]/files/demo_pkg-1.0.0.tar.gz#subdirectory=.`
-      ╰─▶ Hash mismatch for `demo-pkg @ http://[LOCALHOST]/files/demo_pkg-1.0.0.tar.gz#subdirectory=.`
+    error: Failed to download and build `demo-pkg @ http://[LOCALHOST]/files/demo_pkg-1.0.0.tar.gz#subdirectory=.`
+      Caused by: Hash mismatch for `demo-pkg @ http://[LOCALHOST]/files/demo_pkg-1.0.0.tar.gz#subdirectory=.`
 
-          Expected:
-            sha256:93703857ad8ea956f6661f1d78d445be4340afa15f8b87bf1f3a79621068847f
+        Expected:
+          sha256:93703857ad8ea956f6661f1d78d445be4340afa15f8b87bf1f3a79621068847f
 
-          Computed:
-            sha256:883b65920e21bce11c2697819dab77eb70e18d810b2746f49e46155d6ca527bc
+        Computed:
+          sha256:883b65920e21bce11c2697819dab77eb70e18d810b2746f49e46155d6ca527bc
     ");
     assert!(
         !sentinel.exists(),
@@ -2486,14 +2486,14 @@ async fn lock_sdist_url_rejected_archive_not_cached() -> Result<()> {
         .env("UV_LOCK_TEST_SENTINEL", sentinel.path()), @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × Failed to download and build `demo-pkg @ http://[LOCALHOST]/files/demo_pkg-1.0.0.tar.gz`
-      ╰─▶ Hash mismatch for `demo-pkg @ http://[LOCALHOST]/files/demo_pkg-1.0.0.tar.gz`
+    error: Failed to download and build `demo-pkg @ http://[LOCALHOST]/files/demo_pkg-1.0.0.tar.gz`
+      Caused by: Hash mismatch for `demo-pkg @ http://[LOCALHOST]/files/demo_pkg-1.0.0.tar.gz`
 
-          Expected:
-            sha256:93703857ad8ea956f6661f1d78d445be4340afa15f8b87bf1f3a79621068847f
+        Expected:
+          sha256:93703857ad8ea956f6661f1d78d445be4340afa15f8b87bf1f3a79621068847f
 
-          Computed:
-            sha256:883b65920e21bce11c2697819dab77eb70e18d810b2746f49e46155d6ca527bc
+        Computed:
+          sha256:883b65920e21bce11c2697819dab77eb70e18d810b2746f49e46155d6ca527bc
     ");
     assert!(
         !sentinel.exists(),
@@ -2528,10 +2528,10 @@ async fn lock_sdist_url_rejected_archive_not_cached() -> Result<()> {
         .env("UV_LOCK_TEST_SENTINEL", sentinel.path()), @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × Failed to download and build `demo-pkg @ http://[LOCALHOST]/files/demo_pkg-1.0.0.tar.gz`
-      ├─▶ Failed to extract archive: demo-pkg @ http://[LOCALHOST]/files/demo_pkg-1.0.0.tar.gz
-      ├─▶ I/O operation failed during extraction
-      ╰─▶ Invalid gzip header
+    error: Failed to download and build `demo-pkg @ http://[LOCALHOST]/files/demo_pkg-1.0.0.tar.gz`
+      Caused by: Failed to extract archive: demo-pkg @ http://[LOCALHOST]/files/demo_pkg-1.0.0.tar.gz
+      Caused by: I/O operation failed during extraction
+      Caused by: Invalid gzip header
     ");
     assert!(
         !sentinel.exists(),
@@ -2612,14 +2612,14 @@ async fn lock_sdist_url_equivalent_subdirectory_locked_hash_mismatch() -> Result
         .env("UV_LOCK_TEST_SENTINEL", sentinel.path()), @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × Failed to download and build `demo-pkg @ http://[LOCALHOST]/files/demo_pkg-1.0.0.tar.gz#subdirectory=nested/../nested`
-      ╰─▶ Hash mismatch for `demo-pkg @ http://[LOCALHOST]/files/demo_pkg-1.0.0.tar.gz#subdirectory=nested/../nested`
+    error: Failed to download and build `demo-pkg @ http://[LOCALHOST]/files/demo_pkg-1.0.0.tar.gz#subdirectory=nested/../nested`
+      Caused by: Hash mismatch for `demo-pkg @ http://[LOCALHOST]/files/demo_pkg-1.0.0.tar.gz#subdirectory=nested/../nested`
 
-          Expected:
-            sha256:09c631b3e8d48a04c4d7e3bc64d61dbc10a6b89131dffadd885eccb3ffa5e455
+        Expected:
+          sha256:09c631b3e8d48a04c4d7e3bc64d61dbc10a6b89131dffadd885eccb3ffa5e455
 
-          Computed:
-            sha256:4d8741dcbddac394ac2680d99589d36c9d8fd7b3b19665531de9cc02550ec5eb
+        Computed:
+          sha256:4d8741dcbddac394ac2680d99589d36c9d8fd7b3b19665531de9cc02550ec5eb
     ");
     assert!(
         !sentinel.exists(),
@@ -2684,14 +2684,14 @@ fn lock_sdist_path_locked_hash_mismatch() -> Result<()> {
         .env("UV_LOCK_TEST_SENTINEL", sentinel.path()), @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × Failed to build `demo-pkg @ file://[TEMP_DIR]/demo_pkg-1.0.0.tar.gz`
-      ╰─▶ Hash mismatch for `demo-pkg @ file://[TEMP_DIR]/demo_pkg-1.0.0.tar.gz`
+    error: Failed to build `demo-pkg @ file://[TEMP_DIR]/demo_pkg-1.0.0.tar.gz`
+      Caused by: Hash mismatch for `demo-pkg @ file://[TEMP_DIR]/demo_pkg-1.0.0.tar.gz`
 
-          Expected:
-            sha256:93703857ad8ea956f6661f1d78d445be4340afa15f8b87bf1f3a79621068847f
+        Expected:
+          sha256:93703857ad8ea956f6661f1d78d445be4340afa15f8b87bf1f3a79621068847f
 
-          Computed:
-            sha256:883b65920e21bce11c2697819dab77eb70e18d810b2746f49e46155d6ca527bc
+        Computed:
+          sha256:883b65920e21bce11c2697819dab77eb70e18d810b2746f49e46155d6ca527bc
     ");
     assert!(!sentinel.exists(), "the refreshed backend was executed");
 
@@ -2748,14 +2748,14 @@ fn lock_sdist_path_rejected_archive_not_cached() -> Result<()> {
         .env("UV_LOCK_TEST_SENTINEL", sentinel.path()), @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × Failed to build `demo-pkg @ file://[TEMP_DIR]/demo_pkg-1.0.0.tar.gz`
-      ╰─▶ Hash mismatch for `demo-pkg @ file://[TEMP_DIR]/demo_pkg-1.0.0.tar.gz`
+    error: Failed to build `demo-pkg @ file://[TEMP_DIR]/demo_pkg-1.0.0.tar.gz`
+      Caused by: Hash mismatch for `demo-pkg @ file://[TEMP_DIR]/demo_pkg-1.0.0.tar.gz`
 
-          Expected:
-            sha256:93703857ad8ea956f6661f1d78d445be4340afa15f8b87bf1f3a79621068847f
+        Expected:
+          sha256:93703857ad8ea956f6661f1d78d445be4340afa15f8b87bf1f3a79621068847f
 
-          Computed:
-            sha256:883b65920e21bce11c2697819dab77eb70e18d810b2746f49e46155d6ca527bc
+        Computed:
+          sha256:883b65920e21bce11c2697819dab77eb70e18d810b2746f49e46155d6ca527bc
 
     hint: `demo-pkg` was included because `project` (v0.1.0) depends on `demo-pkg`
     ");
@@ -2835,11 +2835,11 @@ async fn lock_sdist_url_cache_heal_hash_mismatch() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_install().arg(&archive_url)
         .env_remove(EnvVars::RUST_LOG)
         .env("UV_LOCK_TEST_SENTINEL", sentinel.path()), @"
-    exit_code: 1 (failure)
+    exit_code: 2 (failure)
     ----- stderr -----
     Resolved 1 package in [TIME]
-      × Failed to download and build `demo-pkg @ http://[LOCALHOST]/files/demo_pkg-1.0.0.tar.gz`
-      ╰─▶ Attempted to re-extract the source distribution for `demo-pkg @ http://[LOCALHOST]/files/demo_pkg-1.0.0.tar.gz`, but the sha256 hash didn't match. Run `uv cache clean` to clear the cache.
+    error: Failed to download and build `demo-pkg @ http://[LOCALHOST]/files/demo_pkg-1.0.0.tar.gz`
+      Caused by: Attempted to re-extract the source distribution for `demo-pkg @ http://[LOCALHOST]/files/demo_pkg-1.0.0.tar.gz`, but the sha256 hash didn't match. Run `uv cache clean` to clear the cache.
     ");
     assert!(
         !sentinel.exists(),
@@ -7283,17 +7283,17 @@ fn lock_requires_python() -> Result<()> {
     uv_snapshot!(context.filters(), context.lock(), @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × No solution found when resolving dependencies for split (markers: python_full_version >= '3.7' and python_full_version < '3.7.9'):
-      ╰─▶ Because the requested Python version (>=3.7) does not satisfy Python>=3.7.9 and pygls>=1.1.0,<=1.2.1 depends on Python>=3.7.9,<4, we can conclude that pygls>=1.1.0,<=1.2.1 cannot be used.
-          And because only the following versions of pygls are available:
-              pygls<=1.2.1
-              pygls>=1.3.0
-          we can conclude that pygls>=1.1.0,<1.3.0 cannot be used. (1)
+    error: No solution found when resolving dependencies for split (markers: python_full_version >= '3.7' and python_full_version < '3.7.9'):
+      Caused by: Because the requested Python version (>=3.7) does not satisfy Python>=3.7.9 and pygls>=1.1.0,<=1.2.1 depends on Python>=3.7.9,<4, we can conclude that pygls>=1.1.0,<=1.2.1 cannot be used.
+        And because only the following versions of pygls are available:
+            pygls<=1.2.1
+            pygls>=1.3.0
+        we can conclude that pygls>=1.1.0,<1.3.0 cannot be used. (1)
 
-          Because the requested Python version (>=3.7) does not satisfy Python>=3.8 and pygls==1.3.0 depends on Python>=3.8, we can conclude that pygls==1.3.0 cannot be used.
-          And because only pygls<=1.3.0 is available, we can conclude that pygls>=1.3.0 cannot be used.
-          And because we know from (1) that pygls>=1.1.0,<1.3.0 cannot be used, we can conclude that pygls>=1.1.0 cannot be used.
-          And because your project depends on pygls>=1.1.0, we can conclude that your project's requirements are unsatisfiable.
+        Because the requested Python version (>=3.7) does not satisfy Python>=3.8 and pygls==1.3.0 depends on Python>=3.8, we can conclude that pygls==1.3.0 cannot be used.
+        And because only pygls<=1.3.0 is available, we can conclude that pygls>=1.3.0 cannot be used.
+        And because we know from (1) that pygls>=1.1.0,<1.3.0 cannot be used, we can conclude that pygls>=1.1.0 cannot be used.
+        And because your project depends on pygls>=1.1.0, we can conclude that your project's requirements are unsatisfiable.
 
     hint: While the active Python version is 3.12, the resolution failed for other Python versions supported by your project. Consider limiting your project's supported Python versions using `requires-python`.
 
@@ -13122,9 +13122,9 @@ fn lock_external_workspace_source() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
-      × Failed to build `project @ file://[TEMP_DIR]/project`
-      ├─▶ Failed to parse entry: `pkg-b`
-      ╰─▶ Workspace source path `[TEMP_DIR]/external-workspace/packages/pkg-b` must point to a workspace root (found workspace at `[TEMP_DIR]/external-workspace`)
+    error: Failed to build `project @ file://[TEMP_DIR]/project`
+      Caused by: Failed to parse entry: `pkg-b`
+      Caused by: Workspace source path `[TEMP_DIR]/external-workspace/packages/pkg-b` must point to a workspace root (found workspace at `[TEMP_DIR]/external-workspace`)
     ");
 
     Ok(())
@@ -13196,9 +13196,9 @@ fn lock_workspace_member_with_external_workspace_source() -> Result<()> {
     uv_snapshot!(context.filters(), context.lock(), @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × Failed to build `project @ file://[TEMP_DIR]/`
-      ├─▶ Failed to parse entry: `child`
-      ╰─▶ `child` is included as a workspace member, but does not use `workspace = true` in `tool.uv.sources`
+    error: Failed to build `project @ file://[TEMP_DIR]/`
+      Caused by: Failed to parse entry: `child`
+      Caused by: `child` is included as a workspace member, but does not use `workspace = true` in `tool.uv.sources`
     ");
 
     Ok(())
@@ -20877,9 +20877,9 @@ fn lock_regenerates_dependencies_without_metadata() -> Result<()> {
     uv_snapshot!(context.filters(), context.lock().arg("--preview-features").arg("lock-without-metadata").arg("--locked").arg("--index-url").arg(server.index_url()), @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × No solution found when resolving dependencies for split (markers: python_full_version >= '3.12' and sys_platform != 'win32'):
-      ╰─▶ Because only tqdm{sys_platform != 'win32'}==4.0.0 is available and your project depends on tqdm{sys_platform != 'win32'}>4, we can conclude that your project's requirements are unsatisfiable.
-          And because your project requires project[empty], we can conclude that your project's requirements are unsatisfiable.
+    error: No solution found when resolving dependencies for split (markers: python_full_version >= '3.12' and sys_platform != 'win32'):
+      Caused by: Because only tqdm{sys_platform != 'win32'}==4.0.0 is available and your project depends on tqdm{sys_platform != 'win32'}>4, we can conclude that your project's requirements are unsatisfiable.
+        And because your project requires project[empty], we can conclude that your project's requirements are unsatisfiable.
     ");
 
     // Requested target extras are part of their optional dependency edges.
@@ -20985,8 +20985,8 @@ fn lock_regenerates_incompatible_self_requirement() -> Result<()> {
         .arg("--offline"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because your project depends on itself at an incompatible version (project>=2.0.0), we can conclude that your project's requirements are unsatisfiable.
+    error: No solution found when resolving dependencies:
+      Caused by: Because your project depends on itself at an incompatible version (project>=2.0.0), we can conclude that your project's requirements are unsatisfiable.
 
     hint: The project `project` depends on itself at an incompatible version. This is likely a mistake. If you intended to depend on a third-party package named `project`, consider renaming the project `project` to avoid creating a conflict.
     ");
@@ -21004,8 +21004,8 @@ fn lock_regenerates_incompatible_self_requirement() -> Result<()> {
         .arg("--offline"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because project[feature] depends on itself at an incompatible version (project>=2.0.0) and your project requires project[feature], we can conclude that your project's requirements are unsatisfiable.
+    error: No solution found when resolving dependencies:
+      Caused by: Because project[feature] depends on itself at an incompatible version (project>=2.0.0) and your project requires project[feature], we can conclude that your project's requirements are unsatisfiable.
 
     hint: The project `project` depends on itself at an incompatible version. This is likely a mistake. If you intended to depend on a third-party package named `project`, consider renaming the project `project` to avoid creating a conflict.
     ");
@@ -33361,39 +33361,21 @@ fn lock_derivation_chain_prod() -> Result<()> {
     uv_snapshot!(context.filters(), context.lock(), @r#"
     exit_code: 1 (failure)
     ----- stderr -----
-      × Failed to build `wsgiref==0.1.2`
-      ├─▶ The build backend returned an error
-      ╰─▶ Call to `setuptools.build_meta:__legacy__.build_wheel` failed (exit status: 1)
-
-          [stderr]
-          Traceback (most recent call last):
-            File "<string>", line 14, in <module>
-            File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 325, in get_requires_for_build_wheel
-              return self._get_build_requires(config_settings, requirements=['wheel'])
-                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-            File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 295, in _get_build_requires
-              self.run_setup()
-            File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 487, in run_setup
-              super().run_setup(setup_script=setup_script)
-            File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 311, in run_setup
-              exec(code, locals())
-            File "<string>", line 5, in <module>
-            File "[CACHE_DIR]/[TMP]/src/ez_setup/__init__.py", line 170
-              print "Setuptools version",version,"or greater has been installed."
-              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-          SyntaxError: Missing parentheses in call to 'print'. Did you mean print(...)?
+    error: Failed to build `wsgiref==0.1.2`
+      Caused by: The build backend returned an error
+      Caused by: Call to `setuptools.build_meta:__legacy__.build_wheel` failed (exit status: 1)
 
         [stderr]
         Traceback (most recent call last):
           File "<string>", line 14, in <module>
-          File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 325, in get_requires_for_build_wheel
+          File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 325, in get_requires_for_build_wheel
             return self._get_build_requires(config_settings, requirements=['wheel'])
                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-          File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 295, in _get_build_requires
+          File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 295, in _get_build_requires
             self.run_setup()
-          File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 487, in run_setup
+          File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 487, in run_setup
             super().run_setup(setup_script=setup_script)
-          File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 311, in run_setup
+          File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 311, in run_setup
             exec(code, locals())
           File "<string>", line 5, in <module>
           File "[CACHE_DIR]/[TMP]/src/ez_setup/__init__.py", line 170
@@ -33429,39 +33411,21 @@ fn lock_derivation_chain_extra() -> Result<()> {
     uv_snapshot!(context.filters(), context.lock(), @r#"
     exit_code: 1 (failure)
     ----- stderr -----
-      × Failed to build `wsgiref==0.1.2`
-      ├─▶ The build backend returned an error
-      ╰─▶ Call to `setuptools.build_meta:__legacy__.build_wheel` failed (exit status: 1)
-
-          [stderr]
-          Traceback (most recent call last):
-            File "<string>", line 14, in <module>
-            File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 325, in get_requires_for_build_wheel
-              return self._get_build_requires(config_settings, requirements=['wheel'])
-                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-            File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 295, in _get_build_requires
-              self.run_setup()
-            File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 487, in run_setup
-              super().run_setup(setup_script=setup_script)
-            File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 311, in run_setup
-              exec(code, locals())
-            File "<string>", line 5, in <module>
-            File "[CACHE_DIR]/[TMP]/src/ez_setup/__init__.py", line 170
-              print "Setuptools version",version,"or greater has been installed."
-              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-          SyntaxError: Missing parentheses in call to 'print'. Did you mean print(...)?
+    error: Failed to build `wsgiref==0.1.2`
+      Caused by: The build backend returned an error
+      Caused by: Call to `setuptools.build_meta:__legacy__.build_wheel` failed (exit status: 1)
 
         [stderr]
         Traceback (most recent call last):
           File "<string>", line 14, in <module>
-          File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 325, in get_requires_for_build_wheel
+          File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 325, in get_requires_for_build_wheel
             return self._get_build_requires(config_settings, requirements=['wheel'])
                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-          File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 295, in _get_build_requires
+          File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 295, in _get_build_requires
             self.run_setup()
-          File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 487, in run_setup
+          File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 487, in run_setup
             super().run_setup(setup_script=setup_script)
-          File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 311, in run_setup
+          File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 311, in run_setup
             exec(code, locals())
           File "<string>", line 5, in <module>
           File "[CACHE_DIR]/[TMP]/src/ez_setup/__init__.py", line 170
@@ -33499,39 +33463,21 @@ fn lock_derivation_chain_group() -> Result<()> {
     uv_snapshot!(context.filters(), context.lock(), @r#"
     exit_code: 1 (failure)
     ----- stderr -----
-      × Failed to build `wsgiref==0.1.2`
-      ├─▶ The build backend returned an error
-      ╰─▶ Call to `setuptools.build_meta:__legacy__.build_wheel` failed (exit status: 1)
-
-          [stderr]
-          Traceback (most recent call last):
-            File "<string>", line 14, in <module>
-            File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 325, in get_requires_for_build_wheel
-              return self._get_build_requires(config_settings, requirements=['wheel'])
-                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-            File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 295, in _get_build_requires
-              self.run_setup()
-            File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 487, in run_setup
-              super().run_setup(setup_script=setup_script)
-            File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 311, in run_setup
-              exec(code, locals())
-            File "<string>", line 5, in <module>
-            File "[CACHE_DIR]/[TMP]/src/ez_setup/__init__.py", line 170
-              print "Setuptools version",version,"or greater has been installed."
-              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-          SyntaxError: Missing parentheses in call to 'print'. Did you mean print(...)?
+    error: Failed to build `wsgiref==0.1.2`
+      Caused by: The build backend returned an error
+      Caused by: Call to `setuptools.build_meta:__legacy__.build_wheel` failed (exit status: 1)
 
         [stderr]
         Traceback (most recent call last):
           File "<string>", line 14, in <module>
-          File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 325, in get_requires_for_build_wheel
+          File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 325, in get_requires_for_build_wheel
             return self._get_build_requires(config_settings, requirements=['wheel'])
                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-          File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 295, in _get_build_requires
+          File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 295, in _get_build_requires
             self.run_setup()
-          File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 487, in run_setup
+          File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 487, in run_setup
             super().run_setup(setup_script=setup_script)
-          File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 311, in run_setup
+          File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 311, in run_setup
             exec(code, locals())
           File "<string>", line 5, in <module>
           File "[CACHE_DIR]/[TMP]/src/ez_setup/__init__.py", line 170
@@ -33580,39 +33526,21 @@ fn lock_derivation_chain_extended() -> Result<()> {
     uv_snapshot!(context.filters(), context.lock(), @r#"
     exit_code: 1 (failure)
     ----- stderr -----
-      × Failed to build `wsgiref==0.1.2`
-      ├─▶ The build backend returned an error
-      ╰─▶ Call to `setuptools.build_meta:__legacy__.build_wheel` failed (exit status: 1)
-
-          [stderr]
-          Traceback (most recent call last):
-            File "<string>", line 14, in <module>
-            File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 325, in get_requires_for_build_wheel
-              return self._get_build_requires(config_settings, requirements=['wheel'])
-                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-            File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 295, in _get_build_requires
-              self.run_setup()
-            File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 487, in run_setup
-              super().run_setup(setup_script=setup_script)
-            File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 311, in run_setup
-              exec(code, locals())
-            File "<string>", line 5, in <module>
-            File "[CACHE_DIR]/[TMP]/src/ez_setup/__init__.py", line 170
-              print "Setuptools version",version,"or greater has been installed."
-              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-          SyntaxError: Missing parentheses in call to 'print'. Did you mean print(...)?
+    error: Failed to build `wsgiref==0.1.2`
+      Caused by: The build backend returned an error
+      Caused by: Call to `setuptools.build_meta:__legacy__.build_wheel` failed (exit status: 1)
 
         [stderr]
         Traceback (most recent call last):
           File "<string>", line 14, in <module>
-          File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 325, in get_requires_for_build_wheel
+          File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 325, in get_requires_for_build_wheel
             return self._get_build_requires(config_settings, requirements=['wheel'])
                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-          File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 295, in _get_build_requires
+          File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 295, in _get_build_requires
             self.run_setup()
-          File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 487, in run_setup
+          File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 487, in run_setup
             super().run_setup(setup_script=setup_script)
-          File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 311, in run_setup
+          File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 311, in run_setup
             exec(code, locals())
           File "<string>", line 5, in <module>
           File "[CACHE_DIR]/[TMP]/src/ez_setup/__init__.py", line 170
@@ -33936,8 +33864,8 @@ fn lock_no_build_invalid_dependency_virtual_project() -> Result<()> {
     uv_snapshot!(context.filters(), context.lock(), @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × Failed to build `project @ file://[TEMP_DIR]/`
-      ╰─▶ Building source distributions for `project` is disabled
+    error: Failed to build `project @ file://[TEMP_DIR]/`
+      Caused by: Building source distributions for `project` is disabled
     ");
 
     Ok(())
@@ -41069,12 +40997,12 @@ fn lock_supported_environment_wheel_only_package_requires_compatible_wheels() ->
     uv_snapshot!(filters, context.lock(), @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × No solution found when resolving dependencies for split (markers: sys_platform == 'linux'):
-      ╰─▶ Because pywin32<=305 has no wheels with a matching Python version tag (e.g., `cp312`) and only the following versions of pywin32 are available:
-              pywin32<=305
-              pywin32>=306
-          we can conclude that pywin32<306 cannot be used.
-          And because pywin32>=306 has no Linux-compatible wheels and your project depends on pywin32, we can conclude that your project's requirements are unsatisfiable.
+    error: No solution found when resolving dependencies for split (markers: sys_platform == 'linux'):
+      Caused by: Because pywin32<=305 has no wheels with a matching Python version tag (e.g., `cp312`) and only the following versions of pywin32 are available:
+            pywin32<=305
+            pywin32>=306
+        we can conclude that pywin32<306 cannot be used.
+        And because pywin32>=306 has no Linux-compatible wheels and your project depends on pywin32, we can conclude that your project's requirements are unsatisfiable.
 
     hint: Wheels are available for `pywin32` (v305) with the following Python ABI tags: `cp36m`, `cp37m`, `cp38`, `cp39`, `cp310`, `cp311`
     ");

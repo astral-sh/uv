@@ -8528,32 +8528,20 @@ fn fail_to_add_revert_project() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
     Resolved 3 packages in [TIME]
-      × Failed to build `child @ file://[TEMP_DIR]/child`
-      ├─▶ The build backend returned an error
-      ╰─▶ Call to `setuptools.build_meta.build_wheel` failed (exit status: 1)
-
-          [stderr]
-          Traceback (most recent call last):
-            File "<string>", line 14, in <module>
-            File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 325, in get_requires_for_build_wheel
-              return self._get_build_requires(config_settings, requirements=['wheel'])
-                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-            File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 295, in _get_build_requires
-              self.run_setup()
-            File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 311, in run_setup
-              exec(code, locals())
-            File "<string>", line 1, in <module>
-          ZeroDivisionError: division by zero
+    error: Failed to add dependencies
+      Caused by: Failed to build `child @ file://[TEMP_DIR]/child`
+      Caused by: The build backend returned an error
+      Caused by: Call to `setuptools.build_meta.build_wheel` failed (exit status: 1)
 
         [stderr]
         Traceback (most recent call last):
           File "<string>", line 14, in <module>
-          File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 325, in get_requires_for_build_wheel
+          File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 325, in get_requires_for_build_wheel
             return self._get_build_requires(config_settings, requirements=['wheel'])
                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-          File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 295, in _get_build_requires
+          File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 295, in _get_build_requires
             self.run_setup()
-          File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 311, in run_setup
+          File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 311, in run_setup
             exec(code, locals())
           File "<string>", line 1, in <module>
         ZeroDivisionError: division by zero
@@ -8640,32 +8628,20 @@ fn fail_to_edit_revert_project() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
     Resolved 3 packages in [TIME]
-      × Failed to build `child @ file://[TEMP_DIR]/child`
-      ├─▶ The build backend returned an error
-      ╰─▶ Call to `setuptools.build_meta.build_wheel` failed (exit status: 1)
-
-          [stderr]
-          Traceback (most recent call last):
-            File "<string>", line 14, in <module>
-            File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 325, in get_requires_for_build_wheel
-              return self._get_build_requires(config_settings, requirements=['wheel'])
-                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-            File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 295, in _get_build_requires
-              self.run_setup()
-            File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 311, in run_setup
-              exec(code, locals())
-            File "<string>", line 1, in <module>
-          ZeroDivisionError: division by zero
+    error: Failed to add dependencies
+      Caused by: Failed to build `child @ file://[TEMP_DIR]/child`
+      Caused by: The build backend returned an error
+      Caused by: Call to `setuptools.build_meta.build_wheel` failed (exit status: 1)
 
         [stderr]
         Traceback (most recent call last):
           File "<string>", line 14, in <module>
-          File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 325, in get_requires_for_build_wheel
+          File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 325, in get_requires_for_build_wheel
             return self._get_build_requires(config_settings, requirements=['wheel'])
                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-          File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 295, in _get_build_requires
+          File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 295, in _get_build_requires
             self.run_setup()
-          File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 311, in run_setup
+          File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 311, in run_setup
             exec(code, locals())
           File "<string>", line 1, in <module>
         ZeroDivisionError: division by zero
@@ -8763,38 +8739,23 @@ fn fail_to_add_revert_workspace_root() -> Result<()> {
     ----- stderr -----
     Added `broken` to workspace members
     Resolved 3 packages in [TIME]
-      × Failed to build `broken @ file://[TEMP_DIR]/broken`
-      ├─▶ The build backend returned an error
-      ╰─▶ Call to `setuptools.build_meta.build_editable` failed (exit status: 1)
-
-          [stderr]
-          Traceback (most recent call last):
-            File "<string>", line 14, in <module>
-            File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 448, in get_requires_for_build_editable
-              return self.get_requires_for_build_wheel(config_settings)
-                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-            File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 325, in get_requires_for_build_wheel
-              return self._get_build_requires(config_settings, requirements=['wheel'])
-                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-            File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 295, in _get_build_requires
-              self.run_setup()
-            File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 311, in run_setup
-              exec(code, locals())
-            File "<string>", line 1, in <module>
-          ZeroDivisionError: division by zero
+    error: Failed to add dependencies
+      Caused by: Failed to build `broken @ file://[TEMP_DIR]/broken`
+      Caused by: The build backend returned an error
+      Caused by: Call to `setuptools.build_meta.build_editable` failed (exit status: 1)
 
         [stderr]
         Traceback (most recent call last):
           File "<string>", line 14, in <module>
-          File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 448, in get_requires_for_build_editable
+          File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 448, in get_requires_for_build_editable
             return self.get_requires_for_build_wheel(config_settings)
                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-          File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 325, in get_requires_for_build_wheel
+          File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 325, in get_requires_for_build_wheel
             return self._get_build_requires(config_settings, requirements=['wheel'])
                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-          File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 295, in _get_build_requires
+          File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 295, in _get_build_requires
             self.run_setup()
-          File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 311, in run_setup
+          File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 311, in run_setup
             exec(code, locals())
           File "<string>", line 1, in <module>
         ZeroDivisionError: division by zero
@@ -8894,38 +8855,23 @@ fn fail_to_add_revert_workspace_member() -> Result<()> {
     ----- stderr -----
     Added `broken` to workspace members
     Resolved 4 packages in [TIME]
-      × Failed to build `broken @ file://[TEMP_DIR]/broken`
-      ├─▶ The build backend returned an error
-      ╰─▶ Call to `setuptools.build_meta.build_editable` failed (exit status: 1)
-
-          [stderr]
-          Traceback (most recent call last):
-            File "<string>", line 14, in <module>
-            File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 448, in get_requires_for_build_editable
-              return self.get_requires_for_build_wheel(config_settings)
-                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-            File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 325, in get_requires_for_build_wheel
-              return self._get_build_requires(config_settings, requirements=['wheel'])
-                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-            File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 295, in _get_build_requires
-              self.run_setup()
-            File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 311, in run_setup
-              exec(code, locals())
-            File "<string>", line 1, in <module>
-          ZeroDivisionError: division by zero
+    error: Failed to add dependencies
+      Caused by: Failed to build `broken @ file://[TEMP_DIR]/broken`
+      Caused by: The build backend returned an error
+      Caused by: Call to `setuptools.build_meta.build_editable` failed (exit status: 1)
 
         [stderr]
         Traceback (most recent call last):
           File "<string>", line 14, in <module>
-          File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 448, in get_requires_for_build_editable
+          File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 448, in get_requires_for_build_editable
             return self.get_requires_for_build_wheel(config_settings)
                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-          File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 325, in get_requires_for_build_wheel
+          File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 325, in get_requires_for_build_wheel
             return self._get_build_requires(config_settings, requirements=['wheel'])
                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-          File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 295, in _get_build_requires
+          File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 295, in _get_build_requires
             self.run_setup()
-          File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 311, in run_setup
+          File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 311, in run_setup
             exec(code, locals())
           File "<string>", line 1, in <module>
         ZeroDivisionError: division by zero
@@ -9607,8 +9553,9 @@ fn add_shadowed_name() -> Result<()> {
     uv_snapshot!(context.filters(), context.add().arg("dagster-webserver==1.6.13"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because dagster-webserver>=1.6.13 depends on your project and your project depends on dagster-webserver==1.6.13, we can conclude that your project's requirements are unsatisfiable.
+    error: Failed to add dependencies
+      Caused by: No solution found when resolving dependencies:
+      Caused by: Because dagster-webserver>=1.6.13 depends on your project and your project depends on dagster-webserver==1.6.13, we can conclude that your project's requirements are unsatisfiable.
 
     hint: The package `dagster-webserver` depends on the package `dagster` but the name is shadowed by your project. Consider changing the name of the project.
 
@@ -9619,9 +9566,10 @@ fn add_shadowed_name() -> Result<()> {
     uv_snapshot!(context.filters(), context.add().arg("dagster-webserver>=1.6.11,<1.7.0"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because dagster-webserver==1.6.11 depends on your project and dagster-webserver==1.6.12 depends on your project, we can conclude that dagster-webserver>=1.6.11,<=1.6.12 depends on your project.
-          And because dagster-webserver>=1.6.13 depends on your project and your project depends on dagster-webserver>=1.6.11, we can conclude that your project's requirements are unsatisfiable.
+    error: Failed to add dependencies
+      Caused by: No solution found when resolving dependencies:
+      Caused by: Because dagster-webserver==1.6.11 depends on your project and dagster-webserver==1.6.12 depends on your project, we can conclude that dagster-webserver>=1.6.11,<=1.6.12 depends on your project.
+        And because dagster-webserver>=1.6.13 depends on your project and your project depends on dagster-webserver>=1.6.11, we can conclude that your project's requirements are unsatisfiable.
 
     hint: The package `dagster-webserver` depends on the package `dagster` but the name is shadowed by your project. Consider changing the name of the project.
 
@@ -13559,9 +13507,9 @@ async fn lock_forbidden_index_with_available_package() -> Result<()> {
     uv_snapshot!(context.filters(), context.lock(), @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because idna was not found in the package registry and all versions of anyio depend on idna>=2.8, we can conclude that all versions of anyio cannot be used.
-          And because your project depends on anyio, we can conclude that your project's requirements are unsatisfiable.
+    error: No solution found when resolving dependencies:
+      Caused by: Because idna was not found in the package registry and all versions of anyio depend on idna>=2.8, we can conclude that all versions of anyio cannot be used.
+        And because your project depends on anyio, we can conclude that your project's requirements are unsatisfiable.
 
     hint: An index (http://[LOCALHOST]/) returned a 403 Forbidden error, but uv received a successful response from another request to the index. If the failing package is not present on this index, consider adding `ignore-error-codes = [403]` to the index's `[[tool.uv.index]]` entry to continue searching across indexes.
     ");
@@ -13895,9 +13843,10 @@ async fn add_auth_policy_never_with_url_credentials_ignored() -> Result<()> {
     uv_snapshot!(context.filters(), context.add().arg("anyio"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because anyio==4.3.0 could not be fetched from the network (`401 Unauthorized`) and only anyio==4.3.0 is available, we can conclude that all versions of anyio cannot be used.
-          And because your project depends on anyio, we can conclude that your project's requirements are unsatisfiable.
+    error: Failed to add dependencies
+      Caused by: No solution found when resolving dependencies:
+      Caused by: Because anyio==4.3.0 could not be fetched from the network (`401 Unauthorized`) and only anyio==4.3.0 is available, we can conclude that all versions of anyio cannot be used.
+        And because your project depends on anyio, we can conclude that your project's requirements are unsatisfiable.
 
     hint: Metadata for `anyio` (v4.3.0) could not be fetched; the server returned: `401 Unauthorized`
 

@@ -750,10 +750,10 @@ fn conflict_in_fork() -> Result<()> {
     uv_snapshot!(filters, cmd, @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × No solution found when resolving dependencies for split (markers: sys_platform == 'os2'):
-      ╰─▶ Because all versions of c depend on d==2 and all versions of b depend on d==1, we can conclude that all versions of b and all versions of c are incompatible.
-          And because a<=1.0.0 depends on b, we can conclude that a<=1.0.0 and all versions of c are incompatible.
-          And because a<=1.0.0 depends on c and your project depends on a{sys_platform == 'os2'}<2, we can conclude that your project's requirements are unsatisfiable.
+    error: No solution found when resolving dependencies for split (markers: sys_platform == 'os2'):
+      Caused by: Because all versions of c depend on d==2 and all versions of b depend on d==1, we can conclude that all versions of b and all versions of c are incompatible.
+        And because a<=1.0.0 depends on b, we can conclude that a<=1.0.0 and all versions of c are incompatible.
+        And because a<=1.0.0 depends on c and your project depends on a{sys_platform == 'os2'}<2, we can conclude that your project's requirements are unsatisfiable.
 
     hint: The resolution failed for an environment that is not the current one, consider limiting the environments with `tool.uv.environments`.
     "
@@ -3064,9 +3064,9 @@ fn fork_non_local_fork_marker_direct() -> Result<()> {
     uv_snapshot!(filters, cmd, @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because all versions of b depend on c>=2.0.0 and all versions of a depend on c<2.0.0, we can conclude that all versions of a and all versions of b are incompatible.
-          And because your project depends on a{sys_platform == 'linux'}==1.0.0 and b{sys_platform == 'darwin'}==1.0.0, we can conclude that your project's requirements are unsatisfiable.
+    error: No solution found when resolving dependencies:
+      Caused by: Because all versions of b depend on c>=2.0.0 and all versions of a depend on c<2.0.0, we can conclude that all versions of a and all versions of b are incompatible.
+        And because your project depends on a{sys_platform == 'linux'}==1.0.0 and b{sys_platform == 'darwin'}==1.0.0, we can conclude that your project's requirements are unsatisfiable.
     "
     );
 
@@ -3133,9 +3133,9 @@ fn fork_non_local_fork_marker_transitive() -> Result<()> {
     uv_snapshot!(filters, cmd, @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because all versions of b depend on c{sys_platform == 'darwin'}>=2.0.0 and all versions of a depend on c{sys_platform == 'linux'}<2.0.0, we can conclude that all versions of a and all versions of b are incompatible.
-          And because your project depends on a==1.0.0 and b==1.0.0, we can conclude that your project's requirements are unsatisfiable.
+    error: No solution found when resolving dependencies:
+      Caused by: Because all versions of b depend on c{sys_platform == 'darwin'}>=2.0.0 and all versions of a depend on c{sys_platform == 'linux'}<2.0.0, we can conclude that all versions of a and all versions of b are incompatible.
+        And because your project depends on a==1.0.0 and b==1.0.0, we can conclude that your project's requirements are unsatisfiable.
     "
     );
 

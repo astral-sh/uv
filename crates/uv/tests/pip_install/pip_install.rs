@@ -945,9 +945,9 @@ fn no_solution() {
         .arg("--strict"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because flask>=3.0.2 depends on werkzeug>=3.0.0 and you require flask>=3.0.2, we can conclude that you require werkzeug>=3.0.0.
-          And because you require werkzeug<1.0.0, we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving dependencies:
+      Caused by: Because flask>=3.0.2 depends on werkzeug>=3.0.0 and you require flask>=3.0.2, we can conclude that you require werkzeug>=3.0.0.
+        And because you require werkzeug<1.0.0, we can conclude that your requirements are unsatisfiable.
     ");
 }
 
@@ -1292,9 +1292,9 @@ werkzeug==3.0.1
         .arg("--strict"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because flask>=3.0.2 depends on click>=8.1.3 and you require click==7.0.0, we can conclude that your requirements and flask>=3.0.2 are incompatible.
-          And because you require flask==3.0.2, we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving dependencies:
+      Caused by: Because flask>=3.0.2 depends on click>=8.1.3 and you require click==7.0.0, we can conclude that your requirements and flask>=3.0.2 are incompatible.
+        And because you require flask==3.0.2, we can conclude that your requirements are unsatisfiable.
     "
     );
 
@@ -3093,9 +3093,9 @@ async fn install_git_public_rejects_mismatched_github_api_commit() -> Result<()>
         .env(EnvVars::UV_GITHUB_FAST_PATH_URL, server.uri()), @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × Failed to download and build `uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage@0dacfd662c64cb4ceb16e6cf65a157a8b715b979`
-      ├─▶ Git operation failed
-      ╰─▶ Exact Git revision `0dacfd662c64cb4ceb16e6cf65a157a8b715b979` does not match precise commit `b270df1a2fb5d012294e9aaf05e7e0bab1e6a389` for `https://github.com/astral-test/uv-public-pypackage`
+    error: Failed to download and build `uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage@0dacfd662c64cb4ceb16e6cf65a157a8b715b979`
+      Caused by: Git operation failed
+      Caused by: Exact Git revision `0dacfd662c64cb4ceb16e6cf65a157a8b715b979` does not match precise commit `b270df1a2fb5d012294e9aaf05e7e0bab1e6a389` for `https://github.com/astral-test/uv-public-pypackage`
     ");
 
     Ok(())
@@ -3174,13 +3174,13 @@ fn install_git_public_https_missing_commit() {
         , @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × Failed to download and build `uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage@79a935a7a1a0ad6d0bdf72dce0e16cb0a24a1b3b`
-      ├─▶ Git operation failed
-      ├─▶ failed to clone into: [CACHE_DIR]/git-v0/db/8dab139913c4b566
-      ├─▶ failed to fetch commit `79a935a7a1a0ad6d0bdf72dce0e16cb0a24a1b3b`
-      ╰─▶ process didn't exit successfully: `git fetch [...]` (exit code: 128)
-          --- stderr
-          fatal: remote error: upload-pack: not our ref 79a935a7a1a0ad6d0bdf72dce0e16cb0a24a1b3b
+    error: Failed to download and build `uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage@79a935a7a1a0ad6d0bdf72dce0e16cb0a24a1b3b`
+      Caused by: Git operation failed
+      Caused by: failed to clone into: [CACHE_DIR]/git-v0/db/8dab139913c4b566
+      Caused by: failed to fetch commit `79a935a7a1a0ad6d0bdf72dce0e16cb0a24a1b3b`
+      Caused by: process didn't exit successfully: `git fetch [...]` (exit code: 128)
+        --- stderr
+        fatal: remote error: upload-pack: not our ref 79a935a7a1a0ad6d0bdf72dce0e16cb0a24a1b3b
     ");
 }
 
@@ -3378,13 +3378,13 @@ fn install_git_private_https_pat_not_authorized() {
         , @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × Failed to download and build `uv-private-pypackage @ git+https://git:****@github.com/astral-test/uv-private-pypackage`
-      ├─▶ Git operation failed
-      ├─▶ failed to clone into: [CACHE_DIR]/git-v0/db/8401f5508e3e612d
-      ╰─▶ process didn't exit successfully: `git fetch --force --update-head-ok 'https://git:****@github.com/astral-test/uv-private-pypackage' '+HEAD:refs/remotes/origin/HEAD'` (exit status: 128)
-          --- stderr
-          remote: Invalid username or token. Password authentication is not supported for Git operations.
-          fatal: Authentication failed for 'https://github.com/astral-test/uv-private-pypackage/'
+    error: Failed to download and build `uv-private-pypackage @ git+https://git:****@github.com/astral-test/uv-private-pypackage`
+      Caused by: Git operation failed
+      Caused by: failed to clone into: [CACHE_DIR]/git-v0/db/8401f5508e3e612d
+      Caused by: process didn't exit successfully: `git fetch --force --update-head-ok 'https://git:****@github.com/astral-test/uv-private-pypackage' '+HEAD:refs/remotes/origin/HEAD'` (exit status: 128)
+        --- stderr
+        remote: Invalid username or token. Password authentication is not supported for Git operations.
+        fatal: Authentication failed for 'https://github.com/astral-test/uv-private-pypackage/'
     ");
 }
 
@@ -4275,9 +4275,9 @@ fn no_deps_installed() -> Result<()> {
         .arg("--no-index"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because child was not found in the provided package locations and parent==1.0.0 depends on child>=2, we can conclude that parent==1.0.0 cannot be used.
-          And because parent was not found in the provided package locations and you require parent, we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving dependencies:
+      Caused by: Because child was not found in the provided package locations and parent==1.0.0 depends on child>=2, we can conclude that parent==1.0.0 cannot be used.
+        And because parent was not found in the provided package locations and you require parent, we can conclude that your requirements are unsatisfiable.
 
     hint: Packages were unavailable because index lookups were disabled and no additional package locations were provided (try: `--find-links <uri>`)
     ");
@@ -4317,8 +4317,8 @@ fn no_deps_installed() -> Result<()> {
         .arg("constraints.txt"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because you require parent==1.0.0 and parent==2.0.0, we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving dependencies:
+      Caused by: Because you require parent==1.0.0 and parent==2.0.0, we can conclude that your requirements are unsatisfiable.
     ");
 
     Ok(())
@@ -4849,8 +4849,8 @@ fn explicit_prerelease_does_not_fall_back_if_necessary() {
         .arg("a>0.1.0"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because only a<=0.1.0 is available and you require a>0.1.0, we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving dependencies:
+      Caused by: Because only a<=0.1.0 is available and you require a>0.1.0, we can conclude that your requirements are unsatisfiable.
 
     hint: Pre-releases are available for `a` in the requested range (e.g., 1.0.0a1), but pre-releases weren't enabled (try: `--prerelease=allow`)
     ");
@@ -4961,9 +4961,9 @@ fn explicit_prerelease_disallows_transitive_marker() {
         .arg("b"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because there is no version of c==2.0.0b1 and all versions of a depend on c==2.0.0b1, we can conclude that all versions of a cannot be used.
-          And because you require a, we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving dependencies:
+      Caused by: Because there is no version of c==2.0.0b1 and all versions of a depend on c==2.0.0b1, we can conclude that all versions of a cannot be used.
+        And because you require a, we can conclude that your requirements are unsatisfiable.
 
     hint: `c` was requested with a pre-release marker (e.g., c==2.0.0b1), but pre-releases weren't enabled (try: `--prerelease=allow`)
     ");
@@ -5013,9 +5013,9 @@ fn prerelease_package_disallows_transitive_prerelease() {
         .arg("b"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because there is no version of c==2.0.0b1 and all versions of a depend on c==2.0.0b1, we can conclude that all versions of a cannot be used.
-          And because you require a, we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving dependencies:
+      Caused by: Because there is no version of c==2.0.0b1 and all versions of a depend on c==2.0.0b1, we can conclude that all versions of a cannot be used.
+        And because you require a, we can conclude that your requirements are unsatisfiable.
 
     hint: `c` was requested with a pre-release marker (e.g., c==2.0.0b1), but pre-releases weren't enabled (try: `--prerelease-package c=allow`)
     ");
@@ -5121,8 +5121,8 @@ fn prerelease_package_rejected_in_pip_configuration() -> Result<()> {
         | ^^^^^^^^^^^^^^^^^^
       unknown field `prerelease-package`, expected one of [...]
 
-      × No solution found when resolving dependencies:
-      ╰─▶ Because only a<=0.1.0 is available and you require a>0.1.0, we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving dependencies:
+      Caused by: Because only a<=0.1.0 is available and you require a>0.1.0, we can conclude that your requirements are unsatisfiable.
 
     hint: Pre-releases are available for `a` in the requested range (e.g., 1.0.0a1), but pre-releases weren't enabled (try: `--prerelease=allow`)
     "#);
@@ -5210,9 +5210,9 @@ fn disallow_transitive_prerelease() {
         .arg("b"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because there is no version of c==2.0.0b1 and all versions of a depend on c==2.0.0b1, we can conclude that all versions of a cannot be used.
-          And because you require a, we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving dependencies:
+      Caused by: Because there is no version of c==2.0.0b1 and all versions of a depend on c==2.0.0b1, we can conclude that all versions of a cannot be used.
+        And because you require a, we can conclude that your requirements are unsatisfiable.
 
     hint: `c` was requested with a pre-release marker (e.g., c==2.0.0b1), but pre-releases weren't enabled (try: `--prerelease=allow`)
     ");
@@ -9230,14 +9230,14 @@ fn verify_hashes_exact_equal() -> Result<()> {
             exit_code: 1 (failure)
             ----- stderr -----
             Resolved 1 package in [TIME]
-              × Failed to download `ok==1.0.0`
-              ╰─▶ Hash mismatch for `ok==1.0.0`
+            error: Failed to download `ok==1.0.0`
+              Caused by: Hash mismatch for `ok==1.0.0`
 
-                  Expected:
-                    sha256:0000000000000000000000000000000000000000000000000000000000000000
+                Expected:
+                  sha256:0000000000000000000000000000000000000000000000000000000000000000
 
-                  Computed:
-                    sha256:79f0b33e6ce1e09eaa1784c8eee275dfe84d215d9c65c652f07c18e85fdaac5f
+                Computed:
+                  sha256:79f0b33e6ce1e09eaa1784c8eee275dfe84d215d9c65c652f07c18e85fdaac5f
             ");
         }
     }
@@ -9290,14 +9290,14 @@ fn verify_hashes_public_pin_local_version() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
     Resolved 1 package in [TIME]
-      × Failed to download `hash-probe==1.0.0+local`
-      ╰─▶ Hash mismatch for `hash-probe==1.0.0+local`
+    error: Failed to download `hash-probe==1.0.0+local`
+      Caused by: Hash mismatch for `hash-probe==1.0.0+local`
 
-          Expected:
-            sha256:[PUBLIC_HASH]
+        Expected:
+          sha256:[PUBLIC_HASH]
 
-          Computed:
-            sha256:[LOCAL_HASH]
+        Computed:
+          sha256:[LOCAL_HASH]
     ");
 
     // A hash for `==1.0.0+local` takes precedence over the hash for `==1.0.0`.
@@ -10800,39 +10800,21 @@ fn resolve_derivation_chain() -> Result<()> {
         .arg("."), @r#"
     exit_code: 1 (failure)
     ----- stderr -----
-      × Failed to build `wsgiref==0.1.2`
-      ├─▶ The build backend returned an error
-      ╰─▶ Call to `setuptools.build_meta:__legacy__.build_wheel` failed (exit status: 1)
-
-          [stderr]
-          Traceback (most recent call last):
-            File "<string>", line 14, in <module>
-            File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 325, in get_requires_for_build_wheel
-              return self._get_build_requires(config_settings, requirements=['wheel'])
-                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-            File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 295, in _get_build_requires
-              self.run_setup()
-            File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 487, in run_setup
-              super().run_setup(setup_script=setup_script)
-            File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 311, in run_setup
-              exec(code, locals())
-            File "<string>", line 5, in <module>
-            File "[CACHE_DIR]/[TMP]/src/ez_setup/__init__.py", line 170
-              print "Setuptools version",version,"or greater has been installed."
-              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-          SyntaxError: Missing parentheses in call to 'print'. Did you mean print(...)?
+    error: Failed to build `wsgiref==0.1.2`
+      Caused by: The build backend returned an error
+      Caused by: Call to `setuptools.build_meta:__legacy__.build_wheel` failed (exit status: 1)
 
         [stderr]
         Traceback (most recent call last):
           File "<string>", line 14, in <module>
-          File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 325, in get_requires_for_build_wheel
+          File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 325, in get_requires_for_build_wheel
             return self._get_build_requires(config_settings, requirements=['wheel'])
                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-          File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 295, in _get_build_requires
+          File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 295, in _get_build_requires
             self.run_setup()
-          File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 487, in run_setup
+          File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 487, in run_setup
             super().run_setup(setup_script=setup_script)
-          File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 311, in run_setup
+          File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 311, in run_setup
             exec(code, locals())
           File "<string>", line 5, in <module>
           File "[CACHE_DIR]/[TMP]/src/ez_setup/__init__.py", line 170
@@ -15295,9 +15277,9 @@ fn reject_invalid_streaming_zip() {
     exit_code: 1 (failure)
     ----- stderr -----
     Resolved 1 package in [TIME]
-      × Failed to download `cbwheelstreamtest==0.0.1`
-      ├─▶ Failed to extract archive: cbwheelstreamtest-0.0.1-py2.py3-none-any.whl
-      ╰─▶ ZIP file contains multiple entries for the same output path: cbwheelstreamtest/__init__.py
+    error: Failed to download `cbwheelstreamtest==0.0.1`
+      Caused by: Failed to extract archive: cbwheelstreamtest-0.0.1-py2.py3-none-any.whl
+      Caused by: ZIP file contains multiple entries for the same output path: cbwheelstreamtest/__init__.py
     "
     );
 }
@@ -15593,15 +15575,12 @@ fn pip_install_build_dependencies_respect_locked_versions() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
     Resolved [N] packages in [TIME]
-      × Failed to build `child @ file://[TEMP_DIR]/child`
-      ├─▶ The build backend returned an error
-      ╰─▶ Call to `build_backend.build_wheel` failed (exit status: 1)
-
-          [stderr]
-          Expected `a` version 0.1 but got 0.3.0
+    error: Failed to build `child @ file://[TEMP_DIR]/child`
+      Caused by: The build backend returned an error
+      Caused by: Call to `build_backend.build_wheel` failed (exit status: 1)
 
         [stderr]
-        Expected `anyio` version 3.0 but got 4.3.0
+        Expected `a` version 0.1 but got 0.3.0
 
     hint: `child` was included because `parent` (v0.1.0) depends on `child`
 
@@ -15656,15 +15635,12 @@ fn pip_install_build_dependencies_respect_locked_versions() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
     Resolved [N] packages in [TIME]
-      × Failed to build `child @ file://[TEMP_DIR]/child`
-      ├─▶ The build backend returned an error
-      ╰─▶ Call to `build_backend.build_wheel` failed (exit status: 1)
-
-          [stderr]
-          Expected `a` version 0.2 but got 0.1.0
+    error: Failed to build `child @ file://[TEMP_DIR]/child`
+      Caused by: The build backend returned an error
+      Caused by: Call to `build_backend.build_wheel` failed (exit status: 1)
 
         [stderr]
-        Expected `anyio` version 4.0 but got 3.7.1
+        Expected `a` version 0.2 but got 0.1.0
 
     hint: `child` was included because `parent` (v0.1.0) depends on `child`
 
@@ -16893,9 +16869,9 @@ fn fail_on_bz2_wheel() {
         @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × Failed to download `futzed-bz2 @ http://[LOCALHOST]/futzed_bz2-0.1.0-py3-none-any.whl`
-      ├─▶ Failed to read metadata: `http://[LOCALHOST]/futzed_bz2-0.1.0-py3-none-any.whl`
-      ╰─▶ Archive contains a file with an unsupported compression method; files must be compressed with 'stored', 'DEFLATE', or 'zstd'
+    error: Failed to download `futzed-bz2 @ http://[LOCALHOST]/futzed_bz2-0.1.0-py3-none-any.whl`
+      Caused by: Failed to read metadata: `http://[LOCALHOST]/futzed_bz2-0.1.0-py3-none-any.whl`
+      Caused by: Archive contains a file with an unsupported compression method; files must be compressed with 'stored', 'DEFLATE', or 'zstd'
     "
     );
 }
@@ -16912,9 +16888,9 @@ fn fail_on_lzma_wheel() {
         @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × Failed to download `futzed-lzma @ http://[LOCALHOST]/futzed_lzma-0.1.0-py3-none-any.whl`
-      ├─▶ Failed to read metadata: `http://[LOCALHOST]/futzed_lzma-0.1.0-py3-none-any.whl`
-      ╰─▶ Archive contains a file with an unsupported compression method; files must be compressed with 'stored', 'DEFLATE', or 'zstd'
+    error: Failed to download `futzed-lzma @ http://[LOCALHOST]/futzed_lzma-0.1.0-py3-none-any.whl`
+      Caused by: Failed to read metadata: `http://[LOCALHOST]/futzed_lzma-0.1.0-py3-none-any.whl`
+      Caused by: Archive contains a file with an unsupported compression method; files must be compressed with 'stored', 'DEFLATE', or 'zstd'
     "
     );
 }
