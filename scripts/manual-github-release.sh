@@ -6,10 +6,9 @@
 #
 # It can take a while to download all the artifacts.
 #
-# Requires `gh` and `uv`.
+# Requires `gh` and `jq`.
 
 set -euo pipefail
-SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 
 if [ -z "${COMMIT:-}" ]; then
     echo "COMMIT is required."
@@ -35,7 +34,7 @@ for artifact in archives global manifest; do
 done
 
 MANIFEST="artifacts/dist-manifest.json"
-uv run --locked "$SCRIPT_DIR/list-release-artifacts.py" github "$MANIFEST" artifacts --include-manifest > release-assets.txt
+jq -r '(["dist-manifest.json"] + [.releases[].artifacts[]])[] | "artifacts/\(.)"' "$MANIFEST" > release-assets.txt
 assets=()
 while IFS= read -r asset; do
     assets+=("$asset")

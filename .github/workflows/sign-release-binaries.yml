@@ -24,9 +24,6 @@ on:
       uv-build-sdist:
         description: "Artifact ID for the uv_build source distribution"
         value: ${{ jobs.assemble.outputs.uv-build-sdist }}
-      inventory:
-        description: "Artifact ID for the exact release distribution inventory"
-        value: ${{ jobs.assemble.outputs.inventory }}
 
 permissions: {}
 
@@ -312,7 +309,6 @@ jobs:
       github-archives: ${{ steps.github-archives.outputs.artifact-id }}
       uv-sdist: ${{ steps.uv-sdist.outputs.artifact-id }}
       uv-build-sdist: ${{ steps.uv-build-sdist.outputs.artifact-id }}
-      inventory: ${{ steps.inventory.outputs.artifact-id }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -451,14 +447,6 @@ jobs:
         with:
           name: release-sdist-uv_build-${{ github.run_id }}-${{ github.run_attempt }}
           path: release-artifacts/sdists/uv_build
-          if-no-files-found: error
-
-      - name: "Upload release inventory"
-        id: inventory
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: release-inventory-${{ github.run_id }}-${{ github.run_attempt }}
-          path: release-artifacts/inventory.json
           if-no-files-found: error
 
   verify-macos:

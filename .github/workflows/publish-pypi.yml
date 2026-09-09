@@ -24,10 +24,6 @@ on:
       uv-build-sdist:
         required: true
         type: string
-      inventory:
-        description: "Artifact ID for the exact release distribution inventory"
-        required: true
-        type: string
 
 env:
   ACTIONS_CACHE_MODE: none
@@ -40,24 +36,14 @@ jobs:
     environment:
       name: release
     permissions:
-      contents: read
       id-token: write # For PyPI's trusted publishing
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
       - name: "Install uv"
         uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
         with:
           version: "0.12.10"
           checksum: "173d95a0c32d18c896c46ba6fafbf3cf9c14ab74b033f81b76c883ef492a976b"
           enable-cache: false
-      - name: "Download release inventory"
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        with:
-          artifact-ids: ${{ inputs.inventory }}
-          path: release-inventory
-          merge-multiple: true
       - name: "Download uv release distributions"
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
@@ -65,11 +51,7 @@ jobs:
           path: wheels_uv
           merge-multiple: true
       - name: Publish to PyPI
-        shell: bash
-        run: |
-          uv run scripts/list-release-artifacts.py python release-inventory/inventory.json wheels_uv uv > "$RUNNER_TEMP/release-assets.txt"
-          mapfile -t assets < "$RUNNER_TEMP/release-assets.txt"
-          uv publish -v "${assets[@]}"
+        run: uv publish -v wheels_uv/*
 
   pypi-publish-uv-build:
     name: Upload uv-build to PyPI
@@ -77,24 +59,14 @@ jobs:
     environment:
       name: release
     permissions:
-      contents: read
       id-token: write # For PyPI's trusted publishing
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
       - name: "Install uv"
         uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
         with:
           version: "0.12.10"
           checksum: "173d95a0c32d18c896c46ba6fafbf3cf9c14ab74b033f81b76c883ef492a976b"
           enable-cache: false
-      - name: "Download release inventory"
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        with:
-          artifact-ids: ${{ inputs.inventory }}
-          path: release-inventory
-          merge-multiple: true
       - name: "Download uv_build release distributions"
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
@@ -102,8 +74,4 @@ jobs:
           path: wheels_uv_build
           merge-multiple: true
       - name: Publish to PyPI
-        shell: bash
-        run: |
-          uv run scripts/list-release-artifacts.py python release-inventory/inventory.json wheels_uv_build uv_build > "$RUNNER_TEMP/release-assets.txt"
-          mapfile -t assets < "$RUNNER_TEMP/release-assets.txt"
-          uv publish -v "${assets[@]}"
+        run: uv publish -v wheels_uv_build/*

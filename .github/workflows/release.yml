@@ -223,12 +223,6 @@ jobs:
           artifact-ids: ${{ needs.plan.outputs.artifact }},${{ needs.generate-checksum-manifest.outputs.artifact }},${{ needs.sign-release-binaries.outputs.github-archives }}
           path: target/distrib/
           merge-multiple: true
-      - name: Fetch release inventory
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        with:
-          artifact-ids: ${{ needs.sign-release-binaries.outputs.inventory }}
-          path: release-inventory
-          merge-multiple: true
       - id: cargo-dist
         shell: bash
         run: |
@@ -243,8 +237,16 @@ jobs:
           cp dist-manifest.json "$BUILD_MANIFEST_NAME"
         env:
           DIST_TAG_FLAG: ${{ needs.plan.outputs.tag-flag }}
-      - name: "Check complete GitHub release inventory"
-        run: uv run scripts/list-release-artifacts.py github-build dist-manifest.json release-inventory/inventory.json
+      - name: "Check planned GitHub release files"
+        shell: bash
+        run: |
+          jq -r '.releases[].artifacts[]' dist-manifest.json |
+            while IFS= read -r asset; do
+              if [[ ! -f "target/distrib/$asset" ]]; then
+                echo "Missing GitHub release asset: $asset" >&2
+                exit 1
+              fi
+            done
       - name: "Upload artifacts"
         id: artifacts
         uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
@@ -320,11 +322,9 @@ jobs:
       uv-build-wheels: ${{ needs.sign-release-binaries.outputs.uv-build-wheels }}
       uv-sdist: ${{ needs.sign-release-binaries.outputs.uv-sdist }}
       uv-build-sdist: ${{ needs.sign-release-binaries.outputs.uv-build-sdist }}
-      inventory: ${{ needs.sign-release-binaries.outputs.inventory }}
     secrets: inherit
     # publish jobs get escalated permissions
     permissions:
-      "contents": "read"
       "id-token": "write"
       "packages": "write"
 
@@ -370,27 +370,20 @@ jobs:
           persist-credentials: false
           submodules: recursive
       # Create a GitHub Release while uploading all files to it
-      - name: "Install uv"
-        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
-        with:
-          version: "0.12.10"
-          checksum: "173d95a0c32d18c896c46ba6fafbf3cf9c14ab74b033f81b76c883ef492a976b"
-          enable-cache: false
       - name: "Download GitHub Artifacts"
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           artifact-ids: ${{ needs.host.outputs.github-artifacts }}
           path: artifacts
           merge-multiple: true
-      - name: "Check release asset inventory"
+      - name: "Read release asset names"
         id: assets
         shell: bash
         run: |
-          uv run scripts/list-release-artifacts.py github artifacts/dist-manifest.json artifacts --include-manifest > "$RUNNER_TEMP/release-assets.txt"
-          uv run scripts/list-release-artifacts.py github artifacts/dist-manifest.json artifacts --include-manifest --attest > "$RUNNER_TEMP/attestation-assets.txt"
+          jq -r '(["dist-manifest.json"] + [.releases[].artifacts[]])[] | "artifacts/\(.)"' artifacts/dist-manifest.json > "$RUNNER_TEMP/release-assets.txt"
           {
             echo 'attestation-paths<<EOF'
-            cat "$RUNNER_TEMP/attestation-assets.txt"
+            jq -r '.github_attestations_filters[] | "artifacts/\(.)"' artifacts/dist-manifest.json
             echo EOF
           } >> "$GITHUB_OUTPUT"
       - name: Attest
