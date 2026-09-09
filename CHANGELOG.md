@@ -7,7 +7,7 @@
 
 Released on 2026-09-09.
 
-The executables in our macOS and Windows release archives and `uv` and `uv_build` wheels are now code-signed. macOS executables are signed with an Apple Developer ID certificate and notarized by Apple. Windows executables have timestamped Authenticode signatures from Azure Artifact Signing.
+The executables in our macOS and Windows release archives and `uv` and `uv_build` wheels are now code-signed. macOS executables are signed with an Apple Developer ID certificate and notarized by Apple. Windows executables have timestamped Authenticode signatures from Azure Artifact Signing. This enables verification of the release publisher and binary integrity, supports publisher-based allowlisting, and should reduce security warnings and antivirus false positives.
 
 ### Bug fixes
 
