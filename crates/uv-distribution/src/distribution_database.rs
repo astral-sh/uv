@@ -26,6 +26,7 @@ use uv_distribution_filename::WheelFilename;
 use uv_distribution_types::{
     ArchiveHashPolicy, BuildInfo, BuildableSource, BuiltDist, Dist, DistRef, HashCollection,
     HashValidation, Hashed, IndexUrl, InstalledDist, MetadataHashPolicy, Name, SourceDist,
+    SourceUrl,
 };
 use uv_extract::dirhash::{DirectoryDigest, HashedFile};
 use uv_extract::hash::Hasher;
@@ -41,7 +42,7 @@ use uv_types::{BuildContext, BuildStack};
 use crate::archive::Archive;
 use crate::error::PythonVersion;
 use crate::extracted_wheel::{ExtractedWheel, HashedWheel, WheelExtractor};
-use crate::hash::http_hash_algorithms;
+use crate::hash::{http_hash_algorithms, parse_url_hashes};
 use crate::metadata::{ArchiveMetadata, Metadata};
 use crate::source::SourceDistributionBuilder;
 use crate::{Error, LocalWheel, Reporter, RequiresDist};
@@ -542,6 +543,15 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         dist: &BuiltDist,
         hashes: MetadataHashPolicy<'_>,
     ) -> Result<ArchiveMetadata, Error> {
+        let declared_hashes = if hashes.collection != HashCollection::None
+            && hashes.validation == HashValidation::None
+            && let BuiltDist::DirectUrl(dist) = dist
+        {
+            parse_url_hashes(&dist.url)
+        } else {
+            None
+        };
+
         let hash_policy = match hashes.validation {
             HashValidation::None => {
                 let compute_hashes = match hashes.collection {
@@ -553,9 +563,8 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                             hashes.collection == HashCollection::All
                                 && dist.best_wheel().file.hashes.is_empty()
                         }
-                        BuiltDist::DirectUrl(_) | BuiltDist::Path(_) | BuiltDist::GitPath(_) => {
-                            true
-                        }
+                        BuiltDist::DirectUrl(_) => declared_hashes.is_none(),
+                        BuiltDist::Path(_) | BuiltDist::GitPath(_) => true,
                     },
                 };
                 if compute_hashes {
@@ -594,7 +603,10 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             .dependency_metadata()
             .get(dist.name(), Some(dist.version()))
         {
-            return Ok(ArchiveMetadata::from_metadata23(metadata));
+            return Ok(ArchiveMetadata {
+                metadata: Metadata::from_metadata23(metadata),
+                hashes: declared_hashes.unwrap_or_else(HashDigests::empty),
+            });
         }
 
         let result = self
@@ -614,7 +626,10 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         match result {
             Ok(metadata) => {
                 // Validate that the metadata is consistent with the distribution.
-                Ok(ArchiveMetadata::from_metadata23(metadata))
+                Ok(ArchiveMetadata {
+                    metadata: Metadata::from_metadata23(metadata),
+                    hashes: declared_hashes.unwrap_or_else(HashDigests::empty),
+                })
             }
             Err(err) if err.is_http_streaming_unsupported() => {
                 warn!(
@@ -625,7 +640,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 // downloading the wheel directly, try that.
                 let wheel = self.get_wheel(dist, hash_policy).await?;
                 let metadata = wheel.metadata()?;
-                let hashes = wheel.hashes;
+                let hashes = declared_hashes.unwrap_or(wheel.hashes);
                 Ok(ArchiveMetadata {
                     metadata: Metadata::from_metadata23(metadata),
                     hashes,
@@ -644,6 +659,18 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         source: &BuildableSource<'_>,
         hashes: MetadataHashPolicy<'_>,
     ) -> Result<ArchiveMetadata, Error> {
+        let declared_hashes = if hashes.collection == HashCollection::None
+            || hashes.validation != HashValidation::None
+        {
+            None
+        } else if let BuildableSource::Dist(SourceDist::DirectUrl(dist)) = source {
+            parse_url_hashes(&dist.url)
+        } else if let BuildableSource::Url(SourceUrl::Direct(source)) = source {
+            parse_url_hashes(source.url)
+        } else {
+            None
+        };
+
         // If the metadata was provided by the user directly, prefer it.
         if let Some(dist) = source.as_dist() {
             if let Some(metadata) = self
@@ -655,22 +682,36 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 // commits.
                 self.builder.resolve_revision(source, &self.client).await?;
 
-                return Ok(ArchiveMetadata::from_metadata23(metadata));
+                return Ok(ArchiveMetadata {
+                    metadata: Metadata::from_metadata23(metadata),
+                    hashes: declared_hashes.unwrap_or_else(HashDigests::empty),
+                });
             }
         }
 
+        // If resolving metadata requires a build, validate the declared hashes before executing
+        // the backend, even when the caller only requested hash collection.
         let build_hash_policy = match hashes.validation {
-            HashValidation::None => match hashes.collection {
-                HashCollection::None => ArchiveHashPolicy::None,
-                HashCollection::Url | HashCollection::All => ArchiveHashPolicy::Generate,
-            },
+            HashValidation::None => {
+                if let Some(hashes) = declared_hashes.as_ref() {
+                    ArchiveHashPolicy::All(hashes.as_slice())
+                } else if hashes.collection != HashCollection::None {
+                    ArchiveHashPolicy::Generate
+                } else {
+                    ArchiveHashPolicy::None
+                }
+            }
             HashValidation::Any(_) | HashValidation::All(_) => hashes.validation.into(),
         };
-        let metadata = self
+        let mut metadata = self
             .builder
             .download_and_build_metadata(source, build_hash_policy, &self.client)
             .boxed_local()
             .await?;
+
+        if let Some(hashes) = declared_hashes {
+            metadata.hashes = hashes;
+        }
 
         Ok(metadata)
     }

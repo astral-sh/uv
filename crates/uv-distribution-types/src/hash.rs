@@ -136,7 +136,7 @@ impl<'a> From<HashValidation<'a>> for ArchiveHashPolicy<'a> {
 
 /// Which distributions should have hashes collected during resolution.
 ///
-/// Use index-provided hashes when available; otherwise, compute a SHA-256 hash from the archive.
+/// Reuse declared hashes when available; otherwise, compute a SHA-256 hash from the archive.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub enum HashCollection {
     /// Do not collect hashes during resolution.
