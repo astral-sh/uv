@@ -38,9 +38,15 @@ jobs:
           version: "0.12.10"
           checksum: "173d95a0c32d18c896c46ba6fafbf3cf9c14ab74b033f81b76c883ef492a976b"
           enable-cache: false
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+      - name: "Download uv sdist"
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          pattern: release-pypi-uv-*
+          name: release-sdist-uv
+          path: wheels_uv
+      - name: "Download uv release wheels"
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: release-wheels-uv-*
           path: wheels_uv
           merge-multiple: true
       - name: "Download signed uv wheels"
@@ -66,9 +72,15 @@ jobs:
           version: "0.12.10"
           checksum: "173d95a0c32d18c896c46ba6fafbf3cf9c14ab74b033f81b76c883ef492a976b"
           enable-cache: false
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+      - name: "Download uv_build sdist"
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          pattern: release-pypi-uv_build-*
+          name: release-sdist-uv_build
+          path: wheels_uv_build
+      - name: "Download uv_build release wheels"
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: release-wheels-uv_build-*
           path: wheels_uv_build
           merge-multiple: true
       - name: "Download signed uv_build wheels"
