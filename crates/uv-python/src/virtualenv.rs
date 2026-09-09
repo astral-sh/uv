@@ -205,13 +205,14 @@ pub(crate) fn virtualenv_python_executable(venv: impl AsRef<Path>) -> PathBuf {
         // If none of these exist, return the standard location
         default_executable
     } else {
-        // Check for both `python3` over `python`, preferring the more specific one
-        let default_executable = venv.join("bin").join("python3");
+        // Prefer the unversioned `python` command exposed by virtual environments.
+        let default_executable = venv.join("bin").join("python");
         if default_executable.exists() {
             return default_executable;
         }
 
-        let executable = venv.join("bin").join("python");
+        // Fall back to `python3` for installations without an unversioned executable.
+        let executable = venv.join("bin").join("python3");
         if executable.exists() {
             return executable;
         }
