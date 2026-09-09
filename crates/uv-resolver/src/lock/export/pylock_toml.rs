@@ -28,8 +28,9 @@ use uv_distribution_filename::{
 use uv_distribution_types::{
     BuiltDist, DirectUrlBuiltDist, DirectUrlSourceDist, DirectorySourceDist, Dist, Edge,
     FileLocation, FirstParty, GitDirectorySourceDist, IndexUrl, Name, Node, PathBuiltDist,
-    PathSourceDist, RegistryBuiltDist, RegistryBuiltWheel, RegistrySourceDist, RemoteSource,
-    RequiresPython, Resolution, ResolvedDist, SourceDist, ToUrlError, UrlString,
+    PathSourceDist, RegistryBuiltDist, RegistryBuiltWheel, RegistrySourceDist,
+    RegistryVariantsJson, RemoteSource, RequiresPython, Resolution, ResolvedDist, SourceDist,
+    ToUrlError, UrlString,
 };
 use uv_extract::hash::{HashReader, Hasher};
 use uv_fs::{PortablePathBuf, normalize_path, try_relative_to_if};
@@ -44,6 +45,10 @@ use uv_pypi_types::{
 };
 use uv_redacted::DisplaySafeUrl;
 use uv_small_str::SmallString;
+use uv_variants::VariantProviderOutput;
+use uv_variants::resolved_variants::{ResolvedVariants, VariantScore};
+use uv_variants::variant_lock::VariantLock;
+use uv_variants::variants_json::VariantsJsonContent;
 use uv_warnings::warn_user_once;
 
 use crate::lock::export::ExportableRequirements;
@@ -119,6 +124,16 @@ pub enum PylockTomlErrorKind {
         "Package `{0}` must include one of: `wheels`, `directory`, `archive`, `sdist`, or `vcs`"
     )]
     MissingSource(PackageName),
+    #[error("Failed to read variant metadata for pylock.toml")]
+    VariantMetadata(#[source] uv_client::Error),
+    #[error("Invalid target variant properties")]
+    VariantProperties(#[source] toml::de::Error),
+    #[error("Unsupported target variant property file version `{0}`")]
+    VariantPropertiesVersion(Version),
+    #[error(
+        "Cannot export variant-dependent package markers for `{0}` to pylock.toml; PEP 825 permits variant markers only in dependency specifiers"
+    )]
+    VariantPackageMarker(PackageName),
     #[error("Package `{0}` uses a Git archive, which pylock.toml export does not support")]
     GitArchiveUnsupported(PackageName),
     #[error("Package `{0}` does not include a compatible wheel for the current platform")]
@@ -264,6 +279,12 @@ pub struct PylockToml {
     pub dependency_groups: Vec<GroupName>,
     #[serde(skip_serializing_if = "Vec::is_empty", default)]
     pub default_groups: Vec<GroupName>,
+    #[serde(
+        default,
+        skip_serializing_if = "Vec::is_empty",
+        deserialize_with = "deserialize_environments"
+    )]
+    environments: Vec<String>,
     pub packages: Vec<PylockTomlPackage>,
     #[serde(skip_serializing_if = "Vec::is_empty", default)]
     attestation_identities: Vec<PylockTomlAttestationIdentity>,
@@ -281,6 +302,66 @@ where
     }
 
     Ok(version)
+}
+
+/// Variant markers require a selected wheel and cannot gate a package entry.
+fn deserialize_package_marker<'de, D: serde::Deserializer<'de>>(
+    deserializer: D,
+) -> Result<MarkerTree, D::Error> {
+    let marker = MarkerTree::deserialize(deserializer)?;
+    if marker.has_variant_expression() {
+        return Err(serde::de::Error::custom(
+            "variant markers are not permitted in packages.marker",
+        ));
+    }
+    Ok(marker)
+}
+
+fn deserialize_environments<'de, D: serde::Deserializer<'de>>(
+    deserializer: D,
+) -> Result<Vec<String>, D::Error> {
+    let environments = Vec::<String>::deserialize(deserializer)?;
+    for environment in &environments {
+        let marker = MarkerTree::from_str(environment).map_err(serde::de::Error::custom)?;
+        if marker.has_variant_expression() {
+            return Err(serde::de::Error::custom(
+                "variant markers are not permitted in environments",
+            ));
+        }
+    }
+    Ok(environments)
+}
+
+/// PEP 825 requires lockfile readers to validate the embedded metadata schema.
+fn deserialize_variant_metadata<'de, D: serde::Deserializer<'de>>(
+    deserializer: D,
+) -> Result<Option<VariantsJsonContent>, D::Error> {
+    let value = serde_json::Value::deserialize(deserializer)?;
+    let object = value
+        .as_object()
+        .ok_or_else(|| serde::de::Error::custom("variant metadata must be a table"))?;
+    for key in object.keys() {
+        if !matches!(key.as_str(), "$schema" | "default-priorities" | "variants") {
+            return Err(serde::de::Error::custom(format!(
+                "unknown variant metadata field `{key}`"
+            )));
+        }
+    }
+    if let Some(priorities) = object
+        .get("default-priorities")
+        .and_then(serde_json::Value::as_object)
+    {
+        for key in priorities.keys() {
+            if key != "namespace" {
+                return Err(serde::de::Error::custom(format!(
+                    "unknown default priority `{key}`"
+                )));
+            }
+        }
+    }
+    serde_json::from_value(value)
+        .map(Some)
+        .map_err(serde::de::Error::custom)
 }
 
 /// Deserialize artifact [`Hashes`], warning about invalid empty tables.
@@ -390,7 +471,8 @@ pub struct PylockTomlPackage {
     #[serde(
         skip_serializing_if = "uv_pep508::marker::ser::is_empty",
         serialize_with = "uv_pep508::marker::ser::serialize",
-        default
+        default,
+        deserialize_with = "deserialize_package_marker"
     )]
     marker: MarkerTree,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -407,6 +489,14 @@ pub struct PylockTomlPackage {
     sdist: Option<PylockTomlSdist>,
     #[serde(skip_serializing_if = "Option::is_none")]
     wheels: Option<Vec<PylockTomlWheel>>,
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "deserialize_variant_metadata"
+    )]
+    variants_json: Option<VariantsJsonContent>,
+    #[serde(skip)]
+    variants_json_source: Option<Arc<RegistryVariantsJson>>,
 }
 
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
@@ -548,7 +638,12 @@ impl<'lock> PylockToml {
         // Convert each node to a `pylock.toml`-style package.
         let mut packages = Vec::with_capacity(resolution.graph.node_count());
         for (node_index, node) in resolution.base_dists() {
-            let ResolvedDist::Installable { dist, version, .. } = &node.dist else {
+            let ResolvedDist::Installable {
+                dist,
+                version,
+                variants_json,
+            } = &node.dist
+            else {
                 continue;
             };
             if omit.contains(dist.name()) {
@@ -573,6 +668,8 @@ impl<'lock> PylockToml {
                 archive: None,
                 sdist: None,
                 wheels: None,
+                variants_json: None,
+                variants_json_source: variants_json.clone(),
             };
 
             match &**dist {
@@ -745,6 +842,9 @@ impl<'lock> PylockToml {
             }
 
             // Add the package to the list of packages.
+            if package.marker.has_variant_expression() {
+                return Err(PylockTomlErrorKind::VariantPackageMarker(package.name));
+            }
             packages.push(package);
         }
 
@@ -755,6 +855,7 @@ impl<'lock> PylockToml {
         Ok(Self {
             lock_version,
             created_by,
+            environments: Vec::new(),
             requires_python: Some(requires_python),
             extras,
             dependency_groups,
@@ -1107,8 +1208,15 @@ impl<'lock> PylockToml {
                 archive,
                 sdist,
                 wheels,
+                variants_json: None,
+                variants_json_source: package
+                    .to_registry_variants_json(target.install_path())?
+                    .map(Arc::new),
             };
 
+            if package.marker.has_variant_expression() {
+                return Err(PylockTomlErrorKind::VariantPackageMarker(package.name));
+            }
             packages.push(package);
         }
 
@@ -1116,12 +1224,38 @@ impl<'lock> PylockToml {
             lock_version,
             created_by,
             requires_python: Some(requires_python),
+            environments: Vec::new(),
             extras,
             dependency_groups,
             default_groups,
             packages,
             attestation_identities,
         })
+    }
+
+    /// Whether index metadata still needs to be embedded in this export.
+    pub fn has_pending_variant_metadata(&self) -> bool {
+        self.packages
+            .iter()
+            .any(|package| package.variants_json_source.is_some())
+    }
+
+    /// Freeze the complete metadata used to select variant wheels into the lock file.
+    pub async fn resolve_variant_metadata(
+        &mut self,
+        client: &RegistryClient,
+    ) -> Result<(), PylockTomlErrorKind> {
+        for package in &mut self.packages {
+            if let Some(source) = &package.variants_json_source {
+                let metadata = client
+                    .fetch_variants_json(source)
+                    .await
+                    .map_err(PylockTomlErrorKind::VariantMetadata)?;
+                package.variants_json = Some(metadata.without_provider_extensions());
+                package.variants_json_source = None;
+            }
+        }
+        Ok(())
     }
 
     /// Returns `true` if any distribution file is missing the hashes required by PEP 751.
@@ -1215,6 +1349,11 @@ impl<'lock> PylockToml {
 
     /// Returns the TOML representation of this lockfile.
     pub fn to_toml(&self) -> Result<String, toml_edit::ser::Error> {
+        if self.has_pending_variant_metadata() {
+            return Err(serde::ser::Error::custom(
+                "variant metadata must be resolved before writing pylock.toml",
+            ));
+        }
         // We construct a TOML document manually instead of going through Serde to enable
         // the use of inline tables.
         let mut doc = toml_edit::DocumentMut::new();
@@ -1268,6 +1407,14 @@ impl<'lock> PylockToml {
             };
             doc.insert("attestation-identities", value(attestation_identities));
         }
+        if !self.environments.is_empty() {
+            doc.insert(
+                "environments",
+                value(Array::from_iter(
+                    self.environments.iter().map(String::as_str),
+                )),
+            );
+        }
         if self.packages.is_empty() {
             // `packages` is a required key in PEP 751, even when empty.
             doc.insert("packages", value(Array::new()));
@@ -1292,6 +1439,30 @@ impl<'lock> PylockToml {
         tags: &Tags,
         build_options: &BuildOptions,
     ) -> Result<Resolution, PylockTomlError> {
+        let variant_lock = if self
+            .packages
+            .iter()
+            .any(|package| package.variants_json.is_some())
+        {
+            std::env::var_os("UV_VARIANT_LOCK")
+                .map(|path| {
+                    let content = fs_err::read(path)?;
+                    let target: VariantLock = toml::from_slice(&content)
+                        .map_err(PylockTomlErrorKind::VariantProperties)?;
+                    if target.metadata.version < Version::new([0, 1])
+                        || target.metadata.version >= Version::new([0, 2])
+                    {
+                        return Err(PylockTomlErrorKind::VariantPropertiesVersion(
+                            target.metadata.version,
+                        ));
+                    }
+                    Ok::<_, PylockTomlErrorKind>(target)
+                })
+                .transpose()?
+        } else {
+            None
+        };
+
         // Convert the extras and dependency groups specifications to a concrete environment.
         let mut graph =
             petgraph::graph::DiGraph::with_capacity(self.packages.len(), self.packages.len());
@@ -1385,8 +1556,9 @@ impl<'lock> PylockToml {
                 .unwrap_or_default();
 
             // Search for a matching wheel.
-            let dist = if let Some(best_wheel) =
-                package.find_best_wheel(tags).filter(|_| !no_binary)
+            let dist = if let Some(best_wheel) = package
+                .find_best_wheel(tags, variant_lock.as_ref())
+                .filter(|_| !no_binary)
             {
                 let hashes = HashDigests::from(best_wheel.hashes.clone());
                 let built_dist = Dist::Built(BuiltDist::Registry(RegistryBuiltDist {
@@ -1591,12 +1763,39 @@ impl PylockTomlPackage {
             table.insert("wheels", value(wheels));
         }
 
+        if let Some(metadata) = &self.variants_json {
+            let mut metadata_table = toml_edit::ser::to_document(metadata)?.into_table();
+            metadata_table.set_implicit(false);
+            table.insert("variants-json", Item::Table(metadata_table));
+        }
+
         Ok(table)
     }
 
     /// Return the index of the best wheel for the given tags.
-    fn find_best_wheel(&self, tags: &Tags) -> Option<&PylockTomlWheel> {
-        type WheelPriority = (TagPriority, Option<BuildTag>);
+    fn find_best_wheel(
+        &self,
+        tags: &Tags,
+        target: Option<&VariantLock>,
+    ) -> Option<&PylockTomlWheel> {
+        type WheelPriority = (Option<VariantScore>, TagPriority, Option<BuildTag>);
+        let resolved = ResolvedVariants {
+            variants_json: self.variants_json.clone(),
+            resolved_namespaces: target
+                .into_iter()
+                .flat_map(|target| &target.provider)
+                .map(|provider| {
+                    (
+                        provider.namespace.clone(),
+                        Arc::new(VariantProviderOutput {
+                            namespace: provider.namespace.clone(),
+                            features: provider.properties.clone(),
+                        }),
+                    )
+                })
+                .collect(),
+            disabled_namespaces: HashSet::default(),
+        };
 
         let mut best: Option<(WheelPriority, &PylockTomlWheel)> = None;
         for wheel in self.wheels.iter().flatten() {
@@ -1607,7 +1806,15 @@ impl PylockTomlPackage {
                 continue;
             };
             let build_tag = filename.build_tag().cloned();
-            let wheel_priority = (tag_priority, build_tag);
+            let variant_priority = if let Some(label) = filename.variant() {
+                let Some(score) = resolved.score_variant(label) else {
+                    continue;
+                };
+                Some(score)
+            } else {
+                None
+            };
+            let wheel_priority = (variant_priority, tag_priority, build_tag);
             match &best {
                 None => {
                     best = Some((wheel_priority, wheel));
@@ -2096,4 +2303,76 @@ where
         .to_timestamp(DateTime::from_parts(date, time))
         .map_err(serde::de::Error::custom)?;
     Ok(Some(timestamp))
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+    use uv_variants::variants_json::VARIANT_SCHEMA;
+
+    use super::PylockToml;
+
+    #[test]
+    fn pep825_pylock_schema_validation() -> Result<(), Box<dyn std::error::Error>> {
+        let metadata = json!({
+            "$schema": VARIANT_SCHEMA,
+            "default-priorities": {"namespace": ["cpu"]},
+            "variants": {"fast": {"cpu": {"level": ["v3"]}}}
+        });
+        let lock = json!({"lock-version": "1.0", "created-by": "test", "packages": [{"name": "example", "version": "1.0", "variants-json": metadata}]});
+        let valid: PylockToml = serde_json::from_value(lock.clone())?;
+        let serialized = valid.to_toml()?;
+        let round_trip: PylockToml = toml::from_str(&serialized)?;
+        assert_eq!(
+            valid.packages[0].variants_json,
+            round_trip.packages[0].variants_json
+        );
+        for (pointer, value) in [
+            ("/packages/0/variants-json/$schema", json!("unsupported")),
+            (
+                "/packages/0/variants-json/default-priorities",
+                json!({"namespace": ["cpu"], "feature": {}}),
+            ),
+            (
+                "/packages/0/variants-json/variants/fast/cpu/level",
+                json!([]),
+            ),
+            (
+                "/packages/0/variants-json/variants/fast/cpu/level",
+                json!(["v3", "v3"]),
+            ),
+            (
+                "/packages/0/variants-json/variants/fast/cpu/level",
+                json!([" v3 "]),
+            ),
+            (
+                "/packages/0/variants-json",
+                json!({"$schema": VARIANT_SCHEMA, "providers": {}, "default-priorities": {"namespace": ["cpu"]}, "variants": {}}),
+            ),
+        ] {
+            let mut invalid = lock.clone();
+            if let Some(destination) = invalid.pointer_mut(pointer) {
+                *destination = value;
+            }
+            assert!(
+                serde_json::from_value::<PylockToml>(invalid).is_err(),
+                "{pointer}"
+            );
+        }
+        for marker in [
+            "variant_label == 'fast'",
+            "python_version > '3.10' and 'cpu' in variant_namespaces",
+        ] {
+            let mut invalid = lock.clone();
+            invalid["packages"][0]["marker"] = json!(marker);
+            assert!(serde_json::from_value::<PylockToml>(invalid).is_err());
+            let mut invalid = lock.clone();
+            invalid["environments"] = json!([marker]);
+            assert!(serde_json::from_value::<PylockToml>(invalid).is_err());
+        }
+        let mut ordinary = lock;
+        ordinary["packages"][0]["marker"] = json!("python_version > '3.10'");
+        assert!(serde_json::from_value::<PylockToml>(ordinary).is_ok());
+        Ok(())
+    }
 }

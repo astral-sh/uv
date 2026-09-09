@@ -460,10 +460,11 @@ pub(crate) async fn export(
 
             // Registries don't always provide hashes, but `packages.*.hashes` is a required
             // key in PEP 751, so we have to download and hash files with missing hashes.
-            if export.has_missing_hashes() {
+            if export.has_missing_hashes() || export.has_pending_variant_metadata() {
                 let client = RegistryClientBuilder::new(client_builder.clone(), cache.clone())
                     .index_locations(settings.index_locations.clone())
                     .build()?;
+                export.resolve_variant_metadata(&client).await?;
                 export
                     .generate_missing_hashes(&client, concurrency.downloads, target.install_path())
                     .await?;
