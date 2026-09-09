@@ -15,6 +15,7 @@ use uv_distribution_types::{
 use uv_normalize::PackageName;
 use uv_pep440::Version;
 use uv_platform_tags::{TagCompatibility, Tags};
+use uv_preview::PreviewFeature;
 use uv_pypi_types::HashDigest;
 use uv_types::HashStrategy;
 use uv_variants::VariantPriority;
@@ -74,6 +75,11 @@ impl FlatDistributions {
     ) -> Self {
         let mut distributions = Self::default();
         for entry in entries {
+            if entry.filename().is_variant()
+                && !uv_preview::is_enabled(PreviewFeature::WheelVariants)
+            {
+                continue;
+            }
             let (filename, file, index) = entry.into_parts();
             distributions.add_file(file, filename, tags, hasher, build_options, index);
         }

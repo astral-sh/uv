@@ -28,7 +28,7 @@ fn pep825_pylock_metadata() -> Result<()> {
         .temp_dir
         .child("requirements.in")
         .write_str("example")?;
-    uv_snapshot!(context.filters(), context.pip_compile()
+    uv_snapshot!(context.filters(), context.pip_compile().arg("--preview-features").arg("wheel-variants")
         .arg("requirements.in").arg("--no-index").arg("--find-links").arg(context.temp_dir.path())
         .arg("--universal").arg("--no-header").arg("-o").arg("pylock.toml"), @r###"
     exit_code: 0 (success)
@@ -59,7 +59,15 @@ fn pep825_pylock_metadata() -> Result<()> {
         .temp_dir
         .child("example-1.0.0-variants.json")
         .write_str("{}")?;
-    uv_snapshot!(context.filters(), context.pip_sync().arg("--preview-features").arg("pylock").arg("pylock.toml")
+    // The separate pylock preview does not enable variants or read the target property file.
+    uv_snapshot!(context.filters(), context.pip_sync()
+        .arg("--preview-features").arg("pylock").arg("pylock.toml")
+        .env("UV_VARIANT_LOCK", context.temp_dir.child("missing.toml").path()), @r###"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: This lockfile uses wheel variants; pass `--preview-features wheel-variants` to use it
+    "###);
+    uv_snapshot!(context.filters(), context.pip_sync().arg("--preview-features").arg("pylock,wheel-variants").arg("pylock.toml")
         .env("UV_VARIANT_LOCK", context.temp_dir.child("target.toml").path()), @r###"
     exit_code: 0 (success)
     ----- stderr -----

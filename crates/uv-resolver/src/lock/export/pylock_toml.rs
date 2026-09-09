@@ -40,6 +40,7 @@ use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::Version;
 use uv_pep508::{MarkerEnvironment, MarkerTree, MarkerVariantsUniversal, VerbatimUrl};
 use uv_platform_tags::{TagCompatibility, TagPriority, Tags};
+use uv_preview::PreviewFeature;
 use uv_pypi_types::{
     HashAlgorithm, HashDigest, HashDigests, Hashes, ParsedGitDirectoryUrl, VcsKind,
 };
@@ -124,6 +125,10 @@ pub enum PylockTomlErrorKind {
         "Package `{0}` must include one of: `wheels`, `directory`, `archive`, `sdist`, or `vcs`"
     )]
     MissingSource(PackageName),
+    #[error(
+        "This lockfile uses wheel variants; pass `--preview-features wheel-variants` to use it"
+    )]
+    WheelVariantsPreview,
     #[error("Failed to read variant metadata for pylock.toml")]
     VariantMetadata(#[source] uv_client::Error),
     #[error("Invalid target variant properties")]
@@ -1439,6 +1444,17 @@ impl<'lock> PylockToml {
         tags: &Tags,
         build_options: &BuildOptions,
     ) -> Result<Resolution, PylockTomlError> {
+        if self.packages.iter().any(|package| {
+            package.variants_json.is_some()
+                || package.wheels.iter().flatten().any(|wheel| {
+                    wheel
+                        .filename(&package.name)
+                        .is_ok_and(|filename| filename.variant().is_some())
+                })
+        }) && !uv_preview::is_enabled(PreviewFeature::WheelVariants)
+        {
+            return Err(PylockTomlErrorKind::WheelVariantsPreview.into());
+        }
         let variant_lock = if self
             .packages
             .iter()

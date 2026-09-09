@@ -21,6 +21,7 @@ use uv_distribution_types::{
 use uv_fs::Simplified;
 use uv_normalize::PackageName;
 use uv_platform_tags::{AbiTag, IncompatibleTag, LanguageTag, PlatformTag, TagCompatibility, Tags};
+use uv_preview::PreviewFeature;
 use uv_pypi_types::VerbatimParsedUrl;
 use uv_python::PythonEnvironment;
 use uv_redacted::DisplaySafeUrl;
@@ -308,6 +309,13 @@ impl<'a> Planner<'a> {
         //    So, e.g., if a package is marked as `--reinstall`, we _expect_ that it's not passed in
         //    as [`ResolvedDist::Installed`] here.
         for dist in self.resolution.distributions() {
+            if dist
+                .wheel_filename()
+                .is_some_and(|filename| filename.variant().is_some())
+                && !uv_preview::is_enabled(PreviewFeature::WheelVariants)
+            {
+                bail!("Wheel variants require `--preview-features wheel-variants`");
+            }
             // Check if the package should be reinstalled.
             let reinstall = reinstall.contains_package(dist.name())
                 || dist

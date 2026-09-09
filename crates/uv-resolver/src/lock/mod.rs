@@ -3793,6 +3793,16 @@ impl TryFrom<LockWire> for Lock {
     type Error = LockError;
 
     fn try_from(wire: LockWire) -> Result<Self, LockError> {
+        if wire.packages.iter().any(|package| {
+            package.variants_json.is_some()
+                || package
+                    .wheels
+                    .iter()
+                    .any(|wheel| wheel.filename.variant().is_some())
+        }) && !uv_preview::is_enabled(PreviewFeature::WheelVariants)
+        {
+            return Err(LockErrorKind::WheelVariantsPreview.into());
+        }
         // Count the number of sources for each package name. When
         // there's only one source for a particular package name (the
         // overwhelmingly common case), we can omit some data (like source and
@@ -7594,6 +7604,10 @@ impl std::fmt::Display for WheelTagHint {
 /// is with the caller somewhere in such cases.
 #[derive(Debug, thiserror::Error)]
 enum LockErrorKind {
+    #[error(
+        "This lockfile uses wheel variants; pass `--preview-features wheel-variants` to use it"
+    )]
+    WheelVariantsPreview,
     /// An error that occurs when the overrides for validating a
     /// metadata-free lockfile cannot be scoped to their packages.
     #[error(transparent)]
