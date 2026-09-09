@@ -9,13 +9,11 @@ Released on 2026-09-09.
 
 ### Bug fixes
 
-- Fix `exclude-newer` handling when dists for the same package straddle the cutoff ([#21539](https://github.com/astral-sh/uv/pull/21539))
+- Exclude post-cutoff wheels and source distributions from lockfiles and generated requirement hashes when artifacts for the same package version straddle an `exclude-newer` cutoff, including with `--no-build`, `--only-binary`, or `--no-binary` ([#21539](https://github.com/astral-sh/uv/pull/21539))
 
 ### Other changes
 
-- Notarize macOS release binaries during dry-runs ([#21494](https://github.com/astral-sh/uv/pull/21494))
-- Publish signed macOS and Windows release artifacts ([#21447](https://github.com/astral-sh/uv/pull/21447))
-- Use Node.js 24 for release smoke-test QEMU setup ([#21548](https://github.com/astral-sh/uv/pull/21548))
+- Publish signed and notarized macOS binaries and signed Windows binaries in release archives and wheels ([#21494](https://github.com/astral-sh/uv/pull/21494), [#21447](https://github.com/astral-sh/uv/pull/21447))
 
 ## 0.12.11
 
