@@ -3,6 +3,20 @@
 <!-- prettier-ignore-start -->
 
 
+## 0.12.12
+
+Released on 2026-09-09.
+
+### Bug fixes
+
+- Fix `exclude-newer` handling when dists for the same package straddle the cutoff ([#21539](https://github.com/astral-sh/uv/pull/21539))
+
+### Other changes
+
+- Notarize macOS release binaries during dry-runs ([#21494](https://github.com/astral-sh/uv/pull/21494))
+- Publish signed macOS and Windows release artifacts ([#21447](https://github.com/astral-sh/uv/pull/21447))
+- Use Node.js 24 for release smoke-test QEMU setup ([#21548](https://github.com/astral-sh/uv/pull/21548))
+
 ## 0.12.11
 
 Released on 2026-09-08.
