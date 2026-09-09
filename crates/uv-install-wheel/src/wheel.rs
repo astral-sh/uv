@@ -188,33 +188,32 @@ pub fn reserved_script_name(name: &str) -> Option<&str> {
 }
 
 /// An installation destination that has been checked against a wheel subtree.
-pub(crate) struct ValidatedWheelDestination {
-    path: PathBuf,
-}
+pub(crate) struct ValidatedWheelDestination(PathBuf);
 
 impl ValidatedWheelDestination {
     /// Validate a wheel subtree that maps directly onto a trusted installation root.
     fn at_root(source: &Path, root: &Path) -> Result<Self, Error> {
-        Self::new(source, root, Path::new(""))
+        Self::new(source, root, None)
     }
 
     /// Validate a wheel subtree that maps below a trusted installation root.
     fn under_root(source: &Path, root: &Path, relative: &Path) -> Result<Self, Error> {
-        Self::new(source, root, relative)
+        Self::new(source, root, Some(relative))
     }
 
     /// Check that merging a wheel subtree into its destination cannot follow a directory symlink.
-    fn new(source: &Path, root: &Path, relative: &Path) -> Result<Self, Error> {
-        let (destination, min_depth) = if relative.as_os_str().is_empty() {
-            (root.to_path_buf(), 1)
-        } else {
-            let Some(destination) = normalize_path_under(root.join(relative), root) else {
-                return Err(Error::InvalidWheel(format!(
-                    "Wheel destination escapes its installation root: {}",
-                    relative.simplified_display()
-                )));
-            };
-            (destination, 0)
+    fn new(source: &Path, root: &Path, relative: Option<&Path>) -> Result<Self, Error> {
+        let (destination, min_depth) = match relative {
+            None => (root.to_path_buf(), 1),
+            Some(relative) => {
+                let Some(destination) = normalize_path_under(root.join(relative), root) else {
+                    return Err(Error::InvalidWheel(format!(
+                        "Wheel destination escapes its installation root: {}",
+                        relative.simplified_display()
+                    )));
+                };
+                (destination, 0)
+            }
         };
 
         if source.is_dir() {
@@ -254,11 +253,11 @@ impl ValidatedWheelDestination {
             }
         }
 
-        Ok(Self { path: destination })
+        Ok(Self(destination))
     }
 
     pub(crate) fn as_path(&self) -> &Path {
-        &self.path
+        &self.0
     }
 }
 
