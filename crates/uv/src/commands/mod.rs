@@ -152,10 +152,7 @@ impl UvError {
     }
 
     /// Classify an operation error with command-specific resolution context.
-    pub(crate) fn from_operation_with_context(
-        error: pip::operations::Error,
-        context: &'static str,
-    ) -> Self {
+    fn from_operation_with_context(error: pip::operations::Error, context: &'static str) -> Self {
         Self::from_operation(error, Some(context))
     }
 
@@ -192,7 +189,7 @@ impl UvError {
     }
 
     /// Add command-specific context to a user error without changing unexpected errors.
-    pub(crate) fn map_user(self, context: impl FnOnce(anyhow::Error) -> anyhow::Error) -> Self {
+    fn map_user(self, context: impl FnOnce(anyhow::Error) -> anyhow::Error) -> Self {
         match self {
             Self::User(error) => Self::User(context(error)),
             Self::Argument(error) => Self::Argument(error),

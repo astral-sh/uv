@@ -745,13 +745,8 @@ impl NoSolutionError {
             .unique()
     }
 
-    /// Generate the report and hints for this resolution failure.
-    ///
-    /// Returns the formatted report string and structured [`PubGrubHint`] values.
-    /// The result is cached so repeated calls (e.g., from both `Display` and
-    /// explicit hint collection) don't recompute the derivation tree.
     /// Return the formatted report string.
-    pub fn report(&self) -> &str {
+    fn report(&self) -> &str {
         &self.cached().0
     }
 
