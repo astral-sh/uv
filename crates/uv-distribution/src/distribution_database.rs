@@ -10,6 +10,7 @@ use futures::{FutureExt, TryStreamExt};
 use http_content_range::{ContentRange, ContentRangeBytes, ContentRangeUnbound};
 use rayon::in_place_scope;
 use rayon::prelude::*;
+use reqwest::header::{ETAG, HeaderValue, IF_RANGE};
 use rustc_hash::FxHashMap;
 use tokio::io::{AsyncRead, AsyncSeekExt, AsyncWriteExt, ReadBuf};
 use tokio::sync::Semaphore;
@@ -915,6 +916,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             async {
                 let progress_size = size.or_else(|| content_length(&response));
                 let mut download_size = content_length(&response).or(expected_size);
+                let etag = strong_etag(&response).cloned();
 
                 let progress = self.reporter.as_ref().map(|reporter| {
                     (
@@ -1020,6 +1022,9 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                     if replaces_partial_download || !supports_range_requests {
                         return Err(err);
                     }
+                    let Some(etag) = etag.as_ref() else {
+                        return Err(err);
+                    };
 
                     writer.flush().await.map_err(Error::CacheWrite)?;
                     let offset = writer
@@ -1036,9 +1041,17 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
 
                     debug!("Resuming download of {download_url} at byte {offset}");
                     let resumed_response = self
-                        .request_with_offset(download_url.clone(), offset)
+                        .request_with_offset(download_url.clone(), offset, etag)
                         .await?;
                     resumed_response.error_for_status_ref()?;
+
+                    if strong_etag(&resumed_response) != Some(etag) {
+                        // The callback is cached with the original response's headers. A changed
+                        // representation needs a fresh request through the cached client so its
+                        // bytes and cache metadata come from the same response.
+                        debug!("Download changed while resuming {download_url}; retrying in full");
+                        return Err(err);
+                    }
 
                     resumed_range = if resumed_response.status()
                         == reqwest::StatusCode::PARTIAL_CONTENT
@@ -1401,13 +1414,14 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             .build()
     }
 
-    /// Send a GET request with a `Range: bytes=<offset>-` header.
+    /// Send a GET request with a `Range: bytes=<offset>-` header and an `If-Range` validator.
     ///
     /// Used to resume an interrupted download from `offset` bytes into the file.
     async fn request_with_offset(
         &self,
         url: DisplaySafeUrl,
         offset: u64,
+        etag: &HeaderValue,
     ) -> Result<reqwest::Response, reqwest_middleware::Error> {
         self.client
             .unmanaged
@@ -1418,6 +1432,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 reqwest::header::HeaderValue::from_static("identity"),
             )
             .header(reqwest::header::RANGE, format!("bytes={offset}-"))
+            .header(IF_RANGE, etag.clone())
             .send()
             .await
     }
@@ -1547,6 +1562,19 @@ fn content_length(response: &reqwest::Response) -> Option<u64> {
         .get(reqwest::header::CONTENT_LENGTH)
         .and_then(|val| val.to_str().ok())
         .and_then(|val| val.parse::<u64>().ok())
+}
+
+/// Return a syntactically valid strong `ETag` that can validate a byte range.
+fn strong_etag(response: &reqwest::Response) -> Option<&HeaderValue> {
+    let etag = response.headers().get(ETAG)?;
+    let value = etag.as_bytes().strip_prefix(b"\"")?.strip_suffix(b"\"")?;
+    if !value
+        .iter()
+        .all(|byte| *byte == b'!' || (b'#'..=b'~').contains(byte) || *byte >= 0x80)
+    {
+        return None;
+    }
+    Some(etag)
 }
 
 /// Return the bounds of a range response starting at `offset` with a known complete length.
