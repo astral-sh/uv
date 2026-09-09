@@ -2588,7 +2588,7 @@ fn python_install_emulated_macos() {
     }
 
     // Before installation, `uv python list` should not show the x86_64 download
-    uv_snapshot!(context.filters(), context.python_list().arg("3.13"), @r"
+    uv_snapshot!(context.filters(), context.python_list().arg("cpython@3.13"), @r"
     exit_code: 0 (success)
     ----- stdout -----
     cpython-3.13.[LATEST]-macos-aarch64-none    <download available>
@@ -2610,7 +2610,7 @@ fn python_install_emulated_macos() {
     ");
 
     // And included in `uv python list`
-    uv_snapshot!(context.filters(), context.python_list().arg("3.13"), @r"
+    uv_snapshot!(context.filters(), context.python_list().arg("cpython@3.13"), @r"
     exit_code: 0 (success)
     ----- stdout -----
     cpython-3.13.[LATEST]-macos-aarch64-none    <download available>
