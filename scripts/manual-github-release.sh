@@ -30,6 +30,7 @@ REPO=$(gh repo view --json nameWithOwner | jq .nameWithOwner -r)
 RUN_ATTEMPT=$(gh run view "$RUN_ID" --repo "$REPO" --json attempt --jq .attempt)
 SIGNED_ARCHIVES="signed-github-archives-$RUN_ID-$RUN_ATTEMPT"
 gh run download "$RUN_ID" --repo "$REPO" --pattern 'release-github-*'
+gh run download "$RUN_ID" --repo "$REPO" --pattern 'build-github-archives-*-linux-*'
 gh run download "$RUN_ID" --repo "$REPO" --name "$SIGNED_ARCHIVES" --dir "$SIGNED_ARCHIVES"
 
 MANIFEST="release-github-manifest/dist-manifest.json"
@@ -45,7 +46,7 @@ echo "$BODY" > /tmp/notes.txt
 
 # Merge the publication artifacts and signed archives (like CI does).
 mkdir -p artifacts
-cp -r release-github-*/* "$SIGNED_ARCHIVES"/* artifacts/
+cp -r release-github-*/* build-github-archives-*/* "$SIGNED_ARCHIVES"/* artifacts/
 
 # Remove the granular manifests (like CI does)
 rm -f artifacts/*-dist-manifest.json

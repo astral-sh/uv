@@ -51,7 +51,7 @@ echo ""
 
 for artifact in $ALL_ARTIFACTS; do
     case "$artifact" in
-        unsigned-github-archives-* | release-github-archives-*) ;;
+        build-github-archives-*) ;;
         *) continue ;;
     esac
 
