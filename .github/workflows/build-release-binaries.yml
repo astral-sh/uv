@@ -1,7 +1,6 @@
 # Build uv on all platforms.
 #
-# Generates both wheels (for PyPI) and archived binaries (for GitHub releases).
-# Original distributions use build-wheels-*, build-sdist-*, and build-github-archives-* names.
+# Creates `build-wheels-*`, `build-sdist-*`, and `build-github-archives-*` artifacts.
 #
 # Called from:
 # - .github/workflows/ci.yml (when release-relevant files change)
