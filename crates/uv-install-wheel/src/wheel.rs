@@ -14,7 +14,10 @@ use sha2::{Digest, Sha256};
 use tracing::{debug, instrument, trace, warn};
 use walkdir::WalkDir;
 
-use uv_fs::{PortablePath, Simplified, normalize_path_under, persist_with_retry_sync, relative_to};
+use uv_fs::{
+    PortablePath, Simplified, copy_atomic_sync, normalize_path_under, persist_with_retry_sync,
+    relative_to,
+};
 use uv_normalize::PackageName;
 use uv_pypi_types::DirectUrl;
 use uv_shell::escape_posix_for_single_quotes;
@@ -227,17 +230,11 @@ impl ValidatedWheelDestination {
                 }
 
                 let relative = relative_to(entry.path(), source)?;
-                let target = if relative.as_os_str().is_empty() {
-                    destination.clone()
-                } else {
-                    let Some(target) = normalize_path_under(destination.join(&relative), root)
-                    else {
-                        return Err(Error::InvalidWheel(format!(
-                            "Wheel directory entry escapes its destination: {}",
-                            relative.simplified_display()
-                        )));
-                    };
-                    target
+                let Some(target) = normalize_path_under(destination.join(&relative), root) else {
+                    return Err(Error::InvalidWheel(format!(
+                        "Wheel directory entry escapes its destination: {}",
+                        relative.simplified_display()
+                    )));
                 };
                 match fs::symlink_metadata(&target) {
                     Ok(metadata) if metadata.file_type().is_symlink() => {
@@ -785,7 +782,7 @@ fn install_script(
                     permissions.mode()
                 );
 
-                uv_fs::copy_atomic_sync(&path, &script_absolute)?;
+                copy_atomic_sync(&path, &script_absolute)?;
 
                 fs::set_permissions(
                     script_absolute,
@@ -1332,6 +1329,7 @@ impl RenameOrCopy {
     ///
     /// Usually, source and target are on the same device, so we can rename, but if that fails, we
     /// have to copy. If renaming failed once, we switch to copy permanently.
+    /// Copies replace the destination atomically so destination symlinks are not followed.
     fn rename_or_copy(&mut self, from: impl AsRef<Path>, to: impl AsRef<Path>) -> io::Result<()> {
         let from = from.as_ref();
         let to = to.as_ref();
@@ -1342,24 +1340,14 @@ impl RenameOrCopy {
                 Err(err) => {
                     *self = Self::Copy;
                     debug!("Failed to rename, falling back to copy: {err}");
-                    Self::copy(from, to)?;
+                    copy_atomic_sync(from, to)?;
                 }
             },
             Self::Copy => {
-                Self::copy(from, to)?;
+                copy_atomic_sync(from, to)?;
             }
         }
         Ok(())
-    }
-
-    /// Copy through a temporary file so an existing destination symlink is replaced, not followed.
-    fn copy(from: &Path, to: &Path) -> io::Result<()> {
-        let parent = to.parent().ok_or_else(|| {
-            io::Error::new(io::ErrorKind::InvalidInput, "Destination has no parent")
-        })?;
-        let tempfile = uv_fs::tempfile_in(parent)?;
-        fs_err::copy(from, tempfile.path())?;
-        persist_with_retry_sync(tempfile, to)
     }
 }
 
