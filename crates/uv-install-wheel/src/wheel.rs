@@ -187,9 +187,69 @@ pub fn reserved_script_name(name: &str) -> Option<&str> {
     .then_some(normalized_name)
 }
 
-/// An unpacked wheel whose data directories cannot overwrite a reserved script.
+/// An installation destination that has been checked against a wheel subtree.
+pub(crate) struct ValidatedWheelDestination {
+    path: PathBuf,
+}
+
+impl ValidatedWheelDestination {
+    /// Check that merging a wheel subtree into its destination cannot follow a directory symlink.
+    fn new(source: &Path, destination: &Path) -> Result<Self, Error> {
+        if source.is_dir() {
+            // Merging through a pre-existing directory symlink would write wheel files outside the
+            // environment. Check every directory before linking or moving any files.
+            for entry in WalkDir::new(source).min_depth(1) {
+                let entry = entry?;
+                if !entry.file_type().is_dir() {
+                    continue;
+                }
+
+                let relative = relative_to(entry.path(), source)?;
+                let Some(target) = normalize_path_under(destination.join(&relative), destination)
+                else {
+                    return Err(Error::InvalidWheel(format!(
+                        "Wheel directory entry escapes its destination: {}",
+                        relative.simplified_display()
+                    )));
+                };
+                match fs::symlink_metadata(&target) {
+                    Ok(metadata) if metadata.file_type().is_symlink() => {
+                        return Err(Error::InvalidWheel(format!(
+                            "Cannot install into symlinked directory: {}",
+                            target.simplified_display()
+                        )));
+                    }
+                    Ok(_) => {}
+                    Err(err) if err.kind() == io::ErrorKind::NotFound => {}
+                    Err(err) => return Err(err.into()),
+                }
+            }
+        }
+
+        Ok(Self {
+            path: destination.to_path_buf(),
+        })
+    }
+
+    pub(crate) fn as_path(&self) -> &Path {
+        &self.path
+    }
+}
+
+struct ValidatedWheelDataDestinations {
+    data: ValidatedWheelDestination,
+    scripts: ValidatedWheelDestination,
+    headers: ValidatedWheelDestination,
+    purelib: ValidatedWheelDestination,
+    platlib: ValidatedWheelDestination,
+}
+
+/// An unpacked wheel whose installation destinations have been validated before any writes.
 pub(crate) struct ValidatedWheel<'wheel> {
     path: &'wheel Path,
+    destination: ValidatedWheelDestination,
+    installed_data_dir: PathBuf,
+    data_destinations: ValidatedWheelDataDestinations,
 }
 
 impl<'wheel> ValidatedWheel<'wheel> {
@@ -197,6 +257,8 @@ impl<'wheel> ValidatedWheel<'wheel> {
         layout: &Layout,
         wheel: &'wheel Path,
         dist_info_prefix: &str,
+        dist_name: &PackageName,
+        destination: &Path,
     ) -> Result<Self, Error> {
         let data_dir = wheel.join(format!("{dist_info_prefix}.data"));
         for (source, destination) in [
@@ -221,11 +283,48 @@ impl<'wheel> ValidatedWheel<'wheel> {
             }
         }
 
-        Ok(Self { path: wheel })
+        let destination = ValidatedWheelDestination::new(wheel, destination)?;
+        let installed_data_dir = destination
+            .as_path()
+            .join(format!("{dist_info_prefix}.data"));
+        let data_destinations = ValidatedWheelDataDestinations {
+            data: ValidatedWheelDestination::new(&data_dir.join("data"), &layout.scheme.data)?,
+            scripts: ValidatedWheelDestination::new(
+                &data_dir.join("scripts"),
+                &layout.scheme.scripts,
+            )?,
+            headers: ValidatedWheelDestination::new(
+                &data_dir.join("headers"),
+                &layout.scheme.include.join(dist_name.as_str()),
+            )?,
+            purelib: ValidatedWheelDestination::new(
+                &data_dir.join("purelib"),
+                &layout.scheme.purelib,
+            )?,
+            platlib: ValidatedWheelDestination::new(
+                &data_dir.join("platlib"),
+                &layout.scheme.platlib,
+            )?,
+        };
+
+        Ok(Self {
+            path: wheel,
+            destination,
+            installed_data_dir,
+            data_destinations,
+        })
     }
 
     pub(crate) fn as_path(&self) -> &Path {
         self.path
+    }
+
+    pub(crate) fn destination(&self) -> &ValidatedWheelDestination {
+        &self.destination
+    }
+
+    pub(crate) fn installed_data_dir(&self) -> &Path {
+        &self.installed_data_dir
     }
 }
 
@@ -466,11 +565,12 @@ pub(crate) enum LibKind {
 /// Moves the files and folders in src to dest, updating the RECORD in the process
 fn move_folder_recorded(
     src_dir: &Path,
-    dest_dir: &Path,
-    scripts: &Path,
+    destination: &ValidatedWheelDestination,
+    scripts: &ValidatedWheelDestination,
     site_packages: &Path,
     record: &mut [RecordEntry],
 ) -> Result<(), Error> {
+    let dest_dir = destination.as_path();
     let mut rename_or_copy = RenameOrCopy::default();
     fs::create_dir_all(dest_dir)?;
     for entry in WalkDir::new(src_dir) {
@@ -490,7 +590,7 @@ fn move_folder_recorded(
         if entry.file_type().is_dir() {
             fs::create_dir_all(&target)?;
         } else {
-            validate_data_script_destination(&target, scripts)?;
+            validate_data_script_destination(&target, scripts.as_path())?;
             rename_or_copy.rename_or_copy(src, &target)?;
             let entry = record
                 .iter_mut()
@@ -513,6 +613,7 @@ fn move_folder_recorded(
 fn install_script(
     layout: &Layout,
     relocatable: bool,
+    destination: &ValidatedWheelDestination,
     site_packages: &Path,
     record: &mut [RecordEntry],
     file: &DirEntry,
@@ -543,8 +644,9 @@ fn install_script(
         }
     }
 
-    let script_absolute = layout.scheme.scripts.join(file.file_name());
-    validate_data_script_destination(&script_absolute, &layout.scheme.scripts)?;
+    let scripts = destination.as_path();
+    let script_absolute = scripts.join(file.file_name());
+    validate_data_script_destination(&script_absolute, scripts)?;
     let script_relative =
         pathdiff::diff_paths(&script_absolute, site_packages).ok_or_else(|| {
             Error::Io(io::Error::other(format!(
@@ -609,7 +711,7 @@ fn install_script(
             start.push(b'\n');
         }
 
-        let mut target = uv_fs::tempfile_in(&layout.scheme.scripts)?;
+        let mut target = uv_fs::tempfile_in(scripts)?;
         let size_and_encoded_hash = copy_and_hash(&mut start.chain(script), &mut target)?;
 
         persist_with_retry_sync(target, &script_absolute)?;
@@ -717,13 +819,15 @@ fn install_script(
 pub(crate) fn install_data(
     layout: &Layout,
     relocatable: bool,
-    site_packages: &Path,
-    data_dir: &Path,
+    wheel: &ValidatedWheel<'_>,
     dist_name: &PackageName,
     console_scripts: &[Script],
     gui_scripts: &[Script],
     record: &mut [RecordEntry],
 ) -> Result<(), Error> {
+    let site_packages = wheel.destination.as_path();
+    let data_dir = wheel.installed_data_dir();
+    let destinations = &wheel.data_destinations;
     for entry in fs::read_dir(data_dir)? {
         let entry = entry?;
         let path = entry.path();
@@ -733,13 +837,13 @@ pub(crate) fn install_data(
                 trace!(
                     ?dist_name,
                     "Installing data/data to {}",
-                    layout.scheme.data.user_display()
+                    destinations.data.as_path().user_display()
                 );
                 // Move the content of the folder to the root of the venv
                 move_folder_recorded(
                     &path,
-                    &layout.scheme.data,
-                    &layout.scheme.scripts,
+                    &destinations.data,
+                    &destinations.scripts,
                     site_packages,
                     record,
                 )?;
@@ -748,7 +852,7 @@ pub(crate) fn install_data(
                 trace!(
                     ?dist_name,
                     "Installing data/scripts to {}",
-                    layout.scheme.scripts.user_display()
+                    destinations.scripts.as_path().user_display()
                 );
                 let mut rename_or_copy = RenameOrCopy::default();
                 let mut initialized = false;
@@ -773,13 +877,14 @@ pub(crate) fn install_data(
 
                     // Create the scripts directory, if it doesn't exist.
                     if !initialized {
-                        fs::create_dir_all(&layout.scheme.scripts)?;
+                        fs::create_dir_all(destinations.scripts.as_path())?;
                         initialized = true;
                     }
 
                     install_script(
                         layout,
                         relocatable,
+                        &destinations.scripts,
                         site_packages,
                         record,
                         &file,
@@ -788,16 +893,15 @@ pub(crate) fn install_data(
                 }
             }
             Some("headers") => {
-                let target_path = layout.scheme.include.join(dist_name.as_str());
                 trace!(
                     ?dist_name,
                     "Installing data/headers to {}",
-                    target_path.user_display()
+                    destinations.headers.as_path().user_display()
                 );
                 move_folder_recorded(
                     &path,
-                    &target_path,
-                    &layout.scheme.scripts,
+                    &destinations.headers,
+                    &destinations.scripts,
                     site_packages,
                     record,
                 )?;
@@ -806,12 +910,12 @@ pub(crate) fn install_data(
                 trace!(
                     ?dist_name,
                     "Installing data/purelib to {}",
-                    layout.scheme.purelib.user_display()
+                    destinations.purelib.as_path().user_display()
                 );
                 move_folder_recorded(
                     &path,
-                    &layout.scheme.purelib,
-                    &layout.scheme.scripts,
+                    &destinations.purelib,
+                    &destinations.scripts,
                     site_packages,
                     record,
                 )?;
@@ -820,12 +924,12 @@ pub(crate) fn install_data(
                 trace!(
                     ?dist_name,
                     "Installing data/platlib to {}",
-                    layout.scheme.platlib.user_display()
+                    destinations.platlib.as_path().user_display()
                 );
                 move_folder_recorded(
                     &path,
-                    &layout.scheme.platlib,
-                    &layout.scheme.scripts,
+                    &destinations.platlib,
+                    &destinations.scripts,
                     site_packages,
                     record,
                 )?;
@@ -1203,20 +1307,33 @@ impl RenameOrCopy {
     /// Usually, source and target are on the same device, so we can rename, but if that fails, we
     /// have to copy. If renaming failed once, we switch to copy permanently.
     fn rename_or_copy(&mut self, from: impl AsRef<Path>, to: impl AsRef<Path>) -> io::Result<()> {
+        let from = from.as_ref();
+        let to = to.as_ref();
+
         match self {
-            Self::Rename => match fs_err::rename(from.as_ref(), to.as_ref()) {
+            Self::Rename => match fs_err::rename(from, to) {
                 Ok(()) => {}
                 Err(err) => {
                     *self = Self::Copy;
                     debug!("Failed to rename, falling back to copy: {err}");
-                    fs_err::copy(from.as_ref(), to.as_ref())?;
+                    Self::copy(from, to)?;
                 }
             },
             Self::Copy => {
-                fs_err::copy(from.as_ref(), to.as_ref())?;
+                Self::copy(from, to)?;
             }
         }
         Ok(())
+    }
+
+    /// Copy through a temporary file so an existing destination symlink is replaced, not followed.
+    fn copy(from: &Path, to: &Path) -> io::Result<()> {
+        let parent = to.parent().ok_or_else(|| {
+            io::Error::new(io::ErrorKind::InvalidInput, "Destination has no parent")
+        })?;
+        let tempfile = uv_fs::tempfile_in(parent)?;
+        fs_err::copy(from, tempfile.path())?;
+        persist_with_retry_sync(tempfile, to)
     }
 }
 
@@ -1230,10 +1347,39 @@ mod test {
     use assert_fs::prelude::*;
     use indoc::{formatdoc, indoc};
 
+    #[cfg(unix)]
+    use super::RenameOrCopy;
     use super::{
         Error, RecordEntry, Script, WheelFile, format_shebang, get_script_executable,
         parse_email_message_file, parse_scripts, read_record, write_installer_metadata,
     };
+
+    #[cfg(unix)]
+    #[test]
+    fn rename_or_copy_does_not_follow_destination_symlink() -> Result<()> {
+        let temp_dir = assert_fs::TempDir::new()?;
+        let source = temp_dir.child("source");
+        let destination = temp_dir.child("destination");
+        let external = temp_dir.child("external");
+        source.write_str("wheel payload")?;
+        external.write_str("external contents")?;
+        fs_err::os::unix::fs::symlink(external.path(), destination.path())?;
+
+        RenameOrCopy::Copy.rename_or_copy(source.path(), destination.path())?;
+
+        assert_eq!(
+            fs_err::read_to_string(external.path())?,
+            "external contents"
+        );
+        assert_eq!(fs_err::read_to_string(destination.path())?, "wheel payload");
+        assert!(
+            !fs_err::symlink_metadata(destination.path())?
+                .file_type()
+                .is_symlink()
+        );
+
+        Ok(())
+    }
 
     #[test]
     fn test_parse_email_message_file() {
