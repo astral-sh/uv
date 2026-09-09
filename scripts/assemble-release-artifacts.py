@@ -10,7 +10,7 @@
 
 Every configured target contributes one wheel per package and one GitHub archive.
 Use the signing job's replacements where signing is required; copy other builds
-and the source distributions unchanged. Record the exact publication inventory.
+and the source distributions unchanged.
 """
 
 import argparse
@@ -31,13 +31,12 @@ def one_file(directory: Path, pattern: str) -> Path:
     return files[0]
 
 
-def copy_distribution(source: Path, directory: Path) -> str:
+def copy_distribution(source: Path, directory: Path) -> None:
     """Copy a distribution without replacing another target's output."""
     destination = directory / source.name
     if destination.exists():
         raise ValueError(f"Duplicate release distribution: {source.name}")
     shutil.copyfile(source, destination)
-    return source.name
 
 
 def check_inventory(directory: Path, expected: set[str]) -> None:
@@ -63,7 +62,7 @@ def check_checksum(archive: Path, checksum: Path) -> None:
 def assemble(
     built: Path, signed_wheels: Path, signed_archives: Path, output: Path
 ) -> None:
-    """Select every expected distribution and write its publication inventory."""
+    """Copy every expected distribution into its release artifact directory."""
     plan = json.loads(os.environ["RELEASE_PLAN"])
     targets = json.loads(os.environ["RELEASE_TARGETS"])
     signed_targets = {
@@ -89,25 +88,22 @@ def assemble(
         )
 
     output.mkdir()
-    inventory = {"wheels": {}, "sdists": {}, "github-archives": []}
     selected_signed_wheels = set()
     for package in PACKAGES:
         wheels = output / "wheels" / package
         wheels.mkdir(parents=True)
-        inventory["wheels"][package] = []
         for target in targets:
             source = one_file(built / "wheels" / target, f"{package}-*.whl")
             if system := signed_targets.get(target):
                 source = signed_wheels / system / target / source.name
                 selected_signed_wheels.add(source)
-            inventory["wheels"][package].append(copy_distribution(source, wheels))
-        inventory["wheels"][package].sort()
+            copy_distribution(source, wheels)
 
         sdists = output / "sdists" / package
         sdists.mkdir(parents=True)
         source = one_file(built / "sdists" / package, f"{package}-*.tar.gz")
         check_inventory(source.parent, {source.name})
-        inventory["sdists"][package] = [copy_distribution(source, sdists)]
+        copy_distribution(source, sdists)
 
     for target in targets:
         directory = built / "wheels" / target
@@ -130,13 +126,7 @@ def assemble(
         )
         check_checksum(source / archive, source / checksum)
         for name in (archive, checksum):
-            inventory["github-archives"].append(
-                copy_distribution(source / name, destination)
-            )
-    inventory["github-archives"].sort()
-    (output / "inventory.json").write_text(
-        json.dumps(inventory, indent=2) + "\n", encoding="utf-8"
-    )
+            copy_distribution(source / name, destination)
 
 
 def main() -> None:
