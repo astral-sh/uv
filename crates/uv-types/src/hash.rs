@@ -68,10 +68,6 @@ impl HashStrategy {
     /// Preserve hash collection and require hashes if either strategy requires them. Constraints
     /// for identities absent from this strategy remain available for newly resolved dependencies.
     pub fn with_constraint_hashes(mut self, constraints: &Self) -> Result<Self, HashStrategyError> {
-        let constraint_hashes = match &constraints.verification {
-            HashVerification::None => return Ok(self),
-            HashVerification::IfPresent(hashes) | HashVerification::Required(hashes) => hashes,
-        };
         let (requirement_hashes, mode) = match &self.verification {
             HashVerification::None => {
                 self.verification = constraints.verification.clone();
@@ -89,14 +85,33 @@ impl HashStrategy {
             HashVerification::Required(hashes) => (hashes, HashCheckingMode::Require),
         };
 
-        let mut hashes = constraint_hashes.as_ref().clone();
+        let mut constraints = constraints.clone();
+        let constraint_hashes = match &mut constraints.verification {
+            HashVerification::None => return Ok(self),
+            HashVerification::IfPresent(hashes) | HashVerification::Required(hashes) => {
+                Arc::make_mut(hashes)
+            }
+        };
+        if mode.is_require() {
+            constraint_hashes.retain(|_, digests| {
+                digests.retain(|digest| digest.algorithm() != HashAlgorithm::Md5);
+                !digests.is_empty()
+            });
+        }
+        let mut hashes = constraint_hashes.clone();
         for (id, digests) in requirement_hashes.iter() {
+            let mut digests = digests.clone();
+            if mode.is_require() {
+                digests.retain(|digest| digest.algorithm() != HashAlgorithm::Md5);
+            }
             let digests = if let Some(constraint) = constraints.hashes_for_id(id) {
-                combine_constraint_hashes(id, digests.clone(), constraint, id, mode)?
+                combine_constraint_hashes(id, digests, constraint, id, mode)?
             } else {
-                digests.clone()
+                digests
             };
-            hashes.insert(id.clone(), digests);
+            if !digests.is_empty() {
+                hashes.insert(id.clone(), digests);
+            }
         }
         self.verification = match mode {
             HashCheckingMode::Verify => HashVerification::IfPresent(Arc::new(hashes)),
@@ -268,7 +283,13 @@ impl HashStrategy {
         self.augment_with_requirements(requirements)
     }
 
-    /// Read the required hashes from a set of [`UnresolvedRequirement`] entries.
+    /// Collect hashes from [`UnresolvedRequirement`] entries and constraints.
+    ///
+    /// For duplicate registry pins and local files, the last nonempty constraint hash list wins.
+    /// Remote archive URLs combine hashes across algorithms and reject conflicting digests for
+    /// the same algorithm. Registry pins accept any allowed digest; direct URLs must match all
+    /// supplied digests. When requirements and constraints both supply hashes, only their shared
+    /// hashes are allowed, except for remote archive URLs, whose hashes are combined instead.
     ///
     /// When the environment is not given, this treats all marker expressions
     /// that reference the environment as true. In other words, it does
@@ -279,27 +300,6 @@ impl HashStrategy {
         constraints: impl Iterator<Item = (&'a Requirement, &'a [String])>,
         marker_env: Option<&ResolverMarkerEnvironment>,
         mode: HashCheckingMode,
-    ) -> Result<Self, HashStrategyError> {
-        Self::from_requirements_with_constraint_intersection(
-            requirements,
-            constraints,
-            marker_env,
-            mode,
-            false,
-        )
-    }
-
-    /// Collect hashes from requirements and constraints, optionally keeping only hashes shared by
-    /// duplicate build constraints.
-    ///
-    /// When enabled, repeated registry pins must share a hash; hashes for other source identities
-    /// are merged, rejecting incompatible digests.
-    fn from_requirements_with_constraint_intersection<'a>(
-        requirements: impl Iterator<Item = (&'a UnresolvedRequirement, &'a [String])>,
-        constraints: impl Iterator<Item = (&'a Requirement, &'a [String])>,
-        marker_env: Option<&ResolverMarkerEnvironment>,
-        mode: HashCheckingMode,
-        intersect_constraints: bool,
     ) -> Result<Self, HashStrategyError> {
         let mut constraint_hashes = FxHashMap::<VersionId, Vec<HashDigest>>::default();
 
@@ -337,31 +337,6 @@ impl HashStrategy {
             }
 
             if digests.is_empty() {
-                continue;
-            }
-
-            if intersect_constraints && let Some(existing) = constraint_hashes.get_mut(&id) {
-                match &id {
-                    VersionId::NameVersion { .. } => {
-                        existing.retain(|digest| digests.contains(digest));
-                        if existing.is_empty() {
-                            return Err(HashStrategyError::ConflictingConstraintHashes(
-                                requirement.to_string(),
-                            ));
-                        }
-                    }
-                    VersionId::ArchiveUrl { .. } => {
-                        merge_digests(existing, &digests, requirement)?;
-                    }
-                    VersionId::Git { .. }
-                    | VersionId::Path { .. }
-                    | VersionId::Directory { .. }
-                    | VersionId::Unknown { .. } => {
-                        merge_digests(existing, &digests, requirement).map_err(|_| {
-                            HashStrategyError::ConflictingConstraintHashes(requirement.to_string())
-                        })?;
-                    }
-                }
                 continue;
             }
 
@@ -455,21 +430,20 @@ impl HashStrategy {
         }
     }
 
-    /// Collect supplied hashes from build constraints using the same pinning rules as regular
-    /// constraints.
-    pub fn from_build_constraints(
+    /// Collect hashes from [`Constraints`] using the same handling as regular constraints in
+    /// [`Self::from_requirements`], preserving declaration order.
+    pub fn from_constraints(
         constraints: &Constraints,
         marker_env: Option<&ResolverMarkerEnvironment>,
         mode: HashCheckingMode,
     ) -> Result<Self, HashStrategyError> {
-        Self::from_requirements_with_constraint_intersection(
+        Self::from_requirements(
             std::iter::empty(),
             constraints
                 .specifications()
                 .map(|entry| (&entry.requirement, entry.hashes.as_slice())),
             marker_env,
             mode,
-            true,
         )
     }
 
@@ -713,8 +687,6 @@ pub enum HashStrategyError {
         "In `{1}` mode, all requirements must have a hash, but there were no overlapping hashes between the requirements and constraints for: {0}"
     )]
     NoIntersection(String, HashCheckingMode),
-    #[error("Build constraints for {0} have no hashes in common")]
-    ConflictingConstraintHashes(String),
 }
 
 #[cfg(test)]
@@ -893,10 +865,13 @@ mod tests {
         assert!(!strategy.allows_package(&name, &version));
 
         let digest = HashDigest::from_str("sha256:0123456789abcdef")?;
-        let constraints = HashStrategy::verify(Arc::new(FxHashMap::from_iter([(
-            VersionId::from_url(&url),
-            vec![digest.clone()],
-        )])));
+        let constraints = HashStrategy::verify(Arc::new(FxHashMap::from_iter([
+            (VersionId::from_url(&url), vec![digest.clone()]),
+            (
+                VersionId::from_registry(name.clone(), version.clone()),
+                vec![HashDigest::from_str("md5:0123456789abcdef")?],
+            ),
+        ])));
         for strategy in [
             strategy.clone().with_constraint_hashes(&constraints)?,
             constraints.with_constraint_hashes(&strategy)?,

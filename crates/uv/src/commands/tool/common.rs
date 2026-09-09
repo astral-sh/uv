@@ -464,7 +464,7 @@ impl ToolLock {
             .build_options(build_options.clone())
             .build();
         let hasher = HashStrategy::collect(HashCollection::Url);
-        let build_hasher = HashStrategy::from_build_constraints(
+        let build_hasher = HashStrategy::from_constraints(
             build_constraints,
             Some(&interpreter.to_resolver_marker_environment()),
             HashCheckingMode::Verify,
