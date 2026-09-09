@@ -1708,7 +1708,7 @@ impl PylockTomlWheel {
         };
 
         let file = Box::new(uv_distribution_types::File {
-            dist_info_metadata: false,
+            dist_info_metadata: None,
             filename: SmallString::from(filename.to_string()),
             hashes: HashDigests::from(self.hashes.clone()),
             requires_python: None,
@@ -1716,7 +1716,6 @@ impl PylockTomlWheel {
             upload_time_utc_ms: self.upload_time.map(Timestamp::as_millisecond),
             url: FileLocation::AbsoluteUrl(file_url),
             yanked: None,
-            zstd: None,
         });
 
         Ok(RegistryBuiltWheel {
@@ -1872,7 +1871,7 @@ impl PylockTomlSdist {
         };
 
         let file = Box::new(uv_distribution_types::File {
-            dist_info_metadata: false,
+            dist_info_metadata: None,
             filename,
             hashes: HashDigests::from(self.hashes.clone()),
             requires_python: None,
@@ -1880,7 +1879,6 @@ impl PylockTomlSdist {
             upload_time_utc_ms: self.upload_time.map(Timestamp::as_millisecond),
             url: FileLocation::AbsoluteUrl(file_url),
             yanked: None,
-            zstd: None,
         });
 
         Ok(RegistrySourceDist {

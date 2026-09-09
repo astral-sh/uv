@@ -23,7 +23,8 @@ pub enum FileConversionError {
 #[derive(Debug, Clone, PartialEq, Eq, Hash, rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)]
 #[rkyv(derive(Debug))]
 pub struct File {
-    pub dist_info_metadata: bool,
+    /// Hashes for separately available metadata, or an empty list when no hashes were provided.
+    pub dist_info_metadata: Option<HashDigests>,
     pub filename: SmallString,
     pub hashes: HashDigests,
     pub requires_python: Option<Arc<VersionSpecifiers>>,
@@ -35,10 +36,6 @@ pub struct File {
     pub upload_time_utc_ms: Option<i64>,
     pub url: FileLocation,
     pub yanked: Option<Box<Yanked>>,
-    /// Deprecated pyx-specific zstd wheel metadata, retained only for compatibility with the
-    /// flat-index cache layout.
-    // TODO: Remove this field when the flat-index cache format is next bumped.
-    pub zstd: Option<Box<Zstd>>,
 }
 
 impl File {
@@ -48,10 +45,7 @@ impl File {
         base: &SmallString,
     ) -> Result<Self, FileConversionError> {
         Ok(Self {
-            dist_info_metadata: file
-                .core_metadata
-                .as_ref()
-                .is_some_and(CoreMetadata::is_available),
+            dist_info_metadata: Self::dist_info_metadata(file.core_metadata),
             filename: file.filename,
             hashes: HashDigests::from(file.hashes),
             requires_python: file
@@ -62,8 +56,15 @@ impl File {
             upload_time_utc_ms: file.upload_time.map(Timestamp::as_millisecond),
             url: FileLocation::new(file.url, base),
             yanked: file.yanked,
-            zstd: None,
         })
+    }
+
+    fn dist_info_metadata(metadata: Option<CoreMetadata>) -> Option<HashDigests> {
+        match metadata? {
+            CoreMetadata::Bool(false) => None,
+            CoreMetadata::Bool(true) => Some(HashDigests::empty()),
+            CoreMetadata::Hashes(hashes) => Some(HashDigests::from(hashes)),
+        }
     }
 }
 
@@ -254,15 +255,6 @@ pub enum ToUrlError {
         #[source]
         err: DisplaySafeUrlError,
     },
-}
-
-/// Deprecated pyx-specific zstd wheel metadata, retained only for compatibility with existing
-/// cache layouts.
-// TODO: Remove this type once the Simple API and flat-index cache formats are both bumped.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)]
-pub struct Zstd {
-    pub hashes: HashDigests,
-    pub size: Option<u64>,
 }
 
 #[cfg(test)]

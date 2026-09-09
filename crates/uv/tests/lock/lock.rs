@@ -11732,6 +11732,122 @@ fn lock_mixed_hashes() -> Result<()> {
     Ok(())
 }
 
+/// Verify sidecar downloads using both fresh and cached index responses.
+#[cfg(feature = "test-universal")]
+#[tokio::test]
+async fn lock_core_metadata_hash() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let index_server = MockServer::start().await;
+    let artifact_server = MockServer::start().await;
+
+    let metadata = indoc! {"
+        Metadata-Version: 2.1
+        Name: basic-package
+        Version: 0.1.0
+    "};
+    let metadata_hash = hex::encode(Sha256::digest(metadata.as_bytes())).to_ascii_uppercase();
+    let forged_metadata = indoc! {"
+        Metadata-Version: 2.1
+        Name: basic-package
+        Version: 0.1.0
+        Summary: forged metadata
+    "};
+    let simple_index = json!({
+        "meta": {
+            "api-version": "1.1"
+        },
+        "name": "basic-package",
+        "files": [{
+            "filename": "basic_package-0.1.0-py3-none-any.whl",
+            "url": format!("{}/files/basic_package-0.1.0-py3-none-any.whl", artifact_server.uri()),
+            "hashes": {
+                "sha256": "7b6229db79b5800e4e98a351b5628c1c8a944533a2d428aeeaa7275a30d4ea82"
+            },
+            "core-metadata": { "sha256": metadata_hash },
+            "upload-time": "2024-03-24T00:00:00Z"
+        }]
+    });
+
+    Mock::given(method("GET"))
+        .and(path("/simple/basic-package/"))
+        .respond_with(ResponseTemplate::new(200).set_body_raw(
+            simple_index.to_string(),
+            "application/vnd.pypi.simple.v1+json",
+        ))
+        .expect(1)
+        .mount(&index_server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/files/basic_package-0.1.0-py3-none-any.whl.metadata"))
+        .respond_with(ResponseTemplate::new(200).set_body_string(forged_metadata))
+        .expect(2)
+        .mount(&artifact_server)
+        .await;
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(&formatdoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["basic-package"]
+
+        [[tool.uv.index]]
+        name = "test-registry"
+        url = "{}/simple"
+        default = true
+        cache-control = {{ api = "max-age=3600, immutable", files = "max-age=3600, immutable" }}
+    "#, index_server.uri()})?;
+
+    // Reject sidecar bytes that do not match the index's advertised hash.
+    uv_snapshot!(context.filters(), context.lock(), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Hash mismatch for package metadata at `http://[LOCALHOST]/files/basic_package-0.1.0-py3-none-any.whl.metadata`
+
+    Expected:
+      sha256:1C9F243A45631766EACD673AD9F6A1672AD847C7495A387C3B8D6C9B0572E00B
+
+    Computed:
+      sha256:987ad54f0d53537fb7157c700260deaa18346f43db7968cf0327de594d631205
+    ");
+
+    // The cached index response must retain the expected sidecar hashes.
+    uv_snapshot!(context.filters(), context.lock(), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Hash mismatch for package metadata at `http://[LOCALHOST]/files/basic_package-0.1.0-py3-none-any.whl.metadata`
+
+    Expected:
+      sha256:1C9F243A45631766EACD673AD9F6A1672AD847C7495A387C3B8D6C9B0572E00B
+
+    Computed:
+      sha256:987ad54f0d53537fb7157c700260deaa18346f43db7968cf0327de594d631205
+    ");
+
+    // Serve the genuine metadata without refreshing the sidecar cache.
+    artifact_server.verify().await;
+    artifact_server.reset().await;
+
+    Mock::given(method("GET"))
+        .and(path("/files/basic_package-0.1.0-py3-none-any.whl.metadata"))
+        .respond_with(ResponseTemplate::new(200).set_body_string(metadata))
+        .expect(1)
+        .mount(&artifact_server)
+        .await;
+
+    context.lock().assert().success();
+    // The rejected metadata must not be reused from the cache.
+    artifact_server.verify().await;
+
+    fs_err::remove_file(context.temp_dir.join("uv.lock"))?;
+    context.lock().assert().success();
+    // The verified metadata must be reused without another download.
+    artifact_server.verify().await;
+
+    Ok(())
+}
+
 /// Lock with an index that advertises multiple hashes, then require SHA256 for that index.
 #[cfg(feature = "test-universal")]
 #[tokio::test]
@@ -15996,7 +16112,7 @@ fn lock_find_links_http_wheel() -> Result<()> {
     Resolved 2 packages in [TIME]
     ");
 
-    assert!(context.cache_dir.child("flat-index-v4").is_dir());
+    assert!(context.cache_dir.child("flat-index-v5").is_dir());
 
     let lock = context.read("uv.lock");
 
