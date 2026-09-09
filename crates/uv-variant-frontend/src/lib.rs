@@ -245,7 +245,7 @@ impl VariantBuild {
             features = {{config.name: config.values for config in configs}}
             output = {{"namespace": backend.namespace, "features": features}}
 
-            with open("{out_file}", "w") as fp:
+            with open({out_file}, "w") as fp:
                 fp.write(json.dumps(output))
             "#,
             backend = self.import()?,

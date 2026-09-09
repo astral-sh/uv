@@ -10,4 +10,6 @@ mod pip_install;
 #[cfg(feature = "test-python")]
 mod variants;
 #[cfg(feature = "test-python")]
+mod variants_packse;
+#[cfg(feature = "test-python")]
 mod variants_pylock;
