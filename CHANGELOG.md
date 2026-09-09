@@ -7,13 +7,11 @@
 
 Released on 2026-09-09.
 
+The executables in our macOS and Windows release archives and `uv` and `uv_build` wheels are now code-signed. macOS executables are signed with an Apple Developer ID certificate and notarized by Apple. Windows executables have timestamped Authenticode signatures from Azure Artifact Signing.
+
 ### Bug fixes
 
 - Exclude post-cutoff wheels and source distributions from lockfiles and generated requirement hashes when artifacts for the same package version straddle an `exclude-newer` cutoff, including with `--no-build`, `--only-binary`, or `--no-binary` ([#21539](https://github.com/astral-sh/uv/pull/21539))
-
-### Other changes
-
-- Publish signed and notarized macOS binaries and signed Windows binaries in release archives and wheels ([#21494](https://github.com/astral-sh/uv/pull/21494), [#21447](https://github.com/astral-sh/uv/pull/21447))
 
 ## 0.12.11
 
