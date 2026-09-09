@@ -1014,10 +1014,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
 
                     debug!("Resuming download of {download_url} at byte {offset}");
                     let resumed_response = self
-                        .client
-                        .unmanaged
-                        .uncached_client(&download_url)
-                        .execute(self.request_with_offset(download_url.clone(), offset)?)
+                        .request_with_offset(download_url.clone(), offset)
                         .await?;
                     resumed_response.error_for_status_ref()?;
 
@@ -1374,14 +1371,14 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             .build()
     }
 
-    /// Returns a GET [`reqwest::Request`] with a `Range: bytes=<offset>-` header.
+    /// Send a GET request with a `Range: bytes=<offset>-` header.
     ///
     /// Used to resume an interrupted download from `offset` bytes into the file.
-    fn request_with_offset(
+    async fn request_with_offset(
         &self,
         url: DisplaySafeUrl,
         offset: u64,
-    ) -> Result<reqwest::Request, reqwest::Error> {
+    ) -> Result<reqwest::Response, reqwest_middleware::Error> {
         self.client
             .unmanaged
             .uncached_client(&url)
@@ -1391,7 +1388,8 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 reqwest::header::HeaderValue::from_static("identity"),
             )
             .header(reqwest::header::RANGE, format!("bytes={offset}-"))
-            .build()
+            .send()
+            .await
     }
 
     /// Return the [`ManagedClient`] used by this resolver.

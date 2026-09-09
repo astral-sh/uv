@@ -4,6 +4,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::{Duration, Instant};
 
+use anyhow::Result;
 use assert_fs::fixture::{ChildPath, FileWriteStr, PathChild};
 use async_zip::base::write::ZipFileWriter;
 use async_zip::{Compression, ZipEntryBuilder};
@@ -17,6 +18,7 @@ use hyper::body::Frame;
 use hyper::service::service_fn;
 use hyper_util::rt::TokioIo;
 use serde_json::json;
+use sha2::{Digest, Sha256};
 use tokio_stream::wrappers::ReceiverStream;
 use wiremock::matchers::{any, method};
 use wiremock::{Mock, MockServer, Request, ResponseTemplate};
@@ -1124,6 +1126,7 @@ async fn wheel_requiring_download() -> Vec<u8> {
 #[derive(Clone, Copy)]
 enum RangeResponse {
     Supported,
+    Ignored,
     NotAdvertised,
     InvalidContentRange,
 }
@@ -1173,6 +1176,14 @@ fn wheel_server(wheel: Vec<u8>, range_response: RangeResponse) -> (String, impl 
                                         }
 
                                         if let Some(range) = request.headers().get(RANGE) {
+                                            if matches!(range_response, RangeResponse::Ignored)
+                                                && full_get_count.load(Ordering::Relaxed) >= 2
+                                            {
+                                                return Ok::<_, Infallible>(hyper::Response::builder()
+                                                    .header(CONTENT_LENGTH, size.to_string())
+                                                    .body(http_body_util::Full::new(wheel).boxed())
+                                                    .expect("valid wheel response"));
+                                            }
                                             let (start, end) = range
                                                 .to_str()
                                                 .unwrap()
@@ -1222,6 +1233,7 @@ fn wheel_server(wheel: Vec<u8>, range_response: RangeResponse) -> (String, impl 
                                         if matches!(
                                             range_response,
                                             RangeResponse::Supported
+                                                | RangeResponse::Ignored
                                                 | RangeResponse::InvalidContentRange
                                         ) {
                                             response = response.header(ACCEPT_RANGES, "bytes");
@@ -1243,26 +1255,28 @@ fn wheel_server(wheel: Vec<u8>, range_response: RangeResponse) -> (String, impl 
     (server_url, shutdown_tx)
 }
 
-/// A mid-stream interruption is transparently resumed via HTTP range without consuming a retry.
+/// A resumed download hashes the complete wheel without consuming a retry.
 #[tokio::test]
-async fn direct_url_range_resume() {
+async fn direct_url_range_resume() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
     let wheel = wheel_requiring_download().await;
+    let hash = hex::encode(Sha256::digest(&wheel));
     let (server, _guard) = wheel_server(wheel, RangeResponse::Supported);
 
     let wheel_url = format!("{server}/ok-1.0.0-py3-none-any.whl");
+    let requirements = context.temp_dir.child("requirements.txt");
+    requirements.write_str(&format!("ok @ {wheel_url} --hash=sha256:{hash}\n"))?;
     uv_snapshot!(context.filters(), context
         .pip_install()
-        .arg(format!("ok @ {wheel_url}"))
+        .arg("-r")
+        .arg(requirements.path())
+        .arg("--require-hashes")
         .env(EnvVars::UV_HTTP_RETRIES, "0")
         .env(EnvVars::UV_HTTP_TIMEOUT, "1")
         .env(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY, "true")
         .env(EnvVars::RUST_LOG, "warn"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     WARN Streaming unsupported for ok @ http://[LOCALHOST]/ok-1.0.0-py3-none-any.whl; downloading wheel to disk (Invalid zip file structure)
@@ -1270,6 +1284,41 @@ async fn direct_url_range_resume() {
     Installed 1 package in [TIME]
      + ok==1.0.0 (from http://[LOCALHOST]/ok-1.0.0-py3-none-any.whl)
     ");
+
+    Ok(())
+}
+
+/// A full response to a range request resets the wheel hash along with the partial file.
+#[tokio::test]
+async fn direct_url_ignored_range_resume() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let wheel = wheel_requiring_download().await;
+    let hash = hex::encode(Sha256::digest(&wheel));
+    let (server, _guard) = wheel_server(wheel, RangeResponse::Ignored);
+
+    let wheel_url = format!("{server}/ok-1.0.0-py3-none-any.whl");
+    let requirements = context.temp_dir.child("requirements.txt");
+    requirements.write_str(&format!("ok @ {wheel_url} --hash=sha256:{hash}\n"))?;
+    uv_snapshot!(context.filters(), context
+        .pip_install()
+        .arg("-r")
+        .arg(requirements.path())
+        .arg("--require-hashes")
+        .env(EnvVars::UV_HTTP_RETRIES, "0")
+        .env(EnvVars::UV_HTTP_TIMEOUT, "1")
+        .env(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY, "true")
+        .env(EnvVars::RUST_LOG, "warn"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    WARN Streaming unsupported for ok @ http://[LOCALHOST]/ok-1.0.0-py3-none-any.whl; downloading wheel to disk (Invalid zip file structure)
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + ok==1.0.0 (from http://[LOCALHOST]/ok-1.0.0-py3-none-any.whl)
+    ");
+
+    Ok(())
 }
 
 /// Without advertised range support, a mid-stream interruption uses a regular retry.
@@ -1288,10 +1337,7 @@ async fn direct_url_no_range_resume() {
         .env(EnvVars::UV_HTTP_TIMEOUT, "1")
         .env(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY, "true")
         .env(EnvVars::RUST_LOG, "warn"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     WARN Streaming unsupported for ok @ http://[LOCALHOST]/ok-1.0.0-py3-none-any.whl; downloading wheel to disk (Invalid zip file structure)
@@ -1317,10 +1363,7 @@ async fn direct_url_invalid_range_does_not_bypass_retry() {
         .env(EnvVars::UV_HTTP_TIMEOUT, "1")
         .env(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY, "true")
         .env(EnvVars::RUST_LOG, "warn"), @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
     Resolved 1 package in [TIME]
     WARN Streaming unsupported for ok @ http://[LOCALHOST]/ok-1.0.0-py3-none-any.whl; downloading wheel to disk (Invalid zip file structure)
