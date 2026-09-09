@@ -39,6 +39,10 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: "Set up shared release signing scripts"
+        id: setup-signing
+        uses: astral-sh/github-actions/setup-release-signing@f6d0962615c86d7d8b3154b4128fee20f04fe26d # shared release signing actions
+
       - name: "Install uv"
         uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
         with:
@@ -79,6 +83,7 @@ jobs:
       - name: "Extract executable wheel members"
         shell: bash
         env:
+          RELEASE_SIGNING_SCRIPTS: ${{ steps.setup-signing.outputs.scripts }}
           MACOS_TARGETS: ${{ steps.targets.outputs.macos }}
           WINDOWS_TARGETS: ${{ steps.targets.outputs.windows }}
         run: |
@@ -90,7 +95,7 @@ jobs:
               mkdir -p "wheels/$target"
               cp wheel-artifacts/"wheels_uv-$target"/*.whl "wheels/$target/"
               cp wheel-artifacts/"wheels_uv_build-$target"/*.whl "wheels/$target/"
-              uv run scripts/extract-wheel-binaries.py \
+              uv run "$RELEASE_SIGNING_SCRIPTS/extract-wheel-binaries.py" \
                 --output "./unsigned/$system/$target" wheels/"$target"/*.whl
             done < <(jq -r '.[].target' <<< "$targets")
           done
@@ -137,6 +142,10 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: "Set up shared release signing scripts"
+        id: setup-signing
+        uses: astral-sh/github-actions/setup-release-signing@f6d0962615c86d7d8b3154b4128fee20f04fe26d # shared release signing actions
+
       - name: "Install uv"
         uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
         with:
@@ -161,6 +170,7 @@ jobs:
       - name: "Sign executable wheel members through Azure Key Vault"
         shell: bash
         env:
+          RELEASE_SIGNING_SCRIPTS: ${{ steps.setup-signing.outputs.scripts }}
           TARGETS: ${{ needs.prepare.outputs.macos }}
           STORAGE_ACCOUNT: ${{ secrets.CODESIGN_STORAGE_ACCOUNT }}
           STORAGE_CONTAINER: ${{ secrets.CODESIGN_STORAGE_CONTAINER }}
@@ -178,15 +188,16 @@ jobs:
           set -euo pipefail
           mkdir signed
           while read -r target; do
-            uv run scripts/sign-release-macos.py "./unsigned/$target" "./signed/$target"
+            uv run "$RELEASE_SIGNING_SCRIPTS/sign-release-macos.py" "./unsigned/$target" "./signed/$target"
           done < <(jq -r '.[].target' <<< "$TARGETS")
 
       - name: "Notarize signed macOS executables"
         shell: bash
         env:
+          RELEASE_SIGNING_SCRIPTS: ${{ steps.setup-signing.outputs.scripts }}
           AZURE_KEYVAULT_NAME: ${{ secrets.CODESIGN_AZURE_KEYVAULT_NAME }}
           APPLE_NOTARIZATION_AKV_KEY_NAME: ${{ secrets.CODESIGN_APPLE_NOTARIZATION_AKV_KEY_NAME }}
-        run: uv run scripts/notarize-release-macos.py ./signed
+        run: uv run "$RELEASE_SIGNING_SCRIPTS/notarize-release-macos.py" ./signed
 
       - name: "Upload signed executable wheel members"
         id: upload
@@ -235,41 +246,14 @@ jobs:
             }
           }
 
-      - name: "Sign executable wheel members with Azure Artifact Signing"
-        uses: azure/artifact-signing-action@c7ab2a863ab5f9a846ddb8265964877ef296ee82 # v2
+      - name: "Sign and verify Windows executable identities"
+        uses: astral-sh/github-actions/sign-windows@f6d0962615c86d7d8b3154b4128fee20f04fe26d # shared release signing actions
         with:
+          directory: ${{ github.workspace }}/signed
           endpoint: ${{ secrets.CODESIGN_ENDPOINT }}
           signing-account-name: ${{ secrets.CODESIGN_SIGNING_ACCOUNT_NAME }}
           certificate-profile-name: ${{ secrets.CODESIGN_CERTIFICATE_PROFILE_NAME }}
-          files-folder: ${{ github.workspace }}/signed
-          files-folder-filter: exe
-          files-folder-recurse: true
-          file-digest: SHA256
-          timestamp-rfc3161: http://timestamp.acs.microsoft.com
-          timestamp-digest: SHA256
-          exclude-environment-credential: true
-          exclude-azure-cli-credential: false
-          cache-dependencies: false
-          trace: false
-
-      - name: "Verify signed executable identities"
-        shell: pwsh
-        env:
-          TARGETS: ${{ needs.prepare.outputs.windows }}
-          CERTIFICATE_SUBJECT: ${{ secrets.CODESIGN_CERTIFICATE_SUBJECT }}
-        run: |
-          $ErrorActionPreference = 'Stop'
-          if (-not $env:CERTIFICATE_SUBJECT) { throw 'Missing signing certificate subject' }
-          foreach ($platform in ($env:TARGETS | ConvertFrom-Json)) {
-            foreach ($binary in (Get-ChildItem "signed/$($platform.target)" -File -Force)) {
-              $path = $binary.FullName
-              $signature = Get-AuthenticodeSignature $path
-              if ($signature.Status -ne 'Valid' -or $null -eq $signature.TimeStamperCertificate -or
-                  $signature.SignerCertificate.Subject -ne $env:CERTIFICATE_SUBJECT) {
-                throw "Expected a timestamped signature from the configured publisher: $path"
-              }
-            }
-          }
+          certificate-subject: ${{ secrets.CODESIGN_CERTIFICATE_SUBJECT }}
 
       - name: "Upload signed executable wheel members"
         id: upload
@@ -295,6 +279,10 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+
+      - name: "Set up shared release signing scripts"
+        id: setup-signing
+        uses: astral-sh/github-actions/setup-release-signing@f6d0962615c86d7d8b3154b4128fee20f04fe26d # shared release signing actions
 
       - name: "Install uv"
         uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
@@ -326,6 +314,7 @@ jobs:
       - name: "Replace executable wheel members"
         shell: bash
         env:
+          RELEASE_SIGNING_SCRIPTS: ${{ steps.setup-signing.outputs.scripts }}
           MACOS_TARGETS: ${{ needs.prepare.outputs.macos }}
           WINDOWS_TARGETS: ${{ needs.prepare.outputs.windows }}
         run: |
@@ -341,7 +330,7 @@ jobs:
                 [[ ${#wheels[@]} -eq 1 ]] || { echo "Expected one $package wheel for $target" >&2; exit 1; }
                 wheel=${wheels[0]}
                 output="signed-wheels/$system/$target/${wheel##*/}"
-                uv run scripts/inject-signed-wheel-binaries.py --input "$wheel" \
+                uv run "$RELEASE_SIGNING_SCRIPTS/inject-signed-wheel-binaries.py" --input "$wheel" \
                   --output "$output" --signed-binaries "./signed/$target"
                 cp "$output" "signed-pypi/$package/"
               done
@@ -353,6 +342,7 @@ jobs:
       - name: "Replace GitHub release archive executables"
         shell: bash
         env:
+          RELEASE_SIGNING_SCRIPTS: ${{ steps.setup-signing.outputs.scripts }}
           MACOS_TARGETS: ${{ needs.prepare.outputs.macos }}
           WINDOWS_TARGETS: ${{ needs.prepare.outputs.windows }}
         run: |
@@ -361,7 +351,7 @@ jobs:
             if [[ "$system" == macos ]]; then extension=tar.gz; else extension=zip; fi
             if [[ "$system" == macos ]]; then targets=$MACOS_TARGETS; else targets=$WINDOWS_TARGETS; fi
             while read -r target; do
-              uv run scripts/extract-wheel-binaries.py \
+              uv run "$RELEASE_SIGNING_SCRIPTS/extract-wheel-binaries.py" \
                 --output "./unsigned/$target" wheels/"$target"/*.whl
               uv run scripts/inject-signed-github-release-binaries.py \
                 "./github-archives/uv-$target.$extension" \
@@ -426,6 +416,10 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: "Set up shared release signing scripts"
+        id: setup-signing
+        uses: astral-sh/github-actions/setup-release-signing@f6d0962615c86d7d8b3154b4128fee20f04fe26d # shared release signing actions
+
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           cache: ""
@@ -454,6 +448,8 @@ jobs:
           merge-multiple: true
 
       - name: "Verify packaged executables and signatures"
+        env:
+          RELEASE_SIGNING_SCRIPTS: ${{ steps.setup-signing.outputs.scripts }}
         run: uv run scripts/verify-release-wheels-macos.py "./signed/$TARGET" "./wheels/$TARGET"
 
       - name: "Download signed GitHub release archives"
@@ -464,6 +460,8 @@ jobs:
           merge-multiple: true
 
       - name: "Verify GitHub release archive"
+        env:
+          RELEASE_SIGNING_SCRIPTS: ${{ steps.setup-signing.outputs.scripts }}
         run: uv run scripts/verify-github-release-macos.py "./signed/$TARGET" "./github-archives/uv-$TARGET.tar.gz"
 
       - name: "Install and run the signed wheels"
@@ -485,6 +483,10 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+
+      - name: "Set up shared release signing scripts"
+        id: setup-signing
+        uses: astral-sh/github-actions/setup-release-signing@f6d0962615c86d7d8b3154b4128fee20f04fe26d # shared release signing actions
 
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
@@ -525,6 +527,8 @@ jobs:
 
       - name: "Verify packaged executables and signatures"
         shell: pwsh
+        env:
+          RELEASE_SIGNING_SCRIPTS: ${{ steps.setup-signing.outputs.scripts }}
         run: ./scripts/verify-release-wheels-windows.ps1 "./signed/$env:TARGET" "./wheels/$env:TARGET"
 
       - name: "Download signed GitHub release archives"
@@ -536,6 +540,8 @@ jobs:
 
       - name: "Verify GitHub release archive"
         shell: pwsh
+        env:
+          RELEASE_SIGNING_SCRIPTS: ${{ steps.setup-signing.outputs.scripts }}
         run: ./scripts/verify-github-release-windows.ps1 "./signed/$env:TARGET" "./github-archives/uv-${env:TARGET}.zip"
 
       - name: "Install and run the signed wheels"

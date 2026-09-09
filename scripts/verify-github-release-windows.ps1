@@ -2,7 +2,8 @@
 #
 # Use `extract-github-release-binaries.py` to check the archive's contents and
 # checksum and extract its executables. Delegate byte and signature checks to
-# `verify-release-binaries-windows.ps1`.
+# `verify-release-binaries-windows.ps1` from
+# `astral-sh/github-actions/setup-release-signing`.
 
 param(
     [Parameter(Mandatory)]
@@ -19,7 +20,7 @@ try {
     uv run "$PSScriptRoot/extract-github-release-binaries.py" --output $archiveBinaries $Archive
     if ($LASTEXITCODE -ne 0) { throw 'GitHub release archive extraction failed' }
 
-    & "$PSScriptRoot/verify-release-binaries-windows.ps1" -Signed $Signed `
+    & "$env:RELEASE_SIGNING_SCRIPTS/verify-release-binaries-windows.ps1" -Signed $Signed `
         -BinaryDirectory $archiveBinaries -Binaries @(Get-ChildItem $archiveBinaries -Name -Force)
 }
 finally {

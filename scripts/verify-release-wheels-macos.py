@@ -9,10 +9,12 @@
 """Verify uv's macOS release wheels against the signing job's output.
 
 Extract the executables with `extract-wheel-binaries.py`, then delegate byte
-and signature checks to `verify-release-binaries-macos.py`.
+and signature checks to `verify-release-binaries-macos.py`. Both scripts are
+provided by `astral-sh/github-actions/setup-release-signing`.
 """
 
 import argparse
+import os
 import subprocess
 import sys
 import tempfile
@@ -28,7 +30,8 @@ def verify_wheels(signed: Path, wheels: Path) -> None:
         subprocess.run(
             [
                 sys.executable,
-                Path(__file__).with_name("extract-wheel-binaries.py"),
+                Path(os.environ["RELEASE_SIGNING_SCRIPTS"])
+                / "extract-wheel-binaries.py",
                 "--output",
                 wheel_binaries,
                 *sorted(wheels.glob("*.whl")),
@@ -39,7 +42,8 @@ def verify_wheels(signed: Path, wheels: Path) -> None:
             [
                 "uv",
                 "run",
-                Path(__file__).with_name("verify-release-binaries-macos.py"),
+                Path(os.environ["RELEASE_SIGNING_SCRIPTS"])
+                / "verify-release-binaries-macos.py",
                 signed,
                 wheel_binaries,
                 *BINARIES,

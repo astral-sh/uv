@@ -10,10 +10,12 @@
 
 Use `extract-github-release-binaries.py` to check the archive's contents and
 checksum and extract its executables. Delegate byte and signature checks to
-`verify-release-binaries-macos.py`.
+`verify-release-binaries-macos.py` from
+`astral-sh/github-actions/setup-release-signing`.
 """
 
 import argparse
+import os
 import subprocess
 import sys
 import tempfile
@@ -38,7 +40,8 @@ def verify_archive(signed: Path, archive: Path) -> None:
             [
                 "uv",
                 "run",
-                Path(__file__).with_name("verify-release-binaries-macos.py"),
+                Path(os.environ["RELEASE_SIGNING_SCRIPTS"])
+                / "verify-release-binaries-macos.py",
                 signed,
                 archive_binaries,
                 *sorted(path.name for path in archive_binaries.iterdir()),
