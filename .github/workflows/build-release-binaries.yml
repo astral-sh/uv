@@ -1,5 +1,6 @@
 # Build uv on all platforms.
 #
+# Generates both wheels (for PyPI) and archived binaries (for GitHub releases).
 # Creates `build-wheels-*`, `build-sdist-*`, and `build-github-archives-*` artifacts.
 #
 # Called from:
