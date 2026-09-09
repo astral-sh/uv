@@ -480,6 +480,24 @@ impl BuildContext for BuildDispatch<'_> {
                 .await?
         };
 
+        let mut wheels = wheels.into_iter().chain(cached).collect::<Vec<_>>();
+        let installer = Installer::new(venv, self.preview)
+            .with_link_mode(self.link_mode)
+            .with_cache(self.cache)
+            .with_variant_contexts(
+                &wheels,
+                resolution,
+                &DistributionDatabase::new(
+                    self.client,
+                    self,
+                    self.concurrency.downloads_semaphore.clone(),
+                )
+                .with_build_stack(build_stack),
+                self.interpreter.markers(),
+            )
+            .await
+            .context("Failed to resolve build dependency variants")?;
+
         // Remove any unnecessary packages.
         if !reinstalls.is_empty() {
             let layout = venv.interpreter().layout();
@@ -499,16 +517,13 @@ impl BuildContext for BuildDispatch<'_> {
         }
 
         // Install the resolved distributions.
-        let mut wheels = wheels.into_iter().chain(cached).collect::<Vec<_>>();
         if !wheels.is_empty() {
             debug!(
                 "Installing build requirement{}: {}",
                 if wheels.len() == 1 { "" } else { "s" },
                 wheels.iter().map(ToString::to_string).join(", ")
             );
-            wheels = Installer::new(venv, self.preview)
-                .with_link_mode(self.link_mode)
-                .with_cache(self.cache)
+            wheels = installer
                 .install(wheels)
                 .await
                 .context("Failed to install build dependencies")?;

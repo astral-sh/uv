@@ -803,8 +803,10 @@ impl ResolverOutput {
                     }
                 }
                 MarkerParam::String(value_string) => {
-                    // TODO(konsti): What's the correct handling for `variant_label`?
-                    let from_env = marker_env.get_string(value_string).unwrap_or("");
+                    // A selected wheel label is package-specific, not an environment marker.
+                    let Some(from_env) = marker_env.get_string(&value_string) else {
+                        continue;
+                    };
                     MarkerExpression::String {
                         key: value_string.into(),
                         operator: MarkerOperator::Equal,

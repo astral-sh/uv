@@ -20,8 +20,8 @@ use uv_distribution_types::{
 use uv_installer::SitePackages;
 use uv_normalize::PackageName;
 use uv_pep440::{Operator, Version, VersionSpecifier, VersionSpecifiers};
-use uv_pep508::{MarkerVariantsUniversal, Requirement, VersionOrUrl};
-use uv_pypi_types::{ResolutionMetadata, ResolverMarkerEnvironment, VerbatimParsedUrl};
+use uv_pep508::{Requirement, VersionOrUrl};
+use uv_pypi_types::{ResolutionMetadata, VerbatimParsedUrl};
 use uv_python::{EnvironmentPreference, PythonEnvironment, PythonPreference, PythonRequest};
 use uv_resolver::{ExcludeNewer, Prerelease};
 
@@ -68,20 +68,24 @@ pub(crate) async fn pip_tree(
     // Read packages from the virtual environment.
     let site_packages = SitePackages::from_environment(&environment)?;
 
-    let packages = {
-        let mut packages: FxHashMap<_, Vec<_>> = FxHashMap::default();
-        for package in site_packages.iter() {
-            packages
-                .entry(package.name())
-                .or_default()
-                .push(package.read_metadata()?);
-        }
-        packages
-    };
-
     // Determine the markers and tags to use for the resolution.
     let markers = environment.interpreter().to_resolver_marker_environment();
     let tags = environment.interpreter().tags()?;
+
+    let packages = {
+        let mut packages: FxHashMap<_, Vec<_>> = FxHashMap::default();
+        for package in site_packages.iter() {
+            let variants = package.read_variant_context(markers.markers())?;
+            let mut metadata = package.read_metadata()?.clone();
+            metadata.requires_dist = metadata
+                .requires_dist
+                .into_iter()
+                .filter(|requirement| requirement.marker.evaluate(&markers, &variants, &[]))
+                .collect();
+            packages.entry(package.name()).or_default().push(metadata);
+        }
+        packages
+    };
 
     // Determine the latest version for each package.
     let latest = if outdated && !packages.is_empty() {
@@ -157,7 +161,6 @@ pub(crate) async fn pip_tree(
         no_dedupe,
         invert,
         show_version_specifiers,
-        &markers,
         &packages,
         &latest,
     )
@@ -224,8 +227,7 @@ impl<'env> DisplayDependencyGraph<'env> {
         no_dedupe: bool,
         invert: bool,
         show_version_specifiers: bool,
-        markers: &ResolverMarkerEnvironment,
-        packages: &'env FxHashMap<&PackageName, Vec<&ResolutionMetadata>>,
+        packages: &'env FxHashMap<&PackageName, Vec<ResolutionMetadata>>,
         latest: &'env FxHashMap<&PackageName, Version>,
     ) -> Self {
         // Create a graph.
@@ -257,13 +259,6 @@ impl<'env> DisplayDependencyGraph<'env> {
                 if prune.contains(&requirement.name) {
                     continue;
                 }
-                if !requirement
-                    .marker
-                    .evaluate(markers, &MarkerVariantsUniversal, &[])
-                {
-                    continue;
-                }
-
                 for dep_index in inverse
                     .get(&requirement.name)
                     .into_iter()

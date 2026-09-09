@@ -316,10 +316,10 @@ impl InternerGuard<'_> {
                         CanonicalMarkerValueString::SysPlatform,
                         arcstr::literal!("android"),
                     ),
-                    _ => (key.into(), value),
+                    (key, _) => (key.into(), value),
                 };
                 (
-                    Variable::String(key),
+                    Variable::String(key.clone()),
                     Edges::from_string(key, operator, value),
                 )
             }
@@ -711,11 +711,31 @@ impl InternerGuard<'_> {
         let node = self.shared.node(i);
         let children = node.children.map(i, |node| self.edit_variable(node, f));
 
-        if let Some(var) = f(&node.var) {
-            self.create_node(var, children)
-        } else {
-            self.create_node(node.var.clone(), children)
+        let var = f(&node.var).unwrap_or_else(|| node.var.clone());
+        if children
+            .nodes()
+            .all(|child| child.is_true() || child.is_false() || var < self.shared.node(child).var)
+        {
+            return self.create_node(var, children);
         }
+
+        // Scoping a marker may move its variable after one of its children, or merge it
+        // with a child's variable. Recombine the branches through the ordered operations
+        // instead of constructing a node with an invalid variable order.
+        let mut result = NodeId::FALSE;
+        for child in children.nodes().filter(|child| !child.is_false()) {
+            let condition = children.map(NodeId::TRUE, |other| {
+                if other == child {
+                    NodeId::TRUE
+                } else {
+                    NodeId::FALSE
+                }
+            });
+            let condition = self.create_node(var.clone(), condition);
+            let branch = self.and(condition, child);
+            result = self.or(result, branch);
+        }
+        result
     }
 
     pub(crate) fn collect_variant_bases(&mut self, i: NodeId, bases: &mut BTreeSet<String>) {
@@ -1245,6 +1265,9 @@ impl Variable {
 
     fn variant_base(&self) -> Option<&str> {
         match self {
+            Self::String(key) | Self::In { key, .. } | Self::Contains { key, .. } => {
+                key.variant_base()
+            }
             Self::List(
                 CanonicalMarkerListPair::VariantNamespaces { base, .. }
                 | CanonicalMarkerListPair::VariantFeatures { base, .. }

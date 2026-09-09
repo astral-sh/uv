@@ -6,6 +6,7 @@ use anyhow::Result;
 use assert_fs::prelude::*;
 use indoc::indoc;
 use serde_json::{Value, json};
+use url::Url;
 
 use uv_test::packse::generate_wheel_with_files;
 use uv_test::{TestContext, uv_snapshot};
@@ -170,7 +171,6 @@ fn wheel_variants_preview_direct() -> Result<()> {
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + example==1.0.0 (from file://[TEMP_DIR]/example-1.0.0-py3-none-any-null.whl)
     "###);
@@ -180,6 +180,142 @@ fn wheel_variants_preview_direct() -> Result<()> {
     ----- stderr -----
       × Failed to read `example @ file://[TEMP_DIR]/example-1.0.0-py3-none-any-null.whl`
       ╰─▶ Wheel variants require `--preview-features wheel-variants`
+    "###);
+    // A direct wheel must satisfy the target properties and retain its own marker context.
+    let properties = json!({"gpu": {"cuda": ["12.0", "13.0", "14.0"]}});
+    write_wheel(
+        &context,
+        "example",
+        Some("fast"),
+        properties.clone(),
+        &[
+            "labelled; variant_label == 'fast'",
+            "supported; 'gpu :: cuda :: 12.0' in variant_properties",
+            "unsupported; 'gpu :: cuda :: 14.0' in variant_properties",
+            "nonvariant; variant_label == ''",
+        ],
+        None,
+    )?;
+    for name in ["labelled", "supported", "unsupported", "nonvariant"] {
+        write_wheel(&context, name, None, json!({}), &[], None)?;
+    }
+    write_metadata(&context, json!({"fast": properties}))?;
+    context
+        .temp_dir
+        .child("incompatible.toml")
+        .write_str(indoc! {r#"
+        [metadata]
+        version = "0.1"
+        created-by = "uv-test"
+        [[provider]]
+        namespace = "gpu"
+        resolved = []
+        [provider.properties]
+        cuda = ["15.0"]
+    "#})?;
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--preview-features").arg("wheel-variants")
+        .arg("example-1.0.0-py3-none-any-fast.whl")
+        .arg("--no-index").arg("--find-links").arg(context.temp_dir.path())
+        .env("UV_VARIANT_LOCK", context.temp_dir.child("incompatible.toml").path()), @r###"
+    exit_code: 1 (failure)
+    ----- stderr -----
+      × Failed to read `example @ file://[TEMP_DIR]/example-1.0.0-py3-none-any-fast.whl`
+      ╰─▶ Package example has no matching wheel for the current platform, but has the following variants: fast
+    "###);
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--preview-features").arg("wheel-variants")
+        .arg("example-1.0.0-py3-none-any-fast.whl")
+        .arg("--no-index").arg("--find-links").arg(context.temp_dir.path())
+        .env("UV_VARIANT_LOCK", context.temp_dir.child("target.toml").path()), @r###"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 3 packages in [TIME]
+     - example==1.0.0 (from file://[TEMP_DIR]/example-1.0.0-py3-none-any-null.whl)
+     + example==1.0.0 (from file://[TEMP_DIR]/example-1.0.0-py3-none-any-fast.whl)
+     + labelled==1.0.0
+     + supported==1.0.0
+    "###);
+
+    // A direct ordinary wheel cannot activate variant-only direct dependencies during lookahead.
+    let missing = context.temp_dir.child("missing-1.0.0-py3-none-any.whl");
+    let dependency = format!(
+        "missing @ {}; 'gpu' in variant_namespaces",
+        Url::from_file_path(missing.path()).expect("valid absolute path"),
+    );
+    write_wheel(&context, "ordinary", None, json!({}), &[&dependency], None)?;
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--preview-features").arg("wheel-variants")
+        .arg("ordinary-1.0.0-py3-none-any.whl").arg("--no-index"), @r###"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + ordinary==1.0.0 (from file://[TEMP_DIR]/ordinary-1.0.0-py3-none-any.whl)
+    "###);
+
+    // Overrides replace dependency markers before lookahead follows nested direct references.
+    write_wheel(&context, "leaf", None, json!({}), &[], None)?;
+    let leaf = context.temp_dir.child("leaf-1.0.0-py3-none-any.whl");
+    let dependency = format!(
+        "leaf @ {}",
+        Url::from_file_path(leaf.path()).expect("valid absolute path"),
+    );
+    write_wheel(&context, "middle", None, json!({}), &[&dependency], None)?;
+    let middle = context.temp_dir.child("middle-1.0.0-py3-none-any.whl");
+    write_wheel(
+        &context,
+        "overridden",
+        None,
+        json!({}),
+        &["middle; python_version < '2'"],
+        None,
+    )?;
+    context.temp_dir.child("overrides.txt").write_str(&format!(
+        "middle @ {}",
+        Url::from_file_path(middle.path()).expect("valid absolute path"),
+    ))?;
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("overridden-1.0.0-py3-none-any.whl")
+        .arg("--override").arg("overrides.txt").arg("--no-index"), @r###"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + leaf==1.0.0 (from file://[TEMP_DIR]/leaf-1.0.0-py3-none-any.whl)
+     + middle==1.0.0 (from file://[TEMP_DIR]/middle-1.0.0-py3-none-any.whl)
+     + overridden==1.0.0 (from file://[TEMP_DIR]/overridden-1.0.0-py3-none-any.whl)
+    "###);
+    Ok(())
+}
+
+/// A metadata sidecar is not itself an installable distribution.
+#[test]
+fn pep825_metadata_only_version() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    write_wheel(&context, "example", None, json!({}), &[], None)?;
+    context
+        .temp_dir
+        .child("example-2.0.0-variants.json")
+        .write_str(&serde_json::to_string(&json!({
+            "$schema": VARIANT_SCHEMA,
+            "default-priorities": {"namespace": ["cpu"]},
+            "variants": {"null": {}}
+        }))?)?;
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--preview-features").arg("wheel-variants").arg("example")
+        .arg("--no-index").arg("--find-links").arg(context.temp_dir.path()), @r###"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + example==1.0.0
     "###);
     Ok(())
 }
@@ -413,8 +549,9 @@ fn pep825_project_sync() -> Result<()> {
     ----- stderr -----
     Resolved 4 packages in [TIME]
     Prepared 1 package in [TIME]
-    Uninstalled 1 package in [TIME]
-    Installed 1 package in [TIME]
+    Uninstalled 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     ~ example==1.0.0
      - supported==1.0.0
      + unsupported==1.0.0
     "###);

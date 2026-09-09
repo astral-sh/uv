@@ -1,6 +1,9 @@
-use uv_distribution_filename::DistExtension;
+use rustc_hash::FxHashMap;
+
+use uv_distribution_filename::{DistExtension, WheelFilename};
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pypi_types::{HashDigest, HashDigests};
+use uv_variants::variant_with_label::VariantWithLabel;
 
 use crate::{
     BuiltDist, Diagnostic, Dist, IndexMetadata, Name, RequirementSource, ResolvedDist, SourceDist,
@@ -15,6 +18,7 @@ use crate::{
 pub struct Resolution {
     graph: petgraph::graph::DiGraph<Node, Edge>,
     diagnostics: Vec<ResolutionDiagnostic>,
+    variant_contexts: FxHashMap<WheelFilename, VariantWithLabel>,
 }
 
 impl Resolution {
@@ -23,6 +27,7 @@ impl Resolution {
         Self {
             graph,
             diagnostics: Vec::new(),
+            variant_contexts: FxHashMap::default(),
         }
     }
 
@@ -36,6 +41,21 @@ impl Resolution {
     pub fn with_diagnostics(mut self, diagnostics: Vec<ResolutionDiagnostic>) -> Self {
         self.diagnostics.extend(diagnostics);
         self
+    }
+
+    /// Retain the supported variant properties determined when each wheel was selected.
+    #[must_use]
+    pub fn with_variant_contexts(
+        mut self,
+        contexts: FxHashMap<WheelFilename, VariantWithLabel>,
+    ) -> Self {
+        self.variant_contexts = contexts;
+        self
+    }
+
+    /// Return the marker context for this exact wheel filename, when selection retained it.
+    pub fn variant_context(&self, filename: &WheelFilename) -> Option<&VariantWithLabel> {
+        self.variant_contexts.get(filename)
     }
 
     /// Return the hashes for the given package name, if they exist.

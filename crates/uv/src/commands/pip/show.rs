@@ -13,7 +13,6 @@ use uv_fs::Simplified;
 use uv_install_wheel::read_record;
 use uv_installer::SitePackages;
 use uv_normalize::PackageName;
-use uv_pep508::MarkerVariantsUniversal;
 use uv_python::{
     EnvironmentPreference, Prefix, PythonEnvironment, PythonPreference, PythonRequest, Target,
 };
@@ -120,12 +119,13 @@ pub(crate) fn pip_show(
     // For Requires field
     for dist in &distributions {
         if let Ok(metadata) = dist.read_metadata() {
+            let variants = dist.read_variant_context(markers.markers())?;
             requires_map.insert(
                 dist.name(),
                 metadata
                     .requires_dist
                     .iter()
-                    .filter(|req| req.evaluate_markers(&markers, &MarkerVariantsUniversal, &[]))
+                    .filter(|req| req.evaluate_markers(&markers, &variants, &[]))
                     .map(|req| &req.name)
                     .sorted_unstable()
                     .dedup()
@@ -140,10 +140,11 @@ pub(crate) fn pip_show(
                 continue;
             }
             if let Ok(metadata) = installed.read_metadata() {
+                let variants = installed.read_variant_context(markers.markers())?;
                 let requires = metadata
                     .requires_dist
                     .iter()
-                    .filter(|req| req.evaluate_markers(&markers, &MarkerVariantsUniversal, &[]))
+                    .filter(|req| req.evaluate_markers(&markers, &variants, &[]))
                     .map(|req| &req.name)
                     .collect_vec();
                 if !requires.is_empty() {

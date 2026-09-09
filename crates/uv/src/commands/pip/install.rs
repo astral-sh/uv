@@ -666,6 +666,7 @@ pub(crate) async fn pip_install(
         compile.then_some(operations::BytecodeCompilation::Installed),
         &hasher,
         &tags,
+        marker_env.markers(),
         &client,
         state.in_flight(),
         &concurrency,

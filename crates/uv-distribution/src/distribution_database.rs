@@ -25,7 +25,7 @@ use uv_client::{
     CacheControl, CachedClientError, Connectivity, DataWithCachePolicy, RegistryClient,
 };
 use uv_configuration::{BuildOutput, initialize_rayon_once};
-use uv_distribution_filename::WheelFilename;
+use uv_distribution_filename::{VariantLabel, WheelFilename};
 use uv_distribution_types::{
     BuildInfo, BuildableSource, BuiltDist, Dist, DistRef, HashPolicy, Hashed, IndexUrl,
     InstalledDist, Name, RegistryVariantsJson, SourceDist, VariantsJsonFilename,
@@ -45,6 +45,7 @@ use uv_types::{BuildContext, BuildStack, VariantsTrait};
 use uv_variants::VariantProviderOutput;
 use uv_variants::resolved_variants::ResolvedVariants;
 use uv_variants::variant_lock::{VariantLock, VariantLockProvider, VariantLockResolved};
+use uv_variants::variant_with_label::VariantWithLabel;
 use uv_variants::variants_json::{Provider, VariantsJsonContent};
 
 use crate::archive::Archive;
@@ -586,6 +587,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             };
             let hashes = wheel.hashes;
             return Ok(ArchiveMetadata {
+                variant: None,
                 metadata: Metadata::from_metadata23(metadata),
                 hashes,
             });
@@ -630,6 +632,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 let metadata = wheel.metadata()?;
                 let hashes = wheel.hashes;
                 Ok(ArchiveMetadata {
+                    variant: None,
                     metadata: Metadata::from_metadata23(metadata),
                     hashes,
                 })
@@ -684,6 +687,51 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 self.client.unmanaged.credentials_cache(),
             )
             .await
+    }
+
+    /// Read and validate the metadata embedded in a particular variant wheel.
+    pub async fn read_wheel_variant_metadata(
+        &self,
+        dist: &BuiltDist,
+        hashes: HashPolicy<'_>,
+    ) -> Result<VariantsJsonContent, Error> {
+        if !uv_preview::is_enabled(PreviewFeature::WheelVariants) {
+            return Err(Error::WheelVariantsPreview);
+        }
+        let wheel = self.get_wheel(dist, hashes).await?;
+        let prefix = uv_metadata::find_flat_dist_info(&wheel.filename, &wheel.archive)
+            .map_err(|err| Error::WheelMetadata(wheel.archive.to_path_buf(), Box::new(err)))?;
+        let path = wheel
+            .archive
+            .join(format!("{prefix}.dist-info/variant.json"));
+        let contents = fs_err::read(path).map_err(Error::WheelVariantRead)?;
+        let metadata: VariantsJsonContent =
+            serde_json::from_slice(&contents).map_err(Error::WheelVariantParse)?;
+        if let Some(label) = wheel.filename.variant() {
+            metadata.validate_wheel(label)?;
+        }
+        Ok(metadata)
+    }
+
+    /// Determine the supported properties of a wheel whose label has already been selected.
+    pub async fn query_wheel_variants(
+        &self,
+        metadata: VariantsJsonContent,
+        label: &VariantLabel,
+        marker_env: &MarkerEnvironment,
+        filename: &VariantsJsonFilename,
+    ) -> Result<VariantWithLabel, Error> {
+        if !uv_preview::is_enabled(PreviewFeature::WheelVariants) {
+            return Err(Error::WheelVariantsPreview);
+        }
+        metadata.validate_wheel(label)?;
+        self.query_variant_providers(metadata, marker_env, filename)
+            .await?
+            .compatible_variant(label)
+            .ok_or_else(|| Error::WheelVariantMismatch {
+                name: filename.name.clone(),
+                variants: label.to_string(),
+            })
     }
 
     #[instrument(skip_all, fields(variants_json = %registry_variants_json.filename))]

@@ -34,6 +34,7 @@ uv-requirements-txt = { workspace = true, features = ["http"] }
 uv-resolver = { workspace = true, features = ["clap"] }
 uv-scripts = { workspace = true }
 uv-types = { workspace = true }
+uv-variants = { workspace = true }
 uv-warnings = { workspace = true }
 
 anyhow = { workspace = true }

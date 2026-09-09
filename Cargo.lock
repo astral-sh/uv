@@ -6569,6 +6569,7 @@ dependencies = [
  "rmp-serde",
  "rustc-hash",
  "serde",
+ "serde_json",
  "tempfile",
  "thiserror",
  "tokio",
@@ -6874,6 +6875,7 @@ dependencies = [
  "rayon",
  "rustc-hash",
  "same-file",
+ "serde_json",
  "tempfile",
  "thiserror",
  "tokio",
@@ -6900,6 +6902,7 @@ dependencies = [
  "uv-redacted",
  "uv-static",
  "uv-types",
+ "uv-variants",
  "uv-warnings",
  "walkdir",
 ]
@@ -7281,6 +7284,7 @@ dependencies = [
  "uv-resolver",
  "uv-scripts",
  "uv-types",
+ "uv-variants",
  "uv-warnings",
 ]
 
@@ -7358,6 +7362,7 @@ dependencies = [
  "toml_writer",
  "tracing",
  "url",
+ "uv-cache",
  "uv-cache-key",
  "uv-client",
  "uv-configuration",

@@ -8,10 +8,11 @@ use uv_configuration::BuildOptions;
 use uv_distribution::{ArchiveMetadata, DistributionDatabase, Reporter};
 use uv_distribution_types::{
     Dist, IndexCapabilities, IndexLocations, IndexMetadata, IndexMetadataRef, InstalledDist,
-    RegistryVariantsJson, RequestedDist, RequiresPython,
+    RegistryVariantsJson, RequestedDist, RequiresPython, VariantsJsonFilename,
 };
 use uv_normalize::PackageName;
 use uv_pep440::{Version, VersionSpecifiers};
+use uv_pep508::MarkerEnvironment;
 use uv_platform_tags::Tags;
 use uv_static::EnvVars;
 use uv_types::{BuildContext, HashStrategy};
@@ -100,12 +101,14 @@ pub trait ResolverProvider {
     fn get_or_build_wheel_metadata<'io>(
         &'io self,
         dist: &'io Dist,
+        marker_env: Option<&'io MarkerEnvironment>,
     ) -> impl Future<Output = WheelMetadataResult> + 'io;
 
     /// Get the metadata for an installed distribution.
     fn get_installed_metadata<'io>(
         &'io self,
         dist: &'io InstalledDist,
+        marker_env: Option<&'io MarkerEnvironment>,
     ) -> impl Future<Output = WheelMetadataResult> + 'io;
 
     /// Fetch the variants for a distribution given the marker environment.
@@ -280,12 +283,40 @@ impl<Context: BuildContext> ResolverProvider for DefaultResolverProvider<'_, Con
     }
 
     /// Fetch the metadata for a distribution, building it if necessary.
-    async fn get_or_build_wheel_metadata<'io>(&'io self, dist: &'io Dist) -> WheelMetadataResult {
-        match self
-            .fetcher
-            .get_or_build_wheel_metadata(dist, self.hasher.get(dist))
-            .await
-        {
+    async fn get_or_build_wheel_metadata<'io>(
+        &'io self,
+        dist: &'io Dist,
+        marker_env: Option<&'io MarkerEnvironment>,
+    ) -> WheelMetadataResult {
+        let result = async {
+            let mut metadata = self
+                .fetcher
+                .get_or_build_wheel_metadata(dist, self.hasher.get(dist))
+                .await?;
+            if let Dist::Built(built) = dist
+                && built.index().is_none()
+                && let Some(label) = built.wheel_filename().variant()
+            {
+                let variants = self
+                    .fetcher
+                    .read_wheel_variant_metadata(built, self.hasher.get(dist))
+                    .await?;
+                if let Some(marker_env) = marker_env {
+                    let filename = VariantsJsonFilename {
+                        name: built.wheel_filename().name.clone(),
+                        version: built.wheel_filename().version.clone(),
+                    };
+                    metadata.variant = Some(
+                        self.fetcher
+                            .query_wheel_variants(variants, label, marker_env, &filename)
+                            .await?,
+                    );
+                }
+            }
+            Ok::<_, uv_distribution::Error>(metadata)
+        }
+        .await;
+        match result {
             Ok(metadata) => Ok(MetadataResponse::Found(metadata)),
             Err(err) => match err {
                 uv_distribution::Error::Client(client) => {
@@ -358,8 +389,19 @@ impl<Context: BuildContext> ResolverProvider for DefaultResolverProvider<'_, Con
     async fn get_installed_metadata<'io>(
         &'io self,
         dist: &'io InstalledDist,
+        marker_env: Option<&'io MarkerEnvironment>,
     ) -> WheelMetadataResult {
-        match self.fetcher.get_installed_metadata(dist).await {
+        let result = async {
+            let mut metadata = self.fetcher.get_installed_metadata(dist).await?;
+            if let Some(marker_env) = marker_env {
+                metadata.variant = Some(dist.read_variant_context(marker_env).map_err(|err| {
+                    uv_distribution::Error::ReadInstalled(Box::new(dist.clone()), err)
+                })?);
+            }
+            Ok::<_, uv_distribution::Error>(metadata)
+        }
+        .await;
+        match result {
             Ok(metadata) => Ok(MetadataResponse::Found(metadata)),
             Err(err) => Ok(MetadataResponse::Error(
                 Box::new(RequestedDist::Installed(dist.clone())),

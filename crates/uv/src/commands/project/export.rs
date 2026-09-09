@@ -464,7 +464,9 @@ pub(crate) async fn export(
                 let client = RegistryClientBuilder::new(client_builder.clone(), cache.clone())
                     .index_locations(settings.index_locations.clone())
                     .build()?;
-                export.resolve_variant_metadata(&client).await?;
+                export
+                    .resolve_variant_metadata(&client, cache, target.install_path())
+                    .await?;
                 export
                     .generate_missing_hashes(&client, concurrency.downloads, target.install_path())
                     .await?;

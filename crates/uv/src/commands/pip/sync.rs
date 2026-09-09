@@ -532,6 +532,7 @@ pub(crate) async fn pip_sync(
         compile.then_some(operations::BytecodeCompilation::All),
         &hasher,
         &tags,
+        marker_env.markers(),
         &client,
         state.in_flight(),
         &concurrency,

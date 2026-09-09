@@ -1,3 +1,4 @@
+use std::cell::RefCell;
 use std::collections::BTreeSet;
 use std::collections::VecDeque;
 use std::collections::hash_map::Entry;
@@ -15,7 +16,10 @@ use uv_configuration::{
     ExtrasSpecificationWithDefaults, InstallOptions,
 };
 use uv_distribution::{DistributionDatabase, PackageVariantCache};
-use uv_distribution_types::{Edge, FirstParty, Name, Node, Resolution, ResolvedDist};
+use uv_distribution_types::{
+    BuiltDist, Dist, Edge, FirstParty, HashPolicy, Node, Resolution, ResolvedDist,
+    VariantsJsonFilename,
+};
 use uv_normalize::{DefaultExtras, ExtraName, GroupName, PackageName};
 use uv_pep508::{
     MarkerVariantsEnvironment, MarkerVariantsUniversal, VariantFeature, VariantNamespace,
@@ -24,7 +28,6 @@ use uv_pep508::{
 use uv_platform_tags::Tags;
 use uv_pypi_types::{ConflictKind, ConflictSet, ResolverMarkerEnvironment};
 use uv_types::BuildContext;
-use uv_variants::resolved_variants::VariantScore;
 use uv_variants::variant_with_label::VariantWithLabel;
 
 use crate::lock::{
@@ -178,7 +181,17 @@ pub trait Installable<'lock> {
         MarkerVariantsUniversal
     }
 
-    /// Resolve variant metadata before following the selected wheels' dependencies.
+    /// Whether this lock contains wheel variants that require artifact selection.
+    fn has_variants(&self) -> bool {
+        self.lock().packages().iter().any(package_has_variants)
+    }
+
+    /// Whether the parent's artifact has been selected before following its dependencies.
+    fn dependencies_ready(&self, _package: &Package) -> bool {
+        true
+    }
+
+    /// Select each reached package's artifact before evaluating its dependency markers.
     #[expect(async_fn_in_trait)]
     async fn to_resolution_with_variants<Context: BuildContext>(
         &self,
@@ -191,44 +204,74 @@ pub trait Installable<'lock> {
         distribution_database: DistributionDatabase<'_, Context>,
         variants_cache: &PackageVariantCache,
     ) -> Result<Resolution, LockError> {
-        let provisional = self.to_resolution(
-            marker_env,
-            tags,
-            extras,
-            groups,
-            build_options,
+        let mut target = VariantInstallable {
+            target: self,
+            selected: HashMap::new(),
+            variants: QueriedVariants::default(),
+            pending: RefCell::new(HashMap::new()),
             install_options,
-        )?;
-        let mut variants = QueriedVariants::default();
-        for package in self.lock().packages() {
-            if provisional
-                .distributions()
-                .any(|dist| dist.name() == package.name())
-            {
-                let properties = determine_properties(
+        };
+        loop {
+            let resolution = target.to_resolution(
+                marker_env,
+                tags,
+                extras,
+                groups,
+                build_options,
+                install_options,
+            )?;
+            let pending = target.pending.take();
+            if pending.is_empty() {
+                let contexts = target
+                    .selected
+                    .iter()
+                    .filter_map(|(index, node)| {
+                        let Node::Dist { dist, .. } = node else {
+                            return None;
+                        };
+                        let filename = dist.wheel_filename()?;
+                        filename.variant()?;
+                        let variant = target
+                            .variants
+                            .0
+                            .get(&variant_base(self.lock().package(*index)))?;
+                        Some((filename.clone(), variant.clone()))
+                    })
+                    .collect();
+                return Ok(resolution.with_variant_contexts(contexts));
+            }
+            for (index, install) in pending {
+                let package = self.lock().package(index);
+                let select_node = |package: &Package| {
+                    if install {
+                        self.installable_node(package, tags, marker_env, build_options)
+                    } else {
+                        self.non_installable_node(package, tags, marker_env)
+                    }
+                };
+                let node = select_node(package)?;
+                let selection = select_variant(
                     package,
-                    self.install_path(),
+                    node,
                     marker_env,
                     &distribution_database,
                     variants_cache,
                     tags,
                 )
                 .await?;
-                variants.0.insert(variant_base(package), properties);
+                let (node, properties) = if let Some(selection) = selection {
+                    selection
+                } else {
+                    // Variant properties are compatibility constraints. If no wheel survives,
+                    // use the usual source fallback, including its build policy and hashes.
+                    let mut source_package = package.clone();
+                    source_package.wheels.clear();
+                    (select_node(&source_package)?, VariantWithLabel::default())
+                };
+                target.variants.0.insert(variant_base(package), properties);
+                target.selected.insert(index, node);
             }
         }
-        VariantInstallable {
-            target: self,
-            variants,
-        }
-        .to_resolution(
-            marker_env,
-            tags,
-            extras,
-            groups,
-            build_options,
-            install_options,
-        )
     }
 
     /// Create an installable [`Node`] from a [`Package`].
@@ -282,8 +325,10 @@ pub trait Installable<'lock> {
         let version = package.version().cloned();
         let dist = ResolvedDist::Installable {
             dist: Arc::new(dist),
-            // No need to determine variants for something we don't install.
-            variants_json: None,
+            // Dependencies still belong to this wheel when its installation is omitted.
+            variants_json: package
+                .to_registry_variants_json(self.install_path())?
+                .map(Arc::new),
             version,
         };
         let hashes = package.hashes();
@@ -432,6 +477,9 @@ trait InstallableExt<'lock>: Installable<'lock> {
 
         // Add the workspace dependencies to the queue.
         for (dist, package_index, index, root_kind) in initialized_roots {
+            if !self.dependencies_ready(dist) {
+                continue;
+            }
             if root_kind == InstallableRootKind::Production && groups.prod() {
                 // Push its dependencies onto the queue.
                 queue.push_back((package_index, None));
@@ -744,6 +792,9 @@ trait InstallableExt<'lock>: Installable<'lock> {
             let mut reachability = conflict_reachability;
             while let Some((package_index, extra)) = queue.pop_front() {
                 let package = self.lock().package(package_index);
+                if !self.dependencies_ready(package) {
+                    continue;
+                }
                 let Some(parent_reachability) = reachability.get(&(package_index, extra)).copied()
                 else {
                     continue;
@@ -830,6 +881,9 @@ trait InstallableExt<'lock>: Installable<'lock> {
 
         while let Some((package_index, extra)) = queue.pop_front() {
             let package = self.lock().package(package_index);
+            if !self.dependencies_ready(package) {
+                continue;
+            }
             for dep in package_dependencies(package, extra) {
                 if validate_conflicts && dep.complexified_marker.has_conflict_marker() {
                     dependencies_for_conflict_validation.push((package, dep));
@@ -1847,6 +1901,14 @@ source = { registry = "https://example.com/simple" }
     }
 }
 
+fn package_has_variants(package: &Package) -> bool {
+    package.variants_json.is_some()
+        || package
+            .wheels
+            .iter()
+            .any(|wheel| wheel.filename.variant().is_some())
+}
+
 fn variant_base(package: &Package) -> String {
     format!(
         "{}=={}",
@@ -1860,7 +1922,37 @@ fn variant_base(package: &Package) -> String {
 
 struct VariantInstallable<'a, T: ?Sized> {
     target: &'a T,
+    selected: HashMap<PackageIndex, Node>,
     variants: QueriedVariants,
+    pending: RefCell<HashMap<PackageIndex, bool>>,
+    install_options: &'a InstallOptions,
+}
+
+impl<'lock, T: Installable<'lock> + ?Sized> VariantInstallable<'_, T> {
+    /// Record the artifact that the next traversal step needs. Pending nodes are discarded;
+    /// only a complete traversal returns a resolution to the caller.
+    fn selected_node(&self, package: &Package, install: bool) -> Node {
+        let index = self.lock().by_id[&package.id];
+        if let Some(Node::Dist {
+            dist,
+            hashes,
+            install: selected_install,
+        }) = self.selected.get(&index)
+            && (!install || *selected_install)
+        {
+            return Node::Dist {
+                dist: dist.clone(),
+                hashes: hashes.clone(),
+                install,
+            };
+        }
+        self.pending
+            .borrow_mut()
+            .entry(index)
+            .and_modify(|pending_install| *pending_install |= install)
+            .or_insert(install);
+        Node::Root
+    }
 }
 
 impl<'lock, T: Installable<'lock> + ?Sized> Installable<'lock> for VariantInstallable<'_, T> {
@@ -1887,6 +1979,51 @@ impl<'lock, T: Installable<'lock> + ?Sized> Installable<'lock> for VariantInstal
     fn project_name(&self) -> Option<&PackageName> {
         self.target.project_name()
     }
+    fn installable_node(
+        &self,
+        package: &Package,
+        tags: &Tags,
+        marker_env: &ResolverMarkerEnvironment,
+        build_options: &BuildOptions,
+    ) -> Result<Node, LockError> {
+        if !package_has_variants(package) {
+            return self
+                .target
+                .installable_node(package, tags, marker_env, build_options);
+        }
+        Ok(self.selected_node(package, true))
+    }
+
+    fn non_installable_node(
+        &self,
+        package: &Package,
+        tags: &Tags,
+        marker_env: &ResolverMarkerEnvironment,
+    ) -> Result<Node, LockError> {
+        if !package_has_variants(package) {
+            return self.target.non_installable_node(package, tags, marker_env);
+        }
+        Ok(self.selected_node(package, false))
+    }
+
+    fn dependencies_ready(&self, package: &Package) -> bool {
+        if !package_has_variants(package) {
+            return true;
+        }
+        let index = self.lock().by_id[&package.id];
+        if self.selected.contains_key(&index) && !self.pending.borrow().contains_key(&index) {
+            return true;
+        }
+        // The conflict traversal can reach a package before creating its graph node.
+        let install = self.install_options.include_package(
+            package.as_install_target(),
+            self.project_name(),
+            self.lock().members(),
+        );
+        self.pending.borrow_mut().entry(index).or_insert(install);
+        false
+    }
+
     fn variant_environment(&self, package: &Package) -> impl MarkerVariantsEnvironment {
         CurrentQueriedVariants {
             current: self
@@ -1970,29 +2107,86 @@ impl MarkerVariantsEnvironment for CurrentQueriedVariants<'_> {
     fn label(&self) -> Option<&str> {
         self.current.label()
     }
+
+    fn base_label(&self, base: &str) -> Option<&str> {
+        self.global.0.get(base).and_then(|variant| variant.label())
+    }
 }
 
-async fn determine_properties<Context: BuildContext>(
+/// Select a compatible wheel and its marker properties, or request source fallback when none match.
+async fn select_variant<Context: BuildContext>(
     package: &Package,
-    workspace_root: &Path,
+    mut node: Node,
     marker_env: &ResolverMarkerEnvironment,
     distribution_database: &DistributionDatabase<'_, Context>,
     variants_cache: &PackageVariantCache,
     tags: &Tags,
-) -> Result<VariantWithLabel, LockError> {
-    let Some(variants_json) = package.to_registry_variants_json(workspace_root)? else {
-        // When selecting a non-variant wheel, all variant markers evaluate to false.
-        return Ok(VariantWithLabel::default());
+) -> Result<Option<(Node, VariantWithLabel)>, LockError> {
+    let Node::Dist {
+        dist:
+            ResolvedDist::Installable {
+                dist,
+                variants_json,
+                ..
+            },
+        hashes,
+        ..
+    } = &mut node
+    else {
+        return Ok(Some((node, VariantWithLabel::default())));
+    };
+    // Source distributions selected by --no-binary have no variant properties.
+    let Dist::Built(built) = Arc::make_mut(dist) else {
+        return Ok(Some((node, VariantWithLabel::default())));
+    };
+    let dist = match built {
+        BuiltDist::Registry(dist) => dist,
+        BuiltDist::DirectUrl(_) | BuiltDist::Path(_) | BuiltDist::GitPath(_) => {
+            let filename = built.wheel_filename();
+            let Some(label) = filename.variant() else {
+                return Ok(Some((node, VariantWithLabel::default())));
+            };
+            let hash_policy = if hashes.is_empty() {
+                HashPolicy::None
+            } else {
+                HashPolicy::Any(hashes.as_slice())
+            };
+            let metadata = distribution_database
+                .read_wheel_variant_metadata(built, hash_policy)
+                .await
+                .map_err(|err| LockErrorKind::VariantError {
+                    package_id: package.id.clone(),
+                    err,
+                })?;
+            let properties = distribution_database
+                .query_wheel_variants(
+                    metadata,
+                    label,
+                    marker_env,
+                    &VariantsJsonFilename {
+                        name: filename.name.clone(),
+                        version: filename.version.clone(),
+                    },
+                )
+                .await
+                .map_err(|err| LockErrorKind::VariantError {
+                    package_id: package.id.clone(),
+                    err,
+                })?;
+            return Ok(Some((node, properties)));
+        }
+    };
+    let Some(variants_json) = variants_json else {
+        return Ok(Some((node, VariantWithLabel::default())));
     };
     let resolved_variants = if variants_cache.register(variants_json.version_id()) {
         let resolved_variants = distribution_database
-            .fetch_and_query_variants(&variants_json, marker_env)
+            .fetch_and_query_variants(variants_json, marker_env)
             .await
             .map_err(|err| LockErrorKind::VariantError {
                 package_id: package.id.clone(),
                 err,
             })?;
-
         let resolved_variants = Arc::new(resolved_variants);
         variants_cache.done(variants_json.version_id(), resolved_variants.clone());
         resolved_variants
@@ -2003,36 +2197,31 @@ async fn determine_properties<Context: BuildContext>(
             .expect("missing value for registered task")
     };
 
-    // Select best wheel
-    let mut highest_priority_variant_wheel: Option<(_, VariantScore)> = None;
-    for wheel in &package.wheels {
-        if !wheel.filename.compatibility(tags).is_compatible() {
-            continue;
-        }
-        let Some(variant) = wheel.filename.variant() else {
-            // The non-variant wheel is already supported
-            continue;
-        };
-
-        let Some(scores) = resolved_variants.score_variant(variant) else {
-            continue;
-        };
-
-        if let Some((_, old_scores)) = &highest_priority_variant_wheel {
-            if &scores > old_scores {
-                highest_priority_variant_wheel = Some((variant, scores));
+    let best_variant = dist
+        .wheels
+        .iter()
+        .enumerate()
+        .filter_map(|(index, wheel)| {
+            let compatibility = wheel.filename.compatibility(tags);
+            if !compatibility.is_compatible() {
+                return None;
             }
-        } else {
-            highest_priority_variant_wheel = Some((variant, scores));
-        }
+            let label = wheel.filename.variant()?;
+            let score = resolved_variants.score_variant(label)?;
+            Some(((score, compatibility, wheel.filename.build_tag()), index))
+        })
+        .max_by(|(left, _), (right, _)| left.cmp(right));
+    if let Some((_, index)) = best_variant {
+        dist.best_wheel_index = index;
+    } else if dist.best_wheel().filename.variant().is_some() {
+        return Ok(None);
     }
-
-    if let Some((best_variant, _)) = highest_priority_variant_wheel {
-        Ok(resolved_variants
-            .compatible_variant(best_variant)
-            .unwrap_or_default())
-    } else {
-        // When selecting the non-variant wheel, all variant markers evaluate to false.
-        Ok(VariantWithLabel::default())
-    }
+    let wheel = dist.best_wheel();
+    *hashes = wheel.file.hashes.clone();
+    let properties = wheel
+        .filename
+        .variant()
+        .and_then(|label| resolved_variants.compatible_variant(label))
+        .unwrap_or_default();
+    Ok(Some((node, properties)))
 }

@@ -112,13 +112,16 @@ pub fn find_archive_dist_info<'a, T: Copy>(
     Ok((payload, dist_info_prefix))
 }
 
-/// Returns `true` if the file is a `METADATA` file in a `.dist-info` directory that matches the
-/// wheel filename.
-fn is_metadata_entry(path: &str, filename: &WheelFilename) -> Result<bool, Error> {
+/// Returns `true` if the file is the requested entry in a matching `.dist-info` directory.
+fn is_dist_info_entry(
+    path: &str,
+    filename: &WheelFilename,
+    entry_name: &str,
+) -> Result<bool, Error> {
     let Some((dist_info_dir, file)) = path.split_once('/') else {
         return Ok(false);
     };
-    if file != "METADATA" {
+    if file != entry_name {
         return Ok(false);
     }
     let Some(dist_info_prefix) = dist_info_dir.strip_suffix(".dist-info") else {
@@ -174,7 +177,10 @@ pub fn read_archive_metadata(
 /// Find the `.dist-info` directory in an unzipped wheel.
 ///
 /// See: <https://github.com/PyO3/python-pkginfo-rs>
-fn find_flat_dist_info(filename: &WheelFilename, path: impl AsRef<Path>) -> Result<String, Error> {
+pub fn find_flat_dist_info(
+    filename: &WheelFilename,
+    path: impl AsRef<Path>,
+) -> Result<String, Error> {
     // Iterate over `path` to find the `.dist-info` directory. It should be at the top-level.
     let Some(dist_info_prefix) = fs_err::read_dir(path.as_ref())
         .map_err(Error::Io)?
@@ -261,14 +267,25 @@ pub async fn read_metadata_async_stream<R: futures::AsyncRead + Unpin>(
     debug_path: &str,
     reader: R,
 ) -> Result<ResolutionMetadata, Error> {
+    let contents = read_dist_info_file_async_stream(filename, "METADATA", reader).await?;
+    ResolutionMetadata::parse_metadata(&contents)
+        .map_err(|err| Error::InvalidMetadata(debug_path.to_string(), Box::new(err)))
+}
+
+/// Read a named `.dist-info` file from a wheel without seeking.
+pub async fn read_dist_info_file_async_stream<R: futures::AsyncRead + Unpin>(
+    filename: &WheelFilename,
+    entry_name: &str,
+    reader: R,
+) -> Result<Vec<u8>, Error> {
     let reader = futures::io::BufReader::with_capacity(128 * 1024, reader);
     let mut zip = async_zip::base::read::stream::ZipFileReader::new(reader);
 
     while let Some(mut entry) = zip.next_with_entry().await? {
-        // Find the `METADATA` entry.
+        // Find the requested `.dist-info` entry.
         let path = entry.reader().entry().filename().as_str()?.to_owned();
 
-        if is_metadata_entry(&path, filename)? {
+        if is_dist_info_entry(&path, filename, entry_name)? {
             let mut reader = entry.reader_mut().compat();
             let mut contents = Vec::new();
             reader.read_to_end(&mut contents).await.map_err(Error::Io)?;
@@ -296,9 +313,7 @@ pub async fn read_metadata_async_stream<R: futures::AsyncRead + Unpin>(
                 }
             }
 
-            let metadata = ResolutionMetadata::parse_metadata(&contents)
-                .map_err(|err| Error::InvalidMetadata(debug_path.to_string(), Box::new(err)))?;
-            return Ok(metadata);
+            return Ok(contents);
         }
 
         // Close current file to get access to the next one. See docs:

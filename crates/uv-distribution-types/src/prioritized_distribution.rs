@@ -413,7 +413,7 @@ impl PrioritizedDist {
     pub fn from_variant_json(variant_json: RegistryVariantsJson) -> Self {
         Self(Box::new(PrioritizedDistInner {
             markers: MarkerTree::TRUE,
-            best_wheel_index: Some(0),
+            best_wheel_index: None,
             wheels: vec![],
             source: None,
             variants_json: Some(variant_json),

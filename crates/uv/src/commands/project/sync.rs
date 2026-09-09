@@ -19,7 +19,7 @@ use uv_configuration::{
     InstallOptions, TargetTriple, Upgrade,
 };
 use uv_dispatch::BuildDispatch;
-use uv_distribution::{DistributionDatabase, LoweredExtraBuildDependencies, resolve_variants};
+use uv_distribution::{DistributionDatabase, LoweredExtraBuildDependencies};
 use uv_distribution_types::{
     Dist, Index, IndexUrl, Name, Requirement, Resolution, ResolvedDist, SourceDist,
 };
@@ -789,7 +789,7 @@ pub(crate) async fn do_sync<'a>(
     // Populate credentials from the target.
     store_credentials_from_target(target, &client_builder)?;
 
-    {
+    if !target.has_variants() {
         // Read the lockfile.
         let resolution = target.to_resolution(
             &marker_env,
@@ -800,70 +800,59 @@ pub(crate) async fn do_sync<'a>(
             &install_options,
         )?;
 
-        if !resolution.distributions().any(|dist| {
-            matches!(
-                dist,
-                ResolvedDist::Installable {
-                    variants_json: Some(_),
-                    ..
-                }
-            )
-        }) {
-            // Always skip virtual projects, which shouldn't be built or installed.
-            let resolution = apply_no_virtual_project(resolution);
+        // Always skip virtual projects, which shouldn't be built or installed.
+        let resolution = apply_no_virtual_project(resolution);
 
-            // If necessary, convert editable to non-editable distributions.
-            let resolution = apply_editable_mode(resolution, editable.clone());
+        // If necessary, convert editable to non-editable distributions.
+        let resolution = apply_editable_mode(resolution, editable.clone());
 
-            // Constrain any build requirements marked as `match-runtime = true`.
-            let extra_build_requires = extra_build_requires.clone().match_runtime(&resolution)?;
+        // Constrain any build requirements marked as `match-runtime = true`.
+        let extra_build_requires = extra_build_requires.clone().match_runtime(&resolution)?;
 
-            // Extract the hashes from the lockfile.
-            let hasher = HashStrategy::from_resolution(&resolution, HashCheckingMode::Verify)?;
+        // Extract the hashes from the lockfile.
+        let hasher = HashStrategy::from_resolution(&resolution, HashCheckingMode::Verify)?;
 
-            let bytecode_compilation =
-                compile_bytecode.then_some(operations::BytecodeCompilation::All);
-            let site_packages = SitePackages::from_environment(venv)?;
-            let installation_plan = operations::InstallationPlan::build(
+        let bytecode_compilation = compile_bytecode.then_some(operations::BytecodeCompilation::All);
+        let site_packages = SitePackages::from_environment(venv)?;
+        let installation_plan = operations::InstallationPlan::build(
+            &resolution,
+            site_packages,
+            InstallationStrategy::Strict,
+            reinstall,
+            build_options,
+            &hasher,
+            index_locations,
+            config_setting,
+            config_settings_package,
+            &extra_build_requires,
+            extra_build_variables,
+            cache,
+            venv,
+            &tags,
+        )?;
+
+        // Avoid constructing an HTTP client and build dispatch when planning shows that there is no
+        // installation work to perform.
+        if installation_plan.is_noop(modifications, bytecode_compilation, dry_run) {
+            maybe_check_malware(
+                &target,
                 &resolution,
-                site_packages,
-                InstallationStrategy::Strict,
-                reinstall,
-                build_options,
-                &hasher,
-                index_locations,
-                config_setting,
-                config_settings_package,
-                &extra_build_requires,
-                extra_build_variables,
+                &malware_check_client_builder,
+                concurrency,
                 cache,
-                venv,
-                &tags,
-            )?;
+                preview,
+                &malware_context,
+            )
+            .await?;
 
-            // Avoid constructing an HTTP client and build dispatch when planning shows that there is no
-            // installation work to perform.
-            if installation_plan.is_noop(modifications, bytecode_compilation, dry_run) {
-                maybe_check_malware(
-                    &target,
-                    &resolution,
-                    &malware_check_client_builder,
-                    concurrency,
-                    cache,
-                    preview,
-                    &malware_context,
-                )
-                .await?;
-
-                return Ok(installation_plan.finish_noop(
-                    &resolution,
-                    modifications,
-                    bytecode_compilation,
-                    logger.as_ref(),
-                    dry_run,
-                    printer,
-                )?);
-            }
+            return Ok(installation_plan.finish_noop(
+                &resolution,
+                modifications,
+                bytecode_compilation,
+                logger.as_ref(),
+                dry_run,
+                printer,
+            )?);
         }
     }
 
@@ -1000,21 +989,6 @@ pub(crate) async fn do_sync<'a>(
         preview,
     );
 
-    // TODO(konsti): Pass this into operations::install
-    let distribution_database = DistributionDatabase::new(
-        &client,
-        &build_dispatch,
-        concurrency.downloads_semaphore.clone(),
-    );
-    let resolution = resolve_variants(
-        resolution,
-        &marker_env,
-        distribution_database,
-        state.index().variant_priorities(),
-        &tags,
-    )
-    .await?;
-
     let bytecode_compilation = compile_bytecode.then_some(operations::BytecodeCompilation::All);
     let site_packages = SitePackages::from_environment(venv)?;
     let installation_plan = operations::InstallationPlan::build(
@@ -1080,6 +1054,7 @@ pub(crate) async fn do_sync<'a>(
             bytecode_compilation,
             &hasher,
             &tags,
+            marker_env.markers(),
             &client,
             state.in_flight(),
             concurrency,
