@@ -60,12 +60,13 @@ jobs:
           RELEASE_BUILD: ${{ inputs.plan != '' }}
           TAG: ${{ inputs.plan != '' && fromJson(inputs.plan).announcement_tag }}
           PUSH_DEV: ${{ inputs.push-dev }}
-          IS_LOCAL_PR: ${{ github.event.pull_request.head.repo.full_name == 'astral-sh/uv' }}
+          IS_LOCAL_PR: ${{ github.repository == 'astral-sh/uv' && github.event.pull_request.head.repo.full_name == github.repository }}
+          IS_UV_DEV_PR: ${{ github.repository == 'astral-sh/uv-dev' && github.event.pull_request.head.repo.full_name == github.repository }}
         id: plan
         run: |
           {
-            if [ "${PUSH_DEV}" == "true" ] && [ "${IS_LOCAL_PR}" == "true" ]; then
-              echo "login=true"
+            if [ "${PUSH_DEV}" == "true" ] && { [ "${IS_LOCAL_PR}" == "true" ] || [ "${IS_UV_DEV_PR}" == "true" ]; }; then
+              echo "login=${IS_LOCAL_PR}"
               echo "push=true"
               echo "push-version=false"
               echo "save=true"

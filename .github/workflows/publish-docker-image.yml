@@ -23,6 +23,9 @@ permissions:
 
 jobs:
   publish:
+    # Development publication cannot select the production repositories.
+    # Production publication is restricted to the upstream release workflow.
+    if: ${{ inputs.push-dev || (github.repository == 'astral-sh/uv' && github.event_name == 'workflow_dispatch' && github.workflow_ref == 'astral-sh/uv/.github/workflows/release.yml@refs/heads/main') }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     environment:
@@ -34,6 +37,33 @@ jobs:
       packages: write # for GHCR image pushes
       attestations: write # for GHCR attestations
     steps:
+      - name: Validate publication target
+        env:
+          PUSH_DEV: ${{ inputs.push-dev }}
+          PR_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name }}
+        run: |
+          if [ "$PUSH_DEV" == "true" ]; then
+            case "$GITHUB_REPOSITORY" in
+              astral-sh/uv|astral-sh/uv-dev) ;;
+              *) echo "Development publication requires an Astral repository" >&2; exit 1 ;;
+            esac
+            if [ "$GITHUB_EVENT_NAME" != "pull_request" ] || [ "$PR_REPOSITORY" != "$GITHUB_REPOSITORY" ]; then
+              echo "Development publication requires a same-repository pull request" >&2
+              exit 1
+            fi
+            if [ "$UV_GHCR_IMAGE" != "ghcr.io/astral-sh/uv-dev" ] || [ -n "$UV_DOCKERHUB_IMAGE" ]; then
+              echo "Unexpected development image destination" >&2
+              exit 1
+            fi
+          elif [ "$GITHUB_REPOSITORY" != "astral-sh/uv" ] ||
+               [ "$GITHUB_EVENT_NAME" != "workflow_dispatch" ] ||
+               [ "$GITHUB_WORKFLOW_REF" != "astral-sh/uv/.github/workflows/release.yml@refs/heads/main" ]; then
+            echo "Production publication requires an upstream main-branch release" >&2
+            exit 1
+          fi
+          echo "GHCR destination: $UV_GHCR_IMAGE"
+          echo "Docker Hub destination: ${UV_DOCKERHUB_IMAGE:-none}"
+
       - uses: depot/setup-action@15c09a5f77a0840ad4bce955686522a257853461 # v1.7.1
 
       - uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
