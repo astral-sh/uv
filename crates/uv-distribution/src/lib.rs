@@ -9,7 +9,7 @@ pub use metadata::{
 };
 pub use reporter::Reporter;
 pub use source::{StaticMetadataDatabase, prune};
-pub use variants::{PackageVariantCache, resolve_variants};
+pub use variants::PackageVariantCache;
 
 mod archive;
 mod distribution_database;

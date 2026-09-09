@@ -38,6 +38,12 @@ impl fmt::Display for PythonVersion {
 pub enum Error {
     #[error("Wheel variants require `--preview-features wheel-variants`")]
     WheelVariantsPreview,
+    #[error("Failed to read wheel variant metadata")]
+    WheelVariantRead(#[source] std::io::Error),
+    #[error("Invalid wheel variant metadata")]
+    WheelVariantParse(#[source] serde_json::Error),
+    #[error(transparent)]
+    WheelVariantMetadata(#[from] uv_variants::variants_json::VariantMetadataError),
     #[error("Building source distributions is disabled")]
     NoBuild,
     #[error("Building source distributions for `{0}` is disabled")]

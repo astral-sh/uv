@@ -101,8 +101,28 @@ fn parse_marker_value<T: Pep508Url>(
         // ... or it can be a keyword
         Some(_) => {
             let (start, len) = cursor.take_while(|char| {
-                !char.is_whitespace() && !matches!(char, '>' | '=' | '<' | '!' | '~' | ')')
+                !char.is_whitespace() && !matches!(char, '>' | '=' | '<' | '!' | '~' | ')' | '[')
             });
+            // uv's lockfile scopes labels to their owning package, just as it scopes
+            // the set-valued variant markers. Standard dependency markers omit this suffix.
+            if cursor.slice(start, len) == "variant_label" && cursor.eat_char('[').is_some() {
+                let base_start = cursor.pos();
+                let base = parse_marker_value(cursor, reporter)?;
+                let MarkerValue::QuotedString(base) = base else {
+                    return Err(Pep508Error {
+                        message: Pep508ErrorSource::String(
+                            "Expected a quoted package identifier".to_string(),
+                        ),
+                        start: base_start,
+                        len: cursor.pos() - base_start,
+                        input: cursor.to_string(),
+                    });
+                };
+                cursor.next_expect_char(']', cursor.pos())?;
+                return Ok(MarkerValue::MarkerEnvString(
+                    MarkerValueString::VariantLabelBase(base),
+                ));
+            }
             let key = cursor.slice(start, len);
             MarkerValue::from_str(key)
                 .map_err(|_| Pep508Error {

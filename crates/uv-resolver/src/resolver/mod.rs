@@ -1556,7 +1556,9 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             if env.included_by_marker(marker) {
                 // But isn't supported by the distribution in this fork...
                 if !env.included_by_marker(dist.implied_markers().and(marker))
-                    && env.included_by_marker(find_environments(id, pubgrub, &variant_base).and(marker))
+                    && env.included_by_marker(
+                        find_environments(id, pubgrub, &variant_base).and(marker),
+                    )
                 {
                     // Then we need to fork.
                     let Some((left, right)) = fork_version_by_marker(env, marker) else {
@@ -1916,10 +1918,6 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     return Err(ResolveError::UnregisteredTask(format!("{name}=={version}")));
                 };
 
-                // If we're resolving for a specific environment, use the host variants, otherwise resolve
-                // for all variants.
-                let variant = Self::variant_properties(name, version, pins, env, in_memory_index);
-
                 // If the package does not exist in the registry or locally, we cannot fetch its dependencies
                 if self.dependency_mode.is_transitive()
                     && self.unavailable_packages.pin().contains_key(name)
@@ -1965,6 +1963,15 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                             err.clone(),
                         ));
                     }
+                };
+
+                let variant = if env.marker_environment().is_some()
+                    && let MetadataResponse::Found(archive) = &*response
+                    && let Some(variant) = &archive.variant
+                {
+                    variant.clone()
+                } else {
+                    Self::variant_properties(name, version, pins, env, in_memory_index)
                 };
 
                 // If there was no requires-python on the index page, we may have an incompatible
@@ -2302,7 +2309,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 }
 
                 let metadata = provider
-                    .get_or_build_wheel_metadata(&dist)
+                    .get_or_build_wheel_metadata(&dist, self.env.marker_environment())
                     .boxed_local()
                     .await?;
 
@@ -2320,7 +2327,10 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             }
 
             Request::Installed(dist) => {
-                let metadata = provider.get_installed_metadata(&dist).boxed_local().await?;
+                let metadata = provider
+                    .get_installed_metadata(&dist, self.env.marker_environment())
+                    .boxed_local()
+                    .await?;
 
                 if let MetadataResponse::Found(metadata) = &metadata {
                     if &metadata.metadata.name != dist.name() {
@@ -2477,7 +2487,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     let response = match dist {
                         ResolvedDist::Installable { dist, .. } => {
                             let metadata = provider
-                                .get_or_build_wheel_metadata(&dist)
+                                .get_or_build_wheel_metadata(&dist, self.env.marker_environment())
                                 .boxed_local()
                                 .await?;
 
@@ -2487,8 +2497,10 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                             }
                         }
                         ResolvedDist::Installed { dist } => {
-                            let metadata =
-                                provider.get_installed_metadata(&dist).boxed_local().await?;
+                            let metadata = provider
+                                .get_installed_metadata(&dist, self.env.marker_environment())
+                                .boxed_local()
+                                .await?;
 
                             Response::Installed {
                                 dist: (*dist).clone(),

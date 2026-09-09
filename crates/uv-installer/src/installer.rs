@@ -1,17 +1,23 @@
 use std::convert;
 use std::sync::Arc;
 
-use anyhow::{Context, Error, Result};
+use anyhow::{Context, Error, Result, ensure};
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
+use rustc_hash::FxHashMap;
 use tokio::sync::oneshot;
 use tracing::{instrument, warn};
 
 use uv_cache::Cache;
 use uv_configuration::initialize_rayon_once;
-use uv_distribution_types::CachedDist;
+use uv_distribution::DistributionDatabase;
+use uv_distribution_types::{CachedDist, Name, Resolution, VariantsJsonFilename};
 use uv_install_wheel::{Layout, LinkMode};
+use uv_normalize::PackageName;
+use uv_pep508::MarkerEnvironment;
 use uv_preview::Preview;
 use uv_python::PythonEnvironment;
+use uv_types::BuildContext;
+use uv_variants::variants_json::VariantsJsonContent;
 
 pub struct Installer<'a> {
     venv: &'a PythonEnvironment,
@@ -22,6 +28,8 @@ pub struct Installer<'a> {
     name: Option<String>,
     /// The metadata associated with the [`Installer`].
     metadata: bool,
+    /// The selected properties used to evaluate each installed wheel's dependency markers.
+    variants: FxHashMap<PackageName, serde_json::Value>,
     /// Preview settings for the installer.
     preview: Preview,
 }
@@ -36,6 +44,7 @@ impl<'a> Installer<'a> {
             reporter: None,
             name: Some("uv".to_string()),
             metadata: true,
+            variants: FxHashMap::default(),
             preview,
         }
     }
@@ -82,6 +91,57 @@ impl<'a> Installer<'a> {
         }
     }
 
+    /// Resolve the installed marker context before replacing any existing packages.
+    ///
+    /// A wheel can list several alternative property values. Save only the values supported
+    /// by the installation target so subsequent inspection does not need to execute providers.
+    pub async fn with_variant_contexts(
+        mut self,
+        wheels: &[CachedDist],
+        resolution: &Resolution,
+        database: &DistributionDatabase<'_, impl BuildContext>,
+        markers: &MarkerEnvironment,
+    ) -> Result<Self> {
+        for wheel in wheels {
+            let Some(label) = wheel.filename().variant() else {
+                continue;
+            };
+            let installed_path = uv_install_wheel::installed_dist_info_path(
+                &self.venv.interpreter().layout(),
+                wheel.path(),
+            )?;
+            let dist_info = installed_path
+                .file_name()
+                .context("Missing wheel dist-info directory")?;
+            let metadata_path = wheel.path().join(dist_info).join("variant.json");
+            let metadata: VariantsJsonContent =
+                serde_json::from_slice(&fs_err::read(&metadata_path)?)?;
+            let filename = VariantsJsonFilename {
+                name: wheel.name().clone(),
+                version: wheel.filename().version.clone(),
+            };
+            metadata.validate_wheel(label)?;
+            let variant = if let Some(context) = resolution.variant_context(wheel.filename()) {
+                // The target was already determined during selection. Validate the retained
+                // properties against the wheel without repeating provider discovery or policy.
+                ensure!(
+                    context.label.as_ref() == Some(label),
+                    "Selected wheel variant label changed"
+                );
+                context
+                    .validate_properties(metadata, label)
+                    .context("Selected wheel variant properties changed")?
+            } else {
+                database
+                    .query_wheel_variants(metadata, label, markers, &filename)
+                    .await?
+            };
+            self.variants
+                .insert(wheel.name().clone(), serde_json::to_value(variant)?);
+        }
+        Ok(self)
+    }
+
     /// Install a set of wheels into a Python virtual environment.
     #[instrument(skip_all, fields(num_wheels = %wheels.len()))]
     pub async fn install(self, wheels: Vec<CachedDist>) -> Result<Vec<CachedDist>> {
@@ -92,6 +152,7 @@ impl<'a> Installer<'a> {
             reporter,
             name: installer_name,
             metadata: installer_metadata,
+            variants,
             preview,
         } = self;
 
@@ -118,6 +179,7 @@ impl<'a> Installer<'a> {
                 reporter.as_ref(),
                 relocatable,
                 installer_metadata,
+                &variants,
                 preview,
             );
 
@@ -149,6 +211,7 @@ impl<'a> Installer<'a> {
             self.reporter.as_ref(),
             self.venv.relocatable(),
             self.metadata,
+            &self.variants,
             self.preview,
         )
     }
@@ -164,6 +227,7 @@ fn install(
     reporter: Option<&Arc<dyn Reporter>>,
     relocatable: bool,
     installer_metadata: bool,
+    variants: &FxHashMap<PackageName, serde_json::Value>,
     preview: Preview,
 ) -> Result<Vec<CachedDist>> {
     // Initialize the threadpool with the user settings.
@@ -185,6 +249,7 @@ fn install(
                 Some(wheel.cache_info())
             },
             wheel.build_info(),
+            variants.get(wheel.name()),
             installer_name,
             installer_metadata,
             link_mode,

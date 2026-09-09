@@ -262,8 +262,11 @@ impl<'a> RequirementExpander<'a> {
             })
             .filter(move |requirement| self.is_requirement_applicable(requirement, extra, variants))
             .flat_map(move |requirement| {
-                iter::once(requirement.clone())
-                    .chain(self.constraints_for_requirement(requirement, extra, variants))
+                iter::once(requirement.clone()).chain(self.constraints_for_requirement(
+                    requirement,
+                    extra,
+                    variants,
+                ))
             })
     }
 

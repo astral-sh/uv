@@ -41,7 +41,7 @@ impl MarkerEnvironment {
     }
 
     /// Returns of the stringly typed value of the key in the current environment
-    pub fn get_string(&self, key: CanonicalMarkerValueString) -> Option<&str> {
+    pub fn get_string(&self, key: &CanonicalMarkerValueString) -> Option<&str> {
         Some(match key {
             CanonicalMarkerValueString::ImplementationName => self.implementation_name(),
             CanonicalMarkerValueString::OsName => self.os_name(),
@@ -53,7 +53,8 @@ impl MarkerEnvironment {
             CanonicalMarkerValueString::PlatformSystem => self.platform_system(),
             CanonicalMarkerValueString::PlatformVersion => self.platform_version(),
             CanonicalMarkerValueString::SysPlatform => self.sys_platform(),
-            CanonicalMarkerValueString::VariantLabel => return None,
+            CanonicalMarkerValueString::VariantLabel
+            | CanonicalMarkerValueString::VariantLabelBase(_) => return None,
         })
     }
 }

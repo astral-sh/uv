@@ -123,6 +123,12 @@ impl ResolutionDependencyEdge {
         // We specifically do not account for conflict
         // markers here. Instead, those are computed via
         // a traversal on the resolution graph.
-        UniversalMarker::new(self.marker, ConflictMarker::TRUE)
+        // Reachability combines markers from several dependency edges. Keep each variant
+        // marker tied to the wheel declaring that dependency before combining them.
+        let marker = self.from.as_ref().map_or(self.marker, |node| {
+            self.marker
+                .with_variant_base(&format!("{}=={}", node.package.name, node.version))
+        });
+        UniversalMarker::new(marker, ConflictMarker::TRUE)
     }
 }
