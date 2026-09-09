@@ -730,16 +730,33 @@ fn check_virtual_workspace_checks_all_members_by_default() -> Result<()> {
         .child("pyproject.toml")
         .write_str(indoc! {r#"
             [tool.uv.workspace]
-            members = ["packages/*"]
+            members = ["packages/*", "vendor/*"]
+
+            [tool.ty.src]
+            exclude = ["vendor"]
         "#})?;
     write_workspace_member(&context, "member-a", "value: int = 'selected-a'\n")?;
-    write_workspace_member(&context, "member-b", "value: int = 'selected-b'\n")?;
 
+    let vendored = context.temp_dir.child("vendor/vendored");
+    vendored.create_dir_all()?;
+    vendored.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "vendored"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+    "#})?;
+    vendored
+        .child("main.py")
+        .write_str("value: int = 'selected-vendored'\n")?;
+
+    // Automatically selecting the vendored member overrides ty's exclusion, which is undesirable
+    // because configured exclusions should still apply. See astral-sh/uv#21551.
     uv_snapshot!(context.filters(), workspace_check(&context), @r#"
     exit_code: 1 (failure)
     ----- stdout -----
     packages/member-a/main.py:1:14: error[invalid-assignment] Object of type `Literal["selected-a"]` is not assignable to `int`
-    packages/member-b/main.py:1:14: error[invalid-assignment] Object of type `Literal["selected-b"]` is not assignable to `int`
+    vendor/vendored/main.py:1:14: error[invalid-assignment] Object of type `Literal["selected-vendored"]` is not assignable to `int`
     Found 2 diagnostics
 
     ----- stderr -----
