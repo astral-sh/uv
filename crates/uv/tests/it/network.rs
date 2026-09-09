@@ -1,4 +1,5 @@
 use std::convert::Infallible;
+use std::future::ready;
 use std::io;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -17,6 +18,7 @@ use http_body_util::{BodyExt, StreamBody};
 use hyper::body::Frame;
 use hyper::service::service_fn;
 use hyper_util::rt::TokioIo;
+use insta::allow_duplicates;
 use serde_json::json;
 use sha2::{Digest, Sha256};
 use tokio_stream::wrappers::ReceiverStream;
@@ -187,51 +189,59 @@ async fn mixed_error_server() -> (MockServer, String) {
     (server, mock_server_uri)
 }
 
-async fn time_out_response(
-    _req: hyper::Request<hyper::body::Incoming>,
-) -> Result<hyper::Response<BoxBody<Bytes, Infallible>>, Infallible> {
+type StreamingResponse = hyper::Response<BoxBody<Bytes, Infallible>>;
+
+/// Emit some bytes and then stall until the client times out.
+fn stalled_body(bytes: Bytes) -> BoxBody<Bytes, Infallible> {
     let (tx, rx) = tokio::sync::mpsc::channel(1);
     tokio::spawn(async move {
-        let _ = tx.send(Ok(Frame::data(Bytes::new()))).await;
+        let _ = tx.send(Ok(Frame::data(bytes))).await;
         tokio::time::sleep(Duration::from_mins(1)).await;
     });
-    let body = StreamBody::new(ReceiverStream::new(rx)).boxed();
-    Ok(hyper::Response::builder()
-        .header("Content-Type", "text/html")
-        .body(body)
-        .unwrap())
+    StreamBody::new(ReceiverStream::new(rx)).boxed()
 }
 
-/// Returns the server URL and a drop guard that shuts down the server.
-///
-/// The server runs in a thread with its own tokio runtime, so it
-/// won't be starved by the subprocess blocking the test thread. Dropping the
-/// guard shuts down the runtime and all tasks running in it.
-fn read_timeout_server() -> (String, impl Drop) {
-    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
-    listener.set_nonblocking(true).unwrap();
-    let server = format!("http://{}", listener.local_addr().unwrap());
+fn time_out_response(
+    _request: hyper::Request<hyper::body::Incoming>,
+) -> Result<StreamingResponse, http::Error> {
+    hyper::Response::builder()
+        .header("Content-Type", "text/html")
+        .body(stalled_body(Bytes::new()))
+}
 
+/// Run a streaming HTTP server on its own runtime so test subprocesses cannot starve it.
+/// Dropping the guard shuts down the runtime and all connection tasks.
+fn streaming_server(
+    handler: impl Fn(hyper::Request<hyper::body::Incoming>) -> Result<StreamingResponse, http::Error>
+    + Send
+    + Sync
+    + 'static,
+) -> (String, impl Drop) {
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("bind test server");
+    listener
+        .set_nonblocking(true)
+        .expect("nonblocking listener");
+    let server = format!("http://{}", listener.local_addr().expect("server address"));
+    let handler = Arc::new(handler);
     let (shutdown_tx, shutdown_rx) = tokio::sync::oneshot::channel::<()>();
-
     std::thread::spawn(move || {
         let runtime = tokio::runtime::Builder::new_current_thread()
             .enable_all()
             .build()
-            .unwrap();
+            .expect("test server runtime");
         runtime.block_on(async move {
-            let listener = tokio::net::TcpListener::from_std(listener).unwrap();
+            let listener = tokio::net::TcpListener::from_std(listener).expect("async listener");
             tokio::select! {
-                _ = async {
-                    loop {
-                        let (stream, _) = listener.accept().await.unwrap();
-                        let io = TokioIo::new(stream);
-
+                () = async {
+                    while let Ok((stream, _)) = listener.accept().await {
+                        let handler = handler.clone();
                         tokio::spawn(async move {
-                           let _ = hyper_util::server::conn::auto::Builder::new(
+                            let _ = hyper_util::server::conn::auto::Builder::new(
                                 hyper_util::rt::TokioExecutor::new(),
                             )
-                            .serve_connection(io, service_fn(time_out_response))
+                            .serve_connection(TokioIo::new(stream), service_fn(move |request| {
+                                ready(handler(request))
+                            }))
                             .await;
                         });
                     }
@@ -240,7 +250,6 @@ fn read_timeout_server() -> (String, impl Drop) {
             }
         });
     });
-
     (server, shutdown_tx)
 }
 
@@ -1038,7 +1047,7 @@ fn connect_timeout_stream() {
 async fn retry_read_timeout_index() {
     let context = uv_test::test_context!("3.12").with_fast_http_retry();
 
-    let (server, _guard) = read_timeout_server();
+    let (server, _guard) = streaming_server(time_out_response);
 
     uv_snapshot!(context.filters(), context
         .pip_install()
@@ -1059,7 +1068,7 @@ async fn retry_read_timeout_index() {
 async fn retry_read_timeout_python_downloads_json() {
     let context = uv_test::test_context!("3.12").with_fast_http_retry();
 
-    let (server, _guard) = read_timeout_server();
+    let (server, _guard) = streaming_server(time_out_response);
 
     uv_snapshot!(context.filters(), context
         .python_list()
@@ -1081,7 +1090,7 @@ async fn retry_read_timeout_python_downloads_json() {
 async fn retry_read_timeout_stream() {
     let context = uv_test::test_context!("3.12").with_fast_http_retry();
 
-    let (server, _guard) = read_timeout_server();
+    let (server, _guard) = streaming_server(time_out_response);
 
     uv_snapshot!(context.filters(), context
         .pip_install()
@@ -1097,12 +1106,8 @@ async fn retry_read_timeout_stream() {
     ");
 }
 
-/// A valid wheel whose data descriptors require the on-disk extraction fallback.
-async fn wheel_requiring_download() -> Vec<u8> {
-    wheel_requiring_download_with_generator("test").await
-}
-
-async fn wheel_requiring_download_with_generator(generator: &str) -> Vec<u8> {
+/// A valid wheel whose stored entries and data descriptors require on-disk extraction.
+async fn wheel_requiring_download(generator: &str) -> Result<Bytes> {
     let wheel_metadata = format!(
         "Wheel-Version: 1.0\nGenerator: {generator}\nRoot-Is-Purelib: true\nTag: py3-none-any\n"
     );
@@ -1119,366 +1124,294 @@ async fn wheel_requiring_download_with_generator(generator: &str) -> Vec<u8> {
         ),
     ] {
         let entry = ZipEntryBuilder::new(path.to_string().into(), Compression::Stored);
-        let mut entry_writer = writer.write_entry_stream(entry).await.unwrap();
-        entry_writer.write_all(contents).await.unwrap();
-        entry_writer.close().await.unwrap();
+        let mut entry_writer = writer.write_entry_stream(entry).await?;
+        entry_writer.write_all(contents).await?;
+        entry_writer.close().await?;
     }
-    writer.close().await.unwrap()
+    Ok(writer.close().await?.into())
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Default)]
 enum RangeResponse {
+    #[default]
     Supported,
-    Limited,
-    LimitedUnknownLength,
+    Limited {
+        known_length: bool,
+    },
     Ignored,
     NotAdvertised,
     InvalidContentRange,
 }
 
-/// Returns a server URL and a drop guard that serves a wheel with mid-stream interruption.
-///
-/// HEAD and range requests complete normally so metadata reads do not affect the download count.
-/// The first full GET reaches the streaming fallback, and the second is interrupted. When
-/// supported, that interrupted download can be resumed.
-fn wheel_server(wheel: Vec<u8>, range_response: RangeResponse) -> (String, impl Drop) {
-    let (server, guard, _) = wheel_server_with_etag(wheel, range_response, Some("\"wheel\""), None);
-    (server, guard)
+#[derive(Clone, Copy)]
+struct DownloadCase {
+    range: RangeResponse,
+    etag: Option<&'static str>,
+    replace: bool,
+    /// Number of full download retries expected and allowed.
+    full_retries: usize,
 }
 
-/// Serve an optional replacement wheel after the interrupted download, honoring `If-Range`.
-/// Return the full GET count so tests can distinguish a fresh download from a continuation.
-fn wheel_server_with_etag(
-    wheel: Vec<u8>,
-    range_response: RangeResponse,
-    etag: Option<&'static str>,
-    replacement: Option<Vec<u8>>,
-) -> (String, impl Drop, Arc<AtomicUsize>) {
-    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
-    listener.set_nonblocking(true).unwrap();
-    let server_url = format!("http://{}", listener.local_addr().unwrap());
-    let wheel = Bytes::from(wheel);
-    let replacement = replacement.map(Bytes::from);
+impl Default for DownloadCase {
+    fn default() -> Self {
+        Self {
+            range: RangeResponse::Supported,
+            etag: Some("\"wheel\""),
+            replace: false,
+            full_retries: 0,
+        }
+    }
+}
+
+/// Serve metadata normally, then interrupt the second full GET after streaming extraction fails.
+/// Subsequent requests exercise the configured continuation or full-download fallback.
+fn wheel_response(
+    request: &hyper::Request<hyper::body::Incoming>,
+    wheel: &Bytes,
+    replacement: Option<&Bytes>,
+    case: DownloadCase,
+    full_get_count: &AtomicUsize,
+) -> Result<StreamingResponse, http::Error> {
+    let resuming = full_get_count.load(Ordering::Relaxed) >= 2;
+    let (wheel, etag) = if resuming && let Some(replacement) = replacement {
+        (replacement, Some("\"replacement\""))
+    } else {
+        (wheel, case.etag)
+    };
+    let size = wheel.len();
+    let mut response = hyper::Response::builder();
+    if let Some(etag) = etag {
+        response = response.header(ETAG, etag);
+    }
+    if request.method() == hyper::Method::HEAD {
+        return response
+            .header(CONTENT_LENGTH, size)
+            .header(ACCEPT_RANGES, "bytes")
+            .body(http_body_util::Empty::new().boxed());
+    }
+    if let Some(range) = request.headers().get(RANGE) {
+        if resuming
+            && request
+                .headers()
+                .get(IF_RANGE)
+                .is_some_and(|validator| etag.is_none_or(|etag| validator != etag))
+        {
+            return response
+                .header(CONTENT_LENGTH, size)
+                .body(http_body_util::Full::new(wheel.clone()).boxed());
+        }
+        let (start, end) = range
+            .to_str()
+            .expect("ASCII range")
+            .strip_prefix("bytes=")
+            .expect("byte range")
+            .split_once('-')
+            .expect("range bounds");
+        let start: usize = start.parse().expect("range start");
+        let mut end = if end.is_empty() {
+            size - 1
+        } else {
+            end.parse().expect("range end")
+        };
+        let mut content_range_start = start;
+        let mut complete_length = size.to_string();
+        if resuming {
+            match case.range {
+                RangeResponse::Supported | RangeResponse::NotAdvertised => {}
+                RangeResponse::Ignored => {
+                    return response
+                        .header(CONTENT_LENGTH, size)
+                        .body(http_body_util::Full::new(wheel.clone()).boxed());
+                }
+                RangeResponse::Limited { known_length } => {
+                    end = end.min(start + size / 4 - 1);
+                    if !known_length {
+                        complete_length = "*".to_string();
+                    }
+                }
+                RangeResponse::InvalidContentRange => content_range_start = 0,
+            }
+        }
+        let bytes = wheel.slice(start..=end);
+        return response
+            .status(StatusCode::PARTIAL_CONTENT)
+            .header(
+                CONTENT_RANGE,
+                format!("bytes {content_range_start}-{end}/{complete_length}"),
+            )
+            .header(CONTENT_LENGTH, bytes.len())
+            .body(http_body_util::Full::new(bytes).boxed());
+    }
+    response = response.header(CONTENT_LENGTH, size);
+    if full_get_count.fetch_add(1, Ordering::Relaxed) != 1 {
+        return response.body(http_body_util::Full::new(wheel.clone()).boxed());
+    }
+    if !matches!(case.range, RangeResponse::NotAdvertised) {
+        response = response.header(ACCEPT_RANGES, "bytes");
+    }
+    response.body(stalled_body(wheel.slice(..size / 2)))
+}
+
+async fn wheel_server(case: DownloadCase) -> Result<(String, impl Drop, Arc<AtomicUsize>, String)> {
+    let wheel = wheel_requiring_download("test").await?;
+    let replacement = if case.replace {
+        Some(wheel_requiring_download("next").await?)
+    } else {
+        None
+    };
+    let hash = hex::encode(Sha256::digest(replacement.as_ref().unwrap_or(&wheel)));
     let full_get_count = Arc::new(AtomicUsize::new(0));
     let requests = full_get_count.clone();
-    let (shutdown_tx, shutdown_rx) = tokio::sync::oneshot::channel::<()>();
-    std::thread::spawn(move || {
-        let runtime = tokio::runtime::Builder::new_current_thread()
-            .enable_all()
-            .build()
-            .unwrap();
-        runtime.block_on(async move {
-            let listener = tokio::net::TcpListener::from_std(listener).unwrap();
-            tokio::select! {
-                () = async {
-                    loop {
-                        let Ok((stream, _)) = listener.accept().await else { break };
-                        let wheel = wheel.clone();
-                        let replacement = replacement.clone();
-                        let full_get_count = full_get_count.clone();
-                        tokio::spawn(async move {
-                            let _ = hyper_util::server::conn::auto::Builder::new(
-                                hyper_util::rt::TokioExecutor::new(),
-                            )
-                            .serve_connection(
-                                TokioIo::new(stream),
-                                service_fn(move |request: hyper::Request<hyper::body::Incoming>| {
-                                    let wheel = wheel.clone();
-                                    let replacement = replacement.clone();
-                                    let full_get_count = full_get_count.clone();
-                                    async move {
-                                        let (wheel, etag) = if full_get_count.load(Ordering::Relaxed) >= 2
-                                            && let Some(replacement) = replacement
-                                        {
-                                            (replacement, Some("\"replacement\""))
-                                        } else {
-                                            (wheel, etag)
-                                        };
-                                        let size = wheel.len();
-                                        let mut response = hyper::Response::builder();
-                                        if let Some(etag) = etag {
-                                            response = response.header(ETAG, etag);
-                                        }
-                                        if request.method() == hyper::Method::HEAD {
-                                            return Ok::<_, Infallible>(response
-                                                .header(CONTENT_LENGTH, size.to_string())
-                                                .header(ACCEPT_RANGES, "bytes")
-                                                .body(http_body_util::Empty::new().boxed())
-                                                .unwrap());
-                                        }
-
-                                        if let Some(range) = request.headers().get(RANGE) {
-                                            if full_get_count.load(Ordering::Relaxed) >= 2
-                                                && (matches!(range_response, RangeResponse::Ignored)
-                                                    || request.headers().get(IF_RANGE).is_some_and(|validator| {
-                                                        etag.is_none_or(|etag| validator != etag)
-                                                    }))
-                                            {
-                                                return Ok::<_, Infallible>(response
-                                                    .header(CONTENT_LENGTH, size.to_string())
-                                                    .body(http_body_util::Full::new(wheel).boxed())
-                                                    .expect("valid wheel response"));
-                                            }
-                                            let (start, end) = range
-                                                .to_str()
-                                                .unwrap()
-                                                .trim_start_matches("bytes=")
-                                                .split_once('-')
-                                                .map(|(start, end)| {
-                                                    (
-                                                        start.parse().unwrap(),
-                                                        end.parse().unwrap_or(size - 1),
-                                                    )
-                                                })
-                                                .unwrap();
-                                            let end = match range_response {
-                                                RangeResponse::Limited | RangeResponse::LimitedUnknownLength
-                                                    if full_get_count.load(Ordering::Relaxed) >= 2 =>
-                                                {
-                                                    end.min(start + size / 4 - 1)
-                                                }
-                                                RangeResponse::Supported
-                                                | RangeResponse::Limited
-                                                | RangeResponse::LimitedUnknownLength
-                                                | RangeResponse::Ignored
-                                                | RangeResponse::NotAdvertised
-                                                | RangeResponse::InvalidContentRange => end,
-                                            };
-                                            let complete_length = match range_response {
-                                                RangeResponse::LimitedUnknownLength
-                                                    if full_get_count.load(Ordering::Relaxed) >= 2 => "*".to_string(),
-                                                RangeResponse::Supported
-                                                | RangeResponse::Limited
-                                                | RangeResponse::LimitedUnknownLength
-                                                | RangeResponse::Ignored
-                                                | RangeResponse::NotAdvertised
-                                                | RangeResponse::InvalidContentRange => size.to_string(),
-                                            };
-                                            let content_range_start = if matches!(
-                                                range_response,
-                                                RangeResponse::InvalidContentRange
-                                            ) && full_get_count.load(Ordering::Relaxed) >= 2
-                                            {
-                                                0
-                                            } else {
-                                                start
-                                            };
-                                            let bytes = wheel.slice(start..=end);
-                                            return Ok::<_, Infallible>(response
-                                                .status(StatusCode::PARTIAL_CONTENT)
-                                                .header(CONTENT_RANGE, format!("bytes {content_range_start}-{end}/{complete_length}"))
-                                                .header(CONTENT_LENGTH, bytes.len().to_string())
-                                                .body(http_body_util::Full::new(bytes).boxed())
-                                                .unwrap());
-                                        }
-
-                                        if full_get_count.fetch_add(1, Ordering::Relaxed) != 1 {
-                                            return Ok::<_, Infallible>(response
-                                                .header(CONTENT_LENGTH, size.to_string())
-                                                .body(http_body_util::Full::new(wheel).boxed())
-                                                .unwrap());
-                                        }
-
-                                        let (tx, rx) = tokio::sync::mpsc::channel(1);
-                                        tokio::spawn(async move {
-                                            let _ = tx
-                                                .send(Ok(Frame::data(wheel.slice(..size / 2))))
-                                                .await;
-                                            tokio::time::sleep(Duration::from_mins(1)).await;
-                                        });
-                                        response = response.header(CONTENT_LENGTH, size.to_string());
-                                        if matches!(
-                                            range_response,
-                                            RangeResponse::Supported
-                                                | RangeResponse::Limited
-                                                | RangeResponse::LimitedUnknownLength
-                                                | RangeResponse::Ignored
-                                                | RangeResponse::InvalidContentRange
-                                        ) {
-                                            response = response.header(ACCEPT_RANGES, "bytes");
-                                        }
-                                        Ok::<_, Infallible>(response
-                                            .body(StreamBody::new(ReceiverStream::new(rx)).boxed())
-                                            .unwrap())
-                                    }
-                                }),
-                            )
-                            .await;
-                        });
-                    }
-                } => {}
-                _ = shutdown_rx => {}
-            }
-        });
+    let (server, guard) = streaming_server(move |request| {
+        wheel_response(
+            &request,
+            &wheel,
+            replacement.as_ref(),
+            case,
+            &full_get_count,
+        )
     });
-    (server_url, shutdown_tx, requests)
+    Ok((server, guard, requests, hash))
 }
 
-/// A resumed download hashes the complete wheel without consuming a retry.
+async fn assert_wheel_download(case: DownloadCase) -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let (server, _guard, full_get_count, hash) = wheel_server(case).await?;
+    let wheel_url = format!("{server}/ok-1.0.0-py3-none-any.whl");
+    let requirements = context.temp_dir.child("requirements.txt");
+    requirements.write_str(&format!("ok @ {wheel_url} --hash=sha256:{hash}\n"))?;
+    allow_duplicates! {
+        uv_snapshot!(context.filters(), context
+            .pip_install()
+            .arg("-r")
+            .arg(requirements.path())
+            .arg("--require-hashes")
+            .env(EnvVars::UV_HTTP_RETRIES, case.full_retries.to_string())
+            .env(EnvVars::UV_HTTP_TIMEOUT, "1")
+            .env(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY, "true")
+            .env(EnvVars::RUST_LOG, "warn"), @"
+        exit_code: 0 (success)
+        ----- stderr -----
+        Resolved 1 package in [TIME]
+        WARN Streaming unsupported for ok @ http://[LOCALHOST]/ok-1.0.0-py3-none-any.whl; downloading wheel to disk (Invalid zip file structure)
+        Prepared 1 package in [TIME]
+        Installed 1 package in [TIME]
+         + ok==1.0.0 (from http://[LOCALHOST]/ok-1.0.0-py3-none-any.whl)
+        ");
+    }
+    // The first full GET reaches the extraction fallback; the second is interrupted.
+    assert_eq!(
+        full_get_count.load(Ordering::Relaxed),
+        2 + case.full_retries
+    );
+    Ok(())
+}
+
 #[tokio::test]
 async fn direct_url_range_resume() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
-
-    let wheel = wheel_requiring_download().await;
-    let hash = hex::encode(Sha256::digest(&wheel));
-    let (server, _guard) = wheel_server(wheel, RangeResponse::Supported);
-
-    let wheel_url = format!("{server}/ok-1.0.0-py3-none-any.whl");
-    let requirements = context.temp_dir.child("requirements.txt");
-    requirements.write_str(&format!("ok @ {wheel_url} --hash=sha256:{hash}\n"))?;
-    uv_snapshot!(context.filters(), context
-        .pip_install()
-        .arg("-r")
-        .arg(requirements.path())
-        .arg("--require-hashes")
-        .env(EnvVars::UV_HTTP_RETRIES, "0")
-        .env(EnvVars::UV_HTTP_TIMEOUT, "1")
-        .env(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY, "true")
-        .env(EnvVars::RUST_LOG, "warn"), @"
-    exit_code: 0 (success)
-    ----- stderr -----
-    Resolved 1 package in [TIME]
-    WARN Streaming unsupported for ok @ http://[LOCALHOST]/ok-1.0.0-py3-none-any.whl; downloading wheel to disk (Invalid zip file structure)
-    Prepared 1 package in [TIME]
-    Installed 1 package in [TIME]
-     + ok==1.0.0 (from http://[LOCALHOST]/ok-1.0.0-py3-none-any.whl)
-    ");
-
-    Ok(())
+    assert_wheel_download(DownloadCase::default()).await
 }
 
-/// Complete the wheel when each range response supplies only part of the remaining bytes.
 #[tokio::test]
 async fn direct_url_partial_range_resume() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
-
-    let wheel = wheel_requiring_download().await;
-    let hash = hex::encode(Sha256::digest(&wheel));
-    let (server, _guard) = wheel_server(wheel, RangeResponse::Limited);
-
-    let wheel_url = format!("{server}/ok-1.0.0-py3-none-any.whl");
-    let requirements = context.temp_dir.child("requirements.txt");
-    requirements.write_str(&format!("ok @ {wheel_url} --hash=sha256:{hash}\n"))?;
-    uv_snapshot!(context.filters(), context
-        .pip_install()
-        .arg("-r")
-        .arg(requirements.path())
-        .arg("--require-hashes")
-        .env(EnvVars::UV_HTTP_RETRIES, "0")
-        .env(EnvVars::UV_HTTP_TIMEOUT, "1")
-        .env(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY, "true")
-        .env(EnvVars::RUST_LOG, "warn"), @"
-    exit_code: 0 (success)
-    ----- stderr -----
-    Resolved 1 package in [TIME]
-    WARN Streaming unsupported for ok @ http://[LOCALHOST]/ok-1.0.0-py3-none-any.whl; downloading wheel to disk (Invalid zip file structure)
-    Prepared 1 package in [TIME]
-    Installed 1 package in [TIME]
-     + ok==1.0.0 (from http://[LOCALHOST]/ok-1.0.0-py3-none-any.whl)
-    ");
-
-    Ok(())
+    assert_wheel_download(DownloadCase {
+        range: RangeResponse::Limited { known_length: true },
+        ..DownloadCase::default()
+    })
+    .await
 }
 
-/// Use the original content length when partial responses omit the complete length.
 #[tokio::test]
 async fn direct_url_partial_range_resume_unknown_length() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
-
-    let wheel = wheel_requiring_download().await;
-    let hash = hex::encode(Sha256::digest(&wheel));
-    let (server, _guard) = wheel_server(wheel, RangeResponse::LimitedUnknownLength);
-
-    let wheel_url = format!("{server}/ok-1.0.0-py3-none-any.whl");
-    let requirements = context.temp_dir.child("requirements.txt");
-    requirements.write_str(&format!("ok @ {wheel_url} --hash=sha256:{hash}\n"))?;
-    uv_snapshot!(context.filters(), context
-        .pip_install()
-        .arg("-r")
-        .arg(requirements.path())
-        .arg("--require-hashes")
-        .env(EnvVars::UV_HTTP_RETRIES, "0")
-        .env(EnvVars::UV_HTTP_TIMEOUT, "1")
-        .env(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY, "true")
-        .env(EnvVars::RUST_LOG, "warn"), @"
-    exit_code: 0 (success)
-    ----- stderr -----
-    Resolved 1 package in [TIME]
-    WARN Streaming unsupported for ok @ http://[LOCALHOST]/ok-1.0.0-py3-none-any.whl; downloading wheel to disk (Invalid zip file structure)
-    Prepared 1 package in [TIME]
-    Installed 1 package in [TIME]
-     + ok==1.0.0 (from http://[LOCALHOST]/ok-1.0.0-py3-none-any.whl)
-    ");
-
-    Ok(())
+    assert_wheel_download(DownloadCase {
+        range: RangeResponse::Limited {
+            known_length: false,
+        },
+        ..DownloadCase::default()
+    })
+    .await
 }
 
-/// A full response to a range request resets the wheel hash along with the partial file.
 #[tokio::test]
 async fn direct_url_ignored_range_resume() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
-
-    let wheel = wheel_requiring_download().await;
-    let hash = hex::encode(Sha256::digest(&wheel));
-    let (server, _guard) = wheel_server(wheel, RangeResponse::Ignored);
-
-    let wheel_url = format!("{server}/ok-1.0.0-py3-none-any.whl");
-    let requirements = context.temp_dir.child("requirements.txt");
-    requirements.write_str(&format!("ok @ {wheel_url} --hash=sha256:{hash}\n"))?;
-    uv_snapshot!(context.filters(), context
-        .pip_install()
-        .arg("-r")
-        .arg(requirements.path())
-        .arg("--require-hashes")
-        .env(EnvVars::UV_HTTP_RETRIES, "0")
-        .env(EnvVars::UV_HTTP_TIMEOUT, "1")
-        .env(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY, "true")
-        .env(EnvVars::RUST_LOG, "warn"), @"
-    exit_code: 0 (success)
-    ----- stderr -----
-    Resolved 1 package in [TIME]
-    WARN Streaming unsupported for ok @ http://[LOCALHOST]/ok-1.0.0-py3-none-any.whl; downloading wheel to disk (Invalid zip file structure)
-    Prepared 1 package in [TIME]
-    Installed 1 package in [TIME]
-     + ok==1.0.0 (from http://[LOCALHOST]/ok-1.0.0-py3-none-any.whl)
-    ");
-
-    Ok(())
+    assert_wheel_download(DownloadCase {
+        range: RangeResponse::Ignored,
+        ..DownloadCase::default()
+    })
+    .await
 }
 
-/// Without advertised range support, a mid-stream interruption uses a regular retry.
 #[tokio::test]
-async fn direct_url_no_range_resume() {
-    let context = uv_test::test_context!("3.12");
+async fn direct_url_no_range_resume() -> Result<()> {
+    assert_wheel_download(DownloadCase {
+        range: RangeResponse::NotAdvertised,
+        full_retries: 1,
+        ..DownloadCase::default()
+    })
+    .await
+}
 
-    let wheel = wheel_requiring_download().await;
-    let (server, _guard) = wheel_server(wheel, RangeResponse::NotAdvertised);
+#[tokio::test]
+async fn direct_url_range_validator_changed() -> Result<()> {
+    assert_wheel_download(DownloadCase {
+        replace: true,
+        full_retries: 1,
+        ..DownloadCase::default()
+    })
+    .await
+}
 
-    let wheel_url = format!("{server}/ok-1.0.0-py3-none-any.whl");
-    uv_snapshot!(context.filters(), context
-        .pip_install()
-        .arg(format!("ok @ {wheel_url}"))
-        .env(EnvVars::UV_HTTP_RETRIES, "1")
-        .env(EnvVars::UV_HTTP_TIMEOUT, "1")
-        .env(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY, "true")
-        .env(EnvVars::RUST_LOG, "warn"), @"
-    exit_code: 0 (success)
-    ----- stderr -----
-    Resolved 1 package in [TIME]
-    WARN Streaming unsupported for ok @ http://[LOCALHOST]/ok-1.0.0-py3-none-any.whl; downloading wheel to disk (Invalid zip file structure)
-    Prepared 1 package in [TIME]
-    Installed 1 package in [TIME]
-     + ok==1.0.0 (from http://[LOCALHOST]/ok-1.0.0-py3-none-any.whl)
-    ");
+#[tokio::test]
+async fn direct_url_range_validator_changed_full_response() -> Result<()> {
+    assert_wheel_download(DownloadCase {
+        range: RangeResponse::Ignored,
+        replace: true,
+        full_retries: 1,
+        ..DownloadCase::default()
+    })
+    .await
+}
+
+#[tokio::test]
+async fn direct_url_range_validator_missing() -> Result<()> {
+    assert_wheel_download(DownloadCase {
+        etag: None,
+        full_retries: 1,
+        ..DownloadCase::default()
+    })
+    .await
+}
+
+#[tokio::test]
+async fn direct_url_range_validator_weak() -> Result<()> {
+    assert_wheel_download(DownloadCase {
+        etag: Some("W/\"wheel\""),
+        full_retries: 1,
+        ..DownloadCase::default()
+    })
+    .await
+}
+
+#[tokio::test]
+async fn direct_url_range_validator_invalid() -> Result<()> {
+    assert_wheel_download(DownloadCase {
+        etag: Some("unquoted"),
+        full_retries: 1,
+        ..DownloadCase::default()
+    })
+    .await
 }
 
 /// An invalid continuation response does not bypass regular retry handling.
 #[tokio::test]
-async fn direct_url_invalid_range_does_not_bypass_retry() {
+async fn direct_url_invalid_range_does_not_bypass_retry() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
-    let wheel = wheel_requiring_download().await;
-    let (server, _guard) = wheel_server(wheel, RangeResponse::InvalidContentRange);
+    let (server, _guard, _, _) = wheel_server(DownloadCase {
+        range: RangeResponse::InvalidContentRange,
+        ..DownloadCase::default()
+    })
+    .await?;
 
     let wheel_url = format!("{server}/ok-1.0.0-py3-none-any.whl");
     uv_snapshot!(context.filters(), context
@@ -1497,196 +1430,5 @@ async fn direct_url_invalid_range_does_not_bypass_retry() {
       ├─▶ Failed to write to the distribution cache
       ╰─▶ Failed to download distribution due to network timeout. Try increasing UV_HTTP_TIMEOUT (current value: [TIME]).
     ");
-}
-
-/// A changed wheel is downloaded afresh instead of combining two representations.
-#[tokio::test]
-async fn direct_url_range_validator_changed() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
-
-    let wheel = wheel_requiring_download().await;
-    let replacement = wheel_requiring_download_with_generator("next").await;
-    let hash = hex::encode(Sha256::digest(&replacement));
-    let (server, _guard, full_get_count) = wheel_server_with_etag(
-        wheel,
-        RangeResponse::Supported,
-        Some("\"wheel\""),
-        Some(replacement),
-    );
-
-    let wheel_url = format!("{server}/ok-1.0.0-py3-none-any.whl");
-    let requirements = context.temp_dir.child("requirements.txt");
-    requirements.write_str(&format!("ok @ {wheel_url} --hash=sha256:{hash}\n"))?;
-    uv_snapshot!(context.filters(), context
-        .pip_install()
-        .arg("-r")
-        .arg(requirements.path())
-        .arg("--require-hashes")
-        .env(EnvVars::UV_HTTP_RETRIES, "1")
-        .env(EnvVars::UV_HTTP_TIMEOUT, "1")
-        .env(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY, "true")
-        .env(EnvVars::RUST_LOG, "warn"), @"
-    exit_code: 0 (success)
-    ----- stderr -----
-    Resolved 1 package in [TIME]
-    WARN Streaming unsupported for ok @ http://[LOCALHOST]/ok-1.0.0-py3-none-any.whl; downloading wheel to disk (Invalid zip file structure)
-    Prepared 1 package in [TIME]
-    Installed 1 package in [TIME]
-     + ok==1.0.0 (from http://[LOCALHOST]/ok-1.0.0-py3-none-any.whl)
-    ");
-
-    // The fresh full response supplies both the wheel and its HTTP cache metadata.
-    assert_eq!(full_get_count.load(Ordering::Relaxed), 3);
-
-    Ok(())
-}
-
-/// A full replacement response must be cached with its own response metadata.
-#[tokio::test]
-async fn direct_url_range_validator_changed_full_response() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
-
-    let wheel = wheel_requiring_download().await;
-    let replacement = wheel_requiring_download_with_generator("next").await;
-    let hash = hex::encode(Sha256::digest(&replacement));
-    let (server, _guard, full_get_count) = wheel_server_with_etag(
-        wheel,
-        RangeResponse::Ignored,
-        Some("\"wheel\""),
-        Some(replacement),
-    );
-
-    let wheel_url = format!("{server}/ok-1.0.0-py3-none-any.whl");
-    let requirements = context.temp_dir.child("requirements.txt");
-    requirements.write_str(&format!("ok @ {wheel_url} --hash=sha256:{hash}\n"))?;
-    uv_snapshot!(context.filters(), context
-        .pip_install()
-        .arg("-r")
-        .arg(requirements.path())
-        .arg("--require-hashes")
-        .env(EnvVars::UV_HTTP_RETRIES, "1")
-        .env(EnvVars::UV_HTTP_TIMEOUT, "1")
-        .env(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY, "true")
-        .env(EnvVars::RUST_LOG, "warn"), @"
-    exit_code: 0 (success)
-    ----- stderr -----
-    Resolved 1 package in [TIME]
-    WARN Streaming unsupported for ok @ http://[LOCALHOST]/ok-1.0.0-py3-none-any.whl; downloading wheel to disk (Invalid zip file structure)
-    Prepared 1 package in [TIME]
-    Installed 1 package in [TIME]
-     + ok==1.0.0 (from http://[LOCALHOST]/ok-1.0.0-py3-none-any.whl)
-    ");
-
-    // The fresh full response supplies both the wheel and its HTTP cache metadata.
-    assert_eq!(full_get_count.load(Ordering::Relaxed), 3);
-
-    Ok(())
-}
-
-/// An interrupted response without a validator uses a full download retry.
-#[tokio::test]
-async fn direct_url_range_validator_missing() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
-
-    let wheel = wheel_requiring_download().await;
-    let hash = hex::encode(Sha256::digest(&wheel));
-    let (server, _guard, full_get_count) =
-        wheel_server_with_etag(wheel, RangeResponse::Supported, None, None);
-
-    let wheel_url = format!("{server}/ok-1.0.0-py3-none-any.whl");
-    let requirements = context.temp_dir.child("requirements.txt");
-    requirements.write_str(&format!("ok @ {wheel_url} --hash=sha256:{hash}\n"))?;
-    uv_snapshot!(context.filters(), context
-        .pip_install()
-        .arg("-r")
-        .arg(requirements.path())
-        .arg("--require-hashes")
-        .env(EnvVars::UV_HTTP_RETRIES, "1")
-        .env(EnvVars::UV_HTTP_TIMEOUT, "1")
-        .env(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY, "true")
-        .env(EnvVars::RUST_LOG, "warn"), @"
-    exit_code: 0 (success)
-    ----- stderr -----
-    Resolved 1 package in [TIME]
-    WARN Streaming unsupported for ok @ http://[LOCALHOST]/ok-1.0.0-py3-none-any.whl; downloading wheel to disk (Invalid zip file structure)
-    Prepared 1 package in [TIME]
-    Installed 1 package in [TIME]
-     + ok==1.0.0 (from http://[LOCALHOST]/ok-1.0.0-py3-none-any.whl)
-    ");
-
-    assert_eq!(full_get_count.load(Ordering::Relaxed), 3);
-
-    Ok(())
-}
-
-/// A weak `ETag` cannot validate the bytes of a resumed download.
-#[tokio::test]
-async fn direct_url_range_validator_weak() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
-
-    let wheel = wheel_requiring_download().await;
-    let hash = hex::encode(Sha256::digest(&wheel));
-    let (server, _guard, full_get_count) =
-        wheel_server_with_etag(wheel, RangeResponse::Supported, Some("W/\"wheel\""), None);
-
-    let wheel_url = format!("{server}/ok-1.0.0-py3-none-any.whl");
-    let requirements = context.temp_dir.child("requirements.txt");
-    requirements.write_str(&format!("ok @ {wheel_url} --hash=sha256:{hash}\n"))?;
-    uv_snapshot!(context.filters(), context
-        .pip_install()
-        .arg("-r")
-        .arg(requirements.path())
-        .arg("--require-hashes")
-        .env(EnvVars::UV_HTTP_RETRIES, "1")
-        .env(EnvVars::UV_HTTP_TIMEOUT, "1")
-        .env(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY, "true")
-        .env(EnvVars::RUST_LOG, "warn"), @"
-    exit_code: 0 (success)
-    ----- stderr -----
-    Resolved 1 package in [TIME]
-    WARN Streaming unsupported for ok @ http://[LOCALHOST]/ok-1.0.0-py3-none-any.whl; downloading wheel to disk (Invalid zip file structure)
-    Prepared 1 package in [TIME]
-    Installed 1 package in [TIME]
-     + ok==1.0.0 (from http://[LOCALHOST]/ok-1.0.0-py3-none-any.whl)
-    ");
-
-    assert_eq!(full_get_count.load(Ordering::Relaxed), 3);
-
-    Ok(())
-}
-
-/// An invalid `ETag` cannot validate the bytes of a resumed download.
-#[tokio::test]
-async fn direct_url_range_validator_invalid() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
-
-    let wheel = wheel_requiring_download().await;
-    let hash = hex::encode(Sha256::digest(&wheel));
-    let (server, _guard, full_get_count) =
-        wheel_server_with_etag(wheel, RangeResponse::Supported, Some("unquoted"), None);
-
-    let wheel_url = format!("{server}/ok-1.0.0-py3-none-any.whl");
-    let requirements = context.temp_dir.child("requirements.txt");
-    requirements.write_str(&format!("ok @ {wheel_url} --hash=sha256:{hash}\n"))?;
-    uv_snapshot!(context.filters(), context
-        .pip_install()
-        .arg("-r")
-        .arg(requirements.path())
-        .arg("--require-hashes")
-        .env(EnvVars::UV_HTTP_RETRIES, "1")
-        .env(EnvVars::UV_HTTP_TIMEOUT, "1")
-        .env(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY, "true")
-        .env(EnvVars::RUST_LOG, "warn"), @"
-    exit_code: 0 (success)
-    ----- stderr -----
-    Resolved 1 package in [TIME]
-    WARN Streaming unsupported for ok @ http://[LOCALHOST]/ok-1.0.0-py3-none-any.whl; downloading wheel to disk (Invalid zip file structure)
-    Prepared 1 package in [TIME]
-    Installed 1 package in [TIME]
-     + ok==1.0.0 (from http://[LOCALHOST]/ok-1.0.0-py3-none-any.whl)
-    ");
-
-    assert_eq!(full_get_count.load(Ordering::Relaxed), 3);
-
     Ok(())
 }
