@@ -16,7 +16,7 @@ use uv_cache_info::Timestamp;
 use uv_cli::ExternalCommand;
 use uv_client::{BaseClientBuilder, RegistryClientBuilder};
 use uv_configuration::{
-    Concurrency, Constraints, DependencyMode, DependencyOverride, GitLfsSetting, TargetTriple,
+    Concurrency, Constraints, DependencyMode, GitLfsSetting, Override, TargetTriple,
 };
 use uv_distribution::LoweredExtraBuildDependencies;
 use uv_distribution_types::InstalledDist;
@@ -1017,12 +1017,7 @@ async fn get_or_create_environment(
     .await?;
     let mut modifiers = spec.modifiers.clone();
     modifiers
-        .extend_overrides(
-            overrides
-                .iter()
-                .cloned()
-                .map(DependencyOverride::requirement),
-        )
+        .extend_overrides(overrides.iter().cloned().map(Override::requirement))
         .map_err(|error| ProjectError::Operation(error.into()))?;
 
     // Check if the tool is already installed in a compatible environment.

@@ -13,7 +13,7 @@ use uv_cache::{Cache, Refresh};
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
     ActiveEnvironment, Concurrency, Constraints, DependencyGroupsWithDefaults, DependencyModifiers,
-    DependencyOverride, DryRun, ExtrasSpecification, PackageOverride, Reinstall, Upgrade,
+    DryRun, ExtrasSpecification, Override, PackageOverride, Reinstall, Upgrade,
 };
 use uv_dispatch::BuildDispatch;
 use uv_distribution::{DistributionDatabase, LoweredExtraBuildDependencies};
@@ -42,7 +42,7 @@ use uv_types::{
     BuildContext, BuildIsolation, EmptyInstalledPackages, HashStrategy, SourceTreeEditablePolicy,
 };
 use uv_warnings::{warn_user, warn_user_once};
-use uv_workspace::pyproject::UnresolvedDependencyOverride;
+use uv_workspace::pyproject::OverrideDependency;
 use uv_workspace::{
     DiscoveryOptions, Editability, VirtualProject, WorkspaceCache, WorkspaceMember,
 };
@@ -571,7 +571,7 @@ async fn do_lock(
         let mut lowered_overrides = Vec::new();
         for entry in overrides {
             match entry {
-                UnresolvedDependencyOverride::Requirement(requirement) => {
+                OverrideDependency::Requirement(requirement) => {
                     lowered_overrides.extend(
                         target
                             .lower(
@@ -584,11 +584,11 @@ async fn do_lock(
                             )
                             .await?
                             .into_iter()
-                            .map(DependencyOverride::requirement),
+                            .map(Override::requirement),
                     );
                 }
-                UnresolvedDependencyOverride::Package(package) => {
-                    lowered_overrides.push(DependencyOverride::Package(PackageOverride {
+                OverrideDependency::Package(package) => {
+                    lowered_overrides.push(Override::Package(PackageOverride {
                         package: package.package,
                         dependencies: target
                             .lower(

@@ -15,8 +15,8 @@ use uv_cache_key::{cache_digest, cache_name};
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
     ActiveEnvironment, Concurrency, Constraints, DependencyGroupsWithDefaults, DependencyModifiers,
-    DependencyOverride, DryRun, ExtrasSpecification, GitLfsSetting, PackageOverride, Reinstall,
-    TargetTriple, Upgrade,
+    DryRun, ExtrasSpecification, GitLfsSetting, Override, PackageOverride, Reinstall, TargetTriple,
+    Upgrade,
 };
 use uv_dispatch::{BuildDispatch, SharedState};
 use uv_distribution::{DistributionDatabase, LoweredExtraBuildDependencies, LoweredRequirement};
@@ -55,7 +55,7 @@ use uv_torch::TorchStrategy;
 use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy, SourceTreeEditablePolicy};
 use uv_warnings::{warn_user, warn_user_once};
 use uv_workspace::dependency_groups::DependencyGroupError;
-use uv_workspace::pyproject::{ExtraBuildDependency, PyProjectToml, UnresolvedDependencyOverride};
+use uv_workspace::pyproject::{ExtraBuildDependency, OverrideDependency, PyProjectToml};
 use uv_workspace::{ProjectEnvironmentSelection, RequiresPythonSources, Workspace, WorkspaceCache};
 
 use crate::commands::pip::loggers::{InstallLogger, ResolveLogger};
@@ -3355,7 +3355,7 @@ pub(crate) async fn script_specification(
         let mut overrides = Vec::new();
         for entry in override_entries {
             match entry {
-                UnresolvedDependencyOverride::Requirement(requirement) => {
+                OverrideDependency::Requirement(requirement) => {
                     overrides.extend(
                         LoweredRequirement::from_non_workspace_requirement(
                             *requirement,
@@ -3369,11 +3369,11 @@ pub(crate) async fn script_specification(
                         )
                         .await
                         .map_ok(LoweredRequirement::into_inner)
-                        .map_ok(DependencyOverride::requirement)
+                        .map_ok(Override::requirement)
                         .collect::<Result<Vec<_>, _>>()?,
                     );
                 }
-                UnresolvedDependencyOverride::Package(package) => {
+                OverrideDependency::Package(package) => {
                     let mut dependencies = Vec::new();
                     for requirement in package.dependencies.into_vec() {
                         dependencies.extend(
@@ -3392,7 +3392,7 @@ pub(crate) async fn script_specification(
                             .collect::<Result<Vec<_>, _>>()?,
                         );
                     }
-                    overrides.push(DependencyOverride::Package(PackageOverride {
+                    overrides.push(Override::Package(PackageOverride {
                         package: package.package,
                         dependencies: dependencies.into_boxed_slice(),
                     }));

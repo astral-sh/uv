@@ -3441,8 +3441,7 @@ fn workspace_modifiers(
             dependency.map_requirements(|requirement| {
                 Requirement::from(requirement.with_origin(RequirementOrigin::Workspace))
             })
-        })
-        .collect::<Vec<_>>();
+        });
     let exclusions = filesystem
         .and_then(|configuration| configuration.exclude_dependencies.as_ref())
         .into_iter()

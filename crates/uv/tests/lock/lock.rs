@@ -1921,6 +1921,36 @@ fn lock_project_with_overrides() -> Result<()> {
     Ok(())
 }
 
+/// Re-resolving preserves lock equality when modifiers are unordered or repeated.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_check_refresh_unordered_overrides_and_excludes() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [tool.uv]
+        override-dependencies = ["zulu==1", "alpha==1", "zulu==1"]
+        exclude-dependencies = ["zulu", "alpha", "zulu"]
+        "#,
+    )?;
+
+    context.lock().assert().success();
+
+    uv_snapshot!(context.filters(), context.lock().arg("--check").arg("--refresh"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+
+    Ok(())
+}
+
 /// Lock a project with `tool.uv.override-dependencies` scoped to a package version.
 #[cfg(feature = "test-universal")]
 #[test]

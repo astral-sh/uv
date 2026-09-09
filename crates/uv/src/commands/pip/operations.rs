@@ -14,8 +14,8 @@ use tracing::debug;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, RegistryClient};
 use uv_configuration::{
-    BuildOptions, Concurrency, Constraints, DependencyGroups, DependencyModifiers,
-    DependencyOverride, DryRun, ExtrasSpecification, Reinstall, Upgrade,
+    BuildOptions, Concurrency, Constraints, DependencyGroups, DependencyModifiers, DryRun,
+    ExtrasSpecification, Override, Reinstall, Upgrade,
 };
 use uv_dispatch::BuildDispatch;
 use uv_distribution::{DistributionDatabase, SourcedDependencyGroups};
@@ -309,7 +309,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
             .chain(upgrade.constraints().cloned()),
     );
     modifiers
-        .extend_overrides(overrides.into_iter().map(DependencyOverride::requirement))
+        .extend_overrides(overrides.into_iter().map(Override::requirement))
         .map_err(anyhow::Error::from)?;
     let preferences = Preferences::from_iter(preferences, &resolver_env);
 

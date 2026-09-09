@@ -16,7 +16,7 @@ use rustc_hash::{FxHashSet, FxHasher};
 use tracing::{debug, trace, warn};
 
 use uv_cache::Cache;
-use uv_configuration::{ActiveEnvironment, DependencyExclusion, DependencyGroupsWithDefaults};
+use uv_configuration::{ActiveEnvironment, DependencyGroupsWithDefaults, ExcludeDependency};
 use uv_distribution_types::{Index, Requirement, RequirementSource};
 use uv_fs::{CWD, Simplified, normalize_path};
 use uv_normalize::{DEV_DEPENDENCIES, GroupName, PackageName};
@@ -29,8 +29,8 @@ use uv_warnings::warn_user_once;
 
 use crate::dependency_groups::{DependencyGroupError, FlatDependencyGroup, FlatDependencyGroups};
 use crate::pyproject::{
-    Project, PyProjectToml, PyprojectTomlError, Source, Sources, ToolUvSources, ToolUvWorkspace,
-    UnresolvedDependencyOverride, WorkspaceReference,
+    OverrideDependency, Project, PyProjectToml, PyprojectTomlError, Source, Sources, ToolUvSources,
+    ToolUvWorkspace, WorkspaceReference,
 };
 
 /// The workspace project environment selected by configuration and command-line options.
@@ -831,7 +831,7 @@ impl Workspace {
     }
 
     /// Returns the set of overrides for the workspace.
-    pub fn overrides(&self) -> Vec<UnresolvedDependencyOverride> {
+    pub fn overrides(&self) -> Vec<OverrideDependency> {
         let Some(overrides) = self
             .pyproject_toml
             .tool
@@ -845,7 +845,7 @@ impl Workspace {
     }
 
     /// Returns the set of dependency exclusions for the workspace.
-    pub fn exclude_dependencies(&self) -> Vec<DependencyExclusion> {
+    pub fn exclude_dependencies(&self) -> Vec<ExcludeDependency> {
         let Some(excludes) = self
             .pyproject_toml
             .tool
