@@ -289,6 +289,17 @@ pub struct GlobalArgs {
     /// However, in some cases, you may want to use the platform's native certificate store,
     /// especially if you're relying on a corporate trust root (e.g., for a mandatory proxy) that's
     /// included in your system's certificate store.
+    #[cfg(feature = "rustls-tls")]
+    #[arg(global = true, long, value_parser = clap::builder::BoolishValueParser::new(), overrides_with_all = ["no_system_certs", "native_tls", "no_native_tls"])]
+    pub system_certs: bool,
+
+    /// Accepted for compatibility; this build of uv (OpenSSL) always uses the platform's native certificate store [env: UV_SYSTEM_CERTS=]
+    ///
+    /// This build of uv links against the system's native TLS stack (e.g., OpenSSL), which always
+    /// uses the platform's native certificate store (honoring `SSL_CERT_FILE` and `SSL_CERT_DIR`).
+    /// The system certificate store is therefore always in effect, so this flag is accepted for
+    /// compatibility but has no effect.
+    #[cfg(not(feature = "rustls-tls"))]
     #[arg(global = true, long, value_parser = clap::builder::BoolishValueParser::new(), overrides_with_all = ["no_system_certs", "native_tls", "no_native_tls"])]
     pub system_certs: bool,
 

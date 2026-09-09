@@ -557,6 +557,7 @@ pub struct WrappedReqwestError {
 #[derive(Debug)]
 enum WrappedReqwestErrorContext {
     ProblemDetails(ProblemDetails),
+    #[cfg(feature = "rustls-tls")]
     TlsCertificateSource(CertificateSource),
 }
 
@@ -575,22 +576,35 @@ impl WrappedReqwestError {
     }
 
     #[must_use]
+    #[cfg_attr(not(feature = "rustls-tls"), allow(unused_mut))]
     fn with_certificate_source(mut self, certificate_source: CertificateSource) -> Self {
+        #[cfg(feature = "rustls-tls")]
         if self.is_ssl() {
             self.context = Some(Box::new(WrappedReqwestErrorContext::TlsCertificateSource(
                 certificate_source,
             )));
         }
+        #[cfg(not(feature = "rustls-tls"))]
+        let _ = certificate_source;
         self
     }
 
+    #[cfg_attr(not(feature = "rustls-tls"), allow(clippy::unused_self))]
     fn suggests_system_certs(&self) -> bool {
-        matches!(
-            self.context.as_deref(),
-            Some(WrappedReqwestErrorContext::TlsCertificateSource(
-                CertificateSource::WebPki
-            ))
-        )
+        #[cfg(feature = "rustls-tls")]
+        {
+            matches!(
+                self.context.as_deref(),
+                Some(WrappedReqwestErrorContext::TlsCertificateSource(
+                    CertificateSource::WebPki
+                ))
+            )
+        }
+        // Other backends always use the system trust store, so there is nothing to suggest.
+        #[cfg(not(feature = "rustls-tls"))]
+        {
+            false
+        }
     }
 
     /// Drop `RetryError::WithRetries` to avoid reporting the number of retries twice.
@@ -656,6 +670,7 @@ impl WrappedReqwestError {
 
     /// Check if the error chain contains a `reqwest` error that looks like this:
     /// * invalid peer certificate: `UnknownIssuer`
+    #[cfg(feature = "rustls-tls")]
     fn is_ssl(&self) -> bool {
         if let Some(reqwest_err) = self.inner() {
             if !reqwest_err.is_connect() {

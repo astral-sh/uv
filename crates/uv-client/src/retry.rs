@@ -4,11 +4,18 @@ use std::{io, iter};
 
 use http::status::StatusCode;
 use itertools::Itertools;
+#[cfg(all(
+    feature = "native-tls",
+    not(feature = "rustls-tls"),
+    not(any(target_vendor = "apple", target_os = "windows"))
+))]
+use openssl::error::ErrorStack;
 use reqwest::Response;
 use reqwest_retry::policies::ExponentialBackoff;
 use reqwest_retry::{
     RetryPolicy, Retryable, RetryableStrategy, default_on_request_error, default_on_request_success,
 };
+#[cfg(feature = "rustls-tls")]
 use rustls::{AlertDescription, Error as RustlsError};
 use tracing::{debug, trace};
 use url::Url;
@@ -273,31 +280,136 @@ fn is_retryable_status_error(reqwest_err: &reqwest::Error) -> bool {
         || status == StatusCode::TOO_MANY_REQUESTS
 }
 
-fn is_tls_certificate_error(reqwest_err: &reqwest::Error) -> bool {
-    let Some(rustls_error) = find_source::<RustlsError>(reqwest_err) else {
-        return false;
-    };
+/// OpenSSL library code for the TLS/SSL layer (`ERR_LIB_SSL`). Not re-exported by
+/// `openssl-sys`; the value is stable across OpenSSL 1.1.1 and 3.x.
+#[cfg(all(
+    feature = "native-tls",
+    not(feature = "rustls-tls"),
+    not(any(target_vendor = "apple", target_os = "windows"))
+))]
+const ERR_LIB_SSL: i32 = 20;
 
-    // TODO(konsti): https://github.com/seanmonstar/reqwest/issues/2819#issuecomment-5032072023
-    match rustls_error {
-        RustlsError::InvalidCertificate(_) | RustlsError::NoCertificatesPresented => true,
-        RustlsError::AlertReceived(alert) => matches!(
-            alert,
-            AlertDescription::AccessDenied
-                | AlertDescription::BadCertificate
-                | AlertDescription::BadCertificateHashValue
-                | AlertDescription::BadCertificateStatusResponse
-                | AlertDescription::CertificateExpired
-                | AlertDescription::CertificateRequired
-                | AlertDescription::CertificateRevoked
-                | AlertDescription::CertificateUnknown
-                | AlertDescription::CertificateUnobtainable
-                | AlertDescription::DecryptError
-                | AlertDescription::NoCertificate
-                | AlertDescription::UnknownCA
-                | AlertDescription::UnsupportedCertificate
-        ),
-        _ => false,
+/// OpenSSL reason code for a failed local certificate verification
+/// (`SSL_R_CERTIFICATE_VERIFY_FAILED`).
+#[cfg(all(
+    feature = "native-tls",
+    not(feature = "rustls-tls"),
+    not(any(target_vendor = "apple", target_os = "windows"))
+))]
+const SSL_R_CERTIFICATE_VERIFY_FAILED: i32 = 134;
+
+// TODO(tiran): Once a released `openssl` crate exposes the typed `SslAlert`
+// (sfackler/rust-openssl#2684), replace this manual `SSL_AD_REASON_OFFSET` arithmetic and the
+// `CERTIFICATE_ALERT_DESCRIPTIONS` table below with `SslAlert::from_reason_code` and its variants.
+
+/// OpenSSL encodes a received or sent TLS alert as the reason code
+/// `SSL_AD_REASON_OFFSET + <alert description>` (see OpenSSL's `ssl.h`).
+#[cfg(all(
+    feature = "native-tls",
+    not(feature = "rustls-tls"),
+    not(any(target_vendor = "apple", target_os = "windows"))
+))]
+const SSL_AD_REASON_OFFSET: i32 = 1000;
+
+/// TLS alert descriptions (per the IANA registry) that indicate a certificate
+/// problem. This mirrors the [`AlertDescription`] set matched by the rustls
+/// backend.
+#[cfg(all(
+    feature = "native-tls",
+    not(feature = "rustls-tls"),
+    not(any(target_vendor = "apple", target_os = "windows"))
+))]
+const CERTIFICATE_ALERT_DESCRIPTIONS: &[i32] = &[
+    41,  // no_certificate (SSLv3)
+    42,  // bad_certificate
+    43,  // unsupported_certificate
+    44,  // certificate_revoked
+    45,  // certificate_expired
+    46,  // certificate_unknown
+    48,  // unknown_ca
+    49,  // access_denied
+    51,  // decrypt_error
+    111, // certificate_unobtainable
+    113, // bad_certificate_status_response
+    114, // bad_certificate_hash_value
+    116, // certificate_required
+];
+
+/// Whether a request failed because the TLS handshake produced a fatal verdict: uv rejected the
+/// peer's certificate, or the peer sent an alert to abort the handshake. These are deterministic,
+/// so we treat them as fatal rather than retrying. Transient handshake failures instead surface as
+/// [`io::Error`]s, handled by [`retryable_on_request_failure`].
+fn is_tls_certificate_error(reqwest_err: &reqwest::Error) -> bool {
+    #[cfg(feature = "rustls-tls")]
+    {
+        let Some(rustls_error) = find_source::<RustlsError>(reqwest_err) else {
+            return false;
+        };
+
+        // TODO(konsti): https://github.com/seanmonstar/reqwest/issues/2819#issuecomment-5032072023
+        match rustls_error {
+            RustlsError::InvalidCertificate(_) | RustlsError::NoCertificatesPresented => true,
+            RustlsError::AlertReceived(alert) => matches!(
+                alert,
+                AlertDescription::AccessDenied
+                    | AlertDescription::BadCertificate
+                    | AlertDescription::BadCertificateHashValue
+                    | AlertDescription::BadCertificateStatusResponse
+                    | AlertDescription::CertificateExpired
+                    | AlertDescription::CertificateRequired
+                    | AlertDescription::CertificateRevoked
+                    | AlertDescription::CertificateUnknown
+                    | AlertDescription::CertificateUnobtainable
+                    | AlertDescription::DecryptError
+                    | AlertDescription::NoCertificate
+                    | AlertDescription::UnknownCA
+                    | AlertDescription::UnsupportedCertificate
+            ),
+            _ => false,
+        }
+    }
+    // `native-tls` uses OpenSSL off Apple and Windows.
+    #[cfg(all(
+        feature = "native-tls",
+        not(feature = "rustls-tls"),
+        not(any(target_vendor = "apple", target_os = "windows"))
+    ))]
+    {
+        // With the native-tls (OpenSSL) backend, a certificate failure surfaces as an
+        // [`ErrorStack`] nested in the error source chain. Both local verification failures
+        // and received certificate-related TLS alerts are treated as fatal, matching the
+        // rustls backend. Non-certificate TLS failures (for example, a received
+        // `internal_error` alert) are left retryable.
+        let Some(error_stack) = find_source::<ErrorStack>(reqwest_err) else {
+            return false;
+        };
+
+        error_stack.errors().iter().any(|error| {
+            if error.library_code() != ERR_LIB_SSL {
+                return false;
+            }
+            let reason = error.reason_code();
+            reason == SSL_R_CERTIFICATE_VERIFY_FAILED
+                || CERTIFICATE_ALERT_DESCRIPTIONS.contains(&(reason - SSL_AD_REASON_OFFSET))
+        })
+    }
+    // SecureTransport (Apple) and SChannel (Windows) expose no typed certificate error; fall back to
+    // generic retry. The default build on these platforms uses rustls anyway.
+    #[cfg(all(
+        feature = "native-tls",
+        not(feature = "rustls-tls"),
+        any(target_vendor = "apple", target_os = "windows")
+    ))]
+    {
+        let _ = reqwest_err;
+        false
+    }
+    // Without a TLS backend the client cannot establish secure connections, so there are no TLS
+    // certificate errors to classify.
+    #[cfg(not(any(feature = "rustls-tls", feature = "native-tls")))]
+    {
+        let _ = reqwest_err;
+        false
     }
 }
 

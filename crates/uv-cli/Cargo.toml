@@ -49,6 +49,11 @@ insta = { workspace = true }
 [features]
 default = []
 self-update = []
+# TLS backend selection, forwarded from the `uv` binary. These features only gate the
+# `--system-certs` help text so it describes the actual runtime behavior; `uv-cli` itself
+# does not link a TLS stack. `rustls-tls` takes precedence when both are enabled.
+rustls-tls = []
+native-tls = []
 
 [build-dependencies]
 uv-static = { workspace = true }

@@ -1,10 +1,10 @@
 use std::env;
 use std::fmt::{Display, Formatter};
-use std::io::{self, Read};
+use std::io;
 use std::path::{Path, PathBuf};
 
 use itertools::Itertools;
-use reqwest::{Certificate, Identity};
+use reqwest::Certificate;
 use rustls_native_certs::{CertificateResult, load_certs_from_paths};
 use rustls_pki_types::CertificateDer;
 use tracing::{debug, warn};
@@ -470,14 +470,6 @@ impl From<CertificateResult> for Certificates {
 }
 
 #[derive(thiserror::Error, Debug)]
-pub(crate) enum CertificateError {
-    #[error(transparent)]
-    Io(#[from] io::Error),
-    #[error(transparent)]
-    Reqwest(reqwest::Error),
-}
-
-#[derive(thiserror::Error, Debug)]
 pub enum CertificateFileError {
     #[error("Failed to read certificate file `{}`", .0.simplified_display())]
     Io(PathBuf, #[source] io::Error),
@@ -485,18 +477,6 @@ pub enum CertificateFileError {
     NotFile(PathBuf),
     #[error("No valid certificates found in: `{}`", .0.simplified_display())]
     NoValidCertificates(PathBuf),
-}
-
-/// Return the `Identity` from the provided file.
-pub(crate) fn read_identity(
-    ssl_client_cert: &std::ffi::OsStr,
-) -> Result<Identity, CertificateError> {
-    let mut buf = Vec::new();
-    fs_err::File::open(ssl_client_cert)?.read_to_end(&mut buf)?;
-    Identity::from_pem(&buf).map_err(|tls_err| {
-        debug_assert!(tls_err.is_builder(), "must be a rustls::Error internally");
-        CertificateError::Reqwest(tls_err)
-    })
 }
 
 #[cfg(test)]

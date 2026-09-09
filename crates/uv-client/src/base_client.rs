@@ -10,9 +10,13 @@ use http::header::{
     PROXY_AUTHORIZATION, REFERER, TRANSFER_ENCODING, WWW_AUTHENTICATE,
 };
 use http::{HeaderMap, HeaderName, HeaderValue, Method, StatusCode};
-use reqwest::{
-    Certificate, Client, ClientBuilder, IntoUrl, NoProxy, Proxy, Request, Response, multipart,
-};
+use reqwest::{Client, ClientBuilder, IntoUrl, NoProxy, Proxy, Request, Response, multipart};
+// `reqwest::Certificate` only exists when a TLS backend is enabled. Without one it is aliased to an
+// uninhabited type so signatures still resolve; a certificate value can never be constructed.
+#[cfg(any(feature = "rustls-tls", feature = "native-tls"))]
+use reqwest::Certificate;
+#[cfg(not(any(feature = "rustls-tls", feature = "native-tls")))]
+type Certificate = std::convert::Infallible;
 use reqwest_middleware::{ClientWithMiddleware, Middleware};
 use reqwest_retry::policies::ExponentialBackoff;
 use reqwest_retry::{Jitter, RetryTransientMiddleware};
@@ -35,11 +39,15 @@ use uv_redacted::DisplaySafeUrl;
 use uv_redacted::DisplaySafeUrlError;
 use uv_static::EnvVars;
 use uv_version::version;
+#[cfg(any(feature = "rustls-tls", feature = "native-tls"))]
 use uv_warnings::warn_user_once;
 
 use crate::linehaul::LineHaul;
 use crate::middleware::{AzureStorageMiddleware, OfflineMiddleware};
-use crate::tls::{Certificates, read_identity};
+#[cfg(feature = "rustls-tls")]
+use crate::tls::Certificates;
+#[cfg(any(feature = "rustls-tls", feature = "native-tls"))]
+use crate::tls::read_identity;
 use crate::{Connectivity, MetadataRangeRequest, RetriableError, RetryState, UvRetryableStrategy};
 
 pub const DEFAULT_RETRIES: u32 = 3;
@@ -93,6 +101,7 @@ pub struct BaseClientBuilder<'a> {
     preview: Preview,
     allow_insecure_host: Vec<TrustedHost>,
     system_certs: bool,
+    #[cfg(feature = "rustls-tls")]
     custom_certificates: Option<Certificates>,
     retries: u32,
     pub connectivity: Connectivity,
@@ -205,6 +214,7 @@ impl Default for BaseClientBuilder<'_> {
             preview: Preview::default(),
             allow_insecure_host: vec![],
             system_certs: false,
+            #[cfg(feature = "rustls-tls")]
             custom_certificates: None,
             connectivity: Connectivity::Online,
             retries: DEFAULT_RETRIES,
@@ -321,6 +331,9 @@ impl<'a> BaseClientBuilder<'a> {
     }
 
     /// Use custom certificate authorities for TLS verification.
+    ///
+    /// Only available with the `rustls-tls` backend.
+    #[cfg(feature = "rustls-tls")]
     #[must_use]
     pub fn custom_certificates(mut self, certificates: Certificates) -> Self {
         self.custom_certificates = Some(certificates);
@@ -547,17 +560,28 @@ impl<'a> BaseClientBuilder<'a> {
             let _ = write!(user_agent_string, " {output}");
         }
 
-        let custom_certs = self
-            .custom_certificates
-            .as_ref()
-            .map(Certificates::to_reqwest_certs);
-        let certificate_source = if custom_certs.is_some() {
-            CertificateSource::Custom
-        } else if self.system_certs {
-            CertificateSource::System
-        } else {
-            CertificateSource::WebPki
+        // Only rustls selects a certificate source; other backends use the system trust store.
+        #[cfg(feature = "rustls-tls")]
+        let (custom_certs, certificate_source) = {
+            let custom_certs = self
+                .custom_certificates
+                .as_ref()
+                .map(Certificates::to_reqwest_certs);
+            let certificate_source = if custom_certs.is_some() {
+                CertificateSource::Custom
+            } else if self.system_certs {
+                CertificateSource::System
+            } else {
+                CertificateSource::WebPki
+            };
+            (custom_certs, certificate_source)
         };
+        #[cfg(all(feature = "native-tls", not(feature = "rustls-tls")))]
+        let (custom_certs, certificate_source) =
+            (None::<Vec<Certificate>>, CertificateSource::System);
+        #[cfg(not(any(feature = "rustls-tls", feature = "native-tls")))]
+        let (custom_certs, certificate_source) =
+            (None::<Vec<Certificate>>, CertificateSource::Unknown);
 
         // Create a secure client that validates certificates.
         let raw_client = self.create_client(
@@ -582,6 +606,9 @@ impl<'a> BaseClientBuilder<'a> {
         Ok((raw_client, raw_dangerous_client, certificate_source))
     }
 
+    // `custom_certs` is consumed only by the rustls backend (which takes ownership); with any other
+    // backend it is intentionally unused, so silence the by-value lint there.
+    #[cfg_attr(not(feature = "rustls-tls"), allow(clippy::needless_pass_by_value))]
     fn create_client(
         &self,
         user_agent: &str,
@@ -601,17 +628,24 @@ impl<'a> BaseClientBuilder<'a> {
             .redirect(redirect_policy.reqwest_policy());
 
         // If necessary, accept invalid certificates.
+        #[cfg(any(feature = "rustls-tls", feature = "native-tls"))]
         let client_builder = match security {
             Security::Secure => client_builder,
             Security::Insecure => client_builder.danger_accept_invalid_certs(true),
         };
+        // Without a TLS backend there are no certificates to accept or reject.
+        #[cfg(not(any(feature = "rustls-tls", feature = "native-tls")))]
+        let _ = security;
 
+        // Select the TLS backend.
+        #[cfg(feature = "rustls-tls")]
         let client_builder = client_builder.tls_backend_rustls();
 
         // Configure the certificate source.
         //
         // Non-empty `SSL_CERT_FILE` and `SSL_CERT_DIR` values override the default certificate
         // source, even when no valid certificates can be loaded from their configured paths.
+        #[cfg(feature = "rustls-tls")]
         let client_builder = if let Some(custom_certs) = custom_certs {
             client_builder.tls_certs_only(custom_certs)
         } else if self.system_certs {
@@ -619,8 +653,12 @@ impl<'a> BaseClientBuilder<'a> {
         } else {
             client_builder.tls_certs_only(Certificates::webpki_roots().to_reqwest_certs())
         };
+        // Only rustls consumes `custom_certs`; other backends leave it unused.
+        #[cfg(not(feature = "rustls-tls"))]
+        let _ = custom_certs;
 
-        // Configure mTLS.
+        // Configure mTLS. Client identities require a TLS backend.
+        #[cfg(any(feature = "rustls-tls", feature = "native-tls"))]
         let client_builder = if let Some(ssl_client_cert) = env::var_os(EnvVars::SSL_CLIENT_CERT) {
             match read_identity(&ssl_client_cert) {
                 Ok(identity) => client_builder.identity(identity),
@@ -753,10 +791,13 @@ pub struct BaseClient {
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
 pub(crate) enum CertificateSource {
     /// The system certificate roots.
+    #[cfg(any(feature = "rustls-tls", feature = "native-tls"))]
     System,
-    /// The bundled `WebPKI` certificate roots.
+    /// The bundled `WebPKI` certificate roots (rustls-tls only).
+    #[cfg(feature = "rustls-tls")]
     WebPki,
-    /// Custom certificate roots.
+    /// Custom certificate roots (rustls-tls only).
+    #[cfg(feature = "rustls-tls")]
     Custom,
     /// An externally constructed client whose certificate roots are unknown.
     Unknown,

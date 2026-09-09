@@ -39,7 +39,8 @@ path = "benches/uv_pypi_types.rs"
 harness = false
 
 [dev-dependencies]
-uv = { workspace = true }
+# `uv` is `default-features = false` at the workspace level; select a TLS backend explicitly.
+uv = { workspace = true, features = ["rustls-tls"] }
 uv-cache = { workspace = true }
 uv-cli = { workspace = true }
 uv-client = { workspace = true }

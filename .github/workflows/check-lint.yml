@@ -127,6 +127,10 @@ jobs:
         run: rustup component add clippy
       - name: "Clippy"
         run: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
+      - name: "Install OpenSSL headers"
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends pkg-config libssl-dev
+      - name: "Clippy (native-tls)"
+        run: cargo clippy -p uv-client --no-default-features --features native-tls --all-targets --locked -- -D warnings
 
   clippy-windows:
     name: "clippy on windows"

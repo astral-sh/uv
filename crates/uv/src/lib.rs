@@ -1,5 +1,14 @@
 #![deny(clippy::print_stdout, clippy::print_stderr)]
 
+// The `uv` binary must link a TLS backend. `rustls-tls` is the default; downstream rebuilds can swap
+// in the system's native stack via `--no-default-features --features native-tls`. Reject a
+// `--no-default-features` build that would link no TLS stack at all.
+#[cfg(not(any(feature = "rustls-tls", feature = "native-tls")))]
+compile_error!(
+    "a TLS backend is required: build with the default `rustls-tls` feature, \
+     or `--no-default-features --features native-tls`"
+);
+
 use std::borrow::Cow;
 use std::ffi::OsString;
 use std::fmt::Write;
@@ -85,11 +94,15 @@ pub(crate) fn base_client_builder<'a>(globals: &GlobalSettings) -> BaseClientBui
     .https_proxy(globals.network_settings.https_proxy.clone())
     .no_proxy(globals.network_settings.no_proxy.clone());
 
-    if let Some(certificates) = &globals.network_settings.custom_certificates {
+    // Only rustls consumes uv's custom certificates; other backends use the system store.
+    #[cfg(feature = "rustls-tls")]
+    let client_builder = if let Some(certificates) = &globals.network_settings.custom_certificates {
         client_builder.custom_certificates(certificates.clone())
     } else {
         client_builder
-    }
+    };
+
+    client_builder
 }
 
 /// Whether to initialize process-global state.
@@ -513,6 +526,7 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
     }
 
     debug!("uv {}", uv_cli::version::uv_self_version());
+    trace!("TLS backend: {}", uv_client::tls_stack());
     if let Some(config_file) = cli.top_level.config_file.as_ref() {
         debug!("Using configuration file: {}", config_file.user_display());
     }

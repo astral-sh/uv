@@ -10,6 +10,17 @@ authors = { workspace = true }
 license = { workspace = true }
 
 [features]
+default = ["rustls-tls"]
+rustls-tls = [
+  "dep:rustls",
+  "dep:rustls-native-certs",
+  "dep:rustls-pki-types",
+  "dep:webpki",
+  "dep:webpki-root-certs",
+  "dep:x509-parser",
+  "reqwest/rustls",
+]
+native-tls = ["dep:openssl", "reqwest/native-tls"]
 test-pypi = []
 
 [lib]
@@ -64,12 +75,12 @@ reqwest-retry = { workspace = true }
 rkyv = { workspace = true }
 rmp-serde = { workspace = true }
 rustc-hash = { workspace = true }
-rustls = { workspace = true }
-rustls-native-certs = { workspace = true }
-rustls-pki-types = { workspace = true }
+rustls = { workspace = true, optional = true }
+rustls-native-certs = { workspace = true, optional = true }
+rustls-pki-types = { workspace = true, optional = true }
 serde = { workspace = true }
-webpki = { workspace = true }
-x509-parser = { workspace = true }
+webpki = { workspace = true, optional = true }
+x509-parser = { workspace = true, optional = true }
 serde_json = { workspace = true }
 uv-platform = { workspace = true }
 thiserror = { workspace = true }
@@ -77,7 +88,11 @@ tokio = { workspace = true }
 tokio-util = { workspace = true }
 tracing = { workspace = true }
 url = { workspace = true }
-webpki-root-certs = { workspace = true }
+webpki-root-certs = { workspace = true, optional = true }
+
+# `native-tls` uses OpenSSL only off Apple (SecureTransport) and Windows (SChannel).
+[target.'cfg(not(any(target_vendor = "apple", target_os = "windows")))'.dependencies]
+openssl = { workspace = true, optional = true }
 
 [dev-dependencies]
 anyhow = { workspace = true }
