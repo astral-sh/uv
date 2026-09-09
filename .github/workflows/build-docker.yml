@@ -41,7 +41,7 @@ permissions:
 jobs:
   docker-plan:
     name: plan
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-4' || 'ubuntu-latest' }}
     timeout-minutes: 2
     outputs:
       login: ${{ steps.plan.outputs.login }}
@@ -134,7 +134,7 @@ jobs:
     name: ${{ needs.docker-plan.outputs.action }} uv
     needs:
       - docker-plan
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-4' || 'ubuntu-latest' }}
     timeout-minutes: 20
     permissions:
       contents: read
@@ -231,7 +231,7 @@ jobs:
 
   docker-publish-extra:
     name: ${{ needs.docker-plan.outputs.action }} ${{ matrix.image-mapping }}
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-4' || 'ubuntu-latest' }}
     timeout-minutes: 5
     environment:
       name: ${{ needs.docker-plan.outputs.push-version == 'true' && 'release' || (needs.docker-plan.outputs.push == 'true' && 'release-test' || '') }}
@@ -402,7 +402,7 @@ jobs:
   # Annotate the base image
   docker-annotate-base:
     name: annotate uv
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-4' || 'ubuntu-latest' }}
     timeout-minutes: 2
     permissions:
       contents: read

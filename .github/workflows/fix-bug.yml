@@ -34,7 +34,7 @@ on:
         type: string
       runner:
         description: "The runner to use for bug fixing"
-        default: ubuntu-latest
+        default: github-ubuntu-24.04-x86_64-4
         required: false
         type: string
     outputs:
@@ -450,7 +450,7 @@ jobs:
   publish:
     needs: fix
     if: needs.fix.outputs.publish == 'true'
-    runs-on: ubuntu-slim
+    runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-2' || 'ubuntu-slim' }}
     environment: automations
     timeout-minutes: 10
     permissions:
@@ -676,7 +676,7 @@ jobs:
       needs.fix.result == 'success' &&
       needs.fix.outputs.result != '' &&
       (needs.publish.result == 'success' || needs.publish.result == 'skipped')
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-4' || 'ubuntu-latest' }}
     environment: automations
     timeout-minutes: 10
     concurrency:

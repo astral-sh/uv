@@ -26,7 +26,7 @@ env:
 jobs:
   pypi-publish-uv:
     name: Upload uv to PyPI
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-4' || 'ubuntu-latest' }}
     environment:
       name: release
     permissions:
@@ -54,7 +54,7 @@ jobs:
 
   pypi-publish-uv-build:
     name: Upload uv-build to PyPI
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-4' || 'ubuntu-latest' }}
     environment:
       name: release
     permissions:

@@ -1356,7 +1356,7 @@ jobs:
 
   check-wheels:
     name: "check wheel contents"
-    runs-on: ubuntu-slim
+    runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-2' || 'ubuntu-slim' }}
     needs:
       - macos-x86_64
       - macos-aarch64

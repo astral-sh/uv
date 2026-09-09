@@ -56,7 +56,7 @@ jobs:
   release-gate:
     # N.B. This name should not change, it is used for downstream checks.
     name: release-gate
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-4' || 'ubuntu-latest' }}
     # This environment requires a 2-factor approval, i.e., the workflow must be approved by another
     # team member. GitHub fires approval events on every job that deploys to an environment, so we
     # have a dedicated environment for this purpose instead of using the `release` environment.
@@ -346,7 +346,7 @@ jobs:
     # `publish-crates` is intentionally not a dependency: it's not
     # critical to the release and isn't idempotent on retry.
     if: ${{ always() && needs.host.result == 'success' && needs.release-gate.result == 'success' && needs.sign-release-binaries.result == 'success' && (needs.publish-pypi.result == 'skipped' || needs.publish-pypi.result == 'success') }}
-    runs-on: "ubuntu-latest"
+    runs-on: "${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-4' || 'ubuntu-latest' }}"
     environment:
       name: release
     permissions:

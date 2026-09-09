@@ -13,7 +13,7 @@ env:
 jobs:
   update:
     if: github.repository == 'astral-sh/uv' && !github.event.issue.pull_request
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-4' || 'ubuntu-latest' }}
     environment: automations
     timeout-minutes: 15
     permissions:
@@ -255,7 +255,7 @@ jobs:
   persist:
     needs: update
     if: needs.update.outputs.changed == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-4' || 'ubuntu-latest' }}
     environment: automations
     timeout-minutes: 10
     concurrency:
