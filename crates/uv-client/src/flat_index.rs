@@ -299,9 +299,7 @@ impl<'a> FlatIndexClient<'a> {
     ) -> FlatIndexEntries {
         let entries = files
             .into_iter()
-            .filter_map(|mut file| {
-                // Ignore deprecated pyx-specific zstd wheel metadata from an older cache entry.
-                file.zstd = None;
+            .filter_map(|file| {
                 Some(FlatIndexEntry {
                     filename: DistFilename::try_from_normalized_filename(&file.filename)?,
                     file,
@@ -364,7 +362,6 @@ impl<'a> FlatIndexClient<'a> {
                 upload_time_utc_ms: None,
                 url: FileLocation::AbsoluteUrl(UrlString::from(url)),
                 yanked: None,
-                zstd: None,
             };
 
             let Some(filename) = DistFilename::try_from_normalized_filename(filename) else {
@@ -397,14 +394,12 @@ mod tests {
     use fs_err::File;
     use std::io::Write;
     use tempfile::tempdir;
-    use uv_distribution_types::Zstd;
 
-    /// Round-trip a synthetic flat-index cache entry, preserving sidecar hashes and discarding
-    /// deprecated pyx-specific zstd wheel metadata before the file is used.
+    /// Round-trip a synthetic flat-index cache entry and preserve sidecar hashes.
     #[test]
     fn cached_files_round_trip() -> Result<(), Box<dyn std::error::Error>> {
         let url = DisplaySafeUrl::parse("https://example.com/flat/")?;
-        let mut files = FlatIndexClient::parse_html(
+        let files = FlatIndexClient::parse_html(
             r#"<a href="example-1.0.0-py3-none-any.whl" data-core-metadata="sha256=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef">example-1.0.0-py3-none-any.whl</a>"#,
             &url,
         )?;
@@ -415,18 +410,11 @@ mod tests {
                 .as_ref()
                 .is_some_and(|hashes| !hashes.is_empty())
         );
-        assert!(files[0].zstd.is_none());
-        files[0].zstd = Some(Box::new(Zstd {
-            hashes: HashDigests::empty(),
-            size: Some(42),
-        }));
-
         let archived = OwnedArchive::from_unarchived(&files)?;
         let files = OwnedArchive::deserialize(&archived);
         let entries =
             FlatIndexClient::entries_from_files(files, &IndexUrl::parse(url.as_str(), None)?);
         assert_eq!(entries.entries.len(), 1);
-        assert!(entries.entries[0].file.zstd.is_none());
         assert_eq!(entries.entries[0].file.dist_info_metadata, metadata_hashes);
         Ok(())
     }

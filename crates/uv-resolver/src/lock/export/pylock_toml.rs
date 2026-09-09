@@ -1716,7 +1716,6 @@ impl PylockTomlWheel {
             upload_time_utc_ms: self.upload_time.map(Timestamp::as_millisecond),
             url: FileLocation::AbsoluteUrl(file_url),
             yanked: None,
-            zstd: None,
         });
 
         Ok(RegistryBuiltWheel {
@@ -1880,7 +1879,6 @@ impl PylockTomlSdist {
             upload_time_utc_ms: self.upload_time.map(Timestamp::as_millisecond),
             url: FileLocation::AbsoluteUrl(file_url),
             yanked: None,
-            zstd: None,
         });
 
         Ok(RegistrySourceDist {

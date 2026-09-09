@@ -36,10 +36,6 @@ pub struct File {
     pub upload_time_utc_ms: Option<i64>,
     pub url: FileLocation,
     pub yanked: Option<Box<Yanked>>,
-    /// Deprecated pyx-specific zstd wheel metadata, retained only for compatibility with the
-    /// flat-index cache layout.
-    // TODO: Remove this field when the flat-index cache format is next bumped.
-    pub zstd: Option<Box<Zstd>>,
 }
 
 impl File {
@@ -60,7 +56,6 @@ impl File {
             upload_time_utc_ms: file.upload_time.map(Timestamp::as_millisecond),
             url: FileLocation::new(file.url, base),
             yanked: file.yanked,
-            zstd: None,
         })
     }
 
@@ -260,15 +255,6 @@ pub enum ToUrlError {
         #[source]
         err: DisplaySafeUrlError,
     },
-}
-
-/// Deprecated pyx-specific zstd wheel metadata, retained only for compatibility with existing
-/// cache layouts.
-// TODO: Remove this type once the Simple API and flat-index cache formats are both bumped.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)]
-pub struct Zstd {
-    pub hashes: HashDigests,
-    pub size: Option<u64>,
 }
 
 #[cfg(test)]

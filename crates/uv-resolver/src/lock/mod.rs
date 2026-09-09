@@ -4362,7 +4362,6 @@ impl Package {
                     upload_time_utc_ms: sdist.upload_time().map(Timestamp::as_millisecond),
                     url: FileLocation::AbsoluteUrl(file_url.clone()),
                     yanked: None,
-                    zstd: None,
                 });
 
                 let index = IndexUrl::from(VerbatimUrl::from_url(
@@ -4438,7 +4437,6 @@ impl Package {
                     upload_time_utc_ms: sdist.upload_time().map(Timestamp::as_millisecond),
                     url: file_url,
                     yanked: None,
-                    zstd: None,
                 });
 
                 let index = IndexUrl::from(
@@ -6216,7 +6214,6 @@ impl Wheel {
                     upload_time_utc_ms: self.upload_time.map(Timestamp::as_millisecond),
                     url: file_location,
                     yanked: None,
-                    zstd: None,
                 });
                 let index = IndexUrl::from(VerbatimUrl::from_url(
                     url.to_url().map_err(LockErrorKind::InvalidUrl)?,
@@ -6260,7 +6257,6 @@ impl Wheel {
                     upload_time_utc_ms: self.upload_time.map(Timestamp::as_millisecond),
                     url: file_location,
                     yanked: None,
-                    zstd: None,
                 });
                 let index = IndexUrl::from(
                     VerbatimUrl::from_absolute_path(root.join(index_path))

@@ -22,7 +22,7 @@ use uv_distribution_filename::{DistFilename, WheelFilename};
 use uv_distribution_types::{
     BuiltDist, File, FileLocation, IndexCapabilities, IndexFormat, IndexLocations,
     IndexMetadataRef, IndexStatusCodeDecision, IndexStatusCodeStrategy, IndexUrl, Name,
-    RegistryBuiltWheel, Zstd,
+    RegistryBuiltWheel,
 };
 use uv_extract::hash::Hasher;
 use uv_git::{GIT_LFS, GitError, GitHttpSettings, GitResolver, Reporter};
@@ -1380,11 +1380,6 @@ pub struct CachedFile {
     filename: Option<Box<SmallString>>,
     #[rkyv(with = rkyv::with::Niche)]
     yanked: Option<Box<Yanked>>,
-    /// Deprecated pyx-specific zstd wheel metadata, retained only for compatibility with the
-    /// Simple API cache layout.
-    // TODO: Remove this field when the Simple API cache format is next bumped.
-    #[rkyv(with = rkyv::with::Niche)]
-    zstd: Option<Box<Zstd>>,
     #[rkyv(with = rkyv::with::Niche)]
     metadata_hashes: Option<Box<CachedHashDigests>>,
     dist_info_metadata: bool,
@@ -1438,7 +1433,6 @@ impl From<File> for CachedFile {
             has_upload_time,
             url: file.url,
             yanked: file.yanked.filter(|yanked| yanked.is_yanked()),
-            zstd: None,
         }
     }
 }
@@ -1459,7 +1453,6 @@ impl From<CachedFile> for File {
             upload_time_utc_ms: file.has_upload_time.then_some(file.upload_time_utc_ms),
             url: file.url,
             yanked: file.yanked,
-            zstd: None,
         }
     }
 }
@@ -1829,8 +1822,8 @@ mod tests {
     };
     use uv_cache::Cache;
     use uv_distribution_types::{
-        File, FileLocation, Index, IndexCapabilities, IndexFormat, IndexLocations,
-        IndexMetadataRef, IndexUrl, ToUrlError, Zstd,
+        FileLocation, Index, IndexCapabilities, IndexFormat, IndexLocations, IndexMetadataRef,
+        IndexUrl, ToUrlError,
     };
     use uv_small_str::SmallString;
     use wiremock::matchers::{basic_auth, method, path_regex};
@@ -2196,19 +2189,12 @@ mod tests {
         let package_name = PackageName::from_str("example-1")?;
         let data: PypiSimpleDetail = serde_json::from_str(response)?;
         let base = DisplaySafeUrl::parse("https://pypi.org/simple/example-1/")?;
-        let mut simple_metadata = SimpleDetailMetadata::from_pypi_files(
+        let simple_metadata = SimpleDetailMetadata::from_pypi_files(
             data.files,
             &package_name,
             data.project_status,
             &base,
         );
-        let cached_wheel = &mut simple_metadata.versions[0].files.wheels[0];
-        assert!(cached_wheel.zstd.is_none());
-        // An entry written by an older uv may still contain pyx-specific zstd wheel metadata.
-        cached_wheel.zstd = Some(Box::new(Zstd {
-            hashes: HashDigests::empty(),
-            size: Some(42),
-        }));
         let archived = super::OwnedArchive::from_unarchived(&simple_metadata)?;
         let simple_metadata = super::OwnedArchive::deserialize(&archived);
 
@@ -2216,19 +2202,6 @@ mod tests {
             .versions
             .into_iter()
             .flat_map(|datum| datum.files.all(&package_name))
-            .map(|(filename, mut file)| {
-                assert!(file.zstd.is_none());
-                // New cache entries must not preserve pyx-specific zstd wheel metadata either.
-                file.zstd = Some(Box::new(Zstd {
-                    hashes: HashDigests::empty(),
-                    size: Some(42),
-                }));
-                let cached = super::CachedFile::from(file);
-                assert!(cached.zstd.is_none());
-                let file = File::from(cached);
-                assert!(file.zstd.is_none());
-                (filename, file)
-            })
             .collect();
         let filenames: Vec<_> = files
             .iter()
@@ -2331,7 +2304,6 @@ mod tests {
                                 ),
                                 filename: None,
                                 yanked: None,
-                                zstd: None,
                                 metadata_hashes: None,
                                 dist_info_metadata: false,
                                 has_size: true,
@@ -2404,7 +2376,6 @@ mod tests {
                                 ),
                                 filename: None,
                                 yanked: None,
-                                zstd: None,
                                 metadata_hashes: None,
                                 dist_info_metadata: false,
                                 has_size: false,
