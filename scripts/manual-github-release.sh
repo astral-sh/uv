@@ -26,10 +26,13 @@ cd "release_$RUN_ID"
 
 REPO=$(gh repo view --json nameWithOwner | jq .nameWithOwner -r)
 
-# Download all artifacts for the workflow run
-gh run download "$RUN_ID" --repo "$REPO" --pattern 'artifacts-*'
+# Download publication artifacts and signed archives from the same run attempt.
+RUN_ATTEMPT=$(gh run view "$RUN_ID" --repo "$REPO" --json attempt --jq .attempt)
+SIGNED_ARCHIVES="signed-github-archives-$RUN_ID-$RUN_ATTEMPT"
+gh run download "$RUN_ID" --repo "$REPO" --pattern 'release-github-*'
+gh run download "$RUN_ID" --repo "$REPO" --name "$SIGNED_ARCHIVES" --dir "$SIGNED_ARCHIVES"
 
-MANIFEST="artifacts-dist-manifest/dist-manifest.json"
+MANIFEST="release-github-manifest/dist-manifest.json"
 
 # Extract values from manifest
 TAG=$(jq -r '.announcement_tag // .tag' "$MANIFEST")
@@ -40,9 +43,9 @@ PRERELEASE=$(jq -r '.announcement_is_prerelease' "$MANIFEST")
 # Write body to temp file
 echo "$BODY" > /tmp/notes.txt
 
-# Merge artifacts-* directories into artifacts/ (like CI does)
+# Merge the publication artifacts and signed archives (like CI does).
 mkdir -p artifacts
-cp -r artifacts-*/* artifacts/
+cp -r release-github-*/* "$SIGNED_ARCHIVES"/* artifacts/
 
 # Remove the granular manifests (like CI does)
 rm -f artifacts/*-dist-manifest.json
