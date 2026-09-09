@@ -191,7 +191,7 @@ fn check_show_command_quotes_script_path() -> Result<()> {
     All checks passed!
 
     ----- stderr -----
-    Running `ty check --color auto -- 'script with spaces.py'`
+    Running `ty check --color auto --force-exclude -- 'script with spaces.py'`
     "
     );
 
@@ -720,9 +720,9 @@ fn check_workspace_member_selection() -> Result<()> {
     Ok(())
 }
 
-/// Check every member when invoked from the root of a virtual workspace.
+/// Respect ty exclusions when automatically selecting members of a virtual workspace.
 #[test]
-fn check_virtual_workspace_checks_all_members_by_default() -> Result<()> {
+fn check_virtual_workspace_respects_exclusions() -> Result<()> {
     let context =
         uv_test::test_context!("3.12").with_filter((r"WARN Failed to fetch `ty`[^\n]*\n", ""));
     context
@@ -750,14 +750,12 @@ fn check_virtual_workspace_checks_all_members_by_default() -> Result<()> {
         .child("main.py")
         .write_str("value: int = 'selected-vendored'\n")?;
 
-    // Automatically selecting the vendored member overrides ty's exclusion, which is undesirable
-    // because configured exclusions should still apply. See astral-sh/uv#21551.
+    // Configured exclusions still apply to automatically selected members. See astral-sh/uv#21551.
     uv_snapshot!(context.filters(), workspace_check(&context), @r#"
     exit_code: 1 (failure)
     ----- stdout -----
     packages/member-a/main.py:1:14: error[invalid-assignment] Object of type `Literal["selected-a"]` is not assignable to `int`
-    vendor/vendored/main.py:1:14: error[invalid-assignment] Object of type `Literal["selected-vendored"]` is not assignable to `int`
-    Found 2 diagnostics
+    Found 1 diagnostic
 
     ----- stderr -----
     warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.

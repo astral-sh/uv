@@ -199,6 +199,8 @@ pub(super) async fn run(
         );
     }
     if !check_targets.is_empty() {
+        // Respect configured exclusions even though the paths are passed explicitly.
+        command.arg("--force-exclude");
         // Keep paths relative to the working directory for stable diagnostics, and use `--` so
         // option-like filenames are treated as paths.
         command.arg("--");
