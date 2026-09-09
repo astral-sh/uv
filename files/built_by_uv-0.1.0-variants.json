@@ -1,14 +1,6 @@
 {
   "default-priorities": {
-    "feature": {
-      "cpu_level": ["x86_64_level"]
-    },
-    "namespace": ["cpu_level"],
-    "property": {
-      "cpu_level": {
-        "x86_64_level": ["v4", "v3", "v2", "v1"]
-      }
-    }
+    "namespace": ["cpu_level", "mathlib"]
   },
   "static-properties": {
     "mathlib": {
@@ -58,5 +50,6 @@
         "kind": ["very_fast_lib"]
       }
     }
-  }
+  },
+  "$schema": "https://variants-schema.wheelnext.dev/peps/825/v0.1.1.json"
 }

@@ -904,6 +904,14 @@ impl<T: MarkerVariantsEnvironment> MarkerVariantsEnvironment for &T {
     ) -> bool {
         T::contains_base_property(self, prefix, namespace, feature, value)
     }
+
+    fn label(&self) -> Option<&str> {
+        T::label(self)
+    }
+
+    fn is_universal(&self) -> bool {
+        T::is_universal(self)
+    }
 }
 
 /// A marker variants environment that always evaluates to `true`.
@@ -1300,8 +1308,7 @@ impl MarkerTree {
                             tree.evaluate_reporter_impl(env, extras, variants, reporter)
                         });
                     }
-                    // TODO(konsti): If we selected a non-variant wheel, what's the evaluation?
-                    // "" is a placeholder for now.
+                    // Non-variant wheels have the empty string as their label.
                     let label = variants.label();
                     let label = label.unwrap_or("");
                     for (range, tree) in marker.children() {
@@ -1322,16 +1329,10 @@ impl MarkerTree {
                             tree.evaluate_reporter_impl(env, extras, variants, reporter)
                         });
                     }
-                    // TODO(konsti): If we selected a non-variant wheel, what's the evaluation?
-                    if let Some(label) = variants.label() {
-                        marker
-                            .edge(marker.value().contains(label))
-                            .evaluate_reporter_impl(env, extras, variants, reporter)
-                    } else {
-                        marker
-                            .edge(false)
-                            .evaluate_reporter_impl(env, extras, variants, reporter)
-                    }
+                    let label = variants.label().unwrap_or("");
+                    marker
+                        .edge(marker.value().contains(label))
+                        .evaluate_reporter_impl(env, extras, variants, reporter)
                 };
             }
             MarkerTreeKind::Contains(marker) => {
@@ -1345,16 +1346,10 @@ impl MarkerTree {
                             tree.evaluate_reporter_impl(env, extras, variants, reporter)
                         });
                     }
-                    // TODO(konsti): If we selected a non-variant wheel, what's the evaluation?
-                    if let Some(label) = variants.label() {
-                        marker
-                            .edge(label.contains(marker.value()))
-                            .evaluate_reporter_impl(env, extras, variants, reporter)
-                    } else {
-                        marker
-                            .edge(false)
-                            .evaluate_reporter_impl(env, extras, variants, reporter)
-                    }
+                    let label = variants.label().unwrap_or("");
+                    marker
+                        .edge(label.contains(marker.value()))
+                        .evaluate_reporter_impl(env, extras, variants, reporter)
                 };
             }
             MarkerTreeKind::List(marker) => {
@@ -1868,7 +1863,7 @@ pub enum MarkerTreeKind<'a> {
 }
 
 impl MarkerTreeKind<'_> {
-    /// TODO(konsti)
+    /// Whether this node or any descendant depends on the selected wheel variant.
     pub fn has_variant_expression(&self) -> bool {
         match self {
             MarkerTreeKind::True | MarkerTreeKind::False => false,
@@ -1879,7 +1874,33 @@ impl MarkerTreeKind<'_> {
                     | CanonicalMarkerListPair::VariantProperties { .. },
                 ..
             }) => true,
-            _ => true,
+            Self::Version(marker) => marker
+                .edges()
+                .any(|(_, tree)| tree.has_variant_expression()),
+            Self::String(marker) => {
+                marker.key() == CanonicalMarkerValueString::VariantLabel
+                    || marker
+                        .children()
+                        .any(|(_, tree)| tree.has_variant_expression())
+            }
+            Self::In(marker) => {
+                marker.key() == CanonicalMarkerValueString::VariantLabel
+                    || marker
+                        .children()
+                        .any(|(_, tree)| tree.has_variant_expression())
+            }
+            Self::Contains(marker) => {
+                marker.key() == CanonicalMarkerValueString::VariantLabel
+                    || marker
+                        .children()
+                        .any(|(_, tree)| tree.has_variant_expression())
+            }
+            Self::List(marker) => marker
+                .children()
+                .any(|(_, tree)| tree.has_variant_expression()),
+            Self::Extra(marker) => marker
+                .children()
+                .any(|(_, tree)| tree.has_variant_expression()),
         }
     }
 }
@@ -4135,6 +4156,31 @@ mod test {
         assert!(!marker.evaluate_only_extras(std::slice::from_ref(&a)));
         assert!(!marker.evaluate_only_extras(std::slice::from_ref(&b)));
         assert!(marker.evaluate_only_extras(&[a.clone(), b.clone()]));
+    }
+
+    #[test]
+    fn pep825_variant_marker_detection() {
+        for marker in [
+            "python_version > '3.10'",
+            "sys_platform == 'linux'",
+            "'dev' in dependency_groups",
+            "extra == 'test'",
+        ] {
+            assert!(!m(marker).has_variant_expression(), "{marker}");
+        }
+        for marker in [
+            "variant_label == 'gpu'",
+            "python_version > '3.10' and variant_label in 'gpu'",
+            "sys_platform == 'linux' and 'gpu' in variant_namespaces",
+            "extra == 'test' or 'gpu::cuda::13.0' in variant_properties",
+        ] {
+            assert!(m(marker).has_variant_expression(), "{marker}");
+        }
+        let variant = VariantEnv::new(&[], "gpu".to_string());
+        let borrowed = &variant;
+        assert!(m("variant_label == 'gpu'").evaluate(&env37(), &borrowed, &[]));
+        let universal = &MarkerVariantsUniversal;
+        assert!(m("variant_label == 'gpu'").evaluate(&env37(), &universal, &[]));
     }
 
     #[test]

@@ -1,295 +1,208 @@
+use std::cmp::Reverse;
 use std::sync::Arc;
 
 use rustc_hash::{FxHashMap, FxHashSet};
-use tracing::{debug, trace, warn};
+use tracing::warn;
 
 use uv_distribution_filename::VariantLabel;
-use uv_pep508::{VariantNamespace, VariantValue};
+use uv_pep508::VariantNamespace;
 
 use crate::VariantProviderOutput;
-use crate::variants_json::{DefaultPriorities, Variant, VariantsJsonContent};
+use crate::variant_with_label::VariantWithLabel;
+use crate::variants_json::VariantsJsonContent;
 
-#[derive(Debug, Clone)]
+/// A wheel variant's priority, with larger values preferred.
+///
+/// Compare the best property first, prefer longer lists on a shared prefix, then use the
+/// lexically smaller label. Platform and build tags only break ties within the same label.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub struct VariantScore {
+    properties: Vec<Reverse<(usize, usize, usize)>>,
+    label: Reverse<VariantLabel>,
+}
+
+#[derive(Debug, Clone, Default)]
 pub struct ResolvedVariants {
-    pub variants_json: VariantsJsonContent,
+    pub variants_json: Option<VariantsJsonContent>,
     pub resolved_namespaces: FxHashMap<VariantNamespace, Arc<VariantProviderOutput>>,
-    /// Namespaces where `enable-if` didn't match.
+    /// Namespaces where the prototype provider's `enable-if` did not match.
     pub disabled_namespaces: FxHashSet<VariantNamespace>,
 }
 
 impl ResolvedVariants {
-    pub fn score_variant(&self, variant: &VariantLabel) -> Option<Vec<usize>> {
-        let Some(variants_properties) = self.variants_json.variants.get(variant) else {
-            warn!("Variant {variant} is missing in variants.json");
+    /// Return a priority score, or `None` if any feature has no supported value.
+    pub fn score_variant(&self, label: &VariantLabel) -> Option<VariantScore> {
+        let metadata = self.variants_json.as_ref()?;
+        let Some(variant) = metadata.variants.get(label) else {
+            warn!("Variant {label} is missing in variants.json");
             return None;
         };
 
-        score_variant(
-            &self.variants_json.default_priorities,
-            &self.resolved_namespaces,
-            &self.disabled_namespaces,
-            variants_properties,
-        )
-    }
-}
-
-/// Return a priority score for the variant (higher is better) or `None` if it isn't compatible.
-pub fn score_variant(
-    default_priorities: &DefaultPriorities,
-    target_namespaces: &FxHashMap<VariantNamespace, Arc<VariantProviderOutput>>,
-    disabled_namespaces: &FxHashSet<VariantNamespace>,
-    variants_properties: &Variant,
-) -> Option<Vec<usize>> {
-    for (namespace, features) in &**variants_properties {
-        for (feature, properties) in features {
-            let resolved_properties = target_namespaces
-                .get(namespace)
-                .and_then(|namespace| namespace.features.get(feature))?;
-            if !properties
-                .iter()
-                .any(|property| resolved_properties.contains(property))
-            {
+        let mut properties = Vec::new();
+        for (namespace, features) in &**variant {
+            if self.disabled_namespaces.contains(namespace) {
                 return None;
             }
-        }
-    }
-
-    // TODO(konsti): This is performance sensitive, prepare priorities and use a pairwise wheel
-    // comparison function instead.
-    let mut scores = Vec::new();
-    for namespace in &default_priorities.namespace {
-        if disabled_namespaces.contains(namespace) {
-            trace!("Skipping disabled namespace: {}", namespace);
-            continue;
-        }
-        // Explicit priorities are optional, but take priority over the provider
-        let explicit_feature_priorities = default_priorities.feature.get(namespace);
-        let Some(target_variants) = target_namespaces.get(namespace) else {
-            // TODO(konsti): Can this even happen?
-            debug!("Missing namespace priority: {namespace}");
-            continue;
-        };
-        let feature_priorities = explicit_feature_priorities.into_iter().flatten().chain(
-            target_variants.features.keys().filter(|priority| {
-                explicit_feature_priorities.is_none_or(|explicit| !explicit.contains(priority))
-            }),
-        );
-
-        for feature in feature_priorities {
-            let value_priorities: Vec<VariantValue> = default_priorities
-                .property
-                .get(namespace)
-                .and_then(|namespace_features| namespace_features.get(feature))
-                .into_iter()
-                .flatten()
-                .cloned()
-                .chain(
-                    target_namespaces
-                        .get(namespace)
-                        .and_then(|namespace| namespace.features.get(feature).cloned())
-                        .into_iter()
-                        .flatten(),
-                )
-                .collect();
-            let Some(wheel_properties) = variants_properties
-                .get(namespace)
-                .and_then(|namespace| namespace.get(feature))
-            else {
-                scores.push(0);
-                continue;
-            };
-
-            // Determine the highest scoring property
-            // Reversed to give a higher score to earlier entries
-            let score = value_priorities.len()
-                - value_priorities
+            let namespace_priority = metadata
+                .default_priorities
+                .namespace
+                .iter()
+                .position(|name| name == namespace)?;
+            for (feature, values) in features {
+                let provider = self.resolved_namespaces.get(namespace)?;
+                let (feature_priority, _, supported_values) =
+                    provider.features.get_full(feature)?;
+                let value_priority = supported_values
                     .iter()
-                    .position(|feature| wheel_properties.contains(feature))
-                    .unwrap_or(value_priorities.len());
-            scores.push(score);
+                    .position(|value| values.contains(value))?;
+                properties.push(Reverse((
+                    namespace_priority,
+                    feature_priority,
+                    value_priority,
+                )));
+            }
         }
+        properties.sort_unstable_by(|left, right| right.cmp(left));
+        Some(VariantScore {
+            properties,
+            label: Reverse(label.clone()),
+        })
     }
-    Some(scores)
+
+    /// Properties of the selected wheel that are supported by the target system.
+    ///
+    /// PEP 825 requires all supported values here, even though ordering uses only the best one.
+    pub fn compatible_variant(&self, label: &VariantLabel) -> Option<VariantWithLabel> {
+        self.score_variant(label)?;
+        let mut variant = self.variants_json.as_ref()?.variants.get(label)?.clone();
+        variant.retain_values(|namespace, feature, value| {
+            self.resolved_namespaces
+                .get(namespace)
+                .and_then(|provider| provider.features.get(feature))
+                .is_some_and(|supported| supported.contains(value))
+        });
+        Some(VariantWithLabel {
+            variant,
+            label: Some(label.clone()),
+        })
+    }
 }
 
 #[cfg(test)]
 mod tests {
-    use insta::assert_snapshot;
-    use itertools::Itertools;
-    use rustc_hash::{FxHashMap, FxHashSet};
+    use insta::assert_debug_snapshot;
+    use rustc_hash::FxHashSet;
     use serde_json::json;
 
-    use std::sync::Arc;
+    use super::ResolvedVariants;
+    use crate::variants_json::VARIANT_SCHEMA;
 
-    use uv_pep508::VariantNamespace;
-
-    use crate::VariantProviderOutput;
-    use crate::resolved_variants::score_variant;
-    use crate::variants_json::{DefaultPriorities, Variant};
-
-    fn host() -> FxHashMap<VariantNamespace, Arc<VariantProviderOutput>> {
-        serde_json::from_value(json!({
-            "gpu": {
-                "namespace": "gpu",
-                "features": {
-                    // Even though they are ahead of CUDA here, they are sorted below it due to the
-                    // default priorities
-                    "rocm": ["rocm68"],
-                    "xpu": ["xpu1"],
-                    "cuda": ["cu128", "cu126"]
+    fn resolved() -> Result<ResolvedVariants, serde_json::Error> {
+        Ok(ResolvedVariants {
+            variants_json: Some(serde_json::from_value(json!({
+                "$schema": VARIANT_SCHEMA,
+                "default-priorities": {"namespace": ["nvidia", "x86_64"]},
+                "variants": {
+                    "gpu": {"nvidia": {"cuda": ["13.0"]}},
+                    "gpu_cpuv2": {"nvidia": {"cuda": ["13.0"]}, "x86_64": {"level": ["v2"]}},
+                    "gpu_cpuv4": {"nvidia": {"cuda": ["13.0"]}, "x86_64": {"level": ["v4"]}},
+                    "cpuv4": {"x86_64": {"level": ["v4"]}},
+                    "multi": {"nvidia": {"cuda": ["12.0", "13.0", "14.0"]}},
+                    "unsupported": {"nvidia": {"cuda": ["14.0"]}},
+                    "unsupported_feature": {"nvidia": {"unknown": ["on"]}},
+                    "null": {}
                 }
-            },
-            "cpu": {
-                "namespace": "cpu",
-                "features": {
-                    "level": ["x86_64_v2", "x86_64_v1"]
-                }
-            },
-        }))
-        .unwrap()
-    }
-
-    // Default priorities in `variants.json`
-    fn default_priorities() -> DefaultPriorities {
-        serde_json::from_value(json!({
-            "namespace": ["gpu", "cpu", "blas", "not_used_namespace"],
-            "feature": {
-                "gpu": ["cuda", "not_used_feature"],
-                "cpu": ["level"],
-            },
-            "property": {
-                "cpu": {
-                    "level": ["x86_64_v4", "x86_64_v3", "x86_64_v2", "x86_64_v1", "not_used_value"],
-                },
-            },
-        }))
-        .unwrap()
-    }
-
-    fn score(variant: &Variant) -> Option<String> {
-        let score = score_variant(
-            &default_priorities(),
-            &host(),
-            &FxHashSet::default(),
-            variant,
-        )?;
-        Some(score.iter().map(ToString::to_string).join(", "))
+            }))?),
+            resolved_namespaces: serde_json::from_value(json!({
+                "nvidia": {"namespace": "nvidia", "features": {"cuda": ["13.0", "12.0"]}},
+                "x86_64": {"namespace": "x86_64", "features": {"level": ["v4", "v3", "v2"]}}
+            }))?,
+            disabled_namespaces: FxHashSet::default(),
+        })
     }
 
     #[test]
-    fn incompatible_variants() {
-        let incompatible_namespace: Variant = serde_json::from_value(json!({
-            "serial": {
-                "usb": ["usb3"],
-            },
-        }))
-        .unwrap();
-        assert_eq!(score(&incompatible_namespace), None);
-
-        let incompatible_feature: Variant = serde_json::from_value(json!({
-            "gpu": {
-                "rocm": ["rocm69"],
-            },
-        }))
-        .unwrap();
-        assert_eq!(score(&incompatible_feature), None);
-
-        let incompatible_value: Variant = serde_json::from_value(json!({
-            "gpu": {
-                "cuda": ["cu130"],
-            },
-        }))
-        .unwrap();
-        assert_eq!(score(&incompatible_value), None);
+    fn pep825_variant_ordering() -> Result<(), Box<dyn std::error::Error>> {
+        let resolved = resolved()?;
+        let mut variants = resolved
+            .variants_json
+            .as_ref()
+            .expect("test metadata")
+            .variants
+            .keys()
+            .filter_map(|label| Some((resolved.score_variant(label)?, label.as_str())))
+            .collect::<Vec<_>>();
+        variants.sort_by(|left, right| right.0.cmp(&left.0));
+        assert_debug_snapshot!(variants.iter().map(|(_, label)| label).collect::<Vec<_>>(), @r#"
+        [
+            "gpu_cpuv4",
+            "gpu_cpuv2",
+            "gpu",
+            "multi",
+            "cpuv4",
+            "null",
+        ]
+        "#);
+        Ok(())
     }
 
     #[test]
-    fn variant_sorting() {
-        let cu128_v2: Variant = serde_json::from_value(json!({
-            "gpu": {
-                "cuda": ["cu128"],
+    fn pep825_best_supported_value() -> Result<(), Box<dyn std::error::Error>> {
+        let mut resolved = resolved()?;
+        // Package metadata no longer overrides the provider's feature and value priorities.
+        resolved.variants_json = Some(serde_json::from_value(json!({
+            "$schema": VARIANT_SCHEMA,
+            "default-priorities": {
+                "namespace": ["nvidia"],
+                "feature": {"nvidia": ["unknown", "cuda"]},
+                "property": {"nvidia": {"cuda": ["14.0", "12.0", "13.0"]}}
             },
-            "cpu": {
-                "level": ["x86_64_v2"],
-            },
-        }))
-        .unwrap();
-        let cu128_v1: Variant = serde_json::from_value(json!({
-            "gpu": {
-                "cuda": ["cu128"],
-            },
-            "cpu": {
-                "level": ["x86_64_v1"],
-            },
-        }))
-        .unwrap();
-        let cu126_v2: Variant = serde_json::from_value(json!({
-            "gpu": {
-                "cuda": ["cu126"],
-            },
-            "cpu": {
-                "level": ["x86_64_v2"],
-            },
-        }))
-        .unwrap();
-        let cu126_v1: Variant = serde_json::from_value(json!({
-            "gpu": {
-                "cuda": ["cu126"],
-            },
-            "cpu": {
-                "level": ["x86_64_v1"],
-            },
-        }))
-        .unwrap();
-        let rocm: Variant = serde_json::from_value(json!({
-            "gpu": {
-                "rocm": ["rocm68"],
-            },
-        }))
-        .unwrap();
-        let xpu: Variant = serde_json::from_value(json!({
-            "gpu": {
-                "xpu": ["xpu1"],
-            },
-        }))
-        .unwrap();
-        // If the namespace is missing, the variant is compatible but below the higher ranking
-        // namespace
-        let v1: Variant = serde_json::from_value(json!({
-            "cpu": {
-                "level": ["x86_64_v1"],
-            },
-        }))
-        .unwrap();
-        // The null variant is last.
-        let null: Variant = serde_json::from_value(json!({})).unwrap();
+            "variants": {
+                "first": {"nvidia": {"cuda": ["13.0"]}},
+                "second": {"nvidia": {"cuda": ["12.0", "14.0"]}},
+                "third": {"nvidia": {"cuda": ["14.0"]}}
+            }
+        }))?);
+        assert!(
+            resolved.score_variant(&"first".parse()?) > resolved.score_variant(&"second".parse()?)
+        );
+        assert!(resolved.score_variant(&"third".parse()?).is_none());
+        Ok(())
+    }
 
-        assert_snapshot!(score(&cu128_v2).unwrap(), @"2, 0, 0, 0, 5");
-        assert_snapshot!(score(&cu128_v1).unwrap(), @"2, 0, 0, 0, 4");
-        assert_snapshot!(score(&cu126_v2).unwrap(), @"1, 0, 0, 0, 5");
-        assert_snapshot!(score(&cu126_v1).unwrap(), @"1, 0, 0, 0, 4");
-        assert_snapshot!(score(&rocm).unwrap(), @"0, 0, 1, 0, 0");
-        assert_snapshot!(score(&xpu).unwrap(), @"0, 0, 0, 1, 0");
-        assert_snapshot!(score(&v1).unwrap(), @"0, 0, 0, 0, 4");
-        assert_snapshot!(score(&null).unwrap(), @"0, 0, 0, 0, 0");
-
-        let wheels = vec![
-            &cu128_v2, &cu128_v1, &cu126_v2, &cu126_v1, &rocm, &xpu, &v1, &null,
-        ];
-        let mut wheels2 = wheels.clone();
-        // "shuffle"
-        wheels2.reverse();
-        wheels2.sort_by(|a, b| {
-            score_variant(&default_priorities(), &host(), &FxHashSet::default(), a)
-                .cmp(&score_variant(
-                    &default_priorities(),
-                    &host(),
-                    &FxHashSet::default(),
-                    b,
-                ))
-                // higher is better
-                .reverse()
-        });
-        assert_eq!(wheels2, wheels);
+    #[test]
+    fn pep825_compatible_marker_properties() -> Result<(), Box<dyn std::error::Error>> {
+        let resolved = resolved()?;
+        let variant = resolved.compatible_variant(&"multi".parse()?);
+        assert_debug_snapshot!(variant, @r#"
+        Some(
+            VariantWithLabel {
+                variant: Variant(
+                    {
+                        VariantNamespace(
+                            "nvidia",
+                        ): {
+                            VariantFeature(
+                                "cuda",
+                            ): [
+                                VariantValue(
+                                    "12.0",
+                                ),
+                                VariantValue(
+                                    "13.0",
+                                ),
+                            ],
+                        },
+                    },
+                ),
+                label: Some(
+                    VariantLabel(
+                        "multi",
+                    ),
+                ),
+            },
+        )
+        "#);
+        Ok(())
     }
 }

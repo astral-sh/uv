@@ -2159,18 +2159,9 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             return VariantWithLabel::default();
         };
 
-        // Collect the host properties for marker filtering.
-        // TODO(konsti): We shouldn't need to clone
-        let variant = resolved_variants
-            .variants_json
-            .variants
-            .get(variant_label)
-            .expect("Missing previously select variant label");
-
-        VariantWithLabel {
-            variant: variant.clone(),
-            label: Some(variant_label.clone()),
-        }
+        resolved_variants
+            .compatible_variant(variant_label)
+            .unwrap_or_default()
     }
 
     /// Fetch the metadata for a stream of packages and versions.
@@ -2534,7 +2525,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         provider
             .fetch_and_query_variants(&variants_json, marker_env)
             .await
-            .map_err(ResolveError::VariantFrontend)
+            .map_err(|err| ResolveError::VariantFrontend(Box::new(err)))
     }
 
     fn convert_no_solution_err(
@@ -3481,7 +3472,6 @@ fn widen_to_gap(version: &Version, known_versions: Option<&[Version]>) -> Range<
 
 /// Fetch the metadata for an item
 #[derive(Debug)]
-#[expect(clippy::large_enum_variant)]
 pub(crate) enum Request {
     /// A request to fetch the metadata for a package.
     Package(PackageName, Option<IndexMetadata>),
@@ -3555,7 +3545,6 @@ impl Display for Request {
 }
 
 #[derive(Debug)]
-#[expect(clippy::large_enum_variant)]
 enum Response {
     /// The returned metadata for a package hosted on a registry.
     Package(PackageName, Option<IndexUrl>, VersionsResponse),
