@@ -3,6 +3,16 @@
 <!-- prettier-ignore-start -->
 
 
+## 0.12.12
+
+Released on 2026-09-09.
+
+The executables in our macOS and Windows release archives and `uv` and `uv_build` wheels are now code-signed. macOS executables are signed with an Apple Developer ID certificate and notarized by Apple. Windows executables have timestamped Authenticode signatures from Azure Artifact Signing. This enables verification of the release publisher and binary integrity, supports publisher-based allowlisting, and should reduce security warnings and antivirus false positives.
+
+### Bug fixes
+
+- Exclude distributions uploaded after the `exclude-newer` cutoff from lockfiles and generated requirement hashes ([#21539](https://github.com/astral-sh/uv/pull/21539))
+
 ## 0.12.11
 
 Released on 2026-09-08.
