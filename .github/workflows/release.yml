@@ -74,6 +74,7 @@ jobs:
     runs-on: "depot-ubuntu-latest-4"
     outputs:
       val: ${{ steps.plan.outputs.manifest }}
+      artifact: ${{ steps.upload.outputs.artifact-id }}
       tag: ${{ (inputs.tag != 'dry-run' && inputs.tag) || '' }}
       tag-flag: ${{ inputs.tag && inputs.tag != 'dry-run' && format('--tag={0}', inputs.tag) || '' }}
       publishing: ${{ inputs.tag && inputs.tag != 'dry-run' }}
@@ -102,9 +103,10 @@ jobs:
         env:
           DIST_CMD: ${{ (inputs.tag && inputs.tag != 'dry-run' && format('host --steps=create --tag={0}', inputs.tag)) || 'plan' }}
       - name: "Upload dist-manifest.json"
+        id: upload
         uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
-          name: release-github-manifest-plan
+          name: dist-manifest-plan-${{ github.run_id }}-${{ github.run_attempt }}
           path: plan-dist-manifest.json
 
   build-release-binaries:
@@ -154,6 +156,8 @@ jobs:
       - sign-release-binaries
     if: ${{ needs.plan.outputs.publishing == 'true' || fromJson(needs.plan.outputs.val).ci.github.pr_run_mode == 'upload' || inputs.tag == 'dry-run' }}
     runs-on: "depot-ubuntu-latest-4"
+    outputs:
+      artifact: ${{ steps.upload.outputs.artifact-id }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
         with:
@@ -163,17 +167,10 @@ jobs:
         uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
         with:
           version: "0.12.5"
-      - name: Fetch local artifacts
+      - name: Fetch release archives and plan
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          # The macOS and Windows archives come from the signing job below.
-          pattern: release-github-*
-          path: target/distrib/
-          merge-multiple: true
-      - name: Fetch signed GitHub release archives
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        with:
-          artifact-ids: ${{ needs.sign-release-binaries.outputs.github-archives }}
+          artifact-ids: ${{ needs.plan.outputs.artifact }},${{ needs.sign-release-binaries.outputs.github-archives }}
           path: target/distrib/
           merge-multiple: true
       - name: Generate local dist manifest
@@ -190,9 +187,10 @@ jobs:
           python3 scripts/patch-dist-manifest-checksums.py --manifest "$temp_manifest" --artifacts-dir target/distrib
           mv "$temp_manifest" target/distrib/local-dist-manifest.json
       - name: Upload synthesized local dist manifest
+        id: upload
         uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
-          name: release-github-manifest-local
+          name: dist-manifest-local-${{ github.run_id }}-${{ github.run_attempt }}
           path: target/distrib/local-dist-manifest.json
 
   # Build and package all the platform-agnostic(ish) things
@@ -204,6 +202,9 @@ jobs:
       - generate-checksum-manifest
       - sign-release-binaries
     runs-on: "depot-ubuntu-latest-4"
+    outputs:
+      artifacts: ${{ steps.artifacts.outputs.artifact-id }}
+      manifest: ${{ steps.manifest.outputs.artifact-id }}
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       BUILD_MANIFEST_NAME: target/distrib/global-dist-manifest.json
@@ -216,17 +217,17 @@ jobs:
         uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
         with:
           version: "0.12.5" # Get all the local artifacts for the global tasks to use (for e.g. checksums)
-      - name: Fetch local artifacts
+      - name: Fetch release archives and manifests
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          pattern: release-github-*
+          artifact-ids: ${{ needs.plan.outputs.artifact }},${{ needs.generate-checksum-manifest.outputs.artifact }},${{ needs.sign-release-binaries.outputs.github-archives }}
           path: target/distrib/
           merge-multiple: true
-      - name: Fetch signed GitHub release archives
+      - name: Fetch release inventory
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          artifact-ids: ${{ needs.sign-release-binaries.outputs.github-archives }}
-          path: target/distrib/
+          artifact-ids: ${{ needs.sign-release-binaries.outputs.inventory }}
+          path: release-inventory
           merge-multiple: true
       - id: cargo-dist
         shell: bash
@@ -242,13 +243,20 @@ jobs:
           cp dist-manifest.json "$BUILD_MANIFEST_NAME"
         env:
           DIST_TAG_FLAG: ${{ needs.plan.outputs.tag-flag }}
+      - name: "Check complete GitHub release inventory"
+        run: uv run scripts/list-release-artifacts.py github-build dist-manifest.json release-inventory/inventory.json
       - name: "Upload artifacts"
+        id: artifacts
         uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
-          name: release-github-global
-          path: |
-            ${{ steps.cargo-dist.outputs.paths }}
-            ${{ env.BUILD_MANIFEST_NAME }}
+          name: release-github-global-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ steps.cargo-dist.outputs.paths }}
+      - name: "Upload global dist manifest"
+        id: manifest
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        with:
+          name: dist-manifest-global-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ env.BUILD_MANIFEST_NAME }}
   # Determines if we should publish/announce
   host:
     needs:
@@ -256,6 +264,7 @@ jobs:
       - build-release-binaries
       - build-docker
       - build-global-artifacts
+      - generate-checksum-manifest
       - sign-release-binaries
     # Only run if we're publishing and the required builds and signing succeeded (skipped builds are fine).
     if: ${{ always() && needs.plan.result == 'success' && needs.plan.outputs.publishing == 'true' && needs.sign-release-binaries.result == 'success' && (needs.build-global-artifacts.result == 'skipped' || needs.build-global-artifacts.result == 'success') && (needs.build-release-binaries.result == 'skipped' || needs.build-release-binaries.result == 'success') && (needs.build-docker.result == 'skipped' || needs.build-docker.result == 'success') }}
@@ -264,6 +273,7 @@ jobs:
     runs-on: "depot-ubuntu-latest-4"
     outputs:
       val: ${{ steps.host.outputs.manifest }}
+      github-artifacts: ${{ needs.sign-release-binaries.outputs.github-archives }},${{ needs.build-global-artifacts.outputs.artifacts }},${{ steps.manifest.outputs.artifact-id }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
         with:
@@ -273,16 +283,10 @@ jobs:
         uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
         with:
           version: "0.12.5" # Fetch artifacts from scratch-storage
-      - name: Fetch artifacts
+      - name: Fetch release artifacts and manifests
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          pattern: release-github-*
-          path: target/distrib/
-          merge-multiple: true
-      - name: Fetch signed GitHub release archives
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        with:
-          artifact-ids: ${{ needs.sign-release-binaries.outputs.github-archives }}
+          artifact-ids: ${{ needs.plan.outputs.artifact }},${{ needs.generate-checksum-manifest.outputs.artifact }},${{ needs.build-global-artifacts.outputs.manifest }},${{ needs.sign-release-binaries.outputs.github-archives }},${{ needs.build-global-artifacts.outputs.artifacts }}
           path: target/distrib/
           merge-multiple: true
       # This is a harmless no-op for GitHub Releases, hosting for that happens in "publish-github"
@@ -296,10 +300,10 @@ jobs:
         env:
           DIST_TAG_FLAG: ${{ needs.plan.outputs.tag-flag }}
       - name: "Upload dist-manifest.json"
+        id: manifest
         uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
-          # Overwrite the previous copy
-          name: release-github-manifest
+          name: release-github-manifest-${{ github.run_id }}-${{ github.run_attempt }}
           path: dist-manifest.json
 
   publish-pypi:
@@ -320,6 +324,7 @@ jobs:
     secrets: inherit
     # publish jobs get escalated permissions
     permissions:
+      "contents": "read"
       "id-token": "write"
       "packages": "write"
 
@@ -365,31 +370,33 @@ jobs:
           persist-credentials: false
           submodules: recursive
       # Create a GitHub Release while uploading all files to it
+      - name: "Install uv"
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          version: "0.12.10"
+          checksum: "173d95a0c32d18c896c46ba6fafbf3cf9c14ab74b033f81b76c883ef492a976b"
+          enable-cache: false
       - name: "Download GitHub Artifacts"
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          pattern: release-github-*
+          artifact-ids: ${{ needs.host.outputs.github-artifacts }}
           path: artifacts
           merge-multiple: true
-      - name: "Download signed GitHub release archives"
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        with:
-          artifact-ids: ${{ needs.sign-release-binaries.outputs.github-archives }}
-          path: artifacts
-          merge-multiple: true
-      - name: Cleanup
+      - name: "Check release asset inventory"
+        id: assets
+        shell: bash
         run: |
-          # Remove the granular manifests
-          rm -f artifacts/*-dist-manifest.json
+          uv run scripts/list-release-artifacts.py github artifacts/dist-manifest.json artifacts --include-manifest > "$RUNNER_TEMP/release-assets.txt"
+          uv run scripts/list-release-artifacts.py github artifacts/dist-manifest.json artifacts --include-manifest --attest > "$RUNNER_TEMP/attestation-assets.txt"
+          {
+            echo 'attestation-paths<<EOF'
+            cat "$RUNNER_TEMP/attestation-assets.txt"
+            echo EOF
+          } >> "$GITHUB_OUTPUT"
       - name: Attest
         uses: actions/attest-build-provenance@00014ed6ed5efc5b1ab7f7f34a39eb55d41aa4f8
         with:
-          subject-path: |
-            artifacts/*.json
-            artifacts/*.sh
-            artifacts/*.ps1
-            artifacts/*.zip
-            artifacts/*.tar.gz
+          subject-path: ${{ steps.assets.outputs.attestation-paths }}
       - name: Get release token
         id: release-token
         uses: open-security-tools/ost-simple-sts@974a63a2daaaa40f7c6dec40d334f3da4421469e
@@ -413,7 +420,8 @@ jobs:
           # Write and read notes from a file to avoid quoting breaking things
           echo "$ANNOUNCEMENT_BODY" > $RUNNER_TEMP/notes.txt
 
-          gh release create "${NEEDS_PLAN_OUTPUTS_TAG}" --target "$RELEASE_COMMIT" $PRERELEASE_FLAG --title "$ANNOUNCEMENT_TITLE" --notes-file "$RUNNER_TEMP/notes.txt" artifacts/*
+          mapfile -t assets < "$RUNNER_TEMP/release-assets.txt"
+          gh release create "${NEEDS_PLAN_OUTPUTS_TAG}" --target "$RELEASE_COMMIT" $PRERELEASE_FLAG --title "$ANNOUNCEMENT_TITLE" --notes-file "$RUNNER_TEMP/notes.txt" "${assets[@]}"
 
   publish-docs:
     needs:
@@ -440,13 +448,14 @@ jobs:
   publish-mirror:
     needs:
       - plan
+      - host
       - publish-github
       - sign-release-binaries
     if: ${{ always() && needs.publish-github.result == 'success' && needs.sign-release-binaries.result == 'success' }}
     uses: $/.github/workflows/publish-mirror.yml
     with:
       plan: ${{ needs.plan.outputs.val }}
-      github-archives: ${{ needs.sign-release-binaries.outputs.github-archives }}
+      github-artifacts: ${{ needs.host.outputs.github-artifacts }}
     secrets: inherit
     permissions:
       "contents": "read"
