@@ -53,26 +53,26 @@ jobs:
       - name: "Download unsigned macOS wheels"
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          pattern: wheels_*-*-apple-darwin
+          pattern: unsigned-pypi-*-wheels-*-apple-darwin
           path: wheel-artifacts
 
       - name: "Download unsigned Windows wheels"
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          pattern: wheels_*-*-pc-windows-msvc
+          pattern: unsigned-pypi-*-wheels-*-pc-windows-msvc
           path: wheel-artifacts
 
       - name: "Download unsigned macOS GitHub release archives"
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          pattern: artifacts-*-apple-darwin
+          pattern: unsigned-github-archives-*-apple-darwin
           path: github-archives
           merge-multiple: true
 
       - name: "Download unsigned Windows GitHub release archives"
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          pattern: artifacts-*-pc-windows-msvc
+          pattern: unsigned-github-archives-*-pc-windows-msvc
           path: github-archives
           merge-multiple: true
 
@@ -88,8 +88,8 @@ jobs:
             if [[ "$system" == macos ]]; then targets=$MACOS_TARGETS; else targets=$WINDOWS_TARGETS; fi
             while read -r target; do
               mkdir -p "wheels/$target"
-              cp wheel-artifacts/"wheels_uv-$target"/*.whl "wheels/$target/"
-              cp wheel-artifacts/"wheels_uv_build-$target"/*.whl "wheels/$target/"
+              cp wheel-artifacts/"unsigned-pypi-uv-wheels-$target"/*.whl "wheels/$target/"
+              cp wheel-artifacts/"unsigned-pypi-uv_build-wheels-$target"/*.whl "wheels/$target/"
               uv run scripts/extract-wheel-binaries.py \
                 --output "./unsigned/$system/$target" wheels/"$target"/*.whl
             done < <(jq -r '.[].target' <<< "$targets")
@@ -99,7 +99,7 @@ jobs:
         id: macos
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: unsigned-macos-${{ github.run_id }}-${{ github.run_attempt }}
+          name: unsigned-binaries-macos-${{ github.run_id }}-${{ github.run_attempt }}
           path: unsigned/macos
           if-no-files-found: error
 
@@ -107,7 +107,7 @@ jobs:
         id: windows
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: unsigned-windows-${{ github.run_id }}-${{ github.run_attempt }}
+          name: unsigned-binaries-windows-${{ github.run_id }}-${{ github.run_attempt }}
           path: unsigned/windows
           if-no-files-found: error
 
@@ -115,7 +115,7 @@ jobs:
         id: assembly
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: signing-assembly-${{ github.run_id }}-${{ github.run_attempt }}
+          name: signing-assembly-inputs-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
             wheels
             github-archives
@@ -192,7 +192,7 @@ jobs:
         id: upload
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: signed-macos-${{ github.run_id }}-${{ github.run_attempt }}
+          name: signed-binaries-macos-${{ github.run_id }}-${{ github.run_attempt }}
           path: signed
           if-no-files-found: error
 
@@ -275,7 +275,7 @@ jobs:
         id: upload
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: signed-windows-${{ github.run_id }}-${{ github.run_attempt }}
+          name: signed-binaries-windows-${{ github.run_id }}-${{ github.run_attempt }}
           path: signed
           if-no-files-found: error
 
@@ -373,7 +373,7 @@ jobs:
         id: macos-wheels
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: signed-macos-wheels-${{ github.run_id }}-${{ github.run_attempt }}
+          name: signed-wheels-macos-${{ github.run_id }}-${{ github.run_attempt }}
           path: signed-wheels/macos
           if-no-files-found: error
 
@@ -381,7 +381,7 @@ jobs:
         id: windows-wheels
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: signed-windows-wheels-${{ github.run_id }}-${{ github.run_attempt }}
+          name: signed-wheels-windows-${{ github.run_id }}-${{ github.run_attempt }}
           path: signed-wheels/windows
           if-no-files-found: error
 
@@ -389,7 +389,7 @@ jobs:
         id: uv-wheels
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: signed-uv-wheels-${{ github.run_id }}-${{ github.run_attempt }}
+          name: signed-pypi-uv-wheels-${{ github.run_id }}-${{ github.run_attempt }}
           path: signed-pypi/uv
           if-no-files-found: error
 
@@ -397,7 +397,7 @@ jobs:
         id: uv-build-wheels
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: signed-uv-build-wheels-${{ github.run_id }}-${{ github.run_attempt }}
+          name: signed-pypi-uv_build-wheels-${{ github.run_id }}-${{ github.run_attempt }}
           path: signed-pypi/uv_build
           if-no-files-found: error
 
@@ -405,7 +405,7 @@ jobs:
         id: github-archives
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: signed-github-release-archives-${{ github.run_id }}-${{ github.run_attempt }}
+          name: signed-github-archives-${{ github.run_id }}-${{ github.run_attempt }}
           path: signed-github-archives/*
           if-no-files-found: error
 
