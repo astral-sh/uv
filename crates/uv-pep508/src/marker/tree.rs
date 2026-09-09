@@ -4141,7 +4141,7 @@ mod test {
     fn marker_evaluation_variants() {
         let env37 = env37();
         let gpu_namespaces = VariantEnv::new(&[("gpu", "cuda", "12.4")], String::new());
-        let cpu_namespaces = VariantEnv::new(&[("cpu", "", "")], String::new());
+        let cpu_namespaces = VariantEnv::new(&[("cpu", "level", "v1")], String::new());
 
         // namespace variant markers
         let marker1 = m("'gpu' in variant_namespaces");
@@ -4265,7 +4265,7 @@ mod test {
         let cu126_2 = VariantEnv::new(
             &[
                 ("nvidia", "ctk", "12.6"),
-                ("nvidia", "cuda_version", ">=12.6,<13"),
+                ("nvidia", "cuda_version_lower_bound", "12.6"),
             ],
             String::new(),
         );

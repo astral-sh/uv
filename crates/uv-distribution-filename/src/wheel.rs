@@ -256,10 +256,10 @@ impl WheelFilename {
                     )
                 } else {
                     // 6 components: Determine whether we have a build tag or a variant tag.
-                    if LanguageTag::from_str(
-                        &stem[build_tag_or_python_tag + 1..python_tag_or_abi_tag],
-                    )
-                    .is_ok()
+                    if !stem[build_tag_or_python_tag + 1..python_tag_or_abi_tag]
+                        .as_bytes()
+                        .first()
+                        .is_some_and(u8::is_ascii_digit)
                     {
                         (
                             &stem[..version],
@@ -301,6 +301,17 @@ impl WheelFilename {
                     memchr(b'.', &stem.as_bytes()[build_tag_or_python_tag..]).is_none(),
                 )
             };
+
+        if python_tag
+            .as_bytes()
+            .first()
+            .is_some_and(u8::is_ascii_digit)
+        {
+            return Err(WheelFilenameError::InvalidWheelFileName(
+                filename.to_string(),
+                "Python tag must not start with a digit".to_string(),
+            ));
+        }
 
         let name = if let Some(hint) = hint
             && normalized_package_name_matches(name, hint)
@@ -563,6 +574,51 @@ mod tests {
         insta::assert_debug_snapshot!(WheelFilename::from_str(
             "foo-1.2.3-202206090410-py3-none-any.whl"
         ));
+    }
+
+    #[test]
+    fn pep825_variant_filenames() -> Result<(), Box<dyn std::error::Error>> {
+        let mut labels = Vec::new();
+        for filename in [
+            "numpy-2.3.2-cp313-cp313t-musllinux_1_2_x86_64-x86_64_v3_openblas.whl",
+            "numpy-2.3.2-7-cp313-cp313t-musllinux_1_2_x86_64-x86_64_v3_openblas.whl",
+            "numpy-2.3.2-future99-none-any-null.whl",
+            "numpy-2.3.2-cp312.cp313-none-any-cpu_v3.whl",
+        ] {
+            let wheel = WheelFilename::from_str(filename)?;
+            assert_eq!(wheel.to_string(), filename);
+            labels.push(wheel.variant().map(ToString::to_string));
+        }
+        insta::assert_debug_snapshot!(labels, @r#"
+        [
+            Some(
+                "x86_64_v3_openblas",
+            ),
+            Some(
+                "x86_64_v3_openblas",
+            ),
+            Some(
+                "null",
+            ),
+            Some(
+                "cpu_v3",
+            ),
+        ]
+        "#);
+        Ok(())
+    }
+
+    #[test]
+    fn pep825_invalid_variant_filenames() {
+        let errors = [
+            "numpy-2.3.2-3py-none-any.whl",
+            "numpy-2.3.2-7-3py-none-any-null.whl",
+            "numpy-2.3.2-py3-none-any-.whl",
+            "numpy-2.3.2-py3-none-any-cpu_!v3.whl",
+            "numpy-2.3.2-py3-none-any-cpu_É.whl",
+        ]
+        .map(|filename| WheelFilename::from_str(filename).map_err(|error| error.to_string()));
+        insta::assert_debug_snapshot!(errors);
     }
 
     #[test]

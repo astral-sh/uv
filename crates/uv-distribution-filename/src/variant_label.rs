@@ -7,8 +7,8 @@ use uv_small_str::SmallString;
 pub enum InvalidVariantLabel {
     #[error("Invalid character `{invalid}` in variant label, only [a-z0-9._] are allowed: {input}")]
     InvalidCharacter { invalid: char, input: String },
-    #[error("Variant label must be between 1 and 16 characters long, not {length}: {input}")]
-    InvalidLength { length: usize, input: String },
+    #[error("Variant label must not be empty")]
+    Empty,
 }
 
 #[derive(
@@ -38,25 +38,16 @@ impl FromStr for VariantLabel {
     type Err = InvalidVariantLabel;
 
     fn from_str(label: &str) -> Result<Self, Self::Err> {
-        if let Some(invalid) = label
-            .chars()
-            .find(|c| !(c.is_ascii_lowercase() || c.is_ascii_digit() || *c == '.'))
-        {
-            if !invalid.is_ascii_lowercase()
-                && !invalid.is_ascii_digit()
-                && !matches!(invalid, '.' | '_')
-            {
-                return Err(InvalidVariantLabel::InvalidCharacter {
-                    invalid,
-                    input: label.to_string(),
-                });
-            }
+        if label.is_empty() {
+            return Err(InvalidVariantLabel::Empty);
         }
-
-        // We checked that the label is ASCII only above, so we can use `len()`.
-        if label.is_empty() || label.len() > 16 {
-            return Err(InvalidVariantLabel::InvalidLength {
-                length: label.len(),
+        if let Some(invalid) = label.chars().find(|character| {
+            !(character.is_ascii_lowercase()
+                || character.is_ascii_digit()
+                || matches!(character, '.' | '_'))
+        }) {
+            return Err(InvalidVariantLabel::InvalidCharacter {
+                invalid,
                 input: label.to_string(),
             });
         }
