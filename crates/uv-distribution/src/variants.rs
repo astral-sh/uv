@@ -15,7 +15,7 @@ use uv_once_map::OnceMap;
 use uv_platform_tags::{TagCompatibility, Tags};
 use uv_pypi_types::ResolverMarkerEnvironment;
 use uv_types::BuildContext;
-use uv_variants::resolved_variants::ResolvedVariants;
+use uv_variants::resolved_variants::{ResolvedVariants, VariantScore};
 
 use crate::{DistributionDatabase, Error};
 
@@ -86,7 +86,7 @@ pub async fn resolve_variants<Context: BuildContext>(
         // Select best wheel
         let mut highest_priority_variant_wheel: Option<(
             usize,
-            Vec<usize>,
+            VariantScore,
             TagCompatibility,
             Option<&BuildTag>,
         )> = None;

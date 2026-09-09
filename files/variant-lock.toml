@@ -8,7 +8,8 @@ plugin-api = "cpu_level_provider"
 namespace = "cpu_level"
 
 [provider.properties]
-x86_64_level = ["v1", "v2"]
+# Compatible values are ordered from most to least preferred.
+x86_64_level = ["v2", "v1"]
 
 [[provider]]
 resolved = ["nvidia-variant-provider==0.0.1"]

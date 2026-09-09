@@ -1414,10 +1414,10 @@ impl VersionFiles {
         let file = CachedFile::from(file);
         match filename {
             IndexEntryFilename::DistFilename(DistFilename::WheelFilename(_)) => {
-                self.wheels.push(file)
+                self.wheels.push(file);
             }
             IndexEntryFilename::DistFilename(DistFilename::SourceDistFilename(_)) => {
-                self.source_dists.push(file)
+                self.source_dists.push(file);
             }
             IndexEntryFilename::VariantJson(_) => self.variant_jsons.push(file),
         }
@@ -2307,6 +2307,45 @@ mod tests {
             ["example_1-1.0.0.tar.gz", "example_1-1.0.0-py3-none-any.whl"]
         );
 
+        Ok(())
+    }
+
+    #[test]
+    fn pep825_index_metadata_attributes() -> Result<(), Error> {
+        let data: PypiSimpleDetail = serde_json::from_str(
+            r#"{
+            "files": [{
+                "filename": "example-1.0.0-variants.json",
+                "url": "https://example.com/arbitrary-metadata-location",
+                "hashes": {},
+                "requires-python": "not a version specifier",
+                "core-metadata": true,
+                "yanked": "does not apply"
+            }]
+        }"#,
+        )?;
+        let package_name = PackageName::from_str("example")?;
+        let metadata = SimpleDetailMetadata::from_pypi_files(
+            data.files,
+            &package_name,
+            data.project_status,
+            &Url::parse("https://example.com/simple/")?,
+        );
+        let entries = metadata
+            .versions
+            .into_iter()
+            .flat_map(|datum| datum.files.all_entries(&package_name))
+            .collect::<Vec<_>>();
+        assert_eq!(entries.len(), 1);
+        let (filename, file) = &entries[0];
+        assert_eq!(filename.to_string(), "example-1.0.0-variants.json");
+        assert_eq!(
+            file.url.to_url()?.as_str(),
+            "https://example.com/arbitrary-metadata-location"
+        );
+        assert!(file.requires_python.is_none());
+        assert!(file.yanked.is_none());
+        assert!(!file.dist_info_metadata);
         Ok(())
     }
 

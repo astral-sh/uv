@@ -24,6 +24,7 @@ use uv_pep508::{
 use uv_platform_tags::Tags;
 use uv_pypi_types::{ConflictKind, ConflictSet, ResolverMarkerEnvironment};
 use uv_types::BuildContext;
+use uv_variants::resolved_variants::VariantScore;
 use uv_variants::variant_with_label::VariantWithLabel;
 
 use crate::lock::{
@@ -2003,7 +2004,7 @@ async fn determine_properties<Context: BuildContext>(
     };
 
     // Select best wheel
-    let mut highest_priority_variant_wheel: Option<(_, Vec<usize>)> = None;
+    let mut highest_priority_variant_wheel: Option<(_, VariantScore)> = None;
     for wheel in &package.wheels {
         if !wheel.filename.compatibility(tags).is_compatible() {
             continue;
@@ -2027,15 +2028,9 @@ async fn determine_properties<Context: BuildContext>(
     }
 
     if let Some((best_variant, _)) = highest_priority_variant_wheel {
-        // TODO(konsti): We shouldn't need to clone
-
-        // TODO(konsti): The variant exists because we used it for scoring, but we should
-        // be able to write this without unwrap.
-        let known_properties = resolved_variants.variants_json.variants[best_variant].clone();
-        Ok(VariantWithLabel {
-            variant: known_properties,
-            label: Some(best_variant.clone()),
-        })
+        Ok(resolved_variants
+            .compatible_variant(best_variant)
+            .unwrap_or_default())
     } else {
         // When selecting the non-variant wheel, all variant markers evaluate to false.
         Ok(VariantWithLabel::default())

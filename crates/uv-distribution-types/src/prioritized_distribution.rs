@@ -10,7 +10,7 @@ use uv_pep508::{MarkerExpression, MarkerOperator, MarkerTree, MarkerValueString}
 use uv_platform_tags::{AbiTag, IncompatibleTag, LanguageTag, PlatformTag, TagPriority, Tags};
 use uv_pypi_types::{HashDigest, Yanked};
 use uv_variants::VariantPriority;
-use uv_variants::resolved_variants::ResolvedVariants;
+use uv_variants::resolved_variants::{ResolvedVariants, VariantScore};
 
 use crate::{
     File, IndexUrl, InstalledDist, KnownPlatform, RegistryBuiltDist, RegistryBuiltWheel,
@@ -588,7 +588,7 @@ impl PrioritizedDist {
         &self,
         resolved_variants: &ResolvedVariants,
     ) -> Option<Self> {
-        let mut highest_priority_variant_wheel: Option<(usize, Vec<usize>)> = None;
+        let mut highest_priority_variant_wheel: Option<(usize, VariantScore)> = None;
         for (wheel_index, (wheel, compatibility)) in self.wheels().enumerate() {
             if !compatibility.is_compatible() {
                 continue;
@@ -603,8 +603,11 @@ impl PrioritizedDist {
                 continue;
             };
 
-            if let Some((_, old_scores)) = &highest_priority_variant_wheel {
-                if &scores > old_scores {
+            if let Some((old_index, old_scores)) = &highest_priority_variant_wheel {
+                if &scores > old_scores
+                    || (&scores == old_scores
+                        && compatibility.is_more_compatible(&self.0.wheels[*old_index].1))
+                {
                     highest_priority_variant_wheel = Some((wheel_index, scores));
                 }
             } else {

@@ -9,6 +9,7 @@ use thiserror::Error;
 /// A segment of a variant uses invalid characters.
 #[derive(Error, Debug)]
 pub enum VariantParseError {
+    /// A namespace, feature or value is empty.
     #[error("Variant {0} must not be empty")]
     Empty(&'static str),
     /// The namespace segment of a variant failed to parse.
@@ -79,6 +80,11 @@ impl<'de> Deserialize<'de> for VariantNamespace {
         D: Deserializer<'de>,
     {
         let s = String::deserialize(deserializer)?;
+        if s.trim() != s {
+            return Err(serde::de::Error::custom(
+                "variant metadata components must not contain surrounding whitespace",
+            ));
+        }
         Self::from_str(&s).map_err(serde::de::Error::custom)
     }
 }
@@ -127,6 +133,11 @@ impl<'de> Deserialize<'de> for VariantFeature {
         D: Deserializer<'de>,
     {
         let s = String::deserialize(deserializer)?;
+        if s.trim() != s {
+            return Err(serde::de::Error::custom(
+                "variant metadata components must not contain surrounding whitespace",
+            ));
+        }
         Self::from_str(&s).map_err(serde::de::Error::custom)
     }
 }
@@ -175,6 +186,11 @@ impl<'de> Deserialize<'de> for VariantValue {
         D: Deserializer<'de>,
     {
         let s = String::deserialize(deserializer)?;
+        if s.trim() != s {
+            return Err(serde::de::Error::custom(
+                "variant metadata components must not contain surrounding whitespace",
+            ));
+        }
         Self::from_str(&s).map_err(serde::de::Error::custom)
     }
 }

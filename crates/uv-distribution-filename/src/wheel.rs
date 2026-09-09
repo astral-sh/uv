@@ -256,8 +256,7 @@ impl WheelFilename {
                     )
                 } else {
                     // 6 components: Determine whether we have a build tag or a variant tag.
-                    if !stem[build_tag_or_python_tag + 1..python_tag_or_abi_tag]
-                        .as_bytes()
+                    if !stem.as_bytes()[build_tag_or_python_tag + 1..python_tag_or_abi_tag]
                         .first()
                         .is_some_and(u8::is_ascii_digit)
                     {

@@ -7,3 +7,5 @@ use uv_test::pypi_proxy;
 mod direct_url_hashes;
 #[cfg(all(feature = "test-python", feature = "test-pypi"))]
 mod pip_install;
+#[cfg(feature = "test-python")]
+mod variants;

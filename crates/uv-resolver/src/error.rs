@@ -43,7 +43,7 @@ pub enum ResolveError {
     Dependencies(#[source] Box<Self>, PackageName, Version, DerivationChain),
 
     #[error(transparent)]
-    VariantFrontend(uv_distribution::Error),
+    VariantFrontend(Box<uv_distribution::Error>),
 
     #[error(transparent)]
     Client(#[from] uv_client::Error),

@@ -686,7 +686,16 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         registry_variants_json: &RegistryVariantsJson,
         marker_env: &MarkerEnvironment,
     ) -> Result<ResolvedVariants, Error> {
-        let variants_json = self.fetch_variants_json(registry_variants_json).await?;
+        let variants_json = match self.fetch_variants_json(registry_variants_json).await {
+            Ok(metadata) => metadata,
+            Err(Error::Client(err))
+                if matches!(err.kind(), uv_client::ErrorKind::VariantsJsonFormat(..)) =>
+            {
+                warn!("Ignoring invalid variant metadata: {err}");
+                return Ok(ResolvedVariants::default());
+            }
+            Err(err) => return Err(err),
+        };
         let resolved_variants = self
             .query_variant_providers(variants_json, marker_env, &registry_variants_json.filename)
             .await?;
@@ -790,8 +799,29 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             );
         }
 
+        // PEP 825 leaves discovery of host properties to a separate specification. A
+        // target property file also works with standard metadata without provider extensions.
+        if let Some((_, variant_lock)) = &variant_lock {
+            for provider in &variant_lock.provider {
+                if variants_json
+                    .default_priorities
+                    .namespace
+                    .contains(&provider.namespace)
+                    && !disabled_namespaces.contains(&provider.namespace)
+                {
+                    resolved_namespaces.insert(
+                        provider.namespace.clone(),
+                        Arc::new(VariantProviderOutput {
+                            namespace: provider.namespace.clone(),
+                            features: provider.properties.clone().into_iter().collect(),
+                        }),
+                    );
+                }
+            }
+        }
+
         Ok(ResolvedVariants {
-            variants_json,
+            variants_json: Some(variants_json),
             resolved_namespaces,
             disabled_namespaces,
         })
