@@ -24,7 +24,10 @@ PACKAGES = ("uv", "uv_build")
 
 
 def one_file(directory: Path, pattern: str) -> Path:
-    """Require one matching distribution in a build directory."""
+    """Return the only path matching `pattern` in `directory`.
+
+    Reject missing or duplicate build outputs instead of choosing one implicitly.
+    """
     files = sorted(directory.glob(pattern))
     if len(files) != 1:
         raise ValueError(f"Expected one {pattern} in {directory}, found {len(files)}")
@@ -32,7 +35,10 @@ def one_file(directory: Path, pattern: str) -> Path:
 
 
 def copy_distribution(source: Path, directory: Path) -> None:
-    """Copy a distribution without replacing another target's output."""
+    """Copy `source` into an existing directory, preserving its name and bytes.
+
+    Reject a filename collision rather than overwrite another target's output.
+    """
     destination = directory / source.name
     if destination.exists():
         raise ValueError(f"Duplicate release distribution: {source.name}")
@@ -40,7 +46,11 @@ def copy_distribution(source: Path, directory: Path) -> None:
 
 
 def check_inventory(directory: Path, expected: set[str]) -> None:
-    """Require a flat artifact directory to contain exactly the expected files."""
+    """Require the immediate entries in `directory` to match `expected`.
+
+    `expected` contains filenames, not paths. Report both missing and unexpected
+    entries; subdirectories are not searched.
+    """
     actual = {path.name for path in directory.iterdir()}
     if actual != expected:
         raise ValueError(
@@ -50,7 +60,11 @@ def check_inventory(directory: Path, expected: set[str]) -> None:
 
 
 def check_checksum(archive: Path, checksum: Path) -> None:
-    """Check the sha256sum sidecar before forwarding a release archive."""
+    """Verify an archive's bytes and filename against its SHA-256 sidecar.
+
+    Accept the text and binary forms written by `sha256sum`. Reject a different
+    digest or recorded filename before forwarding the archive to publication.
+    """
     digest = hashlib.sha256(archive.read_bytes()).hexdigest()
     if checksum.read_text(encoding="utf-8").replace(" *", "  ").split() != [
         digest,
@@ -62,7 +76,18 @@ def check_checksum(archive: Path, checksum: Path) -> None:
 def assemble(
     built: Path, signed_wheels: Path, signed_archives: Path, output: Path
 ) -> None:
-    """Copy every expected distribution into its release artifact directory."""
+    """Assemble every configured target into new publication directories.
+
+    `built` contains `wheels/<target>`, `sdists/<package>`, and `github-archives`.
+    `signed_wheels` contains `<system>/<target>` directories; `signed_archives`
+    is flat. The JSON values in `RELEASE_PLAN`, `RELEASE_TARGETS`, `MACOS_TARGETS`,
+    and `WINDOWS_TARGETS` identify the expected archives and signed replacements.
+
+    Require complete inputs, use signed replacements for macOS and Windows, and
+    copy the other distributions unchanged. Missing replacements never fall back
+    to the original binaries. `output` must not exist; it receives
+    `wheels/<package>`, `sdists/<package>`, and `github-archives` directories.
+    """
     plan = json.loads(os.environ["RELEASE_PLAN"])
     targets = json.loads(os.environ["RELEASE_TARGETS"])
     signed_targets = {
@@ -130,7 +155,11 @@ def assemble(
 
 
 def main() -> None:
-    """Assemble release files from the calling workflow's prepared directories."""
+    """Parse the four directory arguments and assemble the release.
+
+    The calling signing workflow supplies the release plan and target matrices
+    through the environment.
+    """
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("built", type=Path)
     parser.add_argument("signed_wheels", type=Path)
