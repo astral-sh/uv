@@ -5499,7 +5499,7 @@ fn export_lock_workspace_mismatch_with_frozen() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.export().arg("--frozen"), @"
-    exit_code: 2 (failure)
+    exit_code: 1 (failure)
     ----- stderr -----
     error: The lockfile at `uv.lock` needs to be updated, but `--frozen` was provided: Missing workspace member `foo`.
 
