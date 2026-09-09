@@ -4753,14 +4753,14 @@ fn index_wheel_hash_mismatch() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
     Resolved 1 package in [TIME]
-      × Failed to download `example-a-961b4c22==1.0.0`
-      ╰─▶ Hash mismatch for `example-a-961b4c22==1.0.0`
+    error: Failed to download `example-a-961b4c22==1.0.0`
+      cause: Hash mismatch for `example-a-961b4c22==1.0.0`
 
-          Expected:
-            sha256:8838f9d005ff0432b258ba648d9cabb1cbdf06ac29d14f788b02edae544032ea
+             Expected:
+               sha256:8838f9d005ff0432b258ba648d9cabb1cbdf06ac29d14f788b02edae544032ea
 
-          Computed:
-            sha256:5d69f0b590514103234f0c3526563856f04d044d8d0ea1073a843ae429b3187e
+             Computed:
+               sha256:5d69f0b590514103234f0c3526563856f04d044d8d0ea1073a843ae429b3187e
     ");
 
     context

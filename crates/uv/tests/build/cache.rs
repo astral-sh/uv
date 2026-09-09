@@ -447,27 +447,27 @@ async fn index_source_hashes() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
     Resolved 1 package in [TIME]
-      × Failed to download and build `ok==1.0.0`
-      ╰─▶ Hash mismatch for `ok==1.0.0`
+    error: Failed to download and build `ok==1.0.0`
+      cause: Hash mismatch for `ok==1.0.0`
 
-          Expected:
-            sha256:[WRONG_HASH]
+             Expected:
+               sha256:[WRONG_HASH]
 
-          Computed:
-            sha256:[SOURCE_HASH]
+             Computed:
+               sha256:[SOURCE_HASH]
     ");
     uv_snapshot!(context.filters(), context.pip_compile()
         .arg("requirements.txt").arg("--index-url").arg(&index_url).arg("--no-header").arg("--generate-hashes"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × Failed to download and build `ok==1.0.0`
-      ╰─▶ Hash mismatch for `ok==1.0.0`
+    error: Failed to download and build `ok==1.0.0`
+      cause: Hash mismatch for `ok==1.0.0`
 
-          Expected:
-            sha256:[WRONG_HASH]
+             Expected:
+               sha256:[WRONG_HASH]
 
-          Computed:
-            sha256:[SOURCE_HASH]
+             Computed:
+               sha256:[SOURCE_HASH]
     ");
     marker.assert(predicate::path::missing());
 
