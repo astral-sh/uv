@@ -354,8 +354,8 @@ jobs:
       - publish-docker
       - publish-pypi
       - sign-release-binaries
-    # use "always() && ..." to allow publish jobs to skip themselves (for prereleases).
-    # "host" however must run to completion, no skipping allowed!
+    # Use `always()` so `publish-pypi` can skip prereleases while the required
+    # builds and Docker publication must still succeed.
     # `publish-crates` is intentionally not a dependency: it's not
     # critical to the release and isn't idempotent on retry.
     if: ${{ always() && needs.host.result == 'success' && needs.release-gate.result == 'success' && needs.sign-release-binaries.result == 'success' && needs.publish-docker.result == 'success' && (needs.publish-pypi.result == 'skipped' || needs.publish-pypi.result == 'success') }}

@@ -1,7 +1,15 @@
 # Build Docker images and save release candidates in Depot Registry.
 #
-# Pull requests normally build without saving images. Releases and trusted
-# development-image builds save immutable image references for publish-docker.yml.
+# Uses Depot for multi-platform builds. Includes both a `uv` base image, which
+# contains the `uv` and `uvx` binaries in a scratch image, and common base images
+# with uv installed.
+#
+# On pull requests, CI builds the images when Docker-related files change.
+# Images are not saved unless a trusted development-image push is requested.
+#
+# Releases, including dry-runs, save the images in Depot Registry. The returned
+# artifact records their build IDs, digests, tags, and annotations for
+# `publish-docker.yml`.
 name: "Build Docker images"
 
 on:
@@ -48,6 +56,7 @@ jobs:
       - name: Plan images
         env:
           DRY_RUN: ${{ inputs.plan == '' || fromJson(inputs.plan).announcement_tag_is_implicit }}
+          # Release dry-runs also exercise the Depot Registry handoff.
           RELEASE_BUILD: ${{ inputs.plan != '' }}
           TAG: ${{ inputs.plan != '' && fromJson(inputs.plan).announcement_tag }}
           PUSH_DEV: ${{ inputs.push-dev }}
@@ -144,6 +153,7 @@ jobs:
           submodules: recursive
           persist-credentials: false
 
+      # Authenticate read-only pulls to avoid Docker Hub's anonymous rate limits.
       - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         if: ${{ needs.docker-plan.outputs.login == 'true' }}
         with:
@@ -175,7 +185,8 @@ jobs:
           images: |
             ${{ env.UV_GHCR_IMAGE }}
             ${{ env.UV_DOCKERHUB_IMAGE }}
-          # Keep the version label tied to the release, not the branch name.
+          # Set `org.opencontainers.image.version` to the release version,
+          # rather than the branch name.
           tags: |
             type=raw,value=dry-run,enable=${{ needs.docker-plan.outputs.push == 'false' }}
             type=pep440,pattern={{ version }},value=${{ needs.docker-plan.outputs.tag }},enable=${{ needs.docker-plan.outputs.push-version == 'true' }}
@@ -232,6 +243,7 @@ jobs:
       fail-fast: false
       matrix: ${{ fromJson(needs.docker-plan.outputs.extra-images) }}
     steps:
+      # Authenticate read-only pulls to avoid Docker Hub's anonymous rate limits.
       - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         if: ${{ needs.docker-plan.outputs.login == 'true' }}
         with:
@@ -261,7 +273,7 @@ jobs:
         env:
           VERSION: ${{ needs.docker-plan.outputs.tag }}
           PUSH_DEV: ${{ inputs.push-dev }}
-          # Unsaved PR builds retain the existing fallback to the released image.
+          # When the new base image is not saved, use the registry's `latest` tag.
           UV_BASE_IMAGE: ${{ needs.docker-plan.outputs.save == 'true' && format('registry.depot.dev/7hd4vdzmw5@{0}', needs.docker-build-base.outputs.image-digest) || format('{0}:latest', env.UV_GHCR_IMAGE) }}
           IMAGE_MAPPING: ${{ matrix.image-mapping }}
         run: |
@@ -277,7 +289,8 @@ jobs:
           CMD ["/usr/local/bin/uv"]
           EOF
 
-          # The full version comes first so the version label remains unchanged.
+          # For releases, the first tag includes the patch version and image suffix.
+          # Docker metadata uses it for `org.opencontainers.image.version`.
           TAG_PATTERNS=""
           IFS=','; for TAG in ${BASE_TAGS}; do
             if [ "${PUSH_DEV}" == "true" ]; then
@@ -298,6 +311,7 @@ jobs:
       - name: Extract metadata (tags, labels) for Docker
         id: meta
         uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
+        # GHCR uses index-level annotations for image metadata.
         env:
           DOCKER_METADATA_ANNOTATIONS_LEVELS: index
         with:

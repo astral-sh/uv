@@ -1,4 +1,4 @@
-# Promote one immutable Depot build into the public image repositories.
+# Publish one saved Depot image without rebuilding it.
 name: "Publish Docker image"
 
 on:
@@ -38,7 +38,8 @@ jobs:
 
       - uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
         with:
-          # imagetools create needs --metadata-file.
+          # Install a version that supports `imagetools create --metadata-file`
+          # (https://github.com/docker/buildx/issues/2407).
           version: v0.33.0
           cache-binary: false
 
@@ -64,7 +65,7 @@ jobs:
           build_id=$(jq -er '.build_id | select(test("^[a-zA-Z0-9]+$"))' <<< "$IMAGE_JSON")
           digest=$(jq -er '.digest | select(test("^sha256:[0-9a-f]{64}$"))' <<< "$IMAGE_JSON")
 
-          # Check that the saved build still names the exact index we recorded.
+          # Verify that the Depot build ID resolves to the recorded index digest.
           token="$(depot pull-token --project 7hd4vdzmw5 "$build_id")"
           echo "::add-mask::$token"
           printf '%s' "$token" | docker login registry.depot.dev --username x-token --password-stdin
@@ -80,7 +81,8 @@ jobs:
             annotations+=(--annotation "$annotation")
           done < <(jq -r '.annotations[]' <<< "$IMAGE_JSON")
 
-          # Only publish to the repositories selected by this workflow.
+          # Only accept tag references for the destination repositories selected
+          # by this workflow.
           for image in $IMAGES; do
             readarray -t image_tags < <(
               jq -r --arg prefix "$image:" '.tags[] | select(startswith($prefix))' <<< "$IMAGE_JSON"
@@ -90,7 +92,9 @@ jobs:
               exit 1
             fi
 
-            # depot push copies all platforms and attestations, without rebuilding.
+            # Copy the complete index instead of loading and re-pushing it through
+            # the local Docker image store, which can drop platforms or change
+            # the manifest format (astral-sh/uv#14165).
             depot push --project 7hd4vdzmw5 --tag "${image_tags[0]}" "$build_id"
             copied_digest=$(docker buildx imagetools inspect \
               "${image_tags[0]}" --format '{{.Manifest.Digest}}')
@@ -109,8 +113,8 @@ jobs:
               --metadata-file "$RUNNER_TEMP/docker-publish-metadata.json" \
               "$image@$digest"
 
-            # Annotations change the index digest. Attest that exact result,
-            # without resolving one of the mutable release tags again.
+            # Adding index annotations changes the digest. Read the new digest
+            # from `imagetools` so the attestation cannot race a mutable tag.
             if [ "$image" == "$UV_GHCR_IMAGE" ]; then
               final_digest=$(jq -er '."containerimage.descriptor".digest' "$RUNNER_TEMP/docker-publish-metadata.json")
               echo "digest=$final_digest" >> "$GITHUB_OUTPUT"

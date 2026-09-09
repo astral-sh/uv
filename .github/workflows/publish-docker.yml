@@ -1,4 +1,4 @@
-# Publish previously built Docker images without rebuilding them.
+# Publish saved Docker images without rebuilding them.
 name: "Publish Docker images"
 
 on:
@@ -56,7 +56,9 @@ jobs:
       packages: write
       attestations: write
 
-  # Publish the base index last so it remains the first image shown on GHCR.
+  # GHCR orders package versions by the first push of a manifest. Publish the
+  # annotated base index after the variants so GHCR shows it first.
+  # See astral-sh/uv#7568.
   publish-base:
     name: publish uv
     needs:
