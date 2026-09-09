@@ -6,9 +6,10 @@
 #
 # It can take a while to download all the artifacts.
 #
-# Requires the `gh` CLI.
+# Requires `gh` and `uv`.
 
 set -euo pipefail
+SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 
 if [ -z "${COMMIT:-}" ]; then
     echo "COMMIT is required."
@@ -26,14 +27,19 @@ cd "release_$RUN_ID"
 
 REPO=$(gh repo view --json nameWithOwner | jq .nameWithOwner -r)
 
-# Download publication artifacts and signed archives from the same run attempt.
+# Download exactly the publication artifacts from the same run attempt.
 RUN_ATTEMPT=$(gh run view "$RUN_ID" --repo "$REPO" --json attempt --jq .attempt)
-SIGNED_ARCHIVES="release-github-archives-$RUN_ID-$RUN_ATTEMPT"
-gh run download "$RUN_ID" --repo "$REPO" --pattern 'release-github-*'
-gh run download "$RUN_ID" --repo "$REPO" --pattern 'build-github-archives-*-linux-*'
-gh run download "$RUN_ID" --repo "$REPO" --name "$SIGNED_ARCHIVES" --dir "$SIGNED_ARCHIVES"
+for artifact in archives global manifest; do
+    gh run download "$RUN_ID" --repo "$REPO" \
+        --name "release-github-$artifact-$RUN_ID-$RUN_ATTEMPT" --dir artifacts
+done
 
-MANIFEST="release-github-manifest/dist-manifest.json"
+MANIFEST="artifacts/dist-manifest.json"
+uv run --locked "$SCRIPT_DIR/list-release-artifacts.py" github "$MANIFEST" artifacts --include-manifest > release-assets.txt
+assets=()
+while IFS= read -r asset; do
+    assets+=("$asset")
+done < release-assets.txt
 
 # Extract values from manifest
 TAG=$(jq -r '.announcement_tag // .tag' "$MANIFEST")
@@ -42,25 +48,18 @@ BODY=$(jq -r '.announcement_github_body' "$MANIFEST")
 PRERELEASE=$(jq -r '.announcement_is_prerelease' "$MANIFEST")
 
 # Write body to temp file
-echo "$BODY" > /tmp/notes.txt
-
-# Merge the publication artifacts and signed archives (like CI does).
-mkdir -p artifacts
-cp -r release-github-*/* "$SIGNED_ARCHIVES"/* artifacts/
-
-# Remove the granular manifests (like CI does)
-rm -f artifacts/*-dist-manifest.json
+echo "$BODY" > notes.txt
 
 # Create release
 release_args=(
     "$TAG"
     --target "$COMMIT"
     --title "$TITLE"
-    --notes-file /tmp/notes.txt
+    --notes-file notes.txt
 )
 
 if [ "$PRERELEASE" = "true" ]; then
     release_args+=(--prerelease)
 fi
 
-gh release create "${release_args[@]}" artifacts/*
+gh release create "${release_args[@]}" "${assets[@]}"
