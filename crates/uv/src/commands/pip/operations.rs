@@ -1039,6 +1039,22 @@ mod tests {
         assert!(!is_build_user_failure(&uv_types::AnyErrorBuild::from(
             uv_build_frontend::Error::Io(std::io::Error::other("disk failure"))
         )));
+        assert!(is_build_user_failure(&uv_types::AnyErrorBuild::from(
+            uv_dispatch::BuildDispatchError::Anyhow(
+                anyhow::Error::from(uv_resolver::ResolveError::Distribution(
+                    uv_distribution::Error::NoBuild,
+                ))
+                .context("Failed to resolve build requirements"),
+            )
+        )));
+        assert!(!is_build_user_failure(&uv_types::AnyErrorBuild::from(
+            uv_dispatch::BuildDispatchError::Anyhow(
+                anyhow::Error::from(uv_resolver::ResolveError::Distribution(
+                    uv_distribution::Error::CacheRead(std::io::Error::other("broken cache")),
+                ))
+                .context("Failed to resolve build requirements"),
+            )
+        )));
     }
 
     #[test]
@@ -1724,9 +1740,13 @@ fn is_build_user_failure(error: &uv_types::AnyErrorBuild) -> bool {
             uv_dispatch::BuildDispatchError::Lookahead(error) => {
                 is_requirements_user_failure(error)
             }
-            uv_dispatch::BuildDispatchError::Tags(_)
-            | uv_dispatch::BuildDispatchError::Join(_)
-            | uv_dispatch::BuildDispatchError::Anyhow(_) => false,
+            uv_dispatch::BuildDispatchError::Anyhow(error) => error
+                .chain()
+                .find_map(|cause| cause.downcast_ref::<uv_resolver::ResolveError>())
+                .is_some_and(is_resolve_user_failure),
+            uv_dispatch::BuildDispatchError::Tags(_) | uv_dispatch::BuildDispatchError::Join(_) => {
+                false
+            }
         };
     }
     is_build_backend_error
