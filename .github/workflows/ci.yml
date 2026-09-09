@@ -156,6 +156,18 @@ jobs:
     permissions:
       contents: read
       id-token: write
+
+  publish-docker:
+    needs: build-docker
+    if: ${{ needs.build-docker.outputs.publish-dev == 'true' }}
+    uses: ./.github/workflows/publish-docker.yml
+    with:
+      manifest: ${{ needs.build-docker.outputs.manifest }}
+      push-dev: true
+    secrets: inherit
+    permissions:
+      contents: read
+      id-token: write
       packages: write
       attestations: write
 

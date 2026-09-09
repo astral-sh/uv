@@ -1,0 +1,130 @@
+# Promote one immutable Depot build into the public image repositories.
+name: "Publish Docker image"
+
+on:
+  workflow_call:
+    inputs:
+      image:
+        description: "Saved image record from the Docker build manifest"
+        required: true
+        type: string
+      push-dev:
+        required: false
+        type: boolean
+        default: false
+
+env:
+  ACTIONS_CACHE_MODE: none
+  UV_GHCR_IMAGE: ghcr.io/${{ github.repository_owner }}/${{ inputs.push-dev && 'uv-dev' || 'uv' }}
+  UV_DOCKERHUB_IMAGE: ${{ !inputs.push-dev && 'docker.io/astral/uv' || '' }}
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment:
+      name: ${{ inputs.push-dev && 'release-test' || 'release' }}
+      deployment: ${{ !inputs.push-dev }}
+    permissions:
+      contents: read
+      id-token: write # for Depot OIDC and GHCR signing
+      packages: write # for GHCR image pushes
+      attestations: write # for GHCR attestations
+    steps:
+      - uses: depot/setup-action@15c09a5f77a0840ad4bce955686522a257853461 # v1.7.1
+
+      - uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
+        with:
+          # imagetools create needs --metadata-file.
+          version: v0.33.0
+          cache-binary: false
+
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        if: ${{ !inputs.push-dev }}
+        with:
+          username: astral
+          password: ${{ secrets.DOCKERHUB_TOKEN_RW }}
+
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Copy saved image and publish tags
+        id: publish
+        env:
+          IMAGE_JSON: ${{ inputs.image }}
+          IMAGES: "${{ env.UV_GHCR_IMAGE }} ${{ env.UV_DOCKERHUB_IMAGE }}"
+        run: |
+          set -euo pipefail
+          build_id=$(jq -er '.build_id | select(test("^[a-zA-Z0-9]+$"))' <<< "$IMAGE_JSON")
+          digest=$(jq -er '.digest | select(test("^sha256:[0-9a-f]{64}$"))' <<< "$IMAGE_JSON")
+
+          # Check that the saved build still names the exact index we recorded.
+          token="$(depot pull-token --project 7hd4vdzmw5 "$build_id")"
+          echo "::add-mask::$token"
+          printf '%s' "$token" | docker login registry.depot.dev --username x-token --password-stdin
+          saved_digest=$(docker buildx imagetools inspect \
+            "registry.depot.dev/7hd4vdzmw5:$build_id" --format '{{.Manifest.Digest}}')
+          if [ "$saved_digest" != "$digest" ]; then
+            echo "The saved Depot image does not match the build manifest" >&2
+            exit 1
+          fi
+
+          annotations=()
+          while IFS= read -r annotation; do
+            annotations+=(--annotation "$annotation")
+          done < <(jq -r '.annotations[]' <<< "$IMAGE_JSON")
+
+          # Only publish to the repositories selected by this workflow.
+          for image in $IMAGES; do
+            readarray -t image_tags < <(
+              jq -r --arg prefix "$image:" '.tags[] | select(startswith($prefix))' <<< "$IMAGE_JSON"
+            )
+            if [ "${#image_tags[@]}" -eq 0 ]; then
+              echo "Missing tags for $image" >&2
+              exit 1
+            fi
+
+            # depot push copies all platforms and attestations, without rebuilding.
+            depot push --project 7hd4vdzmw5 --tag "${image_tags[0]}" "$build_id"
+            copied_digest=$(docker buildx imagetools inspect \
+              "${image_tags[0]}" --format '{{.Manifest.Digest}}')
+            if [ "$copied_digest" != "$digest" ]; then
+              echo "The copied image digest does not match the build manifest" >&2
+              exit 1
+            fi
+
+            tags=()
+            for tag in "${image_tags[@]}"; do
+              tags+=(-t "$tag")
+            done
+            docker buildx imagetools create \
+              "${annotations[@]}" \
+              "${tags[@]}" \
+              --metadata-file "$RUNNER_TEMP/docker-publish-metadata.json" \
+              "$image@$digest"
+
+            # Annotations change the index digest. Attest that exact result,
+            # without resolving one of the mutable release tags again.
+            if [ "$image" == "$UV_GHCR_IMAGE" ]; then
+              final_digest=$(jq -er '."containerimage.descriptor".digest' "$RUNNER_TEMP/docker-publish-metadata.json")
+              echo "digest=$final_digest" >> "$GITHUB_OUTPUT"
+            fi
+          done
+
+      - name: Attest original image
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-name: ${{ env.UV_GHCR_IMAGE }}
+          subject-digest: ${{ fromJson(inputs.image).digest }}
+
+      - name: Attest published image
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-name: ${{ env.UV_GHCR_IMAGE }}
+          subject-digest: ${{ steps.publish.outputs.digest }}
