@@ -1658,15 +1658,15 @@ fn requirements_txt_ssh_git_username() -> Result<()> {
     uv_snapshot!(filters, context.export().env(EnvVars::GIT_SSH_COMMAND, failing_git_ssh_command), @r#"
     exit_code: 1 (failure)
     ----- stderr -----
-      × Failed to download and build `uv-private-pypackage @ git+ssh://git@github.com/astral-test/uv-private-pypackage.git@d780faf0ac91257d4d5a4f0c5a0e4509608c0071`
-      ├─▶ Git operation failed
-      ├─▶ failed to clone into: [PATH]
-      ├─▶ failed to fetch commit `d780faf0ac91257d4d5a4f0c5a0e4509608c0071`
-      ╰─▶ process didn't exit successfully: [GIT_COMMAND_ERROR]
-          --- stderr
-          Load key "[TEMP_DIR]/fake_deploy_key": [ERROR]
-          git@github.com: Permission denied (publickey).
-          fatal: Could not read from remote repository.
+    error: Failed to download and build `uv-private-pypackage @ git+ssh://git@github.com/astral-test/uv-private-pypackage.git@d780faf0ac91257d4d5a4f0c5a0e4509608c0071`
+      Caused by: Git operation failed
+      Caused by: failed to clone into: [PATH]
+      Caused by: failed to fetch commit `d780faf0ac91257d4d5a4f0c5a0e4509608c0071`
+      Caused by: process didn't exit successfully: [GIT_COMMAND_ERROR]
+        --- stderr
+        Load key "[TEMP_DIR]/fake_deploy_key": [ERROR]
+        git@github.com: Permission denied (publickey).
+        fatal: Could not read from remote repository.
 
         Please make sure you have the correct access rights
         and the repository exists.

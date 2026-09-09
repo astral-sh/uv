@@ -827,7 +827,7 @@ fn reject_sdist_archive_type_bz2() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_sync()
         .arg("requirements.txt")
         .arg("--strict"), @"
-    exit_code: 2 (failure)
+    exit_code: 1 (failure)
     ----- stderr -----
     error: Source distribution `[WORKSPACE]/test/links/bz2-1.0.0.tar.bz2` has a non-PEP 625-compliant filename; only `.tar.gz` and `.zip` archives are accepted
     "
@@ -1217,11 +1217,11 @@ fn install_unnamed_wheel_url_rejects_path_traversal() -> Result<()> {
 
     uv_snapshot!(context.filters(), context.pip_sync()
         .arg("requirements.txt")
-        .arg("--strict"), @"
-    exit_code: 2 (failure)
+        .arg("--strict"), @r#"
+    exit_code: 1 (failure)
     ----- stderr -----
-    error: The wheel filename \"pkg-1.0-py3-none-../../../target.whl\" is invalid: Tag components must contain only ASCII letters, digits, underscores, and periods
-    "
+    error: The wheel filename "pkg-1.0-py3-none-../../../target.whl" is invalid: Tag components must contain only ASCII letters, digits, underscores, and periods
+    "#
     );
 
     Ok(())
@@ -1238,11 +1238,11 @@ fn install_unnamed_wheel_url_rejects_stream_separator() -> Result<()> {
 
     uv_snapshot!(context.filters(), context.pip_sync()
         .arg("requirements.txt")
-        .arg("--strict"), @"
-    exit_code: 2 (failure)
+        .arg("--strict"), @r#"
+    exit_code: 1 (failure)
     ----- stderr -----
-    error: The wheel filename \"pkg-1.0-py3-none-target:stream.whl\" is invalid: Tag components must contain only ASCII letters, digits, underscores, and periods
-    "
+    error: The wheel filename "pkg-1.0-py3-none-target:stream.whl" is invalid: Tag components must contain only ASCII letters, digits, underscores, and periods
+    "#
     );
 
     Ok(())

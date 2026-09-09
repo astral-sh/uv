@@ -2715,7 +2715,7 @@ fn conflicting_repeated_url_dependency_version_mismatch() -> Result<()> {
 
     uv_snapshot!(context.filters(), context.pip_compile()
             .arg("requirements.in"), @"
-    exit_code: 2 (failure)
+    exit_code: 1 (failure)
     ----- stderr -----
     error: Requirements contain conflicting URLs for package `werkzeug`:
     - https://files.pythonhosted.org/packages/bd/24/11c3ea5a7e866bf2d97f0501d0b4b1c9bbeade102bb4b588f0d2919a5212/Werkzeug-2.0.1-py3-none-any.whl
@@ -2766,7 +2766,7 @@ fn conflicting_repeated_url_dependency_version_match() -> Result<()> {
 
     uv_snapshot!(context.filters(), context.pip_compile()
             .arg("requirements.in"), @"
-    exit_code: 2 (failure)
+    exit_code: 1 (failure)
     ----- stderr -----
     error: Requirements contain conflicting URLs for package `werkzeug`:
     - git+https://github.com/pallets/werkzeug.git@2.0.0
@@ -2839,7 +2839,7 @@ fn conflicting_repeated_url_dependency() -> Result<()> {
 
     uv_snapshot!(context.filters(), context.pip_compile()
             .arg("requirements.in"), @"
-    exit_code: 2 (failure)
+    exit_code: 1 (failure)
     ----- stderr -----
     error: Requirements contain conflicting URLs for package `uv-public-pypackage`:
     - git+https://github.com/astral-test/uv-public-pypackage.git@0.0.1
@@ -2958,7 +2958,7 @@ fn incompatible_narrowed_url_dependency() -> Result<()> {
 
     uv_snapshot!(context.filters(), context.pip_compile()
             .arg("requirements.in"), @"
-    exit_code: 2 (failure)
+    exit_code: 1 (failure)
     ----- stderr -----
     error: Requirements contain conflicting URLs for package `uv-public-pypackage`:
     - git+https://github.com/astral-test/uv-public-pypackage@test-branch
@@ -3913,7 +3913,7 @@ fn compile_wheel_path_dependency_missing() -> Result<()> {
 
     uv_snapshot!(context.filters(), context.pip_compile()
             .arg("requirements.in"), @"
-    exit_code: 2 (failure)
+    exit_code: 1 (failure)
     ----- stderr -----
     error: Distribution not found at: file://[TEMP_DIR]/flask-3.0.0-py3-none-any.whl
     ");
@@ -6726,7 +6726,7 @@ fn missing_path_requirement() -> Result<()> {
 
     uv_snapshot!(filters, context.pip_compile()
             .arg("requirements.in"), @"
-    exit_code: 2 (failure)
+    exit_code: 1 (failure)
     ----- stderr -----
     error: Distribution not found at: file://tmp/anyio-3.7.0.tar.gz
     ");
@@ -6763,7 +6763,7 @@ fn missing_editable_directory() -> Result<()> {
 
     uv_snapshot!(context.filters(), context.pip_compile()
             .arg("requirements.in"), @"
-    exit_code: 2 (failure)
+    exit_code: 1 (failure)
     ----- stderr -----
     error: Distribution not found at: file://[TEMP_DIR]/foo/bar
     ");
@@ -12623,7 +12623,7 @@ fn requirement_wheel_name_mismatch() -> Result<()> {
 
     uv_snapshot!(context.filters(), context.pip_compile()
         .arg("requirements.in"), @"
-    exit_code: 2 (failure)
+    exit_code: 1 (failure)
     ----- stderr -----
     error: Requested package name `dateutil` does not match `python-dateutil` in the distribution filename: https://files.pythonhosted.org/packages/ec/57/56b9bcc3c9c6a792fcbaf139543cee77261f3651ca9da0c93f5c1221264b/python_dateutil-2.9.0.post0-py2.py3-none-any.whl
     "

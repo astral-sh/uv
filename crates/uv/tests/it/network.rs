@@ -723,7 +723,7 @@ async fn rfc9457_problem_details_license_violation() {
     uv_snapshot!(context.filters(), context
         .pip_install()
         .arg(format!("tqdm @ {tqdm_url}")), @"
-    exit_code: 1 (failure)
+    exit_code: 2 (failure)
     ----- stderr -----
     error: Failed to download `tqdm @ http://[LOCALHOST]/packages/tqdm-4.67.1-py3-none-any.whl`
       Caused by: Failed to fetch: `http://[LOCALHOST]/packages/tqdm-4.67.1-py3-none-any.whl`
@@ -1051,7 +1051,7 @@ fn connect_timeout_stream() {
         .arg(format!("https://{server}/tqdm-0.1-py3-none-any.whl"))
         .env(EnvVars::UV_HTTP_CONNECT_TIMEOUT, "1")
         .env(EnvVars::UV_HTTP_RETRIES, "0"), @"
-    exit_code: 1 (failure)
+    exit_code: 2 (failure)
     ----- stderr -----
     error: Failed to download `tqdm @ https://[LOCALHOST]/tqdm-0.1-py3-none-any.whl`
       Caused by: Failed to fetch: `https://[LOCALHOST]/tqdm-0.1-py3-none-any.whl`

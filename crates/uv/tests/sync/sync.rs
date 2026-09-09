@@ -3059,14 +3059,15 @@ fn sync_build_dependencies_module_error_hints() -> Result<()> {
       Caused by: The build backend returned an error
       Caused by: Call to `build_backend.build_wheel` failed (exit status: 1)
 
-          [stderr]
-          Traceback (most recent call last):
-            File "<string>", line 8, in <module>
-            File "[TEMP_DIR]/child/build_backend.py", line 4, in <module>
-              import a
-          ModuleNotFoundError: No module named 'a'
+        [stderr]
+        Traceback (most recent call last):
+          File "<string>", line 8, in <module>
+          File "[TEMP_DIR]/child/build_backend.py", line 4, in <module>
+            import a
+        ModuleNotFoundError: No module named 'a'
 
     hint: `child` was included because `parent` (v0.1.0) depends on `child`
+
     hint: This error likely indicates that `child@0.1.0` depends on `a`, but doesn't declare it as a build dependency. If `child` is a first-party package, consider adding `a` to its `build-system.requires`. Otherwise, either add it to your `pyproject.toml` under:
 
     [tool.uv.extra-build-dependencies]

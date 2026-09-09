@@ -13776,7 +13776,7 @@ async fn lock_redact_http() -> Result<()> {
     // Installing from the lockfile should fail without credentials. Omit the root, so that we fail
     // when installing `iniconfig`, rather than when building `foo`.
     uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--index-url").arg(proxy.url("/basic-auth/simple")).arg("--no-install-project"), @"
-    exit_code: 1 (failure)
+    exit_code: 2 (failure)
     ----- stderr -----
     error: Failed to download `iniconfig==2.0.0`
       Caused by: Failed to fetch: `http://[LOCALHOST]/basic-auth/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl`
@@ -13787,7 +13787,7 @@ async fn lock_redact_http() -> Result<()> {
 
     // Installing from the lockfile should fail without an index.
     uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--no-install-project"), @"
-    exit_code: 1 (failure)
+    exit_code: 2 (failure)
     ----- stderr -----
     error: Failed to download `iniconfig==2.0.0`
       Caused by: Failed to fetch: `http://[LOCALHOST]/basic-auth/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl`
@@ -13817,7 +13817,7 @@ async fn lock_redact_http() -> Result<()> {
 
     // Installing without credentials will fail without a cache.
     uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--reinstall").arg("--no-cache").arg("--no-install-project"), @"
-    exit_code: 1 (failure)
+    exit_code: 2 (failure)
     ----- stderr -----
     error: Failed to download `iniconfig==2.0.0`
       Caused by: Failed to fetch: `http://[LOCALHOST]/basic-auth/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl`
@@ -41424,19 +41424,19 @@ fn lock_frozen_errors_report_source() -> Result<()> {
     "#})?;
 
     uv_snapshot!(context.filters(), context.lock().arg("--frozen"), @"
-    exit_code: 2 (failure)
+    exit_code: 1 (failure)
     ----- stderr -----
     error: Unable to find lockfile at `uv.lock`, but `--frozen` was provided. To create a lockfile, run `uv lock` or `uv sync` without the flag.
     ");
 
     uv_snapshot!(context.filters(), context.lock().arg("--check-exists"), @"
-    exit_code: 2 (failure)
+    exit_code: 1 (failure)
     ----- stderr -----
     error: Unable to find lockfile at `uv.lock`, but `--check-exists` was provided. To create a lockfile, run `uv lock` or `uv sync` without the flag.
     ");
 
     uv_snapshot!(context.filters(), context.lock().env(EnvVars::UV_FROZEN, "1"), @"
-    exit_code: 2 (failure)
+    exit_code: 1 (failure)
     ----- stderr -----
     error: Unable to find lockfile at `uv.lock`, but `UV_FROZEN=1` was provided. To create a lockfile, run `uv lock` or `uv sync` without the flag.
     ");
@@ -41453,7 +41453,7 @@ fn lock_frozen_errors_report_source() -> Result<()> {
     "#})?;
 
     uv_snapshot!(context.filters(), context.lock().arg("--frozen"), @"
-    exit_code: 2 (failure)
+    exit_code: 1 (failure)
     ----- stderr -----
     error: The lockfile at `uv.lock` needs to be updated, but `--frozen` was provided: Missing workspace member `renamed`.
 
@@ -41461,7 +41461,7 @@ fn lock_frozen_errors_report_source() -> Result<()> {
     ");
 
     uv_snapshot!(context.filters(), context.lock().arg("--check-exists"), @"
-    exit_code: 2 (failure)
+    exit_code: 1 (failure)
     ----- stderr -----
     error: The lockfile at `uv.lock` needs to be updated, but `--check-exists` was provided: Missing workspace member `renamed`.
 
@@ -41469,7 +41469,7 @@ fn lock_frozen_errors_report_source() -> Result<()> {
     ");
 
     uv_snapshot!(context.filters(), context.lock().env(EnvVars::UV_FROZEN, "1"), @"
-    exit_code: 2 (failure)
+    exit_code: 1 (failure)
     ----- stderr -----
     error: The lockfile at `uv.lock` needs to be updated, but `UV_FROZEN=1` was provided: Missing workspace member `renamed`.
 
