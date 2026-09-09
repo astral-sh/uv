@@ -162,6 +162,7 @@ mod tests {
           upgrades, and audits.
         - `venv-safe-clear`: Prevents `uv venv --clear` from clearing a directory that does not contain a `pyvenv.cfg` file
           unless `--force` is provided.
+        - `wheel-variants`: Allows resolving and installing [wheel variants](https://peps.python.org/pep-0825/), including running variant providers.
         - `workspace-dir`: Allows using `uv workspace dir`.
         - `workspace-list`: Allows using `uv workspace list`.
         - `workspace-list-scripts`: Allows using `uv workspace list --scripts`.

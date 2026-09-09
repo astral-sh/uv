@@ -767,6 +767,9 @@ pub(crate) async fn pip_compile(
             // Registries don't always provide hashes, but `packages.*.hashes` is a required
             // key in PEP 751, so we have to download and hash files with missing hashes.
             export
+                .resolve_variant_metadata(&client, &cache, install_path)
+                .await?;
+            export
                 .generate_missing_hashes(&client, concurrency.downloads, install_path)
                 .await?;
 

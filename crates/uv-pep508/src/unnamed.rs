@@ -10,9 +10,10 @@ use crate::marker::parse;
 use crate::verbatim_url::strip_host;
 use crate::verbatim_url::were_vars_expanded;
 use crate::{
-    Cursor, MarkerEnvironment, MarkerTree, Pep508Error, Pep508ErrorSource, Pep508Url, Reporter,
-    RequirementOrigin, Scheme, TracingReporter, VerbatimUrl, VerbatimUrlError, expand_env_vars,
-    parse_extras_cursor, split_extras, split_scheme,
+    Cursor, MarkerEnvironment, MarkerTree, MarkerVariantsEnvironment, Pep508Error,
+    Pep508ErrorSource, Pep508Url, Reporter, RequirementOrigin, Scheme, TracingReporter,
+    VerbatimUrl, VerbatimUrlError, expand_env_vars, parse_extras_cursor, split_extras,
+    split_scheme,
 };
 
 /// An extension over [`Pep508Url`] that also supports parsing unnamed requirements, namely paths.
@@ -94,12 +95,24 @@ pub struct UnnamedRequirement<ReqUrl: UnnamedRequirementUrl = VerbatimUrl> {
 
 impl<Url: UnnamedRequirementUrl> UnnamedRequirement<Url> {
     /// Returns whether the markers apply for the given environment
+    pub fn evaluate_markers(
+        &self,
+        env: &MarkerEnvironment,
+        variants: &impl MarkerVariantsEnvironment,
+        extras: &[ExtraName],
+    ) -> bool {
+        self.evaluate_optional_environment(Some(env), variants, extras)
+    }
+
+    /// Returns whether the markers apply for the given environment
     pub fn evaluate_optional_environment(
         &self,
         env: Option<&MarkerEnvironment>,
+        variants: &impl MarkerVariantsEnvironment,
         extras: &[ExtraName],
     ) -> bool {
-        self.marker.evaluate_optional_environment(env, extras)
+        self.marker
+            .evaluate_optional_environment(env, variants, extras)
     }
 
     /// Set the source file containing the requirement.

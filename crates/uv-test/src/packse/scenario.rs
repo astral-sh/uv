@@ -9,14 +9,18 @@ use std::path::Path;
 use std::str::FromStr;
 
 use anyhow::{Context, Result};
+use indexmap::IndexMap;
 use serde::Deserialize;
 
 use uv_configuration::TargetTriple;
-use uv_distribution_filename::WheelFilename;
+use uv_distribution_filename::{VariantLabel, WheelFilename};
 use uv_normalize::{ExtraName, PackageName};
 use uv_pep440::{Version, VersionSpecifiers};
-use uv_pep508::{MarkerTree, Requirement};
+use uv_pep508::{MarkerTree, Requirement, VariantFeature, VariantNamespace, VariantValue};
 use uv_python::PythonVersion;
+use uv_variants::variants_json::{
+    DefaultPriorities, Provider, VARIANT_SCHEMA, Variant, VariantsJsonContent,
+};
 
 /// A complete packse scenario definition.
 #[derive(Debug, Deserialize)]
@@ -128,6 +132,43 @@ pub struct PackageMetadata {
     /// An empty list means produce only the default `py3-none-any` wheel.
     #[serde(default)]
     pub wheel_tags: Vec<WheelTag>,
+
+    /// Variant wheels and their shared index metadata.
+    #[serde(default)]
+    pub variants: Option<Variants>,
+}
+
+/// Wheel variants for a package version, adapted from Packse's variant scenarios.
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Variants {
+    /// Whether to also generate a wheel without a variant label.
+    #[serde(default = "default_true")]
+    pub non_variant_wheel: bool,
+    pub default_priorities: DefaultPriorities,
+    pub properties: BTreeMap<VariantLabel, Variant>,
+    #[serde(default)]
+    pub providers: BTreeMap<VariantNamespace, Provider>,
+    #[serde(default)]
+    pub static_properties:
+        Option<BTreeMap<VariantNamespace, IndexMap<VariantFeature, Vec<VariantValue>>>>,
+}
+
+impl Variants {
+    /// Produce current PEP 825 metadata, including the prototype provider extensions.
+    pub fn metadata(&self) -> VariantsJsonContent {
+        let metadata = VariantsJsonContent {
+            schema: VARIANT_SCHEMA.to_string(),
+            default_priorities: self.default_priorities.clone(),
+            providers: self.providers.clone().into_iter().collect(),
+            static_properties: self.static_properties.clone(),
+            variants: self.properties.clone(),
+        };
+        metadata
+            .validate()
+            .expect("valid scenario variant metadata");
+        metadata
+    }
 }
 
 fn deserialize_artifact<'de, D>(
@@ -330,6 +371,10 @@ fn default_requires_python() -> Option<VersionSpecifiers> {
 #[expect(clippy::unnecessary_wraps)] // Must return `Option` for serde `default`
 fn default_artifact() -> Option<ArtifactMetadata> {
     Some(ArtifactMetadata::default())
+}
+
+fn default_true() -> bool {
+    true
 }
 
 fn default_python() -> PythonVersion {

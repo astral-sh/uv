@@ -308,6 +308,13 @@ fn write_package(
         writer.raw("\n");
     }
 
+    if let Some(variants_json) = &package.variants_json {
+        writer.key_value(
+            "variants-json",
+            SerializedValue(Value::InlineTable(variants_json.to_toml()?)),
+        )?;
+    }
+
     if !package.wheels.is_empty() {
         writer.key_multiline_array("wheels", &package.wheels, write_wheel_inline)?;
     }

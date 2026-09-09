@@ -10,6 +10,7 @@ use uv_distribution_types::{GitDirectorySourceUrl, IndexLocations, Requirement};
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::{Version, VersionSpecifiers};
 use uv_pypi_types::{HashDigests, ResolutionMetadata};
+use uv_variants::variant_with_label::VariantWithLabel;
 use uv_workspace::dependency_groups::DependencyGroupError;
 use uv_workspace::{WorkspaceCache, WorkspaceError};
 
@@ -148,6 +149,8 @@ impl Metadata {
 /// The metadata associated with an archive.
 #[derive(Debug, Clone)]
 pub struct ArchiveMetadata {
+    /// Supported properties of the selected wheel for dependency marker evaluation.
+    pub variant: Option<VariantWithLabel>,
     /// The [`Metadata`] for the underlying distribution.
     pub metadata: Metadata,
     /// The hashes of the source or built archive.
@@ -161,6 +164,7 @@ impl ArchiveMetadata {
         Self {
             metadata: Metadata::from_metadata23(metadata),
             hashes: HashDigests::empty(),
+            variant: None,
         }
     }
 }
@@ -170,6 +174,7 @@ impl From<Metadata> for ArchiveMetadata {
         Self {
             metadata,
             hashes: HashDigests::empty(),
+            variant: None,
         }
     }
 }

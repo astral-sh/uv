@@ -7,9 +7,13 @@ use tracing::trace;
 
 use uv_configuration::{Constraints, Excludes, Overrides};
 use uv_distribution::{DistributionDatabase, Reporter};
-use uv_distribution_types::{DependencyMetadata, Dist, Identifier, Requirement, RequirementSource};
+use uv_distribution_types::{
+    DependencyMetadata, Dist, Identifier, Requirement, RequirementSource, VariantsJsonFilename,
+};
+use uv_pep508::{MarkerEnvironment, MarkerVariantsUniversal};
 use uv_resolver::{InMemoryIndex, MetadataResponse, ResolverEnvironment};
 use uv_types::{BuildContext, HashStrategy, HashVerification, RequestedRequirements};
+use uv_variants::variant_with_label::VariantWithLabel;
 
 use crate::{Error, required_dist};
 
@@ -101,7 +105,13 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
             .constraints
             .apply(self.overrides.apply(self.requirements))
             .filter(|requirement| !self.excludes.contains(&requirement.name))
-            .filter(|requirement| requirement.evaluate_markers(env.marker_environment(), &[]))
+            .filter(|requirement| {
+                requirement.evaluate_markers(
+                    env.marker_environment(),
+                    &MarkerVariantsUniversal,
+                    &[],
+                )
+            })
             .map(|requirement| (*requirement).clone())
             .collect();
 
@@ -109,13 +119,17 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
             while let Some(requirement) = queue.pop_front() {
                 if !matches!(requirement.source, RequirementSource::Registry { .. }) {
                     if seen.insert(requirement.clone()) {
-                        futures.push(self.lookahead(requirement, hasher.clone()));
+                        futures.push(self.lookahead(
+                            requirement,
+                            hasher.clone(),
+                            env.marker_environment(),
+                        ));
                     }
                 }
             }
 
             while let Some(result) = futures.next().await {
-                if let Some(lookahead) = result? {
+                if let Some((lookahead, variant)) = result? {
                     // User-provided metadata can authorize dependencies even under required hashes.
                     // An override may only match after the source's version has been discovered.
                     // Read its hashes directly; the lookahead requirements may come from the archive.
@@ -156,9 +170,18 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
                             lookahead.package(),
                             lookahead.version(),
                             &requirement.name,
-                        ) && requirement
-                            .evaluate_markers(env.marker_environment(), lookahead.extras())
-                        {
+                        ) && match &variant {
+                            Some(variant) => requirement.evaluate_markers(
+                                env.marker_environment(),
+                                variant,
+                                lookahead.extras(),
+                            ),
+                            None => requirement.evaluate_markers(
+                                env.marker_environment(),
+                                &MarkerVariantsUniversal,
+                                lookahead.extras(),
+                            ),
+                        } {
                             queue.push_back((*requirement).clone());
                         }
                     }
@@ -175,7 +198,8 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
         &self,
         requirement: Requirement,
         hasher: HashStrategy,
-    ) -> Result<Option<RequestedRequirements>, Error> {
+        marker_env: Option<&MarkerEnvironment>,
+    ) -> Result<Option<(RequestedRequirements, Option<VariantWithLabel>)>, Error> {
         trace!("Performing lookahead for {requirement}");
 
         // Determine whether the requirement represents a local distribution and convert to a
@@ -191,32 +215,54 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
             false
         };
 
-        // Fetch the metadata for the distribution.
-        let metadata = {
-            let id = dist.distribution_id();
+        // Fetch the metadata for the distribution, completing any earlier extras-only lookup
+        // with the selected wheel's supported properties before following direct dependencies.
+        let id = dist.distribution_id();
+        let mut archive =
             if let Some(response) = self.index.distributions().register_or_wait(&id).await {
                 let MetadataResponse::Found(archive) = &*response else {
                     panic!("Failed to find metadata for: {requirement}");
                 };
-                archive.metadata.clone()
+                archive.clone()
             } else {
-                // Run the PEP 517 build process to extract metadata from the source distribution.
-                let archive = self
-                    .database
+                self.database
                     .get_or_build_wheel_metadata(&dist, hasher.get(&dist))
                     .await
-                    .map_err(|err| Error::from_dist(dist, err))?;
-
-                let metadata = archive.metadata.clone();
-
-                // Insert the metadata into the index.
-                self.index
-                    .distributions()
-                    .done(id, Arc::new(MetadataResponse::Found(archive)));
-
-                metadata
+                    .map_err(|err| Error::from_dist(dist.clone(), err))?
+            };
+        if archive.variant.is_none()
+            && let Dist::Built(built) = &dist
+            && let Some(label) = built.wheel_filename().variant()
+        {
+            let metadata = self
+                .database
+                .read_wheel_variant_metadata(built, hasher.get(&dist))
+                .await
+                .map_err(|err| Error::from_dist(dist.clone(), err))?;
+            if let Some(marker_env) = marker_env {
+                archive.variant = Some(
+                    self.database
+                        .query_wheel_variants(
+                            metadata,
+                            label,
+                            marker_env,
+                            &VariantsJsonFilename {
+                                name: built.wheel_filename().name.clone(),
+                                version: built.wheel_filename().version.clone(),
+                            },
+                        )
+                        .await
+                        .map_err(|err| Error::from_dist(dist.clone(), err))?,
+                );
             }
-        };
+        }
+        let metadata = archive.metadata.clone();
+        // Concrete non-variant wheels use empty variant markers. Universal lookahead retains
+        // all variant conditions for the resolver to consider.
+        let variant = marker_env.map(|_| archive.variant.clone().unwrap_or_default());
+        self.index
+            .distributions()
+            .done(id, Arc::new(MetadataResponse::Found(archive)));
 
         // Respect recursive extras by propagating the source extras to the dependencies.
         let package = metadata.name.clone();
@@ -248,12 +294,9 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
             .collect();
 
         // Return the requirements from the metadata.
-        Ok(Some(RequestedRequirements::new(
-            package,
-            version,
-            requirement.extras,
-            requires_dist,
-            direct,
+        Ok(Some((
+            RequestedRequirements::new(package, version, requirement.extras, requires_dist, direct),
+            variant,
         )))
     }
 }

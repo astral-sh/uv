@@ -26,7 +26,7 @@ pub use resolution_mode::ResolutionMode;
 pub use resolver::{
     DefaultResolverProvider, InMemoryIndex, MetadataResponse, PackageVersionsResult,
     Reporter as ResolverReporter, Resolver, ResolverEnvironment, ResolverProvider,
-    VersionsResponse, WheelMetadataResult,
+    VariantProviderResult, VersionsResponse, WheelMetadataResult,
 };
 pub(crate) use universal_marker::ConflictMarker;
 pub use universal_marker::UniversalMarker;

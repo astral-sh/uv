@@ -1,19 +1,22 @@
 use std::cmp::Reverse;
+use std::ffi::OsString;
 use std::future::Future;
-use std::io;
 use std::path::Path;
+use std::path::PathBuf;
 use std::pin::Pin;
+use std::str::FromStr;
 use std::sync::Arc;
 use std::task::{Context, Poll};
 
-use futures::{FutureExt, TryStreamExt};
+use futures::{FutureExt, StreamExt, TryStreamExt};
 use rayon::in_place_scope;
 use rayon::prelude::*;
-use rustc_hash::FxHashMap;
+use rustc_hash::{FxHashMap, FxHashSet};
+use std::{env, io};
 use tokio::io::{AsyncRead, AsyncSeekExt, ReadBuf};
 use tokio::sync::Semaphore;
 use tokio_util::compat::FuturesAsyncReadCompatExt;
-use tracing::{Instrument, info_span, instrument, warn};
+use tracing::{Instrument, debug, info_span, instrument, trace, warn};
 use url::Url;
 
 use uv_cache::{ArchiveFileId, ArchiveId, Cache, CacheBucket, CacheEntry, WheelCache};
@@ -21,22 +24,29 @@ use uv_cache_info::{CacheInfo, Timestamp};
 use uv_client::{
     CacheControl, CachedClientError, Connectivity, DataWithCachePolicy, RegistryClient,
 };
-use uv_configuration::initialize_rayon_once;
-use uv_distribution_filename::WheelFilename;
+use uv_configuration::{BuildOutput, initialize_rayon_once};
+use uv_distribution_filename::{VariantLabel, WheelFilename};
 use uv_distribution_types::{
     BuildInfo, BuildableSource, BuiltDist, Dist, DistRef, HashPolicy, Hashed, IndexUrl,
-    InstalledDist, Name, SourceDist,
+    InstalledDist, Name, RegistryVariantsJson, SourceDist, VariantsJsonFilename,
 };
 use uv_extract::dirhash::{DirectoryDigest, HashedFile};
 use uv_extract::hash::Hasher;
 use uv_fs::{LockedFile, write_atomic};
 use uv_git::{GIT_LFS, GitError};
+use uv_pep440::VersionSpecifiers;
+use uv_pep508::{MarkerEnvironment, MarkerVariantsUniversal, VariantNamespace, VersionOrUrl};
 use uv_platform_tags::Tags;
 use uv_preview::PreviewFeature;
 use uv_pypi_types::{HashDigest, HashDigests, PyProjectToml};
 use uv_python::PythonVariant;
 use uv_redacted::DisplaySafeUrl;
-use uv_types::{BuildContext, BuildStack};
+use uv_types::{BuildContext, BuildStack, VariantsTrait};
+use uv_variants::VariantProviderOutput;
+use uv_variants::resolved_variants::ResolvedVariants;
+use uv_variants::variant_lock::{VariantLock, VariantLockProvider, VariantLockResolved};
+use uv_variants::variant_with_label::VariantWithLabel;
+use uv_variants::variants_json::{Provider, VariantsJsonContent};
 
 use crate::archive::Archive;
 use crate::error::PythonVersion;
@@ -202,6 +212,12 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         dist: &Dist,
         hashes: HashPolicy<'_>,
     ) -> Result<ArchiveMetadata, Error> {
+        if let Dist::Built(built) = dist
+            && built.wheel_filename().variant().is_some()
+            && !uv_preview::is_enabled(PreviewFeature::WheelVariants)
+        {
+            return Err(Error::WheelVariantsPreview);
+        }
         match dist {
             Dist::Built(built) => self.get_wheel_metadata(built, hashes).await,
             Dist::Source(source) => {
@@ -571,6 +587,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             };
             let hashes = wheel.hashes;
             return Ok(ArchiveMetadata {
+                variant: None,
                 metadata: Metadata::from_metadata23(metadata),
                 hashes,
             });
@@ -615,6 +632,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 let metadata = wheel.metadata()?;
                 let hashes = wheel.hashes;
                 Ok(ArchiveMetadata {
+                    variant: None,
                     metadata: Metadata::from_metadata23(metadata),
                     hashes,
                 })
@@ -669,6 +687,279 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 self.client.unmanaged.credentials_cache(),
             )
             .await
+    }
+
+    /// Read and validate the metadata embedded in a particular variant wheel.
+    pub async fn read_wheel_variant_metadata(
+        &self,
+        dist: &BuiltDist,
+        hashes: HashPolicy<'_>,
+    ) -> Result<VariantsJsonContent, Error> {
+        if !uv_preview::is_enabled(PreviewFeature::WheelVariants) {
+            return Err(Error::WheelVariantsPreview);
+        }
+        let wheel = self.get_wheel(dist, hashes).await?;
+        let prefix = uv_metadata::find_flat_dist_info(&wheel.filename, &wheel.archive)
+            .map_err(|err| Error::WheelMetadata(wheel.archive.to_path_buf(), Box::new(err)))?;
+        let path = wheel
+            .archive
+            .join(format!("{prefix}.dist-info/variant.json"));
+        let contents = fs_err::read(path).map_err(Error::WheelVariantRead)?;
+        let metadata: VariantsJsonContent =
+            serde_json::from_slice(&contents).map_err(Error::WheelVariantParse)?;
+        if let Some(label) = wheel.filename.variant() {
+            metadata.validate_wheel(label)?;
+        }
+        Ok(metadata)
+    }
+
+    /// Determine the supported properties of a wheel whose label has already been selected.
+    pub async fn query_wheel_variants(
+        &self,
+        metadata: VariantsJsonContent,
+        label: &VariantLabel,
+        marker_env: &MarkerEnvironment,
+        filename: &VariantsJsonFilename,
+    ) -> Result<VariantWithLabel, Error> {
+        if !uv_preview::is_enabled(PreviewFeature::WheelVariants) {
+            return Err(Error::WheelVariantsPreview);
+        }
+        metadata.validate_wheel(label)?;
+        self.query_variant_providers(metadata, marker_env, filename)
+            .await?
+            .compatible_variant(label)
+            .ok_or_else(|| Error::WheelVariantMismatch {
+                name: filename.name.clone(),
+                variants: label.to_string(),
+            })
+    }
+
+    #[instrument(skip_all, fields(variants_json = %registry_variants_json.filename))]
+    pub async fn fetch_and_query_variants(
+        &self,
+        registry_variants_json: &RegistryVariantsJson,
+        marker_env: &MarkerEnvironment,
+    ) -> Result<ResolvedVariants, Error> {
+        if !uv_preview::is_enabled(PreviewFeature::WheelVariants) {
+            return Err(Error::WheelVariantsPreview);
+        }
+        let variants_json = match self.fetch_variants_json(registry_variants_json).await {
+            Ok(metadata) => metadata,
+            Err(Error::Client(err))
+                if matches!(err.kind(), uv_client::ErrorKind::VariantsJsonFormat(..)) =>
+            {
+                warn!("Ignoring invalid variant metadata: {err}");
+                return Ok(ResolvedVariants::default());
+            }
+            Err(err) => return Err(err),
+        };
+        let resolved_variants = self
+            .query_variant_providers(variants_json, marker_env, &registry_variants_json.filename)
+            .await?;
+        Ok(resolved_variants)
+    }
+
+    /// Fetch the variants.json contents from a URL (cached) or from a path.
+    async fn fetch_variants_json(
+        &self,
+        variants_json: &RegistryVariantsJson,
+    ) -> Result<VariantsJsonContent, Error> {
+        Ok(self
+            .client
+            .managed(|client| client.fetch_variants_json(variants_json))
+            .await?)
+    }
+
+    async fn query_variant_providers(
+        &self,
+        variants_json: VariantsJsonContent,
+        marker_env: &MarkerEnvironment,
+        debug_filename: &VariantsJsonFilename,
+    ) -> Result<ResolvedVariants, Error> {
+        // TODO: parse_boolish_environment_variable
+        let locked_and_inferred =
+            env::var_os("UV_VARIANT_LOCK_INCOMPLETE").is_some_and(|var| var == "1");
+        // TODO(konsti): Integrate this properly, and add this to the CLI.
+        let variant_lock = if let Some(variant_lock_path) = env::var_os("UV_VARIANT_LOCK") {
+            let variant_lock: VariantLock = toml::from_slice(
+                &fs_err::read(&variant_lock_path).map_err(Error::VariantLockRead)?,
+            )
+            .map_err(|err| Error::VariantLockParse(PathBuf::from(&variant_lock_path), err))?;
+            // TODO(konsti): If parsing fails, check the version
+            if !VersionSpecifiers::from_str(">=0.1,<0.2")
+                .unwrap()
+                .contains(&variant_lock.metadata.version)
+            {
+                return Err(Error::VariantLockVersion(
+                    PathBuf::from(variant_lock_path),
+                    variant_lock.metadata.version,
+                ));
+            }
+
+            Some((variant_lock_path, variant_lock))
+        } else {
+            None
+        };
+
+        // Query the install time provider.
+        // TODO(konsti): Don't use threads if we're fully static.
+        let mut disabled_namespaces = FxHashSet::default();
+        let mut resolved_namespaces: FxHashMap<VariantNamespace, Arc<VariantProviderOutput>> =
+            futures::stream::iter(variants_json.providers.iter().filter(|(_, provider)| {
+                provider.install_time.unwrap_or(true)
+                    && !provider.optional
+                    && provider
+                        .enable_if
+                        .evaluate(marker_env, &MarkerVariantsUniversal, &[])
+            }))
+            .map(|(name, provider)| {
+                self.resolve_provider(locked_and_inferred, variant_lock.as_ref(), name, provider)
+            })
+            // TODO(konsti): Buffer size
+            .buffered(8)
+            .try_collect()
+            .await?;
+
+        // "Query" the static providers
+        for (namespace, provider) in &variants_json.providers {
+            // Track disabled namespaces for consistency checks.
+            if !provider
+                .enable_if
+                .evaluate(marker_env, &MarkerVariantsUniversal, &[])
+                || provider.optional
+            {
+                disabled_namespaces.insert(namespace.clone());
+                continue;
+            }
+
+            if provider.install_time.unwrap_or(true) {
+                continue;
+            }
+
+            let Some(features) = variants_json
+                .static_properties
+                .as_ref()
+                .and_then(|static_properties| static_properties.get(namespace))
+            else {
+                warn!(
+                    "Missing namespace {namespace} in default properties for {}=={}",
+                    debug_filename.name, debug_filename.version
+                );
+                continue;
+            };
+            resolved_namespaces.insert(
+                namespace.clone(),
+                Arc::new(VariantProviderOutput {
+                    namespace: namespace.clone(),
+                    features: features.clone().into_iter().collect(),
+                }),
+            );
+        }
+
+        // PEP 825 leaves discovery of host properties to a separate specification. A
+        // target property file also works with standard metadata without provider extensions.
+        if let Some((_, variant_lock)) = &variant_lock {
+            for provider in &variant_lock.provider {
+                if variants_json
+                    .default_priorities
+                    .namespace
+                    .contains(&provider.namespace)
+                    && !disabled_namespaces.contains(&provider.namespace)
+                {
+                    resolved_namespaces.insert(
+                        provider.namespace.clone(),
+                        Arc::new(VariantProviderOutput {
+                            namespace: provider.namespace.clone(),
+                            features: provider.properties.clone().into_iter().collect(),
+                        }),
+                    );
+                }
+            }
+        }
+
+        Ok(ResolvedVariants {
+            variants_json: Some(variants_json),
+            resolved_namespaces,
+            disabled_namespaces,
+        })
+    }
+
+    async fn resolve_provider(
+        &self,
+        locked_and_inferred: bool,
+        variant_lock: Option<&(OsString, VariantLock)>,
+        name: &VariantNamespace,
+        provider: &Provider,
+    ) -> Result<(VariantNamespace, Arc<VariantProviderOutput>), Error> {
+        if let Some((variant_lock_path, variant_lock)) = &variant_lock {
+            if let Some(static_provider) = variant_lock
+                .provider
+                .iter()
+                .find(|static_provider| satisfies_provider_requires(provider, static_provider))
+            {
+                Ok((
+                    static_provider.namespace.clone(),
+                    Arc::new(VariantProviderOutput {
+                        namespace: static_provider.namespace.clone(),
+                        features: static_provider.properties.clone().into_iter().collect(),
+                    }),
+                ))
+            } else if locked_and_inferred {
+                let config = self.query_variant_provider(name, provider).await?;
+                Ok((config.namespace.clone(), config))
+            } else {
+                Err(Error::VariantLockMissing {
+                    variant_lock: PathBuf::from(variant_lock_path),
+                    requires: provider.requires.clone().unwrap_or_default(),
+                    plugin_api: provider.plugin_api.clone().unwrap_or_default().clone(),
+                })
+            }
+        } else {
+            let config = self.query_variant_provider(name, provider).await?;
+            Ok((config.namespace.clone(), config))
+        }
+    }
+
+    async fn query_variant_provider(
+        &self,
+        name: &VariantNamespace,
+        provider: &Provider,
+    ) -> Result<Arc<VariantProviderOutput>, Error> {
+        let config = if self.build_context.variants().register(provider.clone()) {
+            debug!("Querying provider `{name}` for variants");
+
+            // TODO(konsti): That's not spec compliant
+            let backend_name = provider.plugin_api.clone().unwrap_or(name.to_string());
+            let builder = self
+                .build_context
+                .setup_variants(backend_name, provider, BuildOutput::Debug)
+                .await?;
+            let config = builder.query().await?;
+            trace!(
+                "Found namespace {} with configs {:?}",
+                config.namespace, config
+            );
+
+            let config = Arc::new(config);
+            self.build_context
+                .variants()
+                .done(provider.clone(), config.clone());
+            config
+        } else {
+            debug!("Reading provider `{name}` from in-memory cache");
+            self.build_context
+                .variants()
+                .wait(provider)
+                .await
+                .expect("missing value for registered task")
+        };
+        if &config.namespace != name {
+            return Err(Error::WheelVariantNamespaceMismatch {
+                declared: name.clone(),
+                actual: config.namespace.clone(),
+            });
+        }
+        Ok(config)
     }
 
     /// Stream a wheel from a URL, unzipping it into the cache as it's downloaded.
@@ -1507,4 +1798,43 @@ impl PathArchivePointer {
     pub fn to_build_info(&self) -> Option<BuildInfo> {
         None
     }
+}
+fn satisfies_provider_requires(
+    requested_provider: &Provider,
+    static_provider: &VariantLockProvider,
+) -> bool {
+    // TODO(konsti): Correct plugin_api inference.
+    if static_provider.plugin_api.clone().or(static_provider
+        .resolved
+        .first()
+        .map(|resolved| resolved.name().to_string()))
+        != requested_provider.plugin_api.clone().or(static_provider
+            .resolved
+            .first()
+            .map(|resolved| resolved.name().to_string()))
+    {
+        return false;
+    }
+    let Some(requires) = &requested_provider.requires else {
+        return true;
+    };
+    requires.iter().all(|requested| {
+        static_provider.resolved.iter().any(|resolved| {
+            // We ignore extras for simplicity.
+            &requested.name == resolved.name()
+                && match (&requested.version_or_url, resolved) {
+                    (None, _) => true,
+                    (
+                        Some(VersionOrUrl::VersionSpecifier(requested)),
+                        VariantLockResolved::Version(_name, resolved),
+                    ) => requested.contains(resolved),
+                    (
+                        Some(VersionOrUrl::Url(resolved_url)),
+                        VariantLockResolved::Url(_name, url),
+                    ) => resolved_url == &**url,
+                    // We don't support URL<->version matching
+                    _ => false,
+                }
+        })
+    })
 }

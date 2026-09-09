@@ -592,6 +592,10 @@ fn parse_dependency(
             Pep508ErrorSource::String(message)
             | Pep508ErrorSource::UnsupportedRequirement(message) => message,
             Pep508ErrorSource::UrlError(_) => "Invalid URL requirement".to_string(),
+            message @ (Pep508ErrorSource::ListOperator(..)
+            | Pep508ErrorSource::ListValue(..)
+            | Pep508ErrorSource::ListLValue(..)
+            | Pep508ErrorSource::InvalidVariantSegment(..)) => message.to_string(),
         };
         anyhow!(
             "Failed to parse dependency from {table_name} in `{}`: {message}",

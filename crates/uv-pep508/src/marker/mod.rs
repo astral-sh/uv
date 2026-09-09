@@ -15,6 +15,7 @@ mod lowering;
 pub(crate) mod parse;
 mod simplify;
 mod tree;
+mod variants;
 
 pub use environment::{MarkerEnvironment, MarkerEnvironmentBuilder};
 pub use lowering::{
@@ -24,9 +25,10 @@ pub(crate) use tree::MarkerValue;
 pub use tree::{
     ContainsMarkerTree, ExtraMarkerTree, ExtraOperator, InMarkerTree, MarkerExpression,
     MarkerOperator, MarkerTree, MarkerTreeContents, MarkerTreeKind, MarkerValueExtra,
-    MarkerValueList, MarkerValueString, MarkerValueVersion, MarkerWarningKind, StringMarkerTree,
-    StringVersion, VersionMarkerTree,
+    MarkerValueList, MarkerValueString, MarkerValueVersion, MarkerVariantsEnvironment,
+    MarkerVariantsUniversal, MarkerWarningKind, StringMarkerTree, StringVersion, VersionMarkerTree,
 };
+pub use variants::{VariantFeature, VariantNamespace, VariantParseError, VariantValue};
 
 /// `serde` helpers for [`MarkerTree`].
 pub mod ser {

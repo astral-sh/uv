@@ -33,6 +33,7 @@ uv-git-types = { workspace = true }
 uv-install-wheel = { workspace = true }
 uv-metadata = { workspace = true }
 uv-normalize = { workspace = true }
+uv-once-map = { workspace = true }
 uv-pep440 = { workspace = true }
 uv-pep508 = { workspace = true }
 uv-platform-tags = { workspace = true }
@@ -41,12 +42,14 @@ uv-pypi-types = { workspace = true }
 uv-python = { workspace = true }
 uv-redacted = { workspace = true }
 uv-types = { workspace = true }
+uv-variants = { workspace = true }
 uv-workspace = { workspace = true }
 
 anyhow = { workspace = true }
 either = { workspace = true }
 fs-err = { workspace = true }
 futures = { workspace = true }
+itertools = { workspace = true }
 owo-colors = { workspace = true }
 rayon = { workspace = true }
 reqwest = { workspace = true }
@@ -54,6 +57,7 @@ reqwest-middleware = { workspace = true }
 rmp-serde = { workspace = true }
 rustc-hash = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
 tempfile = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }

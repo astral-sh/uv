@@ -1,10 +1,13 @@
 use std::borrow::Cow;
+use std::env;
+use std::ffi::OsString;
 use std::io::BufReader;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
-use std::sync::OnceLock;
+use std::sync::{Arc, OnceLock};
 
 use fs_err as fs;
+use rustc_hash::{FxHashMap, FxHashSet};
 use thiserror::Error;
 use tracing::warn;
 use url::Url;
@@ -15,8 +18,14 @@ use uv_fs::Simplified;
 use uv_install_wheel::WheelFile;
 use uv_normalize::PackageName;
 use uv_pep440::Version;
+use uv_pep508::{MarkerEnvironment, MarkerVariantsUniversal};
 use uv_pypi_types::{DirectUrl, MetadataError};
 use uv_redacted::DisplaySafeUrl;
+use uv_variants::VariantProviderOutput;
+use uv_variants::resolved_variants::ResolvedVariants;
+use uv_variants::variant_lock::VariantLock;
+use uv_variants::variant_with_label::VariantWithLabel;
+use uv_variants::variants_json::{DistInfoVariantsJson, VariantsJsonContent};
 
 use crate::{
     BuildInfo, DistributionMetadata, InstalledMetadata, InstalledVersion, Name, VersionOrUrlRef,
@@ -47,6 +56,23 @@ pub enum InstalledDistError {
 
     #[error(transparent)]
     ExpandedTagParse(#[from] uv_distribution_filename::ExpandedTagError),
+
+    #[error(
+        "Installed variant properties are unavailable for `{0}`; reinstall it with `--preview-features wheel-variants`"
+    )]
+    VariantContextUnavailable(PackageName),
+
+    #[error("Installed wheel variant for `{0}` is incompatible with the target properties")]
+    VariantIncompatible(PackageName),
+
+    #[error("Invalid installed variant metadata: {0}")]
+    VariantMetadata(#[from] uv_variants::variants_json::VariantMetadataError),
+
+    #[error("Invalid target variant properties: {0}")]
+    VariantTarget(#[from] toml::de::Error),
+
+    #[error("Unsupported target variant property file version `{0}`")]
+    VariantTargetVersion(Version),
 
     #[error("Invalid .egg-link path: `{}`", _0.user_display())]
     InvalidEggLinkPath(PathBuf),
@@ -461,6 +487,180 @@ impl InstalledDist {
 
         let _ = self.metadata_cache.set(metadata);
         Ok(self.metadata_cache.get().expect("metadata should be set"))
+    }
+
+    /// Read the `variant.json` file of the distribution, if it exists.
+    pub fn read_variant_json(&self) -> Result<Option<DistInfoVariantsJson>, InstalledDistError> {
+        let path = self.install_path().join("variant.json");
+        let file = match fs_err::File::open(&path) {
+            Ok(file) => file,
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+            Err(err) => return Err(err.into()),
+        };
+        let variants_json = serde_json::from_reader::<BufReader<fs_err::File>, DistInfoVariantsJson>(
+            BufReader::new(file),
+        )?;
+        Ok(Some(variants_json))
+    }
+
+    /// Read the supported properties recorded when the wheel was installed.
+    ///
+    /// The wheel's own metadata lists alternatives, including unsupported values. An explicit
+    /// target overrides the saved subset. Older installations can recover the subset from target
+    /// or static properties; inspecting an environment never executes providers.
+    pub fn read_variant_context(
+        &self,
+        markers: &MarkerEnvironment,
+    ) -> Result<VariantWithLabel, InstalledDistError> {
+        self.read_variant_context_with_target(markers, env::var_os("UV_VARIANT_LOCK"))
+    }
+
+    /// Whether reuse preserves the supported properties recorded during installation.
+    pub fn can_reuse_variant_context(
+        &self,
+        markers: &MarkerEnvironment,
+    ) -> Result<bool, InstalledDistError> {
+        let context = self.read_variant_context(markers)?;
+        if context.label.is_none() {
+            return Ok(true);
+        }
+        self.recorded_variant_context_matches(&context, markers)
+    }
+
+    /// Compare the selected wheel's context with the one recorded for the installed wheel.
+    pub fn recorded_variant_context_matches(
+        &self,
+        selected: &VariantWithLabel,
+        markers: &MarkerEnvironment,
+    ) -> Result<bool, InstalledDistError> {
+        match self.read_variant_context_with_target(markers, None) {
+            Ok(recorded) => {
+                Ok(recorded.label == selected.label && recorded.variant == selected.variant)
+            }
+            Err(InstalledDistError::VariantContextUnavailable(_)) => Ok(false),
+            Err(err) => Err(err),
+        }
+    }
+
+    fn read_variant_context_with_target(
+        &self,
+        markers: &MarkerEnvironment,
+        target: Option<OsString>,
+    ) -> Result<VariantWithLabel, InstalledDistError> {
+        match &self.kind {
+            InstalledDistKind::Registry(_) | InstalledDistKind::Url(_) => {}
+            InstalledDistKind::EggInfoFile(_)
+            | InstalledDistKind::EggInfoDirectory(_)
+            | InstalledDistKind::LegacyEditable(_) => return Ok(VariantWithLabel::default()),
+        }
+        let metadata = match fs::read(self.install_path().join("variant.json")) {
+            Ok(metadata) => serde_json::from_slice::<VariantsJsonContent>(&metadata)?,
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+                return Ok(VariantWithLabel::default());
+            }
+            Err(err) => return Err(err.into()),
+        };
+        let label = metadata
+            .variants
+            .keys()
+            .next()
+            .ok_or_else(|| InstalledDistError::VariantContextUnavailable(self.name().clone()))?
+            .clone();
+        metadata.validate_wheel(&label)?;
+
+        if metadata
+            .variants
+            .get(&label)
+            .is_some_and(|variant| variant.is_empty())
+        {
+            return Ok(VariantWithLabel {
+                label: Some(label),
+                ..VariantWithLabel::default()
+            });
+        }
+
+        if target.is_none() {
+            match fs::read(self.install_path().join("uv_variant.json")) {
+                Ok(context) => {
+                    let context: VariantWithLabel = serde_json::from_slice(&context)?;
+                    if context.label.as_ref() != Some(&label) {
+                        return Err(InstalledDistError::VariantContextUnavailable(
+                            self.name().clone(),
+                        ));
+                    }
+                    return context
+                        .validate_properties(metadata, &label)
+                        .ok_or_else(|| {
+                            InstalledDistError::VariantContextUnavailable(self.name().clone())
+                        });
+                }
+                Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
+                Err(err) => return Err(err.into()),
+            }
+        }
+
+        let mut resolved_namespaces = FxHashMap::default();
+        let mut disabled_namespaces = FxHashSet::default();
+        for (namespace, provider) in &metadata.providers {
+            if provider.optional
+                || !provider
+                    .enable_if
+                    .evaluate(markers, &MarkerVariantsUniversal, &[])
+            {
+                disabled_namespaces.insert(namespace.clone());
+                continue;
+            }
+            if provider.install_time == Some(false)
+                && let Some(features) = metadata
+                    .static_properties
+                    .as_ref()
+                    .and_then(|properties| properties.get(namespace))
+            {
+                resolved_namespaces.insert(
+                    namespace.clone(),
+                    Arc::new(VariantProviderOutput {
+                        namespace: namespace.clone(),
+                        features: features.clone(),
+                    }),
+                );
+            }
+        }
+        let explicit_target = target.is_some();
+        if let Some(target) = target {
+            let target: VariantLock = toml::from_slice(&fs::read(target)?)?;
+            if target.metadata.version < Version::new([0, 1])
+                || target.metadata.version >= Version::new([0, 2])
+            {
+                return Err(InstalledDistError::VariantTargetVersion(
+                    target.metadata.version,
+                ));
+            }
+            for provider in target.provider {
+                if disabled_namespaces.contains(&provider.namespace) {
+                    continue;
+                }
+                resolved_namespaces.insert(
+                    provider.namespace.clone(),
+                    Arc::new(VariantProviderOutput {
+                        namespace: provider.namespace,
+                        features: provider.properties,
+                    }),
+                );
+            }
+        }
+        ResolvedVariants {
+            variants_json: Some(metadata),
+            resolved_namespaces,
+            disabled_namespaces,
+        }
+        .compatible_variant(&label)
+        .ok_or_else(|| {
+            if explicit_target {
+                InstalledDistError::VariantIncompatible(self.name().clone())
+            } else {
+                InstalledDistError::VariantContextUnavailable(self.name().clone())
+            }
+        })
     }
 
     /// Return the supported wheel tags for the distribution from the `WHEEL` file, if available.

@@ -119,12 +119,13 @@ pub(crate) fn pip_show(
     // For Requires field
     for dist in &distributions {
         if let Ok(metadata) = dist.read_metadata() {
+            let variants = dist.read_variant_context(markers.markers())?;
             requires_map.insert(
                 dist.name(),
                 metadata
                     .requires_dist
                     .iter()
-                    .filter(|req| req.evaluate_markers(&markers, &[]))
+                    .filter(|req| req.evaluate_markers(&markers, &variants, &[]))
                     .map(|req| &req.name)
                     .sorted_unstable()
                     .dedup()
@@ -139,10 +140,11 @@ pub(crate) fn pip_show(
                 continue;
             }
             if let Ok(metadata) = installed.read_metadata() {
+                let variants = installed.read_variant_context(markers.markers())?;
                 let requires = metadata
                     .requires_dist
                     .iter()
-                    .filter(|req| req.evaluate_markers(&markers, &[]))
+                    .filter(|req| req.evaluate_markers(&markers, &variants, &[]))
                     .map(|req| &req.name)
                     .collect_vec();
                 if !requires.is_empty() {

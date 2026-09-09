@@ -4,10 +4,12 @@ use tracing::debug;
 use uv_client::{MetadataFormat, RegistryClient, VersionFiles};
 use uv_distribution_filename::DistFilename;
 use uv_distribution_types::{
-    File, IndexCapabilities, IndexLocations, IndexMetadataRef, IndexUrl, RequiresPython,
+    File, IndexCapabilities, IndexEntryFilename, IndexLocations, IndexMetadataRef, IndexUrl,
+    RequiresPython,
 };
 use uv_normalize::PackageName;
 use uv_platform_tags::Tags;
+use uv_preview::PreviewFeature;
 use uv_resolver::{ExcludeNewer, Prerelease, PrereleaseMode};
 use uv_warnings::warn_user_once;
 
@@ -43,6 +45,13 @@ impl LatestClient<'_> {
         file: &File,
         exclude_newer: Option<&jiff::Timestamp>,
     ) -> bool {
+        if let DistFilename::WheelFilename(filename) = filename
+            && filename.variant().is_some()
+            && !uv_preview::is_enabled(PreviewFeature::WheelVariants)
+        {
+            return false;
+        }
+
         // Respect any exclude-newer cutoffs that were provided.
         if let Some(exclude_newer) = exclude_newer {
             match file.upload_time_utc_ms.as_ref() {
@@ -170,7 +179,11 @@ impl LatestClient<'_> {
                 }
                 MetadataFormat::Flat(entries) => {
                     for entry in entries {
-                        let (filename, file, _) = entry.into_parts();
+                        let (IndexEntryFilename::DistFilename(filename), file, _) =
+                            entry.into_parts()
+                        else {
+                            continue;
+                        };
                         if self.consider_candidate(
                             package,
                             &filename,
@@ -190,7 +203,10 @@ impl LatestClient<'_> {
                 .find_links_entries(package, download_concurrency)
                 .await?
             {
-                let (filename, file, index) = entry.into_parts();
+                let (IndexEntryFilename::DistFilename(filename), file, index) = entry.into_parts()
+                else {
+                    continue;
+                };
                 let exclude_newer = self.effective_exclude_newer(package, &index);
                 if self.consider_candidate(package, &filename, &file, exclude_newer.as_ref()) {
                     update_latest(filename);

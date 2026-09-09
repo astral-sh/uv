@@ -7,7 +7,7 @@
 //! Cached build dependencies are exposed through the same `/simple/*` and
 //! `/files/*` routes as scenario packages.
 
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::path::Path;
 use std::str::FromStr;
 use std::sync::Arc;
@@ -20,14 +20,14 @@ use wiremock::{
 
 use uv_distribution_filename::WheelFilename;
 use uv_normalize::PackageName;
-use uv_pep440::VersionSpecifiers;
+use uv_pep440::{Version, VersionSpecifiers};
 
 use crate::http_server::{HttpServer, content_type_for_filename};
 use crate::vendor::{VendorArtifact, vendor_artifacts};
 
-use super::scenario::{Scenario, WheelTag};
+use super::scenario::{Scenario, Variants, WheelTag};
 use super::scenarios_dir;
-use super::wheel::{generate_sdist, generate_wheel, sha256_hex};
+use super::wheel::{generate_sdist, generate_wheel, generate_wheel_with_files, sha256_hex};
 
 const PACKSE_UPLOAD_TIME: &str = "2024-03-24T00:00:00Z";
 
@@ -144,6 +144,23 @@ fn build_server_index(scenario: &Scenario) -> ServerIndex {
 
         for (version, meta) in &package.versions {
             if let Some(wheel_metadata) = &meta.wheel {
+                let variants = meta.variants.as_ref().map(Variants::metadata);
+                if let Some(variants) = &variants {
+                    let filename = format!(
+                        "{}-{version}-variants.json",
+                        package_name.as_dist_info_name()
+                    );
+                    let bytes = serde_json::to_vec(variants).expect("serialize variant metadata");
+                    let sha256 = sha256_hex(&bytes);
+                    files.insert(filename.clone(), FileData::Bytes(bytes.into()));
+                    dists.push(DistInfo {
+                        filename,
+                        sha256,
+                        requires_python: None,
+                        upload_time: None,
+                        yanked: false,
+                    });
+                }
                 let tags = if meta.wheel_tags.is_empty() {
                     vec!["py3-none-any"]
                 } else {
@@ -151,6 +168,45 @@ fn build_server_index(scenario: &Scenario) -> ServerIndex {
                 };
 
                 for tag in tags {
+                    if let Some(variants) = &variants {
+                        for (label, properties) in &variants.variants {
+                            let mut metadata = variants.clone();
+                            metadata.variants = [(label.clone(), properties.clone())].into();
+                            let metadata = serde_json::to_string(&metadata)
+                                .expect("serialize wheel variant metadata");
+                            let metadata_path = format!(
+                                "{}-{version}.dist-info/variant.json",
+                                package_name.as_dist_info_name()
+                            );
+                            let (filename, bytes) = generate_wheel_with_files(
+                                package_name,
+                                version,
+                                &meta.requires,
+                                &meta.extras,
+                                meta.requires_python.as_ref(),
+                                tag,
+                                &[(&metadata_path, &metadata)],
+                            );
+                            let filename =
+                                format!("{}-{label}.whl", filename.trim_end_matches(".whl"));
+                            let sha256 = sha256_hex(&bytes);
+                            files.insert(filename.clone(), FileData::Bytes(bytes.into()));
+                            dists.push(DistInfo {
+                                filename,
+                                sha256,
+                                requires_python: meta.requires_python.clone(),
+                                upload_time: wheel_metadata.upload_time.clone(),
+                                yanked: meta.yanked,
+                            });
+                        }
+                    }
+                    if meta
+                        .variants
+                        .as_ref()
+                        .is_some_and(|variants| !variants.non_variant_wheel)
+                    {
+                        continue;
+                    }
                     let (filename, bytes) = generate_wheel(
                         package_name,
                         version,
@@ -192,6 +248,41 @@ fn build_server_index(scenario: &Scenario) -> ServerIndex {
         }
 
         packages.insert(package_name.clone(), PackageEntry { dists });
+    }
+
+    // The mock runtime provider is installed in an isolated environment, just like a real plugin.
+    if scenario.packages.values().any(|package| {
+        package
+            .versions
+            .values()
+            .any(|metadata| metadata.variants.is_some())
+    }) {
+        let name = PackageName::from_str("cpu-provider").expect("valid provider package name");
+        let (filename, bytes) = generate_wheel_with_files(
+            &name,
+            &Version::new([0, 1, 0]),
+            &[],
+            &BTreeMap::new(),
+            None,
+            "py3-none-any",
+            &[(
+                "cpu_provider/plugin.py",
+                include_str!("../../../../test/fixtures/variants/cpu_provider.py"),
+            )],
+        );
+        let sha256 = sha256_hex(&bytes);
+        files.insert(filename.clone(), FileData::Bytes(bytes.into()));
+        packages
+            .entry(name)
+            .or_insert_with(|| PackageEntry { dists: Vec::new() })
+            .dists
+            .push(DistInfo {
+                filename,
+                sha256,
+                requires_python: None,
+                upload_time: None,
+                yanked: false,
+            });
     }
 
     for artifact in vendor_artifacts() {

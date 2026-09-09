@@ -1,3 +1,4 @@
+use serde::Serializer;
 use std::borrow::Cow;
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
@@ -9,6 +10,9 @@ use std::path::{Path, PathBuf};
 use std::slice;
 use std::str::FromStr;
 use std::sync::{Arc, LazyLock};
+use toml_edit::{InlineTable, Value};
+use uv_fs::relative_to;
+use uv_pep508::MarkerVariantsUniversal;
 
 use itertools::Itertools;
 use jiff::Timestamp;
@@ -33,11 +37,12 @@ use uv_distribution_filename::{
 };
 use uv_distribution_types::{
     BuiltDist, DependencyMetadata, DirectUrlBuiltDist, DirectUrlSourceDist, DirectorySourceDist,
-    Dist, FileLocation, FirstParty, GitDirectorySourceDist, GitPathBuiltDist, GitPathSourceDist,
-    HashPolicy, Identifier, IndexLocations, IndexMetadata, IndexUrl, Name, PYPI_URL, PathBuiltDist,
-    PathSourceDist, RegistryBuiltDist, RegistryBuiltWheel, RegistrySourceDist, RemoteSource,
-    Requirement, RequirementSource, RequiresPython, ResolvedDist, SimplifiedMarkerTree,
-    StaticMetadata, ToUrlError, UrlString, VersionId,
+    Dist, File, FileLocation, FirstParty, GitDirectorySourceDist, GitPathBuiltDist,
+    GitPathSourceDist, HashPolicy, Identifier, IndexLocations, IndexMetadata, IndexUrl, Name,
+    PYPI_URL, PathBuiltDist, PathSourceDist, RegistryBuiltDist, RegistryBuiltWheel,
+    RegistrySourceDist, RegistryVariantsJson, RemoteSource, Requirement, RequirementSource,
+    RequiresPython, ResolvedDist, SimplifiedMarkerTree, StaticMetadata, ToUrlError, UrlString,
+    VariantsJsonFilename, VersionId,
 };
 use uv_fs::{PortablePath, PortablePathBuf, Simplified, normalize_path, try_relative_to_if};
 use uv_git::{RepositoryReference, ResolvedRepositoryReference};
@@ -1574,7 +1579,11 @@ impl Lock {
         } else {
             let root_applies = self.manifest.requirements.iter().any(|requirement| {
                 &requirement.name == dependency_name
-                    && requirement.marker.evaluate(marker_environment, &[])
+                    && requirement.marker.evaluate(
+                        marker_environment,
+                        &MarkerVariantsUniversal,
+                        &[],
+                    )
             });
             let group_applies =
                 self.manifest
@@ -1583,7 +1592,11 @@ impl Lock {
                     .flatten()
                     .any(|requirement| {
                         &requirement.name == dependency_name
-                            && requirement.marker.evaluate(marker_environment, &[])
+                            && requirement.marker.evaluate(
+                                marker_environment,
+                                &MarkerVariantsUniversal,
+                                &[],
+                            )
                     });
 
             // Lock-manifest requirements and dependency groups only record requirements, not
@@ -1597,7 +1610,11 @@ impl Lock {
             let root = package.and_then(|package| {
                 let mut applicable = self.manifest.requirements.iter().filter(|requirement| {
                     &requirement.name == dependency_name
-                        && requirement.marker.evaluate(marker_environment, &[])
+                        && requirement.marker.evaluate(
+                            marker_environment,
+                            &MarkerVariantsUniversal,
+                            &[],
+                        )
                 });
                 let requirement = applicable.next()?;
                 let mut selection = SelectedDependency::from_requirement(package, requirement);
@@ -1611,7 +1628,11 @@ impl Lock {
                 for (group, requirements) in &self.manifest.dependency_groups {
                     let mut applicable = requirements.iter().filter(|requirement| {
                         &requirement.name == dependency_name
-                            && requirement.marker.evaluate(marker_environment, &[])
+                            && requirement.marker.evaluate(
+                                marker_environment,
+                                &MarkerVariantsUniversal,
+                                &[],
+                            )
                     });
                     let Some(requirement) = applicable.next() else {
                         continue;
@@ -1657,6 +1678,7 @@ impl Lock {
             // must not match there.
             if !dependency.complexified_marker.evaluate(
                 marker_environment,
+                &MarkerVariantsUniversal,
                 std::iter::empty::<&PackageName>(),
                 dependency
                     .extra
@@ -1706,6 +1728,7 @@ impl Lock {
         {
             if !dependency.complexified_marker.evaluate(
                 marker_environment,
+                &MarkerVariantsUniversal,
                 std::iter::once(project_name),
                 dependency
                     .extra
@@ -2768,7 +2791,7 @@ impl Lock {
                     if marker.is_false() {
                         continue;
                     }
-                    if !marker.evaluate(markers, &[]) {
+                    if !marker.evaluate(markers, &MarkerVariantsUniversal, &[]) {
                         continue;
                     }
 
@@ -3770,6 +3793,16 @@ impl TryFrom<LockWire> for Lock {
     type Error = LockError;
 
     fn try_from(wire: LockWire) -> Result<Self, LockError> {
+        if wire.packages.iter().any(|package| {
+            package.variants_json.is_some()
+                || package
+                    .wheels
+                    .iter()
+                    .any(|wheel| wheel.filename.variant().is_some())
+        }) && !uv_preview::is_enabled(PreviewFeature::WheelVariants)
+        {
+            return Err(LockErrorKind::WheelVariantsPreview.into());
+        }
         // Count the number of sources for each package name. When
         // there's only one source for a particular package name (the
         // overwhelmingly common case), we can omit some data (like source and
@@ -3871,6 +3904,10 @@ pub struct Package {
     pub(crate) id: PackageId,
     sdist: Option<SourceDist>,
     wheels: Vec<Wheel>,
+    /// The variants JSON file for the package version, if available.
+    ///
+    /// Named `variants-json` in `uv.lock`.
+    variants_json: Option<VariantsJsonEntry>,
     /// If there are multiple versions or sources for the same package name, we add the markers of
     /// the fork(s) that contained this version or source, so we can set the correct preferences in
     /// the next resolution.
@@ -3899,6 +3936,7 @@ impl Package {
         index_locations: &IndexLocations,
     ) -> Result<Self, LockError> {
         let id = PackageId::from_annotated_dist(annotated_dist, root)?;
+        let variants_json = VariantsJsonEntry::from_annotated_dist(annotated_dist)?;
         let sdist = SourceDist::from_annotated_dist(&id, annotated_dist, index_locations)?;
         let wheels = Wheel::from_annotated_dist(annotated_dist, index_locations)?;
         let metadata = if id.source.is_immutable() {
@@ -3916,6 +3954,7 @@ impl Package {
             id,
             sdist,
             wheels,
+            variants_json,
             fork_markers,
             dependencies: vec![],
             optional_dependencies: BTreeMap::default(),
@@ -4462,8 +4501,84 @@ impl Package {
         Ok(Some(sdist))
     }
 
+    /// Convert to a [`RegistryVariantsJson`] for installation.
+    pub(crate) fn to_registry_variants_json(
+        &self,
+        workspace_root: &Path,
+    ) -> Result<Option<RegistryVariantsJson>, LockError> {
+        let Some(variants_json) = &self.variants_json else {
+            return Ok(None);
+        };
+
+        let name = &self.id.name;
+        let version = self
+            .id
+            .version
+            .as_ref()
+            .expect("version for registry source");
+        let (file_url, index) = match &self.id.source {
+            Source::Registry(RegistrySource::Url(url)) => {
+                let file_url =
+                    variants_json
+                        .url
+                        .url()
+                        .ok_or_else(|| LockErrorKind::MissingUrl {
+                            name: name.clone(),
+                            version: version.clone(),
+                        })?;
+                let index = IndexUrl::from(VerbatimUrl::from_url(
+                    url.to_url().map_err(LockErrorKind::InvalidUrl)?,
+                ));
+                (FileLocation::AbsoluteUrl(file_url.clone()), index)
+            }
+            Source::Registry(RegistrySource::Path(path)) => {
+                let index = IndexUrl::from(
+                    VerbatimUrl::from_absolute_path(workspace_root.join(path))
+                        .map_err(LockErrorKind::RegistryVerbatimUrl)?,
+                );
+                match &variants_json.url {
+                    VariantsJsonSource::Url { url: file_url } => {
+                        (FileLocation::AbsoluteUrl(file_url.clone()), index)
+                    }
+                    VariantsJsonSource::Path { path: file_path } => {
+                        let file_path = workspace_root.join(path).join(file_path);
+                        let file_url =
+                            DisplaySafeUrl::from_file_path(&file_path).map_err(|()| {
+                                LockErrorKind::PathToUrl {
+                                    path: file_path.into_boxed_path(),
+                                }
+                            })?;
+                        (FileLocation::AbsoluteUrl(UrlString::from(file_url)), index)
+                    }
+                }
+            }
+            _ => todo!("Handle error: variants.json can only be used on a registry source"),
+        };
+
+        let filename = format!("{name}-{version}-variants.json");
+        let file = File {
+            dist_info_metadata: false,
+            filename: SmallString::from(filename),
+            hashes: variants_json.hash.iter().map(|h| h.0.clone()).collect(),
+            requires_python: None,
+            size: variants_json.size,
+            upload_time_utc_ms: variants_json.upload_time.map(Timestamp::as_millisecond),
+            url: file_url,
+            yanked: None,
+            zstd: None,
+        };
+        Ok(Some(RegistryVariantsJson {
+            filename: VariantsJsonFilename {
+                name: self.name().clone(),
+                version: version.clone(),
+            },
+            file: Box::new(file),
+            index,
+        }))
+    }
+
     fn find_best_wheel(&self, tag_policy: TagPolicy<'_>) -> Option<usize> {
-        type WheelPriority<'lock> = (TagPriority, Option<&'lock BuildTag>);
+        type WheelPriority<'lock> = (bool, TagPriority, Option<&'lock BuildTag>);
 
         let mut best: Option<(WheelPriority, usize)> = None;
         for (i, wheel) in self.wheels.iter().enumerate() {
@@ -4473,7 +4588,8 @@ impl Package {
                 continue;
             };
             let build_tag = wheel.filename.build_tag();
-            let wheel_priority = (tag_priority, build_tag);
+            // Non-variant wheels before variant wheels.
+            let wheel_priority = (wheel.filename.variant().is_none(), tag_priority, build_tag);
             match best {
                 None => {
                     best = Some((wheel_priority, i));
@@ -4660,6 +4776,8 @@ struct PackageWire {
     sdist: Option<SourceDist>,
     #[serde(default)]
     wheels: Vec<Wheel>,
+    #[serde(default, rename = "variants-json")]
+    variants_json: Option<VariantsJsonEntry>,
     #[serde(default, rename = "resolution-markers")]
     fork_markers: Vec<SimplifiedMarkerTree>,
     #[serde(default)]
@@ -4766,6 +4884,7 @@ impl PackageWire {
             metadata: self.metadata,
             sdist: self.sdist,
             wheels: self.wheels,
+            variants_json: self.variants_json,
             fork_markers: self
                 .fork_markers
                 .into_iter()
@@ -5981,6 +6100,152 @@ fn locked_git_url(
     url
 }
 
+#[derive(Clone, Debug, serde::Deserialize, PartialEq, Eq)]
+#[serde(from = "VariantsJsonWire")]
+struct VariantsJsonEntry {
+    /// A URL or file path (via `file://`) where the variants JSON file that was locked
+    /// against was found. The location does not need to exist in the future,
+    /// so this should be treated as only a hint to where to look and/or
+    /// recording where the variants JSON file originally came from.
+    #[serde(flatten)]
+    url: VariantsJsonSource,
+    /// A hash of the variants JSON file.
+    ///
+    /// This is only present for variants JSON files that come from registries and direct
+    /// URLs. Files from git or path dependencies do not have hashes
+    /// associated with them.
+    hash: Option<Hash>,
+    /// The size of the variants JSON file in bytes.
+    ///
+    /// This is only present for variants JSON files that come from registries.
+    size: Option<u64>,
+    /// The upload time of the variants JSON file.
+    ///
+    /// This is only present for variants JSON files that come from registries.
+    upload_time: Option<Timestamp>,
+}
+
+#[derive(Clone, Debug, serde::Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "kebab-case")]
+struct VariantsJsonWire {
+    /// A URL or file path (via `file://`) where the variants JSON file that was locked
+    /// against was found.
+    #[serde(flatten)]
+    url: VariantsJsonSource,
+    /// A hash of the variants JSON file.
+    hash: Option<Hash>,
+    /// The size of the variants JSON file in bytes.
+    size: Option<u64>,
+    /// The upload time of the variants JSON file.
+    #[serde(alias = "upload_time")]
+    upload_time: Option<Timestamp>,
+}
+
+impl VariantsJsonEntry {
+    fn from_annotated_dist(annotated_dist: &AnnotatedDist) -> Result<Option<Self>, LockError> {
+        match &annotated_dist.dist {
+            // We pass empty installed packages for locking.
+            ResolvedDist::Installed { .. } => unreachable!(),
+            ResolvedDist::Installable { variants_json, .. } => {
+                if let Some(variants_json) = variants_json {
+                    let url = match &variants_json.index {
+                        IndexUrl::Pypi(_) | IndexUrl::Url(_) => {
+                            let url = normalize_file_location(&variants_json.file.url)
+                                .map_err(LockErrorKind::InvalidUrl)
+                                .map_err(LockError::from)?;
+                            VariantsJsonSource::Url { url }
+                        }
+                        IndexUrl::Path(path) => {
+                            let index_path = path
+                                .to_file_path()
+                                .map_err(|()| LockErrorKind::UrlToPath { url: path.to_url() })?;
+                            let variants_url = variants_json
+                                .file
+                                .url
+                                .to_url()
+                                .map_err(LockErrorKind::InvalidUrl)?;
+
+                            if variants_url.scheme() == "file" {
+                                let variants_path = variants_url
+                                    .to_file_path()
+                                    .map_err(|()| LockErrorKind::UrlToPath { url: variants_url })?;
+                                let path = relative_to(&variants_path, index_path)
+                                    .or_else(|_| std::path::absolute(&variants_path))
+                                    .map_err(LockErrorKind::DistributionRelativePath)?
+                                    .into_boxed_path();
+                                VariantsJsonSource::Path { path }
+                            } else {
+                                let url = normalize_file_location(&variants_json.file.url)
+                                    .map_err(LockErrorKind::InvalidUrl)
+                                    .map_err(LockError::from)?;
+                                VariantsJsonSource::Url { url }
+                            }
+                        }
+                    };
+
+                    Ok(Some(Self {
+                        url,
+                        hash: variants_json
+                            .file
+                            .hashes
+                            .iter()
+                            .max()
+                            .cloned()
+                            .map(Hash::from),
+                        size: variants_json.file.size,
+                        upload_time: variants_json
+                            .file
+                            .upload_time_utc_ms
+                            .map(Timestamp::from_millisecond)
+                            .transpose()
+                            .map_err(LockErrorKind::InvalidTimestamp)?,
+                    }))
+                } else {
+                    Ok(None)
+                }
+            }
+        }
+    }
+
+    /// Returns the TOML representation of this variants JSON file.
+    fn to_toml(&self) -> Result<InlineTable, toml_edit::ser::Error> {
+        let mut table = InlineTable::new();
+        match &self.url {
+            VariantsJsonSource::Url { url } => {
+                table.insert("url", Value::from(url.as_ref()));
+            }
+            VariantsJsonSource::Path { path } => {
+                table.insert("path", Value::from(PortablePath::from(path).to_string()));
+            }
+        }
+        if let Some(hash) = &self.hash {
+            table.insert("hash", Value::from(hash.to_string()));
+        }
+        if let Some(size) = self.size {
+            table.insert(
+                "size",
+                toml_edit::ser::ValueSerializer::new().serialize_u64(size)?,
+            );
+        }
+        if let Some(upload_time) = self.upload_time {
+            table.insert("upload-time", Value::from(upload_time.to_string()));
+        }
+        Ok(table)
+    }
+}
+
+impl From<VariantsJsonWire> for VariantsJsonEntry {
+    fn from(wire: VariantsJsonWire) -> Self {
+        // TODO(konsti): Do we still need the wire type?
+        Self {
+            url: wire.url,
+            hash: wire.hash,
+            size: wire.size,
+            upload_time: wire.upload_time,
+        }
+    }
+}
+
 /// Inspired by: <https://discuss.python.org/t/lock-files-again-but-this-time-w-sdists/46593>
 #[derive(Clone, Debug, serde::Deserialize, PartialEq, Eq)]
 #[serde(try_from = "WheelWire")]
@@ -6327,6 +6592,32 @@ enum WheelWireSource {
     },
 }
 
+#[derive(Clone, Debug, serde::Deserialize, PartialEq, Eq)]
+#[serde(untagged, rename_all = "kebab-case")]
+enum VariantsJsonSource {
+    /// Used for all variants JSON files that come from remote sources.
+    Url {
+        /// A URL where the variants JSON file that was locked against was found. The location
+        /// does not need to exist in the future, so this should be treated as
+        /// only a hint to where to look and/or recording where the variants JSON file
+        /// originally came from.
+        url: UrlString,
+    },
+    /// Used for variants JSON files that come from local registries (like `--find-links`).
+    Path {
+        /// The path to the variants JSON file, relative to the index.
+        path: Box<Path>,
+    },
+}
+
+impl VariantsJsonSource {
+    fn url(&self) -> Option<&UrlString> {
+        match &self {
+            Self::Path { .. } => None,
+            Self::Url { url, .. } => Some(url),
+        }
+    }
+}
 impl TryFrom<WheelWire> for Wheel {
     type Error = String;
 
@@ -7313,6 +7604,10 @@ impl std::fmt::Display for WheelTagHint {
 /// is with the caller somewhere in such cases.
 #[derive(Debug, thiserror::Error)]
 enum LockErrorKind {
+    #[error(
+        "This lockfile uses wheel variants; pass `--preview-features wheel-variants` to use it"
+    )]
+    WheelVariantsPreview,
     /// An error that occurs when the overrides for validating a
     /// metadata-free lockfile cannot be scoped to their packages.
     #[error(transparent)]
@@ -7687,6 +7982,12 @@ enum LockErrorKind {
     NonLocalWorkspaceMember {
         /// The ID of the workspace member with an invalid source.
         id: PackageId,
+    },
+    #[error("Failed to fetch and query variants for `{package_id}`")]
+    VariantError {
+        package_id: PackageId,
+        #[source]
+        err: uv_distribution::Error,
     },
 }
 

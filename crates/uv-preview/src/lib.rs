@@ -338,6 +338,8 @@ pub enum PreviewFeature {
     /// Exclude `exclude-newer-package` entries from the lockfile when not included in the
     /// project's resolved dependencies.
     MissingExcludeNewerPackageLock,
+    /// Allows resolving and installing [wheel variants](https://peps.python.org/pep-0825/), including running variant providers.
+    WheelVariants,
 }
 
 impl Display for PreviewFeature {

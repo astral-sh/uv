@@ -11,13 +11,13 @@ use uv_configuration::{DependencyMode, ExcludeDependency, Excludes, Override, Ov
 use uv_distribution_filename::EggInfoFilename;
 use uv_distribution_types::{
     ConfigSettings, DependencyMetadata, Diagnostic, ExtraBuildRequires, ExtraBuildVariables,
-    InstalledDist, InstalledDistKind, Name, NameRequirementSpecification, PackageConfigSettings,
-    Requirement, UnresolvedRequirement, UnresolvedRequirementSpecification,
+    InstalledDist, InstalledDistError, InstalledDistKind, Name, NameRequirementSpecification,
+    PackageConfigSettings, Requirement, UnresolvedRequirement, UnresolvedRequirementSpecification,
 };
 use uv_fs::Simplified;
 use uv_normalize::PackageName;
 use uv_pep440::{Version, VersionSpecifiers};
-use uv_pep508::VersionOrUrl;
+use uv_pep508::{MarkerVariantsUniversal, VersionOrUrl};
 use uv_platform_tags::Tags;
 use uv_pypi_types::{ResolverMarkerEnvironment, VerbatimParsedUrl};
 use uv_python::{Interpreter, PythonEnvironment};
@@ -280,9 +280,11 @@ impl SitePackages {
                     }
                 }
 
+                let variants = distribution.read_variant_context(markers.markers())?;
+
                 // Verify that the dependencies are installed.
                 for dependency in &metadata.requires_dist {
-                    if !dependency.evaluate_markers(markers, &[]) {
+                    if !dependency.evaluate_markers(markers, &variants, &[]) {
                         continue;
                     }
 
@@ -486,7 +488,7 @@ impl SitePackages {
             .apply(requirements)
             .filter(|requirement| !excludes.contains(&requirement.name))
         {
-            if requirement.evaluate_markers(Some(markers), &[]) {
+            if requirement.evaluate_markers(Some(markers), &MarkerVariantsUniversal, &[]) {
                 let requirement = requirement.into_owned();
                 if seen.insert(requirement.clone()) {
                     stack.push(requirement);
@@ -505,7 +507,7 @@ impl SitePackages {
                 }
                 [distribution] => {
                     // Validate that the requirement is satisfied.
-                    if requirement.evaluate_markers(Some(markers), &[]) {
+                    if requirement.evaluate_markers(Some(markers), &MarkerVariantsUniversal, &[]) {
                         match RequirementSatisfaction::check(
                             name,
                             distribution,
@@ -529,7 +531,8 @@ impl SitePackages {
 
                     // Validate that the installed version satisfies the constraints.
                     for constraint in constraints.get(name).into_iter().flatten() {
-                        if constraint.evaluate_markers(Some(markers), &[]) {
+                        if constraint.evaluate_markers(Some(markers), &MarkerVariantsUniversal, &[])
+                        {
                             match RequirementSatisfaction::check(
                                 name,
                                 distribution,
@@ -554,6 +557,16 @@ impl SitePackages {
                         }
                     }
 
+                    // A changed target may require another wheel or a refreshed marker context,
+                    // even when the installed version and dependency set are unchanged.
+                    match distribution.can_reuse_variant_context(markers.markers()) {
+                        Ok(true) => {}
+                        Ok(false) | Err(InstalledDistError::VariantIncompatible(_)) => {
+                            return Ok(SatisfiesResult::Unsatisfied(requirement.to_string()));
+                        }
+                        Err(err) => return Err(err.into()),
+                    }
+
                     // With `--no-deps`, only the requested requirements and their constraints
                     // need to be satisfied. Avoid reading metadata for dependencies that the
                     // resolver would not include either.
@@ -565,6 +578,7 @@ impl SitePackages {
                     let metadata = distribution
                         .read_metadata()
                         .with_context(|| format!("Failed to read metadata for: {distribution}"))?;
+                    let variants = distribution.read_variant_context(markers.markers())?;
 
                     // Add the dependencies to the queue.
                     let dependencies = metadata
@@ -579,7 +593,11 @@ impl SitePackages {
                             !excludes.contains_for(name, distribution.version(), &dependency.name)
                         })
                     {
-                        if dependency.evaluate_markers(Some(markers), &requirement.extras) {
+                        if dependency.evaluate_markers(
+                            Some(markers),
+                            &variants,
+                            &requirement.extras,
+                        ) {
                             let dependency = dependency.into_owned();
                             if seen.insert(dependency.clone()) {
                                 stack.push(dependency);

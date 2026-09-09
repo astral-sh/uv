@@ -6,6 +6,7 @@ use either::Either;
 use uv_configuration::{Constraints, Excludes, Overrides};
 use uv_distribution_types::Requirement;
 use uv_normalize::PackageName;
+use uv_pep508::MarkerVariantsUniversal;
 use uv_types::RequestedRequirements;
 
 use crate::preferences::Preferences;
@@ -143,7 +144,11 @@ impl Manifest {
                 })
                 .map(|(_, _, requirement)| Cow::Borrowed(requirement))
                 .filter(move |requirement| {
-                    requirement.evaluate_markers(env.marker_environment(), &[])
+                    requirement.evaluate_markers(
+                        env.marker_environment(),
+                        &MarkerVariantsUniversal,
+                        &[],
+                    )
                 }),
         )
     }
@@ -174,8 +179,11 @@ impl Manifest {
                                 )
                             })
                             .filter(move |requirement| {
-                                requirement
-                                    .evaluate_markers(env.marker_environment(), lookahead.extras())
+                                requirement.evaluate_markers(
+                                    env.marker_environment(),
+                                    &MarkerVariantsUniversal,
+                                    lookahead.extras(),
+                                )
                             })
                     })
                     .chain(
@@ -183,7 +191,11 @@ impl Manifest {
                             .apply(&self.requirements)
                             .filter(|requirement| !self.excludes.contains(&requirement.name))
                             .filter(move |requirement| {
-                                requirement.evaluate_markers(env.marker_environment(), &[])
+                                requirement.evaluate_markers(
+                                    env.marker_environment(),
+                                    &MarkerVariantsUniversal,
+                                    &[],
+                                )
                             }),
                     )
                     .chain(
@@ -191,7 +203,11 @@ impl Manifest {
                             .requirements()
                             .filter(|requirement| !self.excludes.contains(&requirement.name))
                             .filter(move |requirement| {
-                                requirement.evaluate_markers(env.marker_environment(), &[])
+                                requirement.evaluate_markers(
+                                    env.marker_environment(),
+                                    &MarkerVariantsUniversal,
+                                    &[],
+                                )
                             })
                             .map(Cow::Borrowed),
                     ),
@@ -203,7 +219,11 @@ impl Manifest {
                     .chain(self.constraints.requirements().map(Cow::Borrowed))
                     .filter(|requirement| !self.excludes.contains(&requirement.name))
                     .filter(move |requirement| {
-                        requirement.evaluate_markers(env.marker_environment(), &[])
+                        requirement.evaluate_markers(
+                            env.marker_environment(),
+                            &MarkerVariantsUniversal,
+                            &[],
+                        )
                     }),
             ),
         }
@@ -222,7 +242,11 @@ impl Manifest {
                     .global_requirements()
                     .filter(|requirement| !self.excludes.contains(&requirement.name))
                     .filter(move |requirement| {
-                        requirement.evaluate_markers(env.marker_environment(), &[])
+                        requirement.evaluate_markers(
+                            env.marker_environment(),
+                            &MarkerVariantsUniversal,
+                            &[],
+                        )
                     })
                     .map(Cow::Borrowed),
             ),
@@ -232,7 +256,11 @@ impl Manifest {
                     .global_requirements()
                     .filter(|requirement| !self.excludes.contains(&requirement.name))
                     .filter(move |requirement| {
-                        requirement.evaluate_markers(env.marker_environment(), &[])
+                        requirement.evaluate_markers(
+                            env.marker_environment(),
+                            &MarkerVariantsUniversal,
+                            &[],
+                        )
                     })
                     .map(Cow::Borrowed),
             ),
@@ -257,42 +285,55 @@ impl Manifest {
         match mode {
             // Include direct requirements, dependencies of editables, and transitive dependencies
             // of local packages.
-            DependencyMode::Transitive => Either::Left(
-                self.lookaheads
-                    .iter()
-                    .filter(|lookahead| lookahead.direct())
-                    .flat_map(move |lookahead| {
-                        self.overrides
-                            .apply_for(
-                                lookahead.package(),
-                                lookahead.version(),
-                                lookahead.requirements(),
-                            )
-                            .filter(|requirement| {
-                                !self.excludes.contains_for(
+            DependencyMode::Transitive => {
+                Either::Left(
+                    self.lookaheads
+                        .iter()
+                        .filter(|lookahead| lookahead.direct())
+                        .flat_map(move |lookahead| {
+                            self.overrides
+                                .apply_for(
                                     lookahead.package(),
                                     lookahead.version(),
-                                    &requirement.name,
+                                    lookahead.requirements(),
                                 )
-                            })
-                            .filter(move |requirement| {
-                                requirement
-                                    .evaluate_markers(env.marker_environment(), lookahead.extras())
-                            })
-                    })
-                    .chain(
-                        self.overrides
-                            .apply(&self.requirements)
-                            .filter(move |requirement| {
-                                requirement.evaluate_markers(env.marker_environment(), &[])
-                            }),
-                    ),
-            ),
+                                .filter(|requirement| {
+                                    !self.excludes.contains_for(
+                                        lookahead.package(),
+                                        lookahead.version(),
+                                        &requirement.name,
+                                    )
+                                })
+                                .filter(move |requirement| {
+                                    requirement.evaluate_markers(
+                                        env.marker_environment(),
+                                        &MarkerVariantsUniversal,
+                                        lookahead.extras(),
+                                    )
+                                })
+                        })
+                        .chain(self.overrides.apply(&self.requirements).filter(
+                            move |requirement| {
+                                requirement.evaluate_markers(
+                                    env.marker_environment(),
+                                    &MarkerVariantsUniversal,
+                                    &[],
+                                )
+                            },
+                        )),
+                )
+            }
 
             // Restrict to the direct requirements.
             DependencyMode::Direct => {
                 Either::Right(self.overrides.apply(self.requirements.iter()).filter(
-                    move |requirement| requirement.evaluate_markers(env.marker_environment(), &[]),
+                    move |requirement| {
+                        requirement.evaluate_markers(
+                            env.marker_environment(),
+                            &MarkerVariantsUniversal,
+                            &[],
+                        )
+                    },
                 ))
             }
         }
