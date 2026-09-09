@@ -147,6 +147,23 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         lock_entry.lock().await.map_err(Error::CacheLock)
     }
 
+    /// Validate dist hashes, and return them.
+    fn validate_hashes(
+        dist: &BuiltDist,
+        hashes: ArchiveHashPolicy<'_>,
+        hashers: Vec<Hasher>,
+    ) -> Result<HashDigests, Error> {
+        let computed_hashes: HashDigests = hashers.into_iter().map(HashDigest::from).collect();
+        if hashes.requires_validation() && !hashes.matches(computed_hashes.as_slice()) {
+            return Err(Error::hash_mismatch(
+                dist.to_string(),
+                hashes.digests(),
+                computed_hashes.as_slice(),
+            ));
+        }
+        Ok(computed_hashes)
+    }
+
     /// Either fetch the wheel or fetch and build the source distribution
     ///
     /// Returns a wheel that's compliant with the given platform tags.
@@ -787,15 +804,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                     });
                 }
 
-                let computed_hashes: HashDigests =
-                    hashers.into_iter().map(HashDigest::from).collect();
-                if hashes.requires_validation() && !hashes.matches(computed_hashes.as_slice()) {
-                    return Err(Error::hash_mismatch(
-                        dist.to_string(),
-                        hashes.digests(),
-                        computed_hashes.as_slice(),
-                    ));
-                }
+                let computed_hashes = Self::validate_hashes(dist, hashes, hashers)?;
 
                 // Before we make the wheel accessible by persisting it, ensure that the RECORD is
                 // valid.
@@ -1001,15 +1010,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                     tokio::task::spawn_blocking(move || extractor.extract_seekable(file))
                         .await?
                         .map_err(|err| Error::Extract(filename.to_string(), err))?;
-                let computed_hashes: HashDigests =
-                    hashers.into_iter().map(HashDigest::from).collect();
-                if hashes.requires_validation() && !hashes.matches(computed_hashes.as_slice()) {
-                    return Err(Error::hash_mismatch(
-                        dist.to_string(),
-                        hashes.digests(),
-                        computed_hashes.as_slice(),
-                    ));
-                }
+                let computed_hashes = Self::validate_hashes(dist, hashes, hashers)?;
 
                 // Before we make the wheel accessible by persisting it, ensure that the RECORD is
                 // valid.
@@ -1213,14 +1214,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             // Exhaust the reader to compute the hash.
             hasher.finish().await.map_err(Error::HashExhaustion)?;
 
-            let computed_hashes: HashDigests = hashers.into_iter().map(HashDigest::from).collect();
-            if hashes.requires_validation() && !hashes.matches(computed_hashes.as_slice()) {
-                return Err(Error::hash_mismatch(
-                    dist.to_string(),
-                    hashes.digests(),
-                    computed_hashes.as_slice(),
-                ));
-            }
+            let computed_hashes = Self::validate_hashes(dist, hashes, hashers)?;
 
             // Before we make the wheel accessible by persisting it, ensure that the RECORD is
             // valid.
