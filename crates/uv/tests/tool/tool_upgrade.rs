@@ -1651,6 +1651,66 @@ async fn mount_simple_launcher_index(server: &MockServer, hash: &str, wheel: &[u
         .await;
 }
 
+#[tokio::test]
+async fn tool_upgrade_resolution_hints_quiet_modes() -> Result<()> {
+    let context = uv_test::test_context!("3.12").with_tool_dirs();
+    let bin_dir = context.temp_dir.child("bin");
+    let wheel = fs_err::read(
+        context
+            .workspace_root
+            .join("test/links/simple_launcher-0.1.0-py3-none-any.whl"),
+    )?;
+    let server = MockServer::start().await;
+    mount_simple_launcher_index(
+        &server,
+        "5327e0bb67cdb46800999de6dcf034bf0a5335702883494af0d8b7f6ca48cee4",
+        &wheel,
+    )
+    .await;
+    let index_url = format!("{}/simple", server.uri());
+    context
+        .tool_install()
+        .arg("simple-launcher")
+        .arg("--index-url")
+        .arg(&index_url)
+        .env(EnvVars::PATH, bin_dir.as_os_str())
+        .assert()
+        .success();
+
+    server.reset().await;
+    Mock::given(method("GET"))
+        .and(path("/simple/simple-launcher/"))
+        .respond_with(ResponseTemplate::new(401))
+        .mount(&server)
+        .await;
+
+    for quiet in [None, Some("-q"), Some("-qq")] {
+        let mut command = context.tool_upgrade();
+        command
+            .arg("simple-launcher>0.1.0")
+            .arg("--index-url")
+            .arg(&index_url)
+            .arg("--no-cache")
+            .env(EnvVars::PATH, bin_dir.as_os_str());
+        if let Some(quiet) = quiet {
+            command.arg(quiet);
+        }
+        let assertion = command.assert().code(1);
+        if quiet == Some("-qq") {
+            assertion.stderr("");
+        } else {
+            assertion
+                .stderr(predicate::str::contains(
+                    "error: Failed to upgrade simple-launcher",
+                ))
+                .stderr(predicate::str::contains("hint: An index URL"))
+                .stderr(predicate::str::contains("401 Unauthorized"));
+        }
+    }
+
+    Ok(())
+}
+
 /// Ensure that `tool upgrade` verifies distributions against its newly generated tool lock.
 ///
 /// The initial install and upgrade use the same index URL so that the installed distribution's
