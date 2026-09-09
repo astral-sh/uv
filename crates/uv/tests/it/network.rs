@@ -10,7 +10,6 @@ use assert_fs::fixture::{ChildPath, FileWriteStr, PathChild};
 use async_zip::base::write::ZipFileWriter;
 use async_zip::{Compression, ZipEntryBuilder};
 use bytes::Bytes;
-use futures::io::AsyncWriteExt;
 use http::StatusCode;
 use http::header::{ACCEPT_RANGES, CONTENT_LENGTH, CONTENT_RANGE, ETAG, IF_RANGE, RANGE};
 use http_body_util::combinators::BoxBody;
@@ -191,12 +190,12 @@ async fn mixed_error_server() -> (MockServer, String) {
 
 type StreamingResponse = hyper::Response<BoxBody<Bytes, Infallible>>;
 
-/// Emit some bytes and then stall until the client times out.
-fn stalled_body(bytes: Bytes) -> BoxBody<Bytes, Infallible> {
+/// Emit some bytes, then wait before ending the response body.
+fn delayed_body(bytes: Bytes, delay: Duration) -> BoxBody<Bytes, Infallible> {
     let (tx, rx) = tokio::sync::mpsc::channel(1);
     tokio::spawn(async move {
         let _ = tx.send(Ok(Frame::data(bytes))).await;
-        tokio::time::sleep(Duration::from_mins(1)).await;
+        tokio::time::sleep(delay).await;
     });
     StreamBody::new(ReceiverStream::new(rx)).boxed()
 }
@@ -206,7 +205,7 @@ fn time_out_response(
 ) -> Result<StreamingResponse, http::Error> {
     hyper::Response::builder()
         .header("Content-Type", "text/html")
-        .body(stalled_body(Bytes::new()))
+        .body(delayed_body(Bytes::new(), Duration::from_mins(1)))
 }
 
 /// Run a streaming HTTP server on its own runtime so test subprocesses cannot starve it.
@@ -1106,8 +1105,8 @@ async fn retry_read_timeout_stream() {
     ");
 }
 
-/// A valid wheel whose stored entries and data descriptors require on-disk extraction.
-async fn wheel_requiring_download(generator: &str) -> Result<Bytes> {
+/// A wheel that supports both streaming and on-disk extraction.
+async fn test_wheel(generator: &str) -> Result<Bytes> {
     let wheel_metadata = format!(
         "Wheel-Version: 1.0\nGenerator: {generator}\nRoot-Is-Purelib: true\nTag: py3-none-any\n"
     );
@@ -1123,10 +1122,8 @@ async fn wheel_requiring_download(generator: &str) -> Result<Bytes> {
             b"ok-1.0.0.dist-info/RECORD,,\n".as_slice(),
         ),
     ] {
-        let entry = ZipEntryBuilder::new(path.to_string().into(), Compression::Stored);
-        let mut entry_writer = writer.write_entry_stream(entry).await?;
-        entry_writer.write_all(contents).await?;
-        entry_writer.close().await?;
+        let entry = ZipEntryBuilder::new(path.to_string().into(), Compression::Deflate);
+        writer.write_entry_whole(entry, contents).await?;
     }
     Ok(writer.close().await?.into())
 }
@@ -1148,7 +1145,7 @@ struct DownloadCase {
     range: RangeResponse,
     etag: Option<&'static str>,
     replace: bool,
-    /// Number of full download retries expected and allowed.
+    /// Retry limit for both paths, and the number of retries expected after falling back.
     full_retries: usize,
 }
 
@@ -1163,7 +1160,8 @@ impl Default for DownloadCase {
     }
 }
 
-/// Serve metadata normally, then interrupt the second full GET after streaming extraction fails.
+/// Serve metadata normally, then truncate full responses until streaming retries are exhausted.
+/// Interrupt the first download-to-file response with a timeout.
 /// Subsequent requests exercise the configured continuation or full-download fallback.
 fn wheel_response(
     request: &hyper::Request<hyper::body::Incoming>,
@@ -1172,7 +1170,8 @@ fn wheel_response(
     case: DownloadCase,
     full_get_count: &AtomicUsize,
 ) -> Result<StreamingResponse, http::Error> {
-    let resuming = full_get_count.load(Ordering::Relaxed) >= 2;
+    let streaming_attempts = 1 + case.full_retries;
+    let resuming = full_get_count.load(Ordering::Relaxed) > streaming_attempts;
     let (wheel, etag) = if resuming && let Some(replacement) = replacement {
         (replacement, Some("\"replacement\""))
     } else {
@@ -1243,19 +1242,30 @@ fn wheel_response(
             .body(http_body_util::Full::new(bytes).boxed());
     }
     response = response.header(CONTENT_LENGTH, size);
-    if full_get_count.fetch_add(1, Ordering::Relaxed) != 1 {
+    let full_get = full_get_count.fetch_add(1, Ordering::Relaxed);
+    if full_get < streaming_attempts {
+        // Give Hyper time to flush the partial body before closing short of Content-Length.
+        return response.body(delayed_body(
+            wheel.slice(..size / 2),
+            Duration::from_millis(50),
+        ));
+    }
+    if full_get > streaming_attempts {
         return response.body(http_body_util::Full::new(wheel.clone()).boxed());
     }
     if !matches!(case.range, RangeResponse::NotAdvertised) {
         response = response.header(ACCEPT_RANGES, "bytes");
     }
-    response.body(stalled_body(wheel.slice(..size / 2)))
+    response.body(delayed_body(
+        wheel.slice(..size / 2),
+        Duration::from_mins(1),
+    ))
 }
 
 async fn wheel_server(case: DownloadCase) -> Result<(String, impl Drop, Arc<AtomicUsize>, String)> {
-    let wheel = wheel_requiring_download("test").await?;
+    let wheel = test_wheel("test").await?;
     let replacement = if case.replace {
-        Some(wheel_requiring_download("next").await?)
+        Some(test_wheel("next").await?)
     } else {
         None
     };
@@ -1293,16 +1303,16 @@ async fn assert_wheel_download(case: DownloadCase) -> Result<()> {
         exit_code: 0 (success)
         ----- stderr -----
         Resolved 1 package in [TIME]
-        WARN Streaming unsupported for ok @ http://[LOCALHOST]/ok-1.0.0-py3-none-any.whl; downloading wheel to disk (Invalid zip file structure)
+        WARN Streaming failed for ok @ http://[LOCALHOST]/ok-1.0.0-py3-none-any.whl; downloading wheel to disk (I/O operation failed during extraction)
         Prepared 1 package in [TIME]
         Installed 1 package in [TIME]
          + ok==1.0.0 (from http://[LOCALHOST]/ok-1.0.0-py3-none-any.whl)
         ");
     }
-    // The first full GET reaches the extraction fallback; the second is interrupted.
+    // Both streaming and the download fallback use their configured full-request retry budgets.
     assert_eq!(
         full_get_count.load(Ordering::Relaxed),
-        2 + case.full_retries
+        2 * (1 + case.full_retries)
     );
     Ok(())
 }
@@ -1424,7 +1434,7 @@ async fn direct_url_invalid_range_does_not_bypass_retry() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
     Resolved 1 package in [TIME]
-    WARN Streaming unsupported for ok @ http://[LOCALHOST]/ok-1.0.0-py3-none-any.whl; downloading wheel to disk (Invalid zip file structure)
+    WARN Streaming failed for ok @ http://[LOCALHOST]/ok-1.0.0-py3-none-any.whl; downloading wheel to disk (I/O operation failed during extraction)
     WARN Invalid range request response from server that declares HTTP range request support, abandoning resumed download: http://[LOCALHOST]/ok-1.0.0-py3-none-any.whl
       × Failed to download `ok @ http://[LOCALHOST]/ok-1.0.0-py3-none-any.whl`
       ├─▶ Failed to write to the distribution cache
