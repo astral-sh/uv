@@ -193,24 +193,52 @@ pub(crate) struct ValidatedWheelDestination {
 }
 
 impl ValidatedWheelDestination {
+    /// Validate a wheel subtree that maps directly onto a trusted installation root.
+    fn at_root(source: &Path, root: &Path) -> Result<Self, Error> {
+        Self::new(source, root, Path::new(""))
+    }
+
+    /// Validate a wheel subtree that maps below a trusted installation root.
+    fn under_root(source: &Path, root: &Path, relative: &Path) -> Result<Self, Error> {
+        Self::new(source, root, relative)
+    }
+
     /// Check that merging a wheel subtree into its destination cannot follow a directory symlink.
-    fn new(source: &Path, destination: &Path) -> Result<Self, Error> {
+    fn new(source: &Path, root: &Path, relative: &Path) -> Result<Self, Error> {
+        let (destination, min_depth) = if relative.as_os_str().is_empty() {
+            (root.to_path_buf(), 1)
+        } else {
+            let Some(destination) = normalize_path_under(root.join(relative), root) else {
+                return Err(Error::InvalidWheel(format!(
+                    "Wheel destination escapes its installation root: {}",
+                    relative.simplified_display()
+                )));
+            };
+            (destination, 0)
+        };
+
         if source.is_dir() {
             // Merging through a pre-existing directory symlink would write wheel files outside the
-            // environment. Check every directory before linking or moving any files.
-            for entry in WalkDir::new(source).min_depth(1) {
+            // environment. The installation root is trusted, but any mapped directory beneath it
+            // must be checked before linking or moving any files.
+            for entry in WalkDir::new(source).min_depth(min_depth) {
                 let entry = entry?;
                 if !entry.file_type().is_dir() {
                     continue;
                 }
 
                 let relative = relative_to(entry.path(), source)?;
-                let Some(target) = normalize_path_under(destination.join(&relative), destination)
-                else {
-                    return Err(Error::InvalidWheel(format!(
-                        "Wheel directory entry escapes its destination: {}",
-                        relative.simplified_display()
-                    )));
+                let target = if relative.as_os_str().is_empty() {
+                    destination.clone()
+                } else {
+                    let Some(target) = normalize_path_under(destination.join(&relative), root)
+                    else {
+                        return Err(Error::InvalidWheel(format!(
+                            "Wheel directory entry escapes its destination: {}",
+                            relative.simplified_display()
+                        )));
+                    };
+                    target
                 };
                 match fs::symlink_metadata(&target) {
                     Ok(metadata) if metadata.file_type().is_symlink() => {
@@ -226,9 +254,7 @@ impl ValidatedWheelDestination {
             }
         }
 
-        Ok(Self {
-            path: destination.to_path_buf(),
-        })
+        Ok(Self { path: destination })
     }
 
     pub(crate) fn as_path(&self) -> &Path {
@@ -283,25 +309,26 @@ impl<'wheel> ValidatedWheel<'wheel> {
             }
         }
 
-        let destination = ValidatedWheelDestination::new(wheel, destination)?;
+        let destination = ValidatedWheelDestination::at_root(wheel, destination)?;
         let installed_data_dir = destination
             .as_path()
             .join(format!("{dist_info_prefix}.data"));
         let data_destinations = ValidatedWheelDataDestinations {
-            data: ValidatedWheelDestination::new(&data_dir.join("data"), &layout.scheme.data)?,
-            scripts: ValidatedWheelDestination::new(
+            data: ValidatedWheelDestination::at_root(&data_dir.join("data"), &layout.scheme.data)?,
+            scripts: ValidatedWheelDestination::at_root(
                 &data_dir.join("scripts"),
                 &layout.scheme.scripts,
             )?,
-            headers: ValidatedWheelDestination::new(
+            headers: ValidatedWheelDestination::under_root(
                 &data_dir.join("headers"),
-                &layout.scheme.include.join(dist_name.as_str()),
+                &layout.scheme.include,
+                Path::new(dist_name.as_str()),
             )?,
-            purelib: ValidatedWheelDestination::new(
+            purelib: ValidatedWheelDestination::at_root(
                 &data_dir.join("purelib"),
                 &layout.scheme.purelib,
             )?,
-            platlib: ValidatedWheelDestination::new(
+            platlib: ValidatedWheelDestination::at_root(
                 &data_dir.join("platlib"),
                 &layout.scheme.platlib,
             )?,
