@@ -7691,7 +7691,6 @@ dependencies = [
  "rustc-hash",
  "schemars",
  "serde",
- "serde-untagged",
  "tempfile",
  "thiserror",
  "tokio",

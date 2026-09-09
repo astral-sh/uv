@@ -9,7 +9,7 @@ use uv_pep440::Version;
 use uv_pep508::MarkerTree;
 
 use super::{
-    DependencyExclusion, DependencyModifierScope, DependencyModifiers, DependencyOverride,
+    DependencyModifierScope, DependencyModifiers, ExcludeDependency, Override,
     ScopedOverrideSourceError,
 };
 
@@ -58,16 +58,16 @@ impl PackageModifiers {
 impl DependencyModifierIndex {
     pub(super) fn insert_override(
         &mut self,
-        override_entry: &DependencyOverride,
+        override_entry: &Override,
     ) -> Result<(), ScopedOverrideSourceError> {
         match override_entry {
-            DependencyOverride::Requirement(requirement) => {
+            Override::Requirement(requirement) => {
                 self.global_overrides
                     .entry(requirement.name.clone())
                     .or_default()
                     .push(requirement.as_ref().clone());
             }
-            DependencyOverride::Package(package) => {
+            Override::Package(package) => {
                 for requirement in &package.dependencies {
                     match &requirement.source {
                         RequirementSource::Registry { index: None, .. } => {}
@@ -77,7 +77,11 @@ impl DependencyModifierIndex {
                                 dependency: requirement.name.clone(),
                             });
                         }
-                        _ => {
+                        RequirementSource::Url { .. }
+                        | RequirementSource::GitDirectory { .. }
+                        | RequirementSource::GitPath { .. }
+                        | RequirementSource::Path { .. }
+                        | RequirementSource::Directory { .. } => {
                             return Err(ScopedOverrideSourceError::Url {
                                 package: package.package.name.clone(),
                                 dependency: requirement.name.clone(),
@@ -103,12 +107,12 @@ impl DependencyModifierIndex {
         Ok(())
     }
 
-    pub(super) fn insert_exclusion(&mut self, exclusion: &DependencyExclusion) {
+    pub(super) fn insert_exclusion(&mut self, exclusion: &ExcludeDependency) {
         match exclusion {
-            DependencyExclusion::Dependency(dependency) => {
+            ExcludeDependency::Dependency(dependency) => {
                 self.global_exclusions.insert(dependency.clone());
             }
-            DependencyExclusion::Package(package) => {
+            ExcludeDependency::Package(package) => {
                 let modifiers = self.scoped.entry(package.package.name.clone()).or_default();
                 let exclusions = if let Some(version) = package.package.version.clone() {
                     modifiers.exclusion_versions.entry(version).or_default()
@@ -173,10 +177,14 @@ impl DependencyModifierIndex {
             return Either::Left(std::iter::once(Cow::Borrowed(requirement)));
         };
 
+        // ASSUMPTION: There is one `extra = "..."`, and it's either the only marker or part
+        // of the main conjunction.
         let Some(extra_expression) = requirement.marker.top_level_extra() else {
             return Either::Right(Either::Left(overrides.iter().map(Cow::Borrowed)));
         };
 
+        // When the original requirement is an optional dependency, the override(s) need to
+        // be optional for the same extra, otherwise we activate extras that should be inactive.
         Either::Right(Either::Right(overrides.iter().map(
             move |override_requirement| {
                 let marker = MarkerTree::expression(extra_expression.clone())
@@ -201,9 +209,7 @@ impl DependencyModifiers {
     }
 
     /// Return all scoped override [`Requirement`]s that are not excluded in their scope.
-    pub fn scoped_overrides(
-        &self,
-    ) -> impl Iterator<Item = (&PackageName, Option<&Version>, &Requirement)> {
+    pub fn scoped_overrides(&self) -> impl Iterator<Item = &Requirement> {
         self.index
             .scoped
             .iter()
@@ -212,16 +218,14 @@ impl DependencyModifiers {
                     .overrides
                     .iter()
                     .flat_map(|overrides| overrides.values().flatten())
-                    .filter_map(move |requirement| {
-                        (!self.is_excluded(&requirement.name)
-                            && !modifiers.is_versionless_override_excluded(&requirement.name))
-                        .then_some((package, None, requirement))
+                    .filter(move |requirement| {
+                        !self.is_excluded(&requirement.name)
+                            && !modifiers.is_versionless_override_excluded(&requirement.name)
                     })
                     .chain(modifiers.override_versions.iter().flat_map(
                         move |(version, overrides)| {
-                            overrides.values().flatten().filter_map(move |requirement| {
-                                (!self.is_excluded_for(package, version, &requirement.name))
-                                    .then_some((package, Some(version), requirement))
+                            overrides.values().flatten().filter(move |requirement| {
+                                !self.is_excluded_for(package, version, &requirement.name)
                             })
                         },
                     ))
