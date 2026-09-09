@@ -421,7 +421,7 @@ jobs:
           # Write and read notes from a file to avoid quoting breaking things
           echo "$ANNOUNCEMENT_BODY" > $RUNNER_TEMP/notes.txt
 
-          jq -r '(["dist-manifest.json"] + [.releases[].artifacts[]])[] | "artifacts/\(.)"' artifacts/dist-manifest.json > "$RUNNER_TEMP/release-assets.txt"
+          scripts/dist-manifest-to-files.sh artifacts/dist-manifest.json > "$RUNNER_TEMP/release-assets.txt"
           mapfile -t assets < "$RUNNER_TEMP/release-assets.txt"
           gh release create "${NEEDS_PLAN_OUTPUTS_TAG}" --target "$RELEASE_COMMIT" $PRERELEASE_FLAG --title "$ANNOUNCEMENT_TITLE" --notes-file "$RUNNER_TEMP/notes.txt" "${assets[@]}"
 
