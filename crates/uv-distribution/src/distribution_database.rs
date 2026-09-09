@@ -1565,6 +1565,8 @@ fn content_length(response: &reqwest::Response) -> Option<u64> {
 }
 
 /// Return a syntactically valid strong `ETag` that can validate a byte range.
+///
+/// TODO: De-dupe with `uv_client::httpcache::ETag::parse`?
 fn strong_etag(response: &reqwest::Response) -> Option<&HeaderValue> {
     let etag = response.headers().get(ETAG)?;
     let value = etag.as_bytes().strip_prefix(b"\"")?.strip_suffix(b"\"")?;
