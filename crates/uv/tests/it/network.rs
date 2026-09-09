@@ -7,8 +7,6 @@ use std::time::{Duration, Instant};
 
 use anyhow::Result;
 use assert_fs::fixture::{ChildPath, FileWriteStr, PathChild};
-use async_zip::base::write::ZipFileWriter;
-use async_zip::{Compression, ZipEntryBuilder};
 use bytes::Bytes;
 use http::StatusCode;
 use http::header::{ACCEPT_RANGES, CONTENT_LENGTH, CONTENT_RANGE, ETAG, IF_RANGE, RANGE};
@@ -1105,29 +1103,6 @@ async fn retry_read_timeout_stream() {
     ");
 }
 
-/// A wheel that supports both streaming and on-disk extraction.
-async fn test_wheel(generator: &str) -> Result<Bytes> {
-    let wheel_metadata = format!(
-        "Wheel-Version: 1.0\nGenerator: {generator}\nRoot-Is-Purelib: true\nTag: py3-none-any\n"
-    );
-    let mut writer = ZipFileWriter::new(Vec::new());
-    for (path, contents) in [
-        ("ok-1.0.0.dist-info/WHEEL", wheel_metadata.as_bytes()),
-        (
-            "ok-1.0.0.dist-info/METADATA",
-            b"Metadata-Version: 2.1\nName: ok\nVersion: 1.0.0\n".as_slice(),
-        ),
-        (
-            "ok-1.0.0.dist-info/RECORD",
-            b"ok-1.0.0.dist-info/RECORD,,\n".as_slice(),
-        ),
-    ] {
-        let entry = ZipEntryBuilder::new(path.to_string().into(), Compression::Deflate);
-        writer.write_entry_whole(entry, contents).await?;
-    }
-    Ok(writer.close().await?.into())
-}
-
 #[derive(Clone, Copy, Default)]
 enum RangeResponse {
     #[default]
@@ -1262,10 +1237,19 @@ fn wheel_response(
     ))
 }
 
-async fn wheel_server(case: DownloadCase) -> Result<(String, impl Drop, Arc<AtomicUsize>, String)> {
-    let wheel = test_wheel("test").await?;
+fn wheel_server(
+    context: &TestContext,
+    case: DownloadCase,
+) -> Result<(String, impl Drop, Arc<AtomicUsize>, String)> {
+    let fixtures = context.workspace_root.join("test/links");
+    let wheel = Bytes::from(fs_err::read(
+        fixtures.join("build_tag-1.0.0-1-py2.py3-none-any.whl"),
+    )?);
+    // These builds have the same package version and length, but different contents.
     let replacement = if case.replace {
-        Some(test_wheel("next").await?)
+        Some(Bytes::from(fs_err::read(
+            fixtures.join("build_tag-1.0.0-3-py2.py3-none-any.whl"),
+        )?))
     } else {
         None
     };
@@ -1284,12 +1268,12 @@ async fn wheel_server(case: DownloadCase) -> Result<(String, impl Drop, Arc<Atom
     Ok((server, guard, requests, hash))
 }
 
-async fn assert_wheel_download(case: DownloadCase) -> Result<()> {
+fn assert_wheel_download(case: DownloadCase) -> Result<()> {
     let context = uv_test::test_context!("3.12");
-    let (server, _guard, full_get_count, hash) = wheel_server(case).await?;
-    let wheel_url = format!("{server}/ok-1.0.0-py3-none-any.whl");
+    let (server, _guard, full_get_count, hash) = wheel_server(&context, case)?;
+    let wheel_url = format!("{server}/build_tag-1.0.0-1-py2.py3-none-any.whl");
     let requirements = context.temp_dir.child("requirements.txt");
-    requirements.write_str(&format!("ok @ {wheel_url} --hash=sha256:{hash}\n"))?;
+    requirements.write_str(&format!("build-tag @ {wheel_url} --hash=sha256:{hash}\n"))?;
     allow_duplicates! {
         uv_snapshot!(context.filters(), context
             .pip_install()
@@ -1303,10 +1287,10 @@ async fn assert_wheel_download(case: DownloadCase) -> Result<()> {
         exit_code: 0 (success)
         ----- stderr -----
         Resolved 1 package in [TIME]
-        WARN Streaming failed for ok @ http://[LOCALHOST]/ok-1.0.0-py3-none-any.whl; downloading wheel to disk (I/O operation failed during extraction)
+        WARN Streaming failed for build-tag @ http://[LOCALHOST]/build_tag-1.0.0-1-py2.py3-none-any.whl; downloading wheel to disk (I/O operation failed during extraction)
         Prepared 1 package in [TIME]
         Installed 1 package in [TIME]
-         + ok==1.0.0 (from http://[LOCALHOST]/ok-1.0.0-py3-none-any.whl)
+         + build-tag==1.0.0 (from http://[LOCALHOST]/build_tag-1.0.0-1-py2.py3-none-any.whl)
         ");
     }
     // Both streaming and the download fallback use their configured full-request retry budgets.
@@ -1317,116 +1301,109 @@ async fn assert_wheel_download(case: DownloadCase) -> Result<()> {
     Ok(())
 }
 
-#[tokio::test]
-async fn direct_url_range_resume() -> Result<()> {
-    assert_wheel_download(DownloadCase::default()).await
+#[test]
+fn direct_url_range_resume() -> Result<()> {
+    assert_wheel_download(DownloadCase::default())
 }
 
-#[tokio::test]
-async fn direct_url_partial_range_resume() -> Result<()> {
+#[test]
+fn direct_url_partial_range_resume() -> Result<()> {
     assert_wheel_download(DownloadCase {
         range: RangeResponse::Limited { known_length: true },
         ..DownloadCase::default()
     })
-    .await
 }
 
-#[tokio::test]
-async fn direct_url_partial_range_resume_unknown_length() -> Result<()> {
+#[test]
+fn direct_url_partial_range_resume_unknown_length() -> Result<()> {
     assert_wheel_download(DownloadCase {
         range: RangeResponse::Limited {
             known_length: false,
         },
         ..DownloadCase::default()
     })
-    .await
 }
 
-#[tokio::test]
-async fn direct_url_ignored_range_resume() -> Result<()> {
+#[test]
+fn direct_url_ignored_range_resume() -> Result<()> {
     assert_wheel_download(DownloadCase {
         range: RangeResponse::Ignored,
         ..DownloadCase::default()
     })
-    .await
 }
 
-#[tokio::test]
-async fn direct_url_no_range_resume() -> Result<()> {
+#[test]
+fn direct_url_no_range_resume() -> Result<()> {
     assert_wheel_download(DownloadCase {
         range: RangeResponse::NotAdvertised,
         full_retries: 1,
         ..DownloadCase::default()
     })
-    .await
 }
 
-#[tokio::test]
-async fn direct_url_range_validator_changed() -> Result<()> {
+#[test]
+fn direct_url_range_validator_changed() -> Result<()> {
     assert_wheel_download(DownloadCase {
         replace: true,
         full_retries: 1,
         ..DownloadCase::default()
     })
-    .await
 }
 
-#[tokio::test]
-async fn direct_url_range_validator_changed_full_response() -> Result<()> {
+#[test]
+fn direct_url_range_validator_changed_full_response() -> Result<()> {
     assert_wheel_download(DownloadCase {
         range: RangeResponse::Ignored,
         replace: true,
         full_retries: 1,
         ..DownloadCase::default()
     })
-    .await
 }
 
-#[tokio::test]
-async fn direct_url_range_validator_missing() -> Result<()> {
+#[test]
+fn direct_url_range_validator_missing() -> Result<()> {
     assert_wheel_download(DownloadCase {
         etag: None,
         full_retries: 1,
         ..DownloadCase::default()
     })
-    .await
 }
 
-#[tokio::test]
-async fn direct_url_range_validator_weak() -> Result<()> {
+#[test]
+fn direct_url_range_validator_weak() -> Result<()> {
     assert_wheel_download(DownloadCase {
         etag: Some("W/\"wheel\""),
         full_retries: 1,
         ..DownloadCase::default()
     })
-    .await
 }
 
-#[tokio::test]
-async fn direct_url_range_validator_invalid() -> Result<()> {
+#[test]
+fn direct_url_range_validator_invalid() -> Result<()> {
     assert_wheel_download(DownloadCase {
         etag: Some("unquoted"),
         full_retries: 1,
         ..DownloadCase::default()
     })
-    .await
 }
 
 /// An invalid continuation response does not bypass regular retry handling.
-#[tokio::test]
-async fn direct_url_invalid_range_does_not_bypass_retry() -> Result<()> {
+#[test]
+fn direct_url_invalid_range_does_not_bypass_retry() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
-    let (server, _guard, _, _) = wheel_server(DownloadCase {
-        range: RangeResponse::InvalidContentRange,
-        ..DownloadCase::default()
-    })
-    .await?;
+    let (server, _guard, _, _) = wheel_server(
+        &context,
+        DownloadCase {
+            range: RangeResponse::InvalidContentRange,
+            ..DownloadCase::default()
+        },
+    )?;
 
-    let wheel_url = format!("{server}/ok-1.0.0-py3-none-any.whl");
+    let wheel_url = format!("{server}/build_tag-1.0.0-1-py2.py3-none-any.whl");
     uv_snapshot!(context.filters(), context
         .pip_install()
-        .arg(format!("ok @ {wheel_url}"))
+        .arg(format!("build-tag @ {wheel_url}"))
         .env(EnvVars::UV_HTTP_RETRIES, "0")
         .env(EnvVars::UV_HTTP_TIMEOUT, "1")
         .env(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY, "true")
@@ -1434,9 +1411,9 @@ async fn direct_url_invalid_range_does_not_bypass_retry() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
     Resolved 1 package in [TIME]
-    WARN Streaming failed for ok @ http://[LOCALHOST]/ok-1.0.0-py3-none-any.whl; downloading wheel to disk (I/O operation failed during extraction)
-    WARN Invalid range request response from server that declares HTTP range request support, abandoning resumed download: http://[LOCALHOST]/ok-1.0.0-py3-none-any.whl
-      × Failed to download `ok @ http://[LOCALHOST]/ok-1.0.0-py3-none-any.whl`
+    WARN Streaming failed for build-tag @ http://[LOCALHOST]/build_tag-1.0.0-1-py2.py3-none-any.whl; downloading wheel to disk (I/O operation failed during extraction)
+    WARN Invalid range request response from server that declares HTTP range request support, abandoning resumed download: http://[LOCALHOST]/build_tag-1.0.0-1-py2.py3-none-any.whl
+      × Failed to download `build-tag @ http://[LOCALHOST]/build_tag-1.0.0-1-py2.py3-none-any.whl`
       ├─▶ Failed to write to the distribution cache
       ╰─▶ Failed to download distribution due to network timeout. Try increasing UV_HTTP_TIMEOUT (current value: [TIME]).
     ");
