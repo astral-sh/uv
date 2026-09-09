@@ -914,6 +914,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         let download = |mut response: reqwest::Response| {
             async {
                 let progress_size = size.or_else(|| content_length(&response));
+                let mut download_size = content_length(&response).or(expected_size);
 
                 let progress = self.reporter.as_ref().map(|reporter| {
                     (
@@ -935,6 +936,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 ));
 
                 let mut resumed_at = None;
+                let mut resumed_range: Option<ContentRangeBytes> = None;
 
                 loop {
                     let supports_range_requests = response.status()
@@ -990,8 +992,28 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
 
                     actual_size += hasher.bytes_read();
 
-                    let Err(err) = copy_result else {
-                        break;
+                    let err = match copy_result {
+                        Ok(_) => {
+                            let Some(range) = resumed_range else {
+                                break;
+                            };
+                            if actual_size != range.last_byte + 1 {
+                                return Err(Error::CacheWrite(io::Error::new(
+                                    io::ErrorKind::UnexpectedEof,
+                                    "Range response length does not match Content-Range",
+                                )));
+                            }
+                            if actual_size == range.complete_length {
+                                break;
+                            }
+                            // A successful range response may cover only part of the requested
+                            // bytes. Keep requesting the remainder before extracting the wheel.
+                            Error::CacheWrite(io::Error::new(
+                                io::ErrorKind::UnexpectedEof,
+                                "Range response did not complete the download",
+                            ))
+                        }
+                        Err(err) => err,
                     };
                     // Only resume inline when range support is usable; otherwise let the outer
                     // retry machinery retry the full download.
@@ -1018,15 +1040,23 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                         .await?;
                     resumed_response.error_for_status_ref()?;
 
-                    if resumed_response.status() == reqwest::StatusCode::PARTIAL_CONTENT
-                        && !content_range_starts_at(&resumed_response, offset)
+                    resumed_range = if resumed_response.status()
+                        == reqwest::StatusCode::PARTIAL_CONTENT
                     {
-                        warn!(
-                            "Invalid range request response from server that declares HTTP range \
-                             request support, abandoning resumed download: {download_url}"
-                        );
-                        return Err(err);
-                    }
+                        let Some(range) = content_range(&resumed_response, offset, download_size)
+                        else {
+                            warn!(
+                                "Invalid range request response from server that declares HTTP range \
+                                 request support, abandoning resumed download: {download_url}"
+                            );
+                            return Err(err);
+                        };
+                        download_size = Some(range.complete_length);
+                        Some(range)
+                    } else {
+                        download_size = content_length(&resumed_response).or(expected_size);
+                        None
+                    };
 
                     response = resumed_response;
                     resumed_at = Some(offset);
@@ -1519,23 +1549,39 @@ fn content_length(response: &reqwest::Response) -> Option<u64> {
         .and_then(|val| val.parse::<u64>().ok())
 }
 
-/// Returns `true` if `response` is a range response starting at `offset`.
-fn content_range_starts_at(response: &reqwest::Response, offset: u64) -> bool {
-    let Some(content_range) = response
+/// Return the bounds of a range response starting at `offset` with a known complete length.
+fn content_range(
+    response: &reqwest::Response,
+    offset: u64,
+    download_size: Option<u64>,
+) -> Option<ContentRangeBytes> {
+    let range = response
         .headers()
         .get(reqwest::header::CONTENT_RANGE)
         .and_then(|value| value.to_str().ok())
-        .and_then(ContentRange::parse)
-    else {
-        return false;
+        .and_then(ContentRange::parse)?;
+
+    let range = match range {
+        ContentRange::Bytes(range) => range,
+        ContentRange::UnboundBytes(ContentRangeUnbound {
+            first_byte,
+            last_byte,
+        }) => ContentRangeBytes {
+            first_byte,
+            last_byte,
+            complete_length: download_size?,
+        },
+        ContentRange::Unsatisfied(_) => return None,
     };
 
-    matches!(
-        content_range,
-        ContentRange::Bytes(ContentRangeBytes { first_byte, .. })
-            | ContentRange::UnboundBytes(ContentRangeUnbound { first_byte, .. })
-            if first_byte == offset
-    )
+    if range.first_byte != offset
+        || range.last_byte >= range.complete_length
+        || download_size.is_some_and(|size| size != range.complete_length)
+    {
+        return None;
+    }
+
+    Some(range)
 }
 
 /// An asynchronous reader that reports progress as bytes are read.

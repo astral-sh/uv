@@ -1126,6 +1126,8 @@ async fn wheel_requiring_download() -> Vec<u8> {
 #[derive(Clone, Copy)]
 enum RangeResponse {
     Supported,
+    Limited,
+    LimitedUnknownLength,
     Ignored,
     NotAdvertised,
     InvalidContentRange,
@@ -1196,6 +1198,29 @@ fn wheel_server(wheel: Vec<u8>, range_response: RangeResponse) -> (String, impl 
                                                     )
                                                 })
                                                 .unwrap();
+                                            let end = match range_response {
+                                                RangeResponse::Limited | RangeResponse::LimitedUnknownLength
+                                                    if full_get_count.load(Ordering::Relaxed) >= 2 =>
+                                                {
+                                                    end.min(start + size / 4 - 1)
+                                                }
+                                                RangeResponse::Supported
+                                                | RangeResponse::Limited
+                                                | RangeResponse::LimitedUnknownLength
+                                                | RangeResponse::Ignored
+                                                | RangeResponse::NotAdvertised
+                                                | RangeResponse::InvalidContentRange => end,
+                                            };
+                                            let complete_length = match range_response {
+                                                RangeResponse::LimitedUnknownLength
+                                                    if full_get_count.load(Ordering::Relaxed) >= 2 => "*".to_string(),
+                                                RangeResponse::Supported
+                                                | RangeResponse::Limited
+                                                | RangeResponse::LimitedUnknownLength
+                                                | RangeResponse::Ignored
+                                                | RangeResponse::NotAdvertised
+                                                | RangeResponse::InvalidContentRange => size.to_string(),
+                                            };
                                             let content_range_start = if matches!(
                                                 range_response,
                                                 RangeResponse::InvalidContentRange
@@ -1208,7 +1233,7 @@ fn wheel_server(wheel: Vec<u8>, range_response: RangeResponse) -> (String, impl 
                                             let bytes = wheel.slice(start..=end);
                                             return Ok::<_, Infallible>(hyper::Response::builder()
                                                 .status(StatusCode::PARTIAL_CONTENT)
-                                                .header(CONTENT_RANGE, format!("bytes {content_range_start}-{end}/{size}"))
+                                                .header(CONTENT_RANGE, format!("bytes {content_range_start}-{end}/{complete_length}"))
                                                 .header(CONTENT_LENGTH, bytes.len().to_string())
                                                 .body(http_body_util::Full::new(bytes).boxed())
                                                 .unwrap());
@@ -1233,6 +1258,8 @@ fn wheel_server(wheel: Vec<u8>, range_response: RangeResponse) -> (String, impl 
                                         if matches!(
                                             range_response,
                                             RangeResponse::Supported
+                                                | RangeResponse::Limited
+                                                | RangeResponse::LimitedUnknownLength
                                                 | RangeResponse::Ignored
                                                 | RangeResponse::InvalidContentRange
                                         ) {
@@ -1263,6 +1290,72 @@ async fn direct_url_range_resume() -> Result<()> {
     let wheel = wheel_requiring_download().await;
     let hash = hex::encode(Sha256::digest(&wheel));
     let (server, _guard) = wheel_server(wheel, RangeResponse::Supported);
+
+    let wheel_url = format!("{server}/ok-1.0.0-py3-none-any.whl");
+    let requirements = context.temp_dir.child("requirements.txt");
+    requirements.write_str(&format!("ok @ {wheel_url} --hash=sha256:{hash}\n"))?;
+    uv_snapshot!(context.filters(), context
+        .pip_install()
+        .arg("-r")
+        .arg(requirements.path())
+        .arg("--require-hashes")
+        .env(EnvVars::UV_HTTP_RETRIES, "0")
+        .env(EnvVars::UV_HTTP_TIMEOUT, "1")
+        .env(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY, "true")
+        .env(EnvVars::RUST_LOG, "warn"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    WARN Streaming unsupported for ok @ http://[LOCALHOST]/ok-1.0.0-py3-none-any.whl; downloading wheel to disk (Invalid zip file structure)
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + ok==1.0.0 (from http://[LOCALHOST]/ok-1.0.0-py3-none-any.whl)
+    ");
+
+    Ok(())
+}
+
+/// Complete the wheel when each range response supplies only part of the remaining bytes.
+#[tokio::test]
+async fn direct_url_partial_range_resume() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let wheel = wheel_requiring_download().await;
+    let hash = hex::encode(Sha256::digest(&wheel));
+    let (server, _guard) = wheel_server(wheel, RangeResponse::Limited);
+
+    let wheel_url = format!("{server}/ok-1.0.0-py3-none-any.whl");
+    let requirements = context.temp_dir.child("requirements.txt");
+    requirements.write_str(&format!("ok @ {wheel_url} --hash=sha256:{hash}\n"))?;
+    uv_snapshot!(context.filters(), context
+        .pip_install()
+        .arg("-r")
+        .arg(requirements.path())
+        .arg("--require-hashes")
+        .env(EnvVars::UV_HTTP_RETRIES, "0")
+        .env(EnvVars::UV_HTTP_TIMEOUT, "1")
+        .env(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY, "true")
+        .env(EnvVars::RUST_LOG, "warn"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    WARN Streaming unsupported for ok @ http://[LOCALHOST]/ok-1.0.0-py3-none-any.whl; downloading wheel to disk (Invalid zip file structure)
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + ok==1.0.0 (from http://[LOCALHOST]/ok-1.0.0-py3-none-any.whl)
+    ");
+
+    Ok(())
+}
+
+/// Use the original content length when partial responses omit the complete length.
+#[tokio::test]
+async fn direct_url_partial_range_resume_unknown_length() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let wheel = wheel_requiring_download().await;
+    let hash = hex::encode(Sha256::digest(&wheel));
+    let (server, _guard) = wheel_server(wheel, RangeResponse::LimitedUnknownLength);
 
     let wheel_url = format!("{server}/ok-1.0.0-py3-none-any.whl");
     let requirements = context.temp_dir.child("requirements.txt");
