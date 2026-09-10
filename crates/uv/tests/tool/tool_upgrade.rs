@@ -1652,7 +1652,7 @@ async fn mount_simple_launcher_index(server: &MockServer, hash: &str, wheel: &[u
 }
 
 #[tokio::test]
-async fn tool_upgrade_resolution_hints_quiet_modes() -> Result<()> {
+async fn tool_upgrade_resolution_hints() -> Result<()> {
     let context = uv_test::test_context!("3.12").with_tool_dirs();
     let bin_dir = context.temp_dir.child("bin");
     let wheel = fs_err::read(
@@ -1684,29 +1684,19 @@ async fn tool_upgrade_resolution_hints_quiet_modes() -> Result<()> {
         .mount(&server)
         .await;
 
-    for quiet in [None, Some("-q"), Some("-qq")] {
-        let mut command = context.tool_upgrade();
-        command
-            .arg("simple-launcher>0.1.0")
-            .arg("--index-url")
-            .arg(&index_url)
-            .arg("--no-cache")
-            .env(EnvVars::PATH, bin_dir.as_os_str());
-        if let Some(quiet) = quiet {
-            command.arg(quiet);
-        }
-        let assertion = command.assert().code(1);
-        if quiet == Some("-qq") {
-            assertion.stderr("");
-        } else {
-            assertion
-                .stderr(predicate::str::contains(
-                    "error: Failed to upgrade simple-launcher",
-                ))
-                .stderr(predicate::str::contains("hint: An index URL"))
-                .stderr(predicate::str::contains("401 Unauthorized"));
-        }
-    }
+    uv_snapshot!(context.filters(), context.tool_upgrade()
+        .arg("simple-launcher>0.1.0")
+        .arg("--index-url")
+        .arg(&index_url)
+        .arg("--no-cache")
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: Failed to upgrade simple-launcher
+      Caused by: Because simple-launcher was not found in the package registry and you require simple-launcher>0.1.0, we can conclude that your requirements are unsatisfiable.
+
+    hint: An index URL (http://[LOCALHOST]/simple) could not be queried due to a lack of valid authentication credentials (401 Unauthorized)
+    ");
 
     Ok(())
 }
