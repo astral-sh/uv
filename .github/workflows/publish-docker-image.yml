@@ -26,6 +26,7 @@ permissions:
 
 jobs:
   publish:
+    name: publish ${{ fromJson(inputs.image).name }}
     # Development publication cannot select the production repositories.
     # Production publication requires the main-branch release workflow in `astral-sh/uv`.
     if: ${{ inputs.push-dev || (github.repository == 'astral-sh/uv' && github.event_name == 'workflow_dispatch' && github.workflow_ref == 'astral-sh/uv/.github/workflows/release.yml@refs/heads/main') }}
