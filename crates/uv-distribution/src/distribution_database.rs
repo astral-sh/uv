@@ -659,30 +659,24 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             }
         }
 
-        let declared_hashes = if hashes.collection == HashCollection::None
-            || hashes.validation != HashValidation::None
-        {
-            None
-        } else if let BuildableSource::Dist(SourceDist::DirectUrl(dist)) = source {
+        let url_hashes = if let BuildableSource::Dist(SourceDist::DirectUrl(dist)) = source {
             parse_url_hashes(&dist.url)
-        } else if let BuildableSource::Url(SourceUrl::Direct(source)) = source {
-            parse_url_hashes(source.url)
+        } else if let BuildableSource::Url(SourceUrl::Direct(url)) = source {
+            parse_url_hashes(url.url)
         } else {
             None
         };
 
-        // If resolving metadata requires a build, validate the declared hashes before executing
-        // the backend, even when the caller only requested hash collection.
         let build_hash_policy = match hashes.validation {
-            HashValidation::None => {
-                if let Some(hashes) = declared_hashes.as_ref() {
-                    ArchiveHashPolicy::All(hashes.as_slice())
-                } else if hashes.collection != HashCollection::None {
-                    ArchiveHashPolicy::Generate
-                } else {
-                    ArchiveHashPolicy::None
-                }
-            }
+            HashValidation::None => match hashes.collection {
+                HashCollection::None => ArchiveHashPolicy::None,
+                // If resolving metadata requires a build, validate any URL hash before executing
+                // the backend, even when the caller only requested hash collection.
+                HashCollection::Url | HashCollection::All => match url_hashes.as_ref() {
+                    Some(digests) => ArchiveHashPolicy::All(digests.as_slice()),
+                    None => ArchiveHashPolicy::Generate,
+                },
+            },
             HashValidation::Any(_) | HashValidation::All(_) => hashes.validation.into(),
         };
         let metadata = self
