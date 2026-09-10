@@ -1517,8 +1517,9 @@ checksum = "d0881ea181b1df73ff77ffaaf9c7544ecc11e82fba9b5f27b262a3c73a332555"
 
 [[package]]
 name = "editpe"
-version = "0.2.3"
-source = "git+https://github.com/zanieb/editpe?rev=e4a9afbf8b70d67ef31b1df9783d11b19eedc928#e4a9afbf8b70d67ef31b1df9783d11b19eedc928"
+version = "0.2.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "de488f8727e67269a918bcb5b35b1b9ee59b2ae2859743ffdd6288de9701c5e6"
 dependencies = [
  "debug-ignore",
  "foldhash 0.2.0",
