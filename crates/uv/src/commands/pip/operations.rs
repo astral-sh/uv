@@ -964,6 +964,7 @@ fn python_source_path_from_record(
 #[cfg(test)]
 mod tests {
     use super::{Error, python_source_path_from_record};
+    use insta::assert_snapshot;
     use std::path::{Path, PathBuf};
     use uv_normalize::PackageName;
 
@@ -1119,10 +1120,7 @@ mod tests {
         let error = Error::Prepare(uv_installer::PrepareError::NoBuild(
             PackageName::from_owned("demo".to_string())?,
         ));
-        assert_eq!(
-            error.to_string(),
-            "Building source distributions is disabled, but attempted to build `demo`"
-        );
+        assert_snapshot!(error, @"Building source distributions is disabled, but attempted to build `demo`");
         Ok(())
     }
 }

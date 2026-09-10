@@ -226,6 +226,8 @@ impl From<pip::operations::Error> for UvError {
 mod error_tests {
     use std::io::{Error, ErrorKind};
 
+    use insta::{allow_duplicates, assert_snapshot};
+
     use super::{UvError, pip, project};
 
     #[test]
@@ -243,7 +245,9 @@ mod error_tests {
             else {
                 panic!("operation classification changed with context");
             };
-            assert_eq!(error.to_string(), "Failed to resolve tool requirement");
+            allow_duplicates! {
+                assert_snapshot!(error, @"Failed to resolve tool requirement");
+            }
             assert!(error.downcast_ref::<pip::operations::Error>().is_some());
         }
     }
