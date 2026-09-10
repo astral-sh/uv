@@ -15,7 +15,7 @@ use http_body_util::{BodyExt, StreamBody};
 use hyper::body::Frame;
 use hyper::service::service_fn;
 use hyper_util::rt::TokioIo;
-use insta::allow_duplicates;
+use insta::{allow_duplicates, assert_snapshot};
 use serde_json::json;
 use sha2::{Digest, Sha256};
 use tokio_stream::wrappers::ReceiverStream;
@@ -1312,6 +1312,30 @@ fn assert_wheel_download(case: DownloadCase) -> Result<()> {
         full_get_count.load(Ordering::Relaxed),
         2 * (1 + case.full_retries)
     );
+
+    let site_packages = context.site_packages();
+    let build = if case.replace { "3" } else { "1" };
+    assert_eq!(
+        fs_err::read_to_string(site_packages.join("build_tag/__init__.py"))?,
+        format!("def main():\n    print(\"{build}\")\n"),
+    );
+    let metadata =
+        fs_err::read_to_string(site_packages.join("build_tag-1.0.0.dist-info/METADATA"))?;
+    let wheel = fs_err::read_to_string(site_packages.join("build_tag-1.0.0.dist-info/WHEEL"))?;
+    allow_duplicates! {
+        assert_snapshot!(metadata, @"
+        Metadata-Version: 2.3
+        Name: build-tag
+        Version: 1.0.0
+        ");
+        assert_snapshot!(wheel, @"
+        Wheel-Version: 1.0
+        Generator: hatchling 1.26.3
+        Root-Is-Purelib: true
+        Tag: py2-none-any
+        Tag: py3-none-any
+        ");
+    }
     Ok(())
 }
 
