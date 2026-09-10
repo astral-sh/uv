@@ -1,6 +1,7 @@
 # Build uv on all platforms.
 #
 # Generates both wheels (for PyPI) and archived binaries (for GitHub releases).
+# Creates `build-wheels-*`, `build-sdist-*`, and `build-github-archives-*` artifacts.
 #
 # Called from:
 # - .github/workflows/ci.yml (when release-relevant files change)
@@ -76,7 +77,7 @@ jobs:
       - name: "Upload sdist"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: wheels_uv-sdist
+          name: build-sdist-uv
           path: dist
 
       # uv-build
@@ -104,7 +105,7 @@ jobs:
       - name: "Upload sdist uv-build"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: wheels_uv_build-sdist
+          name: build-sdist-uv_build
           path: crates/uv-build/dist
 
   macos-x86_64:
@@ -142,7 +143,7 @@ jobs:
       - name: "Upload wheels"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: wheels_uv-x86_64-apple-darwin
+          name: build-wheels-uv-x86_64-apple-darwin
           path: dist
       - name: "Archive binary"
         run: |
@@ -158,7 +159,7 @@ jobs:
       - name: "Upload binary"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: artifacts-x86_64-apple-darwin
+          name: build-github-archives-x86_64-apple-darwin
           path: |
             *.tar.gz
             *.sha256
@@ -179,7 +180,7 @@ jobs:
       - name: "Upload wheels uv-build"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: wheels_uv_build-x86_64-apple-darwin
+          name: build-wheels-uv_build-x86_64-apple-darwin
           path: crates/uv-build/dist
 
   macos-aarch64:
@@ -238,7 +239,7 @@ jobs:
       - name: "Upload wheels"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: wheels_uv-aarch64-apple-darwin
+          name: build-wheels-uv-aarch64-apple-darwin
           path: dist
       - name: "Archive binary"
         run: |
@@ -254,7 +255,7 @@ jobs:
       - name: "Upload binary"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: artifacts-aarch64-apple-darwin
+          name: build-github-archives-aarch64-apple-darwin
           path: |
             *.tar.gz
             *.sha256
@@ -280,7 +281,7 @@ jobs:
       - name: "Upload wheels uv-build"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: wheels_uv_build-aarch64-apple-darwin
+          name: build-wheels-uv_build-aarch64-apple-darwin
           path: crates/uv-build/dist
 
   windows:
@@ -387,7 +388,7 @@ jobs:
       - name: "Upload wheels"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: wheels_uv-${{ matrix.platform.target }}
+          name: build-wheels-uv-${{ matrix.platform.target }}
           path: dist
       - name: "Archive binary"
         shell: bash
@@ -402,7 +403,7 @@ jobs:
       - name: "Upload binary"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: artifacts-${{ matrix.platform.target }}
+          name: build-github-archives-${{ matrix.platform.target }}
           path: |
             *.zip
             *.sha256
@@ -428,7 +429,7 @@ jobs:
       - name: "Upload wheels uv-build"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: wheels_uv_build-${{ matrix.platform.target }}
+          name: build-wheels-uv_build-${{ matrix.platform.target }}
           path: crates/uv-build/dist
 
   test-windows-aarch64:
@@ -443,7 +444,7 @@ jobs:
           architecture: arm64
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          pattern: wheels_*-aarch64-pc-windows-msvc
+          pattern: build-wheels-*-aarch64-pc-windows-msvc
           path: dist
           merge-multiple: true
       - name: "Test wheel"
@@ -541,7 +542,7 @@ jobs:
       - name: "Upload wheels"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: wheels_uv-${{ matrix.target }}
+          name: build-wheels-uv-${{ matrix.target }}
           path: dist
       - name: "Archive binary"
         shell: bash
@@ -559,7 +560,7 @@ jobs:
       - name: "Upload binary"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: artifacts-${{ matrix.target }}
+          name: build-github-archives-${{ matrix.target }}
           path: |
             *.tar.gz
             *.sha256
@@ -587,7 +588,7 @@ jobs:
       - name: "Upload wheels uv-build"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: wheels_uv_build-${{ matrix.target }}
+          name: build-wheels-uv_build-${{ matrix.target }}
           path: crates/uv-build/dist
 
   linux-arm:
@@ -685,7 +686,7 @@ jobs:
       - name: "Upload wheels"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: wheels_uv-${{ matrix.platform.target }}
+          name: build-wheels-uv-${{ matrix.platform.target }}
           path: dist
       - name: "Archive binary"
         shell: bash
@@ -703,7 +704,7 @@ jobs:
       - name: "Upload binary"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: artifacts-${{ matrix.platform.target }}
+          name: build-github-archives-${{ matrix.platform.target }}
           path: |
             *.tar.gz
             *.sha256
@@ -739,7 +740,7 @@ jobs:
       - name: "Upload wheels uv-build"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: wheels_uv_build-${{ matrix.platform.target }}
+          name: build-wheels-uv_build-${{ matrix.platform.target }}
           path: crates/uv-build/dist
 
   # Like `linux-arm`.
@@ -802,7 +803,7 @@ jobs:
       - name: "Upload wheels"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: wheels_uv-${{ matrix.platform.target }}
+          name: build-wheels-uv-${{ matrix.platform.target }}
           path: dist
       - name: "Archive binary"
         shell: bash
@@ -820,7 +821,7 @@ jobs:
       - name: "Upload binary"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: artifacts-${{ matrix.platform.target }}
+          name: build-github-archives-${{ matrix.platform.target }}
           path: |
             *.tar.gz
             *.sha256
@@ -856,7 +857,7 @@ jobs:
       - name: "Upload wheels uv-build"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: wheels_uv_build-${{ matrix.platform.target }}
+          name: build-wheels-uv_build-${{ matrix.platform.target }}
           path: crates/uv-build/dist
 
   # Like `linux-arm`, but install the `gcc-powerpc64-linux-gnu` package.
@@ -925,7 +926,7 @@ jobs:
       - name: "Upload wheels"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: wheels_uv-${{ matrix.platform.target }}
+          name: build-wheels-uv-${{ matrix.platform.target }}
           path: dist
       - name: "Archive binary"
         shell: bash
@@ -943,7 +944,7 @@ jobs:
       - name: "Upload binary"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: artifacts-${{ matrix.platform.target }}
+          name: build-github-archives-${{ matrix.platform.target }}
           path: |
             *.tar.gz
             *.sha256
@@ -972,7 +973,7 @@ jobs:
       - name: "Upload wheels uv-build"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: wheels_uv_build-${{ matrix.platform.target }}
+          name: build-wheels-uv_build-${{ matrix.platform.target }}
           path: crates/uv-build/dist
 
   # Like `linux-arm`.
@@ -1030,7 +1031,7 @@ jobs:
       - name: "Upload wheels"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: wheels_uv-${{ matrix.platform.target }}
+          name: build-wheels-uv-${{ matrix.platform.target }}
           path: dist
       - name: "Archive binary"
         shell: bash
@@ -1048,7 +1049,7 @@ jobs:
       - name: "Upload binary"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: artifacts-${{ matrix.platform.target }}
+          name: build-github-archives-${{ matrix.platform.target }}
           path: |
             *.tar.gz
             *.sha256
@@ -1084,7 +1085,7 @@ jobs:
       - name: "Upload wheels uv-build"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: wheels_uv_build-${{ matrix.platform.target }}
+          name: build-wheels-uv_build-${{ matrix.platform.target }}
           path: crates/uv-build/dist
 
   musllinux:
@@ -1140,7 +1141,7 @@ jobs:
       - name: "Upload wheels"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: wheels_uv-${{ matrix.target }}
+          name: build-wheels-uv-${{ matrix.target }}
           path: dist
       - name: "Archive binary"
         shell: bash
@@ -1158,7 +1159,7 @@ jobs:
       - name: "Upload binary"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: artifacts-${{ matrix.target }}
+          name: build-github-archives-${{ matrix.target }}
           path: |
             *.tar.gz
             *.sha256
@@ -1194,7 +1195,7 @@ jobs:
       - name: "Upload wheels uv-build"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: wheels_uv_build-${{ matrix.target }}
+          name: build-wheels-uv_build-${{ matrix.target }}
           path: crates/uv-build/dist
 
   musllinux-cross:
@@ -1281,7 +1282,7 @@ jobs:
       - name: "Upload wheels"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: wheels_uv-${{ matrix.platform.target }}
+          name: build-wheels-uv-${{ matrix.platform.target }}
           path: dist
       - name: "Archive binary"
         shell: bash
@@ -1300,7 +1301,7 @@ jobs:
       - name: "Upload binary"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: artifacts-${{ matrix.platform.target }}
+          name: build-github-archives-${{ matrix.platform.target }}
           path: |
             *.tar.gz
             *.sha256
@@ -1351,7 +1352,7 @@ jobs:
       - name: "Upload wheels"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: wheels_uv_build-${{ matrix.platform.target }}
+          name: build-wheels-uv_build-${{ matrix.platform.target }}
           path: crates/uv-build/dist
 
   check-wheels:
@@ -1376,9 +1377,10 @@ jobs:
         uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
         with:
           enable-cache: false
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+      - name: "Download built wheels"
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          pattern: wheels_*-*
+          pattern: build-wheels-*-*
           path: wheels
           merge-multiple: true
       - name: "check wheel contents"

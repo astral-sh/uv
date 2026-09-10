@@ -11,11 +11,17 @@ on:
         required: true
         type: string
       uv-wheels:
-        description: "Artifact ID for the verified signed uv wheels"
+        description: "Artifact ID for all verified uv release wheels"
         required: true
         type: string
       uv-build-wheels:
-        description: "Artifact ID for the verified signed uv_build wheels"
+        description: "Artifact ID for all verified uv_build release wheels"
+        required: true
+        type: string
+      uv-sdist:
+        required: true
+        type: string
+      uv-build-sdist:
         required: true
         type: string
 
@@ -38,15 +44,10 @@ jobs:
           version: "0.12.10"
           checksum: "173d95a0c32d18c896c46ba6fafbf3cf9c14ab74b033f81b76c883ef492a976b"
           enable-cache: false
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        with:
-          pattern: "wheels_uv-!(*-apple-darwin|*-pc-windows-msvc)"
-          path: wheels_uv
-          merge-multiple: true
-      - name: "Download signed uv wheels"
+      - name: "Download uv release distributions"
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          artifact-ids: ${{ inputs.uv-wheels }}
+          artifact-ids: ${{ inputs.uv-wheels }},${{ inputs.uv-sdist }}
           path: wheels_uv
           merge-multiple: true
       - name: Publish to PyPI
@@ -66,15 +67,10 @@ jobs:
           version: "0.12.10"
           checksum: "173d95a0c32d18c896c46ba6fafbf3cf9c14ab74b033f81b76c883ef492a976b"
           enable-cache: false
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        with:
-          pattern: "wheels_uv_build-!(*-apple-darwin|*-pc-windows-msvc)"
-          path: wheels_uv_build
-          merge-multiple: true
-      - name: "Download signed uv_build wheels"
+      - name: "Download uv_build release distributions"
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          artifact-ids: ${{ inputs.uv-build-wheels }}
+          artifact-ids: ${{ inputs.uv-build-wheels }},${{ inputs.uv-build-sdist }}
           path: wheels_uv_build
           merge-multiple: true
       - name: Publish to PyPI
