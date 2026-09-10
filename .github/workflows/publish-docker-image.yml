@@ -106,6 +106,8 @@ jobs:
             exit 1
           fi
 
+          # Keep annotation values containing spaces or shell-special characters
+          # together as individual command arguments.
           annotations=()
           while IFS= read -r annotation; do
             annotations+=(--annotation "$annotation")
@@ -137,6 +139,8 @@ jobs:
             for tag in "${image_tags[@]}"; do
               tags+=(-t "$tag")
             done
+            # Apply index metadata during publication so the final digest covers
+            # both the complete multi-platform image and its annotations.
             docker buildx imagetools create \
               "${annotations[@]}" \
               "${tags[@]}" \

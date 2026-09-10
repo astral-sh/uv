@@ -279,9 +279,13 @@ jobs:
           IMAGE_MAPPING: ${{ matrix.image-mapping }}
         run: |
           set -euo pipefail
+
+          # Extract the image and tags from the matrix variable.
           IFS=',' read -r BASE_IMAGE BASE_TAGS <<< "${IMAGE_MAPPING}"
+          # The first image alias is the name of its manifest artifact.
           echo "name=${BASE_TAGS%%,*}" >> "$GITHUB_OUTPUT"
 
+          # Generate the Dockerfile for this base image.
           cat <<EOF > Dockerfile
           FROM ${BASE_IMAGE}
           COPY --from=${UV_BASE_IMAGE} /uv /uvx /usr/local/bin/
@@ -290,9 +294,11 @@ jobs:
           CMD ["/usr/local/bin/uv"]
           EOF
 
+          # Collect Docker metadata patterns for every image alias.
+          TAG_PATTERNS=""
+
           # For releases, the first tag includes the patch version and image suffix.
           # Docker metadata uses it for `org.opencontainers.image.version`.
-          TAG_PATTERNS=""
           IFS=','; for TAG in ${BASE_TAGS}; do
             if [ "${PUSH_DEV}" == "true" ]; then
               TAG_PATTERNS="${TAG_PATTERNS}type=sha,suffix=-${TAG}\n"
@@ -302,7 +308,11 @@ jobs:
               TAG_PATTERNS="${TAG_PATTERNS}type=raw,value=${TAG}\n"
             fi
           done
+
+          # Remove the trailing escaped newline from the pattern list.
           TAG_PATTERNS="${TAG_PATTERNS%\\n}"
+
+          # Export the patterns using GitHub Actions' multiline environment syntax.
           {
             echo "TAG_PATTERNS<<EOF"
             echo -e "${TAG_PATTERNS}"
