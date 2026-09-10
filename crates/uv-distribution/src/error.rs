@@ -183,6 +183,15 @@ pub enum Error {
     },
 
     #[error(
+        "Content-Length mismatch for `{distribution}`: expected {expected} bytes, but the server advertised {actual} bytes"
+    )]
+    MismatchedContentLength {
+        distribution: String,
+        expected: u64,
+        actual: u64,
+    },
+
+    #[error(
         "Range response size mismatch for `{distribution}`: expected {expected} bytes from Content-Range, but received {actual} bytes"
     )]
     MismatchedRangeSize {

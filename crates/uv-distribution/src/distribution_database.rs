@@ -1074,6 +1074,19 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         // Errors returned from this loop reach the outer retry classifier, which may restart
         // the full download.
         loop {
+            // Reject conflicting full-response lengths before reading the body. A range response's
+            // Content-Length describes only that range, so it cannot be compared to the wheel size.
+            if response.status() == reqwest::StatusCode::OK
+                && let (Some(expected), Some(actual)) = (expected_size, content_length(&response))
+                && expected != actual
+            {
+                return Err(Error::MismatchedContentLength {
+                    distribution: dist.to_string(),
+                    expected,
+                    actual,
+                });
+            }
+
             // Check whether the response indicates range request support. A `206 Partial Content`
             // implies range support while an `Accept-Ranges: bytes` header explicitly advertises it.
             let supports_range_requests = response.status() == reqwest::StatusCode::PARTIAL_CONTENT

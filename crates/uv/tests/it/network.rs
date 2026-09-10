@@ -15,6 +15,7 @@ use http_body_util::{BodyExt, StreamBody};
 use hyper::body::Frame;
 use hyper::service::service_fn;
 use hyper_util::rt::TokioIo;
+use indoc::formatdoc;
 use insta::{allow_duplicates, assert_snapshot};
 use serde_json::json;
 use sha2::{Digest, Sha256};
@@ -1285,22 +1286,18 @@ fn wheel_server(
 fn assert_wheel_download(case: DownloadCase) -> Result<()> {
     let context = uv_test::test_context!("3.12");
     let (server, _guard, full_get_count, hash) = wheel_server(&context, case)?;
-    let wheel_url = format!("{server}/build_tag-1.0.0-1-py2.py3-none-any.whl");
-    let requirements = context.temp_dir.child("requirements.txt");
-    requirements.write_str(&format!("build-tag @ {wheel_url} --hash=sha256:{hash}\n"))?;
+    write_wheel_lockfile(&context, &server, 932, &hash)?;
     allow_duplicates! {
         uv_snapshot!(context.filters(), context
-            .pip_install()
-            .arg("-r")
-            .arg(requirements.path())
-            .arg("--require-hashes")
+            .pip_sync()
+            .arg("--preview")
+            .arg("pylock.toml")
             .env(EnvVars::UV_HTTP_RETRIES, case.full_retries.to_string())
             .env(EnvVars::UV_HTTP_TIMEOUT, "1")
             .env(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY, "true")
             .env(EnvVars::RUST_LOG, "warn"), @"
         exit_code: 0 (success)
         ----- stderr -----
-        Resolved 1 package in [TIME]
         WARN Streaming failed for build-tag @ http://[LOCALHOST]/build_tag-1.0.0-1-py2.py3-none-any.whl; downloading wheel to disk (I/O operation failed during extraction)
         Prepared 1 package in [TIME]
         Installed 1 package in [TIME]
@@ -1336,6 +1333,53 @@ fn assert_wheel_download(case: DownloadCase) -> Result<()> {
         Tag: py3-none-any
         ");
     }
+    Ok(())
+}
+
+fn write_wheel_lockfile(context: &TestContext, server: &str, size: u64, hash: &str) -> Result<()> {
+    context.temp_dir.child("pylock.toml").write_str(&formatdoc! {
+        r#"
+        lock-version = "1.0"
+        created-by = "uv"
+
+        [[packages]]
+        name = "build-tag"
+        version = "1.0.0"
+        archive = {{ url = "{server}/build_tag-1.0.0-1-py2.py3-none-any.whl", size = {size}, hashes = {{ sha256 = "{hash}" }} }}
+        "#,
+    })?;
+    Ok(())
+}
+
+#[test]
+fn direct_url_content_length_mismatch() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let (server, _guard, full_get_count, hash) = wheel_server(
+        &context,
+        DownloadCase {
+            range: RangeResponse::NotAdvertised,
+            full_retries: 1,
+            ..DownloadCase::default()
+        },
+    )?;
+    write_wheel_lockfile(&context, &server, 1, &hash)?;
+
+    uv_snapshot!(context.filters(), context
+        .pip_sync()
+        .arg("--preview")
+        .arg("pylock.toml")
+        .env(EnvVars::UV_HTTP_RETRIES, "1")
+        .env(EnvVars::UV_HTTP_TIMEOUT, "1")
+        .env(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY, "true")
+        .env(EnvVars::RUST_LOG, "warn"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    WARN Streaming failed for build-tag @ http://[LOCALHOST]/build_tag-1.0.0-1-py2.py3-none-any.whl; downloading wheel to disk (I/O operation failed during extraction)
+      × Failed to download `build-tag @ http://[LOCALHOST]/build_tag-1.0.0-1-py2.py3-none-any.whl`
+      ╰─▶ Content-Length mismatch for `build-tag @ http://[LOCALHOST]/build_tag-1.0.0-1-py2.py3-none-any.whl`: expected 1 bytes, but the server advertised 932 bytes
+    ");
+    // The first fallback response fails on its headers without consuming a full-download retry.
+    assert_eq!(full_get_count.load(Ordering::Relaxed), 3);
     Ok(())
 }
 
