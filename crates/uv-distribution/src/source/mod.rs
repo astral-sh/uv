@@ -2814,7 +2814,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         source: &BuildableSource<'_>,
         ext: SourceDistExtension,
         target: &Path,
-        hash_request: ArchiveHashPolicy<'_>,
+        hash_policy: ArchiveHashPolicy<'_>,
         existing_hashes: &[HashDigest],
     ) -> Result<(Vec<HashDigest>, u64), Error> {
         let reader = response
@@ -2836,7 +2836,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             self.build_context.cache(),
             ArchiveValidation {
                 extra_algorithms: &[HashAlgorithm::Sha256],
-                hash_request,
+                hash_policy,
                 existing_hashes,
                 expected_size,
             },
@@ -2854,7 +2854,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         path: &Path,
         ext: SourceDistExtension,
         target: &Path,
-        hash_request: ArchiveHashPolicy<'_>,
+        hash_policy: ArchiveHashPolicy<'_>,
         existing_hashes: &[HashDigest],
     ) -> Result<Vec<HashDigest>, Error> {
         debug!("Unpacking for build: {}", path.display());
@@ -2868,7 +2868,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             self.build_context.cache(),
             ArchiveValidation {
                 extra_algorithms: &[],
-                hash_request,
+                hash_policy,
                 existing_hashes,
                 expected_size: None,
             },
