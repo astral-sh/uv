@@ -191,7 +191,7 @@ fn check_show_command_quotes_script_path() -> Result<()> {
     All checks passed!
 
     ----- stderr -----
-    Running `ty check --color auto --force-exclude -- 'script with spaces.py'`
+    Running `ty check --color auto -- 'script with spaces.py'`
     "
     );
 
@@ -681,7 +681,7 @@ fn check_fix_script_does_not_fix_unselected_script() -> Result<()> {
     Ok(())
 }
 
-/// Check only the selected workspace member, whether selected implicitly or explicitly.
+/// Respect workspace exclusions unless packages are selected explicitly.
 #[test]
 fn check_workspace_member_selection() -> Result<()> {
     let context =
@@ -692,11 +692,15 @@ fn check_workspace_member_selection() -> Result<()> {
         .write_str(indoc! {r#"
             [tool.uv.workspace]
             members = ["packages/*"]
+
+            [tool.ty.src]
+            exclude = ["packages/member-a"]
         "#})?;
     write_workspace_member(&context, "member-a", "value: int = 'selected'\n")?;
     write_workspace_member(&context, "member-b", "value: int = 'excluded'\n")?;
 
     let member_a = context.temp_dir.child("packages").child("member-a");
+    // The current directory explicitly selects the member, overriding its exclusion.
     uv_snapshot!(context.filters(), workspace_check(&context).current_dir(&member_a), @r#"
     exit_code: 1 (failure)
     ----- stdout -----
@@ -712,6 +716,18 @@ fn check_workspace_member_selection() -> Result<()> {
     ----- stdout -----
     main.py:1:14: error[invalid-assignment] Object of type `Literal["selected"]` is not assignable to `int`
     Found 1 diagnostic
+
+    ----- stderr -----
+    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
+    "#);
+
+    // Explicitly selecting all packages overrides the configured exclusion.
+    uv_snapshot!(context.filters(), workspace_check(&context).arg("--all-packages"), @r#"
+    exit_code: 1 (failure)
+    ----- stdout -----
+    packages/member-a/main.py:1:14: error[invalid-assignment] Object of type `Literal["selected"]` is not assignable to `int`
+    packages/member-b/main.py:1:14: error[invalid-assignment] Object of type `Literal["excluded"]` is not assignable to `int`
+    Found 2 diagnostics
 
     ----- stderr -----
     warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
