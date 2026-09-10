@@ -252,14 +252,13 @@ impl InstallState {
 #[instrument(skip_all)]
 pub(crate) fn link_wheel_files(
     link_mode: LinkMode,
-    site_packages: impl AsRef<Path>,
     wheel: &ValidatedWheel<'_>,
     state: &InstallState,
     filename: &WheelFilename,
 ) -> Result<(), Error> {
-    let wheel = wheel.as_path();
-    let site_packages = site_packages.as_ref();
-    register_installed_paths(wheel, state, filename)?;
+    let site_packages = wheel.destination().as_path();
+    let wheel_path = wheel.as_path();
+    register_installed_paths(wheel_path, state, filename)?;
 
     // The `RECORD` file is modified during installation, so it needs a real
     // copy rather than a link back to the cache.
@@ -267,7 +266,7 @@ pub(crate) fn link_wheel_files(
         .with_mutable_copy_filter(|p: &Path| p.ends_with("RECORD"))
         .with_copy_locks(state.copy_locks())
         .with_on_existing_directory(OnExistingDirectory::Merge);
-    let used_link_mode = link_dir(wheel, site_packages, &options)?;
+    let used_link_mode = link_dir(wheel_path, site_packages, &options)?;
 
     if used_link_mode == LinkMode::Clone {
         // The directory mtime is not updated when cloning and the mtime is

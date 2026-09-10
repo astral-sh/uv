@@ -88,9 +88,10 @@ pub fn install_wheel<Cache: serde::Serialize, Build: serde::Serialize>(
     // > 1.b Check that installer is compatible with Wheel-Version. Warn if minor version is greater, abort if major version is greater.
     // > 1.c If Root-Is-Purelib == ‘true’, unpack archive into purelib (site-packages).
     // > 1.d Else unpack archive into platlib (site-packages).
-    let validated_wheel = ValidatedWheel::new(layout, wheel, &dist_info_prefix)?;
+    let validated_wheel =
+        ValidatedWheel::new(layout, wheel, &dist_info_prefix, &name, site_packages)?;
     trace!(?name, "Extracting wheel files");
-    link_wheel_files(link_mode, site_packages, &validated_wheel, state, filename)?;
+    link_wheel_files(link_mode, &validated_wheel, state, filename)?;
     trace!(?name, "Extracted wheel files");
 
     // Read the RECORD file.
@@ -126,13 +127,12 @@ pub fn install_wheel<Cache: serde::Serialize, Build: serde::Serialize>(
 
     // 2.a Unpacked archive includes distribution-1.0.dist-info/ and (if there is data) distribution-1.0.data/.
     // 2.b Move each subtree of distribution-1.0.data/ onto its destination path. Each subdirectory of distribution-1.0.data/ is a key into a dict of destination directories, such as distribution-1.0.data/(purelib|platlib|headers|scripts|data). The initially supported paths are taken from distutils.command.install.
-    let data_dir = site_packages.join(format!("{dist_info_prefix}.data"));
+    let data_dir = validated_wheel.installed_data_dir();
     if data_dir.is_dir() {
         install_data(
             layout,
             relocatable,
-            site_packages,
-            &data_dir,
+            &validated_wheel,
             &name,
             &console_scripts,
             &gui_scripts,
