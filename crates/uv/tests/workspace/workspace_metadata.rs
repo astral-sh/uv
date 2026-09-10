@@ -1408,8 +1408,8 @@ dependencies = [
     ----- stderr -----
     warning: The `uv workspace metadata` command is experimental and may change without warning. Pass `--preview-features workspace-metadata` to disable this warning.
     error: Failed to collect module owners
-      Caused by: Failed to determine installation plan
-      Caused by: Distribution not found at: file://[TEMP_DIR]/gpu_a-0.1.0-py3-none-any.whl
+      ├─▶ Failed to determine installation plan
+      ╰─▶ Distribution not found at: file://[TEMP_DIR]/gpu_a-0.1.0-py3-none-any.whl
     "#);
 
     Ok(())

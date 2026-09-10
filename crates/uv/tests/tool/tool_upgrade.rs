@@ -113,7 +113,7 @@ fn tool_upgrade_all_unreadable_receipt() -> Result<()> {
     exit_code: 2 (failure)
     ----- stderr -----
     error: Failed to inspect installed tools in `tools`
-      Caused by: failed to read from file `[TEMP_DIR]/tools/babel/uv-receipt.toml`: stream did not contain valid UTF-8
+      ╰─▶ failed to read from file `[TEMP_DIR]/tools/babel/uv-receipt.toml`: stream did not contain valid UTF-8
     ");
 
     Ok(())
@@ -813,7 +813,7 @@ fn tool_upgrade_non_existing_package() {
     exit_code: 1 (failure)
     ----- stderr -----
     error: Failed to upgrade black
-      Caused by: `black` is not installed; run `uv tool install black` to install
+      ╰─▶ `black` is not installed; run `uv tool install black` to install
     ");
 
     // Attempt to upgrade all.
@@ -886,7 +886,7 @@ fn tool_upgrade_not_stop_if_upgrade_fails() -> anyhow::Result<()> {
      - pytz==2018.5
     Installed 1 executable: pybabel
     error: Failed to upgrade python-dotenv
-      Caused by: `python-dotenv` is missing a valid receipt; run `uv tool install --force python-dotenv` to reinstall
+      ╰─▶ `python-dotenv` is missing a valid receipt; run `uv tool install --force python-dotenv` to reinstall
     ");
 
     Ok(())
@@ -1548,8 +1548,8 @@ async fn tool_upgrade_invalid_auth() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
     error: Failed to upgrade executable-application
-      Caused by: Failed to fetch: `http://[LOCALHOST]/basic-auth/simple/executable-application/`
-      Caused by: Missing credentials for http://[LOCALHOST]/basic-auth/simple/executable-application/
+      ├─▶ Failed to fetch: `http://[LOCALHOST]/basic-auth/simple/executable-application/`
+      ╰─▶ Missing credentials for http://[LOCALHOST]/basic-auth/simple/executable-application/
     ");
 
     Ok(())
@@ -1693,7 +1693,7 @@ async fn tool_upgrade_resolution_hints() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
     error: Failed to upgrade simple-launcher
-      Caused by: Because simple-launcher was not found in the package registry and you require simple-launcher>0.1.0, we can conclude that your requirements are unsatisfiable.
+      ╰─▶ Because simple-launcher was not found in the package registry and you require simple-launcher>0.1.0, we can conclude that your requirements are unsatisfiable.
 
     hint: An index URL (http://[LOCALHOST]/simple) could not be queried due to a lack of valid authentication credentials (401 Unauthorized)
     ");
@@ -1753,14 +1753,14 @@ async fn tool_upgrade_lock_verifies_hashes() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
     error: Failed to upgrade simple-launcher
-      Caused by: Failed to download `simple-launcher==0.1.0`
-      Caused by: Hash mismatch for `simple-launcher==0.1.0`
+      ├─▶ Failed to download `simple-launcher==0.1.0`
+      ╰─▶ Hash mismatch for `simple-launcher==0.1.0`
 
-        Expected:
-          sha256:0000000000000000000000000000000000000000000000000000000000000000
+          Expected:
+            sha256:0000000000000000000000000000000000000000000000000000000000000000
 
-        Computed:
-          sha256:5327e0bb67cdb46800999de6dcf034bf0a5335702883494af0d8b7f6ca48cee4
+          Computed:
+            sha256:5327e0bb67cdb46800999de6dcf034bf0a5335702883494af0d8b7f6ca48cee4
     ");
 
     Ok(())

@@ -103,4 +103,28 @@ mod tests {
         assert_snapshot!(output, @"warning: Failed to create registry entry
 ");
     }
+
+    #[test]
+    fn format_warning_with_causes_and_hints() {
+        let error = anyhow!("Permission denied")
+            .context("Failed to write registry entry")
+            .context("Failed to install Python");
+        let mut output = String::new();
+        write_warning_chain_with_options(
+            error.as_ref(),
+            &Hints::from("Check the registry permissions."),
+            ErrorOptions::default().with_stream(&mut output),
+        )
+        .unwrap();
+        assert_snapshot!(format!("{output:?}"), @r#""\u{1b}[1m\u{1b}[33mwarning\u{1b}[39m\u{1b}[0m\u{1b}[1m:\u{1b}[0m Failed to install Python\n  \u{1b}[1m\u{1b}[33m├─▶\u{1b}[39m\u{1b}[0m Failed to write registry entry\n  \u{1b}[1m\u{1b}[33m╰─▶\u{1b}[39m\u{1b}[0m Permission denied\n\n\u{1b}[36m\u{1b}[1mhint\u{1b}[0m\u{1b}[39m\u{1b}[1m:\u{1b}[0m Check the registry permissions.\n""#);
+        let output = anstream::adapter::strip_str(&output);
+
+        assert_snapshot!(output, @"
+        warning: Failed to install Python
+          ├─▶ Failed to write registry entry
+          ╰─▶ Permission denied
+
+        hint: Check the registry permissions.
+        ");
+    }
 }

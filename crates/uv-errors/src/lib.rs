@@ -370,29 +370,34 @@ pub fn write_error_chain_with_options<C: DynColor + Copy, W: fmt::Write>(
         wrapped_main.trim()
     )?;
 
-    for source in iter::successors(err.source(), |&err| err.source()) {
+    let mut sources = iter::successors(err.source(), |&err| err.source()).peekable();
+    while let Some(source) = sources.next() {
         let msg = source.to_string();
-        let padding = "  ";
-        let cause = "Caused by";
-        let child_padding = " ".repeat(padding.len() + cause.len() + 2);
-        let authored_line_padding = "    ";
-
-        let wrapped = wrap_text(&msg, width, "", &child_padding, authored_line_padding);
+        let has_more = sources.peek().is_some();
+        let connector = if has_more { "├─▶" } else { "╰─▶" };
+        // Reserve the display width of the gutter before wrapping the message. Authored lines
+        // retain their own indentation within the gutter.
+        let wrapped = wrap_text(&msg, width.map(|width| width.saturating_sub(6)), "", "", "");
 
         let mut lines = wrapped.lines();
         if let Some(first) = lines.next() {
             writeln!(
                 &mut stream,
-                "{}{}: {}",
-                padding,
-                cause.color(color).bold(),
+                "  {} {}",
+                connector.color(color).bold(),
                 first.trim()
             )?;
             for line in lines {
                 if line.trim().is_empty() {
-                    writeln!(&mut stream)?;
+                    if has_more {
+                        writeln!(&mut stream, "  {}", "│".color(color).bold())?;
+                    } else {
+                        writeln!(&mut stream)?;
+                    }
+                } else if has_more {
+                    writeln!(&mut stream, "  {}   {line}", "│".color(color).bold())?;
                 } else {
-                    writeln!(&mut stream, "{line}")?;
+                    writeln!(&mut stream, "      {line}")?;
                 }
             }
         }
@@ -549,11 +554,11 @@ mod tests {
         .unwrap();
         let output = anstream::adapter::strip_str(&output);
 
-        assert_snapshot!(output, @r"
+        assert_snapshot!(output, @"
         error: No solution found when resolving dependencies
-          Caused by: Because fiasobfhuasbf was not found in the package registry and you require
-                     fiasobfhuasbf, we can conclude that your requirements are
-                     unsatisfiable.
+          ╰─▶ Because fiasobfhuasbf was not found in the package registry and you
+              require fiasobfhuasbf, we can conclude that your requirements are
+              unsatisfiable.
         ");
     }
 
@@ -578,12 +583,12 @@ mod tests {
             ErrorOptions::default().with_stream(&mut output),
         )
         .unwrap();
-        assert_snapshot!(format!("{output:?}"), @r#""\u{1b}[1m\u{1b}[31merror\u{1b}[39m\u{1b}[0m\u{1b}[1m:\u{1b}[0m Failed to write file\n  \u{1b}[1m\u{1b}[31mCaused by\u{1b}[39m\u{1b}[0m: Permission denied\n""#);
+        assert_snapshot!(format!("{output:?}"), @r#""\u{1b}[1m\u{1b}[31merror\u{1b}[39m\u{1b}[0m\u{1b}[1m:\u{1b}[0m Failed to write file\n  \u{1b}[1m\u{1b}[31m╰─▶\u{1b}[39m\u{1b}[0m Permission denied\n""#);
         let output = anstream::adapter::strip_str(&output);
 
-        assert_snapshot!(output, @r"
+        assert_snapshot!(output, @"
         error: Failed to write file
-          Caused by: Permission denied
+          ╰─▶ Permission denied
         ");
     }
 
@@ -710,15 +715,39 @@ mod tests {
             &error,
             &Hints::none(),
             ErrorOptions::default()
-                .with_width_override(60)
+                .with_width_override(40)
                 .with_stream(&mut output),
         )
         .unwrap();
         let output = anstream::adapter::strip_str(&output);
-        assert_snapshot!(output, @r"
-        error: Unable to resolve package dependencies
-          Caused by: Failed to fetch package metadata from registry
-          Caused by: Network connection timeout after multiple retry attempts
+        assert_snapshot!(output, @"
+        error: Unable to resolve package
+               dependencies
+          ├─▶ Failed to fetch package metadata
+          │   from registry
+          ╰─▶ Network connection timeout after
+              multiple retry attempts
+        ");
+    }
+
+    #[test]
+    fn format_cause_with_narrow_width() {
+        let error = anyhow!("one two").context("root");
+        let mut output = String::new();
+        write_error_chain_with_options(
+            error.as_ref(),
+            &Hints::none(),
+            ErrorOptions::default()
+                .with_width_override(4)
+                .with_stream(&mut output),
+        )
+        .unwrap();
+        let output = anstream::adapter::strip_str(&output);
+
+        assert_snapshot!(output, @"
+        error: root
+          ╰─▶ one
+              two
         ");
     }
 
@@ -794,9 +823,9 @@ mod tests {
         .unwrap();
         let rendered = anstream::adapter::strip_str(&rendered);
 
-        assert_snapshot!(rendered, @r"
+        assert_snapshot!(rendered, @"
         error: Failed to fetch package
-          Caused by: Permission denied
+          ╰─▶ Permission denied
 
         hint: Try running with `--verbose` for more information.
 
@@ -823,13 +852,13 @@ mod tests {
         .unwrap();
         let rendered = anstream::adapter::strip_str(&rendered);
 
-        assert_snapshot!(rendered, @r"
+        assert_snapshot!(rendered, @"
         error: Failed to download Python 3.12
-          Caused by: Failed to fetch https://example.com/upload/python3.13.tar.zst
-            Server says: This endpoint only support POST requests.
-
-            For downloads, please refer to https://example.com/download/python3.13.tar.zst
-          Caused by: Caused By: HTTP Error 400
+          ├─▶ Failed to fetch https://example.com/upload/python3.13.tar.zst
+          │   Server says: This endpoint only support POST requests.
+          │
+          │   For downloads, please refer to https://example.com/download/python3.13.tar.zst
+          ╰─▶ Caused By: HTTP Error 400
         ");
     }
 }

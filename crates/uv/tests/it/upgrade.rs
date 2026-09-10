@@ -524,7 +524,7 @@ fn upgrade_reports_no_solution_without_mutation() -> Result<()> {
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     error: No solution found when resolving dependencies
-      Caused by: Because there is no version of idna==9999 and your project depends on idna==9999, we can conclude that your project's requirements are unsatisfiable.
+      ╰─▶ Because there is no version of idna==9999 and your project depends on idna==9999, we can conclude that your project's requirements are unsatisfiable.
     ");
 
     assert_project_unchanged(&context, pyproject_toml)
@@ -1375,8 +1375,8 @@ fn upgrade_preserves_hard_constraint_no_solution_failure() -> Result<()> {
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     error: No solution found when resolving dependencies for split (markers: sys_platform != 'linux')
-      Caused by: Because all versions of foo depend on bar{sys_platform != 'linux'}==2 and your project depends on bar<2, we can conclude that your project and all versions of foo are incompatible.
-        And because your project depends on foo==1.0.0, we can conclude that your project's requirements are unsatisfiable.
+      ╰─▶ Because all versions of foo depend on bar{sys_platform != 'linux'}==2 and your project depends on bar<2, we can conclude that your project and all versions of foo are incompatible.
+          And because your project depends on foo==1.0.0, we can conclude that your project's requirements are unsatisfiable.
     "
     );
 

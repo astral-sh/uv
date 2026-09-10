@@ -2490,8 +2490,8 @@ fn version_get_frozen_workspace_without_python() -> Result<()> {
     let context = uv_test::test_context!("3.12")
         .with_cache_dir("cache-file")
         .with_filter((
-            r"Caused by: failed to create directory `[^`]+`: .*",
-            "Caused by: failed to create directory `[CACHE_DIR]`: [ERROR]",
+            r"╰─▶ failed to create directory `[^`]+`: .*",
+            "╰─▶ failed to create directory `[CACHE_DIR]`: [ERROR]",
         ));
 
     context
@@ -2555,7 +2555,7 @@ fn version_get_frozen_workspace_without_python() -> Result<()> {
     exit_code: 2 (failure)
     ----- stderr -----
     error: Failed to initialize cache at `cache-file`
-      Caused by: failed to create directory `[CACHE_DIR]`: [ERROR]
+      ╰─▶ failed to create directory `[CACHE_DIR]`: [ERROR]
     ");
 
     Ok(())

@@ -1036,8 +1036,8 @@ fn lock_exclude_newer_relative_values() -> Result<()> {
     ----- stderr -----
     Resolving despite existing lockfile due to removal of exclude newer span
     error: No solution found when resolving dependencies
-      Caused by: Because there are no versions of iniconfig and iniconfig==2.0.0 was published after the exclude newer time, we can conclude that all versions of iniconfig cannot be used.
-        And because your project depends on iniconfig, we can conclude that your project's requirements are unsatisfiable.
+      ╰─▶ Because there are no versions of iniconfig and iniconfig==2.0.0 was published after the exclude newer time, we can conclude that all versions of iniconfig cannot be used.
+          And because your project depends on iniconfig, we can conclude that your project's requirements are unsatisfiable.
 
     hint: `iniconfig` was filtered by `exclude-newer` to only include packages uploaded before 2006-12-02T02:07:43Z. The latest version satisfying the requirement is v2.0.0, published at 2023-01-07T11:08:09.864Z. Consider using `exclude-newer-package` to override the cutoff for this package.
     ");
@@ -1272,11 +1272,11 @@ fn lock_exclude_newer_package_relative_no_timestamp_in_lockfile() -> Result<()> 
     exit_code: 2 (failure)
     ----- stderr -----
     error: Failed to parse `uv.lock`
-      Caused by: TOML parse error at line 5, column 1
-          |
-        5 | [options]
-          | ^^^^^^^^^
-        data did not match any variant of untagged enum Helper
+      ╰─▶ TOML parse error at line 5, column 1
+            |
+          5 | [options]
+            | ^^^^^^^^^
+          data did not match any variant of untagged enum Helper
     ");
 
     Ok(())
