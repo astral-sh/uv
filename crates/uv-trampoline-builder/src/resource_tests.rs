@@ -34,6 +34,7 @@ fn write_native_resources(
         .iter()
         .map(|(name, data)| {
             Ok((
+                *name,
                 name.encode_utf16()
                     .chain(std::iter::once(0))
                     .collect::<Vec<_>>(),
@@ -47,20 +48,24 @@ fn write_native_resources(
     // every update, and the update handle is closed on both success and failure.
     #[allow(unsafe_code)]
     unsafe {
-        let handle = BeginUpdateResourceW(PCWSTR(path_wide.as_ptr()), false)?;
-        let result = resources.iter().try_for_each(|(name, data, size)| {
-            UpdateResourceW(
-                handle,
-                PCWSTR(RT_RCDATA as usize as *const u16),
-                PCWSTR(name.as_ptr()),
-                0,
-                Some(data.as_ptr().cast()),
-                *size,
-            )
-        });
+        let handle = BeginUpdateResourceW(PCWSTR(path_wide.as_ptr()), false)
+            .context("BeginUpdateResourceW failed")?;
+        let result = resources
+            .iter()
+            .try_for_each(|(name, name_wide, data, size)| {
+                UpdateResourceW(
+                    handle,
+                    PCWSTR(RT_RCDATA as usize as *const u16),
+                    PCWSTR(name_wide.as_ptr()),
+                    0,
+                    Some(data.as_ptr().cast()),
+                    *size,
+                )
+                .with_context(|| format!("UpdateResourceW failed for {name} ({size} bytes)"))
+            });
         let finish = EndUpdateResourceW(handle, result.is_err());
         result?;
-        finish?;
+        finish.context("EndUpdateResourceW failed")?;
     }
 
     Ok(fs_err::read(path)?)
@@ -185,13 +190,15 @@ fn resources_match_native_windows_updates() -> Result<()> {
                 .context("Missing PE resource table")?
                 .size,
         )?;
-        let mut sizes = vec![0, 1, 65_535, 65_536, 65_537];
+        let mut sizes = vec![1, 65_535, 65_536, 65_537];
         for alignment in [file_alignment, section_alignment] {
             // Account for the resource tables and existing resources so the complete directory
             // crosses the boundary, not just the script payload.
             let boundary = alignment - resource_overhead % alignment;
             sizes.extend([boundary - 1, boundary, boundary + 1]);
         }
+        // UpdateResourceW rejects empty resources, which are covered separately below.
+        sizes.retain(|size| *size > 0);
         sizes.sort_unstable();
         sizes.dedup();
 
@@ -231,6 +238,27 @@ fn resources_match_native_windows_updates() -> Result<()> {
             assert_eq!(edited.script_data.as_deref(), Some(payload.as_slice()));
         }
     }
+
+    Ok(())
+}
+
+#[test]
+fn empty_script_resource_is_preserved() -> Result<()> {
+    let temp_dir = assert_fs::TempDir::new()?;
+    let path = temp_dir.child("empty.exe");
+    let resources: &[(&str, &[u8])] = &[
+        (RESOURCE_TRAMPOLINE_KIND, &[1]),
+        (RESOURCE_PYTHON_PATH, b"C:/Python312/python.exe"),
+        (RESOURCE_SCRIPT_DATA, &[]),
+    ];
+    fs_err::write(
+        path.path(),
+        write_resources(get_launcher_bin(false)?, resources)?,
+    )?;
+
+    let launcher = Launcher::try_from_path(path.path())?
+        .context("Launcher with an empty script resource was not recognized")?;
+    assert_eq!(launcher.script_data, Some(Vec::new()));
 
     Ok(())
 }
