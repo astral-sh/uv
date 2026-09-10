@@ -358,7 +358,7 @@ fn python_install_force() {
     exit_code: 0 (success)
     ----- stderr -----
     warning: Failed to install executable for cpython-3.14.[LATEST]-[PLATFORM]
-      └── Executable already exists at `[BIN]/python3.14` but is not managed by uv; use `--force` to replace it
+      cause: Executable already exists at `[BIN]/python3.14` but is not managed by uv; use `--force` to replace it
     ");
 
     uv_snapshot!(context.filters(), context.python_install().arg("--force").arg("3.14"), @"
@@ -591,7 +591,7 @@ fn python_install_preview() {
     exit_code: 0 (success)
     ----- stderr -----
     warning: Failed to install executable for cpython-3.14.[LATEST]-[PLATFORM]
-      └── Executable already exists at `[BIN]/python3.14` but is not managed by uv; use `--force` to replace it
+      cause: Executable already exists at `[BIN]/python3.14` but is not managed by uv; use `--force` to replace it
     ");
 
     // With `--bin`, this should error instead of warn
@@ -599,13 +599,13 @@ fn python_install_preview() {
     exit_code: 1 (failure)
     ----- stderr -----
     error: Failed to install executable for cpython-3.14.[LATEST]-[PLATFORM]
-      └── Executable already exists at `[BIN]/python3.14` but is not managed by uv; use `--force` to replace it
+      cause: Executable already exists at `[BIN]/python3.14` but is not managed by uv; use `--force` to replace it
     ");
     uv_snapshot!(context.filters(), context.python_install().arg("--preview").arg("3.14").env(EnvVars::UV_PYTHON_INSTALL_BIN, "1"), @"
     exit_code: 1 (failure)
     ----- stderr -----
     error: Failed to install executable for cpython-3.14.[LATEST]-[PLATFORM]
-      └── Executable already exists at `[BIN]/python3.14` but is not managed by uv; use `--force` to replace it
+      cause: Executable already exists at `[BIN]/python3.14` but is not managed by uv; use `--force` to replace it
     ");
 
     // With `--no-bin`, this should be silent
@@ -763,7 +763,7 @@ fn python_install_multiple_unmanaged_executables() {
     exit_code: 0 (success)
     ----- stderr -----
     warning: Failed to install executable for cpython-3.13.[LATEST]-[PLATFORM]
-      └── Executables `python3.13`, `python3`, and `python` already exist in `[BIN]/` but are not managed by uv; use `--force` to replace them
+      cause: Executables `python3.13`, `python3`, and `python` already exist in `[BIN]/` but are not managed by uv; use `--force` to replace them
     ");
 
     // The unmanaged executables should be left untouched (still empty).
@@ -2468,7 +2468,7 @@ fn python_install_cached() {
     exit_code: 1 (failure)
     ----- stderr -----
     error: Failed to install cpython-3.12.[LATEST]-[PLATFORM]
-      └── An offline Python installation was requested, but cpython-3.12.[PATCH]-[DATE]-[PLATFORM].tar.gz) is missing in python-cache
+      cause: An offline Python installation was requested, but cpython-3.12.[PATCH]-[DATE]-[PLATFORM].tar.gz) is missing in python-cache
     ");
 }
 
@@ -2558,8 +2558,8 @@ fn python_install_no_cache() {
     exit_code: 1 (failure)
     ----- stderr -----
     error: Failed to install cpython-3.12.[LATEST]-[PLATFORM]
-      ├── Failed to download https://github.com/astral-sh/python-build-standalone/releases/download/[DATE]/cpython-3.12.[PATCH]-[DATE]-[PLATFORM].tar.gz
-      └── Network connectivity is disabled, but the requested data wasn't found in the cache for: `https://github.com/astral-sh/python-build-standalone/releases/download/[DATE]/cpython-3.12.[PATCH]-[DATE]-[PLATFORM].tar.gz`
+      cause: Failed to download https://github.com/astral-sh/python-build-standalone/releases/download/[DATE]/cpython-3.12.[PATCH]-[DATE]-[PLATFORM].tar.gz
+      cause: Network connectivity is disabled, but the requested data wasn't found in the cache for: `https://github.com/astral-sh/python-build-standalone/releases/download/[DATE]/cpython-3.12.[PATCH]-[DATE]-[PLATFORM].tar.gz`
     ");
 }
 
@@ -3169,7 +3169,7 @@ fn uninstall_last_patch() {
     exit_code: 2 (failure)
     ----- stderr -----
     error: Failed to inspect Python interpreter from active virtual environment at `.venv/[BIN]/python`
-      └── Broken symlink at `.venv/[BIN]/python`, was the underlying Python interpreter removed?
+      cause: Broken symlink at `.venv/[BIN]/python`, was the underlying Python interpreter removed?
 
     hint: Consider recreating the environment (e.g., with `uv venv`)
     "
@@ -3180,7 +3180,7 @@ fn uninstall_last_patch() {
     exit_code: 2 (failure)
     ----- stderr -----
     error: Failed to inspect Python interpreter from active virtual environment at `.venv/[BIN]/python`
-      └── Python interpreter not found at `[VENV]/[BIN]/python`
+      cause: Python interpreter not found at `[VENV]/[BIN]/python`
     "
     );
 }

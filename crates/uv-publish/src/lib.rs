@@ -2258,7 +2258,7 @@ mod tests {
             &capture,
             @"
         error: Failed to publish `../../test/links/tqdm-4.66.1-py3-none-manylinux_2_12_x86_64.manylinux2010_x86_64.musllinux_1_1_x86_64.whl` to [SERVER]/final
-          └── Too many redirects, only 10 redirects are allowed
+          cause: Too many redirects, only 10 redirects are allowed
         "
         );
     }
@@ -2292,7 +2292,7 @@ mod tests {
             &capture,
             @"
         error: Failed to publish `../../test/links/tqdm-4.66.1-py3-none-manylinux_2_12_x86_64.manylinux2010_x86_64.musllinux_1_1_x86_64.whl` to https://different.auth.tld/final/
-          └── Redirected URL is not in the same realm. Redirected to: https://different.auth.tld/final/
+          cause: Redirected URL is not in the same realm. Redirected to: https://different.auth.tld/final/
         "
         );
     }
@@ -2331,7 +2331,7 @@ mod tests {
             &capture,
             @"
         error: Failed to publish `../../test/links/tqdm-4.66.1-py3-none-manylinux_2_12_x86_64.manylinux2010_x86_64.musllinux_1_1_x86_64.whl` to [SERVER]/final
-          └── Server returned status code 400 Bad Request. Server says: 400 Error: Use 'source' as Python version for an sdist.
+          cause: Server returned status code 400 Bad Request. Server says: 400 Error: Use 'source' as Python version for an sdist.
         "
         );
     }
@@ -2373,7 +2373,7 @@ mod tests {
             &capture,
             @"
         error: Failed to publish `../../test/links/tqdm-4.66.1-py3-none-manylinux_2_12_x86_64.manylinux2010_x86_64.musllinux_1_1_x86_64.whl` to [SERVER]/final
-          └── Server returned status code 400 Bad Request. Server message: Bad Request, Missing required field `name`
+          cause: Server returned status code 400 Bad Request. Server message: Bad Request, Missing required field `name`
         "
         );
     }

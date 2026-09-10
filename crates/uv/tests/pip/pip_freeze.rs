@@ -208,13 +208,13 @@ fn freeze_direct_archive_hash_roundtrip() -> Result<()> {
     ----- stderr -----
     Resolved 1 package in [TIME]
     error: Failed to read `ok @ file://[WORKSPACE]/test/links/ok-1.0.0-py3-none-any.whl#subdirectory=src&sha256=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa`
-      └── Hash mismatch for `ok @ file://[WORKSPACE]/test/links/ok-1.0.0-py3-none-any.whl#subdirectory=src&sha256=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa`
+      cause: Hash mismatch for `ok @ file://[WORKSPACE]/test/links/ok-1.0.0-py3-none-any.whl#subdirectory=src&sha256=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa`
 
-          Expected:
-            sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+             Expected:
+               sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 
-          Computed:
-            sha256:79f0b33e6ce1e09eaa1784c8eee275dfe84d215d9c65c652f07c18e85fdaac5f
+             Computed:
+               sha256:79f0b33e6ce1e09eaa1784c8eee275dfe84d215d9c65c652f07c18e85fdaac5f
     ");
 
     Ok(())

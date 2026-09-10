@@ -97,9 +97,9 @@ fn tool_run_at_version() {
     exit_code: 2 (failure)
     ----- stderr -----
     error: Failed to parse: `pytest@`
-      └── Expected URL
-          pytest@
-                 ^
+      cause: Expected URL
+             pytest@
+                    ^
     ");
 
     // Invalid versions are just treated as package and command names
@@ -109,7 +109,7 @@ fn tool_run_at_version() {
     exit_code: 1 (failure)
     ----- stderr -----
     error: Failed to resolve tool requirement
-      └── Distribution not found at: file://[TEMP_DIR]/invalid
+      cause: Distribution not found at: file://[TEMP_DIR]/invalid
     ");
 
     let filters = context
@@ -977,8 +977,8 @@ fn tool_run_git_does_not_infer_dynamic_requires_python() {
     exit_code: 1 (failure)
     ----- stderr -----
     error: No solution found when resolving tool dependencies
-      └── Because the current Python version (3.11.[X]) does not satisfy Python>=3.12,<3.13 and dynamic-requires-python-tool==0.1.0 depends on Python>=3.12,<3.13, we can conclude that dynamic-requires-python-tool==0.1.0 cannot be used.
-          And because only dynamic-requires-python-tool==0.1.0 is available and you require dynamic-requires-python-tool, we can conclude that your requirements are unsatisfiable.
+      cause: Because the current Python version (3.11.[X]) does not satisfy Python>=3.12,<3.13 and dynamic-requires-python-tool==0.1.0 depends on Python>=3.12,<3.13, we can conclude that dynamic-requires-python-tool==0.1.0 cannot be used.
+             And because only dynamic-requires-python-tool==0.1.0 is available and you require dynamic-requires-python-tool, we can conclude that your requirements are unsatisfiable.
     ");
 }
 
@@ -1704,7 +1704,7 @@ fn tool_run_invalid_with() {
     exit_code: 1 (failure)
     ----- stderr -----
     error: Failed to resolve `--with` requirement
-      └── Distribution not found at: file://[TEMP_DIR]/foo
+      cause: Distribution not found at: file://[TEMP_DIR]/foo
     ");
 }
 
@@ -1791,7 +1791,7 @@ fn tool_run_resolution_error() {
     exit_code: 1 (failure)
     ----- stderr -----
     error: No solution found when resolving tool dependencies
-      └── Because there are no versions of add and you require add, we can conclude that your requirements are unsatisfiable.
+      cause: Because there are no versions of add and you require add, we can conclude that your requirements are unsatisfiable.
     ");
 }
 
@@ -2071,7 +2071,7 @@ fn tool_run_python_at_version() {
     exit_code: 1 (failure)
     ----- stderr -----
     error: No solution found when resolving tool dependencies
-      └── Because cp311 was not found in the package registry and you require cp311, we can conclude that your requirements are unsatisfiable.
+      cause: Because cp311 was not found in the package registry and you require cp311, we can conclude that your requirements are unsatisfiable.
     ");
 
     // Bare versions don't work either. Again we interpret them as package names.
@@ -2081,7 +2081,7 @@ fn tool_run_python_at_version() {
     exit_code: 1 (failure)
     ----- stderr -----
     error: No solution found when resolving tool dependencies
-      └── Because 311 was not found in the package registry and you require 311, we can conclude that your requirements are unsatisfiable.
+      cause: Because 311 was not found in the package registry and you require 311, we can conclude that your requirements are unsatisfiable.
     ");
 
     // Request a version via `-p`
@@ -2880,9 +2880,9 @@ fn tool_run_with_url_ending_in_py() {
     exit_code: 1 (failure)
     ----- stderr -----
     error: Failed to resolve `--with` requirement
-      ├── Git operation failed
-      ├── failed to fetch into: [CACHE_DIR]/git-v0/db/efbd3507bcbea33c
-      └── Remote Git fetches are not allowed because network connectivity is disabled (i.e., with `--offline`)
+      cause: Git operation failed
+      cause: failed to fetch into: [CACHE_DIR]/git-v0/db/efbd3507bcbea33c
+      cause: Remote Git fetches are not allowed because network connectivity is disabled (i.e., with `--offline`)
     ");
 
     uv_snapshot!(context.filters(), context.tool_run()
@@ -2891,10 +2891,10 @@ fn tool_run_with_url_ending_in_py() {
     exit_code: 1 (failure)
     ----- stderr -----
     error: Failed to resolve tool requirement
-      ├── Failed to download and build `easyeda2kicad @ git+https://github.com/uPesy/easyeda2kicad.py`
-      ├── Git operation failed
-      ├── failed to fetch into: [CACHE_DIR]/git-v0/db/efbd3507bcbea33c
-      └── Remote Git fetches are not allowed because network connectivity is disabled (i.e., with `--offline`)
+      cause: Failed to download and build `easyeda2kicad @ git+https://github.com/uPesy/easyeda2kicad.py`
+      cause: Git operation failed
+      cause: failed to fetch into: [CACHE_DIR]/git-v0/db/efbd3507bcbea33c
+      cause: Remote Git fetches are not allowed because network connectivity is disabled (i.e., with `--offline`)
     ");
 }
 
@@ -2912,9 +2912,9 @@ fn tool_run_with_from_url_ending_in_py() {
     exit_code: 1 (failure)
     ----- stderr -----
     error: Failed to resolve `--with` requirement
-      ├── Git operation failed
-      ├── failed to fetch into: [CACHE_DIR]/git-v0/db/efbd3507bcbea33c
-      └── Remote Git fetches are not allowed because network connectivity is disabled (i.e., with `--offline`)
+      cause: Git operation failed
+      cause: failed to fetch into: [CACHE_DIR]/git-v0/db/efbd3507bcbea33c
+      cause: Remote Git fetches are not allowed because network connectivity is disabled (i.e., with `--offline`)
     ");
 
     uv_snapshot!(context.filters(), context.tool_run()
@@ -2925,10 +2925,10 @@ fn tool_run_with_from_url_ending_in_py() {
     exit_code: 1 (failure)
     ----- stderr -----
     error: Failed to resolve tool requirement
-      ├── Failed to download and build `easyeda2kicad @ git+https://github.com/uPesy/easyeda2kicad.py`
-      ├── Git operation failed
-      ├── failed to fetch into: [CACHE_DIR]/git-v0/db/efbd3507bcbea33c
-      └── Remote Git fetches are not allowed because network connectivity is disabled (i.e., with `--offline`)
+      cause: Failed to download and build `easyeda2kicad @ git+https://github.com/uPesy/easyeda2kicad.py`
+      cause: Git operation failed
+      cause: failed to fetch into: [CACHE_DIR]/git-v0/db/efbd3507bcbea33c
+      cause: Remote Git fetches are not allowed because network connectivity is disabled (i.e., with `--offline`)
     ");
 }
 
@@ -2947,8 +2947,8 @@ fn tool_run_verbose_hint() {
     exit_code: 1 (failure)
     ----- stderr -----
     error: Failed to run tool
-      ├── No solution found when resolving dependencies
-      └── Because nonexistent-package-foo was not found in the package registry and you require nonexistent-package-foo, we can conclude that your requirements are unsatisfiable.
+      cause: No solution found when resolving dependencies
+      cause: Because nonexistent-package-foo was not found in the package registry and you require nonexistent-package-foo, we can conclude that your requirements are unsatisfiable.
 
     hint: You provided `--verbose` to `nonexistent-package-foo`. Did you mean to provide it to `uv tool run`? e.g., `uv tool run --verbose nonexistent-package-foo`
     ");
@@ -2960,8 +2960,8 @@ fn tool_run_verbose_hint() {
     exit_code: 1 (failure)
     ----- stderr -----
     error: Failed to run tool
-      ├── No solution found when resolving dependencies
-      └── Because nonexistent-package-bar was not found in the package registry and you require nonexistent-package-bar, we can conclude that your requirements are unsatisfiable.
+      cause: No solution found when resolving dependencies
+      cause: Because nonexistent-package-bar was not found in the package registry and you require nonexistent-package-bar, we can conclude that your requirements are unsatisfiable.
 
     hint: You provided `-v` to `nonexistent-package-bar`. Did you mean to provide it to `uv tool run`? e.g., `uv tool run -v nonexistent-package-bar`
     ");
@@ -2973,8 +2973,8 @@ fn tool_run_verbose_hint() {
     exit_code: 1 (failure)
     ----- stderr -----
     error: Failed to run tool
-      ├── No solution found when resolving dependencies
-      └── Because nonexistent-package-baz was not found in the package registry and you require nonexistent-package-baz, we can conclude that your requirements are unsatisfiable.
+      cause: No solution found when resolving dependencies
+      cause: Because nonexistent-package-baz was not found in the package registry and you require nonexistent-package-baz, we can conclude that your requirements are unsatisfiable.
 
     hint: You provided `-vv` to `nonexistent-package-baz`. Did you mean to provide it to `uv tool run`? e.g., `uv tool run -vv nonexistent-package-baz`
     ");
@@ -2986,7 +2986,7 @@ fn tool_run_verbose_hint() {
     exit_code: 1 (failure)
     ----- stderr -----
     error: No solution found when resolving tool dependencies
-      └── Because nonexistent-package-quux was not found in the package registry and you require nonexistent-package-quux, we can conclude that your requirements are unsatisfiable.
+      cause: Because nonexistent-package-quux was not found in the package registry and you require nonexistent-package-quux, we can conclude that your requirements are unsatisfiable.
     ");
 }
 
@@ -3049,9 +3049,9 @@ fn tool_run_with_incompatible_build_constraints() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
     error: Failed to download and build `requests==1.2.0`
-      ├── Failed to resolve requirements from `setup.py` build
-      ├── No solution found when resolving: `setuptools>=40.8.0`
-      └── Because you require setuptools>=40.8.0 and setuptools==2, we can conclude that your requirements are unsatisfiable.
+      cause: Failed to resolve requirements from `setup.py` build
+      cause: No solution found when resolving: `setuptools>=40.8.0`
+      cause: Because you require setuptools>=40.8.0 and setuptools==2, we can conclude that your requirements are unsatisfiable.
     ");
 
     Ok(())
@@ -3484,8 +3484,8 @@ fn tool_run_reresolve_python() -> anyhow::Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
     error: No solution found when resolving tool dependencies
-      └── Because the current Python version (3.11.[X]) does not satisfy Python>=3.12 and foo==1.0.0 depends on Python>=3.12, we can conclude that foo==1.0.0 cannot be used.
-          And because only foo==1.0.0 is available and you require foo, we can conclude that your requirements are unsatisfiable.
+      cause: Because the current Python version (3.11.[X]) does not satisfy Python>=3.12 and foo==1.0.0 depends on Python>=3.12, we can conclude that foo==1.0.0 cannot be used.
+             And because only foo==1.0.0 is available and you require foo, we can conclude that your requirements are unsatisfiable.
     ");
 
     // Unless the discovered interpreter is compatible with the request

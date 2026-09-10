@@ -434,7 +434,7 @@ fn run_pep723_script() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
     error: No solution found when resolving script dependencies
-      └── Because there are no versions of add and you require add, we can conclude that your requirements are unsatisfiable.
+      cause: Because there are no versions of add and you require add, we can conclude that your requirements are unsatisfiable.
     ");
 
     // If the script can't be resolved, we should reference the script.
@@ -453,7 +453,7 @@ fn run_pep723_script() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
     error: No solution found when resolving script dependencies
-      └── Because there are no versions of add and you require add, we can conclude that your requirements are unsatisfiable.
+      cause: Because there are no versions of add and you require add, we can conclude that your requirements are unsatisfiable.
     ");
 
     // If the script contains an unclosed PEP 723 tag, we should error.
@@ -1054,9 +1054,9 @@ fn run_pep723_script_build_constraints() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
     error: Failed to download and build `requests==1.2.0`
-      ├── Failed to resolve requirements from `setup.py` build
-      ├── No solution found when resolving: `setuptools>=40.8.0`
-      └── Because you require setuptools>=40.8.0 and setuptools==1, we can conclude that your requirements are unsatisfiable.
+      cause: Failed to resolve requirements from `setup.py` build
+      cause: No solution found when resolving: `setuptools>=40.8.0`
+      cause: Because you require setuptools>=40.8.0 and setuptools==1, we can conclude that your requirements are unsatisfiable.
     ");
 
     // Compatible build constraints.
@@ -1493,7 +1493,7 @@ fn run_with() -> Result<()> {
     Resolved 2 packages in [TIME]
     Checked 2 packages in [TIME]
     error: No solution found when resolving `--with` dependencies
-      └── Because there are no versions of add and you require add, we can conclude that your requirements are unsatisfiable.
+      cause: Because there are no versions of add and you require add, we can conclude that your requirements are unsatisfiable.
     ");
 
     Ok(())
@@ -1983,9 +1983,9 @@ fn run_with_build_constraints() -> Result<()> {
      + sniffio==1.3.1
      + typing-extensions==4.10.0
     error: Failed to download and build `requests==1.2.0`
-      ├── Failed to resolve requirements from `setup.py` build
-      ├── No solution found when resolving: `setuptools>=40.8.0`
-      └── Because you require setuptools>=40.8.0 and setuptools==1, we can conclude that your requirements are unsatisfiable.
+      cause: Failed to resolve requirements from `setup.py` build
+      cause: No solution found when resolving: `setuptools>=40.8.0`
+      cause: Because you require setuptools>=40.8.0 and setuptools==1, we can conclude that your requirements are unsatisfiable.
     ");
 
     // Change the build constraint to be compatible with `requests==1.2`.
@@ -2287,7 +2287,7 @@ fn run_with_editable() -> Result<()> {
     Resolved 3 packages in [TIME]
     Checked 3 packages in [TIME]
     error: Failed to resolve `--with` requirement
-      └── Distribution not found at: file://[TEMP_DIR]/foo
+      cause: Distribution not found at: file://[TEMP_DIR]/foo
     ");
 
     Ok(())
@@ -3285,7 +3285,7 @@ fn run_from_directory() -> Result<()> {
     Installed 1 package in [TIME]
      + foo==1.0.0 (from file://[TEMP_DIR]/project)
     error: Failed to spawn: `./project/main.py`
-      └── [OS ERROR 2]
+      cause: [OS ERROR 2]
     ");
 
     // Even if we write a `.python-version` file in the current directory, we should prefer the
@@ -4080,11 +4080,11 @@ fn run_invalid_project_table() -> Result<()> {
     exit_code: 2 (failure)
     ----- stderr -----
     error: Failed to parse: `pyproject.toml`
-      └── TOML parse error at line 1, column 2
-            |
-          1 | [project.urls]
-            |  ^^^^^^^
-          `pyproject.toml` is using the `[project]` table, but the required `project.name` field is not set
+      cause: TOML parse error at line 1, column 2
+               |
+             1 | [project.urls]
+               |  ^^^^^^^
+             `pyproject.toml` is using the `[project]` table, but the required `project.name` field is not set
     ");
 
     Ok(())
@@ -4123,7 +4123,7 @@ fn run_script_without_build_system() -> Result<()> {
     Resolved 1 package in [TIME]
     Checked in [TIME]
     error: Failed to spawn: `entry`
-      └── No such file or directory (os error 2)
+      cause: No such file or directory (os error 2)
     ");
 
     Ok(())
@@ -4781,8 +4781,8 @@ fn run_remote_pep723_script_with_nonexistent_ssl_cert_file() {
     ----- stderr -----
     warning: Invalid `SSL_CERT_FILE`. Path does not exist: [TEMP_DIR]/missing.pem. No default certificates will be trusted.
     error: error sending request for url (https://raw.githubusercontent.com/astral-sh/uv/df45b9ac2584824309ff29a6a09421055ad730f6/scripts/uv-run-remote-script-test.py)
-      ├── client error (Connect)
-      └── invalid peer certificate: UnknownIssuer
+      cause: client error (Connect)
+      cause: invalid peer certificate: UnknownIssuer
     ");
 }
 
@@ -4829,10 +4829,10 @@ fn run_remote_pep723_requirements_fetch_error_does_not_leak_credentials() -> Res
     exit_code: 2 (failure)
     ----- stderr -----
     error: Request failed after 3 retries
-      ├── error sending request for url (http://[LOCALHOST]/requirements.py)
-      ├── client error (Connect)
-      ├── tcp connect error
-      └── [CONNECTION_REFUSED]
+      cause: error sending request for url (http://[LOCALHOST]/requirements.py)
+      cause: client error (Connect)
+      cause: tcp connect error
+      cause: [CONNECTION_REFUSED]
     ");
 
     Ok(())

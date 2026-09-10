@@ -1783,13 +1783,13 @@ fn check_locked_tool_rejects_invalid_hash() -> Result<()> {
     ----- stderr -----
     warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
     error: Failed to download `ty==0.0.17`
-      └── Hash mismatch for `ty==0.0.17`
+      cause: Hash mismatch for `ty==0.0.17`
 
-          Expected:
-            sha256:[HASH]
+             Expected:
+               sha256:[HASH]
 
-          Computed:
-            sha256:[HASH]
+             Computed:
+               sha256:[HASH]
     "
     );
 
@@ -2630,11 +2630,11 @@ fn check_no_sync_errors_on_invalid_lockfile() -> Result<()> {
     ----- stderr -----
     warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
     error: Failed to parse `uv.lock`
-      └── TOML parse error at line 1, column 8
-            |
-          1 | invalid
-            |        ^
-          key with no value, expected `=`
+      cause: TOML parse error at line 1, column 8
+               |
+             1 | invalid
+               |        ^
+             key with no value, expected `=`
     "
     );
 
@@ -2674,11 +2674,11 @@ fn check_script_no_sync_errors_on_invalid_lockfile() -> Result<()> {
     ----- stderr -----
     warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
     error: Failed to parse `uv.lock`
-      └── TOML parse error at line 1, column 8
-            |
-          1 | invalid
-            |        ^
-          key with no value, expected `=`
+      cause: TOML parse error at line 1, column 8
+               |
+             1 | invalid
+               |        ^
+             key with no value, expected `=`
     "
     );
 
@@ -2715,7 +2715,7 @@ fn check_ty_version_no_match() {
     ----- stderr -----
     warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
     error: Failed to find ty version matching: >=999.0.0
-      └── No version of ty found matching `>=999.0.0` for platform `[PLATFORM]`
+      cause: No version of ty found matching `>=999.0.0` for platform `[PLATFORM]`
     "
     );
 }

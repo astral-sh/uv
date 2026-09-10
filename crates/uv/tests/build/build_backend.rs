@@ -859,7 +859,7 @@ fn license_glob_without_matches_errors() -> Result<()> {
     exit_code: 2 (failure)
     ----- stderr -----
     error: Invalid project metadata
-      └── `project.license-files` glob `abc` did not match any files
+      cause: `project.license-files` glob `abc` did not match any files
     ");
 
     Ok(())
@@ -899,7 +899,7 @@ fn license_file_must_be_utf8() -> Result<()> {
     exit_code: 2 (failure)
     ----- stderr -----
     error: Invalid project metadata
-      └── License file `LICENSE.bin` must be UTF-8 encoded
+      cause: License file `LICENSE.bin` must be UTF-8 encoded
     ");
 
     Ok(())
@@ -1046,7 +1046,7 @@ fn error_on_relative_module_root_outside_project_root() -> Result<()> {
     ----- stderr -----
     Building source distribution...
     error: Failed to build `[TEMP_DIR]/`
-      └── Module root must be inside the project: ..
+      cause: Module root must be inside the project: ..
     ");
 
     uv_snapshot!(context.filters(), context.build().arg("--wheel"), @"
@@ -1054,7 +1054,7 @@ fn error_on_relative_module_root_outside_project_root() -> Result<()> {
     ----- stderr -----
     Building wheel...
     error: Failed to build `[TEMP_DIR]/`
-      └── Module root must be inside the project: ..
+      cause: Module root must be inside the project: ..
     ");
 
     Ok(())
@@ -1095,7 +1095,7 @@ fn error_on_relative_data_dir_outside_project_root() -> Result<()> {
     ----- stderr -----
     Building source distribution...
     error: Failed to build `[TEMP_DIR]/project`
-      └── The path for the data directory headers must be inside the project: ../header
+      cause: The path for the data directory headers must be inside the project: ../header
     ");
 
     uv_snapshot!(context.filters(), context.build().arg("project").arg("--wheel"), @"
@@ -1103,7 +1103,7 @@ fn error_on_relative_data_dir_outside_project_root() -> Result<()> {
     ----- stderr -----
     Building wheel...
     error: Failed to build `[TEMP_DIR]/project`
-      └── The path for the data directory headers must be inside the project: ../header
+      cause: The path for the data directory headers must be inside the project: ../header
     ");
 
     pyproject_toml.write_str(indoc! {r#"
@@ -1130,7 +1130,7 @@ fn error_on_relative_data_dir_outside_project_root() -> Result<()> {
     ----- stderr -----
     Building wheel...
     error: Failed to build `[TEMP_DIR]/project`
-      └── The path for the data directory headers must be inside the project: ../outside
+      cause: The path for the data directory headers must be inside the project: ../outside
     ");
 
     Ok(())
@@ -1221,7 +1221,7 @@ fn wheel_data_symlink_containment() -> Result<()> {
     exit_code: 2 (failure)
     ----- stderr -----
     error: Failed to build `[TEMP_DIR]/project`
-      └── The path for the data directory data must be inside the project: external-assets
+      cause: The path for the data directory data must be inside the project: external-assets
     ");
 
     project.child("assets/public.txt").touch()?;
@@ -1283,7 +1283,7 @@ fn venv_in_source_tree() {
     ----- stderr -----
     Building source distribution...
     error: Failed to build `[TEMP_DIR]/`
-      └── Virtual environments must not be added to source distributions or wheels, remove the directory or exclude it from the build: src/foo/.venv
+      cause: Virtual environments must not be added to source distributions or wheels, remove the directory or exclude it from the build: src/foo/.venv
     ");
 
     uv_snapshot!(context.filters(), context.build().arg("--wheel"), @"
@@ -1291,7 +1291,7 @@ fn venv_in_source_tree() {
     ----- stderr -----
     Building wheel...
     error: Failed to build `[TEMP_DIR]/`
-      └── Virtual environments must not be added to source distributions or wheels, remove the directory or exclude it from the build: src/foo/.venv
+      cause: Virtual environments must not be added to source distributions or wheels, remove the directory or exclude it from the build: src/foo/.venv
     ");
 }
 
@@ -1380,12 +1380,12 @@ fn invalid_pyproject_toml() -> Result<()> {
     ----- stderr -----
     Building source distribution...
     error: Failed to build `[TEMP_DIR]/child`
-      ├── Invalid metadata format in: child/pyproject.toml
-      └── TOML parse error at line 2, column 8
-            |
-          2 | name = 1
-            |        ^
-          invalid type: integer `1`, expected a string
+      cause: Invalid metadata format in: child/pyproject.toml
+      cause: TOML parse error at line 2, column 8
+               |
+             2 | name = 1
+               |        ^
+             invalid type: integer `1`, expected a string
     ");
 
     Ok(())

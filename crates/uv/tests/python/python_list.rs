@@ -119,10 +119,10 @@ fn python_list_warns_on_noncritical_explicit_path_errors() -> Result<()> {
     exit_code: 0 (success)
     ----- stderr -----
     warning: Failed to inspect Python interpreter from provided path at `python`
-      └── Querying Python at `[TEMP_DIR]/python` failed with exit status exit status: 1
+      cause: Querying Python at `[TEMP_DIR]/python` failed with exit status exit status: 1
 
-          [stderr]
-          error: intentionally broken python executable
+             [stderr]
+             error: intentionally broken python executable
     ");
 
     let environment = context.temp_dir.join("environment");
@@ -137,10 +137,10 @@ fn python_list_warns_on_noncritical_explicit_path_errors() -> Result<()> {
     exit_code: 0 (success)
     ----- stderr -----
     warning: Failed to inspect Python interpreter from provided path at `environment`
-      └── Querying Python at `[TEMP_DIR]/environment/bin/python` failed with exit status exit status: 1
+      cause: Querying Python at `[TEMP_DIR]/environment/bin/python` failed with exit status exit status: 1
 
-          [stderr]
-          error: intentionally broken python executable
+             [stderr]
+             error: intentionally broken python executable
     ");
 
     Ok(())
@@ -638,8 +638,8 @@ async fn python_list_remote_python_downloads_json_url() -> Result<()> {
     exit_code: 2 (failure)
     ----- stderr -----
     error: Error while fetching remote python downloads json from 'http://[LOCALHOST]/404'
-      ├── Failed to fetch: `http://[LOCALHOST]/404`
-      └── HTTP status client error (404 Not Found) for url (http://[LOCALHOST]/404)
+      cause: Failed to fetch: `http://[LOCALHOST]/404`
+      cause: HTTP status client error (404 Not Found) for url (http://[LOCALHOST]/404)
     ");
 
     // test invalid json
@@ -650,7 +650,7 @@ async fn python_list_remote_python_downloads_json_url() -> Result<()> {
     exit_code: 2 (failure)
     ----- stderr -----
     error: Unable to parse the JSON Python download list at http://[LOCALHOST]/invalid
-      └── EOF while parsing an object at line 1 column 1
+      cause: EOF while parsing an object at line 1 column 1
     ");
 
     Ok(())

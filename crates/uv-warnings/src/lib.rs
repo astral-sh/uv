@@ -116,13 +116,13 @@ mod tests {
             ErrorOptions::default().with_stream(&mut output),
         )
         .unwrap();
-        assert_snapshot!(format!("{output:?}"), @r#""\u{1b}[1m\u{1b}[33mwarning\u{1b}[39m\u{1b}[0m\u{1b}[1m:\u{1b}[0m Failed to install Python\n  \u{1b}[1m\u{1b}[33m├──\u{1b}[39m\u{1b}[0m Failed to write registry entry\n  \u{1b}[1m\u{1b}[33m└──\u{1b}[39m\u{1b}[0m Permission denied\n\n\u{1b}[36m\u{1b}[1mhint\u{1b}[0m\u{1b}[39m\u{1b}[1m:\u{1b}[0m Check the registry permissions.\n""#);
+        assert_snapshot!(format!("{output:?}"), @r#""\u{1b}[1m\u{1b}[33mwarning\u{1b}[39m\u{1b}[0m\u{1b}[1m:\u{1b}[0m Failed to install Python\n  \u{1b}[1m\u{1b}[33mcause\u{1b}[39m\u{1b}[0m\u{1b}[1m:\u{1b}[0m Failed to write registry entry\n  \u{1b}[1m\u{1b}[33mcause\u{1b}[39m\u{1b}[0m\u{1b}[1m:\u{1b}[0m Permission denied\n\n\u{1b}[36m\u{1b}[1mhint\u{1b}[0m\u{1b}[39m\u{1b}[1m:\u{1b}[0m Check the registry permissions.\n""#);
         let output = anstream::adapter::strip_str(&output);
 
         assert_snapshot!(output, @"
         warning: Failed to install Python
-          ├── Failed to write registry entry
-          └── Permission denied
+          cause: Failed to write registry entry
+          cause: Permission denied
 
         hint: Check the registry permissions.
         ");

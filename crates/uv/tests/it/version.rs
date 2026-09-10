@@ -2555,7 +2555,7 @@ fn version_get_frozen_workspace_without_python() -> Result<()> {
     exit_code: 2 (failure)
     ----- stderr -----
     error: Failed to initialize cache at `cache-file`
-      └── failed to create directory `[CACHE_DIR]`: [ERROR]
+      cause: failed to create directory `[CACHE_DIR]`: [ERROR]
     ");
 
     Ok(())

@@ -791,7 +791,7 @@ fn python_find_venv_invalid() {
     exit_code: 2 (failure)
     ----- stderr -----
     error: Failed to inspect Python interpreter from active virtual environment at `.venv/[BIN]/[PYTHON]`
-      └── Python interpreter not found at `[VENV]/[BIN]/[PYTHON]`
+      cause: Python interpreter not found at `[VENV]/[BIN]/[PYTHON]`
     ");
 
     // Unless the virtual environment is not active
@@ -1075,8 +1075,8 @@ fn python_find_path() {
     exit_code: 2 (failure)
     ----- stderr -----
     error: Failed to inspect Python interpreter from provided path at `bar`
-      ├── Failed to query Python interpreter at `[TEMP_DIR]/bar`
-      └── [PERMISSION DENIED]
+      cause: Failed to query Python interpreter at `[TEMP_DIR]/bar`
+      cause: [PERMISSION DENIED]
     ");
 
     // No interpreter at a file that does not exist
