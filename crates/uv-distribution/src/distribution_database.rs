@@ -193,8 +193,8 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
 
     /// Retrieve distribution metadata and any hashes requested for resolution.
     ///
-    /// Source archives are validated before executing build backends; wheel validation is deferred
-    /// to installation.
+    /// Source archive hashes are validated before executing build backends; wheel archive hash
+    /// validation is deferred to installation.
     #[instrument(skip_all, fields(%dist))]
     pub async fn get_or_build_wheel_metadata(
         &self,
@@ -535,8 +535,8 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
 
     /// Fetch wheel metadata, along with any hashes requested for resolution.
     ///
-    /// Hash-checking is _not_ enforced here; callers must enforce it when retrieving the wheel for
-    /// installation.
+    /// Wheel archive hash validation is deferred to installation. Metadata sidecar hashes are
+    /// checked by the client when downloading sidecars with index-provided hashes.
     async fn get_wheel_metadata(
         &self,
         dist: &BuiltDist,
@@ -548,7 +548,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                     HashCollection::None => false,
                     HashCollection::Url | HashCollection::All => match dist {
                         BuiltDist::Registry(dist) => {
-                            // Preserve the fallback for indexes and `--find-links` without hashes.
+                            // Generate missing hashes for indexes and `--find-links` without hashes.
                             // This hashes only the selected wheel, not every distribution for the version.
                             hashes.collection == HashCollection::All
                                 && dist.best_wheel().file.hashes.is_empty()

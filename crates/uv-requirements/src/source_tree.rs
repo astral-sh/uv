@@ -204,7 +204,7 @@ impl<'a, Context: BuildContext> SourceTreeResolver<'a, Context> {
             editable: None,
         });
 
-        // Determine the hash request. Since we don't have a package name, we perform a
+        // Determine the hash policy. Since we don't have a package name, we perform a
         // manual match.
         let collection = match self.hasher.verification() {
             HashVerification::Required(_) => {
