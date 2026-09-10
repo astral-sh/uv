@@ -24,7 +24,7 @@ pub struct NameRequirementSpecification {
 }
 
 impl NameRequirementSpecification {
-    /// Convert the requirement to a relative path while preserving its hashes.
+    /// Make the requirement's path relative to the given root.
     pub fn relative_to(self, root: &Path) -> Result<Self, io::Error> {
         Ok(Self {
             requirement: self.requirement.relative_to(root)?,
@@ -32,7 +32,7 @@ impl NameRequirementSpecification {
         })
     }
 
-    /// Convert the requirement to an absolute path while preserving its hashes.
+    /// Make the requirement's path absolute based on the given root.
     #[must_use]
     pub fn into_absolute(self, root: &Path) -> Self {
         Self {
