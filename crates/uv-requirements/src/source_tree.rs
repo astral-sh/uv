@@ -11,7 +11,7 @@ use uv_distribution::{DistributionDatabase, FlatRequiresDist, Reporter, Requires
 use uv_distribution_types::Requirement;
 use uv_distribution_types::{
     BuildableSource, DirectorySourceUrl, HashCollection, HashValidation, Identifier,
-    MetadataHashRequest, SourceUrl,
+    MetadataHashPolicy, SourceUrl,
 };
 use uv_fs::Simplified;
 use uv_normalize::{ExtraName, PackageName};
@@ -218,7 +218,7 @@ impl<'a, Context: BuildContext> SourceTreeResolver<'a, Context> {
             }
             HashVerification::None => self.hasher.collection(),
         };
-        let hashes = MetadataHashRequest {
+        let hashes = MetadataHashPolicy {
             collection,
             validation: HashValidation::None,
         };

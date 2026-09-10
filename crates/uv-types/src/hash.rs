@@ -7,7 +7,7 @@ use rustc_hash::FxHashMap;
 
 use uv_configuration::HashCheckingMode;
 use uv_distribution_types::{
-    ArchiveHashRequest, DistributionMetadata, HashCollection, HashValidation, MetadataHashRequest,
+    ArchiveHashPolicy, DistributionMetadata, HashCollection, HashValidation, MetadataHashPolicy,
     Name, Requirement, RequirementSource, Resolution, UnresolvedRequirement, VersionId,
 };
 use uv_normalize::PackageName;
@@ -73,49 +73,49 @@ impl HashStrategy {
         &self.verification
     }
 
-    /// Return the [`ArchiveHashRequest`] for the given distribution.
-    pub fn get<T: DistributionMetadata>(&self, distribution: &T) -> ArchiveHashRequest<'_> {
+    /// Return the [`ArchiveHashPolicy`] for the given distribution.
+    pub fn get<T: DistributionMetadata>(&self, distribution: &T) -> ArchiveHashPolicy<'_> {
         self.get_archive_request(|| distribution.version_id())
     }
 
-    /// Return the [`MetadataHashRequest`] for retrieving the given distribution's metadata.
+    /// Return the [`MetadataHashPolicy`] for retrieving the given distribution's metadata.
     pub fn get_metadata<T: DistributionMetadata>(
         &self,
         distribution: &T,
-    ) -> MetadataHashRequest<'_> {
-        MetadataHashRequest {
+    ) -> MetadataHashPolicy<'_> {
+        MetadataHashPolicy {
             collection: self.collection,
             validation: self.get_validation(|| distribution.version_id()),
         }
     }
 
-    /// Return the [`ArchiveHashRequest`] for the given registry-based package.
-    pub fn get_package(&self, name: &PackageName, version: &Version) -> ArchiveHashRequest<'_> {
+    /// Return the [`ArchiveHashPolicy`] for the given registry-based package.
+    pub fn get_package(&self, name: &PackageName, version: &Version) -> ArchiveHashPolicy<'_> {
         self.get_archive_request(|| VersionId::from_registry(name.clone(), version.clone()))
     }
 
-    /// Return the [`ArchiveHashRequest`] for the given direct URL package.
+    /// Return the [`ArchiveHashPolicy`] for the given direct URL package.
     ///
     /// A direct URL identifies a single concrete artifact, so every provided digest must match.
-    pub fn get_url(&self, url: &DisplaySafeUrl) -> ArchiveHashRequest<'_> {
+    pub fn get_url(&self, url: &DisplaySafeUrl) -> ArchiveHashPolicy<'_> {
         self.get_archive_request(|| VersionId::from_url(url))
     }
 
-    /// Return the [`MetadataHashRequest`] for a URL whose package name is not yet known.
-    pub fn get_url_metadata(&self, url: &DisplaySafeUrl) -> MetadataHashRequest<'_> {
-        MetadataHashRequest {
+    /// Return the [`MetadataHashPolicy`] for a URL whose package name is not yet known.
+    pub fn get_url_metadata(&self, url: &DisplaySafeUrl) -> MetadataHashPolicy<'_> {
+        MetadataHashPolicy {
             collection: self.collection,
             validation: self.get_validation(|| VersionId::from_url(url)),
         }
     }
 
-    /// Return the archive hash request for a distribution.
-    fn get_archive_request(&self, id: impl FnOnce() -> VersionId) -> ArchiveHashRequest<'_> {
+    /// Return the archive hash policy for a distribution.
+    fn get_archive_request(&self, id: impl FnOnce() -> VersionId) -> ArchiveHashPolicy<'_> {
         let validation = self.get_validation(id);
         match validation {
             HashValidation::None => self
                 .collection
-                .map_or(ArchiveHashRequest::None, |_| ArchiveHashRequest::Generate),
+                .map_or(ArchiveHashPolicy::None, |_| ArchiveHashPolicy::Generate),
             HashValidation::Any(_) | HashValidation::All(_) => validation.into(),
         }
     }
@@ -583,7 +583,7 @@ mod tests {
     use uv_configuration::HashCheckingMode;
     use uv_distribution_filename::DistExtension;
     use uv_distribution_types::{
-        ArchiveHashRequest, HashCollection, HashValidation, MetadataHashRequest, Requirement,
+        ArchiveHashPolicy, HashCollection, HashValidation, MetadataHashPolicy, Requirement,
         RequirementSource, UnresolvedRequirement, VersionId,
     };
     use uv_normalize::PackageName;
@@ -649,7 +649,7 @@ mod tests {
             };
             assert_eq!(
                 hasher.get_url(url),
-                ArchiveHashRequest::All(expected.as_slice())
+                ArchiveHashPolicy::All(expected.as_slice())
             );
         }
     }
@@ -677,7 +677,7 @@ mod tests {
 
         assert_eq!(
             strategy.get_url(&url),
-            ArchiveHashRequest::All(slice::from_ref(&digest))
+            ArchiveHashPolicy::All(slice::from_ref(&digest))
         );
         for fragment in [
             "#subdirectory=.",
@@ -688,31 +688,31 @@ mod tests {
             let root_url = format!("{url}{fragment}").parse()?;
             assert_eq!(
                 strategy.get_url(&root_url),
-                ArchiveHashRequest::All(slice::from_ref(&digest))
+                ArchiveHashPolicy::All(slice::from_ref(&digest))
             );
         }
-        assert_eq!(strategy.get_url(&unknown_url), ArchiveHashRequest::Generate);
+        assert_eq!(strategy.get_url(&unknown_url), ArchiveHashPolicy::Generate);
         assert_eq!(
             strategy.get_url_metadata(&unknown_url),
-            MetadataHashRequest {
+            MetadataHashPolicy {
                 collection: Some(HashCollection::All),
                 validation: HashValidation::None,
             }
         );
         assert_eq!(
             strategy.get_url_metadata(&url),
-            MetadataHashRequest {
+            MetadataHashPolicy {
                 collection: Some(HashCollection::All),
                 validation: HashValidation::All(slice::from_ref(&digest)),
             }
         );
         assert_eq!(
             strategy.get_package(&name, &version),
-            ArchiveHashRequest::Any(slice::from_ref(&digest))
+            ArchiveHashPolicy::Any(slice::from_ref(&digest))
         );
         assert_eq!(
             strategy.get_package(&name, &unknown_version),
-            ArchiveHashRequest::Generate
+            ArchiveHashPolicy::Generate
         );
 
         Ok(())
@@ -726,17 +726,17 @@ mod tests {
         let strategy = HashStrategy::collect(HashCollection::All)
             .with_verification(HashVerification::Required(Arc::default()));
 
-        assert_eq!(strategy.get_url(&url), ArchiveHashRequest::All(&[]));
+        assert_eq!(strategy.get_url(&url), ArchiveHashPolicy::All(&[]));
         assert_eq!(
             strategy.get_url_metadata(&url),
-            MetadataHashRequest {
+            MetadataHashPolicy {
                 collection: Some(HashCollection::All),
                 validation: HashValidation::All(&[]),
             }
         );
         assert_eq!(
             strategy.get_package(&name, &version),
-            ArchiveHashRequest::Any(&[])
+            ArchiveHashPolicy::Any(&[])
         );
         assert!(!strategy.allows_url(&url));
         assert!(!strategy.allows_package(&name, &version));

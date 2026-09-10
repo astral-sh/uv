@@ -32,10 +32,10 @@ use uv_distribution_filename::{
     BuildTag, DistExtension, ExtensionError, SourceDistExtension, WheelFilename,
 };
 use uv_distribution_types::{
-    ArchiveHashRequest, BuiltDist, DependencyMetadata, DirectUrlBuiltDist, DirectUrlSourceDist,
+    ArchiveHashPolicy, BuiltDist, DependencyMetadata, DirectUrlBuiltDist, DirectUrlSourceDist,
     DirectorySourceDist, Dist, FileLocation, FirstParty, GitDirectorySourceDist, GitPathBuiltDist,
     GitPathSourceDist, HashValidation, Identifier, IndexLocations, IndexMetadata, IndexUrl,
-    MetadataHashRequest, Name, PYPI_URL, PathBuiltDist, PathSourceDist, RegistryBuiltDist,
+    MetadataHashPolicy, Name, PYPI_URL, PathBuiltDist, PathSourceDist, RegistryBuiltDist,
     RegistryBuiltWheel, RegistrySourceDist, RemoteSource, Requirement, RequirementSource,
     RequiresPython, ResolvedDist, SimplifiedMarkerTree, StaticMetadata, ToUrlError, UrlString,
     VersionId,
@@ -3294,14 +3294,14 @@ impl Lock {
                 }
             })
             && locked_hashes.is_none_or(|validation| {
-                ArchiveHashRequest::from(validation).matches(archive.hashes.as_slice())
+                ArchiveHashPolicy::from(validation).matches(archive.hashes.as_slice())
             })
         {
             return Ok(archive.metadata.clone());
         }
 
         let metadata_hashes = if let Some(validation) = locked_hashes {
-            MetadataHashRequest {
+            MetadataHashPolicy {
                 collection: hasher.collection(),
                 validation,
             }
@@ -8159,13 +8159,13 @@ wheels = [{ filename = "local-1.0.0-py3-none-any.whl", hash = "sha256:53a42340ae
         assert_eq!(hasher.collection(), None);
         assert_eq!(
             hasher.get_url(&remote),
-            ArchiveHashRequest::All(slice::from_ref(&digest))
+            ArchiveHashPolicy::All(slice::from_ref(&digest))
         );
         assert_eq!(
             hasher.get_url(&local),
-            ArchiveHashRequest::All(slice::from_ref(&digest))
+            ArchiveHashPolicy::All(slice::from_ref(&digest))
         );
-        assert_eq!(hasher.get_url(&unknown), ArchiveHashRequest::None);
+        assert_eq!(hasher.get_url(&unknown), ArchiveHashPolicy::None);
     }
 
     #[test]

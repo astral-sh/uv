@@ -1,30 +1,33 @@
 use uv_pypi_types::{HashAlgorithm, HashDigest};
 
-/// Hash requirements for an archive.
+/// Hash generation and validation policy for an archive.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ArchiveHashRequest<'a> {
-    /// No hash requirements.
+pub enum ArchiveHashPolicy<'a> {
+    /// No hash policy is specified.
     None,
-    /// Generate a SHA-256 hash without validation.
+    /// Hashes should be generated (specifically, a SHA-256 hash), but not validated.
     Generate,
-    /// Require at least one expected hash to match.
+    /// Hashes should be validated against a pre-defined list of hashes, and any matching digest is
+    /// sufficient. If necessary, hashes should be generated so as to ensure that the archive is
+    /// valid.
     Any(&'a [HashDigest]),
-    /// Require every expected hash to match. An empty list rejects all archives.
+    /// Hashes should be validated against a pre-defined list of hashes, and every digest must
+    /// match. If necessary, hashes should be generated so as to ensure that the archive is valid.
     All(&'a [HashDigest]),
 }
 
-impl ArchiveHashRequest<'_> {
-    /// Returns `true` if the hash request is `None`.
+impl ArchiveHashPolicy<'_> {
+    /// Returns `true` if the hash policy is `None`.
     pub fn is_none(&self) -> bool {
         matches!(self, Self::None)
     }
 
-    /// Returns `true` if the hash request is `Any` or `All`.
+    /// Returns `true` if the hash policy is `Any` or `All`.
     pub fn requires_validation(&self) -> bool {
         matches!(self, Self::Any(_) | Self::All(_))
     }
 
-    /// Return the algorithms used in the hash request.
+    /// Return the algorithms used in the hash policy.
     pub fn algorithms(&self) -> Vec<HashAlgorithm> {
         match self {
             Self::None => vec![],
@@ -38,7 +41,7 @@ impl ArchiveHashRequest<'_> {
         }
     }
 
-    /// Return the digests used in the hash request.
+    /// Return the digests used in the hash policy.
     pub fn digests(&self) -> &[HashDigest] {
         match self {
             Self::None => &[],
@@ -47,7 +50,7 @@ impl ArchiveHashRequest<'_> {
         }
     }
 
-    /// Returns `true` if the given hashes satisfy the request.
+    /// Returns `true` if the given hashes satisfy the policy.
     pub fn matches(&self, hashes: &[HashDigest]) -> bool {
         match self {
             Self::None => true,
@@ -63,7 +66,7 @@ impl ArchiveHashRequest<'_> {
         }
     }
 
-    /// Returns `true` if the given hashes include the algorithms required by the request.
+    /// Returns `true` if the given hashes include the algorithms required by the policy.
     fn has_required_algorithms(&self, hashes: &[HashDigest]) -> bool {
         match self {
             Self::None => true,
@@ -93,23 +96,23 @@ impl ArchiveHashRequest<'_> {
 /// For example, `uv pip compile --generate-hashes` requests [`HashCollection::All`] with
 /// [`HashValidation::None`]:
 ///
-/// - If the index provides a wheel's hash, metadata lookup uses [`ArchiveHashRequest::None`].
+/// - If the index provides a wheel's hash, metadata lookup uses [`ArchiveHashPolicy::None`].
 ///   The resolver can record the index-provided hash without hashing the wheel.
-/// - If the index provides no hashes, metadata lookup uses [`ArchiveHashRequest::Generate`]
+/// - If the index provides no hashes, metadata lookup uses [`ArchiveHashPolicy::Generate`]
 ///   to obtain a SHA-256 hash of the wheel.
 ///
 /// If source metadata requires a build and `validation` contains expected hashes, the fetcher
-/// instead uses [`ArchiveHashRequest::Any`] or [`ArchiveHashRequest::All`] to check the archive
+/// instead uses [`ArchiveHashPolicy::Any`] or [`ArchiveHashPolicy::All`] to check the archive
 /// before running the backend. Those expected hashes take precedence over collection.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
-pub struct MetadataHashRequest<'a> {
+pub struct MetadataHashPolicy<'a> {
     /// Which missing hashes to collect for the resolution.
     pub collection: Option<HashCollection>,
     /// Expected hashes to validate before source builds. Wheel validation is deferred to installation.
     pub validation: HashValidation<'a>,
 }
 
-/// Expected digests for an archive, without requesting hash generation.
+/// Expected digests to validate against an archive.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub enum HashValidation<'a> {
     /// No expected digests are specified.
@@ -121,7 +124,7 @@ pub enum HashValidation<'a> {
     All(&'a [HashDigest]),
 }
 
-impl<'a> From<HashValidation<'a>> for ArchiveHashRequest<'a> {
+impl<'a> From<HashValidation<'a>> for ArchiveHashPolicy<'a> {
     fn from(validation: HashValidation<'a>) -> Self {
         match validation {
             HashValidation::None => Self::None,
@@ -146,13 +149,13 @@ pub trait Hashed {
     /// Return the [`HashDigest`]s for the archive.
     fn hashes(&self) -> &[HashDigest];
 
-    /// Returns `true` if the archive satisfies the given hash request.
-    fn satisfies(&self, hashes: ArchiveHashRequest) -> bool {
+    /// Returns `true` if the archive satisfies the given hash policy.
+    fn satisfies(&self, hashes: ArchiveHashPolicy) -> bool {
         hashes.matches(self.hashes())
     }
 
-    /// Returns `true` if the archive includes the algorithms required by the given hash request.
-    fn has_digests(&self, hashes: ArchiveHashRequest) -> bool {
+    /// Returns `true` if the archive includes the algorithms required by the given hash policy.
+    fn has_digests(&self, hashes: ArchiveHashPolicy) -> bool {
         hashes.has_required_algorithms(self.hashes())
     }
 }
@@ -175,7 +178,7 @@ mod tests {
 
     use uv_pypi_types::HashDigest;
 
-    use super::ArchiveHashRequest;
+    use super::ArchiveHashPolicy;
 
     #[test]
     fn validate_all_requires_every_digest() {
@@ -192,10 +195,10 @@ mod tests {
         )
         .unwrap();
 
-        let request = ArchiveHashRequest::All(&[sha256.clone(), sha512.clone()]);
-        assert!(request.matches(&[sha256.clone(), sha512]));
-        assert!(!request.matches(std::slice::from_ref(&sha256)));
-        assert!(!request.matches(&[sha256, wrong_sha512]));
+        let policy = ArchiveHashPolicy::All(&[sha256.clone(), sha512.clone()]);
+        assert!(policy.matches(&[sha256.clone(), sha512]));
+        assert!(!policy.matches(std::slice::from_ref(&sha256)));
+        assert!(!policy.matches(&[sha256, wrong_sha512]));
     }
 
     #[test]
@@ -213,8 +216,8 @@ mod tests {
         )
         .unwrap();
 
-        let request = ArchiveHashRequest::Any(&[sha256.clone(), sha512]);
-        assert!(request.matches(&[sha256]));
-        assert!(!request.matches(&[wrong_sha512]));
+        let policy = ArchiveHashPolicy::Any(&[sha256.clone(), sha512]);
+        assert!(policy.matches(&[sha256]));
+        assert!(!policy.matches(&[wrong_sha512]));
     }
 }

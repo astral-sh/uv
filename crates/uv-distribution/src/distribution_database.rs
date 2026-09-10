@@ -24,8 +24,8 @@ use uv_client::{
 use uv_configuration::initialize_rayon_once;
 use uv_distribution_filename::WheelFilename;
 use uv_distribution_types::{
-    ArchiveHashRequest, BuildInfo, BuildableSource, BuiltDist, Dist, DistRef, HashCollection,
-    HashValidation, Hashed, IndexUrl, InstalledDist, MetadataHashRequest, Name, SourceDist,
+    ArchiveHashPolicy, BuildInfo, BuildableSource, BuiltDist, Dist, DistRef, HashCollection,
+    HashValidation, Hashed, IndexUrl, InstalledDist, MetadataHashPolicy, Name, SourceDist,
 };
 use uv_extract::dirhash::{DirectoryDigest, HashedFile};
 use uv_extract::hash::Hasher;
@@ -157,7 +157,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         &self,
         dist: &Dist,
         tags: &Tags,
-        hashes: ArchiveHashRequest<'_>,
+        hashes: ArchiveHashPolicy<'_>,
     ) -> Result<LocalWheel, Error> {
         match dist {
             Dist::Built(built) => self.get_wheel(built, hashes).await,
@@ -199,7 +199,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
     pub async fn get_or_build_wheel_metadata(
         &self,
         dist: &Dist,
-        hashes: MetadataHashRequest<'_>,
+        hashes: MetadataHashPolicy<'_>,
     ) -> Result<ArchiveMetadata, Error> {
         match dist {
             Dist::Built(built) => self.get_wheel_metadata(built, hashes).await,
@@ -217,7 +217,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
     async fn get_wheel(
         &self,
         dist: &BuiltDist,
-        hashes: ArchiveHashRequest<'_>,
+        hashes: ArchiveHashPolicy<'_>,
     ) -> Result<LocalWheel, Error> {
         match dist {
             BuiltDist::Registry(wheels) => {
@@ -450,7 +450,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         &self,
         dist: &SourceDist,
         tags: &Tags,
-        hashes: ArchiveHashRequest<'_>,
+        hashes: ArchiveHashPolicy<'_>,
     ) -> Result<LocalWheel, Error> {
         let built_wheel = self
             .builder
@@ -540,9 +540,9 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
     async fn get_wheel_metadata(
         &self,
         dist: &BuiltDist,
-        hashes: MetadataHashRequest<'_>,
+        hashes: MetadataHashPolicy<'_>,
     ) -> Result<ArchiveMetadata, Error> {
-        let hash_request = match hashes.validation {
+        let hash_policy = match hashes.validation {
             HashValidation::None => {
                 let compute_hashes = hashes.collection.is_some_and(|collection| match dist {
                     BuiltDist::Registry(dist) => {
@@ -554,9 +554,9 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                     BuiltDist::DirectUrl(_) | BuiltDist::Path(_) | BuiltDist::GitPath(_) => true,
                 });
                 if compute_hashes {
-                    ArchiveHashRequest::Generate
+                    ArchiveHashPolicy::Generate
                 } else {
-                    ArchiveHashRequest::None
+                    ArchiveHashPolicy::None
                 }
             }
             HashValidation::Any(_) | HashValidation::All(_) => hashes.validation.into(),
@@ -564,8 +564,8 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
 
         // Fetch the entire wheel only when we need to compute a hash for resolution.
         // TODO(charlie): Request the hashes via a separate method, to reduce the coupling in this API.
-        if hash_request == ArchiveHashRequest::Generate {
-            let wheel = self.get_wheel(dist, hash_request).await?;
+        if hash_policy == ArchiveHashPolicy::Generate {
+            let wheel = self.get_wheel(dist, hash_policy).await?;
             // If the metadata was provided by the user directly, prefer it.
             let metadata = if let Some(metadata) = self
                 .build_context
@@ -618,7 +618,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
 
                 // If the request failed due to an error that could be resolved by
                 // downloading the wheel directly, try that.
-                let wheel = self.get_wheel(dist, hash_request).await?;
+                let wheel = self.get_wheel(dist, hash_policy).await?;
                 let metadata = wheel.metadata()?;
                 let hashes = wheel.hashes;
                 Ok(ArchiveMetadata {
@@ -637,7 +637,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
     pub async fn build_wheel_metadata(
         &self,
         source: &BuildableSource<'_>,
-        hashes: MetadataHashRequest<'_>,
+        hashes: MetadataHashPolicy<'_>,
     ) -> Result<ArchiveMetadata, Error> {
         // If the metadata was provided by the user directly, prefer it.
         if let Some(dist) = source.as_dist() {
@@ -654,15 +654,15 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             }
         }
 
-        let build_hash_request = match hashes.validation {
+        let build_hash_policy = match hashes.validation {
             HashValidation::None => hashes
                 .collection
-                .map_or(ArchiveHashRequest::None, |_| ArchiveHashRequest::Generate),
+                .map_or(ArchiveHashPolicy::None, |_| ArchiveHashPolicy::Generate),
             HashValidation::Any(_) | HashValidation::All(_) => hashes.validation.into(),
         };
         let metadata = self
             .builder
-            .download_and_build_metadata(source, build_hash_request, &self.client)
+            .download_and_build_metadata(source, build_hash_policy, &self.client)
             .boxed_local()
             .await?;
 
@@ -693,7 +693,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         size: Option<u64>,
         wheel_entry: &CacheEntry,
         dist: &BuiltDist,
-        hashes: ArchiveHashRequest<'_>,
+        hashes: ArchiveHashPolicy<'_>,
     ) -> Result<Archive, Error> {
         let expected_size = match dist {
             BuiltDist::Registry(dist) if dist.best_wheel().size_is_authoritative => size,
@@ -873,7 +873,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         size: Option<u64>,
         wheel_entry: &CacheEntry,
         dist: &BuiltDist,
-        hashes: ArchiveHashRequest<'_>,
+        hashes: ArchiveHashPolicy<'_>,
     ) -> Result<Archive, Error> {
         let expected_size = match dist {
             BuiltDist::Registry(dist) if dist.best_wheel().size_is_authoritative => size,
@@ -1071,7 +1071,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         filename: &WheelFilename,
         wheel_entry: CacheEntry,
         dist: &BuiltDist,
-        hashes: ArchiveHashRequest<'_>,
+        hashes: ArchiveHashPolicy<'_>,
     ) -> Result<LocalWheel, Error> {
         // Acquire an advisory lock, to guard against concurrent writes.
         let _lock = Self::lock_wheel(&wheel_entry, filename).await?;

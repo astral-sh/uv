@@ -7,7 +7,7 @@ use tracing::warn;
 
 use uv_cache::{Cache, CacheBucket};
 use uv_distribution_filename::SourceDistExtension;
-use uv_distribution_types::{ArchiveHashRequest, BuildableSource};
+use uv_distribution_types::{ArchiveHashPolicy, BuildableSource};
 use uv_extract::hash::{HashReader, Hasher};
 use uv_fs::rename_with_retry;
 use uv_pypi_types::{HashAlgorithm, HashDigest};
@@ -19,7 +19,7 @@ pub(super) struct ArchiveValidation<'a> {
     /// Additional hashes to generate beyond those required for validation.
     pub(super) extra_algorithms: &'a [HashAlgorithm],
     /// The caller's hash requirements.
-    pub(super) hash_request: ArchiveHashRequest<'a>,
+    pub(super) hash_request: ArchiveHashPolicy<'a>,
     /// Every digest from a cache revision being repaired must remain unchanged.
     pub(super) existing_hashes: &'a [HashDigest],
     pub(super) expected_size: Option<u64>,
@@ -160,7 +160,7 @@ mod tests {
 
     const NO_VALIDATION: ArchiveValidation<'static> = ArchiveValidation {
         extra_algorithms: &[],
-        hash_request: ArchiveHashRequest::None,
+        hash_request: ArchiveHashPolicy::None,
         existing_hashes: &[],
         expected_size: None,
     };
@@ -222,7 +222,7 @@ mod tests {
                 ..NO_VALIDATION
             },
             ArchiveValidation {
-                hash_request: ArchiveHashRequest::Generate,
+                hash_request: ArchiveHashPolicy::Generate,
                 ..NO_VALIDATION
             },
             ArchiveValidation {
@@ -278,7 +278,7 @@ mod tests {
             &cache,
             &bytes[..],
             ArchiveValidation {
-                hash_request: ArchiveHashRequest::All(&[wrong_hash]),
+                hash_request: ArchiveHashPolicy::All(&[wrong_hash]),
                 ..NO_VALIDATION
             },
         )
