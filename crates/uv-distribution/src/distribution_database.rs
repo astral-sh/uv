@@ -707,7 +707,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
 
     /// Stream a wheel from a URL, unzipping it into the cache as it's downloaded.
     ///
-    /// Note that `progress_size_hint` is purely a size hint for the progress reporter,
+    /// Note that `progress_size_hint` is a size hint for the progress reporter,
     /// and is not guaranteed to be the true size of the wheel if/when fetched from the
     /// origin.
     async fn stream_wheel(
@@ -720,7 +720,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         dist: &BuiltDist,
         hashes: ArchiveHashPolicy<'_>,
     ) -> Result<Archive, Error> {
-        // Sometimes we can promote the size hint to a guaranteed size.
+        // Sometimes we can promote the size hint to a trusted effective size.
         let expected_size = match dist {
             BuiltDist::Registry(dist) if dist.best_wheel().size_is_authoritative => {
                 progress_size_hint
@@ -894,7 +894,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
 
     /// Download a wheel from a URL, then unzip it into the cache.
     ///
-    /// Note that, like [`Self::stream_wheel`], `progress_size_hint` is purely
+    /// Note that, like [`Self::stream_wheel`], `progress_size_hint` is
     /// a size hint for the progress reporter, and is not guaranteed to be the size
     /// of the wheel if/when fetched from the origin.
     async fn download_wheel(
@@ -907,7 +907,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         dist: &BuiltDist,
         hashes: ArchiveHashPolicy<'_>,
     ) -> Result<Archive, Error> {
-        // Sometimes we can promote the size hint to a guaranteed size.
+        // Sometimes we can promote the size hint to a trusted effective size.
         let expected_size = match dist {
             BuiltDist::Registry(dist) if dist.best_wheel().size_is_authoritative => {
                 progress_size_hint
@@ -1059,9 +1059,11 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
 
         // States for the download loop below.
         let mut hashers = algorithms.into_iter().map(Hasher::from).collect::<Vec<_>>();
-        // The total number of bytes written to the tempfile, accumulated over individual requests.
-        let mut bytes_written = 0;
-        // The current offset, i.e. where to resume a partial download from.
+        // The total number of bytes retrieved, accumulated over individual requests.
+        // Note that this is *not* the same as the number of bytes actually written
+        // to the temporary file, since a copy from the response to the file can fail.
+        let mut bytes_retrieved = 0;
+        // The most recent range request's starting offset.
         let mut resumed_at = None;
         // The `Content-Range` that the download was last resumed at.
         let mut resumed_range: Option<ContentRangeBytes> = None;
@@ -1069,9 +1071,8 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         // This loop is where we handle resumption of interrupted downloads, as well as
         // range requests (if the origin supports them).
         //
-        // Note that this loop exists outside of our normal retry logic since it handles partial
-        // downloads rather than full restarts of downloads. Hard errors are returned back
-        // and may cause full retries (per the retry classifier).
+        // Errors returned from this loop reach the outer retry classifier, which may restart
+        // the full download.
         loop {
             // Check whether the response indicates range request support. A `206 Partial Content`
             // implies range support while an `Accept-Ranges: bytes` header explicitly advertises it.
@@ -1099,7 +1100,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                     .into_iter()
                     .map(Hasher::from)
                     .collect();
-                bytes_written = 0;
+                bytes_retrieved = 0;
             }
 
             let reader = response
@@ -1126,7 +1127,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                     .map_err(Error::CacheWrite),
             };
 
-            bytes_written += hasher.bytes_read();
+            bytes_retrieved += hasher.bytes_read();
 
             let err = match copy_result {
                 // Draining the response succeeded. However, the response could be a `206 Partial Content`,
@@ -1144,7 +1145,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                     // stack). Note that this implies some kind of buggy origin.
                     //
                     // Byte ranges are inclusive, not exclusive.
-                    if bytes_written != range.last_byte + 1 {
+                    if bytes_retrieved != range.last_byte + 1 {
                         return Err(Error::CacheWrite(io::Error::new(
                             io::ErrorKind::UnexpectedEof,
                             "Range response length does not match Content-Range",
@@ -1153,7 +1154,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
 
                     // We've successfully performed the download over one or more
                     // range requests. We can leave the loop.
-                    if bytes_written == range.complete_length {
+                    if bytes_retrieved == range.complete_length {
                         break;
                     }
 
@@ -1185,16 +1186,14 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             }
 
             // We expect any partial response to have an ETag, so that we can detect
-            // when an (honest) origin changes its response beneath us. This is strictly
-            // an optimization, i.e. so that we don't continue requesting content for a
-            // download that will fail hash and/or size validation anyways.
+            // when an (honest) origin changes its representation beneath us.
             let Some(etag) = etag.as_ref() else {
                 return Err(err);
             };
 
             // Some sanity checks: we should have made *some* progress as part of
             // partial response, plus our writer's offset should agree with the number
-            // of bytes written, *and* we should be making forward progress (i.e. not
+            // of bytes retrieved, *and* we should be making forward progress (i.e. not
             // resuming behind where we already are).
             writer.flush().await.map_err(Error::CacheWrite)?;
             let offset = writer
@@ -1203,7 +1202,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 .await
                 .map_err(Error::CacheWrite)?;
             if offset == 0
-                || offset != bytes_written
+                || offset != bytes_retrieved
                 || resumed_at.is_some_and(|previous| offset <= previous)
             {
                 return Err(err);
@@ -1248,12 +1247,12 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         // We've left the resumption loop.
         // Sanity check: we should have written as many bytes as we expected.
         if let Some(expected) = expected_size
-            && bytes_written != expected
+            && bytes_retrieved != expected
         {
             return Err(Error::MismatchedSize {
                 distribution: dist.to_string(),
                 expected,
-                actual: bytes_written,
+                actual: bytes_retrieved,
             });
         }
 
@@ -1291,7 +1290,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             id,
             hashes,
             filename.clone(),
-            Some(bytes_written),
+            Some(bytes_retrieved),
         ))
     }
 
