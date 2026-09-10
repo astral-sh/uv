@@ -601,13 +601,16 @@ pub fn with_retry_sync(
             })
             .call()
             .map_err(|err| {
-                std::io::Error::other(format!(
-                    "Failed {} `{}` to `{}`: {}",
-                    operation_name,
-                    from.display(),
-                    to.display(),
-                    err
-                ))
+                std::io::Error::new(
+                    err.kind(),
+                    format!(
+                        "Failed {} `{}` to `{}`: {}",
+                        operation_name,
+                        from.display(),
+                        to.display(),
+                        err
+                    ),
+                )
             })
     }
     #[cfg(not(windows))]
@@ -1067,6 +1070,52 @@ mod tests {
             assert_eq!(transcode_to_string(&encoded, source)?, expected, "{source}");
         }
         Ok(())
+    }
+
+    #[test]
+    fn with_retry_sync_preserves_error_kind() {
+        for kind in [
+            io::ErrorKind::CrossesDevices,
+            io::ErrorKind::NotFound,
+            io::ErrorKind::InvalidInput,
+            io::ErrorKind::Other,
+        ] {
+            let attempts = std::cell::Cell::new(0);
+            let error = with_retry_sync("source", "destination", "renaming", || {
+                attempts.set(attempts.get() + 1);
+                Err(io::Error::new(kind, "authored error"))
+            })
+            .unwrap_err();
+
+            assert_eq!(error.kind(), kind);
+            assert_eq!(attempts.get(), 1);
+            #[cfg(windows)]
+            assert_eq!(
+                error.to_string(),
+                "Failed renaming source to destination: authored error"
+            );
+            #[cfg(not(windows))]
+            assert_eq!(error.to_string(), "authored error");
+        }
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn with_retry_sync_preserves_cross_device_os_error() {
+        use windows::Win32::Foundation::ERROR_NOT_SAME_DEVICE;
+
+        let os_error = i32::try_from(ERROR_NOT_SAME_DEVICE.0).unwrap();
+        let original = io::Error::from_raw_os_error(os_error);
+        let error = with_retry_sync("source", "destination", "renaming", || {
+            Err(io::Error::from_raw_os_error(os_error))
+        })
+        .unwrap_err();
+
+        assert_eq!(error.kind(), io::ErrorKind::CrossesDevices);
+        assert_eq!(
+            error.to_string(),
+            format!("Failed renaming source to destination: {original}")
+        );
     }
 
     #[test]

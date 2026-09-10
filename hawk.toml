@@ -136,15 +136,6 @@ reason = "used by Pixi to distinguish packages installed through its uv integrat
 
 [[override]]
 lint = "hawk::dead_public"
-crate = "uv_fs"
-item = "with_retry_sync"
-kind = "function"
-level = "expect"
-target = "cfg(not(windows))"
-reason = "used by the Windows installer path"
-
-[[override]]
-lint = "hawk::dead_public"
 crate = "uv_trampoline_builder"
 item = "Launcher::write_to_file"
 kind = "inherent_method"

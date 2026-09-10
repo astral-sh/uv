@@ -671,21 +671,19 @@ fn install_script(
 
         #[cfg(not(unix))]
         {
-            // Here, two wrappers over rename are clashing: We want to retry for security software
-            // blocking the file, but we also need the copy fallback is the problem was trying to
-            // move a file cross-drive.
-            match uv_fs::with_retry_sync(&path, &script_absolute, "renaming", || {
-                fs_err::rename(&path, &script_absolute)
-            }) {
-                Ok(()) => (),
-                Err(err) => {
-                    debug!("Failed to rename, falling back to copy: {err}");
+            // Retry when security software temporarily blocks the file, falling back to copy only
+            // when the rename crosses devices.
+            copy_on_cross_device(
+                uv_fs::with_retry_sync(&path, &script_absolute, "renaming", || {
+                    fs_err::rename(&path, &script_absolute)
+                }),
+                || {
                     uv_fs::with_retry_sync(&path, &script_absolute, "copying", || {
                         fs_err::copy(&path, &script_absolute)?;
                         Ok(())
-                    })?;
-                }
-            }
+                    })
+                },
+            )?;
         }
 
         None
@@ -1189,6 +1187,21 @@ pub(crate) fn parse_scripts(
     Ok((console_scripts, gui_scripts))
 }
 
+/// Fall back to copying when a rename fails across devices.
+#[cfg(any(not(unix), test))]
+fn copy_on_cross_device(
+    rename_result: io::Result<()>,
+    copy: impl FnOnce() -> io::Result<()>,
+) -> io::Result<()> {
+    match rename_result {
+        Err(err) if err.kind() == io::ErrorKind::CrossesDevices => {
+            debug!("Failed to rename, falling back to copy: {err}");
+            copy()
+        }
+        result => result,
+    }
+}
+
 /// Rename a file with a fallback to copy that switches over on the first failure.
 #[derive(Default, Copy, Clone)]
 enum RenameOrCopy {
@@ -1231,9 +1244,89 @@ mod test {
     use indoc::{formatdoc, indoc};
 
     use super::{
-        Error, RecordEntry, Script, WheelFile, format_shebang, get_script_executable,
-        parse_email_message_file, parse_scripts, read_record, write_installer_metadata,
+        Error, RecordEntry, Script, WheelFile, copy_on_cross_device, format_shebang,
+        get_script_executable, parse_email_message_file, parse_scripts, read_record,
+        write_installer_metadata,
     };
+
+    #[test]
+    fn copy_on_cross_device_preserves_rename_errors() -> Result<()> {
+        let temp_dir = assert_fs::TempDir::new()?;
+        let destination = temp_dir.child("destination");
+        destination.write_str("existing contents")?;
+
+        for kind in [
+            ErrorKind::NotFound,
+            ErrorKind::PermissionDenied,
+            ErrorKind::AlreadyExists,
+            ErrorKind::InvalidInput,
+            ErrorKind::Other,
+        ] {
+            let copy_calls = std::cell::Cell::new(0);
+            let error =
+                copy_on_cross_device(Err(std::io::Error::new(kind, "rename failed")), || {
+                    copy_calls.set(copy_calls.get() + 1);
+                    fs_err::write(destination.path(), "copied contents")
+                })
+                .unwrap_err();
+
+            assert_eq!(error.kind(), kind);
+            assert_eq!(error.to_string(), "rename failed");
+            assert_eq!(copy_calls.get(), 0);
+            assert_eq!(
+                fs_err::read_to_string(destination.path())?,
+                "existing contents"
+            );
+        }
+
+        copy_on_cross_device(Ok(()), || {
+            fs_err::write(destination.path(), "unexpected copy")
+        })?;
+        assert_eq!(
+            fs_err::read_to_string(destination.path())?,
+            "existing contents"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn copy_on_cross_device_uses_copy_result() -> Result<()> {
+        let temp_dir = assert_fs::TempDir::new()?;
+        let source = temp_dir.child("source");
+        let destination = temp_dir.child("destination");
+        source.write_str("script payload")?;
+
+        let rename_result =
+            uv_fs::with_retry_sync(source.path(), destination.path(), "renaming", || {
+                Err(std::io::Error::new(
+                    ErrorKind::CrossesDevices,
+                    "different devices",
+                ))
+            });
+        copy_on_cross_device(rename_result, || {
+            fs_err::copy(source.path(), destination.path()).map(|_| ())
+        })?;
+        assert_eq!(fs_err::read_to_string(source.path())?, "script payload");
+        assert_eq!(
+            fs_err::read_to_string(destination.path())?,
+            "script payload"
+        );
+
+        let copy_calls = std::cell::Cell::new(0);
+        let error =
+            copy_on_cross_device(Err(std::io::Error::from(ErrorKind::CrossesDevices)), || {
+                copy_calls.set(copy_calls.get() + 1);
+                Err(std::io::Error::new(
+                    ErrorKind::PermissionDenied,
+                    "copy failed",
+                ))
+            })
+            .unwrap_err();
+        assert_eq!(copy_calls.get(), 1);
+        assert_eq!(error.kind(), ErrorKind::PermissionDenied);
+        assert_eq!(error.to_string(), "copy failed");
+        Ok(())
+    }
 
     #[test]
     fn test_parse_email_message_file() {
