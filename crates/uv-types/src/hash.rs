@@ -78,7 +78,7 @@ impl HashStrategy {
         &self,
         distribution: &T,
     ) -> ArchiveHashPolicy<'_> {
-        self.get_archive_request(|| distribution.version_id())
+        self.archive_policy_for_id(|| distribution.version_id())
     }
 
     /// Return the [`MetadataHashPolicy`] for retrieving the given distribution's metadata.
@@ -88,7 +88,7 @@ impl HashStrategy {
     ) -> MetadataHashPolicy<'_> {
         MetadataHashPolicy {
             collection: self.collection,
-            validation: self.get_validation(|| distribution.version_id()),
+            validation: self.validation_for_id(|| distribution.version_id()),
         }
     }
 
@@ -98,27 +98,27 @@ impl HashStrategy {
         name: &PackageName,
         version: &Version,
     ) -> ArchiveHashPolicy<'_> {
-        self.get_archive_request(|| VersionId::from_registry(name.clone(), version.clone()))
+        self.archive_policy_for_id(|| VersionId::from_registry(name.clone(), version.clone()))
     }
 
     /// Return the [`ArchiveHashPolicy`] for the given direct URL package.
     ///
     /// A direct URL identifies a single concrete artifact, so every provided digest must match.
     pub fn archive_policy_for_url(&self, url: &DisplaySafeUrl) -> ArchiveHashPolicy<'_> {
-        self.get_archive_request(|| VersionId::from_url(url))
+        self.archive_policy_for_id(|| VersionId::from_url(url))
     }
 
     /// Return the [`MetadataHashPolicy`] for a URL whose package name is not yet known.
     pub fn metadata_policy_for_url(&self, url: &DisplaySafeUrl) -> MetadataHashPolicy<'_> {
         MetadataHashPolicy {
             collection: self.collection,
-            validation: self.get_validation(|| VersionId::from_url(url)),
+            validation: self.validation_for_id(|| VersionId::from_url(url)),
         }
     }
 
-    /// Return the archive hash policy for a distribution.
-    fn get_archive_request(&self, id: impl FnOnce() -> VersionId) -> ArchiveHashPolicy<'_> {
-        let validation = self.get_validation(id);
+    /// Return the archive hash policy for a distribution identity.
+    fn archive_policy_for_id(&self, id: impl FnOnce() -> VersionId) -> ArchiveHashPolicy<'_> {
+        let validation = self.validation_for_id(id);
         match validation {
             HashValidation::None => self
                 .collection
@@ -128,7 +128,7 @@ impl HashStrategy {
     }
 
     /// Construct an identity only when verification requires a lookup.
-    fn get_validation(&self, id: impl FnOnce() -> VersionId) -> HashValidation<'_> {
+    fn validation_for_id(&self, id: impl FnOnce() -> VersionId) -> HashValidation<'_> {
         match &self.verification {
             HashVerification::IfPresent(hashes) => {
                 let id = id();
