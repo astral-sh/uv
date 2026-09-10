@@ -27,7 +27,7 @@ pub fn disable() {
 }
 
 /// Format a warning chain to standard error.
-pub fn write_warning_chain(err: &dyn Error, hints: &Hints<'_>) -> fmt::Result {
+pub fn write_warning_chain(err: &(dyn Error + 'static), hints: &Hints<'_>) -> fmt::Result {
     write_warning_chain_with_options(err, hints, ErrorOptions::default())
 }
 
@@ -57,7 +57,7 @@ fn write_warning_chain_once_with_writer(
 }
 
 fn write_warning_chain_with_options<C, W: fmt::Write>(
-    err: &dyn Error,
+    err: &(dyn Error + 'static),
     hints: &Hints<'_>,
     options: ErrorOptions<'_, C, W>,
 ) -> fmt::Result {
