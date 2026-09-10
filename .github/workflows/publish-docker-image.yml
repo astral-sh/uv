@@ -15,7 +15,8 @@ on:
 
 env:
   ACTIONS_CACHE_MODE: none
-  DEPOT_PROJECT_ID: 7hd4vdzmw5 # astral-sh/uv
+  # Development and production images are saved in separate Depot projects.
+  DEPOT_PROJECT_ID: ${{ inputs.push-dev && 'v094vdzkdt' || '7hd4vdzmw5' }}
   UV_GHCR_IMAGE: ghcr.io/${{ github.repository_owner }}/${{ inputs.push-dev && 'uv-dev' || 'uv' }}
   UV_DOCKERHUB_IMAGE: ${{ !inputs.push-dev && 'docker.io/astral/uv' || '' }}
 
