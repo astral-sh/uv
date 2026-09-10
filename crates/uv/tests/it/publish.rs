@@ -89,7 +89,10 @@ fn username_password_no_longer_supported() {
     Hashing ok-1.0.0-py3-none-any.whl ([SIZE]B)
     Uploading ok-1.0.0-py3-none-any.whl ([SIZE]B)
     error: Failed to publish `[WORKSPACE]/test/links/ok-1.0.0-py3-none-any.whl` to https://test.pypi.org/legacy/
-      cause: Server returned status code 403 Forbidden. Server says: 403 Username/Password authentication is no longer supported. Migrate to API Tokens or Trusted Publishers instead. See https://test.pypi.org/help/#apitoken and https://test.pypi.org/help/#trusted-publishers
+      cause: Server returned status code 403 Forbidden
+      info: The server included the following context:
+        |
+        | 403 Username/Password authentication is no longer supported. Migrate to API Tokens or Trusted Publishers instead. See https://test.pypi.org/help/#apitoken and https://test.pypi.org/help/#trusted-publishers
     "
     );
 }
@@ -112,7 +115,10 @@ fn invalid_token() {
     Hashing ok-1.0.0-py3-none-any.whl ([SIZE]B)
     Uploading ok-1.0.0-py3-none-any.whl ([SIZE]B)
     error: Failed to publish `[WORKSPACE]/test/links/ok-1.0.0-py3-none-any.whl` to https://test.pypi.org/legacy/
-      cause: Server returned status code 403 Forbidden. Server says: 403 Invalid or non-existent authentication information. See https://test.pypi.org/help/#invalid-auth for more information.
+      cause: Server returned status code 403 Forbidden
+      info: The server included the following context:
+        |
+        | 403 Invalid or non-existent authentication information. See https://test.pypi.org/help/#invalid-auth for more information.
     "
     );
 }
@@ -319,7 +325,10 @@ fn check_keyring_behaviours() {
     Hashing ok-1.0.0-py3-none-any.whl ([SIZE]B)
     Uploading ok-1.0.0-py3-none-any.whl ([SIZE]B)
     error: Failed to publish `[WORKSPACE]/test/links/ok-1.0.0-py3-none-any.whl` to https://test.pypi.org/legacy/?ok
-      cause: Server returned status code 403 Forbidden. Server says: 403 Username/Password authentication is no longer supported. Migrate to API Tokens or Trusted Publishers instead. See https://test.pypi.org/help/#apitoken and https://test.pypi.org/help/#trusted-publishers
+      cause: Server returned status code 403 Forbidden
+      info: The server included the following context:
+        |
+        | 403 Username/Password authentication is no longer supported. Migrate to API Tokens or Trusted Publishers instead. See https://test.pypi.org/help/#apitoken and https://test.pypi.org/help/#trusted-publishers
     "
     );
 
@@ -342,7 +351,10 @@ fn check_keyring_behaviours() {
     Hashing ok-1.0.0-py3-none-any.whl ([SIZE]B)
     Uploading ok-1.0.0-py3-none-any.whl ([SIZE]B)
     error: Failed to publish `[WORKSPACE]/test/links/ok-1.0.0-py3-none-any.whl` to https://test.pypi.org/legacy/?ok
-      cause: Server returned status code 403 Forbidden. Server says: 403 Username/Password authentication is no longer supported. Migrate to API Tokens or Trusted Publishers instead. See https://test.pypi.org/help/#apitoken and https://test.pypi.org/help/#trusted-publishers
+      cause: Server returned status code 403 Forbidden
+      info: The server included the following context:
+        |
+        | 403 Username/Password authentication is no longer supported. Migrate to API Tokens or Trusted Publishers instead. See https://test.pypi.org/help/#apitoken and https://test.pypi.org/help/#trusted-publishers
     "
     );
 
@@ -370,7 +382,10 @@ fn check_keyring_behaviours() {
     Keyring request for dummy@https://test.pypi.org/legacy/?ok
     Keyring request for dummy@test.pypi.org
     error: Failed to publish `[WORKSPACE]/test/links/ok-1.0.0-py3-none-any.whl` to https://test.pypi.org/legacy/?ok
-      cause: Server returned status code 403 Forbidden. Server says: 403 Username/Password authentication is no longer supported. Migrate to API Tokens or Trusted Publishers instead. See https://test.pypi.org/help/#apitoken and https://test.pypi.org/help/#trusted-publishers
+      cause: Server returned status code 403 Forbidden
+      info: The server included the following context:
+        |
+        | 403 Username/Password authentication is no longer supported. Migrate to API Tokens or Trusted Publishers instead. See https://test.pypi.org/help/#apitoken and https://test.pypi.org/help/#trusted-publishers
     "
     );
 
@@ -393,7 +408,10 @@ fn check_keyring_behaviours() {
     Hashing ok-1.0.0-py3-none-any.whl ([SIZE]B)
     Uploading ok-1.0.0-py3-none-any.whl ([SIZE]B)
     error: Failed to publish `[WORKSPACE]/test/links/ok-1.0.0-py3-none-any.whl` to https://test.pypi.org/legacy/?ok
-      cause: Server returned status code 403 Forbidden. Server says: 403 Username/Password authentication is no longer supported. Migrate to API Tokens or Trusted Publishers instead. See https://test.pypi.org/help/#apitoken and https://test.pypi.org/help/#trusted-publishers
+      cause: Server returned status code 403 Forbidden
+      info: The server included the following context:
+        |
+        | 403 Username/Password authentication is no longer supported. Migrate to API Tokens or Trusted Publishers instead. See https://test.pypi.org/help/#apitoken and https://test.pypi.org/help/#trusted-publishers
     "
     );
 }
@@ -863,7 +881,10 @@ async fn trusted_publishing_burn_failure() {
     Uploading ok-1.0.0-py3-none-any.whl ([SIZE]B)
     warning: Failed to invalidate trusted publishing token. It will expire naturally. Cause: Failed to fetch: `http://[LOCALHOST]/_/oidc/burn-token`
     error: Failed to publish `[WORKSPACE]/test/links/ok-1.0.0-py3-none-any.whl` to http://[LOCALHOST]/upload
-      cause: Server returned status code 400 Bad Request. Server says: Upload failed
+      cause: Server returned status code 400 Bad Request
+      info: The server included the following context:
+        |
+        | Upload failed
     "
     );
 }
@@ -1186,7 +1207,10 @@ async fn upload_error_pypi_json() {
     Hashing ok-1.0.0-py3-none-any.whl ([SIZE]B)
     Uploading ok-1.0.0-py3-none-any.whl ([SIZE]B)
     error: Failed to publish `[WORKSPACE]/test/links/ok-1.0.0-py3-none-any.whl` to http://[LOCALHOST]/upload
-      cause: Server returned status code 400 Bad Request. Server says: 400 Use 'source' as Python version for an sdist.
+      cause: Server returned status code 400 Bad Request
+      info: The server included the following context:
+        |
+        | 400 Use 'source' as Python version for an sdist.
     "
     );
 }
@@ -1220,9 +1244,50 @@ async fn upload_error_problem_details() {
     Hashing ok-1.0.0-py3-none-any.whl ([SIZE]B)
     Uploading ok-1.0.0-py3-none-any.whl ([SIZE]B)
     error: Failed to publish `[WORKSPACE]/test/links/ok-1.0.0-py3-none-any.whl` to http://[LOCALHOST]/upload
-      cause: Server returned status code 400 Bad Request. Server message: Bad Request, Missing required field `name`
+      cause: Server returned status code 400 Bad Request
+      info: The server included the following context:
+        |
+        | Bad Request, Missing required field `name`
     "
     );
+}
+
+/// A plain-text server response remains readable when it contains multiple paragraphs.
+#[tokio::test]
+async fn upload_error_method_not_allowed() {
+    let context = uv_test::test_context!("3.12").with_filtered_sizes();
+    let server = MockServer::start().await;
+
+    Mock::given(method("POST"))
+        .and(path("/upload"))
+        .respond_with(ResponseTemplate::new(405).set_body_raw(
+            "This endpoint accepts GET requests only.\n\nUse /legacy/ to upload packages.",
+            "text/plain",
+        ))
+        .mount(&server)
+        .await;
+
+    uv_snapshot!(context.filters(), context.publish()
+        .arg("-u")
+        .arg("dummy")
+        .arg("-p")
+        .arg("dummy")
+        .arg("--publish-url")
+        .arg(format!("{}/upload", server.uri()))
+        .arg(dummy_wheel()), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    Publishing 1 file to http://[LOCALHOST]/upload
+    Hashing ok-1.0.0-py3-none-any.whl ([SIZE]B)
+    Uploading ok-1.0.0-py3-none-any.whl ([SIZE]B)
+    error: Failed to publish `[WORKSPACE]/test/links/ok-1.0.0-py3-none-any.whl` to http://[LOCALHOST]/upload
+      cause: POST requests are not supported by the endpoint, are you using the simple index URL instead of the upload URL?
+      info: The server included the following context:
+        |
+        | This endpoint accepts GET requests only.
+        |
+        | Use /legacy/ to upload packages.
+    ");
 }
 
 /// A dry run checks valid distribution metadata without uploading the file.

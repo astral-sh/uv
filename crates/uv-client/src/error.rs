@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::fmt::{Display, Formatter};
 use std::ops::Deref;
 use std::path::PathBuf;
@@ -98,6 +99,16 @@ impl ProblemDetails {
                 warn!("Failed to read response body for problem details: {err}");
                 None
             }
+        }
+    }
+
+    /// The server's description without a diagnostic label.
+    pub fn message(&self) -> Option<Cow<'_, str>> {
+        match (self.title.as_deref(), self.detail.as_deref(), self.status) {
+            (Some(title), Some(detail), _) => Some(Cow::Owned(format!("{title}, {detail}"))),
+            (Some(message), None, _) | (None, Some(message), _) => Some(Cow::Borrowed(message)),
+            (None, None, Some(status)) => Some(Cow::Owned(format!("HTTP error {status}"))),
+            (None, None, None) => None,
         }
     }
 
@@ -879,6 +890,38 @@ mod tests {
         let problem_details: ProblemDetails =
             serde_json::from_slice(json_minimal.as_bytes()).unwrap();
         assert_eq!(problem_details.description().unwrap(), "HTTP error 400");
+    }
+
+    #[test]
+    fn test_problem_details_message() {
+        let messages = [
+            r#"{"title":"Bad Request","detail":"Missing name","status":400}"#,
+            r#"{"title":"Bad Request"}"#,
+            r#"{"detail":"Missing name"}"#,
+            r#"{"status":400}"#,
+            "{}",
+        ]
+        .map(|json| {
+            let problem: ProblemDetails = serde_json::from_str(json).unwrap();
+            problem.message().map(Cow::into_owned)
+        });
+        insta::assert_debug_snapshot!(messages, @r#"
+        [
+            Some(
+                "Bad Request, Missing name",
+            ),
+            Some(
+                "Bad Request",
+            ),
+            Some(
+                "Missing name",
+            ),
+            Some(
+                "HTTP error 400",
+            ),
+            None,
+        ]
+        "#);
     }
 
     #[test]

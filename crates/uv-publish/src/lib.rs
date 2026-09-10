@@ -2,6 +2,7 @@ mod trusted_publishing;
 
 use std::borrow::Cow;
 use std::collections::BTreeSet;
+use std::error::Error as StdError;
 use std::fmt::Display;
 use std::io::Read;
 use std::path::{Path, PathBuf};
@@ -38,6 +39,7 @@ use uv_client::{
 use uv_configuration::{KeyringProviderType, TrustedPublishing};
 use uv_distribution_filename::{DistFilename, SourceDistExtension, SourceDistFilename};
 use uv_distribution_types::{IndexCapabilities, IndexUrl};
+use uv_errors::{Diagnostic, Info};
 use uv_extract::hash::Hasher;
 use uv_fs::{ProgressReader, Simplified};
 use uv_metadata::read_metadata_async_seek;
@@ -133,8 +135,8 @@ pub enum PublishSendError {
     StatusNoBody(StatusCode, #[source] reqwest::Error),
     #[error("Server returned status code {0}. Server says: {1}")]
     Status(StatusCode, String),
-    #[error("Server returned status code {0}. {1}")]
-    StatusProblemDetails(StatusCode, String),
+    #[error("Server returned status code {0}. {description}", description = .1.description().unwrap_or_default())]
+    StatusProblemDetails(StatusCode, ProblemDetails),
     #[error(
         "POST requests are not supported by the endpoint, are you using the simple index URL instead of the upload URL?"
     )]
@@ -156,6 +158,18 @@ pub enum PublishSendError {
     RedirectLocationInvalidStr(#[source] ToStrError),
     #[error("Request was redirected, but location header is not a URL")]
     RedirectInvalidLocation(#[source] DisplaySafeUrlError),
+}
+
+/// Resolve user-facing context for a publishing error in a source chain.
+pub fn diagnostic_for_error<'a>(error: &'a (dyn StdError + 'static)) -> Option<Diagnostic<'a>> {
+    error
+        .downcast_ref::<PublishSendError>()
+        .or_else(|| {
+            error
+                .downcast_ref::<Box<PublishSendError>>()
+                .map(AsRef::as_ref)
+        })?
+        .diagnostic()
 }
 
 pub trait Reporter: Send + Sync + 'static {
@@ -325,6 +339,44 @@ pub struct PublishSession<'a> {
 }
 
 impl PublishSendError {
+    /// Separate the server's response from the transport failure.
+    fn diagnostic(&self) -> Option<Diagnostic<'_>> {
+        let (message, details) = match self {
+            Self::Status(status, body) => (
+                format!("Server returned status code {status}"),
+                Cow::Borrowed(body.as_str()),
+            ),
+            Self::StatusProblemDetails(status, problem) => (
+                format!("Server returned status code {status}"),
+                problem.message()?,
+            ),
+            Self::MethodNotAllowed(body) => (
+                Self::MethodNotAllowedNoBody.to_string(),
+                Cow::Borrowed(body.as_str()),
+            ),
+            Self::PermissionDenied(status, body) => (
+                format!("Permission denied (status code {status})"),
+                Cow::Borrowed(body.as_str()),
+            ),
+            Self::ReqwestMiddleware(_)
+            | Self::StatusNoBody(..)
+            | Self::MethodNotAllowedNoBody
+            | Self::TooManyRedirects(_)
+            | Self::RedirectRealmMismatch(_)
+            | Self::RedirectNoLocation
+            | Self::RedirectLocationInvalidStr(_)
+            | Self::RedirectInvalidLocation(_) => return None,
+        };
+        let diagnostic = Diagnostic::new(message);
+        if details.trim().is_empty() {
+            Some(diagnostic)
+        } else {
+            Some(diagnostic.with_info(
+                Info::new("The server included the following context:").with_details(details),
+            ))
+        }
+    }
+
     /// Extract `code` from the PyPI json error response, if any.
     ///
     /// The error response from PyPI contains crucial context, such as the difference between
@@ -393,13 +445,16 @@ impl PublishSendError {
     ///            Access was denied to this resource.<br/><br/>
     /// ```
     ///
-    /// In comparison, we now show (line-wrapped for readability):
+    /// The user-facing diagnostic separates the status from this context (line-wrapped here):
     ///
     /// ```text
     /// error: Failed to publish `dist/astral_test_1-0.1.0-py3-none-any.whl` to `https://test.pypi.org/legacy/`
-    ///   └── Incorrect credentials (status code 403 Forbidden): 403 Username/Password
-    ///       authentication is no longer supported. Migrate to API Tokens or Trusted Publishers
-    ///       instead. See https://test.pypi.org/help/#apitoken and https://test.pypi.org/help/#trusted-publishers
+    ///   cause: Server returned status code 403 Forbidden
+    ///   info: The server included the following context:
+    ///     |
+    ///     | 403 Username/Password authentication is no longer supported. Migrate to API Tokens
+    ///     | or Trusted Publishers instead. See https://test.pypi.org/help/#apitoken and
+    ///     | https://test.pypi.org/help/#trusted-publishers
     /// ```
     fn extract_error_message(body: String, content_type: Option<&str>) -> String {
         if content_type == Some("application/json") {
@@ -1402,12 +1457,9 @@ impl PublishSession<'_> {
         // Try to parse as RFC 9457 Problem Details.
         if content_type.as_deref() == Some(ProblemDetails::CONTENT_TYPE)
             && let Some(problem) = ProblemDetails::try_from_response_body(upload_error.as_bytes())
-            && let Some(description) = problem.description()
+            && problem.message().is_some()
         {
-            return Err(PublishSendError::StatusProblemDetails(
-                status_code,
-                description,
-            ));
+            return Err(PublishSendError::StatusProblemDetails(status_code, problem));
         }
 
         // Raced uploads of the same file are handled by the caller.
@@ -1442,7 +1494,8 @@ mod tests {
 
     use crate::{
         FormMetadata, PublishError, PublishOutcome, PublishPrepareError, PublishSession,
-        PublishingCredentials, Reporter, UploadOutcome, group_files, source_dist_pkg_info,
+        PublishingCredentials, Reporter, UploadOutcome, diagnostic_for_error, group_files,
+        source_dist_pkg_info,
     };
     use uv_errors::{ErrorOptions, Hints, write_error_chain_with_options};
     use wiremock::matchers::{method, path};
@@ -2247,7 +2300,9 @@ mod tests {
         write_error_chain_with_options(
             &err,
             &Hints::none(),
-            ErrorOptions::default().with_stream(&mut capture),
+            ErrorOptions::default()
+                .with_diagnostic(diagnostic_for_error)
+                .with_stream(&mut capture),
         )
         .unwrap();
 
@@ -2281,7 +2336,9 @@ mod tests {
         write_error_chain_with_options(
             &err,
             &Hints::none(),
-            ErrorOptions::default().with_stream(&mut capture),
+            ErrorOptions::default()
+                .with_diagnostic(diagnostic_for_error)
+                .with_stream(&mut capture),
         )
         .unwrap();
 
@@ -2320,7 +2377,9 @@ mod tests {
         write_error_chain_with_options(
             &err,
             &Hints::none(),
-            ErrorOptions::default().with_stream(&mut capture),
+            ErrorOptions::default()
+                .with_diagnostic(diagnostic_for_error)
+                .with_stream(&mut capture),
         )
         .unwrap();
 
@@ -2331,7 +2390,10 @@ mod tests {
             &capture,
             @"
         error: Failed to publish `../../test/links/tqdm-4.66.1-py3-none-manylinux_2_12_x86_64.manylinux2010_x86_64.musllinux_1_1_x86_64.whl` to [SERVER]/final
-          cause: Server returned status code 400 Bad Request. Server says: 400 Error: Use 'source' as Python version for an sdist.
+          cause: Server returned status code 400 Bad Request
+          info: The server included the following context:
+            |
+            | 400 Error: Use 'source' as Python version for an sdist.
         "
         );
     }
@@ -2362,7 +2424,9 @@ mod tests {
         write_error_chain_with_options(
             &err,
             &Hints::none(),
-            ErrorOptions::default().with_stream(&mut capture),
+            ErrorOptions::default()
+                .with_diagnostic(diagnostic_for_error)
+                .with_stream(&mut capture),
         )
         .unwrap();
 
@@ -2373,7 +2437,10 @@ mod tests {
             &capture,
             @"
         error: Failed to publish `../../test/links/tqdm-4.66.1-py3-none-manylinux_2_12_x86_64.manylinux2010_x86_64.musllinux_1_1_x86_64.whl` to [SERVER]/final
-          cause: Server returned status code 400 Bad Request. Server message: Bad Request, Missing required field `name`
+          cause: Server returned status code 400 Bad Request
+          info: The server included the following context:
+            |
+            | Bad Request, Missing required field `name`
         "
         );
     }
