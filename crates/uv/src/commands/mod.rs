@@ -199,7 +199,6 @@ impl UvError {
 }
 
 impl From<project::ProjectError> for UvError {
-    /// Classify a project error at the point where it leaves its command.
     fn from(error: project::ProjectError) -> Self {
         match error {
             error @ (project::ProjectError::LockMismatch(..)
@@ -216,7 +215,6 @@ impl From<project::ProjectError> for UvError {
 }
 
 impl From<pip::operations::Error> for UvError {
-    /// Classify an operation error at the point where it leaves its command.
     fn from(error: pip::operations::Error) -> Self {
         Self::from_operation(error, None)
     }
