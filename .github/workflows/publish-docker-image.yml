@@ -15,7 +15,9 @@ on:
 
 env:
   ACTIONS_CACHE_MODE: none
-  DEPOT_PROJECT_ID: 7hd4vdzmw5 # astral-sh/uv
+  DEPOT_PROJECT_PROD_UV: 7hd4vdzmw5 # prod/uv
+  DEPOT_PROJECT_DEV_UV: v094vdzkdt # dev/uv
+  DEPOT_PROJECT_DEV_UV_DEV: c3ht4lmvqh # dev/uv-dev
   UV_GHCR_IMAGE: ghcr.io/${{ github.repository_owner }}/${{ inputs.push-dev && 'uv-dev' || 'uv' }}
   UV_DOCKERHUB_IMAGE: ${{ !inputs.push-dev && 'docker.io/astral/uv' || '' }}
 
@@ -45,7 +47,8 @@ jobs:
         run: |
           if [ "$PUSH_DEV" == "true" ]; then
             case "$GITHUB_REPOSITORY" in
-              astral-sh/uv|astral-sh/uv-dev) ;;
+              astral-sh/uv) depot_project_id="$DEPOT_PROJECT_DEV_UV" ;;
+              astral-sh/uv-dev) depot_project_id="$DEPOT_PROJECT_DEV_UV_DEV" ;;
               *) echo "Development publication requires an Astral repository" >&2; exit 1 ;;
             esac
             if [ "$GITHUB_EVENT_NAME" != "pull_request" ] || [ "$PR_REPOSITORY" != "$GITHUB_REPOSITORY" ]; then
@@ -61,7 +64,10 @@ jobs:
                [ "$GITHUB_WORKFLOW_REF" != "astral-sh/uv/.github/workflows/release.yml@refs/heads/main" ]; then
             echo "Production publication requires the main-branch release workflow in astral-sh/uv" >&2
             exit 1
+          else
+            depot_project_id="$DEPOT_PROJECT_PROD_UV"
           fi
+          echo "DEPOT_PROJECT_ID=$depot_project_id" >> "$GITHUB_ENV"
           echo "GHCR destination: $UV_GHCR_IMAGE"
           echo "Docker Hub destination: ${UV_DOCKERHUB_IMAGE:-none}"
 

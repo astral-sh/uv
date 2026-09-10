@@ -33,7 +33,9 @@ on:
 
 env:
   ACTIONS_CACHE_MODE: none
-  DEPOT_PROJECT_ID: 7hd4vdzmw5 # astral-sh/uv
+  DEPOT_PROJECT_PROD_UV: 7hd4vdzmw5 # prod/uv
+  DEPOT_PROJECT_DEV_UV: v094vdzkdt # dev/uv
+  DEPOT_PROJECT_DEV_UV_DEV: c3ht4lmvqh # dev/uv-dev
   UV_GHCR_IMAGE: ghcr.io/${{ github.repository_owner }}/${{ inputs.push-dev && 'uv-dev' || 'uv' }}
   UV_DOCKERHUB_IMAGE: ${{ !inputs.push-dev && 'docker.io/astral/uv' || '' }}
   UV_LOCKED: 1
@@ -47,6 +49,7 @@ jobs:
     runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-4' || 'ubuntu-latest' }}
     timeout-minutes: 2
     outputs:
+      depot-project-id: ${{ steps.plan.outputs.depot-project-id }}
       login: ${{ steps.plan.outputs.login }}
       push: ${{ steps.plan.outputs.push }}
       push-version: ${{ steps.plan.outputs.push-version }}
@@ -65,7 +68,22 @@ jobs:
           IS_UV_DEV_PR: ${{ github.repository == 'astral-sh/uv-dev' && github.event.pull_request.head.repo.full_name == github.repository }}
         id: plan
         run: |
+          # Each repository has its own development cache and saved images.
+          # Release plans in `uv`, including dry-runs, use the production project.
+          case "$GITHUB_REPOSITORY" in
+            astral-sh/uv)
+              if [ "$RELEASE_BUILD" == "true" ] && [ "$PUSH_DEV" != "true" ]; then
+                depot_project_id="$DEPOT_PROJECT_PROD_UV"
+              else
+                depot_project_id="$DEPOT_PROJECT_DEV_UV"
+              fi
+              ;;
+            astral-sh/uv-dev) depot_project_id="$DEPOT_PROJECT_DEV_UV_DEV" ;;
+            *) echo "No Depot project configured for $GITHUB_REPOSITORY" >&2; exit 1 ;;
+          esac
+
           {
+            echo "depot-project-id=$depot_project_id"
             if [ "${PUSH_DEV}" == "true" ] && { [ "${IS_LOCAL_PR}" == "true" ] || [ "${IS_UV_DEV_PR}" == "true" ]; }; then
               echo "login=${IS_LOCAL_PR}"
               echo "push=true"
@@ -141,6 +159,8 @@ jobs:
   docker-build-base:
     name: build uv
     needs: docker-plan
+    env:
+      DEPOT_PROJECT_ID: ${{ needs.docker-plan.outputs.depot-project-id }}
     runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-4' || 'ubuntu-latest' }}
     timeout-minutes: 20
     permissions:
@@ -239,6 +259,8 @@ jobs:
     needs:
       - docker-plan
       - docker-build-base
+    env:
+      DEPOT_PROJECT_ID: ${{ needs.docker-plan.outputs.depot-project-id }}
     permissions:
       id-token: write # for Depot OIDC
     strategy:
