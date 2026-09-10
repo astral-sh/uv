@@ -5,7 +5,6 @@ use std::iter::once;
 use std::path::Path;
 use std::pin::Pin;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::task::{Context, Poll};
 
 use futures::{FutureExt, TryStreamExt};
@@ -44,7 +43,7 @@ use uv_types::{BuildContext, BuildStack};
 use crate::archive::Archive;
 use crate::error::PythonVersion;
 use crate::extracted_wheel::{ExtractedWheel, HashedWheel, WheelExtractor};
-use crate::hash::{http_wheel_hash_algorithms, url_hashes_for_generation};
+use crate::hash::http_wheel_hash_algorithms;
 use crate::metadata::{ArchiveMetadata, Metadata};
 use crate::source::SourceDistributionBuilder;
 use crate::{Error, LocalWheel, Reporter, RequiresDist};
@@ -609,36 +608,15 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             return Ok(ArchiveMetadata::from_metadata23(metadata));
         }
 
-        // A shared archive can be replaced through another URL fragment while the metadata
-        // cache still describes the old wheel. Read its metadata through the archive's HTTP
-        // cache, so we also honor expiration and refresh mismatched hashes before resolution.
+        // Cached archives determine both installed contents and metadata. Resolve through the
+        // same HTTP cache so changed hashes and expired responses are refreshed together.
         if let BuiltDist::DirectUrl(wheel) = dist
-            && once(wheel.location.as_ref())
-                .chain((wheel.location.as_ref() != wheel.url.raw()).then_some(wheel.url.raw()))
-                .any(|location| {
-                    self.build_context
-                        .cache()
-                        .entry(
-                            CacheBucket::Wheels,
-                            WheelCache::Url(location).wheel_dir(wheel.name().as_ref()),
-                            format!("{}.http", wheel.filename.cache_key()),
-                        )
-                        .path()
-                        .exists()
-                })
+            && HttpArchivePointer::read_entries(self.build_context.cache(), wheel)
+                .next()
+                .is_some()
         {
-            let url_hashes = parse_url_hashes(&wheel.url);
-            let cache_hashes = if hash_policy.is_none() {
-                url_hashes.as_ref().map_or(hash_policy, |hashes| {
-                    ArchiveHashPolicy::All(hashes.as_slice())
-                })
-            } else {
-                hash_policy
-            };
-            let wheel = self.get_wheel(dist, cache_hashes).await?;
-            if wheel.satisfies(cache_hashes) {
-                return Ok(ArchiveMetadata::from_metadata23(wheel.metadata()?));
-            }
+            let wheel = self.get_wheel(dist, hash_policy).await?;
+            return Ok(ArchiveMetadata::from_metadata23(wheel.metadata()?));
         }
 
         let result = self
@@ -766,8 +744,6 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             BuiltDist::DirectUrl(_) => size,
             _ => None,
         };
-        let is_online_direct_url = self.client.unmanaged.connectivity().is_online()
-            && matches!(dist, BuiltDist::DirectUrl(_));
 
         // Acquire an advisory lock, to guard against concurrent writes.
         let _lock = Self::lock_wheel(wheel_entry, filename).await?;
@@ -775,8 +751,6 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         // Create an entry for the HTTP cache.
         let http_entry = wheel_entry.with_file(format!("{}.http", filename.cache_key()));
         let cache_read_entry = self.wheel_cache_read_entry(dist, hashes, &http_entry);
-        let url_hashes = url_hashes_for_generation(dist, hashes);
-        let downloaded = AtomicBool::new(false);
 
         let download = |response: reqwest::Response| {
             async {
@@ -845,7 +819,6 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                     reporter.on_download_complete(dist.name(), progress);
                 }
 
-                downloaded.store(true, Ordering::Relaxed);
                 Ok(Archive::new(
                     id,
                     hashers.into_iter().map(HashDigest::from).collect(),
@@ -886,7 +859,8 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                     req,
                     &cache_read_entry,
                     &http_entry,
-                    cache_control.clone(),
+                    cache_control,
+                    |archive| self.validate_cached_wheel(archive, dist, hashes, expected_size),
                     download,
                 )
             })
@@ -898,7 +872,6 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
 
         if let (Some(expected), Some(actual)) = (expected_size, archive.size)
             && expected != actual
-            && !is_online_direct_url
         {
             return Err(Error::MismatchedSize {
                 distribution: dist.to_string(),
@@ -906,52 +879,6 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 actual,
             });
         }
-
-        // A direct URL's contents can change even while its HTTP response is fresh. Online,
-        // refresh if the cached hashes or size do not match. Offline, preserve mismatch errors.
-        // Also refresh if the archive is missing required hashes or size, or has been removed.
-        let archive = Some(archive)
-            .filter(|archive| {
-                let downloaded = downloaded.load(Ordering::Relaxed);
-                // Another process may have replaced the shared pointer since the initial lookup.
-                if !downloaded
-                    && cache_read_entry.path() == http_entry.path()
-                    && let Some(url_hashes) = &url_hashes
-                    && !archive.satisfies(ArchiveHashPolicy::All(url_hashes.as_slice()))
-                {
-                    return false;
-                }
-                if is_online_direct_url && !downloaded {
-                    archive.satisfies(hashes)
-                        && expected_size.is_none_or(|expected| archive.size == Some(expected))
-                } else {
-                    archive.has_digests(hashes)
-                }
-            })
-            .filter(|archive| archive.exists(self.build_context.cache()))
-            .filter(|archive| expected_size.is_none() || archive.size.is_some());
-
-        let archive = if let Some(archive) = archive {
-            archive
-        } else {
-            self.client
-                .managed(async |client| {
-                    client
-                        .cached_client()
-                        .skip_cache_with_retry(
-                            self.request(url)?,
-                            &http_entry,
-                            cache_control,
-                            download,
-                        )
-                        .await
-                        .map_err(|err| match err {
-                            CachedClientError::Callback { err, .. } => err,
-                            CachedClientError::Client(err) => Error::Client(err),
-                        })
-                })
-                .await?
-        };
 
         Ok(archive)
     }
@@ -972,8 +899,6 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             BuiltDist::DirectUrl(_) => size,
             _ => None,
         };
-        let is_online_direct_url = self.client.unmanaged.connectivity().is_online()
-            && matches!(dist, BuiltDist::DirectUrl(_));
 
         let content_addressed_cache = self.content_addressed_cache;
 
@@ -983,8 +908,6 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         // Create an entry for the HTTP cache.
         let http_entry = wheel_entry.with_file(format!("{}.http", filename.cache_key()));
         let cache_read_entry = self.wheel_cache_read_entry(dist, hashes, &http_entry);
-        let url_hashes = url_hashes_for_generation(dist, hashes);
-        let downloaded = AtomicBool::new(false);
 
         let download = |response: reqwest::Response| {
             async {
@@ -1071,7 +994,6 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                     reporter.on_download_complete(dist.name(), progress);
                 }
 
-                downloaded.store(true, Ordering::Relaxed);
                 Ok(Archive::new(
                     id,
                     hashes,
@@ -1112,7 +1034,8 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                     req,
                     &cache_read_entry,
                     &http_entry,
-                    cache_control.clone(),
+                    cache_control,
+                    |archive| self.validate_cached_wheel(archive, dist, hashes, expected_size),
                     download,
                 )
             })
@@ -1124,7 +1047,6 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
 
         if let (Some(expected), Some(actual)) = (expected_size, archive.size)
             && expected != actual
-            && !is_online_direct_url
         {
             return Err(Error::MismatchedSize {
                 distribution: dist.to_string(),
@@ -1132,52 +1054,6 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 actual,
             });
         }
-
-        // A direct URL's contents can change even while its HTTP response is fresh. Online,
-        // refresh if the cached hashes or size do not match. Offline, preserve mismatch errors.
-        // Also refresh if the archive is missing required hashes or size, or has been removed.
-        let archive = Some(archive)
-            .filter(|archive| {
-                let downloaded = downloaded.load(Ordering::Relaxed);
-                // Another process may have replaced the shared pointer since the initial lookup.
-                if !downloaded
-                    && cache_read_entry.path() == http_entry.path()
-                    && let Some(url_hashes) = &url_hashes
-                    && !archive.satisfies(ArchiveHashPolicy::All(url_hashes.as_slice()))
-                {
-                    return false;
-                }
-                if is_online_direct_url && !downloaded {
-                    archive.satisfies(hashes)
-                        && expected_size.is_none_or(|expected| archive.size == Some(expected))
-                } else {
-                    archive.has_digests(hashes)
-                }
-            })
-            .filter(|archive| archive.exists(self.build_context.cache()))
-            .filter(|archive| expected_size.is_none() || archive.size.is_some());
-
-        let archive = if let Some(archive) = archive {
-            archive
-        } else {
-            self.client
-                .managed(async |client| {
-                    client
-                        .cached_client()
-                        .skip_cache_with_retry(
-                            self.request(url)?,
-                            &http_entry,
-                            cache_control,
-                            download,
-                        )
-                        .await
-                        .map_err(|err| match err {
-                            CachedClientError::Callback { err, .. } => err,
-                            CachedClientError::Client(err) => Error::Client(err),
-                        })
-                })
-                .await?
-        };
 
         Ok(archive)
     }
@@ -1376,6 +1252,47 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             .map_err(Error::CacheWrite)
     }
 
+    /// Check whether a cached wheel can satisfy the request before reusing it.
+    fn validate_cached_wheel(
+        &self,
+        archive: &Archive,
+        dist: &BuiltDist,
+        hashes: ArchiveHashPolicy<'_>,
+        expected_size: Option<u64>,
+    ) -> Result<bool, Error> {
+        match dist {
+            BuiltDist::DirectUrl(wheel) => {
+                // Offline, report known mismatches because a replacement cannot be downloaded.
+                if self.client.unmanaged.connectivity().is_offline() {
+                    if let (Some(expected), Some(actual)) = (expected_size, archive.size)
+                        && expected != actual
+                    {
+                        return Err(Error::MismatchedSize {
+                            distribution: dist.to_string(),
+                            expected,
+                            actual,
+                        });
+                    }
+                    if hashes.requires_validation()
+                        && archive.has_digests(hashes)
+                        && !archive.satisfies(hashes)
+                    {
+                        return Err(Error::hash_mismatch(
+                            dist.to_string(),
+                            hashes.digests(),
+                            archive.hashes(),
+                        ));
+                    }
+                }
+                Ok(archive.matches_direct_url(self.build_context.cache(), wheel, hashes))
+            }
+            BuiltDist::Registry(_) | BuiltDist::Path(_) | BuiltDist::GitPath(_) => Ok(archive
+                .exists(self.build_context.cache())
+                && archive.has_digests(hashes)
+                && (expected_size.is_none() || archive.size.is_some())),
+        }
+    }
+
     /// Find the cached response to read, while keeping new downloads under the canonical key.
     fn wheel_cache_read_entry(
         &self,
@@ -1386,28 +1303,8 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         let BuiltDist::DirectUrl(wheel) = dist else {
             return http_entry.clone();
         };
-        let cache = self.build_context.cache();
-        let url_hashes = url_hashes_for_generation(dist, hashes);
-        let cache_hashes = url_hashes
-            .as_ref()
-            .map_or(hashes, |hashes| ArchiveHashPolicy::All(hashes.as_slice()));
-        if let Some((entry, pointer)) =
-            HttpArchivePointer::read_from_direct_url(cache, wheel, cache_hashes)
-            && pointer.archive.has_digests(hashes)
-        {
-            return entry;
-        }
-
-        // Generation does not validate fresh downloads. If the shared entry does not match the
-        // explicit URL hash, retain the old verbatim-key lookup instead of returning other bytes.
-        if url_hashes.is_some() {
-            return cache.entry(
-                CacheBucket::Wheels,
-                WheelCache::Url(wheel.url.raw()).wheel_dir(wheel.name().as_ref()),
-                format!("{}.http", wheel.filename.cache_key()),
-            );
-        }
-        http_entry.clone()
+        HttpArchivePointer::read_from_direct_url(self.build_context.cache(), wheel, hashes)
+            .map_or_else(|| http_entry.clone(), |(entry, _)| entry)
     }
 
     /// Returns a GET [`reqwest::Request`] for the given URL.
@@ -1607,28 +1504,33 @@ impl HttpArchivePointer {
         wheel: &DirectUrlBuiltDist,
         hashes: ArchiveHashPolicy<'_>,
     ) -> Option<(CacheEntry, Self)> {
+        Self::read_entries(cache, wheel).find_map(|(entry, pointer)| {
+            pointer
+                .ok()
+                .filter(|pointer| pointer.archive.matches_direct_url(cache, wheel, hashes))
+                .map(|pointer| (entry, pointer))
+        })
+    }
+
+    /// Read canonical and legacy URL entries, retaining corrupt entries so callers can heal them.
+    fn read_entries(
+        cache: &Cache,
+        wheel: &DirectUrlBuiltDist,
+    ) -> impl Iterator<Item = (CacheEntry, Result<Self, Error>)> {
         once(wheel.location.as_ref())
             .chain((wheel.location.as_ref() != wheel.url.raw()).then_some(wheel.url.raw()))
-            .find_map(|location| {
+            .filter_map(move |location| {
                 let entry = cache.entry(
                     CacheBucket::Wheels,
                     WheelCache::Url(location).wheel_dir(wheel.name().as_ref()),
                     format!("{}.http", wheel.filename.cache_key()),
                 );
                 match Self::read_from(&entry) {
-                    Ok(Some(pointer))
-                        if pointer.archive.satisfies(hashes)
-                            && wheel
-                                .size
-                                .is_none_or(|size| pointer.archive.size == Some(size))
-                            && pointer.archive.exists(cache) =>
-                    {
-                        Some((entry, pointer))
-                    }
-                    Ok(_) => None,
+                    Ok(Some(pointer)) => Some((entry, Ok(pointer))),
+                    Ok(None) => None,
                     Err(err) => {
                         debug!("Failed to deserialize cached URL wheel for {wheel}: {err}");
-                        None
+                        Some((entry, Err(err)))
                     }
                 }
             })

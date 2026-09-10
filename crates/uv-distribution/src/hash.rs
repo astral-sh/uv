@@ -1,5 +1,6 @@
 use uv_distribution_types::{ArchiveHashPolicy, BuiltDist};
 use uv_pypi_types::{HashAlgorithm, HashDigests, Hashes};
+use uv_redacted::DisplaySafeUrl;
 
 /// Return the algorithms to compute for an HTTP distribution.
 fn http_hash_algorithms(hashes: ArchiveHashPolicy<'_>) -> Vec<HashAlgorithm> {
@@ -10,31 +11,30 @@ fn http_hash_algorithms(hashes: ArchiveHashPolicy<'_>) -> Vec<HashAlgorithm> {
     algorithms
 }
 
-/// Return the URL hash that must match before reusing a shared wheel cache entry during generation.
-pub(crate) fn url_hashes_for_generation(
-    dist: &BuiltDist,
+/// Use a URL hash to select cached contents unless explicit hash requirements take precedence.
+pub(crate) fn url_hashes_for_cache(
+    url: &DisplaySafeUrl,
     hashes: ArchiveHashPolicy<'_>,
 ) -> Option<HashDigests> {
-    if hashes != ArchiveHashPolicy::Generate {
-        return None;
+    match hashes {
+        ArchiveHashPolicy::None | ArchiveHashPolicy::Generate => {}
+        ArchiveHashPolicy::Any(_) | ArchiveHashPolicy::All(_) => return None,
     }
-    let BuiltDist::DirectUrl(wheel) = dist else {
-        return None;
-    };
-    wheel
-        .url
-        .fragment()?
+    url.fragment()?
         .split('&')
         .find_map(|fragment| Hashes::parse_fragment(fragment).ok())
         .map(HashDigests::from)
 }
 
-/// Include the URL's hash algorithm so subsequent generation can reuse the canonical wheel entry.
+/// Compute URL digests needed to recognize the same wheel in subsequent cache lookups.
 pub(crate) fn http_wheel_hash_algorithms(
     dist: &BuiltDist,
     hashes: ArchiveHashPolicy<'_>,
 ) -> Vec<HashAlgorithm> {
-    let url_hashes = url_hashes_for_generation(dist, hashes);
+    let url_hashes = match dist {
+        BuiltDist::DirectUrl(wheel) => url_hashes_for_cache(&wheel.url, hashes),
+        BuiltDist::Registry(_) | BuiltDist::Path(_) | BuiltDist::GitPath(_) => None,
+    };
     http_hash_algorithms(
         url_hashes
             .as_ref()

@@ -4978,6 +4978,31 @@ async fn direct_url_wheel_cache_tracks_content() -> Result<()> {
         .arg("--offline")
         .assert()
         .failure();
+    // A failed refresh must leave the original archive usable for requests that still match it.
+    Mock::given(method("GET"))
+        .and(path(format!("/{wheel_filename}")))
+        .respond_with(ResponseTemplate::new(404))
+        .with_priority(1)
+        .up_to_n_times(1)
+        .mount(&server)
+        .await;
+    context
+        .pip_compile()
+        .arg("requirements.in")
+        .arg("--generate-hashes")
+        .assert()
+        .failure();
+    requirements_in.write_str(&format!("ok @ {generation_url}\n"))?;
+    context
+        .pip_compile()
+        .arg("requirements.in")
+        .arg("--generate-hashes")
+        .arg("--offline")
+        .assert()
+        .success();
+    requirements_in.write_str(&format!(
+        "ok @ {generation_url}#sha256={replacement_hash}\n"
+    ))?;
     uv_snapshot!(context.filters(), context.pip_compile()
         .arg("requirements.in")
         .arg("--generate-hashes"), @r"

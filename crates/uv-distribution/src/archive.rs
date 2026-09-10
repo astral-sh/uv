@@ -1,8 +1,10 @@
 use serde::ser::SerializeMap;
 use uv_cache::{ARCHIVE_VERSION, ArchiveId, Cache};
 use uv_distribution_filename::WheelFilename;
-use uv_distribution_types::Hashed;
+use uv_distribution_types::{ArchiveHashPolicy, DirectUrlBuiltDist, Hashed};
 use uv_pypi_types::{HashDigest, HashDigests};
+
+use crate::hash::url_hashes_for_cache;
 
 /// An archive (unzipped wheel) that exists in the local cache.
 #[derive(Debug, Clone, serde::Deserialize)]
@@ -52,6 +54,23 @@ impl Archive {
             version: ARCHIVE_VERSION,
             size,
         }
+    }
+
+    /// Whether this cached archive can satisfy the direct URL request.
+    pub(crate) fn matches_direct_url(
+        &self,
+        cache: &Cache,
+        wheel: &DirectUrlBuiltDist,
+        hashes: ArchiveHashPolicy<'_>,
+    ) -> bool {
+        let url_hashes = url_hashes_for_cache(&wheel.url, hashes);
+        let cache_hashes = url_hashes
+            .as_ref()
+            .map_or(hashes, |hashes| ArchiveHashPolicy::All(hashes.as_slice()));
+        self.satisfies(cache_hashes)
+            && self.has_digests(hashes)
+            && wheel.size.is_none_or(|size| self.size == Some(size))
+            && self.exists(cache)
     }
 
     /// Returns `true` if the archive exists in the cache.

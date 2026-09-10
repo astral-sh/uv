@@ -245,6 +245,7 @@ impl CachedClient {
         cache_read_entry: &CacheEntry,
         cache_entry: &CacheEntry,
         cache_control: CacheControl,
+        cache_validator: impl Fn(&Payload::Target) -> Result<bool, CallBackError>,
         response_callback: Callback,
     ) -> Result<Payload::Target, CachedClientError<CallBackError>> {
         let start = Instant::now();
@@ -254,7 +255,19 @@ impl CachedClient {
                 .read_and_decode_stale_cache::<Payload>(req, cache_read_entry)
                 .await;
             match cached {
-                Ok(Some(payload)) => return Ok(payload),
+                Ok(Some(payload)) => {
+                    if cache_validator(&payload).map_err(|err| CachedClientError::Callback {
+                        retries: 0,
+                        err,
+                        duration: start.elapsed(),
+                    })? {
+                        return Ok(payload);
+                    }
+                    debug!(
+                        "Cached response rejected: {}",
+                        cache_read_entry.path().display()
+                    );
+                }
                 Ok(None) => warn!(
                     "Cached response doesn't match current request for: {}",
                     DisplaySafeUrl::from_url(req.url().clone())
@@ -302,29 +315,8 @@ impl CachedClient {
                 cache_policy,
             }
         };
-        match cached_response {
-            CachedResponse::FreshCache(cached) => match self
-                .0
-                .cache_read_runtime()
-                .spawn_blocking(move || Payload::from_aligned_bytes(cached.data))
-                .await
-                .expect("cache payload decoding task panicked")
-            {
-                Ok(payload) => Ok(payload),
-                Err(err) => {
-                    warn!(
-                        "Broken fresh cache entry (for payload) at {}, removing: {err}",
-                        cache_entry.path().display()
-                    );
-                    self.resend_and_heal_cache(
-                        fresh_req,
-                        cache_entry,
-                        cache_control.clone(),
-                        response_callback,
-                    )
-                    .await
-                }
-            },
+        let cached = match cached_response {
+            CachedResponse::FreshCache(cached) => cached,
             CachedResponse::NotModified { cached, new_policy } => {
                 let refresh_cache =
                     info_span!("refresh_cache", file = %cache_entry.path().display());
@@ -337,63 +329,68 @@ impl CachedClient {
                     write_atomic(cache_entry.path(), data_with_cache_policy_bytes)
                         .await
                         .map_err(ErrorKind::CacheWrite)?;
-                    match self
-                        .0
-                        .cache_read_runtime()
-                        .spawn_blocking(move || Payload::from_aligned_bytes(cached.data))
-                        .await
-                        .expect("cache payload decoding task panicked")
-                    {
-                        Ok(payload) => Ok(payload),
-                        Err(err) => {
-                            warn!(
-                                "Broken fresh cache entry after revalidation \
-                                 (for payload) at {}, removing: {err}",
-                                cache_entry.path().display()
-                            );
-                            self.resend_and_heal_cache(
-                                fresh_req,
-                                cache_entry,
-                                cache_control.clone(),
-                                response_callback,
-                            )
-                            .await
-                        }
-                    }
+                    Ok::<_, Error>(cached)
                 }
                 .instrument(refresh_cache)
-                .await
+                .await?
             }
             CachedResponse::ModifiedOrNew {
                 response,
                 cache_policy,
             } => {
-                // If we got a modified response, but it's a 304, then a validator failed (e.g., the
-                // ETag didn't match). We need to make a fresh request.
+                // An unusable 304 requires a fresh request instead of the response callback.
                 if response.status() == http::StatusCode::NOT_MODIFIED {
                     warn!(
                         "Server returned unusable 304 for: {}",
                         DisplaySafeUrl::from_url(fresh_req.url().clone())
                     );
-                    self.resend_and_heal_cache(
-                        fresh_req,
-                        cache_entry,
-                        cache_control,
-                        response_callback,
-                    )
-                    .await
                 } else {
-                    self.run_response_callback(
-                        cache_entry,
-                        cache_policy,
-                        start,
-                        response,
-                        response_callback,
-                    )
-                    .await
+                    return self
+                        .run_response_callback(
+                            cache_entry,
+                            cache_policy,
+                            start,
+                            response,
+                            response_callback,
+                        )
+                        .await;
                 }
+                let _ = fs_err::tokio::remove_file(cache_entry.path()).await;
+                return self
+                    .fetch_and_cache(fresh_req, cache_entry, cache_control, response_callback)
+                    .await;
+            }
+        };
+        match self
+            .0
+            .cache_read_runtime()
+            .spawn_blocking(move || Payload::from_aligned_bytes(cached.data))
+            .await
+            .expect("cache payload decoding task panicked")
+        {
+            Ok(payload) => {
+                if cache_validator(&payload).map_err(|err| CachedClientError::Callback {
+                    retries: 0,
+                    err,
+                    duration: start.elapsed(),
+                })? {
+                    return Ok(payload);
+                }
+                debug!(
+                    "Cached response rejected: {}",
+                    cache_read_entry.path().display()
+                );
+            }
+            Err(err) => {
+                warn!(
+                    "Broken cache entry (for payload) at {}, removing: {err}",
+                    cache_read_entry.path().display()
+                );
+                let _ = fs_err::tokio::remove_file(cache_read_entry.path()).await;
             }
         }
+        self.fetch_and_cache(fresh_req, cache_entry, cache_control, response_callback)
+            .await
     }
 
     /// Make a request without checking whether the cache is fresh.
@@ -421,7 +418,7 @@ impl CachedClient {
         Ok(payload)
     }
 
-    async fn resend_and_heal_cache<
+    async fn fetch_and_cache<
         Payload: Cacheable,
         CallBackError: std::error::Error + 'static,
         Callback: AsyncFnOnce(Response) -> Result<Payload, CallBackError>,
@@ -432,7 +429,6 @@ impl CachedClient {
         cache_control: CacheControl,
         response_callback: Callback,
     ) -> Result<Payload::Target, CachedClientError<CallBackError>> {
-        let _ = fs_err::tokio::remove_file(&cache_entry.path()).await;
         let start = Instant::now();
         let (response, cache_policy) = self.fresh_request(req, cache_control).await?;
         self.run_response_callback(
@@ -725,6 +721,7 @@ impl CachedClient {
             cache_entry,
             cache_entry,
             cache_control,
+            |_| Ok(true),
             response_callback,
         )
         .await
@@ -732,6 +729,9 @@ impl CachedClient {
 
     /// Make a cached request, reading from one entry and writing new or revalidated responses to
     /// another. This allows callers to reuse an older cache key without continuing to populate it.
+    /// The `cache_validator` returns `Ok(true)` to reuse a cached value, `Ok(false)` to fetch it
+    /// again, or an error to stop the request. Fresh responses are passed to `response_callback`
+    /// without applying the cache validator.
     #[instrument(skip_all)]
     pub async fn get_serde_with_retry_from<
         Payload: Serialize + DeserializeOwned + Send + 'static,
@@ -743,6 +743,7 @@ impl CachedClient {
         cache_read_entry: &CacheEntry,
         cache_entry: &CacheEntry,
         cache_control: CacheControl,
+        cache_validator: impl Fn(&Payload) -> Result<bool, CallBackError>,
         response_callback: Callback,
     ) -> Result<Payload, CachedClientError<CallBackError>> {
         let payload = self
@@ -751,6 +752,7 @@ impl CachedClient {
                 cache_read_entry,
                 cache_entry,
                 cache_control,
+                cache_validator,
                 async |resp| {
                     let payload = response_callback(resp).await?;
                     Ok(SerdeCacheable { inner: payload })
@@ -780,6 +782,7 @@ impl CachedClient {
             cache_entry,
             cache_entry,
             cache_control,
+            |_| Ok(true),
             response_callback,
         )
         .boxed_local()
@@ -796,6 +799,7 @@ impl CachedClient {
         cache_read_entry: &CacheEntry,
         cache_entry: &CacheEntry,
         cache_control: CacheControl,
+        cache_validator: impl Fn(&Payload::Target) -> Result<bool, CallBackError>,
         response_callback: Callback,
     ) -> Result<Payload::Target, CachedClientError<CallBackError>> {
         let mut retry_state = RetryState::start(self.uncached().retry_policy(), req.url().clone());
@@ -807,6 +811,7 @@ impl CachedClient {
                     cache_read_entry,
                     cache_entry,
                     cache_control.clone(),
+                    &cache_validator,
                     &response_callback,
                 )
                 .await;
