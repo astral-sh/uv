@@ -1,6 +1,9 @@
 use assert_cmd::assert::OutputAssertExt;
 use assert_fs::prelude::{FileTouch, PathChild};
-use assert_fs::{fixture::FileWriteStr, prelude::PathCreateDir};
+use assert_fs::{
+    fixture::{FileWriteBin, FileWriteStr},
+    prelude::PathCreateDir,
+};
 use indoc::indoc;
 
 use uv_platform::{Arch, Os};
@@ -282,6 +285,45 @@ fn python_find_pin_arbitrary_name() {
 
     ----- stderr -----
     warning: Ignoring unsupported Python request `foo` in version file: [TEMP_DIR]/foo/.python-version
+    ");
+}
+
+/// Version files are frequently written by editors and shells that prepend a byte-order mark; on
+/// Windows, `Set-Content -Encoding UTF8` writes a UTF-8 BOM and `>` writes UTF-16LE.
+#[test]
+fn python_find_pin_byte_order_mark() {
+    let context = uv_test::test_context_with_versions!(&["3.11", "3.12"]);
+
+    // UTF-8 with a byte-order mark.
+    let mut utf8 = vec![0xEF, 0xBB, 0xBF];
+    utf8.extend_from_slice(b"3.12");
+    context
+        .temp_dir
+        .child(".python-version")
+        .write_binary(&utf8)
+        .unwrap();
+
+    uv_snapshot!(context.filters(), context.python_find(), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    [PYTHON-3.12]
+    ");
+
+    // UTF-16LE with a byte-order mark.
+    let mut utf16 = vec![0xFF, 0xFE];
+    for unit in "3.12".encode_utf16() {
+        utf16.extend_from_slice(&unit.to_le_bytes());
+    }
+    context
+        .temp_dir
+        .child(".python-version")
+        .write_binary(&utf16)
+        .unwrap();
+
+    uv_snapshot!(context.filters(), context.python_find(), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    [PYTHON-3.12]
     ");
 }
 

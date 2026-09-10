@@ -185,7 +185,9 @@ impl PythonVersionFile {
     ///
     /// If the file does not exist, `Ok(None)` is returned.
     async fn try_from_path(path: PathBuf) -> Result<Option<Self>, std::io::Error> {
-        match fs::tokio::read_to_string(&path).await {
+        // Version files are often written by editors and shells that emit a byte-order mark, so
+        // read them with BOM sniffing, as we do for requirements files.
+        match uv_fs::read_to_string_transcode(&path).await {
             Ok(content) => {
                 debug!(
                     "Reading Python requests from version file at `{}`",
