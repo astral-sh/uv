@@ -163,6 +163,21 @@ fn python_find_cached_launcher_override() {
 }
 
 #[test]
+#[cfg(windows)]
+fn python_find_extensionless_path() {
+    let context = uv_test::test_context!("3.12");
+
+    // A path without the `.exe` extension should resolve to the adjacent executable.
+    let requested_python = venv_bin_path(&context.venv).join("python");
+
+    uv_snapshot!(context.filters(), context.python_find().arg(&requested_python), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    [VENV]/Scripts/python.exe
+    ");
+}
+
+#[test]
 fn python_find_pin() {
     let context = uv_test::test_context_with_versions!(&["3.11", "3.12"]);
 

@@ -5,6 +5,8 @@ use rustc_hash::{FxBuildHasher, FxHashSet};
 use same_file::is_same_file;
 use std::borrow::Cow;
 use std::cmp::Reverse;
+#[cfg(windows)]
+use std::env::consts::EXE_EXTENSION;
 use std::env::consts::EXE_SUFFIX;
 use std::fmt::{self, Debug, Formatter};
 use std::sync::atomic::Ordering;
@@ -1992,7 +1994,7 @@ impl PythonRequest {
         // e.g. path/to/python on Windows, where path/to/python.exe is the true path
         #[cfg(windows)]
         if value_as_path.extension().is_none() {
-            let value_as_path = value_as_path.with_extension(EXE_SUFFIX);
+            let value_as_path = value_as_path.with_extension(EXE_EXTENSION);
             if value_as_path.is_file() {
                 return Self::File(value_as_path);
             }
