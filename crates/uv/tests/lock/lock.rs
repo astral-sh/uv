@@ -1266,6 +1266,7 @@ fn lock_wheel_git_archive_missing_lfs() -> Result<()> {
 }
 
 /// A downloaded fragment-bearing URL can be installed from the lockfile offline.
+#[cfg(feature = "test-universal")]
 #[tokio::test]
 async fn lock_wheel_url_fragment_download() -> Result<()> {
     let context = uv_test::test_context!("3.12");
