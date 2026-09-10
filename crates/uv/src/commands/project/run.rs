@@ -265,7 +265,7 @@ pub(crate) async fn run(
             {
                 Ok(result) => result.into_lock(),
                 Err(ProjectError::Operation(err)) => {
-                    return Err(UvError::from_operation_with_context(err, "script").into());
+                    return Err(UvError::from(err.with_resolution_context("script")).into());
                 }
                 Err(err) => return Err(UvError::from(err).into()),
             };
@@ -308,7 +308,7 @@ pub(crate) async fn run(
             {
                 Ok(_) => {}
                 Err(ProjectError::Operation(err)) => {
-                    return Err(UvError::from_operation_with_context(err, "script").into());
+                    return Err(UvError::from(err.with_resolution_context("script")).into());
                 }
                 Err(err) => return Err(UvError::from(err).into()),
             }
@@ -449,7 +449,7 @@ pub(crate) async fn run(
                 {
                     Ok(update) => Some(update.into_environment().into_interpreter()),
                     Err(ProjectError::Operation(err)) => {
-                        return Err(UvError::from_operation_with_context(err, "script").into());
+                        return Err(UvError::from(err.with_resolution_context("script")).into());
                     }
                     Err(err) => return Err(UvError::from(err).into()),
                 }
@@ -1001,7 +1001,7 @@ pub(crate) async fn run(
             let environment = match result {
                 Ok(resolution) => resolution,
                 Err(ProjectError::Operation(err)) => {
-                    return Err(UvError::from_operation_with_context(err, "`--with`").into());
+                    return Err(UvError::from(err.with_resolution_context("`--with`")).into());
                 }
                 Err(err) => return Err(UvError::from(err).into()),
             };
