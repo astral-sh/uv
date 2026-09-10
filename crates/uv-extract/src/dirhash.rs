@@ -110,14 +110,14 @@ where
     R: AsyncRead,
     W: AsyncWrite,
 {
-    blake3_copy_with_buffer(reader, writer, &mut Vec::new()).await
+    blake3_copy_with_buffer(reader, writer, &mut Box::new([0; 1 << 16])).await
 }
 
 /// Copy and hash bytes with a reusable 64 KiB buffer, allocating it on the first call.
 pub(crate) async fn blake3_copy_with_buffer<R, W>(
     reader: R,
     writer: W,
-    buffer: &mut Vec<u8>,
+    buffer: &mut [u8; 1 << 16],
 ) -> io::Result<(u64, blake3::Hash)>
 where
     R: AsyncRead,
@@ -126,7 +126,7 @@ where
     let mut reader = pin!(reader);
     let mut writer = pin!(writer);
     let mut hasher = blake3::Hasher::new();
-    buffer.resize(1 << 16, 0); // 64 KiB
+    buffer.fill(0);
     let mut total = 0u64;
     // BLAKE3 is fastest when hashing power-of-two sized buffers. That maximizes the time we spend
     // in the wide SIMD part of the implementation (which wants between 4 and 16 KiB at a time
@@ -711,7 +711,7 @@ mod tests {
     async fn test_blake3_copy_reuses_buffer() -> io::Result<()> {
         let mut input = vec![0; 64_000 * 3];
         paint_input(&mut input);
-        let mut buffer = Vec::new();
+        let mut buffer = Box::new([0; 1 << 16]);
         for input in [input.as_slice(), b"hello", b""] {
             let mut output = Vec::new();
             let (bytes_read, hash) =
