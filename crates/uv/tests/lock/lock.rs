@@ -1,7 +1,6 @@
 use anyhow::Result;
 #[cfg(feature = "test-universal")]
 use anyhow::anyhow;
-#[cfg(feature = "test-universal")]
 use assert_cmd::assert::OutputAssertExt;
 use assert_fs::prelude::*;
 use indoc::{formatdoc, indoc};
