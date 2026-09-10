@@ -1,6 +1,5 @@
 [
   "area:authentication",
-  "area:automations",
   "area:benchmarks",
   "area:build-backend",
   "area:cache",
@@ -13,7 +12,6 @@
   "area:network",
   "area:projects",
   "area:registry",
-  "area:releases",
   "area:resolver",
   "area:rustlib",
   "area:scripts",
@@ -29,7 +27,6 @@
   "area:workspaces",
   "breaking",
   "bug",
-  "ci-flake",
   "compatibility",
   "dependencies",
   "documentation",
@@ -37,6 +34,11 @@
   "external",
   "integration",
   "internal",
+  "internal:automations",
+  "internal:ci",
+  "internal:ci-flake",
+  "internal:releases",
+  "internal:testing",
   "linux",
   "macos",
   "musl",
@@ -45,6 +47,5 @@
   "pypy",
   "rust",
   "security",
-  "testing",
   "windows"
 ]
