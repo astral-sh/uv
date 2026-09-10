@@ -26,6 +26,7 @@ use uv_distribution_filename::WheelFilename;
 use uv_distribution_types::{
     ArchiveHashPolicy, BuildInfo, BuildableSource, BuiltDist, Dist, DistRef, HashCollection,
     HashValidation, Hashed, IndexUrl, InstalledDist, MetadataHashPolicy, Name, SourceDist,
+    SourceUrl, parse_url_hashes,
 };
 use uv_extract::dirhash::{DirectoryDigest, HashedFile};
 use uv_extract::hash::Hasher;
@@ -553,9 +554,8 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                             hashes.collection == HashCollection::All
                                 && dist.best_wheel().file.hashes.is_empty()
                         }
-                        BuiltDist::DirectUrl(_) | BuiltDist::Path(_) | BuiltDist::GitPath(_) => {
-                            true
-                        }
+                        BuiltDist::DirectUrl(dist) => parse_url_hashes(&dist.url).is_none(),
+                        BuiltDist::Path(_) | BuiltDist::GitPath(_) => true,
                     },
                 };
                 if compute_hashes {
@@ -659,10 +659,23 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             }
         }
 
+        let url_hashes = if let BuildableSource::Dist(SourceDist::DirectUrl(dist)) = source {
+            parse_url_hashes(&dist.url)
+        } else if let BuildableSource::Url(SourceUrl::Direct(url)) = source {
+            parse_url_hashes(url.url)
+        } else {
+            None
+        };
+
         let build_hash_policy = match hashes.validation {
             HashValidation::None => match hashes.collection {
                 HashCollection::None => ArchiveHashPolicy::None,
-                HashCollection::Url | HashCollection::All => ArchiveHashPolicy::Generate,
+                // If resolving metadata requires a build, validate any URL hash before executing
+                // the backend, even when the caller only requested hash collection.
+                HashCollection::Url | HashCollection::All => match url_hashes.as_ref() {
+                    Some(digests) => ArchiveHashPolicy::All(digests.as_slice()),
+                    None => ArchiveHashPolicy::Generate,
+                },
             },
             HashValidation::Any(_) | HashValidation::All(_) => hashes.validation.into(),
         };
