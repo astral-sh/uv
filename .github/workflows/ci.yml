@@ -140,7 +140,7 @@ jobs:
     with:
       sha: ${{ github.sha }}
 
-  build-release-binaries:
+  build-release-artifacts:
     needs: plan
     if: ${{ needs.plan.outputs.build-release-binaries == 'true' }}
     uses: $/.github/workflows/build-release-binaries.yml
