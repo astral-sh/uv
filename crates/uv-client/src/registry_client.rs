@@ -2,6 +2,7 @@ use std::collections::BTreeMap;
 use std::fmt::{self, Debug, Formatter};
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::thread;
 use std::time::Duration;
 
 use async_http_range_reader::AsyncHttpRangeReader;
@@ -11,7 +12,7 @@ use itertools::Either;
 use reqwest::{Proxy, Response};
 use rustc_hash::FxHashMap;
 use tokio::sync::{Mutex, Semaphore};
-use tracing::{Instrument, debug, info_span, instrument, trace, warn};
+use tracing::{Instrument, Span, debug, info_span, instrument, trace, warn};
 use url::Url;
 
 use uv_auth::{CredentialsCache, Indexes};
@@ -205,6 +206,10 @@ impl<'a> RegistryClientBuilder<'a> {
             client,
             read_timeout,
             flat_indexes: Arc::default(),
+            parse_concurrency: Arc::new(Semaphore::new(
+                thread::available_parallelism().map_or(1, |parallelism| parallelism.get().min(4)),
+            )),
+            parse_memory: Arc::new(Semaphore::new(8 * 1024 * 1024)),
             metadata_range_request: self.metadata_range_request,
         })
     }
@@ -229,6 +234,10 @@ pub struct RegistryClient {
     read_timeout: Duration,
     /// The flat index entries for each `--find-links`-style index URL, with one slot per index.
     flat_indexes: Arc<Mutex<FlatIndexCache>>,
+    /// Bound CPU work for large remote index responses independently of network requests.
+    parse_concurrency: Arc<Semaphore>,
+    /// Limit decoded input bytes held by offloaded parsers, independently of parsed output size.
+    parse_memory: Arc<Semaphore>,
     /// The behavior when metadata range requests are unsupported.
     metadata_range_request: MetadataRangeRequest,
 }
@@ -644,7 +653,7 @@ impl RegistryClient {
                     ))
                 })?;
 
-                let unarchived = match media_type {
+                match media_type {
                     MediaType::PypiV1Json => {
                         let bytes = response.bytes().await.map_err(|err| {
                             ErrorKind::from_reqwest(
@@ -654,15 +663,19 @@ impl RegistryClient {
                             )
                         })?;
 
-                        let data: PypiSimpleDetail = serde_json::from_slice(bytes.as_ref())
-                            .map_err(|err| Error::from_json_err(err, url.clone()))?;
-
-                        SimpleDetailMetadata::from_pypi_files(
-                            data.files,
-                            package_name,
-                            data.project_status,
-                            &url,
-                        )
+                        let package_name = package_name.clone();
+                        self.parse_simple_body(bytes.len(), move || {
+                            let data: PypiSimpleDetail = serde_json::from_slice(bytes.as_ref())
+                                .map_err(|err| Error::from_json_err(err, url.clone()))?;
+                            let unarchived = SimpleDetailMetadata::from_pypi_files(
+                                data.files,
+                                &package_name,
+                                data.project_status,
+                                &url,
+                            );
+                            OwnedArchive::from_unarchived(&unarchived)
+                        })
+                        .await
                     }
                     MediaType::PypiV1Html | MediaType::TextHtml => {
                         let text = response.text().await.map_err(|err| {
@@ -672,10 +685,15 @@ impl RegistryClient {
                                 self.client.certificate_source(),
                             )
                         })?;
-                        SimpleDetailMetadata::from_html(&text, package_name, &url)?
+                        let package_name = package_name.clone();
+                        self.parse_simple_body(text.len(), move || {
+                            let unarchived =
+                                SimpleDetailMetadata::from_html(&text, &package_name, &url)?;
+                            OwnedArchive::from_unarchived(&unarchived)
+                        })
+                        .await
                     }
-                };
-                OwnedArchive::from_unarchived(&unarchived)
+                }
             }
             .boxed_local()
             .instrument(info_span!("parse_simple_api", package = %package_name))
@@ -690,6 +708,41 @@ impl RegistryClient {
             )
             .await?;
         Ok(simple)
+    }
+
+    /// Parse large index bodies without blocking sibling HTTP futures in the resolver fetch task.
+    async fn parse_simple_body(
+        &self,
+        body_size: usize,
+        parse: impl FnOnce() -> Result<OwnedArchive<SimpleDetailMetadata>, Error> + Send + 'static,
+    ) -> Result<OwnedArchive<SimpleDetailMetadata>, Error> {
+        // Small responses are cheaper to parse inline than to dispatch to another thread.
+        if body_size < 512 * 1024 {
+            return parse();
+        }
+        // Oversized permit requests are invalid on 32-bit platforms.
+        if body_size > Semaphore::MAX_PERMITS {
+            return parse();
+        }
+        let Ok(body_size) = u32::try_from(body_size) else {
+            return parse();
+        };
+        // Fall back to inline parsing instead of retaining completed response bodies in a queue.
+        let Ok(permit) = self.parse_concurrency.clone().try_acquire_owned() else {
+            return parse();
+        };
+        let Ok(memory) = self.parse_memory.clone().try_acquire_many_owned(body_size) else {
+            drop(permit);
+            return parse();
+        };
+        let span = Span::current();
+        let (result, _permits) = tokio::task::spawn_blocking(move || {
+            // Hold admission until the result is collected, or a cancelled task finishes.
+            (span.in_scope(parse), (permit, memory))
+        })
+        .await
+        .expect("index parsing task panicked");
+        result
     }
 
     /// Fetch the [`SimpleDetailMetadata`] from a local file, using a PEP 503-compatible directory
@@ -1787,8 +1840,12 @@ impl Connectivity {
 mod tests {
     use std::assert_matches;
     use std::str::FromStr;
+    use std::sync::Arc;
+    use std::thread;
+    use std::time::Duration;
 
-    use tokio::sync::Semaphore;
+    use tokio::sync::{Semaphore, oneshot};
+    use tokio::time::timeout;
     use url::Url;
     use uv_normalize::PackageName;
     use uv_pypi_types::{HashDigests, PypiSimpleDetail};
@@ -1796,10 +1853,11 @@ mod tests {
     use uv_torch::{TorchBackend, TorchStrategy};
 
     use crate::{
-        BaseClientBuilder, Connectivity, RegistryClient, RegistryClientBuilder,
-        SimpleDetailMetadata, SimpleDetailMetadatum, html::SimpleDetailHTML,
+        BaseClientBuilder, Connectivity, OwnedArchive, RegistryClient, RegistryClientBuilder,
+        SimpleDetailMetadata, SimpleDetailMetadatum, cached_client::CacheControl,
+        html::SimpleDetailHTML,
     };
-    use uv_cache::Cache;
+    use uv_cache::{Cache, CacheBucket};
     use uv_distribution_types::{
         File, FileLocation, Index, IndexCapabilities, IndexFormat, IndexLocations,
         IndexMetadataRef, IndexUrl, ToUrlError, Zstd,
@@ -1809,6 +1867,187 @@ mod tests {
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
     type Error = Box<dyn std::error::Error>;
+
+    #[tokio::test]
+    async fn simple_parse_dispatch() -> Result<(), Error> {
+        let client = no_index_client(vec![])?;
+        let runtime_thread = thread::current().id();
+
+        for (body_size, offloaded) in [
+            (512 * 1024 - 1, false),
+            (512 * 1024, true),
+            (8 * 1024 * 1024 + 1, false),
+            (usize::MAX, false),
+        ] {
+            client
+                .parse_simple_body(body_size, move || {
+                    assert_eq!(thread::current().id() != runtime_thread, offloaded);
+                    OwnedArchive::from_unarchived(&SimpleDetailMetadata::default())
+                })
+                .await?;
+        }
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn simple_parse_admission_is_shared_and_bounded() -> Result<(), Error> {
+        // Exercise the task limit and the byte budget independently.
+        for (concurrency, memory) in [(1, 8 * 1024 * 1024), (2, 512 * 1024)] {
+            let mut client = no_index_client(vec![])?;
+            client.parse_concurrency = Arc::new(Semaphore::new(concurrency));
+            client.parse_memory = Arc::new(Semaphore::new(memory));
+            let sibling = client.clone();
+            let runtime_thread = thread::current().id();
+            let (started, started_receiver) = oneshot::channel();
+            let (release, release_receiver) = oneshot::channel();
+            let parsing = tokio::spawn(async move {
+                sibling
+                    .parse_simple_body(512 * 1024, move || {
+                        assert_ne!(thread::current().id(), runtime_thread);
+                        started.send(()).expect("test is waiting for the parser");
+                        release_receiver
+                            .blocking_recv()
+                            .expect("test releases the parser");
+                        OwnedArchive::from_unarchived(&SimpleDetailMetadata::default())
+                    })
+                    .await
+            });
+            started_receiver.await?;
+
+            // Saturated admission must run immediately, rather than queue another body.
+            timeout(
+                Duration::from_secs(10),
+                client.parse_simple_body(512 * 1024, move || {
+                    assert_eq!(thread::current().id(), runtime_thread);
+                    OwnedArchive::from_unarchived(&SimpleDetailMetadata::default())
+                }),
+            )
+            .await??;
+            assert_eq!(
+                client.parse_concurrency.available_permits(),
+                concurrency - 1
+            );
+            assert_eq!(client.parse_memory.available_permits(), memory - 512 * 1024);
+
+            release.send(()).expect("parser is waiting for release");
+            parsing.await??;
+            assert_eq!(client.parse_concurrency.available_permits(), concurrency);
+            assert_eq!(client.parse_memory.available_permits(), memory);
+        }
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn simple_parse_cancellation_retains_admission() -> Result<(), Error> {
+        let mut client = no_index_client(vec![])?;
+        client.parse_concurrency = Arc::new(Semaphore::new(1));
+        client.parse_memory = Arc::new(Semaphore::new(512 * 1024));
+        let sibling = client.clone();
+        let runtime_thread = thread::current().id();
+        let (started, started_receiver) = oneshot::channel();
+        let (release, release_receiver) = oneshot::channel();
+        let parsing = tokio::spawn(async move {
+            sibling
+                .parse_simple_body(512 * 1024, move || {
+                    assert_ne!(thread::current().id(), runtime_thread);
+                    started.send(()).expect("test is waiting for the parser");
+                    release_receiver
+                        .blocking_recv()
+                        .expect("test releases the parser");
+                    OwnedArchive::from_unarchived(&SimpleDetailMetadata::default())
+                })
+                .await
+        });
+        started_receiver.await?;
+        parsing.abort();
+        assert!(
+            parsing
+                .await
+                .expect_err("caller was cancelled")
+                .is_cancelled()
+        );
+
+        // A running blocking task survives its caller, so it must retain both budgets.
+        assert_eq!(client.parse_concurrency.available_permits(), 0);
+        assert_eq!(client.parse_memory.available_permits(), 0);
+        release.send(()).expect("parser is waiting for release");
+        let _permit =
+            timeout(Duration::from_secs(10), client.parse_concurrency.acquire()).await??;
+        let _memory = timeout(
+            Duration::from_secs(10),
+            client.parse_memory.acquire_many(512 * 1024),
+        )
+        .await??;
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn large_simple_response_is_cached() -> Result<(), Error> {
+        for (content_type, body) in [
+            (
+                "application/vnd.pypi.simple.v1+json",
+                r#"{"files":[{"filename":"validation-1.0.0-py3-none-any.whl","hashes":{},"url":"validation-1.0.0-py3-none-any.whl"}]}"#,
+            ),
+            (
+                "text/html",
+                r#"<html><body><a href="validation-1.0.0-py3-none-any.whl">validation-1.0.0-py3-none-any.whl</a></body></html>"#,
+            ),
+        ] {
+            let server = MockServer::start().await;
+            Mock::given(method("GET"))
+                .and(path_regex("^/simple/validation/$"))
+                .respond_with(
+                    ResponseTemplate::new(302).insert_header("Location", "/redirected/validation/"),
+                )
+                .expect(1)
+                .mount(&server)
+                .await;
+            Mock::given(method("GET"))
+                .and(path_regex("^/redirected/validation/$"))
+                .respond_with(
+                    ResponseTemplate::new(200)
+                        .insert_header("Cache-Control", "public, max-age=3600")
+                        .set_body_raw(format!("{}{body}", " ".repeat(512 * 1024)), content_type),
+                )
+                .expect(1)
+                .mount(&server)
+                .await;
+
+            let client = no_index_client(vec![])?;
+            let package_name = PackageName::from_str("validation")?;
+            let url = DisplaySafeUrl::parse(&format!("{}/simple/validation/", server.uri()))?;
+            let entry = client
+                .cache
+                .entry(CacheBucket::Simple, "test", "validation.rkyv");
+            let response = client
+                .fetch_remote_simple_detail(&package_name, &url, &entry, CacheControl::None)
+                .await?;
+            let cached = client
+                .fetch_remote_simple_detail(&package_name, &url, &entry, CacheControl::None)
+                .await?;
+            assert_eq!(
+                OwnedArchive::as_bytes(&response),
+                OwnedArchive::as_bytes(&cached)
+            );
+
+            let metadata = OwnedArchive::deserialize(&response);
+            let files = metadata
+                .versions
+                .into_iter()
+                .flat_map(|datum| datum.files.all(&package_name))
+                .collect::<Vec<_>>();
+            assert_eq!(files.len(), 1);
+            assert_eq!(files[0].0.to_string(), "validation-1.0.0-py3-none-any.whl");
+            assert_eq!(
+                files[0].1.url.to_url()?.as_str(),
+                format!(
+                    "{}/redirected/validation/validation-1.0.0-py3-none-any.whl",
+                    server.uri()
+                )
+            );
+        }
+        Ok(())
+    }
 
     async fn start_test_server(username: &'static str, password: &'static str) -> MockServer {
         let server = MockServer::start().await;
