@@ -283,10 +283,9 @@ impl Shell {
                 "$env:PATH = \"{};$env:PATH\"",
                 backtick_escape(&path.simplified_display().to_string()),
             )),
-            Self::Cmd => Some(format!(
-                "set PATH=\"{};%PATH%\"",
-                backslash_escape(&path.simplified_display().to_string()),
-            )),
+            // Command Prompt has no escape character, and quoting the value rather than the whole
+            // assignment would make the quotes part of `PATH`.
+            Self::Cmd => Some(format!("set \"PATH={};%PATH%\"", path.simplified_display())),
         }
     }
 }
@@ -457,6 +456,16 @@ mod tests {
                     vec![tmp_zdotdir.path().join(".zshenv")]
                 );
             },
+        );
+    }
+
+    #[test]
+    fn prepend_path_cmd() {
+        assert_eq!(
+            Shell::Cmd
+                .prepend_path(Path::new(r"C:\Users\ferris\.local\bin"))
+                .unwrap(),
+            r#"set "PATH=C:\Users\ferris\.local\bin;%PATH%""#
         );
     }
 }
