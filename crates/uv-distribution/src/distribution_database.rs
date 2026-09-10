@@ -1034,7 +1034,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         expected_size: Option<u64>,
         wheel_entry: &CacheEntry,
         dist: &BuiltDist,
-        hashes: HashPolicy<'_>,
+        hashes: ArchiveHashPolicy<'_>,
     ) -> Result<Archive, Error> {
         let progress_size_hint = progress_size_hint.or_else(|| content_length(&response));
         let mut download_size = content_length(&response).or(expected_size);
@@ -1243,7 +1243,6 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             } else {
                 // The origin is allowed to ignore our range request and send a full response instead.
                 // That means we have no `resumed_range` to honor on the next iteration.
-                download_size = content_length(&resumed_response).or(expected_size);
                 None
             };
 
