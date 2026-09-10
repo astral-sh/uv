@@ -169,9 +169,28 @@ fn resources_match_native_windows_updates() -> Result<()> {
             .context("Missing PE optional header")?;
         let file_alignment = usize::try_from(header.windows_fields.file_alignment)?;
         let section_alignment = usize::try_from(header.windows_fields.section_alignment)?;
+        let empty_resources: &[(&str, &[u8])] = &[
+            (RESOURCE_TRAMPOLINE_KIND, &[1]),
+            (RESOURCE_PYTHON_PATH, b"C:/Python312/python.exe"),
+            (RESOURCE_SCRIPT_DATA, &[]),
+        ];
+        let empty = write_resources(launcher, empty_resources)?;
+        let resource_overhead = usize::try_from(
+            PE::parse(&empty)?
+                .header
+                .optional_header
+                .context("Missing updated PE optional header")?
+                .data_directories
+                .get_resource_table()
+                .context("Missing PE resource table")?
+                .size,
+        )?;
         let mut sizes = vec![0, 1, 65_535, 65_536, 65_537];
         for alignment in [file_alignment, section_alignment] {
-            sizes.extend([alignment - 1, alignment, alignment + 1]);
+            // Account for the resource tables and existing resources so the complete directory
+            // crosses the boundary, not just the script payload.
+            let boundary = alignment - resource_overhead % alignment;
+            sizes.extend([boundary - 1, boundary, boundary + 1]);
         }
         sizes.sort_unstable();
         sizes.dedup();
