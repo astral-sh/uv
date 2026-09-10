@@ -33,9 +33,9 @@ on:
 
 env:
   ACTIONS_CACHE_MODE: none
-  DEPOT_PROJECT_PRODUCTION_UV: 7hd4vdzmw5
-  DEPOT_PROJECT_DEV_UV: v094vdzkdt
-  DEPOT_PROJECT_DEV_UV_DEV: c3ht4lmvqh
+  DEPOT_PROJECT_PRODUCTION_UV: 7hd4vdzmw5 # production/uv
+  DEPOT_PROJECT_DEV_UV: v094vdzkdt # dev/uv
+  DEPOT_PROJECT_DEV_UV_DEV: c3ht4lmvqh # dev/uv-dev
   UV_GHCR_IMAGE: ghcr.io/${{ github.repository_owner }}/${{ inputs.push-dev && 'uv-dev' || 'uv' }}
   UV_DOCKERHUB_IMAGE: ${{ !inputs.push-dev && 'docker.io/astral/uv' || '' }}
   UV_LOCKED: 1
