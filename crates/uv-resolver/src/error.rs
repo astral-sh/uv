@@ -150,13 +150,13 @@ pub enum ResolveError {
     },
 }
 
-impl uv_errors::Hint for ResolveError {
+impl uv_errors::Hinted for ResolveError {
     fn hints(&self) -> uv_errors::Hints<'_> {
         match self {
-            Self::NoSolution(no_solution) => uv_errors::Hint::hints(no_solution.as_ref()),
-            Self::Client(error) => uv_errors::Hint::hints(error),
-            Self::Distribution(error) => uv_errors::Hint::hints(error),
-            Self::Dependencies(error, ..) => uv_errors::Hint::hints(error.as_ref()),
+            Self::NoSolution(no_solution) => uv_errors::Hinted::hints(no_solution.as_ref()),
+            Self::Client(error) => uv_errors::Hinted::hints(error),
+            Self::Distribution(error) => uv_errors::Hinted::hints(error),
+            Self::Dependencies(error, ..) => uv_errors::Hinted::hints(error.as_ref()),
             _ => uv_errors::Hints::none(),
         }
     }
@@ -892,7 +892,7 @@ impl std::fmt::Debug for NoSolutionError {
 
 impl std::error::Error for NoSolutionError {}
 
-impl uv_errors::Hint for NoSolutionError {
+impl uv_errors::Hinted for NoSolutionError {
     fn hints(&self) -> uv_errors::Hints<'_> {
         self.pubgrub_hints()
             .iter()
@@ -901,7 +901,7 @@ impl uv_errors::Hint for NoSolutionError {
     }
 }
 
-impl uv_errors::Hint for Box<NoSolutionError> {
+impl uv_errors::Hinted for Box<NoSolutionError> {
     fn hints(&self) -> uv_errors::Hints<'_> {
         self.as_ref().hints()
     }

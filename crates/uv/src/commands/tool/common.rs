@@ -25,7 +25,7 @@ use uv_distribution_types::{
     DependencyMetadata, HashCollection, Index, IndexLocations, InstalledDist, Name, Requirement,
     RequiresPython, Resolution, UnresolvedRequirement,
 };
-use uv_errors::{ErrorWithHints, Hint, Hints};
+use uv_errors::{ErrorWithHints, Hinted, Hints};
 #[cfg(unix)]
 use uv_fs::replace_symlink;
 use uv_fs::{CWD, Simplified};
@@ -68,7 +68,7 @@ pub(crate) enum NoExecutablesError {
     },
 }
 
-impl Hint for NoExecutablesError {
+impl Hinted for NoExecutablesError {
     fn hints(&self) -> Hints<'_> {
         let mut hints = Hints::none();
         let (package, matching_dependency_packages) = match self {

@@ -2166,7 +2166,7 @@ pub(crate) struct RecursionLimitError {
     max: u32,
 }
 
-impl uv_errors::Hint for RecursionLimitError {
+impl uv_errors::Hinted for RecursionLimitError {
     fn hints(&self) -> uv_errors::Hints<'_> {
         uv_errors::Hints::from(format!(
             "If you are running a script with `{}` in the shebang, you may need to include the `{}` flag",

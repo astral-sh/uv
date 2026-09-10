@@ -213,7 +213,7 @@ impl std::fmt::Display for PylockTomlError {
     }
 }
 
-impl uv_errors::Hint for PylockTomlError {
+impl uv_errors::Hinted for PylockTomlError {
     fn hints(&self) -> uv_errors::Hints<'_> {
         if let Some(hint) = &self.hint {
             uv_errors::Hints::from(hint.to_string())

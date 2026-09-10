@@ -95,10 +95,10 @@ pub enum Error {
     GzipWrite(PathBuf, #[source] io::Error),
 }
 
-impl uv_errors::Hint for Error {
+impl uv_errors::Hinted for Error {
     fn hints(&self) -> uv_errors::Hints<'_> {
         match self {
-            Self::PortableGlob { source, .. } => uv_errors::Hint::hints(source),
+            Self::PortableGlob { source, .. } => uv_errors::Hinted::hints(source),
             _ => uv_errors::Hints::none(),
         }
     }
@@ -493,7 +493,7 @@ mod tests {
     use tar_codec::{Archive as _, TarArchive, extract::ExtractPolicy};
     use tempfile::TempDir;
     use uv_distribution_filename::{SourceDistFilename, WheelFilename};
-    use uv_errors::{ErrorWithHints, Hint};
+    use uv_errors::{ErrorWithHints, Hinted};
     use uv_fs::{copy_dir_all, relative_to};
     use uv_preview::PreviewFeature;
 

@@ -474,7 +474,7 @@ pub(crate) struct DependencyNotFoundError {
     found_in: Vec<DependencyType>,
 }
 
-impl uv_errors::Hint for DependencyNotFoundError {
+impl uv_errors::Hinted for DependencyNotFoundError {
     fn hints(&self) -> uv_errors::Hints<'_> {
         self.found_in
             .iter()

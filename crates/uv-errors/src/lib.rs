@@ -14,7 +14,7 @@ use line_wrap::{get_wrap_width, wrap_text};
 /// Implement this on error types that want to surface contextual suggestions
 /// (e.g., "try `--prerelease=allow`") to the diagnostics layer. Hints are
 /// rendered after the error output, each prefixed with `hint:`.
-pub trait Hint {
+pub trait Hinted {
     /// Return any hints associated with this error.
     fn hints(&self) -> Hints<'_> {
         Hints::none()

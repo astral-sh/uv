@@ -1242,7 +1242,7 @@ pub(crate) enum ToolRunScriptError {
     },
 }
 
-impl uv_errors::Hint for ToolRunScriptError {
+impl uv_errors::Hinted for ToolRunScriptError {
     fn hints(&self) -> uv_errors::Hints<'_> {
         uv_errors::Hints::from(match self {
             Self::FromScript {

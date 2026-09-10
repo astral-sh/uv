@@ -16,7 +16,7 @@ use crate::{FlatIndexError, html};
 use uv_cache::Error as CacheError;
 use uv_distribution_filename::{WheelFilename, WheelFilenameError};
 use uv_distribution_types::IndexUrl;
-use uv_errors::{Hint, Hints};
+use uv_errors::{Hinted, Hints};
 use uv_git::GitError;
 use uv_normalize::PackageName;
 use uv_pypi_types::HashDigest;
@@ -376,7 +376,7 @@ impl Error {
     }
 }
 
-impl Hint for Error {
+impl Hinted for Error {
     fn hints(&self) -> Hints<'_> {
         if self.suggests_system_certs() {
             Hints::from(format!(
