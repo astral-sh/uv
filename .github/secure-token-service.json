@@ -24,6 +24,24 @@
   },
   "rules": [
     {
+      "caller": "uv-dev",
+      "environment": "automations",
+      "caller_workflow": "ci.yml",
+      "reusable_workflow": "bench.yml",
+      "on": ["push", "workflow_dispatch"],
+      "permissions": { "actions": "read" },
+      "target": "uv"
+    },
+    {
+      "caller": "uv-security",
+      "environment": "automations",
+      "caller_workflow": "ci.yml",
+      "reusable_workflow": "bench.yml",
+      "on": ["push", "workflow_dispatch"],
+      "permissions": { "actions": "read" },
+      "target": "uv"
+    },
+    {
       "caller": "uv",
       "environment": "release",
       "caller_workflow": "release.yml",

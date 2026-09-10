@@ -179,6 +179,7 @@ jobs:
     with:
       save-rust-cache: ${{ needs.plan.outputs.save-rust-cache }}
     permissions:
+      contents: read
       id-token: write
 
   # This job cannot be moved into a reusable workflow because it includes coverage for uploading
