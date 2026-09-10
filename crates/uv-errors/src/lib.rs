@@ -34,12 +34,12 @@ pub enum HintOrdering {
 }
 
 /// A user-facing hint and its preferred display order.
-pub struct HintMessage<'a> {
+pub struct Hint<'a> {
     message: Cow<'a, str>,
     ordering: HintOrdering,
 }
 
-impl<'a> HintMessage<'a> {
+impl<'a> Hint<'a> {
     /// Create a hint with no preferred placement.
     pub fn new(message: impl Into<Cow<'a, str>>) -> Self {
         Self {
@@ -56,21 +56,21 @@ impl<'a> HintMessage<'a> {
     }
 
     /// Convert a borrowed hint to owned, extending its lifetime to `'static`.
-    fn into_owned(self) -> HintMessage<'static> {
-        HintMessage {
+    fn into_owned(self) -> Hint<'static> {
+        Hint {
             message: Cow::Owned(self.message.into_owned()),
             ordering: self.ordering,
         }
     }
 }
 
-impl<'a> From<&'a str> for HintMessage<'a> {
+impl<'a> From<&'a str> for Hint<'a> {
     fn from(message: &'a str) -> Self {
         Self::new(message)
     }
 }
 
-impl From<String> for HintMessage<'_> {
+impl From<String> for Hint<'_> {
     fn from(message: String) -> Self {
         Self::new(message)
     }
@@ -80,7 +80,7 @@ impl From<String> for HintMessage<'_> {
 ///
 /// Each hint is rendered on its own line, prefixed with the styled `hint:` label.
 /// Hints are grouped by [`HintOrdering`], retaining insertion order within each group.
-pub struct Hints<'a>(Vec<HintMessage<'a>>);
+pub struct Hints<'a>(Vec<Hint<'a>>);
 
 impl<'a> Hints<'a> {
     /// No hints.
@@ -89,7 +89,7 @@ impl<'a> Hints<'a> {
     }
 
     /// Add a single hint.
-    pub fn push(&mut self, hint: impl Into<HintMessage<'a>>) {
+    pub fn push(&mut self, hint: impl Into<Hint<'a>>) {
         self.0.push(hint.into());
     }
 
@@ -104,7 +104,7 @@ impl<'a> Hints<'a> {
 
     /// Convert all borrowed hints to owned, extending the lifetime to `'static`.
     pub fn into_owned(self) -> Hints<'static> {
-        Hints(self.0.into_iter().map(HintMessage::into_owned).collect())
+        Hints(self.0.into_iter().map(Hint::into_owned).collect())
     }
 
     /// Whether the collection is empty.
@@ -142,8 +142,8 @@ impl<'a> Hints<'a> {
 
 /// A borrowed iterator over hint messages in display order.
 pub struct HintsIter<'h, 'a> {
-    hints: &'h [HintMessage<'a>],
-    current: std::slice::Iter<'h, HintMessage<'a>>,
+    hints: &'h [Hint<'a>],
+    current: std::slice::Iter<'h, Hint<'a>>,
     ordering: HintOrdering,
     remaining: std::array::IntoIter<HintOrdering, 2>,
 }
@@ -173,8 +173,7 @@ impl<'h, 'a> IntoIterator for &'h Hints<'a> {
 
 impl<'a> IntoIterator for Hints<'a> {
     type Item = Cow<'a, str>;
-    type IntoIter =
-        std::iter::Map<std::vec::IntoIter<HintMessage<'a>>, fn(HintMessage<'a>) -> Cow<'a, str>>;
+    type IntoIter = std::iter::Map<std::vec::IntoIter<Hint<'a>>, fn(Hint<'a>) -> Cow<'a, str>>;
 
     fn into_iter(mut self) -> Self::IntoIter {
         self.0.sort_by_key(|hint| hint.ordering);
@@ -211,23 +210,23 @@ impl<E: fmt::Display> fmt::Display for ErrorWithHints<'_, E> {
 
 impl<'a> From<&'a str> for Hints<'a> {
     fn from(hint: &'a str) -> Self {
-        Self::from(HintMessage::from(hint))
+        Self::from(Hint::from(hint))
     }
 }
 
 impl From<String> for Hints<'_> {
     fn from(hint: String) -> Self {
-        Self::from(HintMessage::from(hint))
+        Self::from(Hint::from(hint))
     }
 }
 
-impl<'a> From<HintMessage<'a>> for Hints<'a> {
-    fn from(hint: HintMessage<'a>) -> Self {
+impl<'a> From<Hint<'a>> for Hints<'a> {
+    fn from(hint: Hint<'a>) -> Self {
         Self(vec![hint])
     }
 }
 
-impl<'a, T: Into<HintMessage<'a>>> FromIterator<T> for Hints<'a> {
+impl<'a, T: Into<Hint<'a>>> FromIterator<T> for Hints<'a> {
     fn from_iter<I: IntoIterator<Item = T>>(iter: I) -> Self {
         Self(iter.into_iter().map(Into::into).collect())
     }
@@ -414,7 +413,7 @@ mod tests {
     use owo_colors::AnsiColors;
 
     use super::{
-        ErrorOptions, ErrorWithHints, HintMessage, HintOrdering, Hints, debug_error_chain,
+        ErrorOptions, ErrorWithHints, Hint, HintOrdering, Hints, debug_error_chain,
         write_error_chain_with_options,
     };
 
@@ -436,8 +435,8 @@ mod tests {
     #[test]
     fn hint_ordering_retains_insertion_order() {
         let mut hints = Hints::from("any 1");
-        hints.push(HintMessage::new("last 1").with_ordering(HintOrdering::Last));
-        hints.push(HintMessage::new("first 1").with_ordering(HintOrdering::First));
+        hints.push(Hint::new("last 1").with_ordering(HintOrdering::Last));
+        hints.push(Hint::new("first 1").with_ordering(HintOrdering::First));
         hints.push("any 2".to_string());
         hints.extend(Hints::from("last 2").with_ordering(HintOrdering::Last));
         hints.extend(Hints::from("first 2").with_ordering(HintOrdering::First));
@@ -475,9 +474,9 @@ mod tests {
     #[test]
     fn changing_ordering_retains_insertion_order() {
         let hints = [
-            HintMessage::new("last").with_ordering(HintOrdering::Last),
-            HintMessage::new("first").with_ordering(HintOrdering::First),
-            HintMessage::new("any"),
+            Hint::new("last").with_ordering(HintOrdering::Last),
+            Hint::new("first").with_ordering(HintOrdering::First),
+            Hint::new("any"),
         ]
         .into_iter()
         .collect::<Hints<'_>>()

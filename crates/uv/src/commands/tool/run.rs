@@ -1269,7 +1269,7 @@ impl uv_errors::Hinted for ToolRunScriptError {
             ),
         };
         uv_errors::Hints::from(
-            uv_errors::HintMessage::new(message).with_ordering(uv_errors::HintOrdering::Last),
+            uv_errors::Hint::new(message).with_ordering(uv_errors::HintOrdering::Last),
         )
     }
 }
