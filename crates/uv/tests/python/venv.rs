@@ -47,7 +47,7 @@ fn create_venv() {
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
     error: Failed to create virtual environment
-      ╰─▶ A virtual environment already exists at: .venv
+      └── A virtual environment already exists at: .venv
 
     hint: Use the `--clear` flag or set `UV_VENV_CLEAR=1` to replace the existing virtual environment
     "
@@ -419,7 +419,7 @@ fn create_centralized_project_environment() -> Result<()> {
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment `project-cp3.12.[X]-[HASH]`
     error: Failed to create virtual environment
-      ╰─▶ A virtual environment already exists at: [CACHE_DIR]/environments-v2/project-cp3.12.[X]-[HASH]
+      └── A virtual environment already exists at: [CACHE_DIR]/environments-v2/project-cp3.12.[X]-[HASH]
 
     hint: Use the `--clear` flag or set `UV_VENV_CLEAR=1` to replace the existing virtual environment
     "#);
@@ -1390,7 +1390,7 @@ fn file_exists() -> Result<()> {
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
     error: Failed to create virtual environment
-      ╰─▶ File exists at `.venv`
+      └── File exists at `.venv`
     "
     );
 
@@ -1414,7 +1414,7 @@ fn non_utf8_path() {
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv-�
     error: Failed to create virtual environment
-      ╰─▶ Virtual environment path is not valid UTF-8: .venv-�
+      └── Virtual environment path is not valid UTF-8: .venv-�
     "
     );
 
@@ -1462,7 +1462,7 @@ fn non_empty_dir_exists() -> Result<()> {
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
     error: Failed to create virtual environment
-      ╰─▶ A directory already exists at: .venv
+      └── A directory already exists at: .venv
 
     hint: Use the `--clear` flag or set `UV_VENV_CLEAR=1` to replace the existing directory
     ");
@@ -1477,7 +1477,7 @@ fn non_empty_dir_exists() -> Result<()> {
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
     error: Failed to create virtual environment
-      ╰─▶ uv will not clear a directory that is not a virtual environment
+      └── uv will not clear a directory that is not a virtual environment
 
     hint: Use the `--force` flag to remove the existing directory anyway
     "
@@ -1534,7 +1534,7 @@ fn non_empty_dir_exists_allow_existing() -> Result<()> {
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
     error: Failed to create virtual environment
-      ╰─▶ A directory already exists at: .venv
+      └── A directory already exists at: .venv
 
     hint: Use the `--clear` flag or set `UV_VENV_CLEAR=1` to replace the existing directory
     "
@@ -1906,7 +1906,7 @@ fn path_with_trailing_space_gives_proper_error() {
     exit_code: 2 (failure)
     ----- stderr -----
     error: Failed to initialize cache at `[CACHE_DIR]/ `
-      ╰─▶ failed to open file `[CACHE_DIR]/ /CACHEDIR.TAG`: The system cannot find the path specified. (os error 3)
+      └── failed to open file `[CACHE_DIR]/ /CACHEDIR.TAG`: The system cannot find the path specified. (os error 3)
     "###
     );
     // Note the extra trailing `/` in the snapshot is due to the filters, not the actual output.
@@ -2030,7 +2030,7 @@ fn venv_python_preference() {
     Using CPython 3.11.[X] interpreter at: [PYTHON-3.11]
     Creating virtual environment at: .venv
     error: Failed to create virtual environment
-      ╰─▶ A virtual environment already exists at: .venv
+      └── A virtual environment already exists at: .venv
 
     hint: Use the `--clear` flag or set `UV_VENV_CLEAR=1` to replace the existing virtual environment
     ");
@@ -2049,7 +2049,7 @@ fn venv_python_preference() {
     Using CPython 3.12.[X]
     Creating virtual environment at: .venv
     error: Failed to create virtual environment
-      ╰─▶ A virtual environment already exists at: .venv
+      └── A virtual environment already exists at: .venv
 
     hint: Use the `--clear` flag or set `UV_VENV_CLEAR=1` to replace the existing virtual environment
     ");
@@ -2291,7 +2291,7 @@ fn create_venv_current_working_directory() {
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .
     error: Failed to create virtual environment
-      ╰─▶ failed to remove directory `[VENV]/`: The process cannot access the file because it is being used by another process. (os error 32)
+      └── failed to remove directory `[VENV]/`: The process cannot access the file because it is being used by another process. (os error 32)
     "
     );
 }
@@ -2324,7 +2324,7 @@ fn no_clear_with_existing_directory() {
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
     error: Failed to create virtual environment
-      ╰─▶ A virtual environment already exists at: .venv
+      └── A virtual environment already exists at: .venv
 
     hint: Use the `--clear` flag or set `UV_VENV_CLEAR=1` to replace the existing virtual environment
     "
@@ -2372,7 +2372,7 @@ fn no_clear_overrides_clear() {
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
     error: Failed to create virtual environment
-      ╰─▶ A directory already exists at: .venv
+      └── A directory already exists at: .venv
 
     hint: Use the `--clear` flag or set `UV_VENV_CLEAR=1` to replace the existing directory
     "
@@ -2399,7 +2399,7 @@ fn no_clear_overrides_clear_env_var() {
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
     error: Failed to create virtual environment
-      ╰─▶ A directory already exists at: .venv
+      └── A directory already exists at: .venv
 
     hint: Use the `--clear` flag or set `UV_VENV_CLEAR=1` to replace the existing directory
     "

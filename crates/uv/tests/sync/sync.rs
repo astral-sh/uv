@@ -1198,7 +1198,7 @@ fn group_requires_python_useful_defaults() -> Result<()> {
     Using CPython 3.8.[X] interpreter at: [PYTHON-3.8]
     Creating virtual environment at: .venv
     error: No solution found when resolving dependencies for split (markers: python_full_version == '3.8.*')
-      ╰─▶ Because the requested Python version (>=3.8) does not satisfy Python>=3.9 and sphinx==7.2.6 depends on Python>=3.9, we can conclude that sphinx==7.2.6 cannot be used.
+      └── Because the requested Python version (>=3.8) does not satisfy Python>=3.9 and sphinx==7.2.6 depends on Python>=3.9, we can conclude that sphinx==7.2.6 cannot be used.
           And because only sphinx<=7.2.6 is available, we can conclude that sphinx>=7.2.6 cannot be used.
           And because pharaohs-tomp:dev depends on sphinx>=7.2.6 and your project requires pharaohs-tomp:dev, we can conclude that your project's requirements are unsatisfiable.
 
@@ -1210,7 +1210,7 @@ fn group_requires_python_useful_defaults() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
     error: No solution found when resolving dependencies for split (markers: python_full_version == '3.8.*')
-      ╰─▶ Because the requested Python version (>=3.8) does not satisfy Python>=3.9 and sphinx==7.2.6 depends on Python>=3.9, we can conclude that sphinx==7.2.6 cannot be used.
+      └── Because the requested Python version (>=3.8) does not satisfy Python>=3.9 and sphinx==7.2.6 depends on Python>=3.9, we can conclude that sphinx==7.2.6 cannot be used.
           And because only sphinx<=7.2.6 is available, we can conclude that sphinx>=7.2.6 cannot be used.
           And because pharaohs-tomp:dev depends on sphinx>=7.2.6 and your project requires pharaohs-tomp:dev, we can conclude that your project's requirements are unsatisfiable.
 
@@ -1330,7 +1330,7 @@ fn group_requires_python_useful_non_defaults() -> Result<()> {
     Using CPython 3.8.[X] interpreter at: [PYTHON-3.8]
     Creating virtual environment at: .venv
     error: No solution found when resolving dependencies for split (markers: python_full_version == '3.8.*')
-      ╰─▶ Because the requested Python version (>=3.8) does not satisfy Python>=3.9 and sphinx==7.2.6 depends on Python>=3.9, we can conclude that sphinx==7.2.6 cannot be used.
+      └── Because the requested Python version (>=3.8) does not satisfy Python>=3.9 and sphinx==7.2.6 depends on Python>=3.9, we can conclude that sphinx==7.2.6 cannot be used.
           And because only sphinx<=7.2.6 is available, we can conclude that sphinx>=7.2.6 cannot be used.
           And because pharaohs-tomp:mygroup depends on sphinx>=7.2.6 and your project requires pharaohs-tomp:mygroup, we can conclude that your project's requirements are unsatisfiable.
 
@@ -1343,7 +1343,7 @@ fn group_requires_python_useful_non_defaults() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
     error: No solution found when resolving dependencies for split (markers: python_full_version == '3.8.*')
-      ╰─▶ Because the requested Python version (>=3.8) does not satisfy Python>=3.9 and sphinx==7.2.6 depends on Python>=3.9, we can conclude that sphinx==7.2.6 cannot be used.
+      └── Because the requested Python version (>=3.8) does not satisfy Python>=3.9 and sphinx==7.2.6 depends on Python>=3.9, we can conclude that sphinx==7.2.6 cannot be used.
           And because only sphinx<=7.2.6 is available, we can conclude that sphinx>=7.2.6 cannot be used.
           And because pharaohs-tomp:mygroup depends on sphinx>=7.2.6 and your project requires pharaohs-tomp:mygroup, we can conclude that your project's requirements are unsatisfiable.
 
@@ -1974,8 +1974,8 @@ fn sync_build_isolation_package() -> Result<()> {
     ----- stderr -----
     Resolved 2 packages in [TIME]
     error: Failed to build `source-distribution @ https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz`
-      ├─▶ The build backend returned an error
-      ╰─▶ Call to `hatchling.build.build_wheel` failed (exit status: 1)
+      ├── The build backend returned an error
+      └── Call to `hatchling.build.build_wheel` failed (exit status: 1)
 
           [stderr]
           Traceback (most recent call last):
@@ -2054,8 +2054,8 @@ fn sync_build_isolation_package_order() -> Result<()> {
     ----- stderr -----
     Resolved 2 packages in [TIME]
     error: Failed to build `source-distribution @ https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz`
-      ├─▶ The build backend returned an error
-      ╰─▶ Call to `hatchling.build.build_wheel` failed (exit status: 1)
+      ├── The build backend returned an error
+      └── Call to `hatchling.build.build_wheel` failed (exit status: 1)
 
           [stderr]
           Traceback (most recent call last):
@@ -2219,8 +2219,8 @@ fn sync_build_isolation_extra() -> Result<()> {
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
     error: Failed to build `source-distribution @ https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz`
-      ├─▶ The build backend returned an error
-      ╰─▶ Call to `hatchling.build.build_wheel` failed (exit status: 1)
+      ├── The build backend returned an error
+      └── Call to `hatchling.build.build_wheel` failed (exit status: 1)
 
           [stderr]
           Traceback (most recent call last):
@@ -2350,8 +2350,8 @@ fn sync_extra_build_dependencies() -> Result<()> {
     ----- stderr -----
     Resolved [N] packages in [TIME]
     error: Failed to build `child @ file://[TEMP_DIR]/child`
-      ├─▶ The build backend returned an error
-      ╰─▶ Call to `build_backend.build_wheel` failed (exit status: 1)
+      ├── The build backend returned an error
+      └── Call to `build_backend.build_wheel` failed (exit status: 1)
 
           [stderr]
           Missing `anyio` module
@@ -2417,8 +2417,8 @@ fn sync_extra_build_dependencies() -> Result<()> {
     ----- stderr -----
     Resolved [N] packages in [TIME]
     error: Failed to build `child @ file://[TEMP_DIR]/child`
-      ├─▶ The build backend returned an error
-      ╰─▶ Call to `build_backend.build_wheel` failed (exit status: 1)
+      ├── The build backend returned an error
+      └── Call to `build_backend.build_wheel` failed (exit status: 1)
 
           [stderr]
           Missing `anyio` module
@@ -2483,8 +2483,8 @@ fn sync_extra_build_dependencies() -> Result<()> {
     ----- stderr -----
     Resolved [N] packages in [TIME]
     error: Failed to build `bad-child @ file://[TEMP_DIR]/bad_child`
-      ├─▶ The build backend returned an error
-      ╰─▶ Call to `build_backend.build_wheel` failed (exit status: 1)
+      ├── The build backend returned an error
+      └── Call to `build_backend.build_wheel` failed (exit status: 1)
 
           [stderr]
           Found `anyio` module
@@ -2572,8 +2572,8 @@ fn sync_extra_build_dependencies_setuptools_legacy() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
     error: Failed to build `child @ file://[TEMP_DIR]/child`
-      ├─▶ The build backend returned an error
-      ╰─▶ Call to `setuptools.build_meta:__legacy__.build_wheel` failed (exit status: 1)
+      ├── The build backend returned an error
+      └── Call to `setuptools.build_meta:__legacy__.build_wheel` failed (exit status: 1)
 
           [stderr]
           Missing `anyio` module
@@ -2671,8 +2671,8 @@ fn sync_extra_build_dependencies_setuptools() -> Result<()> {
     ----- stderr -----
     Resolved [N] packages in [TIME]
     error: Failed to build `child @ file://[TEMP_DIR]/child`
-      ├─▶ The build backend returned an error
-      ╰─▶ Call to `setuptools.build_meta.build_wheel` failed (exit status: 1)
+      ├── The build backend returned an error
+      └── Call to `setuptools.build_meta.build_wheel` failed (exit status: 1)
 
           [stderr]
           Missing `anyio` module
@@ -2852,8 +2852,8 @@ fn sync_extra_build_dependencies_index() -> Result<()> {
     ----- stderr -----
     Resolved [N] packages in [TIME]
     error: Failed to build `child @ file://[TEMP_DIR]/child`
-      ├─▶ The build backend returned an error
-      ╰─▶ Call to `build_backend.build_wheel` failed (exit status: 1)
+      ├── The build backend returned an error
+      └── Call to `build_backend.build_wheel` failed (exit status: 1)
 
           [stderr]
           Expected `anyio` version 3.0 but got 4.3.0
@@ -2901,8 +2901,8 @@ fn sync_extra_build_dependencies_index() -> Result<()> {
     ----- stderr -----
     Resolved [N] packages in [TIME]
     error: Failed to build `child @ file://[TEMP_DIR]/child`
-      ├─▶ The build backend returned an error
-      ╰─▶ Call to `build_backend.build_wheel` failed (exit status: 1)
+      ├── The build backend returned an error
+      └── Call to `build_backend.build_wheel` failed (exit status: 1)
 
           [stderr]
           Expected `anyio` version 4.3 but got 3.5.0
@@ -2992,8 +2992,8 @@ fn sync_extra_build_dependencies_sources_from_child() -> Result<()> {
     ----- stderr -----
     Resolved [N] packages in [TIME]
     error: Failed to build `child @ file://[TEMP_DIR]/child`
-      ├─▶ The build backend returned an error
-      ╰─▶ Call to `build_backend.build_wheel` failed (exit status: 1)
+      ├── The build backend returned an error
+      └── Call to `build_backend.build_wheel` failed (exit status: 1)
 
           [stderr]
           Found system anyio instead of local anyio
@@ -3056,8 +3056,8 @@ fn sync_build_dependencies_module_error_hints() -> Result<()> {
     ----- stderr -----
     Resolved [N] packages in [TIME]
     error: Failed to build `child @ file://[TEMP_DIR]/child`
-      ├─▶ The build backend returned an error
-      ╰─▶ Call to `build_backend.build_wheel` failed (exit status: 1)
+      ├── The build backend returned an error
+      └── Call to `build_backend.build_wheel` failed (exit status: 1)
 
           [stderr]
           Traceback (most recent call last):
@@ -3117,8 +3117,8 @@ fn sync_build_dependencies_module_error_hints() -> Result<()> {
     ----- stderr -----
     Resolved [N] packages in [TIME]
     error: Failed to build `child @ file://[TEMP_DIR]/child`
-      ├─▶ The build backend returned an error
-      ╰─▶ Call to `build_backend.build_wheel` failed (exit status: 1)
+      ├── The build backend returned an error
+      └── Call to `build_backend.build_wheel` failed (exit status: 1)
 
           [stderr]
           Traceback (most recent call last):
@@ -4545,7 +4545,7 @@ fn sync_default_groups_gibberish() -> Result<()> {
     exit_code: 2 (failure)
     ----- stderr -----
     error: Failed to parse: `pyproject.toml`
-      ╰─▶ TOML parse error at line 14, column 26
+      └── TOML parse error at line 14, column 26
              |
           14 |         default-groups = "gibberish"
              |                          ^^^^^^^^^^^
@@ -6225,8 +6225,8 @@ fn sync_extra_build_dependencies_script() -> Result<()> {
     Creating script environment at: [CACHE_DIR]/environments-v2/script-[HASH]
     Resolved [N] packages in [TIME]
     error: Failed to build `child @ file://[TEMP_DIR]/child`
-      ├─▶ The build backend returned an error
-      ╰─▶ Call to `build_backend.build_wheel` failed (exit status: 1)
+      ├── The build backend returned an error
+      └── Call to `build_backend.build_wheel` failed (exit status: 1)
 
           [stderr]
           Missing `anyio` module
@@ -6528,7 +6528,7 @@ fn virtual_no_build_dynamic_no_cache() -> Result<()> {
     exit_code: 2 (failure)
     ----- stderr -----
     error: Failed to generate package metadata for `project==0.1.0 @ virtual+.`
-      ╰─▶ Building source distributions for `project` is disabled
+      └── Building source distributions for `project` is disabled
     ");
 
     Ok(())
@@ -10098,8 +10098,8 @@ fn sync_derivation_chain() -> Result<()> {
     ----- stderr -----
     Resolved 2 packages in [TIME]
     error: Failed to build `wsgiref==0.1.2`
-      ├─▶ The build backend returned an error
-      ╰─▶ Call to `setuptools.build_meta:__legacy__.build_wheel` failed (exit status: 1)
+      ├── The build backend returned an error
+      └── Call to `setuptools.build_meta:__legacy__.build_wheel` failed (exit status: 1)
 
           [stderr]
           Traceback (most recent call last):
@@ -10153,8 +10153,8 @@ fn sync_derivation_chain_extra() -> Result<()> {
     ----- stderr -----
     Resolved 2 packages in [TIME]
     error: Failed to build `wsgiref==0.1.2`
-      ├─▶ The build backend returned an error
-      ╰─▶ Call to `setuptools.build_meta:__legacy__.build_wheel` failed (exit status: 1)
+      ├── The build backend returned an error
+      └── Call to `setuptools.build_meta:__legacy__.build_wheel` failed (exit status: 1)
 
           [stderr]
           Traceback (most recent call last):
@@ -10210,8 +10210,8 @@ fn sync_derivation_chain_group() -> Result<()> {
     ----- stderr -----
     Resolved 2 packages in [TIME]
     error: Failed to build `wsgiref==0.1.2`
-      ├─▶ The build backend returned an error
-      ╰─▶ Call to `setuptools.build_meta:__legacy__.build_wheel` failed (exit status: 1)
+      ├── The build backend returned an error
+      └── Call to `setuptools.build_meta:__legacy__.build_wheel` failed (exit status: 1)
 
           [stderr]
           Traceback (most recent call last):
@@ -10774,8 +10774,8 @@ fn sync_git_path_archive_missing_lfs() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
     error: Failed to download `iniconfig @ git+https://github.com/astral-sh/archive-in-git-test@bb7ce6abf9f90544767701de5b7b0c7802dc642b#path=archives/iniconfig-2.0.0-py3-none-any.whl&lfs=true`
-      ├─▶ The wheel `git+https://github.com/astral-sh/archive-in-git-test@bb7ce6abf9f90544767701de5b7b0c7802dc642b#path=archives/iniconfig-2.0.0-py3-none-any.whl&lfs=true` is missing Git LFS artifacts.
-      ╰─▶ Git LFS extension not found. Ensure that Git LFS is installed and available.
+      ├── The wheel `git+https://github.com/astral-sh/archive-in-git-test@bb7ce6abf9f90544767701de5b7b0c7802dc642b#path=archives/iniconfig-2.0.0-py3-none-any.whl&lfs=true` is missing Git LFS artifacts.
+      └── Git LFS extension not found. Ensure that Git LFS is installed and available.
 
     hint: `iniconfig` (v2.0.0) was included because `foo` (v0.1.0) depends on `iniconfig`
     "###
@@ -10809,7 +10809,7 @@ fn mismatched_name_self_editable() -> Result<()> {
     ----- stderr -----
     Resolved 2 packages in [TIME]
     error: Failed to build `foo @ file://[TEMP_DIR]/`
-      ╰─▶ Package metadata name `project` does not match given name `foo`
+      └── Package metadata name `project` does not match given name `foo`
 
     hint: `foo` was included because `project` (v0.1.0) depends on `foo`
     ");
@@ -10857,7 +10857,7 @@ fn mismatched_name_cached_wheel() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
     error: Failed to download and build `foo @ https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz`
-      ╰─▶ Package metadata name `iniconfig` does not match given name `foo`
+      └── Package metadata name `iniconfig` does not match given name `foo`
     ");
 
     Ok(())
@@ -11399,7 +11399,7 @@ fn url_hash_mismatch() -> Result<()> {
     exit_code: 2 (failure)
     ----- stderr -----
     error: Failed to generate package metadata for `iniconfig==2.0.0 @ direct+https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz`
-      ╰─▶ Hash mismatch for `iniconfig @ https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz`
+      └── Hash mismatch for `iniconfig @ https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz`
 
           Expected:
             sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b4
@@ -11467,7 +11467,7 @@ fn path_hash_mismatch() -> Result<()> {
     exit_code: 2 (failure)
     ----- stderr -----
     error: Failed to generate package metadata for `iniconfig==2.0.0 @ path+iniconfig-2.0.0.tar.gz`
-      ╰─▶ Hash mismatch for `iniconfig @ file://[TEMP_DIR]/iniconfig-2.0.0.tar.gz`
+      └── Hash mismatch for `iniconfig @ file://[TEMP_DIR]/iniconfig-2.0.0.tar.gz`
 
           Expected:
             sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b4
@@ -12164,9 +12164,9 @@ fn sync_script_with_incompatible_build_constraints() -> Result<()> {
     ----- stderr -----
     Creating script environment at: [CACHE_DIR]/environments-v2/script-[HASH]
     error: Failed to download and build `requests==1.2.0`
-      ├─▶ Failed to resolve requirements from `setup.py` build
-      ├─▶ No solution found when resolving: `setuptools>=40.8.0`
-      ╰─▶ Because you require setuptools>=40.8.0 and setuptools==1, we can conclude that your requirements are unsatisfiable.
+      ├── Failed to resolve requirements from `setup.py` build
+      ├── No solution found when resolving: `setuptools>=40.8.0`
+      └── Because you require setuptools>=40.8.0 and setuptools==1, we can conclude that your requirements are unsatisfiable.
     ");
 
     Ok(())
@@ -12196,8 +12196,8 @@ fn unsupported_git_scheme() -> Result<()> {
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
     error: Failed to build `foo @ file://[TEMP_DIR]/`
-      ├─▶ Failed to parse entry: `foo`
-      ╰─▶ Unsupported Git URL scheme `c:` in `c:/home/ferris/projects/foo` (expected one of `https:`, `ssh:`, or `file:`)
+      ├── Failed to parse entry: `foo`
+      └── Unsupported Git URL scheme `c:` in `c:/home/ferris/projects/foo` (expected one of `https:`, `ssh:`, or `file:`)
     ");
     Ok(())
 }
@@ -12565,35 +12565,35 @@ fn transitive_group_conflicts_cycle() -> Result<()> {
     exit_code: 2 (failure)
     ----- stderr -----
     error: Project `example` has malformed dependency groups
-      ╰─▶ Detected a cycle in `dependency-groups`: `dev` -> `test` -> `dev`
+      └── Detected a cycle in `dependency-groups`: `dev` -> `test` -> `dev`
     ");
 
     uv_snapshot!(context.filters(), context.sync().arg("--group").arg("dev"), @"
     exit_code: 2 (failure)
     ----- stderr -----
     error: Project `example` has malformed dependency groups
-      ╰─▶ Detected a cycle in `dependency-groups`: `dev` -> `test` -> `dev`
+      └── Detected a cycle in `dependency-groups`: `dev` -> `test` -> `dev`
     ");
 
     uv_snapshot!(context.filters(), context.sync().arg("--group").arg("dev").arg("--group").arg("test"), @"
     exit_code: 2 (failure)
     ----- stderr -----
     error: Project `example` has malformed dependency groups
-      ╰─▶ Detected a cycle in `dependency-groups`: `dev` -> `test` -> `dev`
+      └── Detected a cycle in `dependency-groups`: `dev` -> `test` -> `dev`
     ");
 
     uv_snapshot!(context.filters(), context.sync().arg("--group").arg("test").arg("--group").arg("magic"), @"
     exit_code: 2 (failure)
     ----- stderr -----
     error: Project `example` has malformed dependency groups
-      ╰─▶ Detected a cycle in `dependency-groups`: `dev` -> `test` -> `dev`
+      └── Detected a cycle in `dependency-groups`: `dev` -> `test` -> `dev`
     ");
 
     uv_snapshot!(context.filters(), context.sync().arg("--group").arg("dev").arg("--group").arg("magic"), @"
     exit_code: 2 (failure)
     ----- stderr -----
     error: Project `example` has malformed dependency groups
-      ╰─▶ Detected a cycle in `dependency-groups`: `dev` -> `test` -> `dev`
+      └── Detected a cycle in `dependency-groups`: `dev` -> `test` -> `dev`
     ");
 
     Ok(())
@@ -12715,7 +12715,7 @@ fn locked_version_coherence() -> Result<()> {
     exit_code: 2 (failure)
     ----- stderr -----
     error: Failed to parse `uv.lock`
-      ╰─▶ The entry for package `iniconfig` (1.0.0) has wheel `iniconfig-2.0.0-py3-none-any.whl` with inconsistent version (2.0.0), which indicates a malformed wheel. If this is intentional, set `UV_SKIP_WHEEL_FILENAME_CHECK=1`.
+      └── The entry for package `iniconfig` (1.0.0) has wheel `iniconfig-2.0.0-py3-none-any.whl` with inconsistent version (2.0.0), which indicates a malformed wheel. If this is intentional, set `UV_SKIP_WHEEL_FILENAME_CHECK=1`.
     ");
 
     // Without `--locked`, we could fail or recreate the lockfile, currently, we fail.
@@ -12723,7 +12723,7 @@ fn locked_version_coherence() -> Result<()> {
     exit_code: 2 (failure)
     ----- stderr -----
     error: Failed to parse `uv.lock`
-      ╰─▶ The entry for package `iniconfig` (1.0.0) has wheel `iniconfig-2.0.0-py3-none-any.whl` with inconsistent version (2.0.0), which indicates a malformed wheel. If this is intentional, set `UV_SKIP_WHEEL_FILENAME_CHECK=1`.
+      └── The entry for package `iniconfig` (1.0.0) has wheel `iniconfig-2.0.0-py3-none-any.whl` with inconsistent version (2.0.0), which indicates a malformed wheel. If this is intentional, set `UV_SKIP_WHEEL_FILENAME_CHECK=1`.
     ");
 
     Ok(())
@@ -14267,8 +14267,8 @@ fn sync_build_dependencies_respect_locked_versions() -> Result<()> {
     ----- stderr -----
     Resolved [N] packages in [TIME]
     error: Failed to build `child @ file://[TEMP_DIR]/child`
-      ├─▶ The build backend returned an error
-      ╰─▶ Call to `build_backend.build_wheel` failed (exit status: 1)
+      ├── The build backend returned an error
+      └── Call to `build_backend.build_wheel` failed (exit status: 1)
 
           [stderr]
           Expected `a` version 0.1 but got 0.3.0
@@ -14326,8 +14326,8 @@ fn sync_build_dependencies_respect_locked_versions() -> Result<()> {
     ----- stderr -----
     Resolved [N] packages in [TIME]
     error: Failed to build `child @ file://[TEMP_DIR]/child`
-      ├─▶ The build backend returned an error
-      ╰─▶ Call to `build_backend.build_wheel` failed (exit status: 1)
+      ├── The build backend returned an error
+      └── Call to `build_backend.build_wheel` failed (exit status: 1)
 
           [stderr]
           Expected `a` version 0.2 but got 0.1.0
@@ -14385,9 +14385,9 @@ fn sync_build_dependencies_respect_locked_versions() -> Result<()> {
     ----- stderr -----
     Resolved [N] packages in [TIME]
     error: Failed to build `child @ file://[TEMP_DIR]/child`
-      ├─▶ Failed to resolve requirements from `build-system.requires` and `extra-build-dependencies`
-      ├─▶ No solution found when resolving: `hatchling`, `a<0.3, >0.15`, `a==0.1.0 (index: http://[LOCALHOST]/simple/)`
-      ╰─▶ you require a<0.3 and a>0.15, which are incompatible
+      ├── Failed to resolve requirements from `build-system.requires` and `extra-build-dependencies`
+      ├── No solution found when resolving: `hatchling`, `a<0.3, >0.15`, `a==0.1.0 (index: http://[LOCALHOST]/simple/)`
+      └── you require a<0.3 and a>0.15, which are incompatible
 
     hint: `child` was included because `parent` (v0.1.0) depends on `child`
     ");
@@ -14476,8 +14476,8 @@ fn sync_extra_build_variables() -> Result<()> {
     ----- stderr -----
     Resolved [N] packages in [TIME]
     error: Failed to build `parent @ file://[TEMP_DIR]/`
-      ├─▶ The build backend returned an error
-      ╰─▶ Call to `build_backend.build_editable` failed (exit status: 1)
+      ├── The build backend returned an error
+      └── Call to `build_backend.build_editable` failed (exit status: 1)
 
           [stderr]
           Expected `anyio` version 3.0 but got 4.3.0
@@ -14506,8 +14506,8 @@ fn sync_extra_build_variables() -> Result<()> {
     ----- stderr -----
     Resolved [N] packages in [TIME]
     error: Failed to build `parent @ file://[TEMP_DIR]/`
-      ├─▶ The build backend returned an error
-      ╰─▶ Call to `build_backend.build_editable` failed (exit status: 1)
+      ├── The build backend returned an error
+      └── Call to `build_backend.build_editable` failed (exit status: 1)
 
           [stderr]
           Expected `anyio` version 3.0 but got 4.3.0
@@ -14565,7 +14565,7 @@ fn reject_unmatched_runtime() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
     error: Failed to download and build `source-distribution==0.0.3`
-      ╰─▶ Extra build requirement `iniconfig` was declared with `match-runtime = true`, but `source-distribution` does not declare static metadata, making runtime-matching impossible
+      └── Extra build requirement `iniconfig` was declared with `match-runtime = true`, but `source-distribution` does not declare static metadata, making runtime-matching impossible
 
     hint: `source-distribution` (v0.0.3) was included because `foo` (v0.1.0) depends on `source-distribution`
     ");
@@ -15303,7 +15303,7 @@ async fn sync_non_pep625_sdist() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
     error: No solution found when resolving dependencies
-      ╰─▶ Because basic-package==0.1.0 has a non-PEP 625-compliant source distribution filename and only basic-package==0.1.0 is available, we can conclude that all versions of basic-package cannot be used.
+      └── Because basic-package==0.1.0 has a non-PEP 625-compliant source distribution filename and only basic-package==0.1.0 is available, we can conclude that all versions of basic-package cannot be used.
           And because your project depends on basic-package, we can conclude that your project's requirements are unsatisfiable.
 
     hint: `basic-package` was found on http://[LOCALHOST]/simple, but not at the requested version (basic-package==0.1.0). A compatible version may be available on a subsequent index (e.g., https://pypi.org/simple). By default, uv will only consider versions that are published on the first index that contains a given package, to avoid dependency confusion attacks. If all indexes are equally trusted, use `--index-strategy unsafe-best-match` to consider all versions from all indexes, regardless of the order in which they were defined.
@@ -16136,7 +16136,7 @@ fn sync_fails_ambiguous_url() -> Result<()> {
       ambiguous user/pass authority in URL (not percent-encoded?): https:***@domain/a/b/c
 
     error: Failed to parse: `pyproject.toml`
-      ╰─▶ TOML parse error at line 10, column 15
+      └── TOML parse error at line 10, column 15
              |
           10 |         url = "https://user/name:password@domain/a/b/c"
              |               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -16568,7 +16568,7 @@ async fn sync_malware_check_network_error() {
     ----- stderr -----
     Resolved 2 packages in [TIME]
     error: Malware check failed due to an error from OSV
-      ╰─▶ HTTP status server error (500 Internal Server Error) for url (http://[LOCALHOST]/v1/querybatch)
+      └── HTTP status server error (500 Internal Server Error) for url (http://[LOCALHOST]/v1/querybatch)
     ");
 }
 

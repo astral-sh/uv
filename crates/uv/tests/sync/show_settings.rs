@@ -2458,7 +2458,7 @@ fn invalid_conflicts() -> anyhow::Result<()> {
     exit_code: 2 (failure)
     ----- stderr -----
     error: Failed to parse: `pyproject.toml`
-      ╰─▶ TOML parse error at line 7, column 13
+      └── TOML parse error at line 7, column 13
             |
           7 | conflicts = [
             |             ^
@@ -2482,7 +2482,7 @@ fn invalid_conflicts() -> anyhow::Result<()> {
     exit_code: 2 (failure)
     ----- stderr -----
     error: Failed to parse: `pyproject.toml`
-      ╰─▶ TOML parse error at line 7, column 13
+      └── TOML parse error at line 7, column 13
             |
           7 | conflicts = [[]]
             |             ^^^^
@@ -2508,7 +2508,7 @@ fn invalid_conflicts() -> anyhow::Result<()> {
     exit_code: 2 (failure)
     ----- stderr -----
     error: Failed to parse: `pyproject.toml`
-      ╰─▶ TOML parse error at line 7, column 13
+      └── TOML parse error at line 7, column 13
             |
           7 | conflicts = [
             |             ^
@@ -2698,7 +2698,7 @@ fn resolve_config_file() -> anyhow::Result<()> {
     exit_code: 2 (failure)
     ----- stderr -----
     error: Failed to parse: `[CACHE_DIR]/uv.toml`
-      ╰─▶ TOML parse error at line 1, column 2
+      └── TOML parse error at line 1, column 2
             |
           1 | [project]
             |  ^^^^^^^
@@ -2730,7 +2730,7 @@ fn resolve_config_file() -> anyhow::Result<()> {
     ----- stderr -----
     warning: The `--config-file` argument expects to receive a `uv.toml` file, not a `pyproject.toml`. If you're trying to run a command from another project, use the `--project` argument instead.
     error: Failed to parse: `[CACHE_DIR]/pyproject.toml`
-      ╰─▶ TOML parse error at line 9, column 3
+      └── TOML parse error at line 9, column 3
             |
           9 | ""
             |   ^
@@ -4288,7 +4288,7 @@ fn preview_features_uv_toml() -> anyhow::Result<()> {
     exit_code: 2 (failure)
     ----- stderr -----
     error: Failed to parse: `uv.toml`
-      ╰─▶ cannot specify both `preview` and `preview-features`
+      └── cannot specify both `preview` and `preview-features`
     ");
 
     config.write_str(r#"preview-features = ["unknown-preview-feature"]"#)?;
@@ -4318,7 +4318,7 @@ fn preview_features_uv_toml() -> anyhow::Result<()> {
     exit_code: 2 (failure)
     ----- stderr -----
     error: Failed to parse: `uv.toml`
-      ╰─▶ TOML parse error at line 1, column 20
+      └── TOML parse error at line 1, column 20
             |
           1 | preview-features = ["  "]
             |                    ^^^^^^
@@ -4332,7 +4332,7 @@ fn preview_features_uv_toml() -> anyhow::Result<()> {
     exit_code: 2 (failure)
     ----- stderr -----
     error: Failed to parse: `uv.toml`
-      ╰─▶ TOML parse error at line 1, column 20
+      └── TOML parse error at line 1, column 20
             |
           1 | preview-features = 123
             |                    ^^^

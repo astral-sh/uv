@@ -28,8 +28,8 @@ async fn invalid_cloud_endpoint_urls() {
             exit_code: 2 (failure)
             ----- stderr -----
             error: Failed to fetch: `http://[LOCALHOST]/basic-auth/simple/iniconfig/`
-              ├─▶ Invalid `UV_[CLOUD]_ENDPOINT_URL`
-              ╰─▶ relative URL without a base
+              ├── Invalid `UV_[CLOUD]_ENDPOINT_URL`
+              └── relative URL without a base
             ");
         }
     }
@@ -66,8 +66,8 @@ async fn add_package_native_auth_realm() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
     error: Failed to add dependencies
-      ├─▶ No solution found when resolving dependencies
-      ╰─▶ Because anyio was not found in the package registry and your project depends on anyio, we can conclude that your project's requirements are unsatisfiable.
+      ├── No solution found when resolving dependencies
+      └── Because anyio was not found in the package registry and your project depends on anyio, we can conclude that your project's requirements are unsatisfiable.
 
     hint: An index URL (http://[LOCALHOST]/basic-auth/simple) could not be queried due to a lack of valid authentication credentials (401 Unauthorized)
 
@@ -122,8 +122,8 @@ async fn add_package_native_auth_realm() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
     error: Failed to add dependencies
-      ├─▶ No solution found when resolving dependencies
-      ╰─▶ Because iniconfig was not found in the package registry and your project depends on iniconfig, we can conclude that your project's requirements are unsatisfiable.
+      ├── No solution found when resolving dependencies
+      └── Because iniconfig was not found in the package registry and your project depends on iniconfig, we can conclude that your project's requirements are unsatisfiable.
 
     hint: An index URL (http://[LOCALHOST]/basic-auth/simple) could not be queried due to a lack of valid authentication credentials (401 Unauthorized)
 
@@ -166,8 +166,8 @@ async fn add_package_native_auth() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
     error: Failed to add dependencies
-      ├─▶ No solution found when resolving dependencies
-      ╰─▶ Because anyio was not found in the package registry and your project depends on anyio, we can conclude that your project's requirements are unsatisfiable.
+      ├── No solution found when resolving dependencies
+      └── Because anyio was not found in the package registry and your project depends on anyio, we can conclude that your project's requirements are unsatisfiable.
 
     hint: An index URL (http://[LOCALHOST]/basic-auth/simple) could not be queried due to a lack of valid authentication credentials (401 Unauthorized)
 
@@ -222,8 +222,8 @@ async fn add_package_native_auth() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
     error: Failed to add dependencies
-      ├─▶ No solution found when resolving dependencies
-      ╰─▶ Because iniconfig was not found in the package registry and your project depends on iniconfig, we can conclude that your project's requirements are unsatisfiable.
+      ├── No solution found when resolving dependencies
+      └── Because iniconfig was not found in the package registry and your project depends on iniconfig, we can conclude that your project's requirements are unsatisfiable.
 
     hint: An index URL (http://[LOCALHOST]/basic-auth/simple) could not be queried due to a lack of valid authentication credentials (401 Unauthorized)
 
@@ -664,7 +664,7 @@ async fn logout_native_auth() -> Result<()> {
     exit_code: 2 (failure)
     ----- stderr -----
     error: Unable to remove credentials for http://[LOCALHOST]/basic-auth
-      ╰─▶ No matching entry found in secure storage
+      └── No matching entry found in secure storage
     ");
 
     // Logout before logging in (with a username)
@@ -676,7 +676,7 @@ async fn logout_native_auth() -> Result<()> {
     exit_code: 2 (failure)
     ----- stderr -----
     error: Unable to remove credentials for public@http://[LOCALHOST]/basic-auth
-      ╰─▶ No matching entry found in secure storage
+      └── No matching entry found in secure storage
     ");
 
     // Login with a username
@@ -701,7 +701,7 @@ async fn logout_native_auth() -> Result<()> {
     exit_code: 2 (failure)
     ----- stderr -----
     error: Unable to remove credentials for http://[LOCALHOST]/basic-auth
-      ╰─▶ No matching entry found in secure storage
+      └── No matching entry found in secure storage
     ");
 
     // Logout with a username
@@ -1811,7 +1811,7 @@ fn bazel_helper_invalid_bearer_token() -> Result<()> {
     exit_code: 2 (failure)
     ----- stderr -----
     error: Invalid authorization header
-      ╰─▶ failed to parse header value
+      └── failed to parse header value
     "
     );
 
@@ -1851,7 +1851,7 @@ fn bazel_helper_invalid_json() {
     ----- stderr -----
     warning: The `uv auth helper` command is experimental and may change without warning. Pass `--preview-features auth-helper` to disable this warning
     error: Failed to parse credential request as JSON
-      ╰─▶ expected ident at line 1 column 2
+      └── expected ident at line 1 column 2
     "
     );
 }
@@ -1870,7 +1870,7 @@ fn bazel_helper_invalid_uri() {
     ----- stderr -----
     warning: The `uv auth helper` command is experimental and may change without warning. Pass `--preview-features auth-helper` to disable this warning
     error: Failed to parse credential request as JSON
-      ╰─▶ relative URL without a base: "not a url" at line 1 column 18
+      └── relative URL without a base: "not a url" at line 1 column 18
     "#
     );
 }

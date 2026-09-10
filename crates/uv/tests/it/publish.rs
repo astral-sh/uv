@@ -89,7 +89,7 @@ fn username_password_no_longer_supported() {
     Hashing ok-1.0.0-py3-none-any.whl ([SIZE]B)
     Uploading ok-1.0.0-py3-none-any.whl ([SIZE]B)
     error: Failed to publish `[WORKSPACE]/test/links/ok-1.0.0-py3-none-any.whl` to https://test.pypi.org/legacy/
-      ╰─▶ Server returned status code 403 Forbidden. Server says: 403 Username/Password authentication is no longer supported. Migrate to API Tokens or Trusted Publishers instead. See https://test.pypi.org/help/#apitoken and https://test.pypi.org/help/#trusted-publishers
+      └── Server returned status code 403 Forbidden. Server says: 403 Username/Password authentication is no longer supported. Migrate to API Tokens or Trusted Publishers instead. See https://test.pypi.org/help/#apitoken and https://test.pypi.org/help/#trusted-publishers
     "
     );
 }
@@ -112,7 +112,7 @@ fn invalid_token() {
     Hashing ok-1.0.0-py3-none-any.whl ([SIZE]B)
     Uploading ok-1.0.0-py3-none-any.whl ([SIZE]B)
     error: Failed to publish `[WORKSPACE]/test/links/ok-1.0.0-py3-none-any.whl` to https://test.pypi.org/legacy/
-      ╰─▶ Server returned status code 403 Forbidden. Server says: 403 Invalid or non-existent authentication information. See https://test.pypi.org/help/#invalid-auth for more information.
+      └── Server returned status code 403 Forbidden. Server says: 403 Invalid or non-existent authentication information. See https://test.pypi.org/help/#invalid-auth for more information.
     "
     );
 }
@@ -159,9 +159,9 @@ fn missing_trusted_publishing_permission() {
     ----- stderr -----
     Publishing 1 file to https://test.pypi.org/legacy/
     error: Failed to obtain token for trusted publishing
-      ├─▶ Failed to obtain OIDC token: is the `id-token: write` permission missing?
-      ├─▶ GitHub Actions detection error
-      ╰─▶ insufficient permissions: missing ACTIONS_ID_TOKEN_REQUEST_URL
+      ├── Failed to obtain OIDC token: is the `id-token: write` permission missing?
+      ├── GitHub Actions detection error
+      └── insufficient permissions: missing ACTIONS_ID_TOKEN_REQUEST_URL
     "
     );
 }
@@ -183,14 +183,14 @@ fn no_credentials() {
     Publishing 1 file to https://test.pypi.org/legacy/
     Note: Neither credentials nor keyring are configured, and there was an error fetching the trusted publishing token. If you don't want to use trusted publishing, you can ignore this error, but you need to provide credentials.
     error: Trusted publishing failed
-      ├─▶ Failed to obtain OIDC token: is the `id-token: write` permission missing?
-      ├─▶ GitHub Actions detection error
-      ╰─▶ insufficient permissions: missing ACTIONS_ID_TOKEN_REQUEST_URL
+      ├── Failed to obtain OIDC token: is the `id-token: write` permission missing?
+      ├── GitHub Actions detection error
+      └── insufficient permissions: missing ACTIONS_ID_TOKEN_REQUEST_URL
     Hashing ok-1.0.0-py3-none-any.whl ([SIZE]B)
     Uploading ok-1.0.0-py3-none-any.whl ([SIZE]B)
     error: Failed to publish `[WORKSPACE]/test/links/ok-1.0.0-py3-none-any.whl` to https://test.pypi.org/legacy/
-      ├─▶ Failed to send POST request
-      ╰─▶ Missing credentials for https://test.pypi.org/legacy/
+      ├── Failed to send POST request
+      └── Missing credentials for https://test.pypi.org/legacy/
     "
     );
 }
@@ -319,7 +319,7 @@ fn check_keyring_behaviours() {
     Hashing ok-1.0.0-py3-none-any.whl ([SIZE]B)
     Uploading ok-1.0.0-py3-none-any.whl ([SIZE]B)
     error: Failed to publish `[WORKSPACE]/test/links/ok-1.0.0-py3-none-any.whl` to https://test.pypi.org/legacy/?ok
-      ╰─▶ Server returned status code 403 Forbidden. Server says: 403 Username/Password authentication is no longer supported. Migrate to API Tokens or Trusted Publishers instead. See https://test.pypi.org/help/#apitoken and https://test.pypi.org/help/#trusted-publishers
+      └── Server returned status code 403 Forbidden. Server says: 403 Username/Password authentication is no longer supported. Migrate to API Tokens or Trusted Publishers instead. See https://test.pypi.org/help/#apitoken and https://test.pypi.org/help/#trusted-publishers
     "
     );
 
@@ -342,7 +342,7 @@ fn check_keyring_behaviours() {
     Hashing ok-1.0.0-py3-none-any.whl ([SIZE]B)
     Uploading ok-1.0.0-py3-none-any.whl ([SIZE]B)
     error: Failed to publish `[WORKSPACE]/test/links/ok-1.0.0-py3-none-any.whl` to https://test.pypi.org/legacy/?ok
-      ╰─▶ Server returned status code 403 Forbidden. Server says: 403 Username/Password authentication is no longer supported. Migrate to API Tokens or Trusted Publishers instead. See https://test.pypi.org/help/#apitoken and https://test.pypi.org/help/#trusted-publishers
+      └── Server returned status code 403 Forbidden. Server says: 403 Username/Password authentication is no longer supported. Migrate to API Tokens or Trusted Publishers instead. See https://test.pypi.org/help/#apitoken and https://test.pypi.org/help/#trusted-publishers
     "
     );
 
@@ -370,7 +370,7 @@ fn check_keyring_behaviours() {
     Keyring request for dummy@https://test.pypi.org/legacy/?ok
     Keyring request for dummy@test.pypi.org
     error: Failed to publish `[WORKSPACE]/test/links/ok-1.0.0-py3-none-any.whl` to https://test.pypi.org/legacy/?ok
-      ╰─▶ Server returned status code 403 Forbidden. Server says: 403 Username/Password authentication is no longer supported. Migrate to API Tokens or Trusted Publishers instead. See https://test.pypi.org/help/#apitoken and https://test.pypi.org/help/#trusted-publishers
+      └── Server returned status code 403 Forbidden. Server says: 403 Username/Password authentication is no longer supported. Migrate to API Tokens or Trusted Publishers instead. See https://test.pypi.org/help/#apitoken and https://test.pypi.org/help/#trusted-publishers
     "
     );
 
@@ -393,7 +393,7 @@ fn check_keyring_behaviours() {
     Hashing ok-1.0.0-py3-none-any.whl ([SIZE]B)
     Uploading ok-1.0.0-py3-none-any.whl ([SIZE]B)
     error: Failed to publish `[WORKSPACE]/test/links/ok-1.0.0-py3-none-any.whl` to https://test.pypi.org/legacy/?ok
-      ╰─▶ Server returned status code 403 Forbidden. Server says: 403 Username/Password authentication is no longer supported. Migrate to API Tokens or Trusted Publishers instead. See https://test.pypi.org/help/#apitoken and https://test.pypi.org/help/#trusted-publishers
+      └── Server returned status code 403 Forbidden. Server says: 403 Username/Password authentication is no longer supported. Migrate to API Tokens or Trusted Publishers instead. See https://test.pypi.org/help/#apitoken and https://test.pypi.org/help/#trusted-publishers
     "
     );
 }
@@ -535,8 +535,8 @@ async fn read_index_credential_env_vars_for_check_url() {
     Hashing astral_test_private-0.1.0-py3-none-any.whl ([SIZE]KiB)
     Uploading astral_test_private-0.1.0-py3-none-any.whl ([SIZE]KiB)
     error: Failed to publish `dist/astral_test_private-0.1.0-py3-none-any.whl` to http://[LOCALHOST]/upload
-      ├─▶ Failed to send POST request
-      ╰─▶ Missing credentials for http://[LOCALHOST]/upload
+      ├── Failed to send POST request
+      └── Missing credentials for http://[LOCALHOST]/upload
     "
     );
     // Test that it works with credentials
@@ -863,7 +863,7 @@ async fn trusted_publishing_burn_failure() {
     Uploading ok-1.0.0-py3-none-any.whl ([SIZE]B)
     warning: Failed to invalidate trusted publishing token. It will expire naturally. Cause: Failed to fetch: `http://[LOCALHOST]/_/oidc/burn-token`
     error: Failed to publish `[WORKSPACE]/test/links/ok-1.0.0-py3-none-any.whl` to http://[LOCALHOST]/upload
-      ╰─▶ Server returned status code 400 Bad Request. Server says: Upload failed
+      └── Server returned status code 400 Bad Request. Server says: Upload failed
     "
     );
 }
@@ -916,9 +916,9 @@ async fn trusted_publishing_burn_after_prepare_failure() {
     Publishing 1 file to http://[LOCALHOST]/upload
     Hashing a-1.0.0-py3-none-any.whl ([SIZE]B)
     error: Failed to publish: `a-1.0.0-py3-none-any.whl`
-      ├─▶ Failed to read metadata
-      ├─▶ Failed to read from zip file
-      ╰─▶ unable to locate the end of central directory record
+      ├── Failed to read metadata
+      ├── Failed to read from zip file
+      └── unable to locate the end of central directory record
     "
     );
 
@@ -941,9 +941,9 @@ async fn trusted_publishing_burn_after_prepare_failure() {
     Uploading ok-1.0.0-py3-none-any.whl ([SIZE]B)
     Hashing z-1.0.0-py3-none-any.whl ([SIZE]B)
     error: Failed to publish: `z-1.0.0-py3-none-any.whl`
-      ├─▶ Failed to read metadata
-      ├─▶ Failed to read from zip file
-      ╰─▶ unable to locate the end of central directory record
+      ├── Failed to read metadata
+      ├── Failed to read from zip file
+      └── unable to locate the end of central directory record
     "
     );
 
@@ -1013,9 +1013,9 @@ async fn trusted_publishing_dry_run() {
     Checking 1 file against http://[LOCALHOST]/upload
     Checking a-1.0.0-py3-none-any.whl ([SIZE]B)
     error: Failed to publish: `a-1.0.0-py3-none-any.whl`
-      ├─▶ Failed to read metadata
-      ├─▶ Failed to read from zip file
-      ╰─▶ unable to locate the end of central directory record
+      ├── Failed to read metadata
+      ├── Failed to read from zip file
+      └── unable to locate the end of central directory record
     Found issues with 1 file
     "
     );
@@ -1186,7 +1186,7 @@ async fn upload_error_pypi_json() {
     Hashing ok-1.0.0-py3-none-any.whl ([SIZE]B)
     Uploading ok-1.0.0-py3-none-any.whl ([SIZE]B)
     error: Failed to publish `[WORKSPACE]/test/links/ok-1.0.0-py3-none-any.whl` to http://[LOCALHOST]/upload
-      ╰─▶ Server returned status code 400 Bad Request. Server says: 400 Use 'source' as Python version for an sdist.
+      └── Server returned status code 400 Bad Request. Server says: 400 Use 'source' as Python version for an sdist.
     "
     );
 }
@@ -1220,7 +1220,7 @@ async fn upload_error_problem_details() {
     Hashing ok-1.0.0-py3-none-any.whl ([SIZE]B)
     Uploading ok-1.0.0-py3-none-any.whl ([SIZE]B)
     error: Failed to publish `[WORKSPACE]/test/links/ok-1.0.0-py3-none-any.whl` to http://[LOCALHOST]/upload
-      ╰─▶ Server returned status code 400 Bad Request. Server message: Bad Request, Missing required field `name`
+      └── Server returned status code 400 Bad Request. Server message: Bad Request, Missing required field `name`
     "
     );
 }
@@ -1277,14 +1277,14 @@ fn dry_run_reports_all_errors() {
     Checking 2 files against https://test.pypi.org/legacy/
     Checking a-1.0.0-py3-none-any.whl ([SIZE]B)
     error: Failed to publish: `a-1.0.0-py3-none-any.whl`
-      ├─▶ Failed to read metadata
-      ├─▶ Failed to read from zip file
-      ╰─▶ unable to locate the end of central directory record
+      ├── Failed to read metadata
+      ├── Failed to read from zip file
+      └── unable to locate the end of central directory record
     Checking b-1.0.0-py3-none-any.whl ([SIZE]B)
     error: Failed to publish: `b-1.0.0-py3-none-any.whl`
-      ├─▶ Failed to read metadata
-      ├─▶ Failed to read from zip file
-      ╰─▶ unable to locate the end of central directory record
+      ├── Failed to read metadata
+      ├── Failed to read from zip file
+      └── unable to locate the end of central directory record
     Found issues with 2 files
     "
     );
@@ -1328,8 +1328,8 @@ async fn publish_invalid_attestations() {
     Publishing 1 file to http://[LOCALHOST]/upload
     Hashing basic_app-0.1.0-py3-none-any.whl ([SIZE]KiB)
     error: Failed to publish: `[WORKSPACE]/test/links/basic_app-0.1.0-py3-none-any.whl`
-      ├─▶ Invalid PEP 740 attestation (not JSON): `[TEMP_DIR]/basic_app-0.1.0-py3-none-any.whl.publish.attestation`
-      ╰─▶ EOF while parsing an object at line 1 column 1
+      ├── Invalid PEP 740 attestation (not JSON): `[TEMP_DIR]/basic_app-0.1.0-py3-none-any.whl.publish.attestation`
+      └── EOF while parsing an object at line 1 column 1
     ");
 
     uv_snapshot!(context.filters(), context.publish()
@@ -1347,12 +1347,12 @@ async fn publish_invalid_attestations() {
     Checking 2 files against http://[LOCALHOST]/upload
     Checking basic_app-0.1.0-py3-none-any.whl ([SIZE]KiB)
     error: Failed to publish: `[WORKSPACE]/test/links/basic_app-0.1.0-py3-none-any.whl`
-      ├─▶ Invalid PEP 740 attestation (not JSON): `[TEMP_DIR]/basic_app-0.1.0-py3-none-any.whl.publish.attestation`
-      ╰─▶ EOF while parsing an object at line 1 column 1
+      ├── Invalid PEP 740 attestation (not JSON): `[TEMP_DIR]/basic_app-0.1.0-py3-none-any.whl.publish.attestation`
+      └── EOF while parsing an object at line 1 column 1
     Checking ok-1.0.0-py3-none-any.whl ([SIZE]B)
     error: Failed to publish: `[WORKSPACE]/test/links/ok-1.0.0-py3-none-any.whl`
-      ├─▶ Invalid PEP 740 attestation (not JSON): `[TEMP_DIR]/ok-1.0.0-py3-none-any.whl.publish.attestation`
-      ╰─▶ EOF while parsing an object at line 1 column 1
+      ├── Invalid PEP 740 attestation (not JSON): `[TEMP_DIR]/ok-1.0.0-py3-none-any.whl.publish.attestation`
+      └── EOF while parsing an object at line 1 column 1
     Found issues with 2 files
     ");
 

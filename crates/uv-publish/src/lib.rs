@@ -397,7 +397,7 @@ impl PublishSendError {
     ///
     /// ```text
     /// error: Failed to publish `dist/astral_test_1-0.1.0-py3-none-any.whl` to `https://test.pypi.org/legacy/`
-    ///   ╰─▶ Incorrect credentials (status code 403 Forbidden): 403 Username/Password
+    ///   └── Incorrect credentials (status code 403 Forbidden): 403 Username/Password
     ///       authentication is no longer supported. Migrate to API Tokens or Trusted Publishers
     ///       instead. See https://test.pypi.org/help/#apitoken and https://test.pypi.org/help/#trusted-publishers
     /// ```
@@ -2258,7 +2258,7 @@ mod tests {
             &capture,
             @"
         error: Failed to publish `../../test/links/tqdm-4.66.1-py3-none-manylinux_2_12_x86_64.manylinux2010_x86_64.musllinux_1_1_x86_64.whl` to [SERVER]/final
-          ╰─▶ Too many redirects, only 10 redirects are allowed
+          └── Too many redirects, only 10 redirects are allowed
         "
         );
     }
@@ -2292,7 +2292,7 @@ mod tests {
             &capture,
             @"
         error: Failed to publish `../../test/links/tqdm-4.66.1-py3-none-manylinux_2_12_x86_64.manylinux2010_x86_64.musllinux_1_1_x86_64.whl` to https://different.auth.tld/final/
-          ╰─▶ Redirected URL is not in the same realm. Redirected to: https://different.auth.tld/final/
+          └── Redirected URL is not in the same realm. Redirected to: https://different.auth.tld/final/
         "
         );
     }
@@ -2331,7 +2331,7 @@ mod tests {
             &capture,
             @"
         error: Failed to publish `../../test/links/tqdm-4.66.1-py3-none-manylinux_2_12_x86_64.manylinux2010_x86_64.musllinux_1_1_x86_64.whl` to [SERVER]/final
-          ╰─▶ Server returned status code 400 Bad Request. Server says: 400 Error: Use 'source' as Python version for an sdist.
+          └── Server returned status code 400 Bad Request. Server says: 400 Error: Use 'source' as Python version for an sdist.
         "
         );
     }
@@ -2373,7 +2373,7 @@ mod tests {
             &capture,
             @"
         error: Failed to publish `../../test/links/tqdm-4.66.1-py3-none-manylinux_2_12_x86_64.manylinux2010_x86_64.musllinux_1_1_x86_64.whl` to [SERVER]/final
-          ╰─▶ Server returned status code 400 Bad Request. Server message: Bad Request, Missing required field `name`
+          └── Server returned status code 400 Bad Request. Server message: Bad Request, Missing required field `name`
         "
         );
     }

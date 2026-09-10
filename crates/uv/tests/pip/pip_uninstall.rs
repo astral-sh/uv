@@ -34,7 +34,7 @@ fn invalid_requirement() {
     exit_code: 2 (failure)
     ----- stderr -----
     error: Failed to parse: `flask==1.0.x`
-      ╰─▶ after parsing `1.0`, found `.x`, which is not part of a valid version
+      └── after parsing `1.0`, found `.x`, which is not part of a valid version
           flask==1.0.x
                ^^^^^^^
     ");
@@ -67,7 +67,7 @@ fn invalid_requirements_txt_requirement() -> Result<()> {
     exit_code: 2 (failure)
     ----- stderr -----
     error: Couldn't parse requirement in `requirements.txt` at position 0
-      ╰─▶ after parsing `1.0`, found `.x`, which is not part of a valid version
+      └── after parsing `1.0`, found `.x`, which is not part of a valid version
           flask==1.0.x
                ^^^^^^^
     ");

@@ -355,7 +355,7 @@ fn format_fails_malformed_pyproject() -> Result<()> {
 
     warning: `uv format` is experimental and may change without warning. Pass `--preview-features format-command` to disable this warning.
     error: Failed to parse: `pyproject.toml`
-      ╰─▶ TOML parse error at line 1, column 11
+      └── TOML parse error at line 1, column 11
             |
           1 | malformed pyproject.toml
             |           ^
@@ -687,7 +687,7 @@ fn format_no_matching_version() -> Result<()> {
     ----- stderr -----
     warning: `uv format` is experimental and may change without warning. Pass `--preview-features format-command` to disable this warning.
     error: Failed to find ruff version matching: >=999.0.0
-      ╰─▶ No version of ruff found matching `>=999.0.0` for platform `[PLATFORM]`
+      └── No version of ruff found matching `>=999.0.0` for platform `[PLATFORM]`
     ");
 
     Ok(())

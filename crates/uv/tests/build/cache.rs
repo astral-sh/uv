@@ -353,7 +353,7 @@ fn cache_init_failure() -> Result<()> {
     exit_code: 2 (failure)
     ----- stderr -----
     error: Failed to initialize cache at `cache_parent/cache`
-      ╰─▶ failed to create directory `[CACHE_DIR]/`: Permission denied (os error 13)
+      └── failed to create directory `[CACHE_DIR]/`: Permission denied (os error 13)
     ");
 
     Ok(())
