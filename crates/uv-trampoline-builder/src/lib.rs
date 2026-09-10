@@ -11,6 +11,9 @@ use thiserror::Error;
 
 use uv_fs::Simplified;
 
+#[cfg(all(test, windows))]
+mod resource_tests;
+
 #[cfg(all(windows, target_arch = "x86"))]
 const LAUNCHER_I686_GUI: &[u8] = include_bytes!("../trampolines/uv-trampoline-i686-gui.exe");
 
