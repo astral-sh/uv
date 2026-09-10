@@ -1140,16 +1140,16 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                     };
 
                     // We should be in sync with the origin. Failure here means that the
-                    // origin actually sent us an under- or over-length response, which we
-                    // treat as a resumption error (and return back to the normal retry
-                    // stack). Note that this implies some kind of buggy origin.
+                    // origin actually sent us an under- or over-length response. Treat this
+                    // as a non-retryable error, since the HTTP body was received successfully.
                     //
                     // Byte ranges are inclusive, not exclusive.
                     if bytes_retrieved != range.last_byte + 1 {
-                        return Err(Error::CacheWrite(io::Error::new(
-                            io::ErrorKind::UnexpectedEof,
-                            "Range response length does not match Content-Range",
-                        )));
+                        return Err(Error::MismatchedRangeSize {
+                            distribution: dist.to_string(),
+                            expected: range.last_byte - range.first_byte + 1,
+                            actual: hasher.bytes_read(),
+                        });
                     }
 
                     // We've successfully performed the download over one or more

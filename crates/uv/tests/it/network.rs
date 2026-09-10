@@ -1111,6 +1111,7 @@ enum RangeResponse {
     Ignored,
     NotAdvertised,
     InvalidContentRange,
+    ShortBody,
 }
 
 #[derive(Clone, Copy)]
@@ -1187,6 +1188,7 @@ fn wheel_response(
         };
         let mut content_range_start = start;
         let mut complete_length = size.to_string();
+        let mut body_end = None;
         if resuming {
             match case.range {
                 RangeResponse::Supported | RangeResponse::NotAdvertised => {}
@@ -1202,9 +1204,10 @@ fn wheel_response(
                     }
                 }
                 RangeResponse::InvalidContentRange => content_range_start = 0,
+                RangeResponse::ShortBody => body_end = Some(end - 1),
             }
         }
-        let bytes = wheel.slice(start..=end);
+        let bytes = wheel.slice(start..=body_end.unwrap_or(end));
         return response
             .status(StatusCode::PARTIAL_CONTENT)
             .header(
@@ -1415,5 +1418,38 @@ fn direct_url_invalid_range_does_not_bypass_retry() -> Result<()> {
       ├─▶ Failed to write to the distribution cache
       ╰─▶ Failed to download distribution due to network timeout. Try increasing UV_HTTP_TIMEOUT (current value: [TIME]).
     ");
+    Ok(())
+}
+
+/// A complete HTTP body with the wrong range length fails without retrying the full download.
+#[test]
+fn direct_url_range_size_mismatch() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let (server, _guard, full_get_count, _) = wheel_server(
+        &context,
+        DownloadCase {
+            range: RangeResponse::ShortBody,
+            full_retries: 1,
+            ..DownloadCase::default()
+        },
+    )?;
+
+    let wheel_url = format!("{server}/build_tag-1.0.0-1-py2.py3-none-any.whl");
+    uv_snapshot!(context.filters(), context
+        .pip_install()
+        .arg(format!("build-tag @ {wheel_url}"))
+        .env(EnvVars::UV_HTTP_RETRIES, "1")
+        .env(EnvVars::UV_HTTP_TIMEOUT, "1")
+        .env(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY, "true")
+        .env(EnvVars::RUST_LOG, "warn"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    WARN Streaming failed for build-tag @ http://[LOCALHOST]/build_tag-1.0.0-1-py2.py3-none-any.whl; downloading wheel to disk (I/O operation failed during extraction)
+      × Failed to download `build-tag @ http://[LOCALHOST]/build_tag-1.0.0-1-py2.py3-none-any.whl`
+      ╰─▶ Range response size mismatch for `build-tag @ http://[LOCALHOST]/build_tag-1.0.0-1-py2.py3-none-any.whl`: expected 466 bytes from Content-Range, but received 465 bytes
+    ");
+    // Two streaming attempts precede the download fallback; the range mismatch ends the attempt.
+    assert_eq!(full_get_count.load(Ordering::Relaxed), 3);
     Ok(())
 }
