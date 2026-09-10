@@ -1,4 +1,5 @@
-use uv_pypi_types::{HashAlgorithm, HashDigest};
+use uv_pypi_types::{HashAlgorithm, HashDigest, HashDigests, Hashes};
+use uv_redacted::DisplaySafeUrl;
 
 /// Hash generation and validation policy for an archive.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -146,6 +147,15 @@ pub enum HashCollection {
     Url,
     /// Also compute missing registry hashes when the index metadata does not provide them.
     All,
+}
+
+/// Read a URL's declared hash for resolution, excluding MD5, which `--require-hashes` rejects.
+pub fn parse_url_hashes(url: &DisplaySafeUrl) -> Option<HashDigests> {
+    let hashes = url
+        .fragment()?
+        .split('&')
+        .find_map(|fragment| Hashes::parse_fragment(fragment).ok())?;
+    hashes.md5.is_none().then(|| HashDigests::from(hashes))
 }
 
 pub trait Hashed {
