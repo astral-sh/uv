@@ -33,17 +33,46 @@ pub enum HintOrdering {
     Last,
 }
 
-struct HintMessage<'a> {
+/// A user-facing hint and its preferred display order.
+pub struct HintMessage<'a> {
     message: Cow<'a, str>,
     ordering: HintOrdering,
 }
 
-impl HintMessage<'_> {
-    fn into_owned(self) -> HintMessage<'static> {
+impl<'a> HintMessage<'a> {
+    /// Create a hint with no preferred placement.
+    pub fn new(message: impl Into<Cow<'a, str>>) -> Self {
+        Self {
+            message: message.into(),
+            ordering: HintOrdering::Any,
+        }
+    }
+
+    /// Set the preferred display order of this hint.
+    #[must_use]
+    pub fn with_ordering(mut self, ordering: HintOrdering) -> Self {
+        self.ordering = ordering;
+        self
+    }
+
+    /// Convert a borrowed hint to owned, extending its lifetime to `'static`.
+    pub fn into_owned(self) -> HintMessage<'static> {
         HintMessage {
             message: Cow::Owned(self.message.into_owned()),
             ordering: self.ordering,
         }
+    }
+}
+
+impl<'a> From<&'a str> for HintMessage<'a> {
+    fn from(message: &'a str) -> Self {
+        Self::new(message)
+    }
+}
+
+impl From<String> for HintMessage<'_> {
+    fn from(message: String) -> Self {
+        Self::new(message)
     }
 }
 
@@ -53,18 +82,15 @@ impl HintMessage<'_> {
 /// Hints are grouped by [`HintOrdering`], retaining insertion order within each group.
 pub struct Hints<'a>(Vec<HintMessage<'a>>);
 
-impl Hints<'_> {
+impl<'a> Hints<'a> {
     /// No hints.
     pub fn none() -> Self {
         Self(Vec::new())
     }
 
-    /// Add a single owned hint.
-    pub fn push(&mut self, hint: String) {
-        self.0.push(HintMessage {
-            message: Cow::Owned(hint),
-            ordering: HintOrdering::Any,
-        });
+    /// Add a single hint.
+    pub fn push(&mut self, hint: impl Into<HintMessage<'a>>) {
+        self.0.push(hint.into());
     }
 
     /// Set the display order of every hint in this collection.
@@ -84,6 +110,18 @@ impl Hints<'_> {
     /// Whether the collection is empty.
     pub fn is_empty(&self) -> bool {
         self.0.is_empty()
+    }
+
+    /// Iterate over hint messages in display order.
+    pub fn iter(&self) -> impl Iterator<Item = &str> {
+        [HintOrdering::First, HintOrdering::Any, HintOrdering::Last]
+            .into_iter()
+            .flat_map(|ordering| {
+                self.0
+                    .iter()
+                    .filter(move |hint| hint.ordering == ordering)
+                    .map(|hint| hint.message.as_ref())
+            })
     }
 
     /// Extend with another set of hints, converting borrowed hints to owned.
@@ -133,57 +171,34 @@ impl<E: fmt::Display> fmt::Display for ErrorWithHints<'_, E> {
 
 impl<'a> From<&'a str> for Hints<'a> {
     fn from(hint: &'a str) -> Self {
-        Self(vec![HintMessage {
-            message: Cow::Borrowed(hint),
-            ordering: HintOrdering::Any,
-        }])
+        Self::from(HintMessage::from(hint))
     }
 }
 
 impl From<String> for Hints<'_> {
     fn from(hint: String) -> Self {
-        Self(vec![HintMessage {
-            message: Cow::Owned(hint),
-            ordering: HintOrdering::Any,
-        }])
+        Self::from(HintMessage::from(hint))
     }
 }
 
-impl FromIterator<String> for Hints<'_> {
-    fn from_iter<I: IntoIterator<Item = String>>(iter: I) -> Self {
-        Self(
-            iter.into_iter()
-                .map(|message| HintMessage {
-                    message: Cow::Owned(message),
-                    ordering: HintOrdering::Any,
-                })
-                .collect(),
-        )
+impl<'a> From<HintMessage<'a>> for Hints<'a> {
+    fn from(hint: HintMessage<'a>) -> Self {
+        Self(vec![hint])
+    }
+}
+
+impl<'a, T: Into<HintMessage<'a>>> FromIterator<T> for Hints<'a> {
+    fn from_iter<I: IntoIterator<Item = T>>(iter: I) -> Self {
+        Self(iter.into_iter().map(Into::into).collect())
     }
 }
 
 impl fmt::Display for Hints<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let mut hints = self.0.iter().collect::<Vec<_>>();
-        hints.sort_by_key(|hint| hint.ordering);
-        for hint in hints {
-            write!(f, "\n{HintPrefix} {}", hint.message)?;
+        for hint in self.iter() {
+            write!(f, "\n{HintPrefix} {hint}")?;
         }
         Ok(())
-    }
-}
-
-impl<'a> IntoIterator for Hints<'a> {
-    type Item = Cow<'a, str>;
-    type IntoIter = std::vec::IntoIter<Cow<'a, str>>;
-
-    fn into_iter(mut self) -> Self::IntoIter {
-        self.0.sort_by_key(|hint| hint.ordering);
-        self.0
-            .into_iter()
-            .map(|hint| hint.message)
-            .collect::<Vec<_>>()
-            .into_iter()
     }
 }
 
@@ -344,7 +359,7 @@ pub fn write_error_chain_with_options<C: DynColor + Copy, W: fmt::Write>(
         }
     }
 
-    for hint in hints {
+    for hint in hints.iter() {
         writeln!(&mut stream, "\n{HintPrefix} {hint}")?;
     }
 
@@ -359,7 +374,7 @@ mod tests {
     use owo_colors::AnsiColors;
 
     use super::{
-        ErrorOptions, ErrorWithHints, HintOrdering, Hints, debug_error_chain,
+        ErrorOptions, ErrorWithHints, HintMessage, HintOrdering, Hints, debug_error_chain,
         write_error_chain_with_options,
     };
 
@@ -369,10 +384,7 @@ mod tests {
         hints.extend(Hints::from("same"));
         hints.extend(Hints::from("other"));
 
-        let hints = hints
-            .into_iter()
-            .map(std::borrow::Cow::into_owned)
-            .collect::<Vec<_>>();
+        let hints = hints.iter().collect::<Vec<_>>();
         assert_debug_snapshot!(hints, @r#"
         [
             "same",
@@ -384,8 +396,8 @@ mod tests {
     #[test]
     fn hint_ordering_retains_insertion_order() {
         let mut hints = Hints::from("any 1");
-        hints.extend(Hints::from("last 1").with_ordering(HintOrdering::Last));
-        hints.extend(Hints::from("first 1").with_ordering(HintOrdering::First));
+        hints.push(HintMessage::new("last 1").with_ordering(HintOrdering::Last));
+        hints.push(HintMessage::new("first 1").with_ordering(HintOrdering::First));
         hints.push("any 2".to_string());
         hints.extend(Hints::from("last 2").with_ordering(HintOrdering::Last));
         hints.extend(Hints::from("first 2").with_ordering(HintOrdering::First));
@@ -398,7 +410,7 @@ mod tests {
         hint: last 1
         hint: last 2
         ");
-        assert_debug_snapshot!(hints.into_iter().collect::<Vec<_>>(), @r#"
+        assert_debug_snapshot!(hints.iter().collect::<Vec<_>>(), @r#"
         [
             "first 1",
             "first 2",
@@ -406,6 +418,26 @@ mod tests {
             "any 2",
             "last 1",
             "last 2",
+        ]
+        "#);
+    }
+
+    #[test]
+    fn changing_ordering_retains_insertion_order() {
+        let hints = [
+            HintMessage::new("last").with_ordering(HintOrdering::Last),
+            HintMessage::new("first").with_ordering(HintOrdering::First),
+            HintMessage::new("any"),
+        ]
+        .into_iter()
+        .collect::<Hints<'_>>()
+        .with_ordering(HintOrdering::Any);
+
+        assert_debug_snapshot!(hints.iter().collect::<Vec<_>>(), @r#"
+        [
+            "last",
+            "first",
+            "any",
         ]
         "#);
     }
