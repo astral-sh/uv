@@ -214,20 +214,18 @@ fn streaming_server(
     + Sync
     + 'static,
 ) -> (String, impl Drop) {
-    let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("bind test server");
-    listener
-        .set_nonblocking(true)
-        .expect("nonblocking listener");
-    let server = format!("http://{}", listener.local_addr().expect("server address"));
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    listener.set_nonblocking(true).unwrap();
+    let server = format!("http://{}", listener.local_addr().unwrap());
     let handler = Arc::new(handler);
     let (shutdown_tx, shutdown_rx) = tokio::sync::oneshot::channel::<()>();
     std::thread::spawn(move || {
         let runtime = tokio::runtime::Builder::new_current_thread()
             .enable_all()
             .build()
-            .expect("test server runtime");
+            .unwrap();
         runtime.block_on(async move {
-            let listener = tokio::net::TcpListener::from_std(listener).expect("async listener");
+            let listener = tokio::net::TcpListener::from_std(listener).unwrap();
             tokio::select! {
                 () = async {
                     while let Ok((stream, _)) = listener.accept().await {
