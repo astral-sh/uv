@@ -247,7 +247,7 @@ async fn audit_pylock_vulnerability() -> Result<()> {
         .arg("--service-url").arg(server.uri()), @"
     exit_code: 0 (success)
     ----- stderr -----
-    warning: Ignored vulnerability `PYSEC-DOES-NOT-EXIST` does not match any vulnerability in the lockfile
+    warning: Ignored vulnerability `PYSEC-DOES-NOT-EXIST` does not match any vulnerability
     Found no known vulnerabilities and no adverse project statuses in 1 package
     ");
 
@@ -2047,7 +2047,7 @@ async fn audit_ignore_unmatched() {
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    warning: Ignored vulnerability `CVE-XXXX-YYYY` does not match any vulnerability in the project
+    warning: Ignored vulnerability `CVE-XXXX-YYYY` does not match any vulnerability
     Found no known vulnerabilities and no adverse project statuses in 1 package
     ");
 }
@@ -2092,7 +2092,7 @@ async fn audit_ignore_until_fixed_unmatched() {
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    warning: Ignored vulnerability `CVE-XXXX-YYYY` does not match any vulnerability in the project
+    warning: Ignored vulnerability `CVE-XXXX-YYYY` does not match any vulnerability
     Found no known vulnerabilities and no adverse project statuses in 1 package
     ");
 }
@@ -2163,7 +2163,7 @@ async fn audit_ignore_mixed_matched_unmatched() {
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    warning: Ignored vulnerability `CVE-DOES-NOT-EXIST` does not match any vulnerability in the project
+    warning: Ignored vulnerability `CVE-DOES-NOT-EXIST` does not match any vulnerability
     Found no known vulnerabilities and no adverse project statuses in 1 package
     ");
 }

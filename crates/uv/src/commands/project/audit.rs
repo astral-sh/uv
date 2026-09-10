@@ -94,7 +94,7 @@ pub(crate) async fn audit(
         );
     }
 
-    let (dependencies, artifact_uri, scope) = if let Some(requirements) = requirements {
+    let (dependencies, artifact_uri) = if let Some(requirements) = requirements {
         let RequirementsSource::PylockToml(pylock) =
             RequirementsSource::from_requirements_file(requirements.clone())?
         else {
@@ -117,13 +117,9 @@ pub(crate) async fn audit(
         } else {
             artifact_uri(&std::path::absolute(pylock)?)
         };
-        (
-            AuditDependencies::from_pylock(&lock),
-            artifact_uri,
-            "the lockfile",
-        )
+        (AuditDependencies::from_pylock(&lock), artifact_uri)
     } else {
-        let (dependencies, artifact_uri) = project_dependencies(
+        project_dependencies(
             project_dir,
             extras,
             groups,
@@ -144,8 +140,7 @@ pub(crate) async fn audit(
             printer,
             preview,
         )
-        .await?;
-        (dependencies, artifact_uri, "the project")
+        .await?
     };
 
     let outcome = audit_dependencies(
@@ -162,12 +157,7 @@ pub(crate) async fn audit(
     )
     .await?;
 
-    warn_unmatched_ignores(
-        &ignore,
-        &ignore_until_fixed,
-        &outcome.matched_ignores,
-        scope,
-    );
+    warn_unmatched_ignores(&ignore, &ignore_until_fixed, &outcome.matched_ignores);
 
     let display = AuditResults {
         printer,
@@ -529,12 +519,11 @@ pub(crate) fn warn_unmatched_ignores(
     ignore: &[VulnerabilityID],
     ignore_until_fixed: &[VulnerabilityID],
     matched_ignores: &FxHashSet<VulnerabilityID>,
-    scope: &str,
 ) {
     for id in ignore.iter().chain(ignore_until_fixed.iter()) {
         if !matched_ignores.contains(id) {
             warn_user!(
-                "Ignored vulnerability `{}` does not match any vulnerability in {scope}",
+                "Ignored vulnerability `{}` does not match any vulnerability",
                 id.as_str()
             );
         }

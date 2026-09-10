@@ -227,12 +227,7 @@ pub(crate) async fn audit(
         ));
     }
 
-    warn_unmatched_ignores(
-        &ignore,
-        &ignore_until_fixed,
-        &matched_ignores,
-        "the selected tools",
-    );
+    warn_unmatched_ignores(&ignore, &ignore_until_fixed, &matched_ignores);
 
     if audits.is_empty() && matches!(output_format, AuditOutputFormat::Text) {
         writeln!(printer.stderr(), "No auditable tools installed")?;
