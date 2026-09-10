@@ -171,6 +171,7 @@ impl Error {
             | ErrorKind::RemotePackageNotFound(_)
             | ErrorKind::LocalPackageNotFound(_)
             | ErrorKind::LocalIndexNotFound(_)
+            | ErrorKind::MetadataHashMismatch { .. }
             | ErrorKind::MetadataParseError(..)
             | ErrorKind::BadJson { .. }
             | ErrorKind::BadHtml { .. }

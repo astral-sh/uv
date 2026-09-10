@@ -11802,7 +11802,7 @@ async fn lock_core_metadata_hash() -> Result<()> {
 
     // Reject sidecar bytes that do not match the index's advertised hash.
     uv_snapshot!(context.filters(), context.lock(), @"
-    exit_code: 2 (failure)
+    exit_code: 1 (failure)
     ----- stderr -----
     error: Hash mismatch for package metadata at `http://[LOCALHOST]/files/basic_package-0.1.0-py3-none-any.whl.metadata`
 
@@ -11815,7 +11815,7 @@ async fn lock_core_metadata_hash() -> Result<()> {
 
     // The cached index response must retain the expected sidecar hashes.
     uv_snapshot!(context.filters(), context.lock(), @"
-    exit_code: 2 (failure)
+    exit_code: 1 (failure)
     ----- stderr -----
     error: Hash mismatch for package metadata at `http://[LOCALHOST]/files/basic_package-0.1.0-py3-none-any.whl.metadata`
 
