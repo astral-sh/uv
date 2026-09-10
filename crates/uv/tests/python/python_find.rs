@@ -685,7 +685,7 @@ fn python_find_venv_executable_precedence() -> Result<()> {
     [VENV]/bin/python3
     ");
 
-    // Environments containing only `python` remain supported.
+    // Discover environments containing only `python`.
     fs_err::remove_file(&python3)?;
     uv_snapshot!(context.filters(), context.python_find(), @"
     exit_code: 0 (success)
@@ -698,7 +698,7 @@ fn python_find_venv_executable_precedence() -> Result<()> {
     [VENV]/bin/python
     ");
 
-    // Environments containing only `python3` remain supported.
+    // Discover environments containing only `python3`.
     fs_err::os::unix::fs::symlink(fs_err::canonicalize(&python)?, &python3)?;
     fs_err::remove_file(&python)?;
     uv_snapshot!(context.filters(), context.python_find().arg(context.venv.path()), @"
