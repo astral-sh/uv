@@ -117,6 +117,4 @@ However, uv supports `pylock.toml` as an export target, in the `uv pip` CLI, and
   `uv pip compile requirements.in -o pylock.toml`
 - To install from a `pylock.toml` file, run: `uv pip sync pylock.toml` or
   `uv pip install -r pylock.toml`
-- To audit a `pylock.toml` file, run: `uv audit -r pylock.toml`. This audits every versioned package
-  in the file, across all environments, extras, and groups, without updating the lockfile or
-  requiring a Python interpreter. Packages without versions are skipped.
+- To audit a `pylock.toml` file, run: `uv audit -r pylock.toml`.
