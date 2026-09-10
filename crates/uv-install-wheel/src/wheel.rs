@@ -223,7 +223,8 @@ impl ValidatedWheelDestination {
             // Merging through a pre-existing directory symlink would write wheel files outside the
             // environment. The installation root is trusted, but any mapped directory beneath it
             // must be checked before linking or moving any files.
-            for entry in WalkDir::new(source).min_depth(min_depth) {
+            let mut entries = WalkDir::new(source).min_depth(min_depth).into_iter();
+            while let Some(entry) = entries.next() {
                 let entry = entry?;
                 if !entry.file_type().is_dir() {
                     continue;
@@ -244,7 +245,10 @@ impl ValidatedWheelDestination {
                         )));
                     }
                     Ok(_) => {}
-                    Err(err) if err.kind() == io::ErrorKind::NotFound => {}
+                    Err(err) if err.kind() == io::ErrorKind::NotFound => {
+                        // No existing destination symlink can lie beneath a missing directory.
+                        entries.skip_current_dir();
+                    }
                     Err(err) => return Err(err.into()),
                 }
             }

@@ -14241,6 +14241,53 @@ fn reject_symlinked_wheel_package_directory() -> Result<()> {
     Ok(())
 }
 
+/// Wheel validation must reject nested directory symlinks alongside new subtrees.
+#[cfg(unix)]
+#[test]
+fn reject_symlinked_wheel_nested_package_directory() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context.init().arg("--lib").arg("foo").assert().success();
+    context
+        .temp_dir
+        .child("foo/src/foo/new/deep/__init__.py")
+        .write_str("NEW = 1\n")?;
+    context
+        .temp_dir
+        .child("foo/src/foo/existing/nested/__init__.py")
+        .write_str("NESTED = 1\n")?;
+    context.build().arg("--wheel").arg("foo").assert().success();
+    let wheel = context.temp_dir.join("foo/dist/foo-0.1.0-py3-none-any.whl");
+
+    let external = context.temp_dir.child("external");
+    external.create_dir_all()?;
+    external.child("sentinel.txt").write_str("keep me")?;
+    let existing = context.site_packages().join("foo/existing");
+    fs_err::create_dir_all(&existing)?;
+    fs_err::os::unix::fs::symlink(external.path(), existing.join("nested"))?;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--link-mode")
+        .arg("copy")
+        .arg(&wheel), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    error: Failed to install: foo-0.1.0-py3-none-any.whl (foo==0.1.0 (from file://[TEMP_DIR]/foo/dist/foo-0.1.0-py3-none-any.whl))
+      Caused by: The wheel is invalid: Cannot install into symlinked directory: [SITE_PACKAGES]/foo/existing/nested
+    ");
+
+    external.child("sentinel.txt").assert("keep me");
+    external
+        .child("__init__.py")
+        .assert(predicate::path::missing());
+    assert!(!context.site_packages().join("foo/new").exists());
+    assert!(!context.site_packages().join("foo-0.1.0.dist-info").exists());
+
+    Ok(())
+}
+
 /// Wheel data must not merge purelib, platlib, or data files through a directory symlink.
 #[cfg(unix)]
 #[test]
