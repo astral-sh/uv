@@ -131,6 +131,7 @@ dev = [
 
 [tool.uv]
 no-build = true
+preview-features = ["missing-exclude-newer-package-lock"]
 cache-keys = [
     { file = "pyproject.toml" },
     { file = "Cargo.toml" },
