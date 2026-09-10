@@ -13,7 +13,7 @@ Released on 2026-09-10.
 
 ### Enhancements
 
-- Verify newly downloaded PEP 658 wheel metadata sidecars against index-provided hashes and prioritize PEP 714 `core-metadata` fields over legacy aliases in JSON index responses ([#21563](https://github.com/astral-sh/uv/pull/21563))
+- Verify hashes when downloading PEP 658 metadata sidecars ([#21563](https://github.com/astral-sh/uv/pull/21563))
 
 ### Preview features
 
@@ -26,6 +26,7 @@ Released on 2026-09-10.
 ### Bug fixes
 
 - Edit Windows entry-point launcher resources in memory to support Nano Server and reduce antivirus contention ([#18713](https://github.com/astral-sh/uv/pull/18713))
+- Prefer `core-metadata` over legacy aliases in JSON index responses ([#21563](https://github.com/astral-sh/uv/pull/21563))
 
 ## 0.12.12
 
