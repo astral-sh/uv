@@ -226,6 +226,15 @@ pub enum Error {
 }
 
 impl Error {
+    /// Return whether this is an expected user-facing failure.
+    pub fn is_user_failure(&self) -> bool {
+        match self {
+            Self::NoBuild(_) | Self::NoBinary(_) | Self::CyclicBuildDependency(_) => true,
+            Self::Dist(_, _, _, error) => error.is_user_failure(),
+            Self::Thread(_) => false,
+        }
+    }
+
     /// Create an [`Error`] from a distribution error.
     fn from_dist(dist: Dist, err: uv_distribution::Error, resolution: &Resolution) -> Self {
         let chain =

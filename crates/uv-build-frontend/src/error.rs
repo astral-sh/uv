@@ -58,6 +58,27 @@ pub enum Error {
 }
 
 impl IsBuildBackendError for Error {
+    fn is_user_failure(&self) -> bool {
+        match self {
+            Self::InvalidSourceDist(_)
+            | Self::InvalidPyprojectTomlSyntax(_)
+            | Self::InvalidPyprojectTomlSchema(_)
+            | Self::InvalidBackendPath(_)
+            | Self::BackendPathOutsideSourceTree(_)
+            | Self::CommandFailed(..)
+            | Self::BuildBackend(_)
+            | Self::MissingHeader(_)
+            | Self::BuildScriptPath(_)
+            | Self::CyclicBuildDependency(_)
+            | Self::UnmatchedRuntime(..)
+            | Self::Lowering(_) => true,
+            Self::RequirementsResolve(_, error) | Self::RequirementsInstall(_, error) => {
+                error.is_user_failure()
+            }
+            Self::Io(_) | Self::Virtualenv(_) => false,
+        }
+    }
+
     fn is_build_backend_error(&self) -> bool {
         match self {
             Self::Io(_)

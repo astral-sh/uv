@@ -45,6 +45,18 @@ pub enum Error {
 }
 
 impl Error {
+    /// Return whether this is an expected user-facing failure.
+    pub fn is_user_failure(&self) -> bool {
+        match self {
+            Self::Dist(_, _, error) | Self::Distribution(error) => error.is_user_failure(),
+            Self::DistributionTypes(_) | Self::HashStrategy(_) | Self::WheelFilename(_) => true,
+            Self::Io(error) => matches!(
+                error.kind(),
+                std::io::ErrorKind::NotFound | std::io::ErrorKind::InvalidInput
+            ),
+        }
+    }
+
     /// Create an [`Error`] from a distribution error.
     fn from_dist(dist: Dist, err: uv_distribution::Error) -> Self {
         Self::Dist(

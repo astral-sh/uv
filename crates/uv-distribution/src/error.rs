@@ -213,6 +213,22 @@ pub enum Error {
     InstallWheelError(uv_install_wheel::Error),
 }
 
+fn is_not_found_error(mut error: &(dyn std::error::Error + 'static)) -> bool {
+    loop {
+        if error
+            .downcast_ref::<reqwest::Error>()
+            .and_then(reqwest::Error::status)
+            .is_some_and(|status| status == reqwest::StatusCode::NOT_FOUND)
+        {
+            return true;
+        }
+        let Some(source) = error.source() else {
+            return false;
+        };
+        error = source;
+    }
+}
+
 impl From<reqwest::Error> for Error {
     fn from(error: reqwest::Error) -> Self {
         Self::Reqwest(WrappedReqwestError::from(error))
@@ -242,6 +258,10 @@ impl uv_errors::Hinted for Error {
 }
 
 impl IsBuildBackendError for Error {
+    fn is_user_failure(&self) -> bool {
+        Self::is_user_failure(self)
+    }
+
     fn is_build_backend_error(&self) -> bool {
         match self {
             Self::Build(err) => err.is_build_backend_error(),
@@ -251,6 +271,62 @@ impl IsBuildBackendError for Error {
 }
 
 impl Error {
+    /// Return whether this is an expected user-facing failure.
+    pub fn is_user_failure(&self) -> bool {
+        match self {
+            Self::NoBuild
+            | Self::NoBuildPackage(_)
+            | Self::InvalidUrl(_)
+            | Self::NonFileUrl(_)
+            | Self::WheelFilename(_)
+            | Self::WheelMetadataNameMismatch { .. }
+            | Self::WheelMetadataVersionMismatch { .. }
+            | Self::WheelFilenameNameMismatch { .. }
+            | Self::WheelFilenameVersionMismatch { .. }
+            | Self::BuiltWheelIncompatibleHostPlatform { .. }
+            | Self::BuiltWheelIncompatibleTargetPlatform { .. }
+            | Self::Metadata(_)
+            | Self::WheelMetadata(..)
+            | Self::Extract(..)
+            | Self::MissingPkgInfo
+            | Self::MissingSubdirectory(..)
+            | Self::MissingSourceDistGitLfsArtifacts(..)
+            | Self::MissingWheelGitLfsArtifacts(..)
+            | Self::PkgInfo(_)
+            | Self::MissingPyprojectToml
+            | Self::PyprojectToml(_)
+            | Self::MetadataLowering(_)
+            | Self::NotFound(_)
+            | Self::RequiresPython(..)
+            | Self::MismatchedHashes { .. }
+            | Self::MismatchedSize { .. }
+            | Self::MissingHashes { .. }
+            | Self::MissingActualHashes { .. }
+            | Self::MissingExpectedHashes { .. }
+            | Self::HashesNotSupportedSourceTree(_)
+            | Self::HashesNotSupportedGit(_) => true,
+            Self::Build(error) => error.is_user_failure(),
+            Self::InstallWheelError(error) => error.is_user_failure(),
+            Self::Git(error) => error.is_user_failure(),
+            Self::Reqwest(error) => error.is_user_failure(),
+            Self::Client(error) => error.is_user_failure(),
+            Self::ClientBuild(error) => error.is_user_failure(),
+            Self::CacheRead(_)
+            | Self::CacheWrite(_)
+            | Self::CacheLock(_)
+            | Self::CacheDecode(_)
+            | Self::CacheEncode(_)
+            | Self::CacheWalk(_)
+            | Self::CacheInfo(_)
+            | Self::ReadInstalled(..)
+            | Self::CacheHeal(..)
+            | Self::BaseInterpreter(_)
+            | Self::Join(_)
+            | Self::HashExhaustion(_) => false,
+            Self::ReqwestMiddlewareError(error) => is_not_found_error(error.as_ref()),
+        }
+    }
+
     /// Construct a hash mismatch error.
     pub fn hash_mismatch(
         distribution: String,

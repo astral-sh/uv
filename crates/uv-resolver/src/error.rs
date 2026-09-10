@@ -150,6 +150,33 @@ pub enum ResolveError {
     },
 }
 
+impl ResolveError {
+    /// Return whether this is an expected user-facing failure.
+    pub fn is_user_failure(&self) -> bool {
+        match self {
+            Self::Dependencies(error, ..) => error.is_user_failure(),
+            Self::Distribution(error) => error.is_user_failure(),
+            Self::ConflictingUrls { .. }
+            | Self::ConflictingIndexesForEnvironment { .. }
+            | Self::ConflictingIndexes(..)
+            | Self::DisallowedUrl { .. }
+            | Self::DistributionType(_)
+            | Self::NoSolution(_)
+            | Self::UnhashedPackage(_)
+            | Self::PackageUnavailable(_)
+            | Self::InvalidExtraInConflictMarker { .. }
+            | Self::InvalidValueInConflictMarker { .. }
+            | Self::MismatchedPackageName { .. } => true,
+            Self::Dist(_, _, _, error) => error.is_user_failure(),
+            Self::Client(error) => error.is_user_failure(),
+            Self::ChannelClosed
+            | Self::UnregisteredTask(_)
+            | Self::InvalidVersion(_)
+            | Self::ConflictingDistribution(_) => false,
+        }
+    }
+}
+
 impl uv_errors::Hinted for ResolveError {
     fn hints(&self) -> uv_errors::Hints<'_> {
         match self {

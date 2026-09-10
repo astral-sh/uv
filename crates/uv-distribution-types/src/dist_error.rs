@@ -13,12 +13,13 @@ use crate::{
     BuiltDist, Dist, DistRef, Edge, Name, Node, RequestedDist, Resolution, ResolvedDist, SourceDist,
 };
 
-/// Inspect whether an error type is a build error.
-pub trait IsBuildBackendError:
-    uv_errors::Hinted + std::error::Error + Send + Sync + 'static
-{
+/// Inspect build failures without depending on their concrete error types.
+pub trait IsBuildBackendError: uv_errors::Hinted + std::error::Error + Send + Sync + 'static {
     /// Returns whether the build backend failed to build the package, so it's not a uv error.
     fn is_build_backend_error(&self) -> bool;
+
+    /// Return whether this is an expected user-facing failure.
+    fn is_user_failure(&self) -> bool;
 }
 
 /// The operation(s) that failed when reporting an error with a distribution.
