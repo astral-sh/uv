@@ -62,12 +62,15 @@ def request(url: str, *, data=None, headers=None, method=None) -> bytes:
         raise RuntimeError("HTTP request failed") from None
 
 
-def upload_request(metadata: dict, token: str) -> dict:
+def upload_request(metadata: dict, token: str | None) -> dict:
+    headers = {"Content-Type": "application/json"}
+    if token:
+        headers["Authorization"] = token
     return json.loads(
         request(
             UPLOAD_URL,
             data=json.dumps(metadata).encode(),
-            headers={"Content-Type": "application/json", "Authorization": token},
+            headers=headers,
         )
     )
 
@@ -111,20 +114,20 @@ def verify_profile(profile: Path, metadata: dict) -> None:
         raise ValueError("Profile archive does not match its upload metadata")
 
 
-def verify_source(metadata: dict, sha: str, run_id: str, mode: str) -> None:
+def verify_recording(
+    metadata: dict, sha: str, run_id: str, mode: str, ref: str, event: str
+) -> None:
     expected = {
         "repositoryProvider": "GITHUB",
         "runEnvironment": "GITHUB_ACTIONS",
         "owner": "astral-sh",
         "repository": "uv",
-        "ref": "refs/heads/main",
-        "event": "push",
+        "ref": ref,
+        "event": event,
         "commitHash": sha,
     }
     if any(metadata.get(key) != value for key, value in expected.items()):
-        raise ValueError(
-            "Expected measurements from the requested public uv/main commit"
-        )
+        raise ValueError("Expected measurements from the requested public uv run")
     if metadata["runPart"]["runId"] != run_id:
         raise ValueError("Measurements belong to a different GitHub Actions run")
     if metadata["runner"]["executor"] != EXECUTORS[mode]:
@@ -133,15 +136,23 @@ def verify_source(metadata: dict, sha: str, run_id: str, mode: str) -> None:
         raise ValueError("Unsupported profile encoding")
 
 
+def verify_source(metadata: dict, sha: str, run_id: str, mode: str) -> None:
+    verify_recording(metadata, sha, run_id, mode, "refs/heads/main", "push")
+
+
 class CaptureServer(ThreadingHTTPServer):
     """A write-through relay: retain exactly what the runner uploads to CodSpeed."""
 
-    def __init__(self, directory: Path, sha: str, run_id: str, mode: str):
+    def __init__(
+        self, directory: Path, sha: str, run_id: str, mode: str, ref: str, event: str
+    ):
         super().__init__(("127.0.0.1", 0), CaptureHandler)
         self.directory = directory
         self.sha = sha
         self.run_id = run_id
         self.mode = mode
+        self.ref = ref
+        self.event = event
         self.nonce = secrets.token_urlsafe()
         self.pending: tuple[dict, str] | None = None
         self.complete = False
@@ -179,12 +190,15 @@ class CaptureHandler(BaseHTTPRequestHandler):
             if not 0 < length <= 1024 * 1024 or self.server.complete:
                 raise ValueError("Unexpected metadata upload")
             metadata = json.loads(self.rfile.read(length))
-            verify_source(
-                metadata, self.server.sha, self.server.run_id, self.server.mode
+            verify_recording(
+                metadata,
+                self.server.sha,
+                self.server.run_id,
+                self.server.mode,
+                self.server.ref,
+                self.server.event,
             )
             token = self.headers.get("Authorization")
-            if not token:
-                raise ValueError("Source upload must use OIDC authentication")
             response = upload_request(metadata, token)
             self.server.pending = metadata, response["uploadUrl"]
             response["uploadUrl"] = f"{self.server.endpoint}/profile"
@@ -225,12 +239,8 @@ class CaptureHandler(BaseHTTPRequestHandler):
 
 
 def start_capture(directory: Path, mode: str) -> None:
-    if (
-        os.environ["GITHUB_REPOSITORY"] != SOURCE_REPOSITORY
-        or os.environ["GITHUB_EVENT_NAME"] != "push"
-        or os.environ["GITHUB_REF"] != "refs/heads/main"
-    ):
-        raise ValueError("Only public uv/main pushes may publish shared profiles")
+    if os.environ["GITHUB_REPOSITORY"] != SOURCE_REPOSITORY:
+        raise ValueError("Only public uv runs may publish shared profiles")
     directory.mkdir(parents=True, exist_ok=False)
     with (directory / "capture.log").open("wb") as log:
         process = subprocess.Popen(
@@ -253,7 +263,12 @@ def start_capture(directory: Path, mode: str) -> None:
 
 def serve_capture(directory: Path, mode: str) -> None:
     with CaptureServer(
-        directory, os.environ["GITHUB_SHA"], os.environ["GITHUB_RUN_ID"], mode
+        directory,
+        os.environ["GITHUB_SHA"],
+        os.environ["GITHUB_RUN_ID"],
+        mode,
+        os.environ["GITHUB_REF"],
+        os.environ["GITHUB_EVENT_NAME"],
     ) as server:
         ready = directory / "endpoint.partial"
         ready.write_text(server.endpoint, encoding="utf-8")
@@ -277,45 +292,69 @@ def github_items(path: str, key: str) -> list[dict]:
     return [item for page in pages for item in page[key]]
 
 
-def find_source_run(sha: str, timeout: float = 3600) -> str:
+def github_object(path: str, *, missing_ok: bool = False) -> dict | None:
+    result = subprocess.run(
+        ["gh", "api", path], capture_output=True, text=True, check=False
+    )
+    if result.returncode:
+        if missing_ok and "(HTTP 404)" in result.stderr:
+            return None
+        raise RuntimeError("Could not read GitHub workflow information")
+    return json.loads(result.stdout)
+
+
+def find_source_run(sha: str, run_id: str | None = None) -> str | None:
     if not re.fullmatch(r"[0-9a-f]{40}", sha):
         raise ValueError("Expected a full commit SHA")
-    deadline = time.monotonic() + timeout
-    while True:
+    if run_id:
+        if not run_id.isdecimal():
+            raise ValueError("Expected a GitHub Actions run ID")
+        runs = [github_object(f"repos/{SOURCE_REPOSITORY}/actions/runs/{run_id}")]
+    else:
         runs = github_items(
             f"repos/{SOURCE_REPOSITORY}/actions/workflows/ci.yml/runs"
             f"?event=push&head_sha={sha}&per_page=100",
             "workflow_runs",
         )
-        for run in runs:
-            if (
-                run["head_sha"] != sha
-                or run["head_branch"] != "main"
-                or run["event"] != "push"
-                or run["repository"]["full_name"] != SOURCE_REPOSITORY
-                or run["head_repository"]["full_name"] != SOURCE_REPOSITORY
-            ):
-                continue
-            run_id = str(run["id"])
-            jobs = github_items(
-                f"repos/{SOURCE_REPOSITORY}/actions/runs/{run_id}/jobs?per_page=100",
-                "jobs",
-            )
-            successful = {job["name"] for job in jobs if job["conclusion"] == "success"}
-            if not SOURCE_JOBS <= successful:
-                continue
-            artifacts = github_items(
-                f"repos/{SOURCE_REPOSITORY}/actions/runs/{run_id}/artifacts?per_page=100",
-                "artifacts",
-            )
-            available = {item["name"] for item in artifacts if not item["expired"]}
-            if set(ARTIFACTS.values()) <= available:
-                return run_id
-        if time.monotonic() >= deadline:
-            raise RuntimeError(
-                "No successful uv/main benchmark profiles for this commit"
-            )
-        time.sleep(30)
+    for run in runs:
+        if not run or (
+            run["head_sha"] != sha
+            or run["head_branch"] != "main"
+            or run["event"] != "push"
+            or run["path"] != ".github/workflows/ci.yml"
+            or run["repository"]["full_name"] != SOURCE_REPOSITORY
+            or run["head_repository"]["full_name"] != SOURCE_REPOSITORY
+        ):
+            continue
+        source_run = str(run["id"])
+        jobs = github_items(
+            f"repos/{SOURCE_REPOSITORY}/actions/runs/{source_run}/jobs?per_page=100",
+            "jobs",
+        )
+        successful = {job["name"] for job in jobs if job["conclusion"] == "success"}
+        if not SOURCE_JOBS <= successful:
+            continue
+        artifacts = github_items(
+            f"repos/{SOURCE_REPOSITORY}/actions/runs/{source_run}/artifacts?per_page=100",
+            "artifacts",
+        )
+        available = {item["name"] for item in artifacts if not item["expired"]}
+        if set(ARTIFACTS.values()) <= available:
+            return source_run
+    return None
+
+
+def commit_is_mirrored(sha: str) -> bool:
+    repository = os.environ["GITHUB_REPOSITORY"]
+    if repository not in DESTINATIONS or os.environ["GITHUB_REF"] != "refs/heads/main":
+        raise ValueError("Expected a mirror main-branch workflow")
+    if not re.fullmatch(r"[0-9a-f]{40}", sha):
+        raise ValueError("Expected a full commit SHA")
+    comparison = github_object(
+        f"repos/{repository}/compare/{sha}...{os.environ['GITHUB_SHA']}",
+        missing_ok=True,
+    )
+    return comparison is not None and comparison["status"] in {"ahead", "identical"}
 
 
 def destination_metadata(source: dict, environment: Mapping[str, str]) -> dict:
@@ -369,13 +408,13 @@ def oidc_token() -> str:
     )["value"]
 
 
-def import_profiles(directory: Path, source_run: str) -> None:
+def import_profiles(directory: Path, source_run: str, source_sha: str) -> None:
     prepared = []
     for mode, artifact in ARTIFACTS.items():
         bundle = directory / artifact
         source = json.loads((bundle / "metadata.json").read_text())
         profile = bundle / "profile.tar"
-        verify_source(source, os.environ["GITHUB_SHA"], source_run, mode)
+        verify_source(source, source_sha, source_run, mode)
         verify_profile(profile, source)
         metadata = destination_metadata(source, os.environ)
         prepared.append((mode, profile, metadata))
@@ -393,10 +432,14 @@ def main() -> None:
         command.add_argument("directory", type=Path)
         command.add_argument("mode", choices=EXECUTORS)
     commands.add_parser("finish").add_argument("directory", type=Path)
-    commands.add_parser("find").add_argument("sha")
+    command = commands.add_parser("find")
+    command.add_argument("sha")
+    command.add_argument("--run-id")
+    command.add_argument("--require-mirrored", action="store_true")
     command = commands.add_parser("import")
     command.add_argument("directory", type=Path)
     command.add_argument("source_run")
+    command.add_argument("source_sha")
     args = parser.parse_args()
     match args.command:
         case "start":
@@ -406,9 +449,12 @@ def main() -> None:
         case "finish":
             finish_capture(args.directory)
         case "find":
-            print(f"run-id={find_source_run(args.sha)}")
+            source_run = None
+            if not args.require_mirrored or commit_is_mirrored(args.sha):
+                source_run = find_source_run(args.sha, args.run_id)
+            print(f"run-id={source_run or ''}")
         case "import":
-            import_profiles(args.directory, args.source_run)
+            import_profiles(args.directory, args.source_run, args.source_sha)
 
 
 if __name__ == "__main__":

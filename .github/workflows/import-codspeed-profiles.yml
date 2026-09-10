@@ -1,0 +1,78 @@
+name: Import CodSpeed profiles
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      source-run:
+        description: "Public uv CI run containing the profiles"
+        type: string
+      source-sha:
+        description: "Public uv commit to import"
+        type: string
+
+permissions:
+  contents: read
+
+env:
+  UV_LOCKED: 1
+
+jobs:
+  import:
+    # Each mirror owns its CodSpeed upload. A main sync and the upstream CI
+    # completion both trigger this workflow, so either ordering is supported.
+    if: ${{ (github.repository == 'astral-sh/uv-dev' || github.repository == 'astral-sh/uv-security') && github.ref == 'refs/heads/main' }}
+    runs-on: github-ubuntu-24.04-x86_64-2
+    timeout-minutes: 15
+    environment: automations
+    permissions:
+      contents: read
+      id-token: write # for the credential broker and CodSpeed
+    env:
+      SOURCE_SHA: ${{ inputs.source-sha || github.sha }}
+    steps:
+      - name: Check out trusted main
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          version: "0.12.10"
+          checksum: "173d95a0c32d18c896c46ba6fafbf3cf9c14ab74b033f81b76c883ef492a976b"
+
+      - name: Find public main profiles
+        id: source
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_RUN: ${{ inputs.source-run }}
+        run: uv run --script scripts/codspeed-profiles.py find "$SOURCE_SHA" --run-id "$SOURCE_RUN" --require-mirrored >> "$GITHUB_OUTPUT"
+
+      - name: Get public benchmark artifact token
+        id: token
+        if: ${{ steps.source.outputs.run-id != '' }}
+        uses: open-security-tools/ost-simple-sts@9e012247e07c39080fb6a832dbfbcfeacebc19c4
+        with:
+          exchange-url: ${{ secrets.STS_API_URL }}/exchange
+          audience: ${{ secrets.STS_API_URL }}
+          repository: astral-sh/uv
+          permissions: |
+            actions: read
+
+      - name: Download public main profiles
+        if: ${{ steps.source.outputs.run-id != '' }}
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          github-token: ${{ steps.token.outputs.token }}
+          repository: astral-sh/uv
+          run-id: ${{ steps.source.outputs.run-id }}
+          pattern: codspeed-profiles-*
+          path: ${{ runner.temp }}/codspeed-profiles
+
+      - name: Import public main profiles
+        if: ${{ steps.source.outputs.run-id != '' }}
+        env:
+          SOURCE_RUN: ${{ steps.source.outputs.run-id }}
+        run: uv run --script scripts/codspeed-profiles.py import "$RUNNER_TEMP/codspeed-profiles" "$SOURCE_RUN" "$SOURCE_SHA"

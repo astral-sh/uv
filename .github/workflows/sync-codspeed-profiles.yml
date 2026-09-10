@@ -1,0 +1,79 @@
+name: Sync CodSpeed profiles
+
+on:
+  workflow_dispatch:
+    inputs:
+      source-run:
+        description: "Completed public uv CI run"
+        required: true
+        type: string
+      source-sha:
+        description: "Public uv commit measured by the run"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+env:
+  UV_LOCKED: 1
+
+jobs:
+  source:
+    if: ${{ github.repository == 'astral-sh/uv' && github.ref == 'refs/heads/main' }}
+    runs-on: github-ubuntu-24.04-x86_64-2
+    timeout-minutes: 5
+    outputs:
+      run-id: ${{ steps.source.outputs.run-id }}
+    steps:
+      - name: Check out trusted main
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          version: "0.12.10"
+          checksum: "173d95a0c32d18c896c46ba6fafbf3cf9c14ab74b033f81b76c883ef492a976b"
+
+      - name: Find public main profiles
+        id: source
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_RUN: ${{ inputs.source-run }}
+          SOURCE_SHA: ${{ inputs.source-sha }}
+        run: uv run --script scripts/codspeed-profiles.py find "$SOURCE_SHA" --run-id "$SOURCE_RUN" >> "$GITHUB_OUTPUT"
+
+  dispatch:
+    needs: source
+    if: ${{ needs.source.outputs.run-id != '' }}
+    strategy:
+      matrix:
+        repository: [astral-sh/uv-dev, astral-sh/uv-security]
+    runs-on: github-ubuntu-24.04-x86_64-2
+    timeout-minutes: 5
+    environment: automations
+    permissions:
+      id-token: write # for the credential broker
+    steps:
+      - name: Get mirror workflow token
+        id: token
+        uses: open-security-tools/ost-simple-sts@9e012247e07c39080fb6a832dbfbcfeacebc19c4
+        with:
+          exchange-url: ${{ secrets.STS_API_URL }}/exchange
+          audience: ${{ secrets.STS_API_URL }}
+          repository: ${{ matrix.repository }}
+          permissions: |
+            actions: write
+
+      - name: Dispatch mirror import
+        env:
+          GH_TOKEN: ${{ steps.token.outputs.token }}
+          DESTINATION: ${{ matrix.repository }}
+          SOURCE_RUN: ${{ needs.source.outputs.run-id }}
+          SOURCE_SHA: ${{ inputs.source-sha }}
+        run: |
+          gh workflow run import-codspeed-profiles.yml \
+            --repo "$DESTINATION" --ref main \
+            --field "source-run=$SOURCE_RUN" --field "source-sha=$SOURCE_SHA"

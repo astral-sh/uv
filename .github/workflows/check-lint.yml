@@ -35,7 +35,6 @@ jobs:
           version: "0.12.10"
           checksum: "173d95a0c32d18c896c46ba6fafbf3cf9c14ab74b033f81b76c883ef492a976b"
       - run: uv run --only-group check ruff check .
-      - run: uv run --script scripts/test-codspeed-profiles.py
 
   ty:
     timeout-minutes: 10

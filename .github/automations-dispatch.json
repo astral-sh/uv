@@ -18,6 +18,23 @@
     {
       "repository": "uv",
       "on": {
+        "workflow_run": ["completed"]
+      },
+      "head_repositories": ["uv"],
+      "conditions": {
+        "/workflow_run/event": "push",
+        "/workflow_run/head_branch": "main",
+        "/workflow/path": ".github/workflows/ci.yml"
+      },
+      "workflow": "sync-codspeed-profiles.yml",
+      "inputs": {
+        "source-run": "/workflow_run/id",
+        "source-sha": "/workflow_run/head_sha"
+      }
+    },
+    {
+      "repository": "uv",
+      "on": {
         "pull_request": ["opened", "reopened"]
       },
       "conditions": {
