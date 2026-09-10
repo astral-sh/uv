@@ -44,7 +44,7 @@ impl<'a> HintMessage<'a> {
     pub fn new(message: impl Into<Cow<'a, str>>) -> Self {
         Self {
             message: message.into(),
-            ordering: HintOrdering::Any,
+            ordering: HintOrdering::default(),
         }
     }
 
