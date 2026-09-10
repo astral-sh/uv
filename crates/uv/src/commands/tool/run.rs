@@ -1244,7 +1244,7 @@ pub(crate) enum ToolRunScriptError {
 
 impl uv_errors::Hinted for ToolRunScriptError {
     fn hints(&self) -> uv_errors::Hints<'_> {
-        uv_errors::Hints::from(match self {
+        let message = match self {
             Self::FromScript {
                 package_name,
                 target,
@@ -1267,6 +1267,9 @@ impl uv_errors::Hinted for ToolRunScriptError {
                 package_name.cyan(),
                 format!("{invocation} --from {package_name} {target}").green(),
             ),
-        })
+        };
+        uv_errors::Hints::from(
+            uv_errors::HintMessage::new(message).with_ordering(uv_errors::HintOrdering::Last),
+        )
     }
 }

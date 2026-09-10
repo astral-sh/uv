@@ -56,7 +56,7 @@ impl<'a> HintMessage<'a> {
     }
 
     /// Convert a borrowed hint to owned, extending its lifetime to `'static`.
-    pub fn into_owned(self) -> HintMessage<'static> {
+    fn into_owned(self) -> HintMessage<'static> {
         HintMessage {
             message: Cow::Owned(self.message.into_owned()),
             ordering: self.ordering,
