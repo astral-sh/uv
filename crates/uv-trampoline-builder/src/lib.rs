@@ -339,6 +339,7 @@ fn read_resource(handle: windows::Win32::Foundation::HMODULE, name: &str) -> Opt
     // checked before reading the number of bytes reported by `SizeofResource`.
     #[allow(unsafe_code)]
     unsafe {
+        // Find the resource
         let resource = FindResourceW(
             Some(handle),
             windows::core::PCWSTR(name_wide.as_ptr()),
@@ -348,6 +349,7 @@ fn read_resource(handle: windows::Win32::Foundation::HMODULE, name: &str) -> Opt
             return None;
         }
 
+        // Get resource size and data
         let size = SizeofResource(Some(handle), resource);
         if size == 0 {
             return Some(Vec::new());
@@ -359,6 +361,7 @@ fn read_resource(handle: windows::Win32::Foundation::HMODULE, name: &str) -> Opt
             return None;
         }
 
+        // Copy the resource data into a Vec
         Some(std::slice::from_raw_parts(pointer, size as usize).to_vec())
     }
 }
