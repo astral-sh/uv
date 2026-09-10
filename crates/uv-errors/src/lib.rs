@@ -113,15 +113,13 @@ impl<'a> Hints<'a> {
     }
 
     /// Iterate over hint messages in display order.
-    pub fn iter(&self) -> impl Iterator<Item = &str> {
-        [HintOrdering::First, HintOrdering::Any, HintOrdering::Last]
-            .into_iter()
-            .flat_map(|ordering| {
-                self.0
-                    .iter()
-                    .filter(move |hint| hint.ordering == ordering)
-                    .map(|hint| hint.message.as_ref())
-            })
+    pub fn iter(&self) -> HintsIter<'_, 'a> {
+        HintsIter {
+            hints: &self.0,
+            current: self.0.iter(),
+            ordering: HintOrdering::First,
+            remaining: [HintOrdering::Any, HintOrdering::Last].into_iter(),
+        }
     }
 
     /// Extend with another set of hints, converting borrowed hints to owned.
@@ -139,6 +137,48 @@ impl<'a> Hints<'a> {
                 self.0.push(hint.into_owned());
             }
         }
+    }
+}
+
+/// A borrowed iterator over hint messages in display order.
+pub struct HintsIter<'h, 'a> {
+    hints: &'h [HintMessage<'a>],
+    current: std::slice::Iter<'h, HintMessage<'a>>,
+    ordering: HintOrdering,
+    remaining: std::array::IntoIter<HintOrdering, 2>,
+}
+
+impl<'h> Iterator for HintsIter<'h, '_> {
+    type Item = &'h str;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        loop {
+            if let Some(hint) = self.current.find(|hint| hint.ordering == self.ordering) {
+                return Some(hint.message.as_ref());
+            }
+            self.ordering = self.remaining.next()?;
+            self.current = self.hints.iter();
+        }
+    }
+}
+
+impl<'h, 'a> IntoIterator for &'h Hints<'a> {
+    type Item = &'h str;
+    type IntoIter = HintsIter<'h, 'a>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.iter()
+    }
+}
+
+impl<'a> IntoIterator for Hints<'a> {
+    type Item = Cow<'a, str>;
+    type IntoIter =
+        std::iter::Map<std::vec::IntoIter<HintMessage<'a>>, fn(HintMessage<'a>) -> Cow<'a, str>>;
+
+    fn into_iter(mut self) -> Self::IntoIter {
+        self.0.sort_by_key(|hint| hint.ordering);
+        self.0.into_iter().map(|hint| hint.message)
     }
 }
 
@@ -195,7 +235,7 @@ impl<'a, T: Into<HintMessage<'a>>> FromIterator<T> for Hints<'a> {
 
 impl fmt::Display for Hints<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        for hint in self.iter() {
+        for hint in self {
             write!(f, "\n{HintPrefix} {hint}")?;
         }
         Ok(())
@@ -359,7 +399,7 @@ pub fn write_error_chain_with_options<C: DynColor + Copy, W: fmt::Write>(
         }
     }
 
-    for hint in hints.iter() {
+    for hint in hints {
         writeln!(&mut stream, "\n{HintPrefix} {hint}")?;
     }
 
@@ -410,7 +450,17 @@ mod tests {
         hint: last 1
         hint: last 2
         ");
-        assert_debug_snapshot!(hints.iter().collect::<Vec<_>>(), @r#"
+        assert_debug_snapshot!((&hints).into_iter().collect::<Vec<_>>(), @r#"
+        [
+            "first 1",
+            "first 2",
+            "any 1",
+            "any 2",
+            "last 1",
+            "last 2",
+        ]
+        "#);
+        assert_debug_snapshot!(hints.into_iter().collect::<Vec<_>>(), @r#"
         [
             "first 1",
             "first 2",

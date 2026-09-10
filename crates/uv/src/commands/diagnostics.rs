@@ -109,7 +109,8 @@ impl OperationDiagnostic {
             err => return Some(err),
         };
 
-        // Render all hints after the error output.
+        // Caller-provided advice describes how to adjust the command, so show the underlying
+        // failure's more specific hints first.
         hints.extend(
             self.hints
                 .into_iter()
