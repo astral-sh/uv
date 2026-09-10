@@ -627,7 +627,7 @@ jobs:
           upstream_number=$(jq --exit-status --raw-output '.number | select(type == "number")' <<< "$upstream_pull_request")
 
           # Automation controls and triage labels belong to the source repository.
-          upstream_labels=$(jq '{labels: [.labels[].name | select(test("^(bot|priority|size):") | not)]}' <<< "$source_pull_request")
+          upstream_labels=$(jq '{labels: [.labels[].name | select(test("^(bot|priority|size|risk):") | not)]}' <<< "$source_pull_request")
           if jq --exit-status '.labels | length > 0' <<< "$upstream_labels" > /dev/null; then
             gh api \
               --method POST \
