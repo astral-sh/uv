@@ -1486,7 +1486,13 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
             .into());
         }
         Commands::GenerateShellCompletion(args) => {
-            args.shell.generate(&mut Cli::command(), &mut stdout());
+            let mut buffer = Vec::new();
+            args.shell.generate(&mut Cli::command(), &mut buffer);
+            if let Err(err) = std::io::Write::write_all(&mut stdout(), &buffer) {
+                if err.kind() != std::io::ErrorKind::BrokenPipe {
+                    return Err(err.into());
+                }
+            }
             Ok(ExitStatus::Success)
         }
         Commands::Tool(ToolNamespace {
@@ -1519,7 +1525,13 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
                         uvx = uvx.arg(arg);
                     }
                 }
-                shell.generate(&mut uvx, &mut stdout());
+                let mut buffer = Vec::new();
+                shell.generate(&mut uvx, &mut buffer);
+                if let Err(err) = std::io::Write::write_all(&mut stdout(), &buffer) {
+                    if err.kind() != std::io::ErrorKind::BrokenPipe {
+                        return Err(err.into());
+                    }
+                }
                 return Ok(ExitStatus::Success);
             }
 
