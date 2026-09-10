@@ -8,7 +8,7 @@ use version_ranges::Ranges;
 use uv_distribution_types::{
     DerivationChain, DerivationStep, Dist, DistErrorKind, Name, RequestedDist,
 };
-use uv_errors::{Hinted, Hints};
+use uv_errors::{HintOrdering, Hinted, Hints};
 use uv_normalize::PackageName;
 use uv_pep440::{Version, strip_local_version_sentinels};
 
@@ -110,7 +110,12 @@ impl OperationDiagnostic {
         };
 
         // Render all hints after the error output.
-        hints.extend(self.hints);
+        hints.extend(
+            self.hints
+                .into_iter()
+                .collect::<Hints<'_>>()
+                .with_ordering(HintOrdering::Last),
+        );
         if !hints.is_empty() {
             anstream::eprintln!("{hints}");
         }

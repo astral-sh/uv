@@ -21,10 +21,37 @@ pub trait Hinted {
     }
 }
 
+/// The display order of a user-facing hint.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum HintOrdering {
+    /// Advice that should be shown before other hints.
+    First,
+    /// Advice with no preferred placement.
+    #[default]
+    Any,
+    /// General advice that should follow more specific hints.
+    Last,
+}
+
+struct HintMessage<'a> {
+    message: Cow<'a, str>,
+    ordering: HintOrdering,
+}
+
+impl HintMessage<'_> {
+    fn into_owned(self) -> HintMessage<'static> {
+        HintMessage {
+            message: Cow::Owned(self.message.into_owned()),
+            ordering: self.ordering,
+        }
+    }
+}
+
 /// A collection of user-facing hint messages.
 ///
 /// Each hint is rendered on its own line, prefixed with the styled `hint:` label.
-pub struct Hints<'a>(Vec<Cow<'a, str>>);
+/// Hints are grouped by [`HintOrdering`], retaining insertion order within each group.
+pub struct Hints<'a>(Vec<HintMessage<'a>>);
 
 impl Hints<'_> {
     /// No hints.
@@ -34,17 +61,24 @@ impl Hints<'_> {
 
     /// Add a single owned hint.
     pub fn push(&mut self, hint: String) {
-        self.0.push(Cow::Owned(hint));
+        self.0.push(HintMessage {
+            message: Cow::Owned(hint),
+            ordering: HintOrdering::Any,
+        });
+    }
+
+    /// Set the display order of every hint in this collection.
+    #[must_use]
+    pub fn with_ordering(mut self, ordering: HintOrdering) -> Self {
+        for hint in &mut self.0 {
+            hint.ordering = ordering;
+        }
+        self
     }
 
     /// Convert all borrowed hints to owned, extending the lifetime to `'static`.
     pub fn into_owned(self) -> Hints<'static> {
-        Hints(
-            self.0
-                .into_iter()
-                .map(|cow| Cow::Owned(cow.into_owned()))
-                .collect(),
-        )
+        Hints(self.0.into_iter().map(HintMessage::into_owned).collect())
     }
 
     /// Whether the collection is empty.
@@ -53,14 +87,18 @@ impl Hints<'_> {
     }
 
     /// Extend with another set of hints, converting borrowed hints to owned.
-    pub fn extend<T>(&mut self, other: impl IntoIterator<Item = T>)
-    where
-        T: Into<String>,
-    {
-        for hint in other {
-            let hint = Cow::Owned(hint.into());
-            if !self.0.iter().any(|existing| existing == &hint) {
-                self.0.push(hint);
+    ///
+    /// Duplicate messages retain their first insertion position and earliest ordering.
+    pub fn extend(&mut self, other: Hints<'_>) {
+        for hint in other.0 {
+            if let Some(existing) = self
+                .0
+                .iter_mut()
+                .find(|existing| existing.message == hint.message)
+            {
+                existing.ordering = existing.ordering.min(hint.ordering);
+            } else {
+                self.0.push(hint.into_owned());
             }
         }
     }
@@ -95,26 +133,41 @@ impl<E: fmt::Display> fmt::Display for ErrorWithHints<'_, E> {
 
 impl<'a> From<&'a str> for Hints<'a> {
     fn from(hint: &'a str) -> Self {
-        Self(vec![Cow::Borrowed(hint)])
+        Self(vec![HintMessage {
+            message: Cow::Borrowed(hint),
+            ordering: HintOrdering::Any,
+        }])
     }
 }
 
 impl From<String> for Hints<'_> {
     fn from(hint: String) -> Self {
-        Self(vec![Cow::Owned(hint)])
+        Self(vec![HintMessage {
+            message: Cow::Owned(hint),
+            ordering: HintOrdering::Any,
+        }])
     }
 }
 
 impl FromIterator<String> for Hints<'_> {
     fn from_iter<I: IntoIterator<Item = String>>(iter: I) -> Self {
-        Self(iter.into_iter().map(Cow::Owned).collect())
+        Self(
+            iter.into_iter()
+                .map(|message| HintMessage {
+                    message: Cow::Owned(message),
+                    ordering: HintOrdering::Any,
+                })
+                .collect(),
+        )
     }
 }
 
 impl fmt::Display for Hints<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        for hint in &self.0 {
-            write!(f, "\n{HintPrefix} {hint}")?;
+        let mut hints = self.0.iter().collect::<Vec<_>>();
+        hints.sort_by_key(|hint| hint.ordering);
+        for hint in hints {
+            write!(f, "\n{HintPrefix} {}", hint.message)?;
         }
         Ok(())
     }
@@ -124,8 +177,13 @@ impl<'a> IntoIterator for Hints<'a> {
     type Item = Cow<'a, str>;
     type IntoIter = std::vec::IntoIter<Cow<'a, str>>;
 
-    fn into_iter(self) -> Self::IntoIter {
-        self.0.into_iter()
+    fn into_iter(mut self) -> Self::IntoIter {
+        self.0.sort_by_key(|hint| hint.ordering);
+        self.0
+            .into_iter()
+            .map(|hint| hint.message)
+            .collect::<Vec<_>>()
+            .into_iter()
     }
 }
 
@@ -297,11 +355,11 @@ pub fn write_error_chain_with_options<C: DynColor + Copy, W: fmt::Write>(
 mod tests {
     use anyhow::anyhow;
     use indoc::indoc;
-    use insta::assert_snapshot;
+    use insta::{assert_debug_snapshot, assert_snapshot};
     use owo_colors::AnsiColors;
 
     use super::{
-        ErrorOptions, ErrorWithHints, HintPrefix, Hints, debug_error_chain,
+        ErrorOptions, ErrorWithHints, HintOrdering, Hints, debug_error_chain,
         write_error_chain_with_options,
     };
 
@@ -315,19 +373,72 @@ mod tests {
             .into_iter()
             .map(std::borrow::Cow::into_owned)
             .collect::<Vec<_>>();
-        assert_eq!(hints, vec!["same".to_string(), "other".to_string()]);
+        assert_debug_snapshot!(hints, @r#"
+        [
+            "same",
+            "other",
+        ]
+        "#);
+    }
+
+    #[test]
+    fn hint_ordering_retains_insertion_order() {
+        let mut hints = Hints::from("any 1");
+        hints.extend(Hints::from("last 1").with_ordering(HintOrdering::Last));
+        hints.extend(Hints::from("first 1").with_ordering(HintOrdering::First));
+        hints.push("any 2".to_string());
+        hints.extend(Hints::from("last 2").with_ordering(HintOrdering::Last));
+        hints.extend(Hints::from("first 2").with_ordering(HintOrdering::First));
+
+        assert_snapshot!(anstream::adapter::strip_str(&hints.to_string()), @"
+        hint: first 1
+        hint: first 2
+        hint: any 1
+        hint: any 2
+        hint: last 1
+        hint: last 2
+        ");
+        assert_debug_snapshot!(hints.into_iter().collect::<Vec<_>>(), @r#"
+        [
+            "first 1",
+            "first 2",
+            "any 1",
+            "any 2",
+            "last 1",
+            "last 2",
+        ]
+        "#);
+    }
+
+    #[test]
+    fn duplicate_hints_retain_the_earliest_ordering() {
+        let message = String::from("shared");
+        let mut hints = Hints::from(message.as_str())
+            .with_ordering(HintOrdering::Last)
+            .into_owned();
+        drop(message);
+
+        hints.extend(Hints::from("first").with_ordering(HintOrdering::First));
+        hints.extend(Hints::from("shared").with_ordering(HintOrdering::First));
+        hints.extend(Hints::from("shared").with_ordering(HintOrdering::Last));
+        hints.extend(Hints::from("any"));
+
+        assert_snapshot!(anstream::adapter::strip_str(&hints.to_string()), @"
+        hint: shared
+        hint: first
+        hint: any
+        ");
     }
 
     #[test]
     fn error_with_hints_separates_hints_from_error() {
-        assert_eq!(
-            ErrorWithHints::new("error", Hints::from("fix it")).to_string(),
-            format!("error\n\n{HintPrefix} fix it")
-        );
-        assert_eq!(
-            ErrorWithHints::new("error", Hints::none()).to_string(),
-            "error"
-        );
+        let output = ErrorWithHints::new("error", Hints::from("fix it")).to_string();
+        assert_snapshot!(anstream::adapter::strip_str(&output), @"
+        error
+
+        hint: fix it
+        ");
+        assert_snapshot!(ErrorWithHints::new("error", Hints::none()), @"error");
     }
 
     #[test]
