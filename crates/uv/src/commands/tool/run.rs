@@ -100,7 +100,7 @@ pub(crate) struct ToolRunUsageError {
     context: ToolRunUsageContext,
 }
 
-impl uv_errors::Hint for ToolRunUsageError {
+impl uv_errors::Hinted for ToolRunUsageError {
     fn hints(&self) -> uv_errors::Hints<'_> {
         uv_errors::Hints::from(match &self.context {
             ToolRunUsageContext::UvxRun { arguments } => format!(

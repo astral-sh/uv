@@ -76,7 +76,7 @@ pub(crate) struct AddDependencyError {
     standard_library_package: Option<PackageName>,
 }
 
-impl uv_errors::Hint for AddDependencyError {
+impl uv_errors::Hinted for AddDependencyError {
     fn hints(&self) -> uv_errors::Hints<'_> {
         let mut hints = uv_errors::Hints::none();
         if let Some(package) = &self.standard_library_package {
