@@ -190,6 +190,10 @@ pub fn read_stdin_to_string_transcode() -> std::io::Result<String> {
 
 #[cfg(feature = "tokio")]
 fn transcode_to_string(raw: &[u8], source: &str) -> std::io::Result<String> {
+    // The decoder needs three bytes to detect a BOM, so handle empty UTF-16 files explicitly.
+    if raw == [0xff, 0xfe] || raw == [0xfe, 0xff] {
+        return Ok(String::new());
+    }
     let mut buf = String::with_capacity(1024);
     DecodeReaderBytes::new(raw)
         .read_to_string(&mut buf)
