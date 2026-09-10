@@ -8057,6 +8057,7 @@ pub(crate) fn is_wheel_unreachable(
 
 #[cfg(test)]
 mod tests {
+    use uv_distribution_types::HashCollection;
     use uv_pep440::VersionSpecifiers;
     use uv_pep508::MarkerEnvironmentBuilder;
     use uv_warnings::anstream;
@@ -8156,7 +8157,7 @@ wheels = [{ filename = "local-1.0.0-py3-none-any.whl", hash = "sha256:53a42340ae
         let unknown = "https://example.com/unknown-1.0.0-py3-none-any.whl"
             .parse()
             .expect("valid URL");
-        assert_eq!(hasher.collection(), None);
+        assert_eq!(hasher.collection(), HashCollection::None);
         assert_eq!(
             hasher.archive_policy_for_url(&remote),
             ArchiveHashPolicy::All(slice::from_ref(&digest))

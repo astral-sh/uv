@@ -21,7 +21,7 @@ use uv_redacted::DisplaySafeUrl;
 /// applies to the remaining distributions.
 #[derive(Debug, Default, Clone)]
 pub struct HashStrategy {
-    collection: Option<HashCollection>,
+    collection: HashCollection,
     verification: HashVerification,
 }
 
@@ -41,7 +41,7 @@ impl HashStrategy {
     /// Collect declared hashes for resolution, computing missing hashes according to the policy.
     pub fn collect(collection: HashCollection) -> Self {
         Self {
-            collection: Some(collection),
+            collection,
             ..Self::default()
         }
     }
@@ -64,7 +64,7 @@ impl HashStrategy {
     }
 
     /// Return the hash collection policy.
-    pub fn collection(&self) -> Option<HashCollection> {
+    pub fn collection(&self) -> HashCollection {
         self.collection
     }
 
@@ -120,9 +120,10 @@ impl HashStrategy {
     fn archive_policy_for_id(&self, id: impl FnOnce() -> VersionId) -> ArchiveHashPolicy<'_> {
         let validation = self.validation_for_id(id);
         match validation {
-            HashValidation::None => self
-                .collection
-                .map_or(ArchiveHashPolicy::None, |_| ArchiveHashPolicy::Generate),
+            HashValidation::None => match self.collection {
+                HashCollection::None => ArchiveHashPolicy::None,
+                HashCollection::Url | HashCollection::All => ArchiveHashPolicy::Generate,
+            },
             HashValidation::Any(_) | HashValidation::All(_) => validation.into(),
         }
     }
@@ -705,14 +706,14 @@ mod tests {
         assert_eq!(
             strategy.metadata_policy_for_url(&unknown_url),
             MetadataHashPolicy {
-                collection: Some(HashCollection::All),
+                collection: HashCollection::All,
                 validation: HashValidation::None,
             }
         );
         assert_eq!(
             strategy.metadata_policy_for_url(&url),
             MetadataHashPolicy {
-                collection: Some(HashCollection::All),
+                collection: HashCollection::All,
                 validation: HashValidation::All(slice::from_ref(&digest)),
             }
         );
@@ -743,7 +744,7 @@ mod tests {
         assert_eq!(
             strategy.metadata_policy_for_url(&url),
             MetadataHashPolicy {
-                collection: Some(HashCollection::All),
+                collection: HashCollection::All,
                 validation: HashValidation::All(&[]),
             }
         );

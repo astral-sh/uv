@@ -213,9 +213,10 @@ impl<'a, Context: BuildContext> SourceTreeResolver<'a, Context> {
                     path.user_display()
                 ));
             }
-            HashVerification::IfPresent(_) => {
-                Some(self.hasher.collection().unwrap_or(HashCollection::All))
-            }
+            HashVerification::IfPresent(_) => match self.hasher.collection() {
+                HashCollection::None => HashCollection::All,
+                collection @ (HashCollection::Url | HashCollection::All) => collection,
+            },
             HashVerification::None => self.hasher.collection(),
         };
         let hashes = MetadataHashPolicy {

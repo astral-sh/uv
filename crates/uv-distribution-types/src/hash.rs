@@ -107,7 +107,7 @@ impl ArchiveHashPolicy<'_> {
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub struct MetadataHashPolicy<'a> {
     /// Which missing hashes to collect for the resolution.
-    pub collection: Option<HashCollection>,
+    pub collection: HashCollection,
     /// Expected hashes to validate before source builds. Wheel validation is deferred to installation.
     pub validation: HashValidation<'a>,
 }
@@ -137,8 +137,11 @@ impl<'a> From<HashValidation<'a>> for ArchiveHashPolicy<'a> {
 /// Which distributions should have hashes collected during resolution.
 ///
 /// Use index-provided hashes when available; otherwise, compute a SHA-256 hash from the archive.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub enum HashCollection {
+    /// Do not collect hashes during resolution.
+    #[default]
+    None,
     /// Supply hashes for non-registry distributions. Registry hashes come from index metadata.
     Url,
     /// Also compute missing registry hashes when the index metadata does not provide them.

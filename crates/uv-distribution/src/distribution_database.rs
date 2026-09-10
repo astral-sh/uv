@@ -544,15 +544,20 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
     ) -> Result<ArchiveMetadata, Error> {
         let hash_policy = match hashes.validation {
             HashValidation::None => {
-                let compute_hashes = hashes.collection.is_some_and(|collection| match dist {
-                    BuiltDist::Registry(dist) => {
-                        // Preserve the fallback for indexes and `--find-links` without hashes.
-                        // This hashes only the selected wheel, not every distribution for the version.
-                        collection == HashCollection::All
-                            && dist.best_wheel().file.hashes.is_empty()
-                    }
-                    BuiltDist::DirectUrl(_) | BuiltDist::Path(_) | BuiltDist::GitPath(_) => true,
-                });
+                let compute_hashes = match hashes.collection {
+                    HashCollection::None => false,
+                    HashCollection::Url | HashCollection::All => match dist {
+                        BuiltDist::Registry(dist) => {
+                            // Preserve the fallback for indexes and `--find-links` without hashes.
+                            // This hashes only the selected wheel, not every distribution for the version.
+                            hashes.collection == HashCollection::All
+                                && dist.best_wheel().file.hashes.is_empty()
+                        }
+                        BuiltDist::DirectUrl(_) | BuiltDist::Path(_) | BuiltDist::GitPath(_) => {
+                            true
+                        }
+                    },
+                };
                 if compute_hashes {
                     ArchiveHashPolicy::Generate
                 } else {
@@ -655,9 +660,10 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         }
 
         let build_hash_policy = match hashes.validation {
-            HashValidation::None => hashes
-                .collection
-                .map_or(ArchiveHashPolicy::None, |_| ArchiveHashPolicy::Generate),
+            HashValidation::None => match hashes.collection {
+                HashCollection::None => ArchiveHashPolicy::None,
+                HashCollection::Url | HashCollection::All => ArchiveHashPolicy::Generate,
+            },
             HashValidation::Any(_) | HashValidation::All(_) => hashes.validation.into(),
         };
         let metadata = self
