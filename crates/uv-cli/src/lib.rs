@@ -1276,6 +1276,10 @@ pub enum ProjectCommand {
     /// By default, all extras and groups within the project are audited. To exclude extras
     /// and/or groups from the audit, use the `--no-extra`, `--no-group`, and related
     /// options.
+    ///
+    /// Use `--requirements pylock.toml` to audit every versioned package in a PEP 751 lockfile
+    /// instead of the current project. The lockfile is not updated, and no Python interpreter
+    /// is required.
     #[command(
         after_help = "Use `uv help audit` for more details.",
         after_long_help = ""
@@ -5299,6 +5303,25 @@ pub struct AuditCommonArgs {
 
 #[derive(Args)]
 pub struct AuditArgs {
+    /// Audit the packages listed in a `pylock.toml` file instead of the current project.
+    ///
+    /// Accepts a local path or HTTP(S) URL. Named `pylock.<name>.toml` files are also supported.
+    /// All versioned packages are audited, regardless of environment markers, extras, or groups.
+    /// Packages without versions are skipped. The file is never updated.
+    #[arg(
+        long,
+        short,
+        alias = "requirement",
+        value_parser = parse_file_path,
+        value_hint = ValueHint::FilePath,
+        conflicts_with_all = [
+            "script", "no_extra", "no_dev", "no_group", "only_group",
+            "only_dev", "python_version", "python_platform", "locked", "upgrade",
+            "upgrade_package", "upgrade_group",
+        ],
+    )]
+    pub requirements: Option<PathBuf>,
+
     /// Don't audit the specified optional dependencies.
     ///
     /// May be provided multiple times.
