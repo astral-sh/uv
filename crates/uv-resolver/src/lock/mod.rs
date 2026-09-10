@@ -3306,7 +3306,7 @@ impl Lock {
                 validation,
             }
         } else {
-            hasher.get_metadata(&dist)
+            hasher.metadata_policy(&dist)
         };
         let archive = database
             .get_or_build_wheel_metadata(&dist, metadata_hashes)
@@ -8158,14 +8158,17 @@ wheels = [{ filename = "local-1.0.0-py3-none-any.whl", hash = "sha256:53a42340ae
             .expect("valid URL");
         assert_eq!(hasher.collection(), None);
         assert_eq!(
-            hasher.get_url(&remote),
+            hasher.archive_policy_for_url(&remote),
             ArchiveHashPolicy::All(slice::from_ref(&digest))
         );
         assert_eq!(
-            hasher.get_url(&local),
+            hasher.archive_policy_for_url(&local),
             ArchiveHashPolicy::All(slice::from_ref(&digest))
         );
-        assert_eq!(hasher.get_url(&unknown), ArchiveHashPolicy::None);
+        assert_eq!(
+            hasher.archive_policy_for_url(&unknown),
+            ArchiveHashPolicy::None
+        );
     }
 
     #[test]
