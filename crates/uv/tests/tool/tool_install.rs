@@ -3365,7 +3365,7 @@ fn tool_install_git_does_not_infer_dynamic_requires_python() {
         .env(EnvVars::PATH, path.as_os_str()), @"
     exit_code: 1 (failure)
     ----- stderr -----
-    error: No solution found when resolving dependencies:
+    error: No solution found when resolving dependencies
       Caused by: Because the current Python version (3.11.[X]) does not satisfy Python>=3.12,<3.13 and dynamic-requires-python-tool==0.1.0 depends on Python>=3.12,<3.13, we can conclude that dynamic-requires-python-tool==0.1.0 cannot be used.
         And because only dynamic-requires-python-tool==0.1.0 is available and you require dynamic-requires-python-tool, we can conclude that your requirements are unsatisfiable.
     ");
@@ -4416,7 +4416,7 @@ fn tool_install_preserve_environment() {
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 1 (failure)
     ----- stderr -----
-    error: No solution found when resolving dependencies:
+    error: No solution found when resolving dependencies
       Caused by: Because black==24.1.1 depends on packaging>=22.0 and you require black==24.1.1, we can conclude that you require packaging>=22.0.
         And because you require packaging==0.0.1, we can conclude that your requirements are unsatisfiable.
     ");
@@ -5642,7 +5642,7 @@ fn tool_install_find_links() {
         .arg("basic-app"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-    error: No solution found when resolving tool dependencies:
+    error: No solution found when resolving tool dependencies
       Caused by: Because basic-app==0.1 needs to be downloaded from a registry and only basic-app==0.1 is available, we can conclude that all versions of basic-app cannot be used.
         And because you require basic-app, we can conclude that your requirements are unsatisfiable.
 

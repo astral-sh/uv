@@ -980,7 +980,7 @@ fn install_no_index() -> Result<()> {
         .arg("--strict"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-    error: No solution found when resolving dependencies:
+    error: No solution found when resolving dependencies
       Caused by: Because iniconfig was not found in the provided package locations and you require iniconfig==2.0.0, we can conclude that your requirements are unsatisfiable.
 
     hint: Packages were unavailable because index lookups were disabled and no additional package locations were provided (try: `--find-links <uri>`)
@@ -1023,7 +1023,7 @@ fn install_no_index_cached() -> Result<()> {
         .arg("--strict"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-    error: No solution found when resolving dependencies:
+    error: No solution found when resolving dependencies
       Caused by: Because iniconfig was not found in the provided package locations and you require iniconfig==2.0.0, we can conclude that your requirements are unsatisfiable.
 
     hint: Packages were unavailable because index lookups were disabled and no additional package locations were provided (try: `--find-links <uri>`)
@@ -1316,7 +1316,7 @@ fn mismatched_name() -> Result<()> {
         .arg("--strict"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-    error: No solution found when resolving dependencies:
+    error: No solution found when resolving dependencies
       Caused by: Because foo has an invalid package format and you require foo, we can conclude that your requirements are unsatisfiable.
 
     hint: The structure of `foo` was invalid
@@ -1894,7 +1894,7 @@ fn duplicate_package_overlap() -> Result<()> {
         .arg("--strict"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-    error: No solution found when resolving dependencies:
+    error: No solution found when resolving dependencies
       Caused by: Because you require markupsafe==2.1.3 and markupsafe==2.1.2, we can conclude that your requirements are unsatisfiable.
     "
     );
@@ -2494,7 +2494,7 @@ fn incompatible_wheel() -> Result<()> {
         .arg("--strict"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-    error: No solution found when resolving dependencies:
+    error: No solution found when resolving dependencies
       Caused by: Because foo has an invalid package format and you require foo, we can conclude that your requirements are unsatisfiable.
 
     hint: The structure of `foo` was invalid
@@ -2632,7 +2632,7 @@ fn find_links_offline_no_match() -> Result<()> {
         .arg(context.workspace_root.join("test/links/")), @"
     exit_code: 1 (failure)
     ----- stderr -----
-    error: No solution found when resolving dependencies:
+    error: No solution found when resolving dependencies
       Caused by: Because numpy was not found in the cache and you require numpy, we can conclude that your requirements are unsatisfiable.
 
     hint: Packages were unavailable because the network was disabled. When the network is disabled, registry packages may only be read from the cache.
@@ -2742,7 +2742,7 @@ fn offline() -> Result<()> {
         .arg("--offline"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-    error: No solution found when resolving dependencies:
+    error: No solution found when resolving dependencies
       Caused by: Because black was not found in the cache and you require black==23.10.1, we can conclude that your requirements are unsatisfiable.
 
     hint: Packages were unavailable because the network was disabled. When the network is disabled, registry packages may only be read from the cache.
@@ -2821,7 +2821,7 @@ fn incompatible_constraint() -> Result<()> {
         .arg("constraints.txt"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-    error: No solution found when resolving dependencies:
+    error: No solution found when resolving dependencies
       Caused by: Because you require anyio==3.7.0 and anyio==3.6.0, we can conclude that your requirements are unsatisfiable.
     "
     );
@@ -2906,7 +2906,7 @@ fn repeat_requirement_incompatible() -> Result<()> {
         .arg("requirements.in"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-    error: No solution found when resolving dependencies:
+    error: No solution found when resolving dependencies
       Caused by: Because you require anyio<4.0.0 and anyio==4.0.0, we can conclude that your requirements are unsatisfiable.
     ");
 
@@ -3177,7 +3177,7 @@ requires-python = ">=3.13"
         .arg("requirements.in"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-    error: No solution found when resolving dependencies:
+    error: No solution found when resolving dependencies
       Caused by: Because the current Python version (3.12.[X]) does not satisfy Python>=3.13 and example==0.0.0 depends on Python>=3.13, we can conclude that example==0.0.0 cannot be used.
         And because only example==0.0.0 is available and you require example, we can conclude that your requirements are unsatisfiable.
     "
@@ -3214,7 +3214,7 @@ requires-python = ">=3.13"
         .arg("requirements.in"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-    error: No solution found when resolving dependencies:
+    error: No solution found when resolving dependencies
       Caused by: Because the current Python version (3.12.[X]) does not satisfy Python>=3.13 and example==0.0.0 depends on Python>=3.13, we can conclude that example==0.0.0 cannot be used.
         And because only example==0.0.0 is available and you require example, we can conclude that your requirements are unsatisfiable.
     "
@@ -4715,7 +4715,7 @@ fn require_hashes_registry_valid_hash() -> Result<()> {
         .arg("https://astral-test.github.io/astral-test-hash/valid-hash/simple-html/"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-    error: No solution found when resolving dependencies:
+    error: No solution found when resolving dependencies
       Caused by: Because example-a-961b4c22 was not found in the package registry and you require example-a-961b4c22==1.0.0, we can conclude that your requirements are unsatisfiable.
     "
     );

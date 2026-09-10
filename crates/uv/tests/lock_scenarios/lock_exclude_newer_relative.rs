@@ -1035,7 +1035,7 @@ fn lock_exclude_newer_relative_values() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
     Resolving despite existing lockfile due to removal of exclude newer span
-    error: No solution found when resolving dependencies:
+    error: No solution found when resolving dependencies
       Caused by: Because there are no versions of iniconfig and iniconfig==2.0.0 was published after the exclude newer time, we can conclude that all versions of iniconfig cannot be used.
         And because your project depends on iniconfig, we can conclude that your project's requirements are unsatisfiable.
 

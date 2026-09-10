@@ -912,7 +912,7 @@ fn no_solution() {
         .arg("--strict"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-    error: No solution found when resolving dependencies:
+    error: No solution found when resolving dependencies
       Caused by: Because flask>=3.0.2 depends on werkzeug>=3.0.0 and you require flask>=3.0.2, we can conclude that you require werkzeug>=3.0.0.
         And because you require werkzeug<1.0.0, we can conclude that your requirements are unsatisfiable.
     ");
@@ -1259,7 +1259,7 @@ werkzeug==3.0.1
         .arg("--strict"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-    error: No solution found when resolving dependencies:
+    error: No solution found when resolving dependencies
       Caused by: Because flask>=3.0.2 depends on click>=8.1.3 and you require click==7.0.0, we can conclude that your requirements and flask>=3.0.2 are incompatible.
         And because you require flask==3.0.2, we can conclude that your requirements are unsatisfiable.
     "
@@ -2108,7 +2108,7 @@ fn install_editable_incompatible_constraint_version() -> Result<()> {
         .arg("constraints.txt"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-    error: No solution found when resolving dependencies:
+    error: No solution found when resolving dependencies
       Caused by: Because only black<=0.1.0 is available and you require black>0.1.0, we can conclude that your requirements are unsatisfiable.
     "
     );
@@ -2452,7 +2452,7 @@ fn install_no_index() {
         .arg("--no-index"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-    error: No solution found when resolving dependencies:
+    error: No solution found when resolving dependencies
       Caused by: Because flask was not found in the provided package locations and you require flask, we can conclude that your requirements are unsatisfiable.
 
     hint: Packages were unavailable because index lookups were disabled and no additional package locations were provided (try: `--find-links <uri>`)
@@ -2473,7 +2473,7 @@ fn install_no_index_version() {
         .arg("--no-index"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-    error: No solution found when resolving dependencies:
+    error: No solution found when resolving dependencies
       Caused by: Because flask was not found in the provided package locations and you require flask==3.0.0, we can conclude that your requirements are unsatisfiable.
 
     hint: Packages were unavailable because index lookups were disabled and no additional package locations were provided (try: `--find-links <uri>`)
@@ -3722,7 +3722,7 @@ fn install_only_binary_all_and_no_binary_all() {
         @"
     exit_code: 1 (failure)
     ----- stderr -----
-    error: No solution found when resolving dependencies:
+    error: No solution found when resolving dependencies
       Caused by: Because all versions of anyio have no usable wheels and you require anyio, we can conclude that your requirements are unsatisfiable.
 
     hint: Wheels are required for `anyio` because building from source is disabled for all packages (i.e., with `--no-build`)
@@ -3844,7 +3844,7 @@ fn only_binary_requirements_txt() {
         .arg("--strict"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-    error: No solution found when resolving dependencies:
+    error: No solution found when resolving dependencies
       Caused by: Because django-allauth==0.51.0 has no usable wheels and you require django-allauth==0.51.0, we can conclude that your requirements are unsatisfiable.
 
     hint: Wheels are required for `django-allauth` because building from source is disabled for `django-allauth` (i.e., with `--no-build-package django-allauth`)
@@ -4242,7 +4242,7 @@ fn no_deps_installed() -> Result<()> {
         .arg("--no-index"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-    error: No solution found when resolving dependencies:
+    error: No solution found when resolving dependencies
       Caused by: Because child was not found in the provided package locations and parent==1.0.0 depends on child>=2, we can conclude that parent==1.0.0 cannot be used.
         And because parent was not found in the provided package locations and you require parent, we can conclude that your requirements are unsatisfiable.
 
@@ -4284,7 +4284,7 @@ fn no_deps_installed() -> Result<()> {
         .arg("constraints.txt"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-    error: No solution found when resolving dependencies:
+    error: No solution found when resolving dependencies
       Caused by: Because you require parent==1.0.0 and parent==2.0.0, we can conclude that your requirements are unsatisfiable.
     ");
 
@@ -4816,7 +4816,7 @@ fn explicit_prerelease_does_not_fall_back_if_necessary() {
         .arg("a>0.1.0"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-    error: No solution found when resolving dependencies:
+    error: No solution found when resolving dependencies
       Caused by: Because only a<=0.1.0 is available and you require a>0.1.0, we can conclude that your requirements are unsatisfiable.
 
     hint: Pre-releases are available for `a` in the requested range (e.g., 1.0.0a1), but pre-releases weren't enabled (try: `--prerelease=allow`)
@@ -4928,7 +4928,7 @@ fn explicit_prerelease_disallows_transitive_marker() {
         .arg("b"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-    error: No solution found when resolving dependencies:
+    error: No solution found when resolving dependencies
       Caused by: Because there is no version of c==2.0.0b1 and all versions of a depend on c==2.0.0b1, we can conclude that all versions of a cannot be used.
         And because you require a, we can conclude that your requirements are unsatisfiable.
 
@@ -4980,7 +4980,7 @@ fn prerelease_package_disallows_transitive_prerelease() {
         .arg("b"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-    error: No solution found when resolving dependencies:
+    error: No solution found when resolving dependencies
       Caused by: Because there is no version of c==2.0.0b1 and all versions of a depend on c==2.0.0b1, we can conclude that all versions of a cannot be used.
         And because you require a, we can conclude that your requirements are unsatisfiable.
 
@@ -5088,7 +5088,7 @@ fn prerelease_package_rejected_in_pip_configuration() -> Result<()> {
         | ^^^^^^^^^^^^^^^^^^
       unknown field `prerelease-package`, expected one of [...]
 
-    error: No solution found when resolving dependencies:
+    error: No solution found when resolving dependencies
       Caused by: Because only a<=0.1.0 is available and you require a>0.1.0, we can conclude that your requirements are unsatisfiable.
 
     hint: Pre-releases are available for `a` in the requested range (e.g., 1.0.0a1), but pre-releases weren't enabled (try: `--prerelease=allow`)
@@ -5177,7 +5177,7 @@ fn disallow_transitive_prerelease() {
         .arg("b"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-    error: No solution found when resolving dependencies:
+    error: No solution found when resolving dependencies
       Caused by: Because there is no version of c==2.0.0b1 and all versions of a depend on c==2.0.0b1, we can conclude that all versions of a cannot be used.
         And because you require a, we can conclude that your requirements are unsatisfiable.
 
@@ -6344,7 +6344,7 @@ requires-python = ">=3.13"
         .arg(editable_dir.path()), @"
     exit_code: 1 (failure)
     ----- stderr -----
-    error: No solution found when resolving dependencies:
+    error: No solution found when resolving dependencies
       Caused by: Because the current Python version (3.12.[X]) does not satisfy Python>=3.13 and example==0.0.0 depends on Python>=3.13, we can conclude that example==0.0.0 cannot be used.
         And because only example==0.0.0 is available and you require example, we can conclude that your requirements are unsatisfiable.
     "
@@ -6874,7 +6874,7 @@ requires-python = ">=3.13"
         .arg(format!("example @ {}", editable_dir.path().display())), @"
     exit_code: 1 (failure)
     ----- stderr -----
-    error: No solution found when resolving dependencies:
+    error: No solution found when resolving dependencies
       Caused by: Because the current Python version (3.12.[X]) does not satisfy Python>=3.13 and example==0.0.0 depends on Python>=3.13, we can conclude that example==0.0.0 cannot be used.
         And because only example==0.0.0 is available and you require example, we can conclude that your requirements are unsatisfiable.
     "
@@ -7131,7 +7131,7 @@ async fn install_package_basic_auth_from_keyring_wrong_password() {
     ----- stderr -----
     Keyring request for public@http://[LOCALHOST]/basic-auth/simple
     Keyring request for public@[LOCALHOST]
-    error: No solution found when resolving dependencies:
+    error: No solution found when resolving dependencies
       Caused by: Because anyio was not found in the package registry and you require anyio, we can conclude that your requirements are unsatisfiable.
 
     hint: An index URL (http://[LOCALHOST]/basic-auth/simple) could not be queried due to a lack of valid authentication credentials (401 Unauthorized)
@@ -7173,7 +7173,7 @@ async fn install_package_basic_auth_from_keyring_wrong_username() {
     Keyring request for public@http://[LOCALHOST]/basic-auth/simple
     Keyring request for public@[LOCALHOST]
     Keyring request for public@http://[LOCALHOST]
-    error: No solution found when resolving dependencies:
+    error: No solution found when resolving dependencies
       Caused by: Because anyio was not found in the package registry and you require anyio, we can conclude that your requirements are unsatisfiable.
 
     hint: An index URL (http://[LOCALHOST]/basic-auth/simple) could not be queried due to a lack of valid authentication credentials (401 Unauthorized)
@@ -7322,7 +7322,7 @@ fn reinstall_no_index() {
         .arg("--strict"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-    error: No solution found when resolving dependencies:
+    error: No solution found when resolving dependencies
       Caused by: Because anyio was not found in the provided package locations and you require anyio, we can conclude that your requirements are unsatisfiable.
 
     hint: Packages were unavailable because index lookups were disabled and no additional package locations were provided (try: `--find-links <uri>`)
@@ -7431,7 +7431,7 @@ fn already_installed_dependent_editable() {
         .arg(vendor.url()), @"
     exit_code: 1 (failure)
     ----- stderr -----
-    error: No solution found when resolving dependencies:
+    error: No solution found when resolving dependencies
       Caused by: Because first-local was not found in the provided package locations and second-local==0.1.0 depends on first-local, we can conclude that second-local==0.1.0 cannot be used.
         And because only second-local==0.1.0 is available and you require second-local, we can conclude that your requirements are unsatisfiable.
     "
@@ -7533,7 +7533,7 @@ fn already_installed_local_path_dependent() {
         .arg(vendor.url()), @"
     exit_code: 1 (failure)
     ----- stderr -----
-    error: No solution found when resolving dependencies:
+    error: No solution found when resolving dependencies
       Caused by: Because first-local was not found in the provided package locations and second-local==0.1.0 depends on first-local, we can conclude that second-local==0.1.0 cannot be used.
         And because only second-local==0.1.0 is available and you require second-local, we can conclude that your requirements are unsatisfiable.
     "
@@ -7637,7 +7637,7 @@ fn already_installed_local_version_of_remote_package() {
         .arg("--no-index"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-    error: No solution found when resolving dependencies:
+    error: No solution found when resolving dependencies
       Caused by: Because anyio was not found in the provided package locations and you require anyio==4.2.0, we can conclude that your requirements are unsatisfiable.
 
     hint: Packages were unavailable because index lookups were disabled and no additional package locations were provided (try: `--find-links <uri>`)
@@ -7651,7 +7651,7 @@ fn already_installed_local_version_of_remote_package() {
         .arg("--reinstall"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-    error: No solution found when resolving dependencies:
+    error: No solution found when resolving dependencies
       Caused by: Because there is no version of anyio==4.3.0+foo and you require anyio==4.3.0+foo, we can conclude that your requirements are unsatisfiable.
     "
     );
@@ -7858,7 +7858,7 @@ fn already_installed_remote_url() {
         .arg("--reinstall"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-    error: No solution found when resolving dependencies:
+    error: No solution found when resolving dependencies
       Caused by: Because uv-public-pypackage was not found in the provided package locations and you require uv-public-pypackage, we can conclude that your requirements are unsatisfiable.
 
     hint: Packages were unavailable because index lookups were disabled and no additional package locations were provided (try: `--find-links <uri>`)
@@ -7895,7 +7895,7 @@ fn already_installed_remote_url() {
         context.pip_install().arg("uv-public-pypackage==0.2.0").arg("--no-index"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-    error: No solution found when resolving dependencies:
+    error: No solution found when resolving dependencies
       Caused by: Because uv-public-pypackage was not found in the provided package locations and you require uv-public-pypackage==0.2.0, we can conclude that your requirements are unsatisfiable.
 
     hint: Packages were unavailable because index lookups were disabled and no additional package locations were provided (try: `--find-links <uri>`)

@@ -365,7 +365,7 @@ fn compatible_python_incompatible_override() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
     warning: The requested Python version 3.9 is not available; 3.11.[X] will be used to build dependencies instead.
-    error: No solution found when resolving dependencies:
+    error: No solution found when resolving dependencies
       Caused by: Because the requested Python version (>=3.9) does not satisfy Python>=3.10 and a==1.0.0 depends on Python>=3.10, we can conclude that a==1.0.0 cannot be used.
         And because you require a==1.0.0, we can conclude that your requirements are unsatisfiable.
 
@@ -643,7 +643,7 @@ fn python_patch_override_no_patch() -> Result<()> {
         , @"
     exit_code: 1 (failure)
     ----- stderr -----
-    error: No solution found when resolving dependencies:
+    error: No solution found when resolving dependencies
       Caused by: Because the requested Python version (>=3.9) does not satisfy Python>=3.9.4 and a==1.0.0 depends on Python>=3.9.4, we can conclude that a==1.0.0 cannot be used.
         And because you require a==1.0.0, we can conclude that your requirements are unsatisfiable.
 

@@ -4572,7 +4572,7 @@ fn add_error() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
     error: Failed to add dependencies
-      Caused by: No solution found when resolving dependencies:
+      Caused by: No solution found when resolving dependencies
       Caused by: Because there are no versions of xyz and your project depends on xyz, we can conclude that your project's requirements are unsatisfiable.
 
     hint: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing
@@ -4606,7 +4606,7 @@ fn add_standard_library_error() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
     error: Failed to add dependencies
-      Caused by: No solution found when resolving dependencies:
+      Caused by: No solution found when resolving dependencies
       Caused by: Because pickle was not found in the package registry and your project depends on pickle, we can conclude that your project's requirements are unsatisfiable.
 
     hint: The module `pickle` is included in the Python standard library and usually should not be added as a dependency
@@ -4635,7 +4635,7 @@ fn add_standard_library_unrelated_resolution_error() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
     error: Failed to add dependencies
-      Caused by: No solution found when resolving dependencies:
+      Caused by: No solution found when resolving dependencies
       Caused by: Because there are no versions of xyz and your project depends on xyz, we can conclude that your project's requirements are unsatisfiable.
 
     hint: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing
@@ -9554,7 +9554,7 @@ fn add_shadowed_name() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
     error: Failed to add dependencies
-      Caused by: No solution found when resolving dependencies:
+      Caused by: No solution found when resolving dependencies
       Caused by: Because dagster-webserver>=1.6.13 depends on your project and your project depends on dagster-webserver==1.6.13, we can conclude that your project's requirements are unsatisfiable.
 
     hint: The package `dagster-webserver` depends on the package `dagster` but the name is shadowed by your project. Consider changing the name of the project.
@@ -9567,7 +9567,7 @@ fn add_shadowed_name() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
     error: Failed to add dependencies
-      Caused by: No solution found when resolving dependencies:
+      Caused by: No solution found when resolving dependencies
       Caused by: Because dagster-webserver==1.6.11 depends on your project and dagster-webserver==1.6.12 depends on your project, we can conclude that dagster-webserver>=1.6.11,<=1.6.12 depends on your project.
         And because dagster-webserver>=1.6.13 depends on your project and your project depends on dagster-webserver>=1.6.11, we can conclude that your project's requirements are unsatisfiable.
 
@@ -9663,7 +9663,7 @@ fn add_warn_index_url() -> Result<()> {
     ----- stderr -----
     warning: Indexes specified via `--extra-index-url` will not be persisted to the `pyproject.toml` file; use `--index` instead.
     error: Failed to add dependencies
-      Caused by: No solution found when resolving dependencies:
+      Caused by: No solution found when resolving dependencies
       Caused by: Because only idna==2.7 is available and your project depends on idna>=3.6, we can conclude that your project's requirements are unsatisfiable.
 
     hint: `idna` was found on https://test.pypi.org/simple, but not at the requested version (idna>=3.6). A compatible version may be available on a subsequent index (e.g., https://pypi.org/simple). By default, uv will only consider versions that are published on the first index that contains a given package, to avoid dependency confusion attacks. If all indexes are equally trusted, use `--index-strategy unsafe-best-match` to consider all versions from all indexes, regardless of the order in which they were defined.
@@ -13308,7 +13308,7 @@ async fn add_full_url_in_keyring() -> Result<()> {
     Keyring request for public@[LOCALHOST]
     Keyring request for public@http://[LOCALHOST]
     error: Failed to add dependencies
-      Caused by: No solution found when resolving dependencies:
+      Caused by: No solution found when resolving dependencies
       Caused by: Because anyio was not found in the package registry and your project depends on anyio, we can conclude that your project's requirements are unsatisfiable.
 
     hint: An index URL (http://[LOCALHOST]/basic-auth/simple) could not be queried due to a lack of valid authentication credentials (401 Unauthorized)
@@ -13345,7 +13345,7 @@ async fn add_stop_index_search_early_on_auth_failure() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
     error: Failed to add dependencies
-      Caused by: No solution found when resolving dependencies:
+      Caused by: No solution found when resolving dependencies
       Caused by: Because anyio was not found in the package registry and your project depends on anyio, we can conclude that your project's requirements are unsatisfiable.
 
     hint: An index URL (http://[LOCALHOST]/basic-auth/simple) could not be queried due to a lack of valid authentication credentials (401 Unauthorized)
@@ -13429,7 +13429,7 @@ async fn add_empty_ignore_error_codes() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
     error: Failed to add dependencies
-      Caused by: No solution found when resolving dependencies:
+      Caused by: No solution found when resolving dependencies
       Caused by: Because anyio was not found in the package registry and your project depends on anyio, we can conclude that your project's requirements are unsatisfiable.
 
     hint: An index (http://[LOCALHOST]/) returned a 403 Forbidden error. Check that the index URL is correct and the credentials are valid.
@@ -13506,7 +13506,7 @@ async fn lock_forbidden_index_with_available_package() -> Result<()> {
     uv_snapshot!(context.filters(), context.lock(), @"
     exit_code: 1 (failure)
     ----- stderr -----
-    error: No solution found when resolving dependencies:
+    error: No solution found when resolving dependencies
       Caused by: Because idna was not found in the package registry and all versions of anyio depend on idna>=2.8, we can conclude that all versions of anyio cannot be used.
         And because your project depends on anyio, we can conclude that your project's requirements are unsatisfiable.
 
@@ -13542,7 +13542,7 @@ fn add_missing_package_on_pytorch() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
     error: Failed to add dependencies
-      Caused by: No solution found when resolving dependencies:
+      Caused by: No solution found when resolving dependencies
       Caused by: Because fakepkg was not found in the package registry and your project depends on fakepkg, we can conclude that your project's requirements are unsatisfiable.
 
     hint: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing
@@ -13843,7 +13843,7 @@ async fn add_auth_policy_never_with_url_credentials_ignored() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
     error: Failed to add dependencies
-      Caused by: No solution found when resolving dependencies:
+      Caused by: No solution found when resolving dependencies
       Caused by: Because anyio==4.3.0 could not be fetched from the network (`401 Unauthorized`) and only anyio==4.3.0 is available, we can conclude that all versions of anyio cannot be used.
         And because your project depends on anyio, we can conclude that your project's requirements are unsatisfiable.
 
@@ -13887,7 +13887,7 @@ async fn add_auth_policy_never_with_env_var_credentials() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
     error: Failed to add dependencies
-      Caused by: No solution found when resolving dependencies:
+      Caused by: No solution found when resolving dependencies
       Caused by: Because anyio was not found in the package registry and your project depends on anyio, we can conclude that your project's requirements are unsatisfiable.
 
     hint: An index URL (http://[LOCALHOST]/basic-auth/simple) could not be queried due to a lack of valid authentication credentials (401 Unauthorized)
@@ -13974,7 +13974,7 @@ async fn add_redirect_cross_origin() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
     error: Failed to add dependencies
-      Caused by: No solution found when resolving dependencies:
+      Caused by: No solution found when resolving dependencies
       Caused by: Because anyio was not found in the package registry and your project depends on anyio, we can conclude that your project's requirements are unsatisfiable.
 
     hint: An index URL (http://[LOCALHOST]/) could not be queried due to a lack of valid authentication credentials (401 Unauthorized)
@@ -14091,7 +14091,7 @@ async fn add_redirect_with_keyring_cross_origin() -> Result<()> {
     Keyring request for public@[LOCALHOST]
     Keyring request for public@http://[LOCALHOST]
     error: Failed to add dependencies
-      Caused by: No solution found when resolving dependencies:
+      Caused by: No solution found when resolving dependencies
       Caused by: Because anyio was not found in the package registry and your project depends on anyio, we can conclude that your project's requirements are unsatisfiable.
 
     hint: An index URL (http://[LOCALHOST]/) could not be queried due to a lack of valid authentication credentials (401 Unauthorized)

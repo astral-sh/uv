@@ -976,7 +976,7 @@ fn tool_run_git_does_not_infer_dynamic_requires_python() {
         .arg("dynamic-requires-python-tool"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-    error: No solution found when resolving tool dependencies:
+    error: No solution found when resolving tool dependencies
       Caused by: Because the current Python version (3.11.[X]) does not satisfy Python>=3.12,<3.13 and dynamic-requires-python-tool==0.1.0 depends on Python>=3.12,<3.13, we can conclude that dynamic-requires-python-tool==0.1.0 cannot be used.
         And because only dynamic-requires-python-tool==0.1.0 is available and you require dynamic-requires-python-tool, we can conclude that your requirements are unsatisfiable.
     ");
@@ -1790,7 +1790,7 @@ fn tool_run_resolution_error() {
         .arg("add"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-    error: No solution found when resolving tool dependencies:
+    error: No solution found when resolving tool dependencies
       Caused by: Because there are no versions of add and you require add, we can conclude that your requirements are unsatisfiable.
     ");
 }
@@ -2070,7 +2070,7 @@ fn tool_run_python_at_version() {
         .arg("--version"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-    error: No solution found when resolving tool dependencies:
+    error: No solution found when resolving tool dependencies
       Caused by: Because cp311 was not found in the package registry and you require cp311, we can conclude that your requirements are unsatisfiable.
     ");
 
@@ -2080,7 +2080,7 @@ fn tool_run_python_at_version() {
         .arg("--version"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-    error: No solution found when resolving tool dependencies:
+    error: No solution found when resolving tool dependencies
       Caused by: Because 311 was not found in the package registry and you require 311, we can conclude that your requirements are unsatisfiable.
     ");
 
@@ -2947,7 +2947,7 @@ fn tool_run_verbose_hint() {
     exit_code: 1 (failure)
     ----- stderr -----
     error: Failed to run tool
-      Caused by: No solution found when resolving dependencies:
+      Caused by: No solution found when resolving dependencies
       Caused by: Because nonexistent-package-foo was not found in the package registry and you require nonexistent-package-foo, we can conclude that your requirements are unsatisfiable.
 
     hint: You provided `--verbose` to `nonexistent-package-foo`. Did you mean to provide it to `uv tool run`? e.g., `uv tool run --verbose nonexistent-package-foo`
@@ -2960,7 +2960,7 @@ fn tool_run_verbose_hint() {
     exit_code: 1 (failure)
     ----- stderr -----
     error: Failed to run tool
-      Caused by: No solution found when resolving dependencies:
+      Caused by: No solution found when resolving dependencies
       Caused by: Because nonexistent-package-bar was not found in the package registry and you require nonexistent-package-bar, we can conclude that your requirements are unsatisfiable.
 
     hint: You provided `-v` to `nonexistent-package-bar`. Did you mean to provide it to `uv tool run`? e.g., `uv tool run -v nonexistent-package-bar`
@@ -2973,7 +2973,7 @@ fn tool_run_verbose_hint() {
     exit_code: 1 (failure)
     ----- stderr -----
     error: Failed to run tool
-      Caused by: No solution found when resolving dependencies:
+      Caused by: No solution found when resolving dependencies
       Caused by: Because nonexistent-package-baz was not found in the package registry and you require nonexistent-package-baz, we can conclude that your requirements are unsatisfiable.
 
     hint: You provided `-vv` to `nonexistent-package-baz`. Did you mean to provide it to `uv tool run`? e.g., `uv tool run -vv nonexistent-package-baz`
@@ -2985,7 +2985,7 @@ fn tool_run_verbose_hint() {
         .arg("-version"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-    error: No solution found when resolving tool dependencies:
+    error: No solution found when resolving tool dependencies
       Caused by: Because nonexistent-package-quux was not found in the package registry and you require nonexistent-package-quux, we can conclude that your requirements are unsatisfiable.
     ");
 }
@@ -3483,7 +3483,7 @@ fn tool_run_reresolve_python() -> anyhow::Result<()> {
         .arg("foo"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-    error: No solution found when resolving tool dependencies:
+    error: No solution found when resolving tool dependencies
       Caused by: Because the current Python version (3.11.[X]) does not satisfy Python>=3.12 and foo==1.0.0 depends on Python>=3.12, we can conclude that foo==1.0.0 cannot be used.
         And because only foo==1.0.0 is available and you require foo, we can conclude that your requirements are unsatisfiable.
     ");

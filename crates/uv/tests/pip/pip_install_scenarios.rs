@@ -62,7 +62,7 @@ fn backtrack_to_missing_package() {
         , @"
     exit_code: 1 (failure)
     ----- stderr -----
-    error: No solution found when resolving dependencies:
+    error: No solution found when resolving dependencies
       Caused by: Because c was not found in the package registry and a<=1.0.0 depends on c, we can conclude that a<=1.0.0 cannot be used.
         And because all versions of b depend on a==1.0.0 and you require b, we can conclude that your requirements are unsatisfiable.
     ");
@@ -142,7 +142,7 @@ fn requires_exact_version_does_not_exist() {
         , @"
     exit_code: 1 (failure)
     ----- stderr -----
-    error: No solution found when resolving dependencies:
+    error: No solution found when resolving dependencies
       Caused by: Because there is no version of a==2.0.0 and you require a==2.0.0, we can conclude that your requirements are unsatisfiable.
     ");
 
@@ -172,7 +172,7 @@ fn requires_greater_version_does_not_exist() {
         , @"
     exit_code: 1 (failure)
     ----- stderr -----
-    error: No solution found when resolving dependencies:
+    error: No solution found when resolving dependencies
       Caused by: Because only a<=1.0.0 is available and you require a>1.0.0, we can conclude that your requirements are unsatisfiable.
     ");
 
@@ -203,7 +203,7 @@ fn requires_less_version_does_not_exist() {
         , @"
     exit_code: 1 (failure)
     ----- stderr -----
-    error: No solution found when resolving dependencies:
+    error: No solution found when resolving dependencies
       Caused by: Because only a>=2.0.0 is available and you require a<2.0.0, we can conclude that your requirements are unsatisfiable.
     ");
 
@@ -230,7 +230,7 @@ fn requires_package_does_not_exist() {
         , @"
     exit_code: 1 (failure)
     ----- stderr -----
-    error: No solution found when resolving dependencies:
+    error: No solution found when resolving dependencies
       Caused by: Because a was not found in the package registry and you require a, we can conclude that your requirements are unsatisfiable.
     ");
 
@@ -262,7 +262,7 @@ fn transitive_requires_package_does_not_exist() {
         , @"
     exit_code: 1 (failure)
     ----- stderr -----
-    error: No solution found when resolving dependencies:
+    error: No solution found when resolving dependencies
       Caused by: Because b was not found in the package registry and all versions of a depend on b, we can conclude that all versions of a cannot be used.
         And because you require a, we can conclude that your requirements are unsatisfiable.
     ");
@@ -342,7 +342,7 @@ fn dependency_excludes_non_contiguous_range_of_compatible_versions() {
         , @"
     exit_code: 1 (failure)
     ----- stderr -----
-    error: No solution found when resolving dependencies:
+    error: No solution found when resolving dependencies
       Caused by: Because a<=1.0.0 depends on b==1.0.0 and c<=1.0.0 depends on a<2.0.0, we can conclude that c<=1.0.0 depends on b==1.0.0.
         And because c>=2.0.0 depends on a>=3.0.0 and a>=3.0.0 depends on b==3.0.0, we can conclude that all versions of c depend on one of:
             b<=1.0.0
@@ -420,7 +420,7 @@ fn dependency_excludes_range_of_compatible_versions() {
         , @"
     exit_code: 1 (failure)
     ----- stderr -----
-    error: No solution found when resolving dependencies:
+    error: No solution found when resolving dependencies
       Caused by: Because a<=1.0.0 depends on b==1.0.0 and c<=1.0.0 depends on a<2.0.0, we can conclude that c<=1.0.0 depends on b==1.0.0.
         And because c>=2.0.0 depends on a>=3.0.0 and a>=3.0.0 depends on b==3.0.0, we can conclude that all versions of c depend on one of:
             b<=1.0.0
@@ -473,7 +473,7 @@ fn excluded_only_compatible_version() {
         , @"
     exit_code: 1 (failure)
     ----- stderr -----
-    error: No solution found when resolving dependencies:
+    error: No solution found when resolving dependencies
       Caused by: Because a<=1.0.0 depends on b==1.0.0 and a>=3.0.0 depends on b==3.0.0, we can conclude that all of:
             a<=1.0.0
             a>=3.0.0
@@ -514,7 +514,7 @@ fn excluded_only_version() {
         , @"
     exit_code: 1 (failure)
     ----- stderr -----
-    error: No solution found when resolving dependencies:
+    error: No solution found when resolving dependencies
       Caused by: Because only a==1.0.0 is available and you require one of:
             a<1.0.0
             a>1.0.0
@@ -705,7 +705,7 @@ fn extra_incompatible_with_extra() {
         , @"
     exit_code: 1 (failure)
     ----- stderr -----
-    error: No solution found when resolving dependencies:
+    error: No solution found when resolving dependencies
       Caused by: Because all versions of a[extra-c] depend on b==2.0.0 and all versions of a[extra-b] depend on b==1.0.0, we can conclude that all versions of a[extra-b] and all versions of a[extra-c] are incompatible.
         And because you require a[extra-b] and a[extra-c], we can conclude that your requirements are unsatisfiable.
     ");
@@ -746,7 +746,7 @@ fn extra_incompatible_with_root() {
         , @"
     exit_code: 1 (failure)
     ----- stderr -----
-    error: No solution found when resolving dependencies:
+    error: No solution found when resolving dependencies
       Caused by: Because all versions of a[extra] depend on b==1.0.0 and you require a[extra], we can conclude that you require b==1.0.0.
         And because you require b==2.0.0, we can conclude that your requirements are unsatisfiable.
     ");
@@ -901,7 +901,7 @@ fn direct_incompatible_versions() {
         , @"
     exit_code: 1 (failure)
     ----- stderr -----
-    error: No solution found when resolving dependencies:
+    error: No solution found when resolving dependencies
       Caused by: Because you require a==1.0.0 and a==2.0.0, we can conclude that your requirements are unsatisfiable.
     ");
 
@@ -935,7 +935,7 @@ fn transitive_incompatible_versions() {
         , @"
     exit_code: 1 (failure)
     ----- stderr -----
-    error: No solution found when resolving dependencies:
+    error: No solution found when resolving dependencies
       Caused by: Because all versions of a depend on b==2.0.0 and b==1.0.0, we can conclude that all versions of a cannot be used.
         And because you require a==1.0.0, we can conclude that your requirements are unsatisfiable.
     ");
@@ -974,7 +974,7 @@ fn transitive_incompatible_with_root_version() {
         , @"
     exit_code: 1 (failure)
     ----- stderr -----
-    error: No solution found when resolving dependencies:
+    error: No solution found when resolving dependencies
       Caused by: Because all versions of a depend on b==2.0.0 and you require a, we can conclude that you require b==2.0.0.
         And because you require b==1.0.0, we can conclude that your requirements are unsatisfiable.
     ");
@@ -1018,7 +1018,7 @@ fn transitive_incompatible_with_transitive() {
         , @"
     exit_code: 1 (failure)
     ----- stderr -----
-    error: No solution found when resolving dependencies:
+    error: No solution found when resolving dependencies
       Caused by: Because all versions of b depend on c==2.0.0 and all versions of a depend on c==1.0.0, we can conclude that all versions of a and all versions of b are incompatible.
         And because you require a and b, we can conclude that your requirements are unsatisfiable.
     ");
@@ -1083,7 +1083,7 @@ fn local_greater_than() {
         , @"
     exit_code: 1 (failure)
     ----- stderr -----
-    error: No solution found when resolving dependencies:
+    error: No solution found when resolving dependencies
       Caused by: Because only a==1.2.3+foo is available and you require a>1.2.3, we can conclude that your requirements are unsatisfiable.
     ");
 
@@ -1146,7 +1146,7 @@ fn local_less_than() {
         , @"
     exit_code: 1 (failure)
     ----- stderr -----
-    error: No solution found when resolving dependencies:
+    error: No solution found when resolving dependencies
       Caused by: Because only a==1.2.3+foo is available and you require a<1.2.3, we can conclude that your requirements are unsatisfiable.
     ");
 
@@ -1333,7 +1333,7 @@ fn local_transitive_conflicting() {
         , @"
     exit_code: 1 (failure)
     ----- stderr -----
-    error: No solution found when resolving dependencies:
+    error: No solution found when resolving dependencies
       Caused by: Because all versions of a depend on b==2.0.0+bar and you require a, we can conclude that you require b==2.0.0+bar.
         And because you require b==2.0.0+foo, we can conclude that your requirements are unsatisfiable.
     ");
@@ -1457,7 +1457,7 @@ fn local_transitive_greater_than() {
         , @"
     exit_code: 1 (failure)
     ----- stderr -----
-    error: No solution found when resolving dependencies:
+    error: No solution found when resolving dependencies
       Caused by: Because all versions of a depend on b>2.0.0 and you require a, we can conclude that you require b>2.0.0.
         And because you require b==2.0.0+foo, we can conclude that your requirements are unsatisfiable.
     ");
@@ -1539,7 +1539,7 @@ fn local_transitive_less_than() {
         , @"
     exit_code: 1 (failure)
     ----- stderr -----
-    error: No solution found when resolving dependencies:
+    error: No solution found when resolving dependencies
       Caused by: Because all versions of a depend on b<2.0.0 and you require a, we can conclude that you require b<2.0.0.
         And because you require b==2.0.0+foo, we can conclude that your requirements are unsatisfiable.
     ");
@@ -1681,7 +1681,7 @@ fn post_equal_not_available() {
         , @"
     exit_code: 1 (failure)
     ----- stderr -----
-    error: No solution found when resolving dependencies:
+    error: No solution found when resolving dependencies
       Caused by: Because there is no version of a==1.2.3.post0 and you require a==1.2.3.post0, we can conclude that your requirements are unsatisfiable.
     ");
 
@@ -1778,7 +1778,7 @@ fn post_greater_than_post_not_available() {
         , @"
     exit_code: 1 (failure)
     ----- stderr -----
-    error: No solution found when resolving dependencies:
+    error: No solution found when resolving dependencies
       Caused by: Because only a<=1.2.3.post1 is available and you require a>1.2.3.post2, we can conclude that your requirements are unsatisfiable.
     ");
 
@@ -1874,7 +1874,7 @@ fn post_greater_than() {
         , @"
     exit_code: 1 (failure)
     ----- stderr -----
-    error: No solution found when resolving dependencies:
+    error: No solution found when resolving dependencies
       Caused by: Because only a==1.2.3.post1 is available and you require a>1.2.3, we can conclude that your requirements are unsatisfiable.
     ");
 
@@ -1903,7 +1903,7 @@ fn post_less_than_or_equal() {
         , @"
     exit_code: 1 (failure)
     ----- stderr -----
-    error: No solution found when resolving dependencies:
+    error: No solution found when resolving dependencies
       Caused by: Because only a==1.2.3.post1 is available and you require a<=1.2.3, we can conclude that your requirements are unsatisfiable.
     ");
 
@@ -1965,7 +1965,7 @@ fn post_less_than() {
         , @"
     exit_code: 1 (failure)
     ----- stderr -----
-    error: No solution found when resolving dependencies:
+    error: No solution found when resolving dependencies
       Caused by: Because only a==1.2.3.post1 is available and you require a<1.2.3, we can conclude that your requirements are unsatisfiable.
     ");
 
@@ -1995,7 +1995,7 @@ fn post_local_greater_than_post() {
         , @"
     exit_code: 1 (failure)
     ----- stderr -----
-    error: No solution found when resolving dependencies:
+    error: No solution found when resolving dependencies
       Caused by: Because only a<=1.2.3.post1 is available and you require a>1.2.3.post1, we can conclude that your requirements are unsatisfiable.
     ");
 
@@ -2025,7 +2025,7 @@ fn post_local_greater_than() {
         , @"
     exit_code: 1 (failure)
     ----- stderr -----
-    error: No solution found when resolving dependencies:
+    error: No solution found when resolving dependencies
       Caused by: Because only a<=1.2.3.post1+local is available and you require a>1.2.3, we can conclude that your requirements are unsatisfiable.
     ");
 
@@ -2054,7 +2054,7 @@ fn post_simple() {
         , @"
     exit_code: 1 (failure)
     ----- stderr -----
-    error: No solution found when resolving dependencies:
+    error: No solution found when resolving dependencies
       Caused by: Because there is no version of a==1.2.3 and you require a==1.2.3, we can conclude that your requirements are unsatisfiable.
     ");
 
@@ -4109,7 +4109,7 @@ fn python_greater_than_current_excluded() {
         , @"
     exit_code: 1 (failure)
     ----- stderr -----
-    error: No solution found when resolving dependencies:
+    error: No solution found when resolving dependencies
       Caused by: Because the current Python version (3.9.[X]) does not satisfy Python>=3.10 and a==2.0.0 depends on Python>=3.10, we can conclude that a==2.0.0 cannot be used.
         And because only the following versions of a are available:
             a<=2.0.0
@@ -4177,7 +4177,7 @@ fn python_greater_than_current_many() {
         , @"
     exit_code: 1 (failure)
     ----- stderr -----
-    error: No solution found when resolving dependencies:
+    error: No solution found when resolving dependencies
       Caused by: Because there is no version of a==1.0.0 and you require a==1.0.0, we can conclude that your requirements are unsatisfiable.
     ");
 
@@ -4208,7 +4208,7 @@ fn python_greater_than_current_patch() {
         , @"
     exit_code: 1 (failure)
     ----- stderr -----
-    error: No solution found when resolving dependencies:
+    error: No solution found when resolving dependencies
       Caused by: Because the current Python version (3.13) does not satisfy Python>=3.13.2 and a==1.0.0 depends on Python>=3.13.2, we can conclude that a==1.0.0 cannot be used.
         And because you require a==1.0.0, we can conclude that your requirements are unsatisfiable.
     ");
@@ -4239,7 +4239,7 @@ fn python_greater_than_current() {
         , @"
     exit_code: 1 (failure)
     ----- stderr -----
-    error: No solution found when resolving dependencies:
+    error: No solution found when resolving dependencies
       Caused by: Because the current Python version (3.9.[X]) does not satisfy Python>=3.10 and a==1.0.0 depends on Python>=3.10, we can conclude that a==1.0.0 cannot be used.
         And because you require a==1.0.0, we can conclude that your requirements are unsatisfiable.
     ");
@@ -4302,7 +4302,7 @@ fn python_version_does_not_exist() {
         , @"
     exit_code: 1 (failure)
     ----- stderr -----
-    error: No solution found when resolving dependencies:
+    error: No solution found when resolving dependencies
       Caused by: Because the current Python version (3.12.[X]) does not satisfy Python>=3.30 and a==1.0.0 depends on Python>=3.30, we can conclude that a==1.0.0 cannot be used.
         And because you require a==1.0.0, we can conclude that your requirements are unsatisfiable.
     ");
@@ -4418,7 +4418,7 @@ fn canonical_empty_requirement() {
         , @"
     exit_code: 1 (failure)
     ----- stderr -----
-    error: No solution found when resolving dependencies:
+    error: No solution found when resolving dependencies
       Caused by: you require a<0.dev0, which does not allow any versions
     ");
 
@@ -4459,7 +4459,7 @@ fn equivalent_dependency_ranges() {
         , @"
     exit_code: 1 (failure)
     ----- stderr -----
-    error: No solution found when resolving dependencies:
+    error: No solution found when resolving dependencies
       Caused by: Because all versions of a depend on c<=1.0 and you require a, we can conclude that you require c<=1.0.
         And because you require c>=2.0, we can conclude that your requirements are unsatisfiable.
     ");
@@ -4558,7 +4558,7 @@ fn no_sdist_no_wheels_with_matching_abi() {
         , @"
     exit_code: 1 (failure)
     ----- stderr -----
-    error: No solution found when resolving dependencies:
+    error: No solution found when resolving dependencies
       Caused by: Because a==1.0.0 has no wheels with a matching Python ABI tag (e.g., `cp312`) and only a==1.0.0 is available, we can conclude that all versions of a cannot be used.
         And because you require a, we can conclude that your requirements are unsatisfiable.
 
@@ -4591,7 +4591,7 @@ fn no_sdist_no_wheels_with_matching_platform() {
         , @"
     exit_code: 1 (failure)
     ----- stderr -----
-    error: No solution found when resolving dependencies:
+    error: No solution found when resolving dependencies
       Caused by: Because a==1.0.0 has no wheels with a matching platform tag (e.g., `manylinux_2_17_x86_64`) and only a==1.0.0 is available, we can conclude that all versions of a cannot be used.
         And because you require a, we can conclude that your requirements are unsatisfiable.
 
@@ -4624,7 +4624,7 @@ fn no_sdist_no_wheels_with_matching_python() {
         , @"
     exit_code: 1 (failure)
     ----- stderr -----
-    error: No solution found when resolving dependencies:
+    error: No solution found when resolving dependencies
       Caused by: Because a==1.0.0 has no wheels with a matching Python implementation tag (e.g., `cp312`) and only a==1.0.0 is available, we can conclude that all versions of a cannot be used.
         And because you require a, we can conclude that your requirements are unsatisfiable.
 
@@ -4658,7 +4658,7 @@ fn no_wheels_no_build() {
         , @"
     exit_code: 1 (failure)
     ----- stderr -----
-    error: No solution found when resolving dependencies:
+    error: No solution found when resolving dependencies
       Caused by: Because a==1.0.0 has no usable wheels and only a==1.0.0 is available, we can conclude that all versions of a cannot be used.
         And because you require a, we can conclude that your requirements are unsatisfiable.
 
@@ -4750,7 +4750,7 @@ fn only_wheels_no_binary() {
         , @"
     exit_code: 1 (failure)
     ----- stderr -----
-    error: No solution found when resolving dependencies:
+    error: No solution found when resolving dependencies
       Caused by: Because a==1.0.0 has no source distribution and only a==1.0.0 is available, we can conclude that all versions of a cannot be used.
         And because you require a, we can conclude that your requirements are unsatisfiable.
 
@@ -4841,7 +4841,7 @@ fn package_only_yanked_in_range() {
         , @"
     exit_code: 1 (failure)
     ----- stderr -----
-    error: No solution found when resolving dependencies:
+    error: No solution found when resolving dependencies
       Caused by: Because a==1.0.0 was yanked and only the following versions of a are available:
             a<=0.1.0
             a==1.0.0
@@ -4875,7 +4875,7 @@ fn package_only_yanked() {
         , @"
     exit_code: 1 (failure)
     ----- stderr -----
-    error: No solution found when resolving dependencies:
+    error: No solution found when resolving dependencies
       Caused by: Because a==1.0.0 was yanked and only a==1.0.0 is available, we can conclude that all versions of a cannot be used.
         And because you require a, we can conclude that your requirements are unsatisfiable.
     ");
@@ -5023,7 +5023,7 @@ fn transitive_package_only_yanked_in_range() {
         , @"
     exit_code: 1 (failure)
     ----- stderr -----
-    error: No solution found when resolving dependencies:
+    error: No solution found when resolving dependencies
       Caused by: Because b==1.0.0 was yanked and only the following versions of b are available:
             b<=0.1
             b==1.0.0
@@ -5061,7 +5061,7 @@ fn transitive_package_only_yanked() {
         , @"
     exit_code: 1 (failure)
     ----- stderr -----
-    error: No solution found when resolving dependencies:
+    error: No solution found when resolving dependencies
       Caused by: Because b==1.0.0 was yanked and only b==1.0.0 is available, we can conclude that all versions of b cannot be used.
         And because all versions of a depend on b and you require a, we can conclude that your requirements are unsatisfiable.
     ");
@@ -5156,7 +5156,7 @@ fn transitive_yanked_and_unyanked_dependency() {
         , @"
     exit_code: 1 (failure)
     ----- stderr -----
-    error: No solution found when resolving dependencies:
+    error: No solution found when resolving dependencies
       Caused by: Because c==2.0.0 was yanked and all versions of a depend on c==2.0.0, we can conclude that all versions of a cannot be used.
         And because you require a, we can conclude that your requirements are unsatisfiable.
     ");

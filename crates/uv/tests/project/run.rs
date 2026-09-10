@@ -433,7 +433,7 @@ fn run_pep723_script() -> Result<()> {
     uv_snapshot!(context.filters(), context.run().arg("--group").arg("foo").arg("main.py"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-    error: No solution found when resolving script dependencies:
+    error: No solution found when resolving script dependencies
       Caused by: Because there are no versions of add and you require add, we can conclude that your requirements are unsatisfiable.
     ");
 
@@ -452,7 +452,7 @@ fn run_pep723_script() -> Result<()> {
     uv_snapshot!(context.filters(), context.run().arg("--no-project").arg("main.py"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-    error: No solution found when resolving script dependencies:
+    error: No solution found when resolving script dependencies
       Caused by: Because there are no versions of add and you require add, we can conclude that your requirements are unsatisfiable.
     ");
 
@@ -1492,7 +1492,7 @@ fn run_with() -> Result<()> {
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Checked 2 packages in [TIME]
-    error: No solution found when resolving `--with` dependencies:
+    error: No solution found when resolving `--with` dependencies
       Caused by: Because there are no versions of add and you require add, we can conclude that your requirements are unsatisfiable.
     ");
 
