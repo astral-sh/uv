@@ -33,8 +33,9 @@ on:
 
 env:
   ACTIONS_CACHE_MODE: none
-  # The main-branch release workflow uses `production/uv`; other builds use `dev/uv`.
-  DEPOT_PROJECT_ID: ${{ !inputs.push-dev && github.repository == 'astral-sh/uv' && github.event_name == 'workflow_dispatch' && github.workflow_ref == 'astral-sh/uv/.github/workflows/release.yml@refs/heads/main' && '7hd4vdzmw5' || 'v094vdzkdt' }}
+  # Release builds use `production/uv`; development builds use `dev/uv` or
+  # `dev/uv-dev` to keep each repository's cache and saved images separate.
+  DEPOT_PROJECT_ID: ${{ !inputs.push-dev && github.repository == 'astral-sh/uv' && github.event_name == 'workflow_dispatch' && github.workflow_ref == 'astral-sh/uv/.github/workflows/release.yml@refs/heads/main' && '7hd4vdzmw5' || github.repository == 'astral-sh/uv-dev' && 'c3ht4lmvqh' || 'v094vdzkdt' }}
   UV_GHCR_IMAGE: ghcr.io/${{ github.repository_owner }}/${{ inputs.push-dev && 'uv-dev' || 'uv' }}
   UV_DOCKERHUB_IMAGE: ${{ !inputs.push-dev && 'docker.io/astral/uv' || '' }}
   UV_LOCKED: 1
