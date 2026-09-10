@@ -414,8 +414,8 @@ fn compile_constraints_many_versions() -> Result<()> {
 
     let mut filters = context.filters();
     filters.push((
-        r"(?s)error: No solution found when resolving dependencies:.*requirements are unsatisfiable\.",
-        "error: No solution found when resolving dependencies: [LONG DERIVATION]",
+        r"(?s)  Caused by: Because package<=1\.0\.0.*requirements are unsatisfiable\.",
+        "  Caused by: [LONG DERIVATION]",
     ));
 
     uv_snapshot!(filters, context.pip_compile()
@@ -427,7 +427,8 @@ fn compile_constraints_many_versions() -> Result<()> {
             .env(EnvVars::UV_STACK_SIZE, (4 * 1024 * 1024).to_string()), @"
     exit_code: 1 (failure)
     ----- stderr -----
-    error: No solution found when resolving dependencies: [LONG DERIVATION]
+    error: No solution found when resolving dependencies
+      Caused by: [LONG DERIVATION]
     ");
 
     Ok(())
