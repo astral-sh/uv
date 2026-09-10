@@ -367,7 +367,7 @@ async fn audit_pylock_project_status() -> Result<()> {
 
 #[test]
 fn audit_pylock_invalid_inputs() -> Result<()> {
-    let context = uv_test::test_context_with_versions!(&[]);
+    let context = uv_test::test_context_with_versions!(&[]).with_filtered_missing_file_error();
     uv_snapshot!(context.filters(), context.audit()
         .args(["--preview-features", "audit,pylock"])
         .args(["-r", "requirements.txt"]), @"
@@ -405,7 +405,7 @@ fn audit_pylock_invalid_inputs() -> Result<()> {
         .args(["-r", "pylock.missing.toml"]), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: failed to read from file `pylock.missing.toml`: No such file or directory (os error 2)
+    error: failed to read from file `pylock.missing.toml`: [OS ERROR 2]
     ");
     context
         .temp_dir
