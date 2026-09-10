@@ -622,8 +622,10 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             let cache_hash_policy = declared_hashes.as_ref().map_or(hash_policy, |hashes| {
                 ArchiveHashPolicy::All(hashes.as_slice())
             });
-            let cached_wheel = if let Some(pointer) =
-                HttpArchivePointer::read_from_direct_url(cache, wheel, cache_hash_policy)
+            // Only a matching expected hash can bypass HTTP revalidation.
+            let cached_wheel = if cache_hash_policy.requires_validation()
+                && let Some(pointer) =
+                    HttpArchivePointer::read_from_direct_url(cache, wheel, cache_hash_policy)
             {
                 Some(pointer.into_wheel(cache, dist))
             } else {
@@ -633,9 +635,8 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                     format!("{}.http", wheel.filename.cache_key()),
                 );
                 if http_entry.path().try_exists().map_err(Error::CacheRead)? {
-                    // The cached pointer is corrupt or its archive no longer satisfies this
-                    // request. Recover it before resolving dependencies, not only when the
-                    // installer retrieves the wheel.
+                    // Revalidate mutable URL responses and recover unusable archives before
+                    // resolving dependencies, so installation uses the same contents.
                     Some(
                         self.get_wheel(dist, cache_hash_policy)
                             .boxed_local()
@@ -655,7 +656,10 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 }
                 return Ok(ArchiveMetadata {
                     metadata: Metadata::from_metadata23(wheel.metadata()?),
-                    hashes: wheel.hashes,
+                    hashes: match hashes.collection {
+                        HashCollection::None => HashDigests::empty(),
+                        HashCollection::Url | HashCollection::All => wheel.hashes,
+                    },
                 });
             }
         }
@@ -688,7 +692,10 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 // downloading the wheel directly, try that.
                 let wheel = self.get_wheel(dist, hash_policy).boxed_local().await?;
                 let metadata = wheel.metadata()?;
-                let hashes = wheel.hashes;
+                let hashes = match hashes.collection {
+                    HashCollection::None => HashDigests::empty(),
+                    HashCollection::Url | HashCollection::All => wheel.hashes,
+                };
                 Ok(ArchiveMetadata {
                     metadata: Metadata::from_metadata23(metadata),
                     hashes,
@@ -1567,7 +1574,7 @@ impl HttpArchivePointer {
     }
 
     /// Read an [`HttpArchivePointer`] from the cache.
-    pub fn read_from(path: impl AsRef<Path>) -> Result<Option<Self>, Error> {
+    pub(crate) fn read_from(path: impl AsRef<Path>) -> Result<Option<Self>, Error> {
         match fs_err::File::open(path.as_ref()) {
             Ok(file) => {
                 let data = DataWithCachePolicy::from_reader(file)?.data;
@@ -1584,7 +1591,7 @@ impl HttpArchivePointer {
     /// Only computed hashes populate this index. HTTP metadata and mutable URL responses are not
     /// shared, and a matching index key alone is not sufficient to accept an archive. Unreadable
     /// entries are ignored so that other cached archives or a fresh download can be used instead.
-    pub fn read_from_hashes(
+    fn read_from_hashes(
         cache: &Cache,
         url: &DisplaySafeUrl,
         filename: &WheelFilename,

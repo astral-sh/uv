@@ -11079,7 +11079,7 @@ async fn direct_url_hash_cache_metadata() -> Result<()> {
             .and(path(format!("/{filename}")))
             .respond_with(
                 ResponseTemplate::new(200)
-                    .insert_header("cache-control", "max-age=3600")
+                    .insert_header("cache-control", "max-age=0, must-revalidate")
                     .set_body_bytes(wheel),
             )
     };
@@ -11186,6 +11186,20 @@ async fn direct_url_hash_cache_metadata() -> Result<()> {
           And because only ok==1.0.0 is available and you require ok, we can conclude that your requirements are unsatisfiable.
 
     hint: Packages were unavailable because the network was disabled. When the network is disabled, registry packages may only be read from the cache.
+    ");
+
+    // An expired URL without an expected hash must revalidate before resolving dependencies.
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--target").arg("unpinned")
+        .arg("--no-index").arg(&url), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: .venv/[BIN]/[PYTHON]
+      × No solution found when resolving dependencies:
+      ╰─▶ Because cache-missing-dependency was not found in the provided package locations and ok==1.0.0 depends on cache-missing-dependency==1.0, we can conclude that ok==1.0.0 cannot be used.
+          And because only ok==1.0.0 is available and you require ok, we can conclude that your requirements are unsatisfiable.
+
+    hint: Packages were unavailable because index lookups were disabled and no additional package locations were provided (try: `--find-links <uri>`)
     ");
 
     // A third revision is not cached under any hash. Refresh it before resolving dependencies,
