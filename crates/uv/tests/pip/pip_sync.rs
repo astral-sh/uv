@@ -16,7 +16,7 @@ use wiremock::{Mock, MockServer, ResponseTemplate};
 use uv_cache::{Cache, CacheBucket, WheelCache};
 use uv_client::{BaseClientBuilder, CacheControl, CachedClient, Error as ClientError};
 use uv_distribution::HttpArchivePointer;
-use uv_distribution_types::{DirectUrlBuiltDist, HashPolicy};
+use uv_distribution_types::{ArchiveHashPolicy, DirectUrlBuiltDist};
 use uv_fs::{Simplified, copy_dir_all};
 use uv_redacted::DisplaySafeUrl;
 use uv_static::EnvVars;
@@ -4946,7 +4946,7 @@ async fn direct_url_wheel_cache_tracks_content() -> Result<()> {
         .mount(&server)
         .await;
     // Seed independent entries so generation cannot mask a stale validation entry.
-    requirements_in.write_str(&format!("ok @ {generation_url}#sha256={original_hash}\n"))?;
+    requirements_in.write_str(&format!("ok @ {generation_url}\n"))?;
     context
         .pip_compile()
         .arg("requirements.in")
@@ -4970,6 +4970,14 @@ async fn direct_url_wheel_cache_tracks_content() -> Result<()> {
     requirements_in.write_str(&format!(
         "ok @ {generation_url}#sha256={replacement_hash}\n"
     ))?;
+    // The shared archive has a different hash and cannot supply metadata for this URL offline.
+    context
+        .pip_compile()
+        .arg("requirements.in")
+        .arg("--generate-hashes")
+        .arg("--offline")
+        .assert()
+        .failure();
     uv_snapshot!(context.filters(), context.pip_compile()
         .arg("requirements.in")
         .arg("--generate-hashes"), @r"
@@ -5001,7 +5009,6 @@ async fn direct_url_wheel_cache_tracks_content() -> Result<()> {
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + ok==1.0.0 (from http://[LOCALHOST]/ok-1.0.0-py3-none-any.whl)
     ");
@@ -5127,7 +5134,7 @@ async fn require_hashes_url_legacy_cache() -> Result<()> {
     // Re-create the old layout, including the fragment in the stored HTTP request URI.
     let cache = Cache::from_path(context.cache_dir.path());
     let (canonical, pointer) =
-        HttpArchivePointer::read_from_direct_url(&cache, &wheel, HashPolicy::None)
+        HttpArchivePointer::read_from_direct_url(&cache, &wheel, ArchiveHashPolicy::None)
             .context("expected the downloaded wheel in the cache")?;
     let archive = pointer.into_archive();
     let legacy = cache.entry(
@@ -5173,19 +5180,17 @@ async fn require_hashes_url_legacy_cache() -> Result<()> {
     );
 
     // Revalidate using the legacy ETag; a 304 must create the canonical entry.
-    for request_method in ["HEAD", "GET"] {
-        Mock::given(method(request_method))
-            .and(path(format!("/{wheel_filename}")))
-            .and(header("if-none-match", "\"original\""))
-            .respond_with(
-                ResponseTemplate::new(304)
-                    .insert_header("Cache-Control", "max-age=3600")
-                    .insert_header("ETag", "\"original\""),
-            )
-            .expect(1)
-            .mount(&server)
-            .await;
-    }
+    Mock::given(method("GET"))
+        .and(path(format!("/{wheel_filename}")))
+        .and(header("if-none-match", "\"original\""))
+        .respond_with(
+            ResponseTemplate::new(304)
+                .insert_header("Cache-Control", "max-age=3600")
+                .insert_header("ETag", "\"original\""),
+        )
+        .expect(1)
+        .mount(&server)
+        .await;
     context
         .pip_sync()
         .arg("requirements.txt")

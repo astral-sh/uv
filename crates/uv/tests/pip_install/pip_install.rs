@@ -16998,3 +16998,135 @@ fn compile_bytecode_excludes_stdlib() -> Result<()> {
 
     Ok(())
 }
+
+/// Cached URL metadata must describe the archive selected for installation.
+#[tokio::test]
+async fn direct_url_wheel_cache_metadata() -> Result<()> {
+    let context = uv_test::test_context!("3.12")
+        .with_filtered_python_names()
+        .with_filtered_virtualenv_bin()
+        .with_filtered_exe_suffix();
+    let server = MockServer::start().await;
+    let filename = "ok-1.0.0-py3-none-any.whl";
+    let url = format!("{}/{filename}", server.uri());
+    let original = fs_err::read(context.workspace_root.join("test/links").join(filename))?;
+    let serve = |wheel, cache_control| {
+        Mock::given(method("GET"))
+            .and(path(format!("/{filename}")))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .insert_header("cache-control", cache_control)
+                    .set_body_bytes(wheel),
+            )
+    };
+    Mock::given(method("HEAD"))
+        .respond_with(ResponseTemplate::new(405))
+        .mount(&server)
+        .await;
+    serve(original, "max-age=0, must-revalidate")
+        .mount(&server)
+        .await;
+    context
+        .pip_install()
+        .arg("--target")
+        .arg("original")
+        .arg(&url)
+        .assert()
+        .success();
+
+    server.reset().await;
+
+    // Publish different metadata at the same wheel URL, selected by a new hash.
+    let wheel_with_dependency = |dependency: &str| -> Result<Vec<u8>> {
+        let (_, wheel) = generate_wheel(
+            &"ok".parse()?,
+            &"1.0.0".parse()?,
+            &[dependency.parse()?],
+            &BTreeMap::new(),
+            None,
+            "py3-none-any",
+        );
+        Ok(wheel)
+    };
+    let changed = wheel_with_dependency("cache-missing-dependency==1.0")?;
+    let hash = hex::encode(Sha256::digest(&changed));
+    Mock::given(method("HEAD"))
+        .respond_with(ResponseTemplate::new(405))
+        .mount(&server)
+        .await;
+    serve(changed, "max-age=0, must-revalidate")
+        .mount(&server)
+        .await;
+    context
+        .pip_install()
+        .arg("--target")
+        .arg("changed")
+        .arg("--no-deps")
+        .arg(format!("{url}#sha256={hash}"))
+        .assert()
+        .success();
+
+    // The fragment-free URL must resolve dependencies from the wheel it will install.
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--target").arg("changed-offline")
+        .arg("--offline").arg(&url), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: .venv/[BIN]/[PYTHON]
+      × No solution found when resolving dependencies:
+      ╰─▶ Because cache-missing-dependency was not found in the cache and ok==1.0.0 depends on cache-missing-dependency==1.0, we can conclude that ok==1.0.0 cannot be used.
+          And because only ok==1.0.0 is available and you require ok, we can conclude that your requirements are unsatisfiable.
+
+    hint: Packages were unavailable because the network was disabled. When the network is disabled, registry packages may only be read from the cache.
+    ");
+
+    server.reset().await;
+    serve(
+        wheel_with_dependency("cache-missing-dependency==2.0")?,
+        "max-age=3600",
+    )
+    .expect(1)
+    .mount(&server)
+    .await;
+    // An expired URL without an expected hash must revalidate before resolving dependencies.
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--target").arg("unpinned")
+        .arg("--no-index").arg(&url), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: .venv/[BIN]/[PYTHON]
+      × No solution found when resolving dependencies:
+      ╰─▶ Because cache-missing-dependency was not found in the provided package locations and ok==1.0.0 depends on cache-missing-dependency==2.0, we can conclude that ok==1.0.0 cannot be used.
+          And because only ok==1.0.0 is available and you require ok, we can conclude that your requirements are unsatisfiable.
+
+    hint: Packages were unavailable because index lookups were disabled and no additional package locations were provided (try: `--find-links <uri>`)
+    ");
+
+    // A new expected hash must refresh the archive before resolving dependencies.
+    let refreshed = wheel_with_dependency("cache-missing-dependency==3.0")?;
+    let hash = hex::encode(Sha256::digest(&refreshed));
+    server.reset().await;
+    serve(refreshed, "max-age=3600")
+        .expect(1)
+        .mount(&server)
+        .await;
+    context
+        .temp_dir
+        .child("requirements.txt")
+        .write_str(&format!("ok @ {url} --hash=sha256:{hash}"))?;
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--target").arg("refreshed")
+        .arg("--no-index").arg("--require-hashes")
+        .arg("-r").arg("requirements.txt"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: .venv/[BIN]/[PYTHON]
+      × No solution found when resolving dependencies:
+      ╰─▶ Because cache-missing-dependency was not found in the provided package locations and ok==1.0.0 depends on cache-missing-dependency==3.0, we can conclude that ok==1.0.0 cannot be used.
+          And because only ok==1.0.0 is available and you require ok, we can conclude that your requirements are unsatisfiable.
+
+    hint: Packages were unavailable because index lookups were disabled and no additional package locations were provided (try: `--find-links <uri>`)
+    ");
+
+    Ok(())
+}

@@ -609,6 +609,38 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             return Ok(ArchiveMetadata::from_metadata23(metadata));
         }
 
+        // A shared archive can be replaced through another URL fragment while the metadata
+        // cache still describes the old wheel. Read its metadata through the archive's HTTP
+        // cache, so we also honor expiration and refresh mismatched hashes before resolution.
+        if let BuiltDist::DirectUrl(wheel) = dist
+            && once(wheel.location.as_ref())
+                .chain((wheel.location.as_ref() != wheel.url.raw()).then_some(wheel.url.raw()))
+                .any(|location| {
+                    self.build_context
+                        .cache()
+                        .entry(
+                            CacheBucket::Wheels,
+                            WheelCache::Url(location).wheel_dir(wheel.name().as_ref()),
+                            format!("{}.http", wheel.filename.cache_key()),
+                        )
+                        .path()
+                        .exists()
+                })
+        {
+            let url_hashes = parse_url_hashes(&wheel.url);
+            let cache_hashes = if hash_policy.is_none() {
+                url_hashes.as_ref().map_or(hash_policy, |hashes| {
+                    ArchiveHashPolicy::All(hashes.as_slice())
+                })
+            } else {
+                hash_policy
+            };
+            let wheel = self.get_wheel(dist, cache_hashes).await?;
+            if wheel.satisfies(cache_hashes) {
+                return Ok(ArchiveMetadata::from_metadata23(wheel.metadata()?));
+            }
+        }
+
         let result = self
             .client
             .managed(|client| {
@@ -637,7 +669,10 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 // downloading the wheel directly, try that.
                 let wheel = self.get_wheel(dist, hash_policy).await?;
                 let metadata = wheel.metadata()?;
-                let hashes = wheel.hashes;
+                let hashes = match hashes.collection {
+                    HashCollection::None => HashDigests::empty(),
+                    HashCollection::Url | HashCollection::All => wheel.hashes,
+                };
                 Ok(ArchiveMetadata {
                     metadata: Metadata::from_metadata23(metadata),
                     hashes,
