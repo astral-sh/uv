@@ -7,29 +7,25 @@
 
 Released on 2026-09-10.
 
+### Python
+
+- Add GraalPy 3.13.0 ([#21431](https://github.com/astral-sh/uv/pull/21431))
+
 ### Enhancements
 
-- Verify sidecar hashes ([#21563](https://github.com/astral-sh/uv/pull/21563))
+- Verify newly downloaded PEP 658 wheel metadata sidecars against index-provided hashes and prioritize PEP 714 `core-metadata` fields over legacy aliases in JSON index responses ([#21563](https://github.com/astral-sh/uv/pull/21563))
 
 ### Preview features
 
-- Respect ty exclusions in `uv check` ([#21555](https://github.com/astral-sh/uv/pull/21555))
+- Respect `ty` exclusions when `uv check` automatically selects members of a virtual workspace ([#21555](https://github.com/astral-sh/uv/pull/21555))
 
 ### Performance
 
-- Reuse URL-provided hashes during resolution ([#21279](https://github.com/astral-sh/uv/pull/21279))
+- Avoid full wheel downloads during resolution by reusing supported hashes from direct URL fragments when metadata is available separately ([#21279](https://github.com/astral-sh/uv/pull/21279))
 
-### Other changes
+### Bug fixes
 
-- Build macOS x86_64 dev binaries on Namespace ([#21573](https://github.com/astral-sh/uv/pull/21573))
-- Clarify release pipeline job names ([#21561](https://github.com/astral-sh/uv/pull/21561))
-- Refactor release artifact handling ([#21556](https://github.com/astral-sh/uv/pull/21556))
-- Separate Docker release builds from publishing ([#21586](https://github.com/astral-sh/uv/pull/21586))
-- Sync latest Python releases ([#21431](https://github.com/astral-sh/uv/pull/21431))
-- Update repository label consumers ([#21582](https://github.com/astral-sh/uv/pull/21582))
-- Use `editpe` for trampoline resource edits ([#18713](https://github.com/astral-sh/uv/pull/18713))
-- Use paid GitHub-hosted runners for Linux ([#21572](https://github.com/astral-sh/uv/pull/21572))
-- Use separate Depot projects for Docker development builds ([#21591](https://github.com/astral-sh/uv/pull/21591))
+- Edit Windows entry-point launcher resources in memory to support Nano Server and reduce antivirus contention ([#18713](https://github.com/astral-sh/uv/pull/18713))
 
 ## 0.12.12
 
