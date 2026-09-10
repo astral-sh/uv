@@ -281,7 +281,7 @@ impl<'a, C, W> ErrorOptions<'a, C, W> {
 
 /// Format an error chain and explicitly supplied hints to standard error using the default level
 /// and color.
-pub fn write_error_chain(err: &dyn Error, hints: Hints<'_>) -> fmt::Result {
+pub fn write_error_chain(err: &dyn Error, hints: &Hints<'_>) -> fmt::Result {
     write_error_chain_with_options(err, hints, ErrorOptions::default())
 }
 
@@ -309,7 +309,7 @@ impl fmt::Display for DebugErrorChain<'_> {
 /// Each hint is rendered on its own line, prefixed with the styled `hint:` label.
 pub fn write_error_chain_with_options<C: DynColor + Copy, W: fmt::Write>(
     err: &dyn Error,
-    hints: Hints<'_>,
+    hints: &Hints<'_>,
     options: ErrorOptions<'_, C, W>,
 ) -> fmt::Result {
     let ErrorOptions {
@@ -492,7 +492,7 @@ mod tests {
         let mut output = String::new();
         write_error_chain_with_options(
             &error,
-            Hints::none(),
+            &Hints::none(),
             ErrorOptions::default()
                 .with_width_override(80)
                 .with_stream(&mut output),
@@ -525,7 +525,7 @@ mod tests {
         let mut output = String::new();
         write_error_chain_with_options(
             &error,
-            Hints::none(),
+            &Hints::none(),
             ErrorOptions::default().with_stream(&mut output),
         )
         .unwrap();
@@ -569,7 +569,7 @@ mod tests {
         let mut output = String::new();
         write_error_chain_with_options(
             error.as_ref(),
-            Hints::none(),
+            &Hints::none(),
             ErrorOptions::default()
                 .with_level("warning")
                 .with_color(AnsiColors::Yellow)
@@ -594,7 +594,7 @@ mod tests {
         let mut output = String::new();
         write_error_chain_with_options(
             &error,
-            Hints::none(),
+            &Hints::none(),
             ErrorOptions::default()
                 .with_width_override(50)
                 .with_stream(&mut output),
@@ -619,7 +619,7 @@ mod tests {
         let mut output = String::new();
         write_error_chain_with_options(
             &error,
-            Hints::none(),
+            &Hints::none(),
             ErrorOptions::default()
                 .with_width_override(40)
                 .with_stream(&mut output),
@@ -659,7 +659,7 @@ mod tests {
         let mut output = String::new();
         write_error_chain_with_options(
             &error,
-            Hints::none(),
+            &Hints::none(),
             ErrorOptions::default()
                 .with_width_override(60)
                 .with_stream(&mut output),
@@ -685,7 +685,7 @@ mod tests {
         let mut output = String::new();
         write_error_chain_with_options(
             &error,
-            Hints::none(),
+            &Hints::none(),
             ErrorOptions::default()
                 .with_width_override(50)
                 .with_stream(&mut output),
@@ -712,7 +712,7 @@ mod tests {
         let mut output = String::new();
         write_error_chain_with_options(
             &error,
-            Hints::none(),
+            &Hints::none(),
             ErrorOptions::default()
                 .with_width_override(50)
                 .with_stream(&mut output),
@@ -739,7 +739,7 @@ mod tests {
         let mut rendered = String::new();
         write_error_chain_with_options(
             err.as_ref(),
-            hints,
+            &hints,
             ErrorOptions::default().with_stream(&mut rendered),
         )
         .unwrap();
@@ -768,7 +768,7 @@ mod tests {
         let mut rendered = String::new();
         write_error_chain_with_options(
             err.as_ref(),
-            Hints::none(),
+            &Hints::none(),
             ErrorOptions::default().with_stream(&mut rendered),
         )
         .unwrap();

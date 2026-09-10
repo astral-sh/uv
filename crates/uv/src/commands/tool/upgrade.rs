@@ -182,7 +182,7 @@ pub(crate) async fn upgrade(
             write_error_chain_with_options(
                 err.context(format!("Failed to upgrade {}", name.green()))
                     .as_ref(),
-                Hints::none(),
+                &Hints::none(),
                 ErrorOptions::default().with_stream(printer.stderr()),
             )?;
         }

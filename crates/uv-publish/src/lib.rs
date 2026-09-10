@@ -2246,7 +2246,7 @@ mod tests {
         let mut capture = String::new();
         write_error_chain_with_options(
             &err,
-            Hints::none(),
+            &Hints::none(),
             ErrorOptions::default().with_stream(&mut capture),
         )
         .unwrap();
@@ -2280,7 +2280,7 @@ mod tests {
         let mut capture = String::new();
         write_error_chain_with_options(
             &err,
-            Hints::none(),
+            &Hints::none(),
             ErrorOptions::default().with_stream(&mut capture),
         )
         .unwrap();
@@ -2319,7 +2319,7 @@ mod tests {
         let mut capture = String::new();
         write_error_chain_with_options(
             &err,
-            Hints::none(),
+            &Hints::none(),
             ErrorOptions::default().with_stream(&mut capture),
         )
         .unwrap();
@@ -2361,7 +2361,7 @@ mod tests {
         let mut capture = String::new();
         write_error_chain_with_options(
             &err,
-            Hints::none(),
+            &Hints::none(),
             ErrorOptions::default().with_stream(&mut capture),
         )
         .unwrap();

@@ -521,7 +521,7 @@ async fn build_impl(
                 let hints = crate::commands::diagnostics::hints_for_error(&err);
                 write_error_chain_with_options(
                     err.as_ref(),
-                    hints,
+                    &hints,
                     ErrorOptions::default().with_stream(printer.stderr_important()),
                 )?;
 

@@ -261,7 +261,7 @@ impl TestClient {
             let mut rendered = String::new();
             write_error_chain_with_options(
                 &error,
-                error.hints(),
+                &error.hints(),
                 ErrorOptions::default().with_stream(&mut rendered),
             )
             .unwrap();
