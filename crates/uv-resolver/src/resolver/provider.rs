@@ -274,7 +274,7 @@ impl<Context: BuildContext> ResolverProvider for DefaultResolverProvider<'_, Con
     async fn get_or_build_wheel_metadata<'io>(&'io self, dist: &'io Dist) -> WheelMetadataResult {
         match self
             .fetcher
-            .get_or_build_wheel_metadata(dist, self.hasher.get(dist))
+            .get_or_build_wheel_metadata(dist, self.hasher.metadata_policy(dist))
             .await
         {
             Ok(metadata) => Ok(MetadataResponse::Found(metadata)),

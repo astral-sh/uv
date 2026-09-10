@@ -7,7 +7,7 @@ use tracing::warn;
 
 use uv_cache::{Cache, CacheBucket};
 use uv_distribution_filename::SourceDistExtension;
-use uv_distribution_types::{BuildableSource, HashPolicy};
+use uv_distribution_types::{ArchiveHashPolicy, BuildableSource};
 use uv_extract::hash::{HashReader, Hasher};
 use uv_fs::rename_with_retry;
 use uv_pypi_types::{HashAlgorithm, HashDigest};
@@ -19,7 +19,7 @@ pub(super) struct ArchiveValidation<'a> {
     /// Additional hashes to generate beyond those required for validation.
     pub(super) extra_algorithms: &'a [HashAlgorithm],
     /// The caller's trusted hash policy.
-    pub(super) hash_policy: HashPolicy<'a>,
+    pub(super) hash_policy: ArchiveHashPolicy<'a>,
     /// Every digest from a cache revision being repaired must remain unchanged.
     pub(super) existing_hashes: &'a [HashDigest],
     pub(super) expected_size: Option<u64>,
@@ -152,14 +152,14 @@ mod tests {
     use futures::TryStreamExt;
     use tokio_util::compat::FuturesAsyncReadCompatExt;
 
-    use uv_distribution_types::{DirectSourceUrl, HashGeneration, SourceUrl};
+    use uv_distribution_types::{DirectSourceUrl, SourceUrl};
     use uv_redacted::DisplaySafeUrl;
 
     use super::*;
 
     const NO_VALIDATION: ArchiveValidation<'static> = ArchiveValidation {
         extra_algorithms: &[],
-        hash_policy: HashPolicy::None,
+        hash_policy: ArchiveHashPolicy::None,
         existing_hashes: &[],
         expected_size: None,
     };
@@ -221,7 +221,7 @@ mod tests {
                 ..NO_VALIDATION
             },
             ArchiveValidation {
-                hash_policy: HashPolicy::Generate(HashGeneration::All),
+                hash_policy: ArchiveHashPolicy::Generate,
                 ..NO_VALIDATION
             },
             ArchiveValidation {
@@ -277,7 +277,7 @@ mod tests {
             &cache,
             &bytes[..],
             ArchiveValidation {
-                hash_policy: HashPolicy::All(&[wrong_hash]),
+                hash_policy: ArchiveHashPolicy::All(&[wrong_hash]),
                 ..NO_VALIDATION
             },
         )

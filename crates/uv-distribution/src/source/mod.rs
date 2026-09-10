@@ -31,9 +31,10 @@ use uv_client::{
 use uv_configuration::{BuildKind, BuildOutput, NoSources};
 use uv_distribution_filename::{SourceDistExtension, WheelFilename};
 use uv_distribution_types::{
-    BuildInfo, BuildVariables, BuildableSource, ConfigSettings, DirectorySourceUrl,
-    ExtraBuildRequirement, GitDirectorySourceUrl, GitPathSourceUrl, HashPolicy, Hashed, IndexUrl,
-    PathSourceUrl, RemoteSource, RequirementSource, RequiresPython, SourceDist, SourceUrl,
+    ArchiveHashPolicy, BuildInfo, BuildVariables, BuildableSource, ConfigSettings,
+    DirectorySourceUrl, ExtraBuildRequirement, GitDirectorySourceUrl, GitPathSourceUrl, Hashed,
+    IndexUrl, PathSourceUrl, RemoteSource, RequirementSource, RequiresPython, SourceDist,
+    SourceUrl,
 };
 use uv_fs::{Simplified, rename_with_retry, write_atomic};
 use uv_git::{Fetch, GIT_LFS, GitError, GitHttpSettings, GitResolver};
@@ -261,7 +262,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         &self,
         source: &BuildableSource<'_>,
         tags: &Tags,
-        hashes: HashPolicy<'_>,
+        hashes: ArchiveHashPolicy<'_>,
         client: &ManagedClient<'_>,
     ) -> Result<BuiltWheelMetadata, Error> {
         let built_wheel_metadata = match &source {
@@ -425,7 +426,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
     pub(crate) async fn download_and_build_metadata(
         &self,
         source: &BuildableSource<'_>,
-        hashes: HashPolicy<'_>,
+        hashes: ArchiveHashPolicy<'_>,
         client: &ManagedClient<'_>,
     ) -> Result<ArchiveMetadata, Error> {
         let metadata = match &source {
@@ -631,7 +632,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         subdirectory: Option<&'data Path>,
         ext: SourceDistExtension,
         tags: &Tags,
-        hashes: HashPolicy<'_>,
+        hashes: ArchiveHashPolicy<'_>,
         client: &ManagedClient<'_>,
     ) -> Result<BuiltWheelMetadata, Error> {
         let _lock = cache_shard.lock().await.map_err(Error::CacheLock)?;
@@ -764,7 +765,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         cache_shard: &CacheShard,
         subdirectory: Option<&'data Path>,
         ext: SourceDistExtension,
-        hashes: HashPolicy<'_>,
+        hashes: ArchiveHashPolicy<'_>,
         client: &ManagedClient<'_>,
     ) -> Result<ArchiveMetadata, Error> {
         let _lock = cache_shard.lock().await.map_err(Error::CacheLock)?;
@@ -948,7 +949,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         url: &DisplaySafeUrl,
         index: Option<&IndexUrl>,
         cache_shard: &CacheShard,
-        hashes: HashPolicy<'_>,
+        hashes: ArchiveHashPolicy<'_>,
         client: &ManagedClient<'_>,
     ) -> Result<Revision, Error> {
         let cache_entry = cache_shard.entry(HTTP_REVISION);
@@ -1057,7 +1058,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         resource: &PathSourceUrl<'_>,
         cache_shard: &CacheShard,
         tags: &Tags,
-        hashes: HashPolicy<'_>,
+        hashes: ArchiveHashPolicy<'_>,
     ) -> Result<BuiltWheelMetadata, Error> {
         let _lock = cache_shard.lock().await.map_err(Error::CacheLock)?;
 
@@ -1165,7 +1166,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         source: &BuildableSource<'_>,
         resource: &PathSourceUrl<'_>,
         cache_shard: &CacheShard,
-        hashes: HashPolicy<'_>,
+        hashes: ArchiveHashPolicy<'_>,
     ) -> Result<ArchiveMetadata, Error> {
         let _lock = cache_shard.lock().await.map_err(Error::CacheLock)?;
 
@@ -1320,7 +1321,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         source: &BuildableSource<'_>,
         resource: &PathSourceUrl<'_>,
         cache_shard: &CacheShard,
-        hashes: HashPolicy<'_>,
+        hashes: ArchiveHashPolicy<'_>,
     ) -> Result<LocalRevisionPointer, Error> {
         // Verify that the archive exists.
         if !resource.path.is_file() {
@@ -1380,7 +1381,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         source: &BuildableSource<'_>,
         resource: &DirectorySourceUrl<'_>,
         tags: &Tags,
-        hashes: HashPolicy<'_>,
+        hashes: ArchiveHashPolicy<'_>,
     ) -> Result<BuiltWheelMetadata, Error> {
         // Before running the build, check that the hashes match.
         if hashes.requires_validation() {
@@ -1486,7 +1487,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         &self,
         source: &BuildableSource<'_>,
         resource: &DirectorySourceUrl<'_>,
-        hashes: HashPolicy<'_>,
+        hashes: ArchiveHashPolicy<'_>,
         credentials_cache: &CredentialsCache,
     ) -> Result<ArchiveMetadata, Error> {
         // Before running the build, check that the hashes match.
@@ -1798,7 +1799,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         resource: &GitPathSourceUrl<'_>,
         fetch: &Fetch,
         cache_shard: &CacheShard,
-        hashes: HashPolicy<'_>,
+        hashes: ArchiveHashPolicy<'_>,
     ) -> Result<RevisionHashes, Error> {
         // Validate that LFS artifacts were fully initialized.
         if resource.git.lfs().enabled() && !fetch.lfs_ready() {
@@ -1858,7 +1859,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         source: &BuildableSource<'_>,
         resource: &GitPathSourceUrl<'_>,
         tags: &Tags,
-        hashes: HashPolicy<'_>,
+        hashes: ArchiveHashPolicy<'_>,
         client: &ManagedClient<'_>,
     ) -> Result<BuiltWheelMetadata, Error> {
         // Fetch the Git repository.
@@ -1968,7 +1969,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         &self,
         source: &BuildableSource<'_>,
         resource: &GitPathSourceUrl<'_>,
-        hashes: HashPolicy<'_>,
+        hashes: ArchiveHashPolicy<'_>,
         client: &ManagedClient<'_>,
     ) -> Result<ArchiveMetadata, Error> {
         // Fetch the Git repository.
@@ -2131,7 +2132,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         source: &BuildableSource<'_>,
         resource: &GitDirectorySourceUrl<'_>,
         tags: &Tags,
-        hashes: HashPolicy<'_>,
+        hashes: ArchiveHashPolicy<'_>,
         client: &ManagedClient<'_>,
     ) -> Result<BuiltWheelMetadata, Error> {
         // Before running the build, check that the hashes match.
@@ -2239,7 +2240,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         &self,
         source: &BuildableSource<'_>,
         resource: &GitDirectorySourceUrl<'_>,
-        hashes: HashPolicy<'_>,
+        hashes: ArchiveHashPolicy<'_>,
         client: &ManagedClient<'_>,
         credentials_cache: &CredentialsCache,
     ) -> Result<ArchiveMetadata, Error> {
@@ -2715,7 +2716,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         resource: &PathSourceUrl<'_>,
         entry: &CacheEntry,
         revision: Revision,
-        hashes: HashPolicy<'_>,
+        hashes: ArchiveHashPolicy<'_>,
     ) -> Result<Revision, Error> {
         warn!("Re-extracting missing source distribution: {source}");
 
@@ -2741,7 +2742,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         index: Option<&IndexUrl>,
         entry: &CacheEntry,
         revision: Revision,
-        hashes: HashPolicy<'_>,
+        hashes: ArchiveHashPolicy<'_>,
         client: &ManagedClient<'_>,
     ) -> Result<Revision, Error> {
         warn!("Re-downloading missing source distribution: {source}");
@@ -2813,7 +2814,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         source: &BuildableSource<'_>,
         ext: SourceDistExtension,
         target: &Path,
-        hash_policy: HashPolicy<'_>,
+        hash_policy: ArchiveHashPolicy<'_>,
         existing_hashes: &[HashDigest],
     ) -> Result<(Vec<HashDigest>, u64), Error> {
         let reader = response
@@ -2853,7 +2854,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         path: &Path,
         ext: SourceDistExtension,
         target: &Path,
-        hash_policy: HashPolicy<'_>,
+        hash_policy: ArchiveHashPolicy<'_>,
         existing_hashes: &[HashDigest],
     ) -> Result<Vec<HashDigest>, Error> {
         debug!("Unpacking for build: {}", path.display());
