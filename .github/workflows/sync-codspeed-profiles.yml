@@ -48,32 +48,28 @@ jobs:
   dispatch:
     needs: source
     if: ${{ needs.source.outputs.run-id != '' }}
-    strategy:
-      matrix:
-        repository: [astral-sh/uv-dev, astral-sh/uv-security]
     runs-on: github-ubuntu-24.04-x86_64-2
     timeout-minutes: 5
     environment: automations
     permissions:
       id-token: write # for the credential broker
     steps:
-      - name: Get mirror workflow token
+      - name: Get uv-dev workflow token
         id: token
         uses: open-security-tools/ost-simple-sts@9e012247e07c39080fb6a832dbfbcfeacebc19c4
         with:
           exchange-url: ${{ secrets.STS_API_URL }}/exchange
           audience: ${{ secrets.STS_API_URL }}
-          repository: ${{ matrix.repository }}
+          repository: astral-sh/uv-dev
           permissions: |
             actions: write
 
-      - name: Dispatch mirror import
+      - name: Dispatch uv-dev import
         env:
           GH_TOKEN: ${{ steps.token.outputs.token }}
-          DESTINATION: ${{ matrix.repository }}
           SOURCE_RUN: ${{ needs.source.outputs.run-id }}
           SOURCE_SHA: ${{ inputs.source-sha }}
         run: |
           gh workflow run import-codspeed-profiles.yml \
-            --repo "$DESTINATION" --ref main \
+            --repo astral-sh/uv-dev --ref main \
             --field "source-run=$SOURCE_RUN" --field "source-sha=$SOURCE_SHA"

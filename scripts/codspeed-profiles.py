@@ -6,7 +6,7 @@
 # no-build = true
 # exclude-newer = "P7D"
 # ///
-"""Retain CodSpeed uploads and import public-main measurements into uv mirrors.
+"""Retain CodSpeed uploads and import public-main measurements into uv-dev.
 
 The upload protocol sends measurement metadata, then PUTs an archive to a signed
 URL. Relaying both requests keeps the original machine and runner metadata with
@@ -35,7 +35,7 @@ from pathlib import Path
 
 UPLOAD_URL = "https://api.codspeed.io/upload"
 SOURCE_REPOSITORY = "astral-sh/uv"
-DESTINATIONS = {"astral-sh/uv-dev", "astral-sh/uv-security"}
+DESTINATION_REPOSITORY = "astral-sh/uv-dev"
 EXECUTORS = {"simulation": "valgrind", "walltime": "walltime"}
 ARTIFACTS = {mode: f"codspeed-profiles-{mode}" for mode in EXECUTORS}
 SOURCE_JOBS = {"bench / simulated", "bench / walltime on aarch64 linux"}
@@ -346,8 +346,11 @@ def find_source_run(sha: str, run_id: str | None = None) -> str | None:
 
 def commit_is_mirrored(sha: str) -> bool:
     repository = os.environ["GITHUB_REPOSITORY"]
-    if repository not in DESTINATIONS or os.environ["GITHUB_REF"] != "refs/heads/main":
-        raise ValueError("Expected a mirror main-branch workflow")
+    if (
+        repository != DESTINATION_REPOSITORY
+        or os.environ["GITHUB_REF"] != "refs/heads/main"
+    ):
+        raise ValueError("Expected a uv-dev main-branch workflow")
     if not re.fullmatch(r"[0-9a-f]{40}", sha):
         raise ValueError("Expected a full commit SHA")
     comparison = github_object(
@@ -359,12 +362,12 @@ def commit_is_mirrored(sha: str) -> bool:
 
 def destination_metadata(source: dict, environment: Mapping[str, str]) -> dict:
     repository = environment["GITHUB_REPOSITORY"]
-    if repository not in DESTINATIONS:
-        raise ValueError("Only uv mirrors may import benchmark profiles")
+    if repository != DESTINATION_REPOSITORY:
+        raise ValueError("Only uv-dev may import benchmark profiles")
     if environment["GITHUB_REF"] != "refs/heads/main" or environment[
         "GITHUB_EVENT_NAME"
     ] not in {"push", "workflow_dispatch"}:
-        raise ValueError("Benchmark profiles must be imported on mirror main")
+        raise ValueError("Benchmark profiles must be imported on uv-dev main")
     if source["version"] not in {10, 11}:
         raise ValueError("Unsupported CodSpeed upload metadata version")
     metadata = copy.deepcopy(source)

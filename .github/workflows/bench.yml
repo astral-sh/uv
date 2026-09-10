@@ -21,8 +21,8 @@ jobs:
     name: "walltime build"
     # codspeed-macro doesn't support Ubuntu 24.04 yet
     runs-on: depot-ubuntu-22.04-arm-4
-    # Mirrors benchmark pull requests but import their main-branch measurements from uv.
-    if: ${{ github.repository_owner == 'astral-sh' && (github.repository == 'astral-sh/uv' || github.ref != 'refs/heads/main') }}
+    # uv-dev benchmarks pull requests but imports its main-branch measurements from uv.
+    if: ${{ github.repository == 'astral-sh/uv' || (github.repository == 'astral-sh/uv-dev' && github.ref != 'refs/heads/main') }}
     timeout-minutes: 30
     steps:
       - name: "Checkout Branch"
@@ -96,7 +96,8 @@ jobs:
 
       - name: "Retain benchmark profiles"
         id: profiles
-        if: ${{ github.repository == 'astral-sh/uv' }}
+        # Only public main pushes produce reusable baseline profiles.
+        if: ${{ github.repository == 'astral-sh/uv' && github.event_name == 'push' && github.ref == 'refs/heads/main' }}
         run: ./target/debug/uv run --script scripts/codspeed-profiles.py start "$RUNNER_TEMP/codspeed-walltime" walltime >> "$GITHUB_OUTPUT"
 
       - name: "Run benchmarks"
@@ -125,8 +126,8 @@ jobs:
   benchmarks-simulated:
     name: "simulated"
     runs-on: depot-ubuntu-24.04-4
-    # Only uv measures main; the mirrors reuse the resulting profiles.
-    if: ${{ github.repository_owner == 'astral-sh' && (github.repository == 'astral-sh/uv' || github.ref != 'refs/heads/main') }}
+    # Only uv measures main; uv-dev reuses the resulting profiles.
+    if: ${{ github.repository == 'astral-sh/uv' || (github.repository == 'astral-sh/uv-dev' && github.ref != 'refs/heads/main') }}
     timeout-minutes: 30
     permissions:
       contents: read
@@ -163,7 +164,8 @@ jobs:
 
       - name: "Retain benchmark profiles"
         id: profiles
-        if: ${{ github.repository == 'astral-sh/uv' }}
+        # Only public main pushes produce reusable baseline profiles.
+        if: ${{ github.repository == 'astral-sh/uv' && github.event_name == 'push' && github.ref == 'refs/heads/main' }}
         run: ./target/debug/uv run --script scripts/codspeed-profiles.py start "$RUNNER_TEMP/codspeed-simulation" simulation >> "$GITHUB_OUTPUT"
 
       - name: "Run benchmarks"

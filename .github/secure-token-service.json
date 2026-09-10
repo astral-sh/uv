@@ -32,21 +32,12 @@
       "target": "uv"
     },
     {
-      "caller": "uv-security",
-      "environment": "automations",
-      "caller_workflow": "import-codspeed-profiles.yml",
-      "on": ["push", "workflow_dispatch"],
-      "permissions": { "actions": "read" },
-      "target": "uv"
-    },
-    {
       "caller": "uv",
       "environment": "automations",
       "caller_workflow": "sync-codspeed-profiles.yml",
       "on": ["workflow_dispatch"],
       "permissions": { "actions": "write" },
-      "targets": ["uv-dev", "uv-security"],
-      "installation": "automations"
+      "target": "uv-dev"
     },
     {
       "caller": "uv",

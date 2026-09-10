@@ -20,9 +20,9 @@ env:
 
 jobs:
   import:
-    # Each mirror owns its CodSpeed upload. A main sync and the upstream CI
+    # uv-dev owns its CodSpeed upload. A main sync and the upstream CI
     # completion both trigger this workflow, so either ordering is supported.
-    if: ${{ (github.repository == 'astral-sh/uv-dev' || github.repository == 'astral-sh/uv-security') && github.ref == 'refs/heads/main' }}
+    if: ${{ github.repository == 'astral-sh/uv-dev' && github.ref == 'refs/heads/main' }}
     runs-on: github-ubuntu-24.04-x86_64-2
     timeout-minutes: 15
     environment: automations
