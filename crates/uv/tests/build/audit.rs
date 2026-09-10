@@ -325,18 +325,18 @@ async fn audit_pylock_project_status() -> Result<()> {
         })))
         .mount(&server)
         .await;
+    let simple_index = json!({
+        "meta": {"api-version": "1.4"},
+        "name": "iniconfig",
+        "files": [],
+        "project-status": {"status": "archived"}
+    });
     Mock::given(method("GET"))
         .and(path("/simple/iniconfig/"))
-        .respond_with(
-            ResponseTemplate::new(200)
-                .insert_header("content-type", "application/vnd.pypi.simple.v1+json")
-                .set_body_json(json!({
-                    "meta": {"api-version": "1.4"},
-                    "name": "iniconfig",
-                    "files": [],
-                    "project-status": {"status": "archived"}
-                })),
-        )
+        .respond_with(ResponseTemplate::new(200).set_body_raw(
+            simple_index.to_string(),
+            "application/vnd.pypi.simple.v1+json",
+        ))
         .expect(1)
         .mount(&server)
         .await;
@@ -353,8 +353,14 @@ async fn audit_pylock_project_status() -> Result<()> {
         .arg("--find-links").arg(flat_index)
         .arg("--service-url").arg(server.uri()), @"
     exit_code: 0 (success)
+    ----- stdout -----
+
+    Adverse statuses:
+
+    - iniconfig is archived
+
     ----- stderr -----
-    Found no known vulnerabilities and no adverse project statuses in 3 packages
+    Found no known vulnerabilities and 1 adverse project status in 3 packages
     ");
     Ok(())
 }
