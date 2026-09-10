@@ -29,15 +29,13 @@ on:
         value: ${{ jobs.docker-manifest.outputs.artifact-id }}
       publish-dev:
         description: "Whether to publish the saved development images"
-        value: ${{ inputs.push-dev && jobs.docker-plan.outputs.push == 'true' }}
+        value: ${{ jobs.docker-plan.outputs.mode == 'development' && jobs.docker-plan.outputs.publish == 'true' }}
 
 env:
   ACTIONS_CACHE_MODE: none
   DEPOT_PROJECT_PROD_UV: 7hd4vdzmw5 # prod/uv
   DEPOT_PROJECT_DEV_UV: v094vdzkdt # dev/uv
   DEPOT_PROJECT_DEV_UV_DEV: c3ht4lmvqh # dev/uv-dev
-  UV_GHCR_IMAGE: ghcr.io/${{ github.repository_owner }}/${{ inputs.push-dev && 'uv-dev' || 'uv' }}
-  UV_DOCKERHUB_IMAGE: ${{ !inputs.push-dev && 'docker.io/astral/uv' || '' }}
   UV_LOCKED: 1
 
 permissions:
@@ -50,111 +48,58 @@ jobs:
     timeout-minutes: 2
     outputs:
       depot-project-id: ${{ steps.plan.outputs.depot-project-id }}
+      images: ${{ steps.plan.outputs.images }}
+      ghcr-image: ${{ steps.plan.outputs.ghcr-image }}
       login: ${{ steps.plan.outputs.login }}
-      push: ${{ steps.plan.outputs.push }}
-      push-version: ${{ steps.plan.outputs.push-version }}
+      publish: ${{ steps.plan.outputs.publish }}
+      mode: ${{ steps.plan.outputs.mode }}
       save: ${{ steps.plan.outputs.save }}
-      tag: ${{ steps.plan.outputs.tag }}
-      extra-images: ${{ steps.extra-images.outputs.matrix }}
+      version: ${{ steps.plan.outputs.version }}
+      extra-images: ${{ steps.plan.outputs.matrix }}
     steps:
       - name: Plan images
-        env:
-          DRY_RUN: ${{ inputs.plan == '' || fromJson(inputs.plan).announcement_tag_is_implicit }}
-          # Release dry-runs also exercise the Depot Registry handoff.
-          RELEASE_BUILD: ${{ inputs.plan != '' }}
-          TAG: ${{ inputs.plan != '' && fromJson(inputs.plan).announcement_tag }}
-          PUSH_DEV: ${{ inputs.push-dev }}
-          IS_LOCAL_PR: ${{ github.repository == 'astral-sh/uv' && github.event.pull_request.head.repo.full_name == github.repository }}
-          IS_UV_DEV_PR: ${{ github.repository == 'astral-sh/uv-dev' && github.event.pull_request.head.repo.full_name == github.repository }}
         id: plan
-        run: |
-          # Each repository has its own development cache and saved images.
-          # Release plans in `uv`, including dry-runs, use the production project.
-          case "$GITHUB_REPOSITORY" in
-            astral-sh/uv)
-              if [ "$RELEASE_BUILD" == "true" ] && [ "$PUSH_DEV" != "true" ]; then
-                depot_project_id="$DEPOT_PROJECT_PROD_UV"
-              else
-                depot_project_id="$DEPOT_PROJECT_DEV_UV"
-              fi
-              ;;
-            astral-sh/uv-dev) depot_project_id="$DEPOT_PROJECT_DEV_UV_DEV" ;;
-            *) echo "No Depot project configured for $GITHUB_REPOSITORY" >&2; exit 1 ;;
-          esac
-
-          {
-            echo "depot-project-id=$depot_project_id"
-            if [ "${PUSH_DEV}" == "true" ] && { [ "${IS_LOCAL_PR}" == "true" ] || [ "${IS_UV_DEV_PR}" == "true" ]; }; then
-              echo "login=${IS_LOCAL_PR}"
-              echo "push=true"
-              echo "push-version=false"
-              echo "save=true"
-              echo "tag=sha"
-            elif [ "${DRY_RUN}" == "false" ]; then
-              echo "login=true"
-              echo "push=true"
-              echo "push-version=true"
-              echo "save=true"
-              echo "tag=${TAG}"
-            else
-              echo "login=${IS_LOCAL_PR}"
-              echo "push=false"
-              echo "push-version=false"
-              echo "save=${RELEASE_BUILD}"
-              echo "tag=dry-run"
-            fi
-          } >> "$GITHUB_OUTPUT"
-
-      - name: Generate extra image matrix
-        id: extra-images
-        env:
-          LOGIN: ${{ steps.plan.outputs.login }}
-        run: |
-          # Each entry is: base-image,tag1,tag2,...
-          # DHI (Docker Hardened Images) require authentication to pull, so they
-          # are excluded when login is unavailable (e.g., PRs from forks).
-          images=(
-            "alpine:3.23,alpine3.23,alpine"
-            "alpine:3.22,alpine3.22"
-            "debian:trixie-slim,trixie-slim,debian-slim"
-            "buildpack-deps:trixie,trixie,debian"
-            "python:3.15-alpine3.23,python3.15-alpine3.23,python3.15-alpine"
-            "python:3.14-alpine3.23,python3.14-alpine3.23,python3.14-alpine"
-            "python:3.13-alpine3.23,python3.13-alpine3.23,python3.13-alpine"
-            "python:3.12-alpine3.23,python3.12-alpine3.23,python3.12-alpine"
-            "python:3.11-alpine3.23,python3.11-alpine3.23,python3.11-alpine"
-            "python:3.10-alpine3.23,python3.10-alpine3.23,python3.10-alpine"
-            "python:3.9-alpine3.22,python3.9-alpine3.22,python3.9-alpine"
-            "python:3.15-trixie,python3.15-trixie"
-            "python:3.14-trixie,python3.14-trixie"
-            "python:3.13-trixie,python3.13-trixie"
-            "python:3.12-trixie,python3.12-trixie"
-            "python:3.11-trixie,python3.11-trixie"
-            "python:3.10-trixie,python3.10-trixie"
-            "python:3.9-trixie,python3.9-trixie"
-            "python:3.15-slim-trixie,python3.15-trixie-slim"
-            "python:3.14-slim-trixie,python3.14-trixie-slim"
-            "python:3.13-slim-trixie,python3.13-trixie-slim"
-            "python:3.12-slim-trixie,python3.12-trixie-slim"
-            "python:3.11-slim-trixie,python3.11-trixie-slim"
-            "python:3.10-slim-trixie,python3.10-trixie-slim"
-            "python:3.9-slim-trixie,python3.9-trixie-slim"
-          )
-
-          if [ "${LOGIN}" == "true" ]; then
-            images+=(
-              "dhi.io/alpine-base:3.23,alpine3.23-dhi,alpine-dhi"
-              "dhi.io/debian-base:trixie-debian13,trixie-dhi,debian-dhi"
-              "dhi.io/python:3.14,python3.14-dhi"
-              "dhi.io/python:3.13,python3.13-dhi"
-              "dhi.io/python:3.12,python3.12-dhi"
-              "dhi.io/python:3.11,python3.11-dhi"
-              "dhi.io/python:3.10,python3.10-dhi"
-            )
-          fi
-
-          json=$(printf '%s\n' "${images[@]}" | jq -R . | jq -sc '{"image-mapping": .}')
-          echo "matrix=${json}" >> "$GITHUB_OUTPUT"
+        uses: astral-sh/github-actions/docker-plan@f9f03918930a74747a62150c3f009db66d171c5e
+        with:
+          name: uv
+          plan: ${{ inputs.plan }}
+          push-dev: ${{ inputs.push-dev }}
+          production-project: ${{ env.DEPOT_PROJECT_PROD_UV }}
+          development-project: ${{ github.repository == 'astral-sh/uv-dev' && env.DEPOT_PROJECT_DEV_UV_DEV || env.DEPOT_PROJECT_DEV_UV }}
+          dockerhub: true
+          image-mappings: |
+            alpine:3.23,alpine3.23,alpine
+            alpine:3.22,alpine3.22
+            debian:trixie-slim,trixie-slim,debian-slim
+            buildpack-deps:trixie,trixie,debian
+            python:3.15-alpine3.23,python3.15-alpine3.23,python3.15-alpine
+            python:3.14-alpine3.23,python3.14-alpine3.23,python3.14-alpine
+            python:3.13-alpine3.23,python3.13-alpine3.23,python3.13-alpine
+            python:3.12-alpine3.23,python3.12-alpine3.23,python3.12-alpine
+            python:3.11-alpine3.23,python3.11-alpine3.23,python3.11-alpine
+            python:3.10-alpine3.23,python3.10-alpine3.23,python3.10-alpine
+            python:3.9-alpine3.22,python3.9-alpine3.22,python3.9-alpine
+            python:3.15-trixie,python3.15-trixie
+            python:3.14-trixie,python3.14-trixie
+            python:3.13-trixie,python3.13-trixie
+            python:3.12-trixie,python3.12-trixie
+            python:3.11-trixie,python3.11-trixie
+            python:3.10-trixie,python3.10-trixie
+            python:3.9-trixie,python3.9-trixie
+            python:3.15-slim-trixie,python3.15-trixie-slim
+            python:3.14-slim-trixie,python3.14-trixie-slim
+            python:3.13-slim-trixie,python3.13-trixie-slim
+            python:3.12-slim-trixie,python3.12-trixie-slim
+            python:3.11-slim-trixie,python3.11-trixie-slim
+            python:3.10-slim-trixie,python3.10-trixie-slim
+            python:3.9-slim-trixie,python3.9-trixie-slim
+            dhi.io/alpine-base:3.23,alpine3.23-dhi,alpine-dhi
+            dhi.io/debian-base:trixie-debian13,trixie-dhi,debian-dhi
+            dhi.io/python:3.14,python3.14-dhi
+            dhi.io/python:3.13,python3.13-dhi
+            dhi.io/python:3.12,python3.12-dhi
+            dhi.io/python:3.11,python3.11-dhi
+            dhi.io/python:3.10,python3.10-dhi
 
   docker-build-base:
     name: build uv
@@ -182,75 +127,16 @@ jobs:
           username: astralshbot
           password: ${{ secrets.DOCKERHUB_TOKEN_RO }}
 
-      - uses: depot/setup-action@91bc8495a33ebfc504ffc89e5674379ccf23c29c # v1.7.2
-
-      - name: Check tag consistency
-        if: ${{ needs.docker-plan.outputs.push-version == 'true' }}
-        env:
-          TAG: ${{ needs.docker-plan.outputs.tag }}
-        run: |
-          version=$(grep "version = " pyproject.toml | sed -e 's/version = "\(.*\)"/\1/g')
-          if [ "${TAG}" != "${version}" ]; then
-            echo "The input tag does not match the version from pyproject.toml:" >&2
-            echo "${TAG}" >&2
-            echo "${version}" >&2
-            exit 1
-          fi
-          echo "Releasing ${version}"
-
-      - name: Extract metadata (tags, labels) for Docker
-        id: meta
-        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
-        env:
-          DOCKER_METADATA_ANNOTATIONS_LEVELS: index
-        with:
-          images: |
-            ${{ env.UV_GHCR_IMAGE }}
-            ${{ env.UV_DOCKERHUB_IMAGE }}
-          # Set `org.opencontainers.image.version` to the release version,
-          # rather than the branch name.
-          tags: |
-            type=raw,value=dry-run,enable=${{ needs.docker-plan.outputs.push == 'false' }}
-            type=pep440,pattern={{ version }},value=${{ needs.docker-plan.outputs.tag }},enable=${{ needs.docker-plan.outputs.push-version == 'true' }}
-            type=pep440,pattern={{ major }}.{{ minor }},value=${{ needs.docker-plan.outputs.tag }},enable=${{ needs.docker-plan.outputs.push-version == 'true' }}
-            type=sha,enable=${{ inputs.push-dev }}
-
       - name: Build and save image
         id: build
-        uses: depot/build-push-action@98e78adca7817480b8185f474a400b451d74e287 # v1.18.0
+        uses: astral-sh/github-actions/docker-build@f9f03918930a74747a62150c3f009db66d171c5e
         with:
+          name: uv
           project: ${{ env.DEPOT_PROJECT_ID }}
-          context: .
-          platforms: linux/amd64,linux/arm64
+          images: ${{ needs.docker-plan.outputs.images }}
           save: ${{ needs.docker-plan.outputs.save }}
-          labels: ${{ steps.meta.outputs.labels }}
-          provenance: mode=max
-          sbom: true
-
-      - name: Record image
-        if: ${{ needs.docker-plan.outputs.save == 'true' }}
-        env:
-          BUILD_ID: ${{ steps.build.outputs.build-id }}
-          DIGEST: ${{ steps.build.outputs.digest }}
-          TAGS: ${{ steps.meta.outputs.tags }}
-          ANNOTATIONS: ${{ steps.meta.outputs.annotations }}
-        run: |
-          jq -en \
-            --arg name uv \
-            --arg build_id "$BUILD_ID" \
-            --arg digest "$DIGEST" \
-            --arg tags "$TAGS" \
-            --arg annotations "$ANNOTATIONS" \
-            '{name: $name, build_id: $build_id, digest: $digest,
-              tags: ($tags | split("\n")), annotations: ($annotations | split("\n"))}
-              | select(.build_id != "" and (.digest | test("^sha256:[0-9a-f]{64}$")))' > uv.json
-
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        if: ${{ needs.docker-plan.outputs.save == 'true' }}
-        with:
-          name: docker-image-uv
-          path: uv.json
-          overwrite: true
+          mode: ${{ needs.docker-plan.outputs.mode }}
+          version: ${{ needs.docker-plan.outputs.version }}
 
   docker-build-extra:
     name: build ${{ matrix.image-mapping }}
@@ -281,120 +167,28 @@ jobs:
           username: astralshbot
           password: ${{ secrets.DOCKERHUB_TOKEN_RO }}
 
-      - uses: depot/setup-action@91bc8495a33ebfc504ffc89e5674379ccf23c29c # v1.7.2
-
-      - name: Authenticate to Depot Registry
-        if: ${{ needs.docker-plan.outputs.save == 'true' }}
-        env:
-          BUILD_ID: ${{ needs.docker-build-base.outputs.build-id }}
-        run: |
-          token="$(depot pull-token --project "$DEPOT_PROJECT_ID" "$BUILD_ID")"
-          echo "::add-mask::$token"
-          printf '%s' "$token" | docker login registry.depot.dev --username x-token --password-stdin
-
-      - name: Generate Dockerfile and tags
-        id: dockerfile
-        env:
-          VERSION: ${{ needs.docker-plan.outputs.tag }}
-          PUSH_DEV: ${{ inputs.push-dev }}
-          PUSH_VERSION: ${{ needs.docker-plan.outputs.push-version }}
-          # When the new base image is not saved, use the registry's `latest` tag.
-          UV_BASE_IMAGE: ${{ needs.docker-plan.outputs.save == 'true' && format('registry.depot.dev/{0}@{1}', env.DEPOT_PROJECT_ID, needs.docker-build-base.outputs.image-digest) || format('{0}:latest', env.UV_GHCR_IMAGE) }}
-          IMAGE_MAPPING: ${{ matrix.image-mapping }}
-        run: |
-          set -euo pipefail
-
-          # Extract the image and tags from the matrix variable.
-          IFS=',' read -r BASE_IMAGE BASE_TAGS <<< "${IMAGE_MAPPING}"
-          # The first image alias is the name of its manifest artifact.
-          echo "name=${BASE_TAGS%%,*}" >> "$GITHUB_OUTPUT"
-
-          # Generate the Dockerfile for this base image.
-          cat <<EOF > Dockerfile
-          FROM ${BASE_IMAGE}
-          COPY --from=${UV_BASE_IMAGE} /uv /uvx /usr/local/bin/
-          ENV UV_TOOL_BIN_DIR="/usr/local/bin"
-          ENTRYPOINT []
-          CMD ["/usr/local/bin/uv"]
-          EOF
-
-          # Collect Docker metadata patterns for every image alias.
-          TAG_PATTERNS=""
-
-          # For releases, the first tag includes the patch version and image suffix.
-          # Docker metadata uses it for `org.opencontainers.image.version`.
-          IFS=','; for TAG in ${BASE_TAGS}; do
-            if [ "${PUSH_DEV}" == "true" ]; then
-              TAG_PATTERNS="${TAG_PATTERNS}type=sha,suffix=-${TAG}\n"
-            else
-              TAG_PATTERNS="${TAG_PATTERNS}type=pep440,pattern={{ version }},suffix=-${TAG},value=${VERSION},enable=${PUSH_VERSION}\n"
-              TAG_PATTERNS="${TAG_PATTERNS}type=pep440,pattern={{ major }}.{{ minor }},suffix=-${TAG},value=${VERSION},enable=${PUSH_VERSION}\n"
-              TAG_PATTERNS="${TAG_PATTERNS}type=raw,value=${TAG}\n"
-            fi
-          done
-
-          # Remove the trailing escaped newline from the pattern list.
-          TAG_PATTERNS="${TAG_PATTERNS%\\n}"
-
-          # Export the patterns using GitHub Actions' multiline environment syntax.
-          {
-            echo "TAG_PATTERNS<<EOF"
-            echo -e "${TAG_PATTERNS}"
-            echo EOF
-          } >> "$GITHUB_ENV"
-
-      - name: Extract metadata (tags, labels) for Docker
-        id: meta
-        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
-        # GHCR uses index-level annotations for image metadata.
-        env:
-          DOCKER_METADATA_ANNOTATIONS_LEVELS: index
+      - name: Generate Dockerfile and aliases
+        id: variant
+        uses: astral-sh/github-actions/docker-variant@f9f03918930a74747a62150c3f009db66d171c5e
         with:
-          images: |
-            ${{ env.UV_GHCR_IMAGE }}
-            ${{ env.UV_DOCKERHUB_IMAGE }}
-          flavor: |
-            latest=false
-          tags: |
-            ${{ env.TAG_PATTERNS }}
+          image-mapping: ${{ matrix.image-mapping }}
+          # Unsaved PR builds use the published base image.
+          source-image: ${{ needs.docker-plan.outputs.save == 'true' && format('registry.depot.dev/{0}@{1}', env.DEPOT_PROJECT_ID, needs.docker-build-base.outputs.image-digest) || format('{0}:latest', needs.docker-plan.outputs.ghcr-image) }}
+          binaries: uv uvx
+          dockerfile-lines: ENV UV_TOOL_BIN_DIR="/usr/local/bin"
 
       - name: Build and save image
-        id: build
-        uses: depot/build-push-action@98e78adca7817480b8185f474a400b451d74e287 # v1.18.0
+        uses: astral-sh/github-actions/docker-build@f9f03918930a74747a62150c3f009db66d171c5e
         with:
-          context: .
+          name: ${{ steps.variant.outputs.name }}
           project: ${{ env.DEPOT_PROJECT_ID }}
-          platforms: linux/amd64,linux/arm64
+          pull-build-id: ${{ needs.docker-plan.outputs.save == 'true' && needs.docker-build-base.outputs.build-id || '' }}
+          file: ${{ steps.variant.outputs.file }}
+          images: ${{ needs.docker-plan.outputs.images }}
+          aliases: ${{ steps.variant.outputs.aliases }}
+          mode: ${{ needs.docker-plan.outputs.mode }}
+          version: ${{ needs.docker-plan.outputs.version }}
           save: ${{ needs.docker-plan.outputs.save }}
-          labels: ${{ steps.meta.outputs.labels }}
-          provenance: mode=max
-          sbom: true
-
-      - name: Record image
-        if: ${{ needs.docker-plan.outputs.save == 'true' }}
-        env:
-          NAME: ${{ steps.dockerfile.outputs.name }}
-          BUILD_ID: ${{ steps.build.outputs.build-id }}
-          DIGEST: ${{ steps.build.outputs.digest }}
-          TAGS: ${{ steps.meta.outputs.tags }}
-          ANNOTATIONS: ${{ steps.meta.outputs.annotations }}
-        run: |
-          jq -en \
-            --arg name "$NAME" \
-            --arg build_id "$BUILD_ID" \
-            --arg digest "$DIGEST" \
-            --arg tags "$TAGS" \
-            --arg annotations "$ANNOTATIONS" \
-            '{name: $name, build_id: $build_id, digest: $digest,
-              tags: ($tags | split("\n")), annotations: ($annotations | split("\n"))}
-              | select(.build_id != "" and (.digest | test("^sha256:[0-9a-f]{64}$")))' > "$NAME.json"
-
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        if: ${{ needs.docker-plan.outputs.save == 'true' }}
-        with:
-          name: docker-image-${{ steps.dockerfile.outputs.name }}
-          path: ${{ steps.dockerfile.outputs.name }}.json
-          overwrite: true
 
   docker-manifest:
     name: collect image manifest
@@ -406,34 +200,10 @@ jobs:
     runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-4' || 'ubuntu-latest' }}
     timeout-minutes: 2
     outputs:
-      artifact-id: ${{ steps.upload.outputs.artifact-id }}
+      artifact-id: ${{ steps.manifest.outputs.artifact-id }}
     steps:
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+      - uses: astral-sh/github-actions/docker-manifest@f9f03918930a74747a62150c3f009db66d171c5e
+        id: manifest
         with:
-          pattern: docker-image-*
-          path: images
-          merge-multiple: true
-
-      - name: Assemble image manifest
-        env:
-          EXTRA_IMAGES: ${{ needs.docker-plan.outputs.extra-images }}
-        run: |
-          # Load the per-image records and require one base image plus the
-          # expected number of distinct variants. Split the result into
-          # base and extra images so the publisher can publish the base last.
-          jq -se --argjson expected "$EXTRA_IMAGES" '
-            if length != (1 + ($expected["image-mapping"] | length))
-              or (map(.name) | unique | length) != length
-              or (map(select(.name == "uv")) | length) != 1
-            then error("incomplete Docker image manifest")
-            else {base: map(select(.name == "uv"))[0],
-                  extra: map(select(.name != "uv"))}
-            end
-          ' images/*.json > docker-manifest.json
-
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        id: upload
-        with:
-          name: docker-manifest
-          path: docker-manifest.json
-          overwrite: true
+          base-name: uv
+          image-mappings: ${{ toJson(fromJson(needs.docker-plan.outputs.extra-images).image-mapping) }}
