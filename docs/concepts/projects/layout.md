@@ -109,10 +109,14 @@ input requirements). `pylock.toml` is standardized and tool-agnostic, such that 
 Some of uv's functionality cannot be expressed in the `pylock.toml` format; as such, uv will
 continue to use the `uv.lock` format within the project interface.
 
-However, uv supports `pylock.toml` as an export target and in the `uv pip` CLI. For example:
+However, uv supports `pylock.toml` as an export target, in the `uv pip` CLI, and as an input to
+`uv audit`. For example:
 
 - To export a `uv.lock` to the `pylock.toml` format, run: `uv export -o pylock.toml`
 - To generate a `pylock.toml` file from a set of requirements, run:
   `uv pip compile requirements.in -o pylock.toml`
 - To install from a `pylock.toml` file, run: `uv pip sync pylock.toml` or
   `uv pip install -r pylock.toml`
+- To audit a `pylock.toml` file, run: `uv audit -r pylock.toml`. This audits every versioned package
+  in the file, across all environments, extras, and groups, without updating the lockfile or
+  requiring a Python interpreter. Packages without versions are skipped.
