@@ -33,6 +33,7 @@ on:
 
 env:
   ACTIONS_CACHE_MODE: none
+  DEPOT_PROJECT_ID: 7hd4vdzmw5 # astral-sh/uv
   UV_GHCR_IMAGE: ghcr.io/${{ github.repository_owner }}/${{ inputs.push-dev && 'uv-dev' || 'uv' }}
   UV_DOCKERHUB_IMAGE: ${{ !inputs.push-dev && 'docker.io/astral/uv' || '' }}
   UV_LOCKED: 1
@@ -198,7 +199,7 @@ jobs:
         id: build
         uses: depot/build-push-action@98e78adca7817480b8185f474a400b451d74e287 # v1.18.0
         with:
-          project: 7hd4vdzmw5 # astral-sh/uv
+          project: ${{ env.DEPOT_PROJECT_ID }}
           context: .
           platforms: linux/amd64,linux/arm64
           save: ${{ needs.docker-plan.outputs.save }}
@@ -265,7 +266,7 @@ jobs:
         env:
           BUILD_ID: ${{ needs.docker-build-base.outputs.build-id }}
         run: |
-          token="$(depot pull-token --project 7hd4vdzmw5 "$BUILD_ID")"
+          token="$(depot pull-token --project "$DEPOT_PROJECT_ID" "$BUILD_ID")"
           echo "::add-mask::$token"
           printf '%s' "$token" | docker login registry.depot.dev --username x-token --password-stdin
 
@@ -275,7 +276,7 @@ jobs:
           VERSION: ${{ needs.docker-plan.outputs.tag }}
           PUSH_DEV: ${{ inputs.push-dev }}
           # When the new base image is not saved, use the registry's `latest` tag.
-          UV_BASE_IMAGE: ${{ needs.docker-plan.outputs.save == 'true' && format('registry.depot.dev/7hd4vdzmw5@{0}', needs.docker-build-base.outputs.image-digest) || format('{0}:latest', env.UV_GHCR_IMAGE) }}
+          UV_BASE_IMAGE: ${{ needs.docker-plan.outputs.save == 'true' && format('registry.depot.dev/{0}@{1}', env.DEPOT_PROJECT_ID, needs.docker-build-base.outputs.image-digest) || format('{0}:latest', env.UV_GHCR_IMAGE) }}
           IMAGE_MAPPING: ${{ matrix.image-mapping }}
         run: |
           set -euo pipefail
@@ -339,7 +340,7 @@ jobs:
         uses: depot/build-push-action@98e78adca7817480b8185f474a400b451d74e287 # v1.18.0
         with:
           context: .
-          project: 7hd4vdzmw5 # astral-sh/uv
+          project: ${{ env.DEPOT_PROJECT_ID }}
           platforms: linux/amd64,linux/arm64
           save: ${{ needs.docker-plan.outputs.save }}
           labels: ${{ steps.meta.outputs.labels }}
@@ -394,6 +395,9 @@ jobs:
         env:
           EXTRA_IMAGES: ${{ needs.docker-plan.outputs.extra-images }}
         run: |
+          # Load the per-image records and require one base image plus the
+          # expected number of distinct variants. Split the result into
+          # base and extra images so the publisher can publish the base last.
           jq -se --argjson expected "$EXTRA_IMAGES" '
             if length != (1 + ($expected["image-mapping"] | length))
               or (map(.name) | unique | length) != length

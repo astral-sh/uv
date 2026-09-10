@@ -1,4 +1,4 @@
-# Publish one saved Depot image without rebuilding it.
+# Publish a saved Depot image without rebuilding it.
 name: "Publish Docker image"
 
 on:
@@ -15,6 +15,7 @@ on:
 
 env:
   ACTIONS_CACHE_MODE: none
+  DEPOT_PROJECT_ID: 7hd4vdzmw5 # astral-sh/uv
   UV_GHCR_IMAGE: ghcr.io/${{ github.repository_owner }}/${{ inputs.push-dev && 'uv-dev' || 'uv' }}
   UV_DOCKERHUB_IMAGE: ${{ !inputs.push-dev && 'docker.io/astral/uv' || '' }}
 
@@ -24,7 +25,7 @@ permissions:
 jobs:
   publish:
     # Development publication cannot select the production repositories.
-    # Production publication is restricted to the upstream release workflow.
+    # Production publication requires the main-branch release workflow in `astral-sh/uv`.
     if: ${{ inputs.push-dev || (github.repository == 'astral-sh/uv' && github.event_name == 'workflow_dispatch' && github.workflow_ref == 'astral-sh/uv/.github/workflows/release.yml@refs/heads/main') }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -58,7 +59,7 @@ jobs:
           elif [ "$GITHUB_REPOSITORY" != "astral-sh/uv" ] ||
                [ "$GITHUB_EVENT_NAME" != "workflow_dispatch" ] ||
                [ "$GITHUB_WORKFLOW_REF" != "astral-sh/uv/.github/workflows/release.yml@refs/heads/main" ]; then
-            echo "Production publication requires an upstream main-branch release" >&2
+            echo "Production publication requires the main-branch release workflow in astral-sh/uv" >&2
             exit 1
           fi
           echo "GHCR destination: $UV_GHCR_IMAGE"
@@ -96,11 +97,11 @@ jobs:
           digest=$(jq -er '.digest | select(test("^sha256:[0-9a-f]{64}$"))' <<< "$IMAGE_JSON")
 
           # Verify that the Depot build ID resolves to the recorded index digest.
-          token="$(depot pull-token --project 7hd4vdzmw5 "$build_id")"
+          token="$(depot pull-token --project "$DEPOT_PROJECT_ID" "$build_id")"
           echo "::add-mask::$token"
           printf '%s' "$token" | docker login registry.depot.dev --username x-token --password-stdin
           saved_digest=$(docker buildx imagetools inspect \
-            "registry.depot.dev/7hd4vdzmw5:$build_id" --format '{{.Manifest.Digest}}')
+            "registry.depot.dev/${DEPOT_PROJECT_ID}:$build_id" --format '{{.Manifest.Digest}}')
           if [ "$saved_digest" != "$digest" ]; then
             echo "The saved Depot image does not match the build manifest" >&2
             exit 1
@@ -127,7 +128,7 @@ jobs:
             # Copy the complete index instead of loading and re-pushing it through
             # the local Docker image store, which can drop platforms or change
             # the manifest format (astral-sh/uv#14165).
-            depot push --project 7hd4vdzmw5 --tag "${image_tags[0]}" "$build_id"
+            depot push --project "$DEPOT_PROJECT_ID" --tag "${image_tags[0]}" "$build_id"
             copied_digest=$(docker buildx imagetools inspect \
               "${image_tags[0]}" --format '{{.Manifest.Digest}}')
             if [ "$copied_digest" != "$digest" ]; then

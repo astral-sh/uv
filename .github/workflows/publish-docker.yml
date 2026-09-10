@@ -22,7 +22,7 @@ permissions:
 jobs:
   plan:
     name: plan
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-2' || 'ubuntu-slim' }}
     timeout-minutes: 2
     outputs:
       base-image: ${{ steps.plan.outputs.base-image }}
