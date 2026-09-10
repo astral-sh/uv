@@ -16,8 +16,9 @@ Apply these rules:
 
 - Preserve the release version and date.
 - For every retained entry, preserve its pull request number and exact URL. Never modify a URL.
-- Keep each Markdown paragraph and list item on a single line, including its pull request links. Do
-  not hard-wrap changelog prose; wrapping can break rendering on GitHub.
+- Keep each Markdown paragraph and list item on a single physical line, including its pull request
+  links. Avoid overlong lines by shortening prose or splitting independent changes, not by
+  hard-wrapping; wrapping can break rendering on GitHub.
 - Drop entries that are clearly internal-only and have no user-facing effect, including CI or test
   runner changes, repository reorganization, and agent or developer infrastructure. If the effect is
   uncertain, keep the entry.
@@ -42,9 +43,10 @@ Apply these rules:
   to make them clearer, more precise, and more user-facing. Expand internal shorthand and add
   missing context when supported by the local changes. Preserve the original meaning and do not
   invent or broaden claims. Avoid purely stylistic synonym changes.
-- Lead with what users can do or what behavior is fixed. Keep entries concise, omitting incidental
-  implementation details and exhaustive lists of affected flags or edge cases. Retain qualifiers
-  needed to avoid overstating the change, such as opt-in behavior or affected platforms.
+- Lead with what users can do or what behavior is fixed. Prefer one short sentence per bullet and
+  keep introductory paragraphs brief. Omit incidental implementation details and exhaustive lists of
+  affected flags or edge cases. Retain qualifiers needed to avoid overstating the change, such as
+  opt-in behavior or affected platforms.
 - For routine Python releases, prefer `Add CPython <version>` or the equivalent runtime name. Omit
   download-table and sysconfig implementation details. For managed-runtime rebuilds, identify the
   noteworthy dependency or security update, including versions when useful, instead of only naming
