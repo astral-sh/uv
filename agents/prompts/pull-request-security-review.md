@@ -1,9 +1,10 @@
 Use `$codex-security:security-diff-scan` to review the pull request described in
 `.pull-request-review-event.json` and `.pull-request-review.diff` for security regressions. Use
-`agents/references/threat-model.md` for uv's CLI and `agents/references/repository-threat-model.md`
-for repository automation as the authoritative threat models. Resolve the exact pull request diff
-using `.pull-request-review-revisions.json`: its `base` is the merge base to pass to the plugin's
-terminal diff inventory, and `base_tip` is the pull request event's base revision. The complete path
+`$REVIEW_CONFIG/references/threat-model.md` for uv's CLI and
+`$REVIEW_CONFIG/references/repository-threat-model.md` for repository automation as the
+authoritative threat models. Resolve the exact pull request diff using
+`.pull-request-review-revisions.json`: its `base` is the merge base to pass to the plugin's terminal
+diff inventory, and `base_tip` is the pull request event's base revision. The complete path
 inventory is `.pull-request-review-paths.txt`, including deleted, workflow, configuration, build,
 test, and documentation paths. The plugin's terminal inventory generator may exclude some of these
 paths; add omitted regular files and deleted paths to its `in_scope_files.txt` before candidate
@@ -18,8 +19,8 @@ request to validate findings and suggested fixes, but do not commit, push, or ma
 GitHub. Never print, inspect, encode, or expose credentials. Do not include `@mentions` in review
 findings.
 
-Produce only a JSON object matching `agents/schemas/pull-request-security-review.json`. List each
-fully reviewed changed path once in `reviewed_paths`; reconcile this list with
+Produce only a JSON object matching `$REVIEW_CONFIG/schemas/pull-request-security-review.json`. List
+each fully reviewed changed path once in `reviewed_paths`; reconcile this list with
 `.pull-request-review-paths.txt` before returning. Read deleted paths at the base revision. If a
 path cannot be assessed, omit it from `reviewed_paths` so the incomplete review fails. Do not wrap
 the JSON in Markdown or a code fence.
