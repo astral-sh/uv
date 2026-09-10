@@ -22,6 +22,7 @@ use uv_distribution_types::{
     IndexCapabilities, IndexUrl, Name, NameRequirementSpecification, Requirement,
     RequirementSource, UnresolvedRequirement, UnresolvedRequirementSpecification,
 };
+use uv_errors::HintOrdering;
 use uv_installer::{InstallationStrategy, SatisfiesResult, SitePackages};
 use uv_normalize::PackageName;
 use uv_pep440::{VersionSpecifier, VersionSpecifiers};
@@ -120,6 +121,7 @@ impl uv_errors::Hint for ToolRunUsageError {
                 format!("{invocation_source} {verbose_flag} {target}").green()
             ),
         })
+        .with_ordering(HintOrdering::Last)
     }
 }
 

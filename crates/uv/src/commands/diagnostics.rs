@@ -52,10 +52,9 @@ pub(crate) fn write_error_chain(err: &anyhow::Error, printer: Printer) -> std::f
 /// that implement [`Hinted`]. All hint rendering logic should be consolidated here.
 pub(crate) fn hints_for_error(err: &anyhow::Error) -> Hints<'static> {
     let mut hints = Hints::none();
-    let mut command_hints = Hints::none();
     for cause in err.chain() {
-        collect_hint::<AddDependencyError>(cause, &mut command_hints);
-        collect_hint::<ToolRunUsageError>(cause, &mut command_hints);
+        collect_hint::<AddDependencyError>(cause, &mut hints);
+        collect_hint::<ToolRunUsageError>(cause, &mut hints);
         collect_hint::<Box<uv_resolver::NoSolutionError>>(cause, &mut hints);
         collect_hint::<uv_resolver::NoSolutionError>(cause, &mut hints);
         collect_hint::<uv_resolver::ResolveError>(cause, &mut hints);
@@ -86,7 +85,6 @@ pub(crate) fn hints_for_error(err: &anyhow::Error) -> Hints<'static> {
         #[cfg(not(feature = "self-update"))]
         collect_hint::<crate::ExternallyInstalledError>(cause, &mut hints);
     }
-    hints.extend(command_hints);
     hints
 }
 

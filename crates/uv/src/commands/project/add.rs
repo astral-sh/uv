@@ -26,6 +26,7 @@ use uv_distribution_types::{
     Identifier, Index, IndexLocations, IndexName, IndexUrl, NameRequirementSpecification,
     Requirement, RequirementSource, UnresolvedRequirement,
 };
+use uv_errors::HintOrdering;
 use uv_fs::{LockedFile, LockedFileError, Simplified};
 use uv_git::store_credentials;
 use uv_normalize::{DEV_DEPENDENCIES, DefaultExtras, DefaultGroups, ExtraName, PackageName};
@@ -87,7 +88,7 @@ impl uv_errors::Hint for AddDependencyError {
             "If you want to add the package regardless of the failed resolution, provide the `{}` flag to skip locking and syncing",
             "--frozen".green()
         ));
-        hints
+        hints.with_ordering(HintOrdering::Last)
     }
 }
 
