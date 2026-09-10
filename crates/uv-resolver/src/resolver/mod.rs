@@ -2932,6 +2932,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             self.tags.clone(),
             self.workspace_members.clone(),
             self.options.clone(),
+            self.constraints.clone(),
         )))
     }
 
