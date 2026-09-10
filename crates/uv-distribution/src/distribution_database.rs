@@ -1211,6 +1211,13 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             // Finally our resumption, which is a range request.
             debug!("Resuming download of {url} at byte {offset}");
             let resumed_response = self.request_with_offset(url.clone(), offset, etag).await?;
+
+            // A chunked response can fail after all wheel bytes arrive, leaving no satisfiable
+            // range. Return the original error so the outer retry policy can restart in full.
+            if resumed_response.status() == reqwest::StatusCode::RANGE_NOT_SATISFIABLE {
+                debug!("Range not satisfiable while resuming {url}; abandoning resumed download");
+                return Err(err);
+            }
             resumed_response.error_for_status_ref()?;
 
             // Sanity check with the ETag above: the origin might have changed

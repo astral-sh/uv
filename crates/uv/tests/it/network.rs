@@ -1112,6 +1112,7 @@ enum RangeResponse {
     NotAdvertised,
     InvalidContentRange,
     ShortBody,
+    Unsatisfiable,
 }
 
 #[derive(Clone, Copy)]
@@ -1205,6 +1206,13 @@ fn wheel_response(
                 }
                 RangeResponse::InvalidContentRange => content_range_start = 0,
                 RangeResponse::ShortBody => body_end = Some(end - 1),
+                RangeResponse::Unsatisfiable => {
+                    assert_eq!(start, size);
+                    return response
+                        .status(StatusCode::RANGE_NOT_SATISFIABLE)
+                        .header(CONTENT_RANGE, format!("bytes */{size}"))
+                        .body(http_body_util::Empty::new().boxed());
+                }
             }
         }
         let bytes = wheel.slice(start..=body_end.unwrap_or(end));
@@ -1217,22 +1225,27 @@ fn wheel_response(
             .header(CONTENT_LENGTH, bytes.len())
             .body(http_body_util::Full::new(bytes).boxed());
     }
-    response = response.header(CONTENT_LENGTH, size);
     let full_get = full_get_count.fetch_add(1, Ordering::Relaxed);
     if full_get < streaming_attempts {
         // Give Hyper time to flush the partial body before closing short of Content-Length.
-        return response.body(delayed_body(
+        return response.header(CONTENT_LENGTH, size).body(delayed_body(
             wheel.slice(..size / 2),
             Duration::from_millis(50),
         ));
     }
     if full_get > streaming_attempts {
-        return response.body(http_body_util::Full::new(wheel.clone()).boxed());
+        return response
+            .header(CONTENT_LENGTH, size)
+            .body(http_body_util::Full::new(wheel.clone()).boxed());
     }
     if !matches!(case.range, RangeResponse::NotAdvertised) {
         response = response.header(ACCEPT_RANGES, "bytes");
     }
-    response.body(delayed_body(
+    if let RangeResponse::Unsatisfiable = case.range {
+        // Send all wheel bytes, but stall before terminating the chunked response.
+        return response.body(delayed_body(wheel.clone(), Duration::from_mins(1)));
+    }
+    response.header(CONTENT_LENGTH, size).body(delayed_body(
         wheel.slice(..size / 2),
         Duration::from_mins(1),
     ))
@@ -1340,6 +1353,46 @@ fn direct_url_no_range_resume() -> Result<()> {
         full_retries: 1,
         ..DownloadCase::default()
     })
+}
+
+#[test]
+fn direct_url_unsatisfiable_range_retries_in_full() -> Result<()> {
+    assert_wheel_download(DownloadCase {
+        range: RangeResponse::Unsatisfiable,
+        full_retries: 1,
+        ..DownloadCase::default()
+    })
+}
+
+#[test]
+fn direct_url_unsatisfiable_range_does_not_bypass_retry() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let (server, _guard, full_get_count, _) = wheel_server(
+        &context,
+        DownloadCase {
+            range: RangeResponse::Unsatisfiable,
+            ..DownloadCase::default()
+        },
+    )?;
+
+    let wheel_url = format!("{server}/build_tag-1.0.0-1-py2.py3-none-any.whl");
+    uv_snapshot!(context.filters(), context
+        .pip_install()
+        .arg(format!("build-tag @ {wheel_url}"))
+        .env(EnvVars::UV_HTTP_RETRIES, "0")
+        .env(EnvVars::UV_HTTP_TIMEOUT, "1")
+        .env(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY, "true")
+        .env(EnvVars::RUST_LOG, "warn"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    WARN Streaming failed for build-tag @ http://[LOCALHOST]/build_tag-1.0.0-1-py2.py3-none-any.whl; downloading wheel to disk (I/O operation failed during extraction)
+      × Failed to download `build-tag @ http://[LOCALHOST]/build_tag-1.0.0-1-py2.py3-none-any.whl`
+      ├─▶ Failed to write to the distribution cache
+      ╰─▶ Failed to download distribution due to network timeout. Try increasing UV_HTTP_TIMEOUT (current value: [TIME]).
+    ");
+    assert_eq!(full_get_count.load(Ordering::Relaxed), 2);
+    Ok(())
 }
 
 #[test]
