@@ -121,17 +121,14 @@ jobs:
   build-docker:
     needs:
       - plan
-      - release-gate
-    if: ${{ always() && needs.plan.result == 'success' && (needs.release-gate.result == 'success' || needs.release-gate.result == 'skipped') && (needs.plan.outputs.publishing == 'true' || fromJson(needs.plan.outputs.val).ci.github.pr_run_mode == 'upload' || inputs.tag == 'dry-run') }}
+    if: ${{ needs.plan.outputs.publishing == 'true' || fromJson(needs.plan.outputs.val).ci.github.pr_run_mode == 'upload' || inputs.tag == 'dry-run' }}
     uses: $/.github/workflows/build-docker.yml
     with:
       plan: ${{ needs.plan.outputs.val }}
     secrets: inherit
     permissions:
-      "attestations": "write"
       "contents": "read"
       "id-token": "write"
-      "packages": "write"
 
   sign-release-binaries:
     needs:
@@ -197,7 +194,6 @@ jobs:
     needs:
       - plan
       - build-release-binaries
-      - build-docker
       - generate-checksum-manifest
       - sign-release-binaries
     runs-on: "depot-ubuntu-latest-4"
@@ -299,6 +295,22 @@ jobs:
           name: artifacts-dist-manifest
           path: dist-manifest.json
 
+  publish-docker:
+    needs:
+      - plan
+      - host
+      - release-gate
+      - build-docker
+    uses: ./.github/workflows/publish-docker.yml
+    with:
+      manifest: ${{ needs.build-docker.outputs.manifest }}
+    secrets: inherit
+    permissions:
+      "attestations": "write"
+      "contents": "read"
+      "id-token": "write"
+      "packages": "write"
+
   publish-pypi:
     needs:
       - plan
@@ -339,13 +351,14 @@ jobs:
       - plan
       - host
       - release-gate
+      - publish-docker
       - publish-pypi
       - sign-release-binaries
-    # use "always() && ..." to allow publish jobs to skip themselves (for prereleases).
-    # "host" however must run to completion, no skipping allowed!
+    # Use `always()` so `publish-pypi` can skip prereleases while the required
+    # builds and Docker publication must still succeed.
     # `publish-crates` is intentionally not a dependency: it's not
     # critical to the release and isn't idempotent on retry.
-    if: ${{ always() && needs.host.result == 'success' && needs.release-gate.result == 'success' && needs.sign-release-binaries.result == 'success' && (needs.publish-pypi.result == 'skipped' || needs.publish-pypi.result == 'success') }}
+    if: ${{ always() && needs.host.result == 'success' && needs.release-gate.result == 'success' && needs.sign-release-binaries.result == 'success' && needs.publish-docker.result == 'success' && (needs.publish-pypi.result == 'skipped' || needs.publish-pypi.result == 'success') }}
     runs-on: "${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-4' || 'ubuntu-latest' }}"
     environment:
       name: release
