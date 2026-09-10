@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+codex_home="${1:?Codex home directory is required}"
+
 mkdir -p "$RUNNER_TEMP/codex-security"
 curl --fail --location --silent --show-error \
   --output "$RUNNER_TEMP/codex.tar.gz" \
@@ -16,7 +18,7 @@ jq '.name = "openai-curated-ci" | .plugins |= map(select(.name == "codex-securit
   "$marketplace" > "$RUNNER_TEMP/marketplace.json"
 mv "$RUNNER_TEMP/marketplace.json" "$marketplace"
 
-CODEX_HOME="$GITHUB_WORKSPACE/agents/codex" "$codex" plugin marketplace add \
+CODEX_HOME="$codex_home" "$codex" plugin marketplace add \
   "$GITHUB_WORKSPACE/.codex-security-plugin"
-CODEX_HOME="$GITHUB_WORKSPACE/agents/codex" "$codex" plugin add \
+CODEX_HOME="$codex_home" "$codex" plugin add \
   codex-security@openai-curated-ci

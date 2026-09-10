@@ -21,9 +21,19 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 0
           persist-credentials: false
+
+      - name: "Prepare review configuration"
+        env:
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          REVIEW_CONFIG: ${{ runner.temp }}/pull-request-review
+        run: |
+          # Keep the review configuration at the workflow revision, even for older PR branches.
+          printf 'REVIEW_CONFIG=%s\n' "$REVIEW_CONFIG" >> "$GITHUB_ENV"
+          mkdir -p "$REVIEW_CONFIG"
+          cp -R agents/. "$REVIEW_CONFIG/"
+          git checkout --detach "$HEAD_SHA"
 
       - name: "Checkout Codex Security plugin"
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -42,7 +52,7 @@ jobs:
           checksum: "173d95a0c32d18c896c46ba6fafbf3cf9c14ab74b033f81b76c883ef492a976b"
 
       - name: "Install Codex Security plugin"
-        run: ./agents/scripts/install-codex-security.sh
+        run: '"$REVIEW_CONFIG/scripts/install-codex-security.sh" "$REVIEW_CONFIG/codex"'
 
       - name: "Collect pull request context"
         run: |
@@ -93,7 +103,7 @@ jobs:
             printf 'Pull request security review for #%s: %s\n\n' \
               "$(jq -r '.number' .pull-request-review-event.json)" \
               "$(jq -r '.title | gsub("[\r\n]+"; " ")' .pull-request-review-event.json)"
-            cat agents/prompts/pull-request-security-review.md
+            cat "$REVIEW_CONFIG/prompts/pull-request-security-review.md"
           } > "$RUNNER_TEMP/pull-request-security-review-prompt.md"
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -128,13 +138,13 @@ jobs:
         with:
           openai-api-key: ${{ secrets.OPENAI_API_KEY }}
           codex-version: "0.153.4"
-          codex-home: "agents/codex"
+          codex-home: "${{ env.REVIEW_CONFIG }}/codex"
           effort: xhigh
           permission-profile: "pull-request-review"
           safety-strategy: drop-sudo
           allow-bot-users: "astral-automations-bot[bot],renovate[bot]"
           prompt-file: "${{ runner.temp }}/pull-request-security-review-prompt.md"
-          output-schema-file: "agents/schemas/pull-request-security-review.json"
+          output-schema-file: "${{ env.REVIEW_CONFIG }}/schemas/pull-request-security-review.json"
           output-file: "${{ runner.temp }}/pull-request-review-result.json"
 
       - name: "Check review coverage"
@@ -169,7 +179,7 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: codex-thread-pull-request-security-review-${{ github.run_id }}-${{ github.run_attempt }}
-          path: agents/codex/sessions
+          path: ${{ env.REVIEW_CONFIG }}/codex/sessions
           if-no-files-found: warn
 
   prepare:
