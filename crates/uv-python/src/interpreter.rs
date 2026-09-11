@@ -32,7 +32,6 @@ use uv_static::EnvVars;
 use crate::implementation::LenientImplementationName;
 use crate::managed::ManagedPythonInstallations;
 use crate::pointer_size::PointerSize;
-use crate::virtualenv::virtualenv_python_executable;
 use crate::{
     Prefix, PyVenvConfiguration, PythonInstallationKey, PythonVariant, PythonVersion, Target,
     VersionRequest, VirtualEnvironment,
@@ -118,8 +117,7 @@ impl Interpreter {
 
     /// Cache the metadata for this environment's Python without querying it.
     ///
-    /// Uses the executable selected by virtual environment discovery, which may be a different
-    /// alias from the executable used to create the environment.
+    /// The executable created for this environment is also used by virtual environment discovery.
     pub fn cache_virtualenv(&self, cache: &Cache) -> Result<(), Error> {
         // Launcher overrides can change `sys.executable` and `sys.prefix`, while
         // `sys._base_executable` isn't affected. Instead of trying to stitch together this edge
@@ -1020,7 +1018,6 @@ struct InterpreterInfo {
 impl InterpreterInfo {
     /// Build metadata for virtual environment discovery without querying Python or using the cache.
     fn from_virtualenv(interpreter: &Interpreter) -> Result<Self, Error> {
-        let executable = virtualenv_python_executable(interpreter.sys_prefix());
         let mut scheme = interpreter.scheme.clone();
         // Joining the empty relative data path adds a trailing separator that sysconfig omits.
         scheme.data = scheme.data.components().collect();
@@ -1036,7 +1033,7 @@ impl InterpreterInfo {
             sys_path: Vec::new(),
             sys_base_prefix: interpreter.sys_base_prefix.clone(),
             sys_base_executable: interpreter.sys_base_executable.clone(),
-            sys_executable: std::path::absolute(executable)?,
+            sys_executable: std::path::absolute(interpreter.sys_executable())?,
             site_packages: interpreter.site_packages.clone(),
             stdlib: interpreter.stdlib.clone(),
             extension_suffixes: interpreter.extension_suffixes.clone(),
