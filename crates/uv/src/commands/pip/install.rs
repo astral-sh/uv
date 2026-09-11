@@ -6,7 +6,7 @@ use owo_colors::OwoColorize;
 use thiserror::Error;
 use tracing::{Level, debug, enabled, warn};
 
-use uv_errors::{Hint, Hints};
+use uv_errors::{Hinted, Hints};
 
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
@@ -64,7 +64,7 @@ pub(crate) struct ExternallyManagedError {
     system: bool,
 }
 
-impl Hint for ExternallyManagedError {
+impl Hinted for ExternallyManagedError {
     fn hints(&self) -> Hints<'_> {
         if self.system {
             Hints::from("Virtual environments were not considered due to the `--system` flag")

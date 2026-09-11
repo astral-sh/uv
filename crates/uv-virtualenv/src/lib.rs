@@ -39,7 +39,7 @@ pub enum Error {
     },
 }
 
-impl uv_errors::Hint for Error {
+impl uv_errors::Hinted for Error {
     fn hints(&self) -> uv_errors::Hints<'_> {
         match self {
             Self::Exists { name, .. } => uv_errors::Hints::from(format!(

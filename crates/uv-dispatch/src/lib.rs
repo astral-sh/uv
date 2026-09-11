@@ -68,7 +68,7 @@ pub enum BuildDispatchError {
     Lookahead(#[from] uv_requirements::Error),
 }
 
-impl uv_errors::Hint for BuildDispatchError {
+impl uv_errors::Hinted for BuildDispatchError {
     fn hints(&self) -> uv_errors::Hints<'_> {
         match self {
             Self::BuildFrontend(err) => err.hints(),

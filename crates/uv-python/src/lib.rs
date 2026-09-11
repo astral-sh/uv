@@ -174,7 +174,7 @@ impl std::fmt::Display for MissingPythonHint {
     }
 }
 
-impl uv_errors::Hint for Error {
+impl uv_errors::Hinted for Error {
     fn hints(&self) -> uv_errors::Hints<'_> {
         match self {
             Self::MissingPython(_, Some(hint)) => uv_errors::Hints::from(hint.to_string()),

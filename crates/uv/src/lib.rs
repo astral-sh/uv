@@ -117,7 +117,7 @@ struct ExternallyInstalledError {
 }
 
 #[cfg(not(feature = "self-update"))]
-impl uv_errors::Hint for ExternallyInstalledError {
+impl uv_errors::Hinted for ExternallyInstalledError {
     fn hints(&self) -> uv_errors::Hints<'_> {
         if let Some(source) = &self.install_source {
             uv_errors::Hints::from(format!(

@@ -401,7 +401,7 @@ impl std::fmt::Display for MalwareFindings {
     }
 }
 
-impl uv_errors::Hint for ProjectError {
+impl uv_errors::Hinted for ProjectError {
     fn hints(&self) -> uv_errors::Hints<'_> {
         match self {
             Self::LockMismatch(..) | Self::LockWorkspaceMismatch(..) => {
@@ -416,7 +416,7 @@ impl uv_errors::Hint for ProjectError {
             Self::Lock(err) => err.hints(),
             Self::Python(err) => err.hints(),
             Self::Operation(err) => err.hints(),
-            Self::Client(err) => uv_errors::Hint::hints(err),
+            Self::Client(err) => uv_errors::Hinted::hints(err),
             _ => uv_errors::Hints::none(),
         }
     }

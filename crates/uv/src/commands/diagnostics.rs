@@ -8,7 +8,7 @@ use version_ranges::Ranges;
 use uv_distribution_types::{
     DerivationChain, DerivationStep, Dist, DistErrorKind, Name, RequestedDist,
 };
-use uv_errors::{Hint, Hints};
+use uv_errors::{Hinted, Hints};
 use uv_normalize::PackageName;
 use uv_pep440::{Version, strip_local_version_sentinels};
 
@@ -227,7 +227,7 @@ pub(crate) fn write_error_chain(err: &anyhow::Error, printer: Printer) -> std::f
 ///
 /// This is the central "hint for error" function. It walks the full error chain
 /// (via `anyhow::Error::chain`) and tries to downcast each error to known types
-/// that implement [`Hint`]. All hint rendering logic should be consolidated here.
+/// that implement [`Hinted`]. All hint rendering logic should be consolidated here.
 pub(crate) fn hints_for_error(err: &anyhow::Error) -> Hints<'static> {
     let mut hints = Hints::none();
     for cause in err.chain() {
@@ -265,7 +265,7 @@ pub(crate) fn hints_for_error(err: &anyhow::Error) -> Hints<'static> {
 }
 
 /// If `cause` can be downcast to `T`, collect its hints.
-fn collect_hint<T: Hint + std::error::Error + 'static>(
+fn collect_hint<T: Hinted + std::error::Error + 'static>(
     cause: &(dyn std::error::Error + 'static),
     hints: &mut Hints<'static>,
 ) {

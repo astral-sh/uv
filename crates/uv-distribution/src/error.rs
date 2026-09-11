@@ -230,11 +230,11 @@ impl From<reqwest_middleware::Error> for Error {
     }
 }
 
-impl uv_errors::Hint for Error {
+impl uv_errors::Hinted for Error {
     fn hints(&self) -> uv_errors::Hints<'_> {
         match self {
             Self::Build(err) => err.hints(),
-            Self::Client(err) => uv_errors::Hint::hints(err),
+            Self::Client(err) => uv_errors::Hinted::hints(err),
             Self::MetadataLowering(err) => err.hints(),
             _ => uv_errors::Hints::none(),
         }

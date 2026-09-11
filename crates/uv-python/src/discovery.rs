@@ -311,7 +311,7 @@ pub enum Error {
     BuildVersion(#[from] crate::python_version::BuildVersionError),
 }
 
-impl uv_errors::Hint for Error {
+impl uv_errors::Hinted for Error {
     fn hints(&self) -> uv_errors::Hints<'_> {
         match self {
             Self::Query(err, _, _) => err.hints(),

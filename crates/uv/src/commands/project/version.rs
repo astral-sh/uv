@@ -380,7 +380,7 @@ pub(crate) struct MissingProjectVersionError {
     err: WorkspaceError,
 }
 
-impl uv_errors::Hint for MissingProjectVersionError {
+impl uv_errors::Hinted for MissingProjectVersionError {
     fn hints(&self) -> uv_errors::Hints<'_> {
         uv_errors::Hints::from(format!(
             "If you meant to view uv's version, use `{}` instead",

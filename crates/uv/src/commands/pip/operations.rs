@@ -1398,14 +1398,14 @@ pub(crate) enum Error {
     OutdatedEnvironment(Box<Changelog>),
 }
 
-impl uv_errors::Hint for Error {
+impl uv_errors::Hinted for Error {
     fn hints(&self) -> uv_errors::Hints<'_> {
         match self {
             Self::Resolve(resolve_err) => resolve_err.hints(),
             Self::Anyhow(err) => {
                 for cause in err.chain() {
                     if let Some(extra_err) = cause.downcast_ref::<ExtrasWithoutSourceError>() {
-                        return uv_errors::Hint::hints(extra_err);
+                        return uv_errors::Hinted::hints(extra_err);
                     }
                 }
                 uv_errors::Hints::none()
@@ -1424,7 +1424,7 @@ pub(crate) struct ExtrasWithoutSourceError {
     has_editable: bool,
 }
 
-impl uv_errors::Hint for ExtrasWithoutSourceError {
+impl uv_errors::Hinted for ExtrasWithoutSourceError {
     fn hints(&self) -> uv_errors::Hints<'_> {
         uv_errors::Hints::from(if self.has_editable {
             "Use `<dir>[extra]` syntax or `-r <file>` instead"

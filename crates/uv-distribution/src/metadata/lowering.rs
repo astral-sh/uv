@@ -619,7 +619,7 @@ pub enum LoweringError {
     RelativeTo(io::Error),
 }
 
-impl uv_errors::Hint for LoweringError {
+impl uv_errors::Hinted for LoweringError {
     fn hints(&self) -> uv_errors::Hints<'_> {
         match self {
             Self::MissingIndex {

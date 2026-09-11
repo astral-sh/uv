@@ -15,7 +15,7 @@ use url::Url;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Certificates, RegistryClientBuilder};
 use uv_distribution_types::IndexUrl;
-use uv_errors::{ErrorOptions, Hint, write_error_chain_with_options};
+use uv_errors::{ErrorOptions, Hinted, write_error_chain_with_options};
 use uv_redacted::DisplaySafeUrl;
 use uv_static::EnvVars;
 

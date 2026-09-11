@@ -167,7 +167,7 @@ pub(crate) async fn find_script(
             writeln!(
                 printer.stderr(),
                 "{}",
-                ErrorWithHints::new(&error, uv_errors::Hint::hints(&error))
+                ErrorWithHints::new(&error, uv_errors::Hinted::hints(&error))
             )?;
             return Ok(ExitStatus::Failure);
         }

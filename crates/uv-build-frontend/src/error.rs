@@ -10,7 +10,7 @@ use regex::regex;
 use thiserror::Error;
 use uv_configuration::BuildOutput;
 use uv_distribution_types::IsBuildBackendError;
-use uv_errors::{Hint, Hints};
+use uv_errors::{Hinted, Hints};
 use uv_fs::Simplified;
 use uv_normalize::PackageName;
 use uv_pep440::Version;
@@ -80,7 +80,7 @@ impl IsBuildBackendError for Error {
     }
 }
 
-impl Hint for Error {
+impl Hinted for Error {
     fn hints(&self) -> Hints<'_> {
         match self {
             Self::BuildBackend(_) => Hints::from(
@@ -450,7 +450,7 @@ mod test {
     use std::process::ExitStatus;
     use std::str::FromStr;
     use uv_configuration::BuildOutput;
-    use uv_errors::{ErrorWithHints, Hint};
+    use uv_errors::{ErrorWithHints, Hinted};
     use uv_normalize::PackageName;
     use uv_pep440::Version;
 
