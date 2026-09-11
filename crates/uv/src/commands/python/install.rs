@@ -41,7 +41,7 @@ use uv_warnings::warn_user;
 
 use crate::commands::python::{ChangeEvent, ChangeEventKind};
 use crate::commands::reporters::PythonDownloadReporter;
-use crate::commands::{ExitStatus, conjunction, elapsed};
+use crate::commands::{ExitStatus, UvError, conjunction, elapsed};
 use crate::printer::Printer;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -166,6 +166,26 @@ impl std::fmt::Display for PythonUpgradeSource {
         match self {
             Self::Install => write!(f, "uv python install --upgrade"),
             Self::Upgrade => write!(f, "uv python upgrade"),
+        }
+    }
+}
+
+#[derive(Debug, thiserror::Error)]
+#[error("`{command}` only accepts minor versions, got: {request}")]
+pub(crate) struct InvalidUpgradeRequestError {
+    command: PythonUpgradeSource,
+    request: String,
+    from_version_file: bool,
+}
+
+impl uv_errors::Hinted for InvalidUpgradeRequestError {
+    fn hints(&self) -> Hints<'_> {
+        if self.from_version_file {
+            Hints::from(
+                "The version request came from a `.python-version` file; change the patch version in the file to upgrade instead",
+            )
+        } else {
+            Hints::none()
         }
     }
 }
@@ -446,22 +466,12 @@ async fn perform_install(
         if let Some(request) = requests.iter().find(|request| {
             request.request.includes_patch() || request.request.includes_prerelease()
         }) {
-            writeln!(
-                printer.stderr(),
-                "error: `{source}` only accepts minor versions, got: {}",
-                request.request.to_canonical_string()
-            )?;
-            if is_from_python_version_file {
-                // TODO(zanieb): Consider refactoring this to use an error type.
-                write!(
-                    printer.stderr(),
-                    "{}",
-                    uv_errors::Hints::from(
-                        "The version request came from a `.python-version` file; change the patch version in the file to upgrade instead",
-                    ),
-                )?;
-            }
-            return Ok(ExitStatus::Failure);
+            return Err(UvError::user(InvalidUpgradeRequestError {
+                command: source,
+                request: request.request.to_canonical_string().into_owned(),
+                from_version_file: is_from_python_version_file,
+            })
+            .into());
         }
     }
 
