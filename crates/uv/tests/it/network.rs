@@ -9,7 +9,7 @@ use anyhow::Result;
 use assert_fs::fixture::{ChildPath, FileWriteStr, PathChild};
 use bytes::Bytes;
 use http::StatusCode;
-use http::header::{ACCEPT_RANGES, CONTENT_LENGTH, CONTENT_RANGE, ETAG, IF_RANGE, RANGE};
+use http::header::{ACCEPT_RANGES, CONTENT_LENGTH, CONTENT_RANGE, RANGE};
 use http_body_util::combinators::BoxBody;
 use http_body_util::{BodyExt, StreamBody};
 use hyper::body::Frame;
@@ -1117,24 +1117,11 @@ enum RangeResponse {
     Unsatisfiable,
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Default)]
 struct DownloadCase {
     range: RangeResponse,
-    etag: Option<&'static str>,
-    replace: bool,
     /// Retry limit for both paths, and the number of retries expected after falling back.
     full_retries: usize,
-}
-
-impl Default for DownloadCase {
-    fn default() -> Self {
-        Self {
-            range: RangeResponse::Supported,
-            etag: Some("\"wheel\""),
-            replace: false,
-            full_retries: 0,
-        }
-    }
 }
 
 /// Serve metadata normally, then truncate full responses until streaming retries are exhausted.
@@ -1143,22 +1130,13 @@ impl Default for DownloadCase {
 fn wheel_response(
     request: &hyper::Request<hyper::body::Incoming>,
     wheel: &Bytes,
-    replacement: Option<&Bytes>,
     case: DownloadCase,
     full_get_count: &AtomicUsize,
 ) -> Result<StreamingResponse, http::Error> {
     let streaming_attempts = 1 + case.full_retries;
     let resuming = full_get_count.load(Ordering::Relaxed) > streaming_attempts;
-    let (wheel, etag) = if resuming && let Some(replacement) = replacement {
-        (replacement, Some("\"replacement\""))
-    } else {
-        (wheel, case.etag)
-    };
     let size = wheel.len();
     let mut response = hyper::Response::builder();
-    if let Some(etag) = etag {
-        response = response.header(ETAG, etag);
-    }
     if request.method() == hyper::Method::HEAD {
         return response
             .header(CONTENT_LENGTH, size)
@@ -1166,16 +1144,6 @@ fn wheel_response(
             .body(http_body_util::Empty::new().boxed());
     }
     if let Some(range) = request.headers().get(RANGE) {
-        if resuming
-            && request
-                .headers()
-                .get(IF_RANGE)
-                .is_some_and(|validator| etag.is_none_or(|etag| validator != etag))
-        {
-            return response
-                .header(CONTENT_LENGTH, size)
-                .body(http_body_util::Full::new(wheel.clone()).boxed());
-        }
         let (start, end) = range
             .to_str()
             .expect("ASCII range")
@@ -1261,26 +1229,11 @@ fn wheel_server(
     let wheel = Bytes::from(fs_err::read(
         fixtures.join("build_tag-1.0.0-1-py2.py3-none-any.whl"),
     )?);
-    // These builds have the same package version and length, but different contents.
-    let replacement = if case.replace {
-        Some(Bytes::from(fs_err::read(
-            fixtures.join("build_tag-1.0.0-3-py2.py3-none-any.whl"),
-        )?))
-    } else {
-        None
-    };
-    let hash = hex::encode(Sha256::digest(replacement.as_ref().unwrap_or(&wheel)));
+    let hash = hex::encode(Sha256::digest(&wheel));
     let full_get_count = Arc::new(AtomicUsize::new(0));
     let requests = full_get_count.clone();
-    let (server, guard) = streaming_server(move |request| {
-        wheel_response(
-            &request,
-            &wheel,
-            replacement.as_ref(),
-            case,
-            &full_get_count,
-        )
-    });
+    let (server, guard) =
+        streaming_server(move |request| wheel_response(&request, &wheel, case, &full_get_count));
     Ok((server, guard, requests, hash))
 }
 
@@ -1312,10 +1265,9 @@ fn assert_wheel_download(case: DownloadCase) -> Result<()> {
     );
 
     let site_packages = context.site_packages();
-    let build = if case.replace { "3" } else { "1" };
     assert_eq!(
         fs_err::read_to_string(site_packages.join("build_tag/__init__.py"))?,
-        format!("def main():\n    print(\"{build}\")\n"),
+        "def main():\n    print(\"1\")\n",
     );
     let metadata =
         fs_err::read_to_string(site_packages.join("build_tag-1.0.0.dist-info/METADATA"))?;
@@ -1360,7 +1312,6 @@ fn direct_url_content_length_mismatch() -> Result<()> {
         DownloadCase {
             range: RangeResponse::NotAdvertised,
             full_retries: 1,
-            ..DownloadCase::default()
         },
     )?;
     write_wheel_lockfile(&context, &server, 1, &hash)?;
@@ -1420,7 +1371,6 @@ fn direct_url_no_range_resume() -> Result<()> {
     assert_wheel_download(DownloadCase {
         range: RangeResponse::NotAdvertised,
         full_retries: 1,
-        ..DownloadCase::default()
     })
 }
 
@@ -1429,7 +1379,6 @@ fn direct_url_unsatisfiable_range_retries_in_full() -> Result<()> {
     assert_wheel_download(DownloadCase {
         range: RangeResponse::Unsatisfiable,
         full_retries: 1,
-        ..DownloadCase::default()
     })
 }
 
@@ -1462,52 +1411,6 @@ fn direct_url_unsatisfiable_range_does_not_bypass_retry() -> Result<()> {
     ");
     assert_eq!(full_get_count.load(Ordering::Relaxed), 2);
     Ok(())
-}
-
-#[test]
-fn direct_url_range_validator_changed() -> Result<()> {
-    assert_wheel_download(DownloadCase {
-        replace: true,
-        full_retries: 1,
-        ..DownloadCase::default()
-    })
-}
-
-#[test]
-fn direct_url_range_validator_changed_full_response() -> Result<()> {
-    assert_wheel_download(DownloadCase {
-        range: RangeResponse::Ignored,
-        replace: true,
-        full_retries: 1,
-        ..DownloadCase::default()
-    })
-}
-
-#[test]
-fn direct_url_range_validator_missing() -> Result<()> {
-    assert_wheel_download(DownloadCase {
-        etag: None,
-        full_retries: 1,
-        ..DownloadCase::default()
-    })
-}
-
-#[test]
-fn direct_url_range_validator_weak() -> Result<()> {
-    assert_wheel_download(DownloadCase {
-        etag: Some("W/\"wheel\""),
-        full_retries: 1,
-        ..DownloadCase::default()
-    })
-}
-
-#[test]
-fn direct_url_range_validator_invalid() -> Result<()> {
-    assert_wheel_download(DownloadCase {
-        etag: Some("unquoted"),
-        full_retries: 1,
-        ..DownloadCase::default()
-    })
 }
 
 /// An invalid continuation response does not bypass regular retry handling.
@@ -1552,7 +1455,6 @@ fn direct_url_range_size_mismatch() -> Result<()> {
         DownloadCase {
             range: RangeResponse::ShortBody,
             full_retries: 1,
-            ..DownloadCase::default()
         },
     )?;
 

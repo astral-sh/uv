@@ -10,7 +10,6 @@ use futures::{FutureExt, TryStreamExt};
 use http_content_range::{ContentRange, ContentRangeBytes, ContentRangeUnbound};
 use rayon::in_place_scope;
 use rayon::prelude::*;
-use reqwest::header::{ETAG, HeaderValue, IF_RANGE};
 use rustc_hash::FxHashMap;
 use tokio::io::{AsyncRead, AsyncSeekExt, AsyncWriteExt, ReadBuf};
 use tokio::sync::Semaphore;
@@ -1038,7 +1037,6 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
     ) -> Result<Archive, Error> {
         let progress_size_hint = progress_size_hint.or_else(|| content_length(&response));
         let mut download_size = content_length(&response).or(expected_size);
-        let etag = strong_etag(&response).cloned();
 
         let progress = self.reporter.as_ref().map(|reporter| {
             (
@@ -1198,12 +1196,6 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 return Err(err);
             }
 
-            // We expect any partial response to have an ETag, so that we can detect
-            // when an (honest) origin changes its representation beneath us.
-            let Some(etag) = etag.as_ref() else {
-                return Err(err);
-            };
-
             // Some sanity checks: we should have made *some* progress as part of
             // partial response, plus our writer's offset should agree with the number
             // of bytes retrieved, *and* we should be making forward progress (i.e. not
@@ -1223,7 +1215,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
 
             // Finally our resumption, which is a range request.
             debug!("Resuming download of {url} at byte {offset}");
-            let resumed_response = self.request_with_offset(url.clone(), offset, etag).await?;
+            let resumed_response = self.request_with_offset(url.clone(), offset).await?;
 
             // A chunked response can fail after all wheel bytes arrive, leaving no satisfiable
             // range. Return the original error so the outer retry policy can restart in full.
@@ -1232,14 +1224,6 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 return Err(err);
             }
             resumed_response.error_for_status_ref()?;
-
-            // Sanity check with the ETag above: the origin might have changed
-            // the download underneath us, in which case we need to kick back to the retry
-            // stack and do an entirely fresh request for consistency.
-            if strong_etag(&resumed_response) != Some(etag) {
-                debug!("Download changed while resuming {url}; retrying in full");
-                return Err(err);
-            }
 
             resumed_range = if resumed_response.status() == reqwest::StatusCode::PARTIAL_CONTENT {
                 // The origin honored our range request, so we update `resumed_range`
@@ -1523,14 +1507,13 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             .build()
     }
 
-    /// Send a GET request with a `Range: bytes=<offset>-` header and an `If-Range` validator.
+    /// Send a GET request with a `Range: bytes=<offset>-` header.
     ///
     /// Used to resume an interrupted download from `offset` bytes into the file.
     async fn request_with_offset(
         &self,
         url: DisplaySafeUrl,
         offset: u64,
-        etag: &HeaderValue,
     ) -> Result<reqwest::Response, reqwest_middleware::Error> {
         self.client
             .unmanaged
@@ -1541,7 +1524,6 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 reqwest::header::HeaderValue::from_static("identity"),
             )
             .header(reqwest::header::RANGE, format!("bytes={offset}-"))
-            .header(IF_RANGE, etag.clone())
             .send()
             .await
     }
@@ -1671,21 +1653,6 @@ fn content_length(response: &reqwest::Response) -> Option<u64> {
         .get(reqwest::header::CONTENT_LENGTH)
         .and_then(|val| val.to_str().ok())
         .and_then(|val| val.parse::<u64>().ok())
-}
-
-/// Return a syntactically valid strong `ETag` that can validate a byte range.
-///
-/// TODO: De-dupe with `uv_client::httpcache::ETag::parse`?
-fn strong_etag(response: &reqwest::Response) -> Option<&HeaderValue> {
-    let etag = response.headers().get(ETAG)?;
-    let value = etag.as_bytes().strip_prefix(b"\"")?.strip_suffix(b"\"")?;
-    if !value
-        .iter()
-        .all(|byte| *byte == b'!' || (b'#'..=b'~').contains(byte) || *byte >= 0x80)
-    {
-        return None;
-    }
-    Some(etag)
 }
 
 /// Return the bounds of a range response starting at `offset` with a known complete length.
