@@ -2750,7 +2750,7 @@ fn init_failure() -> Result<()> {
     exit_code: 2 (failure)
     ----- stderr -----
     error: Failed to discover parent workspace; use `uv init --no-workspace` to ignore
-      └── No `project` table found in: [TEMP_DIR]/pyproject.toml
+      cause: No `project` table found in: [TEMP_DIR]/pyproject.toml
     ");
 
     uv_snapshot!(context.filters(), context.init().arg("foo").arg("--no-workspace"), @"

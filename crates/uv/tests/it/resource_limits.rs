@@ -96,6 +96,6 @@ fn run_open_file_limit_override_exceeds_hard_limit() {
     exit_code: 2 (failure)
     ----- stderr -----
     error: Failed to apply `UV_RUN_RLIMIT_NOFILE` value `256`
-      └── requested open file limit (256) exceeds the hard limit (128)
+      cause: requested open file limit (256) exceeds the hard limit (128)
     ");
 }

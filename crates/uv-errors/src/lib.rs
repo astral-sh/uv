@@ -370,34 +370,26 @@ pub fn write_error_chain_with_options<C: DynColor + Copy, W: fmt::Write>(
         wrapped_main.trim()
     )?;
 
-    let mut sources = iter::successors(err.source(), |&err| err.source()).peekable();
-    while let Some(source) = sources.next() {
+    for source in iter::successors(err.source(), |&err| err.source()) {
         let msg = source.to_string();
-        let has_more = sources.peek().is_some();
-        let connector = if has_more { "├──" } else { "└──" };
-        // Reserve the display width of the gutter before wrapping the message. Authored lines
-        // retain their own indentation within the gutter.
-        let wrapped = wrap_text(&msg, width.map(|width| width.saturating_sub(6)), "", "", "");
+        // Reserve the display width of the prefix before wrapping the message. Authored lines
+        // retain their own indentation beneath it.
+        let wrapped = wrap_text(&msg, width.map(|width| width.saturating_sub(9)), "", "", "");
 
         let mut lines = wrapped.lines();
         if let Some(first) = lines.next() {
             writeln!(
                 &mut stream,
-                "  {} {}",
-                connector.color(color).bold(),
+                "  {}{} {}",
+                "cause".color(color).bold(),
+                ":".bold(),
                 first.trim()
             )?;
             for line in lines {
                 if line.trim().is_empty() {
-                    if has_more {
-                        writeln!(&mut stream, "  {}", "│".color(color).bold())?;
-                    } else {
-                        writeln!(&mut stream)?;
-                    }
-                } else if has_more {
-                    writeln!(&mut stream, "  {}   {line}", "│".color(color).bold())?;
+                    writeln!(&mut stream)?;
                 } else {
-                    writeln!(&mut stream, "      {line}")?;
+                    writeln!(&mut stream, "         {line}")?;
                 }
             }
         }
@@ -556,9 +548,9 @@ mod tests {
 
         assert_snapshot!(output, @"
         error: No solution found when resolving dependencies
-          └── Because fiasobfhuasbf was not found in the package registry and you
-              require fiasobfhuasbf, we can conclude that your requirements are
-              unsatisfiable.
+          cause: Because fiasobfhuasbf was not found in the package registry and you
+                 require fiasobfhuasbf, we can conclude that your requirements are
+                 unsatisfiable.
         ");
     }
 
@@ -583,12 +575,12 @@ mod tests {
             ErrorOptions::default().with_stream(&mut output),
         )
         .unwrap();
-        assert_snapshot!(format!("{output:?}"), @r#""\u{1b}[1m\u{1b}[31merror\u{1b}[39m\u{1b}[0m\u{1b}[1m:\u{1b}[0m Failed to write file\n  \u{1b}[1m\u{1b}[31m└──\u{1b}[39m\u{1b}[0m Permission denied\n""#);
+        assert_snapshot!(format!("{output:?}"), @r#""\u{1b}[1m\u{1b}[31merror\u{1b}[39m\u{1b}[0m\u{1b}[1m:\u{1b}[0m Failed to write file\n  \u{1b}[1m\u{1b}[31mcause\u{1b}[39m\u{1b}[0m\u{1b}[1m:\u{1b}[0m Permission denied\n""#);
         let output = anstream::adapter::strip_str(&output);
 
         assert_snapshot!(output, @"
         error: Failed to write file
-          └── Permission denied
+          cause: Permission denied
         ");
     }
 
@@ -723,10 +715,10 @@ mod tests {
         assert_snapshot!(output, @"
         error: Unable to resolve package
                dependencies
-          ├── Failed to fetch package metadata
-          │   from registry
-          └── Network connection timeout after
-              multiple retry attempts
+          cause: Failed to fetch package
+                 metadata from registry
+          cause: Network connection timeout
+                 after multiple retry attempts
         ");
     }
 
@@ -746,8 +738,8 @@ mod tests {
 
         assert_snapshot!(output, @"
         error: root
-          └── one
-              two
+          cause: one
+                 two
         ");
     }
 
@@ -825,7 +817,7 @@ mod tests {
 
         assert_snapshot!(rendered, @"
         error: Failed to fetch package
-          └── Permission denied
+          cause: Permission denied
 
         hint: Try running with `--verbose` for more information.
 
@@ -854,11 +846,11 @@ mod tests {
 
         assert_snapshot!(rendered, @"
         error: Failed to download Python 3.12
-          ├── Failed to fetch https://example.com/upload/python3.13.tar.zst
-          │   Server says: This endpoint only support POST requests.
-          │
-          │   For downloads, please refer to https://example.com/download/python3.13.tar.zst
-          └── Caused By: HTTP Error 400
+          cause: Failed to fetch https://example.com/upload/python3.13.tar.zst
+                 Server says: This endpoint only support POST requests.
+
+                 For downloads, please refer to https://example.com/download/python3.13.tar.zst
+          cause: Caused By: HTTP Error 400
         ");
     }
 }

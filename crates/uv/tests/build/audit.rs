@@ -393,8 +393,8 @@ async fn audit_malformed_vulnerability_record() {
     ----- stderr -----
     Resolved 2 packages in [TIME]
     error: OSV returned a malformed vulnerability record for `PYSEC-2023-0001`
-      ├── error decoding response body for url (http://[LOCALHOST]/v1/vulns/PYSEC-2023-0001)
-      └── expected value at line 1 column 56
+      cause: error decoding response body for url (http://[LOCALHOST]/v1/vulns/PYSEC-2023-0001)
+      cause: expected value at line 1 column 56
     ");
 }
 

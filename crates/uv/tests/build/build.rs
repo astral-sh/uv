@@ -106,7 +106,7 @@ fn build_basic() -> Result<()> {
     ----- stderr -----
     Building source distribution...
     error: Failed to build `[TEMP_DIR]/`
-      └── [TEMP_DIR]/ does not appear to be a Python project, as neither `pyproject.toml` nor `setup.py` are present in the directory
+      cause: [TEMP_DIR]/ does not appear to be a Python project, as neither `pyproject.toml` nor `setup.py` are present in the directory
     ");
 
     // Build to a specified path, even if builds are disabled for the project by name.
@@ -239,7 +239,7 @@ fn build_sdist_missing_backend_path() -> Result<()> {
     Building source distribution...
     Building wheel from source distribution...
     error: Failed to build `[TEMP_DIR]/project`
-      └── `backend-path` entry `backend_dir` does not exist or is not a directory
+      cause: `backend-path` entry `backend_dir` does not exist or is not a directory
     ");
 
     Ok(())
@@ -272,7 +272,7 @@ fn build_backend_path_outside_source_tree() -> Result<()> {
     ----- stderr -----
     Building wheel...
     error: Failed to build `[TEMP_DIR]/project`
-      └── `backend-path` entry `../backend` must be a relative path within the source tree
+      cause: `backend-path` entry `../backend` must be a relative path within the source tree
     ");
 
     Ok(())
@@ -306,7 +306,7 @@ fn build_backend_path_absolute_inside_source_tree() -> Result<()> {
     ----- stderr -----
     Building wheel...
     error: Failed to build `[TEMP_DIR]/project`
-      └── `backend-path` entry `[TEMP_DIR]/project/backend` must be a relative path within the source tree
+      cause: `backend-path` entry `[TEMP_DIR]/project/backend` must be a relative path within the source tree
     ");
 
     Ok(())
@@ -341,7 +341,7 @@ fn build_backend_path_symlink_outside_source_tree() -> Result<()> {
     ----- stderr -----
     Building wheel...
     error: Failed to build `[TEMP_DIR]/project`
-      └── `backend-path` entry `backend` must be a relative path within the source tree
+      cause: `backend-path` entry `backend` must be a relative path within the source tree
     ");
 
     Ok(())
@@ -543,7 +543,7 @@ fn build_wheel_from_sdist() -> Result<()> {
     exit_code: 2 (failure)
     ----- stderr -----
     error: Failed to build `[TEMP_DIR]/project/dist/project-0.1.0.tar.gz`
-      └── Pass `--wheel` explicitly to build a wheel from a source distribution
+      cause: Pass `--wheel` explicitly to build a wheel from a source distribution
     ");
 
     // Error if `--sdist` is specified.
@@ -551,7 +551,7 @@ fn build_wheel_from_sdist() -> Result<()> {
     exit_code: 2 (failure)
     ----- stderr -----
     error: Failed to build `[TEMP_DIR]/project/dist/project-0.1.0.tar.gz`
-      └── Building an `--sdist` from a source distribution is not supported
+      cause: Building an `--sdist` from a source distribution is not supported
     ");
 
     // Explicit wheel builds from an sdist are allowed even when dependency builds are disabled.
@@ -576,7 +576,7 @@ fn build_wheel_from_sdist() -> Result<()> {
     exit_code: 2 (failure)
     ----- stderr -----
     error: Failed to build `[TEMP_DIR]/project/dist/project-0.1.0-py3-none-any.whl`
-      └── `dist/project-0.1.0-py3-none-any.whl` is not a valid build source. Expected to receive a source directory, or a source distribution ending in one of: `.tar.gz`, `.zip`, `.tar.bz2`, `.tar.lz`, `.tar.lzma`, `.tar.xz`, `.tar.zst`, `.tar`, `.tbz`, `.tgz`, `.tlz`, or `.txz`.
+      cause: `dist/project-0.1.0-py3-none-any.whl` is not a valid build source. Expected to receive a source directory, or a source distribution ending in one of: `.tar.gz`, `.zip`, `.tar.bz2`, `.tar.lz`, `.tar.lzma`, `.tar.xz`, `.tar.zst`, `.tar`, `.tbz`, `.tgz`, `.tlz`, or `.txz`.
     ");
 
     Ok(())
@@ -641,8 +641,8 @@ fn build_fail() -> Result<()> {
         from setuptools import setup
     IndentationError: unexpected indent
     error: Failed to build `[TEMP_DIR]/project`
-      ├── The build backend returned an error
-      └── Call to `setuptools.build_meta.build_sdist` failed (exit status: 1)
+      cause: The build backend returned an error
+      cause: Call to `setuptools.build_meta.build_sdist` failed (exit status: 1)
 
     hint: Build failures usually indicate a problem with the package or the build environment
     "#);
@@ -807,7 +807,7 @@ fn build_workspace() -> Result<()> {
     exit_code: 2 (failure)
     ----- stderr -----
     error: `--package` was provided, but no workspace was found
-      └── No `pyproject.toml` found in current directory or any parent directory
+      cause: No `pyproject.toml` found in current directory or any parent directory
     ");
 
     // Fail when `--all` is provided without a workspace.
@@ -815,7 +815,7 @@ fn build_workspace() -> Result<()> {
     exit_code: 2 (failure)
     ----- stderr -----
     error: `--all-packages` was provided, but no workspace was found
-      └── No `pyproject.toml` found in current directory or any parent directory
+      cause: No `pyproject.toml` found in current directory or any parent directory
     ");
 
     // Fail when `--package` is a non-existent member without a workspace.
@@ -936,8 +936,8 @@ fn build_all_with_failure() -> Result<()> {
     Successfully built dist/member_a-0.1.0.tar.gz
     Successfully built dist/member_a-0.1.0-py3-none-any.whl
     error: Failed to build `member-b @ [TEMP_DIR]/project/packages/member_b`
-      ├── The build backend returned an error
-      └── Call to `setuptools.build_meta.build_sdist` failed (exit status: 1)
+      cause: The build backend returned an error
+      cause: Call to `setuptools.build_meta.build_sdist` failed (exit status: 1)
 
     hint: Build failures usually indicate a problem with the package or the build environment
     Successfully built dist/project-0.1.0.tar.gz
@@ -1002,9 +1002,9 @@ fn build_constraints() -> Result<()> {
     ----- stderr -----
     Building source distribution...
     error: Failed to build `[TEMP_DIR]/project`
-      ├── Failed to resolve requirements from `build-system.requires`
-      ├── No solution found when resolving: `hatchling>=1.0`
-      └── Because you require hatchling>=1.0 and hatchling==0.1.0, we can conclude that your requirements are unsatisfiable.
+      cause: Failed to resolve requirements from `build-system.requires`
+      cause: No solution found when resolving: `hatchling>=1.0`
+      cause: Because you require hatchling>=1.0 and hatchling==0.1.0, we can conclude that your requirements are unsatisfiable.
     ");
 
     project
@@ -1379,16 +1379,16 @@ fn build_sha() -> Result<()> {
     ----- stderr -----
     Building source distribution...
     error: Failed to build `[TEMP_DIR]/project`
-      ├── Failed to install requirements from `build-system.requires`
-      ├── Failed to download `hatchling==1.22.4`
-      └── Hash mismatch for `hatchling==1.22.4`
+      cause: Failed to install requirements from `build-system.requires`
+      cause: Failed to download `hatchling==1.22.4`
+      cause: Hash mismatch for `hatchling==1.22.4`
 
-          Expected:
-            sha256:a248cb506794bececcddeddb1678bc722f9cfcacf02f98f7c0af6b9ed893caf2
-            sha256:e16da5bfc396af7b29daa3164851dd04991c994083f56cb054b5003675caecdc
+             Expected:
+               sha256:a248cb506794bececcddeddb1678bc722f9cfcacf02f98f7c0af6b9ed893caf2
+               sha256:e16da5bfc396af7b29daa3164851dd04991c994083f56cb054b5003675caecdc
 
-          Computed:
-            sha256:f56da5bfc396af7b29daa3164851dd04991c994083f56cb054b5003675caecdc
+             Computed:
+               sha256:f56da5bfc396af7b29daa3164851dd04991c994083f56cb054b5003675caecdc
     ");
 
     project
@@ -1408,16 +1408,16 @@ fn build_sha() -> Result<()> {
     ----- stderr -----
     Building source distribution...
     error: Failed to build `[TEMP_DIR]/project`
-      ├── Failed to install requirements from `build-system.requires`
-      ├── Failed to download `hatchling==1.22.4`
-      └── Hash mismatch for `hatchling==1.22.4`
+      cause: Failed to install requirements from `build-system.requires`
+      cause: Failed to download `hatchling==1.22.4`
+      cause: Hash mismatch for `hatchling==1.22.4`
 
-          Expected:
-            sha256:a248cb506794bececcddeddb1678bc722f9cfcacf02f98f7c0af6b9ed893caf2
-            sha256:e16da5bfc396af7b29daa3164851dd04991c994083f56cb054b5003675caecdc
+             Expected:
+               sha256:a248cb506794bececcddeddb1678bc722f9cfcacf02f98f7c0af6b9ed893caf2
+               sha256:e16da5bfc396af7b29daa3164851dd04991c994083f56cb054b5003675caecdc
 
-          Computed:
-            sha256:f56da5bfc396af7b29daa3164851dd04991c994083f56cb054b5003675caecdc
+             Computed:
+               sha256:f56da5bfc396af7b29daa3164851dd04991c994083f56cb054b5003675caecdc
     ");
 
     project
@@ -1440,9 +1440,9 @@ fn build_sha() -> Result<()> {
     ----- stderr -----
     Building source distribution...
     error: Failed to build `[TEMP_DIR]/project`
-      ├── Failed to resolve requirements from `build-system.requires`
-      ├── No solution found when resolving: `hatchling`
-      └── In `--require-hashes` mode, all requirements must be pinned upfront with `==`, but found: `hatchling`
+      cause: Failed to resolve requirements from `build-system.requires`
+      cause: No solution found when resolving: `hatchling`
+      cause: In `--require-hashes` mode, all requirements must be pinned upfront with `==`, but found: `hatchling`
     ");
 
     project
@@ -1754,8 +1754,8 @@ fn build_hide_build_output_on_failure() -> Result<()> {
     ----- stderr -----
     Building source distribution...
     error: Failed to build `[TEMP_DIR]/project`
-      ├── The build backend returned an error
-      └── Call to `setuptools.build_meta.build_sdist` failed (exit status: 1)
+      cause: The build backend returned an error
+      cause: Call to `setuptools.build_meta.build_sdist` failed (exit status: 1)
 
     hint: Build failures usually indicate a problem with the package or the build environment
     ");
@@ -1836,8 +1836,8 @@ fn build_tool_uv_sources() -> Result<()> {
     ----- stderr -----
     Building source distribution...
     error: Failed to build `[TEMP_DIR]/project`
-      ├── Failed to install requirements from `build-system.requires`
-      └── Building source distributions is disabled, but attempted to build `backend`
+      cause: Failed to install requirements from `build-system.requires`
+      cause: Building source distributions is disabled, but attempted to build `backend`
     ");
 
     uv_snapshot!(context.filters(), context.build().arg("--no-build-package").arg("backend").current_dir(project.path()), @"
@@ -1845,8 +1845,8 @@ fn build_tool_uv_sources() -> Result<()> {
     ----- stderr -----
     Building source distribution...
     error: Failed to build `[TEMP_DIR]/project`
-      ├── Failed to install requirements from `build-system.requires`
-      └── Building source distributions is disabled, but attempted to build `backend`
+      cause: Failed to install requirements from `build-system.requires`
+      cause: Building source distributions is disabled, but attempted to build `backend`
     ");
 
     project
@@ -1914,8 +1914,8 @@ fn build_named_index_config_file_hint() -> Result<()> {
     ----- stderr -----
     Building source distribution...
     error: Failed to build `[TEMP_DIR]/project`
-      ├── Failed to parse entry: `hatchling`
-      └── Package `hatchling` references an undeclared index: `privindex`
+      cause: Failed to parse entry: `hatchling`
+      cause: Package `hatchling` references an undeclared index: `privindex`
 
     hint: Index `privindex` was found in a project-level `uv.toml`, but indexes referenced via `tool.uv.sources` must be defined in the project's `pyproject.toml`
     ");
@@ -2274,8 +2274,8 @@ fn build_unsafe_script_entry_point_name() -> Result<()> {
     ----- stderr -----
     Building wheel...
     error: Failed to build `[TEMP_DIR]/`
-      ├── Invalid project metadata
-      └── Script entry point name `../script` must include a non-dot character and consist only of letters, numbers, dots, underscores and dashes
+      cause: Invalid project metadata
+      cause: Script entry point name `../script` must include a non-dot character and consist only of letters, numbers, dots, underscores and dashes
     ");
 
     Ok(())
@@ -2315,8 +2315,8 @@ fn build_dot_script_entry_point_name() -> Result<()> {
     ----- stderr -----
     Building wheel...
     error: Failed to build `[TEMP_DIR]/`
-      ├── Invalid project metadata
-      └── Script entry point name `.` must include a non-dot character and consist only of letters, numbers, dots, underscores and dashes
+      cause: Invalid project metadata
+      cause: Script entry point name `.` must include a non-dot character and consist only of letters, numbers, dots, underscores and dashes
     ");
 
     Ok(())
@@ -2356,8 +2356,8 @@ fn build_nested_script_entry_point_name() -> Result<()> {
     ----- stderr -----
     Building wheel...
     error: Failed to build `[TEMP_DIR]/`
-      ├── Invalid project metadata
-      └── Script entry point name `nested/script` must include a non-dot character and consist only of letters, numbers, dots, underscores and dashes
+      cause: Invalid project metadata
+      cause: Script entry point name `nested/script` must include a non-dot character and consist only of letters, numbers, dots, underscores and dashes
     ");
 
     Ok(())
@@ -2519,7 +2519,7 @@ fn build_list_files_errors() -> Result<()> {
     exit_code: 2 (failure)
     ----- stderr -----
     error: Failed to build `[WORKSPACE]/test/packages/anyio_local`
-      └── Can only use `--list` with a compatible uv build backend, but `[WORKSPACE]/test/packages/anyio_local` is not compatible because `build_system.build-backend` is not `uv_build`, but `flit_core.buildapi`
+      cause: Can only use `--list` with a compatible uv build backend, but `[WORKSPACE]/test/packages/anyio_local` is not compatible because `build_system.build-backend` is not `uv_build`, but `flit_core.buildapi`
     ");
     Ok(())
 }
@@ -2550,7 +2550,7 @@ fn build_version_mismatch() -> Result<()> {
     ----- stderr -----
     Building wheel from source distribution...
     error: Failed to build `[TEMP_DIR]/anyio-1.2.3.tar.gz`
-      └── The source distribution declares version 1.2.3, but the wheel declares version 4.3.0+foo
+      cause: The source distribution declares version 1.2.3, but the wheel declares version 4.3.0+foo
     ");
     Ok(())
 }
@@ -2586,7 +2586,7 @@ fn build_name_mismatch() -> Result<()> {
     Building source distribution...
     Building wheel...
     error: Failed to build `[TEMP_DIR]/project`
-      └── The source distribution declares name alpha, but the wheel declares name beta
+      cause: The source distribution declares name alpha, but the wheel declares name beta
     ");
 
     Ok(())
@@ -2686,7 +2686,7 @@ fn build_workspace_virtual_root() -> Result<()> {
     warning: `[TEMP_DIR]/` appears to be a workspace root without a Python project; consider using `uv sync` to install the workspace, or add a `[build-system]` table to `pyproject.toml`
     Building wheel from source distribution...
     error: Failed to build `[TEMP_DIR]/`
-      └── The source distribution declares name cache, but the wheel declares name unknown
+      cause: The source distribution declares name cache, but the wheel declares name unknown
     ");
     Ok(())
 }
@@ -2712,7 +2712,7 @@ fn build_pyproject_toml_not_a_project() -> Result<()> {
     warning: `[TEMP_DIR]/` does not appear to be a Python project, as the `pyproject.toml` does not include a `[build-system]` table, and neither `setup.py` nor `setup.cfg` are present in the directory
     Building wheel from source distribution...
     error: Failed to build `[TEMP_DIR]/`
-      └── The source distribution declares name cache, but the wheel declares name unknown
+      cause: The source distribution declares name cache, but the wheel declares name unknown
     ");
     Ok(())
 }
@@ -2796,7 +2796,7 @@ fn force_pep517() -> Result<()> {
     ----- stderr -----
     Building source distribution...
     error: Failed to build `[TEMP_DIR]/`
-      └── Expected a Python module at: src/does_not_exist/__init__.py
+      cause: Expected a Python module at: src/does_not_exist/__init__.py
     ");
 
     uv_snapshot!(context.filters(), context.build().arg("--force-pep517").env(EnvVars::RUST_BACKTRACE, "0"), @"
@@ -2805,8 +2805,8 @@ fn force_pep517() -> Result<()> {
     Building source distribution...
     Error: Missing module directory for `does_not_exist` in `src`. Found: `temp`
     error: Failed to build `[TEMP_DIR]/`
-      ├── The build backend returned an error
-      └── Call to `uv_build.build_sdist` failed (exit status: 1)
+      cause: The build backend returned an error
+      cause: Call to `uv_build.build_sdist` failed (exit status: 1)
 
     hint: Build failures usually indicate a problem with the package or the build environment
     ");
@@ -2862,9 +2862,9 @@ fn venv_included_in_sdist() -> Result<()> {
     ----- stderr -----
     Building source distribution...
     error: Failed to build `[TEMP_DIR]/`
-      ├── Invalid tar file
-      ├── failed to unpack `[CACHE_DIR]/sdists-v9/[TMP]/project-0.1.0/.venv/bin/python`
-      └── symlink path `[PYTHON-3.12]` is absolute, but external symlinks are not allowed
+      cause: Invalid tar file
+      cause: failed to unpack `[CACHE_DIR]/sdists-v9/[TMP]/project-0.1.0/.venv/bin/python`
+      cause: symlink path `[PYTHON-3.12]` is absolute, but external symlinks are not allowed
 
     hint: The source distribution includes a virtual environment. Virtual environments must be excluded from source distributions.
     ");
@@ -2885,8 +2885,8 @@ fn venv_included_in_sdist() -> Result<()> {
     ----- stderr -----
     Building source distribution...
     error: Failed to build `[TEMP_DIR]/`
-      ├── Invalid tar file
-      └── at byte [OFFSET]: unsafe symbolic-link target "[PYTHON-3.12]": is absolute
+      cause: Invalid tar file
+      cause: at byte [OFFSET]: unsafe symbolic-link target "[PYTHON-3.12]": is absolute
 
     hint: The source distribution includes a virtual environment. Virtual environments must be excluded from source distributions.
     "#);
@@ -2895,9 +2895,9 @@ fn venv_included_in_sdist() -> Result<()> {
     exit_code: 2 (failure)
     ----- stderr -----
     error: Failed to build `[TEMP_DIR]/`
-      ├── Invalid tar file
-      ├── failed to unpack `[CACHE_DIR]/sdists-v9/[TMP]/project-0.1.0/.venv/bin/python`
-      └── symlink path `[PYTHON-3.12]` is absolute, but external symlinks are not allowed
+      cause: Invalid tar file
+      cause: failed to unpack `[CACHE_DIR]/sdists-v9/[TMP]/project-0.1.0/.venv/bin/python`
+      cause: symlink path `[PYTHON-3.12]` is absolute, but external symlinks are not allowed
 
     hint: The source distribution includes a virtual environment. Virtual environments must be excluded from source distributions.
     ");
