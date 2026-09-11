@@ -269,7 +269,11 @@ nav:
       - Contributing: reference/contributing.md
       - Internals:
           - reference/internals/index.md
+          - Cache: reference/internals/cache.md
+          - Installer: reference/internals/installer.md
+          - Python Discovery: reference/internals/python-discovery.md
           - Resolver: reference/internals/resolver.md
+          - Universal Resolver: reference/internals/universal-resolver.md
           - Workspace Metadata: reference/internals/metadata.md
       - Benchmarks: reference/benchmarks.md
       - Policies:
