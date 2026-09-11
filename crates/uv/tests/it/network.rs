@@ -209,12 +209,13 @@ fn time_out_response(
 
 /// Run a streaming HTTP server on its own runtime so test subprocesses cannot starve it.
 /// Dropping the guard shuts down the runtime and all connection tasks.
-fn streaming_server(
-    handler: impl Fn(hyper::Request<hyper::body::Incoming>) -> Result<StreamingResponse, http::Error>
-    + Send
-    + Sync
-    + 'static,
-) -> (String, impl Drop) {
+fn streaming_server<F>(handler: F) -> (String, impl Drop)
+where
+    F: Fn(hyper::Request<hyper::body::Incoming>) -> Result<StreamingResponse, http::Error>
+        + Send
+        + Sync
+        + 'static,
+{
     let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
     listener.set_nonblocking(true).unwrap();
     let server = format!("http://{}", listener.local_addr().unwrap());
