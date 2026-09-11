@@ -1,6 +1,7 @@
 use std::collections::BTreeMap;
 use std::fmt::{self, Debug, Formatter};
-use std::path::PathBuf;
+use std::io::BufReader;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
@@ -27,7 +28,7 @@ use uv_distribution_types::{
 };
 use uv_extract::hash::Hasher;
 use uv_git::{GIT_LFS, GitError, GitHttpSettings, GitResolver, Reporter};
-use uv_metadata::{read_metadata_async_seek, read_metadata_async_stream};
+use uv_metadata::{read_archive_metadata, read_metadata_async_stream};
 use uv_normalize::PackageName;
 use uv_pep440::{Version, VersionSpecifiers};
 use uv_pep508::MarkerEnvironment;
@@ -959,22 +960,8 @@ impl RegistryClient {
 
                 match location {
                     WheelLocation::Path(path) => {
-                        let file = fs_err::tokio::File::open(&path)
-                            .await
-                            .map_err(ErrorKind::Io)?;
-                        let reader = tokio::io::BufReader::new(file);
-                        let contents = read_metadata_async_seek(&wheel.filename, reader)
-                            .await
-                            .map_err(|err| {
-                                ErrorKind::Metadata(path.to_string_lossy().to_string(), err)
-                            })?;
-                        ResolutionMetadata::parse_metadata(&contents).map_err(|err| {
-                            ErrorKind::MetadataParseError(
-                                wheel.filename.clone(),
-                                built_dist.to_string(),
-                                Box::new(err),
-                            )
-                        })?
+                        Self::wheel_metadata_local(&path, &path, &wheel.filename, built_dist)
+                            .await?
                     }
                     WheelLocation::Url(url) => {
                         self.wheel_metadata_registry(wheel, &url, capabilities)
@@ -993,22 +980,13 @@ impl RegistryClient {
                 .await?
             }
             BuiltDist::Path(wheel) => {
-                let file = fs_err::tokio::File::open(wheel.install_path.as_ref())
-                    .await
-                    .map_err(ErrorKind::Io)?;
-                let reader = tokio::io::BufReader::new(file);
-                let contents = read_metadata_async_seek(&wheel.filename, reader)
-                    .await
-                    .map_err(|err| {
-                        ErrorKind::Metadata(wheel.install_path.to_string_lossy().to_string(), err)
-                    })?;
-                ResolutionMetadata::parse_metadata(&contents).map_err(|err| {
-                    ErrorKind::MetadataParseError(
-                        wheel.filename.clone(),
-                        built_dist.to_string(),
-                        Box::new(err),
-                    )
-                })?
+                Self::wheel_metadata_local(
+                    &wheel.install_path,
+                    &wheel.install_path,
+                    &wheel.filename,
+                    built_dist,
+                )
+                .await?
             }
             BuiltDist::GitPath(wheel) => {
                 // Fetch the Git repository.
@@ -1038,22 +1016,13 @@ impl RegistryClient {
                 }
 
                 // Read the metadata.
-                let file = fs_err::tokio::File::open(fetch.path().join(&wheel.install_path))
-                    .await
-                    .map_err(ErrorKind::Io)?;
-                let reader = tokio::io::BufReader::new(file);
-                let contents = read_metadata_async_seek(&wheel.filename, reader)
-                    .await
-                    .map_err(|err| {
-                        ErrorKind::Metadata(wheel.install_path.to_string_lossy().to_string(), err)
-                    })?;
-                ResolutionMetadata::parse_metadata(&contents).map_err(|err| {
-                    ErrorKind::MetadataParseError(
-                        wheel.filename.clone(),
-                        built_dist.to_string(),
-                        Box::new(err),
-                    )
-                })?
+                Self::wheel_metadata_local(
+                    &fetch.path().join(&wheel.install_path),
+                    &wheel.install_path,
+                    &wheel.filename,
+                    built_dist,
+                )
+                .await?
             }
         };
 
@@ -1065,6 +1034,31 @@ impl RegistryClient {
         }
 
         Ok(metadata)
+    }
+
+    /// Read and parse local wheel metadata in one blocking task.
+    ///
+    /// `metadata_path` identifies the wheel in diagnostics and may be relative to a Git checkout.
+    async fn wheel_metadata_local(
+        path: &Path,
+        metadata_path: &Path,
+        filename: &WheelFilename,
+        built_dist: &BuiltDist,
+    ) -> Result<ResolutionMetadata, Error> {
+        let path = path.to_path_buf();
+        let metadata_path = metadata_path.to_string_lossy().into_owned();
+        let filename = filename.clone();
+        let built_dist = built_dist.to_string();
+        tokio::task::spawn_blocking(move || {
+            let file = fs_err::File::open(path).map_err(ErrorKind::Io)?;
+            let contents = read_archive_metadata(&filename, BufReader::new(file))
+                .map_err(|err| ErrorKind::Metadata(metadata_path, err))?;
+            ResolutionMetadata::parse_metadata(&contents).map_err(|err| {
+                ErrorKind::MetadataParseError(filename, built_dist, Box::new(err)).into()
+            })
+        })
+        .await
+        .map_err(|err| ErrorKind::Io(err.into()))?
     }
 
     /// Fetch the metadata from a wheel file.
