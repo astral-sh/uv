@@ -338,6 +338,8 @@ pub enum PreviewFeature {
     /// Exclude `exclude-newer-package` entries from the lockfile when not included in the
     /// project's resolved dependencies.
     MissingExcludeNewerPackageLock,
+    /// Allows requiring hashes for build dependencies.
+    BuildDependencyHashes,
 }
 
 impl Display for PreviewFeature {

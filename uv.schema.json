@@ -514,6 +514,10 @@
         "$ref": "#/definitions/PackageName"
       }
     },
+    "require-build-hashes": {
+      "description": "Require hashes for all build dependencies.\n\nHashes in `build-constraint-dependencies` are checked when downloading build dependencies.\nEnable this option to reject build dependencies without hashes. Hashes in URL fragments in\n`build-system.requires` also count, but hashes returned by a build backend do not.\n\nNo hash is required when uv uses its bundled `uv_build` backend, since it is part of the uv\nexecutable. Other source builds require build isolation. Already-installed packages and\npreviously built wheels are not checked.\n\nThis setting also applies to `uv pip` commands, where it can be overridden in `[tool.uv.pip]`.",
+      "type": ["boolean", "null"]
+    },
     "required-environments": {
       "description": "A list of environment markers, e.g., `sys_platform == 'darwin'.",
       "type": ["array", "null"],
@@ -1708,6 +1712,10 @@
             "$ref": "#/definitions/PackageName"
           }
         },
+        "require-build-hashes": {
+          "description": "Require hashes for all build dependencies in `uv pip` commands.\n\nOverrides `require-build-hashes` in `[tool.uv]`. This does not require hashes for runtime\ndependencies; use `require-hashes` for those.",
+          "type": ["boolean", "null"]
+        },
         "require-hashes": {
           "description": "Require a matching hash for each requirement.\n\nHash-checking mode is all or nothing. If enabled, _all_ requirements must be provided\nwith a corresponding hash or set of hashes. Additionally, if enabled, _all_ requirements\nmust either be pinned to exact versions (e.g., `==1.0.0`), or be specified via direct URL.\n\nHash-checking mode introduces a number of additional constraints:\n\n- Git dependencies are not supported.\n- Editable installations are not supported.\n- Local dependencies are not supported, unless they point to a specific wheel (`.whl`) or\n  source archive (`.zip`, `.tar.gz`), as opposed to a directory.",
           "type": ["boolean", "null"]
@@ -1858,7 +1866,8 @@
             "index-by-name",
             "artifact-hash-filtering",
             "content-addressed-cache",
-            "missing-exclude-newer-package-lock"
+            "missing-exclude-newer-package-lock",
+            "build-dependency-hashes"
           ]
         },
         {

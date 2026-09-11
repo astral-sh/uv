@@ -783,6 +783,7 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
                 args.settings.dependency_mode,
                 args.settings.upgrade,
                 args.settings.generate_hashes,
+                args.build_hash_checking,
                 args.settings.no_emit_package,
                 args.settings.no_strip_extras,
                 args.settings.no_strip_markers,
@@ -881,6 +882,7 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
                 args.settings.link_mode,
                 args.settings.compile_bytecode,
                 args.settings.hash_checking,
+                args.build_hash_checking,
                 args.settings.index_locations,
                 args.settings.index_strategy,
                 args.settings.torch_backend,
@@ -1052,6 +1054,7 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
                 args.settings.link_mode,
                 args.settings.compile_bytecode,
                 args.settings.hash_checking,
+                args.build_hash_checking,
                 globals.installer_metadata,
                 &args.settings.config_setting,
                 &args.settings.config_settings_package,
@@ -2478,7 +2481,7 @@ async fn run_project(
         }
         ProjectCommand::Upgrade(args) => {
             // Resolve the settings from the command-line arguments and workspace configuration.
-            let args = settings::UpgradeSettings::resolve(args, filesystem, environment);
+            let args = settings::UpgradeSettings::resolve(args, filesystem, environment)?;
             show_settings!(args);
 
             // Initialize the cache.

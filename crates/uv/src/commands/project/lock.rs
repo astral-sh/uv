@@ -534,6 +534,7 @@ async fn do_lock(
         config_setting,
         config_settings_package,
         build_isolation,
+        build_hash_checking,
         extra_build_dependencies,
         extra_build_variables,
         exclude_newer,
@@ -836,7 +837,7 @@ async fn do_lock(
         let build_hasher = HashStrategy::from_constraints(
             &existing_lock.build_constraints(target.install_path()),
             Some(&interpreter.to_resolver_marker_environment()),
-            uv_configuration::HashCheckingMode::Verify,
+            *build_hash_checking,
         )?;
         let locked_build_hasher = locked_hasher
             .clone()
@@ -858,7 +859,7 @@ async fn do_lock(
     let build_hasher = HashStrategy::from_constraints(
         &build_constraints,
         Some(&interpreter.to_resolver_marker_environment()),
-        uv_configuration::HashCheckingMode::Verify,
+        *build_hash_checking,
     )?;
     // Explicit build constraints apply even when fresh resolution can replace lockfile hashes.
     let resolution_build_hasher = match mode {

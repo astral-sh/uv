@@ -1,9 +1,10 @@
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Default, Copy, Clone)]
 pub enum HashCheckingMode {
     /// Hashes should be validated against a pre-defined list of hashes. Every requirement must
     /// itself be hashable (e.g., Git dependencies are forbidden) _and_ have a hash in the lockfile.
     Require,
     /// Hashes should be validated, if present, but ignored if absent.
+    #[default]
     Verify,
 }
 
