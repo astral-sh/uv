@@ -1265,6 +1265,51 @@ fn lock_wheel_git_archive_missing_lfs() -> Result<()> {
     Ok(())
 }
 
+/// A downloaded fragment-bearing URL can be installed from the lockfile offline.
+#[cfg(feature = "test-universal")]
+#[tokio::test]
+async fn lock_wheel_url_fragment_download() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let server = MockServer::start().await;
+    let filename = "ok-1.0.0-py3-none-any.whl";
+    let wheel = fs_err::read(context.workspace_root.join("test/links").join(filename))?;
+    Mock::given(method("GET"))
+        .and(path(format!("/{filename}")))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .insert_header("cache-control", "max-age=3600")
+                .set_body_bytes(wheel),
+        )
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    // MD5 cannot be reused for hash generation, so locking must download the wheel to compute
+    // SHA-256. Stronger URL hashes can avoid downloading the archive altogether.
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(&formatdoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["ok @ {}/{filename}#md5=88d6d524262f256596aa7f663c88038b"]
+    "#, server.uri()})?;
+
+    uv_snapshot!(context.filters(), context.lock(), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Installed 1 package in [TIME]
+     + ok==1.0.0 (from http://[LOCALHOST]/ok-1.0.0-py3-none-any.whl)
+    ");
+
+    Ok(())
+}
+
 /// Lock a requirement from a direct URL to a wheel.
 #[cfg(feature = "test-universal")]
 #[test]
