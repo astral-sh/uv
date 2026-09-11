@@ -19485,6 +19485,34 @@ fn compile_missing_python_version_default_fallback() -> Result<()> {
     Ok(())
 }
 
+/// Invalid client identities should report the underlying TLS error, not just `builder error`.
+#[test]
+fn compile_client_certificate_warning_chain() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let certificate = context.temp_dir.child("client.pem");
+    certificate.write_str("not a PEM identity\n")?;
+    context
+        .temp_dir
+        .child("requirements.in")
+        .write_str("idna==3.6\n")?;
+
+    uv_snapshot!(context.filters(), context.pip_compile()
+        .arg("--offline")
+        .arg("requirements.in")
+        .env(EnvVars::SSL_CLIENT_CERT, certificate.path()), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    warning: Ignoring invalid `SSL_CLIENT_CERT`
+      cause: builder error
+      cause: unexpected error: private key or certificate not found
+    error: No solution found when resolving dependencies
+      cause: Because idna was not found in the cache and you require idna==3.6, we can conclude that your requirements are unsatisfiable.
+
+    hint: Packages were unavailable because the network was disabled. When the network is disabled, registry packages may only be read from the cache.
+    ");
+    Ok(())
+}
+
 /// Test that pip compile warns on download errors
 #[cfg(feature = "test-python-managed")]
 #[tokio::test]
@@ -19524,6 +19552,23 @@ async fn compile_missing_python_download_error_warning() {
       cause: client error (Connect)
       cause: tunnel error: unsuccessful
     warning: The requested Python version 3.10 is not available; 3.12.[X] will be used to build dependencies instead.
+    error: Failed to fetch: `https://pypi.org/simple/anyio/`
+      cause: error sending request for url (https://pypi.org/simple/anyio/)
+      cause: client error (Connect)
+      cause: tunnel error: unsuccessful
+    ");
+
+    // Quiet mode should suppress the download warning and its causes, but retain the fatal error.
+    uv_snapshot!(context.filters(), context
+        .pip_compile()
+        .arg("--quiet")
+        .arg("--python-version").arg("3.10")
+        .env("ALL_PROXY", server.uri())
+        .env(EnvVars::UV_HTTP_RETRIES, "0")
+        .env(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY, "true")
+        .arg("requirements.in"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
     error: Failed to fetch: `https://pypi.org/simple/anyio/`
       cause: error sending request for url (https://pypi.org/simple/anyio/)
       cause: client error (Connect)

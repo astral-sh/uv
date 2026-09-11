@@ -7,7 +7,6 @@ use std::borrow::Cow;
 use std::cmp::Reverse;
 use std::env::consts::EXE_SUFFIX;
 use std::fmt::{self, Debug, Formatter};
-use std::sync::atomic::Ordering;
 use std::{env, io, iter};
 use std::{path::Path, path::PathBuf, str::FromStr};
 use thiserror::Error;
@@ -15,7 +14,6 @@ use tracing::{debug, instrument, trace};
 use uv_cache::Cache;
 use uv_client::BaseClientBuilder;
 use uv_distribution_types::RequiresPython;
-use uv_errors::Hints;
 use uv_fs::Simplified;
 use uv_fs::which::is_executable;
 use uv_pep440::{
@@ -23,7 +21,7 @@ use uv_pep440::{
     release_specifiers_to_ranges,
 };
 use uv_static::EnvVars;
-use uv_warnings::{warn_user_once, write_warning_chain};
+use uv_warnings::{warn_user_once, warn_user_with_chain};
 use which::{which, which_all};
 
 use crate::downloads::{ManagedPythonDownloadList, PlatformRequest, PythonDownloadRequest};
@@ -1386,10 +1384,7 @@ pub fn find_all_python_installations(
             Ok(Ok(installation)) => installations.push(installation),
             Ok(Err(_)) => {}
             Err(err @ Error::Query(..)) => {
-                if uv_warnings::ENABLED.load(Ordering::Relaxed) {
-                    write_warning_chain(&err, &Hints::none())
-                        .expect("writing to stderr should not fail");
-                }
+                warn_user_with_chain!(&err);
             }
             Err(err) if err.is_critical() => return Err(err),
             Err(_) => {}
@@ -1674,11 +1669,13 @@ pub(crate) async fn find_best_python_installation(
                     return Err(error);
                 }
 
-                let error = anyhow::Error::from(error).context(format!(
-                    "A managed Python download is available for {request}, but an error occurred when attempting to download it."
-                ));
-                write_warning_chain(error.as_ref(), &Hints::none())
-                    .expect("writing to stderr should not fail");
+                warn_user_with_chain!(
+                    anyhow::Error::from(error)
+                        .context(format!(
+                            "A managed Python download is available for {request}, but an error occurred when attempting to download it."
+                        ))
+                        .as_ref()
+                );
                 previous_fetch_failed = true;
             }
         }

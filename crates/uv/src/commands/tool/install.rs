@@ -30,7 +30,7 @@ use uv_requirements::{RequirementsSource, RequirementsSpecification};
 use uv_settings::{PythonInstallMirrors, ResolverInstallerOptions, ToolOptions};
 use uv_tool::{InstalledTools, Tool};
 use uv_types::{HashStrategy, SourceTreeEditablePolicy};
-use uv_warnings::{warn_user, warn_user_once};
+use uv_warnings::{warn_user, warn_user_once, warn_user_with_chain};
 use uv_workspace::WorkspaceCache;
 
 use crate::commands::ExitStatus;
@@ -551,7 +551,11 @@ pub(crate) async fn install(
                     return Err(ProjectError::Lock(err).into());
                 }
                 Err(err) => {
-                    warn_user!("Failed to validate existing tool lock: {err}");
+                    warn_user_with_chain!(
+                        anyhow::Error::from(err)
+                            .context("Failed to validate existing tool lock")
+                            .as_ref()
+                    );
                     None
                 }
             }

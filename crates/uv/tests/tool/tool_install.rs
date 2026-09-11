@@ -6000,6 +6000,37 @@ fn tool_install_lock_refreshes_local_directory_constraint() -> Result<()> {
     Installed 1 executable: simple-launcher
     ");
 
+    // A validation warning should retain the parse error that prevents reusing the tool lock.
+    local_package.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "simple-launcher"
+        version = 42
+    "#})?;
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("simple-launcher")
+        .arg("--constraints")
+        .arg(constraints_txt.as_os_str())
+        .arg("--offline")
+        .env(EnvVars::UV_PREVIEW_FEATURES, "tool-install-locks")
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    warning: Failed to validate existing tool lock
+      cause: Failed to parse `[TEMP_DIR]/simple-launcher/pyproject.toml`
+      cause: TOML parse error at line 3, column 11
+               |
+             3 | version = 42
+               |           ^^
+             invalid type: integer `42`, expected a string
+    error: Failed to build `simple-launcher @ file://[TEMP_DIR]/simple-launcher`
+      cause: Failed to parse metadata from built wheel
+      cause: TOML parse error at line 3, column 11
+               |
+             3 | version = 42
+               |           ^^
+             invalid type: integer `42`, expected a string
+    ");
+
     Ok(())
 }
 
