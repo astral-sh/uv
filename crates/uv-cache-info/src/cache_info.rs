@@ -1,11 +1,11 @@
 use std::borrow::Cow;
 use std::collections::BTreeMap;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use serde::Deserialize;
 use tracing::{debug, info_span, warn};
 
-use uv_fs::{Simplified, created_time};
+use uv_fs::{PortablePath, created_time};
 
 use crate::git_info::{Commit, Tags};
 use crate::glob::cluster_globs;
@@ -24,11 +24,25 @@ pub enum CacheInfoError {
 #[derive(Default, Debug, Clone, Hash, PartialEq, Eq, serde::Deserialize, serde::Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub struct CacheInfo {
-    /// The timestamp of the most recent `ctime` of any relevant files, at the time of the build.
-    /// The timestamp will typically be the maximum of the `ctime` values of the `pyproject.toml`,
-    /// `setup.py`, and `setup.cfg` files, if they exist; however, users can provide additional
-    /// files to timestamp via the `cache-keys` field.
+    /// The timestamp of a single relevant file, at the time of the build.
+    ///
+    /// This is only populated when the [`CacheInfo`] is derived from a single file (e.g., a
+    /// source distribution archive) via [`CacheInfo::from_file`]; freshness checks for a source
+    /// tree are instead tracked per-file in [`CacheInfo::files`], so that the disappearance of a
+    /// single cache-key file doesn't go unnoticed.
     timestamp: Option<Timestamp>,
+    /// The timestamp of each individual `cache-keys` file that was considered when building the
+    /// distribution, at the time of the build, keyed by the path of the file relative to the
+    /// source tree.
+    ///
+    /// A `None` value records that the file did _not_ exist at the time of the build. This is
+    /// itself meaningful: if a cache-key file is later deleted (e.g., a build backend that
+    /// generates a file into the source tree, like a compiled extension module, is deleted along
+    /// with the virtual environment), the absence must be distinguishable from the file having
+    /// never been tracked at all, so that the deletion is treated as a cache-invalidating change
+    /// rather than being silently ignored.
+    #[serde(default)]
+    files: BTreeMap<Cow<'static, str>, Option<Timestamp>>,
     /// The commit at which the distribution was built.
     commit: Option<Commit>,
     /// The Git tags present at the time of the build.
@@ -64,7 +78,7 @@ impl CacheInfo {
     pub fn from_directory(directory: &Path) -> Result<Self, CacheInfoError> {
         let mut commit = None;
         let mut tags = None;
-        let mut last_changed: Option<(PathBuf, Timestamp)> = None;
+        let mut files: BTreeMap<Cow<'static, str>, Option<Timestamp>> = BTreeMap::new();
         let mut directories = BTreeMap::new();
         let mut env = BTreeMap::new();
 
@@ -117,6 +131,12 @@ impl CacheInfo {
                     let metadata = match path.metadata() {
                         Ok(metadata) => metadata,
                         Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+                            // Record the absence explicitly: if the file previously existed (e.g.,
+                            // it's a file that a build backend generates into the source tree),
+                            // its disappearance must be distinguishable from it never having been
+                            // tracked, or a deleted file would silently fail to invalidate the
+                            // cache.
+                            files.insert(file, None);
                             continue;
                         }
                         Err(err) => {
@@ -131,12 +151,7 @@ impl CacheInfo {
                         );
                         continue;
                     }
-                    let timestamp = Timestamp::from_metadata(&metadata);
-                    if last_changed.as_ref().is_none_or(|(_, prev_timestamp)| {
-                        *prev_timestamp < Timestamp::from_metadata(&metadata)
-                    }) {
-                        last_changed = Some((path, timestamp));
-                    }
+                    files.insert(file, Some(Timestamp::from_metadata(&metadata)));
                 }
                 CacheKey::Directory { dir } => {
                     // Treat the path as a directory.
@@ -268,28 +283,34 @@ impl CacheInfo {
                         }
                         continue;
                     }
-                    let timestamp = Timestamp::from_metadata(&metadata);
-                    if last_changed.as_ref().is_none_or(|(_, prev_timestamp)| {
-                        *prev_timestamp < Timestamp::from_metadata(&metadata)
-                    }) {
-                        last_changed = Some((entry.into_path(), timestamp));
-                    }
+
+                    // Key each match by its path relative to the source directory, using a
+                    // portable (forward-slash) representation, so that keys are stable across
+                    // platforms and comparable between separate calls to `from_directory`.
+                    //
+                    // Unlike explicitly-named `CacheKey::Path`/`CacheKey::File` entries, we don't
+                    // record an explicit `None` for glob matches that disappear: since a glob
+                    // pattern doesn't enumerate the files that *could* match, there's no fixed set
+                    // of keys to mark as absent. Instead, a file that no longer matches is simply
+                    // missing from `files` on the next computation, which is already sufficient
+                    // for the map comparison in `PartialEq` to detect the change.
+                    let path = entry.into_path();
+                    let relative = path.strip_prefix(directory).unwrap_or(&path);
+                    let key = Cow::Owned(PortablePath::from(relative).to_string());
+                    files.insert(key, Some(Timestamp::from_metadata(&metadata)));
                 }
             }
         }
 
-        let timestamp = if let Some((path, timestamp)) = last_changed {
+        if !(files.is_empty() && directories.is_empty() && env.is_empty()) {
             debug!(
-                "Computed cache info: {timestamp:?}, {commit:?}, {tags:?}, {env:?}, {directories:?}. Most recently modified: {}",
-                path.user_display()
+                "Computed cache info: {files:?}, {commit:?}, {tags:?}, {env:?}, {directories:?}"
             );
-            Some(timestamp)
-        } else {
-            None
-        };
+        }
 
         Ok(Self {
-            timestamp,
+            timestamp: None,
+            files,
             commit,
             tags,
             env,
@@ -311,6 +332,7 @@ impl CacheInfo {
     /// Returns `true` if the cache info is empty.
     pub fn is_empty(&self) -> bool {
         self.timestamp.is_none()
+            && self.files.is_empty()
             && self.commit.is_none()
             && self.tags.is_none()
             && self.env.is_empty()
@@ -379,6 +401,8 @@ enum DirectoryTimestamp {
 
 #[cfg(all(test, unix))]
 mod tests_unix {
+    use std::collections::BTreeMap;
+
     use anyhow::Result;
 
     use super::{CacheInfo, Timestamp};
@@ -410,36 +434,86 @@ mod tests_unix {
             Ok(Timestamp::from_metadata(&path.metadata()?))
         };
 
-        let cache_timestamp = || -> Result<_> { Ok(CacheInfo::from_directory(&dir)?.timestamp) };
+        // Each tracked cache-key file is now recorded individually (as opposed to collapsing to a
+        // single "most recently modified" timestamp), so that a file disappearing from the set is
+        // itself a detectable change rather than being silently absorbed into an unrelated file's
+        // timestamp.
+        let cache_files = || -> Result<BTreeMap<String, Option<Timestamp>>> {
+            Ok(CacheInfo::from_directory(&dir)?
+                .files
+                .into_iter()
+                .map(|(path, timestamp)| (path.into_owned(), timestamp))
+                .collect())
+        };
 
         write_manifest("x/**")?;
-        assert_eq!(cache_timestamp()?, None);
+        assert_eq!(cache_files()?, BTreeMap::new());
         let y = touch("x/y")?;
-        assert_eq!(cache_timestamp()?, Some(y));
+        assert_eq!(
+            cache_files()?,
+            BTreeMap::from([("x/y".to_string(), Some(y))])
+        );
         let z = touch("x/z")?;
-        assert_eq!(cache_timestamp()?, Some(z));
+        assert_eq!(
+            cache_files()?,
+            BTreeMap::from([("x/y".to_string(), Some(y)), ("x/z".to_string(), Some(z))])
+        );
 
         // leaf entry symlink should be resolved
         let a = touch("../a")?;
         fs_err::os::unix::fs::symlink(dir.join("../a"), dir.join("x/a"))?;
-        assert_eq!(cache_timestamp()?, Some(a));
+        assert_eq!(
+            cache_files()?,
+            BTreeMap::from([
+                ("x/a".to_string(), Some(a)),
+                ("x/y".to_string(), Some(y)),
+                ("x/z".to_string(), Some(z)),
+            ])
+        );
 
         // symlink directories should not be followed while globbing
-        let c = touch("../b/c")?;
+        let _c = touch("../b/c")?;
         fs_err::os::unix::fs::symlink(dir.join("../b"), dir.join("x/b"))?;
-        assert_eq!(cache_timestamp()?, Some(a));
+        assert_eq!(
+            cache_files()?,
+            BTreeMap::from([
+                ("x/a".to_string(), Some(a)),
+                ("x/y".to_string(), Some(y)),
+                ("x/z".to_string(), Some(z)),
+            ])
+        );
 
         // no globs, should work as expected
         write_manifest("x/y")?;
-        assert_eq!(cache_timestamp()?, Some(y));
+        assert_eq!(
+            cache_files()?,
+            BTreeMap::from([("x/y".to_string(), Some(y))])
+        );
         write_manifest("x/a")?;
-        assert_eq!(cache_timestamp()?, Some(a));
+        assert_eq!(
+            cache_files()?,
+            BTreeMap::from([("x/a".to_string(), Some(a))])
+        );
         write_manifest("x/b/c")?;
-        assert_eq!(cache_timestamp()?, Some(c));
+        let c = Timestamp::from_metadata(&dir.join("x/b/c").metadata()?);
+        assert_eq!(
+            cache_files()?,
+            BTreeMap::from([("x/b/c".to_string(), Some(c))])
+        );
 
         // symlink pointing to a directory
         write_manifest("x/*b*")?;
-        assert_eq!(cache_timestamp()?, None);
+        assert_eq!(cache_files()?, BTreeMap::new());
+
+        // A cache-key file that is deleted after having existed must be distinguishable from one
+        // that never existed: the deletion itself is a cache-invalidating change.
+        write_manifest("x/y")?;
+        assert_eq!(
+            cache_files()?,
+            BTreeMap::from([("x/y".to_string(), Some(y))])
+        );
+        fs_err::remove_file(dir.join("x/y"))?;
+        assert_eq!(cache_files()?, BTreeMap::from([("x/y".to_string(), None)]));
 
         Ok(())
     }
