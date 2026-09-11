@@ -9,7 +9,7 @@ use std::io;
 use std::path::Path;
 use thiserror::Error;
 use tokio::io::AsyncReadExt;
-use tokio_util::compat::{FuturesAsyncReadCompatExt, TokioAsyncReadCompatExt};
+use tokio_util::compat::FuturesAsyncReadCompatExt;
 use uv_distribution_filename::WheelFilename;
 use uv_normalize::{DistInfoName, InvalidNameError};
 use uv_pypi_types::ResolutionMetadata;
@@ -226,36 +226,7 @@ fn read_dist_info_metadata(
     fs_err::read(metadata_file).map_err(Error::Io)
 }
 
-/// Read a wheel's `METADATA` file from a zip file.
-pub async fn read_metadata_async_seek(
-    filename: &WheelFilename,
-    reader: impl tokio::io::AsyncRead + tokio::io::AsyncSeek + Unpin,
-) -> Result<Vec<u8>, Error> {
-    let reader = futures::io::BufReader::new(reader.compat());
-    let mut zip_reader = async_zip::base::read::seek::ZipFileReader::new(reader).await?;
-
-    let (metadata_idx, _dist_info_prefix) = find_archive_dist_info(
-        filename,
-        zip_reader
-            .file()
-            .entries()
-            .iter()
-            .enumerate()
-            .filter_map(|(index, entry)| Some((index, entry.filename().as_str().ok()?))),
-    )?;
-
-    // Read the contents of the `METADATA` file.
-    let mut contents = Vec::new();
-    zip_reader
-        .reader_with_entry(metadata_idx)
-        .await?
-        .read_to_end_checked(&mut contents)
-        .await?;
-
-    Ok(contents)
-}
-
-/// Like [`read_metadata_async_seek`], but doesn't use seek.
+/// Read and parse a wheel's `METADATA` file from a zip stream without seeking.
 pub async fn read_metadata_async_stream<R: futures::AsyncRead + Unpin>(
     filename: &WheelFilename,
     debug_path: &str,
