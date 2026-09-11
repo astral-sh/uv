@@ -438,7 +438,6 @@ def main() -> None:
     command = commands.add_parser("find")
     command.add_argument("sha")
     command.add_argument("--run-id")
-    command.add_argument("--require-mirrored", action="store_true")
     command = commands.add_parser("import")
     command.add_argument("directory", type=Path)
     command.add_argument("source_run")
@@ -453,7 +452,7 @@ def main() -> None:
             finish_capture(args.directory)
         case "find":
             source_run = None
-            if not args.require_mirrored or commit_is_mirrored(args.sha):
+            if commit_is_mirrored(args.sha):
                 source_run = find_source_run(args.sha, args.run_id)
             print(f"run-id={source_run or ''}")
         case "import":

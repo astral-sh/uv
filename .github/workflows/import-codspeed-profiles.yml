@@ -48,7 +48,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           SOURCE_RUN: ${{ inputs.source-run }}
-        run: uv run --script scripts/codspeed-profiles.py find "$SOURCE_SHA" --run-id "$SOURCE_RUN" --require-mirrored >> "$GITHUB_OUTPUT"
+        run: uv run --script scripts/codspeed-profiles.py find "$SOURCE_SHA" --run-id "$SOURCE_RUN" >> "$GITHUB_OUTPUT"
 
       - name: Get public benchmark artifact token
         id: token
