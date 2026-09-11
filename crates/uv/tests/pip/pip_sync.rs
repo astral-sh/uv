@@ -5785,6 +5785,32 @@ fn pep_751_validates_cached_remote_archive_size() -> Result<()> {
         .assert()
         .success();
 
+    context.reset_venv();
+
+    context.temp_dir.child("pylock.toml").write_str(&formatdoc! {
+        r#"
+        lock-version = "1.0"
+        created-by = "uv"
+
+        [[packages]]
+        name = "a"
+        version = "1.0.0"
+        archive = {{ url = "{wheel_url}", size = 921, hashes = {{ sha256 = "f936eedc194aa91ca01a4c6c9981136ca6c75ce6df47e3951b12522881dce809" }} }}
+        "#,
+    })?;
+
+    uv_snapshot!(context.filters(), context.pip_sync()
+        .arg("--preview")
+        .arg("--offline")
+        .arg("pylock.toml"), @r#"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Installed 1 package in [TIME]
+     + a==1.0.0 (from http://[LOCALHOST]/files/a-1.0.0-py3-none-any.whl)
+    "#);
+
+    context.reset_venv();
+
     context.temp_dir.child("pylock.toml").write_str(&formatdoc! {
         r#"
         lock-version = "1.0"
@@ -5800,12 +5826,196 @@ fn pep_751_validates_cached_remote_archive_size() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_sync()
         .arg("--preview")
         .arg("--offline")
-        .arg("--reinstall")
         .arg("pylock.toml"), @r#"
     exit_code: 1 (failure)
     ----- stderr -----
       × Failed to download `a @ http://[LOCALHOST]/files/a-1.0.0-py3-none-any.whl`
       ╰─▶ Size mismatch for `a @ http://[LOCALHOST]/files/a-1.0.0-py3-none-any.whl`: expected 1 bytes, but downloaded 921 bytes
+    "#);
+
+    Ok(())
+}
+
+#[test]
+fn pep_751_validates_cached_registry_wheel_size() -> Result<()> {
+    let server = PackseServer::new("simple/single-package.toml");
+    let context = uv_test::test_context!("3.12");
+    let pylock = formatdoc! {
+        r#"
+        lock-version = "1.0"
+        created-by = "uv"
+
+        [[packages]]
+        name = "a"
+        version = "1.0.0"
+        index = "{index}"
+        wheels = [{{ url = "{wheel_url}", size = 921, hashes = {{ sha256 = "f936eedc194aa91ca01a4c6c9981136ca6c75ce6df47e3951b12522881dce809" }} }}]
+        "#,
+        index = server.index_url(),
+        wheel_url = server.file_url("a-1.0.0-py3-none-any.whl"),
+    };
+    context.temp_dir.child("pylock.toml").write_str(&pylock)?;
+    context
+        .pip_sync()
+        .arg("--preview")
+        .arg("--index-url")
+        .arg(server.index_url())
+        .arg("pylock.toml")
+        .assert()
+        .success();
+
+    context.reset_venv();
+    uv_snapshot!(context.filters(), context.pip_sync()
+        .arg("--preview")
+        .arg("--index-url")
+        .arg(server.index_url())
+        .arg("--offline")
+        .arg("pylock.toml"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Installed 1 package in [TIME]
+     + a==1.0.0
+    ");
+
+    context.reset_venv();
+    context
+        .temp_dir
+        .child("pylock.toml")
+        .write_str(&pylock.replace("size = 921", "size = 1"))?;
+    uv_snapshot!(context.filters(), context.pip_sync()
+        .arg("--preview")
+        .arg("--index-url")
+        .arg(server.index_url())
+        .arg("--offline")
+        .arg("pylock.toml"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+      × Failed to download `a==1.0.0`
+      ╰─▶ Size mismatch for `a==1.0.0`: expected 1 bytes, but downloaded 921 bytes
+    ");
+
+    Ok(())
+}
+
+#[test]
+fn pep_751_validates_cached_registry_sdist_size() -> Result<()> {
+    let server = PackseServer::new("simple/single-package.toml");
+    let context = uv_test::test_context!("3.12");
+    let (_, hash) = server
+        .files()
+        .find(|(filename, _)| *filename == "a-1.0.0.tar.gz")
+        .expect("source distribution");
+    let pylock = formatdoc! {
+        r#"
+        lock-version = "1.0"
+        created-by = "uv"
+
+        [[packages]]
+        name = "a"
+        version = "1.0.0"
+        index = "{index}"
+        sdist = {{ url = "{sdist_url}", size = 607, hashes = {{ sha256 = "{hash}" }} }}
+        "#,
+        index = server.index_url(),
+        sdist_url = server.file_url("a-1.0.0.tar.gz"),
+    };
+    context.temp_dir.child("pylock.toml").write_str(&pylock)?;
+    context
+        .pip_sync()
+        .arg("--preview")
+        .arg("--index-url")
+        .arg(server.index_url())
+        .arg("pylock.toml")
+        .assert()
+        .success();
+
+    context.reset_venv();
+    uv_snapshot!(context.filters(), context.pip_sync()
+        .arg("--preview")
+        .arg("--index-url")
+        .arg(server.index_url())
+        .arg("--offline")
+        .arg("pylock.toml"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Installed 1 package in [TIME]
+     + a==1.0.0
+    ");
+
+    context.reset_venv();
+    context
+        .temp_dir
+        .child("pylock.toml")
+        .write_str(&pylock.replace("size = 607", "size = 1"))?;
+    uv_snapshot!(context.filters(), context.pip_sync()
+        .arg("--preview")
+        .arg("--index-url")
+        .arg(server.index_url())
+        .arg("--offline")
+        .arg("pylock.toml"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+      × Failed to download and build `a==1.0.0`
+      ╰─▶ Size mismatch for `a==1.0.0`: expected 1 bytes, but downloaded 607 bytes
+    ");
+
+    Ok(())
+}
+
+#[test]
+fn pep_751_validates_cached_url_sdist_size() -> Result<()> {
+    let server = PackseServer::new("simple/single-package.toml");
+    let context = uv_test::test_context!("3.12");
+    let (_, hash) = server
+        .files()
+        .find(|(filename, _)| *filename == "a-1.0.0.tar.gz")
+        .expect("source distribution");
+    let pylock = formatdoc! {
+        r#"
+        lock-version = "1.0"
+        created-by = "uv"
+
+        [[packages]]
+        name = "a"
+        version = "1.0.0"
+        archive = {{ url = "{sdist_url}", size = 607, hashes = {{ sha256 = "{hash}" }} }}
+        "#,
+        sdist_url = server.file_url("a-1.0.0.tar.gz"),
+    };
+    context.temp_dir.child("pylock.toml").write_str(&pylock)?;
+    context
+        .pip_sync()
+        .arg("--preview")
+        .arg("--index-url")
+        .arg(server.index_url())
+        .arg("pylock.toml")
+        .assert()
+        .success();
+
+    context.reset_venv();
+    uv_snapshot!(context.filters(), context.pip_sync()
+        .arg("--preview")
+        .arg("--offline")
+        .arg("pylock.toml"), @r#"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Installed 1 package in [TIME]
+     + a==1.0.0 (from http://[LOCALHOST]/files/a-1.0.0.tar.gz)
+    "#);
+
+    context.reset_venv();
+    context
+        .temp_dir
+        .child("pylock.toml")
+        .write_str(&pylock.replace("size = 607", "size = 1"))?;
+    uv_snapshot!(context.filters(), context.pip_sync()
+        .arg("--preview")
+        .arg("--offline")
+        .arg("pylock.toml"), @r#"
+    exit_code: 1 (failure)
+    ----- stderr -----
+      × Failed to download and build `a @ http://[LOCALHOST]/files/a-1.0.0.tar.gz`
+      ╰─▶ Size mismatch for `a @ http://[LOCALHOST]/files/a-1.0.0.tar.gz`: expected 1 bytes, but downloaded 607 bytes
     "#);
 
     Ok(())
