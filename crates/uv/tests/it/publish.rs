@@ -93,6 +93,7 @@ fn username_password_no_longer_supported() {
       info: The server included the following context:
         |
         | 403 Username/Password authentication is no longer supported. Migrate to API Tokens or Trusted Publishers instead. See https://test.pypi.org/help/#apitoken and https://test.pypi.org/help/#trusted-publishers
+        |
     "
     );
 }
@@ -119,6 +120,7 @@ fn invalid_token() {
       info: The server included the following context:
         |
         | 403 Invalid or non-existent authentication information. See https://test.pypi.org/help/#invalid-auth for more information.
+        |
     "
     );
 }
@@ -329,6 +331,7 @@ fn check_keyring_behaviours() {
       info: The server included the following context:
         |
         | 403 Username/Password authentication is no longer supported. Migrate to API Tokens or Trusted Publishers instead. See https://test.pypi.org/help/#apitoken and https://test.pypi.org/help/#trusted-publishers
+        |
     "
     );
 
@@ -355,6 +358,7 @@ fn check_keyring_behaviours() {
       info: The server included the following context:
         |
         | 403 Username/Password authentication is no longer supported. Migrate to API Tokens or Trusted Publishers instead. See https://test.pypi.org/help/#apitoken and https://test.pypi.org/help/#trusted-publishers
+        |
     "
     );
 
@@ -386,6 +390,7 @@ fn check_keyring_behaviours() {
       info: The server included the following context:
         |
         | 403 Username/Password authentication is no longer supported. Migrate to API Tokens or Trusted Publishers instead. See https://test.pypi.org/help/#apitoken and https://test.pypi.org/help/#trusted-publishers
+        |
     "
     );
 
@@ -412,6 +417,7 @@ fn check_keyring_behaviours() {
       info: The server included the following context:
         |
         | 403 Username/Password authentication is no longer supported. Migrate to API Tokens or Trusted Publishers instead. See https://test.pypi.org/help/#apitoken and https://test.pypi.org/help/#trusted-publishers
+        |
     "
     );
 }
@@ -885,6 +891,7 @@ async fn trusted_publishing_burn_failure() {
       info: The server included the following context:
         |
         | Upload failed
+        |
     "
     );
 }
@@ -1211,6 +1218,7 @@ async fn upload_error_pypi_json() {
       info: The server included the following context:
         |
         | 400 Use 'source' as Python version for an sdist.
+        |
     "
     );
 }
@@ -1248,6 +1256,7 @@ async fn upload_error_problem_details() {
       info: The server included the following context:
         |
         | Bad Request, Missing required field `name`
+        |
     "
     );
 }
@@ -1287,6 +1296,7 @@ async fn upload_error_method_not_allowed() {
         | This endpoint accepts GET requests only.
         |
         | Use /legacy/ to upload packages.
+        |
     ");
 }
 

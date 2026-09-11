@@ -455,6 +455,7 @@ impl PublishSendError {
     ///     | 403 Username/Password authentication is no longer supported. Migrate to API Tokens
     ///     | or Trusted Publishers instead. See https://test.pypi.org/help/#apitoken and
     ///     | https://test.pypi.org/help/#trusted-publishers
+    ///     |
     /// ```
     fn extract_error_message(body: String, content_type: Option<&str>) -> String {
         if content_type == Some("application/json") {
@@ -2394,6 +2395,7 @@ mod tests {
           info: The server included the following context:
             |
             | 400 Error: Use 'source' as Python version for an sdist.
+            |
         "
         );
     }
@@ -2441,6 +2443,7 @@ mod tests {
           info: The server included the following context:
             |
             | Bad Request, Missing required field `name`
+            |
         "
         );
     }
