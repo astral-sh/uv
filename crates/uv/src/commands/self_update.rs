@@ -8,6 +8,7 @@ use axoupdater::{
     AxoUpdater, AxoupdateError, ReleaseSource, ReleaseSourceType, UpdateRequest,
     app_name_to_env_var,
 };
+use futures::StreamExt;
 use owo_colors::OwoColorize;
 use serde::Deserialize;
 use tempfile::TempDir;
@@ -15,8 +16,10 @@ use thiserror::Error;
 use tokio::process::Command;
 use tracing::{debug, warn};
 use url::Url;
-use uv_bin_install::{Binary, find_matching_version};
-use uv_client::{BaseClientBuilder, RetriableError, WrappedReqwestError, fetch_with_url_fallback};
+use uv_bin_install::{Binary, Reporter, find_matching_version};
+use uv_client::{
+    BaseClient, BaseClientBuilder, RetriableError, WrappedReqwestError, fetch_with_url_fallback,
+};
 use uv_fs::Simplified;
 use uv_pep440::{Version as Pep440Version, VersionSpecifier, VersionSpecifiers};
 use uv_redacted::DisplaySafeUrl;
@@ -25,6 +28,7 @@ use uv_static::{
 };
 
 use crate::commands::ExitStatus;
+use crate::commands::reporters::BinaryDownloadReporter;
 use crate::printer::Printer;
 
 const UV_GITHUB_RELEASES_DOWNLOAD_PREFIX: &str =
@@ -359,8 +363,10 @@ async fn run_official_updater(
     download_installer_from_urls(
         &installer_urls,
         &installer_path,
+        target_version,
         client_builder,
         github_token,
+        &BinaryDownloadReporter::single(printer),
     )
     .await?;
 
@@ -432,8 +438,10 @@ fn official_installer_urls_with_mirror(
 async fn download_installer_from_urls(
     urls: &[DisplaySafeUrl],
     installer_path: &Path,
+    target_version: &Pep440Version,
     client_builder: BaseClientBuilder<'_>,
     github_token: Option<&str>,
+    reporter: &BinaryDownloadReporter,
 ) -> Result<()> {
     let retry_policy = client_builder.retry_policy();
     // Disable the client's built-in retries here because `fetch_with_url_fallback` already owns
@@ -443,44 +451,15 @@ async fn download_installer_from_urls(
         .build()
         .context("Failed to build HTTP client for self-update")?;
 
-    fetch_with_url_fallback(urls, retry_policy, "official uv installer", |url| async {
-        let mut request = client.for_host(&url).get(Url::from(url.clone()));
-        if let Some(github_token) = installer_download_github_token(&url, github_token) {
-            request = request.header("Authorization", format!("Bearer {github_token}"));
-        }
-
-        let response = request
-            .send()
-            .await
-            .map_err(|source| InstallerDownloadError::Download {
-                url: url.clone(),
-                source: source.into(),
-            })?;
-
-        let response =
-            response
-                .error_for_status()
-                .map_err(|source| InstallerDownloadError::Download {
-                    url: url.clone(),
-                    source: source.into(),
-                })?;
-
-        let bytes = response
-            .bytes()
-            .await
-            .map_err(|source| InstallerDownloadError::Download {
-                url,
-                source: source.into(),
-            })?;
-
-        fs_err::tokio::write(installer_path, &bytes)
-            .await
-            .map_err(|source| InstallerDownloadError::Write {
-                path: installer_path.to_path_buf(),
-                source,
-            })?;
-
-        Ok::<(), InstallerDownloadError>(())
+    fetch_with_url_fallback(urls, retry_policy, "official uv installer", |url| {
+        download_installer(
+            url,
+            installer_path,
+            target_version,
+            &client,
+            github_token,
+            reporter,
+        )
     })
     .await?;
 
@@ -493,6 +472,48 @@ async fn download_installer_from_urls(
     }
 
     Ok(())
+}
+
+async fn download_installer(
+    url: DisplaySafeUrl,
+    installer_path: &Path,
+    target_version: &Pep440Version,
+    client: &BaseClient,
+    github_token: Option<&str>,
+    reporter: &BinaryDownloadReporter,
+) -> Result<(), InstallerDownloadError> {
+    let failed = |source: WrappedReqwestError| InstallerDownloadError::Download {
+        url: url.clone(),
+        source,
+    };
+
+    let mut request = client.for_host(&url).get(Url::from(url.clone()));
+    if let Some(github_token) = installer_download_github_token(&url, github_token) {
+        request = request.header("Authorization", format!("Bearer {github_token}"));
+    }
+
+    let response = request.send().await.map_err(|err| failed(err.into()))?;
+    let response = response
+        .error_for_status()
+        .map_err(|err| failed(err.into()))?;
+
+    let id = reporter.on_download_start("uv", target_version, response.content_length());
+    let mut stream = response.bytes_stream();
+    let mut buffer = Vec::new();
+
+    while let Some(chunk) = stream.next().await {
+        let chunk = chunk.map_err(|err| failed(err.into()))?;
+        buffer.extend_from_slice(&chunk);
+        reporter.on_download_progress(id, chunk.len() as u64);
+    }
+    reporter.on_download_complete(id);
+
+    fs_err::tokio::write(installer_path, &buffer)
+        .await
+        .map_err(|source| InstallerDownloadError::Write {
+            path: installer_path.to_path_buf(),
+            source,
+        })
 }
 
 fn installer_download_github_token<'a>(
@@ -1089,8 +1110,10 @@ mod tests {
         download_installer_from_urls(
             &[mirror_url, canonical_url],
             &installer_path,
+            &Pep440Version::new([1, 2, 3]),
             BaseClientBuilder::default(),
             None,
+            &BinaryDownloadReporter::single(Printer::Quiet),
         )
         .await
         .expect("404 from mirror should fall back to canonical installer URL");
@@ -1129,9 +1152,16 @@ mod tests {
         let temp_dir = TempDir::new().unwrap();
         let installer_path = temp_dir.path().join("installer.sh");
 
-        download_installer_from_urls(&[url], &installer_path, BaseClientBuilder::default(), None)
-            .await
-            .expect("installer download should succeed");
+        download_installer_from_urls(
+            &[url],
+            &installer_path,
+            &Pep440Version::new([1, 2, 3]),
+            BaseClientBuilder::default(),
+            None,
+            &BinaryDownloadReporter::single(Printer::Quiet),
+        )
+        .await
+        .expect("installer download should succeed");
 
         let _ = shutdown_tx.send(());
         handle.join().unwrap();
