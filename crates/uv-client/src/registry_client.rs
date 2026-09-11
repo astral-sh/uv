@@ -743,7 +743,7 @@ impl RegistryClient {
         let (result, _permits) =
             tokio::task::spawn_blocking(move || (span.in_scope(parse), (permit, memory)))
                 .await
-                .expect("index parsing task panicked");
+                .expect("The task executor is broken, did some other task panic?");
         result
     }
 
