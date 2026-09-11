@@ -318,6 +318,8 @@ impl Error {
             | Self::RequiresPython(..)
             | Self::MismatchedHashes { .. }
             | Self::MismatchedSize { .. }
+            | Self::MismatchedContentLength { .. }
+            | Self::MismatchedRangeSize { .. }
             | Self::MissingHashes { .. }
             | Self::MissingActualHashes { .. }
             | Self::MissingExpectedHashes { .. }
