@@ -3390,7 +3390,6 @@ impl AuditSettings {
 
         let (locked, frozen) = resolve_lock_flags(locked, frozen)?;
 
-        let settings = ResolverSettings::resolve(resolver, build, filesystem, &environment)?;
         if requirements.is_some() {
             let requirements = Flag::from_cli("requirements");
             check_conflicts(requirements, locked.into())?;
@@ -3406,9 +3405,6 @@ impl AuditSettings {
                         name: "no-group",
                     },
                 )?;
-            }
-            if !settings.upgrade.is_none() {
-                bail!("Package upgrades cannot be requested with `--requirements`");
             }
         }
 
@@ -3435,7 +3431,7 @@ impl AuditSettings {
             frozen,
             python_version,
             python_platform,
-            settings,
+            settings: ResolverSettings::resolve(resolver, build, filesystem, &environment)?,
             install_mirrors: environment
                 .install_mirrors
                 .combine(filesystem_install_mirrors),

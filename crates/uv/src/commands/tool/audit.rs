@@ -23,7 +23,6 @@ use crate::commands::project::audit::{
     AuditResults, artifact_uri, audit_lock, json, sarif, warn_unmatched_ignores,
 };
 use crate::printer::Printer;
-use crate::settings::ResolverInstallerSettings;
 
 /// Audit selected installed tools, or every installed tool if no names are provided.
 pub(crate) async fn audit(
@@ -194,15 +193,16 @@ pub(crate) async fn audit(
             }
         };
 
-        let settings = ResolverInstallerSettings::from(
-            ResolverInstallerOptions::from(tool.options().clone()).combine(filesystem.clone()),
-        );
+        let options =
+            ResolverInstallerOptions::from(tool.options().clone()).combine(filesystem.clone());
+        let index_locations = options.indexes.into();
         let outcome = audit_lock(
             &lock,
             &root,
             &extras,
             &groups,
-            &settings.resolver,
+            &index_locations,
+            options.keyring_provider.unwrap_or_default(),
             client_builder.clone(),
             concurrency.clone(),
             cache,
