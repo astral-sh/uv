@@ -18,6 +18,9 @@ on:
       review-security:
         description: "Whether the security review should run"
         value: ${{ jobs.plan.outputs.review-security }}
+      cargo-vet-workspaces:
+        description: "Cargo workspaces to vet"
+        value: ${{ jobs.plan.outputs.cargo-vet-workspaces }}
       check-schema:
         description: "Whether the schema check should run"
         value: ${{ jobs.plan.outputs.check-schema }}
@@ -79,6 +82,7 @@ jobs:
     outputs:
       test-code: ${{ steps.plan.outputs.test_code }}
       review-security: ${{ steps.plan.outputs.review_security }}
+      cargo-vet-workspaces: ${{ steps.plan.outputs.cargo_vet_workspaces }}
       check-schema: ${{ steps.plan.outputs.check_schema }}
       check-crates-policies: ${{ steps.plan.outputs.check_crates_policies }}
       build-release-binaries: ${{ steps.plan.outputs.build_release_binaries }}
@@ -116,6 +120,7 @@ jobs:
           GH_REF: ${{ github.ref }}
           GH_REPOSITORY: ${{ github.repository }}
           GH_EVENT_NAME: ${{ github.event_name }}
+          PUSH_BEFORE_SHA: ${{ github.event.before }}
           GH_HEAD_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name }}
           GH_BASE_REF: ${{ github.base_ref }}
           HAS_SKIP_LABEL: ${{ contains(github.event.pull_request.labels.*.name, 'test:skip') }}
@@ -190,6 +195,23 @@ jobs:
               exit 1
             fi
           fi
+          if [[ "$GH_EVENT_NAME" == "push" && "$HAS_EXPLICIT_SHAS" != "true" ]]; then
+            git diff --no-ext-diff --no-textconv --no-renames --name-only -z "$PUSH_BEFORE_SHA" HEAD -- Cargo.lock ':(glob)crates/**/Cargo.lock' > "$RUNNER_TEMP/changed-cargo-lockfiles"
+          else
+            git diff --no-ext-diff --no-textconv --no-renames --name-only -z "${comparison_base}...HEAD" -- Cargo.lock ':(glob)crates/**/Cargo.lock' > "$RUNNER_TEMP/changed-cargo-lockfiles"
+          fi
+          if [[ -s "$RUNNER_TEMP/changed-cargo-lockfiles" ]]; then
+            while IFS= read -r -d '' lockfile; do
+              if [[ ! -f "$lockfile" && -f "${lockfile%Cargo.lock}Cargo.toml" ]]; then
+                echo "::error::Cannot vet a Cargo workspace without its lockfile: $lockfile"
+                exit 1
+              fi
+            done < "$RUNNER_TEMP/changed-cargo-lockfiles"
+            cargo_vet_workspaces="$(git ls-files -z -- Cargo.lock ':(glob)crates/**/Cargo.lock' |
+              jq -Rsc 'split("\u0000")[:-1] | map(if . == "Cargo.lock" then "." else sub("/Cargo.lock$"; "") end)')"
+          else
+            cargo_vet_workspaces='[]'
+          fi
           while IFS= read -r file; do
             [[ -z "$file" ]] && continue
             [[ "$file" =~ \.rs$ ]] && rust_code_changed=1
@@ -254,6 +276,7 @@ jobs:
           {
             out test_code               "$test_code"
             out review_security         "$review_security"
+            echo "cargo_vet_workspaces=$cargo_vet_workspaces"
             out check_schema            "$check_schema"
             out check_crates_policies   "$check_crates_policies"
             out build_release_binaries  "$build_release_binaries"
