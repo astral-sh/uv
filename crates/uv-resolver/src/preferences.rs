@@ -4,6 +4,7 @@ use std::str::FromStr;
 use rustc_hash::FxHashMap;
 use tracing::trace;
 
+use uv_cache_key::CanonicalUrl;
 use uv_distribution_types::{IndexUrl, InstalledDist, InstalledDistKind};
 use uv_normalize::PackageName;
 use uv_pep440::{Operator, Version};
@@ -159,9 +160,8 @@ impl PreferenceIndex {
             Self::Any => true,
             Self::Implicit => false,
             Self::Explicit(preference) => {
-                // Preferences are stored in the lockfile without credentials, while the index URL
-                // in locations such as `pyproject.toml` may contain credentials.
-                *preference.url() == *index.without_credentials()
+                CanonicalUrl::new(preference.url().without_credentials().into_owned().into())
+                    == CanonicalUrl::new(index.without_credentials().into_owned())
             }
         }
     }
