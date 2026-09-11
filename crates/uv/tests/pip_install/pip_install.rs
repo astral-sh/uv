@@ -4128,15 +4128,6 @@ fn install_copy_long_paths() -> Result<()> {
             let context = TestContext::new_with_bin("3.10", uv_bin.clone());
             let destination = context.site_packages().join(&file);
             assert!(destination.as_os_str().encode_wide().count() > 260);
-            let context = context
-                .with_filter((
-                    format!(r"\[SITE_PACKAGES\][/\\]{}", regex::escape(&file).replace('/', r"[/\\]")),
-                    "[LONG_PATH]",
-                ))
-                .with_filter((
-                    r"failed to persist temporary file: [^\r\n]* \(os error 3\)",
-                    "failed to persist temporary file: The system cannot find the path specified. (os error 3)",
-                ));
             let (filename, wheel) = generate_wheel_with_files(
                 &"long-paths".parse()?,
                 &"1.0.0".parse()?,
@@ -4148,22 +4139,21 @@ fn install_copy_long_paths() -> Result<()> {
             );
             fs::write(context.temp_dir.join(&filename), wheel)?;
 
-            // A valid wheel fails when either its destination or temporary-file path exceeds
-            // MAX_PATH. This should succeed even without the opt-in; see astral-sh/uv#21611.
+            // Both the destination and the temporary-file path can exceed MAX_PATH. Neither
+            // should require the long-path opt-in; see astral-sh/uv#21611.
             uv_snapshot!(context.filters(), context.pip_install()
                 .arg("--no-index")
                 .arg("--link-mode")
                 .arg("copy")
                 .arg(&filename), @"
-            exit_code: 2 (failure)
+            exit_code: 0 (success)
             ----- stderr -----
             Resolved 1 package in [TIME]
             Prepared 1 package in [TIME]
-            error: Failed to install: long_paths-1.0.0-py3-none-any.whl (long-paths==1.0.0 (from file://[TEMP_DIR]/long_paths-1.0.0-py3-none-any.whl))
-              cause: Failed to copy to `[LONG_PATH]`
-              cause: Failed to persist temporary file to [LONG_PATH]: failed to persist temporary file: The system cannot find the path specified. (os error 3)
+            Installed 1 package in [TIME]
+             + long-paths==1.0.0 (from file://[TEMP_DIR]/long_paths-1.0.0-py3-none-any.whl)
             ");
-            assert!(!destination.exists());
+            assert_eq!(fs::read_to_string(&destination)?, "data");
         }
         Ok::<(), anyhow::Error>(())
     }?;
