@@ -6,3 +6,59 @@ malicious or that would have a security impact.
 implies = "safe-to-deploy"
 
 [audits]
+[[audits.async-trait]]
+who = "Codex"
+criteria = [
+    "codex-reviewed",
+]
+delta = "0.1.91 -> 0.1.92"
+notes = "Report: reviews/async-trait/0.1.91/0.1.92/2026-09-11_13-41-00.json"
+[[audits.bitflags]]
+who = "Codex"
+criteria = [
+    "codex-reviewed",
+]
+delta = "2.0.0 -> 2.0.1"
+notes = "Report: reviews/bitflags/2.0.0/2.0.1/codex_2026-09-04_21:38:58.json"
+[[audits.bitflags]]
+who = "Codex"
+criteria = [
+    "codex-reviewed",
+]
+delta = "2.0.1 -> 2.0.2"
+notes = "Report: reviews/bitflags/2.0.1/2.0.2/codex_2026-09-04_21:39:18.json"
+[[audits.bitflags]]
+who = "Codex"
+criteria = [
+    "codex-reviewed",
+]
+delta = "2.0.2 -> 2.1.0"
+notes = "Report: reviews/bitflags/2.0.2/2.1.0/codex_2026-09-04_21:39:23.json"
+[[audits.bitflags]]
+who = "Codex"
+criteria = [
+    "codex-reviewed",
+]
+delta = "2.3.0 -> 2.3.1"
+notes = "Report: reviews/bitflags/2.3.0/2.3.1/codex_2026-09-04_21:39:19.json"
+[[audits.bitflags]]
+who = "Codex"
+criteria = [
+    "codex-reviewed",
+]
+delta = "2.3.1 -> 2.3.2"
+notes = "Report: reviews/bitflags/2.3.1/2.3.2/codex_2026-09-04_21:38:15.json"
+[[audits.wyz]]
+who = "Codex"
+criteria = [
+    "codex-reviewed",
+]
+delta = "0.5.1 -> 0.6.0"
+notes = "Report: reviews/wyz/0.5.1/0.6.0/codex_2026-09-04_21:28:20.json"
+[[audits.wyz]]
+who = "Codex"
+criteria = [
+    "codex-reviewed",
+]
+delta = "0.6.0 -> 0.6.1"
+notes = "Report: reviews/wyz/0.6.0/0.6.1/codex_2026-09-04_21:36:51.json"
