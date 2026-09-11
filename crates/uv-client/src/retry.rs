@@ -229,6 +229,19 @@ pub fn retryable_on_request_failure(err: &(dyn Error + 'static)) -> Option<Retry
                 return Some(Retryable::Transient);
             }
 
+            // On Windows, antivirus and EDR software can transiently hold a lock on a file
+            // we're trying to rename or persist into the cache, which surfaces as a
+            // `PermissionDenied` error. `uv_fs::rename_with_retry` and friends already retry
+            // such errors for about ten seconds, but some software holds the lock longer than
+            // that. Retrying the entire operation gives the lock more time to clear and starts
+            // over with a fresh temporary file, sidestepping the one that was locked.
+            //
+            // See: <https://github.com/astral-sh/uv/issues/17679>
+            if cfg!(windows) && io_err.kind() == io::ErrorKind::PermissionDenied {
+                trace!("Transient IO error: `{}`", io_err.kind());
+                return Some(Retryable::Transient);
+            }
+
             trace!(
                 "Fatal IO error `{}`, not a transient IO error kind",
                 io_err.kind()
@@ -363,6 +376,29 @@ mod tests {
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
     use crate::{UvRetryableStrategy, retryable_on_request_failure};
+
+    /// On Windows, antivirus and EDR software can transiently hold a lock on a file we're
+    /// trying to rename or persist into the cache, so we retry `PermissionDenied` errors.
+    ///
+    /// See: <https://github.com/astral-sh/uv/issues/17679>
+    #[cfg(windows)]
+    #[test]
+    fn permission_denied_is_retryable_on_windows() {
+        let err = io::Error::new(io::ErrorKind::PermissionDenied, "access is denied");
+        assert!(matches!(
+            retryable_on_request_failure(&err),
+            Some(Retryable::Transient)
+        ));
+    }
+
+    /// Off Windows, a `PermissionDenied` error is not the transient antivirus-lock issue seen
+    /// on Windows, so we don't retry it.
+    #[cfg(not(windows))]
+    #[test]
+    fn permission_denied_is_fatal_off_windows() {
+        let err = io::Error::new(io::ErrorKind::PermissionDenied, "permission denied");
+        assert!(retryable_on_request_failure(&err).is_none());
+    }
 
     #[tokio::test]
     #[traced_test]
