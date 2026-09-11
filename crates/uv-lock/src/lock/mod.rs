@@ -91,6 +91,8 @@ mod map;
 mod requirements;
 mod serialize;
 mod tree;
+#[cfg(test)]
+mod windows_emulation_tests;
 
 /// The current version of the lockfile format.
 const VERSION: u32 = 1;
@@ -10279,6 +10281,12 @@ fn is_wheel_unreachable_for_marker(
     let platform_tags = filename.platform_tags();
 
     if platform_tags.iter().all(PlatformTag::is_any) {
+        return false;
+    }
+
+    // An x86_64 interpreter on Windows ARM can report the host's ARM architecture.
+    // Keep its Windows wheel unless concrete tags or `Requires-Python` already rejected it.
+    if platform_tags.contains(&PlatformTag::WinAmd64) && !marker.is_disjoint(*WINDOWS_ARM_MARKERS) {
         return false;
     }
 
