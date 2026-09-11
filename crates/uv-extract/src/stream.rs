@@ -109,6 +109,47 @@ pub async fn unzip_and_hash<R: tokio::io::AsyncRead + Unpin>(
     Ok((target, files, tree))
 }
 
+/// Extract a non-seekable ZIP reader on the current thread using synchronous filesystem I/O.
+///
+/// Call this from a blocking task. Callers computing archive hashes must drain the reader after
+/// extraction, which can leave unread bytes when ZIP validation is disabled.
+pub fn unzip_blocking<R: io::Read + Unpin>(
+    reader: R,
+    target: &Path,
+) -> Result<Vec<UnhashedFile>, Error> {
+    let UnzipOutput::Unhashed(files) = block_on(Box::pin(unzip_inner(
+        AllowStdIo::new(reader).compat(),
+        target,
+        false,
+    )))?
+    else {
+        return Err(Error::Io(io::Error::other(
+            "streaming ZIP hash tree was unexpectedly computed",
+        )));
+    };
+    Ok(files)
+}
+
+/// Extract a non-seekable ZIP reader and compute its extracted hash tree on the current thread.
+///
+/// See [`unzip_blocking`] for blocking and archive hash requirements.
+pub fn unzip_and_hash_blocking<R: io::Read + Unpin>(
+    reader: R,
+    target: &Path,
+) -> Result<(Vec<HashedFile>, DirhashTree), Error> {
+    let UnzipOutput::Hashed { files, tree } = block_on(Box::pin(unzip_inner(
+        AllowStdIo::new(reader).compat(),
+        target,
+        true,
+    )))?
+    else {
+        return Err(Error::Io(io::Error::other(
+            "streaming ZIP hash tree was not computed",
+        )));
+    };
+    Ok((files, tree))
+}
+
 /// Feed a borrowed archive reader to an extraction worker that owns the temporary directory.
 async fn unzip_streaming_inner<R: tokio::io::AsyncRead + Unpin>(
     mut reader: R,

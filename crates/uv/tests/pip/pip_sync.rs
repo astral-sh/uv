@@ -6,7 +6,9 @@ use assert_fs::fixture::ChildPath;
 use assert_fs::prelude::*;
 use fs_err as fs;
 use indoc::{formatdoc, indoc};
+use insta::allow_duplicates;
 use predicates::Predicate;
+use sha2::{Digest, Sha256};
 use url::Url;
 use wiremock::matchers::{method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
@@ -3877,26 +3879,80 @@ fn require_hashes_re_download() -> Result<()> {
 /// Include the hash for a built distribution specified as a local path dependency.
 #[test]
 fn require_hashes_wheel_path() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
+    for content_addressed in [false, true] {
+        let context = uv_test::test_context!("3.12");
 
-    let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.write_str(&format!(
-        "tqdm @ {} --hash=sha256:a34996d4bd5abb2336e14ff0a2d22b92cfd0f0ed344e6883041ce01953276a13",
-        context
-            .workspace_root
-            .join("test/links/tqdm-1000.0.0-py3-none-any.whl")
-            .display()
-    ))?;
+        let requirements_txt = context.temp_dir.child("requirements.txt");
+        requirements_txt.write_str(&format!(
+            "tqdm @ {} --hash=sha256:a34996d4bd5abb2336e14ff0a2d22b92cfd0f0ed344e6883041ce01953276a13",
+            context
+                .workspace_root
+                .join("test/links/tqdm-1000.0.0-py3-none-any.whl")
+                .display()
+        ))?;
+
+        let mut command = context.pip_sync();
+        command.arg("requirements.txt").arg("--require-hashes");
+        if content_addressed {
+            command.args(["--preview-features", "content-addressed-cache"]);
+        }
+        allow_duplicates! {
+            uv_snapshot!(context.filters(), command, @"
+            exit_code: 0 (success)
+            ----- stderr -----
+            Resolved 1 package in [TIME]
+            Prepared 1 package in [TIME]
+            Installed 1 package in [TIME]
+             + tqdm==1000.0.0 (from file://[WORKSPACE]/test/links/tqdm-1000.0.0-py3-none-any.whl)
+            ");
+        }
+        assert_eq!(
+            context.cache_dir.child("files-v0").exists(),
+            content_addressed
+        );
+    }
+
+    Ok(())
+}
+
+/// Hash the complete local wheel even when ZIP validation allows unread trailing bytes.
+#[test]
+fn require_hashes_wheel_path_trailing_bytes() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let filename = "ok-1.0.0-py3-none-any.whl";
+    let wheel = context.temp_dir.join(filename);
+    let mut bytes = fs::read(context.workspace_root.join("test/links").join(filename))?;
+
+    // This fixture has a 22-byte end record without a ZIP comment. Repeat its central directory
+    // at the end so seekable metadata lookup succeeds while streaming extraction stops at the
+    // first end record.
+    let mut end_record = bytes[bytes.len() - 22..].to_vec();
+    let directory_offset = u32::from_le_bytes(end_record[16..20].try_into()?) as usize;
+    let directory = bytes[directory_offset..bytes.len() - 22].to_vec();
+
+    // Exceed the extractor's buffer so hashing must continue after extraction finishes.
+    bytes.resize(bytes.len() + 1024 * 1024, b'x');
+    end_record[16..20].copy_from_slice(&u32::try_from(bytes.len())?.to_le_bytes());
+    bytes.extend_from_slice(&directory);
+    bytes.extend_from_slice(&end_record);
+    let hash = hex::encode(Sha256::digest(&bytes));
+    fs::write(&wheel, bytes)?;
+    context
+        .temp_dir
+        .child("requirements.txt")
+        .write_str(&format!("ok @ {} --hash=sha256:{hash}\n", wheel.display()))?;
 
     uv_snapshot!(context.filters(), context.pip_sync()
         .arg("requirements.txt")
-        .arg("--require-hashes"), @"
+        .arg("--no-index")
+        .arg("--require-hashes")
+        .env(EnvVars::UV_INSECURE_NO_ZIP_VALIDATION, "1"), @"
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + tqdm==1000.0.0 (from file://[WORKSPACE]/test/links/tqdm-1000.0.0-py3-none-any.whl)
+     + ok==1.0.0 (from file://[TEMP_DIR]/ok-1.0.0-py3-none-any.whl)
     "
     );
 

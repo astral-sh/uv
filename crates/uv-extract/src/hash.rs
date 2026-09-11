@@ -72,10 +72,7 @@ pub struct HashReader<'a, R> {
     bytes_read: u64,
 }
 
-impl<'a, R> HashReader<'a, R>
-where
-    R: tokio::io::AsyncRead + Unpin,
-{
+impl<'a, R> HashReader<'a, R> {
     pub fn new(reader: R, hashers: &'a mut [Hasher]) -> Self {
         HashReader {
             reader,
@@ -88,12 +85,25 @@ where
     pub fn bytes_read(&self) -> u64 {
         self.bytes_read
     }
+}
 
+impl<R: tokio::io::AsyncRead + Unpin> HashReader<'_, R> {
     /// Exhaust the underlying reader.
     pub async fn finish(&mut self) -> Result<(), std::io::Error> {
         while self.read(&mut vec![0; 8192]).await? > 0 {}
 
         Ok(())
+    }
+}
+
+impl<R: std::io::Read> std::io::Read for HashReader<'_, R> {
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        let read = self.reader.read(buf)?;
+        self.bytes_read += read as u64;
+        for hasher in self.hashers.iter_mut() {
+            hasher.update(&buf[..read]);
+        }
+        Ok(read)
     }
 }
 

@@ -1152,31 +1152,31 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 build: None,
             })
         } else {
-            // If necessary, compute the hashes of the wheel.
-            let file = fs_err::tokio::File::open(path)
-                .await
-                .map_err(Error::CacheRead)?;
-            let extractor = WheelExtractor::new(
-                self.build_context.cache().root(),
-                self.content_addressed_cache,
-            )
-            .map_err(Error::CacheWrite)?;
-
-            // Create a hasher for each hash algorithm.
+            // Read, hash, and extract the local wheel in one blocking task.
             let algorithms = hashes.algorithms();
-            let mut hashers = algorithms.into_iter().map(Hasher::from).collect::<Vec<_>>();
-            let mut hasher = uv_extract::hash::HashReader::new(file, &mut hashers);
+            let content_addressed_cache = self.content_addressed_cache;
+            let (mut extracted, hashes) = tokio::task::spawn_blocking({
+                let path = path.to_owned();
+                let root = self.build_context.cache().root().to_path_buf();
+                let filename = filename.to_string();
+                move || -> Result<_, Error> {
+                    let file = fs_err::File::open(path).map_err(Error::CacheRead)?;
+                    let extractor = WheelExtractor::new(&root, content_addressed_cache)
+                        .map_err(Error::CacheWrite)?;
+                    let mut hashers = algorithms.into_iter().map(Hasher::from).collect::<Vec<_>>();
+                    let mut hasher = uv_extract::hash::HashReader::new(file, &mut hashers);
+                    let extracted = extractor
+                        .extract_blocking(&mut hasher)
+                        .map_err(|err| Error::Extract(filename, err))?;
 
-            // Unzip the wheel to a temporary directory.
-            let mut extracted = extractor
-                .extract_streaming(&mut hasher)
-                .await
-                .map_err(|err| Error::Extract(filename.to_string(), err))?;
-
-            // Exhaust the reader to compute the hash.
-            hasher.finish().await.map_err(Error::HashExhaustion)?;
-
-            let hashes = hashers.into_iter().map(HashDigest::from).collect();
+                    // Hash the complete file even when ZIP validation is disabled and extraction
+                    // stops before the end of the archive.
+                    io::copy(&mut hasher, &mut io::sink()).map_err(Error::HashExhaustion)?;
+                    let hashes = hashers.into_iter().map(HashDigest::from).collect();
+                    Ok((extracted, hashes))
+                }
+            })
+            .await??;
 
             // Before we make the wheel accessible by persisting it, ensure that the RECORD is
             // valid.

@@ -71,6 +71,28 @@ impl WheelExtractor {
         }
     }
 
+    /// Extract a wheel in one pass on the current thread, optionally retaining its per-file digests.
+    ///
+    /// Call this from a blocking task. The caller must drain the reader before finalizing archive
+    /// hashes, since extraction can finish early when ZIP validation is disabled.
+    pub(crate) fn extract_blocking<R: io::Read + Unpin>(
+        self,
+        reader: R,
+    ) -> Result<ExtractedWheel, uv_extract::Error> {
+        let files = if self.content_addressed {
+            let (files, tree) =
+                uv_extract::stream::unzip_and_hash_blocking(reader, self.temp_dir.path())?;
+            ExtractedFiles::Hashed(HashedWheel { files, tree })
+        } else {
+            let files = uv_extract::stream::unzip_blocking(reader, self.temp_dir.path())?;
+            ExtractedFiles::Unhashed(files)
+        };
+        Ok(ExtractedWheel {
+            temp_dir: self.temp_dir,
+            files,
+        })
+    }
+
     /// Extract a wheel from a seekable file, optionally retaining its per-file digests.
     pub(crate) fn extract_seekable(
         self,
