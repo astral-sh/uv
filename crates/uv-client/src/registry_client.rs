@@ -2,6 +2,7 @@ use std::collections::BTreeMap;
 use std::fmt::{self, Debug, Formatter};
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::thread;
 use std::time::Duration;
 
 use async_http_range_reader::AsyncHttpRangeReader;
@@ -11,7 +12,7 @@ use itertools::Either;
 use reqwest::{Proxy, Response};
 use rustc_hash::FxHashMap;
 use tokio::sync::{Mutex, Semaphore};
-use tracing::{Instrument, debug, info_span, instrument, trace, warn};
+use tracing::{Instrument, Span, debug, info_span, instrument, trace, warn};
 use url::Url;
 
 use uv_auth::{CredentialsCache, Indexes};
@@ -206,6 +207,10 @@ impl<'a> RegistryClientBuilder<'a> {
             client,
             read_timeout,
             flat_indexes: Arc::default(),
+            parse_concurrency: Arc::new(Semaphore::new(
+                thread::available_parallelism().map_or(1, |parallelism| parallelism.get().min(4)),
+            )),
+            parse_memory: Arc::new(Semaphore::new(8 * 1024 * 1024)),
             metadata_range_request: self.metadata_range_request,
         })
     }
@@ -230,6 +235,10 @@ pub struct RegistryClient {
     read_timeout: Duration,
     /// The flat index entries for each `--find-links`-style index URL, with one slot per index.
     flat_indexes: Arc<Mutex<FlatIndexCache>>,
+    /// Bound CPU work for large remote index responses independently of network requests.
+    parse_concurrency: Arc<Semaphore>,
+    /// Limit decoded input bytes held by offloaded parsers, independently of parsed output size.
+    parse_memory: Arc<Semaphore>,
     /// The behavior when metadata range requests are unsupported.
     metadata_range_request: MetadataRangeRequest,
 }
@@ -645,7 +654,8 @@ impl RegistryClient {
                     ))
                 })?;
 
-                let unarchived = match media_type {
+                let package_name = package_name.clone();
+                match media_type {
                     MediaType::PypiV1Json => {
                         let bytes = response.bytes().await.map_err(|err| {
                             ErrorKind::from_reqwest(
@@ -655,15 +665,18 @@ impl RegistryClient {
                             )
                         })?;
 
-                        let data: PypiSimpleDetail = serde_json::from_slice(bytes.as_ref())
-                            .map_err(|err| Error::from_json_err(err, url.clone()))?;
-
-                        SimpleDetailMetadata::from_pypi_files(
-                            data.files,
-                            package_name,
-                            data.project_status,
-                            &url,
-                        )
+                        self.parse_simple_body(bytes.len(), move || {
+                            let data: PypiSimpleDetail = serde_json::from_slice(bytes.as_ref())
+                                .map_err(|err| Error::from_json_err(err, url.clone()))?;
+                            let unarchived = SimpleDetailMetadata::from_pypi_files(
+                                data.files,
+                                &package_name,
+                                data.project_status,
+                                &url,
+                            );
+                            OwnedArchive::from_unarchived(&unarchived)
+                        })
+                        .await
                     }
                     MediaType::PypiV1Html | MediaType::TextHtml => {
                         let text = response.text().await.map_err(|err| {
@@ -673,10 +686,14 @@ impl RegistryClient {
                                 self.client.certificate_source(),
                             )
                         })?;
-                        SimpleDetailMetadata::from_html(&text, package_name, &url)?
+                        self.parse_simple_body(text.len(), move || {
+                            let unarchived =
+                                SimpleDetailMetadata::from_html(&text, &package_name, &url)?;
+                            OwnedArchive::from_unarchived(&unarchived)
+                        })
+                        .await
                     }
-                };
-                OwnedArchive::from_unarchived(&unarchived)
+                }
             }
             .boxed_local()
             .instrument(info_span!("parse_simple_api", package = %package_name))
@@ -691,6 +708,44 @@ impl RegistryClient {
             )
             .await?;
         Ok(simple)
+    }
+
+    /// Offload large remote index parsing so sibling HTTP futures can make progress.
+    ///
+    /// `body_size` counts decoded input bytes, excluding allocations produced by parsing. Small
+    /// bodies or bodies that cannot fit the shared worker and byte budgets are parsed inline
+    /// without waiting. Offloaded work retains both permits until its result is collected or
+    /// dropped, even if the caller is cancelled.
+    async fn parse_simple_body(
+        &self,
+        body_size: usize,
+        parse: impl FnOnce() -> Result<OwnedArchive<SimpleDetailMetadata>, Error> + Send + 'static,
+    ) -> Result<OwnedArchive<SimpleDetailMetadata>, Error> {
+        // Small responses are cheaper to parse inline than to dispatch to another thread.
+        if body_size < 512 * 1024 {
+            return parse();
+        }
+        // Oversized permit requests are invalid on 32-bit platforms.
+        if body_size > Semaphore::MAX_PERMITS {
+            return parse();
+        }
+        let Ok(body_size) = u32::try_from(body_size) else {
+            return parse();
+        };
+        // Fall back to inline parsing instead of retaining completed response bodies in a queue.
+        let Ok(permit) = self.parse_concurrency.clone().try_acquire_owned() else {
+            return parse();
+        };
+        let Ok(memory) = self.parse_memory.clone().try_acquire_many_owned(body_size) else {
+            drop(permit);
+            return parse();
+        };
+        let span = Span::current();
+        let (result, _permits) =
+            tokio::task::spawn_blocking(move || (span.in_scope(parse), (permit, memory)))
+                .await
+                .expect("The task executor is broken, did some other task panic?");
+        result
     }
 
     /// Fetch the [`SimpleDetailMetadata`] from a local file, using a PEP 503-compatible directory
