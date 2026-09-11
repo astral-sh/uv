@@ -72,6 +72,27 @@ fn create_venv() {
 }
 
 #[test]
+fn create_venv_no_lib64_symlink_on_py315_plus() {
+    let context = uv_test::test_context_with_versions!(&["3.15"]);
+
+    uv_snapshot!(context.filters(), context.venv()
+        .arg(context.venv.as_os_str())
+        .arg("--python")
+        .arg("3.15"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Using CPython 3.15.[X] interpreter at: [PYTHON-3.15]
+    Creating virtual environment at: .venv
+    Activate with: source .venv/[BIN]/activate
+    "
+    );
+
+    context.venv.assert(predicates::path::is_dir());
+    let lib64 = context.venv.path().join("lib64");
+    assert!(!lib64.exists() || (lib64.is_dir() && !lib64.is_symlink()));
+}
+
+#[test]
 fn create_venv_preview_skips_distutils_patch_on_py310_plus() {
     let context = uv_test::test_context_with_versions!(&["3.12"]);
 
