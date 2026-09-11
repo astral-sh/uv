@@ -117,8 +117,8 @@ fn tool_run_at_version() {
         .into_iter()
         .chain([(
             // The error message is different on Windows
-            "└── program not found",
-            "└── No such file or directory (os error 2)",
+            "cause: program not found",
+            "cause: No such file or directory (os error 2)",
         )])
         .collect::<Vec<_>>();
 

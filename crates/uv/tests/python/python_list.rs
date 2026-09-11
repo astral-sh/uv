@@ -184,8 +184,8 @@ fn python_list_warns_on_non_native_search_path_interpreters() -> Result<()> {
 
     ----- stderr -----
     warning: Failed to inspect Python interpreter from first executable in the search path at `foreign-bin/python`
-     ├── Failed to query Python interpreter at `[TEMP_DIR]/foreign-bin/python`
-     └── Bad CPU type in executable (os error 86)
+     cause: Failed to query Python interpreter at `[TEMP_DIR]/foreign-bin/python`
+     cause: Bad CPU type in executable (os error 86)
     ");
 
     uv_snapshot!(context.filters(), context.python_list()
@@ -201,8 +201,8 @@ fn python_list_warns_on_non_native_search_path_interpreters() -> Result<()> {
     exit_code: 0 (success)
     ----- stderr -----
     warning: Failed to inspect Python interpreter from provided path at `foreign-bin/python`
-     ├── Failed to query Python interpreter at `[TEMP_DIR]/foreign-bin/python`
-     └── Bad CPU type in executable (os error 86)
+     cause: Failed to query Python interpreter at `[TEMP_DIR]/foreign-bin/python`
+     cause: Bad CPU type in executable (os error 86)
     ");
 
     uv_snapshot!(context.filters(), context.python_find()
@@ -210,8 +210,8 @@ fn python_list_warns_on_non_native_search_path_interpreters() -> Result<()> {
     exit_code: 2 (failure)
     ----- stderr -----
     error: Failed to inspect Python interpreter from first executable in the search path at `foreign-bin/python`
-     ├── Failed to query Python interpreter at `[TEMP_DIR]/foreign-bin/python`
-     └── Bad CPU type in executable (os error 86)
+     cause: Failed to query Python interpreter at `[TEMP_DIR]/foreign-bin/python`
+     cause: Bad CPU type in executable (os error 86)
     ");
 
     uv_snapshot!(context.filters(), context.python_find()
@@ -219,8 +219,8 @@ fn python_list_warns_on_non_native_search_path_interpreters() -> Result<()> {
     exit_code: 2 (failure)
     ----- stderr -----
     error: Failed to inspect Python interpreter from provided path at `foreign-bin/python`
-     ├── Failed to query Python interpreter at `[TEMP_DIR]/foreign-bin/python`
-     └── Bad CPU type in executable (os error 86)
+     cause: Failed to query Python interpreter at `[TEMP_DIR]/foreign-bin/python`
+     cause: Bad CPU type in executable (os error 86)
     ");
 
     Ok(())

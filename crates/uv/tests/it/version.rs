@@ -2490,8 +2490,8 @@ fn version_get_frozen_workspace_without_python() -> Result<()> {
     let context = uv_test::test_context!("3.12")
         .with_cache_dir("cache-file")
         .with_filter((
-            r"└── failed to create directory `[^`]+`: .*",
-            "└── failed to create directory `[CACHE_DIR]`: [ERROR]",
+            r"cause: failed to create directory `[^`]+`: .*",
+            "cause: failed to create directory `[CACHE_DIR]`: [ERROR]",
         ));
 
     context

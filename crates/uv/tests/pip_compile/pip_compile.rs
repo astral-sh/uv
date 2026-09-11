@@ -414,8 +414,8 @@ fn compile_constraints_many_versions() -> Result<()> {
 
     let mut filters = context.filters();
     filters.push((
-        r"(?s)  └── Because package<=1\.0\.0.*requirements are unsatisfiable\.",
-        "  └── [LONG DERIVATION]",
+        r"(?s)  cause: Because package<=1\.0\.0.*requirements are unsatisfiable\.",
+        "  cause: [LONG DERIVATION]",
     ));
 
     uv_snapshot!(filters, context.pip_compile()

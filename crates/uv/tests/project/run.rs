@@ -4809,8 +4809,8 @@ fn run_remote_requirements_offline_redacts_credentials() -> Result<()> {
 #[test]
 fn run_remote_pep723_requirements_fetch_error_does_not_leak_credentials() -> Result<()> {
     let context = uv_test::test_context!("3.12").with_filter((
-        r"(?m)^  └── .*(Connection refused|No connection could be made).*$",
-        "  └── [CONNECTION_REFUSED]",
+        r"(?m)^  cause: .*(Connection refused|No connection could be made).*$",
+        "  cause: [CONNECTION_REFUSED]",
     ));
 
     let script = context.temp_dir.child("main.py");
