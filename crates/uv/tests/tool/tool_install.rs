@@ -2628,6 +2628,8 @@ fn tool_install_force() {
      + pathspec==0.12.1
      + platformdirs==4.2.0
     error: Executable already exists: black (use `--force` to overwrite)
+
+    hint: The tool environment was removed, so `black` is not installed.
     ");
 
     // We should delete the virtual environment
@@ -2662,6 +2664,8 @@ fn tool_install_force() {
      + pathspec==0.12.1
      + platformdirs==4.2.0
     error: Executable already exists: black (use `--force` to overwrite)
+
+    hint: The tool environment was removed, so `black` is not installed.
     ");
 
     // We should not create a virtual environment
@@ -2697,6 +2701,8 @@ fn tool_install_force() {
      + pathspec==0.12.1
      + platformdirs==4.2.0
     error: Executables already exist: black, blackd (use `--force` to overwrite)
+
+    hint: The tool environment was removed, so `black` is not installed.
     ");
 
     // Install `black` with `--force`

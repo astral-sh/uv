@@ -111,6 +111,41 @@ impl Hint for NoExecutablesError {
         hints
     }
 }
+
+/// An error raised when a tool's executables conflict with existing executables.
+///
+/// The tool environment is removed before raising this error, so the tool is not installed.
+#[derive(Debug, Error)]
+pub(crate) struct ExecutableConflictError {
+    /// The names of the conflicting executables.
+    names: Vec<String>,
+    /// The name of the tool being installed.
+    name: PackageName,
+}
+
+impl std::fmt::Display for ExecutableConflictError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let (s, exists) = if self.names.len() == 1 {
+            ("", "exists")
+        } else {
+            ("s", "exist")
+        };
+        write!(
+            f,
+            "Executable{s} already {exists}: {} (use `--force` to overwrite)",
+            self.names.iter().map(|name| name.bold()).join(", ")
+        )
+    }
+}
+
+impl Hint for ExecutableConflictError {
+    fn hints(&self) -> Hints<'_> {
+        Hints::from(format!(
+            "The tool environment was removed, so `{}` is not installed.",
+            self.name.cyan()
+        ))
+    }
+}
 use crate::commands::project::{
     EnvironmentSpecification, PlatformState, PreferenceLocation, ProjectError, PythonRequestSource,
     lock::ValidatedLock,
@@ -873,20 +908,15 @@ pub(crate) fn finalize_tool_install(
 
                 let existing_entrypoints = existing_entrypoints
                     // SAFETY: We know the target has a filename because we just constructed it above
-                    .map(|(_, _, target)| target.file_name().unwrap().to_string_lossy())
+                    .map(|(_, _, target)| {
+                        target.file_name().unwrap().to_string_lossy().into_owned()
+                    })
                     .collect::<Vec<_>>();
-                let (s, exists) = if existing_entrypoints.len() == 1 {
-                    ("", "exists")
-                } else {
-                    ("s", "exist")
-                };
-                bail!(
-                    "Executable{s} already {exists}: {} (use `--force` to overwrite)",
-                    existing_entrypoints
-                        .iter()
-                        .map(|name| name.bold())
-                        .join(", ")
-                )
+                return Err(ExecutableConflictError {
+                    names: existing_entrypoints,
+                    name: name.clone(),
+                }
+                .into());
             }
         }
 

@@ -19,7 +19,7 @@ use crate::commands::project::ProjectError;
 use crate::commands::project::remove::DependencyNotFoundError;
 use crate::commands::project::run::RecursionLimitError;
 use crate::commands::project::version::MissingProjectVersionError;
-use crate::commands::tool::common::NoExecutablesError;
+use crate::commands::tool::common::{ExecutableConflictError, NoExecutablesError};
 use crate::commands::tool::run::ToolRunScriptError;
 use crate::printer::Printer;
 
@@ -242,6 +242,7 @@ pub(crate) fn hints_for_error(err: &anyhow::Error) -> Hints<'static> {
         collect_hint::<ExtrasWithoutSourceError>(cause, &mut hints);
         collect_hint::<ProjectError>(cause, &mut hints);
         collect_hint::<NoExecutablesError>(cause, &mut hints);
+        collect_hint::<ExecutableConflictError>(cause, &mut hints);
         collect_hint::<ExternallyManagedError>(cause, &mut hints);
         collect_hint::<MissingProjectVersionError>(cause, &mut hints);
         collect_hint::<crate::commands::build_frontend::Error>(cause, &mut hints);
