@@ -808,61 +808,60 @@ dependencies = ["flask==1.0.x"]
         .arg("requirements.txt"), @r##"
     exit_code: 1 (failure)
     ----- stderr -----
-      × Failed to build `project @ file://[TEMP_DIR]/path_dep`
-      ├─▶ The build backend returned an error
-      ╰─▶ Call to `setuptools.build_meta:__legacy__.build_wheel` failed (exit status: 1)
+    error: Failed to build `project @ file://[TEMP_DIR]/path_dep`
+      Caused by: The build backend returned an error
+      Caused by: Call to `setuptools.build_meta:__legacy__.build_wheel` failed (exit status: 1)
 
-          [stdout]
-          configuration error: `project.dependencies[0]` must be pep508
-          DESCRIPTION:
-              Project dependency specification according to PEP 508
+        [stdout]
+        configuration error: `project.dependencies[0]` must be pep508
+        DESCRIPTION:
+            Project dependency specification according to PEP 508
 
-          GIVEN VALUE:
-              "flask==1.0.x"
+        GIVEN VALUE:
+            "flask==1.0.x"
 
-          OFFENDING RULE: 'format'
+        OFFENDING RULE: 'format'
 
-          DEFINITION:
-              {
-                  "$id": "#/definitions/dependency",
-                  "title": "Dependency",
-                  "type": "string",
-                  "format": "pep508"
-              }
+        DEFINITION:
+            {
+                "$id": "#/definitions/dependency",
+                "title": "Dependency",
+                "type": "string",
+                "format": "pep508"
+            }
 
-          [stderr]
-          Traceback (most recent call last):
-            File "<string>", line 14, in <module>
-            File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 325, in get_requires_for_build_wheel
-              return self._get_build_requires(config_settings, requirements=['wheel'])
-                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-            File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 295, in _get_build_requires
-              self.run_setup()
-            File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 487, in run_setup
-              super().run_setup(setup_script=setup_script)
-            File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 311, in run_setup
-              exec(code, locals())
-            File "<string>", line 1, in <module>
-            File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/__init__.py", line 104, in setup
-              return distutils.core.setup(**attrs)
-                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-            File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/_distutils/core.py", line 159, in setup
-              dist.parse_config_files()
-            File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/_virtualenv.py", line 21, in parse_config_files
-              result = old_parse_config_files(self, *args, **kwargs)
-                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-            File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/dist.py", line 631, in parse_config_files
-              pyprojecttoml.apply_configuration(self, filename, ignore_option_errors)
-            File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/config/pyprojecttoml.py", line 68, in apply_configuration
-              config = read_configuration(filepath, True, ignore_option_errors, dist)
-                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-            File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/config/pyprojecttoml.py", line 129, in read_configuration
-              validate(subset, filepath)
-            File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/config/pyprojecttoml.py", line 57, in validate
-              raise ValueError(f"{error}/n{summary}") from None
-          ValueError: invalid pyproject.toml config: `project.dependencies[0]`.
-          configuration error: `project.dependencies[0]` must be pep508
-
+        [stderr]
+        Traceback (most recent call last):
+          File "<string>", line 14, in <module>
+          File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 325, in get_requires_for_build_wheel
+            return self._get_build_requires(config_settings, requirements=['wheel'])
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+          File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 295, in _get_build_requires
+            self.run_setup()
+          File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 487, in run_setup
+            super().run_setup(setup_script=setup_script)
+          File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 311, in run_setup
+            exec(code, locals())
+          File "<string>", line 1, in <module>
+          File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/__init__.py", line 104, in setup
+            return distutils.core.setup(**attrs)
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+          File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/_distutils/core.py", line 159, in setup
+            dist.parse_config_files()
+          File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/_virtualenv.py", line 21, in parse_config_files
+            result = old_parse_config_files(self, *args, **kwargs)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+          File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/dist.py", line 631, in parse_config_files
+            pyprojecttoml.apply_configuration(self, filename, ignore_option_errors)
+          File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/config/pyprojecttoml.py", line 68, in apply_configuration
+            config = read_configuration(filepath, True, ignore_option_errors, dist)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+          File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/config/pyprojecttoml.py", line 129, in read_configuration
+            validate(subset, filepath)
+          File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/config/pyprojecttoml.py", line 57, in validate
+            raise ValueError(f"{error}/n{summary}") from None
+        ValueError: invalid pyproject.toml config: `project.dependencies[0]`.
+        configuration error: `project.dependencies[0]` must be pep508
 
     hint: Build failures usually indicate a problem with the package or the build environment
     "##
@@ -913,9 +912,9 @@ fn no_solution() {
         .arg("--strict"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because flask>=3.0.2 depends on werkzeug>=3.0.0 and you require flask>=3.0.2, we can conclude that you require werkzeug>=3.0.0.
-          And because you require werkzeug<1.0.0, we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving dependencies
+      Caused by: Because flask>=3.0.2 depends on werkzeug>=3.0.0 and you require flask>=3.0.2, we can conclude that you require werkzeug>=3.0.0.
+        And because you require werkzeug<1.0.0, we can conclude that your requirements are unsatisfiable.
     ");
 }
 
@@ -1260,9 +1259,9 @@ werkzeug==3.0.1
         .arg("--strict"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because flask>=3.0.2 depends on click>=8.1.3 and you require click==7.0.0, we can conclude that your requirements and flask>=3.0.2 are incompatible.
-          And because you require flask==3.0.2, we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving dependencies
+      Caused by: Because flask>=3.0.2 depends on click>=8.1.3 and you require click==7.0.0, we can conclude that your requirements and flask>=3.0.2 are incompatible.
+        And because you require flask==3.0.2, we can conclude that your requirements are unsatisfiable.
     "
     );
 
@@ -2109,8 +2108,8 @@ fn install_editable_incompatible_constraint_version() -> Result<()> {
         .arg("constraints.txt"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because only black<=0.1.0 is available and you require black>0.1.0, we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving dependencies
+      Caused by: Because only black<=0.1.0 is available and you require black>0.1.0, we can conclude that your requirements are unsatisfiable.
     "
     );
 
@@ -2130,7 +2129,7 @@ fn install_editable_incompatible_constraint_url() -> Result<()> {
         .arg(context.workspace_root.join("test/packages/black_editable"))
         .arg("--constraint")
         .arg("constraints.txt"), @"
-    exit_code: 2 (failure)
+    exit_code: 1 (failure)
     ----- stderr -----
     error: Requirements contain conflicting URLs for package `black`:
     - file://[WORKSPACE]/test/packages/black_editable (editable)
@@ -2453,8 +2452,8 @@ fn install_no_index() {
         .arg("--no-index"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because flask was not found in the provided package locations and you require flask, we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving dependencies
+      Caused by: Because flask was not found in the provided package locations and you require flask, we can conclude that your requirements are unsatisfiable.
 
     hint: Packages were unavailable because index lookups were disabled and no additional package locations were provided (try: `--find-links <uri>`)
     "
@@ -2474,8 +2473,8 @@ fn install_no_index_version() {
         .arg("--no-index"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because flask was not found in the provided package locations and you require flask==3.0.0, we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving dependencies
+      Caused by: Because flask was not found in the provided package locations and you require flask==3.0.0, we can conclude that your requirements are unsatisfiable.
 
     hint: Packages were unavailable because index lookups were disabled and no additional package locations were provided (try: `--find-links <uri>`)
     "
@@ -3010,13 +3009,13 @@ fn install_git_public_https_missing_branch_or_tag() {
         .arg("uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage@2.0.0"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × Failed to download and build `uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage@2.0.0`
-      ├─▶ Git operation failed
-      ├─▶ failed to clone into: [CACHE_DIR]/git-v0/db/8dab139913c4b566
-      ├─▶ failed to fetch branch or tag `2.0.0`
-      ╰─▶ process didn't exit successfully: `git fetch [...]` (exit code: 128)
-          --- stderr
-          fatal: couldn't find remote ref refs/tags/2.0.0
+    error: Failed to download and build `uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage@2.0.0`
+      Caused by: Git operation failed
+      Caused by: failed to clone into: [CACHE_DIR]/git-v0/db/8dab139913c4b566
+      Caused by: failed to fetch branch or tag `2.0.0`
+      Caused by: process didn't exit successfully: `git fetch [...]` (exit code: 128)
+        --- stderr
+        fatal: couldn't find remote ref refs/tags/2.0.0
     ");
 }
 
@@ -3061,9 +3060,9 @@ async fn install_git_public_rejects_mismatched_github_api_commit() -> Result<()>
         .env(EnvVars::UV_GITHUB_FAST_PATH_URL, server.uri()), @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × Failed to download and build `uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage@0dacfd662c64cb4ceb16e6cf65a157a8b715b979`
-      ├─▶ Git operation failed
-      ╰─▶ Exact Git revision `0dacfd662c64cb4ceb16e6cf65a157a8b715b979` does not match precise commit `b270df1a2fb5d012294e9aaf05e7e0bab1e6a389` for `https://github.com/astral-test/uv-public-pypackage`
+    error: Failed to download and build `uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage@0dacfd662c64cb4ceb16e6cf65a157a8b715b979`
+      Caused by: Git operation failed
+      Caused by: Exact Git revision `0dacfd662c64cb4ceb16e6cf65a157a8b715b979` does not match precise commit `b270df1a2fb5d012294e9aaf05e7e0bab1e6a389` for `https://github.com/astral-test/uv-public-pypackage`
     ");
 
     Ok(())
@@ -3142,13 +3141,13 @@ fn install_git_public_https_missing_commit() {
         , @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × Failed to download and build `uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage@79a935a7a1a0ad6d0bdf72dce0e16cb0a24a1b3b`
-      ├─▶ Git operation failed
-      ├─▶ failed to clone into: [CACHE_DIR]/git-v0/db/8dab139913c4b566
-      ├─▶ failed to fetch commit `79a935a7a1a0ad6d0bdf72dce0e16cb0a24a1b3b`
-      ╰─▶ process didn't exit successfully: `git fetch [...]` (exit code: 128)
-          --- stderr
-          fatal: remote error: upload-pack: not our ref 79a935a7a1a0ad6d0bdf72dce0e16cb0a24a1b3b
+    error: Failed to download and build `uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage@79a935a7a1a0ad6d0bdf72dce0e16cb0a24a1b3b`
+      Caused by: Git operation failed
+      Caused by: failed to clone into: [CACHE_DIR]/git-v0/db/8dab139913c4b566
+      Caused by: failed to fetch commit `79a935a7a1a0ad6d0bdf72dce0e16cb0a24a1b3b`
+      Caused by: process didn't exit successfully: `git fetch [...]` (exit code: 128)
+        --- stderr
+        fatal: remote error: upload-pack: not our ref 79a935a7a1a0ad6d0bdf72dce0e16cb0a24a1b3b
     ");
 }
 
@@ -3346,13 +3345,13 @@ fn install_git_private_https_pat_not_authorized() {
         , @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × Failed to download and build `uv-private-pypackage @ git+https://git:****@github.com/astral-test/uv-private-pypackage`
-      ├─▶ Git operation failed
-      ├─▶ failed to clone into: [CACHE_DIR]/git-v0/db/8401f5508e3e612d
-      ╰─▶ process didn't exit successfully: `git fetch --force --update-head-ok 'https://git:****@github.com/astral-test/uv-private-pypackage' '+HEAD:refs/remotes/origin/HEAD'` (exit status: 128)
-          --- stderr
-          remote: Invalid username or token. Password authentication is not supported for Git operations.
-          fatal: Authentication failed for 'https://github.com/astral-test/uv-private-pypackage/'
+    error: Failed to download and build `uv-private-pypackage @ git+https://git:****@github.com/astral-test/uv-private-pypackage`
+      Caused by: Git operation failed
+      Caused by: failed to clone into: [CACHE_DIR]/git-v0/db/8401f5508e3e612d
+      Caused by: process didn't exit successfully: `git fetch --force --update-head-ok 'https://git:****@github.com/astral-test/uv-private-pypackage' '+HEAD:refs/remotes/origin/HEAD'` (exit status: 128)
+        --- stderr
+        remote: Invalid username or token. Password authentication is not supported for Git operations.
+        fatal: Authentication failed for 'https://github.com/astral-test/uv-private-pypackage/'
     ");
 }
 
@@ -3435,12 +3434,12 @@ fn install_git_private_https_interactive() {
         , @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × Failed to download and build `uv-private-pypackage @ git+https://github.com/astral-test/uv-private-pypackage`
-      ├─▶ Git operation failed
-      ├─▶ failed to clone into: [CACHE_DIR]/git-v0/db/8401f5508e3e612d
-      ╰─▶ process didn't exit successfully: `/usr/bin/git fetch --force --update-head-ok 'https://github.com/astral-test/uv-private-pypackage' '+HEAD:refs/remotes/origin/HEAD'` (exit status: 128)
-          --- stderr
-          fatal: could not read Username for 'https://github.com': terminal prompts disabled
+    error: Failed to download and build `uv-private-pypackage @ git+https://github.com/astral-test/uv-private-pypackage`
+      Caused by: Git operation failed
+      Caused by: failed to clone into: [CACHE_DIR]/git-v0/db/8401f5508e3e612d
+      Caused by: process didn't exit successfully: `/usr/bin/git fetch --force --update-head-ok 'https://github.com/astral-test/uv-private-pypackage' '+HEAD:refs/remotes/origin/HEAD'` (exit status: 128)
+        --- stderr
+        fatal: could not read Username for 'https://github.com': terminal prompts disabled
     ");
 }
 
@@ -3723,8 +3722,8 @@ fn install_only_binary_all_and_no_binary_all() {
         @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because all versions of anyio have no usable wheels and you require anyio, we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving dependencies
+      Caused by: Because all versions of anyio have no usable wheels and you require anyio, we can conclude that your requirements are unsatisfiable.
 
     hint: Wheels are required for `anyio` because building from source is disabled for all packages (i.e., with `--no-build`)
     "
@@ -3845,8 +3844,8 @@ fn only_binary_requirements_txt() {
         .arg("--strict"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because django-allauth==0.51.0 has no usable wheels and you require django-allauth==0.51.0, we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving dependencies
+      Caused by: Because django-allauth==0.51.0 has no usable wheels and you require django-allauth==0.51.0, we can conclude that your requirements are unsatisfiable.
 
     hint: Wheels are required for `django-allauth` because building from source is disabled for `django-allauth` (i.e., with `--no-build-package django-allauth`)
     "
@@ -3953,10 +3952,10 @@ fn no_prerelease_hint_source_builds() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
     Resolved 1 package in [TIME]
-      × Failed to build `project @ file://[TEMP_DIR]/`
-      ├─▶ Failed to resolve requirements from `setup.py` build
-      ├─▶ No solution found when resolving: `setuptools>=40.8.0`
-      ╰─▶ Because only setuptools<=40.4.3 is available and you require setuptools>=40.8.0, we can conclude that your requirements are unsatisfiable.
+    error: Failed to build `project @ file://[TEMP_DIR]/`
+      Caused by: Failed to resolve requirements from `setup.py` build
+      Caused by: No solution found when resolving: `setuptools>=40.8.0`
+      Caused by: Because only setuptools<=40.4.3 is available and you require setuptools>=40.8.0, we can conclude that your requirements are unsatisfiable.
 
     hint: `setuptools` was filtered by `exclude-newer` to only include packages uploaded before 2018-10-09T00:00:00Z. The latest version satisfying the requirement is v69.2.0, published at 2024-03-13T11:20:54.103Z. Consider using `exclude-newer-package` to override the cutoff for this package.
     "
@@ -4243,9 +4242,9 @@ fn no_deps_installed() -> Result<()> {
         .arg("--no-index"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because child was not found in the provided package locations and parent==1.0.0 depends on child>=2, we can conclude that parent==1.0.0 cannot be used.
-          And because parent was not found in the provided package locations and you require parent, we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving dependencies
+      Caused by: Because child was not found in the provided package locations and parent==1.0.0 depends on child>=2, we can conclude that parent==1.0.0 cannot be used.
+        And because parent was not found in the provided package locations and you require parent, we can conclude that your requirements are unsatisfiable.
 
     hint: Packages were unavailable because index lookups were disabled and no additional package locations were provided (try: `--find-links <uri>`)
     ");
@@ -4285,8 +4284,8 @@ fn no_deps_installed() -> Result<()> {
         .arg("constraints.txt"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because you require parent==1.0.0 and parent==2.0.0, we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving dependencies
+      Caused by: Because you require parent==1.0.0 and parent==2.0.0, we can conclude that your requirements are unsatisfiable.
     ");
 
     Ok(())
@@ -4757,10 +4756,10 @@ fn install_git_source_respects_offline_mode() {
             .arg("uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × Failed to download and build `uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage`
-      ├─▶ Git operation failed
-      ├─▶ failed to clone into: [CACHE_DIR]/git-v0/db/8dab139913c4b566
-      ╰─▶ Remote Git fetches are not allowed because network connectivity is disabled (i.e., with `--offline`)
+    error: Failed to download and build `uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage`
+      Caused by: Git operation failed
+      Caused by: failed to clone into: [CACHE_DIR]/git-v0/db/8dab139913c4b566
+      Caused by: Remote Git fetches are not allowed because network connectivity is disabled (i.e., with `--offline`)
     "
     );
 }
@@ -4817,8 +4816,8 @@ fn explicit_prerelease_does_not_fall_back_if_necessary() {
         .arg("a>0.1.0"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because only a<=0.1.0 is available and you require a>0.1.0, we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving dependencies
+      Caused by: Because only a<=0.1.0 is available and you require a>0.1.0, we can conclude that your requirements are unsatisfiable.
 
     hint: Pre-releases are available for `a` in the requested range (e.g., 1.0.0a1), but pre-releases weren't enabled (try: `--prerelease=allow`)
     ");
@@ -4929,9 +4928,9 @@ fn explicit_prerelease_disallows_transitive_marker() {
         .arg("b"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because there is no version of c==2.0.0b1 and all versions of a depend on c==2.0.0b1, we can conclude that all versions of a cannot be used.
-          And because you require a, we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving dependencies
+      Caused by: Because there is no version of c==2.0.0b1 and all versions of a depend on c==2.0.0b1, we can conclude that all versions of a cannot be used.
+        And because you require a, we can conclude that your requirements are unsatisfiable.
 
     hint: `c` was requested with a pre-release marker (e.g., c==2.0.0b1), but pre-releases weren't enabled (try: `--prerelease=allow`)
     ");
@@ -4981,9 +4980,9 @@ fn prerelease_package_disallows_transitive_prerelease() {
         .arg("b"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because there is no version of c==2.0.0b1 and all versions of a depend on c==2.0.0b1, we can conclude that all versions of a cannot be used.
-          And because you require a, we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving dependencies
+      Caused by: Because there is no version of c==2.0.0b1 and all versions of a depend on c==2.0.0b1, we can conclude that all versions of a cannot be used.
+        And because you require a, we can conclude that your requirements are unsatisfiable.
 
     hint: `c` was requested with a pre-release marker (e.g., c==2.0.0b1), but pre-releases weren't enabled (try: `--prerelease-package c=allow`)
     ");
@@ -5089,8 +5088,8 @@ fn prerelease_package_rejected_in_pip_configuration() -> Result<()> {
         | ^^^^^^^^^^^^^^^^^^
       unknown field `prerelease-package`, expected one of [...]
 
-      × No solution found when resolving dependencies:
-      ╰─▶ Because only a<=0.1.0 is available and you require a>0.1.0, we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving dependencies
+      Caused by: Because only a<=0.1.0 is available and you require a>0.1.0, we can conclude that your requirements are unsatisfiable.
 
     hint: Pre-releases are available for `a` in the requested range (e.g., 1.0.0a1), but pre-releases weren't enabled (try: `--prerelease=allow`)
     "#);
@@ -5178,9 +5177,9 @@ fn disallow_transitive_prerelease() {
         .arg("b"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because there is no version of c==2.0.0b1 and all versions of a depend on c==2.0.0b1, we can conclude that all versions of a cannot be used.
-          And because you require a, we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving dependencies
+      Caused by: Because there is no version of c==2.0.0b1 and all versions of a depend on c==2.0.0b1, we can conclude that all versions of a cannot be used.
+        And because you require a, we can conclude that your requirements are unsatisfiable.
 
     hint: `c` was requested with a pre-release marker (e.g., c==2.0.0b1), but pre-releases weren't enabled (try: `--prerelease=allow`)
     ");
@@ -6345,9 +6344,9 @@ requires-python = ">=3.13"
         .arg(editable_dir.path()), @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because the current Python version (3.12.[X]) does not satisfy Python>=3.13 and example==0.0.0 depends on Python>=3.13, we can conclude that example==0.0.0 cannot be used.
-          And because only example==0.0.0 is available and you require example, we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving dependencies
+      Caused by: Because the current Python version (3.12.[X]) does not satisfy Python>=3.13 and example==0.0.0 depends on Python>=3.13, we can conclude that example==0.0.0 cannot be used.
+        And because only example==0.0.0 is available and you require example, we can conclude that your requirements are unsatisfiable.
     "
     );
 
@@ -6438,14 +6437,14 @@ fn no_build_isolation() -> Result<()> {
         .arg("--no-build-isolation"), @r#"
     exit_code: 1 (failure)
     ----- stderr -----
-      × Failed to build `anyio @ https://files.pythonhosted.org/packages/db/4d/3970183622f0330d3c23d9b8a5f52e365e50381fd484d08e3285104333d3/anyio-4.3.0.tar.gz`
-      ├─▶ The build backend returned an error
-      ╰─▶ Call to `setuptools.build_meta.prepare_metadata_for_build_wheel` failed (exit status: 1)
+    error: Failed to build `anyio @ https://files.pythonhosted.org/packages/db/4d/3970183622f0330d3c23d9b8a5f52e365e50381fd484d08e3285104333d3/anyio-4.3.0.tar.gz`
+      Caused by: The build backend returned an error
+      Caused by: Call to `setuptools.build_meta.prepare_metadata_for_build_wheel` failed (exit status: 1)
 
-          [stderr]
-          Traceback (most recent call last):
-            File "<string>", line 8, in <module>
-          ModuleNotFoundError: No module named 'setuptools'
+        [stderr]
+        Traceback (most recent call last):
+          File "<string>", line 8, in <module>
+        ModuleNotFoundError: No module named 'setuptools'
 
     hint: This error likely indicates that `anyio` depends on `setuptools`, but doesn't declare it as a build dependency. If `anyio` is a first-party package, consider adding `setuptools` to its `build-system.requires`. Otherwise, either add it to your `pyproject.toml` under:
 
@@ -6502,14 +6501,14 @@ fn respect_no_build_isolation_env_var() -> Result<()> {
         .env(EnvVars::UV_NO_BUILD_ISOLATION, "yes"), @r#"
     exit_code: 1 (failure)
     ----- stderr -----
-      × Failed to build `anyio @ https://files.pythonhosted.org/packages/db/4d/3970183622f0330d3c23d9b8a5f52e365e50381fd484d08e3285104333d3/anyio-4.3.0.tar.gz`
-      ├─▶ The build backend returned an error
-      ╰─▶ Call to `setuptools.build_meta.prepare_metadata_for_build_wheel` failed (exit status: 1)
+    error: Failed to build `anyio @ https://files.pythonhosted.org/packages/db/4d/3970183622f0330d3c23d9b8a5f52e365e50381fd484d08e3285104333d3/anyio-4.3.0.tar.gz`
+      Caused by: The build backend returned an error
+      Caused by: Call to `setuptools.build_meta.prepare_metadata_for_build_wheel` failed (exit status: 1)
 
-          [stderr]
-          Traceback (most recent call last):
-            File "<string>", line 8, in <module>
-          ModuleNotFoundError: No module named 'setuptools'
+        [stderr]
+        Traceback (most recent call last):
+          File "<string>", line 8, in <module>
+        ModuleNotFoundError: No module named 'setuptools'
 
     hint: This error likely indicates that `anyio` depends on `setuptools`, but doesn't declare it as a build dependency. If `anyio` is a first-party package, consider adding `setuptools` to its `build-system.requires`. Otherwise, either add it to your `pyproject.toml` under:
 
@@ -6875,9 +6874,9 @@ requires-python = ">=3.13"
         .arg(format!("example @ {}", editable_dir.path().display())), @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because the current Python version (3.12.[X]) does not satisfy Python>=3.13 and example==0.0.0 depends on Python>=3.13, we can conclude that example==0.0.0 cannot be used.
-          And because only example==0.0.0 is available and you require example, we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving dependencies
+      Caused by: Because the current Python version (3.12.[X]) does not satisfy Python>=3.13 and example==0.0.0 depends on Python>=3.13, we can conclude that example==0.0.0 cannot be used.
+        And because only example==0.0.0 is available and you require example, we can conclude that your requirements are unsatisfiable.
     "
     );
 
@@ -7132,8 +7131,8 @@ async fn install_package_basic_auth_from_keyring_wrong_password() {
     ----- stderr -----
     Keyring request for public@http://[LOCALHOST]/basic-auth/simple
     Keyring request for public@[LOCALHOST]
-      × No solution found when resolving dependencies:
-      ╰─▶ Because anyio was not found in the package registry and you require anyio, we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving dependencies
+      Caused by: Because anyio was not found in the package registry and you require anyio, we can conclude that your requirements are unsatisfiable.
 
     hint: An index URL (http://[LOCALHOST]/basic-auth/simple) could not be queried due to a lack of valid authentication credentials (401 Unauthorized)
     "
@@ -7174,8 +7173,8 @@ async fn install_package_basic_auth_from_keyring_wrong_username() {
     Keyring request for public@http://[LOCALHOST]/basic-auth/simple
     Keyring request for public@[LOCALHOST]
     Keyring request for public@http://[LOCALHOST]
-      × No solution found when resolving dependencies:
-      ╰─▶ Because anyio was not found in the package registry and you require anyio, we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving dependencies
+      Caused by: Because anyio was not found in the package registry and you require anyio, we can conclude that your requirements are unsatisfiable.
 
     hint: An index URL (http://[LOCALHOST]/basic-auth/simple) could not be queried due to a lack of valid authentication credentials (401 Unauthorized)
     "
@@ -7323,8 +7322,8 @@ fn reinstall_no_index() {
         .arg("--strict"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because anyio was not found in the provided package locations and you require anyio, we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving dependencies
+      Caused by: Because anyio was not found in the provided package locations and you require anyio, we can conclude that your requirements are unsatisfiable.
 
     hint: Packages were unavailable because index lookups were disabled and no additional package locations were provided (try: `--find-links <uri>`)
     "
@@ -7432,9 +7431,9 @@ fn already_installed_dependent_editable() {
         .arg(vendor.url()), @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because first-local was not found in the provided package locations and second-local==0.1.0 depends on first-local, we can conclude that second-local==0.1.0 cannot be used.
-          And because only second-local==0.1.0 is available and you require second-local, we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving dependencies
+      Caused by: Because first-local was not found in the provided package locations and second-local==0.1.0 depends on first-local, we can conclude that second-local==0.1.0 cannot be used.
+        And because only second-local==0.1.0 is available and you require second-local, we can conclude that your requirements are unsatisfiable.
     "
     );
 
@@ -7534,9 +7533,9 @@ fn already_installed_local_path_dependent() {
         .arg(vendor.url()), @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because first-local was not found in the provided package locations and second-local==0.1.0 depends on first-local, we can conclude that second-local==0.1.0 cannot be used.
-          And because only second-local==0.1.0 is available and you require second-local, we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving dependencies
+      Caused by: Because first-local was not found in the provided package locations and second-local==0.1.0 depends on first-local, we can conclude that second-local==0.1.0 cannot be used.
+        And because only second-local==0.1.0 is available and you require second-local, we can conclude that your requirements are unsatisfiable.
     "
     );
 
@@ -7638,8 +7637,8 @@ fn already_installed_local_version_of_remote_package() {
         .arg("--no-index"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because anyio was not found in the provided package locations and you require anyio==4.2.0, we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving dependencies
+      Caused by: Because anyio was not found in the provided package locations and you require anyio==4.2.0, we can conclude that your requirements are unsatisfiable.
 
     hint: Packages were unavailable because index lookups were disabled and no additional package locations were provided (try: `--find-links <uri>`)
     "
@@ -7652,8 +7651,8 @@ fn already_installed_local_version_of_remote_package() {
         .arg("--reinstall"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because there is no version of anyio==4.3.0+foo and you require anyio==4.3.0+foo, we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving dependencies
+      Caused by: Because there is no version of anyio==4.3.0+foo and you require anyio==4.3.0+foo, we can conclude that your requirements are unsatisfiable.
     "
     );
 
@@ -7859,8 +7858,8 @@ fn already_installed_remote_url() {
         .arg("--reinstall"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because uv-public-pypackage was not found in the provided package locations and you require uv-public-pypackage, we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving dependencies
+      Caused by: Because uv-public-pypackage was not found in the provided package locations and you require uv-public-pypackage, we can conclude that your requirements are unsatisfiable.
 
     hint: Packages were unavailable because index lookups were disabled and no additional package locations were provided (try: `--find-links <uri>`)
     ");
@@ -7896,8 +7895,8 @@ fn already_installed_remote_url() {
         context.pip_install().arg("uv-public-pypackage==0.2.0").arg("--no-index"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because uv-public-pypackage was not found in the provided package locations and you require uv-public-pypackage==0.2.0, we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving dependencies
+      Caused by: Because uv-public-pypackage was not found in the provided package locations and you require uv-public-pypackage==0.2.0, we can conclude that your requirements are unsatisfiable.
 
     hint: Packages were unavailable because index lookups were disabled and no additional package locations were provided (try: `--find-links <uri>`)
     ");
@@ -8369,8 +8368,8 @@ async fn reject_wheel_with_multiple_dist_info_directories() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
     Resolved 1 package in [TIME]
-      × Failed to download `validation==3.0.0`
-      ╰─▶ The wheel is invalid: Multiple .dist-info directories found: validation-2.0.0, validation-3.0.0
+    error: Failed to download `validation==3.0.0`
+      Caused by: The wheel is invalid: Multiple .dist-info directories found: validation-2.0.0, validation-3.0.0
     "
     );
 
@@ -8527,15 +8526,15 @@ fn require_hashes_mismatch() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
     Resolved 3 packages in [TIME]
-      × Failed to download `anyio==4.0.0`
-      ╰─▶ Hash mismatch for `anyio==4.0.0`
+    error: Failed to download `anyio==4.0.0`
+      Caused by: Hash mismatch for `anyio==4.0.0`
 
-          Expected:
-            sha256:afdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
-            sha256:a7ed51751b2c2add651e5747c891b47e26d2a21be5d32d9311dfe9692f3e5d7a
+        Expected:
+          sha256:afdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
+          sha256:a7ed51751b2c2add651e5747c891b47e26d2a21be5d32d9311dfe9692f3e5d7a
 
-          Computed:
-            sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
+        Computed:
+          sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
     "
     );
 
@@ -8558,7 +8557,7 @@ fn require_hashes_missing_dependency() -> Result<()> {
         .arg("-r")
         .arg("requirements.txt")
         .arg("--require-hashes"), @"
-    exit_code: 2 (failure)
+    exit_code: 1 (failure)
     ----- stderr -----
     error: In `--require-hashes` mode, all requirements must be pinned upfront with `==`, but found: `markupsafe`
     "
@@ -9148,15 +9147,15 @@ fn verify_hashes_mismatch() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
     Resolved 1 package in [TIME]
-      × Failed to download `idna==3.6`
-      ╰─▶ Hash mismatch for `idna==3.6`
+    error: Failed to download `idna==3.6`
+      Caused by: Hash mismatch for `idna==3.6`
 
-          Expected:
-            sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2
-            sha256:f4324edc670a0f49750a81b895f35c3adb843cca46f0530f79fc1babb23789dc
+        Expected:
+          sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2
+          sha256:f4324edc670a0f49750a81b895f35c3adb843cca46f0530f79fc1babb23789dc
 
-          Computed:
-            sha256:c05567e9c24a6b9faaa835c4821bad0590fbb9d5779e7caa6e1cc4978e7eb24f
+        Computed:
+          sha256:c05567e9c24a6b9faaa835c4821bad0590fbb9d5779e7caa6e1cc4978e7eb24f
     "
     );
 
@@ -9198,14 +9197,14 @@ fn verify_hashes_exact_equal() -> Result<()> {
             exit_code: 1 (failure)
             ----- stderr -----
             Resolved 1 package in [TIME]
-              × Failed to download `ok==1.0.0`
-              ╰─▶ Hash mismatch for `ok==1.0.0`
+            error: Failed to download `ok==1.0.0`
+              Caused by: Hash mismatch for `ok==1.0.0`
 
-                  Expected:
-                    sha256:0000000000000000000000000000000000000000000000000000000000000000
+                Expected:
+                  sha256:0000000000000000000000000000000000000000000000000000000000000000
 
-                  Computed:
-                    sha256:79f0b33e6ce1e09eaa1784c8eee275dfe84d215d9c65c652f07c18e85fdaac5f
+                Computed:
+                  sha256:79f0b33e6ce1e09eaa1784c8eee275dfe84d215d9c65c652f07c18e85fdaac5f
             ");
         }
     }
@@ -9258,14 +9257,14 @@ fn verify_hashes_public_pin_local_version() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
     Resolved 1 package in [TIME]
-      × Failed to download `hash-probe==1.0.0+local`
-      ╰─▶ Hash mismatch for `hash-probe==1.0.0+local`
+    error: Failed to download `hash-probe==1.0.0+local`
+      Caused by: Hash mismatch for `hash-probe==1.0.0+local`
 
-          Expected:
-            sha256:[PUBLIC_HASH]
+        Expected:
+          sha256:[PUBLIC_HASH]
 
-          Computed:
-            sha256:[LOCAL_HASH]
+        Computed:
+          sha256:[LOCAL_HASH]
     ");
 
     // A hash for `==1.0.0+local` takes precedence over the hash for `==1.0.0`.
@@ -10198,10 +10197,10 @@ fn incompatible_build_constraint() -> Result<()> {
         .arg("build_constraints.txt"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × Failed to download and build `requests==1.2.0`
-      ├─▶ Failed to resolve requirements from `setup.py` build
-      ├─▶ No solution found when resolving: `setuptools>=40.8.0`
-      ╰─▶ Because you require setuptools>=40.8.0 and setuptools==1, we can conclude that your requirements are unsatisfiable.
+    error: Failed to download and build `requests==1.2.0`
+      Caused by: Failed to resolve requirements from `setup.py` build
+      Caused by: No solution found when resolving: `setuptools>=40.8.0`
+      Caused by: Because you require setuptools>=40.8.0 and setuptools==1, we can conclude that your requirements are unsatisfiable.
     "
     );
 
@@ -10224,10 +10223,10 @@ fn incompatible_build_constraint_from_stdin() -> Result<()> {
         .stdin(std::fs::File::open(constraints_txt)?), @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × Failed to download and build `requests==1.2.0`
-      ├─▶ Failed to resolve requirements from `setup.py` build
-      ├─▶ No solution found when resolving: `setuptools>=40.8.0`
-      ╰─▶ Because you require setuptools>=40.8.0 and setuptools==1, we can conclude that your requirements are unsatisfiable.
+    error: Failed to download and build `requests==1.2.0`
+      Caused by: Failed to resolve requirements from `setup.py` build
+      Caused by: No solution found when resolving: `setuptools>=40.8.0`
+      Caused by: Because you require setuptools>=40.8.0 and setuptools==1, we can conclude that your requirements are unsatisfiable.
     "
     );
 
@@ -10276,10 +10275,10 @@ build-constraint-dependencies = [
         .arg("requests==1.2"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × Failed to download and build `requests==1.2.0`
-      ├─▶ Failed to resolve requirements from `setup.py` build
-      ├─▶ No solution found when resolving: `setuptools>=40.8.0`
-      ╰─▶ Because you require setuptools>=40.8.0 and setuptools==1, we can conclude that your requirements are unsatisfiable.
+    error: Failed to download and build `requests==1.2.0`
+      Caused by: Failed to resolve requirements from `setup.py` build
+      Caused by: No solution found when resolving: `setuptools>=40.8.0`
+      Caused by: Because you require setuptools>=40.8.0 and setuptools==1, we can conclude that your requirements are unsatisfiable.
     "
     );
 
@@ -10338,10 +10337,10 @@ build-constraint-dependencies = [
         .arg("build_constraints.txt"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × Failed to download and build `requests==1.2.0`
-      ├─▶ Failed to resolve requirements from `setup.py` build
-      ├─▶ No solution found when resolving: `setuptools>=40.8.0`
-      ╰─▶ Because you require setuptools>=40 and setuptools==1, we can conclude that your requirements are unsatisfiable.
+    error: Failed to download and build `requests==1.2.0`
+      Caused by: Failed to resolve requirements from `setup.py` build
+      Caused by: No solution found when resolving: `setuptools>=40.8.0`
+      Caused by: Because you require setuptools>=40 and setuptools==1, we can conclude that your requirements are unsatisfiable.
     "
     );
 
@@ -10363,10 +10362,10 @@ build-constraint-dependencies = [
         .arg("build_constraints.txt"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × Failed to download and build `requests==1.2.0`
-      ├─▶ Failed to resolve requirements from `setup.py` build
-      ├─▶ No solution found when resolving: `setuptools>=40.8.0`
-      ╰─▶ Because you require setuptools==1 and setuptools>=40, we can conclude that your requirements are unsatisfiable.
+    error: Failed to download and build `requests==1.2.0`
+      Caused by: Failed to resolve requirements from `setup.py` build
+      Caused by: No solution found when resolving: `setuptools>=40.8.0`
+      Caused by: Because you require setuptools==1 and setuptools>=40, we can conclude that your requirements are unsatisfiable.
     "
     );
 
@@ -10429,14 +10428,14 @@ fn install_build_isolation_package() -> Result<()> {
         .arg(package.path()), @r#"
     exit_code: 1 (failure)
     ----- stderr -----
-      × Failed to build `iniconfig @ https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz`
-      ├─▶ The build backend returned an error
-      ╰─▶ Call to `hatchling.build.prepare_metadata_for_build_wheel` failed (exit status: 1)
+    error: Failed to build `iniconfig @ https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz`
+      Caused by: The build backend returned an error
+      Caused by: Call to `hatchling.build.prepare_metadata_for_build_wheel` failed (exit status: 1)
 
-          [stderr]
-          Traceback (most recent call last):
-            File "<string>", line 8, in <module>
-          ModuleNotFoundError: No module named 'hatchling'
+        [stderr]
+        Traceback (most recent call last):
+          File "<string>", line 8, in <module>
+        ModuleNotFoundError: No module named 'hatchling'
 
     hint: This error likely indicates that `iniconfig` depends on `hatchling`, but doesn't declare it as a build dependency. If `iniconfig` is a first-party package, consider adding `hatchling` to its `build-system.requires`. Otherwise, either add it to your `pyproject.toml` under:
 
@@ -10721,29 +10720,29 @@ fn sklearn() {
     uv_snapshot!(context.filters(), context.pip_install().arg("sklearn"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × Failed to build `sklearn==0.0.post12`
-      ├─▶ The build backend returned an error
-      ╰─▶ Call to `setuptools.build_meta:__legacy__.build_wheel` failed (exit status: 1)
+    error: Failed to build `sklearn==0.0.post12`
+      Caused by: The build backend returned an error
+      Caused by: Call to `setuptools.build_meta:__legacy__.build_wheel` failed (exit status: 1)
 
-          [stderr]
-          The 'sklearn' PyPI package is deprecated, use 'scikit-learn'
-          rather than 'sklearn' for pip commands.
+        [stderr]
+        The 'sklearn' PyPI package is deprecated, use 'scikit-learn'
+        rather than 'sklearn' for pip commands.
 
-          Here is how to fix this error in the main use cases:
-          - use 'pip install scikit-learn' rather than 'pip install sklearn'
-          - replace 'sklearn' by 'scikit-learn' in your pip requirements files
-            (requirements.txt, setup.py, setup.cfg, Pipfile, etc ...)
-          - if the 'sklearn' package is used by one of your dependencies,
-            it would be great if you take some time to track which package uses
-            'sklearn' instead of 'scikit-learn' and report it to their issue tracker
-          - as a last resort, set the environment variable
-            SKLEARN_ALLOW_DEPRECATED_SKLEARN_PACKAGE_INSTALL=True to avoid this error
+        Here is how to fix this error in the main use cases:
+        - use 'pip install scikit-learn' rather than 'pip install sklearn'
+        - replace 'sklearn' by 'scikit-learn' in your pip requirements files
+          (requirements.txt, setup.py, setup.cfg, Pipfile, etc ...)
+        - if the 'sklearn' package is used by one of your dependencies,
+          it would be great if you take some time to track which package uses
+          'sklearn' instead of 'scikit-learn' and report it to their issue tracker
+        - as a last resort, set the environment variable
+          SKLEARN_ALLOW_DEPRECATED_SKLEARN_PACKAGE_INSTALL=True to avoid this error
 
-          More information is available at
-          https://github.com/scikit-learn/sklearn-pypi-package
-
+        More information is available at
+        https://github.com/scikit-learn/sklearn-pypi-package
 
     hint: `sklearn` is often confused for `scikit-learn`. Did you mean to install `scikit-learn` instead?
+
     hint: Build failures usually indicate a problem with the package or the build environment
     "
     );
@@ -10768,30 +10767,30 @@ fn resolve_derivation_chain() -> Result<()> {
         .arg("."), @r#"
     exit_code: 1 (failure)
     ----- stderr -----
-      × Failed to build `wsgiref==0.1.2`
-      ├─▶ The build backend returned an error
-      ╰─▶ Call to `setuptools.build_meta:__legacy__.build_wheel` failed (exit status: 1)
+    error: Failed to build `wsgiref==0.1.2`
+      Caused by: The build backend returned an error
+      Caused by: Call to `setuptools.build_meta:__legacy__.build_wheel` failed (exit status: 1)
 
-          [stderr]
-          Traceback (most recent call last):
-            File "<string>", line 14, in <module>
-            File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 325, in get_requires_for_build_wheel
-              return self._get_build_requires(config_settings, requirements=['wheel'])
-                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-            File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 295, in _get_build_requires
-              self.run_setup()
-            File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 487, in run_setup
-              super().run_setup(setup_script=setup_script)
-            File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 311, in run_setup
-              exec(code, locals())
-            File "<string>", line 5, in <module>
-            File "[CACHE_DIR]/[TMP]/src/ez_setup/__init__.py", line 170
-              print "Setuptools version",version,"or greater has been installed."
-              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-          SyntaxError: Missing parentheses in call to 'print'. Did you mean print(...)?
-
+        [stderr]
+        Traceback (most recent call last):
+          File "<string>", line 14, in <module>
+          File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 325, in get_requires_for_build_wheel
+            return self._get_build_requires(config_settings, requirements=['wheel'])
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+          File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 295, in _get_build_requires
+            self.run_setup()
+          File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 487, in run_setup
+            super().run_setup(setup_script=setup_script)
+          File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 311, in run_setup
+            exec(code, locals())
+          File "<string>", line 5, in <module>
+          File "[CACHE_DIR]/[TMP]/src/ez_setup/__init__.py", line 170
+            print "Setuptools version",version,"or greater has been installed."
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        SyntaxError: Missing parentheses in call to 'print'. Did you mean print(...)?
 
     hint: `wsgiref` (v0.1.2) was included because `project` (v0.1.0) depends on `wsgiref`
+
     hint: Build failures usually indicate a problem with the package or the build environment
     "#
     );
@@ -10868,8 +10867,8 @@ fn test_dynamic_version_sdist_wrong_version() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
     Resolved 1 package in [TIME]
-      × Failed to build `foo @ file://[TEMP_DIR]/foo-1.2.3.tar.gz`
-      ╰─▶ Package metadata version `10.11.12` does not match given version `1.2.3`
+    error: Failed to build `foo @ file://[TEMP_DIR]/foo-1.2.3.tar.gz`
+      Caused by: Package metadata version `10.11.12` does not match given version `1.2.3`
     "
     );
 
@@ -10936,8 +10935,8 @@ fn missing_subdirectory_git() -> Result<()> {
         .arg("workspace-in-root-test @ git+https://github.com/astral-sh/workspace-in-root-test#subdirectory=missing"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × Failed to download and build `workspace-in-root-test @ git+https://github.com/astral-sh/workspace-in-root-test#subdirectory=missing`
-      ╰─▶ The source distribution `git+https://github.com/astral-sh/workspace-in-root-test#subdirectory=missing` has no subdirectory `missing`
+    error: Failed to download and build `workspace-in-root-test @ git+https://github.com/astral-sh/workspace-in-root-test#subdirectory=missing`
+      Caused by: The source distribution `git+https://github.com/astral-sh/workspace-in-root-test#subdirectory=missing` has no subdirectory `missing`
     "
     );
 
@@ -10954,8 +10953,8 @@ fn missing_subdirectory_url() -> Result<()> {
         .arg("source-distribution @ https://files.pythonhosted.org/packages/1f/e5/5b016c945d745f8b108e759d428341488a6aee8f51f07c6c4e33498bb91f/source_distribution-0.0.3.tar.gz#subdirectory=missing"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × Failed to download and build `source-distribution @ https://files.pythonhosted.org/packages/1f/e5/5b016c945d745f8b108e759d428341488a6aee8f51f07c6c4e33498bb91f/source_distribution-0.0.3.tar.gz#subdirectory=missing`
-      ╰─▶ The source distribution `https://files.pythonhosted.org/packages/1f/e5/5b016c945d745f8b108e759d428341488a6aee8f51f07c6c4e33498bb91f/source_distribution-0.0.3.tar.gz#subdirectory=missing` has no subdirectory `missing`
+    error: Failed to download and build `source-distribution @ https://files.pythonhosted.org/packages/1f/e5/5b016c945d745f8b108e759d428341488a6aee8f51f07c6c4e33498bb91f/source_distribution-0.0.3.tar.gz#subdirectory=missing`
+      Caused by: The source distribution `https://files.pythonhosted.org/packages/1f/e5/5b016c945d745f8b108e759d428341488a6aee8f51f07c6c4e33498bb91f/source_distribution-0.0.3.tar.gz#subdirectory=missing` has no subdirectory `missing`
     "
     );
 
@@ -10976,9 +10975,9 @@ fn bad_crc32() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
     Resolved 7 packages in [TIME]
-      × Failed to download `osqp @ https://files.pythonhosted.org/packages/00/04/5959347582ab970e9b922f27585d34f7c794ed01125dac26fb4e7dd80205/osqp-1.0.2-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl`
-      ├─▶ Failed to extract archive: osqp-1.0.2-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl
-      ╰─▶ Bad uncompressed size (got 0007b829, expected 0007b828) for file: osqp/ext_builtin.cpython-311-x86_64-linux-gnu.so
+    error: Failed to download `osqp @ https://files.pythonhosted.org/packages/00/04/5959347582ab970e9b922f27585d34f7c794ed01125dac26fb4e7dd80205/osqp-1.0.2-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl`
+      Caused by: Failed to extract archive: osqp-1.0.2-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl
+      Caused by: Bad uncompressed size (got 0007b829, expected 0007b828) for file: osqp/ext_builtin.cpython-311-x86_64-linux-gnu.so
     "
     );
 
@@ -11088,14 +11087,14 @@ fn direct_url_hash_source_tree_dependency() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
     Resolved 2 packages in [TIME]
-      × Failed to download `protobug @ https://files.pythonhosted.org/packages/f2/cc/db26b91cddffbcf0c6df7834fd642578f737fe34197635ae8ea64643a35f/protobug-0.3.0-py3-none-any.whl#sha256=ee81583f376bb38e5e7af425d2453e5e8d4b57bfbf45e5dba1a75329c2026520`
-      ╰─▶ Hash mismatch for `protobug @ https://files.pythonhosted.org/packages/f2/cc/db26b91cddffbcf0c6df7834fd642578f737fe34197635ae8ea64643a35f/protobug-0.3.0-py3-none-any.whl#sha256=ee81583f376bb38e5e7af425d2453e5e8d4b57bfbf45e5dba1a75329c2026520`
+    error: Failed to download `protobug @ https://files.pythonhosted.org/packages/f2/cc/db26b91cddffbcf0c6df7834fd642578f737fe34197635ae8ea64643a35f/protobug-0.3.0-py3-none-any.whl#sha256=ee81583f376bb38e5e7af425d2453e5e8d4b57bfbf45e5dba1a75329c2026520`
+      Caused by: Hash mismatch for `protobug @ https://files.pythonhosted.org/packages/f2/cc/db26b91cddffbcf0c6df7834fd642578f737fe34197635ae8ea64643a35f/protobug-0.3.0-py3-none-any.whl#sha256=ee81583f376bb38e5e7af425d2453e5e8d4b57bfbf45e5dba1a75329c2026520`
 
-          Expected:
-            sha256:ee81583f376bb38e5e7af425d2453e5e8d4b57bfbf45e5dba1a75329c2026520
+        Expected:
+          sha256:ee81583f376bb38e5e7af425d2453e5e8d4b57bfbf45e5dba1a75329c2026520
 
-          Computed:
-            sha256:ee81583f376bb38e5e7af425d2453e5e8d4b57bfbf45e5dba1a75329c202652e
+        Computed:
+          sha256:ee81583f376bb38e5e7af425d2453e5e8d4b57bfbf45e5dba1a75329c202652e
 
     hint: `protobug` (v0.3.0) was included because `pylock` (v0.1.0) depends on `protobug`
     "
@@ -11131,7 +11130,7 @@ fn direct_url_hash_source_tree_dependency_conflict() -> Result<()> {
 
     uv_snapshot!(context.pip_install()
         .arg("."), @"
-    exit_code: 2 (failure)
+    exit_code: 1 (failure)
     ----- stderr -----
     error: Conflicting archive URL hashes for `anyio @ https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl#sha256=f7ed51751b2c2add651e5747c891b47e26d2a21be5d32d9311dfe9692f3e5d7a`: `sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f` conflicts with `sha256:f7ed51751b2c2add651e5747c891b47e26d2a21be5d32d9311dfe9692f3e5d7a`
     "
@@ -11250,9 +11249,9 @@ fn cyclic_build_dependency() {
     exit_code: 1 (failure)
     ----- stderr -----
     Resolved 1 package in [TIME]
-      × Failed to download and build `circular-one==0.2.0`
-      ├─▶ Failed to install requirements from `build-system.requires`
-      ╰─▶ Cyclic build dependency detected for `circular-one`
+    error: Failed to download and build `circular-one==0.2.0`
+      Caused by: Failed to install requirements from `build-system.requires`
+      Caused by: Cyclic build dependency detected for `circular-one`
     "
     );
 
@@ -13639,14 +13638,14 @@ fn pep_751_hash_mismatch() -> Result<()> {
         .arg("pylock.toml"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × Failed to read `iniconfig @ file://[TEMP_DIR]/iniconfig-2.0.0-py3-none-any.whl`
-      ╰─▶ Hash mismatch for `iniconfig @ file://[TEMP_DIR]/iniconfig-2.0.0-py3-none-any.whl`
+    error: Failed to read `iniconfig @ file://[TEMP_DIR]/iniconfig-2.0.0-py3-none-any.whl`
+      Caused by: Hash mismatch for `iniconfig @ file://[TEMP_DIR]/iniconfig-2.0.0-py3-none-any.whl`
 
-          Expected:
-            sha256:c5185871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374
+        Expected:
+          sha256:c5185871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374
 
-          Computed:
-            sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374
+        Computed:
+          sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374
     "
     );
 
@@ -14126,7 +14125,7 @@ async fn bogus_redirect() -> Result<()> {
             .arg(redirect_server.uri())
             .arg("sniffio"),
         @"
-    exit_code: 2 (failure)
+    exit_code: 1 (failure)
     ----- stderr -----
     error: The index returned metadata for the wrong package: expected distribution for sniffio, got distribution for anyio
     "
@@ -15216,9 +15215,9 @@ fn reject_invalid_archive_member_names() {
     exit_code: 1 (failure)
     ----- stderr -----
     Resolved 1 package in [TIME]
-      × Failed to download `cbwheeldiff2==0.0.1`
-      ├─▶ Failed to extract archive: cbwheeldiff2-0.0.1-py2.py3-none-any.whl
-      ╰─▶ Archive contains unacceptable filename: cbwheeldiff2-0.0.1.dist-info/RECORD�
+    error: Failed to download `cbwheeldiff2==0.0.1`
+      Caused by: Failed to extract archive: cbwheeldiff2-0.0.1-py2.py3-none-any.whl
+      Caused by: Archive contains unacceptable filename: cbwheeldiff2-0.0.1.dist-info/RECORD�
     "
     );
 }
@@ -15232,9 +15231,9 @@ fn reject_invalid_streaming_zip() {
     exit_code: 1 (failure)
     ----- stderr -----
     Resolved 1 package in [TIME]
-      × Failed to download `cbwheelstreamtest==0.0.1`
-      ├─▶ Failed to extract archive: cbwheelstreamtest-0.0.1-py2.py3-none-any.whl
-      ╰─▶ ZIP file contains multiple entries with different contents for: cbwheelstreamtest/__init__.py
+    error: Failed to download `cbwheelstreamtest==0.0.1`
+      Caused by: Failed to extract archive: cbwheelstreamtest-0.0.1-py2.py3-none-any.whl
+      Caused by: ZIP file contains multiple entries with different contents for: cbwheelstreamtest/__init__.py
     "
     );
 
@@ -15245,9 +15244,9 @@ fn reject_invalid_streaming_zip() {
     exit_code: 1 (failure)
     ----- stderr -----
     Resolved 1 package in [TIME]
-      × Failed to download `cbwheelstreamtest==0.0.1`
-      ├─▶ Failed to extract archive: cbwheelstreamtest-0.0.1-py2.py3-none-any.whl
-      ╰─▶ ZIP file contains multiple entries for the same output path: cbwheelstreamtest/__init__.py
+    error: Failed to download `cbwheelstreamtest==0.0.1`
+      Caused by: Failed to extract archive: cbwheelstreamtest-0.0.1-py2.py3-none-any.whl
+      Caused by: ZIP file contains multiple entries for the same output path: cbwheelstreamtest/__init__.py
     "
     );
 }
@@ -15261,9 +15260,9 @@ fn reject_invalid_double_zip() {
     exit_code: 1 (failure)
     ----- stderr -----
     Resolved 2 packages in [TIME]
-      × Failed to download `cbwheelziptest==0.0.2`
-      ├─▶ Failed to extract archive: cbwheelziptest-0.0.2-py2.py3-none-any.whl
-      ╰─▶ ZIP file contains trailing contents after the end-of-central-directory record
+    error: Failed to download `cbwheelziptest==0.0.2`
+      Caused by: Failed to extract archive: cbwheelziptest-0.0.2-py2.py3-none-any.whl
+      Caused by: ZIP file contains trailing contents after the end-of-central-directory record
     "
     );
 }
@@ -15277,10 +15276,10 @@ fn reject_invalid_central_directory_offset() {
     exit_code: 1 (failure)
     ----- stderr -----
     Resolved 1 package in [TIME]
-      × Failed to download `attrs @ https://pub-c6f28d316acd406eae43501e51ad30fa.r2.dev/zip1/attrs-25.3.0-py3-none-any.whl`
-      ├─▶ Failed to extract archive: attrs-25.3.0-py3-none-any.whl
-      ├─▶ Invalid zip file structure
-      ╰─▶ the central directory size (0x8d3) did not match the observed byte span (0x911)
+    error: Failed to download `attrs @ https://pub-c6f28d316acd406eae43501e51ad30fa.r2.dev/zip1/attrs-25.3.0-py3-none-any.whl`
+      Caused by: Failed to extract archive: attrs-25.3.0-py3-none-any.whl
+      Caused by: Invalid zip file structure
+      Caused by: the central directory size (0x8d3) did not match the observed byte span (0x911)
     "
     );
 }
@@ -15294,9 +15293,9 @@ fn reject_invalid_crc32_mismatch() {
     exit_code: 1 (failure)
     ----- stderr -----
     Resolved 1 package in [TIME]
-      × Failed to download `attrs @ https://pub-c6f28d316acd406eae43501e51ad30fa.r2.dev/zip2/attrs-25.3.0-py3-none-any.whl`
-      ├─▶ Failed to extract archive: attrs-25.3.0-py3-none-any.whl
-      ╰─▶ Bad uncompressed size (got 0000001b, expected 0000000c) for file: sitecustomize.py
+    error: Failed to download `attrs @ https://pub-c6f28d316acd406eae43501e51ad30fa.r2.dev/zip2/attrs-25.3.0-py3-none-any.whl`
+      Caused by: Failed to extract archive: attrs-25.3.0-py3-none-any.whl
+      Caused by: Bad uncompressed size (got 0000001b, expected 0000000c) for file: sitecustomize.py
     "
     );
 }
@@ -15310,9 +15309,9 @@ fn reject_invalid_crc32_non_data_descriptor() {
     exit_code: 1 (failure)
     ----- stderr -----
     Resolved 1 package in [TIME]
-      × Failed to download `attrs @ https://pub-c6f28d316acd406eae43501e51ad30fa.r2.dev/zip3/attrs-25.3.0-py3-none-any.whl`
-      ├─▶ Failed to extract archive: attrs-25.3.0-py3-none-any.whl
-      ╰─▶ Bad uncompressed size (got 0000001b, expected 0000000c) for file: sitecustomize.py
+    error: Failed to download `attrs @ https://pub-c6f28d316acd406eae43501e51ad30fa.r2.dev/zip3/attrs-25.3.0-py3-none-any.whl`
+      Caused by: Failed to extract archive: attrs-25.3.0-py3-none-any.whl
+      Caused by: Bad uncompressed size (got 0000001b, expected 0000000c) for file: sitecustomize.py
     "
     );
 }
@@ -15325,9 +15324,9 @@ fn reject_invalid_duplicate_extra_field() {
         .arg("attrs @ https://pub-c6f28d316acd406eae43501e51ad30fa.r2.dev/zip4/attrs-25.3.0-py3-none-any.whl"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × Failed to download `attrs @ https://pub-c6f28d316acd406eae43501e51ad30fa.r2.dev/zip4/attrs-25.3.0-py3-none-any.whl`
-      ├─▶ Failed to unzip wheel: attrs-25.3.0-py3-none-any.whl
-      ╰─▶ an extra field with id 0x7075 was duplicated in the header
+    error: Failed to download `attrs @ https://pub-c6f28d316acd406eae43501e51ad30fa.r2.dev/zip4/attrs-25.3.0-py3-none-any.whl`
+      Caused by: Failed to unzip wheel: attrs-25.3.0-py3-none-any.whl
+      Caused by: an extra field with id 0x7075 was duplicated in the header
     "
     );
 }
@@ -15341,9 +15340,9 @@ fn reject_invalid_short_usize() {
     exit_code: 1 (failure)
     ----- stderr -----
     Resolved 1 package in [TIME]
-      × Failed to download `attrs @ https://pub-c6f28d316acd406eae43501e51ad30fa.r2.dev/zip5/attrs-25.3.0-py3-none-any.whl`
-      ├─▶ Failed to extract archive: attrs-25.3.0-py3-none-any.whl
-      ╰─▶ Bad CRC (got 5100f20e, expected de0ffd6e) for file: attr/_make.py
+    error: Failed to download `attrs @ https://pub-c6f28d316acd406eae43501e51ad30fa.r2.dev/zip5/attrs-25.3.0-py3-none-any.whl`
+      Caused by: Failed to extract archive: attrs-25.3.0-py3-none-any.whl
+      Caused by: Bad CRC (got 5100f20e, expected de0ffd6e) for file: attr/_make.py
     "
     );
 }
@@ -15356,9 +15355,9 @@ fn reject_invalid_chained_extra_field() {
         .arg("attrs @ https://pub-c6f28d316acd406eae43501e51ad30fa.r2.dev/zip6/attrs-25.3.0-py3-none-any.whl"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × Failed to download `attrs @ https://pub-c6f28d316acd406eae43501e51ad30fa.r2.dev/zip6/attrs-25.3.0-py3-none-any.whl`
-      ├─▶ Failed to unzip wheel: attrs-25.3.0-py3-none-any.whl
-      ╰─▶ an extra field with id 0x7075 was duplicated in the header
+    error: Failed to download `attrs @ https://pub-c6f28d316acd406eae43501e51ad30fa.r2.dev/zip6/attrs-25.3.0-py3-none-any.whl`
+      Caused by: Failed to unzip wheel: attrs-25.3.0-py3-none-any.whl
+      Caused by: an extra field with id 0x7075 was duplicated in the header
     "
     );
 }
@@ -15371,9 +15370,9 @@ fn reject_invalid_short_usize_zip64() {
         .arg("attrs @ https://pub-c6f28d316acd406eae43501e51ad30fa.r2.dev/zip7/attrs-25.3.0-py3-none-any.whl"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × Failed to download `attrs @ https://pub-c6f28d316acd406eae43501e51ad30fa.r2.dev/zip7/attrs-25.3.0-py3-none-any.whl`
-      ├─▶ Failed to unzip wheel: attrs-25.3.0-py3-none-any.whl
-      ╰─▶ zip64 extended information field was too long: expected 16 bytes, but 0 bytes were provided
+    error: Failed to download `attrs @ https://pub-c6f28d316acd406eae43501e51ad30fa.r2.dev/zip7/attrs-25.3.0-py3-none-any.whl`
+      Caused by: Failed to unzip wheel: attrs-25.3.0-py3-none-any.whl
+      Caused by: zip64 extended information field was too long: expected 16 bytes, but 0 bytes were provided
     "
     );
 }
@@ -15543,15 +15542,15 @@ fn pip_install_build_dependencies_respect_locked_versions() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
     Resolved [N] packages in [TIME]
-      × Failed to build `child @ file://[TEMP_DIR]/child`
-      ├─▶ The build backend returned an error
-      ╰─▶ Call to `build_backend.build_wheel` failed (exit status: 1)
+    error: Failed to build `child @ file://[TEMP_DIR]/child`
+      Caused by: The build backend returned an error
+      Caused by: Call to `build_backend.build_wheel` failed (exit status: 1)
 
-          [stderr]
-          Expected `a` version 0.1 but got 0.3.0
-
+        [stderr]
+        Expected `a` version 0.1 but got 0.3.0
 
     hint: `child` was included because `parent` (v0.1.0) depends on `child`
+
     hint: Build failures usually indicate a problem with the package or the build environment
     ");
 
@@ -15603,15 +15602,15 @@ fn pip_install_build_dependencies_respect_locked_versions() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
     Resolved [N] packages in [TIME]
-      × Failed to build `child @ file://[TEMP_DIR]/child`
-      ├─▶ The build backend returned an error
-      ╰─▶ Call to `build_backend.build_wheel` failed (exit status: 1)
+    error: Failed to build `child @ file://[TEMP_DIR]/child`
+      Caused by: The build backend returned an error
+      Caused by: Call to `build_backend.build_wheel` failed (exit status: 1)
 
-          [stderr]
-          Expected `a` version 0.2 but got 0.1.0
-
+        [stderr]
+        Expected `a` version 0.2 but got 0.1.0
 
     hint: `child` was included because `parent` (v0.1.0) depends on `child`
+
     hint: Build failures usually indicate a problem with the package or the build environment
     ");
 
@@ -16365,8 +16364,8 @@ fn build_backend_wrong_wheel_platform() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
     Resolved 1 package in [TIME]
-      × Failed to build `py313 @ file://[TEMP_DIR]/child`
-      ╰─▶ The built wheel `py313-0.1.0-py313-none-any.whl` is not compatible with the target Python 3.12 on [ARCH] [OS]. Consider using `--no-build` to disable building wheels.
+    error: Failed to build `py313 @ file://[TEMP_DIR]/child`
+      Caused by: The built wheel `py313-0.1.0-py313-none-any.whl` is not compatible with the target Python 3.12 on [ARCH] [OS]. Consider using `--no-build` to disable building wheels.
     ");
 
     // A python 3.12 host with a 3.13 explicit target works.
@@ -16398,8 +16397,8 @@ fn build_backend_wrong_wheel_platform() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
     Resolved 1 package in [TIME]
-      × Failed to build `py313 @ file://[TEMP_DIR]/child`
-      ╰─▶ The built wheel `py313-0.1.0-py313-none-any.whl` is not compatible with the target Python 3.12 on [ARCH] [OS]. Consider using `--no-build` to disable building wheels.
+    error: Failed to build `py313 @ file://[TEMP_DIR]/child`
+      Caused by: The built wheel `py313-0.1.0-py313-none-any.whl` is not compatible with the target Python 3.12 on [ARCH] [OS]. Consider using `--no-build` to disable building wheels.
     ");
 
     // Create a project that will resolve to a non-latest version of `anyio`
@@ -16453,10 +16452,10 @@ fn build_backend_wrong_wheel_platform() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
     Resolved 1 package in [TIME]
-      × Failed to build `parent @ file://[TEMP_DIR]/`
-      ├─▶ Failed to install requirements from `build-system.requires`
-      ├─▶ Failed to build `py313 @ file://[TEMP_DIR]/child`
-      ╰─▶ The built wheel `py313-0.1.0-py313-none-any.whl` is not compatible with the current Python 3.12 on [ARCH] [OS]
+    error: Failed to build `parent @ file://[TEMP_DIR]/`
+      Caused by: Failed to install requirements from `build-system.requires`
+      Caused by: Failed to build `py313 @ file://[TEMP_DIR]/child`
+      Caused by: The built wheel `py313-0.1.0-py313-none-any.whl` is not compatible with the current Python 3.12 on [ARCH] [OS]
     ");
 
     Ok(())
@@ -16837,9 +16836,9 @@ fn fail_on_bz2_wheel() {
         @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × Failed to download `futzed-bz2 @ http://[LOCALHOST]/futzed_bz2-0.1.0-py3-none-any.whl`
-      ├─▶ Failed to read metadata: `http://[LOCALHOST]/futzed_bz2-0.1.0-py3-none-any.whl`
-      ╰─▶ Archive contains a file with an unsupported compression method; files must be compressed with 'stored', 'DEFLATE', or 'zstd'
+    error: Failed to download `futzed-bz2 @ http://[LOCALHOST]/futzed_bz2-0.1.0-py3-none-any.whl`
+      Caused by: Failed to read metadata: `http://[LOCALHOST]/futzed_bz2-0.1.0-py3-none-any.whl`
+      Caused by: Archive contains a file with an unsupported compression method; files must be compressed with 'stored', 'DEFLATE', or 'zstd'
     "
     );
 }
@@ -16856,9 +16855,9 @@ fn fail_on_lzma_wheel() {
         @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × Failed to download `futzed-lzma @ http://[LOCALHOST]/futzed_lzma-0.1.0-py3-none-any.whl`
-      ├─▶ Failed to read metadata: `http://[LOCALHOST]/futzed_lzma-0.1.0-py3-none-any.whl`
-      ╰─▶ Archive contains a file with an unsupported compression method; files must be compressed with 'stored', 'DEFLATE', or 'zstd'
+    error: Failed to download `futzed-lzma @ http://[LOCALHOST]/futzed_lzma-0.1.0-py3-none-any.whl`
+      Caused by: Failed to read metadata: `http://[LOCALHOST]/futzed_lzma-0.1.0-py3-none-any.whl`
+      Caused by: Archive contains a file with an unsupported compression method; files must be compressed with 'stored', 'DEFLATE', or 'zstd'
     "
     );
 }

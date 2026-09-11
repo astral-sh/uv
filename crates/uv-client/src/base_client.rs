@@ -73,6 +73,16 @@ pub enum ClientBuildError {
     IndexCredentials(#[from] IndexCredentialsError),
 }
 
+impl ClientBuildError {
+    /// Return whether this is an expected user-facing failure.
+    pub fn is_user_failure(&self) -> bool {
+        match self {
+            Self::Credentials(_) | Self::IndexCredentials(_) => true,
+            Self::Reqwest(_) => false,
+        }
+    }
+}
+
 /// Selectively skip parts or the entire auth middleware.
 #[derive(Debug, Clone, Copy, Default)]
 pub enum AuthIntegration {

@@ -1703,7 +1703,6 @@ async fn tool_upgrade_lock_verifies_hashes() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
     error: Failed to upgrade simple-launcher
-      Caused by: Failed to prepare distributions
       Caused by: Failed to download `simple-launcher==0.1.0`
       Caused by: Hash mismatch for `simple-launcher==0.1.0`
 

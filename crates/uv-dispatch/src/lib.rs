@@ -92,6 +92,20 @@ impl uv_errors::Hinted for BuildDispatchError {
 }
 
 impl IsBuildBackendError for BuildDispatchError {
+    fn is_user_failure(&self) -> bool {
+        match self {
+            Self::BuildFrontend(error) => error.is_user_failure(),
+            Self::Resolve(error) => error.is_user_failure(),
+            Self::Prepare(error) => error.is_user_failure(),
+            Self::Lookahead(error) => error.is_user_failure(),
+            Self::Anyhow(error) => error
+                .chain()
+                .find_map(|cause| cause.downcast_ref::<uv_resolver::ResolveError>())
+                .is_some_and(uv_resolver::ResolveError::is_user_failure),
+            Self::Tags(_) | Self::Join(_) => false,
+        }
+    }
+
     fn is_build_backend_error(&self) -> bool {
         match self {
             Self::Tags(_)

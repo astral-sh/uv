@@ -267,10 +267,10 @@ impl InstalledPackagesProvider for EmptyInstalledPackages {
 /// Resolution and installation may need to build packages, while the build frontend needs to
 /// resolve and install for the PEP 517 build environment.
 ///
-/// Usually, [`anyhow::Error`] is opaque error type of choice. In this case though, we error type
-/// that we can inspect on whether it's a build backend error with [`IsBuildBackendError`], and
+/// Usually, [`anyhow::Error`] is the opaque error type of choice. Here, the error type must also
+/// classify user failures and build backend failures through [`IsBuildBackendError`], and
 /// [`anyhow::Error`] does not allow attaching more traits. The next choice would be
-/// `Box<dyn std::error::Error + IsBuildFrontendError + Send + Sync + 'static>`, but [`thiserror`]
+/// `Box<dyn IsBuildBackendError>`, but [`thiserror`]
 /// complains about the internal `AsDynError` not being implemented when being used as `#[source]`.
 /// This struct is an otherwise transparent error wrapper that thiserror recognizes.
 pub struct AnyErrorBuild(Box<dyn IsBuildBackendError>);
