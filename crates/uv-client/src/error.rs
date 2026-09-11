@@ -16,7 +16,7 @@ use crate::{FlatIndexError, html};
 use uv_cache::Error as CacheError;
 use uv_distribution_filename::{WheelFilename, WheelFilenameError};
 use uv_distribution_types::IndexUrl;
-use uv_errors::{Hint, Hints};
+use uv_errors::{Hinted, Hints};
 use uv_git::GitError;
 use uv_normalize::PackageName;
 use uv_pypi_types::HashDigest;
@@ -159,6 +159,44 @@ impl std::error::Error for Error {
 }
 
 impl Error {
+    /// Return whether this is an expected user-facing failure.
+    pub fn is_user_failure(&self) -> bool {
+        match self.kind() {
+            ErrorKind::InvalidUrl(_)
+            | ErrorKind::MissingWheelGitLfsArtifacts(..)
+            | ErrorKind::NonFileUrl(_)
+            | ErrorKind::CannotBeABase(_)
+            | ErrorKind::Metadata(..)
+            | ErrorKind::NoIndex(_)
+            | ErrorKind::RemotePackageNotFound(_)
+            | ErrorKind::LocalPackageNotFound(_)
+            | ErrorKind::LocalIndexNotFound(_)
+            | ErrorKind::MetadataHashMismatch { .. }
+            | ErrorKind::MetadataParseError(..)
+            | ErrorKind::BadJson { .. }
+            | ErrorKind::BadHtml { .. }
+            | ErrorKind::MetadataRangeRequestsRequired(..)
+            | ErrorKind::WheelFilename(_)
+            | ErrorKind::NameMismatch { .. }
+            | ErrorKind::Zip(..)
+            | ErrorKind::MissingContentType(_)
+            | ErrorKind::InvalidContentTypeHeader(..)
+            | ErrorKind::UnsupportedMediaType(..)
+            | ErrorKind::Offline(_) => true,
+            ErrorKind::Git(error) => error.is_user_failure(),
+            ErrorKind::WrappedReqwestError(_, error) => error.is_user_failure(),
+            ErrorKind::Flat(error) => error.is_user_failure(),
+            ErrorKind::AsyncHttpRangeReader(..)
+            | ErrorKind::CacheWrite(_)
+            | ErrorKind::CacheLock(_)
+            | ErrorKind::Io(_)
+            | ErrorKind::Decode(_)
+            | ErrorKind::Encode(_)
+            | ErrorKind::ArchiveRead(_)
+            | ErrorKind::ArchiveWrite(_) => false,
+        }
+    }
+
     /// Create a new [`Error`] with the given [`ErrorKind`] and number of retries.
     pub fn new(kind: ErrorKind, retries: u32, duration: Duration) -> Self {
         Self {
@@ -376,7 +414,7 @@ impl Error {
     }
 }
 
-impl Hint for Error {
+impl Hinted for Error {
     fn hints(&self) -> Hints<'_> {
         if self.suggests_system_certs() {
             Hints::from(format!(
@@ -572,6 +610,13 @@ enum WrappedReqwestErrorContext {
 }
 
 impl WrappedReqwestError {
+    /// Return whether the request failed because the resource does not exist.
+    pub fn is_user_failure(&self) -> bool {
+        self.inner()
+            .and_then(reqwest::Error::status)
+            .is_some_and(|status| status == reqwest::StatusCode::NOT_FOUND)
+    }
+
     /// Create a new `WrappedReqwestError` with optional problem details
     pub fn with_problem_details(
         error: reqwest_middleware::Error,

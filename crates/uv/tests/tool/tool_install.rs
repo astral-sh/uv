@@ -1554,10 +1554,10 @@ fn tool_install_with_incompatible_build_constraints() -> Result<()> {
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × Failed to download and build `requests==1.2.0`
-      ├─▶ Failed to resolve requirements from `setup.py` build
-      ├─▶ No solution found when resolving: `setuptools>=40.8.0`
-      ╰─▶ Because you require setuptools>=40.8.0 and setuptools==2, we can conclude that your requirements are unsatisfiable.
+    error: Failed to download and build `requests==1.2.0`
+      cause: Failed to resolve requirements from `setup.py` build
+      cause: No solution found when resolving: `setuptools>=40.8.0`
+      cause: Because you require setuptools>=40.8.0 and setuptools==2, we can conclude that your requirements are unsatisfiable.
     ");
 
     tool_dir
@@ -3126,26 +3126,24 @@ fn tool_install_uninstallable() {
     exit_code: 1 (failure)
     ----- stderr -----
     Resolved 1 package in [TIME]
-      × Failed to build `pyenv==0.0.1`
-      ├─▶ The build backend returned an error
-      ╰─▶ Call to `setuptools.build_meta:__legacy__.build_wheel` failed (exit status: 1)
+    error: Failed to build `pyenv==0.0.1`
+      cause: The build backend returned an error
+      cause: Call to `setuptools.build_meta:__legacy__.build_wheel` failed (exit status: 1)
 
-          [stdout]
-          running bdist_wheel
-          running build
-          installing to build/bdist.linux-x86_64/wheel
-          running install
+             [stdout]
+             running bdist_wheel
+             running build
+             installing to build/bdist.linux-x86_64/wheel
+             running install
 
-          [stderr]
-          # NOTE #
-          We are sorry, but this package is not installable with pip.
+             [stderr]
+             # NOTE #
+             We are sorry, but this package is not installable with pip.
 
-          Please read the installation instructions at:
+             Please read the installation instructions at:
 
-          https://github.com/pyenv/pyenv#installation
-          #
-
-
+             https://github.com/pyenv/pyenv#installation
+             #
 
     hint: Build failures usually indicate a problem with the package or the build environment
     ");
@@ -3367,9 +3365,9 @@ fn tool_install_git_does_not_infer_dynamic_requires_python() {
         .env(EnvVars::PATH, path.as_os_str()), @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because the current Python version (3.11.[X]) does not satisfy Python>=3.12,<3.13 and dynamic-requires-python-tool==0.1.0 depends on Python>=3.12,<3.13, we can conclude that dynamic-requires-python-tool==0.1.0 cannot be used.
-          And because only dynamic-requires-python-tool==0.1.0 is available and you require dynamic-requires-python-tool, we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving dependencies
+      cause: Because the current Python version (3.11.[X]) does not satisfy Python>=3.12,<3.13 and dynamic-requires-python-tool==0.1.0 depends on Python>=3.12,<3.13, we can conclude that dynamic-requires-python-tool==0.1.0 cannot be used.
+             And because only dynamic-requires-python-tool==0.1.0 is available and you require dynamic-requires-python-tool, we can conclude that your requirements are unsatisfiable.
     ");
 }
 
@@ -4418,9 +4416,9 @@ fn tool_install_preserve_environment() {
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because black==24.1.1 depends on packaging>=22.0 and you require black==24.1.1, we can conclude that you require packaging>=22.0.
-          And because you require packaging==0.0.1, we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving dependencies
+      cause: Because black==24.1.1 depends on packaging>=22.0 and you require black==24.1.1, we can conclude that you require packaging>=22.0.
+             And because you require packaging==0.0.1, we can conclude that your requirements are unsatisfiable.
     ");
 
     // Install `black`. The tool should already be installed, since we didn't remove the environment.
@@ -5418,8 +5416,8 @@ async fn tool_install_default_credentials() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
     error: Failed to upgrade executable-application
-      Caused by: Failed to fetch: `http://[LOCALHOST]/basic-auth/simple/executable-application/`
-      Caused by: Missing credentials for http://[LOCALHOST]/basic-auth/simple/executable-application/
+      cause: Failed to fetch: `http://[LOCALHOST]/basic-auth/simple/executable-application/`
+      cause: Missing credentials for http://[LOCALHOST]/basic-auth/simple/executable-application/
     ");
 
     // Attempt to upgrade.
@@ -5644,9 +5642,9 @@ fn tool_install_find_links() {
         .arg("basic-app"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × No solution found when resolving tool dependencies:
-      ╰─▶ Because basic-app==0.1 needs to be downloaded from a registry and only basic-app==0.1 is available, we can conclude that all versions of basic-app cannot be used.
-          And because you require basic-app, we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving tool dependencies
+      cause: Because basic-app==0.1 needs to be downloaded from a registry and only basic-app==0.1 is available, we can conclude that all versions of basic-app cannot be used.
+             And because you require basic-app, we can conclude that your requirements are unsatisfiable.
 
     hint: Packages were unavailable because the network was disabled. When the network is disabled, registry packages may only be read from the cache.
     ");
@@ -5906,14 +5904,14 @@ fn tool_install_lock_verifies_hashes() -> Result<()> {
         .env(EnvVars::PATH, bin_dir.as_os_str()), @r#"
     exit_code: 1 (failure)
     ----- stderr -----
-      × Failed to read `simple-launcher @ file://[WORKSPACE]/test/links/simple_launcher-0.1.0-py3-none-any.whl`
-      ╰─▶ Hash mismatch for `simple-launcher @ file://[WORKSPACE]/test/links/simple_launcher-0.1.0-py3-none-any.whl`
+    error: Failed to read `simple-launcher @ file://[WORKSPACE]/test/links/simple_launcher-0.1.0-py3-none-any.whl`
+      cause: Hash mismatch for `simple-launcher @ file://[WORKSPACE]/test/links/simple_launcher-0.1.0-py3-none-any.whl`
 
-          Expected:
-            sha256:0000000000000000000000000000000000000000000000000000000000000000
+             Expected:
+               sha256:0000000000000000000000000000000000000000000000000000000000000000
 
-          Computed:
-            sha256:5327e0bb67cdb46800999de6dcf034bf0a5335702883494af0d8b7f6ca48cee4
+             Computed:
+               sha256:5327e0bb67cdb46800999de6dcf034bf0a5335702883494af0d8b7f6ca48cee4
     "#);
 
     Ok(())
@@ -6000,6 +5998,37 @@ fn tool_install_lock_refreshes_local_directory_constraint() -> Result<()> {
      - simple-launcher==1.0.0 (from file://[TEMP_DIR]/simple-launcher)
      + simple-launcher==2.0.0 (from file://[TEMP_DIR]/simple-launcher)
     Installed 1 executable: simple-launcher
+    ");
+
+    // A validation warning should retain the parse error that prevents reusing the tool lock.
+    local_package.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "simple-launcher"
+        version = 42
+    "#})?;
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("simple-launcher")
+        .arg("--constraints")
+        .arg(constraints_txt.as_os_str())
+        .arg("--offline")
+        .env(EnvVars::UV_PREVIEW_FEATURES, "tool-install-locks")
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    warning: Failed to validate existing tool lock
+      cause: Failed to parse `[TEMP_DIR]/simple-launcher/pyproject.toml`
+      cause: TOML parse error at line 3, column 11
+               |
+             3 | version = 42
+               |           ^^
+             invalid type: integer `42`, expected a string
+    error: Failed to build `simple-launcher @ file://[TEMP_DIR]/simple-launcher`
+      cause: Failed to parse metadata from built wheel
+      cause: TOML parse error at line 3, column 11
+               |
+             3 | version = 42
+               |           ^^
+             invalid type: integer `42`, expected a string
     ");
 
     Ok(())

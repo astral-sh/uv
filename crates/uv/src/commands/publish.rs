@@ -198,7 +198,7 @@ async fn publish_files(
                 }
                 write_error_chain_with_options(
                     err.as_ref(),
-                    Hints::none(),
+                    &Hints::none(),
                     ErrorOptions::default().with_stream(printer.stderr()),
                 )?;
                 error_count += 1;
@@ -394,7 +394,7 @@ async fn gather_credentials(
             anyhow::Error::from(err)
                 .context("Trusted publishing failed")
                 .as_ref(),
-            Hints::none(),
+            &Hints::none(),
             ErrorOptions::default().with_stream(printer.stderr()),
         )?;
     }

@@ -41,7 +41,7 @@ use uv_settings::PythonInstallMirrors;
 use uv_types::{
     BuildContext, BuildIsolation, EmptyInstalledPackages, HashStrategy, SourceTreeEditablePolicy,
 };
-use uv_warnings::{warn_user, warn_user_once};
+use uv_warnings::{warn_user, warn_user_once, warn_user_with_chain};
 use uv_workspace::{
     DiscoveryOptions, Editability, VirtualProject, WorkspaceCache, WorkspaceMember,
 };
@@ -54,7 +54,7 @@ use crate::commands::project::{
     script_extra_build_requires,
 };
 use crate::commands::reporters::{PythonDownloadReporter, ResolverReporter};
-use crate::commands::{ExitStatus, ScriptPath, UvError, diagnostics, pip};
+use crate::commands::{ExitStatus, ScriptPath, UvError, pip};
 use crate::printer::Printer;
 use crate::settings::{FrozenSource, LockCheck, LockedSource, ResolverSettings};
 
@@ -270,10 +270,7 @@ pub(crate) async fn lock(
         Err(err @ (ProjectError::LockMismatch(..) | ProjectError::LockFormat(..))) => {
             Err(UvError::user(err).into())
         }
-        Err(ProjectError::Operation(err)) => diagnostics::OperationDiagnostic::default()
-            .report(err)
-            .map_or(Ok(ExitStatus::Failure), |err| Err(err.into())),
-        Err(err) => Err(err.into()),
+        Err(err) => Err(UvError::from(err).into()),
     }
 }
 
@@ -974,7 +971,11 @@ async fn do_lock(
                 return Err(ProjectError::Lock(err));
             }
             Err(err) => {
-                warn_user!("Failed to validate existing lockfile: {err}");
+                warn_user_with_chain!(
+                    anyhow::Error::from(err)
+                        .context("Failed to validate existing lockfile")
+                        .as_ref()
+                );
                 None
             }
         }

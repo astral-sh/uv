@@ -413,7 +413,7 @@ impl Osv {
                 req,
                 &cache_entry,
                 CacheControl::Override(VULN_CACHE_CONTROL.clone()),
-                async |response| response.json::<Vulnerability>().await,
+                async |response, _| response.json::<Vulnerability>().await,
             )
             .await
             .map_err(|err| match err {

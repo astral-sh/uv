@@ -68,7 +68,7 @@ pub enum BuildDispatchError {
     Lookahead(#[from] uv_requirements::Error),
 }
 
-impl uv_errors::Hint for BuildDispatchError {
+impl uv_errors::Hinted for BuildDispatchError {
     fn hints(&self) -> uv_errors::Hints<'_> {
         match self {
             Self::BuildFrontend(err) => err.hints(),
@@ -92,6 +92,20 @@ impl uv_errors::Hint for BuildDispatchError {
 }
 
 impl IsBuildBackendError for BuildDispatchError {
+    fn is_user_failure(&self) -> bool {
+        match self {
+            Self::BuildFrontend(error) => error.is_user_failure(),
+            Self::Resolve(error) => error.is_user_failure(),
+            Self::Prepare(error) => error.is_user_failure(),
+            Self::Lookahead(error) => error.is_user_failure(),
+            Self::Anyhow(error) => error
+                .chain()
+                .find_map(|cause| cause.downcast_ref::<uv_resolver::ResolveError>())
+                .is_some_and(uv_resolver::ResolveError::is_user_failure),
+            Self::Tags(_) | Self::Join(_) => false,
+        }
+    }
+
     fn is_build_backend_error(&self) -> bool {
         match self {
             Self::Tags(_)

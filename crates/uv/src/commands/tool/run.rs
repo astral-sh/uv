@@ -22,6 +22,7 @@ use uv_distribution_types::{
     IndexCapabilities, IndexUrl, Name, NameRequirementSpecification, Requirement,
     RequirementSource, UnresolvedRequirement, UnresolvedRequirementSpecification,
 };
+use uv_errors::HintOrdering;
 use uv_installer::{InstallationStrategy, SatisfiesResult, SitePackages};
 use uv_normalize::PackageName;
 use uv_pep440::{VersionSpecifier, VersionSpecifiers};
@@ -54,9 +55,7 @@ use crate::commands::project::{
 use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::tool::common::{ToolPython, matching_packages, refine_interpreter};
 use crate::commands::tool::{Target, ToolRequest};
-use crate::commands::{
-    UvError, diagnostics, project::environment::CachedEnvironment, read_env_files,
-};
+use crate::commands::{UvError, project::environment::CachedEnvironment, read_env_files};
 use crate::printer::Printer;
 use crate::settings::ResolverInstallerSettings;
 use crate::settings::ResolverSettings;
@@ -76,6 +75,53 @@ impl Display for ToolRunCommand {
             Self::Uvx => write!(f, "uvx"),
             Self::ToolRun => write!(f, "uv tool run"),
         }
+    }
+}
+
+/// Context for invocation mistakes that are specific to `uv tool run` and `uvx`.
+#[derive(Debug)]
+enum ToolRunUsageContext {
+    UvxRun {
+        arguments: String,
+    },
+    Verbose {
+        verbose_flag: String,
+        target: String,
+        invocation_source: ToolRunCommand,
+    },
+}
+
+/// A tool resolution failure with context for correcting a likely invocation mistake.
+#[derive(Debug, thiserror::Error)]
+#[error("Failed to run tool")]
+pub(crate) struct ToolRunUsageError {
+    #[source]
+    cause: anyhow::Error,
+    context: ToolRunUsageContext,
+}
+
+impl uv_errors::Hinted for ToolRunUsageError {
+    fn hints(&self) -> uv_errors::Hints<'_> {
+        uv_errors::Hints::from(match &self.context {
+            ToolRunUsageContext::UvxRun { arguments } => format!(
+                "`{}` invokes the `{}` package. Did you mean `{}`?",
+                format!("uvx run {arguments}").green(),
+                "run".cyan(),
+                format!("uvx {arguments}").green()
+            ),
+            ToolRunUsageContext::Verbose {
+                verbose_flag,
+                target,
+                invocation_source,
+            } => format!(
+                "You provided `{}` to `{}`. Did you mean to provide it to `{}`? e.g., `{}`",
+                verbose_flag.cyan(),
+                target.cyan(),
+                invocation_source.to_string().cyan(),
+                format!("{invocation_source} {verbose_flag} {target}").green()
+            ),
+        })
+        .with_ordering(HintOrdering::Last)
     }
 }
 
@@ -289,40 +335,43 @@ pub(crate) async fn run(
             // If the user ran `uvx run ...`, the `run` is likely a mistake. Show a dedicated hint.
             if from.is_none() && invocation_source == ToolRunCommand::Uvx && target == "run" {
                 let rest = args.iter().map(|s| s.to_string_lossy()).join(" ");
-                return diagnostics::OperationDiagnostic::default()
-                    .with_hint(format!(
-                        "`{}` invokes the `{}` package. Did you mean `{}`?",
-                        format!("uvx run {rest}").green(),
-                        "run".cyan(),
-                        format!("uvx {rest}").green()
-                    ))
-                    .with_context("tool")
-                    .report(err)
-                    .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+                return Err(UvError::from(err.with_resolution_context("tool"))
+                    .map_user(|cause| {
+                        ToolRunUsageError {
+                            cause,
+                            context: ToolRunUsageContext::UvxRun { arguments: rest },
+                        }
+                        .into()
+                    })
+                    .into());
             }
 
-            let diagnostic = diagnostics::OperationDiagnostic::default();
-            let diagnostic = if let Some(verbose_flag) = find_verbose_flag(args) {
-                diagnostic.with_hint(format!(
-                    "You provided `{}` to `{}`. Did you mean to provide it to `{}`? e.g., `{}`",
-                    verbose_flag.cyan(),
-                    target.cyan(),
-                    invocation_source.to_string().cyan(),
-                    format!("{invocation_source} {verbose_flag} {target}").green()
-                ))
-            } else {
-                diagnostic.with_context("tool")
-            };
-            return diagnostic
-                .report(err)
-                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+            if let Some(verbose_flag) = find_verbose_flag(args) {
+                return Err(UvError::from(err)
+                    .map_user(|cause| {
+                        ToolRunUsageError {
+                            cause,
+                            context: ToolRunUsageContext::Verbose {
+                                verbose_flag: verbose_flag.to_string(),
+                                target: target.to_string(),
+                                invocation_source,
+                            },
+                        }
+                        .into()
+                    })
+                    .into());
+            }
+
+            return Err(UvError::from(err.with_resolution_context("tool")).into());
         }
 
         Err(ProjectError::Requirements(err)) => {
-            let err = anyhow::Error::new(err).context("Failed to resolve `--with` requirement");
-            return Err(UvError::user(err).into());
+            return Err(UvError::from(
+                operations::Error::Requirements(err).with_resolution_context("`--with`"),
+            )
+            .into());
         }
-        Err(err) => return Err(err.into()),
+        Err(err) => return Err(UvError::from(err).into()),
     };
 
     // TODO(zanieb): Determine the executable command via the package entry points
@@ -1242,9 +1291,9 @@ pub(crate) enum ToolRunScriptError {
     },
 }
 
-impl uv_errors::Hint for ToolRunScriptError {
+impl uv_errors::Hinted for ToolRunScriptError {
     fn hints(&self) -> uv_errors::Hints<'_> {
-        uv_errors::Hints::from(match self {
+        let message = match self {
             Self::FromScript {
                 package_name,
                 target,
@@ -1267,6 +1316,9 @@ impl uv_errors::Hint for ToolRunScriptError {
                 package_name.cyan(),
                 format!("{invocation} --from {package_name} {target}").green(),
             ),
-        })
+        };
+        uv_errors::Hints::from(
+            uv_errors::Hint::new(message).with_ordering(uv_errors::HintOrdering::Last),
+        )
     }
 }

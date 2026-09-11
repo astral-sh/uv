@@ -35,7 +35,7 @@ use uv_redacted::DisplaySafeUrl;
 use uv_redacted::DisplaySafeUrlError;
 use uv_static::EnvVars;
 use uv_version::version;
-use uv_warnings::warn_user_once;
+use uv_warnings::warn_user_once_with_chain;
 
 use crate::linehaul::LineHaul;
 use crate::middleware::{AzureStorageMiddleware, OfflineMiddleware};
@@ -71,6 +71,16 @@ pub enum ClientBuildError {
     Credentials(#[from] CredentialsFromUrlError),
     #[error(transparent)]
     IndexCredentials(#[from] IndexCredentialsError),
+}
+
+impl ClientBuildError {
+    /// Return whether this is an expected user-facing failure.
+    pub fn is_user_failure(&self) -> bool {
+        match self {
+            Self::Credentials(_) | Self::IndexCredentials(_) => true,
+            Self::Reqwest(_) => false,
+        }
+    }
 }
 
 /// Selectively skip parts or the entire auth middleware.
@@ -625,7 +635,11 @@ impl<'a> BaseClientBuilder<'a> {
             match read_identity(&ssl_client_cert) {
                 Ok(identity) => client_builder.identity(identity),
                 Err(err) => {
-                    warn_user_once!("Ignoring invalid `SSL_CLIENT_CERT`: {err}");
+                    warn_user_once_with_chain!(
+                        anyhow::Error::from(err)
+                            .context("Ignoring invalid `SSL_CLIENT_CERT`")
+                            .as_ref()
+                    );
                     client_builder
                 }
             }

@@ -336,7 +336,7 @@ impl TestContext {
     #[must_use]
     pub fn with_filtered_missing_file_error(mut self) -> Self {
         // The exact message string depends on the system language, so we remove it.
-        // We want to only remove the phrase after `Caused by:`
+        // Keep the severity or cause prefix while removing the operating system's message.
         self.filters.push((
             r"[^:\n]* \(os error 2\)".to_string(),
             " [OS ERROR 2]".to_string(),

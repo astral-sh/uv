@@ -54,7 +54,7 @@ pub enum MetadataError {
     IncompleteSourceGroup(PackageName, GroupName),
 }
 
-impl uv_errors::Hint for MetadataError {
+impl uv_errors::Hinted for MetadataError {
     fn hints(&self) -> uv_errors::Hints<'_> {
         match self {
             Self::LoweringError(_, err) | Self::GroupLoweringError(_, _, err) => err.hints(),

@@ -6,7 +6,7 @@ use owo_colors::OwoColorize;
 use thiserror::Error;
 use tracing::{Level, debug, enabled, warn};
 
-use uv_errors::{Hint, Hints};
+use uv_errors::{Hinted, Hints};
 
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
@@ -52,7 +52,7 @@ use crate::commands::pip::operations::{report_interpreter, report_target_environ
 use crate::commands::pip::{operations, resolution_markers, resolution_tags};
 use crate::commands::pylock::{read_pylock_toml, resolve_pylock_toml};
 use crate::commands::reporters::PythonDownloadReporter;
-use crate::commands::{ExitStatus, diagnostics};
+use crate::commands::{ExitStatus, UvError};
 use crate::printer::Printer;
 
 /// The interpreter is externally managed and cannot be modified.
@@ -64,7 +64,7 @@ pub(crate) struct ExternallyManagedError {
     system: bool,
 }
 
-impl Hint for ExternallyManagedError {
+impl Hinted for ExternallyManagedError {
     fn hints(&self) -> Hints<'_> {
         if self.system {
             Hints::from("Virtual environments were not considered due to the `--system` flag")
@@ -603,9 +603,7 @@ pub(crate) async fn pip_install(
         {
             Ok((graph, hasher)) => (Resolution::from(graph), hasher),
             Err(err) => {
-                return diagnostics::OperationDiagnostic::default()
-                    .report(err)
-                    .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+                return Err(UvError::from(err).into());
             }
         };
 
@@ -682,9 +680,7 @@ pub(crate) async fn pip_install(
     {
         Ok(..) => {}
         Err(err) => {
-            return diagnostics::OperationDiagnostic::default()
-                .report(err)
-                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+            return Err(UvError::from(err).into());
         }
     }
 

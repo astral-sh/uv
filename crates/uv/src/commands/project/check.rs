@@ -30,12 +30,12 @@ use crate::commands::project::install_target::InstallTarget;
 use crate::commands::project::lock::LockMode;
 use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{
-    LinkErrorReporting, ProjectEnvironment, ProjectEnvironmentPolicy, ProjectError,
-    ProjectInterpreter, ScriptEnvironment, ScriptInterpreter, UniversalState, WorkspacePython,
+    LinkErrorReporting, ProjectEnvironment, ProjectEnvironmentPolicy, ProjectInterpreter,
+    ScriptEnvironment, ScriptInterpreter, UniversalState, WorkspacePython,
     default_dependency_groups, validate_project_requires_python,
 };
 use crate::commands::reporters::PythonDownloadReporter;
-use crate::commands::{ExitStatus, diagnostics, project};
+use crate::commands::{ExitStatus, UvError, project};
 use crate::printer::Printer;
 use crate::settings::{FrozenSource, LockCheck, ResolverInstallerSettings};
 
@@ -429,12 +429,7 @@ pub(crate) async fn check(
         .await
         {
             Ok(result) => result,
-            Err(ProjectError::Operation(err)) => {
-                return diagnostics::OperationDiagnostic::default()
-                    .report(err)
-                    .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
-            }
-            Err(err) => return Err(err.into()),
+            Err(err) => return Err(UvError::from(err).into()),
         };
 
         let marker_environment = venv.interpreter().to_resolver_marker_environment();
@@ -486,12 +481,7 @@ pub(crate) async fn check(
         .await
         {
             Ok(_) => {}
-            Err(ProjectError::Operation(err)) => {
-                return diagnostics::OperationDiagnostic::default()
-                    .report(err)
-                    .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
-            }
-            Err(err) => return Err(err.into()),
+            Err(err) => return Err(UvError::from(err).into()),
         }
 
         if no_sync {
@@ -604,12 +594,7 @@ pub(crate) async fn check(
         .await
         {
             Ok(result) => result,
-            Err(ProjectError::Operation(err)) => {
-                return diagnostics::OperationDiagnostic::default()
-                    .report(err)
-                    .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
-            }
-            Err(err) => return Err(err.into()),
+            Err(err) => return Err(UvError::from(err).into()),
         };
 
         let target = project::sync::identify_project_installation_target(
@@ -672,12 +657,7 @@ pub(crate) async fn check(
                 .await
                 {
                     Ok(environment) => environment,
-                    Err(ProjectError::Operation(err)) => {
-                        return diagnostics::OperationDiagnostic::default()
-                            .report(err)
-                            .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
-                    }
-                    Err(err) => return Err(err.into()),
+                    Err(err) => return Err(UvError::from(err).into()),
                 };
                 malware_context.record_resolution(&resolution);
                 PythonEnvironment::from(environment)
@@ -724,12 +704,7 @@ pub(crate) async fn check(
             .await
             {
                 Ok(_) => {}
-                Err(ProjectError::Operation(err)) => {
-                    return diagnostics::OperationDiagnostic::default()
-                        .report(err)
-                        .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
-                }
-                Err(err) => return Err(err.into()),
+                Err(err) => return Err(UvError::from(err).into()),
             }
         }
 

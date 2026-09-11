@@ -221,7 +221,7 @@ impl fmt::Display for IncompatibleWheelError {
 
 impl std::error::Error for IncompatibleWheelError {}
 
-impl uv_errors::Hint for IncompatibleWheelError {
+impl uv_errors::Hinted for IncompatibleWheelError {
     fn hints(&self) -> uv_errors::Hints<'_> {
         if let Some(hint) = &self.compatibility_hint {
             uv_errors::Hints::from(hint.to_string())

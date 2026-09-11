@@ -1646,7 +1646,7 @@ pub enum SourceError {
     EmptySources,
 }
 
-impl uv_errors::Hint for SourceError {
+impl uv_errors::Hinted for SourceError {
     fn hints(&self) -> uv_errors::Hints<'_> {
         match self {
             Self::OverlappingMarkers(_, rhs, replacement) => {

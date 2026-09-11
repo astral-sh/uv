@@ -7,19 +7,21 @@ use std::sync::Arc;
 use std::task::{Context, Poll};
 
 use futures::{FutureExt, TryStreamExt};
+use http_content_range::{ContentRange, ContentRangeBytes, ContentRangeUnbound};
 use rayon::in_place_scope;
 use rayon::prelude::*;
 use rustc_hash::FxHashMap;
-use tokio::io::{AsyncRead, AsyncSeekExt, ReadBuf};
+use tokio::io::{AsyncRead, AsyncSeekExt, AsyncWriteExt, ReadBuf};
 use tokio::sync::Semaphore;
 use tokio_util::compat::FuturesAsyncReadCompatExt;
-use tracing::{Instrument, info_span, instrument, warn};
+use tracing::{Instrument, debug, info_span, instrument, warn};
 use url::Url;
 
 use uv_cache::{ArchiveFileId, ArchiveId, Cache, CacheBucket, CacheEntry, WheelCache};
 use uv_cache_info::{CacheInfo, Timestamp};
 use uv_client::{
     CacheControl, CachedClientError, Connectivity, DataWithCachePolicy, RegistryClient,
+    RequestBuilder, RetryState,
 };
 use uv_configuration::initialize_rayon_once;
 use uv_distribution_filename::WheelFilename;
@@ -704,19 +706,26 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
     }
 
     /// Stream a wheel from a URL, unzipping it into the cache as it's downloaded.
+    ///
+    /// Note that `progress_size_hint` is a size hint for the progress reporter,
+    /// and is not guaranteed to be the true size of the wheel if/when fetched from the
+    /// origin.
     async fn stream_wheel(
         &self,
         url: DisplaySafeUrl,
         index: Option<&IndexUrl>,
         filename: &WheelFilename,
-        size: Option<u64>,
+        progress_size_hint: Option<u64>,
         wheel_entry: &CacheEntry,
         dist: &BuiltDist,
         hashes: ArchiveHashPolicy<'_>,
     ) -> Result<Archive, Error> {
+        // Sometimes we can promote the size hint to a trusted effective size.
         let expected_size = match dist {
-            BuiltDist::Registry(dist) if dist.best_wheel().size_is_authoritative => size,
-            BuiltDist::DirectUrl(_) => size,
+            BuiltDist::Registry(dist) if dist.best_wheel().size_is_authoritative => {
+                progress_size_hint
+            }
+            BuiltDist::DirectUrl(_) => progress_size_hint,
             _ => None,
         };
 
@@ -726,14 +735,14 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         // Create an entry for the HTTP cache.
         let http_entry = wheel_entry.with_file(format!("{}.http", filename.cache_key()));
 
-        let download = |response: reqwest::Response| {
+        let download = |response: reqwest::Response, _: &mut RetryState| {
             async {
-                let progress_size = size.or_else(|| content_length(&response));
+                let progress_size_hint = progress_size_hint.or_else(|| content_length(&response));
 
                 let progress = self.reporter.as_ref().map(|reporter| {
                     (
                         reporter,
-                        reporter.on_download_start(dist.name(), progress_size),
+                        reporter.on_download_start(dist.name(), progress_size_hint),
                     )
                 });
 
@@ -884,23 +893,28 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
     }
 
     /// Download a wheel from a URL, then unzip it into the cache.
+    ///
+    /// Note that, like [`Self::stream_wheel`], `progress_size_hint` is
+    /// a size hint for the progress reporter, and is not guaranteed to be the size
+    /// of the wheel if/when fetched from the origin.
     async fn download_wheel(
         &self,
         url: DisplaySafeUrl,
         index: Option<&IndexUrl>,
         filename: &WheelFilename,
-        size: Option<u64>,
+        progress_size_hint: Option<u64>,
         wheel_entry: &CacheEntry,
         dist: &BuiltDist,
         hashes: ArchiveHashPolicy<'_>,
     ) -> Result<Archive, Error> {
+        // Sometimes we can promote the size hint to a trusted effective size.
         let expected_size = match dist {
-            BuiltDist::Registry(dist) if dist.best_wheel().size_is_authoritative => size,
-            BuiltDist::DirectUrl(_) => size,
+            BuiltDist::Registry(dist) if dist.best_wheel().size_is_authoritative => {
+                progress_size_hint
+            }
+            BuiltDist::DirectUrl(_) => progress_size_hint,
             _ => None,
         };
-
-        let content_addressed_cache = self.content_addressed_cache;
 
         // Acquire an advisory lock, to guard against concurrent writes.
         let _lock = Self::lock_wheel(wheel_entry, filename).await?;
@@ -908,99 +922,22 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         // Create an entry for the HTTP cache.
         let http_entry = wheel_entry.with_file(format!("{}.http", filename.cache_key()));
 
-        let download = |response: reqwest::Response| {
-            async {
-                let progress_size = size.or_else(|| content_length(&response));
+        let download_url = url.clone();
 
-                let progress = self.reporter.as_ref().map(|reporter| {
-                    (
-                        reporter,
-                        reporter.on_download_start(dist.name(), progress_size),
-                    )
-                });
-
-                let reader = response
-                    .bytes_stream()
-                    .map_err(|err| self.handle_response_errors(err))
-                    .into_async_read();
-                let algorithms = http_hash_algorithms(hashes);
-                let mut hashers = algorithms.into_iter().map(Hasher::from).collect::<Vec<_>>();
-                let mut hasher = uv_extract::hash::HashReader::new(reader.compat(), &mut hashers);
-
-                // Download the wheel to a temporary file.
-                let temp_file = tempfile::tempfile_in(self.build_context.cache().root())
-                    .map_err(Error::CacheWrite)?;
-                let mut writer = tokio::io::BufWriter::new(fs_err::tokio::File::from_std(
-                    // It's an unnamed file on Linux so that's the best approximation.
-                    fs_err::File::from_parts(temp_file, self.build_context.cache().root()),
-                ));
-
-                match progress {
-                    Some((reporter, progress)) => {
-                        // Wrap the reader in a progress reporter. This will report 100% progress once
-                        // the download is complete, before the wheel is unzipped.
-                        let mut reader = ProgressReader::new(&mut hasher, progress, &**reporter);
-
-                        tokio::io::copy(&mut reader, &mut writer)
-                            .await
-                            .map_err(Error::CacheWrite)?;
-                    }
-                    None => {
-                        tokio::io::copy(&mut hasher, &mut writer)
-                            .await
-                            .map_err(Error::CacheWrite)?;
-                    }
-                }
-
-                if let Some(expected) = expected_size
-                    && hasher.bytes_read() != expected
-                {
-                    return Err(Error::MismatchedSize {
-                        distribution: dist.to_string(),
-                        expected,
-                        actual: hasher.bytes_read(),
-                    });
-                }
-
-                let actual_size = hasher.bytes_read();
-
-                // Unzip the wheel to a temporary directory.
-                let extractor =
-                    WheelExtractor::new(self.build_context.cache().root(), content_addressed_cache)
-                        .map_err(Error::CacheWrite)?;
-                let mut file = writer.into_inner();
-                file.seek(io::SeekFrom::Start(0))
-                    .await
-                    .map_err(Error::CacheWrite)?;
-
-                let file = file.into_std().await;
-                let mut extracted =
-                    tokio::task::spawn_blocking(move || extractor.extract_seekable(file))
-                        .await?
-                        .map_err(|err| Error::Extract(filename.to_string(), err))?;
-                let hashes = hashers.into_iter().map(HashDigest::from).collect();
-
-                // Before we make the wheel accessible by persisting it, ensure that the RECORD is
-                // valid.
-                extracted.validate_and_heal_record(dist)?;
-
-                // Persist the temporary directory to the directory store.
-                let id = self
-                    .persist_extracted_wheel(extracted, wheel_entry.path())
-                    .await?;
-
-                if let Some((reporter, progress)) = progress {
-                    reporter.on_download_complete(dist.name(), progress);
-                }
-
-                Ok(Archive::new(
-                    id,
-                    hashes,
-                    filename.clone(),
-                    Some(actual_size),
-                ))
-            }
+        let download = async |response, retry_state: &mut RetryState| {
+            self.download_wheel_response(
+                response,
+                &download_url,
+                retry_state,
+                filename,
+                progress_size_hint,
+                expected_size,
+                wheel_entry,
+                dist,
+                hashes,
+            )
             .instrument(info_span!("wheel", wheel = %dist))
+            .await
         };
 
         // Fetch the archive from the cache, or download it if necessary.
@@ -1081,6 +1018,299 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         };
 
         Ok(archive)
+    }
+
+    /// Download and extract a wheel from an HTTP response.
+    ///
+    /// This helper is called by [`Self::download_wheel`] and handles partial content/resumptions
+    /// of interrupted downloads if the origin supports it. Hard failures are propagated
+    /// back to the caller and thus to our general retry machinery.
+    ///
+    /// The caller is responsible for obtaining a lock on the wheel cache.
+    async fn download_wheel_response(
+        &self,
+        mut response: reqwest::Response,
+        url: &DisplaySafeUrl,
+        retry_state: &mut RetryState,
+        filename: &WheelFilename,
+        progress_size_hint: Option<u64>,
+        expected_size: Option<u64>,
+        wheel_entry: &CacheEntry,
+        dist: &BuiltDist,
+        hashes: ArchiveHashPolicy<'_>,
+    ) -> Result<Archive, Error> {
+        let progress_size_hint = progress_size_hint.or_else(|| content_length(&response));
+        let mut download_size = content_length(&response).or(expected_size);
+
+        let progress = self.reporter.as_ref().map(|reporter| {
+            (
+                reporter,
+                reporter.on_download_start(dist.name(), progress_size_hint),
+            )
+        });
+
+        let algorithms = http_hash_algorithms(hashes);
+
+        // Download the wheel to a temporary file.
+        let temp_file =
+            tempfile::tempfile_in(self.build_context.cache().root()).map_err(Error::CacheWrite)?;
+        let mut writer = tokio::io::BufWriter::new(fs_err::tokio::File::from_std(
+            // It's an unnamed file on Linux so that's the best approximation.
+            fs_err::File::from_parts(temp_file, self.build_context.cache().root()),
+        ));
+
+        // States for the download loop below.
+        let mut hashers = algorithms.into_iter().map(Hasher::from).collect::<Vec<_>>();
+        // The total number of bytes retrieved, accumulated over individual requests.
+        // Note that this is *not* the same as the number of bytes actually written
+        // to the temporary file, since a copy from the response to the file can fail.
+        let mut bytes_retrieved = 0;
+        // The most recent range request's starting offset.
+        let mut resumed_at = None;
+        // The `Content-Range` that the download was last resumed at.
+        let mut resumed_range: Option<ContentRangeBytes> = None;
+
+        // This loop is where we handle resumption of interrupted downloads, as well as
+        // range requests (if the origin supports them).
+        //
+        // Errors returned from this loop reach the outer retry classifier, which may restart
+        // the full download.
+        loop {
+            // Reject conflicting full-response lengths before reading the body. A range response's
+            // Content-Length describes only that range, so it cannot be compared to the wheel size.
+            if response.status() == reqwest::StatusCode::OK
+                && let (Some(expected), Some(actual)) = (expected_size, content_length(&response))
+                && expected != actual
+            {
+                return Err(Error::MismatchedContentLength {
+                    distribution: dist.to_string(),
+                    expected,
+                    actual,
+                });
+            }
+
+            // Check whether the response indicates range request support. A `206 Partial Content`
+            // implies range support while an `Accept-Ranges: bytes` header explicitly advertises it.
+            let supports_range_requests = response.status() == reqwest::StatusCode::PARTIAL_CONTENT
+                || response
+                    .headers()
+                    .get(reqwest::header::ACCEPT_RANGES)
+                    .is_some_and(|value| value == "bytes");
+
+            // A server can advertise range requests but ignore one. In that case, the
+            // response is a complete download and must replace the partial bytes.
+            let replaces_partial_download =
+                resumed_at.is_some() && response.status() != reqwest::StatusCode::PARTIAL_CONTENT;
+            if replaces_partial_download {
+                writer
+                    .get_mut()
+                    .set_len(0)
+                    .await
+                    .map_err(Error::CacheWrite)?;
+                writer
+                    .seek(io::SeekFrom::Start(0))
+                    .await
+                    .map_err(Error::CacheWrite)?;
+                hashers = http_hash_algorithms(hashes)
+                    .into_iter()
+                    .map(Hasher::from)
+                    .collect();
+                bytes_retrieved = 0;
+            }
+
+            let reader = response
+                .bytes_stream()
+                .map_err(|err| self.handle_response_errors(err))
+                .into_async_read();
+            let mut hasher = uv_extract::hash::HashReader::new(reader.compat(), &mut hashers);
+
+            // Drain the response. This could be a partial response or a full one.
+            // Note that the partial response here can take several forms: it can be an interrupted
+            // request *or* it can be a `206 Partial Content`.
+            let copy_result = match progress {
+                Some((reporter, progress)) => {
+                    // Wrap the reader in a progress reporter. This will report 100%
+                    // progress once the download is complete, before the wheel is unzipped.
+                    let mut reader = ProgressReader::new(&mut hasher, progress, &**reporter);
+
+                    tokio::io::copy(&mut reader, &mut writer)
+                        .await
+                        .map_err(Error::CacheWrite)
+                }
+                None => tokio::io::copy(&mut hasher, &mut writer)
+                    .await
+                    .map_err(Error::CacheWrite),
+            };
+
+            bytes_retrieved += hasher.bytes_read();
+
+            let interrupted = copy_result.is_err();
+            let err = match copy_result {
+                // Draining the response succeeded. However, the response could be a `206 Partial Content`,
+                // so we can't assume that we're done.
+                Ok(_) => {
+                    // No `resumed_range` means this was a normal full response, so there's
+                    // no resumption to do. We can leave the loop.
+                    let Some(range) = resumed_range else {
+                        break;
+                    };
+
+                    // We should be in sync with the origin. Failure here means that the
+                    // origin actually sent us an under- or over-length response. Treat this
+                    // as a non-retryable error, since the HTTP body was received successfully.
+                    //
+                    // Byte ranges are inclusive, not exclusive.
+                    if bytes_retrieved != range.last_byte + 1 {
+                        return Err(Error::MismatchedRangeSize {
+                            distribution: dist.to_string(),
+                            expected: range.last_byte - range.first_byte + 1,
+                            actual: hasher.bytes_read(),
+                        });
+                    }
+
+                    // We've successfully performed the download over one or more
+                    // range requests. We can leave the loop.
+                    if bytes_retrieved == range.complete_length {
+                        break;
+                    }
+
+                    // A successful range response may cover only part of the requested
+                    // bytes. Keep requesting the remainder before extracting the wheel.
+                    //
+                    // Observe that we don't return this error; we bind it for handling
+                    // below.
+                    Error::CacheWrite(io::Error::new(
+                        io::ErrorKind::UnexpectedEof,
+                        "Range response did not complete the download",
+                    ))
+                }
+                // Draining the response failed, potentially because the connection was interrupted.
+                // Like above, we don't return this error until we know how we want to treat it.
+                Err(err) => err,
+            };
+
+            // At this point we have *some* error state: either a synthetic error (from a
+            // partial response that did not complete the download) or a real error (e.g.
+            // from an interrupted download). We can only resume if certain conditions
+            // below are met.
+
+            // If the response replaces an already in-flight partial download or
+            // indicates a lack of range-request support, then we can't resume.
+            // Return the error back to the retry stack.
+            if replaces_partial_download || !supports_range_requests {
+                return Err(err);
+            }
+
+            // Some sanity checks: we should have made *some* progress as part of
+            // partial response, plus our writer's offset should agree with the number
+            // of bytes retrieved, *and* we should be making forward progress (i.e. not
+            // resuming behind where we already are).
+            writer.flush().await.map_err(Error::CacheWrite)?;
+            let offset = writer
+                .get_mut()
+                .stream_position()
+                .await
+                .map_err(Error::CacheWrite)?;
+            if offset == 0
+                || offset != bytes_retrieved
+                || resumed_at.is_some_and(|previous| offset <= previous)
+            {
+                return Err(err);
+            }
+
+            // Recovering from a failed body consumes the same budget as a full restart.
+            // A successfully completed range needs no retry, even if more bytes remain.
+            if interrupted {
+                let Some(backoff) = retry_state.should_retry(&err, 0) else {
+                    return Err(err);
+                };
+                retry_state.sleep_backoff(backoff).await;
+            }
+
+            // Finally our resumption, which is a range request.
+            debug!("Resuming download of {url} at byte {offset}");
+            let resumed_response = retry_state
+                .send(self.request_with_offset(url.clone(), offset))
+                .await?;
+
+            // A chunked response can fail after all wheel bytes arrive, leaving no satisfiable
+            // range. Return the original error so the outer retry policy can restart in full.
+            if resumed_response.status() == reqwest::StatusCode::RANGE_NOT_SATISFIABLE {
+                debug!("Range not satisfiable while resuming {url}; abandoning resumed download");
+                return Err(err);
+            }
+            resumed_response.error_for_status_ref()?;
+
+            resumed_range = if resumed_response.status() == reqwest::StatusCode::PARTIAL_CONTENT {
+                // The origin honored our range request, so we update `resumed_range`
+                // for the next iteration.
+                let Some(range) = content_range(&resumed_response, offset, download_size) else {
+                    warn!(
+                        "Invalid range request response from server that declares HTTP range \
+                         request support, abandoning resumed download: {url}"
+                    );
+                    return Err(err);
+                };
+                download_size = Some(range.complete_length);
+                Some(range)
+            } else {
+                // The origin is allowed to ignore our range request and send a full response instead.
+                // That means we have no `resumed_range` to honor on the next iteration.
+                None
+            };
+
+            response = resumed_response;
+            resumed_at = Some(offset);
+        }
+
+        // We've left the resumption loop.
+        // Sanity check: we should have written as many bytes as we expected.
+        if let Some(expected) = expected_size
+            && bytes_retrieved != expected
+        {
+            return Err(Error::MismatchedSize {
+                distribution: dist.to_string(),
+                expected,
+                actual: bytes_retrieved,
+            });
+        }
+
+        // Unzip the wheel to a temporary directory.
+        let extractor = WheelExtractor::new(
+            self.build_context.cache().root(),
+            self.content_addressed_cache,
+        )
+        .map_err(Error::CacheWrite)?;
+        let mut file = writer.into_inner();
+        file.seek(io::SeekFrom::Start(0))
+            .await
+            .map_err(Error::CacheWrite)?;
+
+        let file = file.into_std().await;
+        let mut extracted = tokio::task::spawn_blocking(move || extractor.extract_seekable(file))
+            .await?
+            .map_err(|err| Error::Extract(filename.to_string(), err))?;
+        let hashes = hashers.into_iter().map(HashDigest::from).collect();
+
+        // Before we make the wheel accessible by persisting it, ensure that the RECORD is
+        // valid.
+        extracted.validate_and_heal_record(dist)?;
+
+        // Persist the temporary directory to the directory store.
+        let id = self
+            .persist_extracted_wheel(extracted, wheel_entry.path())
+            .await?;
+
+        if let Some((reporter, progress)) = progress {
+            reporter.on_download_complete(dist.name(), progress);
+        }
+
+        Ok(Archive::new(
+            id,
+            hashes,
+            filename.clone(),
+            Some(bytes_retrieved),
+        ))
     }
 
     /// Load a wheel from a local path.
@@ -1293,6 +1523,21 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             .build()
     }
 
+    /// Build a GET request with a `Range: bytes=<offset>-` header.
+    ///
+    /// Used to resume an interrupted download from `offset` bytes into the file.
+    fn request_with_offset(&self, url: DisplaySafeUrl, offset: u64) -> RequestBuilder<'_> {
+        self.client
+            .unmanaged
+            .uncached_client(&url)
+            .get(Url::from(url))
+            .header(
+                "accept-encoding",
+                reqwest::header::HeaderValue::from_static("identity"),
+            )
+            .header(reqwest::header::RANGE, format!("bytes={offset}-"))
+    }
+
     /// Return the [`ManagedClient`] used by this resolver.
     pub fn client(&self) -> &ManagedClient<'a> {
         &self.client
@@ -1418,6 +1663,41 @@ fn content_length(response: &reqwest::Response) -> Option<u64> {
         .get(reqwest::header::CONTENT_LENGTH)
         .and_then(|val| val.to_str().ok())
         .and_then(|val| val.parse::<u64>().ok())
+}
+
+/// Return the bounds of a range response starting at `offset` with a known complete length.
+fn content_range(
+    response: &reqwest::Response,
+    offset: u64,
+    download_size: Option<u64>,
+) -> Option<ContentRangeBytes> {
+    let range = response
+        .headers()
+        .get(reqwest::header::CONTENT_RANGE)
+        .and_then(|value| value.to_str().ok())
+        .and_then(ContentRange::parse)?;
+
+    let range = match range {
+        ContentRange::Bytes(range) => range,
+        ContentRange::UnboundBytes(ContentRangeUnbound {
+            first_byte,
+            last_byte,
+        }) => ContentRangeBytes {
+            first_byte,
+            last_byte,
+            complete_length: download_size?,
+        },
+        ContentRange::Unsatisfied(_) => return None,
+    };
+
+    if range.first_byte != offset
+        || range.last_byte >= range.complete_length
+        || download_size.is_some_and(|size| size != range.complete_length)
+    {
+        return None;
+    }
+
+    Some(range)
 }
 
 /// An asynchronous reader that reports progress as bytes are read.

@@ -1289,9 +1289,9 @@ fn requirements_txt_frozen() -> Result<()> {
     uv_snapshot!(context.filters(), context.export().arg("--all-packages"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × Failed to build `project @ file://[TEMP_DIR]/`
-      ├─▶ Failed to parse entry: `child`
-      ╰─▶ `child` references a workspace in `tool.uv.sources` (e.g., `child = { workspace = true }`), but is not a workspace member
+    error: Failed to build `project @ file://[TEMP_DIR]/`
+      cause: Failed to parse entry: `child`
+      cause: `child` references a workspace in `tool.uv.sources` (e.g., `child = { workspace = true }`), but is not a workspace member
     ");
 
     uv_snapshot!(context.filters(), context.export().arg("--all-packages").arg("--frozen"), @r"
@@ -1658,18 +1658,18 @@ fn requirements_txt_ssh_git_username() -> Result<()> {
     uv_snapshot!(filters, context.export().env(EnvVars::GIT_SSH_COMMAND, failing_git_ssh_command), @r#"
     exit_code: 1 (failure)
     ----- stderr -----
-      × Failed to download and build `uv-private-pypackage @ git+ssh://git@github.com/astral-test/uv-private-pypackage.git@d780faf0ac91257d4d5a4f0c5a0e4509608c0071`
-      ├─▶ Git operation failed
-      ├─▶ failed to clone into: [PATH]
-      ├─▶ failed to fetch commit `d780faf0ac91257d4d5a4f0c5a0e4509608c0071`
-      ╰─▶ process didn't exit successfully: [GIT_COMMAND_ERROR]
-          --- stderr
-          Load key "[TEMP_DIR]/fake_deploy_key": [ERROR]
-          git@github.com: Permission denied (publickey).
-          fatal: Could not read from remote repository.
+    error: Failed to download and build `uv-private-pypackage @ git+ssh://git@github.com/astral-test/uv-private-pypackage.git@d780faf0ac91257d4d5a4f0c5a0e4509608c0071`
+      cause: Git operation failed
+      cause: failed to clone into: [PATH]
+      cause: failed to fetch commit `d780faf0ac91257d4d5a4f0c5a0e4509608c0071`
+      cause: process didn't exit successfully: [GIT_COMMAND_ERROR]
+             --- stderr
+             Load key "[TEMP_DIR]/fake_deploy_key": [ERROR]
+             git@github.com: Permission denied (publickey).
+             fatal: Could not read from remote repository.
 
-          Please make sure you have the correct access rights
-          and the repository exists.
+             Please make sure you have the correct access rights
+             and the repository exists.
     "#);
 
     let ssh_deploy_key = context.temp_dir.child("uv_test_key");
@@ -5499,7 +5499,7 @@ fn export_lock_workspace_mismatch_with_frozen() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.export().arg("--frozen"), @"
-    exit_code: 2 (failure)
+    exit_code: 1 (failure)
     ----- stderr -----
     error: The lockfile at `uv.lock` needs to be updated, but `--frozen` was provided: Missing workspace member `foo`.
 
@@ -6950,9 +6950,9 @@ fn cyclonedx_export_workspace_frozen() -> Result<()> {
     uv_snapshot!(context.filters(), context.export().arg("--format").arg("cyclonedx1.5").arg("--all-packages"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × Failed to build `project @ file://[TEMP_DIR]/`
-      ├─▶ Failed to parse entry: `child`
-      ╰─▶ `child` references a workspace in `tool.uv.sources` (e.g., `child = { workspace = true }`), but is not a workspace member
+    error: Failed to build `project @ file://[TEMP_DIR]/`
+      cause: Failed to parse entry: `child`
+      cause: `child` references a workspace in `tool.uv.sources` (e.g., `child = { workspace = true }`), but is not a workspace member
     ");
 
     uv_snapshot!(context.filters(), context.export().arg("--format").arg("cyclonedx1.5").arg("--all-packages").arg("--frozen").arg("--no-hashes"), @r#"

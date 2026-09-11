@@ -99,8 +99,7 @@ where
 pub enum CachedClientError<CallbackError: std::error::Error + 'static> {
     /// The client tracks retries internally.
     Client(Error),
-    /// Track retries before a callback explicitly, as we can't attach them to the callback error
-    /// type.
+    /// The callback error, with retry context attached by the outer request loop.
     Callback {
         retries: u32,
         err: CallbackError,
@@ -238,7 +237,7 @@ impl CachedClient {
     async fn get_cacheable<
         Payload: Cacheable + 'static,
         CallBackError: std::error::Error + 'static,
-        Callback: AsyncFn(Response) -> Result<Payload, CallBackError>,
+        Callback: AsyncFnOnce(Response) -> Result<Payload, CallBackError>,
     >(
         &self,
         req: Request,
@@ -462,17 +461,13 @@ impl CachedClient {
         response_callback: Callback,
     ) -> Result<Payload::Target, CachedClientError<CallBackError>> {
         let new_cache = info_span!("new_cache", file = %cache_entry.path().display());
-        // Capture retries from the retry middleware
-        let retries = response
-            .extensions()
-            .get::<reqwest_retry::RetryCount>()
-            .map(|retries| retries.value())
-            .unwrap_or_default();
         let data = response_callback(response)
             .boxed_local()
             .await
             .map_err(|err| CachedClientError::Callback {
-                retries,
+                // These retries are already counted in RetryState, so don't count them again.
+                // The outer loop fills in the total before returning the error to the caller.
+                retries: 0,
                 err,
                 duration: start.elapsed(),
             })?;
@@ -706,11 +701,14 @@ impl CachedClient {
     }
 
     /// Perform a [`CachedClient::get_serde`] request with a default retry strategy.
+    ///
+    /// The callback shares the request's [`RetryState`]. It must use that state for any retries
+    /// it performs and send subsequent requests through [`RetryState::send`].
     #[instrument(skip_all)]
     pub async fn get_serde_with_retry<
         Payload: Serialize + DeserializeOwned + Send + 'static,
         CallBackError: std::error::Error + 'static,
-        Callback: AsyncFn(Response) -> Result<Payload, CallBackError>,
+        Callback: AsyncFn(Response, &mut RetryState) -> Result<Payload, CallBackError>,
     >(
         &self,
         req: Request,
@@ -719,10 +717,15 @@ impl CachedClient {
         response_callback: Callback,
     ) -> Result<Payload, CachedClientError<CallBackError>> {
         let payload = self
-            .get_cacheable_with_retry(req, cache_entry, cache_control, async |resp| {
-                let payload = response_callback(resp).await?;
-                Ok(SerdeCacheable { inner: payload })
-            })
+            .get_cacheable_with_retry(
+                req,
+                cache_entry,
+                cache_control,
+                async |resp, retry_state| {
+                    let payload = response_callback(resp, retry_state).await?;
+                    Ok(SerdeCacheable { inner: payload })
+                },
+            )
             .await?;
         Ok(payload)
     }
@@ -734,7 +737,7 @@ impl CachedClient {
     pub(crate) async fn get_cacheable_with_retry<
         Payload: Cacheable + 'static,
         CallBackError: std::error::Error + 'static,
-        Callback: AsyncFn(Response) -> Result<Payload, CallBackError>,
+        Callback: AsyncFn(Response, &mut RetryState) -> Result<Payload, CallBackError>,
     >(
         &self,
         req: Request,
@@ -750,7 +753,11 @@ impl CachedClient {
                     fresh_req,
                     cache_entry,
                     cache_control.clone(),
-                    &response_callback,
+                    async |response| {
+                        retry_state
+                            .handle_response(response, &response_callback)
+                            .await
+                    },
                 )
                 .await;
 
@@ -768,11 +775,13 @@ impl CachedClient {
 
     /// Perform a [`CachedClient::skip_cache`] request with a default retry strategy.
     ///
+    /// The callback shares the request's [`RetryState`], as in [`Self::get_serde_with_retry`].
+    ///
     /// See: <https://github.com/TrueLayer/reqwest-middleware/blob/8a494c165734e24c62823714843e1c9347027e8a/reqwest-retry/src/middleware.rs#L137>
     pub async fn skip_cache_with_retry<
         Payload: Serialize + DeserializeOwned + Send + 'static,
         CallBackError: std::error::Error + 'static,
-        Callback: AsyncFn(Response) -> Result<Payload, CallBackError>,
+        Callback: AsyncFn(Response, &mut RetryState) -> Result<Payload, CallBackError>,
     >(
         &self,
         req: Request,
@@ -788,7 +797,11 @@ impl CachedClient {
                     fresh_req,
                     cache_entry,
                     cache_control.clone(),
-                    &response_callback,
+                    async |response| {
+                        retry_state
+                            .handle_response(response, &response_callback)
+                            .await
+                    },
                 )
                 .await;
 

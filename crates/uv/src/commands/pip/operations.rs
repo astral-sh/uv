@@ -25,7 +25,9 @@ use uv_distribution_types::{
     NameRequirementSpecification, PackageConfigSettings, Requirement, ResolutionDiagnostic,
     UnresolvedRequirement, UnresolvedRequirementSpecification, VersionOrUrlRef,
 };
-use uv_distribution_types::{DistributionMetadata, InstalledMetadata, Name, Resolution};
+use uv_distribution_types::{
+    DerivationChain, DistributionMetadata, InstalledMetadata, Name, Resolution,
+};
 use uv_fs::{CWD, Simplified, normalize_path_under};
 use uv_install_wheel::{LinkMode, installed_dist_info_path, read_record_into_iter};
 use uv_installer::{InstallationStrategy, Plan, Planner, Preparer, SitePackages};
@@ -42,8 +44,9 @@ use uv_requirements::{
     RequirementsSpecification, SourceTree, SourceTreeResolution, SourceTreeResolver,
 };
 use uv_resolver::{
-    DependencyMode, Exclusions, FlatIndex, InMemoryIndex, Manifest, Options, Preference,
-    Preferences, PythonRequirement, Resolver, ResolverEnvironment, ResolverOutput, UpgradePackages,
+    DependencyMode, Exclusions, FlatIndex, InMemoryIndex, Manifest, NoSolutionError,
+    NoSolutionHeader, Options, Preference, Preferences, PythonRequirement, ResolveError, Resolver,
+    ResolverEnvironment, ResolverOutput, UpgradePackages,
 };
 use uv_tool::InstalledTools;
 use uv_types::{BuildContext, HashStrategy, InFlight, InstalledPackagesProvider};
@@ -961,8 +964,10 @@ fn python_source_path_from_record(
 
 #[cfg(test)]
 mod tests {
-    use super::python_source_path_from_record;
+    use super::{Error, python_source_path_from_record};
+    use insta::assert_snapshot;
     use std::path::{Path, PathBuf};
+    use uv_normalize::PackageName;
 
     #[test]
     fn record_python_sources_stay_in_site_packages() {
@@ -993,6 +998,15 @@ mod tests {
             python_source_path_from_record(record_root, "package/data.txt", &site_packages),
             None
         );
+    }
+
+    #[test]
+    fn preparation_errors_are_transparent() -> Result<(), uv_normalize::InvalidNameError> {
+        let error = Error::Prepare(uv_installer::PrepareError::NoBuild(
+            PackageName::from_owned("demo".to_string())?,
+        ));
+        assert_snapshot!(error, @"Building source distributions is disabled, but attempted to build `demo`");
+        Ok(())
     }
 }
 
@@ -1370,11 +1384,18 @@ pub(crate) fn diagnose_environment<'a>(
 
 #[derive(thiserror::Error, Debug)]
 pub(crate) enum Error {
-    #[error("Failed to prepare distributions")]
+    #[error(transparent)]
     Prepare(#[from] uv_installer::PrepareError),
 
+    #[error("{header}")]
+    NoSolution {
+        header: NoSolutionHeader,
+        #[source]
+        source: Box<NoSolutionError>,
+    },
+
     #[error(transparent)]
-    Resolve(#[from] uv_resolver::ResolveError),
+    Resolve(#[from] ResolveError),
 
     #[error(transparent)]
     Uninstall(#[from] uv_installer::UninstallError),
@@ -1391,6 +1412,13 @@ pub(crate) enum Error {
     #[error(transparent)]
     Requirements(#[from] uv_requirements::Error),
 
+    #[error("Failed to resolve {context} requirement")]
+    RequirementsWithContext {
+        context: &'static str,
+        #[source]
+        source: uv_requirements::Error,
+    },
+
     #[error(transparent)]
     Anyhow(#[from] anyhow::Error),
 
@@ -1398,19 +1426,118 @@ pub(crate) enum Error {
     OutdatedEnvironment(Box<Changelog>),
 }
 
-impl uv_errors::Hint for Error {
+impl Error {
+    /// Add the default heading when this operation is the final command error.
+    ///
+    /// Nested operation errors may already have a more specific heading from their caller.
+    #[must_use]
+    pub(crate) fn with_default_resolution_context(self) -> Self {
+        match self {
+            Self::Resolve(ResolveError::NoSolution(source)) => Self::NoSolution {
+                header: NoSolutionHeader::new(source.environment().clone()),
+                source,
+            },
+            error @ (Self::Prepare(_)
+            | Self::NoSolution { .. }
+            | Self::Resolve(_)
+            | Self::Uninstall(_)
+            | Self::Hash(_)
+            | Self::Io(_)
+            | Self::Fmt(_)
+            | Self::Requirements(_)
+            | Self::RequirementsWithContext { .. }
+            | Self::Anyhow(_)
+            | Self::OutdatedEnvironment(_)) => error,
+        }
+    }
+
+    /// Set the command-specific context for a resolution failure.
+    #[must_use]
+    pub(crate) fn with_resolution_context(self, context: &'static str) -> Self {
+        match self.with_default_resolution_context() {
+            Self::NoSolution { header, source } => Self::NoSolution {
+                header: header.with_context(context),
+                source,
+            },
+            Self::Requirements(source) | Self::RequirementsWithContext { source, .. } => {
+                Self::RequirementsWithContext { context, source }
+            }
+            error @ (Self::Prepare(_)
+            | Self::Resolve(_)
+            | Self::Uninstall(_)
+            | Self::Hash(_)
+            | Self::Io(_)
+            | Self::Fmt(_)
+            | Self::Anyhow(_)
+            | Self::OutdatedEnvironment(_)) => error,
+        }
+    }
+
+    /// Return whether this operation failure is an expected user-facing failure.
+    pub(crate) fn is_user_failure(&self) -> bool {
+        match self {
+            Self::Prepare(error) => error.is_user_failure(),
+            Self::NoSolution { .. } => true,
+            Self::Resolve(error) => error.is_user_failure(),
+            Self::Hash(_) | Self::OutdatedEnvironment(_) => true,
+            Self::Requirements(error) | Self::RequirementsWithContext { source: error, .. } => {
+                error.is_user_failure()
+            }
+            Self::Uninstall(_) | Self::Io(_) | Self::Fmt(_) | Self::Anyhow(_) => false,
+        }
+    }
+}
+
+impl uv_errors::Hinted for Error {
     fn hints(&self) -> uv_errors::Hints<'_> {
         match self {
-            Self::Resolve(resolve_err) => resolve_err.hints(),
+            Self::NoSolution { source, .. } => source.hints(),
+            Self::Resolve(uv_resolver::ResolveError::Dist(_, dist, chain, error)) => {
+                crate::commands::diagnostics::dist_hints(
+                    dist.name(),
+                    dist.version(),
+                    chain,
+                    error.hints(),
+                )
+            }
+            Self::Resolve(uv_resolver::ResolveError::Dependencies(error, name, version, chain)) => {
+                crate::commands::diagnostics::dist_hints(name, Some(version), chain, error.hints())
+            }
+            Self::Resolve(error) => error.hints(),
+            Self::Requirements(uv_requirements::Error::Dist(_, dist, error))
+            | Self::RequirementsWithContext {
+                source: uv_requirements::Error::Dist(_, dist, error),
+                ..
+            } => crate::commands::diagnostics::dist_hints(
+                dist.name(),
+                dist.version(),
+                &DerivationChain::default(),
+                error.hints(),
+            ),
+            Self::Prepare(uv_installer::PrepareError::Dist(_, dist, chain, error)) => {
+                crate::commands::diagnostics::dist_hints(
+                    dist.name(),
+                    dist.version(),
+                    chain,
+                    error.hints(),
+                )
+            }
             Self::Anyhow(err) => {
                 for cause in err.chain() {
                     if let Some(extra_err) = cause.downcast_ref::<ExtrasWithoutSourceError>() {
-                        return uv_errors::Hint::hints(extra_err);
+                        return uv_errors::Hinted::hints(extra_err);
                     }
                 }
                 uv_errors::Hints::none()
             }
-            _ => uv_errors::Hints::none(),
+            Self::Prepare(_)
+            | Self::Uninstall(_)
+            | Self::Hash(_)
+            | Self::Io(_)
+            | Self::Fmt(_)
+            | Self::Requirements(_)
+            | Self::RequirementsWithContext { .. }
+            | Self::OutdatedEnvironment(_) => uv_errors::Hints::none(),
         }
     }
 }
@@ -1424,7 +1551,7 @@ pub(crate) struct ExtrasWithoutSourceError {
     has_editable: bool,
 }
 
-impl uv_errors::Hint for ExtrasWithoutSourceError {
+impl uv_errors::Hinted for ExtrasWithoutSourceError {
     fn hints(&self) -> uv_errors::Hints<'_> {
         uv_errors::Hints::from(if self.has_editable {
             "Use `<dir>[extra]` syntax or `-r <file>` instead"

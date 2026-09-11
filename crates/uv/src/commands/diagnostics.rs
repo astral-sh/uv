@@ -1,14 +1,12 @@
 use std::str::FromStr;
-use std::sync::{Arc, LazyLock};
+use std::sync::LazyLock;
 
 use owo_colors::OwoColorize;
 use rustc_hash::FxHashMap;
 use version_ranges::Ranges;
 
-use uv_distribution_types::{
-    DerivationChain, DerivationStep, Dist, DistErrorKind, Name, RequestedDist,
-};
-use uv_errors::{Hint, Hints};
+use uv_distribution_types::{DerivationChain, DerivationStep};
+use uv_errors::{Hinted, Hints};
 use uv_normalize::PackageName;
 use uv_pep440::{Version, strip_local_version_sentinels};
 
@@ -16,11 +14,13 @@ use crate::commands::pip;
 use crate::commands::pip::install::ExternallyManagedError;
 use crate::commands::pip::operations::ExtrasWithoutSourceError;
 use crate::commands::project::ProjectError;
+use crate::commands::project::add::AddDependencyError;
 use crate::commands::project::remove::DependencyNotFoundError;
 use crate::commands::project::run::RecursionLimitError;
 use crate::commands::project::version::MissingProjectVersionError;
+use crate::commands::python::install::InvalidUpgradeRequestError;
 use crate::commands::tool::common::NoExecutablesError;
-use crate::commands::tool::run::ToolRunScriptError;
+use crate::commands::tool::run::{ToolRunScriptError, ToolRunUsageError};
 use crate::printer::Printer;
 
 static SUGGESTIONS: LazyLock<FxHashMap<PackageName, PackageName>> = LazyLock::new(|| {
@@ -37,188 +37,11 @@ static SUGGESTIONS: LazyLock<FxHashMap<PackageName, PackageName>> = LazyLock::ne
         .collect()
 });
 
-/// A rich reporter for operational diagnostics, i.e., errors that occur during resolution and
-/// installation.
-#[derive(Debug, Default)]
-pub(crate) struct OperationDiagnostic {
-    /// Caller-provided hints to render after the error output.
-    hints: Vec<String>,
-    /// The context to display to the user upon resolution failure.
-    context: Option<&'static str>,
-}
-
-impl OperationDiagnostic {
-    /// Add a hint to display to the user upon resolution failure.
-    #[must_use]
-    pub(crate) fn with_hint(mut self, hint: String) -> Self {
-        self.hints.push(hint);
-        self
-    }
-
-    /// Set the context to display to the user upon resolution failure.
-    #[must_use]
-    pub(crate) fn with_context(self, context: &'static str) -> Self {
-        Self {
-            context: Some(context),
-            ..self
-        }
-    }
-
-    /// Attempt to report an error with rich diagnostic context.
-    ///
-    /// Returns `Some` if the error was not handled.
-    pub(crate) fn report(self, err: pip::operations::Error) -> Option<pip::operations::Error> {
-        let mut hints = match err {
-            pip::operations::Error::Resolve(uv_resolver::ResolveError::NoSolution(err)) => {
-                no_solution(&err, self.context)
-            }
-            pip::operations::Error::Resolve(uv_resolver::ResolveError::Dist(
-                kind,
-                dist,
-                chain,
-                err,
-            )) => requested_dist_error(kind, dist, &chain, err),
-            pip::operations::Error::Resolve(uv_resolver::ResolveError::Dependencies(
-                error,
-                name,
-                version,
-                chain,
-            )) => dependencies_error(error, &name, &version, &chain),
-            pip::operations::Error::Requirements(uv_requirements::Error::Dist(kind, dist, err)) => {
-                dist_error(kind, dist, &DerivationChain::default(), Arc::new(*err))
-            }
-            pip::operations::Error::Prepare(uv_installer::PrepareError::Dist(
-                kind,
-                dist,
-                chain,
-                err,
-            )) => dist_error(kind, dist, &chain, Arc::new(*err)),
-            pip::operations::Error::Requirements(err) if let Some(context) = self.context => {
-                let err = miette::Report::msg(format!("{err}"))
-                    .context(format!("Failed to resolve {context} requirement"));
-                anstream::eprint!("{err:?}");
-                Hints::none()
-            }
-            pip::operations::Error::Requirements(err) => {
-                return Some(pip::operations::Error::Requirements(err));
-            }
-            err @ pip::operations::Error::OutdatedEnvironment(..) => {
-                anstream::eprintln!("{}", err);
-                Hints::none()
-            }
-            err => return Some(err),
-        };
-
-        // Render all hints after the error output.
-        hints.extend(self.hints);
-        if !hints.is_empty() {
-            anstream::eprintln!("{hints}");
-        }
-
-        None
-    }
-}
-
-/// Render a distribution failure (read, download or build) with a help message.
-// https://github.com/rust-lang/rust/issues/147648
-#[allow(unused_assignments)]
-fn dist_error(
-    kind: DistErrorKind,
-    dist: Box<Dist>,
-    chain: &DerivationChain,
-    cause: Arc<uv_distribution::Error>,
-) -> Hints<'static> {
-    #[derive(Debug, miette::Diagnostic, thiserror::Error)]
-    #[error("{kind} `{dist}`")]
-    #[diagnostic()]
-    struct Diagnostic {
-        kind: DistErrorKind,
-        dist: Box<Dist>,
-        #[source]
-        cause: Arc<uv_distribution::Error>,
-    }
-
-    let hints = dist_hints(dist.name(), dist.version(), chain, cause.hints());
-    let report = miette::Report::new(Diagnostic { kind, dist, cause });
-    anstream::eprint!("{report:?}");
-    hints
-}
-
-/// Render a requested distribution failure (read, download or build) with a help message.
-// https://github.com/rust-lang/rust/issues/147648
-#[allow(unused_assignments)]
-fn requested_dist_error(
-    kind: DistErrorKind,
-    dist: Box<RequestedDist>,
-    chain: &DerivationChain,
-    cause: Arc<uv_distribution::Error>,
-) -> Hints<'static> {
-    #[derive(Debug, miette::Diagnostic, thiserror::Error)]
-    #[error("{kind} `{dist}`")]
-    #[diagnostic()]
-    struct Diagnostic {
-        kind: DistErrorKind,
-        dist: Box<RequestedDist>,
-        #[source]
-        cause: Arc<uv_distribution::Error>,
-    }
-
-    let hints = dist_hints(dist.name(), dist.version(), chain, cause.hints());
-    let report = miette::Report::new(Diagnostic { kind, dist, cause });
-    anstream::eprint!("{report:?}");
-    hints
-}
-
-/// Render an error in fetching a package's dependencies.
-// https://github.com/rust-lang/rust/issues/147648
-#[allow(unused_assignments)]
-fn dependencies_error(
-    error: Box<uv_resolver::ResolveError>,
-    name: &PackageName,
-    version: &Version,
-    chain: &DerivationChain,
-) -> Hints<'static> {
-    #[derive(Debug, miette::Diagnostic, thiserror::Error)]
-    #[error("Failed to resolve dependencies for `{}` ({})", name.cyan(), format!("v{version}").cyan())]
-    #[diagnostic()]
-    struct Diagnostic {
-        name: PackageName,
-        version: Version,
-        #[source]
-        cause: Box<uv_resolver::ResolveError>,
-    }
-
-    let hints = dist_hints(name, Some(version), chain, error.hints());
-    let report = miette::Report::new(Diagnostic {
-        name: name.clone(),
-        version: version.clone(),
-        cause: error,
-    });
-    anstream::eprint!("{report:?}");
-    hints
-}
-
-/// Render a [`uv_resolver::NoSolutionError`].
-fn no_solution(
-    err: &uv_resolver::NoSolutionError,
-    context: Option<&'static str>,
-) -> Hints<'static> {
-    let header = uv_resolver::NoSolutionHeader::new(err.environment().clone());
-    let header = if let Some(context) = context {
-        header.with_context(context)
-    } else {
-        header
-    };
-    let report = miette::Report::msg(err.report().to_string()).context(header);
-    anstream::eprint!("{report:?}");
-    err.hints().into_owned()
-}
-
 /// Format an error chain with the default user-facing hints and output settings.
 pub(crate) fn write_error_chain(err: &anyhow::Error, printer: Printer) -> std::fmt::Result {
     uv_errors::write_error_chain_with_options(
         err.as_ref(),
-        hints_for_error(err),
+        &hints_for_error(err),
         uv_errors::ErrorOptions::default().with_stream(printer.stderr_important()),
     )
 }
@@ -227,10 +50,12 @@ pub(crate) fn write_error_chain(err: &anyhow::Error, printer: Printer) -> std::f
 ///
 /// This is the central "hint for error" function. It walks the full error chain
 /// (via `anyhow::Error::chain`) and tries to downcast each error to known types
-/// that implement [`Hint`]. All hint rendering logic should be consolidated here.
+/// that implement [`Hinted`]. All hint rendering logic should be consolidated here.
 pub(crate) fn hints_for_error(err: &anyhow::Error) -> Hints<'static> {
     let mut hints = Hints::none();
     for cause in err.chain() {
+        collect_hint::<AddDependencyError>(cause, &mut hints);
+        collect_hint::<ToolRunUsageError>(cause, &mut hints);
         collect_hint::<Box<uv_resolver::NoSolutionError>>(cause, &mut hints);
         collect_hint::<uv_resolver::NoSolutionError>(cause, &mut hints);
         collect_hint::<uv_resolver::ResolveError>(cause, &mut hints);
@@ -244,6 +69,7 @@ pub(crate) fn hints_for_error(err: &anyhow::Error) -> Hints<'static> {
         collect_hint::<NoExecutablesError>(cause, &mut hints);
         collect_hint::<ExternallyManagedError>(cause, &mut hints);
         collect_hint::<MissingProjectVersionError>(cause, &mut hints);
+        collect_hint::<InvalidUpgradeRequestError>(cause, &mut hints);
         collect_hint::<crate::commands::build_frontend::Error>(cause, &mut hints);
         collect_hint::<uv_build_backend::Error>(cause, &mut hints);
         collect_hint::<uv_build_frontend::Error>(cause, &mut hints);
@@ -265,7 +91,7 @@ pub(crate) fn hints_for_error(err: &anyhow::Error) -> Hints<'static> {
 }
 
 /// If `cause` can be downcast to `T`, collect its hints.
-fn collect_hint<T: Hint + std::error::Error + 'static>(
+fn collect_hint<T: Hinted + std::error::Error + 'static>(
     cause: &(dyn std::error::Error + 'static),
     hints: &mut Hints<'static>,
 ) {
@@ -275,7 +101,7 @@ fn collect_hint<T: Hint + std::error::Error + 'static>(
 }
 
 /// Format package context that should follow a distribution error as hints.
-fn dist_hints(
+pub(crate) fn dist_hints(
     name: &PackageName,
     version: Option<&Version>,
     chain: &DerivationChain,
@@ -417,7 +243,7 @@ fn format_chain(name: &PackageName, version: Option<&Version>, chain: &Derivatio
 
 #[cfg(test)]
 mod tests {
-    use std::borrow::Cow;
+    use insta::assert_debug_snapshot;
 
     use uv_workspace::pyproject::{PyprojectTomlError, SourceError};
 
@@ -431,14 +257,11 @@ mod tests {
             "python_version != '3.12'".to_string(),
         )));
 
-        let hints = hints_for_error(&err)
-            .into_iter()
-            .map(Cow::into_owned)
-            .collect::<Vec<_>>();
-
-        assert_eq!(
-            hints,
-            vec!["replace `python_version == '3.12'` with `python_version != '3.12'`".to_string()]
-        );
+        let hints = hints_for_error(&err);
+        assert_debug_snapshot!(hints.iter().collect::<Vec<_>>(), @r#"
+        [
+            "replace `python_version == '3.12'` with `python_version != '3.12'`",
+        ]
+        "#);
     }
 }

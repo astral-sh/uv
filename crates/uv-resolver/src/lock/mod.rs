@@ -6928,7 +6928,7 @@ impl std::error::Error for LockError {
     }
 }
 
-impl uv_errors::Hint for LockError {
+impl uv_errors::Hinted for LockError {
     fn hints(&self) -> uv_errors::Hints<'_> {
         if let Some(hint) = &self.hint {
             uv_errors::Hints::from(hint.to_string())

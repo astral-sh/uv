@@ -26,7 +26,7 @@ use uv_distribution_types::{
     ConfigSettings, DependencyMetadata, ExtraBuildVariables, Index, IndexLocations,
     PackageConfigSettings, Requirement, SourceDist,
 };
-use uv_errors::{ErrorOptions, Hint, Hints, write_error_chain_with_options};
+use uv_errors::{ErrorOptions, Hinted, Hints, write_error_chain_with_options};
 use uv_fs::{Simplified, normalize_path, relative_to};
 use uv_install_wheel::LinkMode;
 use uv_normalize::PackageName;
@@ -108,7 +108,7 @@ impl From<ProjectError> for Error {
     }
 }
 
-impl Hint for Error {
+impl Hinted for Error {
     fn hints(&self) -> Hints<'_> {
         match self {
             Self::BuildBackend(err) => err.hints(),
@@ -521,7 +521,7 @@ async fn build_impl(
                 let hints = crate::commands::diagnostics::hints_for_error(&err);
                 write_error_chain_with_options(
                     err.as_ref(),
-                    hints,
+                    &hints,
                     ErrorOptions::default().with_stream(printer.stderr_important()),
                 )?;
 

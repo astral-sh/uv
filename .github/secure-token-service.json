@@ -24,11 +24,11 @@
   },
   "rules": [
     {
-      "caller": "uv",
-      "environment": "release",
-      "caller_workflow": "release.yml",
-      "on": ["workflow_dispatch"],
-      "permissions": { "contents": "write", "workflows": "write" },
+      "caller": "uv-dev",
+      "environment": "automations",
+      "caller_workflow": "import-codspeed-profiles.yml",
+      "on": ["push", "workflow_dispatch"],
+      "permissions": { "actions": "read" },
       "target": "uv"
     },
     {

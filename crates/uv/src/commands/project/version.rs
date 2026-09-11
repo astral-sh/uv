@@ -39,7 +39,7 @@ use crate::commands::project::{
     LinkErrorReporting, ProjectEnvironment, ProjectEnvironmentPolicy, ProjectError,
     ProjectInterpreter, UniversalState, WorkspacePython, default_dependency_groups,
 };
-use crate::commands::{ExitStatus, diagnostics, project};
+use crate::commands::{ExitStatus, UvError, project};
 use crate::printer::Printer;
 use crate::settings::{FrozenSource, LockCheck, ResolverInstallerSettings};
 
@@ -380,7 +380,7 @@ pub(crate) struct MissingProjectVersionError {
     err: WorkspaceError,
 }
 
-impl uv_errors::Hint for MissingProjectVersionError {
+impl uv_errors::Hinted for MissingProjectVersionError {
     fn hints(&self) -> uv_errors::Hints<'_> {
         uv_errors::Hints::from(format!(
             "If you meant to view uv's version, use `{}` instead",
@@ -502,12 +502,7 @@ async fn print_frozen_version(
     .await
     {
         Ok(result) => result.into_lock(),
-        Err(ProjectError::Operation(err)) => {
-            return diagnostics::OperationDiagnostic::default()
-                .report(err)
-                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
-        }
-        Err(err) => return Err(err.into()),
+        Err(err) => return Err(UvError::from(err).into()),
     };
 
     // Try to find the package of interest in the lock
@@ -649,12 +644,7 @@ async fn lock_and_sync(
     .await
     {
         Ok(result) => result.into_lock(),
-        Err(ProjectError::Operation(err)) => {
-            return diagnostics::OperationDiagnostic::default()
-                .report(err)
-                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
-        }
-        Err(err) => return Err(err.into()),
+        Err(err) => return Err(UvError::from(err).into()),
     };
 
     let AddTarget::Project(project, environment) = target else {
@@ -709,12 +699,7 @@ async fn lock_and_sync(
     .await
     {
         Ok(_) => {}
-        Err(ProjectError::Operation(err)) => {
-            return diagnostics::OperationDiagnostic::default()
-                .report(err)
-                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
-        }
-        Err(err) => return Err(err.into()),
+        Err(err) => return Err(UvError::from(err).into()),
     }
 
     Ok(ExitStatus::Success)

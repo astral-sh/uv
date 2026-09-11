@@ -150,6 +150,103 @@ impl UvError {
     pub(crate) fn unexpected(error: anyhow::Error) -> Self {
         Self::Unexpected(error)
     }
+
+    /// Add command-specific context to a user error without changing unexpected errors.
+    fn map_user(self, context: impl FnOnce(anyhow::Error) -> anyhow::Error) -> Self {
+        match self {
+            Self::User(error) => Self::User(context(error)),
+            Self::Argument(error) => Self::Argument(error),
+            Self::Unexpected(error) => Self::Unexpected(error),
+        }
+    }
+}
+
+impl From<project::ProjectError> for UvError {
+    fn from(error: project::ProjectError) -> Self {
+        match error {
+            error @ (project::ProjectError::LockMismatch(..)
+            | project::ProjectError::LockFormat(..)
+            | project::ProjectError::MissingLockfile(..)
+            | project::ProjectError::LockWorkspaceMismatch(..)) => Self::user(error),
+            project::ProjectError::Operation(error) => Self::from(error),
+            project::ProjectError::Requirements(error) => {
+                Self::from(pip::operations::Error::Requirements(error))
+            }
+            error => Self::unexpected(error.into()),
+        }
+    }
+}
+
+impl From<pip::operations::Error> for UvError {
+    fn from(error: pip::operations::Error) -> Self {
+        let error = error.with_default_resolution_context();
+        if error.is_user_failure() {
+            Self::user(error)
+        } else {
+            Self::unexpected(error.into())
+        }
+    }
+}
+
+#[cfg(test)]
+mod error_tests {
+    use std::io::{Error, ErrorKind};
+
+    use anyhow::bail;
+    use insta::{allow_duplicates, assert_snapshot};
+
+    use super::{UvError, pip, project};
+
+    #[test]
+    fn contextual_operations_keep_their_classification_and_cause() -> anyhow::Result<()> {
+        for (kind, user_failure) in [
+            (ErrorKind::NotFound, true),
+            (ErrorKind::PermissionDenied, false),
+        ] {
+            let error = pip::operations::Error::Requirements(uv_requirements::Error::Io(
+                Error::new(kind, "requirements failure"),
+            ));
+            let error = UvError::from(
+                error
+                    .with_resolution_context("script")
+                    .with_resolution_context("tool"),
+            );
+            let ((UvError::User(error), true) | (UvError::Unexpected(error), false)) =
+                (error, user_failure)
+            else {
+                bail!("operation classification changed with context");
+            };
+            allow_duplicates! {
+                assert_snapshot!(format!("{error:#}"), @"Failed to resolve tool requirement: requirements failure");
+            }
+            assert!(error.downcast_ref::<pip::operations::Error>().is_some());
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn resolution_context_leaves_other_errors_unchanged() -> anyhow::Result<()> {
+        let error = pip::operations::Error::Io(Error::new(
+            ErrorKind::PermissionDenied,
+            "cache write failed",
+        ));
+        let UvError::Unexpected(error) = UvError::from(error.with_resolution_context("tool"))
+        else {
+            bail!("operation classification changed with context");
+        };
+        assert_snapshot!(format!("{error:#}"), @"cache write failed");
+        assert!(error.downcast_ref::<pip::operations::Error>().is_some());
+        Ok(())
+    }
+
+    #[test]
+    fn project_requirements_use_operation_classification() {
+        let error = project::ProjectError::Requirements(uv_requirements::Error::Io(Error::new(
+            ErrorKind::NotFound,
+            "requirements failure",
+        )));
+        assert!(matches!(UvError::from(error), UvError::User(_)));
+    }
 }
 
 /// Read dotenv files into an overlay for a spawned process.

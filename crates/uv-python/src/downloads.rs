@@ -27,7 +27,7 @@ use uv_cache::{Cache, CacheBucket};
 use uv_cache_key::cache_digest;
 use uv_client::{
     BaseClient, BaseClientBuilder, CacheControl, CachedClient, CachedClientError, ClientBuildError,
-    Connectivity, RetriableError, WrappedReqwestError, fetch_with_url_fallback,
+    Connectivity, RetriableError, RetryState, WrappedReqwestError, fetch_with_url_fallback,
     retryable_on_request_failure,
 };
 use uv_distribution_filename::{ExtensionError, SourceDistExtension};
@@ -1143,7 +1143,7 @@ async fn fetch_downloads_from_url(
         .build()
         .map_err(|err| Error::NetworkError(url.clone(), WrappedReqwestError::from(err)))?;
 
-    let response_callback = async |response: Response| {
+    let response_callback = async |response: Response, _: &mut RetryState| {
         let bytes = response
             .bytes()
             .await
