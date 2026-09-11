@@ -130,6 +130,36 @@ impl HashStrategy {
         &self.verification
     }
 
+    /// Return whether an active constraint supplies hashes for another exact version of a package.
+    ///
+    /// Only explicit constraints count; recorded artifact hashes alone do not select a version.
+    /// Disabled verification and unpinned constraints do not restrict the version.
+    pub fn has_hashed_constraint_for_other_version(
+        &self,
+        name: &PackageName,
+        version: &Version,
+        constraints: &Constraints,
+        marker_env: Option<&ResolverMarkerEnvironment>,
+    ) -> bool {
+        constraints.specifications().any(|constraint| {
+            if constraint.requirement.name != *name
+                || constraint.hashes.is_empty()
+                || !constraint
+                    .requirement
+                    .evaluate_markers(marker_env.map(ResolverMarkerEnvironment::markers), &[])
+            {
+                return false;
+            }
+            let Some(id @ VersionId::NameVersion(..)) = Self::pin(&constraint.requirement) else {
+                return false;
+            };
+            id != VersionId::from_registry(name.clone(), version.clone())
+                && self
+                    .hashes_for_id(&id)
+                    .is_some_and(|hashes| !hashes.is_empty())
+        })
+    }
+
     /// Return the [`ArchiveHashPolicy`] for the given distribution.
     pub fn archive_policy<T: DistributionMetadata>(
         &self,

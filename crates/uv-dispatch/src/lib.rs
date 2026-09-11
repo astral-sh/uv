@@ -151,6 +151,30 @@ pub struct BuildDispatch<'a> {
 }
 
 impl<'a> BuildDispatch<'a> {
+    /// Check whether the bundled backend can build the source tree.
+    pub fn check_direct_build(&self, source_tree: &Path) -> Result<(), String> {
+        check_direct_build(source_tree, uv_version::version())
+            .map_err(|reason| reason.to_string())?;
+
+        let name = "uv-build".parse().map_err(|err| format!("{err}"))?;
+        let version = uv_version::version()
+            .parse()
+            .map_err(|err| format!("{err}"))?;
+        if self.hasher.has_hashed_constraint_for_other_version(
+            &name,
+            &version,
+            self.constraints,
+            Some(&self.interpreter.to_resolver_marker_environment()),
+        ) {
+            return Err(format!(
+                "build constraints specify a hashed `uv-build` version other than {}",
+                uv_version::version()
+            ));
+        }
+
+        Ok(())
+    }
+
     pub fn new(
         client: &'a RegistryClient,
         cache: &'a Cache,
@@ -619,7 +643,7 @@ impl BuildContext for BuildDispatch<'_> {
         // Only perform the direct build if the backend is uv in a compatible version.
         let source_tree_str = source_tree.display().to_string();
         let identifier = version_id.unwrap_or_else(|| &source_tree_str);
-        if let Err(reason) = check_direct_build(&source_tree, uv_version::version()) {
+        if let Err(reason) = self.check_direct_build(&source_tree) {
             trace!("Requirements for direct build not matched because {reason}");
             return Ok(None);
         }

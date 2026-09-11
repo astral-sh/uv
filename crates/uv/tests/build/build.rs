@@ -6,7 +6,7 @@ use assert_fs::prelude::*;
 use async_zip::base::read::mem::ZipFileReader;
 use futures::executor::block_on;
 use indoc::{formatdoc, indoc};
-use insta::assert_snapshot;
+use insta::{allow_duplicates, assert_snapshot};
 use predicates::prelude::predicate;
 use sha2::{Digest, Sha256};
 use std::env::current_dir;
@@ -2159,6 +2159,140 @@ fn build_fast_path() -> Result<()> {
         .child("built_by_uv-0.1.0-py3-none-any.whl")
         .assert(predicate::path::is_file());
 
+    Ok(())
+}
+
+/// A hashed pin for another backend version selects an external build.
+#[test]
+fn build_fast_path_hash_constraints() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let built_by_uv = current_dir()?
+        .join("../../test/packages/built-by-uv")
+        .canonicalize()?;
+    let constraints = context.temp_dir.child("constraints.txt");
+    let bad_hash = "0".repeat(64);
+    let mismatched = format!("uv-build==0.8.0 --hash=sha256:{bad_hash}");
+
+    // None of these constraints selects a hashed backend version different from the bundled one.
+    for (constraint, flag) in [
+        (
+            format!(
+                "UV_build==={}.0 --hash=sha256:{bad_hash}",
+                uv_version::version()
+            ),
+            None,
+        ),
+        ("uv-build==0.8.0".to_string(), None),
+        (format!("uv-build>=0.8.0 --hash=sha256:{bad_hash}"), None),
+        (
+            format!("uv-build==0.8.0 ; python_version < '0' --hash=sha256:{bad_hash}"),
+            None,
+        ),
+        (mismatched.clone(), Some("--no-verify-hashes")),
+        (String::new(), Some("--require-hashes")),
+    ] {
+        constraints.write_str(&constraint)?;
+        let mut command = context.build();
+        command
+            .arg(&built_by_uv)
+            .arg("--wheel")
+            .arg("--out-dir")
+            .arg("output")
+            .arg("--no-index")
+            .arg("--no-cache")
+            .args(flag);
+        if !constraint.is_empty() {
+            command.arg("--build-constraint").arg(constraints.path());
+        }
+        allow_duplicates! {
+            uv_snapshot!(context.filters(), command, @"
+            exit_code: 0 (success)
+            ----- stderr -----
+            Building wheel...
+            Successfully built output/built_by_uv-0.1.0-py3-none-any.whl
+            ");
+        }
+    }
+
+    let (filename, wheel) = generate_wheel(
+        &"uv-build".parse()?,
+        &"0.8.0".parse()?,
+        &[],
+        &BTreeMap::new(),
+        None,
+        "py3-none-any",
+        &[],
+    );
+    let wheel_hash = hex::encode(Sha256::digest(&wheel));
+    context
+        .temp_dir
+        .child("wheels")
+        .child(filename)
+        .write_binary(&wheel)?;
+    let context = context
+        .with_filter((wheel_hash, "[UV_BUILD_HASH]"))
+        .with_filter((
+            uv_version::version().replace('.', r"\."),
+            "[CURRENT_VERSION]",
+        ));
+    constraints.write_str(&mismatched)?;
+
+    uv_snapshot!(context.filters(), context.build().arg(&built_by_uv)
+        .arg("--wheel").arg("--out-dir").arg("output")
+        .arg("--no-index").arg("--find-links").arg("wheels").arg("--no-cache")
+        .arg("--build-constraint").arg(constraints.path()), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    Building wheel...
+    error: Failed to build `[WORKSPACE]/test/packages/built-by-uv`
+      cause: Failed to install requirements from `build-system.requires`
+      cause: Failed to download `uv-build==0.8.0`
+      cause: Hash mismatch for `uv-build==0.8.0`
+
+             Expected:
+               sha256:0000000000000000000000000000000000000000000000000000000000000000
+
+             Computed:
+               sha256:[UV_BUILD_HASH]
+    ");
+
+    uv_snapshot!(context.filters(), context.build().arg(&built_by_uv).arg("--list")
+        .arg("--build-constraint").arg(constraints.path()), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Failed to build `[WORKSPACE]/test/packages/built-by-uv`
+      cause: Can only use `--list` with a compatible uv build backend, but `[WORKSPACE]/test/packages/built-by-uv` is not compatible because build constraints specify a hashed `uv-build` version other than [CURRENT_VERSION]
+    ");
+
+    // Package installation goes through the shared build dispatch, not the `uv build` command.
+    uv_snapshot!(context.filters(), context.pip_install().arg(&built_by_uv)
+        .arg("--no-deps").arg("--no-index").arg("--find-links").arg("wheels")
+        .arg("--no-cache").arg("--build-constraint").arg(constraints.path()), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    error: Failed to build `built-by-uv @ file://[WORKSPACE]/test/packages/built-by-uv`
+      cause: Failed to install requirements from `build-system.requires`
+      cause: Failed to download `uv-build==0.8.0`
+      cause: Hash mismatch for `uv-build==0.8.0`
+
+             Expected:
+               sha256:0000000000000000000000000000000000000000000000000000000000000000
+
+             Computed:
+               sha256:[UV_BUILD_HASH]
+    ");
+
+    uv_snapshot!(context.filters(), context.pip_install().arg(&built_by_uv)
+        .arg("--no-deps").arg("--no-index").arg("--no-cache")
+        .arg("--build-constraint").arg(constraints.path()).arg("--no-verify-hashes"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + built-by-uv==0.1.0 (from file://[WORKSPACE]/test/packages/built-by-uv)
+    ");
     Ok(())
 }
 

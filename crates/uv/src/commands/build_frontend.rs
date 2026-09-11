@@ -10,7 +10,6 @@ use owo_colors::OwoColorize;
 use thiserror::Error;
 use tracing::{debug, instrument};
 
-use uv_build_backend::check_direct_build;
 use uv_cache::{Cache, CacheBucket};
 use uv_client::{BaseClientBuilder, RegistryClientBuilder};
 use uv_configuration::{
@@ -736,10 +735,10 @@ async fn build_package(
             return Err(Error::ListForcePep517);
         }
 
-        if let Err(reason) = check_direct_build(source.path(), uv_version::version()) {
+        if let Err(reason) = build_dispatch.check_direct_build(source.path()) {
             return Err(Error::ListNonUv {
                 name: source.path().user_display().to_string(),
-                reason: reason.to_string(),
+                reason,
             });
         }
 
@@ -747,7 +746,7 @@ async fn build_package(
     } else if force_pep517 {
         BuildAction::Pep517
     } else {
-        match check_direct_build(source.path(), uv_version::version()) {
+        match build_dispatch.check_direct_build(source.path()) {
             Ok(()) => BuildAction::DirectBuild,
             Err(reason) => {
                 debug!(
