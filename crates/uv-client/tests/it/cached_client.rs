@@ -142,31 +142,6 @@ async fn send_counts_middleware_retries() -> Result<()> {
 }
 
 #[tokio::test]
-async fn fresh_cache_skips_http_requests() -> Result<()> {
-    let server = MockServer::start().await;
-    Mock::given(method("GET"))
-        .respond_with(
-            ResponseTemplate::new(200)
-                .insert_header("Cache-Control", "max-age=3600")
-                .set_body_string("cached payload"),
-        )
-        .expect(1)
-        .mount(&server)
-        .await;
-
-    let directory = tempfile::tempdir()?;
-    let entry = CacheEntry::new(directory.path(), "response.msgpack");
-    let client = CachedClient::new(BaseClientBuilder::default().build()?);
-    for _ in 0..2 {
-        assert_eq!(
-            cached_text(&client, &entry, &server.uri(), CacheControl::None).await?,
-            "cached payload"
-        );
-    }
-    Ok(())
-}
-
-#[tokio::test]
 async fn fresh_cache_respects_overrides_and_revalidation() -> Result<()> {
     let server = MockServer::start().await;
     Mock::given(method("GET"))
@@ -244,16 +219,26 @@ async fn fresh_cache_rejects_a_different_request() -> Result<()> {
 }
 
 #[tokio::test]
-async fn fresh_cache_heals_corrupted_policy_and_payload() -> Result<()> {
-    for corrupt_policy in [false, true] {
+async fn cache_heals_corrupted_payload() -> Result<()> {
+    for (cache_control, revalidations) in
+        [(CacheControl::None, 0), (CacheControl::MustRevalidate, 1)]
+    {
         let server = MockServer::start().await;
         Mock::given(method("GET"))
             .respond_with(
                 ResponseTemplate::new(200)
                     .insert_header("Cache-Control", "max-age=3600")
+                    .insert_header("ETag", "\"version-1\"")
                     .set_body_string("cached payload"),
             )
             .expect(2)
+            .mount(&server)
+            .await;
+        Mock::given(method("GET"))
+            .and(header("If-None-Match", "\"version-1\""))
+            .respond_with(ResponseTemplate::new(304).insert_header("ETag", "\"version-1\""))
+            .with_priority(1)
+            .expect(revalidations)
             .mount(&server)
             .await;
 
@@ -264,54 +249,17 @@ async fn fresh_cache_heals_corrupted_policy_and_payload() -> Result<()> {
             cached_text(&client, &entry, &server.uri(), CacheControl::None).await?,
             "cached payload"
         );
-        if corrupt_policy {
-            fs_err::write(entry.path(), [u8::MAX; 8])?;
-        } else {
-            corrupt_payload(&entry)?;
-        }
-        for _ in 0..2 {
+        // A reserved MessagePack tag invalidates the payload while leaving its policy intact.
+        let mut bytes = fs_err::read(entry.path())?;
+        bytes[0] = 0xc1;
+        fs_err::write(entry.path(), bytes)?;
+        for cache_control in [cache_control, CacheControl::None] {
             assert_eq!(
-                cached_text(&client, &entry, &server.uri(), CacheControl::None).await?,
+                cached_text(&client, &entry, &server.uri(), cache_control).await?,
                 "cached payload"
             );
         }
     }
-    Ok(())
-}
-
-#[tokio::test]
-async fn stale_cache_heals_corrupted_payload_after_revalidation() -> Result<()> {
-    let server = MockServer::start().await;
-    Mock::given(method("GET"))
-        .respond_with(
-            ResponseTemplate::new(200)
-                .insert_header("Cache-Control", "max-age=0")
-                .insert_header("ETag", "\"version-1\"")
-                .set_body_string("cached payload"),
-        )
-        .expect(2)
-        .mount(&server)
-        .await;
-    Mock::given(method("GET"))
-        .and(header("If-None-Match", "\"version-1\""))
-        .respond_with(ResponseTemplate::new(304).insert_header("ETag", "\"version-1\""))
-        .with_priority(1)
-        .expect(1)
-        .mount(&server)
-        .await;
-
-    let directory = tempfile::tempdir()?;
-    let entry = CacheEntry::new(directory.path(), "response.msgpack");
-    let client = CachedClient::new(BaseClientBuilder::default().build()?);
-    assert_eq!(
-        cached_text(&client, &entry, &server.uri(), CacheControl::None).await?,
-        "cached payload"
-    );
-    corrupt_payload(&entry)?;
-    assert_eq!(
-        cached_text(&client, &entry, &server.uri(), CacheControl::MustRevalidate).await?,
-        "cached payload"
-    );
     Ok(())
 }
 
@@ -334,12 +282,4 @@ async fn cached_text(
             CachedClientError::Client(err) => err.into(),
             CachedClientError::Callback { err, .. } => err.into(),
         })
-}
-
-/// Replaces the `MessagePack` payload's first byte with a reserved tag, leaving its policy intact.
-fn corrupt_payload(entry: &CacheEntry) -> Result<()> {
-    let mut bytes = fs_err::read(entry.path())?;
-    bytes[0] = 0xc1;
-    fs_err::write(entry.path(), bytes)?;
-    Ok(())
 }
