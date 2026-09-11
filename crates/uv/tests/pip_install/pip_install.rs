@@ -14227,7 +14227,7 @@ fn reject_symlinked_wheel_package_directory() -> Result<()> {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     error: Failed to install: foo-0.1.0-py3-none-any.whl (foo==0.1.0 (from file://[TEMP_DIR]/foo/dist/foo-0.1.0-py3-none-any.whl))
-      └── The wheel is invalid: Cannot install into symlinked directory: [SITE_PACKAGES]/foo
+      cause: The wheel is invalid: Cannot install into symlinked directory: [SITE_PACKAGES]/foo
     ");
 
     external
@@ -14274,7 +14274,7 @@ fn reject_symlinked_wheel_nested_package_directory() -> Result<()> {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     error: Failed to install: foo-0.1.0-py3-none-any.whl (foo==0.1.0 (from file://[TEMP_DIR]/foo/dist/foo-0.1.0-py3-none-any.whl))
-      └── The wheel is invalid: Cannot install into symlinked directory: [SITE_PACKAGES]/foo/existing/nested
+      cause: The wheel is invalid: Cannot install into symlinked directory: [SITE_PACKAGES]/foo/existing/nested
     ");
 
     external.child("sentinel.txt").assert("keep me");
@@ -14344,7 +14344,7 @@ fn reject_symlinked_wheel_data_package_directory() -> Result<()> {
         Resolved 1 package in [TIME]
         Prepared 1 package in [TIME]
         error: Failed to install: foo-0.1.0-py3-none-any.whl (foo==0.1.0 (from file://[TEMP_DIR]/foo-0.1.0-py3-none-any.whl))
-          └── The wheel is invalid: Cannot install into symlinked directory: [SITE_PACKAGES]/foo
+          cause: The wheel is invalid: Cannot install into symlinked directory: [SITE_PACKAGES]/foo
             ");
 
             external
@@ -14409,7 +14409,7 @@ fn reject_symlinked_wheel_headers_destination() -> Result<()> {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     error: Failed to install: foo-0.1.0-py3-none-any.whl (foo==0.1.0 (from file://[TEMP_DIR]/foo-0.1.0-py3-none-any.whl))
-      └── The wheel is invalid: Cannot install into symlinked directory: [VENV]/include/site/python3.12/foo
+      cause: The wheel is invalid: Cannot install into symlinked directory: [VENV]/include/site/python3.12/foo
     ");
 
     external
