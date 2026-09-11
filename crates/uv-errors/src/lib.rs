@@ -9,8 +9,10 @@ use std::iter;
 
 use owo_colors::{AnsiColors, DynColor, OwoColorize};
 
+#[cfg(test)]
+use diagnostic::Info;
 use diagnostic::write_info;
-pub use diagnostic::{Diagnostic, DiagnosticFn, Info};
+pub use diagnostic::{Diagnostic, DiagnosticFn};
 use line_wrap::{get_wrap_width, wrap_text};
 use source::write_snippets;
 pub use source::{SourceFile, SourceSnippet};

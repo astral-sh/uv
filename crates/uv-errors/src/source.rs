@@ -34,12 +34,12 @@ impl SourceFile {
     }
 
     /// The user-facing name of this source.
-    pub fn name(&self) -> &str {
+    fn name(&self) -> &str {
         &self.inner.name
     }
 
     /// The exact decoded text used by the parser.
-    pub fn text(&self) -> &str {
+    fn text(&self) -> &str {
         &self.inner.text
     }
 }
