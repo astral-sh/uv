@@ -12,7 +12,6 @@ use uv_client::BaseClientBuilder;
 use uv_configuration::{Concurrency, Constraints, DryRun, HashCheckingMode, TargetTriple};
 use uv_distribution::LoweredExtraBuildDependencies;
 use uv_distribution_types::{ExtraBuildRequires, Index, Name, Requirement, RequirementSource};
-use uv_errors::{ErrorOptions, Hints, write_error_chain_with_options};
 use uv_fs::{CWD, Simplified};
 use uv_installer::{InstallationStrategy, Planner, SitePackages};
 use uv_normalize::PackageName;
@@ -179,11 +178,9 @@ pub(crate) async fn upgrade(
             .sorted_unstable_by(|(name_a, _), (name_b, _)| name_a.cmp(name_b))
         {
             trace!("Error trace: {err:?}");
-            write_error_chain_with_options(
-                err.context(format!("Failed to upgrade {}", name.green()))
-                    .as_ref(),
-                &Hints::none(),
-                ErrorOptions::default().with_stream(printer.stderr()),
+            crate::commands::diagnostics::write_error_chain(
+                &err.context(format!("Failed to upgrade {}", name.green())),
+                printer,
             )?;
         }
         return Ok(ExitStatus::Failure);
