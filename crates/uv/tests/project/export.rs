@@ -10257,3 +10257,229 @@ fn requirements_txt_emit_indexes() -> Result<()> {
 
     Ok(())
 }
+
+/// Each batch entry has the same dependency selection as an independent frozen export.
+#[cfg(feature = "test-universal")]
+#[test]
+fn export_batch_selections() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "root"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["idna"]
+
+        [dependency-groups]
+        dev = ["sniffio"]
+        root-only = ["packaging"]
+
+        [tool.uv.workspace]
+        members = ["child"]
+    "#})?;
+    context
+        .temp_dir
+        .child("child/pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "child"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["typing-extensions"]
+
+        [project.optional-dependencies]
+        test = ["iniconfig"]
+
+        [dependency-groups]
+        dev = ["iniconfig"]
+        lint = ["packaging"]
+
+        [tool.uv]
+        default-groups = ["lint"]
+    "#})?;
+    context.lock().assert().success();
+    let lock = fs_err::read(context.temp_dir.child("uv.lock"))?;
+    let selections: &[(&str, &[&str])] = &[
+        ("", &[]),
+        ("no-group = ['dev']", &["--no-group", "dev"]),
+        ("package = ['child']", &["--package", "child"]),
+        (
+            "package = ['child']\nno-default-groups = true",
+            &["--package", "child", "--no-default-groups"],
+        ),
+        (
+            "package = ['child']\nextra = ['test']\nno-default-groups = true",
+            &[
+                "--package",
+                "child",
+                "--extra",
+                "test",
+                "--no-default-groups",
+            ],
+        ),
+        (
+            "package = ['child']\nonly-group = ['dev']",
+            &["--package", "child", "--only-group", "dev"],
+        ),
+        (
+            "package = ['child']\ngroup = ['root-only']",
+            &["--package", "child", "--group", "root-only"],
+        ),
+        (
+            "package = ['child']\nall-groups = true\nno-group = ['lint']",
+            &["--package", "child", "--all-groups", "--no-group", "lint"],
+        ),
+        (
+            "package = ['root', 'child']\nno-default-groups = true",
+            &[
+                "--package",
+                "root",
+                "--package",
+                "child",
+                "--no-default-groups",
+            ],
+        ),
+        ("all-packages = true", &["--all-packages"]),
+        (
+            "package = ['child']\nall-extras = true\nno-extra = ['test']",
+            &["--package", "child", "--all-extras", "--no-extra", "test"],
+        ),
+    ];
+    let mut manifest = String::new();
+    for (index, (selection, arguments)) in selections.iter().enumerate() {
+        manifest.push_str(&formatdoc! {"
+            [[export]]
+            output-file = '{index}.txt'
+            {selection}
+        "});
+        context
+            .export()
+            .arg("--frozen")
+            .arg("--no-header")
+            .arg("--output-file")
+            .arg(format!("single-{index}.txt"))
+            .args(*arguments)
+            .assert()
+            .success();
+    }
+    context
+        .temp_dir
+        .child("exports/batch.toml")
+        .write_str(&manifest)?;
+    uv_snapshot!(context.filters(), context.export()
+        .arg("--frozen").arg("--no-header")
+        .arg("--batch").arg("exports/batch.toml"), @"exit_code: 0 (success)");
+    for index in 0..selections.len() {
+        assert_eq!(
+            fs_err::read(context.temp_dir.child(format!("exports/{index}.txt")))?,
+            fs_err::read(context.temp_dir.child(format!("single-{index}.txt")))?,
+            "batch entry {index}",
+        );
+    }
+    assert_eq!(fs_err::read(context.temp_dir.child("uv.lock"))?, lock);
+    Ok(())
+}
+
+/// A later invalid selection must not replace outputs rendered earlier in the batch.
+#[test]
+fn export_batch_invalid_selection() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+    "#})?;
+    context.lock().assert().success();
+    context
+        .temp_dir
+        .child("requirements.txt")
+        .write_str("original\n")?;
+    context.temp_dir.child("batch.toml").write_str(indoc! {r#"
+        [[export]]
+        output-file = "requirements.txt"
+
+        [[export]]
+        output-file = "missing.txt"
+        only-group = ["missing"]
+    "#})?;
+    uv_snapshot!(context.filters(), context.export()
+        .arg("--frozen").arg("--batch").arg("batch.toml"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Failed to export `[TEMP_DIR]/missing.txt`
+      cause: Group `missing` is not defined in the project's `dependency-groups` table
+    ");
+    assert_eq!(
+        fs_err::read_to_string(context.temp_dir.child("requirements.txt"))?,
+        "original\n"
+    );
+    assert!(!context.temp_dir.child("missing.txt").exists());
+    Ok(())
+}
+
+#[test]
+fn export_batch_manifest_validation() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let manifest = context.temp_dir.child("batch.toml");
+    manifest.write_str("export = []")?;
+    uv_snapshot!(context.filters(), context.export()
+        .arg("--batch").arg("batch.toml"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: `--batch` requires `--frozen`
+    ");
+    uv_snapshot!(context.filters(), context.export()
+        .arg("--frozen").arg("--batch").arg("batch.toml"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Export manifest must contain at least one `[[export]]` entry
+    ");
+    manifest.write_str(indoc! {r#"
+        [[export]]
+        output-file = "requirements.txt"
+        extras = ["test"]
+    "#})?;
+    uv_snapshot!(context.filters(), context.export()
+        .arg("--frozen").arg("--batch").arg("batch.toml"), @r#"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Failed to parse export manifest `batch.toml`
+      cause: TOML parse error at line 3, column 1
+               |
+             3 | extras = ["test"]
+               | ^^^^^^
+             unknown field `extras`, expected one of `output-file`, `package`, `all-packages`, `extra`, `no-extra`, `all-extras`, `group`, `no-group`, `only-group`, `all-groups`, `no-default-groups`
+    "#);
+    manifest.write_str(indoc! {r#"
+        [[export]]
+        output-file = "requirements.txt"
+        [[export]]
+        output-file = "./requirements.txt"
+    "#})?;
+    uv_snapshot!(context.filters(), context.export()
+        .arg("--frozen").arg("--batch").arg("batch.toml"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Duplicate export output: `[TEMP_DIR]/requirements.txt`
+    ");
+    manifest.write_str(indoc! {r#"
+        [[export]]
+        output-file = "requirements.txt"
+        only-group = ["dev"]
+        extra = ["test"]
+    "#})?;
+    uv_snapshot!(context.filters(), context.export()
+        .arg("--frozen").arg("--batch").arg("batch.toml"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: `only-group` cannot be combined with `extra` or `all-extras`
+    ");
+    Ok(())
+}

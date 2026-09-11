@@ -3,24 +3,25 @@ use std::ffi::OsStr;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
-use anyhow::{Result, anyhow};
+use anyhow::{Context, Result, anyhow, bail};
 use clap::ValueEnum;
 use itertools::Itertools;
 use owo_colors::OwoColorize;
 use rustc_hash::FxHashSet;
+use serde::Deserialize;
 
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, RegistryClientBuilder};
 use uv_configuration::{
-    ActiveEnvironment, Concurrency, DependencyGroups, EditableMode, ExportFormat,
-    ExtrasSpecification, InstallOptions,
+    ActiveEnvironment, Concurrency, DependencyGroups, DependencyGroupsWithDefaults, EditableMode,
+    ExportFormat, ExtrasSpecification, ExtrasSpecificationWithDefaults, InstallOptions,
 };
 use uv_distribution_types::Verbatim;
-use uv_normalize::{DefaultExtras, DefaultGroups, PackageName};
+use uv_normalize::{DefaultExtras, DefaultGroups, ExtraName, GroupName, PackageName};
 use uv_preview::Preview;
 use uv_python::{ConfigDiscovery, PythonDownloads, PythonPreference, PythonRequest};
 use uv_requirements::is_pylock_toml;
-use uv_resolver::{Installable, PylockToml, RequirementsTxtExport, cyclonedx_json};
+use uv_resolver::{Installable, Lock, PylockToml, RequirementsTxtExport, cyclonedx_json};
 use uv_scripts::Pep723Script;
 use uv_settings::PythonInstallMirrors;
 use uv_warnings::warn_user;
@@ -57,6 +58,74 @@ impl<'lock> From<&'lock ExportTarget> for LockTarget<'lock> {
     }
 }
 
+/// Independent selections and destinations for a frozen batch export.
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ExportBatch {
+    export: Vec<BatchExport>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "kebab-case", deny_unknown_fields)]
+struct BatchExport {
+    output_file: PathBuf,
+    #[serde(default)]
+    package: Vec<PackageName>,
+    #[serde(default)]
+    all_packages: bool,
+    #[serde(default)]
+    extra: Vec<ExtraName>,
+    #[serde(default)]
+    no_extra: Vec<ExtraName>,
+    #[serde(default)]
+    all_extras: bool,
+    #[serde(default)]
+    group: Vec<GroupName>,
+    #[serde(default)]
+    no_group: Vec<GroupName>,
+    #[serde(default)]
+    only_group: Vec<GroupName>,
+    #[serde(default)]
+    all_groups: bool,
+    #[serde(default)]
+    no_default_groups: bool,
+}
+
+impl ExportBatch {
+    /// Read and validate the manifest, resolving output paths relative to its directory.
+    async fn read(path: &Path) -> Result<Self> {
+        let contents = fs_err::tokio::read_to_string(path).await?;
+        let mut batch: Self = toml::from_str(&contents)
+            .with_context(|| format!("Failed to parse export manifest `{}`", path.display()))?;
+        if batch.export.is_empty() {
+            bail!("Export manifest must contain at least one `[[export]]` entry");
+        }
+        let parent = path.parent().unwrap_or(Path::new("."));
+        let mut outputs = FxHashSet::default();
+        for entry in &mut batch.export {
+            entry.output_file = uv_fs::normalize_absolute_path(&std::path::absolute(
+                parent.join(&entry.output_file),
+            )?)?;
+            if !outputs.insert(entry.output_file.clone()) {
+                bail!("Duplicate export output: `{}`", entry.output_file.display());
+            }
+            if entry.all_packages && !entry.package.is_empty() {
+                bail!("`all-packages` cannot be combined with `package`");
+            }
+            if entry.all_extras && !entry.extra.is_empty() {
+                bail!("`all-extras` cannot be combined with `extra`");
+            }
+            if !entry.only_group.is_empty() && (!entry.extra.is_empty() || entry.all_extras) {
+                bail!("`only-group` cannot be combined with `extra` or `all-extras`");
+            }
+            if !entry.only_group.is_empty() && (!entry.group.is_empty() || entry.all_groups) {
+                bail!("`only-group` cannot be combined with `group` or `all-groups`");
+            }
+        }
+        Ok(batch)
+    }
+}
+
 /// Export the project's `uv.lock` in an alternate format.
 #[expect(clippy::fn_params_excessive_bools)]
 pub(crate) async fn export(
@@ -68,6 +137,7 @@ pub(crate) async fn export(
     hashes: bool,
     install_options: InstallOptions,
     output_file: Option<PathBuf>,
+    batch: Option<PathBuf>,
     extras: ExtrasSpecification,
     groups: DependencyGroups,
     editable: Option<EditableMode>,
@@ -92,13 +162,25 @@ pub(crate) async fn export(
     printer: Printer,
     preview: Preview,
 ) -> Result<ExitStatus> {
+    let batch = if let Some(path) = batch {
+        if frozen.is_none() {
+            bail!("`--batch` requires `--frozen`");
+        }
+        Some(ExportBatch::read(&path).await?)
+    } else {
+        None
+    };
+
     // Identify the target.
     let target = if let Some(script) = script {
         ExportTarget::Script(script)
     } else {
         let project = if frozen.is_some() {
             let options = DiscoveryOptions {
-                members: if package.is_empty() {
+                members: if package.is_empty()
+                    && batch.as_ref().is_none_or(|batch| {
+                        batch.export.iter().all(|entry| entry.package.is_empty())
+                    }) {
                     MemberDiscovery::None
                 } else {
                     MemberDiscovery::Existing
@@ -149,7 +231,13 @@ pub(crate) async fn export(
 
     // Determine the default groups to include.
     let default_groups = match &target {
-        ExportTarget::Project(project) => default_dependency_groups(project.pyproject_toml())?,
+        ExportTarget::Project(project) => {
+            if batch.is_some() {
+                DefaultGroups::default()
+            } else {
+                default_dependency_groups(project.pyproject_toml())?
+            }
+        }
         ExportTarget::Script(_) => DefaultGroups::default(),
     };
 
@@ -249,73 +337,193 @@ pub(crate) async fn export(
         Err(err) => return Err(UvError::from(err).into()),
     };
 
+    if let Some(batch) = &batch {
+        let ExportTarget::Project(project) = &target else {
+            bail!("`--batch` does not support scripts");
+        };
+        let mut writers = Vec::with_capacity(batch.export.len());
+        for entry in &batch.export {
+            let pyproject = if let [name] = entry.package.as_slice() {
+                project
+                    .workspace()
+                    .packages()
+                    .get(name)
+                    .ok_or_else(|| anyhow!("Package `{name}` not found in workspace"))?
+                    .pyproject_toml()
+            } else {
+                for name in &entry.package {
+                    if !project.workspace().packages().contains_key(name) {
+                        bail!("Package `{name}` not found in workspace");
+                    }
+                }
+                project.pyproject_toml()
+            };
+            let groups = DependencyGroups::from_args(
+                None,
+                entry.group.clone(),
+                entry.no_group.clone(),
+                entry.no_default_groups,
+                entry.only_group.clone(),
+                entry.all_groups,
+            )
+            .with_defaults(default_dependency_groups(pyproject)?);
+            let extras = ExtrasSpecification::from_args(
+                entry.extra.clone(),
+                entry.no_extra.clone(),
+                false,
+                vec![],
+                entry.all_extras,
+            )
+            .with_defaults(DefaultExtras::default());
+            writers.push(
+                render_export(
+                    &target,
+                    &lock,
+                    format,
+                    entry.all_packages,
+                    &entry.package,
+                    &prune,
+                    hashes,
+                    &install_options,
+                    Some(&entry.output_file),
+                    &extras,
+                    &groups,
+                    editable.clone(),
+                    include_annotations,
+                    include_header,
+                    include_index_url,
+                    include_find_links,
+                    &settings,
+                    &client_builder,
+                    &concurrency,
+                    true,
+                    cache,
+                    preview,
+                )
+                .await
+                .with_context(|| format!("Failed to export `{}`", entry.output_file.display()))?,
+            );
+        }
+        // Render every selection before replacing any output, so invalid selections leave files intact.
+        for writer in writers {
+            writer.commit().await?;
+        }
+    } else {
+        render_export(
+            &target,
+            &lock,
+            format,
+            all_packages,
+            &package,
+            &prune,
+            hashes,
+            &install_options,
+            output_file.as_deref(),
+            &extras,
+            &groups,
+            editable,
+            include_annotations,
+            include_header,
+            include_index_url,
+            include_find_links,
+            &settings,
+            &client_builder,
+            &concurrency,
+            quiet,
+            cache,
+            preview,
+        )
+        .await?
+        .commit()
+        .await?;
+    }
+
+    Ok(ExitStatus::Success)
+}
+
+/// Render one selection from a shared lockfile, deferring its file write until validation completes.
+#[expect(clippy::fn_params_excessive_bools)]
+async fn render_export<'output>(
+    target: &ExportTarget,
+    lock: &Lock,
+    format: Option<ExportFormat>,
+    all_packages: bool,
+    package: &[PackageName],
+    prune: &[PackageName],
+    hashes: bool,
+    install_options: &InstallOptions,
+    output_file: Option<&'output Path>,
+    extras: &ExtrasSpecificationWithDefaults,
+    groups: &DependencyGroupsWithDefaults,
+    editable: Option<EditableMode>,
+    include_annotations: bool,
+    include_header: bool,
+    include_index_url: bool,
+    include_find_links: bool,
+    settings: &ResolverSettings,
+    client_builder: &BaseClientBuilder<'_>,
+    concurrency: &Concurrency,
+    quiet: bool,
+    cache: &Cache,
+    preview: Preview,
+) -> Result<OutputWriter<'output>> {
     // Identify the installation target.
-    let target = match &target {
+    let target = match target {
         ExportTarget::Project(VirtualProject::Project(project)) => {
             if all_packages {
                 InstallTarget::Workspace {
                     workspace: project.workspace(),
-                    lock: &lock,
+                    lock,
                 }
             } else {
-                match package.as_slice() {
+                match package {
                     // By default, install the root project.
                     [] => InstallTarget::Project {
                         workspace: project.workspace(),
                         name: project.project_name(),
-                        lock: &lock,
+                        lock,
                     },
                     [name] => InstallTarget::Project {
                         workspace: project.workspace(),
                         name,
-                        lock: &lock,
+                        lock,
                     },
                     names => InstallTarget::Projects {
                         workspace: project.workspace(),
                         names,
-                        lock: &lock,
+                        lock,
                     },
                 }
             }
         }
         ExportTarget::Project(VirtualProject::NonProject(workspace)) => {
             if all_packages {
-                InstallTarget::NonProjectWorkspace {
-                    workspace,
-                    lock: &lock,
-                }
+                InstallTarget::NonProjectWorkspace { workspace, lock }
             } else {
-                match package.as_slice() {
+                match package {
                     // By default, install the entire workspace.
-                    [] => InstallTarget::NonProjectWorkspace {
-                        workspace,
-                        lock: &lock,
-                    },
+                    [] => InstallTarget::NonProjectWorkspace { workspace, lock },
                     [name] => InstallTarget::Project {
                         workspace,
                         name,
-                        lock: &lock,
+                        lock,
                     },
                     names => InstallTarget::Projects {
                         workspace,
                         names,
-                        lock: &lock,
+                        lock,
                     },
                 }
             }
         }
-        ExportTarget::Script(script) => InstallTarget::Script {
-            script,
-            lock: &lock,
-        },
+        ExportTarget::Script(script) => InstallTarget::Script { script, lock },
     };
 
     // Validate that the set of requested extras and development groups are defined in the lockfile.
-    target.validate_extras(&extras)?;
-    target.validate_groups(&groups)?;
+    target.validate_extras(extras)?;
+    target.validate_groups(groups)?;
 
     if output_file
-        .as_deref()
         .and_then(Path::file_name)
         .is_some_and(|name| name.eq_ignore_ascii_case("pyproject.toml"))
     {
@@ -331,18 +539,16 @@ pub(crate) async fn export(
     }
 
     // Write the resolved dependencies to the output channel.
-    let mut writer = OutputWriter::new(!quiet || output_file.is_none(), output_file.as_deref());
+    let mut writer = OutputWriter::new(!quiet || output_file.is_none(), output_file);
 
     // Determine the output format.
     let format = format.unwrap_or_else(|| {
         if output_file
-            .as_deref()
             .and_then(Path::extension)
             .is_some_and(|ext| ext.eq_ignore_ascii_case("txt"))
         {
             ExportFormat::RequirementsTxt
         } else if output_file
-            .as_deref()
             .and_then(Path::file_name)
             .and_then(OsStr::to_str)
             .is_some_and(is_pylock_toml)
@@ -355,13 +561,12 @@ pub(crate) async fn export(
 
     // Skip conflict detection for CycloneDX exports, as SBOMs are meant to document all dependencies including conflicts.
     if !matches!(format, ExportFormat::CycloneDX1_5) {
-        detect_conflicts(&target, &extras, &groups)?;
+        detect_conflicts(&target, extras, groups)?;
     }
 
     // If the user is exporting to PEP 751, ensure the filename matches the specification.
     if matches!(format, ExportFormat::PylockToml) {
         if let Some(file_name) = output_file
-            .as_deref()
             .and_then(Path::file_name)
             .and_then(OsStr::to_str)
         {
@@ -378,13 +583,13 @@ pub(crate) async fn export(
         ExportFormat::RequirementsTxt => {
             let export = RequirementsTxtExport::from_lock(
                 &target,
-                &prune,
-                &extras,
-                &groups,
+                prune,
+                extras,
+                groups,
                 include_annotations,
                 editable,
                 hashes,
-                &install_options,
+                install_options,
             )?;
 
             if include_header {
@@ -445,12 +650,12 @@ pub(crate) async fn export(
         ExportFormat::PylockToml => {
             let mut export = PylockToml::from_lock(
                 &target,
-                &prune,
-                &extras,
-                &groups,
+                prune,
+                extras,
+                groups,
                 include_annotations,
                 editable.as_ref(),
-                &install_options,
+                install_options,
             )?;
 
             // Registries don't always provide hashes, but `packages.*.hashes` is a required
@@ -477,12 +682,12 @@ pub(crate) async fn export(
         ExportFormat::CycloneDX1_5 => {
             let export = cyclonedx_json::from_lock(
                 &target,
-                &prune,
-                &extras,
-                &groups,
+                prune,
+                extras,
+                groups,
                 include_annotations,
                 hashes,
-                &install_options,
+                install_options,
                 preview,
                 all_packages,
             )?;
@@ -491,9 +696,7 @@ pub(crate) async fn export(
         }
     }
 
-    writer.commit().await?;
-
-    Ok(ExitStatus::Success)
+    Ok(writer)
 }
 
 /// Format the uv command used to generate the output file.
