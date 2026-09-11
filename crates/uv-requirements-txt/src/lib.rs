@@ -1023,7 +1023,21 @@ fn parse_requirement_and_hashes(
         }
     }
 
-    let requirement = RequirementsTxtRequirement::parse(requirement, working_dir, editable)
+    // Pip treats backslash + newline as a line continuation and drops it before
+    // interpreting the requirement (leaving surrounding whitespace). Strip those
+    // escapes so PEP 508 parsing sees the joined logical line. See #20744.
+    let requirement = if requirement.contains('\\') {
+        Cow::Owned(
+            requirement
+                .replace("\\\r\n", "")
+                .replace("\\\n", "")
+                .replace("\\\r", ""),
+        )
+    } else {
+        Cow::Borrowed(requirement)
+    };
+
+    let requirement = RequirementsTxtRequirement::parse(&requirement, working_dir, editable)
         .map(|requirement| {
             if let Some(source) = source {
                 requirement.with_origin(RequirementOrigin::File(source.to_path_buf()))
@@ -1618,6 +1632,22 @@ mod test {
     /// Return the insta filters for a given path.
     fn path_filters(filter: &str) -> Vec<(&str, &str)> {
         vec![(filter, "<REQUIREMENTS_DIR>"), (r"\\\\", "/")]
+    }
+
+    #[tokio::test]
+    async fn escaped_line_continuation_before_version_specifier() -> Result<()> {
+        let temp_dir = tempdir()?;
+        let requirements_txt = temp_dir.path().join("requirements.txt");
+        // pip accepts `name \` / `>1.0.0` as a single requirement; see #20744.
+        fs::write(&requirements_txt, "anyio \\\n     >1.0.0\n")?;
+
+        let requirements = RequirementsTxt::parse(&requirements_txt, temp_dir.path()).await?;
+
+        assert_eq!(
+            requirements.requirements[0].requirement.to_string(),
+            "anyio>1.0.0"
+        );
+        Ok(())
     }
 
     #[test_case(Path::new("basic.txt"))]
