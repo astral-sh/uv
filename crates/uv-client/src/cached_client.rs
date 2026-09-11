@@ -610,14 +610,18 @@ impl CachedClient {
         );
 
         // Check for HTTP error status and extract problem details if available
+        let retry_count = response
+            .extensions()
+            .get::<reqwest_retry::RetryCount>()
+            .map(|retries| retries.value());
+
         if let Err(status_error) = response.error_for_status_ref() {
             let problem_details = ProblemDetails::try_from_response(response).await;
-            return Err(ErrorKind::from_reqwest_with_problem_details(
-                url.clone(),
-                status_error,
-                problem_details,
-            )
-            .into());
+            return Err(Error::new(
+                ErrorKind::from_reqwest_with_problem_details(url, status_error, problem_details),
+                retry_count.unwrap_or_default(),
+                start.elapsed(),
+            ));
         }
 
         // If the user set a custom `Cache-Control` header, override it.
@@ -1080,5 +1084,130 @@ impl DataWithCachePolicy {
             return Err(ErrorKind::ArchiveRead(msg).into());
         }
         Ok(len_usize)
+    }
+}
+
+#[cfg(test)]
+mod revalidation_retry_tests {
+    use anyhow::{Context, Result, bail};
+    use reqwest::header::HeaderValue;
+    use reqwest::{Client, StatusCode};
+    use wiremock::matchers::{method, path};
+    use wiremock::{Mock, MockServer, ResponseTemplate};
+
+    use uv_cache::CacheEntry;
+
+    use crate::{AuthIntegration, BaseClientBuilder, ErrorKind, ProblemDetails};
+
+    use super::{CacheControl, CachedClient, CachedClientError};
+
+    #[tokio::test]
+    async fn revalidation_http_errors_share_retry_budget() -> Result<()> {
+        let server = MockServer::start().await;
+        let url = format!("{}/metadata", server.uri());
+        let client = CachedClient::new(
+            BaseClientBuilder::default()
+                .custom_client(Client::builder().no_proxy().build()?)
+                .auth_integration(AuthIntegration::NoAuthMiddleware)
+                .retries(2)
+                .no_retry_delay(true)
+                .build()?,
+        );
+        let temp_dir = tempfile::tempdir()?;
+        let cached_entry = CacheEntry::new(temp_dir.path(), "cached");
+        let fresh_entry = CacheEntry::new(temp_dir.path(), "fresh");
+
+        Mock::given(method("GET"))
+            .and(path("/metadata"))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .insert_header("cache-control", "public, max-age=3600")
+                    .insert_header("etag", "\"cached\"")
+                    .set_body_string("cached"),
+            )
+            .mount(&server)
+            .await;
+        let cached = client
+            .get_serde_with_retry(
+                client.uncached().raw_client().get(&url).build()?,
+                &cached_entry,
+                CacheControl::None,
+                async |response| response.text().await,
+            )
+            .await
+            .expect("the initial response should populate the cache");
+        assert_eq!(cached, "cached");
+        assert!(cached_entry.path().try_exists()?);
+        assert_eq!(
+            server
+                .received_requests()
+                .await
+                .context("request recording is enabled")?
+                .len(),
+            1
+        );
+
+        for (cache_entry, cache_control, revalidation) in [
+            (&cached_entry, CacheControl::MustRevalidate, true),
+            (&fresh_entry, CacheControl::None, false),
+        ] {
+            server.reset().await;
+            Mock::given(method("GET"))
+                .and(path("/metadata"))
+                .respond_with(ResponseTemplate::new(503).set_body_raw(
+                    r#"{"title":"Unavailable","status":503,"detail":"Try again later"}"#,
+                    ProblemDetails::CONTENT_TYPE,
+                ))
+                .mount(&server)
+                .await;
+
+            let error = client
+                .get_serde_with_retry(
+                    client.uncached().raw_client().get(&url).build()?,
+                    cache_entry,
+                    cache_control,
+                    async |response| response.text().await,
+                )
+                .await
+                .expect_err("the server always returns an HTTP error");
+            let CachedClientError::Client(error) = error else {
+                bail!("expected a client error");
+            };
+            assert_eq!(error.retries(), 2);
+            let ErrorKind::WrappedReqwestError(_, source) = error.kind() else {
+                bail!("expected an HTTP status error");
+            };
+            assert_eq!(source.status(), Some(StatusCode::SERVICE_UNAVAILABLE));
+            assert_eq!(
+                source.to_string(),
+                "Server message: Unavailable, Try again later"
+            );
+
+            let requests = server
+                .received_requests()
+                .await
+                .context("request recording is enabled")?;
+            assert_eq!(requests.len(), 3);
+            for request in requests {
+                assert_eq!(
+                    request
+                        .headers
+                        .get("if-none-match")
+                        .map(HeaderValue::to_str)
+                        .transpose()?,
+                    revalidation.then_some("\"cached\"")
+                );
+                assert_eq!(
+                    request
+                        .headers
+                        .get("cache-control")
+                        .map(HeaderValue::to_str)
+                        .transpose()?,
+                    revalidation.then_some("no-cache")
+                );
+            }
+        }
+
+        Ok(())
     }
 }
