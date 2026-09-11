@@ -15044,7 +15044,7 @@ fn strip_shebang_arguments() -> Result<()> {
     insta::with_settings!({filters => context.filters()
     }, {
         insta::assert_snapshot!(script_content, @r#"
-        #![VENV]/bin/python3
+        #![VENV]/bin/python
         # This is a test script with shebang arguments
         import sys
         print(f"Hello from {sys.executable}")
@@ -15058,7 +15058,7 @@ fn strip_shebang_arguments() -> Result<()> {
     insta::with_settings!({filters => context.filters()
     }, {
         insta::assert_snapshot!(gui_script_content, @r#"
-        #![VENV]/bin/python3
+        #![VENV]/bin/python
         # This is a test GUI script with shebang arguments
         import sys
         print(f"Hello from GUI script: {sys.executable}")

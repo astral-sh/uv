@@ -18933,8 +18933,8 @@ fn compile_broken_active_venv() -> Result<()> {
         .arg("requirements.in"), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: Failed to inspect Python interpreter from active virtual environment at `.venv/bin/python3`
-      Caused by: Broken symlink at `.venv/bin/python3`, was the underlying Python interpreter removed?
+    error: Failed to inspect Python interpreter from active virtual environment at `.venv/bin/python`
+      Caused by: Broken symlink at `.venv/bin/python`, was the underlying Python interpreter removed?
 
     hint: Consider recreating the environment (e.g., with `uv venv`)
     ");

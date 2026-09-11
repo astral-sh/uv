@@ -1,3 +1,5 @@
+#[cfg(unix)]
+use anyhow::Result;
 use assert_cmd::assert::OutputAssertExt;
 use assert_fs::prelude::{FileTouch, PathChild};
 use assert_fs::{fixture::FileWriteStr, prelude::PathCreateDir};
@@ -647,6 +649,70 @@ fn python_find_venv() {
         [PYTHON-3.11]
         ");
     }
+}
+
+#[test]
+#[cfg(unix)]
+fn python_find_venv_executable_precedence() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let python = context.interpreter();
+    let python3 = python.with_file_name("python3");
+
+    // Prefer `python` when discovering an environment or requesting it by directory.
+    uv_snapshot!(context.filters(), context.python_find(), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    [VENV]/bin/python
+    ");
+
+    uv_snapshot!(context.filters(), context.python_find().arg(context.venv.path()), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    [VENV]/bin/python
+    ");
+
+    uv_snapshot!(context.filters(), context.python_find()
+        .env(EnvVars::VIRTUAL_ENV, context.venv.path()), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    [VENV]/bin/python
+    ");
+
+    // An explicit executable path is still used as given.
+    uv_snapshot!(context.filters(), context.python_find().arg(&python3), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    [VENV]/bin/python3
+    ");
+
+    // Discover environments containing only `python`.
+    fs_err::remove_file(&python3)?;
+    uv_snapshot!(context.filters(), context.python_find(), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    [VENV]/bin/python
+    ");
+    uv_snapshot!(context.filters(), context.python_find().arg(context.venv.path()), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    [VENV]/bin/python
+    ");
+
+    // Discover environments containing only `python3`.
+    fs_err::os::unix::fs::symlink(fs_err::canonicalize(&python)?, &python3)?;
+    fs_err::remove_file(&python)?;
+    uv_snapshot!(context.filters(), context.python_find().arg(context.venv.path()), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    [VENV]/bin/python3
+    ");
+    uv_snapshot!(context.filters(), context.python_find(), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    [VENV]/bin/python3
+    ");
+
+    Ok(())
 }
 
 #[cfg(unix)]
