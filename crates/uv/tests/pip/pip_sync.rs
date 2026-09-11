@@ -3756,6 +3756,12 @@ fn require_hashes_wheel_url_mismatch() -> Result<()> {
     "
     );
 
+    // A rejected wheel must not be published to the archive cache.
+    context
+        .cache_dir
+        .child("archive-v0")
+        .assert(predicates::path::missing());
+
     Ok(())
 }
 
@@ -3996,6 +4002,12 @@ fn require_hashes_wheel_path_mismatch() -> Result<()> {
             sha256:a34996d4bd5abb2336e14ff0a2d22b92cfd0f0ed344e6883041ce01953276a13
     "
     );
+
+    // A rejected wheel must not be published to the archive cache.
+    context
+        .cache_dir
+        .child("archive-v0")
+        .assert(predicates::path::missing());
 
     Ok(())
 }
@@ -4723,6 +4735,41 @@ fn require_hashes_registry_valid_hash() -> Result<()> {
     Ok(())
 }
 
+/// Verify the index's wheel hash even when no explicit hash policy is requested.
+#[test]
+fn index_wheel_hash_mismatch() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("requirements.txt")
+        .write_str("example-a-961b4c22==1.0.0")?;
+
+    uv_snapshot!(context.pip_sync()
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .arg("requirements.txt")
+        .arg("--only-binary=:all:")
+        .arg("--index-url")
+        .arg("https://astral-test.github.io/astral-test-hash/invalid-hash/simple-html/"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+      × Failed to download `example-a-961b4c22==1.0.0`
+      ╰─▶ Hash mismatch for `example-a-961b4c22==1.0.0`
+
+          Expected:
+            sha256:8838f9d005ff0432b258ba648d9cabb1cbdf06ac29d14f788b02edae544032ea
+
+          Computed:
+            sha256:5d69f0b590514103234f0c3526563856f04d044d8d0ea1073a843ae429b3187e
+    ");
+
+    context
+        .cache_dir
+        .child("archive-v0")
+        .assert(predicates::path::missing());
+    Ok(())
+}
+
 /// Using `--index-url`, and the registry serves us an incorrect hash.
 #[test]
 fn require_hashes_registry_invalid_hash() -> Result<()> {
@@ -4779,8 +4826,8 @@ fn require_hashes_registry_invalid_hash() -> Result<()> {
     "
     );
 
-    // Third, request the correct hash, that the registry _thinks_ is correct. We should accept
-    // it, since it's already cached under this hash.
+    // Third, request the correct hash despite the registry's incorrect hash. The explicit policy
+    // takes precedence, and the rejected downloads must not have populated the cache.
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt
         .write_str("example-a-961b4c22==1.0.0 --hash=sha256:5d69f0b590514103234f0c3526563856f04d044d8d0ea1073a843ae429b3187e")?;
@@ -4801,8 +4848,7 @@ fn require_hashes_registry_invalid_hash() -> Result<()> {
     "
     );
 
-    // Fourth, request the correct hash, that the registry _thinks_ is correct, but without the
-    // cache. We _should_ accept it, but we currently don't.
+    // The explicit policy must also take precedence when refreshing the cache.
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt
         .write_str("example-a-961b4c22==1.0.0 --hash=sha256:5d69f0b590514103234f0c3526563856f04d044d8d0ea1073a843ae429b3187e")?;

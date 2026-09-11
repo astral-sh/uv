@@ -9168,6 +9168,7 @@ fn verify_hashes_mismatch() -> Result<()> {
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + idna==3.6
     "
@@ -9286,6 +9287,7 @@ fn verify_hashes_public_pin_local_version() -> Result<()> {
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + hash-probe==1.0.0+local
     ");
@@ -13662,6 +13664,7 @@ fn pep_751_hash_mismatch() -> Result<()> {
         .arg("pylock.toml"), @"
     exit_code: 0 (success)
     ----- stderr -----
+    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + iniconfig==2.0.0 (from file://[TEMP_DIR]/iniconfig-2.0.0-py3-none-any.whl)
     ");

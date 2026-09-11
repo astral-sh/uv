@@ -7,7 +7,7 @@ use tracing::warn;
 
 use uv_cache::{Cache, CacheBucket};
 use uv_distribution_filename::SourceDistExtension;
-use uv_distribution_types::{ArchiveHashPolicy, BuildableSource};
+use uv_distribution_types::{ArchiveHashPolicy, BuildableSource, SourceDist};
 use uv_extract::hash::{HashReader, Hasher};
 use uv_fs::rename_with_retry;
 use uv_pypi_types::{HashAlgorithm, HashDigest};
@@ -53,8 +53,17 @@ impl ValidatedSourceArchive {
         let staging_dir = tempfile::tempdir_in(cache.bucket(CacheBucket::SourceDistributions))
             .map_err(Error::CacheWrite)?;
 
-        // Include every algorithm needed to validate the caller's policy or repair an old revision.
+        let hash_policy = if let BuildableSource::Dist(SourceDist::Registry(dist)) = source {
+            validation
+                .hash_policy
+                .with_index_hashes(dist.file.hashes.as_slice())
+        } else {
+            validation.hash_policy
+        };
+
+        // Include the caller's algorithms alongside any index algorithms selected for validation.
         let mut algorithms = validation.hash_policy.algorithms();
+        algorithms.extend(hash_policy.algorithms());
         algorithms.extend_from_slice(validation.extra_algorithms);
         algorithms.extend(validation.existing_hashes.iter().map(HashDigest::algorithm));
         algorithms.sort();
@@ -88,11 +97,10 @@ impl ValidatedSourceArchive {
             .into_iter()
             .map(HashDigest::from)
             .collect::<Vec<_>>();
-        if validation.hash_policy.requires_validation() && !validation.hash_policy.matches(&hashes)
-        {
+        if hash_policy.requires_validation() && !hash_policy.matches(&hashes) {
             return Err(Error::hash_mismatch(
                 source.to_string(),
-                validation.hash_policy.digests(),
+                hash_policy.digests(),
                 &hashes,
             ));
         }
