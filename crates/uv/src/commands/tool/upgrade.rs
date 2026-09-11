@@ -349,9 +349,7 @@ async fn upgrade_tool(
     let options = args.clone().combine(receipt.combine(filesystem.clone()));
     let settings = ResolverInstallerSettings::from(options.clone());
 
-    let build_constraint_requirements = existing_tool_receipt.build_constraints().to_vec();
-    let build_constraints =
-        Constraints::from_requirements(build_constraint_requirements.iter().cloned());
+    let build_constraints = existing_tool_receipt.build_constraints().to_vec();
     let manifest_constraints = existing_tool_receipt
         .constraints()
         .iter()
@@ -365,9 +363,10 @@ async fn upgrade_tool(
         &manifest_constraints,
         &manifest_overrides,
         &manifest_excludes,
-        &build_constraint_requirements,
+        &build_constraints,
         &settings.resolver.dependency_metadata,
     );
+    let build_constraints = Constraints::from_specifications(build_constraints);
 
     // Resolve the requirements.
     let spec = RequirementsSpecification::from_excludes(

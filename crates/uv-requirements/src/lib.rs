@@ -38,6 +38,9 @@ pub enum Error {
     HashStrategy(#[from] uv_types::HashStrategyError),
 
     #[error(transparent)]
+    FlatIndex(#[from] Box<uv_client::FlatIndexError>),
+
+    #[error(transparent)]
     WheelFilename(#[from] uv_distribution_filename::WheelFilenameError),
 
     #[error(transparent)]
