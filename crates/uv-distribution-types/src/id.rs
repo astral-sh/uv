@@ -204,7 +204,9 @@ impl Display for VersionId {
 /// the URL would also be sufficient).
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum DistributionId {
-    Url(CanonicalUrl),
+    /// The source location and original fragment, including its expected hashes. In-flight
+    /// downloads must not conflate different content expectations at the same canonical URL.
+    Url(CanonicalUrl, Option<String>),
     PathBuf(PathBuf),
     Digest(HashDigest),
     AbsoluteUrl(String),
@@ -250,6 +252,7 @@ mod tests {
     use fs_err as fs;
 
     use super::VersionId;
+    use crate::Identifier;
     use uv_redacted::DisplaySafeUrl;
 
     #[test]
@@ -264,6 +267,7 @@ mod tests {
         .unwrap();
 
         assert_eq!(VersionId::from_url(&first), VersionId::from_url(&second));
+        assert_ne!(first.distribution_id(), second.distribution_id());
     }
 
     #[test]

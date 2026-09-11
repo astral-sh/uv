@@ -8,14 +8,14 @@ use uv_redacted::{DisplaySafeUrl, DisplaySafeUrlError};
 
 use crate::cache_key::{CacheKey, CacheKeyHasher};
 
-/// A wrapper around `Url` which represents a "canonical" version of an original URL.
+/// A normalized URL for comparing package sources.
 ///
 /// A "canonical" url is only intended for internal comparison purposes. It's to help paper over
 /// mistakes such as depending on `github.com/foo/bar` vs. `github.com/foo/bar.git`.
 ///
-/// This is **only** for internal purposes and provides no means to actually read the underlying
-/// string value of the `Url` it contains. This is intentional, because all fetching should still
-/// happen within the context of the original URL.
+/// Known hash fragments are omitted from source identity. All other fragments are preserved,
+/// including unknown fields that may acquire meaning in the future. Fetching and hash validation
+/// must use the original URL; equal canonical URLs do not imply equal archive contents.
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone)]
 pub struct CanonicalUrl(DisplaySafeUrl);
 
@@ -24,6 +24,22 @@ impl CanonicalUrl {
         // If the URL cannot be a base, then it's not a valid URL anyway.
         if url.cannot_be_a_base() {
             return Self(url);
+        }
+
+        // Match the hash fields recognized by `uv_pypi_types::Hashes::parse_fragment`, without
+        // interpreting other fragments. In particular, malformed or unknown fields are retained.
+        if let Some(fragment) = url.fragment() {
+            let fragments = fragment
+                .split('&')
+                .filter(|fragment| {
+                    !fragment.split_once('=').is_some_and(|(name, value)| {
+                        matches!(name, "md5" | "sha256" | "sha384" | "sha512" | "blake2b")
+                            && !value.contains('=')
+                    })
+                })
+                .collect::<Vec<_>>();
+            let fragment = (!fragments.is_empty()).then(|| fragments.join("&"));
+            url.set_fragment(fragment.as_deref());
         }
 
         // Strip credentials.
@@ -225,6 +241,56 @@ impl std::fmt::Display for RepositoryUrl {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn canonical_url_ignores_known_hash_fragments() -> Result<(), DisplaySafeUrlError> {
+        for algorithm in ["md5", "sha256", "sha384", "sha512", "blake2b"] {
+            assert_eq!(
+                CanonicalUrl::parse(&format!("https://example.com/pkg.whl#{algorithm}=abc"))?,
+                CanonicalUrl::parse("https://example.com/pkg.whl")?,
+            );
+            assert_eq!(
+                CanonicalUrl::parse(&format!(
+                    "https://example.com/pkg.tar.gz#subdirectory=src&{algorithm}=abc&unknown=value"
+                ))?,
+                CanonicalUrl::parse(
+                    "https://example.com/pkg.tar.gz#subdirectory=src&unknown=value"
+                )?,
+            );
+        }
+        assert_eq!(
+            CanonicalUrl::parse("https://example.com/pkg.whl#sha256=abc&sha512=def")?,
+            CanonicalUrl::parse("https://example.com/pkg.whl")?,
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn canonical_url_preserves_other_fragments() -> Result<(), DisplaySafeUrlError> {
+        for fragment in [
+            "subdirectory=src",
+            "path=dist/pkg.whl",
+            "lfs=true",
+            "egg=pkg",
+            "unknown=value",
+            "sha3_256=abc",
+            "SHA256=abc",
+            "sha256",
+            "sha256=abc=def",
+            "0123456789012345678901234567890123456789",
+        ] {
+            let url = DisplaySafeUrl::parse(&format!("https://example.com/pkg#{fragment}"))?;
+            assert_eq!(DisplaySafeUrl::from(CanonicalUrl::new(url.clone())), url);
+        }
+        // Preserve duplicate fields and their order, matching the source parsers.
+        assert_eq!(
+            CanonicalUrl::parse(
+                "https://example.com/pkg#subdirectory=first&sha256=abc&subdirectory=second"
+            )?,
+            CanonicalUrl::parse("https://example.com/pkg#subdirectory=first&subdirectory=second")?,
+        );
+        Ok(())
+    }
 
     #[test]
     fn user_credential_does_not_affect_cache_key() -> Result<(), DisplaySafeUrlError> {
