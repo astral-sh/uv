@@ -1,3 +1,4 @@
+use std::error::Error as StdError;
 use std::num::NonZeroUsize;
 use std::ops::Deref;
 use std::path::{Path, PathBuf};
@@ -8,14 +9,16 @@ use uv_client::{DEFAULT_CONNECT_TIMEOUT, DEFAULT_READ_TIMEOUT, DEFAULT_READ_TIME
 use uv_configuration::RequiredVersion;
 use uv_dirs::{system_config_file, user_config_dir};
 use uv_distribution_types::{IndexUrlError, Origin};
+use uv_errors::{Diagnostic, ErrorOptions, Hints, SourceFile};
 use uv_flags::EnvironmentFlags;
 use uv_fs::Simplified;
 use uv_normalize::{GroupName, PackageName};
 use uv_pep440::Version;
 use uv_redacted::DisplaySafeUrl;
 use uv_static::{EnvVars, InvalidEnvironmentVariable, parse_boolish_environment_variable};
+use uv_toml::diagnostic_for_span;
 use uv_torch::AmdGpuArchitecture;
-use uv_warnings::warn_user;
+use uv_warnings::{warn_user, warn_user_with_chain};
 
 pub use crate::combine::*;
 pub use crate::settings::*;
@@ -105,12 +108,12 @@ impl FilesystemOptions {
                 Ok(None) => {
                     // Continue traversing the directory tree.
                 }
-                Err(Error::PyprojectToml(path, err)) => {
+                Err(error @ Error::PyprojectToml { .. }) => {
                     // If we see an invalid `pyproject.toml`, warn but continue.
-                    warn_user!(
-                        "Failed to parse `{}` during settings discovery:\n{}",
-                        path.user_display().cyan(),
-                        textwrap::indent(&err.to_string(), "  ")
+                    warn_user_with_chain!(
+                        &error,
+                        Hints::none(),
+                        ErrorOptions::default().with_diagnostic(discovery_diagnostic_for_error),
                     );
                 }
                 Err(err) => {
@@ -132,13 +135,7 @@ impl FilesystemOptions {
                 let options =
                     info_span!("toml::from_str filesystem options uv.toml", path = %path.display())
                         .in_scope(|| toml::from_str::<Options>(&content))
-                        .map_err(|err| {
-                            check_uv_toml_required_version(
-                                &path,
-                                &content,
-                                Error::UvToml(path.clone(), Box::new(err)),
-                            )
-                        })?
+                        .map_err(|err| check_uv_toml_required_version(&path, &content, err))?
                         .relative_to(&std::path::absolute(dir)?)?;
 
                 // If the directory also contains a `[tool.uv]` table in a `pyproject.toml` file,
@@ -222,13 +219,7 @@ fn read_file(path: &Path) -> Result<Options, Error> {
     let content = fs_err::read_to_string(path)?;
     let options = info_span!("toml::from_str filesystem options uv.toml", path = %path.display())
         .in_scope(|| toml::from_str::<Options>(&content))
-        .map_err(|err| {
-            check_uv_toml_required_version(
-                path,
-                &content,
-                Error::UvToml(path.to_path_buf(), Box::new(err)),
-            )
-        })?;
+        .map_err(|err| check_uv_toml_required_version(path, &content, err))?;
     let options = if let Some(parent) = std::path::absolute(path)?.parent() {
         options.relative_to(parent)?
     } else {
@@ -256,7 +247,11 @@ fn required_version_mismatch(required_version: Option<RequiredVersion>) -> Optio
 /// On a `pyproject.toml` settings parse error, check whether `tool.uv.required-version` should
 /// take precedence over that error.
 fn check_pyproject_required_version(path: &Path, content: &str, source: toml::de::Error) -> Error {
-    let fallback = || Error::PyprojectToml(path.to_path_buf(), Box::new(source));
+    let fallback = || Error::PyprojectToml {
+        path: path.to_path_buf(),
+        source: Box::new(source),
+        document: SourceFile::new(path.user_display().to_string(), content),
+    };
     let Ok(pyproject) = info_span!(
         "toml::from_str filesystem required-version pyproject.toml",
         path = %path.display()
@@ -274,15 +269,20 @@ fn check_pyproject_required_version(path: &Path, content: &str, source: toml::de
 
 /// On a `uv.toml` settings parse or schema error, check whether top-level `required-version`
 /// should take precedence over that error.
-fn check_uv_toml_required_version(path: &Path, content: &str, source: Error) -> Error {
+fn check_uv_toml_required_version(path: &Path, content: &str, source: toml::de::Error) -> Error {
+    let fallback = || Error::UvToml {
+        path: path.to_path_buf(),
+        source: Box::new(source),
+        document: SourceFile::new(path.user_display().to_string(), content),
+    };
     let Ok(uv_toml) = info_span!(
         "toml::from_str filesystem required-version uv.toml",
         path = %path.display()
     )
     .in_scope(|| toml::from_str::<UvRequiredVersionToml>(content)) else {
-        return source;
+        return fallback();
     };
-    required_version_mismatch(uv_toml.required_version).unwrap_or(source)
+    required_version_mismatch(uv_toml.required_version).unwrap_or_else(fallback)
 }
 
 /// Validate that an [`Options`] schema is compatible with `uv.toml`.
@@ -671,11 +671,21 @@ pub enum Error {
     #[error(transparent)]
     Index(#[from] uv_distribution_types::IndexUrlError),
 
-    #[error("Failed to parse: `{}`", _0.user_display())]
-    PyprojectToml(PathBuf, #[source] Box<toml::de::Error>),
+    #[error("Failed to parse: `{}`", path.user_display())]
+    PyprojectToml {
+        path: PathBuf,
+        #[source]
+        source: Box<toml::de::Error>,
+        document: SourceFile,
+    },
 
-    #[error("Failed to parse: `{}`", _0.user_display())]
-    UvToml(PathBuf, #[source] Box<toml::de::Error>),
+    #[error("Failed to parse: `{}`", path.user_display())]
+    UvToml {
+        path: PathBuf,
+        #[source]
+        source: Box<toml::de::Error>,
+        document: SourceFile,
+    },
 
     #[error("Failed to parse: `{}`. The `{}` field is not allowed in a `uv.toml` file. `{}` is only applicable in the context of a project, and should be placed in a `pyproject.toml` file instead.", _0.user_display(), _1, _1
     )]
@@ -691,6 +701,52 @@ pub enum Error {
 
     #[error(transparent)]
     InvalidEnvironmentVariable(#[from] InvalidEnvironmentVariable),
+}
+
+/// Resolve source presentation for settings errors without replacing their TOML causes.
+pub fn diagnostic_for_error<'a>(error: &'a (dyn StdError + 'static)) -> Option<Diagnostic<'a>> {
+    let error = error
+        .downcast_ref::<Error>()
+        .or_else(|| error.downcast_ref::<Box<Error>>().map(Box::as_ref))?;
+    match error {
+        Error::PyprojectToml {
+            source, document, ..
+        }
+        | Error::UvToml {
+            source, document, ..
+        } => diagnostic_for_span(source.message(), source.span(), document)
+            .map(|source| Diagnostic::default().with_source(source)),
+        Error::Io(_)
+        | Error::Index(_)
+        | Error::PyprojectOnlyField(_, _)
+        | Error::RequiredVersion { .. }
+        | Error::InvalidEnvironmentVariable(_) => None,
+    }
+}
+
+/// Settings discovery can recover from an invalid project configuration.
+fn discovery_diagnostic_for_error<'a>(
+    error: &'a (dyn StdError + 'static),
+) -> Option<Diagnostic<'a>> {
+    let Error::PyprojectToml {
+        path,
+        source,
+        document,
+    } = error.downcast_ref::<Error>()?
+    else {
+        return diagnostic_for_error(error);
+    };
+    let diagnostic = Diagnostic::new(format!(
+        "Failed to parse `{}` during settings discovery",
+        path.user_display(),
+    ));
+    Some(
+        if let Some(source) = diagnostic_for_span(source.message(), source.span(), document) {
+            diagnostic.with_source(source)
+        } else {
+            diagnostic
+        },
+    )
 }
 
 #[derive(Copy, Clone, Debug)]

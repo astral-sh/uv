@@ -17,6 +17,7 @@ use uv_distribution_types::{
     ExtraBuildRequires, IndexCapabilities, NameRequirementSpecification, Requirement,
     RequirementSource, UnresolvedRequirementSpecification,
 };
+use uv_errors::{ErrorOptions, Hints};
 use uv_installer::{InstallationStrategy, Planner, SatisfiesResult, SitePackages};
 use uv_normalize::PackageName;
 use uv_pep440::{VersionSpecifier, VersionSpecifiers};
@@ -34,6 +35,7 @@ use uv_warnings::{warn_user, warn_user_once, warn_user_with_chain};
 use uv_workspace::WorkspaceCache;
 
 use crate::commands::ExitStatus;
+use crate::commands::diagnostics::diagnostic_for_error;
 use crate::commands::pip::latest::LatestClient;
 use crate::commands::pip::loggers::{
     DefaultInstallLogger, DefaultResolveLogger, SummaryResolveLogger,
@@ -554,7 +556,9 @@ pub(crate) async fn install(
                     warn_user_with_chain!(
                         anyhow::Error::from(err)
                             .context("Failed to validate existing tool lock")
-                            .as_ref()
+                            .as_ref(),
+                        Hints::none(),
+                        ErrorOptions::default().with_diagnostic(diagnostic_for_error),
                     );
                     None
                 }

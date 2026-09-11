@@ -1,5 +1,6 @@
 mod diagnostic;
 mod line_wrap;
+mod source;
 
 use std::borrow::Cow;
 use std::error::Error;
@@ -8,10 +9,11 @@ use std::iter;
 
 use owo_colors::{AnsiColors, DynColor, OwoColorize};
 
-#[cfg(test)]
-use diagnostic::{Diagnostic, Info};
-use diagnostic::{DiagnosticFn, write_info};
+use diagnostic::write_info;
+pub use diagnostic::{Diagnostic, DiagnosticFn, Info};
 use line_wrap::{get_wrap_width, wrap_text};
+use source::write_snippets;
+pub use source::{SourceFile, SourceSnippet};
 
 /// An error that may carry user-facing hints.
 ///
@@ -326,8 +328,7 @@ impl<'a, C, W> ErrorOptions<'a, C, W> {
     }
 
     /// Resolve presentation data for each error in the chain.
-    #[cfg(test)]
-    fn with_diagnostic(mut self, diagnostic: DiagnosticFn) -> Self {
+    pub fn with_diagnostic(mut self, diagnostic: DiagnosticFn) -> Self {
         self.diagnostic = Some(diagnostic);
         self
     }
@@ -390,11 +391,16 @@ pub fn write_error_chain_with_options<C: DynColor + Copy, W: fmt::Write>(
         wrapped_main.trim()
     )?;
     if let Some(diagnostic) = &main_diagnostic {
+        write_snippets(&mut stream, &diagnostic.snippets, color)?;
         write_info(&mut stream, &diagnostic.info, width)?;
     }
 
+    let mut source_override = main_diagnostic.and_then(|diagnostic| diagnostic.source);
     for source in iter::successors(err.source(), |&err| err.source()) {
-        let source_diagnostic = diagnostic.and_then(|diagnostic| diagnostic(source));
+        let source_diagnostic = source_override
+            .take()
+            .map(|diagnostic| *diagnostic)
+            .or_else(|| diagnostic.and_then(|diagnostic| diagnostic(source)));
         let msg = source_diagnostic
             .as_ref()
             .and_then(|diagnostic| diagnostic.message.as_deref())
@@ -421,8 +427,10 @@ pub fn write_error_chain_with_options<C: DynColor + Copy, W: fmt::Write>(
             }
         }
         if let Some(diagnostic) = &source_diagnostic {
+            write_snippets(&mut stream, &diagnostic.snippets, color)?;
             write_info(&mut stream, &diagnostic.info, width)?;
         }
+        source_override = source_diagnostic.and_then(|diagnostic| diagnostic.source);
     }
 
     for hint in hints {
@@ -442,8 +450,8 @@ mod tests {
     use owo_colors::AnsiColors;
 
     use super::{
-        Diagnostic, ErrorOptions, ErrorWithHints, Hint, HintOrdering, Hints, Info,
-        debug_error_chain, write_error_chain_with_options,
+        Diagnostic, ErrorOptions, ErrorWithHints, Hint, HintOrdering, Hints, Info, SourceFile,
+        SourceSnippet, debug_error_chain, write_error_chain_with_options,
     };
 
     #[test]
@@ -1026,6 +1034,62 @@ mod tests {
             | \u{1b}[31mred\u{1b}[0m
             | \u{1b}]8;;https://example.com\u{7}link\u{85}\u{202e}text\u{2029}\rrewritten
             |
+        ");
+    }
+
+    #[test]
+    fn source_presentation_keeps_the_real_chain_and_trailing_hints() {
+        #[derive(Debug, thiserror::Error)]
+        #[error("Failed to parse `pyproject.toml`")]
+        struct Outer(#[source] Inner);
+
+        #[derive(Debug, thiserror::Error)]
+        #[error("Original parser display")]
+        struct Inner(#[source] Last);
+
+        #[derive(Debug, thiserror::Error)]
+        #[error("Additional cause")]
+        struct Last;
+
+        let error = Outer(Inner(Last));
+        let mut output = String::new();
+        write_error_chain_with_options(
+            &error,
+            &Hints::from("Update the version."),
+            ErrorOptions::default()
+                .with_diagnostic(|error| {
+                    error.is::<Outer>().then(|| {
+                        Diagnostic::default().with_source(
+                            Diagnostic::new("invalid type: integer `42`, expected a string")
+                                .with_snippet(
+                                    SourceSnippet::new(
+                                        SourceFile::new("pyproject.toml", "version = 42"),
+                                        10..12,
+                                    )
+                                    .expect("valid source span in test input"),
+                                ),
+                        )
+                    })
+                })
+                .with_stream(&mut output),
+        )
+        .expect("writing to a string should not fail");
+        assert!(
+            error
+                .source()
+                .expect("original parser source remains present")
+                .is::<Inner>()
+        );
+        assert_snapshot!(anstream::adapter::strip_str(&output), @"
+        error: Failed to parse `pyproject.toml`
+          cause: invalid type: integer `42`, expected a string
+           --> pyproject.toml:1:11
+            |
+          1 | version = 42
+            |           ^^
+          cause: Additional cause
+
+        hint: Update the version.
         ");
     }
 }

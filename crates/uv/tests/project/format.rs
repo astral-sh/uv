@@ -346,20 +346,19 @@ fn format_fails_malformed_pyproject() -> Result<()> {
     uv_snapshot!(context.filters(), context.format(), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    warning: Failed to parse `pyproject.toml` during settings discovery:
-      TOML parse error at line 1, column 11
+    warning: Failed to parse `pyproject.toml` during settings discovery
+      cause: key with no value, expected `=`
+       --> pyproject.toml:1:11
         |
       1 | malformed pyproject.toml
         |           ^
-      key with no value, expected `=`
-
     warning: `uv format` is experimental and may change without warning. Pass `--preview-features format-command` to disable this warning.
     error: Failed to parse: `pyproject.toml`
-      cause: TOML parse error at line 1, column 11
-               |
-             1 | malformed pyproject.toml
-               |           ^
-             key with no value, expected `=`
+      cause: key with no value, expected `=`
+       --> pyproject.toml:1:11
+        |
+      1 | malformed pyproject.toml
+        |           ^
     ");
 
     // Check that the file is not formatted

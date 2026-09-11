@@ -2458,11 +2458,11 @@ fn invalid_conflicts() -> anyhow::Result<()> {
     exit_code: 2 (failure)
     ----- stderr -----
     error: Failed to parse: `pyproject.toml`
-      cause: TOML parse error at line 7, column 13
-               |
-             7 | conflicts = [
-               |             ^
-             Each set of conflicts must have at least two entries, but found only one
+      cause: Each set of conflicts must have at least two entries, but found only one
+       --> pyproject.toml:7:13
+        |
+      7 | conflicts = [
+        |             ^
     "
     );
 
@@ -2482,11 +2482,11 @@ fn invalid_conflicts() -> anyhow::Result<()> {
     exit_code: 2 (failure)
     ----- stderr -----
     error: Failed to parse: `pyproject.toml`
-      cause: TOML parse error at line 7, column 13
-               |
-             7 | conflicts = [[]]
-               |             ^^^^
-             Each set of conflicts must have at least two entries, but found none
+      cause: Each set of conflicts must have at least two entries, but found none
+       --> pyproject.toml:7:13
+        |
+      7 | conflicts = [[]]
+        |             ^^^^
     "
     );
 
@@ -2508,11 +2508,11 @@ fn invalid_conflicts() -> anyhow::Result<()> {
     exit_code: 2 (failure)
     ----- stderr -----
     error: Failed to parse: `pyproject.toml`
-      cause: TOML parse error at line 7, column 13
-               |
-             7 | conflicts = [
-               |             ^
-             Each set of conflicts must have at least two entries, but found only one
+      cause: Each set of conflicts must have at least two entries, but found only one
+       --> pyproject.toml:7:13
+        |
+      7 | conflicts = [
+        |             ^
     "
     );
 
@@ -2698,11 +2698,11 @@ fn resolve_config_file() -> anyhow::Result<()> {
     exit_code: 2 (failure)
     ----- stderr -----
     error: Failed to parse: `[CACHE_DIR]/uv.toml`
-      cause: TOML parse error at line 1, column 2
-               |
-             1 | [project]
-               |  ^^^^^^^
-             unknown field `project`, expected one of `required-version`, `system-certs`, `native-tls`, `offline`, `no-cache`, `cache-dir`, `preview`, `preview-features`, `python-preference`, `python-downloads`, `concurrent-downloads`, `concurrent-builds`, `concurrent-installs`, `index`, `index-url`, `extra-index-url`, `no-index`, `find-links`, `index-strategy`, `keyring-provider`, `http-proxy`, `https-proxy`, `no-proxy`, `allow-insecure-host`, `resolution`, `prerelease`, `prerelease-package`, `fork-strategy`, `dependency-metadata`, `config-settings`, `config-settings-package`, `no-build-isolation`, `no-build-isolation-package`, `extra-build-dependencies`, `extra-build-variables`, `exclude-newer`, `exclude-newer-package`, `link-mode`, `compile-bytecode`, `no-sources`, `no-sources-package`, `upgrade`, `upgrade-package`, `reinstall`, `reinstall-package`, `no-build`, `no-build-package`, `no-binary`, `no-binary-package`, `torch-backend`, `python-install-mirror`, `pypy-install-mirror`, `python-downloads-json-url`, `publish-url`, `trusted-publishing`, `check-url`, `add-bounds`, `audit`, `pip`, `cache-keys`, `override-dependencies`, `exclude-dependencies`, `constraint-dependencies`, `build-constraint-dependencies`, `environments`, `required-environments`, `conflicts`, `workspace`, `sources`, `managed`, `package`, `default-groups`, `dependency-groups`, `dev-dependencies`, `build-backend`
+      cause: unknown field `project`, expected one of `required-version`, `system-certs`, `native-tls`, `offline`, `no-cache`, `cache-dir`, `preview`, `preview-features`, `python-preference`, `python-downloads`, `concurrent-downloads`, `concurrent-builds`, `concurrent-installs`, `index`, `index-url`, `extra-index-url`, `no-index`, `find-links`, `index-strategy`, `keyring-provider`, `http-proxy`, `https-proxy`, `no-proxy`, `allow-insecure-host`, `resolution`, `prerelease`, `prerelease-package`, `fork-strategy`, `dependency-metadata`, `config-settings`, `config-settings-package`, `no-build-isolation`, `no-build-isolation-package`, `extra-build-dependencies`, `extra-build-variables`, `exclude-newer`, `exclude-newer-package`, `link-mode`, `compile-bytecode`, `no-sources`, `no-sources-package`, `upgrade`, `upgrade-package`, `reinstall`, `reinstall-package`, `no-build`, `no-build-package`, `no-binary`, `no-binary-package`, `torch-backend`, `python-install-mirror`, `pypy-install-mirror`, `python-downloads-json-url`, `publish-url`, `trusted-publishing`, `check-url`, `add-bounds`, `audit`, `pip`, `cache-keys`, `override-dependencies`, `exclude-dependencies`, `constraint-dependencies`, `build-constraint-dependencies`, `environments`, `required-environments`, `conflicts`, `workspace`, `sources`, `managed`, `package`, `default-groups`, `dependency-groups`, `dev-dependencies`, `build-backend`
+       --> [CACHE_DIR]/uv.toml:1:2
+        |
+      1 | [project]
+        |  ^^^^^^^
     "
     );
 
@@ -2730,11 +2730,11 @@ fn resolve_config_file() -> anyhow::Result<()> {
     ----- stderr -----
     warning: The `--config-file` argument expects to receive a `uv.toml` file, not a `pyproject.toml`. If you're trying to run a command from another project, use the `--project` argument instead.
     error: Failed to parse: `[CACHE_DIR]/pyproject.toml`
-      cause: TOML parse error at line 9, column 3
-               |
-             9 | ""
-               |   ^
-             key with no value, expected `=`
+      cause: key with no value, expected `=`
+       --> [CACHE_DIR]/pyproject.toml:9:3
+        |
+      9 | ""
+        |   ^
     "#
     );
 
@@ -4318,11 +4318,11 @@ fn preview_features_uv_toml() -> anyhow::Result<()> {
     exit_code: 2 (failure)
     ----- stderr -----
     error: Failed to parse: `uv.toml`
-      cause: TOML parse error at line 1, column 20
-               |
-             1 | preview-features = ["  "]
-               |                    ^^^^^^
-             preview feature name cannot be empty
+      cause: preview feature name cannot be empty
+       --> uv.toml:1:20
+        |
+      1 | preview-features = ["  "]
+        |                    ^^^^^^
     "#);
 
     config.write_str("preview-features = 123")?;
@@ -4332,11 +4332,11 @@ fn preview_features_uv_toml() -> anyhow::Result<()> {
     exit_code: 2 (failure)
     ----- stderr -----
     error: Failed to parse: `uv.toml`
-      cause: TOML parse error at line 1, column 20
-               |
-             1 | preview-features = 123
-               |                    ^^^
-             invalid type: integer `123`, expected a boolean or a list of preview feature names
+      cause: invalid type: integer `123`, expected a boolean or a list of preview feature names
+       --> uv.toml:1:20
+        |
+      1 | preview-features = 123
+        |                    ^^^
     ");
 
     Ok(())
@@ -4404,13 +4404,12 @@ fn preview_features_pyproject_toml() -> anyhow::Result<()> {
      }
     +
     +----- stderr -----
-    +warning: Failed to parse `pyproject.toml` during settings discovery:
-    +  TOML parse error at line 1, column 1
+    +warning: Failed to parse `pyproject.toml` during settings discovery
+    +  cause: cannot specify both `preview` and `preview-features`
+    +   --> pyproject.toml:1:1
     +    |
     +  1 | [tool.uv]
     +    | ^^^^^^^^^
-    +  cannot specify both `preview` and `preview-features`
-    +
     ...
     "
     );
@@ -4433,13 +4432,12 @@ fn preview_features_pyproject_toml() -> anyhow::Result<()> {
      }
     +
     +----- stderr -----
-    +warning: Failed to parse `pyproject.toml` during settings discovery:
-    +  TOML parse error at line 2, column 20
+    +warning: Failed to parse `pyproject.toml` during settings discovery
+    +  cause: invalid type: integer `123`, expected a boolean or a list of preview feature names
+    +   --> pyproject.toml:2:20
     +    |
     +  2 | preview-features = 123
     +    |                    ^^^
-    +  invalid type: integer `123`, expected a boolean or a list of preview feature names
-    +
     ...
     "
     );
