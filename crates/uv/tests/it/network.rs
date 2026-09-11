@@ -1369,13 +1369,13 @@ fn assert_wheel_download_timeout(
             .env(EnvVars::UV_HTTP_TIMEOUT, "1")
             .env(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY, "true")
             .env(EnvVars::RUST_LOG, "warn"), @"
-        exit_code: 1 (failure)
+        exit_code: 2 (failure)
         ----- stderr -----
         Resolved 1 package in [TIME]
         WARN Streaming failed for build-tag @ http://[LOCALHOST]/build_tag-1.0.0-1-py2.py3-none-any.whl; downloading wheel to disk (I/O operation failed during extraction)
-          × Failed to download `build-tag @ http://[LOCALHOST]/build_tag-1.0.0-1-py2.py3-none-any.whl`
-          ├─▶ Failed to write to the distribution cache
-          ╰─▶ Failed to download distribution due to network timeout. Try increasing UV_HTTP_TIMEOUT (current value: [TIME]).
+        error: Failed to download `build-tag @ http://[LOCALHOST]/build_tag-1.0.0-1-py2.py3-none-any.whl`
+          cause: Failed to write to the distribution cache
+          cause: Failed to download distribution due to network timeout. Try increasing UV_HTTP_TIMEOUT (current value: [TIME]).
         ");
     }
     assert_eq!(requests.full.load(Ordering::Relaxed), full_requests);
@@ -1415,8 +1415,8 @@ fn direct_url_content_length_mismatch() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
     WARN Streaming failed for build-tag @ http://[LOCALHOST]/build_tag-1.0.0-1-py2.py3-none-any.whl; downloading wheel to disk (I/O operation failed during extraction)
-      × Failed to download `build-tag @ http://[LOCALHOST]/build_tag-1.0.0-1-py2.py3-none-any.whl`
-      ╰─▶ Content-Length mismatch for `build-tag @ http://[LOCALHOST]/build_tag-1.0.0-1-py2.py3-none-any.whl`: expected 1 bytes, but the server advertised 932 bytes
+    error: Failed to download `build-tag @ http://[LOCALHOST]/build_tag-1.0.0-1-py2.py3-none-any.whl`
+      cause: Content-Length mismatch for `build-tag @ http://[LOCALHOST]/build_tag-1.0.0-1-py2.py3-none-any.whl`: expected 1 bytes, but the server advertised 932 bytes
     ");
     // The first fallback response fails on its headers without consuming a full-download retry.
     assert_eq!(requests.full.load(Ordering::Relaxed), 3);
@@ -1481,14 +1481,14 @@ fn direct_url_invalid_range_does_not_bypass_retry() -> Result<()> {
         .env(EnvVars::UV_HTTP_TIMEOUT, "1")
         .env(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY, "true")
         .env(EnvVars::RUST_LOG, "warn"), @"
-    exit_code: 1 (failure)
+    exit_code: 2 (failure)
     ----- stderr -----
     Resolved 1 package in [TIME]
     WARN Streaming failed for build-tag @ http://[LOCALHOST]/build_tag-1.0.0-1-py2.py3-none-any.whl; downloading wheel to disk (I/O operation failed during extraction)
     WARN Invalid range request response from server that declares HTTP range request support, abandoning resumed download: http://[LOCALHOST]/build_tag-1.0.0-1-py2.py3-none-any.whl
-      × Failed to download `build-tag @ http://[LOCALHOST]/build_tag-1.0.0-1-py2.py3-none-any.whl`
-      ├─▶ Failed to write to the distribution cache
-      ╰─▶ Failed to download distribution due to network timeout. Try increasing UV_HTTP_TIMEOUT (current value: [TIME]).
+    error: Failed to download `build-tag @ http://[LOCALHOST]/build_tag-1.0.0-1-py2.py3-none-any.whl`
+      cause: Failed to write to the distribution cache
+      cause: Failed to download distribution due to network timeout. Try increasing UV_HTTP_TIMEOUT (current value: [TIME]).
     ");
     assert_eq!(requests.full.load(Ordering::Relaxed), 3);
     assert_eq!(requests.resumed.load(Ordering::Relaxed), 1);
@@ -1513,8 +1513,8 @@ fn direct_url_range_size_mismatch() -> Result<()> {
     ----- stderr -----
     Resolved 1 package in [TIME]
     WARN Streaming failed for build-tag @ http://[LOCALHOST]/build_tag-1.0.0-1-py2.py3-none-any.whl; downloading wheel to disk (I/O operation failed during extraction)
-      × Failed to download `build-tag @ http://[LOCALHOST]/build_tag-1.0.0-1-py2.py3-none-any.whl`
-      ╰─▶ Range response size mismatch for `build-tag @ http://[LOCALHOST]/build_tag-1.0.0-1-py2.py3-none-any.whl`: expected 466 bytes from Content-Range, but received 465 bytes
+    error: Failed to download `build-tag @ http://[LOCALHOST]/build_tag-1.0.0-1-py2.py3-none-any.whl`
+      cause: Range response size mismatch for `build-tag @ http://[LOCALHOST]/build_tag-1.0.0-1-py2.py3-none-any.whl`: expected 466 bytes from Content-Range, but received 465 bytes
     ");
     // Two streaming attempts precede the download fallback; the range mismatch ends the attempt.
     assert_eq!(requests.full.load(Ordering::Relaxed), 3);
