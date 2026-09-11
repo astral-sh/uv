@@ -36,7 +36,8 @@ uv will create the following files and directories:
 ├── README.md
 └── src
     └── hello_world
-        └── __init__.py
+        ├── __init__.py
+        └── __main__.py
 ```
 
 The `pyproject.toml` defines a `hello-world` entrypoint referring to a simple "Hello world" program
@@ -68,7 +69,8 @@ A complete listing would look like:
 ├── README.md
 ├── src
 │   └── hello_world
-│       └── __init__.py
+│       ├── __init__.py
+│       └── __main__.py
 ├── pyproject.toml
 └── uv.lock
 ```

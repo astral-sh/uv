@@ -1165,11 +1165,23 @@ fn generate_package_scripts(
         fs_err::write(init_py, package_script)?;
     }
 
-    // Create `src/{name}/py.typed`, if it doesn't exist already.
     if is_lib {
+        // Create `src/{name}/py.typed`, if it doesn't exist already.
         let py_typed = pkg_dir.join("py.typed");
         if !py_typed.try_exists()? {
             fs_err::write(py_typed, "")?;
+        }
+    } else {
+        let main_py = pkg_dir.join("__main__.py");
+        if !main_py.try_exists()? {
+            fs_err::write(
+                main_py,
+                indoc::formatdoc! {r"
+                from {module_name} import main
+
+                main()
+                "},
+            )?;
         }
     }
 
