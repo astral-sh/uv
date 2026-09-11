@@ -16,9 +16,9 @@ use uv_test::{diff_snapshot, uv_snapshot};
 fn workspace_check(context: &uv_test::TestContext) -> Command {
     let mut command = context.check();
     command.env("TY_OUTPUT_FORMAT", "concise");
-    // Select ty 0.0.64 independently of the suite-wide cutoff so these checks can
-    // exercise `--exclude-scripts` and track newer ty versions without disrupting other tests.
-    command.env(EnvVars::UV_EXCLUDE_NEWER, "2026-07-28T00:00:00Z");
+    // Select ty 0.0.80 independently of the suite-wide cutoff so these checks
+    // can exercise new ty features without disrupting other tests.
+    command.env(EnvVars::UV_EXCLUDE_NEWER, "2026-09-10T00:00:00Z");
     command
 }
 
@@ -681,7 +681,7 @@ fn check_fix_script_does_not_fix_unselected_script() -> Result<()> {
     Ok(())
 }
 
-/// Check only the selected workspace member, whether selected implicitly or explicitly.
+/// Respect workspace exclusions unless packages are selected explicitly.
 #[test]
 fn check_workspace_member_selection() -> Result<()> {
     let context =
@@ -692,11 +692,15 @@ fn check_workspace_member_selection() -> Result<()> {
         .write_str(indoc! {r#"
             [tool.uv.workspace]
             members = ["packages/*"]
+
+            [tool.ty.src]
+            exclude = ["packages/member-a"]
         "#})?;
     write_workspace_member(&context, "member-a", "value: int = 'selected'\n")?;
     write_workspace_member(&context, "member-b", "value: int = 'excluded'\n")?;
 
     let member_a = context.temp_dir.child("packages").child("member-a");
+    // The current directory explicitly selects the member, overriding its exclusion.
     uv_snapshot!(context.filters(), workspace_check(&context).current_dir(&member_a), @r#"
     exit_code: 1 (failure)
     ----- stdout -----
@@ -717,12 +721,24 @@ fn check_workspace_member_selection() -> Result<()> {
     warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
     "#);
 
+    // Explicitly selecting all packages overrides the configured exclusion.
+    uv_snapshot!(context.filters(), workspace_check(&context).arg("--all-packages"), @r#"
+    exit_code: 1 (failure)
+    ----- stdout -----
+    packages/member-a/main.py:1:14: error[invalid-assignment] Object of type `Literal["selected"]` is not assignable to `int`
+    packages/member-b/main.py:1:14: error[invalid-assignment] Object of type `Literal["excluded"]` is not assignable to `int`
+    Found 2 diagnostics
+
+    ----- stderr -----
+    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
+    "#);
+
     Ok(())
 }
 
-/// Check every member when invoked from the root of a virtual workspace.
+/// Respect ty exclusions when automatically selecting members of a virtual workspace.
 #[test]
-fn check_virtual_workspace_checks_all_members_by_default() -> Result<()> {
+fn check_virtual_workspace_respects_exclusions() -> Result<()> {
     let context =
         uv_test::test_context!("3.12").with_filter((r"WARN Failed to fetch `ty`[^\n]*\n", ""));
     context
@@ -730,17 +746,32 @@ fn check_virtual_workspace_checks_all_members_by_default() -> Result<()> {
         .child("pyproject.toml")
         .write_str(indoc! {r#"
             [tool.uv.workspace]
-            members = ["packages/*"]
+            members = ["packages/*", "vendor/*"]
+
+            [tool.ty.src]
+            exclude = ["vendor"]
         "#})?;
     write_workspace_member(&context, "member-a", "value: int = 'selected-a'\n")?;
-    write_workspace_member(&context, "member-b", "value: int = 'selected-b'\n")?;
 
+    let vendored = context.temp_dir.child("vendor/vendored");
+    vendored.create_dir_all()?;
+    vendored.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "vendored"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+    "#})?;
+    vendored
+        .child("main.py")
+        .write_str("value: int = 'selected-vendored'\n")?;
+
+    // Configured exclusions still apply to automatically selected members. See astral-sh/uv#21551.
     uv_snapshot!(context.filters(), workspace_check(&context), @r#"
     exit_code: 1 (failure)
     ----- stdout -----
     packages/member-a/main.py:1:14: error[invalid-assignment] Object of type `Literal["selected-a"]` is not assignable to `int`
-    packages/member-b/main.py:1:14: error[invalid-assignment] Object of type `Literal["selected-b"]` is not assignable to `int`
-    Found 2 diagnostics
+    Found 1 diagnostic
 
     ----- stderr -----
     warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.

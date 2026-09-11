@@ -94944,6 +94944,74 @@
     "variant": null,
     "build": "7.3.11"
   },
+  "graalpy-3.13.0-darwin-aarch64-none": {
+    "name": "graalpy",
+    "arch": {
+      "family": "aarch64",
+      "variant": null
+    },
+    "os": "darwin",
+    "libc": "none",
+    "major": 3,
+    "minor": 13,
+    "patch": 0,
+    "prerelease": "",
+    "url": "https://github.com/oracle/graalpython/releases/download/graal-25.3.4/graalpy3.13-25.3.4.1-macos-aarch64.tar.gz",
+    "sha256": "8ac33b5a5d0ee872751595211508fd826f47051ff6e6614032aed1de071eebab",
+    "variant": null,
+    "build": "25.3.4"
+  },
+  "graalpy-3.13.0-linux-aarch64-gnu": {
+    "name": "graalpy",
+    "arch": {
+      "family": "aarch64",
+      "variant": null
+    },
+    "os": "linux",
+    "libc": "gnu",
+    "major": 3,
+    "minor": 13,
+    "patch": 0,
+    "prerelease": "",
+    "url": "https://github.com/oracle/graalpython/releases/download/graal-25.3.4/graalpy3.13-25.3.4.1-linux-aarch64.tar.gz",
+    "sha256": "53b80e284e444540ae7cb67349af3dd8f6c1848fbf6abb5051742ac745f1f33d",
+    "variant": null,
+    "build": "25.3.4"
+  },
+  "graalpy-3.13.0-linux-x86_64-gnu": {
+    "name": "graalpy",
+    "arch": {
+      "family": "x86_64",
+      "variant": null
+    },
+    "os": "linux",
+    "libc": "gnu",
+    "major": 3,
+    "minor": 13,
+    "patch": 0,
+    "prerelease": "",
+    "url": "https://github.com/oracle/graalpython/releases/download/graal-25.3.4/graalpy3.13-25.3.4.1-linux-amd64.tar.gz",
+    "sha256": "23515b4e659d645960517b0ceedb90faa84fcb01f0f4497beca5868a1b1ae3ea",
+    "variant": null,
+    "build": "25.3.4"
+  },
+  "graalpy-3.13.0-windows-x86_64-none": {
+    "name": "graalpy",
+    "arch": {
+      "family": "x86_64",
+      "variant": null
+    },
+    "os": "windows",
+    "libc": "none",
+    "major": 3,
+    "minor": 13,
+    "patch": 0,
+    "prerelease": "",
+    "url": "https://github.com/oracle/graalpython/releases/download/graal-25.3.4/graalpy3.13-25.3.4.1-windows-amd64.zip",
+    "sha256": "b462ea868644c157ea2fe2e4267a2a16b71b3bccd8bb5d5422126a58282ecfa2",
+    "variant": null,
+    "build": "25.3.4"
+  },
   "graalpy-3.12.0-darwin-aarch64-none": {
     "name": "graalpy",
     "arch": {

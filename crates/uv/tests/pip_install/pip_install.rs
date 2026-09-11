@@ -14204,6 +14204,224 @@ fn reserved_script_name() -> Result<()> {
     Ok(())
 }
 
+/// Wheel installation must not merge package files through a pre-existing directory symlink.
+#[cfg(unix)]
+#[test]
+fn reject_symlinked_wheel_package_directory() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context.init().arg("--lib").arg("foo").assert().success();
+    context.build().arg("--wheel").arg("foo").assert().success();
+    let wheel = context.temp_dir.join("foo/dist/foo-0.1.0-py3-none-any.whl");
+
+    let external = context.temp_dir.child("external");
+    external.create_dir_all()?;
+    external.child("sentinel.txt").write_str("keep me")?;
+    fs_err::os::unix::fs::symlink(external.path(), context.site_packages().join("foo"))?;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--link-mode")
+        .arg("copy")
+        .arg(&wheel), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    error: Failed to install: foo-0.1.0-py3-none-any.whl (foo==0.1.0 (from file://[TEMP_DIR]/foo/dist/foo-0.1.0-py3-none-any.whl))
+      Caused by: The wheel is invalid: Cannot install into symlinked directory: [SITE_PACKAGES]/foo
+    ");
+
+    external
+        .child("sentinel.txt")
+        .assert(predicate::path::is_file());
+    external
+        .child("__init__.py")
+        .assert(predicate::path::missing());
+
+    Ok(())
+}
+
+/// Wheel validation must reject nested directory symlinks alongside new subtrees.
+#[cfg(unix)]
+#[test]
+fn reject_symlinked_wheel_nested_package_directory() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context.init().arg("--lib").arg("foo").assert().success();
+    context
+        .temp_dir
+        .child("foo/src/foo/new/deep/__init__.py")
+        .write_str("NEW = 1\n")?;
+    context
+        .temp_dir
+        .child("foo/src/foo/existing/nested/__init__.py")
+        .write_str("NESTED = 1\n")?;
+    context.build().arg("--wheel").arg("foo").assert().success();
+    let wheel = context.temp_dir.join("foo/dist/foo-0.1.0-py3-none-any.whl");
+
+    let external = context.temp_dir.child("external");
+    external.create_dir_all()?;
+    external.child("sentinel.txt").write_str("keep me")?;
+    let existing = context.site_packages().join("foo/existing");
+    fs_err::create_dir_all(&existing)?;
+    fs_err::os::unix::fs::symlink(external.path(), existing.join("nested"))?;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--link-mode")
+        .arg("copy")
+        .arg(&wheel), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    error: Failed to install: foo-0.1.0-py3-none-any.whl (foo==0.1.0 (from file://[TEMP_DIR]/foo/dist/foo-0.1.0-py3-none-any.whl))
+      Caused by: The wheel is invalid: Cannot install into symlinked directory: [SITE_PACKAGES]/foo/existing/nested
+    ");
+
+    external.child("sentinel.txt").assert("keep me");
+    external
+        .child("__init__.py")
+        .assert(predicate::path::missing());
+    assert!(!context.site_packages().join("foo/new").exists());
+    assert!(!context.site_packages().join("foo-0.1.0.dist-info").exists());
+
+    Ok(())
+}
+
+/// Wheel data must not merge purelib, platlib, or data files through a directory symlink.
+#[cfg(unix)]
+#[test]
+fn reject_symlinked_wheel_data_package_directory() -> Result<()> {
+    allow_duplicates! {
+        for data_type in ["purelib", "platlib", "data"] {
+            let context = uv_test::test_context!("3.12");
+            let wheel = context.temp_dir.join("foo-0.1.0-py3-none-any.whl");
+            let data_path = if data_type == "data" {
+                let site_packages = context.site_packages();
+                let relative = site_packages.strip_prefix(context.venv.path())?;
+                format!(
+                    "foo-0.1.0.data/data/{}/foo/__init__.py",
+                    PortablePath::from(relative)
+                )
+            } else {
+                format!("foo-0.1.0.data/{data_type}/foo/__init__.py")
+            };
+            let record = formatdoc! {"
+                foo-0.1.0.dist-info/METADATA,,
+                foo-0.1.0.dist-info/WHEEL,,
+                foo-0.1.0.dist-info/RECORD,,
+                {data_path},,
+            "};
+
+            let mut writer = ZipFileWriter::new(Vec::new());
+            for (name, contents) in [
+                (
+                    "foo-0.1.0.dist-info/METADATA",
+                    "Metadata-Version: 2.1\nName: foo\nVersion: 0.1.0\n",
+                ),
+                (
+                    "foo-0.1.0.dist-info/WHEEL",
+                    "Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
+                ),
+                ("foo-0.1.0.dist-info/RECORD", record.as_str()),
+                (data_path.as_str(), "VALUE = 1\n"),
+            ] {
+                let entry = ZipEntryBuilder::new(name.into(), Compression::Stored);
+                block_on(writer.write_entry_whole(entry, contents.as_bytes()))?;
+            }
+            fs_err::write(&wheel, block_on(writer.close())?)?;
+
+            let external = context.temp_dir.child("external");
+            external.create_dir_all()?;
+            external.child("sentinel.txt").write_str("keep me")?;
+            fs_err::os::unix::fs::symlink(external.path(), context.site_packages().join("foo"))?;
+
+            uv_snapshot!(context.filters(), context.pip_install()
+            .arg("--link-mode")
+            .arg("copy")
+            .arg(&wheel), @"
+        exit_code: 2 (failure)
+        ----- stderr -----
+        Resolved 1 package in [TIME]
+        Prepared 1 package in [TIME]
+        error: Failed to install: foo-0.1.0-py3-none-any.whl (foo==0.1.0 (from file://[TEMP_DIR]/foo-0.1.0-py3-none-any.whl))
+          Caused by: The wheel is invalid: Cannot install into symlinked directory: [SITE_PACKAGES]/foo
+            ");
+
+            external
+                .child("sentinel.txt")
+                .assert(predicate::path::is_file());
+            external
+                .child("__init__.py")
+                .assert(predicate::path::missing());
+            assert!(!context.site_packages().join("foo-0.1.0.dist-info").exists());
+        }
+        Ok::<(), anyhow::Error>(())
+    }?;
+
+    Ok(())
+}
+
+/// Wheel headers must not be installed through a symlinked package destination.
+#[cfg(unix)]
+#[test]
+fn reject_symlinked_wheel_headers_destination() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let wheel = context.temp_dir.join("foo-0.1.0-py3-none-any.whl");
+    let header_path = "foo-0.1.0.data/headers/foo.h";
+    let record = formatdoc! {"
+        foo-0.1.0.dist-info/METADATA,,
+        foo-0.1.0.dist-info/WHEEL,,
+        foo-0.1.0.dist-info/RECORD,,
+        {header_path},,
+    "};
+
+    let mut writer = ZipFileWriter::new(Vec::new());
+    for (name, contents) in [
+        (
+            "foo-0.1.0.dist-info/METADATA",
+            "Metadata-Version: 2.1\nName: foo\nVersion: 0.1.0\n",
+        ),
+        (
+            "foo-0.1.0.dist-info/WHEEL",
+            "Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
+        ),
+        ("foo-0.1.0.dist-info/RECORD", record.as_str()),
+        (header_path, "#include <stdio.h>\n"),
+    ] {
+        let entry = ZipEntryBuilder::new(name.into(), Compression::Stored);
+        block_on(writer.write_entry_whole(entry, contents.as_bytes()))?;
+    }
+    fs_err::write(&wheel, block_on(writer.close())?)?;
+
+    let external = context.temp_dir.child("external");
+    external.create_dir_all()?;
+    external.child("sentinel.txt").write_str("keep me")?;
+    let include = context.venv.join("include/site/python3.12");
+    fs_err::create_dir_all(&include)?;
+    fs_err::os::unix::fs::symlink(external.path(), include.join("foo"))?;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--link-mode")
+        .arg("copy")
+        .arg(&wheel), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    error: Failed to install: foo-0.1.0-py3-none-any.whl (foo==0.1.0 (from file://[TEMP_DIR]/foo-0.1.0-py3-none-any.whl))
+      Caused by: The wheel is invalid: Cannot install into symlinked directory: [VENV]/include/site/python3.12/foo
+    ");
+
+    external
+        .child("sentinel.txt")
+        .assert(predicate::path::is_file());
+    external.child("foo.h").assert(predicate::path::missing());
+    assert!(!context.site_packages().join("foo-0.1.0.dist-info").exists());
+
+    Ok(())
+}
+
 #[test]
 fn reject_reserved_wheel_data_script_name() -> Result<()> {
     let interpreter = if cfg!(windows) {

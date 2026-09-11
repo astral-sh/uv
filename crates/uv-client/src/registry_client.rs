@@ -22,8 +22,9 @@ use uv_distribution_filename::{DistFilename, WheelFilename};
 use uv_distribution_types::{
     BuiltDist, File, FileLocation, IndexCapabilities, IndexFormat, IndexLocations,
     IndexMetadataRef, IndexStatusCodeDecision, IndexStatusCodeStrategy, IndexUrl, Name,
-    RegistryBuiltWheel, Zstd,
+    RegistryBuiltWheel,
 };
+use uv_extract::hash::Hasher;
 use uv_git::{GIT_LFS, GitError, GitHttpSettings, GitResolver, Reporter};
 use uv_metadata::{read_metadata_async_seek, read_metadata_async_stream};
 use uv_normalize::PackageName;
@@ -1025,7 +1026,7 @@ impl RegistryClient {
         } = wheel;
 
         // If the metadata file is available at its own url (PEP 658), download it from there.
-        if file.dist_info_metadata {
+        if let Some(hashes) = &file.dist_info_metadata {
             let mut url = url.clone();
             let path = format!("{}.metadata", url.path());
             url.set_path(&path);
@@ -1060,6 +1061,20 @@ impl RegistryClient {
                 let bytes = response.bytes().await.map_err(|err| {
                     ErrorKind::from_reqwest(url.clone(), err, self.client.certificate_source())
                 })?;
+
+                // Verify the downloaded bytes before parsing or caching the metadata.
+                for expected in hashes.iter() {
+                    let mut hasher = Hasher::from(expected.algorithm());
+                    hasher.update(&bytes);
+                    let actual = HashDigest::from(hasher);
+                    if !actual.digest.eq_ignore_ascii_case(expected.digest.as_ref()) {
+                        return Err(Error::from(ErrorKind::MetadataHashMismatch {
+                            url: url.clone(),
+                            expected: expected.clone(),
+                            actual,
+                        }));
+                    }
+                }
 
                 info_span!("parse_metadata21")
                     .in_scope(|| ResolutionMetadata::parse_metadata(bytes.as_ref()))
@@ -1365,11 +1380,8 @@ pub struct CachedFile {
     filename: Option<Box<SmallString>>,
     #[rkyv(with = rkyv::with::Niche)]
     yanked: Option<Box<Yanked>>,
-    /// Deprecated pyx-specific zstd wheel metadata, retained only for compatibility with the
-    /// Simple API cache layout.
-    // TODO: Remove this field when the Simple API cache format is next bumped.
     #[rkyv(with = rkyv::with::Niche)]
-    zstd: Option<Box<Zstd>>,
+    metadata_hashes: Option<Box<CachedHashDigests>>,
     dist_info_metadata: bool,
     has_size: bool,
     has_upload_time: bool,
@@ -1403,8 +1415,15 @@ impl From<File> for CachedFile {
             (file.url.raw_filename() != file.filename.as_ref()).then(|| Box::new(file.filename));
         let has_size = file.size.is_some();
         let has_upload_time = file.upload_time_utc_ms.is_some();
+        let dist_info_metadata = file.dist_info_metadata.is_some();
+        let metadata_hashes = file
+            .dist_info_metadata
+            .filter(|hashes| !hashes.is_empty())
+            .map(CachedHashDigests::from)
+            .map(Box::new);
         Self {
-            dist_info_metadata: file.dist_info_metadata,
+            dist_info_metadata,
+            metadata_hashes,
             filename,
             hashes: CachedHashDigests::from(file.hashes),
             requires_python: file.requires_python,
@@ -1414,7 +1433,6 @@ impl From<File> for CachedFile {
             has_upload_time,
             url: file.url,
             yanked: file.yanked.filter(|yanked| yanked.is_yanked()),
-            zstd: None,
         }
     }
 }
@@ -1422,8 +1440,12 @@ impl From<File> for CachedFile {
 impl From<CachedFile> for File {
     fn from(file: CachedFile) -> Self {
         let filename = SmallString::from(file.filename());
+        let dist_info_metadata = file.dist_info_metadata.then(|| {
+            file.metadata_hashes
+                .map_or_else(HashDigests::empty, |hashes| HashDigests::from(*hashes))
+        });
         Self {
-            dist_info_metadata: file.dist_info_metadata,
+            dist_info_metadata,
             filename,
             hashes: HashDigests::from(file.hashes),
             requires_python: file.requires_python,
@@ -1431,7 +1453,6 @@ impl From<CachedFile> for File {
             upload_time_utc_ms: file.has_upload_time.then_some(file.upload_time_utc_ms),
             url: file.url,
             yanked: file.yanked,
-            zstd: None,
         }
     }
 }
@@ -1791,7 +1812,7 @@ mod tests {
     use tokio::sync::Semaphore;
     use url::Url;
     use uv_normalize::PackageName;
-    use uv_pypi_types::{HashDigests, PypiSimpleDetail};
+    use uv_pypi_types::{HashDigest, HashDigests, PypiSimpleDetail};
     use uv_redacted::DisplaySafeUrl;
     use uv_torch::{TorchBackend, TorchStrategy};
 
@@ -1801,8 +1822,8 @@ mod tests {
     };
     use uv_cache::Cache;
     use uv_distribution_types::{
-        File, FileLocation, Index, IndexCapabilities, IndexFormat, IndexLocations,
-        IndexMetadataRef, IndexUrl, ToUrlError, Zstd,
+        FileLocation, Index, IndexCapabilities, IndexFormat, IndexLocations, IndexMetadataRef,
+        IndexUrl, ToUrlError,
     };
     use uv_small_str::SmallString;
     use wiremock::matchers::{basic_auth, method, path_regex};
@@ -2152,6 +2173,9 @@ mod tests {
             "files": [
                 {
                     "filename": "example_1-1.0.0-py3-none-any.whl",
+                    "core-metadata": {
+                        "sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+                    },
                     "hashes": {},
                     "url": "https://files.pythonhosted.org/example_1-1.0.0-py3-none-any.whl"
                 },
@@ -2166,42 +2190,35 @@ mod tests {
         let package_name = PackageName::from_str("example-1")?;
         let data: PypiSimpleDetail = serde_json::from_str(response)?;
         let base = DisplaySafeUrl::parse("https://pypi.org/simple/example-1/")?;
-        let mut simple_metadata = SimpleDetailMetadata::from_pypi_files(
+        let simple_metadata = SimpleDetailMetadata::from_pypi_files(
             data.files,
             &package_name,
             data.project_status,
             &base,
         );
-        let cached_wheel = &mut simple_metadata.versions[0].files.wheels[0];
-        assert!(cached_wheel.zstd.is_none());
-        // An entry written by an older uv may still contain pyx-specific zstd wheel metadata.
-        cached_wheel.zstd = Some(Box::new(Zstd {
-            hashes: HashDigests::empty(),
-            size: Some(42),
-        }));
         let archived = super::OwnedArchive::from_unarchived(&simple_metadata)?;
         let simple_metadata = super::OwnedArchive::deserialize(&archived);
 
-        let filenames: Vec<_> = simple_metadata
+        let files: Vec<_> = simple_metadata
             .versions
             .into_iter()
             .flat_map(|datum| datum.files.all(&package_name))
-            .map(|(filename, mut file)| {
-                assert!(file.zstd.is_none());
-                // New cache entries must not preserve pyx-specific zstd wheel metadata either.
-                file.zstd = Some(Box::new(Zstd {
-                    hashes: HashDigests::empty(),
-                    size: Some(42),
-                }));
-                let cached = super::CachedFile::from(file);
-                assert!(cached.zstd.is_none());
-                assert!(File::from(cached).zstd.is_none());
-                filename.to_string()
-            })
+            .collect();
+        let filenames: Vec<_> = files
+            .iter()
+            .map(|(filename, _)| filename.to_string())
             .collect();
         assert_eq!(
             filenames,
             ["example_1-1.0.0.tar.gz", "example_1-1.0.0-py3-none-any.whl"]
+        );
+        assert!(files[0].1.dist_info_metadata.is_none());
+        let metadata_hashes = HashDigests::from(HashDigest::from_str(
+            "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+        )?);
+        assert_eq!(
+            files[1].1.dist_info_metadata.as_ref(),
+            Some(&metadata_hashes)
         );
 
         Ok(())
@@ -2288,7 +2305,7 @@ mod tests {
                                 ),
                                 filename: None,
                                 yanked: None,
-                                zstd: None,
+                                metadata_hashes: None,
                                 dist_info_metadata: false,
                                 has_size: true,
                                 has_upload_time: true,
@@ -2360,7 +2377,7 @@ mod tests {
                                 ),
                                 filename: None,
                                 yanked: None,
-                                zstd: None,
+                                metadata_hashes: None,
                                 dist_info_metadata: false,
                                 has_size: false,
                                 has_upload_time: false,

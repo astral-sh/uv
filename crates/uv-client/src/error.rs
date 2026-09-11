@@ -19,6 +19,7 @@ use uv_distribution_types::IndexUrl;
 use uv_errors::{Hint, Hints};
 use uv_git::GitError;
 use uv_normalize::PackageName;
+use uv_pypi_types::HashDigest;
 use uv_redacted::DisplaySafeUrl;
 
 /// RFC 9457 Problem Details for HTTP APIs
@@ -438,6 +439,16 @@ pub enum ErrorKind {
     /// The root was not found in the local (file-based) index.
     #[error("Local index not found at: `{}`", _0.display())]
     LocalIndexNotFound(PathBuf),
+
+    /// The metadata file does not match a hash provided by its package index.
+    #[error(
+        "Hash mismatch for package metadata at `{url}`\n\nExpected:\n  {expected}\n\nComputed:\n  {actual}"
+    )]
+    MetadataHashMismatch {
+        url: DisplaySafeUrl,
+        expected: HashDigest,
+        actual: HashDigest,
+    },
 
     /// The metadata file could not be parsed.
     #[error("Couldn't parse metadata of {0} from {1}")]

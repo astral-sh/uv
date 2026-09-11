@@ -3,6 +3,41 @@
 <!-- prettier-ignore-start -->
 
 
+## 0.12.13
+
+Released on 2026-09-10.
+
+### Python
+
+- Add GraalPy 3.13.0 ([#21431](https://github.com/astral-sh/uv/pull/21431))
+
+### Enhancements
+
+- Verify hashes when downloading PEP 658 metadata sidecars ([#21563](https://github.com/astral-sh/uv/pull/21563))
+
+### Preview features
+
+- Respect `ty` exclusions when `uv check` automatically selects members of a virtual workspace ([#21555](https://github.com/astral-sh/uv/pull/21555))
+
+### Performance
+
+- Avoid full wheel downloads during resolution by reusing supported hashes from direct URL fragments when metadata is available separately ([#21279](https://github.com/astral-sh/uv/pull/21279))
+
+### Bug fixes
+
+- Edit Windows entry-point launcher resources in memory to support Nano Server and reduce antivirus contention ([#18713](https://github.com/astral-sh/uv/pull/18713))
+- Prefer `core-metadata` over legacy aliases in JSON index responses ([#21563](https://github.com/astral-sh/uv/pull/21563))
+
+## 0.12.12
+
+Released on 2026-09-09.
+
+The executables in our macOS and Windows release archives and `uv` and `uv_build` wheels are now code-signed. macOS executables are signed with an Apple Developer ID certificate and notarized by Apple. Windows executables have timestamped Authenticode signatures from Azure Artifact Signing. This enables verification of the release publisher and binary integrity, supports publisher-based allowlisting, and should reduce security warnings and antivirus false positives.
+
+### Bug fixes
+
+- Exclude distributions uploaded after the `exclude-newer` cutoff from lockfiles and generated requirement hashes ([#21539](https://github.com/astral-sh/uv/pull/21539))
+
 ## 0.12.11
 
 Released on 2026-09-08.

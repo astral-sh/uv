@@ -35,10 +35,15 @@ PLATFORMS = {
 }
 
 
+def release_targets() -> list[str]:
+    """Read the target inventory used by cargo-dist."""
+    workspace = Path(__file__).resolve().parent.parent / "dist-workspace.toml"
+    return tomllib.loads(workspace.read_text(encoding="utf-8"))["dist"]["targets"]
+
+
 def signing_plan() -> dict[str, list[dict[str, str]]]:
     """Require every macOS and Windows release target to have a verification job."""
-    workspace = Path(__file__).resolve().parent.parent / "dist-workspace.toml"
-    targets = tomllib.loads(workspace.read_text(encoding="utf-8"))["dist"]["targets"]
+    targets = release_targets()
     expected = {
         target
         for target in targets
@@ -64,6 +69,7 @@ def signing_plan() -> dict[str, list[dict[str, str]]]:
 
 def main() -> None:
     """Print one GitHub Actions output for each signing matrix."""
+    print(f"targets={json.dumps(release_targets(), separators=(',', ':'))}")
     for system, platforms in signing_plan().items():
         print(f"{system}={json.dumps(platforms, separators=(',', ':'))}")
 

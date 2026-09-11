@@ -25,3 +25,8 @@
 - AVOID shortening variable names, e.g., use `version` instead of `ver`, and `requires_python`
   instead of `rp`
 - PREFER [`TypeName`] references when writing Rust doc comments
+- DO NOT leak our conversation, prompt, or iteration history into code comments, pull request
+  descriptions, or other maintainer-facing prose. Write for readers who have not seen our
+  conversation.
+- PREFER comments that explain the current behavior and rationale. Avoid past-facing wording like
+  "preserve the existing behavior"; explain the actual backwards-compatibility constraint instead.

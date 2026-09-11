@@ -151,7 +151,7 @@ jobs:
   push:
     name: "Push rebased pull request #${{ inputs.number }}"
     needs: rebase
-    runs-on: ubuntu-slim
+    runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-2' || 'ubuntu-slim' }}
     environment: automations
     timeout-minutes: 10
     permissions:

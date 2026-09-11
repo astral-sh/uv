@@ -859,6 +859,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             self.constraints.clone(),
             self.overrides.clone(),
             &self.preferences,
+            &self.hasher,
             &self.index,
             &self.git,
             self.python_requirement.target().clone(),

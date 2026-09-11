@@ -21,6 +21,7 @@ use crate::commands::workspace::list::{ScriptDiscoveryError, find_scripts};
 use crate::printer::Printer;
 
 /// Run a type check powered by ty.
+#[expect(clippy::fn_params_excessive_bools)]
 pub(super) async fn run(
     version: Option<String>,
     ty_path: Option<PathBuf>,
@@ -29,6 +30,7 @@ pub(super) async fn run(
     workspace_root: Option<&Path>,
     check_targets: &[PathBuf],
     excluded_targets: &[PathBuf],
+    explicit_targets: bool,
     venv_path: Option<&Path>,
     exclude_newer: Option<jiff::Timestamp>,
     show_version: bool,
@@ -199,6 +201,10 @@ pub(super) async fn run(
         );
     }
     if !check_targets.is_empty() {
+        // Respect configured exclusions when automatically selecting members of a virtual workspace.
+        if !explicit_targets {
+            command.arg("--force-exclude");
+        }
         // Keep paths relative to the working directory for stable diagnostics, and use `--` so
         // option-like filenames are treated as paths.
         command.arg("--");

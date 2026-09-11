@@ -25,7 +25,7 @@ use uv_static::EnvVars;
 #[cfg(feature = "test-universal")]
 use uv_test::archive::write_tar_gz;
 #[cfg(feature = "test-universal")]
-use uv_test::packse::PackseServer;
+use uv_test::packse::{PackseServer, scenario::Scenario};
 #[cfg(all(feature = "test-universal", feature = "test-git"))]
 use uv_test::{READ_ONLY_GITHUB_TOKEN, decode_token};
 use uv_test::{diff_snapshot, uv_snapshot};
@@ -11732,6 +11732,122 @@ fn lock_mixed_hashes() -> Result<()> {
     Ok(())
 }
 
+/// Verify sidecar downloads using both fresh and cached index responses.
+#[cfg(feature = "test-universal")]
+#[tokio::test]
+async fn lock_core_metadata_hash() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let index_server = MockServer::start().await;
+    let artifact_server = MockServer::start().await;
+
+    let metadata = indoc! {"
+        Metadata-Version: 2.1
+        Name: basic-package
+        Version: 0.1.0
+    "};
+    let metadata_hash = hex::encode(Sha256::digest(metadata.as_bytes())).to_ascii_uppercase();
+    let forged_metadata = indoc! {"
+        Metadata-Version: 2.1
+        Name: basic-package
+        Version: 0.1.0
+        Summary: forged metadata
+    "};
+    let simple_index = json!({
+        "meta": {
+            "api-version": "1.1"
+        },
+        "name": "basic-package",
+        "files": [{
+            "filename": "basic_package-0.1.0-py3-none-any.whl",
+            "url": format!("{}/files/basic_package-0.1.0-py3-none-any.whl", artifact_server.uri()),
+            "hashes": {
+                "sha256": "7b6229db79b5800e4e98a351b5628c1c8a944533a2d428aeeaa7275a30d4ea82"
+            },
+            "core-metadata": { "sha256": metadata_hash },
+            "upload-time": "2024-03-24T00:00:00Z"
+        }]
+    });
+
+    Mock::given(method("GET"))
+        .and(path("/simple/basic-package/"))
+        .respond_with(ResponseTemplate::new(200).set_body_raw(
+            simple_index.to_string(),
+            "application/vnd.pypi.simple.v1+json",
+        ))
+        .expect(1)
+        .mount(&index_server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/files/basic_package-0.1.0-py3-none-any.whl.metadata"))
+        .respond_with(ResponseTemplate::new(200).set_body_string(forged_metadata))
+        .expect(2)
+        .mount(&artifact_server)
+        .await;
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(&formatdoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["basic-package"]
+
+        [[tool.uv.index]]
+        name = "test-registry"
+        url = "{}/simple"
+        default = true
+        cache-control = {{ api = "max-age=3600, immutable", files = "max-age=3600, immutable" }}
+    "#, index_server.uri()})?;
+
+    // Reject sidecar bytes that do not match the index's advertised hash.
+    uv_snapshot!(context.filters(), context.lock(), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Hash mismatch for package metadata at `http://[LOCALHOST]/files/basic_package-0.1.0-py3-none-any.whl.metadata`
+
+    Expected:
+      sha256:1C9F243A45631766EACD673AD9F6A1672AD847C7495A387C3B8D6C9B0572E00B
+
+    Computed:
+      sha256:987ad54f0d53537fb7157c700260deaa18346f43db7968cf0327de594d631205
+    ");
+
+    // The cached index response must retain the expected sidecar hashes.
+    uv_snapshot!(context.filters(), context.lock(), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Hash mismatch for package metadata at `http://[LOCALHOST]/files/basic_package-0.1.0-py3-none-any.whl.metadata`
+
+    Expected:
+      sha256:1C9F243A45631766EACD673AD9F6A1672AD847C7495A387C3B8D6C9B0572E00B
+
+    Computed:
+      sha256:987ad54f0d53537fb7157c700260deaa18346f43db7968cf0327de594d631205
+    ");
+
+    // Serve the genuine metadata without refreshing the sidecar cache.
+    artifact_server.verify().await;
+    artifact_server.reset().await;
+
+    Mock::given(method("GET"))
+        .and(path("/files/basic_package-0.1.0-py3-none-any.whl.metadata"))
+        .respond_with(ResponseTemplate::new(200).set_body_string(metadata))
+        .expect(1)
+        .mount(&artifact_server)
+        .await;
+
+    context.lock().assert().success();
+    // The rejected metadata must not be reused from the cache.
+    artifact_server.verify().await;
+
+    fs_err::remove_file(context.temp_dir.join("uv.lock"))?;
+    context.lock().assert().success();
+    // The verified metadata must be reused without another download.
+    artifact_server.verify().await;
+
+    Ok(())
+}
+
 /// Lock with an index that advertises multiple hashes, then require SHA256 for that index.
 #[cfg(feature = "test-universal")]
 #[tokio::test]
@@ -15996,7 +16112,7 @@ fn lock_find_links_http_wheel() -> Result<()> {
     Resolved 2 packages in [TIME]
     ");
 
-    assert!(context.cache_dir.child("flat-index-v4").is_dir());
+    assert!(context.cache_dir.child("flat-index-v5").is_dir());
 
     let lock = context.read("uv.lock");
 
@@ -37715,6 +37831,111 @@ fn lock_omit_wheels_exclude_newer() -> Result<()> {
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
+/// Post-cutoff artifacts must not be attached to eligible distributions.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_omit_attached_artifacts_exclude_newer() -> Result<()> {
+    // The cutoff falls between the 2024-03-25 and 2024-03-27 uploads.
+    let scenario = toml::from_str::<Scenario>(indoc! {r#"
+        name = "post-cutoff-attached-artifacts"
+
+        [root]
+
+        [expected]
+        satisfiable = true
+
+        [packages.a.versions."1.0.0"]
+        sdist = { upload_time = "2024-03-25T00:00:00Z" }
+        wheel = { upload_time = "2024-03-27T00:00:00Z" }
+
+        [packages.b.versions."1.0.0"]
+        sdist = { upload_time = "2024-03-27T00:00:00Z" }
+        wheel = { upload_time = "2024-03-25T00:00:00Z" }
+    "#})?;
+    let server = PackseServer::from_scenario(&scenario);
+    let context = uv_test::test_context!("3.12")
+        .with_exclude_newer("2024-03-26T00:00:00Z")
+        .with_filters(
+            server
+                .files()
+                .map(|(filename, hash)| (hash.to_owned(), format!("[SHA256:{filename}]"))),
+        );
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["a==1.0.0", "b==1.0.0"]
+        "#})?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--index-url").arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+
+    // The lock must contain `a`'s sdist and `b`'s wheel, without their later counterparts.
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(context.read("uv.lock"), @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-26T00:00:00Z"
+
+        [[package]]
+        name = "a"
+        version = "1.0.0"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        sdist = { url = "http://[LOCALHOST]/files/a-1.0.0.tar.gz", hash = "sha256:[SHA256:a-1.0.0.tar.gz]", upload-time = "2024-03-25T00:00:00Z" }
+
+        [[package]]
+        name = "b"
+        version = "1.0.0"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        wheels = [
+            { url = "http://[LOCALHOST]/files/b-1.0.0-py3-none-any.whl", hash = "sha256:[SHA256:b-1.0.0-py3-none-any.whl]", upload-time = "2024-03-25T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "a" },
+            { name = "b" },
+        ]
+
+        [package.metadata]
+        requires-dist = [
+            { name = "a", specifier = "==1.0.0" },
+            { name = "b", specifier = "==1.0.0" },
+        ]
+        "#);
+    });
+
+    // Frozen sync installs only from the artifacts in the lockfile.
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--frozen")
+        .arg("--no-cache")
+        .arg("--index-url").arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + a==1.0.0
+     + b==1.0.0
     ");
 
     Ok(())

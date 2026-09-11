@@ -224,12 +224,10 @@ impl<'a> RegistryWheelIndex<'a> {
                             {
                                 if wheel.filename.compatibility(tags).is_compatible() {
                                     // Enforce hash-checking based on the built distribution.
-                                    if wheel.satisfies(
-                                        hasher.get_package(
-                                            &wheel.filename.name,
-                                            &wheel.filename.version,
-                                        ),
-                                    ) {
+                                    if wheel.satisfies(hasher.archive_policy_for_package(
+                                        &wheel.filename.name,
+                                        &wheel.filename.version,
+                                    )) {
                                         entries.push(IndexEntry {
                                             dist: wheel.into_registry_dist(),
                                             index,
@@ -251,12 +249,10 @@ impl<'a> RegistryWheelIndex<'a> {
                             {
                                 if wheel.filename.compatibility(tags).is_compatible() {
                                     // Enforce hash-checking based on the built distribution.
-                                    if wheel.satisfies(
-                                        hasher.get_package(
-                                            &wheel.filename.name,
-                                            &wheel.filename.version,
-                                        ),
-                                    ) {
+                                    if wheel.satisfies(hasher.archive_policy_for_package(
+                                        &wheel.filename.name,
+                                        &wheel.filename.version,
+                                    )) {
                                         entries.push(IndexEntry {
                                             dist: wheel.into_registry_dist(),
                                             index,
@@ -338,10 +334,10 @@ impl<'a> RegistryWheelIndex<'a> {
                         if let Some(wheel) = ResolvedWheel::from_built_source(wheel_dir, cache) {
                             if wheel.filename.compatibility(tags).is_compatible() {
                                 // Enforce hash-checking based on the source distribution.
-                                if revision.satisfies(
-                                    hasher
-                                        .get_package(&wheel.filename.name, &wheel.filename.version),
-                                ) {
+                                if revision.satisfies(hasher.archive_policy_for_package(
+                                    &wheel.filename.name,
+                                    &wheel.filename.version,
+                                )) {
                                     let wheel = CachedWheel::from_entry(
                                         wheel,
                                         revision.hashes().into(),

@@ -729,16 +729,16 @@ impl VersionMapLazy {
         excluded: bool,
         upload_time: Option<i64>,
     ) -> SourceDistCompatibility {
-        // Check if builds are disabled
-        if self.no_build {
-            return SourceDistCompatibility::Incompatible(IncompatibleSource::NoBuild);
-        }
-
         // Check if after upload time cutoff
         if excluded {
             return SourceDistCompatibility::Incompatible(IncompatibleSource::ExcludeNewer(
                 upload_time,
             ));
+        }
+
+        // Check if builds are disabled
+        if self.no_build {
+            return SourceDistCompatibility::Incompatible(IncompatibleSource::NoBuild);
         }
 
         // Check if yanked
@@ -763,7 +763,9 @@ impl VersionMapLazy {
         }
 
         // Check if hashes line up. If hashes aren't required, they're considered matching.
-        let hash_policy = self.hasher.get_package(&filename.name, &filename.version);
+        let hash_policy = self
+            .hasher
+            .archive_policy_for_package(&filename.name, &filename.version);
         let required_hashes = hash_policy.digests();
         let hash = if required_hashes.is_empty() {
             HashComparison::Matched
@@ -790,14 +792,14 @@ impl VersionMapLazy {
         excluded: bool,
         upload_time: Option<i64>,
     ) -> WheelCompatibility {
-        // Check if binaries are disabled
-        if self.no_binary {
-            return WheelCompatibility::Incompatible(IncompatibleWheel::NoBinary);
-        }
-
         // Check if after upload time cutoff
         if excluded {
             return WheelCompatibility::Incompatible(IncompatibleWheel::ExcludeNewer(upload_time));
+        }
+
+        // Check if binaries are disabled
+        if self.no_binary {
+            return WheelCompatibility::Incompatible(IncompatibleWheel::NoBinary);
         }
 
         // Check if yanked
@@ -827,7 +829,7 @@ impl VersionMapLazy {
         };
 
         // Check if hashes line up. If hashes aren't required, they're considered matching.
-        let hash_policy = self.hasher.get_package(name, version);
+        let hash_policy = self.hasher.archive_policy_for_package(name, version);
         let required_hashes = hash_policy.digests();
         let hash = if required_hashes.is_empty() {
             HashComparison::Matched

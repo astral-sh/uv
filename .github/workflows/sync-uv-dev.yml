@@ -18,7 +18,7 @@ jobs:
   sync:
     name: Sync uv-dev
     if: github.repository == 'astral-sh/uv'
-    runs-on: ubuntu-slim
+    runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-2' || 'ubuntu-slim' }}
     environment: automations
     permissions:
       id-token: write # for the credential broker

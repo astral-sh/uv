@@ -16,7 +16,7 @@ jobs:
   system-test-debian:
     timeout-minutes: 10
     name: "python on debian"
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-4' || 'ubuntu-latest' }}
     container: debian:13@sha256:34cd9e9fd437c0a095ec39cb2e73422c9f30821b0d0848ed74fd0d43bae4d958
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -48,7 +48,7 @@ jobs:
   system-test-fedora:
     timeout-minutes: 10
     name: "python on fedora"
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-4' || 'ubuntu-latest' }}
     container: fedora:45@sha256:0c1f63ed8fb818fad16cf6ae091598c410a21d2e1a9adf183beb93189299bfba
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -75,7 +75,7 @@ jobs:
   system-test-ubuntu:
     timeout-minutes: 10
     name: "python3.12 via setup-python"
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-4' || 'ubuntu-latest' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -102,7 +102,7 @@ jobs:
   system-test-python-36:
     timeout-minutes: 10
     name: "python3.6 on debian buster"
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-4' || 'ubuntu-latest' }}
     container: python:3.6-buster
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -126,7 +126,7 @@ jobs:
   system-test-python-37:
     timeout-minutes: 10
     name: "python3.7 on debian buster"
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-4' || 'ubuntu-latest' }}
     container: python:3.7-buster
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -186,7 +186,7 @@ jobs:
   system-test-rocky-linux:
     timeout-minutes: 10
     name: "python on rocky linux ${{ matrix.rocky-version }}"
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-4' || 'ubuntu-latest' }}
     container: rockylinux/rockylinux:${{ matrix.rocky-version }}
     strategy:
       fail-fast: false
@@ -245,7 +245,7 @@ jobs:
   system-test-graalpy:
     timeout-minutes: 10
     name: "graalpy on linux"
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-4' || 'ubuntu-latest' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -272,7 +272,7 @@ jobs:
   system-test-pypy:
     timeout-minutes: 10
     name: "pypy on linux"
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-4' || 'ubuntu-latest' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -299,7 +299,7 @@ jobs:
   system-test-pyston:
     timeout-minutes: 10
     name: "pyston on linux"
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-4' || 'ubuntu-latest' }}
     container: pyston/pyston:2.3.5@sha256:3e8c851140fb52a183b1d7f478e2a534374275516426acfeda5c2b0a032fc6bb
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -323,7 +323,7 @@ jobs:
   system-test-chainguard-dev:
     timeout-minutes: 10
     name: "python on chainguard-dev"
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-4' || 'ubuntu-latest' }}
     container:
       image: cgr.dev/chainguard/python:latest-dev@sha256:c3898a57639a93cb4356fce37d6312f8e9ad44ced420f530148dbcbc5f6797ef
       options: --user root --entrypoint /bin/sh
@@ -347,12 +347,12 @@ jobs:
         run: python scripts/check_system_python.py --uv ./uv
 
   # The Chainguard distroless image has no shell, so we can't use `container:`
-  # directly. Instead, we run on ubuntu-latest and use `docker run` to execute
+  # directly. Instead, we run on Ubuntu and use `docker run` to execute
   # inside the image.
   system-test-chainguard:
     timeout-minutes: 10
     name: "python on chainguard"
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-4' || 'ubuntu-latest' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -377,7 +377,7 @@ jobs:
   system-test-alpine:
     timeout-minutes: 10
     name: "python on alpine"
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-4' || 'ubuntu-latest' }}
     container: alpine:latest@sha256:28bd5fe8b56d1bd048e5babf5b10710ebe0bae67db86916198a6eec434943f8b
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -655,7 +655,7 @@ jobs:
   system-test-pyenv:
     timeout-minutes: 10
     name: "python3.9 via pyenv"
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-4' || 'ubuntu-latest' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -697,7 +697,7 @@ jobs:
   system-test-linux-313:
     timeout-minutes: 10
     name: "python3.13 via setup-python"
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-4' || 'ubuntu-latest' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -735,7 +735,7 @@ jobs:
           - {
               os: "linux",
               target: "linux-libc",
-              runner: "ubuntu-latest",
+              runner: "${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-4' || 'ubuntu-latest' }}",
               arch: "x86-64",
             }
           - {
@@ -794,7 +794,7 @@ jobs:
   system-test-amazonlinux:
     timeout-minutes: 10
     name: "python on amazonlinux"
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-4' || 'ubuntu-latest' }}
     container: amazonlinux:2023@sha256:32f61af6a24e178e8142fb7b0079f4af3a5cda6816cd53d2c611a921ef029ca0
     steps:
       - name: "Install base requirements"

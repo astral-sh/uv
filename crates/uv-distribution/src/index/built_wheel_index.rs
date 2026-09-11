@@ -72,7 +72,7 @@ impl<'a> BuiltWheelIndex<'a> {
 
         // Enforce hash-checking by omitting any wheels that don't satisfy the required hashes.
         let revision = pointer.into_revision();
-        if !revision.satisfies(self.hasher.get(source_dist)) {
+        if !revision.satisfies(self.hasher.archive_policy(source_dist)) {
             return Ok(None);
         }
 
@@ -124,7 +124,7 @@ impl<'a> BuiltWheelIndex<'a> {
 
         // Enforce hash-checking by omitting any wheels that don't satisfy the required hashes.
         let revision = pointer.into_revision();
-        if !revision.satisfies(self.hasher.get(source_dist)) {
+        if !revision.satisfies(self.hasher.archive_policy(source_dist)) {
             return Ok(None);
         }
 
@@ -178,7 +178,7 @@ impl<'a> BuiltWheelIndex<'a> {
 
         // Enforce hash-checking by omitting any wheels that don't satisfy the required hashes.
         let revision = pointer.into_revision();
-        if !revision.satisfies(self.hasher.get(source_dist)) {
+        if !revision.satisfies(self.hasher.archive_policy(source_dist)) {
             return Ok(None);
         }
 
@@ -206,7 +206,11 @@ impl<'a> BuiltWheelIndex<'a> {
     /// Return the most compatible [`CachedWheel`] for a given source distribution at a git URL.
     pub fn git_directory(&self, source_dist: &GitDirectorySourceDist) -> Option<CachedWheel> {
         // Enforce hash-checking, which isn't supported for Git distributions.
-        if self.hasher.get(source_dist).requires_validation() {
+        if self
+            .hasher
+            .archive_policy(source_dist)
+            .requires_validation()
+        {
             return None;
         }
 
@@ -258,7 +262,7 @@ impl<'a> BuiltWheelIndex<'a> {
         };
 
         // Enforce hash-checking by omitting any wheels that don't satisfy the required hashes.
-        if !revision.satisfies(self.hasher.get(source_dist)) {
+        if !revision.satisfies(self.hasher.archive_policy(source_dist)) {
             return Ok(None);
         }
 

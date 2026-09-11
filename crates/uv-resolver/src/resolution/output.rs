@@ -13,14 +13,15 @@ use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
 use uv_configuration::{BuildOptions, Constraints, Overrides};
 use uv_distribution::Metadata;
 use uv_distribution_types::{
-    BuiltDist, Dist, DistributionId, Edge, Identifier, IndexUrl, Name, Node, Requirement,
-    RequiresPython, ResolutionDiagnostic, ResolvedDist, SourceDist,
+    BuiltDist, Dist, DistributionId, Edge, HashCollection, Identifier, IndexUrl, Name, Node,
+    Requirement, RequiresPython, ResolutionDiagnostic, ResolvedDist, SourceDist, parse_url_hashes,
 };
 use uv_git::GitResolver;
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::{Version, VersionSpecifier};
 use uv_pep508::{MarkerEnvironment, MarkerTree, MarkerTreeKind};
-use uv_pypi_types::{Conflicts, HashDigests, ParsedUrlError, VerbatimParsedUrl, Yanked};
+use uv_pypi_types::{Conflicts, HashDigests, ParsedUrl, ParsedUrlError, VerbatimParsedUrl, Yanked};
+use uv_types::HashStrategy;
 
 use crate::graph_ops::{marker_reachability, simplify_conflict_markers};
 use crate::pins::FilePins;
@@ -127,6 +128,7 @@ impl ResolverOutput {
         constraints: Constraints,
         overrides: Overrides,
         preferences: &Preferences,
+        hasher: &HashStrategy,
         index: &InMemoryIndex,
         git: &GitResolver,
         requires_python: RequiresPython,
@@ -157,6 +159,7 @@ impl ResolverOutput {
                     &mut inverse,
                     &mut diagnostics,
                     preferences,
+                    hasher,
                     &resolution.pins,
                     index,
                     git,
@@ -325,6 +328,7 @@ impl ResolverOutput {
         inverse: &mut FxHashMap<PackageRef<'a>, NodeIndex>,
         diagnostics: &mut Vec<ResolutionDiagnostic>,
         preferences: &Preferences,
+        hasher: &HashStrategy,
         pins: &FilePins,
         in_memory: &InMemoryIndex,
         git: &GitResolver,
@@ -347,6 +351,7 @@ impl ResolverOutput {
             pins,
             diagnostics,
             preferences,
+            hasher,
             in_memory,
             git,
         )?;
@@ -406,6 +411,7 @@ impl ResolverOutput {
         pins: &FilePins,
         diagnostics: &mut Vec<ResolutionDiagnostic>,
         preferences: &Preferences,
+        hasher: &HashStrategy,
         in_memory: &InMemoryIndex,
         git: &GitResolver,
     ) -> Result<(ResolvedDist, HashDigests, Option<Metadata>), ResolveError> {
@@ -423,6 +429,7 @@ impl ResolverOutput {
                 &metadata_id,
                 version,
                 preferences,
+                hasher,
                 in_memory,
             );
 
@@ -482,6 +489,7 @@ impl ResolverOutput {
                 &hashes_id,
                 version,
                 preferences,
+                hasher,
                 in_memory,
             );
 
@@ -512,6 +520,7 @@ impl ResolverOutput {
         metadata_id: &DistributionId,
         version: &Version,
         preferences: &Preferences,
+        hasher: &HashStrategy,
         in_memory: &InMemoryIndex,
     ) -> HashDigests {
         // 1. Look for hashes from the lockfile.
@@ -521,7 +530,19 @@ impl ResolverOutput {
             }
         }
 
-        // 2. Look for hashes for the distribution (i.e., the specific wheel or source distribution).
+        // 2. Reuse a direct URL's declared hash when collecting hashes without validation.
+        if let Some(url) = url
+            && let ParsedUrl::Archive(_) = &url.parsed_url
+            && hasher.collection() != HashCollection::None
+            && !hasher
+                .archive_policy_for_url(&url.verbatim)
+                .requires_validation()
+            && let Some(hashes) = parse_url_hashes(&url.verbatim)
+        {
+            return hashes;
+        }
+
+        // 3. Look for hashes computed for the specific wheel or source distribution.
         if let Some(metadata_response) = in_memory.distributions().get(metadata_id) {
             if let MetadataResponse::Found(ref archive) = *metadata_response {
                 let mut digests = archive.hashes.clone();
@@ -532,7 +553,7 @@ impl ResolverOutput {
             }
         }
 
-        // 3. Look for hashes from the registry, which are served at the package level.
+        // 4. Look for hashes from the registry, which are served at the package level.
         if url.is_none() {
             // Query the implicit and explicit indexes (lazily) for the hashes.
             let implicit_response = in_memory.implicit().get(name);

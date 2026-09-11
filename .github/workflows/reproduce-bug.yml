@@ -15,7 +15,7 @@ on:
         type: string
       runner:
         description: "The runner to use for reproduction"
-        default: ubuntu-latest
+        default: github-ubuntu-24.04-x86_64-4
         required: false
         type: string
     outputs:
@@ -48,11 +48,11 @@ on:
         type: string
       runner:
         description: "The runner to use for reproduction"
-        default: ubuntu-latest
+        default: github-ubuntu-24.04-x86_64-4
         required: true
         type: choice
         options:
-          - ubuntu-latest
+          - github-ubuntu-24.04-x86_64-4
           - macos-latest
 
 permissions: {}
@@ -150,7 +150,7 @@ jobs:
   report:
     needs: reproduce
     if: needs.reproduce.outputs.result != ''
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-4' || 'ubuntu-latest' }}
     environment: automations
     timeout-minutes: 10
     concurrency:
@@ -340,7 +340,7 @@ jobs:
   publish-integration-test:
     needs: [reproduce, create-integration-test]
     if: needs.create-integration-test.outputs.created == 'true'
-    runs-on: ubuntu-slim
+    runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-2' || 'ubuntu-slim' }}
     environment: automations
     timeout-minutes: 10
     permissions:

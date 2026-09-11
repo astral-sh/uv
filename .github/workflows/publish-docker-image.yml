@@ -1,0 +1,176 @@
+# Publish a saved Depot image without rebuilding it.
+name: "Publish Docker image"
+
+on:
+  workflow_call:
+    inputs:
+      image:
+        description: "Saved image record from the Docker build manifest"
+        required: true
+        type: string
+      push-dev:
+        required: false
+        type: boolean
+        default: false
+
+env:
+  ACTIONS_CACHE_MODE: none
+  DEPOT_PROJECT_PROD_UV: 7hd4vdzmw5 # prod/uv
+  DEPOT_PROJECT_DEV_UV: v094vdzkdt # dev/uv
+  DEPOT_PROJECT_DEV_UV_DEV: c3ht4lmvqh # dev/uv-dev
+  UV_GHCR_IMAGE: ghcr.io/${{ github.repository_owner }}/${{ inputs.push-dev && 'uv-dev' || 'uv' }}
+  UV_DOCKERHUB_IMAGE: ${{ !inputs.push-dev && 'docker.io/astral/uv' || '' }}
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    name: publish ${{ fromJson(inputs.image).name }}
+    # Development publication cannot select the production repositories.
+    # Production publication requires the main-branch release workflow in `astral-sh/uv`.
+    if: ${{ inputs.push-dev || (github.repository == 'astral-sh/uv' && github.event_name == 'workflow_dispatch' && github.workflow_ref == 'astral-sh/uv/.github/workflows/release.yml@refs/heads/main') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment:
+      name: ${{ inputs.push-dev && 'release-test' || 'release' }}
+      deployment: ${{ !inputs.push-dev }}
+    permissions:
+      contents: read
+      id-token: write # for Depot OIDC and GHCR signing
+      packages: write # for GHCR image pushes
+      attestations: write # for GHCR attestations
+    steps:
+      - name: Validate publication target
+        env:
+          PUSH_DEV: ${{ inputs.push-dev }}
+          PR_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name }}
+        run: |
+          if [ "$PUSH_DEV" == "true" ]; then
+            case "$GITHUB_REPOSITORY" in
+              astral-sh/uv) depot_project_id="$DEPOT_PROJECT_DEV_UV" ;;
+              astral-sh/uv-dev) depot_project_id="$DEPOT_PROJECT_DEV_UV_DEV" ;;
+              *) echo "Development publication requires an Astral repository" >&2; exit 1 ;;
+            esac
+            if [ "$GITHUB_EVENT_NAME" != "pull_request" ] || [ "$PR_REPOSITORY" != "$GITHUB_REPOSITORY" ]; then
+              echo "Development publication requires a same-repository pull request" >&2
+              exit 1
+            fi
+            if [ "$UV_GHCR_IMAGE" != "ghcr.io/astral-sh/uv-dev" ] || [ -n "$UV_DOCKERHUB_IMAGE" ]; then
+              echo "Unexpected development image destination" >&2
+              exit 1
+            fi
+          elif [ "$GITHUB_REPOSITORY" != "astral-sh/uv" ] ||
+               [ "$GITHUB_EVENT_NAME" != "workflow_dispatch" ] ||
+               [ "$GITHUB_WORKFLOW_REF" != "astral-sh/uv/.github/workflows/release.yml@refs/heads/main" ]; then
+            echo "Production publication requires the main-branch release workflow in astral-sh/uv" >&2
+            exit 1
+          else
+            depot_project_id="$DEPOT_PROJECT_PROD_UV"
+          fi
+          echo "DEPOT_PROJECT_ID=$depot_project_id" >> "$GITHUB_ENV"
+          echo "GHCR destination: $UV_GHCR_IMAGE"
+          echo "Docker Hub destination: ${UV_DOCKERHUB_IMAGE:-none}"
+
+      - uses: depot/setup-action@15c09a5f77a0840ad4bce955686522a257853461 # v1.7.1
+
+      - uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
+        with:
+          # Install a version that supports `imagetools create --metadata-file`
+          # (https://github.com/docker/buildx/issues/2407).
+          version: v0.33.0
+          cache-binary: false
+
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        if: ${{ !inputs.push-dev }}
+        with:
+          username: astral
+          password: ${{ secrets.DOCKERHUB_TOKEN_RW }}
+
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Copy saved image and publish tags
+        id: publish
+        env:
+          IMAGE_JSON: ${{ inputs.image }}
+          IMAGES: "${{ env.UV_GHCR_IMAGE }} ${{ env.UV_DOCKERHUB_IMAGE }}"
+        run: |
+          set -euo pipefail
+          build_id=$(jq -er '.build_id | select(test("^[a-zA-Z0-9]+$"))' <<< "$IMAGE_JSON")
+          digest=$(jq -er '.digest | select(test("^sha256:[0-9a-f]{64}$"))' <<< "$IMAGE_JSON")
+
+          # Verify that the Depot build ID resolves to the recorded index digest.
+          token="$(depot pull-token --project "$DEPOT_PROJECT_ID" "$build_id")"
+          echo "::add-mask::$token"
+          printf '%s' "$token" | docker login registry.depot.dev --username x-token --password-stdin
+          saved_digest=$(docker buildx imagetools inspect \
+            "registry.depot.dev/${DEPOT_PROJECT_ID}:$build_id" --format '{{.Manifest.Digest}}')
+          if [ "$saved_digest" != "$digest" ]; then
+            echo "The saved Depot image does not match the build manifest" >&2
+            exit 1
+          fi
+
+          # Keep annotation values containing spaces or shell-special characters
+          # together as individual command arguments.
+          annotations=()
+          while IFS= read -r annotation; do
+            annotations+=(--annotation "$annotation")
+          done < <(jq -r '.annotations[]' <<< "$IMAGE_JSON")
+
+          # Only accept tag references for the destination repositories selected
+          # by this workflow.
+          for image in $IMAGES; do
+            readarray -t image_tags < <(
+              jq -r --arg prefix "$image:" '.tags[] | select(startswith($prefix))' <<< "$IMAGE_JSON"
+            )
+            if [ "${#image_tags[@]}" -eq 0 ]; then
+              echo "Missing tags for $image" >&2
+              exit 1
+            fi
+
+            # Copy the complete index instead of loading and re-pushing it through
+            # the local Docker image store, which can drop platforms or change
+            # the manifest format (astral-sh/uv#14165).
+            depot push --project "$DEPOT_PROJECT_ID" --tag "${image_tags[0]}" "$build_id"
+            copied_digest=$(docker buildx imagetools inspect \
+              "${image_tags[0]}" --format '{{.Manifest.Digest}}')
+            if [ "$copied_digest" != "$digest" ]; then
+              echo "The copied image digest does not match the build manifest" >&2
+              exit 1
+            fi
+
+            tags=()
+            for tag in "${image_tags[@]}"; do
+              tags+=(-t "$tag")
+            done
+            # Apply index metadata during publication so the final digest covers
+            # both the complete multi-platform image and its annotations.
+            docker buildx imagetools create \
+              "${annotations[@]}" \
+              "${tags[@]}" \
+              --metadata-file "$RUNNER_TEMP/docker-publish-metadata.json" \
+              "$image@$digest"
+
+            # Adding index annotations changes the digest. Read the new digest
+            # from `imagetools` so the attestation cannot race a mutable tag.
+            if [ "$image" == "$UV_GHCR_IMAGE" ]; then
+              final_digest=$(jq -er '."containerimage.descriptor".digest' "$RUNNER_TEMP/docker-publish-metadata.json")
+              echo "digest=$final_digest" >> "$GITHUB_OUTPUT"
+            fi
+          done
+
+      - name: Attest original image
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-name: ${{ env.UV_GHCR_IMAGE }}
+          subject-digest: ${{ fromJson(inputs.image).digest }}
+
+      - name: Attest published image
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-name: ${{ env.UV_GHCR_IMAGE }}
+          subject-digest: ${{ steps.publish.outputs.digest }}

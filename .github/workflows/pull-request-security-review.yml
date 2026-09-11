@@ -9,7 +9,7 @@ env:
 jobs:
   review:
     name: "security review"
-    runs-on: ubuntu-latest
+    runs-on: depot-ubuntu-24.04-16
     environment: automations
     timeout-minutes: 30
     permissions:
@@ -24,11 +24,22 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
+      - name: "Prepare review configuration"
+        env:
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          REVIEW_CONFIG: ${{ runner.temp }}/pull-request-review
+        run: |
+          # Keep the review configuration at the workflow revision, even for older PR branches.
+          printf 'REVIEW_CONFIG=%s\n' "$REVIEW_CONFIG" >> "$GITHUB_ENV"
+          mkdir -p "$REVIEW_CONFIG"
+          cp -R agents/. "$REVIEW_CONFIG/"
+          git checkout --detach "$HEAD_SHA"
+
       - name: "Checkout Codex Security plugin"
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: openai/plugins
-          ref: 11c74d6ba24d3a6d48f54a194cd00ef3beea18f9
+          ref: 1e285826e604f66f7208f7ac4dba0fe8341d1f57
           path: .codex-security-plugin
           sparse-checkout: |
             .agents/plugins
@@ -41,20 +52,47 @@ jobs:
           checksum: "173d95a0c32d18c896c46ba6fafbf3cf9c14ab74b033f81b76c883ef492a976b"
 
       - name: "Install Codex Security plugin"
-        run: ./agents/scripts/install-codex-security.sh
+        run: '"$REVIEW_CONFIG/scripts/install-codex-security.sh" "$REVIEW_CONFIG/codex"'
 
       - name: "Collect pull request context"
         run: |
-          set -o pipefail
+          set -euo pipefail
+
+          if [ "$(git rev-parse HEAD)" != "$HEAD_SHA" ]; then
+            echo "The checkout does not match the pull request head." >&2
+            exit 1
+          fi
 
           gh pr view "$PULL_REQUEST_NUMBER" \
             --repo "$GITHUB_REPOSITORY" \
             --json number,title,body,author,baseRefName,baseRefOid,headRefName,headRefOid,isDraft,labels,files,additions,deletions,changedFiles \
             > .pull-request-review-event.json
 
-          gh pr diff "$PULL_REQUEST_NUMBER" \
-            --repo "$GITHUB_REPOSITORY" \
-            > .pull-request-review.diff
+          if ! jq --exit-status --arg head "$HEAD_SHA" \
+            '.headRefOid == $head' .pull-request-review-event.json > /dev/null; then
+            echo "The pull request head changed during review setup." >&2
+            exit 1
+          fi
+
+          merge_base="$(git merge-base "$BASE_SHA" "$HEAD_SHA")"
+          jq --null-input --arg base "$merge_base" --arg base_tip "$BASE_SHA" \
+            --arg head "$HEAD_SHA" \
+            '{base: $base, base_tip: $base_tip, head: $head}' \
+            > .pull-request-review-revisions.json
+
+          git diff --no-ext-diff --no-textconv --no-renames \
+            "$merge_base..$HEAD_SHA" > .pull-request-review.diff
+          git diff --no-ext-diff --no-textconv --no-renames --name-only -z \
+            "$merge_base..$HEAD_SHA" > "$RUNNER_TEMP/pull-request-review-paths.z"
+
+          : > .pull-request-review-paths.txt
+          while IFS= read -r -d '' path; do
+            if [[ "$path" == *$'\n'* || "$path" == *$'\r'* ]]; then
+              echo "A changed path cannot be represented in the scan inventory." >&2
+              exit 1
+            fi
+            printf '%s\n' "$path" >> .pull-request-review-paths.txt
+          done < "$RUNNER_TEMP/pull-request-review-paths.z"
 
           gh api --paginate --slurp \
             "repos/$GITHUB_REPOSITORY/pulls/$PULL_REQUEST_NUMBER/comments?per_page=100" \
@@ -65,46 +103,89 @@ jobs:
             printf 'Pull request security review for #%s: %s\n\n' \
               "$(jq -r '.number' .pull-request-review-event.json)" \
               "$(jq -r '.title | gsub("[\r\n]+"; " ")' .pull-request-review-event.json)"
-            cat agents/prompts/pull-request-security-review.md
+            cat "$REVIEW_CONFIG/prompts/pull-request-security-review.md"
           } > "$RUNNER_TEMP/pull-request-security-review-prompt.md"
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PULL_REQUEST_NUMBER: ${{ github.event.pull_request.number }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
 
       - name: "Install cargo nextest"
         uses: taiki-e/install-action@6c6fd71fe4fb72c3697d269963d0e15df8adedad # v2.85.10
         with:
           tool: cargo-nextest
 
+      # codex-action configures these only on GitHub-hosted runners.
+      - name: "Enable Linux user namespaces for bubblewrap"
+        run: |
+          current_userns="$(sysctl -n kernel.unprivileged_userns_clone 2>/dev/null || true)"
+          if [ -n "$current_userns" ] && [ "$current_userns" != "1" ]; then
+            sudo sysctl -w kernel.unprivileged_userns_clone=1
+          fi
+
+          current_apparmor="$(sysctl -n kernel.apparmor_restrict_unprivileged_userns 2>/dev/null || true)"
+          if [ -n "$current_apparmor" ] && [ "$current_apparmor" != "0" ]; then
+            sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+          fi
+
       - name: "Review pull request"
         id: review
-        uses: openai/codex-action@52fe01ec70a42f454c9d2ebd47598f9fd6893d56 # v1.11
+        uses: openai/codex-action@c385816875cc2fc8e033ed9d1cba96f8c331210e # v1.11 + GitHub API retry
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TMPDIR: ${{ runner.temp }}/codex-security
         with:
           openai-api-key: ${{ secrets.OPENAI_API_KEY }}
-          codex-version: "0.147.0"
-          codex-home: "agents/codex"
-          effort: high
+          codex-version: "0.153.4"
+          codex-home: "${{ env.REVIEW_CONFIG }}/codex"
+          effort: xhigh
           permission-profile: "pull-request-review"
           safety-strategy: drop-sudo
           allow-bot-users: "astral-automations-bot[bot],renovate[bot]"
           prompt-file: "${{ runner.temp }}/pull-request-security-review-prompt.md"
-          output-schema-file: "agents/schemas/pull-request-security-review.json"
+          output-schema-file: "${{ env.REVIEW_CONFIG }}/schemas/pull-request-security-review.json"
+          output-file: "${{ runner.temp }}/pull-request-review-result.json"
+
+      - name: "Check review coverage"
+        if: steps.review.outcome == 'success'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+
+          if [ "$(git rev-parse HEAD)" != "$HEAD_SHA" ]; then
+            echo "The review changed the checked-out revision." >&2
+            exit 1
+          fi
+
+          review="$RUNNER_TEMP/pull-request-review-result.json"
+          merge_base="$(git merge-base "$BASE_SHA" "$HEAD_SHA")"
+          git diff --no-ext-diff --no-textconv --no-renames --name-only -z \
+            "$merge_base..$HEAD_SHA" | LC_ALL=C sort -z \
+            > "$RUNNER_TEMP/expected-review-paths.z"
+          jq --join-output '.reviewed_paths[] | . + "\u0000"' "$review" \
+            | LC_ALL=C sort -z > "$RUNNER_TEMP/reviewed-paths.z"
+
+          if ! cmp --silent "$RUNNER_TEMP/expected-review-paths.z" \
+            "$RUNNER_TEMP/reviewed-paths.z"; then
+            echo "Infrastructure error: the security review did not account for every changed path" >&2
+            exit 1
+          fi
 
       - name: "Upload Codex thread"
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: codex-thread-pull-request-security-review-${{ github.run_id }}-${{ github.run_attempt }}
-          path: agents/codex/sessions
+          path: ${{ env.REVIEW_CONFIG }}/codex/sessions
           if-no-files-found: warn
 
   prepare:
     needs: review
     if: needs.review.outputs.result != ''
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-4' || 'ubuntu-latest' }}
     timeout-minutes: 5
     permissions:
       contents: read
@@ -137,7 +218,7 @@ jobs:
   report:
     needs: prepare
     if: needs.prepare.outputs.result != '' && fromJSON(needs.prepare.outputs.result).comments[0] != null
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-4' || 'ubuntu-latest' }}
     environment: automations
     timeout-minutes: 5
     permissions:

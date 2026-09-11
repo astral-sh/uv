@@ -18,7 +18,7 @@ use uv_configuration::{
 use uv_dispatch::BuildDispatch;
 use uv_distribution::{DistributionDatabase, LoweredExtraBuildDependencies};
 use uv_distribution_types::{
-    DependencyMetadata, HashGeneration, Index, IndexLocations, NameRequirementSpecification,
+    DependencyMetadata, HashCollection, Index, IndexLocations, NameRequirementSpecification,
     Requirement, RequiresPython, UnresolvedRequirementSpecification,
 };
 use uv_git::ResolvedRepositoryReference;
@@ -846,7 +846,7 @@ async fn do_lock(
         LockMode::Locked(..) => &locked_build_hasher,
         LockMode::Write(_) | LockMode::DryRun(_) | LockMode::Frozen(_) => &HashStrategy::default(),
     };
-    let hasher = HashStrategy::generate(HashGeneration::Url)
+    let hasher = HashStrategy::collect(HashCollection::Url)
         .with_verification(resolution_build_hasher.verification().clone());
 
     // TODO(charlie): These are all default values. We should consider whether we want to make them

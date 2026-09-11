@@ -22,7 +22,7 @@ env:
 jobs:
   diagnose:
     if: github.repository == 'astral-sh/uv' || github.repository == 'astral-sh/uv-dev'
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-4' || 'ubuntu-latest' }}
     environment: automations
     timeout-minutes: 20
     permissions:
@@ -137,7 +137,7 @@ jobs:
     if: >-
       needs.diagnose.outputs.result != '' &&
       fromJSON(needs.diagnose.outputs.result).failure_kind == 'flaky'
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-4' || 'ubuntu-latest' }}
     environment: automations
     timeout-minutes: 5
     concurrency:
@@ -229,7 +229,7 @@ jobs:
       needs.diagnose.outputs.result != '' &&
       (fromJSON(needs.diagnose.outputs.result).decision == 'create' ||
       fromJSON(needs.diagnose.outputs.result).decision == 'duplicate')
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-4' || 'ubuntu-latest' }}
     environment: automations
     timeout-minutes: 5
     permissions:
@@ -300,7 +300,7 @@ jobs:
             .decision == "create"
             and (.issue.title | type == "string" and length > 0)
             and (.issue.body | type == "string" and length > 0)
-            and (.issue.label | IN("bug", "ci-flake"))
+            and (.issue.label | IN("bug", "internal:ci", "internal:ci-flake"))
             and (.issue.body | test("@[A-Za-z0-9][A-Za-z0-9-]*") | not)
           ' "$RUNNER_TEMP/diagnosis.json" > /dev/null; then
             echo "The workflow failure diagnosis is invalid or contains a user mention; refusing to open an issue." >&2

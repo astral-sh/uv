@@ -171,7 +171,7 @@ impl<'a, Context: BuildContext> Preparer<'a, Context> {
                 Err(err) => Err(Error::Thread(err.to_owned())),
             }
         } else {
-            let policy = self.hashes.get(&dist);
+            let policy = self.hashes.archive_policy(&dist);
 
             let result = self
                 .database
