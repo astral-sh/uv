@@ -335,7 +335,7 @@ pub(crate) async fn run(
             // If the user ran `uvx run ...`, the `run` is likely a mistake. Show a dedicated hint.
             if from.is_none() && invocation_source == ToolRunCommand::Uvx && target == "run" {
                 let rest = args.iter().map(|s| s.to_string_lossy()).join(" ");
-                return Err(UvError::from_operation_with_context(err, "tool")
+                return Err(UvError::from(err.with_resolution_context("tool"))
                     .map_user(|cause| {
                         ToolRunUsageError {
                             cause,
@@ -362,13 +362,12 @@ pub(crate) async fn run(
                     .into());
             }
 
-            return Err(UvError::from_operation_with_context(err, "tool").into());
+            return Err(UvError::from(err.with_resolution_context("tool")).into());
         }
 
         Err(ProjectError::Requirements(err)) => {
-            return Err(UvError::from_operation_with_context(
-                operations::Error::Requirements(err),
-                "`--with`",
+            return Err(UvError::from(
+                operations::Error::Requirements(err).with_resolution_context("`--with`"),
             )
             .into());
         }
