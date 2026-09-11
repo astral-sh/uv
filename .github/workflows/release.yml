@@ -402,8 +402,8 @@ jobs:
         id: release-token
         uses: open-security-tools/ost-simple-sts@974a63a2daaaa40f7c6dec40d334f3da4421469e
         with:
-          exchange-url: ${{ secrets.STS_API_URL }}/exchange
-          audience: ${{ secrets.STS_API_URL }}
+          exchange-url: ${{ secrets.RELEASES_STS_API_URL }}/exchange
+          audience: ${{ secrets.RELEASES_STS_API_URL }}
           repository: astral-sh/uv
           # Workflow permission is required to create a release tag after `main` advances across workflow changes.
           permissions: |

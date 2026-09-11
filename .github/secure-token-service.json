@@ -33,14 +33,6 @@
     },
     {
       "caller": "uv",
-      "environment": "release",
-      "caller_workflow": "release.yml",
-      "on": ["workflow_dispatch"],
-      "permissions": { "contents": "write", "workflows": "write" },
-      "target": "uv"
-    },
-    {
-      "caller": "uv",
       "environment": "automations",
       "caller_workflow": "release-prepare.yml",
       "on": ["workflow_dispatch"],
