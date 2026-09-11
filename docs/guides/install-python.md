@@ -31,7 +31,7 @@ version to your `PATH`:
 $ python3.13
 ```
 
-uv only installs a _versioned_ executable by default. To install `python` and `python3` executables,
+uv only installs a _versioned_ executable by default. To install `python` and `python3` executables in your path,
 include the experimental `--default` option:
 
 ```console
