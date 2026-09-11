@@ -46,6 +46,7 @@ use crate::remote_metadata::wheel_metadata_from_remote_zip;
 use crate::rkyvutil::OwnedArchive;
 use crate::{
     BaseClient, CachedClient, Error, ErrorKind, FlatIndexClient, RedirectClientWithMiddleware,
+    RetryState,
 };
 
 /// A builder for an [`RegistryClient`].
@@ -633,7 +634,7 @@ impl RegistryClient {
             .map_err(|err| {
                 ErrorKind::from_reqwest(url.clone(), err, self.client.certificate_source())
             })?;
-        let parse_simple_response = |response: Response| {
+        let parse_simple_response = |response: Response, _: &mut RetryState| {
             async {
                 // Use the response URL, rather than the request URL, as the base for relative URLs.
                 // This ensures that we handle redirects and other URL transformations correctly.
@@ -825,7 +826,7 @@ impl RegistryClient {
             Connectivity::Offline => CacheControl::AllowStale,
         };
 
-        let parse_simple_response = |response: Response| {
+        let parse_simple_response = |response: Response, _: &mut RetryState| {
             async {
                 // Use the response URL, rather than the request URL, as the base for relative URLs.
                 // This ensures that we handle redirects and other URL transformations correctly.
@@ -1112,7 +1113,7 @@ impl RegistryClient {
                 lock_entry.lock().await.map_err(ErrorKind::CacheLock)?
             };
 
-            let response_callback = async |response: Response| {
+            let response_callback = async |response: Response, _: &mut RetryState| {
                 let bytes = response.bytes().await.map_err(|err| {
                     ErrorKind::from_reqwest(url.clone(), err, self.client.certificate_source())
                 })?;
@@ -1236,7 +1237,7 @@ impl RegistryClient {
             );
             // This response callback is special, we actually make a number of subsequent requests to
             // fetch the file from the remote zip.
-            let read_metadata_range_request = |response: Response| {
+            let read_metadata_range_request = |response: Response, _: &mut RetryState| {
                 async {
                     let mut reader = AsyncHttpRangeReader::from_head_response(
                         self.uncached_client(url).clone(),
@@ -1315,7 +1316,7 @@ impl RegistryClient {
             })?;
 
         // Stream the file, searching for the METADATA.
-        let read_metadata_stream = |response: Response| {
+        let read_metadata_stream = |response: Response, _: &mut RetryState| {
             async {
                 let reader = response
                     .bytes_stream()
