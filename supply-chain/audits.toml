@@ -1,0 +1,8 @@
+[criteria.codex-reviewed]
+description = """
+An automated review was performed using Codex and it did not find anything
+malicious or that would have a security impact.
+"""
+implies = "safe-to-deploy"
+
+[audits]
