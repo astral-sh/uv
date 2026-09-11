@@ -133,7 +133,14 @@ async fn do_uninstall(
     } else {
         let mut entrypoints = vec![];
         for name in names {
-            let Some(receipt) = installed_tools.get_tool_receipt(&name)? else {
+            let receipt = match installed_tools.get_tool_receipt(&name) {
+                Ok(receipt) => receipt,
+                // If the receipt is malformed (e.g., invalid TOML or non-UTF-8 content), treat
+                // it the same as a missing receipt so we can still remove the dangling
+                // environment.
+                Err(_) => None,
+            };
+            let Some(receipt) = receipt else {
                 // If the tool is not installed properly, attempt to remove the environment anyway.
                 match installed_tools.remove_environment(&name) {
                     Ok(()) => {
