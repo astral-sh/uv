@@ -25,13 +25,13 @@ pub fn disable() {
 }
 
 /// Format a warning chain to standard error.
-pub fn write_warning_chain(err: &dyn Error, hints: Hints<'_>) -> fmt::Result {
+pub fn write_warning_chain(err: &dyn Error, hints: &Hints<'_>) -> fmt::Result {
     write_warning_chain_with_options(err, hints, ErrorOptions::default())
 }
 
 fn write_warning_chain_with_options<C, W: fmt::Write>(
     err: &dyn Error,
-    hints: Hints<'_>,
+    hints: &Hints<'_>,
     options: ErrorOptions<'_, C, W>,
 ) -> fmt::Result {
     write_error_chain_with_options(
@@ -93,7 +93,7 @@ mod tests {
         let mut output = String::new();
         write_warning_chain_with_options(
             error.as_ref(),
-            Hints::none(),
+            &Hints::none(),
             ErrorOptions::default().with_stream(&mut output),
         )
         .unwrap();

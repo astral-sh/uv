@@ -1387,7 +1387,7 @@ pub fn find_all_python_installations(
             Ok(Err(_)) => {}
             Err(err @ Error::Query(..)) => {
                 if uv_warnings::ENABLED.load(Ordering::Relaxed) {
-                    write_warning_chain(&err, Hints::none())
+                    write_warning_chain(&err, &Hints::none())
                         .expect("writing to stderr should not fail");
                 }
             }
@@ -1677,7 +1677,7 @@ pub(crate) async fn find_best_python_installation(
                 let error = anyhow::Error::from(error).context(format!(
                     "A managed Python download is available for {request}, but an error occurred when attempting to download it."
                 ));
-                write_warning_chain(error.as_ref(), Hints::none())
+                write_warning_chain(error.as_ref(), &Hints::none())
                     .expect("writing to stderr should not fail");
                 previous_fetch_failed = true;
             }

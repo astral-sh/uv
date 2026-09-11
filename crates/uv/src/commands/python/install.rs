@@ -917,7 +917,7 @@ async fn perform_install(
                 InstallErrorKind::DownloadUnpack => {
                     write_error_chain_with_options(
                         err.context(format!("Failed to install {key}")).as_ref(),
-                        Hints::none(),
+                        &Hints::none(),
                         ErrorOptions::default().with_stream(printer.stderr()),
                     )?;
                 }
@@ -931,7 +931,7 @@ async fn perform_install(
                     write_error_chain_with_options(
                         err.context(format!("Failed to install executable for {key}"))
                             .as_ref(),
-                        Hints::none(),
+                        &Hints::none(),
                         ErrorOptions::default()
                             .with_level(level)
                             .with_color(color)
@@ -949,7 +949,7 @@ async fn perform_install(
                     write_error_chain_with_options(
                         err.context(format!("Failed to create registry entry for {key}"))
                             .as_ref(),
-                        Hints::none(),
+                        &Hints::none(),
                         ErrorOptions::default()
                             .with_level(level)
                             .with_color(color)

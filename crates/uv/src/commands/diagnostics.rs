@@ -8,7 +8,7 @@ use version_ranges::Ranges;
 use uv_distribution_types::{
     DerivationChain, DerivationStep, Dist, DistErrorKind, Name, RequestedDist,
 };
-use uv_errors::{Hinted, Hints};
+use uv_errors::{HintOrdering, Hinted, Hints};
 use uv_normalize::PackageName;
 use uv_pep440::{Version, strip_local_version_sentinels};
 
@@ -109,8 +109,14 @@ impl OperationDiagnostic {
             err => return Some(err),
         };
 
-        // Render all hints after the error output.
-        hints.extend(self.hints);
+        // Caller-provided advice describes how to adjust the command, so show the underlying
+        // failure's more specific hints first.
+        hints.extend(
+            self.hints
+                .into_iter()
+                .collect::<Hints<'_>>()
+                .with_ordering(HintOrdering::Last),
+        );
         if !hints.is_empty() {
             anstream::eprintln!("{hints}");
         }
@@ -218,7 +224,7 @@ fn no_solution(
 pub(crate) fn write_error_chain(err: &anyhow::Error, printer: Printer) -> std::fmt::Result {
     uv_errors::write_error_chain_with_options(
         err.as_ref(),
-        hints_for_error(err),
+        &hints_for_error(err),
         uv_errors::ErrorOptions::default().with_stream(printer.stderr_important()),
     )
 }
@@ -417,7 +423,7 @@ fn format_chain(name: &PackageName, version: Option<&Version>, chain: &Derivatio
 
 #[cfg(test)]
 mod tests {
-    use std::borrow::Cow;
+    use insta::assert_debug_snapshot;
 
     use uv_workspace::pyproject::{PyprojectTomlError, SourceError};
 
@@ -431,14 +437,11 @@ mod tests {
             "python_version != '3.12'".to_string(),
         )));
 
-        let hints = hints_for_error(&err)
-            .into_iter()
-            .map(Cow::into_owned)
-            .collect::<Vec<_>>();
-
-        assert_eq!(
-            hints,
-            vec!["replace `python_version == '3.12'` with `python_version != '3.12'`".to_string()]
-        );
+        let hints = hints_for_error(&err);
+        assert_debug_snapshot!(hints.iter().collect::<Vec<_>>(), @r#"
+        [
+            "replace `python_version == '3.12'` with `python_version != '3.12'`",
+        ]
+        "#);
     }
 }
