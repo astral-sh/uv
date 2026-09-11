@@ -26,7 +26,7 @@ use uv_cache::{Cache, CacheBucket, CacheEntry, CacheShard, Removal, WheelCache};
 use uv_cache_info::CacheInfo;
 use uv_client::{
     BaseClientBuilder, CacheControl, CachedClientError, Connectivity, DataWithCachePolicy,
-    RegistryClient,
+    RegistryClient, RetryState,
 };
 use uv_configuration::{BuildKind, BuildOutput, NoSources};
 use uv_distribution_filename::{SourceDistExtension, WheelFilename};
@@ -974,7 +974,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             Connectivity::Offline => CacheControl::AllowStale,
         };
 
-        let download = |response| {
+        let download = |response, _: &mut RetryState| {
             async {
                 // At this point, we're seeing a new or updated source distribution. Initialize a
                 // new revision, to collect the source and built artifacts.
@@ -2768,7 +2768,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             Connectivity::Offline => CacheControl::AllowStale,
         };
 
-        let download = |response| {
+        let download = |response, _: &mut RetryState| {
             async {
                 let (hashes, size) = self
                     .download_archive(

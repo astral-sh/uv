@@ -21,6 +21,7 @@ use uv_cache::{ArchiveFileId, ArchiveId, Cache, CacheBucket, CacheEntry, WheelCa
 use uv_cache_info::{CacheInfo, Timestamp};
 use uv_client::{
     CacheControl, CachedClientError, Connectivity, DataWithCachePolicy, RegistryClient,
+    RequestBuilder, RetryState,
 };
 use uv_configuration::initialize_rayon_once;
 use uv_distribution_filename::WheelFilename;
@@ -734,7 +735,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         // Create an entry for the HTTP cache.
         let http_entry = wheel_entry.with_file(format!("{}.http", filename.cache_key()));
 
-        let download = |response: reqwest::Response| {
+        let download = |response: reqwest::Response, _: &mut RetryState| {
             async {
                 let progress_size_hint = progress_size_hint.or_else(|| content_length(&response));
 
@@ -923,10 +924,11 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
 
         let download_url = url.clone();
 
-        let download = |response| {
+        let download = async |response, retry_state: &mut RetryState| {
             self.download_wheel_response(
                 response,
                 &download_url,
+                retry_state,
                 filename,
                 progress_size_hint,
                 expected_size,
@@ -935,6 +937,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 hashes,
             )
             .instrument(info_span!("wheel", wheel = %dist))
+            .await
         };
 
         // Fetch the archive from the cache, or download it if necessary.
@@ -1028,6 +1031,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         &self,
         mut response: reqwest::Response,
         url: &DisplaySafeUrl,
+        retry_state: &mut RetryState,
         filename: &WheelFilename,
         progress_size_hint: Option<u64>,
         expected_size: Option<u64>,
@@ -1140,6 +1144,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
 
             bytes_retrieved += hasher.bytes_read();
 
+            let interrupted = copy_result.is_err();
             let err = match copy_result {
                 // Draining the response succeeded. However, the response could be a `206 Partial Content`,
                 // so we can't assume that we're done.
@@ -1213,9 +1218,20 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 return Err(err);
             }
 
+            // Recovering from a failed body consumes the same budget as a full restart.
+            // A successfully completed range needs no retry, even if more bytes remain.
+            if interrupted {
+                let Some(backoff) = retry_state.should_retry(&err, 0) else {
+                    return Err(err);
+                };
+                retry_state.sleep_backoff(backoff).await;
+            }
+
             // Finally our resumption, which is a range request.
             debug!("Resuming download of {url} at byte {offset}");
-            let resumed_response = self.request_with_offset(url.clone(), offset).await?;
+            let resumed_response = retry_state
+                .send(self.request_with_offset(url.clone(), offset))
+                .await?;
 
             // A chunked response can fail after all wheel bytes arrive, leaving no satisfiable
             // range. Return the original error so the outer retry policy can restart in full.
@@ -1507,14 +1523,10 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             .build()
     }
 
-    /// Send a GET request with a `Range: bytes=<offset>-` header.
+    /// Build a GET request with a `Range: bytes=<offset>-` header.
     ///
     /// Used to resume an interrupted download from `offset` bytes into the file.
-    async fn request_with_offset(
-        &self,
-        url: DisplaySafeUrl,
-        offset: u64,
-    ) -> Result<reqwest::Response, reqwest_middleware::Error> {
+    fn request_with_offset(&self, url: DisplaySafeUrl, offset: u64) -> RequestBuilder<'_> {
         self.client
             .unmanaged
             .uncached_client(&url)
@@ -1524,8 +1536,6 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 reqwest::header::HeaderValue::from_static("identity"),
             )
             .header(reqwest::header::RANGE, format!("bytes={offset}-"))
-            .send()
-            .await
     }
 
     /// Return the [`ManagedClient`] used by this resolver.

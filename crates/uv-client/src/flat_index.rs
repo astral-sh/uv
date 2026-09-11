@@ -15,7 +15,7 @@ use uv_small_str::SmallString;
 
 use crate::cached_client::{CacheControl, CachedClientError};
 use crate::html::SimpleDetailHTML;
-use crate::{CachedClient, Connectivity, Error, ErrorKind, OwnedArchive};
+use crate::{CachedClient, Connectivity, Error, ErrorKind, OwnedArchive, RetryState};
 
 #[derive(Debug, thiserror::Error)]
 pub enum FlatIndexError {
@@ -216,7 +216,7 @@ impl<'a> FlatIndexClient<'a> {
             .map_err(|err| {
                 ErrorKind::from_reqwest(url.clone(), err, self.client.certificate_source())
             })?;
-        let parse_simple_response = |response: Response| {
+        let parse_simple_response = |response: Response, _: &mut RetryState| {
             async {
                 // Use the response URL, rather than the request URL, as the base for relative URLs.
                 // This ensures that we handle redirects and other URL transformations correctly.
