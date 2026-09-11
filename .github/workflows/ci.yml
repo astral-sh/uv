@@ -26,6 +26,20 @@ jobs:
     needs: plan
     uses: $/.github/workflows/check-fmt.yml
 
+  check-vet:
+    name: "Cargo Vet"
+    needs: plan
+    uses: astral-sh/github-actions/.github/workflows/cargo-vet.yml@c064e17eb42bf9ac71f66d7f5eda694f326d16cd
+    with:
+      runner: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-4' || 'ubuntu-latest' }}
+      workspaces: ${{ github.repository_owner == 'astral-sh' && needs.plan.outputs.cargo-vet-workspaces || '[]' }}
+      # renovate: datasource=github-release-attachments depName=astral-sh/uv
+      uv-version: "0.13.4"
+    secrets: inherit
+    permissions:
+      contents: read
+      id-token: write
+
   review:
     needs: plan
     if: ${{ github.event_name == 'pull_request' && github.repository == 'astral-sh/uv' && github.event.pull_request.head.repo.full_name == github.repository && needs.plan.outputs.review-security == 'true' }}
