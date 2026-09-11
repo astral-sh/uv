@@ -1695,6 +1695,7 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
                 &overrides,
                 &excludes,
                 &build_constraints,
+                args.system_site_packages,
                 &entrypoints,
                 args.lfs,
                 args.python,
