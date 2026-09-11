@@ -1055,7 +1055,7 @@ type Hash = String;
 /// We prefer matching PEP 691 (JSON-based Simple API for Python) here for future-proofing
 /// and convenience of consumption.
 fn hashes_map(hash: &crate::lock::Hash) -> BTreeMap<HashAlgorithm, Hash> {
-    Some((hash.0.algorithm.to_string(), hash.0.digest.to_string()))
+    Some((hash.0.algorithm().to_string(), hash.0.digest().to_string()))
         .into_iter()
         .collect()
 }

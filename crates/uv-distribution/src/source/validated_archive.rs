@@ -289,10 +289,10 @@ mod tests {
                 .is_none()
         );
 
-        let existing_hash = HashDigest {
-            algorithm: HashAlgorithm::Sha512,
-            digest: "f754f5955ce76c8fbdccdacd6e0e34977354b04d062d7f993fa84f3301309257fd225c85ebc99571b8b8ad711b37c407af65c5eae73599802ea3b4d3082d2f32".into(),
-        };
+        let existing_hash = HashDigest::new(
+            HashAlgorithm::Sha512,
+            "f754f5955ce76c8fbdccdacd6e0e34977354b04d062d7f993fa84f3301309257fd225c85ebc99571b8b8ad711b37c407af65c5eae73599802ea3b4d3082d2f32",
+        )?;
         let archive = extract(
             &cache,
             &bytes[..],

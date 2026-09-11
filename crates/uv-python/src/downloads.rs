@@ -34,7 +34,7 @@ use uv_distribution_filename::{ExtensionError, SourceDistExtension};
 use uv_extract::hash::Hasher;
 use uv_fs::{Simplified, rename_with_retry};
 use uv_platform::{self as platform, Arch, Libc, Os, Platform};
-use uv_pypi_types::{HashAlgorithm, HashDigest};
+use uv_pypi_types::{Digest, HashAlgorithm, HashDigest};
 use uv_redacted::{DisplaySafeUrl, DisplaySafeUrlError};
 use uv_static::{
     EnvVars, astral_mirror_base_url, astral_mirror_url_from_env, custom_astral_mirror_url,
@@ -211,7 +211,7 @@ fn effective_cpython_mirror(astral_mirror_url: Option<&str>) -> String {
 pub struct ManagedPythonDownload {
     key: PythonInstallationKey,
     url: Cow<'static, str>,
-    sha256: Option<Cow<'static, str>>,
+    sha256: Option<Digest<32>>,
     build: Option<&'static str>,
 }
 
@@ -965,7 +965,7 @@ struct JsonPythonDownload {
     patch: u8,
     prerelease: Option<String>,
     url: String,
-    sha256: Option<String>,
+    sha256: Option<Digest<32>>,
     variant: Option<String>,
     build: Option<String>,
 }
@@ -1183,7 +1183,7 @@ impl ManagedPythonDownload {
         self.key.os()
     }
 
-    pub(crate) fn sha256(&self) -> Option<&Cow<'static, str>> {
+    pub(crate) fn sha256(&self) -> Option<&Digest<32>> {
         self.sha256.as_ref()
     }
 
@@ -1266,10 +1266,10 @@ impl ManagedPythonDownload {
         {
             let python_builds_dir = PathBuf::from(python_builds_dir);
             fs_err::create_dir_all(&python_builds_dir)?;
-            let hash_prefix = match self.sha256.as_deref() {
-                Some(sha) => {
+            let hash_prefix = match self.sha256.as_ref() {
+                Some(digest) => {
                     // Shorten the hash to avoid too-long-filename errors
-                    &sha[..9]
+                    &digest.as_str()[..9]
                 }
                 None => "none",
             };
@@ -1476,12 +1476,11 @@ impl ManagedPythonDownload {
         reporter: Option<&dyn Reporter>,
         direction: Direction,
     ) -> Result<TempDir, Error> {
-        let mut hashers = if self.sha256.is_some() {
-            vec![Hasher::from(HashAlgorithm::Sha256)]
-        } else {
-            vec![]
-        };
-        let mut hasher = uv_extract::hash::HashReader::new(reader, &mut hashers);
+        let mut hashers = self
+            .sha256
+            .as_ref()
+            .map(|_| Hasher::from(HashAlgorithm::Sha256));
+        let mut hasher = uv_extract::hash::HashReader::new(reader, hashers.as_mut_slice());
 
         let target = if let Some(reporter) = reporter {
             let progress_key = reporter.on_request_start(direction, &self.key, size);
@@ -1500,13 +1499,13 @@ impl ManagedPythonDownload {
         hasher.finish().await.map_err(Error::HashExhaustion)?;
 
         // Check the hash
-        if let Some(expected) = self.sha256.as_deref() {
-            let actual = HashDigest::from(hashers.pop().unwrap()).digest;
-            if !actual.eq_ignore_ascii_case(expected) {
+        if let Some((expected, hasher)) = self.sha256.as_ref().zip(hashers) {
+            let actual = HashDigest::from(hasher);
+            if actual.digest() != expected.as_str() {
                 return Err(Error::HashMismatch {
                     installation: self.key.to_string(),
-                    expected: expected.to_string(),
-                    actual: actual.to_string(),
+                    expected: expected.as_str().to_string(),
+                    actual: actual.digest().to_string(),
                 });
             }
         }
@@ -1687,7 +1686,7 @@ fn parse_json_downloads(
             };
 
             let url = Cow::Owned(entry.url);
-            let sha256 = entry.sha256.map(Cow::Owned);
+            let sha256 = entry.sha256;
             let build = entry
                 .build
                 .map(|s| Box::leak(s.into_boxed_str()) as &'static str);
@@ -2311,7 +2310,7 @@ mod tests {
         ManagedPythonDownload {
             key,
             url: Cow::Borrowed(url),
-            sha256: Some(Cow::Borrowed("abc123")),
+            sha256: Some(Digest::from_bytes([0xab; 32])),
             build: Some("20240713"),
         }
     }

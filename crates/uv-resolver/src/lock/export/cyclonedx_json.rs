@@ -22,11 +22,13 @@ use uv_fs::PortablePath;
 use uv_normalize::PackageName;
 use uv_pep508::MarkerTree;
 use uv_preview::{Preview, PreviewFeature};
-use uv_pypi_types::{HashAlgorithm as UvHashAlgorithm, HashDigest};
+use uv_pypi_types::HashAlgorithm as UvHashAlgorithm;
 use uv_warnings::warn_user;
 
 use crate::lock::export::{ExportableRequirement, ExportableRequirements};
-use crate::lock::{LockErrorKind, Package, PackageId, RegistrySource, Source, WheelWireSource};
+use crate::lock::{
+    Hash as LockHash, LockErrorKind, Package, PackageId, RegistrySource, Source, WheelWireSource,
+};
 use crate::{Installable, LockError};
 
 /// Character set for percent-encoding PURL components, copied from packageurl.rs (<https://github.com/scm-rs/packageurl.rs/blob/a725aa0ab332934c350641508017eb09ddfa0813/src/purl.rs#L18>).
@@ -229,13 +231,11 @@ impl<'a> ComponentBuilder<'a> {
 
             if let Some(sdist) = &package.sdist {
                 if let (Some(url), Some(hash)) = (sdist.url(), sdist.hash()) {
-                    if let (Ok(uri), Some(cdx_hash)) =
-                        (Uri::try_from(url.to_string()), to_cyclonedx_hash(&hash.0))
-                    {
+                    if let Ok(uri) = Uri::try_from(url.to_string()) {
                         external_references.push(ExternalReference {
                             url: ExternalReferenceUri::Url(uri),
                             comment: None,
-                            hashes: Some(Hashes(vec![cdx_hash])),
+                            hashes: Some(Hashes(vec![Hash::from(hash)])),
                             external_reference_type: ExternalReferenceType::Distribution,
                         });
                     }
@@ -244,13 +244,11 @@ impl<'a> ComponentBuilder<'a> {
 
             for wheel in &package.wheels {
                 if let (WheelWireSource::Url { url }, Some(hash)) = (&wheel.url, &wheel.hash) {
-                    if let (Ok(uri), Some(cdx_hash)) =
-                        (Uri::try_from(url.to_string()), to_cyclonedx_hash(&hash.0))
-                    {
+                    if let Ok(uri) = Uri::try_from(url.to_string()) {
                         external_references.push(ExternalReference {
                             url: ExternalReferenceUri::Url(uri),
                             comment: None,
-                            hashes: Some(Hashes(vec![cdx_hash])),
+                            hashes: Some(Hashes(vec![Hash::from(hash)])),
                             external_reference_type: ExternalReferenceType::Distribution,
                         });
                     }
@@ -496,23 +494,19 @@ enum PackageType<'a> {
     Dependency,
 }
 
-/// Convert an internal [`HashDigest`] into a `CycloneDX` [`Hash`].
-fn to_cyclonedx_hash(hash: &HashDigest) -> Option<Hash> {
-    let alg = match hash.algorithm() {
-        UvHashAlgorithm::Md5 => HashAlgorithm::MD5,
-        UvHashAlgorithm::Sha256 => HashAlgorithm::SHA_256,
-        UvHashAlgorithm::Sha384 => HashAlgorithm::SHA_384,
-        UvHashAlgorithm::Sha512 => HashAlgorithm::SHA_512,
-        UvHashAlgorithm::Blake2b => match hash.digest.len() {
-            64 => HashAlgorithm::BLAKE2b_256,
-            96 => HashAlgorithm::BLAKE2b_384,
-            128 => HashAlgorithm::BLAKE2b_512,
-            _ => return None,
-        },
-    };
+impl From<&LockHash> for Hash {
+    fn from(hash: &LockHash) -> Self {
+        let alg = match hash.0.algorithm() {
+            UvHashAlgorithm::Md5 => HashAlgorithm::MD5,
+            UvHashAlgorithm::Sha256 => HashAlgorithm::SHA_256,
+            UvHashAlgorithm::Sha384 => HashAlgorithm::SHA_384,
+            UvHashAlgorithm::Sha512 => HashAlgorithm::SHA_512,
+            UvHashAlgorithm::Blake2b256 => HashAlgorithm::BLAKE2b_256,
+        };
 
-    Some(Hash {
-        alg,
-        content: HashValue(hash.digest.to_string()),
-    })
+        Self {
+            alg,
+            content: HashValue(hash.0.digest().to_string()),
+        }
+    }
 }

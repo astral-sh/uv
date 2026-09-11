@@ -11861,7 +11861,7 @@ async fn lock_core_metadata_hash() -> Result<()> {
     error: Hash mismatch for package metadata at `http://[LOCALHOST]/files/basic_package-0.1.0-py3-none-any.whl.metadata`
 
     Expected:
-      sha256:1C9F243A45631766EACD673AD9F6A1672AD847C7495A387C3B8D6C9B0572E00B
+      sha256:1c9f243a45631766eacd673ad9f6a1672ad847c7495a387c3b8d6c9b0572e00b
 
     Computed:
       sha256:987ad54f0d53537fb7157c700260deaa18346f43db7968cf0327de594d631205
@@ -11874,7 +11874,7 @@ async fn lock_core_metadata_hash() -> Result<()> {
     error: Hash mismatch for package metadata at `http://[LOCALHOST]/files/basic_package-0.1.0-py3-none-any.whl.metadata`
 
     Expected:
-      sha256:1C9F243A45631766EACD673AD9F6A1672AD847C7495A387C3B8D6C9B0572E00B
+      sha256:1c9f243a45631766eacd673ad9f6a1672ad847c7495a387c3b8d6c9b0572e00b
 
     Computed:
       sha256:987ad54f0d53537fb7157c700260deaa18346f43db7968cf0327de594d631205
@@ -16167,7 +16167,7 @@ fn lock_find_links_http_wheel() -> Result<()> {
     Resolved 2 packages in [TIME]
     ");
 
-    assert!(context.cache_dir.child("flat-index-v5").is_dir());
+    assert!(context.cache_dir.child("flat-index-v6").is_dir());
 
     let lock = context.read("uv.lock");
 
