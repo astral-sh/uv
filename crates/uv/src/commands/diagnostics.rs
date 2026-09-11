@@ -237,6 +237,7 @@ pub(crate) fn hints_for_error(err: &anyhow::Error) -> Hints<'static> {
         collect_hint::<uv_resolver::LockError>(cause, &mut hints);
         collect_hint::<pip::operations::Error>(cause, &mut hints);
         collect_hint::<ToolRunScriptError>(cause, &mut hints);
+        collect_hint::<crate::commands::spawn::SpawnNotFoundError>(cause, &mut hints);
         collect_hint::<RecursionLimitError>(cause, &mut hints);
         collect_hint::<DependencyNotFoundError>(cause, &mut hints);
         collect_hint::<ExtrasWithoutSourceError>(cause, &mut hints);

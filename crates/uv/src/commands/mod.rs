@@ -98,6 +98,7 @@ mod python;
 pub(crate) mod reporters;
 #[cfg(feature = "self-update")]
 mod self_update;
+pub(crate) mod spawn;
 mod tool;
 mod update_shell;
 mod venv;

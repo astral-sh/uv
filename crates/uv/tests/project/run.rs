@@ -4129,6 +4129,69 @@ fn run_script_without_build_system() -> Result<()> {
     Ok(())
 }
 
+/// A dangling shebang — as left behind when a venv directory is moved or deleted after an
+/// entry point script was installed — should produce a hint naming the missing interpreter
+/// instead of the bare, misleading OS error.
+///
+/// See: <https://github.com/astral-sh/uv/issues/13992>
+#[test]
+#[cfg(target_family = "unix")]
+fn run_reports_dangling_shebang_interpreter() -> Result<()> {
+    use std::os::unix::fs::PermissionsExt;
+
+    let context = uv_test::test_context!("3.12");
+
+    // Write the entry point by hand with a short, synthetic interpreter path rather than
+    // installing a real package: `format_shebang` only emits this direct `#!<path>` form when
+    // the path is under 127 bytes, and `TestContext` temp dirs can exceed that, silently
+    // switching to the unrelated `/bin/sh` wrapper form.
+    let bin_dir = ChildPath::new(uv_test::venv_bin_path(&context.venv));
+    let entrypoint = bin_dir.child("broken-entry");
+    entrypoint.write_str("#!/definitely/does/not/exist/python3\nprint('unreachable')\n")?;
+    fs_err::set_permissions(entrypoint.path(), PermissionsExt::from_mode(0o755))?;
+
+    uv_snapshot!(context.filters(), context.run().arg("--no-project").arg("broken-entry"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Failed to spawn: `broken-entry`
+      Caused by: No such file or directory (os error 2)
+
+    hint: `broken-entry` uses a Python interpreter at `/definitely/does/not/exist/python3`, which no longer exists. The virtual environment may have been moved or deleted; recreate it with `uv venv`.
+    ");
+
+    Ok(())
+}
+
+/// A same-named executable with a dangling shebang found on the ambient `PATH` — outside any
+/// directory uv itself manages (e.g. the venv's `bin`) — must not be diagnosed: uv did not
+/// install it, so it has no basis for guessing that the interpreter it names is even Python, or
+/// that `uv venv` is the fix. It should surface the original, unannotated OS error.
+///
+/// See: <https://github.com/astral-sh/uv/issues/13992>
+#[test]
+#[cfg(target_family = "unix")]
+fn run_does_not_diagnose_dangling_shebang_outside_managed_dirs() -> Result<()> {
+    use std::os::unix::fs::PermissionsExt;
+
+    let context = uv_test::test_context!("3.12");
+
+    // `context.bin_dir` is prepended to the ambient `PATH` uv inherits (see
+    // `TestContext::add_shared_env`), but it is not one of uv's own managed script
+    // directories, so a dangling shebang there should be left undiagnosed.
+    let entrypoint = context.bin_dir.child("unmanaged-entry");
+    entrypoint.write_str("#!/definitely/does/not/exist/python3\nprint('unreachable')\n")?;
+    fs_err::set_permissions(entrypoint.path(), PermissionsExt::from_mode(0o755))?;
+
+    uv_snapshot!(context.filters(), context.run().arg("--no-project").arg("unmanaged-entry"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Failed to spawn: `unmanaged-entry`
+      Caused by: No such file or directory (os error 2)
+    ");
+
+    Ok(())
+}
+
 #[test]
 fn run_script_module_conflict() -> Result<()> {
     let context = uv_test::test_context!("3.12");

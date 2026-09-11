@@ -472,6 +472,50 @@ fn tool_run_from_install() {
     ");
 }
 
+/// A dangling shebang in an installed tool's entry point — as left behind if the tool's Python
+/// interpreter is removed — should produce a hint naming the missing interpreter instead of the
+/// bare, misleading OS error.
+///
+/// See: <https://github.com/astral-sh/uv/issues/13992>
+#[test]
+#[cfg(unix)]
+fn tool_run_reports_dangling_shebang_interpreter() {
+    let context = uv_test::test_context!("3.12").with_filtered_counts();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    context
+        .tool_install()
+        .arg("black==24.1.0")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .assert()
+        .success();
+
+    // Corrupt the installed tool environment's entry point with a dangling shebang, simulating
+    // e.g. the underlying Python installation being removed out from under it.
+    let entrypoint = venv_bin_path(tool_dir.join("black")).join("black");
+    fs_err::write(
+        &entrypoint,
+        "#!/definitely/does/not/exist/python3\nprint('unreachable')\n",
+    )
+    .unwrap();
+    set_permissions(&entrypoint, PermissionsExt::from_mode(0o755)).unwrap();
+
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("black")
+        .arg("--version")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Failed to spawn: `black`
+      Caused by: No such file or directory (os error 2)
+
+    hint: `black` uses a Python interpreter at `/definitely/does/not/exist/python3`, which no longer exists. The environment may have been moved, deleted, or gone stale.
+    ");
+}
+
 #[test]
 fn tool_run_from_install_constraints() {
     let context = uv_test::test_context!("3.12")
