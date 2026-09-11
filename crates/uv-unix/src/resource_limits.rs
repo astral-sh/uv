@@ -144,9 +144,6 @@ fn rlim_t_to_u64(value: rlim_t) -> Option<u64> {
 ///
 /// This is the limit that applies to the process after any adjustments, e.g., those made by
 /// [`adjust_open_file_limit`]. Returns `None` if the limit cannot be read.
-///
-/// Note the type of `rlim_t` is platform-specific (`u64` on Linux/macOS, `i64` on FreeBSD), but
-/// this function always returns a [`u64`].
 pub fn soft_open_file_limit() -> Option<u64> {
     let (soft, _) = getrlimit(Resource::RLIMIT_NOFILE).ok()?;
     rlim_t_to_u64(soft)

@@ -941,10 +941,6 @@ impl TestContext {
     ///
     /// This is called by the `test_context_with_versions!` macro.
     pub fn new_with_versions_and_bin(python_versions: &[&str], uv_bin: PathBuf) -> Self {
-        // Raise the open file limit, so that the limit of the host running the
-        // tests doesn't affect the behavior of uv, e.g., the concurrency limits
-        // that uv derives from it. Tests that exercise a low open file limit set
-        // it explicitly in the commands they run.
         #[cfg(unix)]
         raise_open_file_limit();
 

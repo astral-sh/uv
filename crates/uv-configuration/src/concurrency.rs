@@ -65,12 +65,11 @@ impl Concurrency {
     ///
     /// On Unix, the download, build, and install limits are capped to the number of concurrent
     /// operations that fit within the process's soft open file limit, so that uv doesn't exhaust
-    /// the file descriptors available to it. This is especially relevant for large workspaces,
-    /// where each concurrent build holds several open file descriptors, e.g., for the build
-    /// backend process and its pipes.
+    /// the file descriptors available to it.
     ///
     /// See: <https://github.com/astral-sh/uv/issues/11296>
     pub fn new(downloads: usize, builds: usize, installs: usize, cache_reads: usize) -> Self {
+        #[cfg(unix)]
         let (downloads, builds, installs) = cap_by_open_file_limit(downloads, builds, installs);
         Self {
             downloads,
@@ -120,8 +119,6 @@ fn open_file_limit_concurrency_cap(soft_limit: u64) -> usize {
         .max(1)
 }
 
-/// Cap the number of concurrent downloads, builds, and installs to the process's soft open
-/// file limit, so that uv doesn't exhaust the file descriptors available to it.
 #[cfg(unix)]
 fn cap_by_open_file_limit(
     downloads: usize,
@@ -142,15 +139,6 @@ fn cap_by_open_file_limit(
         );
     }
     capped
-}
-
-#[cfg(not(unix))]
-fn cap_by_open_file_limit(
-    downloads: usize,
-    builds: usize,
-    installs: usize,
-) -> (usize, usize, usize) {
-    (downloads, builds, installs)
 }
 
 #[cfg(test)]
@@ -192,8 +180,8 @@ mod tests {
 
     #[test]
     fn open_file_limit_is_not_constraining_for_typical_limits() {
-        // The Linux default soft limit.
-        assert!(open_file_limit_concurrency_cap(1024) >= 50);
+        // The Linux default soft limit is enough for uv's default limits.
+        assert!(open_file_limit_concurrency_cap(1024) >= Concurrency::DEFAULT_DOWNLOADS);
         // The limit raised to the typical maximum, as done at startup on Unix.
         assert_eq!(open_file_limit_concurrency_cap(0x0010_0000), 87_378);
     }

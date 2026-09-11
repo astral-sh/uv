@@ -213,7 +213,7 @@ fn sync_workspace_under_low_open_file_limit() -> Result<()> {
             requires = []
             build-backend = "backend"
             backend-path = ["."]
-        "#})?;
+            "#})?;
         member_dir.child("backend.py").write_str(TEST_BACKEND)?;
     }
 
