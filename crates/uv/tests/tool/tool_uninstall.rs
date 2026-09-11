@@ -1,5 +1,9 @@
+use std::env::consts::EXE_SUFFIX;
+
+use anyhow::Result;
 use assert_cmd::assert::OutputAssertExt;
-use assert_fs::fixture::PathChild;
+use assert_fs::prelude::*;
+use predicates::prelude::predicate;
 
 use uv_static::EnvVars;
 
@@ -169,4 +173,51 @@ fn tool_uninstall_all_missing_receipt() {
     ----- stderr -----
     Removed dangling environment for `black`
     ");
+}
+
+#[test]
+fn tool_uninstall_all_invalid_name() -> Result<()> {
+    let context = uv_test::test_context!("3.12")
+        .with_filtered_exe_suffix()
+        .with_tool_dirs();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    context
+        .tool_install()
+        .arg("black==24.2.0")
+        .assert()
+        .success();
+
+    // A copied receipt must not remove an executable that does not belong to an installed tool.
+    let unrelated = bin_dir.child(format!("unrelated{EXE_SUFFIX}"));
+    unrelated.write_str("keep")?;
+    let receipt = fs_err::read_to_string(tool_dir.child("black").child("uv-receipt.toml"))?;
+    let backup = tool_dir.child("black backup");
+    backup.create_dir_all()?;
+    backup
+        .child("uv-receipt.toml")
+        .write_str(&receipt.replace("blackd", "unrelated"))?;
+
+    uv_snapshot!(context.filters(), context.tool_uninstall().arg("black backup"), @r#"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: invalid value 'black backup' for '<NAME>...': Not a valid package or extra name: "black backup". Names must start and end with a letter or digit and may only contain -, _, ., and alphanumeric characters.
+
+    For more information, try '--help'.
+    "#);
+
+    backup.assert(predicate::path::is_dir());
+
+    uv_snapshot!(context.filters(), context.tool_uninstall().arg("--all"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Removed dangling tool directory `tools/black backup`
+    Uninstalled 2 executables: black, blackd
+    ");
+
+    tool_dir.assert(predicate::path::missing());
+    unrelated.assert("keep");
+
+    Ok(())
 }
