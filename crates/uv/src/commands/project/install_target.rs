@@ -141,7 +141,9 @@ impl<'lock> Installable<'lock> for InstallTarget<'lock> {
         }
 
         let Self::Project {
-            workspace, name, ..
+            workspace,
+            name,
+            lock,
         } = self
         else {
             return true;
@@ -157,7 +159,7 @@ impl<'lock> Installable<'lock> for InstallTarget<'lock> {
             return false;
         }
 
-        !workspace.packages().get(*name).is_some_and(|member| {
+        let member_defines_group = if let Some(member) = workspace.packages().get(*name) {
             let pyproject = member.pyproject_toml();
             pyproject
                 .dependency_groups
@@ -172,7 +174,18 @@ impl<'lock> Installable<'lock> for InstallTarget<'lock> {
                         .and_then(|tool| tool.uv.as_ref())
                         .and_then(|uv| uv.dev_dependencies.as_ref())
                         .is_some()
-        })
+        } else {
+            // Frozen exports can omit member manifests, so check the lockfile for groups that
+            // take precedence over the workspace root's groups.
+            lock.find_by_name(name)
+                .ok()
+                .flatten()
+                .is_some_and(|package| {
+                    package.dependency_groups().contains_key(group)
+                        || package.resolved_dependency_groups().contains_key(group)
+                })
+        };
+        !member_defines_group
     }
 
     fn project_name(&self) -> Option<&PackageName> {
