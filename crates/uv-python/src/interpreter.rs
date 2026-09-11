@@ -1187,11 +1187,7 @@ impl InterpreterInfo {
                 err,
                 path: interpreter.to_path_buf(),
             }),
-            InterpreterInfoResult::Success(mut data) => {
-                // CPython can report a relative executable when a launcher override is relative.
-                data.sys_executable = std::path::absolute(&data.sys_executable)?;
-                Ok(*data)
-            }
+            InterpreterInfoResult::Success(data) => Ok(*data),
         }
     }
 
