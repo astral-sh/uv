@@ -139,6 +139,7 @@ jobs:
           openai-api-key: ${{ secrets.OPENAI_API_KEY }}
           codex-version: "0.153.4"
           codex-home: "${{ env.REVIEW_CONFIG }}/codex"
+          model: gpt-5.6-sol
           effort: xhigh
           permission-profile: "pull-request-review"
           safety-strategy: drop-sudo
