@@ -95,6 +95,10 @@ async fn audit_pylock_whole_lock() -> Result<()> {
         directory = { path = "." }
     "#};
     lockfile.write_str(contents)?;
+    context.temp_dir.child("uv.toml").write_str(indoc! {r#"
+        upgrade = true
+        upgrade-package = ["iniconfig<2"]
+    "#})?;
 
     let server = MockServer::start().await;
     Mock::given(method("POST"))
@@ -510,16 +514,6 @@ fn audit_pylock_conflicts() -> Result<()> {
     exit_code: 2 (failure)
     ----- stderr -----
     error: the argument `--requirements` cannot be used with `UV_LOCKED` (environment variable)
-    ");
-    context
-        .temp_dir
-        .child("uv.toml")
-        .write_str("upgrade = true\n")?;
-    uv_snapshot!(context.filters(), context.audit()
-        .args(["-r", "pylock.toml"]), @"
-    exit_code: 2 (failure)
-    ----- stderr -----
-    error: Package upgrades cannot be requested with `--requirements`
     ");
     Ok(())
 }
