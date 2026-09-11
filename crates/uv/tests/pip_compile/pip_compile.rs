@@ -4188,6 +4188,53 @@ fn scoped_exclude_dependency_from_script() -> Result<()> {
     Ok(())
 }
 
+/// Constraint and exclusion scripts ignore overrides that would be invalid if applied.
+#[test]
+fn ignored_scoped_overrides_from_script() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("requirements.in")
+        .write_str("idna==3.6")?;
+    let script = context.temp_dir.child("script.py");
+    script.write_str(indoc! {r#"
+        # /// script
+        # dependencies = ["idna==3.6"]
+        #
+        # [tool.uv]
+        # override-dependencies = [
+        #   { package = { name = "idna" }, dependencies = ["anyio @ https://example.com/anyio.whl"] },
+        # ]
+        # ///
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.pip_compile()
+        .arg("requirements.in")
+        .arg("--constraint").arg("-")
+        .stdin(fs::File::open(&script)?)
+        .arg("--no-header"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    idna==3.6
+        # via -r requirements.in
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+
+    uv_snapshot!(context.filters(), context.pip_compile()
+        .arg("requirements.in")
+        .arg("--exclude").arg("-")
+        .stdin(fs::File::open(&script)?)
+        .arg("--no-header"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved in [TIME]
+    ");
+
+    Ok(())
+}
+
 /// Check that `tool.uv.constraint-dependencies` in `pyproject.toml` is respected.
 #[test]
 fn constraint_dependency_from_pyproject() -> Result<()> {

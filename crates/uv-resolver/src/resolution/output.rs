@@ -10,7 +10,7 @@ use petgraph::{
 };
 use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
 
-use uv_configuration::{BuildOptions, Constraints, Overrides};
+use uv_configuration::{BuildOptions, Constraints, DependencyModifierScope, DependencyModifiers};
 use uv_distribution::Metadata;
 use uv_distribution_types::{
     BuiltDist, Dist, DistributionId, Edge, HashCollection, Identifier, IndexUrl, Name, Node,
@@ -52,8 +52,8 @@ pub struct ResolverOutput {
     pub(crate) requirements: Vec<Requirement>,
     /// The constraints that were used to build the graph.
     pub(crate) constraints: Constraints,
-    /// The overrides that were used to build the graph.
-    pub(crate) overrides: Overrides,
+    /// The dependency modifiers that were used to build the graph.
+    pub(crate) modifiers: DependencyModifiers,
     /// The options that were used to build the graph.
     pub(crate) options: Options,
 }
@@ -126,7 +126,7 @@ impl ResolverOutput {
         resolutions: &[Resolution],
         requirements: Vec<Requirement>,
         constraints: Constraints,
-        overrides: Overrides,
+        modifiers: DependencyModifiers,
         preferences: &Preferences,
         hasher: &HashStrategy,
         index: &InMemoryIndex,
@@ -224,7 +224,7 @@ impl ResolverOutput {
         graph.retain_nodes(|graph, node| !graph[node].marker().is_false());
 
         if matches!(resolution_strategy, ResolutionStrategy::Lowest) {
-            report_missing_lower_bounds(&graph, &mut diagnostics, &constraints, &overrides);
+            report_missing_lower_bounds(&graph, &mut diagnostics, &constraints, &modifiers);
         }
 
         let output = Self {
@@ -234,7 +234,7 @@ impl ResolverOutput {
             diagnostics,
             requirements,
             constraints,
-            overrides,
+            modifiers,
             options,
         };
 
@@ -789,9 +789,8 @@ impl ResolverOutput {
             let MetadataResponse::Found(archive, ..) = &*res else {
                 panic!("Every package should have metadata: {metadata_id:?}")
             };
-            for req in self.constraints.apply(self.overrides.apply_for(
-                &dist.name,
-                &dist.version,
+            for req in self.constraints.apply(self.modifiers.apply(
+                DependencyModifierScope::Package(&dist.name, &dist.version),
                 archive.metadata.requires_dist.iter(),
             )) {
                 add_marker_params_from_tree(req.marker, &mut seen_marker_values);
@@ -799,10 +798,10 @@ impl ResolverOutput {
         }
 
         // Ensure that we consider markers from direct dependencies.
-        for direct_req in self
-            .constraints
-            .apply(self.overrides.apply(self.requirements.iter()))
-        {
+        for direct_req in self.constraints.apply(
+            self.modifiers
+                .apply(DependencyModifierScope::Global, self.requirements.iter()),
+        ) {
             add_marker_params_from_tree(direct_req.marker, &mut seen_marker_values);
         }
 
@@ -1000,14 +999,14 @@ fn report_missing_lower_bounds(
     graph: &Graph<ResolutionGraphNode, UniversalMarker>,
     diagnostics: &mut Vec<ResolutionDiagnostic>,
     constraints: &Constraints,
-    overrides: &Overrides,
+    modifiers: &DependencyModifiers,
 ) {
     for node_index in graph.node_indices() {
         let ResolutionGraphNode::Dist(dist) = graph.node_weight(node_index).unwrap() else {
             // Ignore the root package.
             continue;
         };
-        if !has_lower_bound(node_index, dist.name(), graph, constraints, overrides) {
+        if !has_lower_bound(node_index, dist.name(), graph, constraints, modifiers) {
             diagnostics.push(ResolutionDiagnostic::MissingLowerBound {
                 package_name: dist.name().clone(),
             });
@@ -1021,7 +1020,7 @@ fn has_lower_bound(
     package_name: &PackageName,
     graph: &Graph<ResolutionGraphNode, UniversalMarker>,
     constraints: &Constraints,
-    overrides: &Overrides,
+    modifiers: &DependencyModifiers,
 ) -> bool {
     for neighbor_index in graph.neighbors_directed(node_index, Direction::Incoming) {
         let neighbor_dist = match graph.node_weight(neighbor_index).unwrap() {
@@ -1045,13 +1044,15 @@ fn has_lower_bound(
 
         // Get all individual specifier for the current package and check if any has a lower
         // bound.
-        for requirement in overrides
-            .apply_for(
-                neighbor_dist.name(),
-                &neighbor_dist.version,
+        for requirement in modifiers
+            .apply(
+                DependencyModifierScope::Package(neighbor_dist.name(), &neighbor_dist.version),
                 metadata.requires_dist.iter(),
             )
-            .chain(overrides.apply(metadata.dependency_groups.values().flatten()))
+            .chain(modifiers.apply(
+                DependencyModifierScope::Global,
+                metadata.dependency_groups.values().flatten(),
+            ))
             // Constraints are missing from the graph.
             .chain(constraints.requirements().map(Cow::Borrowed))
         {
