@@ -113,6 +113,10 @@ pub enum TorchMode {
     Cu90,
     /// Use the PyTorch index for CUDA 8.0.
     Cu80,
+    /// Use the PyTorch index for ROCm 7.14.
+    #[serde(rename = "rocm7.14")]
+    #[cfg_attr(feature = "clap", clap(name = "rocm7.14"))]
+    Rocm714,
     /// Use the PyTorch index for ROCm 7.2.
     #[serde(rename = "rocm7.2")]
     #[cfg_attr(feature = "clap", clap(name = "rocm7.2"))]
@@ -274,6 +278,7 @@ impl TorchStrategy {
             TorchMode::Cu91 => TorchBackend::Cu91,
             TorchMode::Cu90 => TorchBackend::Cu90,
             TorchMode::Cu80 => TorchBackend::Cu80,
+            TorchMode::Rocm714 => TorchBackend::Rocm714,
             TorchMode::Rocm72 => TorchBackend::Rocm72,
             TorchMode::Rocm71 => TorchBackend::Rocm71,
             TorchMode::Rocm70 => TorchBackend::Rocm70,
@@ -497,6 +502,7 @@ pub enum TorchBackend {
     Cu91,
     Cu90,
     Cu80,
+    Rocm714,
     Rocm72,
     Rocm71,
     Rocm70,
@@ -552,6 +558,7 @@ impl TorchBackend {
             Self::Cu91 => &PYTORCH_CU91_INDEX_URL,
             Self::Cu90 => &PYTORCH_CU90_INDEX_URL,
             Self::Cu80 => &PYTORCH_CU80_INDEX_URL,
+            Self::Rocm714 => &PYTORCH_ROCM714_INDEX_URL,
             Self::Rocm72 => &PYTORCH_ROCM72_INDEX_URL,
             Self::Rocm71 => &PYTORCH_ROCM71_INDEX_URL,
             Self::Rocm70 => &PYTORCH_ROCM70_INDEX_URL,
@@ -622,6 +629,7 @@ impl TorchBackend {
             Self::Cu91 => Some(Version::new([9, 1])),
             Self::Cu90 => Some(Version::new([9, 0])),
             Self::Cu80 => Some(Version::new([8, 0])),
+            Self::Rocm714 => None,
             Self::Rocm72 => None,
             Self::Rocm71 => None,
             Self::Rocm70 => None,
@@ -677,6 +685,7 @@ impl TorchBackend {
             Self::Cu91 => None,
             Self::Cu90 => None,
             Self::Cu80 => None,
+            Self::Rocm714 => Some(Version::new([7, 14])),
             Self::Rocm72 => Some(Version::new([7, 2])),
             Self::Rocm71 => Some(Version::new([7, 1])),
             Self::Rocm70 => Some(Version::new([7, 0])),
@@ -735,6 +744,7 @@ impl FromStr for TorchBackend {
             "cu91" => Ok(Self::Cu91),
             "cu90" => Ok(Self::Cu90),
             "cu80" => Ok(Self::Cu80),
+            "rocm7.14" => Ok(Self::Rocm714),
             "rocm7.2" => Ok(Self::Rocm72),
             "rocm7.1" => Ok(Self::Rocm71),
             "rocm7.0" => Ok(Self::Rocm70),
@@ -855,9 +865,23 @@ static WINDOWS_CUDA_VERSIONS: LazyLock<[(TorchBackend, Version); 27]> = LazyLock
 ///
 /// AMD also provides a compatibility matrix: <https://rocm.docs.amd.com/en/latest/compatibility/compatibility-matrix.html>;
 /// however, this list includes a broader array of GPUs than those in the matrix.
-static LINUX_AMD_GPU_DRIVERS: LazyLock<[(TorchBackend, AmdGpuArchitecture); 93]> =
+static LINUX_AMD_GPU_DRIVERS: LazyLock<[(TorchBackend, AmdGpuArchitecture); 112]> =
     LazyLock::new(|| {
         [
+            // ROCm 7.14
+            (TorchBackend::Rocm714, AmdGpuArchitecture::Gfx908),
+            (TorchBackend::Rocm714, AmdGpuArchitecture::Gfx90a),
+            (TorchBackend::Rocm714, AmdGpuArchitecture::Gfx942),
+            (TorchBackend::Rocm714, AmdGpuArchitecture::Gfx950),
+            (TorchBackend::Rocm714, AmdGpuArchitecture::Gfx1030),
+            (TorchBackend::Rocm714, AmdGpuArchitecture::Gfx1100),
+            (TorchBackend::Rocm714, AmdGpuArchitecture::Gfx1101),
+            (TorchBackend::Rocm714, AmdGpuArchitecture::Gfx1102),
+            (TorchBackend::Rocm714, AmdGpuArchitecture::Gfx1103),
+            (TorchBackend::Rocm714, AmdGpuArchitecture::Gfx1150),
+            (TorchBackend::Rocm714, AmdGpuArchitecture::Gfx1151),
+            (TorchBackend::Rocm714, AmdGpuArchitecture::Gfx1200),
+            (TorchBackend::Rocm714, AmdGpuArchitecture::Gfx1201),
             // ROCm 7.2
             (TorchBackend::Rocm72, AmdGpuArchitecture::Gfx900),
             (TorchBackend::Rocm72, AmdGpuArchitecture::Gfx906),
@@ -869,6 +893,7 @@ static LINUX_AMD_GPU_DRIVERS: LazyLock<[(TorchBackend, AmdGpuArchitecture); 93]>
             (TorchBackend::Rocm72, AmdGpuArchitecture::Gfx1100),
             (TorchBackend::Rocm72, AmdGpuArchitecture::Gfx1101),
             (TorchBackend::Rocm72, AmdGpuArchitecture::Gfx1102),
+            (TorchBackend::Rocm72, AmdGpuArchitecture::Gfx1103),
             (TorchBackend::Rocm72, AmdGpuArchitecture::Gfx1150),
             (TorchBackend::Rocm72, AmdGpuArchitecture::Gfx1151),
             (TorchBackend::Rocm72, AmdGpuArchitecture::Gfx1200),
@@ -884,6 +909,9 @@ static LINUX_AMD_GPU_DRIVERS: LazyLock<[(TorchBackend, AmdGpuArchitecture); 93]>
             (TorchBackend::Rocm71, AmdGpuArchitecture::Gfx1100),
             (TorchBackend::Rocm71, AmdGpuArchitecture::Gfx1101),
             (TorchBackend::Rocm71, AmdGpuArchitecture::Gfx1102),
+            (TorchBackend::Rocm71, AmdGpuArchitecture::Gfx1103),
+            (TorchBackend::Rocm71, AmdGpuArchitecture::Gfx1150),
+            (TorchBackend::Rocm71, AmdGpuArchitecture::Gfx1151),
             (TorchBackend::Rocm71, AmdGpuArchitecture::Gfx1200),
             (TorchBackend::Rocm71, AmdGpuArchitecture::Gfx1201),
             // ROCm 7.0
@@ -897,6 +925,8 @@ static LINUX_AMD_GPU_DRIVERS: LazyLock<[(TorchBackend, AmdGpuArchitecture); 93]>
             (TorchBackend::Rocm70, AmdGpuArchitecture::Gfx1100),
             (TorchBackend::Rocm70, AmdGpuArchitecture::Gfx1101),
             (TorchBackend::Rocm70, AmdGpuArchitecture::Gfx1102),
+            (TorchBackend::Rocm70, AmdGpuArchitecture::Gfx1150),
+            (TorchBackend::Rocm70, AmdGpuArchitecture::Gfx1151),
             (TorchBackend::Rocm70, AmdGpuArchitecture::Gfx1200),
             (TorchBackend::Rocm70, AmdGpuArchitecture::Gfx1201),
             // ROCm 6.4
@@ -1019,6 +1049,8 @@ static PYTORCH_CU90_INDEX_URL: LazyLock<IndexUrl> =
     LazyLock::new(|| IndexUrl::from_str("https://download.pytorch.org/whl/cu90").unwrap());
 static PYTORCH_CU80_INDEX_URL: LazyLock<IndexUrl> =
     LazyLock::new(|| IndexUrl::from_str("https://download.pytorch.org/whl/cu80").unwrap());
+static PYTORCH_ROCM714_INDEX_URL: LazyLock<IndexUrl> =
+    LazyLock::new(|| IndexUrl::from_str("https://download.pytorch.org/whl/rocm7.14").unwrap());
 static PYTORCH_ROCM72_INDEX_URL: LazyLock<IndexUrl> =
     LazyLock::new(|| IndexUrl::from_str("https://download.pytorch.org/whl/rocm7.2").unwrap());
 static PYTORCH_ROCM71_INDEX_URL: LazyLock<IndexUrl> =
