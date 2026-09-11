@@ -935,6 +935,7 @@ mod tests {
             | This endpoint accepts POST requests only.
             |
             | Use /download/ instead.
+            |
           cause: HTTP error 400 Bad Request
 
         hint: Check the download URL
@@ -995,6 +996,7 @@ mod tests {
             |
             |   Indented second
             | paragraph.
+            |
           cause: HTTP error 400 Bad
                  Request
         ");
@@ -1023,6 +1025,7 @@ mod tests {
             |     indented
             | \u{1b}[31mred\u{1b}[0m
             | \u{1b}]8;;https://example.com\u{7}link\u{85}\u{202e}text\u{2029}\rrewritten
+            |
         ");
     }
 }

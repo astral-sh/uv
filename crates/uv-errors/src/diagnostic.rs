@@ -111,6 +111,7 @@ pub(crate) fn write_info(
                     writeln!(stream, "    {} {line}", "|".cyan().bold())?;
                 }
             }
+            writeln!(stream, "    {}", "|".cyan().bold())?;
         }
     }
     Ok(())
