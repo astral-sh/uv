@@ -9,6 +9,20 @@ use std::path::Path;
 
 use crate::{Index, IndexUrl, Origin};
 
+impl PipIndex {
+    /// Preserve credentials from a lower-precedence index when both URLs refer to the same index.
+    #[must_use]
+    pub fn with_credentials_from(mut self, other: &Self) -> Self {
+        if self.0.url().url().username().is_empty()
+            && self.0.url().url().password().is_none()
+            && crate::index_url::is_same_index(self.0.url(), other.0.url())
+        {
+            self.0.url = other.0.url.clone();
+        }
+        self
+    }
+}
+
 macro_rules! impl_index {
     ($name:ident, $from:expr) => {
         #[derive(Debug, Clone, Eq, PartialEq)]
