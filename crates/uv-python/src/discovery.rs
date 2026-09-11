@@ -11,7 +11,7 @@ use std::sync::atomic::Ordering;
 use std::{env, io, iter};
 use std::{path::Path, path::PathBuf, str::FromStr};
 use thiserror::Error;
-use tracing::{debug, instrument, trace};
+use tracing::{debug, instrument, trace, warn};
 use uv_cache::Cache;
 use uv_client::BaseClientBuilder;
 use uv_distribution_types::RequiresPython;
@@ -1108,6 +1108,13 @@ impl Error {
             },
             Self::VirtualEnv(VirtualEnvError::MissingPyVenvCfg(path)) => {
                 trace!("Skipping broken virtualenv at {}", path.display());
+                false
+            }
+            // If the managed Python installation directory is inaccessible (e.g., the drive it
+            // lives on was removed or unmounted), skip it and continue discovery. Managed
+            // installations are optional; uv can fall back to system Python or auto-download.
+            Self::ManagedPython(err) => {
+                warn!("Failed to read managed Python installations, skipping: {err}");
                 false
             }
             _ => true,
