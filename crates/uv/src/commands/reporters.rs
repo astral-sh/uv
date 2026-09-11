@@ -223,8 +223,10 @@ impl ProgressReporter {
 
         let mut state = state.lock().unwrap();
 
-        // Preserve ascending order.
-        let position = size.map_or(0, |size| state.sizes.partition_point(|&len| len < size));
+        // Preserve descending order, so larger downloads appear at the top.
+        let position = size.map_or(state.sizes.len(), |size| {
+            state.sizes.partition_point(|&len| len > size)
+        });
         state.sizes.insert(position, size.unwrap_or(0));
         state.max_len = std::cmp::max(state.max_len, name.len());
 
