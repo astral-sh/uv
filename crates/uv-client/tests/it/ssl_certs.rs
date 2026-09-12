@@ -22,7 +22,7 @@ use uv_static::EnvVars;
 use crate::http_util::{
     SelfSigned, generate_expired_self_signed_certs_with_ca, generate_self_signed_certs_with_ca,
     generate_self_signed_certs_with_ca_custom_extensions, start_https_mtls_user_agent_server,
-    start_https_user_agent_server, test_cert_dir,
+    start_https_negotiated_kx_group_server, start_https_user_agent_server, test_cert_dir,
 };
 
 /// A self-signed CA together with a server certificate and a client certificate
@@ -909,6 +909,37 @@ async fn test_system_certs_with_ssl_cert_dir_valid() -> Result<()> {
         .ssl_cert_dir(dir.path())
         .expect_https_connect_succeeds(&cert)
         .await;
+    Ok(())
+}
+
+/// uv client prefers the PQ-safe hybrid X25519MLKEM768 kx over ECDH.
+#[tokio::test]
+async fn test_prefers_post_quantum_key_exchange() -> Result<()> {
+    let cert = TestCertificate::new()?;
+    let vars: Vec<(&'static str, Option<&str>)> = vec![
+        (EnvVars::UV_NATIVE_TLS, None),
+        (EnvVars::UV_SYSTEM_CERTS, None),
+        (EnvVars::SSL_CERT_FILE, None),
+        (EnvVars::SSL_CERT_DIR, None),
+        (EnvVars::SSL_CLIENT_CERT, None),
+    ];
+    let negotiated_kx_group = async_with_vars(vars, async {
+        let (_server_task, addr, kx_group_rx) =
+            start_https_negotiated_kx_group_server(&cert.server)
+                .await
+                .unwrap();
+        let response = send_request(addr, false, Some(&cert.trust_path)).await;
+        assert!(
+            response.is_ok(),
+            "expected successful response, got: {:?}",
+            response.err()
+        );
+        kx_group_rx
+            .await
+            .expect("server did not report a negotiated key exchange group")
+    })
+    .await;
+    assert_eq!(negotiated_kx_group, rustls::NamedGroup::X25519MLKEM768);
     Ok(())
 }
 
