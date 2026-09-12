@@ -276,8 +276,6 @@ jobs:
           Copy-Item -Path "${{ github.workspace }}" -Destination "$Env:UV_WORKSPACE" -Recurse
 
       - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
-        env:
-          UV_PYTHON_INSTALL_DIR: ${{ env.DEV_DRIVE }}/uv-python
         with:
           version: "0.12.10"
           checksum: "f65744f94072152b1f86ba2aace4d01f1124d9a8ecb235805039e3718c36cac2"
