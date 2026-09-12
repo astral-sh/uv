@@ -501,9 +501,9 @@ fn tool_upgrade_preserves_mixed_workspace_member_non_editability() -> Result<()>
 }
 
 #[test]
-fn tool_upgrade_name() -> Result<()> {
-    let old_index = old_tool_index()?;
-    let new_index = new_tool_index()?;
+fn tool_upgrade_name() {
+    let old_index = old_tool_index();
+    let new_index = new_tool_index();
 
     let context = uv_test::test_context!("3.12")
         .with_filtered_counts()
@@ -541,7 +541,6 @@ fn tool_upgrade_name() -> Result<()> {
      - pytz==2018.5
     Installed 1 executable: pybabel
     ");
-    Ok(())
 }
 
 #[test]
@@ -597,9 +596,9 @@ fn tool_upgrade_recomputes_relative_exclude_newer() {
 }
 
 #[test]
-fn tool_upgrade_multiple_names() -> Result<()> {
-    let old_index = old_tool_index()?;
-    let new_index = new_tool_index()?;
+fn tool_upgrade_multiple_names() {
+    let old_index = old_tool_index();
+    let new_index = new_tool_index();
 
     let context = uv_test::test_context!("3.12")
         .with_filtered_counts()
@@ -657,13 +656,12 @@ fn tool_upgrade_multiple_names() -> Result<()> {
      + python-dotenv==1.0.1
     Installed 1 executable: dotenv
     ");
-    Ok(())
 }
 
 #[test]
-fn tool_upgrade_pinned_hint() -> Result<()> {
-    let old_index = old_tool_index()?;
-    let new_index = new_tool_index()?;
+fn tool_upgrade_pinned_hint() {
+    let old_index = old_tool_index();
+    let new_index = new_tool_index();
 
     let context = uv_test::test_context!("3.12")
         .with_filtered_counts()
@@ -701,13 +699,12 @@ fn tool_upgrade_pinned_hint() -> Result<()> {
 
     hint: `babel` is pinned to `2.6.0` (installed with an exact version pin); reinstall with `uv tool install babel@latest` to upgrade to a new version.
     ");
-    Ok(())
 }
 
 #[test]
-fn tool_upgrade_pinned_hint_with_mixed_constraint() -> Result<()> {
-    let old_index = old_tool_index()?;
-    let new_index = new_tool_index()?;
+fn tool_upgrade_pinned_hint_with_mixed_constraint() {
+    let old_index = old_tool_index();
+    let new_index = new_tool_index();
 
     let context = uv_test::test_context!("3.12")
         .with_filtered_counts()
@@ -746,13 +743,12 @@ fn tool_upgrade_pinned_hint_with_mixed_constraint() -> Result<()> {
 
     hint: `babel` is pinned to `2.6.0` (installed with an exact version pin); reinstall with `uv tool install babel@latest` to upgrade to a new version.
     ");
-    Ok(())
 }
 
 #[test]
 fn tool_upgrade_all() -> Result<()> {
-    let old_index = old_tool_index()?;
-    let new_index = new_tool_index()?;
+    let old_index = old_tool_index();
+    let new_index = new_tool_index();
 
     let context = uv_test::test_context!("3.12")
         .with_filtered_counts()
@@ -848,8 +844,8 @@ fn tool_upgrade_non_existing_package() {
 
 #[test]
 fn tool_upgrade_not_stop_if_upgrade_fails() -> anyhow::Result<()> {
-    let old_index = old_tool_index()?;
-    let new_index = new_tool_index()?;
+    let old_index = old_tool_index();
+    let new_index = new_tool_index();
 
     let context = uv_test::test_context!("3.12")
         .with_filtered_counts()
@@ -1015,9 +1011,9 @@ fn tool_upgrade_no_binary_package_env_var() {
 }
 
 #[test]
-fn tool_upgrade_respect_constraints() -> Result<()> {
-    let old_index = old_tool_index()?;
-    let new_index = new_tool_index()?;
+fn tool_upgrade_respect_constraints() {
+    let old_index = old_tool_index();
+    let new_index = new_tool_index();
 
     let context = uv_test::test_context!("3.12")
         .with_filtered_counts()
@@ -1056,13 +1052,12 @@ fn tool_upgrade_respect_constraints() -> Result<()> {
      + pytz==2024.1
     Installed 1 executable: pybabel
     ");
-    Ok(())
 }
 
 #[test]
-fn tool_upgrade_constraint() -> Result<()> {
-    let old_index = old_tool_index()?;
-    let new_index = new_tool_index()?;
+fn tool_upgrade_constraint() {
+    let old_index = old_tool_index();
+    let new_index = new_tool_index();
 
     let context = uv_test::test_context!("3.12")
         .with_filtered_counts()
@@ -1148,15 +1143,14 @@ fn tool_upgrade_constraint() -> Result<()> {
     warning: `--upgrade` is enabled by default on `uv tool upgrade`
     Nothing to upgrade
     ");
-    Ok(())
 }
 
 /// Upgrade a tool, but only by upgrading one of it's `--with` dependencies, and not the tool
 /// itself.
 #[test]
-fn tool_upgrade_with() -> Result<()> {
-    let old_index = old_tool_index()?;
-    let new_index = new_tool_index()?;
+fn tool_upgrade_with() {
+    let old_index = old_tool_index();
+    let new_index = new_tool_index();
 
     let context = uv_test::test_context!("3.12")
         .with_filtered_counts()
@@ -1194,12 +1188,11 @@ fn tool_upgrade_with() -> Result<()> {
 
     hint: `babel` is pinned to `2.6.0` (installed with an exact version pin); reinstall with `uv tool install babel@latest` to upgrade to a new version.
     ");
-    Ok(())
 }
 
 #[test]
-fn tool_upgrade_python() -> Result<()> {
-    let old_index = old_tool_index()?;
+fn tool_upgrade_python() {
+    let old_index = old_tool_index();
 
     let context = uv_test::test_context_with_versions!(&["3.11", "3.12"])
         .with_filtered_counts()
@@ -1247,12 +1240,11 @@ fn tool_upgrade_python() -> Result<()> {
         let lines: Vec<&str> = content.split('\n').collect();
         assert_snapshot!(lines[lines.len() - 3], @"version_info = 3.12.[X]");
     });
-    Ok(())
 }
 
 #[test]
-fn tool_upgrade_python_with_all() -> Result<()> {
-    let old_index = old_tool_index()?;
+fn tool_upgrade_python_with_all() {
+    let old_index = old_tool_index();
 
     let context = uv_test::test_context_with_versions!(&["3.11", "3.12"])
         .with_filtered_counts()
@@ -1327,7 +1319,6 @@ fn tool_upgrade_python_with_all() -> Result<()> {
         let lines: Vec<&str> = content.split('\n').collect();
         assert_snapshot!(lines[lines.len() - 3], @"version_info = 3.12.[X]");
     });
-    Ok(())
 }
 
 /// Upgrade a tool together with any additional entrypoints from other
@@ -1394,9 +1385,9 @@ fn test_tool_upgrade_additional_entrypoints() {
 /// upgraded alongside `babel`. Here, `pytz` is excluded, so it should remain
 /// absent after the upgrade.
 #[test]
-fn tool_upgrade_excludes() -> Result<()> {
-    let old_index = old_tool_index()?;
-    let new_index = new_tool_index()?;
+fn tool_upgrade_excludes() {
+    let old_index = old_tool_index();
+    let new_index = new_tool_index();
 
     let context = uv_test::test_context!("3.12")
         .with_filtered_counts()
@@ -1439,7 +1430,6 @@ fn tool_upgrade_excludes() -> Result<()> {
      + babel==2.9.1
     Installed 1 executable: pybabel
     ");
-    Ok(())
 }
 
 /// Reuse the configured index username when the tool receipt has stripped its credentials.
@@ -1876,7 +1866,7 @@ fn tool_upgrade_lock_uses_requested_python() -> Result<()> {
 }
 
 /// An index containing earlier synthetic tool releases and their dependencies.
-fn old_tool_index() -> Result<PackseServer> {
+fn old_tool_index() -> PackseServer {
     let scenario = toml::from_str::<Scenario>(indoc! {r#"
         name = "old-tool-index"
 
@@ -1899,12 +1889,13 @@ fn old_tool_index() -> Result<PackseServer> {
         requires_python = ">=3.11"
         sdist = false
         entry_points = ["dotenv"]
-    "#})?;
-    Ok(PackseServer::from_scenario(&scenario))
+    "#})
+    .expect("old tool scenario should parse");
+    PackseServer::from_scenario(&scenario)
 }
 
 /// Later synthetic releases change dependencies to exercise upgrade and removal behavior.
-fn new_tool_index() -> Result<PackseServer> {
+fn new_tool_index() -> PackseServer {
     let scenario = toml::from_str::<Scenario>(indoc! {r#"
         name = "new-tool-index"
 
@@ -1954,6 +1945,7 @@ fn new_tool_index() -> Result<PackseServer> {
         requires_python = ">=3.11"
         sdist = false
         entry_points = ["dotenv"]
-    "#})?;
-    Ok(PackseServer::from_scenario(&scenario))
+    "#})
+    .expect("new tool scenario should parse");
+    PackseServer::from_scenario(&scenario)
 }
