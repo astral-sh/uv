@@ -276,9 +276,19 @@ jobs:
           Copy-Item -Path "${{ github.workspace }}" -Destination "$Env:UV_WORKSPACE" -Recurse
 
       - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        env:
+          UV_PYTHON_INSTALL_DIR: ${{ env.DEV_DRIVE }}/uv-python
         with:
           version: "0.12.10"
           checksum: "f65744f94072152b1f86ba2aace4d01f1124d9a8ecb235805039e3718c36cac2"
+
+      - name: "Restore required Python versions"
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        id: python-cache
+        with:
+          path: ${{ env.UV_PYTHON_INSTALL_DIR }}
+          # Include the workflow to invalidate changes to the bootstrap uv version or paths.
+          key: python-bootstrap-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('.python-versions', '.github/workflows/test.yml') }}
 
       - name: "Install required Python versions"
         run: uv python install
@@ -342,6 +352,13 @@ jobs:
             --workspace \
             --profile ci-windows \
             --partition hash:${{ matrix.partition }}/3
+
+      - name: "Save required Python versions"
+        if: ${{ github.ref == 'refs/heads/main' && inputs.save-rust-cache == 'true' && matrix.partition == 1 && steps.python-cache.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ env.UV_PYTHON_INSTALL_DIR }}
+          key: ${{ steps.python-cache.outputs.cache-primary-key }}
 
       - name: "Prune superseded workspace artifacts"
         if: ${{ inputs.save-rust-cache == 'true' && steps.rust-cache.outputs.cache-hit != 'true' }}
