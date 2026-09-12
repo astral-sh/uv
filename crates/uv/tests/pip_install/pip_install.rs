@@ -4160,8 +4160,8 @@ fn install_copy_long_paths() -> Result<()> {
             Resolved 1 package in [TIME]
             Prepared 1 package in [TIME]
             error: Failed to install: long_paths-1.0.0-py3-none-any.whl (long-paths==1.0.0 (from file://[TEMP_DIR]/long_paths-1.0.0-py3-none-any.whl))
-              Caused by: Failed to copy to `[LONG_PATH]`
-              Caused by: Failed to persist temporary file to [LONG_PATH]: failed to persist temporary file: The system cannot find the path specified. (os error 3)
+              cause: Failed to copy to `[LONG_PATH]`
+              cause: Failed to persist temporary file to [LONG_PATH]: failed to persist temporary file: The system cannot find the path specified. (os error 3)
             ");
             assert!(!destination.exists());
         }
