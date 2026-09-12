@@ -39,6 +39,20 @@ pub fn flag(yes: bool, no: bool, name: &str) -> anyhow::Result<Option<bool>> {
         "flag names must not include the `no-` prefix"
     );
 
+    flag_with_names(yes, no, name, format_args!("no-{name}"))
+}
+
+/// Given a boolean flag pair whose negative flag is not spelled `--no-{yes_name}` (like `--exact`
+/// and `--inexact`, or `--allow-python-downloads` and `--no-python-downloads`), resolve the value
+/// of the flag.
+///
+/// Prefer [`flag`] for the common case.
+pub fn flag_with_names(
+    yes: bool,
+    no: bool,
+    yes_name: impl fmt::Display,
+    no_name: impl fmt::Display,
+) -> anyhow::Result<Option<bool>> {
     match (yes, no) {
         (true, false) => Ok(Some(true)),
         (false, true) => Ok(Some(false)),
@@ -48,8 +62,8 @@ pub fn flag(yes: bool, no: bool, name: &str) -> anyhow::Result<Option<bool>> {
                 "`{}` and `{}` cannot be used together. \
                 Boolean flags on different levels are currently not supported \
                 (https://github.com/clap-rs/clap/issues/6049)",
-                format!("--{name}").green(),
-                format!("--no-{name}").green(),
+                format!("--{yes_name}").green(),
+                format!("--{no_name}").green(),
             )));
         }
     }
