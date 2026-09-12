@@ -61,7 +61,9 @@ foreach ($version in $versions) {
     $verified += @{ request = $version; executable = $executable; version = $actual }
 }
 
-$installations = @(Get-ChildItem -LiteralPath $env:UV_PYTHON_INSTALL_DIR -Directory -Filter "cpython-*")
+# Minor-version junctions are aliases, not additional installations.
+$installations = @(Get-ChildItem -LiteralPath $env:UV_PYTHON_INSTALL_DIR -Directory -Filter "cpython-*" |
+    Where-Object { ($_.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -eq 0 })
 if ($installations.Count -ne $versions.Count) {
     throw "Expected $($versions.Count) installations, got $($installations.Count)"
 }
