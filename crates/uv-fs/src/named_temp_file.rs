@@ -29,10 +29,6 @@ pub fn tempfile_in(path: &Path) -> io::Result<NamedTempFile> {
 }
 
 impl NamedTempFile {
-    pub fn path(&self) -> &Path {
-        self.0.path()
-    }
-
     #[expect(clippy::disallowed_types, reason = "tempfile exposes a std::fs::File")]
     pub fn as_file(&self) -> &std::fs::File {
         self.0.as_file()
@@ -57,7 +53,7 @@ impl NamedTempFile {
 
 impl AsRef<Path> for NamedTempFile {
     fn as_ref(&self) -> &Path {
-        self.path()
+        self.0.path()
     }
 }
 
