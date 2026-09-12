@@ -10,7 +10,6 @@ use uv_test::{LATEST_PYTHON_3_12, uv_snapshot};
 #[test]
 fn python_upgrade() {
     let context = uv_test::test_context_with_versions!(&[])
-        .with_python_download_cache()
         .with_filtered_python_keys()
         .with_filtered_exe_suffix()
         .with_managed_python_dirs()
@@ -74,7 +73,6 @@ fn python_upgrade() {
 #[test]
 fn python_upgrade_without_version() {
     let context = uv_test::test_context_with_versions!(&[])
-        .with_python_download_cache()
         .with_filtered_python_keys()
         .with_filtered_exe_suffix()
         .with_managed_python_dirs()
@@ -126,7 +124,6 @@ fn python_upgrade_without_version() {
 #[test]
 fn python_upgrade_transparent_from_venv() {
     let context = uv_test::test_context_with_versions!(&["3.13"])
-        .with_python_download_cache()
         .with_filtered_python_keys()
         .with_filtered_exe_suffix()
         .with_managed_python_dirs()
@@ -204,7 +201,6 @@ fn python_upgrade_transparent_from_venv() {
 #[test]
 fn python_upgrade_ignored_with_python_pin() {
     let context = uv_test::test_context_with_versions!(&["3.13"])
-        .with_python_download_cache()
         .with_filtered_python_keys()
         .with_filtered_exe_suffix()
         .with_managed_python_dirs()
@@ -256,7 +252,6 @@ fn python_upgrade_ignored_with_python_pin() {
 #[test]
 fn python_no_transparent_upgrade_with_venv_patch_specification() {
     let context = uv_test::test_context_with_versions!(&["3.13"])
-        .with_python_download_cache()
         .with_filtered_python_keys()
         .with_filtered_exe_suffix()
         .with_managed_python_dirs()
@@ -308,7 +303,6 @@ fn python_no_transparent_upgrade_with_venv_patch_specification() {
 #[test]
 fn python_transparent_upgrade_venv_venv() {
     let context = uv_test::test_context_with_versions!(&["3.13"])
-        .with_python_download_cache()
         .with_filtered_python_keys()
         .with_filtered_exe_suffix()
         .with_filtered_virtualenv_bin()
@@ -385,7 +379,6 @@ fn python_transparent_upgrade_venv_venv() {
 #[test]
 fn python_upgrade_transparent_from_venv_module() {
     let context = uv_test::test_context_with_versions!(&["3.13"])
-        .with_python_download_cache()
         .with_filtered_python_keys()
         .with_filtered_exe_suffix()
         .with_managed_python_dirs()
@@ -438,7 +431,6 @@ fn python_upgrade_transparent_from_venv_module() {
 #[test]
 fn python_upgrade_transparent_from_venv_module_in_venv() {
     let context = uv_test::test_context_with_versions!(&["3.13"])
-        .with_python_download_cache()
         .with_filtered_python_keys()
         .with_filtered_exe_suffix()
         .with_managed_python_dirs()
@@ -508,7 +500,6 @@ fn python_upgrade_transparent_from_venv_module_in_venv() {
 #[test]
 fn python_upgrade_force_install() -> Result<()> {
     let context = uv_test::test_context_with_versions!(&["3.13"])
-        .with_python_download_cache()
         .with_filtered_python_keys()
         .with_filtered_exe_suffix()
         .with_empty_python_install_mirror()
@@ -543,7 +534,6 @@ fn python_upgrade_force_install() -> Result<()> {
 #[test]
 fn python_upgrade_implementation() {
     let context = uv_test::test_context_with_versions!(&[])
-        .with_python_download_cache()
         .with_filtered_python_keys()
         .with_filtered_exe_suffix()
         .with_empty_python_install_mirror()
@@ -563,7 +553,6 @@ fn python_upgrade_implementation() {
 #[test]
 fn python_upgrade_build_version() {
     let context = uv_test::test_context_with_versions!(&[])
-        .with_python_download_cache()
         .with_filtered_python_keys()
         .with_filtered_exe_suffix()
         .with_managed_python_dirs()
@@ -635,7 +624,6 @@ fn python_upgrade_build_version() {
 #[test]
 fn python_sync_transparent_patch_upgrade_reuses_environment() -> Result<()> {
     let context = uv_test::test_context_with_versions!(&[])
-        .with_python_download_cache()
         .with_filtered_python_keys()
         .with_filtered_exe_suffix()
         .with_managed_python_dirs()
@@ -701,7 +689,6 @@ fn python_sync_transparent_patch_upgrade_reuses_environment() -> Result<()> {
 #[test]
 fn python_sync_honors_pinned_patch_version() -> Result<()> {
     let context = uv_test::test_context_with_versions!(&[])
-        .with_python_download_cache()
         .with_filtered_python_keys()
         .with_filtered_exe_suffix()
         .with_managed_python_dirs()
