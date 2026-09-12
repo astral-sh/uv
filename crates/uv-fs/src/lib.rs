@@ -17,7 +17,6 @@ use std::io::Read;
 use encoding_rs_io::DecodeReaderBytes;
 #[cfg(target_os = "linux")]
 use rustix::fs::{AtFlags, CWD as RUSTIX_CWD, StatxFlags, statx};
-use tempfile::NamedTempFile;
 use tracing::{debug, warn};
 #[cfg(windows)]
 use windows::Win32::Foundation::HANDLE;
@@ -25,6 +24,7 @@ use windows::Win32::Foundation::HANDLE;
 use windows::Win32::Storage::FileSystem::{BY_HANDLE_FILE_INFORMATION, GetFileInformationByHandle};
 
 pub use crate::locked_file::*;
+pub use crate::named_temp_file::{NamedTempFile, PersistError, tempfile_in};
 pub use crate::path::*;
 pub use crate::read::ValidatedReader;
 pub use crate::space::{PhysicalSpaceError, physical_space, supports_fine_grained_accounting};
@@ -34,6 +34,7 @@ pub mod cachedir;
 mod hardlink_macos;
 pub mod link;
 mod locked_file;
+mod named_temp_file;
 mod path;
 mod read;
 mod space;
@@ -472,24 +473,6 @@ pub fn symlink_or_copy_file(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> std
     Ok(())
 }
 
-/// Return a [`NamedTempFile`] in the specified directory.
-///
-/// Sets the permissions of the temporary file to `0o666`, to match the non-temporary file default.
-/// ([`NamedTempfile`] defaults to `0o600`.)
-#[cfg(unix)]
-pub fn tempfile_in(path: &Path) -> std::io::Result<NamedTempFile> {
-    use std::os::unix::fs::PermissionsExt;
-    tempfile::Builder::new()
-        .permissions(std::fs::Permissions::from_mode(0o666))
-        .tempfile_in(path)
-}
-
-/// Return a [`NamedTempFile`] in the specified directory.
-#[cfg(not(unix))]
-pub fn tempfile_in(path: &Path) -> std::io::Result<NamedTempFile> {
-    tempfile::Builder::new().tempfile_in(path)
-}
-
 /// Write `data` to `path` atomically using a temporary file and atomic rename.
 #[cfg(feature = "tokio")]
 pub async fn write_atomic(path: impl AsRef<Path>, data: impl AsRef<[u8]>) -> std::io::Result<()> {
@@ -515,10 +498,7 @@ pub fn write_atomic_sync(path: impl AsRef<Path>, data: impl AsRef<[u8]>) -> std:
 
 /// Copy `from` to `to` atomically using a temporary file and atomic rename.
 pub fn copy_atomic_sync(from: impl AsRef<Path>, to: impl AsRef<Path>) -> std::io::Result<()> {
-    // `tempfile` uses Win32 APIs directly, so both paths passed to `persist` need the extended-length
-    // prefix when Windows' long-path opt-in is disabled.
-    let to = verbatim_path(to.as_ref());
-    let temp_file = tempfile_in(to.parent().expect("Write path must have a parent"))?;
+    let temp_file = tempfile_in(to.as_ref().parent().expect("Write path must have a parent"))?;
     fs_err::copy(from.as_ref(), &temp_file)?;
     persist_with_retry_sync(temp_file, to.as_ref())
 }
