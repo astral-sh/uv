@@ -19,6 +19,9 @@ mod tool_list;
 mod tool_run;
 
 #[cfg(all(feature = "test-python", feature = "test-pypi"))]
+mod tool_test_index;
+
+#[cfg(all(feature = "test-python", feature = "test-pypi"))]
 mod tool_uninstall;
 
 #[cfg(all(feature = "test-python", feature = "test-pypi"))]
