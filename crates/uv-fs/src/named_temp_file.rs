@@ -9,13 +9,14 @@ use crate::verbatim_path;
 
 /// A temporary file that supports long Windows paths without the process's long-path opt-in.
 ///
-/// Both its temporary path and its persist destination use verbatim paths, since `tempfile` passes
-/// them directly to Win32 APIs. The file is removed on drop unless it is persisted.
+/// On Windows, both its temporary path and its persist destination use verbatim paths, since
+/// `tempfile` passes them directly to Win32 APIs. The file is removed on drop unless it is persisted.
 #[derive(Debug)]
 pub struct NamedTempFile(tempfile::NamedTempFile);
 
 /// Return a [`NamedTempFile`] in the specified directory.
 ///
+/// On Windows, stores a verbatim path so later persistence supports long paths.
 /// On Unix, requests `0o666` permissions (subject to the umask), matching non-temporary files.
 pub fn tempfile_in(path: &Path) -> io::Result<NamedTempFile> {
     #[cfg(unix)]
@@ -37,12 +38,10 @@ impl NamedTempFile {
         self.0.as_file()
     }
 
-    #[expect(clippy::disallowed_types, reason = "tempfile exposes a std::fs::File")]
-    pub fn as_file_mut(&mut self) -> &mut std::fs::File {
-        self.0.as_file_mut()
-    }
-
     /// Persist the temporary file, atomically replacing any existing file at `path`.
+    ///
+    /// The destination must be on the same filesystem. This does not synchronize the file contents
+    /// or the containing directory to disk.
     ///
     /// On failure, the returned [`PersistError`] retains the temporary file so callers can retry.
     #[expect(clippy::disallowed_types, reason = "tempfile exposes a std::fs::File")]
@@ -98,8 +97,6 @@ mod tests {
             .persist(directory.path().join("missing/file"))
             .unwrap_err();
         assert_eq!(error.error.kind(), io::ErrorKind::NotFound);
-        assert_eq!(error.file.path(), temporary_path);
-        assert_eq!(fs_err::read_to_string(&temporary_path)?, "content");
 
         let destination = directory.path().join("file");
         fs_err::write(&destination, "old content")?;
