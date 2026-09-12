@@ -3,12 +3,520 @@ use assert_cmd::assert::OutputAssertExt;
 use assert_fs::prelude::*;
 use indoc::{formatdoc, indoc};
 use serde_json::json;
-use wiremock::matchers::{method, path};
+use wiremock::matchers::{body_json, method, path, path_regex};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
 use uv_static::EnvVars;
 use uv_test::packse::PackseServer;
-use uv_test::uv_snapshot;
+use uv_test::{capture_uv_snapshot, diff_uv_snapshot, uv_snapshot};
+
+/// A complete pylock package whose artifacts do not need to be downloaded for an audit.
+const AUDIT_PYLOCK: &str = indoc! {r#"
+    lock-version = "1.0"
+    created-by = "uv"
+
+    [[packages]]
+    name = "iniconfig"
+    version = "2.0.0"
+    wheels = [{ url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hashes = { sha256 = "b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374" } }]
+"#};
+
+/// Empty pylocks need neither Python nor an audit service, and disabled selectors are harmless.
+#[test]
+fn audit_pylock_empty() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&[]);
+    context.temp_dir.child("pylock.toml").write_str(indoc! {r#"
+        lock-version = "1.0"
+        created-by = "uv"
+        packages = []
+    "#})?;
+    context
+        .temp_dir
+        .child("uv.toml")
+        .write_str("upgrade = true\n")?;
+
+    uv_snapshot!(context.filters(), context.audit()
+        .args(["--preview-features", "audit"])
+        .args(["-r", "pylock.toml", "--offline", "--no-locked", "--no-upgrade"])
+        .env(EnvVars::UV_LOCKED, "true")
+        .env(EnvVars::UV_NO_DEV, "false")
+        .env(EnvVars::UV_NO_DEFAULT_GROUPS, "false"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    warning: Auditing `pylock.toml` files is experimental and may change without warning. Pass `--preview-features pylock` to disable this warning.
+    Found no known vulnerabilities and no adverse project statuses in 0 packages
+    ");
+    for name in ["uv.lock", ".venv"] {
+        context
+            .temp_dir
+            .child(name)
+            .assert(predicates::path::missing());
+    }
+    Ok(())
+}
+
+/// Audit every version in a pylock without discovering Python or installing artifacts.
+#[tokio::test]
+async fn audit_pylock_whole_lock() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&[]);
+    let lockfile = context.temp_dir.child("pylock.production.toml");
+    let contents = indoc! {r#"
+        lock-version = "1.0"
+        created-by = "uv"
+        requires-python = ">=4"
+        extras = ["test"]
+        dependency-groups = ["dev"]
+
+        [[packages]]
+        name = "iniconfig"
+        version = "2.0.0"
+        marker = "sys_platform == 'win32'"
+        wheels = [{ url = "https://example.org/iniconfig-2.0.0-py3-none-any.whl", hashes = { sha256 = "b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374" } }]
+
+        [[packages]]
+        name = "iniconfig"
+        version = "1.1.1"
+        marker = "sys_platform == 'linux'"
+        wheels = [{ url = "https://example.org/iniconfig-1.1.1-py2.py3-none-any.whl", hashes = { sha256 = "bc3a9cb349578c8e768d134b59a7d5e8d3c8926fc8f7e477a4c61111accc88462" } }]
+
+        [[packages]]
+        name = "iniconfig"
+        version = "2.0.0"
+        marker = "'test' in extras or 'dev' in dependency_groups"
+        wheels = [{ url = "https://example.org/iniconfig-2.0.0-py3-none-any.whl", hashes = { sha256 = "b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374" } }]
+
+        [[packages]]
+        name = "idna"
+        version = "3.6"
+        archive = { url = "https://example.org/idna-3.6.tar.gz", hashes = { sha256 = "9ecdbbd083b066a61d5d64ec3cd9bc8d3daa253d7f9fb7f31e9f5c93f09530b8" } }
+
+        [[packages]]
+        name = "local-project"
+        directory = { path = "." }
+    "#};
+    lockfile.write_str(contents)?;
+    context.temp_dir.child("uv.toml").write_str(indoc! {r#"
+        upgrade = true
+        upgrade-package = ["iniconfig<2"]
+    "#})?;
+
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/v1/querybatch"))
+        .and(body_json(json!({"queries": [
+            {"package": {"name": "idna", "ecosystem": "PyPI"}, "version": "3.6"},
+            {"package": {"name": "iniconfig", "ecosystem": "PyPI"}, "version": "1.1.1"},
+            {"package": {"name": "iniconfig", "ecosystem": "PyPI"}, "version": "2.0.0"}
+        ]})))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "results": [{"vulns": []}, {"vulns": []}, {"vulns": []}]
+        })))
+        .expect(1)
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path_regex("^/simple/"))
+        .respond_with(ResponseTemplate::new(500))
+        .expect(0)
+        .mount(&server)
+        .await;
+
+    uv_snapshot!(context.filters(), context.audit()
+        .args(["--preview-features", "audit,pylock,json-output"])
+        .args(["--output-format", "json"])
+        .args(["-r", "pylock.production.toml"])
+        .arg("--frozen")
+        .arg("--default-index").arg(format!("{}/simple", server.uri()))
+        .arg("--service-url").arg(server.uri()), @r#"
+    exit_code: 0 (success)
+    ----- stdout -----
+    {
+      "schema": {
+        "version": "preview"
+      },
+      "summary": {
+        "audited_packages": 3,
+        "vulnerabilities": 0,
+        "adverse_statuses": 0
+      },
+      "vulnerabilities": [],
+      "adverse_statuses": []
+    }
+    "#);
+
+    lockfile.assert(contents);
+    for name in ["uv.lock", ".venv"] {
+        context
+            .temp_dir
+            .child(name)
+            .assert(predicates::path::missing());
+    }
+    Ok(())
+}
+
+/// Local, file-URL, and remote pylocks share the usual audit reports and ignore rules.
+#[tokio::test]
+async fn audit_pylock_vulnerability() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&[]);
+    context.temp_dir.child(".git").create_dir_all()?;
+    let lockfile = context.temp_dir.child("locks/pylock.ci.toml");
+    lockfile.write_str(AUDIT_PYLOCK)?;
+    let file_url = url::Url::from_file_path(lockfile.path())
+        .map_err(|()| anyhow::anyhow!("invalid file URL"))?;
+
+    let server = MockServer::start().await;
+    let remote_url = format!("{}/pylock.ci.toml", server.uri());
+    Mock::given(method("GET"))
+        .and(path("/pylock.ci.toml"))
+        .respond_with(ResponseTemplate::new(200).set_body_string(AUDIT_PYLOCK))
+        .mount(&server)
+        .await;
+    Mock::given(method("POST"))
+        .and(path("/v1/querybatch"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "results": [{"vulns": [{"id": "PYSEC-2023-0001"}]}]
+        })))
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/v1/vulns/PYSEC-2023-0001"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "id": "PYSEC-2023-0001",
+            "modified": "2026-01-01T00:00:00Z",
+            "summary": "A test vulnerability in iniconfig",
+            "affected": [{
+                "package": {"ecosystem": "PyPI", "name": "iniconfig"},
+                "ranges": [{"type": "ECOSYSTEM", "events": [
+                    {"introduced": "0"}, {"fixed": "2.1.0"}
+                ]}]
+            }],
+            "references": [{
+                "type": "ADVISORY",
+                "url": "https://example.com/advisory/PYSEC-2023-0001"
+            }]
+        })))
+        .mount(&server)
+        .await;
+
+    uv_snapshot!(context.filters(), context.audit()
+        .args(["--preview-features", "audit,pylock"])
+        .arg("--requirement").arg(file_url.as_str())
+        .arg("--service-url").arg(server.uri()), @"
+    exit_code: 1 (failure)
+    ----- stdout -----
+
+    Vulnerabilities:
+
+    iniconfig 2.0.0 has 1 known vulnerability:
+
+    - PYSEC-2023-0001: A test vulnerability in iniconfig
+
+      Fixed in: 2.1.0
+
+      Advisory information: https://example.com/advisory/PYSEC-2023-0001
+
+
+    ----- stderr -----
+    Found 1 known vulnerability and no adverse project statuses in 1 package
+    ");
+
+    // The project audit tests snapshot the full schema; require identical pylock output.
+    let reference_dir = context.temp_dir.child("reference");
+    reference_dir.create_dir_all()?;
+    write_audit_output_project(&reference_dir, &format!("{}/simple", server.uri()));
+    let reference = capture_uv_snapshot!(
+        context.filters(),
+        context
+            .audit()
+            .args(["--preview-features", "audit,json-output"])
+            .args(["--output-format", "json", "--frozen"])
+            .arg("--service-url")
+            .arg(server.uri())
+            .current_dir(reference_dir.path())
+    );
+    diff_uv_snapshot!(context.filters(), &reference, context.audit()
+        .args(["--preview-features", "audit,pylock,json-output"])
+        .args(["--output-format", "json"])
+        .args(["--requirements", "locks/pylock.ci.toml"])
+        .arg("--service-url").arg(server.uri()), @"");
+
+    context.temp_dir.child("uv.toml").write_str(indoc! {r#"
+        [audit]
+        ignore = ["PYSEC-2023-0001"]
+    "#})?;
+    uv_snapshot!(context.filters(), context.audit()
+        .args(["--preview-features", "audit,pylock"])
+        .arg("-r").arg(&remote_url)
+        .args(["--ignore", "PYSEC-DOES-NOT-EXIST"])
+        .arg("--service-url").arg(server.uri()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    warning: Ignored vulnerability `PYSEC-DOES-NOT-EXIST` does not match any vulnerability
+    Found no known vulnerabilities and no adverse project statuses in 1 package
+    ");
+
+    let mut artifact_uris = Vec::new();
+    for source in [lockfile.path().to_string_lossy().into_owned(), remote_url] {
+        let assert = context
+            .audit()
+            .args(["--preview-features", "audit,pylock"])
+            .args(["--output-format", "sarif", "--no-config"])
+            .arg("-r")
+            .arg(source)
+            .arg("--service-url")
+            .arg(server.uri())
+            .assert()
+            .failure()
+            .code(1);
+        let report: serde_json::Value = serde_json::from_slice(&assert.get_output().stdout)?;
+        artifact_uris.push(
+            report
+                .pointer("/runs/0/results/0/locations/0/physicalLocation/artifactLocation/uri")
+                .cloned(),
+        );
+    }
+    insta::with_settings!({filters => context.filters()}, {
+        insta::assert_json_snapshot!(artifact_uris, @r#"
+        [
+          "locks/pylock.ci.toml",
+          "http://[LOCALHOST]/pylock.ci.toml"
+        ]
+        "#);
+    });
+    lockfile.assert(AUDIT_PYLOCK);
+    for name in ["uv.lock", ".venv"] {
+        context
+            .temp_dir
+            .child(name)
+            .assert(predicates::path::missing());
+    }
+    Ok(())
+}
+
+/// Only explicit non-flat indexes are queried for adverse statuses, once per project.
+#[tokio::test]
+async fn audit_pylock_project_status() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&[]);
+    let server = MockServer::start().await;
+    let index = format!("{}/simple", server.uri());
+    let flat_index = format!("{}/flat", server.uri());
+    let contents = AUDIT_PYLOCK.replace(
+        "version = \"2.0.0\"",
+        &format!("version = \"2.0.0\"\nindex = \"{index}\""),
+    );
+    let extra_packages = formatdoc! {r#"
+        [[packages]]
+        name = "iniconfig"
+        version = "1.1.1"
+        index = "{index}"
+        wheels = [{{ url = "https://example.org/iniconfig-1.1.1-py2.py3-none-any.whl", hashes = {{ sha256 = "bc3a9cb349578c8e768d134b59a7d5e8d3c8926fc8f7e477a4c61111accc88462" }} }}]
+
+        [[packages]]
+        name = "idna"
+        version = "3.6"
+        index = "{flat_index}"
+        wheels = [{{ url = "https://example.org/idna-3.6-py3-none-any.whl", hashes = {{ sha256 = "c05567e9c24a6b9f8f3f5e4dcacafd6d892ee7ec15fba3876d57d7bc517a75ba" }} }}]
+    "#};
+    context
+        .temp_dir
+        .child("pylock.toml")
+        .write_str(&format!("{contents}\n{extra_packages}"))?;
+
+    Mock::given(method("POST"))
+        .and(path("/v1/querybatch"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "results": [{"vulns": []}, {"vulns": []}, {"vulns": []}]
+        })))
+        .mount(&server)
+        .await;
+    let simple_index = json!({
+        "meta": {"api-version": "1.4"},
+        "name": "iniconfig",
+        "files": [],
+        "project-status": {"status": "archived"}
+    });
+    Mock::given(method("GET"))
+        .and(path("/simple/iniconfig/"))
+        .respond_with(ResponseTemplate::new(200).set_body_raw(
+            simple_index.to_string(),
+            "application/vnd.pypi.simple.v1+json",
+        ))
+        .expect(1)
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path_regex("^/flat"))
+        .respond_with(ResponseTemplate::new(500))
+        .expect(0)
+        .mount(&server)
+        .await;
+
+    uv_snapshot!(context.filters(), context.audit()
+        .args(["--preview-features", "audit,pylock"])
+        .args(["-r", "pylock.toml"])
+        .arg("--find-links").arg(flat_index)
+        .arg("--service-url").arg(server.uri()), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+
+    Adverse statuses:
+
+    - iniconfig is archived
+
+    ----- stderr -----
+    Found no known vulnerabilities and 1 adverse project status in 3 packages
+    ");
+    Ok(())
+}
+
+#[test]
+fn audit_pylock_invalid_inputs() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&[]).with_filtered_missing_file_error();
+    uv_snapshot!(context.filters(), context.audit()
+        .args(["--preview-features", "audit,pylock"])
+        .args(["-r", "requirements.txt"]), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Only `pylock.toml` files are supported by `uv audit --requirements` (found: `requirements.txt`)
+    ");
+    uv_snapshot!(context.filters(), context.audit()
+        .args(["--preview-features", "audit,pylock"])
+        .args(["-r", "-"]), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Only `pylock.toml` files are supported by `uv audit --requirements` (found: `-`)
+    ");
+    uv_snapshot!(context.filters(), context.audit()
+        .args(["--preview-features", "audit,pylock"])
+        .args(["-r", "pylock.invalid.name.toml"]), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: `pylock.invalid.name.toml` is not a valid PEP 751 filename: expected `pylock.toml` or `pylock.<name>.toml`, where `<name>` is non-empty and contains no dots
+    ");
+    uv_snapshot!(context.filters(), context.audit()
+        .args(["--preview-features", "audit,pylock"])
+        .args(["-r", "pylock.toml", "-r", "pylock.ci.toml"]), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: the argument '--requirements <REQUIREMENTS>' cannot be used multiple times
+
+    Usage: uv audit [OPTIONS]
+
+    For more information, try '--help'.
+    ");
+    uv_snapshot!(context.filters(), context.audit()
+        .args(["--preview-features", "audit,pylock"])
+        .args(["-r", "pylock.missing.toml"]), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: failed to read from file `pylock.missing.toml`: [OS ERROR 2]
+    ");
+    context
+        .temp_dir
+        .child("pylock.toml")
+        .write_str("[[packages]\n")?;
+    uv_snapshot!(context.filters(), context.audit()
+        .args(["--preview-features", "audit,pylock"])
+        .args(["-r", "pylock.toml"]), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Not a valid `pylock.toml` file: pylock.toml
+      cause: TOML parse error at line 1, column 12
+               |
+             1 | [[packages]
+               |            ^
+             unclosed array table, expected `]`
+    ");
+    context
+        .temp_dir
+        .child("pylock.toml")
+        .write_str("lock-version = \"2.0\"\n")?;
+    uv_snapshot!(context.filters(), context.audit()
+        .args(["--preview-features", "audit,pylock"])
+        .args(["-r", "pylock.toml"]), @r#"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Not a valid `pylock.toml` file: pylock.toml
+      cause: TOML parse error at line 1, column 16
+               |
+             1 | lock-version = "2.0"
+               |                ^^^^^
+             unsupported lock version (`2.0`, but only major version 1 is supported)
+    "#);
+    Ok(())
+}
+
+#[test]
+fn audit_pylock_conflicts() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&[]);
+    context
+        .temp_dir
+        .child("pylock.toml")
+        .write_str(AUDIT_PYLOCK)?;
+
+    uv_snapshot!(context.filters(), context.audit()
+        .args(["-r", "pylock.toml", "--script", "script.py"]), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: the argument '--requirements <REQUIREMENTS>' cannot be used with '--script <SCRIPT>'
+
+    Usage: uv audit --cache-dir [CACHE_DIR] --requirements <REQUIREMENTS> --exclude-newer <EXCLUDE_NEWER>
+
+    For more information, try '--help'.
+    ");
+    for arguments in [
+        vec!["--no-extra", "test"],
+        vec!["--no-dev"],
+        vec!["--no-group", "dev"],
+        vec!["--no-default-groups"],
+        vec!["--only-group", "dev"],
+        vec!["--only-dev"],
+        vec!["--python-version", "3.12"],
+        vec!["--python-platform", "x86_64-unknown-linux-gnu"],
+        vec!["--locked"],
+        vec!["--upgrade"],
+        vec!["--upgrade-package", "iniconfig"],
+        vec!["--upgrade-group", "dev"],
+    ] {
+        context
+            .audit()
+            .args(["-r", "pylock.toml"])
+            .args(arguments)
+            .assert()
+            .failure()
+            .code(2);
+    }
+
+    uv_snapshot!(context.filters(), context.audit()
+        .args(["-r", "pylock.toml"])
+        .env(EnvVars::UV_NO_DEV, "true"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: the argument `--requirements` cannot be used with `UV_NO_DEV` (environment variable)
+    ");
+    uv_snapshot!(context.filters(), context.audit()
+        .args(["-r", "pylock.toml"])
+        .env(EnvVars::UV_NO_GROUP, "dev"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: the argument `--requirements` cannot be used with `UV_NO_GROUP` (environment variable)
+    ");
+    uv_snapshot!(context.filters(), context.audit()
+        .args(["-r", "pylock.toml"])
+        .env(EnvVars::UV_NO_DEFAULT_GROUPS, "true"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: the argument `--requirements` cannot be used with `--no-default-groups`
+    ");
+    uv_snapshot!(context.filters(), context.audit()
+        .args(["-r", "pylock.toml"])
+        .env(EnvVars::UV_LOCKED, "true"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: the argument `--requirements` cannot be used with `UV_LOCKED` (environment variable)
+    ");
+    Ok(())
+}
 
 #[test]
 fn audit_invalid_service_url() {
@@ -1533,7 +2041,7 @@ async fn audit_ignore_unmatched() {
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    warning: Ignored vulnerability `CVE-XXXX-YYYY` does not match any vulnerability in the project
+    warning: Ignored vulnerability `CVE-XXXX-YYYY` does not match any vulnerability
     Found no known vulnerabilities and no adverse project statuses in 1 package
     ");
 }
@@ -1578,7 +2086,7 @@ async fn audit_ignore_until_fixed_unmatched() {
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    warning: Ignored vulnerability `CVE-XXXX-YYYY` does not match any vulnerability in the project
+    warning: Ignored vulnerability `CVE-XXXX-YYYY` does not match any vulnerability
     Found no known vulnerabilities and no adverse project statuses in 1 package
     ");
 }
@@ -1649,7 +2157,7 @@ async fn audit_ignore_mixed_matched_unmatched() {
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    warning: Ignored vulnerability `CVE-DOES-NOT-EXIST` does not match any vulnerability in the project
+    warning: Ignored vulnerability `CVE-DOES-NOT-EXIST` does not match any vulnerability
     Found no known vulnerabilities and no adverse project statuses in 1 package
     ");
 }

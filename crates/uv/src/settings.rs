@@ -3314,6 +3314,7 @@ impl CheckSettings {
 /// The resolved settings to use for an `audit` invocation.
 #[derive(Debug, Clone)]
 pub(crate) struct AuditSettings {
+    pub(crate) requirements: Option<PathBuf>,
     pub(crate) extras: ExtrasSpecification,
     pub(crate) groups: DependencyGroups,
     pub(crate) lock_check: LockCheck,
@@ -3337,6 +3338,7 @@ impl AuditSettings {
         environment: EnvironmentOptions,
     ) -> anyhow::Result<Self> {
         let AuditArgs {
+            requirements,
             no_extra,
             no_dev,
             no_group,
@@ -3372,7 +3374,15 @@ impl AuditSettings {
             .and_then(|fs| fs.audit.clone())
             .unwrap_or_default();
 
-        let no_dev = no_dev || environment.no_dev.value == Some(true);
+        let no_dev = resolve_flag(no_dev, "no-dev", environment.no_dev);
+        let (no_group, no_group_source) = if no_group.is_empty() {
+            (
+                environment.no_group.clone().unwrap_or_default(),
+                FlagSource::Env(EnvVars::UV_NO_GROUP),
+            )
+        } else {
+            (no_group, FlagSource::Cli)
+        };
 
         // Resolve flags from CLI and environment variables.
         let locked = resolve_lock_check(locked, no_locked, LockedFlag::Locked, environment.locked);
@@ -3380,7 +3390,26 @@ impl AuditSettings {
 
         let (locked, frozen) = resolve_lock_flags(locked, frozen)?;
 
+        if requirements.is_some() {
+            let requirements = Flag::from_cli("requirements");
+            check_conflicts(requirements, locked.into())?;
+            check_conflicts(requirements, no_dev)?;
+            if no_default_groups {
+                check_conflicts(requirements, Flag::from_cli("no-default-groups"))?;
+            }
+            if !no_group.is_empty() {
+                check_conflicts(
+                    requirements,
+                    Flag::Enabled {
+                        source: no_group_source,
+                        name: "no-group",
+                    },
+                )?;
+            }
+        }
+
         Ok(Self {
+            requirements,
             extras: ExtrasSpecification::from_args(
                 vec![],
                 no_extra,
@@ -3391,13 +3420,9 @@ impl AuditSettings {
                 true,
             ),
             groups: DependencyGroups::from_args(
-                DevMode::from_args(only_group.is_empty() && !only_dev, no_dev, only_dev),
+                DevMode::from_args(only_group.is_empty() && !only_dev, no_dev.into(), only_dev),
                 vec![],
-                if no_group.is_empty() {
-                    environment.no_group.clone().unwrap_or_default()
-                } else {
-                    no_group
-                },
+                no_group,
                 no_default_groups,
                 only_group.clone(),
                 only_group.is_empty() && !only_dev,
