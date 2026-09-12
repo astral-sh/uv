@@ -1240,6 +1240,19 @@ pub(crate) fn is_centralized_environment_reference(path: &Path, cache: &Cache) -
             .is_ok_and(|target| is_centralized_environment_path(&target, cache))
 }
 
+/// Return whether a project environment can follow managed Python patch upgrades.
+///
+/// An explicit relocatability override takes precedence over the preview-controlled default.
+pub(crate) fn project_environment_upgradeable(
+    python_request: Option<&PythonRequest>,
+    relocatable_override: Option<bool>,
+) -> bool {
+    let relocatable = relocatable_override
+        .unwrap_or_else(|| uv_preview::is_enabled(PreviewFeature::RelocatableEnvsDefault));
+    python_request.is_none_or(|request| !request.includes_patch())
+        && !(relocatable && uv_preview::is_enabled(PreviewFeature::PortableEnvs))
+}
+
 /// Return the centralized environment path for a given workspace and interpreter.
 pub(crate) fn centralized_environment_root(
     workspace: &Workspace,
@@ -1429,9 +1442,7 @@ impl ProjectInterpreter {
 
         let environment_selection = workspace.environment_selection(active);
         let centralized = centralized_environments_enabled(&environment_selection, cache);
-        let upgradeable = python_request
-            .as_ref()
-            .is_none_or(|request| !request.includes_patch());
+        let upgradeable = project_environment_upgradeable(python_request.as_ref(), None);
 
         // Prefer `.venv`'s interpreter to keep its compatible cached environment selected; derive
         // the cache root instead of trusting the link target.
@@ -1864,10 +1875,9 @@ impl ProjectEnvironment {
             config_discovery,
         )
         .await?;
-        let upgradeable = workspace_python
-            .python_request
-            .as_ref()
-            .is_none_or(|request| !request.includes_patch());
+        let upgradeable =
+            project_environment_upgradeable(workspace_python.python_request.as_ref(), None);
+        let relocatable = uv_preview::is_enabled(PreviewFeature::RelocatableEnvsDefault);
 
         match ProjectInterpreter::discover(
             workspace,
@@ -1975,7 +1985,7 @@ impl ProjectEnvironment {
                         uv_virtualenv::OnExisting::Remove(
                             uv_virtualenv::RemovalReason::ManagedEnvironment,
                         ),
-                        uv_preview::is_enabled(PreviewFeature::RelocatableEnvsDefault),
+                        relocatable,
                         uv_virtualenv::Seed::Disabled,
                         upgradeable,
                     )?;
@@ -2036,7 +2046,7 @@ impl ProjectEnvironment {
                     uv_virtualenv::OnExisting::Remove(
                         uv_virtualenv::RemovalReason::ManagedEnvironment,
                     ),
-                    uv_preview::is_enabled(PreviewFeature::RelocatableEnvsDefault),
+                    relocatable,
                     uv_virtualenv::Seed::Disabled,
                     upgradeable,
                 )?;
