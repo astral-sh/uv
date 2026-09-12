@@ -2131,6 +2131,118 @@ fn python_install_broken_link() {
     });
 }
 
+#[cfg(unix)]
+#[test]
+fn python_install_relative_unmanaged_link() -> anyhow::Result<()> {
+    use fs_err::os::unix::fs::symlink;
+
+    let context = uv_test::test_context!("3.12")
+        .with_filtered_python_keys()
+        .with_filtered_exe_suffix()
+        .with_managed_python_dirs();
+    context
+        .python_install()
+        .args(["--no-config", "--no-bin", "3.13.1"])
+        .assert()
+        .success();
+
+    let bin_python = context.bin_dir.child("python3.13");
+    let unmanaged = context.bin_dir.child("unmanaged-python");
+    symlink(context.interpreter(), &unmanaged)?;
+    symlink("unmanaged-python", &bin_python)?;
+    assert!(bin_python.try_exists()?);
+    assert!(!context.temp_dir.child("unmanaged-python").try_exists()?);
+
+    uv_snapshot!(context.filters(), context.python_install()
+        .args(["--no-config", "--offline", "3.13.1"]), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    warning: Failed to install executable for cpython-3.13.1-[PLATFORM]
+      cause: Executable already exists at `[BIN]/python3.13` but is not managed by uv; use `--force` to replace it
+    ");
+    assert_eq!(
+        fs_err::read_link(&bin_python)?,
+        Path::new("unmanaged-python")
+    );
+    uv_snapshot!(context.filters(), Command::new(bin_python.path())
+        .args(["-I", "-c", "import sys; print('.'.join(map(str, sys.version_info[:2])))"]), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    3.12
+    ");
+
+    uv_snapshot!(context.filters(), context.python_install()
+        .args(["--no-config", "--offline", "3.13.1", "--force"]), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Installed Python 3.13.1 in [TIME]
+     + cpython-3.13.1-[PLATFORM] (python3.13)
+    ");
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        insta::assert_snapshot!(
+            canonicalize_link_path(&bin_python), @"[TEMP_DIR]/managed/cpython-3.13.1-[PLATFORM]/bin/python3.13"
+        );
+    });
+    uv_snapshot!(context.filters(), Command::new(bin_python.path())
+        .args(["-I", "-c", "import sys; print(sys.version.split()[0])"]), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    3.13.1
+    ");
+    Ok(())
+}
+
+#[cfg(unix)]
+#[test]
+fn python_install_relative_broken_link() -> anyhow::Result<()> {
+    use fs_err::os::unix::fs::symlink;
+
+    let context = uv_test::test_context!("3.12")
+        .with_filtered_python_keys()
+        .with_filtered_exe_suffix()
+        .with_managed_python_dirs();
+    context
+        .python_install()
+        .args(["--no-config", "--no-bin", "3.13.1"])
+        .assert()
+        .success();
+
+    // A target with the same name exists in uv's working directory, but the executable link is
+    // relative to its own directory and is dangling.
+    symlink(
+        context.interpreter(),
+        context.temp_dir.child("unmanaged-python"),
+    )?;
+    let bin_python = context.bin_dir.child("python3.13");
+    symlink("unmanaged-python", &bin_python)?;
+    assert!(!bin_python.try_exists()?);
+    assert!(context.temp_dir.child("unmanaged-python").try_exists()?);
+
+    uv_snapshot!(context.filters(), context.python_install()
+        .args(["--no-config", "--offline", "3.13.1"]), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Installed Python 3.13.1 in [TIME]
+     + cpython-3.13.1-[PLATFORM] (python3.13)
+    ");
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        insta::assert_snapshot!(
+            canonicalize_link_path(&bin_python), @"[TEMP_DIR]/managed/cpython-3.13.1-[PLATFORM]/bin/python3.13"
+        );
+    });
+    uv_snapshot!(context.filters(), Command::new(bin_python.path())
+        .args(["-I", "-c", "import sys; print(sys.version.split()[0])"]), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    3.13.1
+    ");
+    Ok(())
+}
+
 /// Test that --default works with pre-release versions (e.g., 3.15.0a1).
 /// This test verifies the fix for issue #16696 where --default didn't create
 /// python.exe and python3.exe links for pre-release versions.
