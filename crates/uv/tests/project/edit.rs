@@ -4201,22 +4201,15 @@ fn add_preserves_indentation_in_pyproject_toml() -> Result<()> {
         name = "project"
         version = "0.1.0"
         requires-python = ">=3.12"
-        dependencies = ["anyio==3.7.0"]
+        dependencies = [
+          "anyio==3.7.0",
+        ]
     "#})?;
 
-    uv_snapshot!(context.filters(), context.add().arg("requests==2.31.0"), @"
+    uv_snapshot!(context.filters(), context.add().arg("requests==2.31.0").arg("--no-sync"), @"
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 8 packages in [TIME]
-    Prepared 7 packages in [TIME]
-    Installed 7 packages in [TIME]
-     + anyio==3.7.0
-     + certifi==2024.2.2
-     + charset-normalizer==3.3.2
-     + idna==3.6
-     + requests==2.31.0
-     + sniffio==1.3.1
-     + urllib3==2.2.1
     ");
 
     let pyproject_toml = context.read("pyproject.toml");
@@ -4231,8 +4224,8 @@ fn add_preserves_indentation_in_pyproject_toml() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = [
-            "anyio==3.7.0",
-            "requests==2.31.0",
+          "anyio==3.7.0",
+          "requests==2.31.0",
         ]
         "#
         );
@@ -4253,19 +4246,10 @@ fn add_puts_default_indentation_in_pyproject_toml_if_not_observed() -> Result<()
         dependencies = ["anyio==3.7.0"]
     "#})?;
 
-    uv_snapshot!(context.filters(), context.add().arg("requests==2.31.0"), @"
+    uv_snapshot!(context.filters(), context.add().arg("requests==2.31.0").arg("--no-sync"), @"
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 8 packages in [TIME]
-    Prepared 7 packages in [TIME]
-    Installed 7 packages in [TIME]
-     + anyio==3.7.0
-     + certifi==2024.2.2
-     + charset-normalizer==3.3.2
-     + idna==3.6
-     + requests==2.31.0
-     + sniffio==1.3.1
-     + urllib3==2.2.1
     ");
 
     let pyproject_toml = context.read("pyproject.toml");
