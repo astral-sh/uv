@@ -20,9 +20,8 @@ use uv_fs::Simplified;
 use uv_fs::copy_dir_all;
 use uv_static::EnvVars;
 
+use uv_test::packse::{PackseServer, scenario::Scenario};
 use uv_test::uv_snapshot;
-
-use crate::fixtures::{ToolPackage, tool_index};
 
 #[cfg(feature = "test-git")]
 fn tool_install_git_path(bin_dir: &ChildPath) -> OsString {
@@ -5439,26 +5438,31 @@ async fn tool_install_default_credentials() -> Result<()> {
 /// Test installing a tool with `--with-executables-from`.
 #[test]
 fn tool_install_with_executables_from() -> Result<()> {
-    let index = tool_index(&[
-        ToolPackage {
-            name: "main-tool",
-            version: "1.0.0",
-            requires: &["dependency-tool"],
-            scripts: &["main"],
-        },
-        ToolPackage {
-            name: "dependency-tool",
-            version: "1.0.0",
-            requires: &[],
-            scripts: &["dep-one", "dep-two"],
-        },
-        ToolPackage {
-            name: "extra-tool",
-            version: "1.0.0",
-            requires: &[],
-            scripts: &["extra"],
-        },
-    ])?;
+    let scenario = toml::from_str::<Scenario>(indoc! {r#"
+        name = "tool-executables"
+
+        [root]
+
+        [expected]
+        satisfiable = true
+
+        [packages.main-tool.versions."1.0.0"]
+        requires_python = ">=3.11"
+        sdist = false
+        requires = ["dependency-tool"]
+        entry_points = ["main"]
+
+        [packages.dependency-tool.versions."1.0.0"]
+        requires_python = ">=3.11"
+        sdist = false
+        entry_points = ["dep-one", "dep-two"]
+
+        [packages.extra-tool.versions."1.0.0"]
+        requires_python = ">=3.11"
+        sdist = false
+        entry_points = ["extra"]
+    "#})?;
+    let index = PackseServer::from_scenario(&scenario);
     let context = uv_test::test_context!("3.12")
         .with_filtered_counts()
         .with_filtered_exe_suffix()
@@ -5513,7 +5517,7 @@ fn tool_install_with_executables_from() -> Result<()> {
     uv_snapshot!(context.filters(), Command::new(bin_dir.join("dep-one")), @"
     exit_code: 0 (success)
     ----- stdout -----
-    tool fixture
+    Hello from dependency-tool!
     ");
 
     uv_snapshot!(context.filters(), context.tool_uninstall()
@@ -5523,6 +5527,42 @@ fn tool_install_with_executables_from() -> Result<()> {
     ----- stderr -----
     Uninstalled 4 executables: dep-one, dep-two, extra, main
     ");
+    Ok(())
+}
+
+#[test]
+fn tool_install_sdist_entry_point() -> Result<()> {
+    let scenario = toml::from_str::<Scenario>(indoc! {r#"
+        name = "sdist-entry-point"
+
+        [root]
+
+        [expected]
+        satisfiable = true
+
+        [packages.scenario-tool.versions."1.0.0"]
+        wheel = false
+        entry_points = ["scenario.tool"]
+    "#})?;
+    let index = PackseServer::from_scenario(&scenario);
+    let context = uv_test::test_context!("3.12").with_tool_dirs();
+    let bin_dir = context.temp_dir.child("bin");
+
+    context
+        .tool_install()
+        .arg("scenario-tool")
+        .arg("--index-url")
+        .arg(index.index_url())
+        .env(EnvVars::PATH, bin_dir.as_os_str())
+        .assert()
+        .success();
+
+    uv_snapshot!(context.filters(), Command::new(bin_dir.join("scenario.tool")), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    Hello from scenario-tool!
+    ");
+
     Ok(())
 }
 

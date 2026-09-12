@@ -89,8 +89,15 @@ impl DirectUrlHashTestContext {
 
         let name = "metadata-parent".parse()?;
         let version = "1.0.0".parse()?;
-        let (wheel_filename, authentic_wheel) =
-            generate_wheel(&name, &version, &[], &BTreeMap::new(), None, "py3-none-any");
+        let (wheel_filename, authentic_wheel) = generate_wheel(
+            &name,
+            &version,
+            &[],
+            &BTreeMap::new(),
+            None,
+            "py3-none-any",
+            &[],
+        );
         let (_, forged_wheel) = generate_wheel(
             &name,
             &version,
@@ -98,6 +105,7 @@ impl DirectUrlHashTestContext {
             &BTreeMap::new(),
             None,
             "py3-none-any",
+            &[],
         );
         let wheel_hash = hex::encode(Sha256::digest(&authentic_wheel));
         let server = MockServer::start().await;

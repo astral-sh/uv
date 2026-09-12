@@ -1,11 +1,11 @@
-//! A per-test wiremock server that serves packse scenario packages or supplied wheels.
+//! A per-test wiremock server that serves packse scenario packages.
 //!
-//! Each [`PackseServer`] serves:
+//! Each [`PackseServer`] reads a single scenario TOML file and serves:
 //! - PEP 691 Simple API at `/simple/{package}/`
 //! - Distribution downloads at `/files/{filename}`
 //!
-//! Scenario-based servers also expose cached build dependencies through the same
-//! `/simple/*` and `/files/*` routes as scenario packages.
+//! Cached build dependencies are exposed through the same `/simple/*` and
+//! `/files/*` routes as scenario packages.
 
 use std::collections::HashMap;
 use std::path::Path;
@@ -67,7 +67,7 @@ struct ServerIndex {
     files: HashMap<String, FileData>,
 }
 
-/// A running mock PyPI server for a packse scenario or supplied wheels.
+/// A running mock PyPI server for a single packse scenario.
 ///
 /// The server runs on a background thread with its own single-threaded tokio runtime.
 /// When [`PackseServer`] is dropped, the background thread and server are shut down.
@@ -95,47 +95,17 @@ impl PackseServer {
 
     /// Start a mock server for the given scenario.
     pub fn from_scenario(scenario: &Scenario) -> Self {
-        Self::start(build_server_index(scenario), true)
+        Self::start(scenario, true)
     }
 
     /// Start a mock server that omits hashes from the Simple API, mimicking indexes that don't
     /// provide hashes, such as HTML-only indexes.
     pub fn from_scenario_without_hashes(scenario: &Scenario) -> Self {
-        Self::start(build_server_index(scenario), false)
+        Self::start(scenario, false)
     }
 
-    /// Start a mock server containing only the supplied wheel filenames and bytes.
-    ///
-    /// Dependencies must be supplied explicitly. The index advertises each wheel's SHA-256
-    /// digest and leaves `Requires-Python` restrictions to the wheel metadata.
-    pub fn from_wheels(
-        wheels: impl IntoIterator<Item = (String, Vec<u8>)>,
-    ) -> anyhow::Result<Self> {
-        let mut packages = HashMap::new();
-        let mut files = HashMap::new();
-
-        for (filename, bytes) in wheels {
-            let wheel_filename = WheelFilename::from_str(&filename)?;
-            let sha256 = sha256_hex(&bytes);
-            files.insert(filename.clone(), FileData::Bytes(bytes.into()));
-            packages
-                .entry(wheel_filename.name)
-                .or_insert_with(|| PackageEntry { dists: Vec::new() })
-                .dists
-                .push(DistInfo {
-                    filename,
-                    sha256,
-                    requires_python: None,
-                    upload_time: None,
-                    yanked: false,
-                });
-        }
-
-        Ok(Self::start(ServerIndex { packages, files }, true))
-    }
-
-    fn start(index: ServerIndex, hashes: bool) -> Self {
-        let index = Arc::new(index);
+    fn start(scenario: &Scenario, hashes: bool) -> Self {
+        let index = Arc::new(build_server_index(scenario));
         let server_index = Arc::clone(&index);
         let server = HttpServer::start(move |request, server_uri| {
             handle_request(request, server_uri, &server_index, hashes)
@@ -188,6 +158,7 @@ fn build_server_index(scenario: &Scenario) -> ServerIndex {
                         &meta.extras,
                         meta.requires_python.as_ref(),
                         tag,
+                        &meta.entry_points,
                     );
                     let sha256 = sha256_hex(&bytes);
                     files.insert(filename.clone(), FileData::Bytes(bytes.into()));
@@ -208,6 +179,7 @@ fn build_server_index(scenario: &Scenario) -> ServerIndex {
                     &meta.requires,
                     &meta.extras,
                     meta.requires_python.as_ref(),
+                    &meta.entry_points,
                 );
                 let sha256 = sha256_hex(&bytes);
                 files.insert(filename.clone(), FileData::Bytes(bytes.into()));

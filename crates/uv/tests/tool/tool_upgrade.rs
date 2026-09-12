@@ -14,10 +14,8 @@ use wiremock::{
 
 use uv_static::EnvVars;
 
-use uv_test::packse::PackseServer;
+use uv_test::packse::{PackseServer, scenario::Scenario};
 use uv_test::{uv_snapshot, venv_bin_path};
-
-use crate::fixtures::{ToolPackage, tool_index};
 
 #[test]
 fn tool_upgrade_empty() {
@@ -1879,78 +1877,83 @@ fn tool_upgrade_lock_uses_requested_python() -> Result<()> {
 
 /// An index containing earlier synthetic tool releases and their dependencies.
 fn old_tool_index() -> Result<PackseServer> {
-    tool_index(&[
-        ToolPackage {
-            name: "babel",
-            version: "2.6.0",
-            requires: &["pytz"],
-            scripts: &["pybabel"],
-        },
-        ToolPackage {
-            name: "pytz",
-            version: "2018.5",
-            requires: &[],
-            scripts: &[],
-        },
-        ToolPackage {
-            name: "python-dotenv",
-            version: "0.10.2.post2",
-            requires: &[],
-            scripts: &["dotenv"],
-        },
-    ])
+    let scenario = toml::from_str::<Scenario>(indoc! {r#"
+        name = "old-tool-index"
+
+        [root]
+
+        [expected]
+        satisfiable = true
+
+        [packages.babel.versions."2.6.0"]
+        requires_python = ">=3.11"
+        sdist = false
+        requires = ["pytz"]
+        entry_points = ["pybabel"]
+
+        [packages.pytz.versions."2018.5"]
+        requires_python = ">=3.11"
+        sdist = false
+
+        [packages.python-dotenv.versions."0.10.2.post2"]
+        requires_python = ">=3.11"
+        sdist = false
+        entry_points = ["dotenv"]
+    "#})?;
+    Ok(PackseServer::from_scenario(&scenario))
 }
 
 /// Later synthetic releases change dependencies to exercise upgrade and removal behavior.
 fn new_tool_index() -> Result<PackseServer> {
-    tool_index(&[
-        ToolPackage {
-            name: "babel",
-            version: "2.6.0",
-            requires: &["pytz"],
-            scripts: &["pybabel"],
-        },
-        ToolPackage {
-            name: "babel",
-            version: "2.9.1",
-            requires: &["pytz"],
-            scripts: &["pybabel"],
-        },
-        ToolPackage {
-            name: "babel",
-            version: "2.11.0",
-            requires: &["pytz"],
-            scripts: &["pybabel"],
-        },
-        ToolPackage {
-            name: "babel",
-            version: "2.13.1",
-            requires: &["setuptools"],
-            scripts: &["pybabel"],
-        },
-        ToolPackage {
-            name: "babel",
-            version: "2.14.0",
-            requires: &[],
-            scripts: &["pybabel"],
-        },
-        ToolPackage {
-            name: "pytz",
-            version: "2024.1",
-            requires: &[],
-            scripts: &[],
-        },
-        ToolPackage {
-            name: "setuptools",
-            version: "69.2.0",
-            requires: &[],
-            scripts: &[],
-        },
-        ToolPackage {
-            name: "python-dotenv",
-            version: "1.0.1",
-            requires: &[],
-            scripts: &["dotenv"],
-        },
-    ])
+    let scenario = toml::from_str::<Scenario>(indoc! {r#"
+        name = "new-tool-index"
+
+        [root]
+
+        [expected]
+        satisfiable = true
+
+        [packages.babel.versions."2.6.0"]
+        requires_python = ">=3.11"
+        sdist = false
+        requires = ["pytz"]
+        entry_points = ["pybabel"]
+
+        [packages.babel.versions."2.9.1"]
+        requires_python = ">=3.11"
+        sdist = false
+        requires = ["pytz"]
+        entry_points = ["pybabel"]
+
+        [packages.babel.versions."2.11.0"]
+        requires_python = ">=3.11"
+        sdist = false
+        requires = ["pytz"]
+        entry_points = ["pybabel"]
+
+        [packages.babel.versions."2.13.1"]
+        requires_python = ">=3.11"
+        sdist = false
+        requires = ["setuptools"]
+        entry_points = ["pybabel"]
+
+        [packages.babel.versions."2.14.0"]
+        requires_python = ">=3.11"
+        sdist = false
+        entry_points = ["pybabel"]
+
+        [packages.pytz.versions."2024.1"]
+        requires_python = ">=3.11"
+        sdist = false
+
+        [packages.setuptools.versions."69.2.0"]
+        requires_python = ">=3.11"
+        sdist = false
+
+        [packages.python-dotenv.versions."1.0.1"]
+        requires_python = ">=3.11"
+        sdist = false
+        entry_points = ["dotenv"]
+    "#})?;
+    Ok(PackseServer::from_scenario(&scenario))
 }
