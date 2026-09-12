@@ -14,9 +14,10 @@ use wiremock::{
 
 use uv_static::EnvVars;
 
+use uv_test::packse::PackseServer;
 use uv_test::{uv_snapshot, venv_bin_path};
 
-use crate::tool_test_index::{ToolPackage, tool_index};
+use crate::fixtures::{ToolPackage, tool_index};
 
 #[test]
 fn tool_upgrade_empty() {
@@ -501,12 +502,10 @@ fn tool_upgrade_preserves_mixed_workspace_member_non_editability() -> Result<()>
     Ok(())
 }
 
-#[tokio::test]
-async fn tool_upgrade_name() -> Result<()> {
-    let old_index = old_tool_index().await?;
-    let old_index_url = format!("{}/simple/", old_index.uri());
-    let new_index = new_tool_index().await?;
-    let new_index_url = format!("{}/simple/", new_index.uri());
+#[test]
+fn tool_upgrade_name() -> Result<()> {
+    let old_index = old_tool_index()?;
+    let new_index = new_tool_index()?;
 
     let context = uv_test::test_context!("3.12")
         .with_filtered_counts()
@@ -518,7 +517,7 @@ async fn tool_upgrade_name() -> Result<()> {
     uv_snapshot!(context.filters(), context.tool_install()
         .arg("babel")
         .arg("--index-url")
-        .arg(&old_index_url)
+        .arg(old_index.index_url())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -534,7 +533,7 @@ async fn tool_upgrade_name() -> Result<()> {
     uv_snapshot!(context.filters(), context.tool_upgrade()
         .arg("babel")
         .arg("--index-url")
-        .arg(&new_index_url)
+        .arg(new_index.index_url())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -599,12 +598,10 @@ fn tool_upgrade_recomputes_relative_exclude_newer() {
     });
 }
 
-#[tokio::test]
-async fn tool_upgrade_multiple_names() -> Result<()> {
-    let old_index = old_tool_index().await?;
-    let old_index_url = format!("{}/simple/", old_index.uri());
-    let new_index = new_tool_index().await?;
-    let new_index_url = format!("{}/simple/", new_index.uri());
+#[test]
+fn tool_upgrade_multiple_names() -> Result<()> {
+    let old_index = old_tool_index()?;
+    let new_index = new_tool_index()?;
 
     let context = uv_test::test_context!("3.12")
         .with_filtered_counts()
@@ -616,7 +613,7 @@ async fn tool_upgrade_multiple_names() -> Result<()> {
     uv_snapshot!(context.filters(), context.tool_install()
         .arg("python-dotenv")
         .arg("--index-url")
-        .arg(&old_index_url)
+        .arg(old_index.index_url())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -631,7 +628,7 @@ async fn tool_upgrade_multiple_names() -> Result<()> {
     uv_snapshot!(context.filters(), context.tool_install()
         .arg("babel")
         .arg("--index-url")
-        .arg(&old_index_url)
+        .arg(old_index.index_url())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -648,7 +645,7 @@ async fn tool_upgrade_multiple_names() -> Result<()> {
         .arg("babel")
         .arg("python-dotenv")
         .arg("--index-url")
-        .arg(&new_index_url)
+        .arg(new_index.index_url())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -665,12 +662,10 @@ async fn tool_upgrade_multiple_names() -> Result<()> {
     Ok(())
 }
 
-#[tokio::test]
-async fn tool_upgrade_pinned_hint() -> Result<()> {
-    let old_index = old_tool_index().await?;
-    let old_index_url = format!("{}/simple/", old_index.uri());
-    let new_index = new_tool_index().await?;
-    let new_index_url = format!("{}/simple/", new_index.uri());
+#[test]
+fn tool_upgrade_pinned_hint() -> Result<()> {
+    let old_index = old_tool_index()?;
+    let new_index = new_tool_index()?;
 
     let context = uv_test::test_context!("3.12")
         .with_filtered_counts()
@@ -682,7 +677,7 @@ async fn tool_upgrade_pinned_hint() -> Result<()> {
     uv_snapshot!(context.filters(), context.tool_install()
         .arg("babel==2.6.0")
         .arg("--index-url")
-        .arg(&old_index_url)
+        .arg(old_index.index_url())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -698,7 +693,7 @@ async fn tool_upgrade_pinned_hint() -> Result<()> {
     uv_snapshot!(context.filters(), context.tool_upgrade()
         .arg("babel")
         .arg("--index-url")
-        .arg(&new_index_url)
+        .arg(new_index.index_url())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -711,12 +706,10 @@ async fn tool_upgrade_pinned_hint() -> Result<()> {
     Ok(())
 }
 
-#[tokio::test]
-async fn tool_upgrade_pinned_hint_with_mixed_constraint() -> Result<()> {
-    let old_index = old_tool_index().await?;
-    let old_index_url = format!("{}/simple/", old_index.uri());
-    let new_index = new_tool_index().await?;
-    let new_index_url = format!("{}/simple/", new_index.uri());
+#[test]
+fn tool_upgrade_pinned_hint_with_mixed_constraint() -> Result<()> {
+    let old_index = old_tool_index()?;
+    let new_index = new_tool_index()?;
 
     let context = uv_test::test_context!("3.12")
         .with_filtered_counts()
@@ -729,7 +722,7 @@ async fn tool_upgrade_pinned_hint_with_mixed_constraint() -> Result<()> {
     uv_snapshot!(context.filters(), context.tool_install()
         .arg("babel>=2.0,==2.6.0")
         .arg("--index-url")
-        .arg(&old_index_url)
+        .arg(old_index.index_url())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -745,7 +738,7 @@ async fn tool_upgrade_pinned_hint_with_mixed_constraint() -> Result<()> {
     uv_snapshot!(context.filters(), context.tool_upgrade()
         .arg("babel")
         .arg("--index-url")
-        .arg(&new_index_url)
+        .arg(new_index.index_url())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -758,12 +751,10 @@ async fn tool_upgrade_pinned_hint_with_mixed_constraint() -> Result<()> {
     Ok(())
 }
 
-#[tokio::test]
-async fn tool_upgrade_all() -> Result<()> {
-    let old_index = old_tool_index().await?;
-    let old_index_url = format!("{}/simple/", old_index.uri());
-    let new_index = new_tool_index().await?;
-    let new_index_url = format!("{}/simple/", new_index.uri());
+#[test]
+fn tool_upgrade_all() -> Result<()> {
+    let old_index = old_tool_index()?;
+    let new_index = new_tool_index()?;
 
     let context = uv_test::test_context!("3.12")
         .with_filtered_counts()
@@ -776,7 +767,7 @@ async fn tool_upgrade_all() -> Result<()> {
     uv_snapshot!(context.filters(), context.tool_install()
         .arg("python-dotenv")
         .arg("--index-url")
-        .arg(&old_index_url)
+        .arg(old_index.index_url())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -791,7 +782,7 @@ async fn tool_upgrade_all() -> Result<()> {
     uv_snapshot!(context.filters(), context.tool_install()
         .arg("babel")
         .arg("--index-url")
-        .arg(&old_index_url)
+        .arg(old_index.index_url())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -810,7 +801,7 @@ async fn tool_upgrade_all() -> Result<()> {
     uv_snapshot!(context.filters(), context.tool_upgrade()
         .arg("--all")
         .arg("--index-url")
-        .arg(&new_index_url)
+        .arg(new_index.index_url())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -857,12 +848,10 @@ fn tool_upgrade_non_existing_package() {
     ");
 }
 
-#[tokio::test]
-async fn tool_upgrade_not_stop_if_upgrade_fails() -> anyhow::Result<()> {
-    let old_index = old_tool_index().await?;
-    let old_index_url = format!("{}/simple/", old_index.uri());
-    let new_index = new_tool_index().await?;
-    let new_index_url = format!("{}/simple/", new_index.uri());
+#[test]
+fn tool_upgrade_not_stop_if_upgrade_fails() -> anyhow::Result<()> {
+    let old_index = old_tool_index()?;
+    let new_index = new_tool_index()?;
 
     let context = uv_test::test_context!("3.12")
         .with_filtered_counts()
@@ -875,7 +864,7 @@ async fn tool_upgrade_not_stop_if_upgrade_fails() -> anyhow::Result<()> {
     uv_snapshot!(context.filters(), context.tool_install()
         .arg("python-dotenv")
         .arg("--index-url")
-        .arg(&old_index_url)
+        .arg(old_index.index_url())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -890,7 +879,7 @@ async fn tool_upgrade_not_stop_if_upgrade_fails() -> anyhow::Result<()> {
     uv_snapshot!(context.filters(), context.tool_install()
         .arg("babel")
         .arg("--index-url")
-        .arg(&old_index_url)
+        .arg(old_index.index_url())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -912,7 +901,7 @@ async fn tool_upgrade_not_stop_if_upgrade_fails() -> anyhow::Result<()> {
     uv_snapshot!(context.filters(), context.tool_upgrade()
         .arg("--all")
         .arg("--index-url")
-        .arg(&new_index_url)
+        .arg(new_index.index_url())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 1 (failure)
     ----- stderr -----
@@ -1027,12 +1016,10 @@ fn tool_upgrade_no_binary_package_env_var() {
     );
 }
 
-#[tokio::test]
-async fn tool_upgrade_respect_constraints() -> Result<()> {
-    let old_index = old_tool_index().await?;
-    let old_index_url = format!("{}/simple/", old_index.uri());
-    let new_index = new_tool_index().await?;
-    let new_index_url = format!("{}/simple/", new_index.uri());
+#[test]
+fn tool_upgrade_respect_constraints() -> Result<()> {
+    let old_index = old_tool_index()?;
+    let new_index = new_tool_index()?;
 
     let context = uv_test::test_context!("3.12")
         .with_filtered_counts()
@@ -1044,7 +1031,7 @@ async fn tool_upgrade_respect_constraints() -> Result<()> {
     uv_snapshot!(context.filters(), context.tool_install()
         .arg("babel<2.10")
         .arg("--index-url")
-        .arg(&old_index_url)
+        .arg(old_index.index_url())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -1060,7 +1047,7 @@ async fn tool_upgrade_respect_constraints() -> Result<()> {
     uv_snapshot!(context.filters(), context.tool_upgrade()
         .arg("babel")
         .arg("--index-url")
-        .arg(&new_index_url)
+        .arg(new_index.index_url())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -1074,12 +1061,10 @@ async fn tool_upgrade_respect_constraints() -> Result<()> {
     Ok(())
 }
 
-#[tokio::test]
-async fn tool_upgrade_constraint() -> Result<()> {
-    let old_index = old_tool_index().await?;
-    let old_index_url = format!("{}/simple/", old_index.uri());
-    let new_index = new_tool_index().await?;
-    let new_index_url = format!("{}/simple/", new_index.uri());
+#[test]
+fn tool_upgrade_constraint() -> Result<()> {
+    let old_index = old_tool_index()?;
+    let new_index = new_tool_index()?;
 
     let context = uv_test::test_context!("3.12")
         .with_filtered_counts()
@@ -1091,7 +1076,7 @@ async fn tool_upgrade_constraint() -> Result<()> {
     uv_snapshot!(context.filters(), context.tool_install()
         .arg("babel")
         .arg("--index-url")
-        .arg(&old_index_url)
+        .arg(old_index.index_url())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -1107,7 +1092,7 @@ async fn tool_upgrade_constraint() -> Result<()> {
     uv_snapshot!(context.filters(), context.tool_upgrade()
         .arg("babel<2.12.0")
         .arg("--index-url")
-        .arg(&new_index_url)
+        .arg(new_index.index_url())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -1123,7 +1108,7 @@ async fn tool_upgrade_constraint() -> Result<()> {
     uv_snapshot!(context.filters(), context.tool_upgrade()
         .arg("babel")
         .arg("--index-url")
-        .arg(&new_index_url)
+        .arg(new_index.index_url())
         .arg("--upgrade-package")
         .arg("babel<2.14.0")
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
@@ -1142,7 +1127,7 @@ async fn tool_upgrade_constraint() -> Result<()> {
     uv_snapshot!(context.filters(), context.tool_upgrade()
         .arg("babel")
         .arg("--index-url")
-        .arg(&new_index_url)
+        .arg(new_index.index_url())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -1157,7 +1142,7 @@ async fn tool_upgrade_constraint() -> Result<()> {
     uv_snapshot!(context.filters(), context.tool_upgrade()
         .arg("babel")
         .arg("--index-url")
-        .arg(&new_index_url)
+        .arg(new_index.index_url())
         .arg("--upgrade")
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
@@ -1170,12 +1155,10 @@ async fn tool_upgrade_constraint() -> Result<()> {
 
 /// Upgrade a tool, but only by upgrading one of it's `--with` dependencies, and not the tool
 /// itself.
-#[tokio::test]
-async fn tool_upgrade_with() -> Result<()> {
-    let old_index = old_tool_index().await?;
-    let old_index_url = format!("{}/simple/", old_index.uri());
-    let new_index = new_tool_index().await?;
-    let new_index_url = format!("{}/simple/", new_index.uri());
+#[test]
+fn tool_upgrade_with() -> Result<()> {
+    let old_index = old_tool_index()?;
+    let new_index = new_tool_index()?;
 
     let context = uv_test::test_context!("3.12")
         .with_filtered_counts()
@@ -1187,7 +1170,7 @@ async fn tool_upgrade_with() -> Result<()> {
     uv_snapshot!(context.filters(), context.tool_install()
         .arg("babel==2.6.0")
         .arg("--index-url")
-        .arg(&old_index_url)
+        .arg(old_index.index_url())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -1203,7 +1186,7 @@ async fn tool_upgrade_with() -> Result<()> {
     uv_snapshot!(context.filters(), context.tool_upgrade()
         .arg("babel")
         .arg("--index-url")
-        .arg(&new_index_url)
+        .arg(new_index.index_url())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -1216,10 +1199,9 @@ async fn tool_upgrade_with() -> Result<()> {
     Ok(())
 }
 
-#[tokio::test]
-async fn tool_upgrade_python() -> Result<()> {
-    let old_index = old_tool_index().await?;
-    let old_index_url = format!("{}/simple/", old_index.uri());
+#[test]
+fn tool_upgrade_python() -> Result<()> {
+    let old_index = old_tool_index()?;
 
     let context = uv_test::test_context_with_versions!(&["3.11", "3.12"])
         .with_filtered_counts()
@@ -1231,7 +1213,7 @@ async fn tool_upgrade_python() -> Result<()> {
     uv_snapshot!(context.filters(), context.tool_install()
     .arg("babel==2.6.0")
     .arg("--index-url")
-    .arg(&old_index_url)
+    .arg(old_index.index_url())
     .arg("--python").arg("3.11")
     .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
@@ -1270,10 +1252,9 @@ async fn tool_upgrade_python() -> Result<()> {
     Ok(())
 }
 
-#[tokio::test]
-async fn tool_upgrade_python_with_all() -> Result<()> {
-    let old_index = old_tool_index().await?;
-    let old_index_url = format!("{}/simple/", old_index.uri());
+#[test]
+fn tool_upgrade_python_with_all() -> Result<()> {
+    let old_index = old_tool_index()?;
 
     let context = uv_test::test_context_with_versions!(&["3.11", "3.12"])
         .with_filtered_counts()
@@ -1285,7 +1266,7 @@ async fn tool_upgrade_python_with_all() -> Result<()> {
     uv_snapshot!(context.filters(), context.tool_install()
     .arg("babel==2.6.0")
     .arg("--index-url")
-    .arg(&old_index_url)
+    .arg(old_index.index_url())
     .arg("--python").arg("3.11")
     .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
@@ -1301,7 +1282,7 @@ async fn tool_upgrade_python_with_all() -> Result<()> {
     uv_snapshot!(context.filters(), context.tool_install()
     .arg("python-dotenv")
     .arg("--index-url")
-    .arg(&old_index_url)
+    .arg(old_index.index_url())
     .arg("--python").arg("3.11")
     .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
@@ -1414,12 +1395,10 @@ fn test_tool_upgrade_additional_entrypoints() {
 /// Compare with `tool_upgrade_respect_constraints`, which shows `pytz` being
 /// upgraded alongside `babel`. Here, `pytz` is excluded, so it should remain
 /// absent after the upgrade.
-#[tokio::test]
-async fn tool_upgrade_excludes() -> Result<()> {
-    let old_index = old_tool_index().await?;
-    let old_index_url = format!("{}/simple/", old_index.uri());
-    let new_index = new_tool_index().await?;
-    let new_index_url = format!("{}/simple/", new_index.uri());
+#[test]
+fn tool_upgrade_excludes() -> Result<()> {
+    let old_index = old_tool_index()?;
+    let new_index = new_tool_index()?;
 
     let context = uv_test::test_context!("3.12")
         .with_filtered_counts()
@@ -1437,7 +1416,7 @@ async fn tool_upgrade_excludes() -> Result<()> {
         .arg("--excludes")
         .arg("excludes.txt")
         .arg("--index-url")
-        .arg(&old_index_url)
+        .arg(old_index.index_url())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -1453,7 +1432,7 @@ async fn tool_upgrade_excludes() -> Result<()> {
     uv_snapshot!(context.filters(), context.tool_upgrade()
         .arg("babel")
         .arg("--index-url")
-        .arg(&new_index_url)
+        .arg(new_index.index_url())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -1899,7 +1878,7 @@ fn tool_upgrade_lock_uses_requested_python() -> Result<()> {
 }
 
 /// An index containing earlier synthetic tool releases and their dependencies.
-async fn old_tool_index() -> Result<MockServer> {
+fn old_tool_index() -> Result<PackseServer> {
     tool_index(&[
         ToolPackage {
             name: "babel",
@@ -1920,11 +1899,10 @@ async fn old_tool_index() -> Result<MockServer> {
             scripts: &["dotenv"],
         },
     ])
-    .await
 }
 
 /// Later synthetic releases change dependencies to exercise upgrade and removal behavior.
-async fn new_tool_index() -> Result<MockServer> {
+fn new_tool_index() -> Result<PackseServer> {
     tool_index(&[
         ToolPackage {
             name: "babel",
@@ -1975,5 +1953,4 @@ async fn new_tool_index() -> Result<MockServer> {
             scripts: &["dotenv"],
         },
     ])
-    .await
 }

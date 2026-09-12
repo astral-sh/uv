@@ -1,7 +1,7 @@
-//! Local mock index for packse scenario tests.
+//! Local mock index for synthetic Python packages.
 //!
-//! This module provides a [`PackseServer`] that reads packse scenario TOML definitions
-//! and serves a PEP 691 Simple API + wheel/sdist downloads via a local wiremock server.
+//! [`PackseServer`] serves packse scenarios or supplied wheels through a local
+//! PEP 691 Simple API, with distribution downloads.
 //! Each test gets its own server instance, so package names need no prefix mangling.
 
 pub mod scenario;

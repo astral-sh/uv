@@ -22,7 +22,7 @@ use uv_static::EnvVars;
 
 use uv_test::uv_snapshot;
 
-use crate::tool_test_index::{ToolPackage, tool_index};
+use crate::fixtures::{ToolPackage, tool_index};
 
 #[cfg(feature = "test-git")]
 fn tool_install_git_path(bin_dir: &ChildPath) -> OsString {
@@ -5437,8 +5437,8 @@ async fn tool_install_default_credentials() -> Result<()> {
 }
 
 /// Test installing a tool with `--with-executables-from`.
-#[tokio::test]
-async fn tool_install_with_executables_from() -> Result<()> {
+#[test]
+fn tool_install_with_executables_from() -> Result<()> {
     let index = tool_index(&[
         ToolPackage {
             name: "main-tool",
@@ -5458,8 +5458,7 @@ async fn tool_install_with_executables_from() -> Result<()> {
             requires: &[],
             scripts: &["extra"],
         },
-    ])
-    .await?;
+    ])?;
     let context = uv_test::test_context!("3.12")
         .with_filtered_counts()
         .with_filtered_exe_suffix()
@@ -5472,7 +5471,7 @@ async fn tool_install_with_executables_from() -> Result<()> {
         .arg("dependency-tool,extra-tool")
         .arg("main-tool==1.0.0")
         .arg("--index-url")
-        .arg(format!("{}/simple/", index.uri()))
+        .arg(index.index_url())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
