@@ -64,3 +64,6 @@ toml = { workspace = true }
 url = { workspace = true }
 walkdir = { workspace = true }
 wiremock = { workspace = true }
+
+[target.'cfg(unix)'.dependencies]
+uv-unix = { workspace = true }
