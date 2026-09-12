@@ -182,8 +182,6 @@ jobs:
           username: astralshbot
           password: ${{ secrets.DOCKERHUB_TOKEN_RO }}
 
-      - uses: depot/setup-action@15c09a5f77a0840ad4bce955686522a257853461 # v1.7.1
-
       - name: Check tag consistency
         if: ${{ needs.docker-plan.outputs.push-version == 'true' }}
         env:
@@ -198,59 +196,22 @@ jobs:
           fi
           echo "Releasing ${version}"
 
-      - name: Extract metadata (tags, labels) for Docker
-        id: meta
-        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
-        env:
-          DOCKER_METADATA_ANNOTATIONS_LEVELS: index
+      - name: Build and save image
+        id: build
+        uses: astral-sh/github-actions/docker-build@29736b0ef051c49097a9b4adca75e0f3e0c973dd
         with:
+          name: uv
+          project: ${{ env.DEPOT_PROJECT_ID }}
           images: |
             ${{ env.UV_GHCR_IMAGE }}
             ${{ env.UV_DOCKERHUB_IMAGE }}
-          # Set `org.opencontainers.image.version` to the release version,
-          # rather than the branch name.
+          save: ${{ needs.docker-plan.outputs.save }}
+          # Set the OCI version label to the release version.
           tags: |
             type=raw,value=dry-run,enable=${{ needs.docker-plan.outputs.push == 'false' }}
             type=pep440,pattern={{ version }},value=${{ needs.docker-plan.outputs.tag }},enable=${{ needs.docker-plan.outputs.push-version == 'true' }}
             type=pep440,pattern={{ major }}.{{ minor }},value=${{ needs.docker-plan.outputs.tag }},enable=${{ needs.docker-plan.outputs.push-version == 'true' }}
             type=sha,enable=${{ inputs.push-dev }}
-
-      - name: Build and save image
-        id: build
-        uses: depot/build-push-action@98e78adca7817480b8185f474a400b451d74e287 # v1.18.0
-        with:
-          project: ${{ env.DEPOT_PROJECT_ID }}
-          context: .
-          platforms: linux/amd64,linux/arm64
-          save: ${{ needs.docker-plan.outputs.save }}
-          labels: ${{ steps.meta.outputs.labels }}
-          provenance: mode=max
-          sbom: true
-
-      - name: Record image
-        if: ${{ needs.docker-plan.outputs.save == 'true' }}
-        env:
-          BUILD_ID: ${{ steps.build.outputs.build-id }}
-          DIGEST: ${{ steps.build.outputs.digest }}
-          TAGS: ${{ steps.meta.outputs.tags }}
-          ANNOTATIONS: ${{ steps.meta.outputs.annotations }}
-        run: |
-          jq -en \
-            --arg name uv \
-            --arg build_id "$BUILD_ID" \
-            --arg digest "$DIGEST" \
-            --arg tags "$TAGS" \
-            --arg annotations "$ANNOTATIONS" \
-            '{name: $name, build_id: $build_id, digest: $digest,
-              tags: ($tags | split("\n")), annotations: ($annotations | split("\n"))}
-              | select(.build_id != "" and (.digest | test("^sha256:[0-9a-f]{64}$")))' > uv.json
-
-      - uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
-        if: ${{ needs.docker-plan.outputs.save == 'true' }}
-        with:
-          name: docker-image-uv
-          path: uv.json
-          overwrite: true
 
   docker-build-extra:
     name: build ${{ matrix.image-mapping }}
@@ -281,119 +242,32 @@ jobs:
           username: astralshbot
           password: ${{ secrets.DOCKERHUB_TOKEN_RO }}
 
-      - uses: depot/setup-action@15c09a5f77a0840ad4bce955686522a257853461 # v1.7.1
-
-      - name: Authenticate to Depot Registry
-        if: ${{ needs.docker-plan.outputs.save == 'true' }}
-        env:
-          BUILD_ID: ${{ needs.docker-build-base.outputs.build-id }}
-        run: |
-          token="$(depot pull-token --project "$DEPOT_PROJECT_ID" "$BUILD_ID")"
-          echo "::add-mask::$token"
-          printf '%s' "$token" | docker login registry.depot.dev --username x-token --password-stdin
-
       - name: Generate Dockerfile and tags
-        id: dockerfile
-        env:
-          VERSION: ${{ needs.docker-plan.outputs.tag }}
-          PUSH_DEV: ${{ inputs.push-dev }}
-          # When the new base image is not saved, use the registry's `latest` tag.
-          UV_BASE_IMAGE: ${{ needs.docker-plan.outputs.save == 'true' && format('registry.depot.dev/{0}@{1}', env.DEPOT_PROJECT_ID, needs.docker-build-base.outputs.image-digest) || format('{0}:latest', env.UV_GHCR_IMAGE) }}
-          IMAGE_MAPPING: ${{ matrix.image-mapping }}
-        run: |
-          set -euo pipefail
-
-          # Extract the image and tags from the matrix variable.
-          IFS=',' read -r BASE_IMAGE BASE_TAGS <<< "${IMAGE_MAPPING}"
-          # The first image alias is the name of its manifest artifact.
-          echo "name=${BASE_TAGS%%,*}" >> "$GITHUB_OUTPUT"
-
-          # Generate the Dockerfile for this base image.
-          cat <<EOF > Dockerfile
-          FROM ${BASE_IMAGE}
-          COPY --from=${UV_BASE_IMAGE} /uv /uvx /usr/local/bin/
-          ENV UV_TOOL_BIN_DIR="/usr/local/bin"
-          ENTRYPOINT []
-          CMD ["/usr/local/bin/uv"]
-          EOF
-
-          # Collect Docker metadata patterns for every image alias.
-          TAG_PATTERNS=""
-
-          # For releases, the first tag includes the patch version and image suffix.
-          # Docker metadata uses it for `org.opencontainers.image.version`.
-          IFS=','; for TAG in ${BASE_TAGS}; do
-            if [ "${PUSH_DEV}" == "true" ]; then
-              TAG_PATTERNS="${TAG_PATTERNS}type=sha,suffix=-${TAG}\n"
-            else
-              TAG_PATTERNS="${TAG_PATTERNS}type=pep440,pattern={{ version }},suffix=-${TAG},value=${VERSION}\n"
-              TAG_PATTERNS="${TAG_PATTERNS}type=pep440,pattern={{ major }}.{{ minor }},suffix=-${TAG},value=${VERSION}\n"
-              TAG_PATTERNS="${TAG_PATTERNS}type=raw,value=${TAG}\n"
-            fi
-          done
-
-          # Remove the trailing escaped newline from the pattern list.
-          TAG_PATTERNS="${TAG_PATTERNS%\\n}"
-
-          # Export the patterns using GitHub Actions' multiline environment syntax.
-          {
-            echo "TAG_PATTERNS<<EOF"
-            echo -e "${TAG_PATTERNS}"
-            echo EOF
-          } >> "$GITHUB_ENV"
-
-      - name: Extract metadata (tags, labels) for Docker
-        id: meta
-        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
-        # GHCR uses index-level annotations for image metadata.
-        env:
-          DOCKER_METADATA_ANNOTATIONS_LEVELS: index
+        id: variant
+        uses: astral-sh/github-actions/docker-variant@29736b0ef051c49097a9b4adca75e0f3e0c973dd
         with:
+          image-mapping: ${{ matrix.image-mapping }}
+          # Unsaved PR builds use the published base image.
+          source-image: ${{ needs.docker-plan.outputs.save == 'true' && format('registry.depot.dev/{0}@{1}', env.DEPOT_PROJECT_ID, needs.docker-build-base.outputs.image-digest) || format('{0}:latest', env.UV_GHCR_IMAGE) }}
+          binaries: uv uvx
+          command: uv
+          dockerfile-lines: ENV UV_TOOL_BIN_DIR="/usr/local/bin"
+          version: ${{ needs.docker-plan.outputs.tag }}
+          push-dev: ${{ inputs.push-dev }}
+
+      - name: Build and save image
+        uses: astral-sh/github-actions/docker-build@29736b0ef051c49097a9b4adca75e0f3e0c973dd
+        with:
+          name: ${{ steps.variant.outputs.name }}
+          project: ${{ env.DEPOT_PROJECT_ID }}
+          pull-build-id: ${{ needs.docker-plan.outputs.save == 'true' && needs.docker-build-base.outputs.build-id || '' }}
+          file: ${{ steps.variant.outputs.file }}
           images: |
             ${{ env.UV_GHCR_IMAGE }}
             ${{ env.UV_DOCKERHUB_IMAGE }}
-          flavor: |
-            latest=false
-          tags: |
-            ${{ env.TAG_PATTERNS }}
-
-      - name: Build and save image
-        id: build
-        uses: depot/build-push-action@98e78adca7817480b8185f474a400b451d74e287 # v1.18.0
-        with:
-          context: .
-          project: ${{ env.DEPOT_PROJECT_ID }}
-          platforms: linux/amd64,linux/arm64
+          tags: ${{ steps.variant.outputs.tags }}
+          flavor: latest=false
           save: ${{ needs.docker-plan.outputs.save }}
-          labels: ${{ steps.meta.outputs.labels }}
-          provenance: mode=max
-          sbom: true
-
-      - name: Record image
-        if: ${{ needs.docker-plan.outputs.save == 'true' }}
-        env:
-          NAME: ${{ steps.dockerfile.outputs.name }}
-          BUILD_ID: ${{ steps.build.outputs.build-id }}
-          DIGEST: ${{ steps.build.outputs.digest }}
-          TAGS: ${{ steps.meta.outputs.tags }}
-          ANNOTATIONS: ${{ steps.meta.outputs.annotations }}
-        run: |
-          jq -en \
-            --arg name "$NAME" \
-            --arg build_id "$BUILD_ID" \
-            --arg digest "$DIGEST" \
-            --arg tags "$TAGS" \
-            --arg annotations "$ANNOTATIONS" \
-            '{name: $name, build_id: $build_id, digest: $digest,
-              tags: ($tags | split("\n")), annotations: ($annotations | split("\n"))}
-              | select(.build_id != "" and (.digest | test("^sha256:[0-9a-f]{64}$")))' > "$NAME.json"
-
-      - uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
-        if: ${{ needs.docker-plan.outputs.save == 'true' }}
-        with:
-          name: docker-image-${{ steps.dockerfile.outputs.name }}
-          path: ${{ steps.dockerfile.outputs.name }}.json
-          overwrite: true
 
   docker-manifest:
     name: collect image manifest
@@ -405,34 +279,10 @@ jobs:
     runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-4' || 'ubuntu-latest' }}
     timeout-minutes: 2
     outputs:
-      artifact-id: ${{ steps.upload.outputs.artifact-id }}
+      artifact-id: ${{ steps.manifest.outputs.artifact-id }}
     steps:
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+      - uses: astral-sh/github-actions/docker-manifest@29736b0ef051c49097a9b4adca75e0f3e0c973dd
+        id: manifest
         with:
-          pattern: docker-image-*
-          path: images
-          merge-multiple: true
-
-      - name: Assemble image manifest
-        env:
-          EXTRA_IMAGES: ${{ needs.docker-plan.outputs.extra-images }}
-        run: |
-          # Load the per-image records and require one base image plus the
-          # expected number of distinct variants. Split the result into
-          # base and extra images so the publisher can publish the base last.
-          jq -se --argjson expected "$EXTRA_IMAGES" '
-            if length != (1 + ($expected["image-mapping"] | length))
-              or (map(.name) | unique | length) != length
-              or (map(select(.name == "uv")) | length) != 1
-            then error("incomplete Docker image manifest")
-            else {base: map(select(.name == "uv"))[0],
-                  extra: map(select(.name != "uv"))}
-            end
-          ' images/*.json > docker-manifest.json
-
-      - uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
-        id: upload
-        with:
-          name: docker-manifest
-          path: docker-manifest.json
-          overwrite: true
+          base-name: uv
+          image-mappings: ${{ toJson(fromJson(needs.docker-plan.outputs.extra-images).image-mapping) }}
