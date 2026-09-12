@@ -610,14 +610,18 @@ impl CachedClient {
         );
 
         // Check for HTTP error status and extract problem details if available
+        let retry_count = response
+            .extensions()
+            .get::<reqwest_retry::RetryCount>()
+            .map(|retries| retries.value());
+
         if let Err(status_error) = response.error_for_status_ref() {
             let problem_details = ProblemDetails::try_from_response(response).await;
-            return Err(ErrorKind::from_reqwest_with_problem_details(
-                url.clone(),
-                status_error,
-                problem_details,
-            )
-            .into());
+            return Err(Error::new(
+                ErrorKind::from_reqwest_with_problem_details(url, status_error, problem_details),
+                retry_count.unwrap_or_default(),
+                start.elapsed(),
+            ));
         }
 
         // If the user set a custom `Cache-Control` header, override it.

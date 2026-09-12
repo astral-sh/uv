@@ -4,7 +4,7 @@ use std::{assert_matches, io};
 
 use anyhow::Result;
 use reqwest::Response;
-use wiremock::matchers::any;
+use wiremock::matchers::{any, header, method, path};
 use wiremock::{Mock, MockServer, Request, ResponseTemplate};
 
 use uv_cache::CacheEntry;
@@ -137,5 +137,62 @@ async fn send_counts_middleware_retries() -> Result<()> {
         assert!(retry_state.should_retry(&error, 0).is_none());
         server.verify().await;
     }
+    Ok(())
+}
+
+#[tokio::test]
+async fn revalidation_http_errors_share_retry_budget() -> Result<()> {
+    let server = MockServer::start().await;
+    let url = format!("{}/metadata", server.uri()).parse()?;
+    let client = CachedClient::new(
+        BaseClientBuilder::default()
+            .retries(2)
+            .no_retry_delay(true)
+            .build()?,
+    );
+    let temp_dir = tempfile::tempdir()?;
+    let cache_entry = CacheEntry::new(temp_dir.path(), "cached");
+
+    Mock::given(method("GET"))
+        .and(path("/metadata"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .insert_header("cache-control", "public, max-age=3600")
+                .insert_header("etag", "\"cached\"")
+                .set_body_string("cached"),
+        )
+        .mount(&server)
+        .await;
+    let request = client.uncached().for_host(&url).get(url.as_str()).build()?;
+    let result = client
+        .get_serde_with_retry(
+            request,
+            &cache_entry,
+            CacheControl::None,
+            async |response, _| response.text().await,
+        )
+        .await;
+    assert_matches!(result, Ok(_));
+
+    server.reset().await;
+    Mock::given(method("GET"))
+        .and(path("/metadata"))
+        .and(header("if-none-match", "\"cached\""))
+        .respond_with(ResponseTemplate::new(503))
+        .expect(3)
+        .mount(&server)
+        .await;
+    let request = client.uncached().for_host(&url).get(url.as_str()).build()?;
+    let result = client
+        .get_serde_with_retry(
+            request,
+            &cache_entry,
+            CacheControl::MustRevalidate,
+            async |response, _| response.text().await,
+        )
+        .await;
+
+    assert_matches!(result, Err(CachedClientError::Client(_)));
+    server.verify().await;
     Ok(())
 }
