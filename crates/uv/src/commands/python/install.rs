@@ -1070,7 +1070,8 @@ fn create_bin_links(
                         let valid_link = cfg!(windows)
                             || target
                                 .read_link()
-                                .and_then(|target| target.try_exists())
+                                // Resolve relative targets from the executable's directory.
+                                .and_then(|_| target.try_exists())
                                 .inspect_err(|err| {
                                     debug!("Failed to inspect executable with error: {err}");
                                 })
