@@ -26,7 +26,6 @@ if ($Stage -eq "prepare") {
     }
     "UV_PYTHON_INSTALL_DIR=$installDir" >> $env:GITHUB_ENV
     "UV_CACHE_DIR=$cacheDir" >> $env:GITHUB_ENV
-    "UV_PYTHON_CACHE_DIR=$cacheDir/python" >> $env:GITHUB_ENV
     "PYTHON_BENCHMARK_START=$([DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds())" >> $env:GITHUB_ENV
     exit 0
 }
