@@ -1829,7 +1829,8 @@
             "index-by-name",
             "artifact-hash-filtering",
             "content-addressed-cache",
-            "missing-exclude-newer-package-lock"
+            "missing-exclude-newer-package-lock",
+            "build-dependency-hashes"
           ]
         },
         {
