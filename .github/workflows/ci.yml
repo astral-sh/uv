@@ -24,7 +24,7 @@ jobs:
 
       - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
         env:
-          UV_PYTHON_INSTALL_DIR: ${{ env.DEV_DRIVE }}/uv-python-bootstrap-benchmark
+          UV_PYTHON_INSTALL_DIR: ${{ env.DEV_DRIVE }}/uv-python
         with:
           version: "0.12.10"
           checksum: "f65744f94072152b1f86ba2aace4d01f1124d9a8ecb235805039e3718c36cac2"
@@ -32,8 +32,6 @@ jobs:
 
       - name: Install seed interpreters
         run: uv python install
-        env:
-          UV_CACHE_DIR: ${{ env.DEV_DRIVE }}/uv-python-bootstrap-seed-cache
 
       - name: Save benchmark cache
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
@@ -48,12 +46,12 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { order: CDW, first: c-cold, second: d-cold, third: d-warm }
-          - { order: CWD, first: c-cold, second: d-warm, third: d-cold }
-          - { order: DCW, first: d-cold, second: c-cold, third: d-warm }
-          - { order: DWC, first: d-cold, second: d-warm, third: c-cold }
-          - { order: WCD, first: d-warm, second: c-cold, third: d-cold }
-          - { order: WDC, first: d-warm, second: d-cold, third: c-cold }
+          - { order: CDW-1, first: c-cold, second: d-cold, third: d-warm }
+          - { order: DCW-1, first: d-cold, second: c-cold, third: d-warm }
+          - { order: CDW-2, first: c-cold, second: d-cold, third: d-warm }
+          - { order: DCW-2, first: d-cold, second: c-cold, third: d-warm }
+          - { order: CDW-3, first: c-cold, second: d-cold, third: d-warm }
+          - { order: DCW-3, first: d-cold, second: c-cold, third: d-warm }
     env:
       BENCHMARK_ORDER: ${{ matrix.order }}
     runs-on: namespace-profile-windows-2022-x86-64-16x32
@@ -68,7 +66,7 @@ jobs:
 
       - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
         env:
-          UV_PYTHON_INSTALL_DIR: ${{ env.DEV_DRIVE }}/uv-python-bootstrap-benchmark
+          UV_PYTHON_INSTALL_DIR: ${{ env.DEV_DRIVE }}/uv-python
         with:
           version: "0.12.10"
           checksum: "f65744f94072152b1f86ba2aace4d01f1124d9a8ecb235805039e3718c36cac2"
