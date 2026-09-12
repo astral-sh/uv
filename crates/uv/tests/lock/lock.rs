@@ -38054,9 +38054,8 @@ fn lock_conflict_for_disjoint_python_version() -> Result<()> {
 #[cfg(all(feature = "test-universal", feature = "test-python-patch"))]
 #[test]
 fn lock_requires_python_empty_lock_file() -> Result<()> {
-    // N.B. These versions were selected based on what was
-    // in `.python-versions` at the time of writing (2025-06-16).
-    let (v1, v2) = ("3.13.0", "3.13.2");
+    // Exercise a lockfile transition between two distinct Python patches.
+    let (v1, v2) = ("3.13.0", "3.13.15");
     let context = uv_test::test_context_with_versions!(&[v1, v2]);
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
@@ -38145,8 +38144,8 @@ fn lock_requires_python_empty_lock_file() -> Result<()> {
     uv_snapshot!(context.filters(), context.lock().arg("--upgrade-package=python"), @r"
     exit_code: 0 (success)
     ----- stderr -----
-    Using CPython 3.13.2 interpreter at: [PYTHON-3.13.2]
-    warning: Resolving despite existing lockfile due to fork markers being disjoint with `requires-python`: `python_full_version == '3.13.0'` vs `python_full_version == '3.13.2'`
+    Using CPython 3.13.15 interpreter at: [PYTHON-3.13.15]
+    warning: Resolving despite existing lockfile due to fork markers being disjoint with `requires-python`: `python_full_version == '3.13.0'` vs `python_full_version == '3.13.15'`
     Resolved 3 packages in [TIME]
     ");
 
@@ -38158,7 +38157,7 @@ fn lock_requires_python_empty_lock_file() -> Result<()> {
             lock, @r#"
         version = 1
         revision = 3
-        requires-python = "==3.13.2"
+        requires-python = "==3.13.15"
         resolution-markers = [
             "sys_platform == 'darwin'",
             "platform_machine == 'aarch64' and sys_platform == 'linux'",

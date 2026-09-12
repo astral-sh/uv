@@ -1357,15 +1357,15 @@ fn create_venv_unknown_python_patch() {
 #[cfg(feature = "test-python-patch")]
 #[test]
 fn create_venv_python_patch() {
-    let context = uv_test::test_context_with_versions!(&["3.12.9"]);
+    let context = uv_test::test_context_with_versions!(&["3.12.14"]);
 
     uv_snapshot!(context.filters(), context.venv()
         .arg(context.venv.as_os_str())
         .arg("--python")
-        .arg("3.12.9"), @r"
+        .arg("3.12.14"), @r"
     exit_code: 0 (success)
     ----- stderr -----
-    Using CPython 3.12.9 interpreter at: [PYTHON-3.12.9]
+    Using CPython 3.12.14 interpreter at: [PYTHON-3.12.14]
     Creating virtual environment at: .venv
     Activate with: source .venv/[BIN]/activate
     "
