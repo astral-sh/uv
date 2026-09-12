@@ -325,7 +325,8 @@ fn python_install_force() {
         .with_filtered_python_keys()
         .with_filtered_exe_suffix()
         .with_filtered_latest_python_versions()
-        .with_managed_python_dirs();
+        .with_managed_python_dirs()
+        .with_python_download_cache();
 
     // Install the latest version
     uv_snapshot!(context.filters(), context.python_install(), @"
@@ -377,7 +378,8 @@ fn python_install_minor() {
         .with_filtered_python_keys()
         .with_filtered_exe_suffix()
         .with_filtered_latest_python_versions()
-        .with_managed_python_dirs();
+        .with_managed_python_dirs()
+        .with_python_download_cache();
 
     // Install a minor version
     uv_snapshot!(context.filters(), context.python_install().arg("3.11"), @"
@@ -430,7 +432,8 @@ fn python_install_multiple_patch() {
     let context = uv_test::test_context_with_versions!(&[])
         .with_filtered_python_keys()
         .with_filtered_exe_suffix()
-        .with_managed_python_dirs();
+        .with_managed_python_dirs()
+        .with_python_download_cache();
 
     // Install multiple patch versions
     uv_snapshot!(context.filters(), context.python_install().arg("3.12.8").arg("3.12.6"), @"
@@ -1271,7 +1274,8 @@ fn python_install_debug() {
         .with_filtered_python_keys()
         .with_filtered_exe_suffix()
         .with_filtered_latest_python_versions()
-        .with_managed_python_dirs();
+        .with_managed_python_dirs()
+        .with_python_download_cache();
 
     // Install the latest version
     uv_snapshot!(context.filters(), context.python_install().arg("--preview").arg("3.13+debug"), @"
@@ -2312,6 +2316,7 @@ fn python_install_prerelease() {
         .with_managed_python_dirs()
         .with_python_download_cache()
         .with_filtered_python_install_bin()
+        .with_filtered_python_names()
         .with_filtered_exe_suffix();
 
     // Install 3.15
@@ -2330,30 +2335,6 @@ fn python_install_prerelease() {
     Installed Python 3.15.0a2 in [TIME]
      + cpython-3.15.0a2-[PLATFORM]
     ");
-
-    // Install a release candidate for a non-zero patch version
-    uv_snapshot!(context.filters(), context.python_install().arg("3.14.5rc1"), @"
-    exit_code: 0 (success)
-    ----- stderr -----
-    Installed Python 3.14.5rc1 in [TIME]
-     + cpython-3.14.5rc1-[PLATFORM] (python3.14)
-    ");
-}
-
-#[test]
-fn python_find_prerelease() {
-    let context = uv_test::test_context_with_versions!(&[])
-        .with_filtered_python_keys()
-        .with_filtered_latest_python_versions()
-        .with_managed_python_dirs()
-        .with_python_download_cache()
-        .with_filtered_python_install_bin()
-        .with_filtered_python_names()
-        .with_filtered_exe_suffix();
-
-    // See [`python_install_prerelease`] coverage of these.
-    context.python_install().arg("3.15").assert().success();
-    context.python_install().arg("3.15.0a2").assert().success();
 
     // We should be able to find this version without opt-in, because there is no stable release
     // installed
@@ -2388,6 +2369,14 @@ fn python_find_prerelease() {
     exit_code: 0 (success)
     ----- stdout -----
     [TEMP_DIR]/managed/cpython-3.13-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
+    ");
+
+    // Install a release candidate for a non-zero patch version
+    uv_snapshot!(context.filters(), context.python_install().arg("3.14.5rc1"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Installed Python 3.14.5rc1 in [TIME]
+     + cpython-3.14.5rc1-[PLATFORM] (python3.14)
     ");
 }
 
