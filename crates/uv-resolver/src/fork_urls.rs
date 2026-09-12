@@ -26,18 +26,18 @@ impl ForkUrls {
     /// Check that this is the only URL used for this package in this fork.
     pub(crate) fn insert(
         &mut self,
-        package_name: &PackageName,
+        package_name: PackageName,
         url: &VerbatimParsedUrl,
         env: &ResolverEnvironment,
     ) -> Result<(), ResolveError> {
-        match self.0.entry(package_name.clone()) {
+        match self.0.entry(package_name) {
             Entry::Occupied(previous) => {
                 if previous.get() != url {
                     let mut conflicting_url =
                         vec![previous.get().parsed_url.clone(), url.parsed_url.clone()];
                     conflicting_url.sort();
                     return Err(ResolveError::ConflictingUrls {
-                        package_name: package_name.clone(),
+                        package_name: previous.key().clone(),
                         urls: conflicting_url,
                         env: env.clone(),
                     });

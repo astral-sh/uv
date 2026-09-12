@@ -19,7 +19,7 @@ struct FilePin {
 /// `3.0.0` to the specific wheel or source distribution archive that was pinned for installation,
 /// along with the concrete distribution whose metadata was used during resolution.
 #[derive(Clone, Debug, Default)]
-pub(crate) struct FilePins(FxHashMap<(PackageName, uv_pep440::Version), FilePin>);
+pub(crate) struct FilePins(FxHashMap<PackageName, FxHashMap<uv_pep440::Version, FilePin>>);
 
 // Inserts are common (every time we select a version) while reads are rare (converting the
 // final resolution).
@@ -30,7 +30,9 @@ impl FilePins {
     /// so we skip construction when an entry already exists.
     pub(crate) fn insert(&mut self, candidate: &Candidate, dist: &CompatibleDist) {
         self.0
-            .entry((candidate.name().clone(), candidate.version().clone()))
+            .entry(candidate.name().clone())
+            .or_default()
+            .entry(candidate.version().clone())
             .or_insert_with(|| FilePin {
                 dist: dist.for_installation().to_owned(),
                 metadata_id: dist.for_resolution().distribution_id(),
@@ -43,9 +45,7 @@ impl FilePins {
         name: &PackageName,
         version: &uv_pep440::Version,
     ) -> Option<&ResolvedDist> {
-        self.0
-            .get(&(name.clone(), version.clone()))
-            .map(|pin| &pin.dist)
+        self.0.get(name)?.get(version).map(|pin| &pin.dist)
     }
 
     /// Return the pinned distribution and its metadata id in a single lookup.
@@ -55,7 +55,8 @@ impl FilePins {
         version: &uv_pep440::Version,
     ) -> Option<(&ResolvedDist, &DistributionId)> {
         self.0
-            .get(&(name.clone(), version.clone()))
+            .get(name)?
+            .get(version)
             .map(|pin| (&pin.dist, &pin.metadata_id))
     }
 }
