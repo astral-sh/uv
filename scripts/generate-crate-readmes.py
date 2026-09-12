@@ -53,7 +53,6 @@ versioning.
 
 
 REPO_URL = "https://github.com/astral-sh/uv"
-PRETTIER_VERSION = "3.8.3"
 
 
 def main() -> None:
@@ -76,6 +75,11 @@ def main() -> None:
         raise RuntimeError("Could not find uv crate")
 
     workspace_root = pathlib.Path(content["workspace_root"])
+    prettier = workspace_root / "node_modules/prettier-readmes/bin/prettier.cjs"
+    if not prettier.is_file():
+        raise RuntimeError(
+            "Prettier is not installed; run `npm ci --ignore-scripts` first"
+        )
     readme_path = workspace_root / "crates" / "uv" / "README.md"
 
     workspace_members = []
@@ -154,8 +158,7 @@ def main() -> None:
 
     # Format all generated READMEs once at the end
     subprocess.run(
-        ["npx", "--yes", f"prettier@{PRETTIER_VERSION}", "--write"]
-        + [str(path) for path in generated_paths],
+        ["node", str(prettier), "--write"] + [str(path) for path in generated_paths],
         check=True,
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
