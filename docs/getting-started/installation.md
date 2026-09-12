@@ -198,7 +198,13 @@ To enable shell autocompletion for uv commands, run one of the following:
     ```bash
     echo 'eval (uv generate-shell-completion elvish | slurp)' >> ~/.elvish/rc.elv
     ```
+    
+=== "Nushell"
 
+    ```nu
+    "\nmkdir ($nu.data-dir | path join "vendor/autoload")\nuv generate-shell-completion nushell | save -f ($nu.data-dir | path join "vendor/autoload/uv.nu")" | save --append $nu.config-path
+    ```
+    
 === "PowerShell / pwsh"
 
     ```powershell
@@ -233,7 +239,12 @@ To enable shell autocompletion for uvx, run one of the following:
     ```bash
     echo 'eval (uvx --generate-shell-completion elvish | slurp)' >> ~/.elvish/rc.elv
     ```
+=== "Nushell"
 
+    ```nu
+    "\nmkdir ($nu.data-dir | path join "vendor/autoload")\nuvx --generate-shell-completion nushell | save -f ($nu.data-dir | path join "vendor/autoload/uvx.nu")" | save --append $nu.config-path
+    ```
+    
 === "PowerShell / pwsh"
 
     ```powershell
