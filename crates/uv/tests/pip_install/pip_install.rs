@@ -9308,6 +9308,7 @@ fn verify_hashes_public_pin_local_version() -> Result<()> {
         &BTreeMap::default(),
         None,
         "py3-none-any",
+        &[],
     );
     let (local_wheel_filename, local_wheel) = generate_wheel(
         &name,
@@ -9316,6 +9317,7 @@ fn verify_hashes_public_pin_local_version() -> Result<()> {
         &BTreeMap::default(),
         None,
         "py3-none-any",
+        &[],
     );
     let public_hash = hex::encode(Sha256::digest(&public_wheel));
     let local_hash = hex::encode(Sha256::digest(&local_wheel));

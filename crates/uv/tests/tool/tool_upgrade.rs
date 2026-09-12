@@ -14,6 +14,7 @@ use wiremock::{
 
 use uv_static::EnvVars;
 
+use uv_test::packse::{PackseServer, scenario::Scenario};
 use uv_test::{uv_snapshot, venv_bin_path};
 
 #[test]
@@ -501,17 +502,20 @@ fn tool_upgrade_preserves_mixed_workspace_member_non_editability() -> Result<()>
 
 #[test]
 fn tool_upgrade_name() {
+    let old_index = old_tool_index();
+    let new_index = new_tool_index();
+
     let context = uv_test::test_context!("3.12")
         .with_filtered_counts()
         .with_filtered_exe_suffix()
         .with_tool_dirs();
     let bin_dir = context.temp_dir.child("bin");
 
-    // Install `babel` from Test PyPI, to get an outdated version.
+    // Install `babel` from the old index.
     uv_snapshot!(context.filters(), context.tool_install()
         .arg("babel")
         .arg("--index-url")
-        .arg("https://test.pypi.org/simple/")
+        .arg(old_index.index_url())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -523,11 +527,11 @@ fn tool_upgrade_name() {
     Installed 1 executable: pybabel
     ");
 
-    // Upgrade `babel` by installing from PyPI, which should upgrade to the latest version.
+    // Upgrade `babel` by installing from the new index, which should upgrade to the latest version.
     uv_snapshot!(context.filters(), context.tool_upgrade()
         .arg("babel")
         .arg("--index-url")
-        .arg("https://pypi.org/simple/")
+        .arg(new_index.index_url())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -593,17 +597,20 @@ fn tool_upgrade_recomputes_relative_exclude_newer() {
 
 #[test]
 fn tool_upgrade_multiple_names() {
+    let old_index = old_tool_index();
+    let new_index = new_tool_index();
+
     let context = uv_test::test_context!("3.12")
         .with_filtered_counts()
         .with_filtered_exe_suffix()
         .with_tool_dirs();
     let bin_dir = context.temp_dir.child("bin");
 
-    // Install `python-dotenv` from Test PyPI, to get an outdated version.
+    // Install `python-dotenv` from the old index.
     uv_snapshot!(context.filters(), context.tool_install()
         .arg("python-dotenv")
         .arg("--index-url")
-        .arg("https://test.pypi.org/simple/")
+        .arg(old_index.index_url())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -614,11 +621,11 @@ fn tool_upgrade_multiple_names() {
     Installed 1 executable: dotenv
     ");
 
-    // Install `babel` from Test PyPI, to get an outdated version.
+    // Install `babel` from the old index.
     uv_snapshot!(context.filters(), context.tool_install()
         .arg("babel")
         .arg("--index-url")
-        .arg("https://test.pypi.org/simple/")
+        .arg(old_index.index_url())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -630,12 +637,12 @@ fn tool_upgrade_multiple_names() {
     Installed 1 executable: pybabel
     ");
 
-    // Upgrade `babel` and `python-dotenv` from PyPI.
+    // Upgrade `babel` and `python-dotenv` from the new index.
     uv_snapshot!(context.filters(), context.tool_upgrade()
         .arg("babel")
         .arg("python-dotenv")
         .arg("--index-url")
-        .arg("https://pypi.org/simple/")
+        .arg(new_index.index_url())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -653,6 +660,9 @@ fn tool_upgrade_multiple_names() {
 
 #[test]
 fn tool_upgrade_pinned_hint() {
+    let old_index = old_tool_index();
+    let new_index = new_tool_index();
+
     let context = uv_test::test_context!("3.12")
         .with_filtered_counts()
         .with_filtered_exe_suffix()
@@ -663,7 +673,7 @@ fn tool_upgrade_pinned_hint() {
     uv_snapshot!(context.filters(), context.tool_install()
         .arg("babel==2.6.0")
         .arg("--index-url")
-        .arg("https://test.pypi.org/simple/")
+        .arg(old_index.index_url())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -679,7 +689,7 @@ fn tool_upgrade_pinned_hint() {
     uv_snapshot!(context.filters(), context.tool_upgrade()
         .arg("babel")
         .arg("--index-url")
-        .arg("https://pypi.org/simple/")
+        .arg(new_index.index_url())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -693,6 +703,9 @@ fn tool_upgrade_pinned_hint() {
 
 #[test]
 fn tool_upgrade_pinned_hint_with_mixed_constraint() {
+    let old_index = old_tool_index();
+    let new_index = new_tool_index();
+
     let context = uv_test::test_context!("3.12")
         .with_filtered_counts()
         .with_filtered_exe_suffix()
@@ -704,7 +717,7 @@ fn tool_upgrade_pinned_hint_with_mixed_constraint() {
     uv_snapshot!(context.filters(), context.tool_install()
         .arg("babel>=2.0,==2.6.0")
         .arg("--index-url")
-        .arg("https://test.pypi.org/simple/")
+        .arg(old_index.index_url())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -720,7 +733,7 @@ fn tool_upgrade_pinned_hint_with_mixed_constraint() {
     uv_snapshot!(context.filters(), context.tool_upgrade()
         .arg("babel")
         .arg("--index-url")
-        .arg("https://pypi.org/simple/")
+        .arg(new_index.index_url())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -734,6 +747,9 @@ fn tool_upgrade_pinned_hint_with_mixed_constraint() {
 
 #[test]
 fn tool_upgrade_all() -> Result<()> {
+    let old_index = old_tool_index();
+    let new_index = new_tool_index();
+
     let context = uv_test::test_context!("3.12")
         .with_filtered_counts()
         .with_filtered_exe_suffix()
@@ -741,11 +757,11 @@ fn tool_upgrade_all() -> Result<()> {
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
-    // Install `python-dotenv` from Test PyPI, to get an outdated version.
+    // Install `python-dotenv` from the old index.
     uv_snapshot!(context.filters(), context.tool_install()
         .arg("python-dotenv")
         .arg("--index-url")
-        .arg("https://test.pypi.org/simple/")
+        .arg(old_index.index_url())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -756,11 +772,11 @@ fn tool_upgrade_all() -> Result<()> {
     Installed 1 executable: dotenv
     ");
 
-    // Install `babel` from Test PyPI, to get an outdated version.
+    // Install `babel` from the old index.
     uv_snapshot!(context.filters(), context.tool_install()
         .arg("babel")
         .arg("--index-url")
-        .arg("https://test.pypi.org/simple/")
+        .arg(old_index.index_url())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -775,11 +791,11 @@ fn tool_upgrade_all() -> Result<()> {
     // An invalid directory must not prevent valid tools from being upgraded.
     tool_dir.child("tool backup").create_dir_all()?;
 
-    // Upgrade all from PyPI.
+    // Upgrade all from the new index.
     uv_snapshot!(context.filters(), context.tool_upgrade()
         .arg("--all")
         .arg("--index-url")
-        .arg("https://pypi.org/simple/")
+        .arg(new_index.index_url())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -828,6 +844,9 @@ fn tool_upgrade_non_existing_package() {
 
 #[test]
 fn tool_upgrade_not_stop_if_upgrade_fails() -> anyhow::Result<()> {
+    let old_index = old_tool_index();
+    let new_index = new_tool_index();
+
     let context = uv_test::test_context!("3.12")
         .with_filtered_counts()
         .with_filtered_exe_suffix()
@@ -835,11 +854,11 @@ fn tool_upgrade_not_stop_if_upgrade_fails() -> anyhow::Result<()> {
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
-    // Install `python-dotenv` from Test PyPI, to get an outdated version.
+    // Install `python-dotenv` from the old index.
     uv_snapshot!(context.filters(), context.tool_install()
         .arg("python-dotenv")
         .arg("--index-url")
-        .arg("https://test.pypi.org/simple/")
+        .arg(old_index.index_url())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -850,11 +869,11 @@ fn tool_upgrade_not_stop_if_upgrade_fails() -> anyhow::Result<()> {
     Installed 1 executable: dotenv
     ");
 
-    // Install `babel` from Test PyPI, to get an outdated version.
+    // Install `babel` from the old index.
     uv_snapshot!(context.filters(), context.tool_install()
         .arg("babel")
         .arg("--index-url")
-        .arg("https://test.pypi.org/simple/")
+        .arg(old_index.index_url())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -872,11 +891,11 @@ fn tool_upgrade_not_stop_if_upgrade_fails() -> anyhow::Result<()> {
         .child("uv-receipt.toml")
         .write_str("Invalid receipt")?;
 
-    // Upgrade all from PyPI.
+    // Upgrade all from the new index.
     uv_snapshot!(context.filters(), context.tool_upgrade()
         .arg("--all")
         .arg("--index-url")
-        .arg("https://pypi.org/simple/")
+        .arg(new_index.index_url())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 1 (failure)
     ----- stderr -----
@@ -993,17 +1012,20 @@ fn tool_upgrade_no_binary_package_env_var() {
 
 #[test]
 fn tool_upgrade_respect_constraints() {
+    let old_index = old_tool_index();
+    let new_index = new_tool_index();
+
     let context = uv_test::test_context!("3.12")
         .with_filtered_counts()
         .with_filtered_exe_suffix()
         .with_tool_dirs();
     let bin_dir = context.temp_dir.child("bin");
 
-    // Install `babel` from Test PyPI, to get an outdated version.
+    // Install `babel` from the old index.
     uv_snapshot!(context.filters(), context.tool_install()
         .arg("babel<2.10")
         .arg("--index-url")
-        .arg("https://test.pypi.org/simple/")
+        .arg(old_index.index_url())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -1015,11 +1037,11 @@ fn tool_upgrade_respect_constraints() {
     Installed 1 executable: pybabel
     ");
 
-    // Upgrade `babel` from PyPI. It should be updated, but not beyond the constraint.
+    // Upgrade `babel` from the new index. It should be updated, but not beyond the constraint.
     uv_snapshot!(context.filters(), context.tool_upgrade()
         .arg("babel")
         .arg("--index-url")
-        .arg("https://pypi.org/simple/")
+        .arg(new_index.index_url())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -1034,17 +1056,20 @@ fn tool_upgrade_respect_constraints() {
 
 #[test]
 fn tool_upgrade_constraint() {
+    let old_index = old_tool_index();
+    let new_index = new_tool_index();
+
     let context = uv_test::test_context!("3.12")
         .with_filtered_counts()
         .with_filtered_exe_suffix()
         .with_tool_dirs();
     let bin_dir = context.temp_dir.child("bin");
 
-    // Install `babel` from Test PyPI, to get an outdated version.
+    // Install `babel` from the old index.
     uv_snapshot!(context.filters(), context.tool_install()
         .arg("babel")
         .arg("--index-url")
-        .arg("https://test.pypi.org/simple/")
+        .arg(old_index.index_url())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -1060,7 +1085,7 @@ fn tool_upgrade_constraint() {
     uv_snapshot!(context.filters(), context.tool_upgrade()
         .arg("babel<2.12.0")
         .arg("--index-url")
-        .arg("https://pypi.org/simple/")
+        .arg(new_index.index_url())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -1076,7 +1101,7 @@ fn tool_upgrade_constraint() {
     uv_snapshot!(context.filters(), context.tool_upgrade()
         .arg("babel")
         .arg("--index-url")
-        .arg("https://pypi.org/simple/")
+        .arg(new_index.index_url())
         .arg("--upgrade-package")
         .arg("babel<2.14.0")
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
@@ -1095,7 +1120,7 @@ fn tool_upgrade_constraint() {
     uv_snapshot!(context.filters(), context.tool_upgrade()
         .arg("babel")
         .arg("--index-url")
-        .arg("https://pypi.org/simple/")
+        .arg(new_index.index_url())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -1110,7 +1135,7 @@ fn tool_upgrade_constraint() {
     uv_snapshot!(context.filters(), context.tool_upgrade()
         .arg("babel")
         .arg("--index-url")
-        .arg("https://pypi.org/simple/")
+        .arg(new_index.index_url())
         .arg("--upgrade")
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
@@ -1124,17 +1149,20 @@ fn tool_upgrade_constraint() {
 /// itself.
 #[test]
 fn tool_upgrade_with() {
+    let old_index = old_tool_index();
+    let new_index = new_tool_index();
+
     let context = uv_test::test_context!("3.12")
         .with_filtered_counts()
         .with_filtered_exe_suffix()
         .with_tool_dirs();
     let bin_dir = context.temp_dir.child("bin");
 
-    // Install `babel` from Test PyPI, to get an outdated version.
+    // Install `babel` from the old index.
     uv_snapshot!(context.filters(), context.tool_install()
         .arg("babel==2.6.0")
         .arg("--index-url")
-        .arg("https://test.pypi.org/simple/")
+        .arg(old_index.index_url())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -1146,11 +1174,11 @@ fn tool_upgrade_with() {
     Installed 1 executable: pybabel
     ");
 
-    // Upgrade `babel` from PyPI. It shouldn't be updated, but `pytz` should be.
+    // Upgrade `babel` from the new index. It shouldn't be updated, but `pytz` should be.
     uv_snapshot!(context.filters(), context.tool_upgrade()
         .arg("babel")
         .arg("--index-url")
-        .arg("https://pypi.org/simple/")
+        .arg(new_index.index_url())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -1164,6 +1192,8 @@ fn tool_upgrade_with() {
 
 #[test]
 fn tool_upgrade_python() {
+    let old_index = old_tool_index();
+
     let context = uv_test::test_context_with_versions!(&["3.11", "3.12"])
         .with_filtered_counts()
         .with_filtered_exe_suffix()
@@ -1174,7 +1204,7 @@ fn tool_upgrade_python() {
     uv_snapshot!(context.filters(), context.tool_install()
     .arg("babel==2.6.0")
     .arg("--index-url")
-    .arg("https://test.pypi.org/simple/")
+    .arg(old_index.index_url())
     .arg("--python").arg("3.11")
     .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
@@ -1214,6 +1244,8 @@ fn tool_upgrade_python() {
 
 #[test]
 fn tool_upgrade_python_with_all() {
+    let old_index = old_tool_index();
+
     let context = uv_test::test_context_with_versions!(&["3.11", "3.12"])
         .with_filtered_counts()
         .with_filtered_exe_suffix()
@@ -1224,7 +1256,7 @@ fn tool_upgrade_python_with_all() {
     uv_snapshot!(context.filters(), context.tool_install()
     .arg("babel==2.6.0")
     .arg("--index-url")
-    .arg("https://test.pypi.org/simple/")
+    .arg(old_index.index_url())
     .arg("--python").arg("3.11")
     .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
@@ -1240,7 +1272,7 @@ fn tool_upgrade_python_with_all() {
     uv_snapshot!(context.filters(), context.tool_install()
     .arg("python-dotenv")
     .arg("--index-url")
-    .arg("https://test.pypi.org/simple/")
+    .arg(old_index.index_url())
     .arg("--python").arg("3.11")
     .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
@@ -1354,6 +1386,9 @@ fn test_tool_upgrade_additional_entrypoints() {
 /// absent after the upgrade.
 #[test]
 fn tool_upgrade_excludes() {
+    let old_index = old_tool_index();
+    let new_index = new_tool_index();
+
     let context = uv_test::test_context!("3.12")
         .with_filtered_counts()
         .with_filtered_exe_suffix()
@@ -1363,14 +1398,14 @@ fn tool_upgrade_excludes() {
     let excludes_txt = context.temp_dir.child("excludes.txt");
     excludes_txt.write_str("pytz").unwrap();
 
-    // Install `babel` from Test PyPI, to get an outdated version.
+    // Install `babel` from the old index.
     // `pytz` is excluded, so it won't be installed despite being a dependency.
     uv_snapshot!(context.filters(), context.tool_install()
         .arg("babel<2.10")
         .arg("--excludes")
         .arg("excludes.txt")
         .arg("--index-url")
-        .arg("https://test.pypi.org/simple/")
+        .arg(old_index.index_url())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -1381,12 +1416,12 @@ fn tool_upgrade_excludes() {
     Installed 1 executable: pybabel
     ");
 
-    // Upgrade `babel` from PyPI. Babel should be updated (within the `<2.10`
+    // Upgrade `babel` from the new index. Babel should be updated (within the `<2.10`
     // constraint), but `pytz` should remain excluded.
     uv_snapshot!(context.filters(), context.tool_upgrade()
         .arg("babel")
         .arg("--index-url")
-        .arg("https://pypi.org/simple/")
+        .arg(new_index.index_url())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -1828,4 +1863,89 @@ fn tool_upgrade_lock_uses_requested_python() -> Result<()> {
     });
 
     Ok(())
+}
+
+/// An index containing earlier synthetic tool releases and their dependencies.
+fn old_tool_index() -> PackseServer {
+    let scenario = toml::from_str::<Scenario>(indoc! {r#"
+        name = "old-tool-index"
+
+        [root]
+
+        [expected]
+        satisfiable = true
+
+        [packages.babel.versions."2.6.0"]
+        requires_python = ">=3.11"
+        sdist = false
+        requires = ["pytz"]
+        entry_points = ["pybabel"]
+
+        [packages.pytz.versions."2018.5"]
+        requires_python = ">=3.11"
+        sdist = false
+
+        [packages.python-dotenv.versions."0.10.2.post2"]
+        requires_python = ">=3.11"
+        sdist = false
+        entry_points = ["dotenv"]
+    "#})
+    .expect("old tool scenario should parse");
+    PackseServer::from_scenario(&scenario)
+}
+
+/// Later synthetic releases change dependencies to exercise upgrade and removal behavior.
+fn new_tool_index() -> PackseServer {
+    let scenario = toml::from_str::<Scenario>(indoc! {r#"
+        name = "new-tool-index"
+
+        [root]
+
+        [expected]
+        satisfiable = true
+
+        [packages.babel.versions."2.6.0"]
+        requires_python = ">=3.11"
+        sdist = false
+        requires = ["pytz"]
+        entry_points = ["pybabel"]
+
+        [packages.babel.versions."2.9.1"]
+        requires_python = ">=3.11"
+        sdist = false
+        requires = ["pytz"]
+        entry_points = ["pybabel"]
+
+        [packages.babel.versions."2.11.0"]
+        requires_python = ">=3.11"
+        sdist = false
+        requires = ["pytz"]
+        entry_points = ["pybabel"]
+
+        [packages.babel.versions."2.13.1"]
+        requires_python = ">=3.11"
+        sdist = false
+        requires = ["setuptools"]
+        entry_points = ["pybabel"]
+
+        [packages.babel.versions."2.14.0"]
+        requires_python = ">=3.11"
+        sdist = false
+        entry_points = ["pybabel"]
+
+        [packages.pytz.versions."2024.1"]
+        requires_python = ">=3.11"
+        sdist = false
+
+        [packages.setuptools.versions."69.2.0"]
+        requires_python = ">=3.11"
+        sdist = false
+
+        [packages.python-dotenv.versions."1.0.1"]
+        requires_python = ">=3.11"
+        sdist = false
+        entry_points = ["dotenv"]
+    "#})
+    .expect("new tool scenario should parse");
+    PackseServer::from_scenario(&scenario)
 }

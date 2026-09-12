@@ -20,6 +20,7 @@ use uv_fs::Simplified;
 use uv_fs::copy_dir_all;
 use uv_static::EnvVars;
 
+use uv_test::packse::{PackseServer, scenario::Scenario};
 use uv_test::uv_snapshot;
 
 #[cfg(feature = "test-git")]
@@ -5436,7 +5437,32 @@ async fn tool_install_default_credentials() -> Result<()> {
 
 /// Test installing a tool with `--with-executables-from`.
 #[test]
-fn tool_install_with_executables_from() {
+fn tool_install_with_executables_from() -> Result<()> {
+    let scenario = toml::from_str::<Scenario>(indoc! {r#"
+        name = "tool-executables"
+
+        [root]
+
+        [expected]
+        satisfiable = true
+
+        [packages.main-tool.versions."1.0.0"]
+        requires_python = ">=3.11"
+        sdist = false
+        requires = ["dependency-tool"]
+        entry_points = ["main"]
+
+        [packages.dependency-tool.versions."1.0.0"]
+        requires_python = ">=3.11"
+        sdist = false
+        entry_points = ["dep-one", "dep-two"]
+
+        [packages.extra-tool.versions."1.0.0"]
+        requires_python = ">=3.11"
+        sdist = false
+        entry_points = ["extra"]
+    "#})?;
+    let index = PackseServer::from_scenario(&scenario);
     let context = uv_test::test_context!("3.12")
         .with_filtered_counts()
         .with_filtered_exe_suffix()
@@ -5446,73 +5472,98 @@ fn tool_install_with_executables_from() {
 
     uv_snapshot!(context.filters(), context.tool_install()
         .arg("--with-executables-from")
-        .arg("ansible-core,black")
-        .arg("ansible==9.3.0")
+        .arg("dependency-tool,extra-tool")
+        .arg("main-tool==1.0.0")
+        .arg("--index-url")
+        .arg(index.index_url())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
-     + ansible==9.3.0
-     + ansible-core==2.16.4
-     + black==24.3.0
-     + cffi==1.16.0
-     + click==8.1.7
-     + cryptography==42.0.5
-     + jinja2==3.1.3
-     + markupsafe==2.1.5
-     + mypy-extensions==1.0.0
-     + packaging==24.0
-     + pathspec==0.12.1
-     + platformdirs==4.2.0
-     + pycparser==2.21
-     + pyyaml==6.0.1
-     + resolvelib==1.0.1
-    Installed 11 executables from `ansible-core`: ansible, ansible-config, ansible-connection, ansible-console, ansible-doc, ansible-galaxy, ansible-inventory, ansible-playbook, ansible-pull, ansible-test, ansible-vault
-    Installed 2 executables from `black`: black, blackd
-    Installed 1 executable: ansible-community
+     + dependency-tool==1.0.0
+     + extra-tool==1.0.0
+     + main-tool==1.0.0
+    Installed 2 executables from `dependency-tool`: dep-one, dep-two
+    Installed 1 executable from `extra-tool`: extra
+    Installed 1 executable: main
     ");
 
+    let receipt = fs_err::read_to_string(tool_dir.join("main-tool").join("uv-receipt.toml"))?;
     insta::with_settings!({
         filters => context.filters(),
     }, {
-        assert_snapshot!(fs_err::read_to_string(tool_dir.join("ansible").join("uv-receipt.toml")).unwrap(), @r#"
+        assert_snapshot!(receipt, @r#"
         [tool]
         requirements = [
-            { name = "ansible", specifier = "==9.3.0" },
-            { name = "ansible-core" },
-            { name = "black" },
+            { name = "main-tool", specifier = "==1.0.0" },
+            { name = "dependency-tool" },
+            { name = "extra-tool" },
         ]
         entrypoints = [
-            { name = "ansible", install-path = "[TEMP_DIR]/bin/ansible", from = "ansible-core" },
-            { name = "ansible-community", install-path = "[TEMP_DIR]/bin/ansible-community", from = "ansible" },
-            { name = "ansible-config", install-path = "[TEMP_DIR]/bin/ansible-config", from = "ansible-core" },
-            { name = "ansible-connection", install-path = "[TEMP_DIR]/bin/ansible-connection", from = "ansible-core" },
-            { name = "ansible-console", install-path = "[TEMP_DIR]/bin/ansible-console", from = "ansible-core" },
-            { name = "ansible-doc", install-path = "[TEMP_DIR]/bin/ansible-doc", from = "ansible-core" },
-            { name = "ansible-galaxy", install-path = "[TEMP_DIR]/bin/ansible-galaxy", from = "ansible-core" },
-            { name = "ansible-inventory", install-path = "[TEMP_DIR]/bin/ansible-inventory", from = "ansible-core" },
-            { name = "ansible-playbook", install-path = "[TEMP_DIR]/bin/ansible-playbook", from = "ansible-core" },
-            { name = "ansible-pull", install-path = "[TEMP_DIR]/bin/ansible-pull", from = "ansible-core" },
-            { name = "ansible-test", install-path = "[TEMP_DIR]/bin/ansible-test", from = "ansible-core" },
-            { name = "ansible-vault", install-path = "[TEMP_DIR]/bin/ansible-vault", from = "ansible-core" },
-            { name = "black", install-path = "[TEMP_DIR]/bin/black", from = "black" },
-            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd", from = "black" },
+            { name = "dep-one", install-path = "[TEMP_DIR]/bin/dep-one", from = "dependency-tool" },
+            { name = "dep-two", install-path = "[TEMP_DIR]/bin/dep-two", from = "dependency-tool" },
+            { name = "extra", install-path = "[TEMP_DIR]/bin/extra", from = "extra-tool" },
+            { name = "main", install-path = "[TEMP_DIR]/bin/main", from = "main-tool" },
         ]
 
         [tool.options]
+        index-url = "http://[LOCALHOST]/simple/"
         exclude-newer = "2024-03-25T00:00:00Z"
         "#);
     });
 
+    uv_snapshot!(context.filters(), Command::new(bin_dir.join("dep-one")), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    Hello from dependency-tool!
+    ");
+
     uv_snapshot!(context.filters(), context.tool_uninstall()
-        .arg("ansible")
+        .arg("main-tool")
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Uninstalled 14 executables: ansible, ansible-community, ansible-config, ansible-connection, ansible-console, ansible-doc, ansible-galaxy, ansible-inventory, ansible-playbook, ansible-pull, ansible-test, ansible-vault, black, blackd
+    Uninstalled 4 executables: dep-one, dep-two, extra, main
     ");
+    Ok(())
+}
+
+#[test]
+fn tool_install_sdist_entry_point() -> Result<()> {
+    let scenario = toml::from_str::<Scenario>(indoc! {r#"
+        name = "sdist-entry-point"
+
+        [root]
+
+        [expected]
+        satisfiable = true
+
+        [packages.scenario-tool.versions."1.0.0"]
+        wheel = false
+        entry_points = ["scenario.tool"]
+    "#})?;
+    let index = PackseServer::from_scenario(&scenario);
+    let context = uv_test::test_context!("3.12").with_tool_dirs();
+    let bin_dir = context.temp_dir.child("bin");
+
+    context
+        .tool_install()
+        .arg("scenario-tool")
+        .arg("--index-url")
+        .arg(index.index_url())
+        .env(EnvVars::PATH, bin_dir.as_os_str())
+        .assert()
+        .success();
+
+    uv_snapshot!(context.filters(), Command::new(bin_dir.join("scenario.tool")), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    Hello from scenario-tool!
+    ");
+
+    Ok(())
 }
 
 /// Test installing a tool with `--with-executables-from`, but the package has no entrypoints.
