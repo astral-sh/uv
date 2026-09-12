@@ -1991,6 +1991,7 @@ mod tests {
         .index_locations(IndexLocations::new(vec![], vec![flat_index], true))
         .torch_backend(Some(TorchStrategy::Backend {
             backend: TorchBackend::Cpu,
+            indexes: Box::new([IndexUrl::from_str("https://download.pytorch.org/whl/cpu")?]),
         }))
         .build()?;
 
