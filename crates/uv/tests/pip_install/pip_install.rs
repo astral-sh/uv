@@ -1,5 +1,7 @@
 use std::collections::BTreeMap;
 use std::fmt::Write;
+#[cfg(windows)]
+use std::os::windows::ffi::OsStrExt;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -32,6 +34,8 @@ use uv_test::archive::write_tar_gz;
 #[cfg(feature = "test-git")]
 use uv_test::decode_token;
 use uv_test::find_links::FindLinksServer;
+#[cfg(windows)]
+use uv_test::packse::generate_wheel_with_files;
 use uv_test::packse::{PackseServer, generate_wheel};
 use uv_test::{
     DEFAULT_PYTHON_VERSION, TestContext, apply_filters, download_to_disk, get_bin, uv_snapshot,
@@ -4076,6 +4080,94 @@ fn install_executable_copy() {
         .join(if cfg!(windows) { "Scripts" } else { "bin" })
         .join(format!("pylint{}", std::env::consts::EXE_SUFFIX));
     Command::new(executable).arg("--version").assert().success();
+}
+
+/// With `LongPathsEnabled=0`, `uv pip install jupyterlab-widgets==3.0.16` can fail when its nested
+/// frontend assets exceed `MAX_PATH` under the virtual environment. See astral-sh/uv#21611.
+///
+/// Lifting the Win32 path limit requires both the machine-wide registry setting and the process's
+/// `longPathAware` manifest declaration. It is not a filesystem or volume option, so a separate
+/// drive cannot isolate it. Remove the manifest opt-in from a private copy of `uv.exe` to reproduce
+/// the same legacy limit without changing registry state used by concurrent tests.
+///
+/// Use a small generated wheel for the two relevant path shapes. Force copy mode to exercise the
+/// affected installation path regardless of whether the cache and virtual environment can be linked.
+#[cfg(windows)]
+#[test]
+fn install_copy_long_paths() -> Result<()> {
+    let bin_dir = tempfile::tempdir()?;
+    let uv_bin = bin_dir.path().join("uv.exe");
+    let mut bytes = fs::read(get_bin!())?;
+
+    // Limit the change to uv's primary application manifest, leaving the embedded trampoline
+    // manifests alone. Replace the element with whitespace to keep the PE resource offsets unchanged.
+    let identity = br#"<assemblyIdentity name="uv""#;
+    let manifest = bytes
+        .windows(identity.len())
+        .position(|candidate| candidate == identity)
+        .context("uv's application manifest is missing")?;
+    let end = bytes[manifest..]
+        .windows(b"</assembly>".len())
+        .position(|candidate| candidate == b"</assembly>")
+        .context("uv's application manifest is incomplete")?;
+    let setting = br#"<longPathAware xmlns="http://schemas.microsoft.com/SMI/2016/WindowsSettings">true</longPathAware>"#;
+    let setting_start = bytes[manifest..manifest + end]
+        .windows(setting.len())
+        .position(|candidate| candidate == setting)
+        .context("uv's long-path opt-in is missing")?
+        + manifest;
+    bytes[setting_start..setting_start + setting.len()].fill(b' ');
+    fs::write(&uv_bin, bytes)?;
+
+    allow_duplicates! {
+        for file in [
+            format!("long_paths/{}.txt", "a".repeat(220)),
+            format!("long_paths/{}/{}/{}/data.txt", "b".repeat(80), "c".repeat(80), "d".repeat(80)),
+        ] {
+            let context = TestContext::new_with_bin("3.10", uv_bin.clone());
+            let destination = context.site_packages().join(&file);
+            assert!(destination.as_os_str().encode_wide().count() > 260);
+            let context = context
+                .with_filter((
+                    format!(r"\[SITE_PACKAGES\][/\\]{}", regex::escape(&file).replace('/', r"[/\\]")),
+                    "[LONG_PATH]",
+                ))
+                .with_filter((
+                    r"failed to persist temporary file: [^\r\n]* \(os error 3\)",
+                    "failed to persist temporary file: The system cannot find the path specified. (os error 3)",
+                ));
+            let (filename, wheel) = generate_wheel_with_files(
+                &"long-paths".parse()?,
+                &"1.0.0".parse()?,
+                &[],
+                &BTreeMap::default(),
+                None,
+                "py3-none-any",
+                &[(&file, "data")],
+            );
+            fs::write(context.temp_dir.join(&filename), wheel)?;
+
+            // A valid wheel fails when either its destination or temporary-file path exceeds
+            // MAX_PATH. This should succeed even without the opt-in; see astral-sh/uv#21611.
+            uv_snapshot!(context.filters(), context.pip_install()
+                .arg("--no-index")
+                .arg("--link-mode")
+                .arg("copy")
+                .arg(&filename), @"
+            exit_code: 2 (failure)
+            ----- stderr -----
+            Resolved 1 package in [TIME]
+            Prepared 1 package in [TIME]
+            error: Failed to install: long_paths-1.0.0-py3-none-any.whl (long-paths==1.0.0 (from file://[TEMP_DIR]/long_paths-1.0.0-py3-none-any.whl))
+              cause: Failed to copy to `[LONG_PATH]`
+              cause: Failed to persist temporary file to [LONG_PATH]: failed to persist temporary file: The system cannot find the path specified. (os error 3)
+            ");
+            assert!(!destination.exists());
+        }
+        Ok::<(), anyhow::Error>(())
+    }?;
+
+    Ok(())
 }
 
 /// Install a package into a virtual environment using hardlink semantics, and ensure that the
