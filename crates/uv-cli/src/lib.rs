@@ -4738,18 +4738,6 @@ pub struct TreeArgs {
 
 #[derive(Args)]
 pub struct ExportArgs {
-    /// Export multiple selections from a TOML manifest containing `[[export]]` entries.
-    ///
-    /// Requires frozen mode. Each entry specifies an `output-file` and its own package, extra,
-    /// and group selections. Output paths are relative to the manifest. Formatting options
-    /// apply to every output. Batch exports do not write requirements to stdout.
-    #[arg(long, hide = true, value_hint = ValueHint::FilePath, conflicts_with_all = [
-        "output_file", "script", "package", "all_packages", "extra", "all_extras", "no_extra",
-        "no_all_extras", "group", "no_group", "only_group", "all_groups", "no_default_groups",
-        "dev", "no_dev", "only_dev",
-    ])]
-    pub batch: Option<PathBuf>,
-
     /// The format to which `uv.lock` should be exported.
     ///
     /// Supports `requirements.txt`, `pylock.toml` (PEP 751) and CycloneDX v1.5 JSON output formats.
@@ -4857,6 +4845,17 @@ pub struct ExportArgs {
     /// Write the exported requirements to the given file.
     #[arg(long, short, value_hint = ValueHint::FilePath)]
     pub output_file: Option<PathBuf>,
+
+    /// Export multiple selections from a TOML manifest containing `[[export]]` entries.
+    ///
+    /// Each entry specifies an `output-file` and its own package, extra, and group selections.
+    /// Output paths are relative to the manifest.
+    #[arg(long, hide = true, value_hint = ValueHint::FilePath, conflicts_with_all = [
+        "output_file", "script", "package", "all_packages", "extra", "all_extras", "no_extra",
+        "no_all_extras", "group", "no_group", "only_group", "all_groups", "no_default_groups",
+        "dev", "no_dev", "only_dev",
+    ])]
+    pub batch: Option<PathBuf>,
 
     /// Do not emit the current project.
     ///

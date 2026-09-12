@@ -18,7 +18,7 @@ use uv_configuration::{
 };
 use uv_distribution_types::Verbatim;
 use uv_normalize::{DefaultExtras, DefaultGroups, ExtraName, GroupName, PackageName};
-use uv_preview::Preview;
+use uv_preview::{Preview, PreviewFeature};
 use uv_python::{ConfigDiscovery, PythonDownloads, PythonPreference, PythonRequest};
 use uv_requirements::is_pylock_toml;
 use uv_resolver::{Installable, Lock, PylockToml, RequirementsTxtExport, cyclonedx_json};
@@ -163,6 +163,12 @@ pub(crate) async fn export(
     preview: Preview,
 ) -> Result<ExitStatus> {
     let batch = if let Some(path) = batch {
+        if !preview.is_enabled(PreviewFeature::BatchExport) {
+            warn_user!(
+                "`uv export --batch` is experimental and may change without warning. Pass `--preview-features {}` to disable this warning.",
+                PreviewFeature::BatchExport
+            );
+        }
         let Some(frozen_source) = frozen else {
             bail!("`--batch` requires `--frozen`");
         };

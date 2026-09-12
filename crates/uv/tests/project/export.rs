@@ -10371,7 +10371,11 @@ fn export_batch_selections() -> Result<()> {
         .write_str(&manifest)?;
     uv_snapshot!(context.filters(), context.export()
         .arg("--frozen").arg("--no-header")
-        .arg("--batch").arg("exports/batch.toml"), @"exit_code: 0 (success)");
+        .arg("--batch").arg("exports/batch.toml"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    warning: `uv export --batch` is experimental and may change without warning. Pass `--preview-features batch-export` to disable this warning.
+    ");
     for index in 0..selections.len() {
         assert_eq!(
             fs_err::read(context.temp_dir.child(format!("exports/{index}.txt")))?,
@@ -10379,6 +10383,12 @@ fn export_batch_selections() -> Result<()> {
             "batch entry {index}",
         );
     }
+
+    // Explicitly enabling the preview feature suppresses the warning.
+    uv_snapshot!(context.filters(), context.export()
+        .arg("--frozen").arg("--no-header")
+        .arg("--batch").arg("exports/batch.toml")
+        .arg("--preview-features").arg("batch-export"), @"exit_code: 0 (success)");
     assert_eq!(fs_err::read(context.temp_dir.child("uv.lock"))?, lock);
     Ok(())
 }
@@ -10413,6 +10423,7 @@ fn export_batch_invalid_selection() -> Result<()> {
         .arg("--frozen").arg("--batch").arg("batch.toml"), @"
     exit_code: 2 (failure)
     ----- stderr -----
+    warning: `uv export --batch` is experimental and may change without warning. Pass `--preview-features batch-export` to disable this warning.
     error: Failed to export `[TEMP_DIR]/missing.txt`
       cause: Group `missing` is not defined in the project's `dependency-groups` table
     ");
@@ -10433,12 +10444,14 @@ fn export_batch_manifest_validation() -> Result<()> {
         .arg("--batch").arg("batch.toml"), @"
     exit_code: 2 (failure)
     ----- stderr -----
+    warning: `uv export --batch` is experimental and may change without warning. Pass `--preview-features batch-export` to disable this warning.
     error: `--batch` requires `--frozen`
     ");
     uv_snapshot!(context.filters(), context.export()
         .arg("--frozen").arg("--batch").arg("batch.toml"), @"
     exit_code: 2 (failure)
     ----- stderr -----
+    warning: `uv export --batch` is experimental and may change without warning. Pass `--preview-features batch-export` to disable this warning.
     error: Export manifest must contain at least one `[[export]]` entry
     ");
     manifest.write_str(indoc! {r#"
@@ -10450,6 +10463,7 @@ fn export_batch_manifest_validation() -> Result<()> {
         .arg("--frozen").arg("--batch").arg("batch.toml"), @r#"
     exit_code: 2 (failure)
     ----- stderr -----
+    warning: `uv export --batch` is experimental and may change without warning. Pass `--preview-features batch-export` to disable this warning.
     error: Failed to parse export manifest `batch.toml`
       cause: TOML parse error at line 3, column 1
                |
@@ -10467,6 +10481,7 @@ fn export_batch_manifest_validation() -> Result<()> {
         .arg("--frozen").arg("--batch").arg("batch.toml"), @"
     exit_code: 2 (failure)
     ----- stderr -----
+    warning: `uv export --batch` is experimental and may change without warning. Pass `--preview-features batch-export` to disable this warning.
     error: Duplicate export output: `[TEMP_DIR]/requirements.txt`
     ");
     manifest.write_str(indoc! {r#"
@@ -10479,6 +10494,7 @@ fn export_batch_manifest_validation() -> Result<()> {
         .arg("--frozen").arg("--batch").arg("batch.toml"), @"
     exit_code: 2 (failure)
     ----- stderr -----
+    warning: `uv export --batch` is experimental and may change without warning. Pass `--preview-features batch-export` to disable this warning.
     error: `only-group` cannot be combined with `extra` or `all-extras`
     ");
     Ok(())
