@@ -515,7 +515,10 @@ pub fn write_atomic_sync(path: impl AsRef<Path>, data: impl AsRef<[u8]>) -> std:
 
 /// Copy `from` to `to` atomically using a temporary file and atomic rename.
 pub fn copy_atomic_sync(from: impl AsRef<Path>, to: impl AsRef<Path>) -> std::io::Result<()> {
-    let temp_file = tempfile_in(to.as_ref().parent().expect("Write path must have a parent"))?;
+    // `tempfile` uses Win32 APIs directly, so both paths passed to `persist` need the extended-length
+    // prefix when Windows' long-path opt-in is disabled.
+    let to = verbatim_path(to.as_ref());
+    let temp_file = tempfile_in(to.parent().expect("Write path must have a parent"))?;
     fs_err::copy(from.as_ref(), &temp_file)?;
     persist_with_retry_sync(temp_file, to.as_ref())
 }
