@@ -127,9 +127,7 @@ fn sync_centralized_env_switch_python() -> Result<()> {
 #[test]
 #[cfg(feature = "test-python-managed")]
 fn sync_centralized_env_distinguishes_python_patch() -> Result<()> {
-    let context = uv_test::test_context_with_versions!(&[])
-        .with_managed_python_dirs()
-        .with_python_download_cache();
+    let context = uv_test::test_context_with_versions!(&[]).with_managed_python_dirs();
     context
         .python_install()
         .arg("3.12.9")
@@ -169,9 +167,7 @@ fn sync_centralized_env_distinguishes_python_patch() -> Result<()> {
 #[test]
 #[cfg(feature = "test-python-managed")]
 fn sync_centralized_env_survives_python_patch_upgrade() -> Result<()> {
-    let context = uv_test::test_context_with_versions!(&[])
-        .with_managed_python_dirs()
-        .with_python_download_cache();
+    let context = uv_test::test_context_with_versions!(&[]).with_managed_python_dirs();
     context.python_install().arg("3.12.9").assert().success();
     write_project(&context, ">=3.12", &[])?;
 

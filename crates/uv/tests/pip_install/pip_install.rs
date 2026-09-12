@@ -16264,7 +16264,6 @@ fn pip_install_no_sources_editable_to_registry_switch() -> Result<()> {
 #[test]
 fn install_with_system_interpreter() {
     let context = uv_test::test_context_with_versions!(&[])
-        .with_python_download_cache()
         .with_managed_python_dirs()
         .with_filtered_python_keys()
         .with_filtered_latest_python_versions();
@@ -16292,9 +16291,7 @@ fn install_with_system_interpreter() {
 #[test]
 fn install_missing_python_no_target() {
     // Create a context that only has Python 3.11 available.
-    let context = uv_test::test_context!("3.11")
-        .with_python_download_cache()
-        .with_managed_python_dirs();
+    let context = uv_test::test_context!("3.11").with_managed_python_dirs();
 
     // Request Python 3.12; which should fail
     uv_snapshot!(context.filters(), context.pip_install()
@@ -16313,7 +16310,6 @@ fn install_missing_python_no_target() {
 fn install_missing_python_with_target() {
     // Create a context with no installed python interpreters.
     let context = uv_test::test_context_with_versions!(&[])
-        .with_python_download_cache()
         .with_managed_python_dirs()
         .with_filtered_latest_python_versions();
 
@@ -16340,7 +16336,6 @@ fn install_missing_python_with_target() {
 fn install_missing_python_version_with_target() {
     // Create a context that only has Python 3.11 available.
     let context = uv_test::test_context!("3.11")
-        .with_python_download_cache()
         .with_managed_python_dirs()
         .with_filtered_latest_python_versions();
 
@@ -16711,7 +16706,6 @@ fn abi_compatibility_on_freethreaded_python() {
     let context = uv_test::test_context_with_versions!(&[])
         .with_filtered_python_keys()
         .with_managed_python_dirs()
-        .with_python_download_cache()
         .with_filtered_python_install_bin()
         .with_filtered_python_names()
         .with_filtered_exe_suffix();
@@ -16835,7 +16829,6 @@ fn abi_compatibility_on_debug_python() {
     let context = uv_test::test_context_with_versions!(&[])
         .with_filtered_python_keys()
         .with_managed_python_dirs()
-        .with_python_download_cache()
         .with_filtered_python_install_bin()
         .with_filtered_python_names()
         .with_filtered_exe_suffix();

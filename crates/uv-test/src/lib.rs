@@ -125,6 +125,7 @@ pub const INSTA_FILTERS: &[(&str, &str)] = &[
 ///
 /// * Set the current directory to a temporary directory (`temp_dir`).
 /// * Set the cache dir to a different temporary directory (`cache_dir`).
+/// * Share the Python download cache unless explicitly disabled.
 /// * Set a shared test timestamp so snapshots don't change after a new release.
 /// * Set the venv to a fresh `.venv` in `temp_dir`
 pub struct TestContext {
@@ -702,19 +703,11 @@ impl TestContext {
         self
     }
 
-    /// Use a shared global cache for Python downloads.
+    /// Disable the shared Python download cache for tests that require fresh downloads or isolated cache state.
     #[must_use]
-    pub fn with_python_download_cache(mut self) -> Self {
-        self.extra_env.push((
-            EnvVars::UV_PYTHON_CACHE_DIR.into(),
-            // Respect `UV_PYTHON_CACHE_DIR` if set, or use the default cache directory
-            env::var_os(EnvVars::UV_PYTHON_CACHE_DIR).unwrap_or_else(|| {
-                uv_cache::Cache::from_settings(false, None)
-                    .unwrap()
-                    .bucket(CacheBucket::Python)
-                    .into()
-            }),
-        ));
+    pub fn without_python_download_cache(mut self) -> Self {
+        self.extra_env
+            .retain(|(key, _)| key != EnvVars::UV_PYTHON_CACHE_DIR);
         self
     }
 
@@ -1197,7 +1190,16 @@ impl TestContext {
             python_versions,
             uv_bin,
             filters,
-            extra_env: vec![],
+            extra_env: vec![(
+                EnvVars::UV_PYTHON_CACHE_DIR.into(),
+                // Respect `UV_PYTHON_CACHE_DIR` if set, or use the default cache directory.
+                env::var_os(EnvVars::UV_PYTHON_CACHE_DIR).unwrap_or_else(|| {
+                    Cache::from_settings(false, None)
+                        .expect("Failed to determine the shared Python download cache")
+                        .bucket(CacheBucket::Python)
+                        .into()
+                }),
+            )],
             _root: root,
             _extra_tempdirs: vec![],
         }

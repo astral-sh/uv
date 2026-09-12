@@ -19325,9 +19325,7 @@ fn compile_with_python_platform_and_built_wheel_for_different_platform() -> Resu
 #[cfg(feature = "test-python-managed")]
 #[test]
 fn compile_missing_python() -> Result<()> {
-    let context = uv_test::test_context!("3.12")
-        .with_python_download_cache()
-        .with_managed_python_dirs();
+    let context = uv_test::test_context!("3.12").with_managed_python_dirs();
 
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("anyio==3.7.0")?;
@@ -19358,9 +19356,7 @@ fn compile_missing_python() -> Result<()> {
 #[cfg(feature = "test-python-managed")]
 #[test]
 fn compile_missing_python_version() -> Result<()> {
-    let context = uv_test::test_context!("3.12")
-        .with_python_download_cache()
-        .with_managed_python_dirs();
+    let context = uv_test::test_context!("3.12").with_managed_python_dirs();
 
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("anyio==3.7.0")?;
@@ -19391,7 +19387,6 @@ fn compile_missing_python_version() -> Result<()> {
 #[test]
 fn compile_missing_python_version_patch_fallback() -> Result<()> {
     let context = uv_test::test_context!("3.12")
-        .with_python_download_cache()
         .with_managed_python_dirs()
         // Filter the patch of the version which will get downloaded
         .with_filter((
@@ -19429,7 +19424,6 @@ fn compile_missing_python_version_patch_fallback() -> Result<()> {
 #[test]
 fn compile_missing_python_version_default_fallback() -> Result<()> {
     let context = uv_test::test_context_with_versions!(&[])
-        .with_python_download_cache()
         .with_managed_python_dirs()
         .with_filtered_latest_python_versions();
 
@@ -19493,6 +19487,7 @@ fn compile_client_certificate_warning_chain() -> Result<()> {
 #[tokio::test]
 async fn compile_missing_python_download_error_warning() {
     let context = uv_test::test_context!("3.12")
+        .without_python_download_cache()
         .with_managed_python_dirs()
         .with_filter((
             r"(https://github\.com/astral-sh/python-build-standalone/releases/download/).*"

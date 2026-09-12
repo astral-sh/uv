@@ -558,6 +558,7 @@ fn write_python_downloads_json(context: &TestContext, mock_server_uri: &String) 
 #[tokio::test]
 async fn python_install_http_500() {
     let context = uv_test::test_context!("3.12")
+        .without_python_download_cache()
         .with_filtered_python_keys()
         .with_filtered_exe_suffix()
         .with_managed_python_dirs();
@@ -585,6 +586,7 @@ async fn python_install_http_500() {
 #[tokio::test]
 async fn python_install_io_error() {
     let context = uv_test::test_context!("3.12")
+        .without_python_download_cache()
         .with_filtered_python_keys()
         .with_filtered_exe_suffix()
         .with_managed_python_dirs();

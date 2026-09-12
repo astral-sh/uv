@@ -6234,9 +6234,7 @@ fn incompatible_platform_direct_url() -> Result<()> {
 #[test]
 fn sync_missing_python_no_target() -> Result<()> {
     // Create a context that only has Python 3.11 available.
-    let context = uv_test::test_context!("3.11")
-        .with_python_download_cache()
-        .with_managed_python_dirs();
+    let context = uv_test::test_context!("3.11").with_managed_python_dirs();
 
     let requirements = context.temp_dir.child("requirements.txt");
     requirements.write_str("anyio")?;
@@ -6258,7 +6256,6 @@ fn sync_missing_python_no_target() -> Result<()> {
 fn sync_with_target_installs_missing_python() -> Result<()> {
     // Create a context that only has Python 3.11 available.
     let context = uv_test::test_context!("3.11")
-        .with_python_download_cache()
         .with_managed_python_dirs()
         .with_filtered_latest_python_versions();
 
