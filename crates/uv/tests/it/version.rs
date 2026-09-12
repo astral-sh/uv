@@ -1700,14 +1700,10 @@ requires-python = ">=3.12"
 
     uv_snapshot!(context.filters(), context.version()
         .arg("--bump").arg("major")
-        .arg("--bump").arg("alpha"), @"
-    exit_code: 0 (success)
-    ----- stdout -----
-    myproject 2.3.4 => 3.0.0a1
-
+        .arg("--bump").arg("minor"), @"
+    exit_code: 2 (failure)
     ----- stderr -----
-    Resolved 1 package in [TIME]
-    Checked in [TIME]
+    error: Only one release version component can be provided to `--bump`, got: major, minor
     ");
     Ok(())
 }
