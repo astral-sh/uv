@@ -4,7 +4,7 @@ use std::{assert_matches, io};
 
 use anyhow::Result;
 use reqwest::Response;
-use wiremock::matchers::any;
+use wiremock::matchers::{any, header, method, path};
 use wiremock::{Mock, MockServer, Request, ResponseTemplate};
 
 use uv_cache::CacheEntry;
@@ -137,5 +137,59 @@ async fn send_counts_middleware_retries() -> Result<()> {
         assert!(retry_state.should_retry(&error, 0).is_none());
         server.verify().await;
     }
+    Ok(())
+}
+
+#[tokio::test]
+async fn revalidation_http_errors_share_retry_budget() -> Result<()> {
+    let server = MockServer::start().await;
+    let url = format!("{}/metadata", server.uri());
+    let client = CachedClient::new(
+        BaseClientBuilder::default()
+            .retries(2)
+            .no_retry_delay(true)
+            .build()?,
+    );
+    let temp_dir = tempfile::tempdir()?;
+    let cache_entry = CacheEntry::new(temp_dir.path(), "cached");
+
+    Mock::given(method("GET"))
+        .and(path("/metadata"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .insert_header("cache-control", "public, max-age=3600")
+                .insert_header("etag", "\"cached\"")
+                .set_body_string("cached"),
+        )
+        .mount(&server)
+        .await;
+    client
+        .get_serde_with_retry(
+            client.uncached().raw_client().get(&url).build()?,
+            &cache_entry,
+            CacheControl::None,
+            async |response, _| response.text().await,
+        )
+        .await
+        .expect("the initial response should populate the cache");
+
+    server.reset().await;
+    Mock::given(method("GET"))
+        .and(path("/metadata"))
+        .and(header("if-none-match", "\"cached\""))
+        .respond_with(ResponseTemplate::new(503))
+        .expect(3)
+        .mount(&server)
+        .await;
+    client
+        .get_serde_with_retry(
+            client.uncached().raw_client().get(&url).build()?,
+            &cache_entry,
+            CacheControl::MustRevalidate,
+            async |response, _| response.text().await,
+        )
+        .await
+        .expect_err("revalidation should fail after exhausting the retry budget");
+
     Ok(())
 }
