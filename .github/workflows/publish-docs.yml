@@ -27,6 +27,9 @@ jobs:
   mkdocs:
     environment:
       name: release
+    permissions:
+      contents: read
+      id-token: write # for the credential broker
     runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-4' || 'ubuntu-latest' }}
     env:
       VERSION: ${{ (inputs.plan != '' && fromJson(inputs.plan).announcement_tag) || inputs.ref }}
@@ -86,12 +89,25 @@ jobs:
       - name: "Build docs"
         run: uv run --only-group docs mkdocs build --strict -f mkdocs.yml
 
-      - name: "Clone docs repo"
-        run: |
-          version="${VERSION}"
-          git clone https://${ASTRAL_DOCS_PAT}@github.com/astral-sh/docs.git astral-docs
-        env:
-          ASTRAL_DOCS_PAT: ${{ secrets.ASTRAL_DOCS_PAT }}
+      - name: "Get docs token"
+        id: token
+        uses: open-security-tools/ost-simple-sts@bda64bffc5722085512dc618ab85f588b6c49b96 # v0.0.4
+        with:
+          exchange-url: ${{ secrets.STS_API_URL }}/exchange
+          audience: ${{ secrets.STS_API_URL }}
+          repository: astral-sh/docs
+          permissions: |
+            contents: write
+            pull_requests: write
+
+      - name: "Checkout docs repo"
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: astral-sh/docs
+          ref: main
+          path: astral-docs
+          token: ${{ steps.token.outputs.token }}
+          persist-credentials: false
 
       - name: "Copy docs"
         run: rm -rf astral-docs/site/uv && mkdir -p astral-docs/site && cp -r site/uv astral-docs/site/
@@ -101,8 +117,8 @@ jobs:
         run: |
           branch_name="${BRANCH_NAME}"
 
-          git config user.name "astral-docs-bot"
-          git config user.email "176161322+astral-docs-bot@users.noreply.github.com"
+          git config user.name "astral-automations-bot[bot]"
+          git config user.email "305554984+astral-automations-bot[bot]@users.noreply.github.com"
 
           git checkout -b $branch_name
           git add site/uv
@@ -111,7 +127,7 @@ jobs:
       - name: "Create Pull Request"
         working-directory: astral-docs
         env:
-          GITHUB_TOKEN: ${{ secrets.ASTRAL_DOCS_PAT }}
+          GH_TOKEN: ${{ steps.token.outputs.token }}
         run: |
           version="${VERSION}"
           display_name="${DISPLAY_NAME}"
@@ -127,6 +143,7 @@ jobs:
             xargs -I {} gh pr close {}
 
           # push the branch to GitHub
+          gh auth setup-git
           git push origin $branch_name
 
           # create the PR
@@ -139,7 +156,7 @@ jobs:
         if: ${{ inputs.plan != '' && !fromJson(inputs.plan).announcement_tag_is_implicit }}
         working-directory: astral-docs
         env:
-          GITHUB_TOKEN: ${{ secrets.ASTRAL_DOCS_PAT }}
+          GH_TOKEN: ${{ steps.token.outputs.token }}
         run: |
           branch_name="${BRANCH_NAME}"
 
