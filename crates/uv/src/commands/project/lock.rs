@@ -551,7 +551,6 @@ async fn do_lock(
     let overrides = target.overrides();
     let excludes = target.exclude_dependencies();
     let constraints = target.constraints();
-    let build_constraints = target.build_constraints();
     let dependency_groups = target.dependency_groups()?;
     let source_trees = vec![];
 
@@ -617,8 +616,7 @@ async fn do_lock(
         )
         .await?;
     let build_constraints = target
-        .lower(
-            build_constraints,
+        .lower_build_constraints(
             index_locations,
             sources,
             cache,
@@ -830,20 +828,40 @@ async fn do_lock(
         .build();
     // Checking an existing lockfile may build metadata and install build dependencies. Verify any
     // artifacts recorded in that lockfile, including for an ordinary unlocked command.
-    let locked_build_hasher = if let Some(existing_lock) = existing_lock.as_ref() {
-        existing_lock.hash_strategy(target.install_path())?
+    let (locked_hasher, locked_build_hasher) = if let Some(existing_lock) = existing_lock.as_ref() {
+        let locked_hasher = existing_lock.hash_strategy(target.install_path())?;
+        let build_hasher = HashStrategy::from_constraints(
+            &existing_lock.build_constraints(target.install_path()),
+            Some(&interpreter.to_resolver_marker_environment()),
+            uv_configuration::HashCheckingMode::Verify,
+        )?;
+        let locked_build_hasher = locked_hasher
+            .clone()
+            .with_constraint_hashes(&build_hasher)?;
+        (locked_hasher, locked_build_hasher)
     } else {
-        HashStrategy::default()
+        (HashStrategy::default(), HashStrategy::default())
     };
     // A fresh resolution retains those hashes under `--locked`, but an explicitly unlocked update
     // must be able to replace them. Build dependencies follow the same choice without generating
     // hashes for artifacts absent from the lockfile.
-    let resolution_build_hasher = match mode {
-        LockMode::Locked(..) => &locked_build_hasher,
+    let resolution_hasher = match mode {
+        LockMode::Locked(..) => &locked_hasher,
         LockMode::Write(_) | LockMode::DryRun(_) | LockMode::Frozen(_) => &HashStrategy::default(),
     };
     let hasher = HashStrategy::collect(HashCollection::Url)
-        .with_verification(resolution_build_hasher.verification().clone());
+        .with_verification(resolution_hasher.verification().clone());
+
+    let build_hasher = HashStrategy::from_constraints(
+        &build_constraints,
+        Some(&interpreter.to_resolver_marker_environment()),
+        uv_configuration::HashCheckingMode::Verify,
+    )?;
+    // Explicit build constraints apply even when fresh resolution can replace lockfile hashes.
+    let resolution_build_hasher = match mode {
+        LockMode::Locked(..) => locked_hasher.with_constraint_hashes(&build_hasher)?,
+        LockMode::Write(_) | LockMode::DryRun(_) | LockMode::Frozen(_) => build_hasher,
+    };
 
     // TODO(charlie): These are all default values. We should consider whether we want to make them
     // optional on the downstream APIs.
@@ -887,14 +905,11 @@ async fn do_lock(
     }
     .into_inner();
 
-    // Convert to the `Constraints` format.
-    let dispatch_constraints = Constraints::from_requirements(build_constraints.iter().cloned());
-
     // Create a build dispatch for fresh resolution.
     let build_dispatch = BuildDispatch::new(
         &client,
         cache,
-        &dispatch_constraints,
+        &build_constraints,
         interpreter,
         index_locations,
         &flat_index,
@@ -908,7 +923,7 @@ async fn do_lock(
         extra_build_variables,
         *link_mode,
         build_options,
-        resolution_build_hasher,
+        &resolution_build_hasher,
         exclude_newer.clone(),
         sources.clone(),
         SourceTreeEditablePolicy::Project,
@@ -1116,7 +1131,7 @@ async fn do_lock(
                 constraints,
                 overrides,
                 excludes.clone(),
-                build_constraints,
+                build_constraints.specifications().cloned(),
                 dependency_groups,
                 dependency_metadata.values().cloned(),
             )
@@ -1187,7 +1202,7 @@ impl ValidatedLock {
         constraints: &[Requirement],
         overrides: &[Override<Requirement>],
         excludes: &[ExcludeDependency],
-        build_constraints: &[Requirement],
+        build_constraints: &Constraints,
         conflicts: &Conflicts,
         environments: Option<&SupportedEnvironments>,
         required_environments: Option<&SupportedEnvironments>,
