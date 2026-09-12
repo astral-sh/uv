@@ -292,6 +292,16 @@ impl TryFrom<Vec<ConflictItem>> for ConflictSet {
             1 => return Err(ConflictError::OneItem),
             _ => {}
         }
+        for item in &set {
+            if let ConflictKind::Extra(extra) = item.kind()
+                && set.contains(&ConflictItem::from(item.package().clone()))
+            {
+                return Err(ConflictError::PackageConflictsWithExtra {
+                    package: item.package().clone(),
+                    extra: extra.clone(),
+                });
+            }
+        }
         Ok(Self { set })
     }
 }
@@ -552,6 +562,14 @@ pub enum ConflictError {
     /// An error for when there is one conflicting items.
     #[error("Each set of conflicts must have at least two entries, but found only one")]
     OneItem,
+    /// An error for a package conflict with one of its own extras.
+    #[error(
+        "Package `{package}` cannot conflict with its own extra `{extra}` because selecting the extra always selects the package"
+    )]
+    PackageConflictsWithExtra {
+        package: PackageName,
+        extra: ExtraName,
+    },
     /// An error that occurs when the `package` field is missing.
     ///
     /// (This is only applicable when deserializing from the lock file.
