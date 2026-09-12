@@ -2579,6 +2579,7 @@ async fn lock_sdist_url_rejected_archive_not_cached() -> Result<()> {
     uv_snapshot!(context.filters(), context.lock()
         .arg("--locked")
         .arg("--refresh")
+        .env(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY, "true")
         .env("UV_LOCK_TEST_SENTINEL", sentinel.path()), @"
     exit_code: 1 (failure)
     ----- stderr -----
