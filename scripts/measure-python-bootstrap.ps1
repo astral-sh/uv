@@ -26,7 +26,7 @@ if ($Stage -eq "prepare") {
     }
     "UV_PYTHON_INSTALL_DIR=$installDir" >> $env:GITHUB_ENV
     "UV_CACHE_DIR=$cacheDir" >> $env:GITHUB_ENV
-    "PYTHON_BENCHMARK_START=$([DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds())" >> $env:GITHUB_ENV
+    "PYTHON_BENCHMARK_START=$([System.Diagnostics.Stopwatch]::GetTimestamp())" >> $env:GITHUB_ENV
     exit 0
 }
 
@@ -40,7 +40,7 @@ if ($LASTEXITCODE -ne 0) {
     throw "uv python install failed"
 }
 $stopwatch.Stop()
-$combinedMilliseconds = [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds() - [long]$env:PYTHON_BENCHMARK_START
+$combinedSeconds = ([System.Diagnostics.Stopwatch]::GetTimestamp() - [long]$env:PYTHON_BENCHMARK_START) / [System.Diagnostics.Stopwatch]::Frequency
 
 # Verify every requested interpreter outside the measured setup interval.
 $versions = @(Get-Content .python-versions | Where-Object { $_.Trim() -ne "" -and -not $_.Trim().StartsWith("#") })
@@ -75,7 +75,7 @@ $result = [ordered]@{
     cache_hit = $CacheHit
     install_directory = $env:UV_PYTHON_INSTALL_DIR
     install_seconds = $stopwatch.Elapsed.TotalSeconds
-    combined_seconds = $combinedMilliseconds / 1000.0
+    combined_seconds = $combinedSeconds
     installation_count = $installations.Count
     installed_file_count = $files.Count
     installed_bytes = ($files | Measure-Object -Property Length -Sum).Sum
