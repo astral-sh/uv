@@ -143,7 +143,7 @@ async fn send_counts_middleware_retries() -> Result<()> {
 #[tokio::test]
 async fn revalidation_http_errors_share_retry_budget() -> Result<()> {
     let server = MockServer::start().await;
-    let url = format!("{}/metadata", server.uri());
+    let url = format!("{}/metadata", server.uri()).parse()?;
     let client = CachedClient::new(
         BaseClientBuilder::default()
             .retries(2)
@@ -163,15 +163,16 @@ async fn revalidation_http_errors_share_retry_budget() -> Result<()> {
         )
         .mount(&server)
         .await;
-    client
+    let request = client.uncached().for_host(&url).get(url.as_str()).build()?;
+    let result = client
         .get_serde_with_retry(
-            client.uncached().raw_client().get(&url).build()?,
+            request,
             &cache_entry,
             CacheControl::None,
             async |response, _| response.text().await,
         )
-        .await
-        .expect("the initial response should populate the cache");
+        .await;
+    assert_matches!(result, Ok(_));
 
     server.reset().await;
     Mock::given(method("GET"))
@@ -181,15 +182,17 @@ async fn revalidation_http_errors_share_retry_budget() -> Result<()> {
         .expect(3)
         .mount(&server)
         .await;
-    client
+    let request = client.uncached().for_host(&url).get(url.as_str()).build()?;
+    let result = client
         .get_serde_with_retry(
-            client.uncached().raw_client().get(&url).build()?,
+            request,
             &cache_entry,
             CacheControl::MustRevalidate,
             async |response, _| response.text().await,
         )
-        .await
-        .expect_err("revalidation should fail after exhausting the retry budget");
+        .await;
 
+    assert_matches!(result, Err(CachedClientError::Client(_)));
+    server.verify().await;
     Ok(())
 }
