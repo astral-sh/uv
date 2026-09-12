@@ -65,6 +65,7 @@ RequirementsTxt {
                 },
             ),
             hashes: [],
+            config_settings: None,
         },
         RequirementEntry {
             requirement: Unnamed(
@@ -125,6 +126,7 @@ RequirementsTxt {
                 },
             ),
             hashes: [],
+            config_settings: None,
         },
         RequirementEntry {
             requirement: Unnamed(
@@ -185,6 +187,7 @@ RequirementsTxt {
                 },
             ),
             hashes: [],
+            config_settings: None,
         },
         RequirementEntry {
             requirement: Unnamed(
@@ -245,6 +248,7 @@ RequirementsTxt {
                 },
             ),
             hashes: [],
+            config_settings: None,
         },
         RequirementEntry {
             requirement: Unnamed(
@@ -298,6 +302,7 @@ RequirementsTxt {
                 },
             ),
             hashes: [],
+            config_settings: None,
         },
         RequirementEntry {
             requirement: Unnamed(
@@ -351,6 +356,7 @@ RequirementsTxt {
                 },
             ),
             hashes: [],
+            config_settings: None,
         },
         RequirementEntry {
             requirement: Unnamed(
@@ -404,6 +410,7 @@ RequirementsTxt {
                 },
             ),
             hashes: [],
+            config_settings: None,
         },
         RequirementEntry {
             requirement: Unnamed(
@@ -457,6 +464,7 @@ RequirementsTxt {
                 },
             ),
             hashes: [],
+            config_settings: None,
         },
     ],
     index_url: None,

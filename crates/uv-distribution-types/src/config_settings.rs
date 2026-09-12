@@ -141,6 +141,19 @@ impl ConfigSettings {
         self.0.is_empty()
     }
 
+    /// Return each build setting, including repeated values for the same key.
+    pub fn iter(&self) -> impl Iterator<Item = (&str, &str)> {
+        self.0.iter().flat_map(|(key, value)| {
+            let values: &[String] = match value {
+                ConfigSettingValue::String(value) => std::slice::from_ref(value),
+                ConfigSettingValue::List(values) => values,
+            };
+            values
+                .iter()
+                .map(move |value| (key.as_str(), value.as_str()))
+        })
+    }
+
     /// Convert the settings to a string that can be passed directly to a PEP 517 build backend.
     pub fn escape_for_python(&self) -> String {
         serde_json::to_string(self).expect("Failed to serialize config settings")
@@ -260,24 +273,39 @@ impl FromIterator<ConfigSettingPackageEntry> for PackageConfigSettings {
 }
 
 impl PackageConfigSettings {
+    /// Returns `true` if there are no package-specific configuration settings.
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+
     /// Returns the config settings for a specific package, if any.
     pub fn get(&self, package: &PackageName) -> Option<&ConfigSettings> {
         self.0.get(package)
+    }
+
+    /// Return the package-specific configuration settings.
+    pub fn iter(&self) -> impl Iterator<Item = (&PackageName, &ConfigSettings)> {
+        self.0.iter()
+    }
+
+    /// Add settings for a package, preserving any existing settings for that package.
+    pub fn insert(&mut self, package: PackageName, settings: ConfigSettings) {
+        match self.0.entry(package) {
+            Entry::Vacant(vacant) => {
+                vacant.insert(settings);
+            }
+            Entry::Occupied(mut occupied) => {
+                let merged = occupied.get().clone().merge(settings);
+                occupied.insert(merged);
+            }
+        }
     }
 
     /// Merge two sets of package config settings, with the values in `self` taking precedence.
     #[must_use]
     pub fn merge(mut self, other: Self) -> Self {
         for (package, settings) in other.0 {
-            match self.0.entry(package) {
-                Entry::Vacant(vacant) => {
-                    vacant.insert(settings);
-                }
-                Entry::Occupied(mut occupied) => {
-                    let merged = occupied.get().clone().merge(settings);
-                    occupied.insert(merged);
-                }
-            }
+            self.insert(package, settings);
         }
         self
     }

@@ -367,6 +367,19 @@ pub(crate) async fn install(
     )
     .await?;
 
+    let marker_environment = resolution_markers(None, python_platform.as_ref(), &interpreter);
+    let settings = ResolverInstallerSettings {
+        resolver: ResolverSettings {
+            config_settings_package: settings.resolver.config_settings_package.merge(
+                spec.config_settings_package
+                    .clone()
+                    .evaluate(Some(&marker_environment)),
+            ),
+            ..settings.resolver
+        },
+        ..settings
+    };
+
     // Resolve the `--from` and `--with` requirements.
     let requirements = {
         let mut requirements = Vec::with_capacity(1 + with.len());
