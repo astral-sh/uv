@@ -18358,7 +18358,7 @@ fn pep_751_compile_preferences() -> Result<()> {
     wheels = [{ url = "https://files.pythonhosted.org/packages/e9/44/75a9c9421471a6c4805dbf2356f7c181a29c1879239abab1ea2cc8f38b40/sniffio-1.3.1-py3-none-any.whl", upload-time = 2024-02-25T23:20:01Z, size = 10235, hashes = { sha256 = "2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2" } }]
 
     ----- stderr -----
-    warning: Empty hash tables in `pylock.toml` will be rejected in a future uv version. Rerun the original `uv export` or `uv pip compile` command to regenerate the file.
+    warning: Empty hash tables in `pylock.toml` will be rejected in a future uv version. Run `uv pip compile --cache-dir [CACHE_DIR] requirements.txt --universal -o pylock.toml` to regenerate the file.
     Resolved 3 packages in [TIME]
     "#);
 
