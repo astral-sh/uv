@@ -150,8 +150,9 @@ pub(crate) async fn pip_sync(
     }
 
     // Read build constraints.
-    let build_constraints =
-        operations::read_constraints(build_constraints, &client_builder).await?;
+    let build_constraints = Constraints::from_specifications(
+        operations::read_constraints(build_constraints, &client_builder).await?,
+    );
 
     // Validate that the requirements are non-empty.
     if !allow_empty_requirements {
@@ -350,7 +351,7 @@ pub(crate) async fn pip_sync(
         HashStrategy::from_requirements(
             std::iter::empty(),
             build_constraints
-                .iter()
+                .specifications()
                 .map(|entry| (&entry.requirement, entry.hashes.as_slice())),
             Some(&marker_env),
             HashCheckingMode::Verify,
@@ -358,11 +359,6 @@ pub(crate) async fn pip_sync(
     } else {
         HashStrategy::default()
     };
-    let build_constraints = Constraints::from_requirements(
-        build_constraints
-            .iter()
-            .map(|constraint| constraint.requirement.clone()),
-    );
 
     // Initialize any shared state.
     let state = SharedState::default();

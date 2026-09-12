@@ -5330,10 +5330,12 @@ fn compatible_build_constraint() -> Result<()> {
     requirements_txt.write_str("requests==1.2")?;
 
     let constraints_txt = context.temp_dir.child("build_constraints.txt");
-    constraints_txt.write_str("setuptools>=40")?;
+    // Verify mode ignores hashes on unpinned constraints and does not activate extras.
+    constraints_txt.write_str("setuptools[foo]>=40 --hash=sha256:incorrect")?;
 
     uv_snapshot!(context.pip_sync()
         .arg("requirements.txt")
+        .arg("--verify-hashes")
         .arg("--build-constraint")
         .arg("build_constraints.txt"), @"
     exit_code: 0 (success)
