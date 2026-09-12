@@ -2981,7 +2981,7 @@ impl VersionRequest {
     }
 
     /// Return the patch version segment of the request, if any.
-    fn patch(&self) -> Option<u8> {
+    pub(crate) fn patch(&self) -> Option<u8> {
         match self {
             Self::Any | Self::Default | Self::Range(_, _) => None,
             Self::Major(_, _) => None,
@@ -3318,7 +3318,7 @@ impl VersionRequest {
     ///
     /// If the patch version is not present, the request is returned unchanged.
     #[must_use]
-    fn without_patch(self) -> Self {
+    pub(crate) fn without_patch(self) -> Self {
         match self {
             Self::Default => Self::Default,
             Self::Any => Self::Any,
