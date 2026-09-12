@@ -1185,6 +1185,90 @@ fn wheel_data_respects_excludes() -> Result<()> {
     Ok(())
 }
 
+/// A large set of unique source excludes is deduplicated without changing glob semantics for
+/// either source distributions or wheels.
+#[test]
+fn build_backend_many_source_excludes() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let unused_excludes = (0..4_096)
+        .map(|index| format!("\"/unused-{index}\""))
+        .collect::<Vec<_>>()
+        .join(", ");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&formatdoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+
+        [tool.uv.build-backend]
+        source-exclude = [{unused_excludes}, "__pycache__", "*.pyc", "*.pyo", "*.source-secret", "*.source-secret", "/src/project/anchored.txt", '/src/project/escaped\[name\].txt']
+        wheel-exclude = ["*.wheel-secret", "*.wheel-secret"]
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+    "#})?;
+    context.temp_dir.child("src/project/__init__.py").touch()?;
+    context.temp_dir.child("src/project/included.txt").touch()?;
+    context
+        .temp_dir
+        .child("src/project/private.source-secret")
+        .touch()?;
+    context
+        .temp_dir
+        .child("src/project/private.wheel-secret")
+        .touch()?;
+    context.temp_dir.child("src/project/anchored.txt").touch()?;
+    context
+        .temp_dir
+        .child("src/project/nested/anchored.txt")
+        .touch()?;
+    context
+        .temp_dir
+        .child("src/project/escaped[name].txt")
+        .touch()?;
+    context
+        .temp_dir
+        .child("src/project/escapedxnamex.txt")
+        .touch()?;
+
+    uv_snapshot!(context.build().arg("--sdist").arg("--list"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Building project-0.1.0.tar.gz will include the following files:
+    project-0.1.0/PKG-INFO (generated)
+    project-0.1.0/pyproject.toml (pyproject.toml)
+    project-0.1.0/src/project/__init__.py (src/project/__init__.py)
+    project-0.1.0/src/project/escapedxnamex.txt (src/project/escapedxnamex.txt)
+    project-0.1.0/src/project/included.txt (src/project/included.txt)
+    project-0.1.0/src/project/nested/anchored.txt (src/project/nested/anchored.txt)
+    project-0.1.0/src/project/private.wheel-secret (src/project/private.wheel-secret)
+
+    ----- stderr -----
+    ");
+
+    uv_snapshot!(context.build().arg("--wheel").arg("--list"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Building project-0.1.0-py3-none-any.whl will include the following files:
+    project/__init__.py (src/project/__init__.py)
+    project/escapedxnamex.txt (src/project/escapedxnamex.txt)
+    project/included.txt (src/project/included.txt)
+    project/nested/anchored.txt (src/project/nested/anchored.txt)
+    project-0.1.0.dist-info/WHEEL (generated)
+    project-0.1.0.dist-info/METADATA (generated)
+
+    ----- stderr -----
+    ");
+
+    Ok(())
+}
+
 /// A symlinked data root must not package files from outside the project, while an internal
 /// symlink still honors the configured excludes.
 #[test]

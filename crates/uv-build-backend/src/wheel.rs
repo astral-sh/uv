@@ -5,6 +5,7 @@ use fs_err::File;
 use futures_lite::future::block_on;
 use futures_lite::io::{AsyncSeek, AsyncWrite, AsyncWriteExt};
 use globset::{GlobSet, GlobSetBuilder};
+use indexmap::IndexSet;
 use rustc_hash::FxHashSet;
 use sha2::{Digest, Sha256};
 use std::fmt::{Display, Formatter};
@@ -385,19 +386,18 @@ fn write_data_files<'data>(
 
 /// Build a globset matcher for all files that must be excluded from a wheel.
 fn build_wheel_exclude_matcher(settings: &BuildBackendSettings) -> Result<GlobSet, Error> {
-    let mut excludes: Vec<String> = Vec::new();
+    let mut excludes = IndexSet::new();
     if settings.default_excludes {
         excludes.extend(DEFAULT_EXCLUDES.iter().map(ToString::to_string));
     }
-    for exclude in settings
-        .wheel_exclude
-        .iter()
-        .chain(&settings.source_exclude)
-    {
-        if !excludes.contains(exclude) {
-            excludes.push(exclude.clone());
-        }
-    }
+    excludes.extend(
+        settings
+            .wheel_exclude
+            .iter()
+            .chain(&settings.source_exclude)
+            .cloned(),
+    );
+    let excludes: Vec<_> = excludes.into_iter().collect();
     debug!("Wheel excludes: {:?}", excludes);
     build_exclude_matcher(excludes)
 }
