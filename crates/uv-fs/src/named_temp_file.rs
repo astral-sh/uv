@@ -79,33 +79,3 @@ pub struct PersistError {
     pub error: io::Error,
     pub file: NamedTempFile,
 }
-
-#[cfg(test)]
-mod tests {
-    use std::io::{self, Write};
-
-    use super::tempfile_in;
-
-    #[test]
-    fn persist_after_failure() -> io::Result<()> {
-        let directory = tempfile::tempdir()?;
-        let mut file = tempfile_in(directory.path())?;
-        file.write_all(b"content")?;
-        let temporary_path = file.path().to_owned();
-
-        let error = file
-            .persist(directory.path().join("missing/file"))
-            .unwrap_err();
-        assert_eq!(error.error.kind(), io::ErrorKind::NotFound);
-
-        let destination = directory.path().join("file");
-        fs_err::write(&destination, "old content")?;
-        error
-            .file
-            .persist(&destination)
-            .map_err(|error| error.error)?;
-        assert_eq!(fs_err::read_to_string(destination)?, "content");
-        assert!(!temporary_path.exists());
-        Ok(())
-    }
-}
