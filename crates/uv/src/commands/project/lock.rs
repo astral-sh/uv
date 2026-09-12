@@ -367,26 +367,7 @@ impl<'env> LockOperation<'env> {
         match self.mode {
             LockMode::Frozen(source) => {
                 // Read the existing lockfile, but don't attempt to lock the project.
-                let lock_filename = target.lock_filename();
-                let existing = target
-                    .read()
-                    .await?
-                    .ok_or(ProjectError::MissingLockfile(source, lock_filename))?;
-
-                // Check if the discovered workspace members match the locked workspace members.
-                if let LockTarget::Workspace(workspace) = target {
-                    for package_name in workspace.packages().keys() {
-                        existing
-                            .find_by_name(package_name)
-                            .map_err(|_| {
-                                ProjectError::LockWorkspaceMismatch(package_name.clone(), source)
-                            })?
-                            .ok_or_else(|| {
-                                ProjectError::LockWorkspaceMismatch(package_name.clone(), source)
-                            })?;
-                    }
-                }
-                Ok(LockResult::Unchanged(existing))
+                Ok(LockResult::Unchanged(target.read_frozen(source).await?))
             }
             LockMode::Locked(interpreter, lock_source) => {
                 // Read the existing lockfile.
