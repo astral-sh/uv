@@ -5,6 +5,7 @@ extend-exclude = [
     "test/ecosystem/**",
     "test/requirements/**/*.in",
     "crates/uv-build-frontend/src/pipreqs/mapping",
+    "supply-chain/config.toml",
 ]
 ignore-hidden = false
 
