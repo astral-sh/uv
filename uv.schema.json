@@ -2734,6 +2734,11 @@
           "const": "cpu"
         },
         {
+          "description": "Use the PyTorch index for CUDA 13.4.",
+          "type": "string",
+          "const": "cu134"
+        },
+        {
           "description": "Use the PyTorch index for CUDA 13.2.",
           "type": "string",
           "const": "cu132"
