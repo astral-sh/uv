@@ -1288,6 +1288,7 @@ async fn lock_and_sync(
         ),
         Modifications::Sufficient,
         None,
+        None,
         settings.into(),
         client_builder,
         &sync_state,

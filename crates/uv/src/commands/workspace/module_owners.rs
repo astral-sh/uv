@@ -81,6 +81,7 @@ pub(crate) async fn collect_module_owners(
             InstallOptions::default(),
             modifications,
             None,
+            None,
             installer_settings,
             client_builder,
             &state.fork(),

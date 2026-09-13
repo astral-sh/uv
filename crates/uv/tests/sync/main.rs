@@ -1,5 +1,8 @@
 //! Integration tests for uv synchronization and settings.
 
+#[cfg(all(feature = "test-python", feature = "test-universal"))]
+mod batch_sync;
+
 #[cfg(all(feature = "test-python", feature = "test-pypi"))]
 mod centralized_project_envs;
 

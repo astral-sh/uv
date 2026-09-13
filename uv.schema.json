@@ -1830,7 +1830,8 @@
             "artifact-hash-filtering",
             "content-addressed-cache",
             "missing-exclude-newer-package-lock",
-            "batch-export"
+            "batch-export",
+            "batch-sync"
           ]
         },
         {

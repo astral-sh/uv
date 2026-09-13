@@ -3794,6 +3794,27 @@ pub struct RunArgs {
 
 #[derive(Args)]
 pub struct SyncArgs {
+    /// Check every dependency selection and Python/platform target in a TOML manifest.
+    ///
+    /// Uses one frozen lockfile without creating an environment, downloading, building, or
+    /// installing packages. Selection and target options must be provided in the manifest.
+    #[arg(
+        long,
+        hide = true,
+        value_hint = ValueHint::FilePath,
+        requires_all = ["frozen", "dry_run"],
+        conflicts_with_all = [
+            "script", "check", "active", "all_packages", "package", "extra", "no_extra",
+            "all_extras", "no_all_extras", "dev", "no_dev", "only_dev", "group", "no_group",
+            "no_default_groups", "only_group", "all_groups", "no_install_project",
+            "only_install_project", "no_install_workspace", "only_install_workspace",
+            "no_install_local", "only_install_local", "no_install_package", "only_install_package",
+            "python_version", "python_platform", "upgrade", "upgrade_package", "refresh",
+            "refresh_package", "editable", "no_editable", "no_editable_package", "inexact", "exact",
+        ],
+    )]
+    pub batch: Option<PathBuf>,
+
     /// Include optional dependencies from the specified extra name.
     ///
     /// May be provided more than once.
@@ -4047,6 +4068,19 @@ pub struct SyncArgs {
         value_hint = ValueHint::Other,
     )]
     pub python: Option<Maybe<String>>,
+
+    /// The Python version to use when checking a frozen installation plan.
+    ///
+    /// Requires `--frozen --dry-run`. This changes dependency markers and wheel compatibility,
+    /// without requiring an interpreter for the target version. Use `--python` to select the
+    /// reference interpreter, which supplies implementation and ABI information.
+    #[arg(
+        long,
+        hide = true,
+        requires_all = ["frozen", "dry_run"],
+        conflicts_with_all = ["batch", "script", "check"],
+    )]
+    pub python_version: Option<PythonVersion>,
 
     /// The platform for which requirements should be installed.
     ///

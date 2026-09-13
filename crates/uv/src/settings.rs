@@ -1934,6 +1934,7 @@ impl PythonPinSettings {
 #[expect(dead_code)]
 #[derive(Debug, Clone)]
 pub(crate) struct SyncSettings {
+    pub(super) batch: Option<PathBuf>,
     pub(super) lock_check: LockCheck,
     pub(super) frozen: Option<FrozenSource>,
     pub(super) dry_run: DryRun,
@@ -1947,6 +1948,7 @@ pub(crate) struct SyncSettings {
     pub(super) all_packages: bool,
     pub(super) package: Vec<PackageName>,
     pub(super) python: Option<String>,
+    pub(super) python_version: Option<PythonVersion>,
     pub(super) python_platform: Option<TargetTriple>,
     pub(super) install_mirrors: PythonInstallMirrors,
     pub(super) refresh: Refresh,
@@ -1963,6 +1965,7 @@ impl SyncSettings {
         environment: EnvironmentOptions,
     ) -> anyhow::Result<Self> {
         let SyncArgs {
+            batch,
             extra,
             all_extras,
             no_extra,
@@ -2005,6 +2008,7 @@ impl SyncSettings {
             package,
             script,
             python,
+            python_version,
             python_platform,
             check,
             no_check,
@@ -2031,6 +2035,17 @@ impl SyncSettings {
         let frozen = resolve_frozen(frozen, no_frozen, FrozenFlag::Frozen, environment.frozen);
 
         let (locked, frozen) = resolve_lock_flags(locked, frozen)?;
+
+        if (batch.is_some() || python_version.is_some()) && (frozen.is_none() || !dry_run.enabled())
+        {
+            anyhow::bail!("`--batch` and `--python-version` require `--frozen --dry-run`");
+        }
+        if batch.is_some() {
+            match output_format {
+                SyncFormat::Text => {}
+                SyncFormat::Json => anyhow::bail!("`--batch` only supports text output"),
+            }
+        }
 
         let (dev, no_dev) = resolve_flag_pair(
             dev,
@@ -2089,7 +2104,29 @@ impl SyncSettings {
         let no_install_local = no_install_local.is_enabled();
         let only_install_local = only_install_local.is_enabled();
 
+        let no_group = if no_group.is_empty() {
+            environment.no_group.clone().unwrap_or_default()
+        } else {
+            no_group
+        };
+        if batch.is_some()
+            && (dev.is_enabled()
+                || no_dev.is_enabled()
+                || !no_group.is_empty()
+                || no_install_project
+                || only_install_project
+                || no_install_workspace
+                || only_install_workspace
+                || no_install_local
+                || only_install_local)
+        {
+            anyhow::bail!(
+                "When using `--batch`, configure dependency selections in the manifest instead of environment variables"
+            );
+        }
+
         Ok(Self {
+            batch,
             output_format,
             lock_check: locked,
             frozen,
@@ -2108,11 +2145,7 @@ impl SyncSettings {
             groups: DependencyGroups::from_args(
                 DevMode::from_args(dev.into(), no_dev.into(), only_dev),
                 group,
-                if no_group.is_empty() {
-                    environment.no_group.clone().unwrap_or_default()
-                } else {
-                    no_group
-                },
+                no_group,
                 no_default_groups,
                 only_group,
                 all_groups,
@@ -2139,6 +2172,7 @@ impl SyncSettings {
             all_packages,
             package,
             python: python.and_then(Maybe::into_option),
+            python_version,
             python_platform,
             refresh: Refresh::try_from(refresh)?,
             settings,

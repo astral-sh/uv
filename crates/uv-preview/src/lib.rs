@@ -340,6 +340,8 @@ pub enum PreviewFeature {
     MissingExcludeNewerPackageLock,
     /// Allows using `uv export --batch`.
     BatchExport,
+    /// Checks locked artifacts for multiple dependency selections and Python/platform targets.
+    BatchSync,
 }
 
 impl Display for PreviewFeature {

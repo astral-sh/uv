@@ -76,6 +76,58 @@ $ uv sync
 Syncing the environment manually is especially useful for ensuring your editor has the correct
 versions of dependencies.
 
+### Checking multiple sync targets
+
+To inspect a frozen sync plan for a different Python version without installing that interpreter,
+use `--python-version` with `--frozen --dry-run`:
+
+```console
+$ uv sync --frozen --dry-run --python 3.12 --python-version 3.11 --python-platform x86_64-manylinux_2_31 --preview-features batch-sync
+```
+
+Here, `--python 3.12` selects the reference interpreter, while `--python-version 3.11` and
+`--python-platform` control the target dependency markers and wheel compatibility. Implementation
+and ABI settings still come from the reference interpreter.
+
+The experimental `--batch` option checks multiple dependency selections and Python/platform targets
+from one workspace and lockfile load:
+
+```console
+$ uv sync --frozen --dry-run --batch targets.toml --preview-features batch-sync
+```
+
+```toml title="targets.toml"
+[[target]]
+python-version = "3.11"
+python-platform = "x86_64-manylinux_2_31"
+
+[[target]]
+python-version = "3.11"
+python-platform = "aarch64-apple-darwin"
+
+[[selection]]
+package = ["app"]
+no-default-groups = true
+no-install-project = true
+
+[[selection]]
+package = ["app"]
+extra = ["test"]
+no-default-groups = true
+no-install-project = true
+```
+
+Every selection is checked against every target. Package, extra, group, and target options belong in
+the manifest. Each selection can also exclude the project or workspace with `no-install-project` or
+`no-install-workspace`. Selecting exactly one package uses that member's default groups; otherwise,
+the current project's default groups are used.
+
+Batch mode requires `--frozen --dry-run` and one existing reference interpreter. It checks markers,
+wheel compatibility, build policies, and local artifact paths independently of installed packages.
+It does not create environments, download artifacts, or prove that a source distribution will build
+successfully. Use a single `uv sync --frozen --dry-run` to inspect an environment's
+install/uninstall plan, and `uv lock --check` to check lock freshness.
+
 ### Editable installation
 
 When the environment is synced, uv will install the project (and other workspace members) as
