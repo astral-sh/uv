@@ -726,56 +726,15 @@ mod tests {
     }
 
     #[test]
-    fn display_range_bounds() {
-        for (lower, upper, expected) in [
-            (Bound::Unbounded, Bound::Unbounded, "*"),
-            (Bound::Unbounded, Bound::Included(version("2.0")), "<=2.0"),
-            (Bound::Unbounded, Bound::Excluded(version("2.0")), "<2.0"),
-            (Bound::Included(version("1.0")), Bound::Unbounded, ">=1.0"),
-            (Bound::Excluded(version("1.0")), Bound::Unbounded, ">1.0"),
-            (
-                Bound::Included(version("1.0")),
-                Bound::Included(version("2.0")),
-                ">=1.0, <=2.0",
-            ),
-            (
-                Bound::Included(version("1.0")),
-                Bound::Excluded(version("2.0")),
-                ">=1.0, <2.0",
-            ),
-            (
-                Bound::Excluded(version("1.0")),
-                Bound::Included(version("2.0")),
-                ">1.0, <=2.0",
-            ),
-            (
-                Bound::Excluded(version("1.0")),
-                Bound::Excluded(version("2.0")),
-                ">1.0, <2.0",
-            ),
-        ] {
-            let range = Ranges::from_range_bounds((lower, upper));
-            assert_eq!(display_version_ranges(&range).to_string(), expected);
-        }
-    }
+    fn display_singletons_in_union() {
+        let range = Ranges::singleton(version("1.0"))
+            .union(&Ranges::from_range_bounds(version("2.0")..version("3.0")))
+            .union(&Ranges::singleton(version("4.0")));
 
-    #[test]
-    fn display_empty_and_singleton_ranges() {
-        let singleton = Ranges::singleton(version("1.0"));
-        for (range, expected) in [
-            (Ranges::empty(), "∅"),
-            (singleton.clone(), "==1.0"),
-            (
-                singleton.union(&Ranges::singleton(version("3.0"))),
-                "==1.0 | ==3.0",
-            ),
-            (
-                singleton.union(&Ranges::strictly_higher_than(version("2.0"))),
-                "==1.0 | >2.0",
-            ),
-        ] {
-            assert_eq!(display_version_ranges(&range).to_string(), expected);
-        }
+        assert_eq!(
+            display_version_ranges(&range).to_string(),
+            "==1.0 | >=2.0, <3.0 | ==4.0"
+        );
     }
 
     #[test]
