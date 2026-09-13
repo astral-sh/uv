@@ -28,7 +28,10 @@ pub use crate::version_files::{
     FilePreference as VersionFilePreference, PYTHON_VERSION_FILENAME, PYTHON_VERSIONS_FILENAME,
     PythonVersionFile,
 };
-pub use crate::virtualenv::{Error as VirtualEnvError, PyVenvConfiguration, VirtualEnvironment};
+pub use crate::virtualenv::{
+    CondaEnvironmentKind, Error as VirtualEnvError, PyVenvConfiguration, VirtualEnvironment,
+    conda_environment_from_env,
+};
 
 mod discovery;
 pub mod downloads;

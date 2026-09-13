@@ -900,7 +900,18 @@ impl Workspace {
     /// If `active` is [`ActiveEnvironment::Prefer`], the `VIRTUAL_ENV` variable will be preferred.
     /// If it is [`ActiveEnvironment::Ignore`], warnings about mismatches between the active
     /// environment and the project environment will be silenced.
-    pub fn environment_selection(&self, active: ActiveEnvironment) -> ProjectEnvironmentSelection {
+    ///
+    /// If `VIRTUAL_ENV` is unset and `active` is [`ActiveEnvironment::Prefer`], the
+    /// `conda_env_path` argument is used instead, matching the order of `uv pip`. Callers to this
+    /// function must pass a non-base conda environment (see `uv_python::CondaEnvironmentKind`), as
+    /// base conda environments are treated as system installations, and shouldn't be used as
+    /// project environments. `conda_env_path` is ignored unless `active` is
+    /// [`ActiveEnvironment::Prefer`].
+    pub fn environment_selection(
+        &self,
+        active: ActiveEnvironment,
+        conda_env_path: Option<PathBuf>,
+    ) -> ProjectEnvironmentSelection {
         /// Resolve the `UV_PROJECT_ENVIRONMENT` value, if any.
         fn from_project_environment_variable(workspace: &Workspace) -> Option<PathBuf> {
             let value = std::env::var_os(EnvVars::UV_PROJECT_ENVIRONMENT)?;
@@ -975,6 +986,17 @@ impl Workspace {
                     "Use of the active virtual environment was requested, but `VIRTUAL_ENV` is not set"
                 );
             }
+        }
+
+        if active == ActiveEnvironment::Prefer
+            && let Some(conda_env_path) = conda_env_path
+        {
+            debug!(
+                "Using active conda environment `{}` instead of project environment `{}`",
+                conda_env_path.user_display(),
+                project_environment_path.user_display()
+            );
+            return ProjectEnvironmentSelection::Active(conda_env_path);
         }
 
         selection
