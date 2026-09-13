@@ -13,7 +13,7 @@ use either::Either;
 use futures::{FutureExt, StreamExt};
 use itertools::Itertools;
 use papaya::{HashMap, ResizeMode};
-use pubgrub::{ConflictId, Dependency, Id, Ranges, State};
+use pubgrub::{ConflictId, Id, Ranges, State};
 use rustc_hash::{FxHashMap, FxHashSet};
 use tokio::sync::mpsc::{self, Receiver, Sender};
 use tokio::sync::oneshot;
@@ -396,7 +396,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                 for (affected, incompatibility) in conflicts {
                                     // Conflict tracking: If there was a conflict, track affected and
                                     // culprit for all root cause incompatibilities
-                                    state.record_conflict(affected, None, incompatibility);
+                                    state.record_conflict(affected, None, &incompatibility);
                                 }
                             }
                         }
@@ -3275,7 +3275,7 @@ impl ForkState {
         // Conflict tracking: If the version was rejected due to its dependencies, record culprit
         // and affected.
         if let Some(incompatibility) = conflict {
-            self.record_conflict(for_package, Some(for_version), incompatibility);
+            self.record_conflict(for_package, Some(for_version), &incompatibility);
         }
     }
 
@@ -3302,7 +3302,7 @@ impl ForkState {
         &mut self,
         affected: Id<PubGrubPackage>,
         version: Option<&Version>,
-        conflict: ConflictId<UvDependencyProvider>,
+        conflict: &ConflictId<UvDependencyProvider>,
     ) {
         let mut culprit_is_real = false;
         for incompatible in self.pubgrub.conflict_packages(conflict) {
@@ -3500,30 +3500,25 @@ impl ForkState {
             .sum();
         let mut edges: Vec<ResolutionDependencyEdge> = Vec::with_capacity(edge_count);
         for (package, self_version) in &solution {
-            for Dependency {
-                dependent: self_package,
-                dependent_versions: self_range,
-                dependency: dependency_package,
-                dependency_versions: dependency_range,
-            } in self.pubgrub.dependencies(*package)
-            {
-                let dependency_range =
-                    dependency_range.map_or_else(|| Cow::Owned(Range::empty()), Cow::Borrowed);
-                if *package != self_package {
+            for dependency in self.pubgrub.dependencies(*package) {
+                if *package != dependency.dependent {
                     continue;
                 }
-                if !self_range.contains(self_version) {
+                if !dependency.dependent_versions.contains(self_version) {
                     continue;
                 }
-                let Some(dependency_version) = solution.get(&dependency_package) else {
+                let Some(dependency_range) = dependency.dependency_versions else {
+                    continue;
+                };
+                let Some(dependency_version) = solution.get(&dependency.dependency) else {
                     continue;
                 };
                 if !dependency_range.contains(dependency_version) {
                     continue;
                 }
 
-                let self_package = &self.pubgrub.package_store[self_package];
-                let dependency_package = &self.pubgrub.package_store[dependency_package];
+                let self_package = &self.pubgrub.package_store[dependency.dependent];
+                let dependency_package = &self.pubgrub.package_store[dependency.dependency];
 
                 let (self_name, self_extra, self_group) = match &**self_package {
                     PubGrubPackageInner::Package {
