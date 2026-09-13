@@ -13,7 +13,7 @@ use either::Either;
 use futures::{FutureExt, StreamExt};
 use itertools::Itertools;
 use papaya::{HashMap, ResizeMode};
-use pubgrub::{Id, IncompId, Incompatibility, Kind, Ranges, State, Term};
+use pubgrub::{ConflictId, Dependency, Id, Ranges, State, Term};
 use rustc_hash::{FxHashMap, FxHashSet};
 use tokio::sync::mpsc::{self, Receiver, Sender};
 use tokio::sync::oneshot;
@@ -581,23 +581,18 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         if let PubGrubPackageInner::Package { name, .. } = &**next_package {
                             // Check if the decision was due to the package being unavailable
                             if let Some(reason) = self.unavailable_packages.pin().get(name) {
-                                state
-                                    .pubgrub
-                                    .add_incompatibility(Incompatibility::custom_term(
-                                        next_id,
-                                        term_intersection.clone(),
-                                        UnavailableReason::Package(reason.clone()),
-                                    ));
+                                state.pubgrub.add_unavailable(
+                                    next_id,
+                                    term_intersection.clone(),
+                                    UnavailableReason::Package(reason.clone()),
+                                );
                                 continue;
                             }
                         }
 
                         state
                             .pubgrub
-                            .add_incompatibility(Incompatibility::no_versions(
-                                next_id,
-                                term_intersection.clone(),
-                            ));
+                            .add_no_versions(next_id, term_intersection.clone());
                         continue;
                     };
 
@@ -677,13 +672,11 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                             &self.index,
                             &self.installed_packages,
                         );
-                        state
-                            .pubgrub
-                            .add_incompatibility(Incompatibility::custom_term(
-                                next_id,
-                                Term::Positive(versions),
-                                UnavailableReason::Version(reason),
-                            ));
+                        state.pubgrub.add_unavailable(
+                            next_id,
+                            Term::Positive(versions),
+                            UnavailableReason::Version(reason),
+                        );
                     }
                     ForkedDependencies::Unforked(dependencies) => {
                         state
@@ -816,15 +809,13 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                             &self.index,
                             &self.installed_packages,
                         );
-                        state
-                            .pubgrub
-                            .add_incompatibility(Incompatibility::custom_term(
-                                next_id,
-                                Term::Positive(versions),
-                                UnavailableReason::Version(UnavailableVersion::RequiresPython(
-                                    requires_python,
-                                )),
-                            ));
+                        state.pubgrub.add_unavailable(
+                            next_id,
+                            Term::Positive(versions),
+                            UnavailableReason::Version(UnavailableVersion::RequiresPython(
+                                requires_python,
+                            )),
+                        );
                     }
                 }
             }
@@ -3319,10 +3310,10 @@ impl ForkState {
         &mut self,
         affected: Id<PubGrubPackage>,
         version: Option<&Version>,
-        incompatibility: IncompId<PubGrubPackage, Range<Version>, UnavailableReason>,
+        conflict: ConflictId<UvDependencyProvider>,
     ) {
         let mut culprit_is_real = false;
-        for (incompatible, _term) in self.pubgrub.incompatibility_store[incompatibility].iter() {
+        for incompatible in self.pubgrub.conflict_packages(conflict) {
             if incompatible == affected {
                 continue;
             }
@@ -3348,9 +3339,10 @@ impl ForkState {
         // marker is "copying" the obligations from the main package through conflicts.
         if culprit_is_real {
             if tracing::enabled!(Level::DEBUG) {
-                let incompatibility = self.pubgrub.incompatibility_store[incompatibility]
-                    .iter()
-                    .map(|(package, _term)| &self.pubgrub.package_store[package])
+                let incompatibility = self
+                    .pubgrub
+                    .conflict_packages(conflict)
+                    .map(|package| &self.pubgrub.package_store[package])
                     .join(", ");
                 if let Some(version) = version {
                     debug!(
@@ -3454,26 +3446,24 @@ impl ForkState {
                     PythonRequirementKind::Target => PubGrubPython::Target,
                 }),
             ));
-            self.pubgrub
-                .add_incompatibility(Incompatibility::from_dependency(
-                    *package,
-                    versions,
-                    (
-                        python,
-                        Range::from_versions(release_specifiers_to_ranges(requires_python)),
-                    ),
-                ));
+            self.pubgrub.add_dependency(
+                *package,
+                versions,
+                (
+                    python,
+                    Range::from_versions(release_specifiers_to_ranges(requires_python)),
+                ),
+            );
             self.pubgrub
                 .partial_solution
                 .add_decision(self.next, version);
             return;
         }
-        self.pubgrub
-            .add_incompatibility(Incompatibility::custom_term(
-                self.next,
-                Term::Positive(versions),
-                UnavailableReason::Version(reason),
-            ));
+        self.pubgrub.add_unavailable(
+            self.next,
+            Term::Positive(versions),
+            UnavailableReason::Version(reason),
+        );
     }
 
     /// Subset the current markers with the new markers and update the python requirements fields
@@ -3517,23 +3507,17 @@ impl ForkState {
         let solution: FxHashMap<_, _> = self.pubgrub.partial_solution.extract_solution().collect();
         let edge_count: usize = solution
             .keys()
-            .map(|package| self.pubgrub.incompatibilities[package].len())
+            .filter_map(|package| self.pubgrub.dependencies(*package).size_hint().1)
             .sum();
         let mut edges: Vec<ResolutionDependencyEdge> = Vec::with_capacity(edge_count);
         for (package, self_version) in &solution {
-            for id in &self.pubgrub.incompatibilities[package] {
-                let incompatibility = &self.pubgrub.incompatibility_store[*id];
-                let pubgrub::Kind::FromDependencyOf(self_package, dependency_package) =
-                    &incompatibility.kind
-                else {
-                    continue;
-                };
-                let (self_package, dependency_package) = (*self_package, *dependency_package);
-                let Some((self_range, dependency_range)) =
-                    incompatibility.dependency_version_sets()
-                else {
-                    continue;
-                };
+            for Dependency {
+                dependent: self_package,
+                dependent_versions: self_range,
+                dependency: dependency_package,
+                dependency_versions: dependency_range,
+            } in self.pubgrub.dependencies(*package)
+            {
                 let dependency_range =
                     dependency_range.map_or_else(|| Cow::Owned(Range::empty()), Cow::Borrowed);
                 if *package != self_package {
@@ -4431,22 +4415,16 @@ fn find_environments(id: Id<PubGrubPackage>, state: &State<UvDependencyProvider>
     ancestors.insert(id);
 
     while let Some(current) = stack.pop() {
-        let Some(incompatibilities) = state.incompatibilities.get(&current) else {
-            continue;
-        };
-
-        for index in incompatibilities {
-            let incompat = &state.incompatibility_store[*index];
-            if let Kind::FromDependencyOf(parent, child) = &incompat.kind {
-                if current != *child {
-                    continue;
+        for dependency in state.dependencies(current) {
+            let parent = dependency.dependent;
+            if current != dependency.dependency {
+                continue;
+            }
+            if ancestors.insert(parent) {
+                if state.package_store[parent].is_root() {
+                    root = Some(parent);
                 }
-                if ancestors.insert(*parent) {
-                    if state.package_store[*parent].is_root() {
-                        root = Some(*parent);
-                    }
-                    stack.push(*parent);
-                }
+                stack.push(parent);
             }
         }
     }
@@ -4465,28 +4443,22 @@ fn find_environments(id: Id<PubGrubPackage>, state: &State<UvDependencyProvider>
         let Some(current_environment) = environments.get(&current).copied() else {
             continue;
         };
-        let Some(incompatibilities) = state.incompatibilities.get(&current) else {
-            continue;
-        };
-
-        for index in incompatibilities {
-            let incompat = &state.incompatibility_store[*index];
-            let Kind::FromDependencyOf(parent, child) = &incompat.kind else {
-                continue;
-            };
-            if current != *parent || !ancestors.contains(child) {
+        for dependency in state.dependencies(current) {
+            let parent = dependency.dependent;
+            let child = dependency.dependency;
+            if current != parent || !ancestors.contains(&child) {
                 continue;
             }
 
-            let mut next_environment = state.package_store[*child].marker();
+            let mut next_environment = state.package_store[child].marker();
             next_environment = next_environment.and(current_environment);
 
-            let entry = environments.entry(*child).or_insert(MarkerTree::FALSE);
+            let entry = environments.entry(child).or_insert(MarkerTree::FALSE);
             let mut combined = *entry;
             combined = combined.or(next_environment);
             if combined != *entry {
                 *entry = combined;
-                queue.push_back(*child);
+                queue.push_back(child);
             }
         }
     }
