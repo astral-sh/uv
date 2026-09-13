@@ -228,32 +228,77 @@ async fn unzip_inner<R: tokio::io::AsyncRead + Unpin>(
                 fs_err::create_dir_all(&path).map_err(Error::Io)?;
             }
 
-            // If this is a directory, we expect the CRC32 to be 0.
-            if zip_entry.crc32() != 0 {
+            // Consume the directory payload to verify that it is empty and measure
+            // its compressed and uncompressed sizes.
+            let mut reader = entry.reader_mut().compat();
+            let mut actual_uncompressed_size = 0u64;
+            copy_buffer.resize(DEFAULT_BUF_SIZE, 0);
+            loop {
+                let read = TokioAsyncReadExt::read(&mut reader, &mut copy_buffer)
+                    .await
+                    .map_err(Error::io_or_zip)?;
+                if read == 0 {
+                    break;
+                }
+                actual_uncompressed_size += read as u64;
+            }
+
+            // A directory entry must not contain file contents.
+            if actual_uncompressed_size != 0 {
                 if !skip_validation {
-                    return Err(Error::BadCrc32 {
+                    return Err(Error::BadUncompressedSize {
                         path: relpath.to_path_buf(),
-                        computed: 0,
-                        expected: zip_entry.crc32(),
+                        computed: actual_uncompressed_size,
+                        expected: 0,
                     });
                 }
             }
 
-            // If this is a directory, we expect the uncompressed size to be 0.
-            if zip_entry.uncompressed_size() != 0 {
+            // If the local file header specifies an uncompressed size, verify it.
+            if expected_uncompressed_size != 0 {
                 if !skip_validation {
                     return Err(Error::BadUncompressedSize {
                         path: relpath.to_path_buf(),
-                        computed: 0,
-                        expected: zip_entry.uncompressed_size(),
+                        computed: actual_uncompressed_size,
+                        expected: expected_uncompressed_size,
                     });
+                }
+            }
+
+            // Validate the compressed size.
+            let reader = entry.reader_mut();
+            let actual_compressed_size = reader.bytes_read();
+            if actual_compressed_size != expected_compressed_size {
+                if !(expected_compressed_size == 0 && expected_data_descriptor) {
+                    if !skip_validation {
+                        return Err(Error::BadCompressedSize {
+                            path: relpath.to_path_buf(),
+                            computed: actual_compressed_size,
+                            expected: expected_compressed_size,
+                        });
+                    }
+                }
+            }
+
+            // Validate the CRC of any directory entry.
+            let actual_crc32 = reader.compute_hash();
+            let expected_crc32 = reader.entry().crc32();
+            if actual_crc32 != expected_crc32 {
+                if !(expected_crc32 == 0 && expected_data_descriptor) {
+                    if !skip_validation {
+                        return Err(Error::BadCrc32 {
+                            path: relpath.to_path_buf(),
+                            computed: actual_crc32,
+                            expected: expected_crc32,
+                        });
+                    }
                 }
             }
 
             ComputedEntry {
-                crc32: 0,
-                uncompressed_size: 0,
-                compressed_size: 0,
+                crc32: actual_crc32,
+                uncompressed_size: actual_uncompressed_size,
+                compressed_size: actual_compressed_size,
                 digest: None,
             }
         } else {
@@ -958,4 +1003,95 @@ pub async fn archive<R: tokio::io::AsyncRead + Unpin>(
         SourceDistExtension::Legacy(_) => Err(Error::UnsupportedCompression),
     }?;
     Ok((target, files))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::tempdir;
+
+    #[tokio::test]
+    async fn test_unzip_deflated_empty_dir_with_data_descriptor() {
+        // Zip archive containing an empty META-INF/ directory compressed with DEFLATE (2 bytes)
+        // using data descriptors (streaming write), followed by file.txt.
+        // Produced by Python zipfile.ZipFile on non-seekable output:
+        // entry: META-INF/, compress_size=2, file_size=0, flags=0b1000 (data descriptor set)
+        let zip_bytes: &[u8] = &[
+            80, 75, 3, 4, 20, 0, 8, 0, 8, 0, 74, 159, 45, 93, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            9, 0, 0, 0, 77, 69, 84, 65, 45, 73, 78, 70, 47, 3, 0, 80, 75, 7, 8, 0, 0, 0, 0, 2, 0,
+            0, 0, 0, 0, 0, 0, 80, 75, 3, 4, 20, 0, 8, 0, 8, 0, 74, 159, 45, 93, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0, 8, 0, 0, 0, 102, 105, 108, 101, 46, 116, 120, 116, 203, 72, 205, 201,
+            201, 231, 2, 0, 80, 75, 7, 8, 32, 48, 58, 54, 8, 0, 0, 0, 6, 0, 0, 0, 80, 75, 1, 2, 20,
+            0, 20, 0, 8, 0, 8, 0, 74, 159, 45, 93, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 9, 0, 0, 0,
+            0, 0, 0, 0, 0, 0, 16, 0, 253, 65, 0, 0, 0, 0, 77, 69, 84, 65, 45, 73, 78, 70, 47, 80,
+            75, 1, 2, 20, 0, 20, 0, 8, 0, 8, 0, 74, 159, 45, 93, 32, 48, 58, 54, 8, 0, 0, 0, 6, 0,
+            0, 0, 8, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 128, 1, 57, 0, 0, 0, 102, 105, 108, 101, 46,
+            116, 120, 116, 80, 75, 5, 6, 0, 0, 0, 0, 2, 0, 2, 0, 109, 0, 0, 0, 119, 0, 0, 0, 0, 0,
+        ];
+
+        let target = tempdir().unwrap();
+        let (target, files) = unzip(zip_bytes, target).await.unwrap();
+
+        assert!(target.path().join("META-INF").is_dir());
+        assert!(target.path().join("file.txt").is_file());
+        assert_eq!(files.len(), 1);
+        assert_eq!(files[0].path(), Path::new("file.txt"));
+        assert_eq!(files[0].size(), 6);
+    }
+
+    #[tokio::test]
+    async fn test_unzip_deflated_empty_dir_without_data_descriptor() {
+        // Zip archive containing an empty META-INF/ directory compressed with DEFLATE (2 bytes)
+        // without data descriptors (seekable write), followed by file.txt.
+        let zip_bytes: &[u8] = &[
+            80, 75, 3, 4, 20, 0, 0, 0, 8, 0, 74, 159, 45, 93, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0,
+            9, 0, 0, 0, 77, 69, 84, 65, 45, 73, 78, 70, 47, 3, 0, 80, 75, 3, 4, 20, 0, 0, 0, 8, 0,
+            74, 159, 45, 93, 32, 48, 58, 54, 8, 0, 0, 0, 6, 0, 0, 0, 8, 0, 0, 0, 102, 105, 108,
+            101, 46, 116, 120, 116, 203, 72, 205, 201, 201, 231, 2, 0, 80, 75, 1, 2, 20, 0, 20, 0,
+            0, 0, 8, 0, 74, 159, 45, 93, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 9, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 16, 0, 253, 65, 0, 0, 0, 0, 77, 69, 84, 65, 45, 73, 78, 70, 47, 80, 75, 1, 2,
+            20, 0, 20, 0, 0, 0, 8, 0, 74, 159, 45, 93, 32, 48, 58, 54, 8, 0, 0, 0, 6, 0, 0, 0, 8,
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 128, 1, 41, 0, 0, 0, 102, 105, 108, 101, 46, 116, 120,
+            116, 80, 75, 5, 6, 0, 0, 0, 0, 2, 0, 2, 0, 109, 0, 0, 0, 87, 0, 0, 0, 0, 0,
+        ];
+
+        let target = tempdir().unwrap();
+        let (target, files) = unzip(zip_bytes, target).await.unwrap();
+
+        assert!(target.path().join("META-INF").is_dir());
+        assert!(target.path().join("file.txt").is_file());
+        assert_eq!(files.len(), 1);
+        assert_eq!(files[0].path(), Path::new("file.txt"));
+        assert_eq!(files[0].size(), 6);
+    }
+
+    #[tokio::test]
+    async fn test_unzip_directory_with_payload_rejected() {
+        // Zip archive containing a directory entry "bad_dir/" that has a non-empty payload.
+        let zip_bytes: &[u8] = &[
+            80, 75, 3, 4, 20, 0, 8, 0, 8, 0, 80, 159, 45, 93, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            8, 0, 0, 0, 98, 97, 100, 95, 100, 105, 114, 47, 43, 72, 172, 204, 201, 79, 76, 81, 200,
+            204, 83, 72, 201, 44, 2, 0, 80, 75, 7, 8, 134, 176, 85, 23, 16, 0, 0, 0, 14, 0, 0, 0,
+            80, 75, 1, 2, 20, 0, 20, 0, 8, 0, 8, 0, 80, 159, 45, 93, 134, 176, 85, 23, 16, 0, 0, 0,
+            14, 0, 0, 0, 8, 0, 0, 0, 0, 0, 0, 0, 0, 0, 16, 0, 253, 65, 0, 0, 0, 0, 98, 97, 100, 95,
+            100, 105, 114, 47, 80, 75, 5, 6, 0, 0, 0, 0, 1, 0, 1, 0, 54, 0, 0, 0, 70, 0, 0, 0, 0,
+            0,
+        ];
+
+        let target = tempdir().unwrap();
+        let err = unzip(zip_bytes, target).await.unwrap_err();
+
+        match err {
+            Error::BadUncompressedSize {
+                path,
+                computed,
+                expected,
+            } => {
+                assert_eq!(path, Path::new("bad_dir"));
+                assert_eq!(computed, 14);
+                assert_eq!(expected, 0);
+            }
+            other => panic!("expected BadUncompressedSize, got {other:?}"),
+        }
+    }
 }
