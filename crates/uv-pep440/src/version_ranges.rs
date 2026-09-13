@@ -653,10 +653,7 @@ impl From<UpperBound> for Bound<Version> {
     }
 }
 
-/// Format a version range with Python equality operators on singleton intervals.
-///
-/// Bounds are displayed as supplied, including any internal sentinels. This is diagnostic
-/// notation and is not necessarily a valid PEP 440 specifier list.
+/// Display a single version in `Ranges` as `==1.2.3` instead of `1.2.3`.
 pub fn display_version_ranges(ranges: &Ranges<Version>) -> impl Display + '_ {
     VersionRangesDisplay(ranges)
 }
