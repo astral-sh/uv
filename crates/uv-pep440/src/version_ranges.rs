@@ -2,6 +2,7 @@
 
 use std::cmp::Ordering;
 use std::collections::Bound;
+use std::fmt::{Display, Formatter};
 use std::ops::Deref;
 use std::sync::LazyLock;
 use version_ranges::Ranges;
@@ -652,6 +653,66 @@ impl From<UpperBound> for Bound<Version> {
     }
 }
 
+/// Format a version range with Python equality operators on singleton intervals.
+///
+/// Bounds are displayed as supplied, including any internal sentinels. This is diagnostic
+/// notation and is not necessarily a valid PEP 440 specifier list.
+pub fn display_version_ranges(ranges: &Ranges<Version>) -> impl Display + '_ {
+    VersionRangesDisplay(ranges)
+}
+
+struct VersionRangesDisplay<'a>(&'a Ranges<Version>);
+
+impl Display for VersionRangesDisplay<'_> {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> std::fmt::Result {
+        if self.0.is_empty() {
+            return formatter.write_str("∅");
+        }
+        for (index, (lower, upper)) in self.0.iter().enumerate() {
+            if index > 0 {
+                formatter.write_str(" | ")?;
+            }
+            if let (Bound::Included(lower), Bound::Included(upper)) = (lower, upper)
+                && lower == upper
+            {
+                write!(formatter, "=={lower}")?;
+                continue;
+            }
+            let has_lower = match lower {
+                Bound::Unbounded => false,
+                Bound::Included(version) => {
+                    write!(formatter, ">={version}")?;
+                    true
+                }
+                Bound::Excluded(version) => {
+                    write!(formatter, ">{version}")?;
+                    true
+                }
+            };
+            match upper {
+                Bound::Unbounded => {
+                    if !has_lower {
+                        formatter.write_str("*")?;
+                    }
+                }
+                Bound::Included(version) => {
+                    if has_lower {
+                        formatter.write_str(", ")?;
+                    }
+                    write!(formatter, "<={version}")?;
+                }
+                Bound::Excluded(version) => {
+                    if has_lower {
+                        formatter.write_str(", ")?;
+                    }
+                    write!(formatter, "<{version}")?;
+                }
+            }
+        }
+        Ok(())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -662,6 +723,59 @@ mod tests {
 
     fn version(version: &str) -> Version {
         version.parse().unwrap()
+    }
+
+    #[test]
+    fn display_range_bounds() {
+        for (lower, upper, expected) in [
+            (Bound::Unbounded, Bound::Unbounded, "*"),
+            (Bound::Unbounded, Bound::Included(version("2.0")), "<=2.0"),
+            (Bound::Unbounded, Bound::Excluded(version("2.0")), "<2.0"),
+            (Bound::Included(version("1.0")), Bound::Unbounded, ">=1.0"),
+            (Bound::Excluded(version("1.0")), Bound::Unbounded, ">1.0"),
+            (
+                Bound::Included(version("1.0")),
+                Bound::Included(version("2.0")),
+                ">=1.0, <=2.0",
+            ),
+            (
+                Bound::Included(version("1.0")),
+                Bound::Excluded(version("2.0")),
+                ">=1.0, <2.0",
+            ),
+            (
+                Bound::Excluded(version("1.0")),
+                Bound::Included(version("2.0")),
+                ">1.0, <=2.0",
+            ),
+            (
+                Bound::Excluded(version("1.0")),
+                Bound::Excluded(version("2.0")),
+                ">1.0, <2.0",
+            ),
+        ] {
+            let range = Ranges::from_range_bounds((lower, upper));
+            assert_eq!(display_version_ranges(&range).to_string(), expected);
+        }
+    }
+
+    #[test]
+    fn display_empty_and_singleton_ranges() {
+        let singleton = Ranges::singleton(version("1.0"));
+        for (range, expected) in [
+            (Ranges::empty(), "∅"),
+            (singleton.clone(), "==1.0"),
+            (
+                singleton.union(&Ranges::singleton(version("3.0"))),
+                "==1.0 | ==3.0",
+            ),
+            (
+                singleton.union(&Ranges::strictly_higher_than(version("2.0"))),
+                "==1.0 | >2.0",
+            ),
+        ] {
+            assert_eq!(display_version_ranges(&range).to_string(), expected);
+        }
     }
 
     #[test]
