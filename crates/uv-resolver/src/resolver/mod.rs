@@ -13,7 +13,7 @@ use either::Either;
 use futures::{FutureExt, StreamExt};
 use itertools::Itertools;
 use papaya::{HashMap, ResizeMode};
-use pubgrub::{ConflictId, Dependency, Id, Ranges, State, Term};
+use pubgrub::{ConflictId, Dependency, Id, Ranges, State};
 use rustc_hash::{FxHashMap, FxHashSet};
 use tokio::sync::mpsc::{self, Receiver, Sender};
 use tokio::sync::oneshot;
@@ -524,12 +524,12 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     // the platform.
                     version
                 } else {
-                    let term_intersection = state
+                    let range = state
                         .pubgrub
                         .partial_solution
                         .term_intersection_for_package(next_id)
-                        .expect("a package was chosen but we don't have a term");
-                    let range = term_intersection.unwrap_positive();
+                        .expect("a package was chosen but we don't have a term")
+                        .unwrap_positive();
 
                     // Within a fixed resolver environment, an implicit registry candidate is
                     // stable for a given range and pre-release policy. Avoid repeating candidate
@@ -572,27 +572,19 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     let Some(version) = decision else {
                         debug!("No compatible version found for: {next_package}");
 
-                        let term_intersection = state
-                            .pubgrub
-                            .partial_solution
-                            .term_intersection_for_package(next_id)
-                            .expect("a package was chosen but we don't have a term");
-
                         if let PubGrubPackageInner::Package { name, .. } = &**next_package {
                             // Check if the decision was due to the package being unavailable
                             if let Some(reason) = self.unavailable_packages.pin().get(name) {
                                 state.pubgrub.add_unavailable(
                                     next_id,
-                                    term_intersection.clone(),
+                                    range.clone(),
                                     UnavailableReason::Package(reason.clone()),
                                 );
                                 continue;
                             }
                         }
 
-                        state
-                            .pubgrub
-                            .add_no_versions(next_id, term_intersection.clone());
+                        state.pubgrub.add_no_versions(next_id, range.clone());
                         continue;
                     };
 
@@ -619,7 +611,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                             next_package,
                             index,
                             &version,
-                            term_intersection.unwrap_positive(),
+                            range,
                             state
                                 .pubgrub
                                 .partial_solution
@@ -674,7 +666,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         );
                         state.pubgrub.add_unavailable(
                             next_id,
-                            Term::Positive(versions),
+                            versions,
                             UnavailableReason::Version(reason),
                         );
                     }
@@ -811,7 +803,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         );
                         state.pubgrub.add_unavailable(
                             next_id,
-                            Term::Positive(versions),
+                            versions,
                             UnavailableReason::Version(UnavailableVersion::RequiresPython(
                                 requires_python,
                             )),
@@ -3459,11 +3451,8 @@ impl ForkState {
                 .add_decision(self.next, version);
             return;
         }
-        self.pubgrub.add_unavailable(
-            self.next,
-            Term::Positive(versions),
-            UnavailableReason::Version(reason),
-        );
+        self.pubgrub
+            .add_unavailable(self.next, versions, UnavailableReason::Version(reason));
     }
 
     /// Subset the current markers with the new markers and update the python requirements fields
