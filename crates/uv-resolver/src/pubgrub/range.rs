@@ -6,7 +6,7 @@ use pubgrub::{Ranges, SetRelation, VersionSet};
 
 use uv_pep440::{
     LocalVersionSlice, Version, VersionSpecifiers, canonicalize_version_ranges,
-    strip_local_version_sentinels,
+    display_version_ranges, strip_local_version_sentinels,
 };
 
 /// A PEP 440 version range with encoded and canonical representations.
@@ -269,9 +269,9 @@ impl VersionSet for Range<Version> {
     }
 }
 
-impl<T: Debug + Display + Clone + Eq + Ord> Display for Range<T> {
+impl Display for Range<Version> {
     fn fmt(&self, formatter: &mut Formatter<'_>) -> std::fmt::Result {
-        Display::fmt(&self.encoded_versions, formatter)
+        Display::fmt(&display_version_ranges(&self.encoded_versions), formatter)
     }
 }
 
