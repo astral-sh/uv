@@ -391,6 +391,161 @@ CMD ["app.main.handler"]
 
 From there, we can build and deploy the updated image as before.
 
+### Using a minimal base image
+
+The AWS-provided Lambda base images for Python include additional software and libraries that are
+not necessary for all Lambda functions, and occasionally lag behind on updates for known
+vulnerabilities. As an alternative, you can build Lambda images on a minimal Debian base using
+[`awslambdaric`](https://github.com/aws/aws-lambda-python-runtime-interface-client) (the AWS Lambda
+Runtime Interface Client) to handle the Lambda lifecycle.
+
+This approach gives you full control over the base image, making it easier to mitigate CVEs quickly
+and reducing the overall image size. For a minimal Lambda function, the resulting image is roughly
+**~3x smaller** than the equivalent image built on the AWS-provided base (~180 MB vs ~600 MB).
+
+Consider a minimal Lambda function with the following structure:
+
+```plaintext
+project
+├── pyproject.toml
+├── Dockerfile
+└── main.py
+```
+
+Where the `pyproject.toml` includes `awslambdaric` as a dependency:
+
+```toml title="pyproject.toml"
+[project]
+name = "uv-aws-lambda-example"
+version = "0.1.0"
+requires-python = ">=3.14"
+dependencies = [
+    # AWS Lambda Runtime Interface Client for running on non-AWS base images.
+    "awslambdaric",
+]
+```
+
+And `main.py` contains the Lambda handler:
+
+```python title="main.py"
+import logging
+
+logger = logging.getLogger()
+logger.setLevel(logging.INFO)
+
+
+def lambda_handler(event, context):
+    logger.info("Received event: %s", event)
+    name = event.get("name", "world")
+    return {"statusCode": 200, "body": f"Hello, {name}!"}
+```
+
+Now, create the Dockerfile. Unlike the previous examples which use `public.ecr.aws/lambda/python` as
+a base, this Dockerfile uses a uv image with Debian for the builder stage and a bare
+`debian:trixie-slim` image for the final stage. Since the final image doesn't include Python, we use
+uv's managed Python to install it into a known location and copy it into the final image:
+
+```dockerfile title="Dockerfile"
+# Stage 1: Build dependencies using the uv Debian base image.
+# Use the same Debian release (trixie) as the final stage.
+FROM ghcr.io/astral-sh/uv:0.10-trixie-slim AS builder
+
+# Enable bytecode compilation, to improve cold-start performance.
+ENV UV_COMPILE_BYTECODE=1
+
+# Require the lockfile to be up-to-date for reproducible builds.
+ENV UV_FROZEN=1
+
+# Enable copy mode since the cache mount is on a separate filesystem.
+ENV UV_LINK_MODE=copy
+
+# Use uv-managed Python and install it into a known location.
+ENV UV_MANAGED_PYTHON=1
+ENV UV_PYTHON_INSTALL_DIR=/lambda/python
+
+# Set the virtual environment path.
+ENV UV_PROJECT_ENVIRONMENT=/lambda/.venv
+
+# Extract CA certificates from the certifi package so we can copy them into
+# the final image. This is often faster than installing system packages via apt.
+# Alternatively, install the ca-certificates package from Debian:
+#   RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates
+RUN mkdir -p /etc/ssl/certs && \
+    cp $(uv run --no-project --with certifi -- python -c "import certifi; print(certifi.where())") \
+    /etc/ssl/certs/ca-certificates.crt
+
+# Copy dependency metadata first for optimal layer caching.
+# If you have a .python-version file, copy it too to pin the exact Python version.
+COPY pyproject.toml uv.lock ./
+
+# Create a relocatable virtual environment so it can be copied across stages.
+RUN uv venv /lambda/.venv --relocatable
+
+# Install dependencies (without the project itself). This layer is cached
+# independently of the application code, and is only invalidated when the
+# pyproject.toml or uv.lock files change.
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --no-install-workspace --no-dev
+
+# Copy the application code.
+COPY . .
+
+# Install the project itself (without editable mode, for deployment).
+# For workspaces, use `uv sync --package <name>` to build a specific package.
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --no-dev --no-editable
+
+# Stage 2: Final Lambda image on a minimal Debian base.
+FROM debian:trixie-slim
+
+# Copy CA certificates from the builder. python-build-standalone expects the
+# certificate bundle at /etc/ssl/cert.pem.
+COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/cert.pem
+
+# Copy the Python installation and virtual environment from the builder.
+COPY --from=builder /lambda/python /lambda/python
+COPY --from=builder /lambda/.venv /lambda/.venv
+
+# Copy the Lambda handler.
+COPY main.py /lambda/
+
+# Ensure the handler is importable by adding /lambda to the Python path.
+ENV PYTHONPATH=/lambda
+
+# Set the Lambda handler entry point using awslambdaric.
+ENTRYPOINT ["/lambda/.venv/bin/python3", "-m", "awslambdaric"]
+CMD ["main.lambda_handler"]
+```
+
+!!! tip
+
+    To deploy to ARM-based AWS Lambda runtimes, build the image for `linux/arm64`, e.g.,
+    `docker build --platform linux/arm64`.
+
+We can build the image with:
+
+```console
+$ uv lock
+$ docker build -t lambda-example .
+```
+
+The key differences from the AWS-provided base image approach are:
+
+1. **uv-managed Python.** The builder stage uses `UV_MANAGED_PYTHON=1` with `UV_PYTHON_INSTALL_DIR`
+   to install Python into a known location (`/lambda/python`), which is then copied into the final
+   image alongside the virtual environment.
+2. **Relocatable virtual environment.** `uv venv --relocatable` creates a virtual environment that
+   can be moved between stages without breaking.
+3. **`awslambdaric` entry point.** Since the final image doesn't include the AWS Lambda runtime,
+   `awslambdaric` serves as the Lambda Runtime Interface Client, handling the Lambda lifecycle via
+   the `ENTRYPOINT`.
+4. **CA certificates.** The minimal Debian base does not include CA certificates, so the certificate
+   bundle is copied from the builder stage to `/etc/ssl/cert.pem` (the path expected by
+   python-build-standalone).
+
+From there, we can push to ECR and deploy to AWS Lambda as described in the
+[previous section](#deploying-a-docker-image).
+
 ## Deploying a zip archive
 
 AWS Lambda also supports deployment via zip archives. For simple applications, zip archives can be a
