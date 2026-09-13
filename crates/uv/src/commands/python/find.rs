@@ -5,7 +5,7 @@ use std::path::Path;
 use uv_cache::Cache;
 use uv_client::BaseClientBuilder;
 use uv_configuration::{ActiveEnvironment, DependencyGroupsWithDefaults};
-use uv_errors::ErrorWithHints;
+use uv_errors::{ErrorOptions, ErrorWithHints, Hints};
 use uv_fs::Simplified;
 use uv_python::{
     ConfigDiscovery, EnvironmentPreference, PythonDownloads, PythonInstallation, PythonPreference,
@@ -16,6 +16,7 @@ use uv_settings::PythonInstallMirrors;
 use uv_warnings::{warn_user, warn_user_once_with_chain};
 use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceCache, WorkspaceErrorKind};
 
+use crate::commands::diagnostics::diagnostic_for_error;
 use crate::commands::{
     ExitStatus,
     project::{ScriptInterpreter, WorkspacePython, validate_project_requires_python},
@@ -65,7 +66,11 @@ pub(crate) async fn find(
                         | WorkspaceErrorKind::MissingPyprojectToml
                         | WorkspaceErrorKind::NonWorkspace(_)
                 ) {
-                    warn_user_once_with_chain!(&err);
+                    warn_user_once_with_chain!(
+                        &err,
+                        Hints::none(),
+                        ErrorOptions::default().with_diagnostic(diagnostic_for_error),
+                    );
                 }
                 None
             }

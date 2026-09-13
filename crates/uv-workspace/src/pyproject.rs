@@ -8,6 +8,7 @@
 
 use std::borrow::Cow;
 use std::collections::BTreeMap;
+use std::error::Error as StdError;
 use std::fmt::Formatter;
 use std::ops::Deref;
 use std::path::{Path, PathBuf};
@@ -22,7 +23,8 @@ use tracing::instrument;
 use uv_build_backend::BuildBackendSettings;
 use uv_configuration::{ExcludeDependency, GitLfsSetting, Override};
 use uv_distribution_types::{Index, IndexName, RequirementSource};
-use uv_fs::{PortablePathBuf, try_relative_to_if};
+use uv_errors::{Diagnostic, SourceFile};
+use uv_fs::{PortablePathBuf, Simplified, try_relative_to_if};
 use uv_git_types::GitReference;
 use uv_macros::OptionsMetadata;
 use uv_normalize::{DefaultGroups, ExtraName, GroupName, PackageName};
@@ -34,12 +36,12 @@ use uv_pypi_types::{
     VerbatimParsedUrl,
 };
 use uv_redacted::DisplaySafeUrl;
-use uv_toml::deserialize_unique_map;
+use uv_toml::{ParseError, deserialize_unique_map, diagnostic_for_span};
 
 #[derive(Error, Debug)]
 pub enum PyprojectTomlError {
     #[error(transparent)]
-    Toml(#[from] toml::de::Error),
+    Toml(#[from] ParseError<toml::de::Error>),
     #[error("Failed to parse `tool.uv.sources`")]
     Source(
         #[from]
@@ -54,6 +56,31 @@ pub enum PyprojectTomlError {
         "`pyproject.toml` is using the `[project]` table, but the required `project.version` field is neither set nor present in the `project.dynamic` list"
     )]
     MissingVersion,
+}
+
+impl From<toml::de::Error> for PyprojectTomlError {
+    fn from(error: toml::de::Error) -> Self {
+        Self::Toml(error.into())
+    }
+}
+
+/// Resolve source presentation for a parsed `pyproject.toml` error.
+pub fn diagnostic_for_error<'a>(error: &'a (dyn StdError + 'static)) -> Option<Diagnostic<'a>> {
+    let error = error.downcast_ref::<PyprojectTomlError>().or_else(|| {
+        error
+            .downcast_ref::<Box<PyprojectTomlError>>()
+            .map(Box::as_ref)
+    })?;
+    match error {
+        PyprojectTomlError::Toml(error) => diagnostic_for_span(
+            error.original().message(),
+            error.original().span(),
+            error.document()?,
+        ),
+        PyprojectTomlError::Source(_)
+        | PyprojectTomlError::MissingName
+        | PyprojectTomlError::MissingVersion => None,
+    }
 }
 
 fn deserialize_optional_dependencies<'de, D, V>(
@@ -91,21 +118,25 @@ pub struct PyProjectToml {
 
 impl PyProjectToml {
     /// Parse a `PyProjectToml` from a raw TOML string.
-    #[instrument("toml::from_str workspace", skip_all, fields(path = %_path.as_ref().display()))]
-    pub fn from_string(raw: String, _path: impl AsRef<Path>) -> Result<Self, PyprojectTomlError> {
+    #[instrument("toml::from_str workspace", skip_all, fields(path = %path.as_ref().display()))]
+    pub fn from_string(raw: String, path: impl AsRef<Path>) -> Result<Self, PyprojectTomlError> {
         let pyproject: Self = match toml::from_str(&raw) {
             Ok(pyproject) => pyproject,
             Err(error) => {
+                let document =
+                    SourceFile::new(path.as_ref().user_display().to_string(), raw.clone());
                 // Preserve the more specific source error if both parses would fail.
                 let sources = toml::from_str::<PyProjectTomlSourcesWire>(&raw)
-                    .map_err(PyprojectTomlError::Toml)?
+                    .map_err(|error| {
+                        PyprojectTomlError::Toml(ParseError::new(error, document.clone()))
+                    })?
                     .tool
                     .and_then(|tool| tool.uv)
                     .and_then(|uv| uv.sources);
                 if let Some(sources) = sources {
                     ToolUvSources::try_from(sources)?;
                 }
-                return Err(PyprojectTomlError::Toml(error));
+                return Err(PyprojectTomlError::Toml(ParseError::new(error, document)));
             }
         };
 

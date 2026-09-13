@@ -1163,20 +1163,18 @@ fn create_venv_warns_user_on_requires_python_discovery_error() -> Result<()> {
     uv_snapshot!(context.filters(), context.venv(), @"
     exit_code: 0 (success)
     ----- stderr -----
-    warning: Failed to parse `pyproject.toml` during settings discovery:
-      TOML parse error at line 1, column 9
+    warning: Failed to parse `pyproject.toml` during settings discovery
+      cause: key with no value, expected `=`
+       --> pyproject.toml:1:9
         |
       1 | invalid toml
         |         ^
-      key with no value, expected `=`
-
-    warning: Failed to parse `pyproject.toml` during environment creation:
-      TOML parse error at line 1, column 9
+    warning: Failed to parse `pyproject.toml` during environment creation
+      cause: key with no value, expected `=`
+       --> pyproject.toml:1:9
         |
       1 | invalid toml
         |         ^
-      key with no value, expected `=`
-
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
     Activate with: source .venv/[BIN]/activate

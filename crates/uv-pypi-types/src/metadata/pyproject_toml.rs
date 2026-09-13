@@ -6,8 +6,10 @@ use serde::Deserialize;
 use serde::de::IntoDeserializer;
 use tracing::instrument;
 
+use uv_errors::SourceFile;
 use uv_normalize::{ExtraName, PackageName};
 use uv_pep440::{Version, VersionSpecifiers};
+use uv_toml::ParseError;
 
 use crate::{LenientVersionSpecifiers, MetadataError};
 
@@ -20,12 +22,22 @@ pub struct PyProjectToml {
 }
 
 impl PyProjectToml {
-    #[instrument(name = "toml::from_str uv pypi types", skip_all, fields(source = % _source))]
-    pub fn from_toml(toml: &str, _source: impl Display) -> Result<Self, MetadataError> {
-        let pyproject_toml = toml_edit::Document::from_str(toml)
-            .map_err(MetadataError::InvalidPyprojectTomlSyntax)?;
-        let pyproject_toml = Self::deserialize(pyproject_toml.into_deserializer())
-            .map_err(MetadataError::InvalidPyprojectTomlSchema)?;
+    /// Parse metadata while retaining its caller-provided, display-safe source name.
+    #[instrument(name = "toml::from_str uv pypi types", skip_all, fields(source = %source))]
+    pub fn from_toml(toml: &str, source: impl Display) -> Result<Self, MetadataError> {
+        let pyproject_toml = toml_edit::Document::from_str(toml).map_err(|error| {
+            MetadataError::InvalidPyprojectTomlSyntax {
+                source: error,
+                document: SourceFile::new(source.to_string(), toml),
+            }
+        })?;
+        let pyproject_toml =
+            Self::deserialize(pyproject_toml.into_deserializer()).map_err(|error| {
+                MetadataError::InvalidPyprojectTomlSchema(ParseError::new(
+                    error,
+                    SourceFile::new(source.to_string(), toml),
+                ))
+            })?;
         Ok(pyproject_toml)
     }
 
@@ -124,8 +136,29 @@ pub struct ToolPoetry {
 mod tests {
     use std::assert_matches;
 
+    use insta::assert_snapshot;
+    use uv_errors::SourceFile;
+    use uv_toml::ParseError;
+
     use super::PyProjectToml;
     use crate::MetadataError;
+
+    #[test]
+    fn spanless_schema_error_retains_the_key_path() {
+        let mut original =
+            <toml_edit::de::Error as serde::de::Error>::custom("invalid project metadata");
+        original.add_key("name".to_owned());
+        original.add_key("project".to_owned());
+        let error = MetadataError::InvalidPyprojectTomlSchema(ParseError::new(
+            original,
+            SourceFile::new("pyproject.toml", "[project]\nname = 42\n"),
+        ));
+        assert!(crate::diagnostic_for_error(&error).is_none());
+        assert_snapshot!(error, @"
+        invalid project metadata
+        in `project.name`
+        ");
+    }
 
     #[test]
     fn requires_python_allows_unrelated_dynamic_metadata() {
