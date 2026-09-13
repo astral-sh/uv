@@ -505,7 +505,7 @@ fn create_centralized_project_environment_path_file() -> Result<()> {
     let marker = target.join("marker");
     fs_err::write(&marker, "")?;
 
-    uv_fs::remove_virtualenv(environment.path())?;
+    uv_fs::remove_virtualenv(environment.path(), uv_fs::ClearNonVirtualenv::Allow)?;
     environment.write_str(&target.to_string_lossy())?;
 
     // With the preview, `--allow-existing` selects the root for the requested interpreter.
@@ -524,7 +524,7 @@ fn create_centralized_project_environment_path_file() -> Result<()> {
     assert_ne!(target, fs_err::read_link(environment.path())?);
     assert!(marker.is_file());
 
-    uv_fs::remove_virtualenv(environment.path())?;
+    uv_fs::remove_virtualenv(environment.path(), uv_fs::ClearNonVirtualenv::Allow)?;
     environment.write_str(&target.to_string_lossy())?;
 
     // Without the preview, `--allow-existing` replaces the path file without clearing its target.

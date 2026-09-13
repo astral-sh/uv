@@ -876,6 +876,15 @@ pub fn is_virtualenv_executable(executable: impl AsRef<Path>) -> bool {
         .is_some_and(is_virtualenv_base)
 }
 
+/// Should [`remove_virtualenv`] remove an entry that is not a virtual environment.
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+pub enum ClearNonVirtualenv {
+    /// Allow clearing a non-virtual environment directory.
+    Allow,
+    /// Refuse to clear a non-virtual environment directory.
+    Error,
+}
+
 /// Returns `true` if a path is the base path of a virtual environment,
 /// indicated by the presence of a `pyvenv.cfg` file.
 ///
@@ -884,6 +893,52 @@ pub fn is_virtualenv_executable(executable: impl AsRef<Path>) -> bool {
 /// unnecessary.
 pub fn is_virtualenv_base(path: impl AsRef<Path>) -> bool {
     path.as_ref().join("pyvenv.cfg").is_file()
+}
+
+/// Ensure that the directory can be removed by checking if it is a
+/// virtual environment (following symlinks) or it is empty
+fn ensure_removable(location: &Path, metadata: &std::fs::Metadata) -> io::Result<()> {
+    let is_dir = if metadata.is_symlink() {
+        location.is_dir()
+    } else {
+        metadata.is_dir()
+    };
+    if is_dir {
+        if is_virtualenv_base(location) {
+            return Ok(());
+        }
+        if !metadata.is_symlink() && fs_err::read_dir(location)?.next().is_none() {
+            return Ok(());
+        }
+    }
+    Err(io::Error::new(
+        io::ErrorKind::InvalidInput,
+        format!("`{}` is not a virtual environment", location.display()),
+    ))
+}
+
+/// Checks if [`remove_virtualenv`] would remove an existing entry at `location`
+///
+/// Returns `Ok(false)` if nothing exists at `location` or if it is an empty directory.
+/// Returns an [`io::ErrorKind::InvalidInput`] error if `clear_non_virtualenv` forbids removing
+/// the directory.
+pub fn would_replace_virtualenv(
+    location: &Path,
+    clear_non_virtualenv: ClearNonVirtualenv,
+) -> io::Result<bool> {
+    let metadata = match ::fs_err::symlink_metadata(location) {
+        Ok(metadata) => metadata,
+        Err(err) if err.kind() == io::ErrorKind::NotFound => return Ok(false),
+        Err(err) => return Err(err),
+    };
+    match clear_non_virtualenv {
+        ClearNonVirtualenv::Allow => {}
+        ClearNonVirtualenv::Error => ensure_removable(location, &metadata)?,
+    }
+    if metadata.is_dir() && fs_err::read_dir(location)?.next().is_none() {
+        return Ok(false);
+    }
+    Ok(true)
 }
 
 /// Whether the error is due to a lock being held.
@@ -952,8 +1007,17 @@ pub fn copy_dir_all(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> std::io::Re
 /// Perform a safe removal of a virtual environment.
 ///
 /// The link or file at `location` is removed without following it.
-pub fn remove_virtualenv(location: &Path) -> io::Result<()> {
-    if !fs_err::symlink_metadata(location)?.is_dir() {
+/// Checks first if removing the directory is allowed.
+pub fn remove_virtualenv(
+    location: &Path,
+    clear_non_virtualenv: ClearNonVirtualenv,
+) -> io::Result<()> {
+    let metadata = fs_err::symlink_metadata(location)?;
+    match clear_non_virtualenv {
+        ClearNonVirtualenv::Allow => {}
+        ClearNonVirtualenv::Error => ensure_removable(location, &metadata)?,
+    }
+    if !metadata.is_dir() {
         return remove_symlink(location);
     }
 
@@ -1010,11 +1074,14 @@ pub fn remove_virtualenv(location: &Path) -> io::Result<()> {
 /// Prepare an empty virtual environment directory, resolving links when possible.
 ///
 /// Returns whether an existing entry was found.
-pub fn clear_virtualenv(location: &Path) -> io::Result<bool> {
+pub fn clear_virtualenv(
+    location: &Path,
+    clear_non_virtualenv: ClearNonVirtualenv,
+) -> io::Result<bool> {
     let location = location
         .canonicalize()
         .unwrap_or_else(|_| location.to_path_buf());
-    let cleared = match remove_virtualenv(&location) {
+    let cleared = match remove_virtualenv(&location, clear_non_virtualenv) {
         Ok(()) => true,
         Err(err) if err.kind() == io::ErrorKind::NotFound => false,
         Err(err) => return Err(err),
@@ -1057,8 +1124,8 @@ mod tests {
         fs_err::write(&marker, "")?;
         let environment = tempdir.path().join("environment");
         create_symlink(&target, &environment)?;
-
-        remove_virtualenv(&environment)?;
+        let clear_non_virtualenv = ClearNonVirtualenv::Allow;
+        remove_virtualenv(&environment, clear_non_virtualenv)?;
 
         assert_matches!(
             fs_err::symlink_metadata(environment),
@@ -1072,9 +1139,48 @@ mod tests {
     fn clear_virtualenv_recreates_missing_directory() -> io::Result<()> {
         let tempdir = tempfile::tempdir()?;
         let environment = tempdir.path().join("environment");
-
-        assert!(!clear_virtualenv(&environment)?);
+        let clear_non_virtualenv = ClearNonVirtualenv::Error;
+        assert!(!clear_virtualenv(&environment, clear_non_virtualenv)?);
         assert!(environment.is_dir());
+        Ok(())
+    }
+
+    #[test]
+    fn remove_virtualenv_refuses_non_virtualenv_directory() -> io::Result<()> {
+        let tempdir = tempfile::tempdir()?;
+        let directory = tempdir.path().join("directory");
+        fs_err::create_dir(&directory)?;
+        let important = directory.join("important.txt");
+        fs_err::write(&important, "content")?;
+
+        assert_matches!(
+            remove_virtualenv(&directory, ClearNonVirtualenv::Error),
+            Err(err) if err.kind() == io::ErrorKind::InvalidInput
+        );
+        assert_eq!(fs_err::read_to_string(&important)?, "content");
+
+        // A pyvenv.cfg marks the directory as a virtual environment that uv
+        // may remove.
+        fs_err::write(directory.join("pyvenv.cfg"), "")?;
+        remove_virtualenv(&directory, ClearNonVirtualenv::Error)?;
+        assert!(!directory.exists());
+        Ok(())
+    }
+
+    #[test]
+    fn remove_virtualenv_refuses_file() -> io::Result<()> {
+        let tempdir = tempfile::tempdir()?;
+        let file = tempdir.path().join("file");
+        fs_err::write(&file, "content")?;
+
+        assert_matches!(
+            remove_virtualenv(&file, ClearNonVirtualenv::Error),
+            Err(err) if err.kind() == io::ErrorKind::InvalidInput
+        );
+        assert_eq!(fs_err::read_to_string(&file)?, "content");
+
+        remove_virtualenv(&file, ClearNonVirtualenv::Allow)?;
+        assert!(!file.exists());
         Ok(())
     }
 }
