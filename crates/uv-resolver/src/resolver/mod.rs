@@ -2834,10 +2834,12 @@ impl<'index> ForkState<'index> {
 
             let proxy_package = self.pubgrub.package_store.alloc(package.clone());
             let base_package_id = self.pubgrub.package_store.alloc(base_package.clone());
-            self.pubgrub.add_proxy_package_incompatibility(
+            // Constrain the proxy and base to the same version range so conflicts reject the
+            // whole range without enumerating each proxy version.
+            self.pubgrub.add_dependency(
                 proxy_package,
-                base_package_id,
                 version.clone(),
+                (base_package_id, version.clone()),
             );
         }
 
