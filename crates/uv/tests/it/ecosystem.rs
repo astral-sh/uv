@@ -192,6 +192,7 @@ fn jupyterlab() -> Result<()> {
 //
 // The dynamically derived project version is replaced with the version from
 // the pinned release. The sdist-only `pybars4` dependency is omitted.
+// The Python range is capped below 3.13 because the `autogen` extra requires NumPy 1.x wheels.
 #[test]
 fn semantic_kernel() -> Result<()> {
     if skip_slow_ecosystem_test_on_non_linux_ci() {
