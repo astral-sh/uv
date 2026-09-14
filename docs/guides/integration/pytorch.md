@@ -528,3 +528,58 @@ $ UV_TORCH_BACKEND=cu130 uv pip install torch torchvision
 ```
 
 At present, `--torch-backend` is only available in the `uv pip` interface.
+
+## ROCm 10.0
+
+ROCm 10.0 is distributed by AMD rather than by PyTorch, and is packaged differently from ROCm 7.x
+and earlier. Instead of one index per GPU family, with the kernels bundled into the `torch` wheel, a
+single architecture-neutral index serves every GPU, and the kernels ship in separate packages that
+are selected by an architecture-specific extra:
+
+```shell
+$ uv pip install torch --torch-backend=rocm10.0
+```
+
+uv detects the AMD GPU architecture and applies the matching extra (e.g., `torch[device-gfx942]`),
+which pulls in the GPU kernels along with the ROCm runtime. On machines with multiple GPU
+architectures, set `UV_AMD_GPU_ARCHITECTURE` to choose which one to target:
+
+```shell
+$ UV_AMD_GPU_ARCHITECTURE=gfx942 uv pip install torch --torch-backend=rocm10.0
+```
+
+`--torch-backend=auto` continues to select from the ROCm 7.x and earlier indexes for AMD GPUs; ROCm
+10.0 must be requested explicitly.
+
+The extra is applied to every requirement on `torch` and `torchvision`, including transitive ones,
+so a package that depends on `torch` resolves to the GPU-enabled build as well. It composes with any
+extras the requirement already declares, so `torch[extra]` becomes `torch[extra,device-gfx942]`.
+
+Like the other backends, `--torch-backend` applies to the `uv pip` interface. To use ROCm 10.0 in a
+project that's resolved with `uv lock`, configure the index and device extra in `pyproject.toml`, as
+below.
+
+To configure the index directly, rather than via `--torch-backend`, note that the device extra is
+required. Without it, the resolved `torch` contains no GPU kernels: it still reports the GPU as
+available, but fails with `hipErrorInvalidImage` on the first kernel launch. The ROCm runtime and
+kernel packages that `torch` depends on are also only published on the AMD index, so the index is
+declared without `explicit = true` so that they resolve there too:
+
+```toml
+[project]
+name = "project"
+version = "0.1.0"
+requires-python = ">=3.14.0"
+dependencies = [
+  "torch[device-gfx942]>=2.11.0 ; sys_platform == 'linux'",
+]
+
+[tool.uv.sources]
+torch = [
+  { index = "amd-rocm", marker = "sys_platform == 'linux'" },
+]
+
+[[tool.uv.index]]
+name = "amd-rocm"
+url = "https://stable.repo.amd.com/rocm/whl-next/"
+```

@@ -2079,7 +2079,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
     ) -> impl Iterator<Item = Cow<'a, Requirement>> {
         let python_marker = python_requirement.to_marker_tree();
 
-        if let Some(dev) = dev {
+        let requirements = if let Some(dev) = dev {
             // Dependency groups can include the project itself, so no need to flatten recursive
             // dependencies.
             Either::Left(Either::Left(self.requirements_for_extra(
@@ -2206,7 +2206,33 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             requirements.extend(self_constraints.into_iter().map(Cow::Owned));
 
             Either::Right(requirements.into_iter())
-        }
+        };
+
+        // Apply the architecture-specific extra required by the configured PyTorch backend, if
+        // any. ROCm 10.0 ships its GPU kernels in separate packages, which are only reachable
+        // through a `device-gfx*` extra on `torch` and `torchvision`.
+        //
+        // This applies to every requirement edge, so a package that depends on `torch` gets the
+        // kernels too, and it composes with extras the requirement already declares (e.g.,
+        // `torch[extra]` becomes `torch[extra,device-gfx942]`).
+        requirements.map(move |requirement| {
+            let Some(extra) = self
+                .options
+                .torch_backend
+                .as_ref()
+                .and_then(|torch_backend| torch_backend.device_extra(&requirement.name))
+            else {
+                return requirement;
+            };
+            if requirement.extras.contains(&extra) {
+                return requirement;
+            }
+            let mut requirement = requirement.into_owned();
+            let mut extras = requirement.extras.into_vec();
+            extras.push(extra);
+            requirement.extras = extras.into_boxed_slice();
+            Cow::Owned(requirement)
+        })
     }
 
     /// The set of the regular and dev dependencies, filtered by Python version,
