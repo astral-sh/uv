@@ -673,7 +673,7 @@ async fn python_list_remote_python_downloads_json_url() -> Result<()> {
     exit_code: 2 (failure)
     ----- stderr -----
     error: Unable to parse the JSON Python download list at http://[LOCALHOST]/invalid-hash
-      Caused by: Invalid hash digest length (expected 64 hexadecimal characters, found 5) at line 16 column 29
+      cause: Invalid hash digest length (expected 64 hexadecimal characters, found 5) at line 16 column 29
     ");
 
     Ok(())
