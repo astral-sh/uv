@@ -4,7 +4,6 @@ use anyhow::{Ok, Result};
 use assert_cmd::assert::OutputAssertExt;
 use assert_fs::prelude::*;
 use indoc::{formatdoc, indoc};
-#[cfg(feature = "test-universal")]
 use insta::assert_snapshot;
 #[cfg(all(feature = "test-universal", feature = "test-git"))]
 use std::path::Path;
@@ -10258,7 +10257,7 @@ fn requirements_txt_emit_indexes() -> Result<()> {
     Ok(())
 }
 
-/// Each batch entry has the same dependency selection as an independent export.
+/// Each batch entry applies its own package, extra, and dependency-group selections.
 #[cfg(feature = "test-universal")]
 #[test]
 fn export_batch_selections() -> Result<()> {
@@ -10301,108 +10300,121 @@ fn export_batch_selections() -> Result<()> {
         default-groups = ["lint"]
     "#})?;
     context.lock().assert().success();
-    let lock = fs_err::read(context.temp_dir.child("uv.lock"))?;
-    let selections: &[(&str, &[&str])] = &[
-        ("", &[]),
-        ("no-group = ['dev']", &["--no-group", "dev"]),
-        ("package = ['child']", &["--package", "child"]),
-        (
-            "package = ['child']\nno-default-groups = true",
-            &["--package", "child", "--no-default-groups"],
-        ),
-        (
-            "package = ['child']\nextra = ['test']\nno-default-groups = true",
-            &[
-                "--package",
-                "child",
-                "--extra",
-                "test",
-                "--no-default-groups",
-            ],
-        ),
-        (
-            "package = ['child']\nonly-group = ['dev']",
-            &["--package", "child", "--only-group", "dev"],
-        ),
-        (
-            "package = ['child']\ngroup = ['root-only']",
-            &["--package", "child", "--group", "root-only"],
-        ),
-        (
-            "package = ['child']\nall-groups = true\nno-group = ['lint']",
-            &["--package", "child", "--all-groups", "--no-group", "lint"],
-        ),
-        (
-            "package = ['root', 'child']\nno-default-groups = true",
-            &[
-                "--package",
-                "root",
-                "--package",
-                "child",
-                "--no-default-groups",
-            ],
-        ),
-        ("all-packages = true", &["--all-packages"]),
-        (
-            "package = ['child']\nall-extras = true\nno-extra = ['test']",
-            &["--package", "child", "--all-extras", "--no-extra", "test"],
-        ),
-    ];
-    let mut manifest = String::new();
-    for (index, (selection, arguments)) in selections.iter().enumerate() {
-        manifest.push_str(&formatdoc! {"
-            [[export]]
-            output-file = '{index}.txt'
-            {selection}
-        "});
-        context
-            .export()
-            .arg("--frozen")
-            .arg("--no-header")
-            .arg("--output-file")
-            .arg(format!("single-{index}.txt"))
-            .args(*arguments)
-            .assert()
-            .success();
-    }
+    let lock = context.read("uv.lock");
     context
         .temp_dir
         .child("exports/batch.toml")
-        .write_str(&manifest)?;
+        .write_str(indoc! {r#"
+        [[export]]
+        output-file = "root.txt"
+
+        [[export]]
+        output-file = "root-no-dev.txt"
+        no-group = ["dev"]
+
+        [[export]]
+        output-file = "child.txt"
+        package = ["child"]
+
+        [[export]]
+        output-file = "child-no-default-groups.txt"
+        package = ["child"]
+        no-default-groups = true
+
+        [[export]]
+        output-file = "child-test.txt"
+        package = ["child"]
+        extra = ["test"]
+        no-default-groups = true
+
+        [[export]]
+        output-file = "child-dev.txt"
+        package = ["child"]
+        only-group = ["dev"]
+
+        [[export]]
+        output-file = "child-root-group.txt"
+        package = ["child"]
+        group = ["root-only"]
+
+        [[export]]
+        output-file = "child-all-groups.txt"
+        package = ["child"]
+        all-groups = true
+        no-group = ["lint"]
+
+        [[export]]
+        output-file = "packages.txt"
+        package = ["root", "child"]
+        no-default-groups = true
+
+        [[export]]
+        output-file = "workspace.txt"
+        all-packages = true
+
+        [[export]]
+        output-file = "child-no-test.txt"
+        package = ["child"]
+        all-extras = true
+        no-extra = ["test"]
+    "#})?;
+
     uv_snapshot!(context.filters(), context.export()
-        .arg("--frozen").arg("--no-header")
+        .arg("--frozen")
+        .arg("--no-header")
+        .arg("--no-hashes")
+        .arg("--no-annotate")
         .arg("--batch").arg("exports/batch.toml"), @"
     exit_code: 0 (success)
     ----- stderr -----
     warning: `uv export --batch` is experimental and may change without warning. Pass `--preview-features batch-export` to disable this warning.
     ");
-    for mode in [None, Some("--locked"), Some("--frozen")] {
-        context
-            .export()
-            .args(mode)
-            .arg("--no-header")
-            .arg("--batch")
-            .arg("exports/batch.toml")
-            .arg("--preview-features")
-            .arg("batch-export")
-            .assert()
-            .success();
-        for index in 0..selections.len() {
-            assert_eq!(
-                fs_err::read(context.temp_dir.child(format!("exports/{index}.txt")))?,
-                fs_err::read(context.temp_dir.child(format!("single-{index}.txt")))?,
-                "batch entry {index}",
-            );
-        }
-        assert_eq!(fs_err::read(context.temp_dir.child("uv.lock"))?, lock);
-    }
+
+    assert_snapshot!(context.read("exports/root.txt"), @"
+    idna==3.6
+    sniffio==1.3.1
+    ");
+    assert_snapshot!(context.read("exports/root-no-dev.txt"), @"idna==3.6");
+    assert_snapshot!(context.read("exports/child.txt"), @"
+    packaging==24.0
+    typing-extensions==4.10.0
+    ");
+    assert_snapshot!(context.read("exports/child-no-default-groups.txt"), @"typing-extensions==4.10.0");
+    assert_snapshot!(context.read("exports/child-test.txt"), @"
+    iniconfig==2.0.0
+    typing-extensions==4.10.0
+    ");
+    assert_snapshot!(context.read("exports/child-dev.txt"), @"iniconfig==2.0.0");
+    assert_snapshot!(context.read("exports/child-root-group.txt"), @"
+    packaging==24.0
+    typing-extensions==4.10.0
+    ");
+    assert_snapshot!(context.read("exports/child-all-groups.txt"), @"
+    iniconfig==2.0.0
+    packaging==24.0
+    typing-extensions==4.10.0
+    ");
+    assert_snapshot!(context.read("exports/packages.txt"), @"
+    idna==3.6
+    typing-extensions==4.10.0
+    ");
+    assert_snapshot!(context.read("exports/workspace.txt"), @"
+    idna==3.6
+    iniconfig==2.0.0
+    sniffio==1.3.1
+    typing-extensions==4.10.0
+    ");
+    assert_snapshot!(context.read("exports/child-no-test.txt"), @"
+    packaging==24.0
+    typing-extensions==4.10.0
+    ");
+    assert_eq!(context.read("uv.lock"), lock);
 
     // Explicitly enabling the preview feature suppresses the warning.
     uv_snapshot!(context.filters(), context.export()
         .arg("--frozen").arg("--no-header")
         .arg("--batch").arg("exports/batch.toml")
         .arg("--preview-features").arg("batch-export"), @"exit_code: 0 (success)");
-    assert_eq!(fs_err::read(context.temp_dir.child("uv.lock"))?, lock);
     Ok(())
 }
 
@@ -10444,21 +10456,15 @@ fn export_batch_lock_modes() -> Result<()> {
     ----- stderr -----
     Resolved 1 package in [TIME]
     ");
-    let lock = fs_err::read(context.temp_dir.child("uv.lock"))?;
-    assert_eq!(
-        fs_err::read_to_string(context.temp_dir.child("dev.txt"))?,
-        ""
-    );
-    assert_eq!(
-        fs_err::read_to_string(context.temp_dir.child("legacy.txt"))?,
-        ""
-    );
+    let lock = context.read("uv.lock");
+    assert_snapshot!(context.read("dev.txt"), @"");
+    assert_snapshot!(context.read("legacy.txt"), @"");
 
     context
         .temp_dir
         .child("pyproject.toml")
         .write_str(&pyproject.replace("0.1.0", "0.2.0"))?;
-    context.temp_dir.child("dev.txt").write_str("original\n")?;
+    context.temp_dir.child("dev.txt").write_str("original")?;
     uv_snapshot!(context.filters(), context.export()
         .arg("--locked").arg("--batch").arg("batch.toml")
         .arg("--preview-features").arg("batch-export"), @"
@@ -10469,20 +10475,14 @@ fn export_batch_lock_modes() -> Result<()> {
 
     hint: To update the lockfile, run `uv lock`.
     ");
-    assert_eq!(fs_err::read(context.temp_dir.child("uv.lock"))?, lock);
-    assert_eq!(
-        fs_err::read_to_string(context.temp_dir.child("dev.txt"))?,
-        "original\n"
-    );
+    assert_eq!(context.read("uv.lock"), lock);
+    assert_snapshot!(context.read("dev.txt"), @"original");
 
     uv_snapshot!(context.filters(), context.export()
         .arg("--frozen").arg("--batch").arg("batch.toml").arg("--no-header")
         .arg("--preview-features").arg("batch-export"), @"exit_code: 0 (success)");
-    assert_eq!(fs_err::read(context.temp_dir.child("uv.lock"))?, lock);
-    assert_eq!(
-        fs_err::read_to_string(context.temp_dir.child("dev.txt"))?,
-        ""
-    );
+    assert_eq!(context.read("uv.lock"), lock);
+    assert_snapshot!(context.read("dev.txt"), @"");
 
     uv_snapshot!(context.filters(), context.export()
         .arg("--batch").arg("batch.toml")
@@ -10518,7 +10518,7 @@ fn export_batch_invalid_selection() -> Result<()> {
     context
         .temp_dir
         .child("requirements.txt")
-        .write_str("original\n")?;
+        .write_str("original")?;
     context.temp_dir.child("batch.toml").write_str(indoc! {r#"
         [[export]]
         output-file = "requirements.txt"
@@ -10535,10 +10535,7 @@ fn export_batch_invalid_selection() -> Result<()> {
     error: Failed to export `[TEMP_DIR]/missing.txt`
       cause: Group `missing` is not defined in the project's `dependency-groups` table
     ");
-    assert_eq!(
-        fs_err::read_to_string(context.temp_dir.child("requirements.txt"))?,
-        "original\n"
-    );
+    assert_snapshot!(context.read("requirements.txt"), @"original");
     assert!(!context.temp_dir.child("missing.txt").exists());
     Ok(())
 }
