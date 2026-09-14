@@ -13,8 +13,9 @@ exclude-newer = "0001-01-01T00:00:00Z" # This has no effect and is included for 
 exclude-newer-span = "P7D"
 
 [options.exclude-newer-package]
-astral-dev-toolchain-cargo-shear = "2026-08-27T04:00:00Z"
+astral-dev-toolchain-cargo-bloat = "2026-09-14T19:10:00Z"
 astral-dev-toolchain-cargo-dist = "2026-08-28T04:00:00Z"
+astral-dev-toolchain-cargo-shear = "2026-08-27T04:00:00Z"
 
 [[package]]
 name = "annotated-doc"
@@ -57,6 +58,19 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/0f/4b/cd5d66b9f87e773bc71344a368b9472987e33514e6627e28342b9c3e7c43/anysqlite-0.0.5.tar.gz", hash = "sha256:9dfcf87baf6b93426ad1d9118088c41dbf24ef01b445eea4a5d486bac2755cce", size = 3432, upload-time = "2023-10-02T13:49:25.135Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/0b/31/349eae2bc9d9331dd8951684cf94528d91efaa71129dc30822ac111dfc66/anysqlite-0.0.5-py3-none-any.whl", hash = "sha256:cb345dc4f76f6b37f768d7a0b3e9cf5c700dfcb7a6356af8ab46a11f666edbe7", size = 3907, upload-time = "2023-10-02T13:49:26.943Z" },
+]
+
+[[package]]
+name = "astral-dev-toolchain-cargo-bloat"
+version = "0.12.1"
+source = { registry = "https://pypi.org/simple" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/d8/cf/e92161194224ce80f8696e9226578bf9a9ca970bffa0842c05b2012ee65e/astral_dev_toolchain_cargo_bloat-0.12.1-py3-none-macosx_10_12_x86_64.whl", hash = "sha256:f06b0381c56c6c36301bd05a27fddae95d21f13583c1deeea00c9d5113adebfc", size = 641601, upload-time = "2026-09-14T19:09:42.495Z" },
+    { url = "https://files.pythonhosted.org/packages/eb/7c/cfc451c88351881a3874d684385b11ce7e0b359c11e5f618abee7389a13c/astral_dev_toolchain_cargo_bloat-0.12.1-py3-none-macosx_11_0_arm64.whl", hash = "sha256:e3db746ff71ba3fd7f7a0f979d4e05fcd82825b0f0ab9284e3ecacfd7aaa450f", size = 619702, upload-time = "2026-09-14T19:09:44.241Z" },
+    { url = "https://files.pythonhosted.org/packages/5f/cf/79c2618a6df399d067bf2d31ab9dd6b8c2ad3451e1532d8a823174f20b14/astral_dev_toolchain_cargo_bloat-0.12.1-py3-none-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:d673c8a5e4913031a3c795c4c79795de994fdc80363768a70c3c5c57216cbaaf", size = 588398, upload-time = "2026-09-14T19:09:46Z" },
+    { url = "https://files.pythonhosted.org/packages/54/7c/1dcf3eb9d5d2c688eb58bccc6a9a1c480388922f0549442aa66baa326a4d/astral_dev_toolchain_cargo_bloat-0.12.1-py3-none-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:2bab27ed44b6154ec63658aa5097e8b989744f262ddfba7d12e2f130980e0864", size = 622786, upload-time = "2026-09-14T19:09:47.544Z" },
+    { url = "https://files.pythonhosted.org/packages/f6/ee/383e7b0664bae9ae1ad905f810406a303fd83b1a8cb07ae0b4e11c8244fb/astral_dev_toolchain_cargo_bloat-0.12.1-py3-none-win_amd64.whl", hash = "sha256:444ffff7124f1eb1622385deef3df60094025dd5ca3137c661d57c1953799f42", size = 545813, upload-time = "2026-09-14T19:09:49.008Z" },
+    { url = "https://files.pythonhosted.org/packages/0c/bb/fb9604ddf09c907e943f89da6f4787b007512e921c2a9af4208c62b52d29/astral_dev_toolchain_cargo_bloat-0.12.1-py3-none-win_arm64.whl", hash = "sha256:c51bf77df71e4627257c3a9bc69ebbf92bb4d054e17b03e0577efed5faa7ce1b", size = 507487, upload-time = "2026-09-14T19:09:50.518Z" },
 ]
 
 [[package]]
@@ -1787,6 +1801,7 @@ check = [
     { name = "validate-pyproject", extra = ["all", "store"] },
 ]
 dev = [
+    { name = "astral-dev-toolchain-cargo-bloat" },
     { name = "astral-dev-toolchain-cargo-codspeed" },
     { name = "astral-dev-toolchain-cargo-dist" },
     { name = "astral-dev-toolchain-cargo-nextest" },
@@ -1820,6 +1835,7 @@ check = [
     { name = "validate-pyproject", extras = ["all", "store"], specifier = ">=0.25" },
 ]
 dev = [
+    { name = "astral-dev-toolchain-cargo-bloat", specifier = ">=0.12.1" },
     { name = "astral-dev-toolchain-cargo-codspeed", specifier = ">=5.0.1" },
     { name = "astral-dev-toolchain-cargo-dist", specifier = ">=0.32.0" },
     { name = "astral-dev-toolchain-cargo-nextest", specifier = ">=0.9.143" },
