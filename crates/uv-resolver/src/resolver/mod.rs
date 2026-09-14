@@ -2001,6 +2001,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     &self.modifiers,
                     env,
                     python_requirement,
+                    self.options.torch_backend.as_ref(),
                 );
                 let requirements = expander.expand(&self.requirements, RequirementContext::Root);
 
@@ -2221,8 +2222,13 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 RequirementContext::Package { name, version },
             ),
         };
-        let expander =
-            RequirementExpander::new(&self.constraints, &self.modifiers, env, python_requirement);
+        let expander = RequirementExpander::new(
+            &self.constraints,
+            &self.modifiers,
+            env,
+            python_requirement,
+            self.options.torch_backend.as_ref(),
+        );
         let requirements = expander.expand(requirements, context);
 
         let dependencies = PubGrubDependency::from_requirements(
