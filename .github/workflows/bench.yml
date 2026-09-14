@@ -37,10 +37,11 @@ jobs:
       - name: "Install Rust toolchain"
         run: rustup show
 
-      - name: "Install codspeed"
-        uses: taiki-e/install-action@6c6fd71fe4fb72c3697d269963d0e15df8adedad # v2.85.10
+      - name: "Install uv"
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
         with:
-          tool: cargo-codspeed
+          version: "0.12.10"
+          checksum: "9ff6b9d4665edcdd3a88dcc73cd1eb641754deb927f14e8c62ebfde6bf4f5f5e"
 
       - name: "Install requirements and prime cache"
         run: |
@@ -52,7 +53,7 @@ jobs:
           cargo run --bin uv -- --config-file test/uv.toml pip compile test/requirements/airflow.in --universal --exclude-newer 2024-08-08 --cache-dir .cache
 
       - name: "Build benchmarks"
-        run: cargo codspeed build -m walltime --profile profiling -p uv-bench --bench uv --bench workspace_discovery
+        run: uv run --only-dev cargo codspeed build -m walltime --profile profiling -p uv-bench --bench uv --bench workspace_discovery
 
       - name: "Create artifact archive"
         run: tar -cvf benchmarks-walltime.tar target/codspeed target/debug/uv .cache
@@ -78,10 +79,11 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: "Install codspeed"
-        uses: taiki-e/install-action@6c6fd71fe4fb72c3697d269963d0e15df8adedad # v2.85.10
+      - name: "Install uv"
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
         with:
-          tool: cargo-codspeed
+          version: "0.12.10"
+          checksum: "9ff6b9d4665edcdd3a88dcc73cd1eb641754deb927f14e8c62ebfde6bf4f5f5e"
 
       - name: "Download benchmark artifacts"
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
@@ -103,7 +105,7 @@ jobs:
       - name: "Run benchmarks"
         uses: CodSpeedHQ/action@4296e51e7041e24dadb86d1d6e8b9320d223dbe8 # v5.0.3
         with:
-          run: cargo codspeed run
+          run: uv run --only-dev cargo codspeed run
           mode: walltime
           upload-url: ${{ steps.profiles.outputs.upload-url }}
 
@@ -145,10 +147,11 @@ jobs:
       - name: "Install Rust toolchain"
         run: rustup show
 
-      - name: "Install codspeed"
-        uses: taiki-e/install-action@6c6fd71fe4fb72c3697d269963d0e15df8adedad # v2.85.10
+      - name: "Install uv"
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
         with:
-          tool: cargo-codspeed
+          version: "0.12.10"
+          checksum: "173d95a0c32d18c896c46ba6fafbf3cf9c14ab74b033f81b76c883ef492a976b"
 
       - name: "Install requirements and prime cache"
         run: |
@@ -160,7 +163,7 @@ jobs:
           cargo run --bin uv -- --config-file test/uv.toml pip compile test/requirements/airflow.in --universal --exclude-newer 2024-08-08 --cache-dir .cache
 
       - name: "Build benchmarks"
-        run: cargo codspeed build --profile profiling -p uv-bench
+        run: uv run --only-dev cargo codspeed build --profile profiling -p uv-bench
 
       - name: "Retain benchmark profiles"
         id: profiles
@@ -171,7 +174,7 @@ jobs:
       - name: "Run benchmarks"
         uses: CodSpeedHQ/action@4296e51e7041e24dadb86d1d6e8b9320d223dbe8 # v5.0.3
         with:
-          run: cargo codspeed run
+          run: uv run --only-dev cargo codspeed run
           mode: simulation
           upload-url: ${{ steps.profiles.outputs.upload-url }}
 

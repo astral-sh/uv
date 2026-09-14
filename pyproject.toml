@@ -126,6 +126,7 @@ check = [
     "validate-pyproject[all,store]>=0.25",
 ]
 dev = [
+    "astral-dev-toolchain-cargo-codspeed>=5.0.1",
     "astral-dev-toolchain-cargo-dist>=0.32.0",
 ]
 
