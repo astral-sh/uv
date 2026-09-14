@@ -110,7 +110,7 @@ pub struct ArtifactPolicy {
     unconstrained: MarkerTree,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 struct LibcEnvironment {
     marker: MarkerTree,
     libc: MinimumLibcVersion,
@@ -168,19 +168,9 @@ impl ArtifactPolicy {
                 return Ok(());
             }
         }
-        let requirements = self
-            .environments
-            .iter()
-            .map(|environment| {
-                let marker = environment
-                    .marker
-                    .try_to_string()
-                    .unwrap_or_else(|| "true".to_owned());
-                format!("{} for `{marker}`", environment.libc)
-            })
-            .collect::<Vec<_>>()
-            .join(", ");
-        Err(ArtifactPolicyError::LibcVersion(requirements))
+        Err(ArtifactPolicyError {
+            environments: Arc::clone(&self.environments),
+        })
     }
 
     /// Return coverage of a single wheel under each applicable scope. Registry callers must
@@ -279,9 +269,25 @@ impl ArtifactCoverage {
 
 /// A wheel excluded by the universal resolution's artifact policy.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
-pub enum ArtifactPolicyError {
-    #[error("no wheels compatible with {0}")]
-    LibcVersion(String),
+pub struct ArtifactPolicyError {
+    environments: Arc<[LibcEnvironment]>,
+}
+
+impl Display for ArtifactPolicyError {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str("no wheels compatible with ")?;
+        for (index, environment) in self.environments.iter().enumerate() {
+            if index > 0 {
+                formatter.write_str(", ")?;
+            }
+            let marker = environment
+                .marker
+                .try_to_string()
+                .unwrap_or_else(|| "true".to_owned());
+            write!(formatter, "{} for `{marker}`", environment.libc)?;
+        }
+        Ok(())
+    }
 }
 
 #[cfg(test)]
