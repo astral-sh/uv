@@ -1054,11 +1054,19 @@ impl DistributionMetadata for RegistryBuiltWheel {
     fn version_or_url(&self) -> VersionOrUrlRef<'_> {
         VersionOrUrlRef::Version(&self.filename.version)
     }
+
+    fn registry_file(&self) -> Option<(&IndexUrl, &File)> {
+        Some((&self.index, &self.file))
+    }
 }
 
 impl DistributionMetadata for RegistryBuiltDist {
     fn version_or_url(&self) -> VersionOrUrlRef<'_> {
         self.best_wheel().version_or_url()
+    }
+
+    fn registry_file(&self) -> Option<(&IndexUrl, &File)> {
+        self.best_wheel().registry_file()
     }
 }
 
@@ -1091,6 +1099,10 @@ impl DistributionMetadata for GitPathBuiltDist {
 impl DistributionMetadata for RegistrySourceDist {
     fn version_or_url(&self) -> VersionOrUrlRef<'_> {
         VersionOrUrlRef::Version(&self.version)
+    }
+
+    fn registry_file(&self) -> Option<(&IndexUrl, &File)> {
+        Some((&self.index, &self.file))
     }
 }
 
@@ -1169,6 +1181,17 @@ impl DistributionMetadata for SourceDist {
             Self::Directory(dist) => dist.version_id(),
         }
     }
+
+    fn registry_file(&self) -> Option<(&IndexUrl, &File)> {
+        match self {
+            Self::Registry(dist) => dist.registry_file(),
+            Self::DirectUrl(_)
+            | Self::GitPath(_)
+            | Self::GitDirectory(_)
+            | Self::Path(_)
+            | Self::Directory(_) => None,
+        }
+    }
 }
 
 impl DistributionMetadata for BuiltDist {
@@ -1189,6 +1212,13 @@ impl DistributionMetadata for BuiltDist {
             Self::GitPath(dist) => dist.version_id(),
         }
     }
+
+    fn registry_file(&self) -> Option<(&IndexUrl, &File)> {
+        match self {
+            Self::Registry(dist) => dist.registry_file(),
+            Self::DirectUrl(_) | Self::Path(_) | Self::GitPath(_) => None,
+        }
+    }
 }
 
 impl DistributionMetadata for Dist {
@@ -1203,6 +1233,13 @@ impl DistributionMetadata for Dist {
         match self {
             Self::Built(dist) => dist.version_id(),
             Self::Source(dist) => dist.version_id(),
+        }
+    }
+
+    fn registry_file(&self) -> Option<(&IndexUrl, &File)> {
+        match self {
+            Self::Built(dist) => dist.registry_file(),
+            Self::Source(dist) => dist.registry_file(),
         }
     }
 }

@@ -6,8 +6,8 @@ use uv_pep508::VerbatimUrl;
 use crate::error::Error;
 use crate::{
     BuiltDist, CachedDirectUrlDist, CachedDist, CachedRegistryDist, DirectUrlBuiltDist,
-    DirectUrlSourceDist, DirectorySourceDist, Dist, DistributionId, GitDirectorySourceDist,
-    GitPathBuiltDist, GitPathSourceDist, InstalledDirectUrlDist, InstalledDist,
+    DirectUrlSourceDist, DirectorySourceDist, Dist, DistributionId, File, GitDirectorySourceDist,
+    GitPathBuiltDist, GitPathSourceDist, IndexUrl, InstalledDirectUrlDist, InstalledDist,
     InstalledEggInfoDirectory, InstalledEggInfoFile, InstalledLegacyEditable,
     InstalledRegistryDist, InstalledVersion, LocalDist, PackageId, PathBuiltDist, PathSourceDist,
     RegistryBuiltWheel, RegistrySourceDist, ResourceId, SourceDist, VersionId, VersionOrUrlRef,
@@ -24,6 +24,11 @@ pub trait DistributionMetadata: Name {
     /// Return a [`uv_pep440::Version`], for registry-based distributions, or a [`url::Url`],
     /// for URL-based distributions.
     fn version_or_url(&self) -> VersionOrUrlRef<'_>;
+
+    /// Return the concrete registry artifact, when its provenance is available.
+    fn registry_file(&self) -> Option<(&IndexUrl, &File)> {
+        None
+    }
 
     /// Returns a unique identifier for the package at the given version (e.g., `black==23.10.0`).
     ///

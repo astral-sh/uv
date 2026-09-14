@@ -1,6 +1,8 @@
 use uv_pypi_types::{HashAlgorithm, HashDigest, HashDigests, Hashes};
 use uv_redacted::DisplaySafeUrl;
 
+use crate::HashComparison;
+
 /// Hash generation and validation policy for an archive.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ArchiveHashPolicy<'a> {
@@ -64,6 +66,19 @@ impl ArchiveHashPolicy<'_> {
             Self::All(required) => {
                 !required.is_empty() && required.iter().all(|hash| hashes.contains(hash))
             }
+        }
+    }
+
+    /// Compare a candidate's advertised hashes with this policy for distribution selection.
+    pub fn compare(&self, hashes: &[HashDigest]) -> HashComparison {
+        if !self.requires_validation() {
+            HashComparison::Matched
+        } else if hashes.is_empty() {
+            HashComparison::Missing
+        } else if self.matches(hashes) {
+            HashComparison::Matched
+        } else {
+            HashComparison::Mismatched
         }
     }
 

@@ -7609,6 +7609,7 @@ dependencies = [
  "rustc-hash",
  "thiserror",
  "uv-cache",
+ "uv-cache-key",
  "uv-configuration",
  "uv-distribution-filename",
  "uv-distribution-types",

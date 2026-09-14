@@ -7,9 +7,9 @@ use uv_pep440::Version;
 use uv_pypi_types::Yanked;
 
 use crate::{
-    BuiltDist, Dist, DistributionId, DistributionMetadata, Identifier, IndexUrl, InstalledDist,
-    Name, PrioritizedDist, RegistryBuiltWheel, RegistrySourceDist, ResourceId, SourceDist,
-    VersionId, VersionOrUrlRef,
+    BuiltDist, Dist, DistributionId, DistributionMetadata, File, Identifier, IndexUrl,
+    InstalledDist, Name, PrioritizedDist, RegistryBuiltWheel, RegistrySourceDist, ResourceId,
+    SourceDist, VersionId, VersionOrUrlRef,
 };
 
 /// A distribution that can be used for resolution and installation.
@@ -179,6 +179,14 @@ impl DistributionMetadata for ResolvedDistRef<'_> {
             Self::InstallableRegistryBuiltDist { wheel, .. } => wheel.version_or_url(),
         }
     }
+
+    fn registry_file(&self) -> Option<(&IndexUrl, &File)> {
+        match self {
+            Self::Installed { .. } => None,
+            Self::InstallableRegistrySourceDist { sdist, .. } => sdist.registry_file(),
+            Self::InstallableRegistryBuiltDist { wheel, .. } => wheel.registry_file(),
+        }
+    }
 }
 
 impl Identifier for ResolvedDistRef<'_> {
@@ -220,6 +228,13 @@ impl DistributionMetadata for ResolvedDist {
         match self {
             Self::Installed { dist } => dist.version_id(),
             Self::Installable { dist, .. } => dist.version_id(),
+        }
+    }
+
+    fn registry_file(&self) -> Option<(&IndexUrl, &File)> {
+        match self {
+            Self::Installed { .. } => None,
+            Self::Installable { dist, .. } => dist.registry_file(),
         }
     }
 }

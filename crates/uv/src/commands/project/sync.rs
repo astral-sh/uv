@@ -861,7 +861,7 @@ pub(crate) async fn do_sync<'a>(
     let build_constraints = target.build_constraints();
 
     // Verify build dependencies against the full lockfile, including unselected extras and groups.
-    let build_hasher = target.lock().hash_strategy(target.install_path())?;
+    let build_hasher = target.lock().build_hash_strategy(target.install_path())?;
 
     // Resolve the flat indexes from `--find-links`.
     let flat_index = {

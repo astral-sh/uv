@@ -2,7 +2,7 @@ use std::fmt::Display;
 
 use uv_distribution::Metadata;
 use uv_distribution_types::{
-    BuiltDist, Dist, DistributionMetadata, IndexUrl, Name, ResolvedDist, SourceDist,
+    BuiltDist, Dist, DistributionMetadata, File, IndexUrl, Name, ResolvedDist, SourceDist,
     VersionOrUrlRef,
 };
 use uv_normalize::{ExtraName, GroupName, PackageName};
@@ -79,6 +79,10 @@ impl Name for AnnotatedDist {
 impl DistributionMetadata for AnnotatedDist {
     fn version_or_url(&self) -> VersionOrUrlRef<'_> {
         self.dist.version_or_url()
+    }
+
+    fn registry_file(&self) -> Option<(&IndexUrl, &File)> {
+        self.dist.registry_file()
     }
 }
 

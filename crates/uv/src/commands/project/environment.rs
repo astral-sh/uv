@@ -129,6 +129,9 @@ fn cached_environment_resolution_hash(
         HashVerification::IfPresent(_) | HashVerification::Required(_) => {
             hash_digest(&("verify", resolution_hash))
         }
+        HashVerification::LockedBuild { .. } => {
+            hash_digest(&("verify-locked-build", resolution_hash))
+        }
     }
 }
 

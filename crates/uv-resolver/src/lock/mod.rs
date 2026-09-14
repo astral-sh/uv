@@ -58,7 +58,7 @@ use uv_pypi_types::{
 };
 use uv_redacted::{DisplaySafeUrl, DisplaySafeUrlError};
 use uv_small_str::SmallString;
-use uv_types::{BuildContext, HashStrategy};
+use uv_types::{BuildContext, HashStrategy, LockedRegistryHashes};
 use uv_warnings::warn_user_once;
 use uv_workspace::{Editability, WorkspaceMember};
 
@@ -1369,11 +1369,65 @@ impl Lock {
         &self.packages
     }
 
-    /// Return a [`HashStrategy`] that verifies artifacts recorded in this lockfile.
+    /// Return a [`HashStrategy`] that verifies locked distributions during runtime resolution.
     ///
-    /// Artifacts absent from the lockfile do not require hashes. This strategy does not generate
-    /// hashes for those artifacts.
+    /// Registry hashes constrain package versions, as they do for requirement pins. Isolated build
+    /// resolution uses [`Self::build_hash_strategy`] because it can select other wheel variants.
     pub fn hash_strategy(&self, root: &Path) -> Result<HashStrategy, LockError> {
+        let hashes = self.hashes_by_version(root)?;
+        if hashes.is_empty() {
+            Ok(HashStrategy::default())
+        } else {
+            Ok(HashStrategy::verify(Arc::new(hashes)))
+        }
+    }
+
+    /// Return a [`HashStrategy`] for independently resolved isolated build requirements.
+    ///
+    /// Registry wheels are verified when their source, full version, and filename are recorded.
+    /// This allows wheels omitted by the runtime lockfile's platform markers. Source archives for
+    /// a known source and version must still match a recorded source hash before running a backend.
+    pub fn build_hash_strategy(&self, root: &Path) -> Result<HashStrategy, LockError> {
+        let mut hashes = self.hashes_by_version(root)?;
+        if hashes.is_empty() {
+            return Ok(HashStrategy::default());
+        }
+
+        let mut registry = LockedRegistryHashes::default();
+        for package in &self.packages {
+            let Some(version) = &package.id.version else {
+                continue;
+            };
+            let Some(index) = package.index(root)? else {
+                continue;
+            };
+            if let Some(hash) = package.sdist.as_ref().and_then(SourceDist::hash) {
+                registry.insert_source(&index, &package.id.name, version, hash.0.clone());
+            }
+            for wheel in &package.wheels {
+                if let Some(hash) = &wheel.hash {
+                    registry.insert_wheel(&index, &wheel.filename, hash.0.clone());
+                    // A public-version lock entry can contain local-version wheels. Candidate
+                    // preferences use each recorded wheel's complete version.
+                    let digests = hashes
+                        .entry(VersionId::from_registry(
+                            wheel.filename.name.clone(),
+                            wheel.filename.version.clone(),
+                        ))
+                        .or_default();
+                    if !digests.contains(&hash.0) {
+                        digests.push(hash.0.clone());
+                    }
+                }
+            }
+        }
+        Ok(HashStrategy::verify_build(Arc::new(hashes), registry))
+    }
+
+    fn hashes_by_version(
+        &self,
+        root: &Path,
+    ) -> Result<FxHashMap<VersionId, Vec<HashDigest>>, LockError> {
         let mut hashes: FxHashMap<VersionId, Vec<HashDigest>> = FxHashMap::default();
 
         for package in &self.packages {
@@ -1414,11 +1468,7 @@ impl Lock {
             }
         }
 
-        if hashes.is_empty() {
-            Ok(HashStrategy::default())
-        } else {
-            Ok(HashStrategy::verify(Arc::new(hashes)))
-        }
+        Ok(hashes)
     }
 
     /// Return whether every registry artifact in the lockfile has a hash using its index's
@@ -8057,7 +8107,7 @@ pub(crate) fn is_wheel_unreachable(
 
 #[cfg(test)]
 mod tests {
-    use uv_distribution_types::HashCollection;
+    use uv_distribution_types::{HashCollection, HashComparison};
     use uv_pep440::VersionSpecifiers;
     use uv_pep508::MarkerEnvironmentBuilder;
     use uv_warnings::anstream;
@@ -8170,6 +8220,62 @@ wheels = [{ filename = "local-1.0.0-py3-none-any.whl", hash = "sha256:53a42340ae
             hasher.archive_policy_for_url(&unknown),
             ArchiveHashPolicy::None
         );
+    }
+
+    #[test]
+    fn build_hash_strategy_tracks_local_wheel_versions() -> Result<(), Box<dyn std::error::Error>> {
+        let lock: Lock = toml::from_str(
+            r#"
+version = 1
+revision = 3
+requires-python = ">=3.12"
+
+[[package]]
+name = "demo-pkg"
+version = "1.0.0"
+source = { registry = "https://example.com/simple" }
+wheels = [{ url = "https://example.com/files/demo_pkg-1.0.0+local-1-py3-none-any.whl", hash = "sha256:53a42340ae36747fb1471f9b4b7958be1f6e2e5fc234f931aafa3e454fd31dfb" }]
+"#,
+        )?;
+        let root = std::env::current_dir()?;
+        let hasher = lock.build_hash_strategy(&root)?;
+        let digest = HashDigest::from_str(
+            "sha256:53a42340ae36747fb1471f9b4b7958be1f6e2e5fc234f931aafa3e454fd31dfb",
+        )?;
+        let index = IndexUrl::parse("https://example.com/simple", None)?;
+        let other_index = IndexUrl::parse("https://example.org/simple", None)?;
+        let wheel: WheelFilename = "demo_pkg-1.0.0+local-1-py3-none-any.whl".parse()?;
+        let other_wheel: WheelFilename = "demo_pkg-1.0.0+local-2-py3-none-any.whl".parse()?;
+
+        assert_eq!(
+            hasher.locked_registry_hash_comparison(
+                &wheel.name,
+                &wheel.version,
+                &index,
+                &wheel.to_string(),
+                &[],
+            ),
+            Some(HashComparison::Missing),
+        );
+        assert_eq!(
+            hasher.locked_registry_hash_comparison(
+                &other_wheel.name,
+                &other_wheel.version,
+                &index,
+                &other_wheel.to_string(),
+                &[],
+            ),
+            Some(HashComparison::Unrecorded),
+        );
+        assert_eq!(
+            hasher.archive_policy_for_registry_wheel(
+                &other_index,
+                &wheel,
+                slice::from_ref(&digest),
+            ),
+            ArchiveHashPolicy::Any(slice::from_ref(&digest)),
+        );
+        Ok(())
     }
 
     #[test]
