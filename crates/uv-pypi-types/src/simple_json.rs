@@ -535,12 +535,14 @@ impl<const BYTES: usize> Digest<BYTES> {
     pub fn from_bytes(bytes: [u8; BYTES]) -> Self {
         const HEX_DIGITS: &[u8; 16] = b"0123456789abcdef";
 
-        let mut digest = String::with_capacity(BYTES * 2);
-        for byte in bytes {
-            digest.push(char::from(HEX_DIGITS[usize::from(byte >> 4)]));
-            digest.push(char::from(HEX_DIGITS[usize::from(byte & 0x0f)]));
-        }
-        Self(digest.into())
+        let digest = SmallString::init_with(BYTES * 2, |output| {
+            for (byte, pair) in bytes.into_iter().zip(output.as_chunks_mut::<2>().0) {
+                pair[0] = HEX_DIGITS[usize::from(byte >> 4)];
+                pair[1] = HEX_DIGITS[usize::from(byte & 0x0f)];
+            }
+        })
+        .expect("hexadecimal digits are valid UTF-8");
+        Self(digest)
     }
 
     /// Return the lowercase hexadecimal digest.
