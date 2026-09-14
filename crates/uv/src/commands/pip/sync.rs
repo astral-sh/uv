@@ -6,7 +6,7 @@ use owo_colors::OwoColorize;
 use tracing::{debug, warn};
 
 use uv_cache::Cache;
-use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
+use uv_client::{BaseClientBuilder, RegistryClientBuilder};
 use uv_configuration::{
     BuildIsolation, BuildOptions, Concurrency, Constraints, DryRun, ExtrasSpecification,
     HashCheckingMode, IndexStrategy, NoSources, Reinstall, Upgrade,
@@ -31,8 +31,8 @@ use uv_python::{
 };
 use uv_requirements::{GroupsSpecification, RequirementsSource, RequirementsSpecification};
 use uv_resolver::{
-    DependencyMode, ExcludeNewer, FlatIndex, OptionsBuilder, Prerelease, PythonRequirement,
-    ResolutionMode, ResolverEnvironment,
+    DependencyMode, ExcludeNewer, OptionsBuilder, Prerelease, PythonRequirement, ResolutionMode,
+    ResolverEnvironment,
 };
 use uv_settings::PythonInstallMirrors;
 use uv_torch::{AmdGpuArchitecture, TorchMode, TorchStrategy};
@@ -41,6 +41,7 @@ use uv_warnings::warn_user;
 use uv_workspace::WorkspaceCache;
 use uv_workspace::pyproject::ExtraBuildDependencies;
 
+use crate::commands::flat_index::resolve_flat_index;
 use crate::commands::pip::loggers::{DefaultInstallLogger, DefaultResolveLogger};
 use crate::commands::pip::operations::Modifications;
 use crate::commands::pip::operations::{report_interpreter, report_target_environment};
@@ -327,13 +328,7 @@ pub(crate) async fn pip_sync(
     let build_options = build_options.combine(no_binary, no_build);
 
     // Resolve the flat indexes from `--find-links`.
-    let flat_index = {
-        let client = FlatIndexClient::new(client.cached_client(), client.connectivity(), &cache);
-        let entries = client
-            .fetch_all(index_locations.flat_indexes().map(Index::url))
-            .await?;
-        FlatIndex::from_entries(entries)
-    };
+    let flat_index = resolve_flat_index(&client, &cache, &index_locations).await?;
 
     // Determine whether to enable build isolation.
     let types_build_isolation = match build_isolation {

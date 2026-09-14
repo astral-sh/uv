@@ -12,7 +12,7 @@ use rustc_hash::FxHashSet;
 use tracing::debug;
 
 use uv_cache::Cache;
-use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
+use uv_client::{BaseClientBuilder, RegistryClientBuilder};
 use uv_configuration::{
     BuildIsolation, BuildOptions, Concurrency, Constraints, ExcludeDependency, ExtrasSpecification,
     IndexStrategy, NoBinary, NoBuild, NoSources, Override, PipCompileFormat, Reinstall, Upgrade,
@@ -41,7 +41,7 @@ use uv_requirements::{
     is_pylock_toml, read_pylock_toml_requirements, read_requirements_txt,
 };
 use uv_resolver::{
-    AnnotationStyle, DependencyMode, DisplayResolutionGraph, ExcludeNewer, FlatIndex, ForkStrategy,
+    AnnotationStyle, DependencyMode, DisplayResolutionGraph, ExcludeNewer, ForkStrategy,
     InMemoryIndex, OptionsBuilder, Prerelease, PylockToml, PythonRequirement, ResolutionMode,
     ResolverEnvironment,
 };
@@ -53,6 +53,7 @@ use uv_warnings::warn_user;
 use uv_workspace::WorkspaceCache;
 use uv_workspace::pyproject::ExtraBuildDependencies;
 
+use crate::commands::flat_index::resolve_flat_index;
 use crate::commands::pip::loggers::DefaultResolveLogger;
 use crate::commands::pip::{operations, resolution_markers, resolution_tags};
 use crate::commands::reporters::PythonDownloadReporter;
@@ -485,13 +486,7 @@ pub(crate) async fn pip_compile(
     let build_options = build_options.combine(no_binary, no_build);
 
     // Resolve the flat indexes from `--find-links`.
-    let flat_index = {
-        let client = FlatIndexClient::new(client.cached_client(), client.connectivity(), &cache);
-        let entries = client
-            .fetch_all(index_locations.flat_indexes().map(Index::url))
-            .await?;
-        FlatIndex::from_entries(entries)
-    };
+    let flat_index = resolve_flat_index(&client, &cache, &index_locations).await?;
 
     // Determine whether to enable build isolation.
     let environment;

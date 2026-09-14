@@ -12,7 +12,7 @@ use owo_colors::OwoColorize;
 use thiserror::Error;
 use tracing::{debug, warn};
 use uv_cache::{Cache, Refresh};
-use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
+use uv_client::{BaseClientBuilder, RegistryClientBuilder};
 use uv_configuration::{
     BuildOptions, Concurrency, Constraints, DependencyGroupsWithDefaults, ExcludeDependency,
     ExtrasSpecification, GitLfsSetting, InstallOptions, Override, TargetTriple,
@@ -22,7 +22,7 @@ use uv_distribution::{
     DistributionDatabase, LoweredExtraBuildDependencies, StaticMetadataDatabase,
 };
 use uv_distribution_types::{
-    DependencyMetadata, HashCollection, Index, IndexLocations, InstalledDist, Name, Requirement,
+    DependencyMetadata, HashCollection, IndexLocations, InstalledDist, Name, Requirement,
     RequiresPython, Resolution, UnresolvedRequirement,
 };
 use uv_errors::{ErrorWithHints, Hint, Hints};
@@ -42,7 +42,7 @@ use uv_python::{
 };
 use uv_requirements::RequirementsSpecification;
 use uv_resolver::{
-    FlatIndex, Installable, Lock, OptionsBuilder, Preference, ResolverManifest, ResolverOutput,
+    Installable, Lock, OptionsBuilder, Preference, ResolverManifest, ResolverOutput,
 };
 use uv_settings::{PythonInstallMirrors, ToolOptions};
 use uv_shell::Shell;
@@ -51,6 +51,7 @@ use uv_types::{BuildIsolation, HashStrategy, SourceTreeEditablePolicy};
 use uv_warnings::warn_user_once;
 use uv_workspace::WorkspaceCache;
 
+use crate::commands::flat_index::resolve_flat_index;
 use crate::commands::pip;
 
 /// An error raised when a tool package provides no executables.
@@ -466,13 +467,7 @@ impl ToolLock {
         let hasher = HashStrategy::collect(HashCollection::Url);
         let build_hasher = HashStrategy::default();
 
-        let flat_index = {
-            let client = FlatIndexClient::new(client.cached_client(), client.connectivity(), cache);
-            let entries = client
-                .fetch_all(index_locations.flat_indexes().map(Index::url))
-                .await?;
-            FlatIndex::from_entries(entries)
-        };
+        let flat_index = resolve_flat_index(&client, cache, index_locations).await?;
 
         let extra_build_requires =
             LoweredExtraBuildDependencies::from_non_lowered(extra_build_dependencies.clone())

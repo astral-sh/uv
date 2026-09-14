@@ -10,7 +10,7 @@ use rustc_hash::{FxBuildHasher, FxHashMap};
 use tracing::debug;
 
 use uv_cache::{Cache, Refresh};
-use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
+use uv_client::{BaseClientBuilder, RegistryClientBuilder};
 use uv_configuration::{
     ActiveEnvironment, Concurrency, Constraints, DependencyGroupsWithDefaults, DryRun,
     ExcludeDependency, ExtrasSpecification, Override, PackageOverride, Reinstall, Upgrade,
@@ -18,8 +18,8 @@ use uv_configuration::{
 use uv_dispatch::BuildDispatch;
 use uv_distribution::{DistributionDatabase, LoweredExtraBuildDependencies};
 use uv_distribution_types::{
-    DependencyMetadata, HashCollection, Index, IndexLocations, NameRequirementSpecification,
-    Requirement, RequiresPython, UnresolvedRequirementSpecification,
+    DependencyMetadata, HashCollection, IndexLocations, NameRequirementSpecification, Requirement,
+    RequiresPython, UnresolvedRequirementSpecification,
 };
 use uv_git::ResolvedRepositoryReference;
 use uv_git_types::GitOid;
@@ -33,8 +33,8 @@ use uv_python::{
 };
 use uv_requirements::{ExtrasResolver, LockedRequirements, read_lock_requirements};
 use uv_resolver::{
-    FlatIndex, InMemoryIndex, Lock, Options, OptionsBuilder, Package, PythonRequirement,
-    ResolverEnvironment, ResolverManifest, SatisfiesResult, UniversalMarker,
+    InMemoryIndex, Lock, Options, OptionsBuilder, Package, PythonRequirement, ResolverEnvironment,
+    ResolverManifest, SatisfiesResult, UniversalMarker,
 };
 use uv_scripts::Pep723Script;
 use uv_settings::PythonInstallMirrors;
@@ -46,6 +46,7 @@ use uv_workspace::{
     DiscoveryOptions, Editability, VirtualProject, WorkspaceCache, WorkspaceMember,
 };
 
+use crate::commands::flat_index::resolve_flat_index;
 use crate::commands::pip::loggers::{DefaultResolveLogger, ResolveLogger, SummaryResolveLogger};
 use crate::commands::project::lock_target::{LockTarget, find_lock_format_error};
 use crate::commands::project::{
@@ -854,13 +855,7 @@ async fn do_lock(
     let groups = BTreeMap::new();
 
     // Resolve the flat indexes from `--find-links`.
-    let flat_index = {
-        let client = FlatIndexClient::new(client.cached_client(), client.connectivity(), cache);
-        let entries = client
-            .fetch_all(index_locations.flat_indexes().map(Index::url))
-            .await?;
-        FlatIndex::from_entries(entries)
-    };
+    let flat_index = resolve_flat_index(&client, cache, index_locations).await?;
 
     // Lower the extra build dependencies.
     let extra_build_requires = match &target {

@@ -12,7 +12,7 @@ use tracing::{debug, instrument};
 
 use uv_build_backend::check_direct_build;
 use uv_cache::{Cache, CacheBucket};
-use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
+use uv_client::{BaseClientBuilder, RegistryClientBuilder};
 use uv_configuration::{
     BuildIsolation, BuildKind, BuildOptions, BuildOutput, Concurrency, Constraints,
     DependencyGroupsWithDefaults, HashCheckingMode, IndexStrategy, KeyringProviderType, NoSources,
@@ -23,8 +23,8 @@ use uv_distribution_filename::{
     DistFilename, SourceDistExtension, SourceDistFilename, WheelFilename,
 };
 use uv_distribution_types::{
-    ConfigSettings, DependencyMetadata, ExtraBuildVariables, Index, IndexLocations,
-    PackageConfigSettings, Requirement, SourceDist,
+    ConfigSettings, DependencyMetadata, ExtraBuildVariables, IndexLocations, PackageConfigSettings,
+    Requirement, SourceDist,
 };
 use uv_errors::{ErrorOptions, Hint, Hints, write_error_chain_with_options};
 use uv_fs::{Simplified, normalize_path, relative_to};
@@ -37,7 +37,7 @@ use uv_python::{
     PythonPreference, PythonRequest, PythonVersionFile, VersionFileDiscoveryOptions,
 };
 use uv_requirements::RequirementsSource;
-use uv_resolver::{ExcludeNewer, FlatIndex};
+use uv_resolver::ExcludeNewer;
 use uv_settings::PythonInstallMirrors;
 use uv_types::{AnyErrorBuild, BuildContext, BuildStack, HashStrategy, SourceTreeEditablePolicy};
 use uv_warnings::warn_user;
@@ -45,6 +45,7 @@ use uv_workspace::pyproject::ExtraBuildDependencies;
 use uv_workspace::{DiscoveryOptions, Workspace, WorkspaceCache, WorkspaceError};
 
 use crate::commands::ExitStatus;
+use crate::commands::flat_index::resolve_flat_index;
 use crate::commands::pip::operations;
 use crate::commands::project::{ProjectError, find_requires_python};
 use crate::commands::reporters::PythonDownloadReporter;
@@ -683,13 +684,7 @@ async fn build_package(
     };
 
     // Resolve the flat indexes from `--find-links`.
-    let flat_index = {
-        let client = FlatIndexClient::new(client.cached_client(), client.connectivity(), cache);
-        let entries = client
-            .fetch_all(index_locations.flat_indexes().map(Index::url))
-            .await?;
-        FlatIndex::from_entries(entries)
-    };
+    let flat_index = resolve_flat_index(&client, cache, index_locations).await?;
 
     // Initialize any shared state.
     let state = SharedState::default();

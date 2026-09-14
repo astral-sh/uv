@@ -12,7 +12,7 @@ use uv_audit::{Dependency, VulnerabilityID};
 use uv_auth::{CredentialsCache, CredentialsFromUrlError};
 use uv_cache::{Cache, CacheBucket};
 use uv_cache_key::{cache_digest, cache_name};
-use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
+use uv_client::{BaseClientBuilder, RegistryClientBuilder};
 use uv_configuration::{
     ActiveEnvironment, Concurrency, Constraints, DependencyGroupsWithDefaults, DryRun,
     ExtrasSpecification, GitLfsSetting, Override, PackageOverride, Reinstall, TargetTriple,
@@ -58,6 +58,7 @@ use uv_workspace::dependency_groups::DependencyGroupError;
 use uv_workspace::pyproject::{ExtraBuildDependency, PyProjectToml};
 use uv_workspace::{ProjectEnvironmentSelection, RequiresPythonSources, Workspace, WorkspaceCache};
 
+use crate::commands::flat_index::resolve_flat_index;
 use crate::commands::pip::loggers::{InstallLogger, ResolveLogger};
 use crate::commands::pip::operations::{Changelog, Modifications};
 use crate::commands::project::install_target::InstallTarget;
@@ -2649,13 +2650,7 @@ pub(crate) async fn resolve_environment(
     };
 
     // Resolve the flat indexes from `--find-links`.
-    let flat_index = {
-        let client = FlatIndexClient::new(client.cached_client(), client.connectivity(), cache);
-        let entries = client
-            .fetch_all(index_locations.flat_indexes().map(Index::url))
-            .await?;
-        FlatIndex::from_entries(entries)
-    };
+    let flat_index = resolve_flat_index(&client, cache, index_locations).await?;
 
     // Lower the extra build dependencies, if any.
     let extra_build_requires =
@@ -2791,13 +2786,7 @@ pub(crate) async fn sync_environment(
     let workspace_cache = WorkspaceCache::default();
 
     // Resolve the flat indexes from `--find-links`.
-    let flat_index = {
-        let client = FlatIndexClient::new(client.cached_client(), client.connectivity(), cache);
-        let entries = client
-            .fetch_all(index_locations.flat_indexes().map(Index::url))
-            .await?;
-        FlatIndex::from_entries(entries)
-    };
+    let flat_index = resolve_flat_index(&client, cache, index_locations).await?;
 
     // Lower the extra build dependencies, if any.
     let extra_build_requires =
@@ -3054,13 +3043,7 @@ pub(crate) async fn update_environment(
     let python_requirement = PythonRequirement::from_interpreter(interpreter);
 
     // Resolve the flat indexes from `--find-links`.
-    let flat_index = {
-        let client = FlatIndexClient::new(client.cached_client(), client.connectivity(), cache);
-        let entries = client
-            .fetch_all(index_locations.flat_indexes().map(Index::url))
-            .await?;
-        FlatIndex::from_entries(entries)
-    };
+    let flat_index = resolve_flat_index(&client, cache, index_locations).await?;
 
     // Create a build dispatch.
     let build_dispatch = BuildDispatch::new(

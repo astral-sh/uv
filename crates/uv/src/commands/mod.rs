@@ -89,6 +89,7 @@ mod cache_prune;
 mod cache_size;
 pub(crate) mod diagnostics;
 mod editable;
+mod flat_index;
 mod help;
 pub(crate) mod pip;
 mod project;

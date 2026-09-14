@@ -12,7 +12,7 @@ use uv_audit::Dependency;
 use uv_audit::osv::{self, Filter};
 use uv_cache::Cache;
 use uv_cli::SyncFormat;
-use uv_client::{BaseClientBuilder, CachedClient, FlatIndexClient, RegistryClientBuilder};
+use uv_client::{BaseClientBuilder, CachedClient, RegistryClientBuilder};
 use uv_configuration::{
     ActiveEnvironment, Concurrency, Constraints, DependencyGroups, DependencyGroupsWithDefaults,
     DryRun, EditableMode, ExtrasSpecification, ExtrasSpecificationWithDefaults, HashCheckingMode,
@@ -21,7 +21,7 @@ use uv_configuration::{
 use uv_dispatch::BuildDispatch;
 use uv_distribution::LoweredExtraBuildDependencies;
 use uv_distribution_types::{
-    Dist, Index, IndexUrl, Name, Requirement, Resolution, ResolvedDist, SourceDist,
+    Dist, IndexUrl, Name, Requirement, Resolution, ResolvedDist, SourceDist,
 };
 use uv_fs::{PortablePathBuf, Simplified};
 use uv_installer::{InstallationStrategy, SitePackages};
@@ -33,9 +33,7 @@ use uv_python::{
     ConfigDiscovery, PythonDownloads, PythonEnvironment, PythonPreference, PythonRequest,
 };
 use uv_redacted::DisplaySafeUrl;
-use uv_resolver::{
-    FlatIndex, ForkStrategy, Installable, Lock, Prerelease, PythonReport, ResolutionMode,
-};
+use uv_resolver::{ForkStrategy, Installable, Lock, Prerelease, PythonReport, ResolutionMode};
 use uv_scripts::Pep723Script;
 use uv_settings::{MalwareCheckSettings, PythonInstallMirrors};
 use uv_types::{BuildIsolation, HashStrategy, SourceTreeEditablePolicy};
@@ -44,6 +42,7 @@ use uv_workspace::pyproject::Source;
 use uv_workspace::{DiscoveryOptions, MemberDiscovery, VirtualProject, Workspace, WorkspaceCache};
 
 use crate::commands::editable::apply_editable_mode;
+use crate::commands::flat_index::resolve_flat_index;
 use crate::commands::pip::loggers::{DefaultInstallLogger, DefaultResolveLogger, InstallLogger};
 use crate::commands::pip::operations::{ChangedDist, Changelog, Modifications};
 use crate::commands::pip::resolution_markers;
@@ -878,13 +877,7 @@ pub(crate) async fn do_sync<'a>(
     let build_hasher = target.lock().hash_strategy(target.install_path())?;
 
     // Resolve the flat indexes from `--find-links`.
-    let flat_index = {
-        let client = FlatIndexClient::new(client.cached_client(), client.connectivity(), cache);
-        let entries = client
-            .fetch_all(index_locations.flat_indexes().map(Index::url))
-            .await?;
-        FlatIndex::from_entries(entries)
-    };
+    let flat_index = resolve_flat_index(&client, cache, index_locations).await?;
 
     // Create a build dispatch.
     let build_dispatch = BuildDispatch::new(

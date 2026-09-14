@@ -9,15 +9,15 @@ use thiserror::Error;
 use tracing::warn;
 
 use uv_cache::Cache;
-use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
+use uv_client::{BaseClientBuilder, RegistryClientBuilder};
 use uv_configuration::{
     ActiveEnvironment, BuildOptions, Concurrency, Constraints, DependencyGroups, DryRun,
     IndexStrategy, KeyringProviderType, NoBinary, NoBuild, NoSources,
 };
 use uv_dispatch::{BuildDispatch, SharedState};
 use uv_distribution_types::{
-    ConfigSettings, DependencyMetadata, ExtraBuildRequires, Index, IndexLocations,
-    PackageConfigSettings, Requirement,
+    ConfigSettings, DependencyMetadata, ExtraBuildRequires, IndexLocations, PackageConfigSettings,
+    Requirement,
 };
 use uv_fs::Simplified;
 use uv_install_wheel::LinkMode;
@@ -27,7 +27,7 @@ use uv_python::{
     ConfigDiscovery, EnvironmentPreference, PythonDownloads, PythonInstallation, PythonPreference,
     PythonRequest,
 };
-use uv_resolver::{ExcludeNewer, FlatIndex};
+use uv_resolver::ExcludeNewer;
 use uv_settings::PythonInstallMirrors;
 use uv_shell::{Shell, shlex_posix, shlex_windows};
 use uv_types::{
@@ -38,6 +38,7 @@ use uv_warnings::warn_user;
 use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceCache, WorkspaceErrorKind};
 
 use crate::commands::ExitStatus;
+use crate::commands::flat_index::resolve_flat_index;
 use crate::commands::pip::loggers::{DefaultInstallLogger, InstallLogger};
 use crate::commands::pip::operations::{Changelog, report_interpreter};
 use crate::commands::project::{
@@ -300,14 +301,9 @@ pub(crate) async fn venv(
             .build()?;
 
         // Resolve the flat indexes from `--find-links`.
-        let flat_index = {
-            let client = FlatIndexClient::new(client.cached_client(), client.connectivity(), cache);
-            let entries = client
-                .fetch_all(index_locations.flat_indexes().map(Index::url))
-                .await
-                .map_err(VenvError::FlatIndex)?;
-            FlatIndex::from_entries(entries)
-        };
+        let flat_index = resolve_flat_index(&client, cache, index_locations)
+            .await
+            .map_err(VenvError::FlatIndex)?;
 
         // Initialize any shared state.
         let state = SharedState::default();

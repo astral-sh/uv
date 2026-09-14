@@ -14,7 +14,7 @@ use tracing::{debug, warn};
 
 use uv_cache::Cache;
 use uv_cache_key::RepositoryUrl;
-use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
+use uv_client::{BaseClientBuilder, RegistryClientBuilder};
 use uv_configuration::{
     ActiveEnvironment, Concurrency, Constraints, DependencyGroups, DependencyGroupsWithDefaults,
     DevMode, DryRun, EditableMode, ExtrasSpecification, ExtrasSpecificationWithDefaults,
@@ -37,7 +37,6 @@ use uv_python::{
 };
 use uv_redacted::DisplaySafeUrl;
 use uv_requirements::{NamedRequirementsResolver, RequirementsSource, RequirementsSpecification};
-use uv_resolver::FlatIndex;
 use uv_scripts::{Pep723Metadata, Pep723Script};
 use uv_settings::{MalwareCheckSettings, PythonInstallMirrors};
 use uv_static::is_known_standard_library_package;
@@ -49,6 +48,7 @@ use uv_workspace::pyproject::{
 use uv_workspace::pyproject_mut::{AddBoundsKind, ArrayEdit, DependencyTarget, PyProjectTomlMut};
 use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceCache};
 
+use crate::commands::flat_index::resolve_flat_index;
 use crate::commands::pip::loggers::{
     DefaultInstallLogger, DefaultResolveLogger, SummaryResolveLogger,
 };
@@ -416,20 +416,8 @@ pub(crate) async fn add(
             };
 
             // Resolve the flat indexes from `--find-links`.
-            let flat_index = {
-                let client =
-                    FlatIndexClient::new(client.cached_client(), client.connectivity(), cache);
-                let entries = client
-                    .fetch_all(
-                        settings
-                            .resolver
-                            .index_locations
-                            .flat_indexes()
-                            .map(Index::url),
-                    )
-                    .await?;
-                FlatIndex::from_entries(entries)
-            };
+            let flat_index =
+                resolve_flat_index(&client, cache, &settings.resolver.index_locations).await?;
 
             // Lower the extra build dependencies, if any.
             let extra_build_requires = if let AddTarget::Project(project, _) = &target {
