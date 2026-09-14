@@ -515,7 +515,7 @@
       }
     },
     "required-environments": {
-      "description": "A list of required platforms, for packages that lack source distributions.\n\nWhen a package does not have a source distribution, it's availability will be limited to\nthe platforms supported by its built distributions (wheels). For example, if a package only\npublishes wheels for Linux, then it won't be installable on macOS or Windows.\n\nBy default, uv requires each package to include at least one wheel that is compatible with\nthe designated Python version. The `required-environments` setting can be used to ensure that\nthe resulting resolution contains wheels for specific platforms, or fails if no such wheels\nare available.\n\nWhile the `environments` setting _limits_ the set of environments that uv will consider when\nresolving dependencies, `required-environments` _expands_ the set of platforms that uv _must_\nsupport when resolving dependencies.\n\nFor example, `environments = [\"sys_platform == 'darwin'\"]` would limit uv to solving for\nmacOS (and ignoring Linux and Windows). On the other hand, `required-environments = [\"sys_platform == 'darwin'\"]`\nwould _require_ that any package without a source distribution include a wheel for macOS in\norder to be installable.\n\nEntries can also be tables with a `marker` and `minimum-libc-version`, for example,\n`{ marker = \"sys_platform == 'linux'\", minimum-libc-version = { glibc = \"2.31\" } }`.\nWithin that marker range, uv excludes wheels for omitted libc implementations and wheels\nthat require a newer version. Every libc implementation in the table must have compatible\nartifacts. String entries do not constrain libc compatibility.\n\n`minimum-libc-version` is in preview. Use `--preview-features minimum-libc-version` to\ndisable the warning.",
+      "description": "A list of required platforms, for packages that lack source distributions.\n\nWhen a package does not have a source distribution, it's availability will be limited to\nthe platforms supported by its built distributions (wheels). For example, if a package only\npublishes wheels for Linux, then it won't be installable on macOS or Windows.\n\nBy default, uv requires each package to include at least one wheel that is compatible with\nthe designated Python version. The `required-environments` setting can be used to ensure that\nthe resulting resolution contains wheels for specific platforms, or fails if no such wheels\nare available.\n\nWhile the `environments` setting _limits_ the set of environments that uv will consider when\nresolving dependencies, `required-environments` _expands_ the set of platforms that uv _must_\nsupport when resolving dependencies.\n\nFor example, `environments = [\"sys_platform == 'darwin'\"]` would limit uv to solving for\nmacOS (and ignoring Linux and Windows). On the other hand, `required-environments = [\"sys_platform == 'darwin'\"]`\nwould _require_ that any package without a source distribution include a wheel for macOS in\norder to be installable.\n\nEntries can also be tables with a `marker` and `libc`, for example,\n`{ marker = \"sys_platform == 'linux'\", libc = { glibc = \"2.31\" } }`.\nWithin that marker range, uv excludes wheels for omitted libc implementations and wheels\nthat require a newer version. Every libc implementation in the table must have compatible\nartifacts. String entries do not constrain libc compatibility.\n\n`libc` is in preview. Use `--preview-features minimum-libc-version` to\ndisable the warning.",
       "anyOf": [
         {
           "$ref": "#/definitions/RequiredEnvironments"
@@ -1961,11 +1961,11 @@
         {
           "type": "object",
           "properties": {
+            "libc": {
+              "$ref": "#/definitions/MinimumLibcVersion"
+            },
             "marker": {
               "$ref": "#/definitions/MarkerTree"
-            },
-            "minimum-libc-version": {
-              "$ref": "#/definitions/MinimumLibcVersion"
             }
           },
           "additionalProperties": false,
