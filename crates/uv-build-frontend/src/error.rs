@@ -40,10 +40,6 @@ pub enum Error {
     RequirementsInstall(&'static str, #[source] AnyErrorBuild),
     #[error("Failed to create temporary virtualenv")]
     Virtualenv(#[from] uv_virtualenv::Error),
-    #[error(
-        "Hash verification for build dependencies requires build isolation, but build isolation is disabled"
-    )]
-    HashesRequireBuildIsolation,
     // Build backend errors
     #[error("Failed to run `{0}`")]
     CommandFailed(PathBuf, #[source] io::Error),
@@ -95,7 +91,6 @@ impl IsBuildBackendError for Error {
             | Self::RequirementsResolve(_, _)
             | Self::RequirementsInstall(_, _)
             | Self::Virtualenv(_)
-            | Self::HashesRequireBuildIsolation
             | Self::CyclicBuildDependency(_)
             | Self::UnmatchedRuntime(_, _) => false,
             Self::CommandFailed(_, _)
