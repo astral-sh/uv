@@ -1,5 +1,4 @@
 use std::collections::BTreeMap;
-use std::collections::btree_map::Entry;
 
 use rustc_hash::FxHashMap;
 use tracing::instrument;
@@ -8,8 +7,9 @@ use uv_client::{FlatIndexEntries, FlatIndexEntry};
 use uv_configuration::BuildOptions;
 use uv_distribution_filename::{DistFilename, SourceDistFilename, WheelFilename};
 use uv_distribution_types::{
-    File, HashComparison, IncompatibleSource, IncompatibleWheel, IndexUrl, PrioritizedDist,
-    RegistryBuiltWheel, RegistrySourceDist, SourceDistCompatibility, WheelCompatibility,
+    ArtifactPolicy, File, HashComparison, IncompatibleSource, IncompatibleWheel, IndexUrl,
+    PrioritizedDist, RegistryBuiltWheel, RegistrySourceDist, SourceDistCompatibility,
+    WheelCompatibility,
 };
 use uv_normalize::PackageName;
 use uv_pep440::Version;
@@ -69,11 +69,20 @@ impl FlatDistributions {
         tags: Option<&Tags>,
         hasher: &HashStrategy,
         build_options: &BuildOptions,
+        artifact_policy: ArtifactPolicy,
     ) -> Self {
         let mut distributions = Self::default();
         for entry in entries {
             let (filename, file, index) = entry.into_parts();
-            distributions.add_file(file, filename, tags, hasher, build_options, index);
+            distributions.add_file(
+                file,
+                filename,
+                tags,
+                hasher,
+                build_options,
+                index,
+                artifact_policy,
+            );
         }
         distributions
     }
@@ -92,6 +101,7 @@ impl FlatDistributions {
         hasher: &HashStrategy,
         build_options: &BuildOptions,
         index: IndexUrl,
+        artifact_policy: ArtifactPolicy,
     ) {
         // No `requires-python` here: for source distributions, we don't have that information;
         // for wheels, we read it lazily only when selected.
@@ -112,14 +122,10 @@ impl FlatDistributions {
                     index,
                     size_is_authoritative: false,
                 };
-                match self.0.entry(version) {
-                    Entry::Occupied(mut entry) => {
-                        entry.get_mut().insert_built(dist, vec![], compatibility);
-                    }
-                    Entry::Vacant(entry) => {
-                        entry.insert(PrioritizedDist::from_built(dist, vec![], compatibility));
-                    }
-                }
+                self.0
+                    .entry(version)
+                    .or_insert_with(|| PrioritizedDist::new(artifact_policy))
+                    .insert_built(dist, vec![], compatibility);
             }
             DistFilename::SourceDistFilename(filename) => {
                 let compatibility = Self::source_dist_compatibility(
@@ -137,14 +143,10 @@ impl FlatDistributions {
                     wheels: vec![],
                     size_is_authoritative: false,
                 };
-                match self.0.entry(filename.version) {
-                    Entry::Occupied(mut entry) => {
-                        entry.get_mut().insert_source(dist, vec![], compatibility);
-                    }
-                    Entry::Vacant(entry) => {
-                        entry.insert(PrioritizedDist::from_source(dist, vec![], compatibility));
-                    }
-                }
+                self.0
+                    .entry(filename.version)
+                    .or_insert_with(|| PrioritizedDist::new(artifact_policy))
+                    .insert_source(dist, vec![], compatibility);
             }
         }
     }

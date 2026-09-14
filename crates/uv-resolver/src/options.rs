@@ -1,4 +1,5 @@
 use uv_configuration::{BuildOptions, IndexStrategy};
+use uv_distribution_types::{ArtifactPolicy, MinimumLibcVersion};
 use uv_pypi_types::SupportedEnvironments;
 use uv_torch::TorchStrategy;
 
@@ -15,9 +16,19 @@ pub struct Options {
     pub exclude_newer: ExcludeNewer,
     pub index_strategy: IndexStrategy,
     pub artifact_environments: SupportedEnvironments,
+    pub minimum_libc_version: Option<MinimumLibcVersion>,
     pub flexibility: Flexibility,
     pub build_options: BuildOptions,
     pub torch_backend: Option<TorchStrategy>,
+}
+
+impl Options {
+    /// Return the artifact constraints for a universal resolution.
+    pub(crate) fn artifact_policy(&self) -> ArtifactPolicy {
+        self.minimum_libc_version
+            .map(ArtifactPolicy::new)
+            .unwrap_or_default()
+    }
 }
 
 /// Builder for [`Options`].
@@ -30,6 +41,7 @@ pub struct OptionsBuilder {
     exclude_newer: ExcludeNewer,
     index_strategy: IndexStrategy,
     artifact_environments: SupportedEnvironments,
+    minimum_libc_version: Option<MinimumLibcVersion>,
     flexibility: Flexibility,
     build_options: BuildOptions,
     torch_backend: Option<TorchStrategy>,
@@ -90,6 +102,16 @@ impl OptionsBuilder {
         self
     }
 
+    /// Sets the supported libc implementations and their minimum versions.
+    #[must_use]
+    pub fn minimum_libc_version(
+        mut self,
+        minimum_libc_version: Option<MinimumLibcVersion>,
+    ) -> Self {
+        self.minimum_libc_version = minimum_libc_version;
+        self
+    }
+
     /// Sets the [`Flexibility`].
     #[must_use]
     pub fn flexibility(mut self, flexibility: Flexibility) -> Self {
@@ -121,6 +143,7 @@ impl OptionsBuilder {
             exclude_newer: self.exclude_newer,
             index_strategy: self.index_strategy,
             artifact_environments: self.artifact_environments,
+            minimum_libc_version: self.minimum_libc_version,
             flexibility: self.flexibility,
             build_options: self.build_options,
             torch_backend: self.torch_backend,

@@ -11,9 +11,9 @@ use uv_client::{FlatIndexEntry, OwnedArchive, SimpleDetailMetadata, VersionFiles
 use uv_configuration::BuildOptions;
 use uv_distribution_filename::{DistFilename, SourceDistFilename, WheelFilename};
 use uv_distribution_types::{
-    HashComparison, IncompatibleSource, IncompatibleWheel, IndexUrl, PrioritizedDist,
-    RegistryBuiltWheel, RegistrySourceDist, RequiresPython, SourceDistCompatibility,
-    WheelCompatibility,
+    ArtifactPolicy, HashComparison, IncompatibleSource, IncompatibleWheel, IndexUrl,
+    PrioritizedDist, RegistryBuiltWheel, RegistrySourceDist, RequiresPython,
+    SourceDistCompatibility, WheelCompatibility,
 };
 use uv_normalize::PackageName;
 use uv_pep440::Version;
@@ -55,6 +55,7 @@ impl VersionMap {
         available_version_cutoff: Option<Timestamp>,
         flat_index: Option<FlatDistributions>,
         build_options: &BuildOptions,
+        artifact_policy: ArtifactPolicy,
     ) -> Self {
         let mut local = false;
         let mut entries = Vec::with_capacity(simple_metadata.iter().size_hint().0);
@@ -104,6 +105,7 @@ impl VersionMap {
                 requires_python,
                 included_version_cutoff,
                 available_version_cutoff,
+                artifact_policy,
             }),
         }
     }
@@ -114,20 +116,10 @@ impl VersionMap {
         tags: Option<&Tags>,
         hasher: &HashStrategy,
         build_options: &BuildOptions,
+        artifact_policy: ArtifactPolicy,
     ) -> Self {
-        let mut local = false;
-        let mut map = BTreeMap::new();
-
-        for (version, prioritized_dist) in
-            FlatDistributions::from_entries(flat_metadata, tags, hasher, build_options)
-        {
-            local |= version.is_local();
-            map.insert(version, prioritized_dist);
-        }
-
-        Self {
-            inner: VersionMapInner::Eager(VersionMapEager { map, local }),
-        }
+        FlatDistributions::from_entries(flat_metadata, tags, hasher, build_options, artifact_policy)
+            .into()
     }
 
     /// Return the [`ResolutionMetadata`] for the given version, if any.
@@ -503,6 +495,8 @@ struct VersionMapLazy {
     hasher: HashStrategy,
     /// The `requires-python` constraint for the resolution.
     requires_python: RequiresPython,
+    /// The policy governing which artifacts can be selected and recorded in the resolution.
+    artifact_policy: ArtifactPolicy,
 }
 
 impl VersionMapLazy {
@@ -626,7 +620,9 @@ impl VersionMapLazy {
                     .files,
             )
             .expect("archived version files always deserializes");
-            let mut priority_dist = init.cloned().unwrap_or_default();
+            let mut priority_dist = init
+                .cloned()
+                .unwrap_or_else(|| PrioritizedDist::new(self.artifact_policy));
             for (filename, file) in files.all(&self.package_name) {
                 // Support resolving as if it were an earlier timestamp, at least as long files have
                 // upload time information.

@@ -43,7 +43,7 @@ use uv_configuration::{
 };
 use uv_distribution_types::{
     ConfigSettings, DependencyMetadata, ExtraBuildVariables, Index, IndexLocations, IndexUrl,
-    PackageConfigSettings, Requirement,
+    MinimumLibcVersion, PackageConfigSettings, Requirement,
 };
 use uv_install_wheel::LinkMode;
 use uv_normalize::{ExtraName, PackageName, PipGroupName};
@@ -3478,6 +3478,7 @@ pub(crate) struct PipCompileSettings {
     pub(crate) build_constraints_from_workspace: Vec<Requirement>,
     pub(crate) environments: SupportedEnvironments,
     pub(crate) required_environments: SupportedEnvironments,
+    pub(crate) minimum_libc_version: Option<MinimumLibcVersion>,
     pub(crate) refresh: Refresh,
     pub(crate) settings: PipSettings,
 }
@@ -3597,6 +3598,10 @@ impl PipCompileSettings {
             SupportedEnvironments::default()
         };
 
+        let minimum_libc_version = filesystem
+            .as_ref()
+            .and_then(|configuration| configuration.minimum_libc_version);
+
         Ok(Self {
             format,
             src_file,
@@ -3622,6 +3627,7 @@ impl PipCompileSettings {
             build_constraints_from_workspace,
             environments,
             required_environments,
+            minimum_libc_version,
             refresh: Refresh::try_from(refresh)?,
             settings: PipSettings::combine(
                 PipOptions {

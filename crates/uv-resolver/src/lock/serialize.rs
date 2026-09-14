@@ -139,6 +139,7 @@ fn write_options(writer: &mut LockWriter, options: &ResolverOptions) -> Result<(
         || options.prerelease.global != PrereleaseMode::default()
         || !options.prerelease.package.is_empty()
         || options.fork_strategy != ForkStrategy::default()
+        || options.minimum_libc_version.is_some()
         || !options.exclude_newer.is_empty();
     if !has_options {
         return Ok(());
@@ -153,6 +154,9 @@ fn write_options(writer: &mut LockWriter, options: &ResolverOptions) -> Result<(
     }
     if options.fork_strategy != ForkStrategy::default() {
         writer.key_value("fork-strategy", options.fork_strategy.to_string())?;
+    }
+    if let Some(version) = options.minimum_libc_version {
+        writer.key_value("minimum-libc-version", serialize_value(&version)?)?;
     }
 
     let exclude_newer = &options.exclude_newer;

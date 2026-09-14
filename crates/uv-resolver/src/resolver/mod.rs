@@ -23,10 +23,10 @@ use tracing::{Level, debug, info, instrument, trace, warn};
 use uv_configuration::{Constraints, Excludes, Overrides};
 use uv_distribution::{ArchiveMetadata, DistributionDatabase};
 use uv_distribution_types::{
-    BuiltDist, CompatibleDist, DerivationChain, Dist, DistErrorKind, Identifier, IncompatibleDist,
-    IncompatibleSource, IncompatibleWheel, IndexCapabilities, IndexLocations, IndexMetadata,
-    IndexUrl, InstalledDist, Name, PythonRequirementKind, RemoteSource, Requirement, ResolvedDist,
-    ResolvedDistRef, SourceDist, VersionOrUrlRef, implied_markers,
+    ArtifactPolicy, BuiltDist, CompatibleDist, DerivationChain, Dist, DistErrorKind, Identifier,
+    IncompatibleDist, IncompatibleSource, IncompatibleWheel, IndexCapabilities, IndexLocations,
+    IndexMetadata, IndexUrl, InstalledDist, Name, PythonRequirementKind, RemoteSource, Requirement,
+    ResolvedDist, ResolvedDistRef, SourceDist, VersionOrUrlRef,
 };
 use uv_git::GitResolver;
 use uv_normalize::{ExtraName, GroupName, PackageName};
@@ -189,6 +189,11 @@ impl<'a, Context: BuildContext, InstalledPackages: InstalledPackagesProvider>
             build_context.locations(),
             build_context.build_options(),
             build_context.capabilities(),
+            if env.marker_environment().is_none() {
+                options.artifact_policy()
+            } else {
+                ArtifactPolicy::default()
+            },
         );
 
         Ok(Self::new_custom_io(
@@ -1236,11 +1241,21 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 BuiltDist::Path(dist) => &dist.filename,
             };
 
-            // If the wheel does _not_ cover an environment that requires artifact coverage, it's
-            // incompatible.
+            // Direct wheels must satisfy the same artifact policy as registry wheels.
+            if env.marker_environment().is_none()
+                && let Err(error) = self.options.artifact_policy().check_wheel(filename)
+            {
+                return Ok(Some(ResolverVersion::Unavailable(
+                    version.clone(),
+                    UnavailableVersion::IncompatibleDist(IncompatibleDist::Wheel(
+                        IncompatibleWheel::ArtifactPolicy(error),
+                    )),
+                )));
+            }
+            // If the wheel does not cover a required environment, it is incompatible.
             if env.marker_environment().is_none() && !self.options.artifact_environments.is_empty()
             {
-                let wheel_marker = implied_markers(filename);
+                let wheel_marker = self.options.artifact_policy().wheel_coverage(filename);
                 // If the caller marked an environment as requiring artifact coverage, ensure it
                 // has coverage.
                 for environment_marker in self.options.artifact_environments.iter().copied() {
@@ -1499,9 +1514,8 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             return Ok(None);
         }
 
-        // If the package is already compatible with all environments (as is the case for
-        // packages that include a source distribution), we don't need to fork.
-        if dist.implied_markers().is_true() {
+        let artifact_markers = dist.artifact_coverage();
+        if artifact_markers.is_true() {
             return Ok(None);
         }
 
@@ -1511,7 +1525,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             // If the platform is part of the current environment...
             if env.included_by_marker(marker) {
                 // But isn't supported by the distribution in this fork...
-                if !env.included_by_marker(dist.implied_markers().and(marker))
+                if !env.included_by_marker(artifact_markers.and(marker))
                     && env.included_by_marker(find_environments(id, pubgrub).and(marker))
                 {
                     // Then we need to fork.
@@ -1587,8 +1601,8 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
 
         // ...and the non-local version has greater platform support...
         let mut remainder = {
-            let mut remainder = base_dist.implied_markers();
-            remainder = remainder.and(dist.implied_markers().negate());
+            let mut remainder = base_dist.artifact_coverage();
+            remainder = remainder.and(artifact_markers.negate());
             remainder
         };
         if remainder.is_false() {
@@ -1604,7 +1618,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
 
         // Similarly, if the local distribution is incompatible with the current environment, then
         // use the base distribution instead (but don't fork).
-        if !env.included_by_marker(dist.implied_markers()) {
+        if !env.included_by_marker(artifact_markers) {
             let filename = match dist.for_installation() {
                 ResolvedDistRef::InstallableRegistrySourceDist { sdist, .. } => sdist
                     .filename()
@@ -1654,9 +1668,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 operator: MarkerOperator::Equal,
                 value,
             });
-            if dist.implied_markers().is_disjoint(sys_platform)
-                && !remainder.is_disjoint(sys_platform)
-            {
+            if artifact_markers.is_disjoint(sys_platform) && !remainder.is_disjoint(sys_platform) {
                 remainder = remainder.or(sys_platform);
             }
         }
