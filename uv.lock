@@ -86,6 +86,19 @@ wheels = [
 ]
 
 [[package]]
+name = "astral-dev-toolchain-cargo-nextest"
+version = "0.9.143"
+source = { registry = "https://pypi.org/simple" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/cc/2e/6091f2ecc6936499edfd82628bc7f6f512d47ad292ed37b2f782f12f7ab9/astral_dev_toolchain_cargo_nextest-0.9.143-py3-none-macosx_10_12_x86_64.whl", hash = "sha256:2a5b4b8629bc71595e6c57bce2463fc0ad98efd2676ae4c2c0aebebe72142b90", size = 7314765, upload-time = "2026-08-26T15:28:18.223Z" },
+    { url = "https://files.pythonhosted.org/packages/a7/a7/edfe750a7e9732a232b4e4ba30b847f067de957966f181d0665f6d46c224/astral_dev_toolchain_cargo_nextest-0.9.143-py3-none-macosx_11_0_arm64.whl", hash = "sha256:d152cb4ce165452a30cc63d92046847210102f9231300d86b4aaf1cfe4f839ad", size = 6995862, upload-time = "2026-08-26T15:28:20.258Z" },
+    { url = "https://files.pythonhosted.org/packages/52/9a/67141069cee76d531d3887e27210c0b16a568585afdd11baf8965cd6b857/astral_dev_toolchain_cargo_nextest-0.9.143-py3-none-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:f6501029b9f9597a720a496997da1aad8e31069a352a80415441eff15d15637d", size = 9880036, upload-time = "2026-08-26T15:28:22.33Z" },
+    { url = "https://files.pythonhosted.org/packages/74/1d/8636da96addb470098a120b55d275d05e8d57925a760515a710d9c2a8245/astral_dev_toolchain_cargo_nextest-0.9.143-py3-none-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:a58a0dafb1d6a54b4e80b837a7cbcf2999b2dfd133eb6261b3d61c714b295c81", size = 10068151, upload-time = "2026-08-26T15:28:24.628Z" },
+    { url = "https://files.pythonhosted.org/packages/9c/68/7b73566785938b8d09d28ce170c77ed6fbe1d3f5790c481324417b5bf4d7/astral_dev_toolchain_cargo_nextest-0.9.143-py3-none-win_amd64.whl", hash = "sha256:824aec957bf38828671f22e70354b21e95c4a4a1aa8fbaef04f98ae3bee5fe09", size = 6689195, upload-time = "2026-08-26T15:28:26.859Z" },
+    { url = "https://files.pythonhosted.org/packages/e2/30/f2b26fa3111bfac4a5ab59957a431c95a97dba900f894fcf9cbd01299928/astral_dev_toolchain_cargo_nextest-0.9.143-py3-none-win_arm64.whl", hash = "sha256:efdda891201e148c0da299a4f8f26c8a7c7ca510c12d96112ae4d51b1b203ef6", size = 6245567, upload-time = "2026-08-26T15:28:28.754Z" },
+]
+
+[[package]]
 name = "astral-dev-toolchain-cargo-shear"
 version = "1.13.4"
 source = { registry = "https://pypi.org/simple" }
@@ -1776,6 +1789,7 @@ check = [
 dev = [
     { name = "astral-dev-toolchain-cargo-codspeed" },
     { name = "astral-dev-toolchain-cargo-dist" },
+    { name = "astral-dev-toolchain-cargo-nextest" },
 ]
 docker = [
     { name = "cargo-zigbuild", marker = "python_full_version >= '3.12'" },
@@ -1808,6 +1822,7 @@ check = [
 dev = [
     { name = "astral-dev-toolchain-cargo-codspeed", specifier = ">=5.0.1" },
     { name = "astral-dev-toolchain-cargo-dist", specifier = ">=0.32.0" },
+    { name = "astral-dev-toolchain-cargo-nextest", specifier = ">=0.9.143" },
 ]
 docker = [{ name = "cargo-zigbuild", marker = "python_full_version >= '3.12'", specifier = ">=0.23.0" }]
 docs = [

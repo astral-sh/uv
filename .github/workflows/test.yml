@@ -102,11 +102,6 @@ jobs:
           sudo mount -o loop /tmp/minix.img /minix
           sudo chown "$(id -u):$(id -g)" /minix
 
-      - name: "Install cargo nextest"
-        uses: taiki-e/install-action@6c6fd71fe4fb72c3697d269963d0e15df8adedad # v2.85.10
-        with:
-          tool: cargo-nextest
-
       - name: "Cargo test"
         env:
           # Retry more than default to reduce flakes in CI
@@ -121,7 +116,7 @@ jobs:
           INSTA_UPDATE: new
           INSTA_PENDING_DIR: ${{ github.workspace }}/pending-snapshots
         run: |
-          cargo nextest run \
+          uv run --only-dev cargo nextest run \
             --cargo-profile fast-build-nightly \
             -Z panic-abort-tests \
             -Z checksum-freshness \
@@ -202,11 +197,6 @@ jobs:
       - name: "Install required Python versions"
         run: uv python install
 
-      - name: "Install cargo nextest"
-        uses: taiki-e/install-action@6c6fd71fe4fb72c3697d269963d0e15df8adedad # v2.85.10
-        with:
-          tool: cargo-nextest
-
       - name: "Cargo test"
         env:
           # Retry more than default to reduce flakes in CI
@@ -222,7 +212,7 @@ jobs:
           INSTA_UPDATE: new
           INSTA_PENDING_DIR: ${{ github.workspace }}/pending-snapshots
         run: |
-          cargo nextest run \
+          uv run --only-dev cargo nextest run \
             --cargo-profile fast-build-nightly \
             -Z panic-abort-tests \
             -Z checksum-freshness \
@@ -310,11 +300,6 @@ jobs:
           New-Item -Path "C:\uv-smb" -ItemType Directory -Force
           New-SmbShare -Name "uv-alt-fs" -Path "C:\uv-smb" -FullAccess "Everyone"
 
-      - name: "Install cargo nextest"
-        uses: taiki-e/install-action@6c6fd71fe4fb72c3697d269963d0e15df8adedad # v2.85.10
-        with:
-          tool: cargo-nextest
-
       - name: "Cargo test"
         working-directory: ${{ env.UV_WORKSPACE }}
         env:
@@ -333,7 +318,7 @@ jobs:
           INSTA_PENDING_DIR: ${{ github.workspace }}/pending-snapshots
         shell: bash
         run: |
-          cargo nextest run \
+          uv run --only-dev cargo nextest run \
             --cargo-profile fast-build-nightly \
             -Z panic-abort-tests \
             -Z checksum-freshness \

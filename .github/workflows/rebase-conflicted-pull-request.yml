@@ -57,10 +57,18 @@ jobs:
       - name: Prepare Rust dependencies
         run: cargo fetch --locked
 
-      - name: "Install cargo nextest"
-        uses: taiki-e/install-action@6c6fd71fe4fb72c3697d269963d0e15df8adedad # v2.85.10
+      - name: "Install uv"
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
         with:
-          tool: cargo-nextest
+          version: "0.12.10"
+          checksum: "173d95a0c32d18c896c46ba6fafbf3cf9c14ab74b033f81b76c883ef492a976b"
+
+      - name: "Install cargo nextest"
+        env:
+          UV_PROJECT_ENVIRONMENT: ${{ runner.temp }}/cargo-tools
+        run: |
+          uv sync --only-dev
+          echo "$UV_PROJECT_ENVIRONMENT/bin" >> "$GITHUB_PATH"
 
       - name: Prepare pull request branch
         id: prepare
