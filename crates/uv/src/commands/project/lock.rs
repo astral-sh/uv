@@ -1314,13 +1314,7 @@ impl ValidatedLock {
             .unwrap_or_default()
             .iter()
             .copied()
-            .map(|environment| RequiredEnvironment {
-                marker: lock.simplify_environment(environment.marker),
-                ..environment
-            })
-            .filter(|environment| {
-                environment.libc.is_some() || environment.marker.contents().is_some()
-            })
+            .filter_map(|environment| lock.simplify_required_environment(environment))
             .collect::<Vec<_>>();
         if expected != actual {
             debug!(

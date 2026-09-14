@@ -5,7 +5,7 @@ use rustc_hash::FxHashMap;
 use serde::Serialize;
 use toml_edit::Value;
 use toml_writer::{TomlWrite, WriteTomlValue};
-use uv_distribution_types::{RequiredEnvironment, RequiresPython, SimplifiedMarkerTree};
+use uv_distribution_types::{RequiresPython, SimplifiedMarkerTree};
 use uv_fs::PortablePath;
 use uv_normalize::PackageName;
 use uv_pep508::MarkerTree;
@@ -71,13 +71,7 @@ fn write_lock(writer: &mut LockWriter, lock: &Lock) -> Result<(), WriteError> {
             .required_environments
             .iter()
             .copied()
-            .map(|environment| RequiredEnvironment {
-                marker: lock.simplify_environment(environment.marker),
-                ..environment
-            })
-            .filter(|environment| {
-                environment.libc.is_some() || environment.marker.contents().is_some()
-            });
+            .filter_map(|environment| lock.simplify_required_environment(environment));
         writer.key_multiline_array("required-markers", environments, |writer, environment| {
             writer.value(serialize_value(&environment)?)
         })?;
