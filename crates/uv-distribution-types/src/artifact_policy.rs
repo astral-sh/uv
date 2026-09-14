@@ -15,19 +15,20 @@ pub struct ArtifactPolicy {
 }
 
 impl ArtifactPolicy {
-    /// Create a policy for the oldest supported glibc release.
-    pub fn new(minimum_glibc_version: Option<GlibcVersion>) -> Self {
+    pub fn new(minimum_glibc_version: GlibcVersion) -> Self {
         Self {
-            minimum_glibc_version,
+            minimum_glibc_version: Some(minimum_glibc_version),
         }
     }
 
-    /// Return whether the policy leaves all artifacts eligible.
     pub fn is_empty(self) -> bool {
         self.minimum_glibc_version.is_none()
     }
 
-    /// Check whether any of the wheel's platform tags satisfy the policy.
+    /// Check artifact eligibility, retaining the entire wheel if any platform tag is allowed.
+    ///
+    /// This does not establish coverage of a required environment; use [`Self::wheel_coverage`]
+    /// for that. An empty policy accepts every wheel.
     pub fn check_wheel(self, filename: &WheelFilename) -> Result<(), ArtifactPolicyError> {
         if let Some(version) = self.minimum_glibc_version
             && !filename
@@ -41,6 +42,10 @@ impl ArtifactPolicy {
     }
 
     /// Return the environments covered by the wheel's allowed platform tags.
+    ///
+    /// At a glibc 2.31 baseline, a wheel tagged `manylinux_2_17_x86_64.manylinux_2_34_aarch64`
+    /// contributes x86-64 coverage only. Tags without a known marker mapping contribute no
+    /// coverage, even if [`Self::check_wheel`] permits the artifact.
     pub fn wheel_coverage(self, filename: &WheelFilename) -> MarkerTree {
         implied_platform_markers(
             filename
@@ -51,6 +56,10 @@ impl ArtifactPolicy {
         .and(implied_python_markers(filename))
     }
 
+    /// When a baseline is set, reject newer manylinux releases and all musllinux tags.
+    ///
+    /// Native Linux tags declare no libc version, so accepting them does not establish a glibc
+    /// compatibility guarantee. Non-Linux tags are unconstrained.
     fn allows_platform(self, platform: &PlatformTag) -> bool {
         let Some(version) = self.minimum_glibc_version else {
             return true;
@@ -63,7 +72,6 @@ impl ArtifactPolicy {
             PlatformTag::Manylinux2010 { .. } => GlibcVersion::new(2, 12) <= version,
             PlatformTag::Manylinux2014 { .. } => GlibcVersion::new(2, 17) <= version,
             PlatformTag::Musllinux { .. } => false,
-            // Native Linux tags do not declare a libc requirement.
             PlatformTag::Linux { .. }
             | PlatformTag::Any
             | PlatformTag::Macos { .. }
@@ -106,10 +114,11 @@ mod tests {
 
     #[test]
     fn glibc_artifact_coverage() -> Result<(), Box<dyn std::error::Error>> {
-        let minimum_glibc_version = GlibcVersion::new(2, 31);
+        let policy = ArtifactPolicy::new(GlibcVersion::new(2, 31));
         for platform in [
             "any",
             "manylinux_2_31_x86_64",
+            "manylinux_2_17_x86_64",
             "manylinux_2_17_aarch64",
             "manylinux1_x86_64",
             "manylinux2010_x86_64",
@@ -117,11 +126,13 @@ mod tests {
             "linux_x86_64",
             "win_amd64",
             "macosx_11_0_arm64",
+            "freebsd_13_0_x86_64",
         ] {
             let filename =
                 WheelFilename::from_str(&format!("example-1.0-py3-none-{platform}.whl"))?;
+            assert!(policy.check_wheel(&filename).is_ok(), "{platform}");
             assert_eq!(
-                ArtifactPolicy::new(Some(minimum_glibc_version)).wheel_coverage(&filename),
+                policy.wheel_coverage(&filename),
                 implied_markers(&filename),
                 "{platform}",
             );
@@ -130,8 +141,10 @@ mod tests {
         for platform in ["manylinux_2_34_x86_64", "musllinux_1_2_x86_64"] {
             let filename =
                 WheelFilename::from_str(&format!("example-1.0-py3-none-{platform}.whl"))?;
+            assert!(policy.check_wheel(&filename).is_err(), "{platform}");
+            assert!(ArtifactPolicy::default().check_wheel(&filename).is_ok());
             assert_eq!(
-                ArtifactPolicy::new(Some(minimum_glibc_version)).wheel_coverage(&filename),
+                policy.wheel_coverage(&filename),
                 MarkerTree::FALSE,
                 "{platform}",
             );
@@ -143,8 +156,9 @@ mod tests {
         )?;
         let compatible =
             WheelFilename::from_str("example-1.0-py3-none-manylinux_2_17_x86_64.win_amd64.whl")?;
+        assert!(policy.check_wheel(&filename).is_ok());
         assert_eq!(
-            ArtifactPolicy::new(Some(minimum_glibc_version)).wheel_coverage(&filename),
+            policy.wheel_coverage(&filename),
             implied_markers(&compatible),
         );
         Ok(())
@@ -160,37 +174,13 @@ mod tests {
             let filename =
                 WheelFilename::from_str(&format!("example-1.0-py3-none-{platform}.whl"))?;
             assert_eq!(
-                ArtifactPolicy::new(Some(GlibcVersion::new(2, minor))).wheel_coverage(&filename),
+                ArtifactPolicy::new(GlibcVersion::new(2, minor)).wheel_coverage(&filename),
                 implied_markers(&filename),
             );
             assert_eq!(
-                ArtifactPolicy::new(Some(GlibcVersion::new(2, minor - 1)))
-                    .wheel_coverage(&filename),
+                ArtifactPolicy::new(GlibcVersion::new(2, minor - 1)).wheel_coverage(&filename),
                 MarkerTree::FALSE,
             );
-        }
-        Ok(())
-    }
-
-    #[test]
-    fn wheel_eligibility() -> Result<(), Box<dyn std::error::Error>> {
-        let policy = ArtifactPolicy::new(Some(GlibcVersion::new(2, 31)));
-        for platform in [
-            "manylinux_2_17_x86_64",
-            "manylinux_2_17_x86_64.manylinux_2_34_aarch64",
-            "win_amd64",
-            "linux_x86_64",
-            "freebsd_13_0_x86_64",
-        ] {
-            let filename =
-                WheelFilename::from_str(&format!("example-1.0-py3-none-{platform}.whl"))?;
-            assert!(policy.check_wheel(&filename).is_ok(), "{platform}");
-        }
-        for platform in ["manylinux_2_34_x86_64", "musllinux_1_2_x86_64"] {
-            let filename =
-                WheelFilename::from_str(&format!("example-1.0-py3-none-{platform}.whl"))?;
-            assert!(policy.check_wheel(&filename).is_err(), "{platform}");
-            assert!(ArtifactPolicy::default().check_wheel(&filename).is_ok());
         }
         Ok(())
     }
