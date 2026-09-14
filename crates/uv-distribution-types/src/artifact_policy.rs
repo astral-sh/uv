@@ -9,6 +9,7 @@ use crate::prioritized_distribution::{implied_platform_markers, implied_python_m
 /// The same policy determines wheel eligibility and the environments that an eligible wheel
 /// covers. These differ for wheels with multiple platform tags: one allowed tag is enough to
 /// retain the artifact, but disallowed tags must not contribute environment coverage.
+/// Musllinux wheels remain eligible, but cannot establish coverage of a glibc baseline.
 #[derive(Debug, Default, Clone, Copy)]
 pub struct ArtifactPolicy {
     minimum_glibc_version: Option<GlibcVersion>,
@@ -44,22 +45,22 @@ impl ArtifactPolicy {
     /// Return the environments covered by the wheel's allowed platform tags.
     ///
     /// At a glibc 2.31 baseline, a wheel tagged `manylinux_2_17_x86_64.manylinux_2_34_aarch64`
-    /// contributes x86-64 coverage only. Tags without a known marker mapping contribute no
-    /// coverage, even if [`Self::check_wheel`] permits the artifact.
+    /// contributes x86-64 coverage only. Musllinux tags do not contribute coverage when a glibc
+    /// baseline is set. Tags without a known marker mapping contribute no coverage, even if
+    /// [`Self::check_wheel`] permits the artifact.
     pub fn wheel_coverage(self, filename: &WheelFilename) -> MarkerTree {
-        implied_platform_markers(
-            filename
-                .platform_tags()
-                .iter()
-                .filter(|tag| self.allows_platform(tag)),
-        )
+        implied_platform_markers(filename.platform_tags().iter().filter(|tag| {
+            self.allows_platform(tag)
+                && !(self.minimum_glibc_version.is_some()
+                    && matches!(tag, PlatformTag::Musllinux { .. }))
+        }))
         .and(implied_python_markers(filename))
     }
 
-    /// When a baseline is set, reject newer manylinux releases and all musllinux tags.
+    /// When a baseline is set, reject newer manylinux releases.
     ///
     /// Native Linux tags declare no libc version, so accepting them does not establish a glibc
-    /// compatibility guarantee. Non-Linux tags are unconstrained.
+    /// compatibility guarantee. Musllinux and non-Linux tags are unconstrained.
     fn allows_platform(self, platform: &PlatformTag) -> bool {
         let Some(version) = self.minimum_glibc_version else {
             return true;
@@ -71,8 +72,8 @@ impl ArtifactPolicy {
             PlatformTag::Manylinux1 { .. } => GlibcVersion::new(2, 5) <= version,
             PlatformTag::Manylinux2010 { .. } => GlibcVersion::new(2, 12) <= version,
             PlatformTag::Manylinux2014 { .. } => GlibcVersion::new(2, 17) <= version,
-            PlatformTag::Musllinux { .. } => false,
-            PlatformTag::Linux { .. }
+            PlatformTag::Musllinux { .. }
+            | PlatformTag::Linux { .. }
             | PlatformTag::Any
             | PlatformTag::Macos { .. }
             | PlatformTag::Win32
@@ -138,11 +139,24 @@ mod tests {
             );
         }
 
-        for platform in ["manylinux_2_34_x86_64", "musllinux_1_2_x86_64"] {
+        for (platform, eligible) in [
+            ("manylinux_2_34_x86_64", false),
+            ("musllinux_1_2_x86_64", true),
+            ("manylinux_2_34_x86_64.musllinux_1_2_x86_64", true),
+        ] {
             let filename =
                 WheelFilename::from_str(&format!("example-1.0-py3-none-{platform}.whl"))?;
-            assert!(policy.check_wheel(&filename).is_err(), "{platform}");
+            assert_eq!(
+                policy.check_wheel(&filename).is_ok(),
+                eligible,
+                "{platform}"
+            );
             assert!(ArtifactPolicy::default().check_wheel(&filename).is_ok());
+            assert_eq!(
+                ArtifactPolicy::default().wheel_coverage(&filename),
+                implied_markers(&filename),
+                "{platform}",
+            );
             assert_eq!(
                 policy.wheel_coverage(&filename),
                 MarkerTree::FALSE,
@@ -152,7 +166,7 @@ mod tests {
         }
 
         let filename = WheelFilename::from_str(
-            "example-1.0-py3-none-manylinux_2_17_x86_64.manylinux_2_34_aarch64.win_amd64.whl",
+            "example-1.0-py3-none-manylinux_2_17_x86_64.manylinux_2_34_aarch64.musllinux_1_2_aarch64.win_amd64.whl",
         )?;
         let compatible =
             WheelFilename::from_str("example-1.0-py3-none-manylinux_2_17_x86_64.win_amd64.whl")?;

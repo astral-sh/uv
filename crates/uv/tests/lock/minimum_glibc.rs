@@ -34,6 +34,7 @@ fn minimum_glibc_filters_locked_wheels() -> Result<()> {
     for tag in [
         "cp312-cp312-manylinux_2_17_x86_64",
         "cp312-cp312-manylinux_2_34_x86_64",
+        "cp312-cp312-musllinux_1_2_x86_64",
         "cp312-cp312-macosx_11_0_arm64",
         "cp312-cp312-win_amd64",
     ] {
@@ -78,6 +79,7 @@ fn minimum_glibc_filters_locked_wheels() -> Result<()> {
         wheels = [
             { path = "demo-1.0.0-cp312-cp312-manylinux_2_17_x86_64.whl" },
             { path = "demo-1.0.0-cp312-cp312-manylinux_2_34_x86_64.whl" },
+            { path = "demo-1.0.0-cp312-cp312-musllinux_1_2_x86_64.whl" },
             { path = "demo-1.0.0-cp312-cp312-macosx_11_0_arm64.whl" },
             { path = "demo-1.0.0-cp312-cp312-win_amd64.whl" },
         ]
@@ -108,10 +110,11 @@ fn minimum_glibc_filters_locked_wheels() -> Result<()> {
         required-environments = ["sys_platform == 'linux' and platform_machine == 'x86_64'"]
         minimum-glibc-version = "2.31"
     "#})?;
-    uv_snapshot!(context.filters(), context.lock().arg("--offline"), @r"
-        exit_code: 0 (success)
-        ----- stderr -----
-        Resolved 2 packages in [TIME]
+    uv_snapshot!(context.filters(), context.lock().arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    warning: Setting `minimum-glibc-version` is experimental and may change without warning. Pass `--preview-features minimum-glibc-version` to disable this warning.
+    Resolved 2 packages in [TIME]
     ");
     let lock = context.read("uv.lock");
     insta::with_settings!({filters => context.filters()}, {
@@ -133,6 +136,7 @@ fn minimum_glibc_filters_locked_wheels() -> Result<()> {
         source = { registry = "links" }
         wheels = [
             { path = "demo-1.0.0-cp312-cp312-manylinux_2_17_x86_64.whl" },
+            { path = "demo-1.0.0-cp312-cp312-musllinux_1_2_x86_64.whl" },
             { path = "demo-1.0.0-cp312-cp312-macosx_11_0_arm64.whl" },
             { path = "demo-1.0.0-cp312-cp312-win_amd64.whl" },
         ]
@@ -150,33 +154,41 @@ fn minimum_glibc_filters_locked_wheels() -> Result<()> {
         "#);
     });
 
-    uv_snapshot!(context.filters(), context.pip_compile().args(["pyproject.toml", "--universal", "--format", "pylock.toml", "--offline", "--no-header"]), @r#"
+    uv_snapshot!(context.filters(), context.lock().args(["--offline", "--locked", "--preview-features", "minimum-glibc-version"]), @r"
         exit_code: 0 (success)
-        ----- stdout -----
-        lock-version = "1.0"
-        created-by = "uv"
-        requires-python = ">=3.12"
-
-        [[packages]]
-        name = "demo"
-        version = "1.0.0"
-        wheels = [
-            { url = "file://[TEMP_DIR]/links/demo-1.0.0-cp312-cp312-manylinux_2_17_x86_64.whl", hashes = { sha256 = "eb2ff51027ef5001a478ca15a93fbd009fdda87e36238238a52f1d4019502428" } },
-            { url = "file://[TEMP_DIR]/links/demo-1.0.0-cp312-cp312-macosx_11_0_arm64.whl", hashes = { sha256 = "ed676c33c75c4e3d56b53b061173a4ec378e289013cef527ae68ce525f30be80" } },
-            { url = "file://[TEMP_DIR]/links/demo-1.0.0-cp312-cp312-win_amd64.whl", hashes = { sha256 = "c0b5946665f8aebba3d880c4e5658f346e3971ec2cc0013780eab4dafbbfcad6" } },
-        ]
-
         ----- stderr -----
-        Resolved 1 package in [TIME]
+        Resolved 2 packages in [TIME]
+    ");
+
+    uv_snapshot!(context.filters(), context.pip_compile().args(["pyproject.toml", "--universal", "--format", "pylock.toml", "--offline", "--no-header", "--preview-features", "minimum-glibc-version"]), @r#"
+    exit_code: 0 (success)
+    ----- stdout -----
+    lock-version = "1.0"
+    created-by = "uv"
+    requires-python = ">=3.12"
+
+    [[packages]]
+    name = "demo"
+    version = "1.0.0"
+    wheels = [
+        { url = "file://[TEMP_DIR]/links/demo-1.0.0-cp312-cp312-manylinux_2_17_x86_64.whl", hashes = { sha256 = "eb2ff51027ef5001a478ca15a93fbd009fdda87e36238238a52f1d4019502428" } },
+        { url = "file://[TEMP_DIR]/links/demo-1.0.0-cp312-cp312-musllinux_1_2_x86_64.whl", hashes = { sha256 = "194d18836a1a5cc527c87a7f315f12cb4b69516977e26583a6d7ca72ef2ee6de" } },
+        { url = "file://[TEMP_DIR]/links/demo-1.0.0-cp312-cp312-macosx_11_0_arm64.whl", hashes = { sha256 = "ed676c33c75c4e3d56b53b061173a4ec378e289013cef527ae68ce525f30be80" } },
+        { url = "file://[TEMP_DIR]/links/demo-1.0.0-cp312-cp312-win_amd64.whl", hashes = { sha256 = "c0b5946665f8aebba3d880c4e5658f346e3971ec2cc0013780eab4dafbbfcad6" } },
+    ]
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
     "#);
     uv_snapshot!(context.filters(), context.pip_compile().args(["pyproject.toml", "--universal", "--generate-hashes", "--offline", "--no-header", "--no-annotate"]), @r"
-        exit_code: 0 (success)
-        ----- stdout -----
-        demo==1.0.0 \
-            --hash=sha256:eb2ff51027ef5001a478ca15a93fbd009fdda87e36238238a52f1d4019502428
+    exit_code: 0 (success)
+    ----- stdout -----
+    demo==1.0.0 \
+        --hash=sha256:eb2ff51027ef5001a478ca15a93fbd009fdda87e36238238a52f1d4019502428
 
-        ----- stderr -----
-        Resolved 1 package in [TIME]
+    ----- stderr -----
+    warning: Setting `minimum-glibc-version` is experimental and may change without warning. Pass `--preview-features minimum-glibc-version` to disable this warning.
+    Resolved 1 package in [TIME]
     ");
     Ok(())
 }
@@ -208,10 +220,11 @@ fn minimum_glibc_local_version_fallback() -> Result<()> {
         minimum-glibc-version = "2.31"
     "#})?;
 
-    uv_snapshot!(context.filters(), context.lock().arg("--offline"), @r"
-        exit_code: 0 (success)
-        ----- stderr -----
-        Resolved 3 packages in [TIME]
+    uv_snapshot!(context.filters(), context.lock().arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    warning: Setting `minimum-glibc-version` is experimental and may change without warning. Pass `--preview-features minimum-glibc-version` to disable this warning.
+    Resolved 3 packages in [TIME]
     ");
     uv_snapshot!(context.filters(), context.export().args(["--frozen", "--no-hashes", "--no-header", "--no-annotate"]), @r"
         exit_code: 0 (success)
@@ -317,33 +330,36 @@ fn minimum_glibc_backtracks_and_invalidates_lock() -> Result<()> {
         required-environments = ["sys_platform == 'linux' and platform_machine == 'x86_64'"]
         minimum-glibc-version = "2.31"
     "#})?;
-    uv_snapshot!(context.filters(), context.lock().args(["--offline", "--locked"]), @r"
-        exit_code: 1 (failure)
-        ----- stderr -----
-        Resolved 2 packages in [TIME]
-        error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+    uv_snapshot!(context.filters(), context.lock().args(["--offline", "--locked"]), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    warning: Setting `minimum-glibc-version` is experimental and may change without warning. Pass `--preview-features minimum-glibc-version` to disable this warning.
+    Resolved 2 packages in [TIME]
+    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
 
-        hint: To update the lockfile, run `uv lock`.
+    hint: To update the lockfile, run `uv lock`.
     ");
     assert_eq!(context.read("uv.lock"), original);
-    uv_snapshot!(context.filters(), context.lock().arg("--offline"), @r"
-        exit_code: 0 (success)
-        ----- stderr -----
-        Resolved 2 packages in [TIME]
-        Updated demo v2.0.0 -> v1.0.0
+    uv_snapshot!(context.filters(), context.lock().arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    warning: Setting `minimum-glibc-version` is experimental and may change without warning. Pass `--preview-features minimum-glibc-version` to disable this warning.
+    Resolved 2 packages in [TIME]
+    Updated demo v2.0.0 -> v1.0.0
     ");
     uv_snapshot!(context.filters(), context.export().args(["--frozen", "--no-hashes", "--no-header", "--no-annotate"]), @r"
         exit_code: 0 (success)
         ----- stdout -----
         demo==1.0.0
     ");
-    uv_snapshot!(context.filters(), context.pip_compile().args(["pyproject.toml", "--universal", "--offline", "--no-header", "--no-annotate"]), @r"
-        exit_code: 0 (success)
-        ----- stdout -----
-        demo==1.0.0
+    uv_snapshot!(context.filters(), context.pip_compile().args(["pyproject.toml", "--universal", "--offline", "--no-header", "--no-annotate"]), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    demo==1.0.0
 
-        ----- stderr -----
-        Resolved 1 package in [TIME]
+    ----- stderr -----
+    warning: Setting `minimum-glibc-version` is experimental and may change without warning. Pass `--preview-features minimum-glibc-version` to disable this warning.
+    Resolved 1 package in [TIME]
     ");
     let lock = context.read("uv.lock");
     insta::with_settings!({filters => context.filters()}, {
@@ -379,10 +395,11 @@ fn minimum_glibc_backtracks_and_invalidates_lock() -> Result<()> {
         requires-dist = [{ name = "demo" }]
         "#);
     });
-    uv_snapshot!(context.filters(), context.lock().args(["--offline", "--locked"]), @r"
-        exit_code: 0 (success)
-        ----- stderr -----
-        Resolved 2 packages in [TIME]
+    uv_snapshot!(context.filters(), context.lock().args(["--offline", "--locked"]), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    warning: Setting `minimum-glibc-version` is experimental and may change without warning. Pass `--preview-features minimum-glibc-version` to disable this warning.
+    Resolved 2 packages in [TIME]
     ");
 
     // Changing the floor invalidates the lock even when the selected wheel remains compatible.
@@ -400,13 +417,14 @@ fn minimum_glibc_backtracks_and_invalidates_lock() -> Result<()> {
         required-environments = ["sys_platform == 'linux' and platform_machine == 'x86_64'"]
         minimum-glibc-version = "2.17"
     "#})?;
-    uv_snapshot!(context.filters(), context.lock().args(["--offline", "--locked"]), @r"
-        exit_code: 1 (failure)
-        ----- stderr -----
-        Resolved 2 packages in [TIME]
-        error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+    uv_snapshot!(context.filters(), context.lock().args(["--offline", "--locked"]), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    warning: Setting `minimum-glibc-version` is experimental and may change without warning. Pass `--preview-features minimum-glibc-version` to disable this warning.
+    Resolved 2 packages in [TIME]
+    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
 
-        hint: To update the lockfile, run `uv lock`.
+    hint: To update the lockfile, run `uv lock`.
     ");
     assert_eq!(context.read("uv.lock"), original);
 
@@ -445,12 +463,21 @@ fn minimum_glibc_backtracks_and_invalidates_lock() -> Result<()> {
 #[test]
 fn minimum_glibc_no_compatible_version() -> Result<()> {
     let context = uv_test::test_context!("3.12");
-    wheel(
-        &context,
-        "demo",
-        "2.0.0",
+    let filters: Vec<_> = context
+        .filters()
+        .into_iter()
+        .chain([(
+            // This hint is only shown when the current platform doesn't match the target.
+            r"\nhint: The resolution failed for an environment that is not the current one[^\n]*",
+            "",
+        )])
+        .collect();
+    for tag in [
         "cp312-cp312-manylinux_2_34_x86_64",
-    )?;
+        "cp312-cp312-musllinux_1_2_x86_64",
+    ] {
+        wheel(&context, "demo", "2.0.0", tag)?;
+    }
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {r#"
         [project]
@@ -466,12 +493,14 @@ fn minimum_glibc_no_compatible_version() -> Result<()> {
         minimum-glibc-version = "2.31"
     "#})?;
 
-    uv_snapshot!(context.filters(), context.lock().arg("--offline"), @r"
-        exit_code: 1 (failure)
-        ----- stderr -----
-        error: No solution found when resolving dependencies
-          cause: Because demo==2.0.0 has no wheels compatible with glibc 2.31 and only demo==2.0.0 is available, we can conclude that all versions of demo cannot be used.
-                 And because your project depends on demo, we can conclude that your project's requirements are unsatisfiable.
+    uv_snapshot!(filters, context.lock().arg("--offline"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    warning: Setting `minimum-glibc-version` is experimental and may change without warning. Pass `--preview-features minimum-glibc-version` to disable this warning.
+    error: No solution found when resolving dependencies for split (markers: platform_machine == 'x86_64' and sys_platform == 'linux')
+      cause: Because demo==2.0.0 has no `platform_machine == 'x86_64' and sys_platform == 'linux'`-compatible wheels and only demo==2.0.0 is available, we can conclude that all versions of demo cannot be used.
+             And because your project depends on demo, we can conclude that your project's requirements are unsatisfiable.
+
     ");
     assert!(!context.temp_dir.child("uv.lock").exists());
     Ok(())
@@ -526,10 +555,11 @@ fn minimum_glibc_allows_sdist_fallback() -> Result<()> {
         minimum-glibc-version = "2.31"
     "#})?;
 
-    uv_snapshot!(context.filters(), context.lock().arg("--offline"), @r"
-        exit_code: 0 (success)
-        ----- stderr -----
-        Resolved 2 packages in [TIME]
+    uv_snapshot!(context.filters(), context.lock().arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    warning: Setting `minimum-glibc-version` is experimental and may change without warning. Pass `--preview-features minimum-glibc-version` to disable this warning.
+    Resolved 2 packages in [TIME]
     ");
     let lock = context.read("uv.lock");
     insta::with_settings!({filters => context.filters()}, {
@@ -565,14 +595,15 @@ fn minimum_glibc_allows_sdist_fallback() -> Result<()> {
     });
 
     // Reconsider the cached flat-index entry when its source distribution cannot be built.
-    uv_snapshot!(context.filters(), context.lock().args(["--offline", "--no-build", "--upgrade"]), @r"
-        exit_code: 1 (failure)
-        ----- stderr -----
-        error: No solution found when resolving dependencies
-          cause: Because demo==2.0.0 has no usable wheels and only demo==2.0.0 is available, we can conclude that all versions of demo cannot be used.
-                 And because your project depends on demo, we can conclude that your project's requirements are unsatisfiable.
+    uv_snapshot!(context.filters(), context.lock().args(["--offline", "--no-build", "--upgrade"]), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    warning: Setting `minimum-glibc-version` is experimental and may change without warning. Pass `--preview-features minimum-glibc-version` to disable this warning.
+    error: No solution found when resolving dependencies
+      cause: Because demo==2.0.0 has no usable wheels and only demo==2.0.0 is available, we can conclude that all versions of demo cannot be used.
+             And because your project depends on demo, we can conclude that your project's requirements are unsatisfiable.
 
-        hint: Wheels are required for `demo` because building from source is disabled for all packages (i.e., with `--no-build`)
+    hint: Wheels are required for `demo` because building from source is disabled for all packages (i.e., with `--no-build`)
     ");
     Ok(())
 }
@@ -607,12 +638,13 @@ fn minimum_glibc_direct_url() -> Result<()> {
         minimum-glibc-version = "2.31"
     "#})?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r"
-        exit_code: 1 (failure)
-        ----- stderr -----
-        error: No solution found when resolving dependencies
-          cause: Because only demo==2.0.0 is available and demo==2.0.0 has no wheels compatible with glibc 2.31, we can conclude that all versions of demo cannot be used.
-                 And because your project depends on demo, we can conclude that your project's requirements are unsatisfiable.
+    uv_snapshot!(context.filters(), context.lock(), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    warning: Setting `minimum-glibc-version` is experimental and may change without warning. Pass `--preview-features minimum-glibc-version` to disable this warning.
+    error: No solution found when resolving dependencies
+      cause: Because only demo==2.0.0 is available and demo==2.0.0 has no wheels compatible with glibc 2.31, we can conclude that all versions of demo cannot be used.
+             And because your project depends on demo, we can conclude that your project's requirements are unsatisfiable.
     ");
     assert!(!context.temp_dir.child("uv.lock").exists());
     Ok(())
@@ -654,10 +686,11 @@ fn minimum_glibc_architectures_and_markers() -> Result<()> {
         minimum-glibc-version = "2.31"
     "#})?;
 
-    uv_snapshot!(context.filters(), context.lock().arg("--offline"), @r"
-        exit_code: 0 (success)
-        ----- stderr -----
-        Resolved 4 packages in [TIME]
+    uv_snapshot!(context.filters(), context.lock().arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    warning: Setting `minimum-glibc-version` is experimental and may change without warning. Pass `--preview-features minimum-glibc-version` to disable this warning.
+    Resolved 4 packages in [TIME]
     ");
     // The required aarch64 branch needs the older version; x86_64 and macOS retain the newer one.
     uv_snapshot!(context.filters(), context.export().args(["--frozen", "--no-hashes", "--no-header", "--no-annotate"]), @r"
@@ -686,12 +719,13 @@ fn minimum_glibc_architectures_and_markers() -> Result<()> {
         required-environments = ["sys_platform == 'linux' and platform_machine == 'x86_64'"]
         minimum-glibc-version = "2.31"
     "#})?;
-    uv_snapshot!(context.filters(), context.lock().args(["--offline", "--upgrade"]), @r"
-            exit_code: 0 (success)
-            ----- stderr -----
-            Resolved 3 packages in [TIME]
-            Updated demo v1.0.0, v2.0.0 -> v2.0.0
-        ");
+    uv_snapshot!(context.filters(), context.lock().args(["--offline", "--upgrade"]), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    warning: Setting `minimum-glibc-version` is experimental and may change without warning. Pass `--preview-features minimum-glibc-version` to disable this warning.
+    Resolved 3 packages in [TIME]
+    Updated demo v1.0.0, v2.0.0 -> v2.0.0
+    ");
     Ok(())
 }
 

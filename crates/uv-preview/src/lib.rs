@@ -340,6 +340,8 @@ pub enum PreviewFeature {
     MissingExcludeNewerPackageLock,
     /// Allows using `uv export --batch`.
     BatchExport,
+    /// Allows setting a minimum glibc version for artifacts in universal resolutions.
+    MinimumGlibcVersion,
 }
 
 impl Display for PreviewFeature {
