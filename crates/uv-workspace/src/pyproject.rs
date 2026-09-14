@@ -685,13 +685,13 @@ pub struct ToolUv {
     /// would _require_ that any package without a source distribution include a wheel for macOS in
     /// order to be installable.
     ///
-    /// Entries can also be tables with a `marker` and `minimum-libc-version`, for example,
-    /// `{ marker = "sys_platform == 'linux'", minimum-libc-version = { glibc = "2.31" } }`.
+    /// Entries can also be tables with a `marker` and `libc`, for example,
+    /// `{ marker = "sys_platform == 'linux'", libc = { glibc = "2.31" } }`.
     /// Within that marker range, uv excludes wheels for omitted libc implementations and wheels
     /// that require a newer version. Every libc implementation in the table must have compatible
     /// artifacts. String entries do not constrain libc compatibility.
     ///
-    /// `minimum-libc-version` is in preview. Use `--preview-features minimum-libc-version` to
+    /// `libc` is in preview. Use `--preview-features minimum-libc-version` to
     /// disable the warning.
     #[option(
         default = "[]",

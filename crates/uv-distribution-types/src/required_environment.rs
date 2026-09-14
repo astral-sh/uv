@@ -15,15 +15,12 @@ use crate::MinimumLibcVersion;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct RequiredEnvironment {
     pub marker: MarkerTree,
-    pub minimum_libc_version: Option<MinimumLibcVersion>,
+    pub libc: Option<MinimumLibcVersion>,
 }
 
 impl From<MarkerTree> for RequiredEnvironment {
     fn from(marker: MarkerTree) -> Self {
-        Self {
-            marker,
-            minimum_libc_version: None,
-        }
+        Self { marker, libc: None }
     }
 }
 
@@ -31,10 +28,10 @@ impl Serialize for RequiredEnvironment {
     /// Keep unconstrained entries as strings; tables retain libc constraints even for a true marker.
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         let marker = self.marker.try_to_string().unwrap_or_default();
-        if let Some(version) = self.minimum_libc_version {
+        if let Some(version) = self.libc {
             let mut table = serializer.serialize_struct("RequiredEnvironment", 2)?;
             table.serialize_field("marker", &marker)?;
-            table.serialize_field("minimum-libc-version", &version)?;
+            table.serialize_field("libc", &version)?;
             table.end()
         } else {
             serializer.serialize_str(&marker)
@@ -59,16 +56,16 @@ impl<'de> Deserialize<'de> for RequiredEnvironment {
 
             fn visit_map<M: MapAccess<'de>>(self, map: M) -> Result<Self::Value, M::Error> {
                 #[derive(Deserialize)]
-                #[serde(deny_unknown_fields, rename_all = "kebab-case")]
+                #[serde(deny_unknown_fields)]
                 struct Table {
                     marker: MarkerTree,
-                    minimum_libc_version: Option<MinimumLibcVersion>,
+                    libc: Option<MinimumLibcVersion>,
                 }
 
                 let table = Table::deserialize(MapAccessDeserializer::new(map))?;
                 Ok(RequiredEnvironment {
                     marker: table.marker,
-                    minimum_libc_version: table.minimum_libc_version,
+                    libc: table.libc,
                 })
             }
         }
@@ -93,7 +90,7 @@ impl schemars::JsonSchema for RequiredEnvironment {
                     "additionalProperties": false,
                     "properties": {
                         "marker": generator.subschema_for::<MarkerTree>(),
-                        "minimum-libc-version": generator.subschema_for::<MinimumLibcVersion>(),
+                        "libc": generator.subschema_for::<MinimumLibcVersion>(),
                     },
                 },
             ],
@@ -120,9 +117,7 @@ impl RequiredEnvironments {
     }
 
     pub fn has_libc_constraints(&self) -> bool {
-        self.0
-            .iter()
-            .any(|environment| environment.minimum_libc_version.is_some())
+        self.0.iter().any(|environment| environment.libc.is_some())
     }
 }
 

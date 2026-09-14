@@ -709,7 +709,7 @@ async fn do_lock(
         && !preview.is_enabled(PreviewFeature::MinimumLibcVersion)
     {
         warn_user_once!(
-            "Setting `minimum-libc-version` in `required-environments` is experimental and may change without warning. Pass `--preview-features {}` to disable this warning.",
+            "Setting `libc` in `required-environments` is experimental and may change without warning. Pass `--preview-features {}` to disable this warning.",
             PreviewFeature::MinimumLibcVersion
         );
     }
@@ -1319,8 +1319,7 @@ impl ValidatedLock {
                 ..environment
             })
             .filter(|environment| {
-                environment.minimum_libc_version.is_some()
-                    || environment.marker.contents().is_some()
+                environment.libc.is_some() || environment.marker.contents().is_some()
             })
             .collect::<Vec<_>>();
         if expected != actual {

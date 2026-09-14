@@ -76,8 +76,7 @@ fn write_lock(writer: &mut LockWriter, lock: &Lock) -> Result<(), WriteError> {
                 ..environment
             })
             .filter(|environment| {
-                environment.minimum_libc_version.is_some()
-                    || environment.marker.contents().is_some()
+                environment.libc.is_some() || environment.marker.contents().is_some()
             });
         writer.key_multiline_array("required-markers", environments, |writer, environment| {
             writer.value(serialize_value(&environment)?)

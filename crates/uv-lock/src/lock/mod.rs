@@ -3475,8 +3475,7 @@ impl Lock {
                 ..environment
             })
             .filter(|environment| {
-                environment.minimum_libc_version.is_some()
-                    || environment.marker.contents().is_some()
+                environment.libc.is_some() || environment.marker.contents().is_some()
             })
             .collect()
     }

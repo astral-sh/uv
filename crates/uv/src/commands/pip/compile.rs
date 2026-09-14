@@ -381,10 +381,7 @@ pub(crate) async fn pip_compile(
     let artifact_environments = if universal {
         for (index, lhs) in required_environments.iter().enumerate() {
             for rhs in &required_environments.as_slice()[index + 1..] {
-                if lhs.minimum_libc_version.is_some()
-                    && rhs.minimum_libc_version.is_some()
-                    && !lhs.marker.is_disjoint(rhs.marker)
-                {
+                if lhs.libc.is_some() && rhs.libc.is_some() && !lhs.marker.is_disjoint(rhs.marker) {
                     bail!(
                         "Required environments `{}` and `{}` overlap. Required environments must be disjoint.",
                         lhs.marker
@@ -562,7 +559,7 @@ pub(crate) async fn pip_compile(
         && !preview.is_enabled(PreviewFeature::MinimumLibcVersion)
     {
         warn_user_once!(
-            "Setting `minimum-libc-version` in `required-environments` is experimental and may change without warning. Pass `--preview-features {}` to disable this warning.",
+            "Setting `libc` in `required-environments` is experimental and may change without warning. Pass `--preview-features {}` to disable this warning.",
             PreviewFeature::MinimumLibcVersion
         );
     }

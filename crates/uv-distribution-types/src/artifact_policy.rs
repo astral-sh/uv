@@ -113,7 +113,7 @@ pub struct ArtifactPolicy {
 #[derive(Debug)]
 struct LibcEnvironment {
     marker: MarkerTree,
-    minimum_libc_version: MinimumLibcVersion,
+    libc: MinimumLibcVersion,
 }
 
 impl Default for ArtifactPolicy {
@@ -130,12 +130,10 @@ impl ArtifactPolicy {
         let environments = environments
             .iter()
             .filter_map(|environment| {
-                environment
-                    .minimum_libc_version
-                    .map(|minimum_libc_version| LibcEnvironment {
-                        marker: environment.marker,
-                        minimum_libc_version,
-                    })
+                environment.libc.map(|libc| LibcEnvironment {
+                    marker: environment.marker,
+                    libc,
+                })
             })
             .collect::<Arc<[_]>>();
         let constrained = environments
@@ -164,8 +162,7 @@ impl ArtifactPolicy {
             let marker = platform.and(python);
             if !marker.is_disjoint(self.unconstrained)
                 || self.environments.iter().any(|environment| {
-                    environment.minimum_libc_version.allows_platform(tag)
-                        && !marker.is_disjoint(environment.marker)
+                    environment.libc.allows_platform(tag) && !marker.is_disjoint(environment.marker)
                 })
             {
                 return Ok(());
@@ -179,7 +176,7 @@ impl ArtifactPolicy {
                     .marker
                     .try_to_string()
                     .unwrap_or_else(|| "true".to_owned());
-                format!("{} for `{marker}`", environment.minimum_libc_version)
+                format!("{} for `{marker}`", environment.libc)
             })
             .collect::<Vec<_>>()
             .join(", ");
@@ -240,7 +237,7 @@ impl ArtifactCoverage {
         self.unconstrained = self.unconstrained.or(ordinary);
         for (coverage, environment) in self.environments.iter_mut().zip(policy.environments.iter())
         {
-            let minimum = environment.minimum_libc_version;
+            let minimum = environment.libc;
             let glibc = implied_platform_markers(filename.platform_tags().iter().filter(|tag| {
                 minimum.allows_platform(tag) && !matches!(tag, PlatformTag::Musllinux { .. })
             }))
@@ -269,10 +266,7 @@ impl ArtifactCoverage {
             .iter()
             .zip(policy.environments.iter())
             .fold(self.unconstrained, |markers, (coverage, environment)| {
-                let covered = match (
-                    environment.minimum_libc_version.glibc,
-                    environment.minimum_libc_version.musl,
-                ) {
+                let covered = match (environment.libc.glibc, environment.libc.musl) {
                     (Some(_), Some(_)) => coverage.glibc.and(coverage.musl),
                     (Some(_), None) => coverage.glibc,
                     (None, Some(_)) => coverage.musl,
@@ -301,11 +295,11 @@ mod tests {
     use super::{ArtifactCoverage, ArtifactPolicy, MinimumLibcVersion};
     use crate::{RequiredEnvironment, RequiredEnvironments, implied_markers};
 
-    fn global_policy(minimum_libc_version: MinimumLibcVersion) -> ArtifactPolicy {
+    fn global_policy(libc: MinimumLibcVersion) -> ArtifactPolicy {
         ArtifactPolicy::new(&RequiredEnvironments::from_environments(vec![
             RequiredEnvironment {
                 marker: MarkerTree::TRUE,
-                minimum_libc_version: Some(minimum_libc_version),
+                libc: Some(libc),
             },
         ]))
     }
