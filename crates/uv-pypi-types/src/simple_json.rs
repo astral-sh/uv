@@ -553,7 +553,7 @@ impl<const BYTES: usize> Digest<BYTES> {
     /// Decode the validated hexadecimal digest into its fixed-size byte array.
     pub fn decode(&self) -> [u8; BYTES] {
         let mut decoded = [0; BYTES];
-        for (index, pair) in self.0.as_bytes().as_chunks::<2>().0.iter().enumerate() {
+        for (output, pair) in decoded.iter_mut().zip(self.0.as_bytes().as_chunks::<2>().0) {
             let decode_digit = |digit: u8| {
                 if digit.is_ascii_digit() {
                     digit - b'0'
@@ -561,7 +561,7 @@ impl<const BYTES: usize> Digest<BYTES> {
                     digit - b'a' + 10
                 }
             };
-            decoded[index] = (decode_digit(pair[0]) << 4) | decode_digit(pair[1]);
+            *output = (decode_digit(pair[0]) << 4) | decode_digit(pair[1]);
         }
         decoded
     }
