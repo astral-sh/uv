@@ -224,9 +224,10 @@ impl<'a> RegistryWheelIndex<'a> {
                             {
                                 if wheel.filename.compatibility(tags).is_compatible() {
                                     // Enforce hash-checking based on the built distribution.
-                                    if wheel.satisfies(hasher.archive_policy_for_package(
-                                        &wheel.filename.name,
-                                        &wheel.filename.version,
+                                    if wheel.satisfies(hasher.archive_policy_for_registry_wheel(
+                                        index.url(),
+                                        &wheel.filename,
+                                        wheel.hashes(),
                                     )) {
                                         entries.push(IndexEntry {
                                             dist: wheel.into_registry_dist(),
@@ -249,9 +250,10 @@ impl<'a> RegistryWheelIndex<'a> {
                             {
                                 if wheel.filename.compatibility(tags).is_compatible() {
                                     // Enforce hash-checking based on the built distribution.
-                                    if wheel.satisfies(hasher.archive_policy_for_package(
-                                        &wheel.filename.name,
-                                        &wheel.filename.version,
+                                    if wheel.satisfies(hasher.archive_policy_for_registry_wheel(
+                                        index.url(),
+                                        &wheel.filename,
+                                        wheel.hashes(),
                                     )) {
                                         entries.push(IndexEntry {
                                             dist: wheel.into_registry_dist(),
@@ -275,6 +277,13 @@ impl<'a> RegistryWheelIndex<'a> {
 
             // For registry source distributions, the cache structure is: `<index>/<package-name>/<version>/`.
             for shard in directories(&cache_shard).ok().into_iter().flatten() {
+                let Some(source_version) = shard
+                    .file_name()
+                    .and_then(|version| version.to_str())
+                    .and_then(|version| version.parse::<Version>().ok())
+                else {
+                    continue;
+                };
                 let cache_shard = cache_shard.shard(shard);
 
                 // Read the revision from the cache.
@@ -334,9 +343,12 @@ impl<'a> RegistryWheelIndex<'a> {
                         if let Some(wheel) = ResolvedWheel::from_built_source(wheel_dir, cache) {
                             if wheel.filename.compatibility(tags).is_compatible() {
                                 // Enforce hash-checking based on the source distribution.
-                                if revision.satisfies(hasher.archive_policy_for_package(
-                                    &wheel.filename.name,
-                                    &wheel.filename.version,
+                                if revision.satisfies(hasher.archive_policy_for_cached_source(
+                                    package,
+                                    &source_version,
+                                    index.url(),
+                                    &wheel.filename,
+                                    revision.hashes(),
                                 )) {
                                     let wheel = CachedWheel::from_entry(
                                         wheel,

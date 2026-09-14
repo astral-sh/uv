@@ -828,10 +828,17 @@ async fn do_lock(
         .build_options(build_options.clone())
         .artifact_environments(artifact_environments.clone())
         .build();
-    // Checking an existing lockfile may build metadata and install build dependencies. Verify any
-    // artifacts recorded in that lockfile, including for an ordinary unlocked command.
-    let locked_build_hasher = if let Some(existing_lock) = existing_lock.as_ref() {
+    // Runtime resolution with `--locked` retains version-wide hashes, so a substituted source
+    // archive cannot run its backend before the final lockfile comparison.
+    let locked_hasher = if let Some(existing_lock) = existing_lock.as_ref() {
         existing_lock.hash_strategy(target.install_path())?
+    } else {
+        HashStrategy::default()
+    };
+    // Checking an existing lockfile may install independently resolved build dependencies.
+    // Verify recorded build artifacts, including for an ordinary unlocked command.
+    let locked_build_hasher = if let Some(existing_lock) = existing_lock.as_ref() {
+        existing_lock.build_hash_strategy(target.install_path())?
     } else {
         HashStrategy::default()
     };
@@ -842,8 +849,12 @@ async fn do_lock(
         LockMode::Locked(..) => &locked_build_hasher,
         LockMode::Write(_) | LockMode::DryRun(_) | LockMode::Frozen(_) => &HashStrategy::default(),
     };
+    let resolution_hasher = match mode {
+        LockMode::Locked(..) => &locked_hasher,
+        LockMode::Write(_) | LockMode::DryRun(_) | LockMode::Frozen(_) => &HashStrategy::default(),
+    };
     let hasher = HashStrategy::collect(HashCollection::Url)
-        .with_verification(resolution_build_hasher.verification().clone());
+        .with_verification(resolution_hasher.verification().clone());
 
     // TODO(charlie): These are all default values. We should consider whether we want to make them
     // optional on the downstream APIs.

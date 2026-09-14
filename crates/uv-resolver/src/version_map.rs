@@ -676,8 +676,7 @@ impl VersionMapLazy {
                     DistFilename::WheelFilename(filename) => {
                         let compatibility = self.wheel_compatibility(
                             &filename,
-                            &filename.name,
-                            &filename.version,
+                            file.filename.as_ref(),
                             hashes.as_slice(),
                             yanked,
                             excluded,
@@ -694,6 +693,7 @@ impl VersionMapLazy {
                     DistFilename::SourceDistFilename(filename) => {
                         let compatibility = self.source_dist_compatibility(
                             &filename,
+                            file.filename.as_ref(),
                             hashes.as_slice(),
                             yanked,
                             excluded,
@@ -724,6 +724,7 @@ impl VersionMapLazy {
     fn source_dist_compatibility(
         &self,
         filename: &SourceDistFilename,
+        registry_filename: &str,
         hashes: &[HashDigest],
         yanked: Option<&Yanked>,
         excluded: bool,
@@ -763,21 +764,32 @@ impl VersionMapLazy {
         }
 
         // Check if hashes line up. If hashes aren't required, they're considered matching.
-        let hash_policy = self
+        let hash = self
             .hasher
-            .archive_policy_for_package(&filename.name, &filename.version);
-        let required_hashes = hash_policy.digests();
-        let hash = if required_hashes.is_empty() {
-            HashComparison::Matched
-        } else {
-            if hashes.is_empty() {
-                HashComparison::Missing
-            } else if hash_policy.matches(hashes) {
-                HashComparison::Matched
-            } else {
-                HashComparison::Mismatched
-            }
-        };
+            .locked_registry_hash_comparison(
+                &filename.name,
+                &filename.version,
+                &self.index,
+                registry_filename,
+                hashes,
+            )
+            .unwrap_or_else(|| {
+                let hash_policy = self
+                    .hasher
+                    .archive_policy_for_package(&filename.name, &filename.version);
+                let required_hashes = hash_policy.digests();
+                if required_hashes.is_empty() {
+                    HashComparison::Matched
+                } else {
+                    if hashes.is_empty() {
+                        HashComparison::Missing
+                    } else if hash_policy.matches(hashes) {
+                        HashComparison::Matched
+                    } else {
+                        HashComparison::Mismatched
+                    }
+                }
+            });
 
         SourceDistCompatibility::Compatible(hash)
     }
@@ -785,8 +797,7 @@ impl VersionMapLazy {
     fn wheel_compatibility(
         &self,
         filename: &WheelFilename,
-        name: &PackageName,
-        version: &Version,
+        registry_filename: &str,
         hashes: &[HashDigest],
         yanked: Option<&Yanked>,
         excluded: bool,
@@ -804,7 +815,11 @@ impl VersionMapLazy {
 
         // Check if yanked
         if let Some(yanked) = yanked {
-            if yanked.is_yanked() && !self.allowed_yanks.contains(name, version) {
+            if yanked.is_yanked()
+                && !self
+                    .allowed_yanks
+                    .contains(&filename.name, &filename.version)
+            {
                 return WheelCompatibility::Incompatible(IncompatibleWheel::Yanked(yanked.clone()));
             }
         }
@@ -829,19 +844,32 @@ impl VersionMapLazy {
         };
 
         // Check if hashes line up. If hashes aren't required, they're considered matching.
-        let hash_policy = self.hasher.archive_policy_for_package(name, version);
-        let required_hashes = hash_policy.digests();
-        let hash = if required_hashes.is_empty() {
-            HashComparison::Matched
-        } else {
-            if hashes.is_empty() {
-                HashComparison::Missing
-            } else if hash_policy.matches(hashes) {
-                HashComparison::Matched
-            } else {
-                HashComparison::Mismatched
-            }
-        };
+        let hash = self
+            .hasher
+            .locked_registry_hash_comparison(
+                &filename.name,
+                &filename.version,
+                &self.index,
+                registry_filename,
+                hashes,
+            )
+            .unwrap_or_else(|| {
+                let hash_policy = self
+                    .hasher
+                    .archive_policy_for_package(&filename.name, &filename.version);
+                let required_hashes = hash_policy.digests();
+                if required_hashes.is_empty() {
+                    HashComparison::Matched
+                } else {
+                    if hashes.is_empty() {
+                        HashComparison::Missing
+                    } else if hash_policy.matches(hashes) {
+                        HashComparison::Matched
+                    } else {
+                        HashComparison::Mismatched
+                    }
+                }
+            });
 
         // Break ties with the build tag.
         let build_tag = filename.build_tag().cloned();

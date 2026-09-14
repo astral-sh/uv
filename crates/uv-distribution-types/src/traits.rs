@@ -1,13 +1,14 @@
 use std::borrow::Cow;
 
 use uv_normalize::PackageName;
+use uv_pep440::Version;
 use uv_pep508::VerbatimUrl;
 
 use crate::error::Error;
 use crate::{
     BuiltDist, CachedDirectUrlDist, CachedDist, CachedRegistryDist, DirectUrlBuiltDist,
-    DirectUrlSourceDist, DirectorySourceDist, Dist, DistributionId, GitDirectorySourceDist,
-    GitPathBuiltDist, GitPathSourceDist, InstalledDirectUrlDist, InstalledDist,
+    DirectUrlSourceDist, DirectorySourceDist, Dist, DistributionId, File, GitDirectorySourceDist,
+    GitPathBuiltDist, GitPathSourceDist, IndexUrl, InstalledDirectUrlDist, InstalledDist,
     InstalledEggInfoDirectory, InstalledEggInfoFile, InstalledLegacyEditable,
     InstalledRegistryDist, InstalledVersion, LocalDist, PackageId, PathBuiltDist, PathSourceDist,
     RegistryBuiltWheel, RegistrySourceDist, ResourceId, SourceDist, VersionId, VersionOrUrlRef,
@@ -18,12 +19,26 @@ pub trait Name {
     fn name(&self) -> &PackageName;
 }
 
+/// The registry provenance of a concrete distribution whose hashes can be checked.
+#[derive(Debug, Clone, Copy)]
+pub struct RegistryHashTarget<'a> {
+    pub name: &'a PackageName,
+    pub version: &'a Version,
+    pub index: &'a IndexUrl,
+    pub file: &'a File,
+}
+
 /// Metadata that can be resolved from a requirements specification alone (i.e., prior to building
 /// or installing the distribution).
 pub trait DistributionMetadata: Name {
     /// Return a [`uv_pep440::Version`], for registry-based distributions, or a [`url::Url`],
     /// for URL-based distributions.
     fn version_or_url(&self) -> VersionOrUrlRef<'_>;
+
+    /// Return the concrete registry artifact, when its provenance is available.
+    fn registry_hash_target(&self) -> Option<RegistryHashTarget<'_>> {
+        None
+    }
 
     /// Returns a unique identifier for the package at the given version (e.g., `black==23.10.0`).
     ///

@@ -10,6 +10,8 @@ use uv_pep440::Version;
 use uv_pypi_types::{HashDigest, ParsedUrl};
 use uv_redacted::DisplaySafeUrl;
 
+use crate::IndexUrl;
+
 /// A unique identifier for a package. A package can either be identified by a name (e.g., `black`)
 /// or a URL (e.g., `git+https://github.com/psf/black`).
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -37,6 +39,25 @@ impl Display for PackageId {
         match self {
             Self::Name(name) => write!(f, "{name}"),
             Self::Url(url) => write!(f, "{url}"),
+        }
+    }
+}
+
+/// A package at an exact version on a particular registry index.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct RegistryVersionId {
+    index: CanonicalUrl,
+    name: PackageName,
+    version: Version,
+}
+
+impl RegistryVersionId {
+    /// Create a registry identity, retaining any local version identifier.
+    pub fn new(name: &PackageName, version: &Version, index: &IndexUrl) -> Self {
+        Self {
+            index: CanonicalUrl::new(index.url().clone()),
+            name: name.clone(),
+            version: version.clone(),
         }
     }
 }
@@ -249,8 +270,35 @@ mod tests {
 
     use fs_err as fs;
 
-    use super::VersionId;
+    use super::{RegistryVersionId, VersionId};
+    use crate::IndexUrl;
+    use uv_normalize::PackageName;
+    use uv_pep440::Version;
     use uv_redacted::DisplaySafeUrl;
+
+    #[test]
+    fn registry_version_id_preserves_index_and_local_version() {
+        let name: PackageName = "demo".parse().expect("valid package name");
+        let version: Version = "1.0.0".parse().expect("valid version");
+        let local_version: Version = "1.0.0+local".parse().expect("valid local version");
+        let index = IndexUrl::parse("https://example.com/simple", None).expect("valid index");
+        let equivalent_index = IndexUrl::parse("https://user:password@example.com/simple/", None)
+            .expect("valid index");
+        let other_index = IndexUrl::parse("https://example.org/simple", None).expect("valid index");
+
+        assert_eq!(
+            RegistryVersionId::new(&name, &version, &index),
+            RegistryVersionId::new(&name, &version, &equivalent_index),
+        );
+        assert_ne!(
+            RegistryVersionId::new(&name, &version, &index),
+            RegistryVersionId::new(&name, &version, &other_index),
+        );
+        assert_ne!(
+            RegistryVersionId::new(&name, &version, &index),
+            RegistryVersionId::new(&name, &local_version, &index),
+        );
+    }
 
     #[test]
     fn version_id_ignores_hash_fragments() {

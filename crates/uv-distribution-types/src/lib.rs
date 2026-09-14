@@ -1054,11 +1054,24 @@ impl DistributionMetadata for RegistryBuiltWheel {
     fn version_or_url(&self) -> VersionOrUrlRef<'_> {
         VersionOrUrlRef::Version(&self.filename.version)
     }
+
+    fn registry_hash_target(&self) -> Option<RegistryHashTarget<'_>> {
+        Some(RegistryHashTarget {
+            name: &self.filename.name,
+            version: &self.filename.version,
+            index: &self.index,
+            file: self.file.as_ref(),
+        })
+    }
 }
 
 impl DistributionMetadata for RegistryBuiltDist {
     fn version_or_url(&self) -> VersionOrUrlRef<'_> {
         self.best_wheel().version_or_url()
+    }
+
+    fn registry_hash_target(&self) -> Option<RegistryHashTarget<'_>> {
+        self.best_wheel().registry_hash_target()
     }
 }
 
@@ -1091,6 +1104,15 @@ impl DistributionMetadata for GitPathBuiltDist {
 impl DistributionMetadata for RegistrySourceDist {
     fn version_or_url(&self) -> VersionOrUrlRef<'_> {
         VersionOrUrlRef::Version(&self.version)
+    }
+
+    fn registry_hash_target(&self) -> Option<RegistryHashTarget<'_>> {
+        Some(RegistryHashTarget {
+            name: &self.name,
+            version: &self.version,
+            index: &self.index,
+            file: self.file.as_ref(),
+        })
     }
 }
 
@@ -1169,6 +1191,17 @@ impl DistributionMetadata for SourceDist {
             Self::Directory(dist) => dist.version_id(),
         }
     }
+
+    fn registry_hash_target(&self) -> Option<RegistryHashTarget<'_>> {
+        match self {
+            Self::Registry(dist) => dist.registry_hash_target(),
+            Self::DirectUrl(_)
+            | Self::GitPath(_)
+            | Self::GitDirectory(_)
+            | Self::Path(_)
+            | Self::Directory(_) => None,
+        }
+    }
 }
 
 impl DistributionMetadata for BuiltDist {
@@ -1189,6 +1222,13 @@ impl DistributionMetadata for BuiltDist {
             Self::GitPath(dist) => dist.version_id(),
         }
     }
+
+    fn registry_hash_target(&self) -> Option<RegistryHashTarget<'_>> {
+        match self {
+            Self::Registry(dist) => dist.registry_hash_target(),
+            Self::DirectUrl(_) | Self::Path(_) | Self::GitPath(_) => None,
+        }
+    }
 }
 
 impl DistributionMetadata for Dist {
@@ -1203,6 +1243,13 @@ impl DistributionMetadata for Dist {
         match self {
             Self::Built(dist) => dist.version_id(),
             Self::Source(dist) => dist.version_id(),
+        }
+    }
+
+    fn registry_hash_target(&self) -> Option<RegistryHashTarget<'_>> {
+        match self {
+            Self::Built(dist) => dist.registry_hash_target(),
+            Self::Source(dist) => dist.registry_hash_target(),
         }
     }
 }

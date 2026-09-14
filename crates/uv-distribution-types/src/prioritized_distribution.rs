@@ -340,6 +340,8 @@ pub enum IncompatibleSource {
 pub enum HashComparison {
     /// The hash is present, but does not match the expected value.
     Mismatched,
+    /// The artifact is not covered by optional lockfile hashes.
+    Unrecorded,
     /// The hash is missing.
     Missing,
     /// The hash matches the expected value.
