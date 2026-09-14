@@ -78,14 +78,14 @@ jobs:
 
       - name: "Load issue context"
         id: issue-context
-        uses: ./.github/actions/load-issue-context
+        uses: $/.github/actions/load-issue-context
         with:
           issue-number: ${{ inputs.issue-number }}
           path: ${{ runner.temp }}/issue-context
 
       - name: "Load reproduction Codex thread"
         id: reproduction-thread
-        uses: ./.github/actions/load-codex-thread
+        uses: $/.github/actions/load-codex-thread
         with:
           repository: ${{ github.repository }}
           run-id: ${{ github.run_id }}
