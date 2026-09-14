@@ -11,4 +11,4 @@ use uv_test::pypi_proxy;
 mod lock;
 
 #[cfg(all(feature = "test-python", feature = "test-universal"))]
-mod minimum_glibc;
+mod minimum_libc;

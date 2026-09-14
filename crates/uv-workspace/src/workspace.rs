@@ -17,7 +17,7 @@ use tracing::{debug, trace, warn};
 
 use uv_cache::Cache;
 use uv_configuration::{ActiveEnvironment, DependencyGroupsWithDefaults, ExcludeDependency};
-use uv_distribution_types::{GlibcVersion, Index, Requirement, RequirementSource};
+use uv_distribution_types::{Index, MinimumLibcVersion, Requirement, RequirementSource};
 use uv_fs::{CWD, Simplified, normalize_path};
 use uv_normalize::{DEV_DEPENDENCIES, DefaultGroups, GroupName, PackageName};
 use uv_once_map::OnceMap;
@@ -744,13 +744,13 @@ impl Workspace {
             .and_then(|uv| uv.required_environments.as_ref())
     }
 
-    /// Returns the oldest glibc version supported by the workspace's required Linux environments.
-    pub fn minimum_glibc_version(&self) -> Option<GlibcVersion> {
+    /// Returns the workspace's supported libc implementations and their minimum versions.
+    pub fn minimum_libc_version(&self) -> Option<MinimumLibcVersion> {
         self.pyproject_toml
             .tool
             .as_ref()
             .and_then(|tool| tool.uv.as_ref())
-            .and_then(|uv| uv.minimum_glibc_version)
+            .and_then(|uv| uv.minimum_libc_version)
     }
 
     /// Returns the set of conflicts for the workspace.
@@ -2661,7 +2661,7 @@ mod tests {
                       "build-constraint-dependencies": null,
                       "environments": null,
                       "required-environments": null,
-                      "minimum-glibc-version": null,
+                      "minimum-libc-version": null,
                       "conflicts": null,
                       "build-backend": null
                     }
@@ -2763,7 +2763,7 @@ mod tests {
                       "build-constraint-dependencies": null,
                       "environments": null,
                       "required-environments": null,
-                      "minimum-glibc-version": null,
+                      "minimum-libc-version": null,
                       "conflicts": null,
                       "build-backend": null
                     }
@@ -3099,7 +3099,7 @@ mod tests {
                       "build-constraint-dependencies": null,
                       "environments": null,
                       "required-environments": null,
-                      "minimum-glibc-version": null,
+                      "minimum-libc-version": null,
                       "conflicts": null,
                       "build-backend": null
                     }
@@ -3210,7 +3210,7 @@ mod tests {
                       "build-constraint-dependencies": null,
                       "environments": null,
                       "required-environments": null,
-                      "minimum-glibc-version": null,
+                      "minimum-libc-version": null,
                       "conflicts": null,
                       "build-backend": null
                     }
@@ -3334,7 +3334,7 @@ mod tests {
                       "build-constraint-dependencies": null,
                       "environments": null,
                       "required-environments": null,
-                      "minimum-glibc-version": null,
+                      "minimum-libc-version": null,
                       "conflicts": null,
                       "build-backend": null
                     }
@@ -3432,7 +3432,7 @@ mod tests {
                       "build-constraint-dependencies": null,
                       "environments": null,
                       "required-environments": null,
-                      "minimum-glibc-version": null,
+                      "minimum-libc-version": null,
                       "conflicts": null,
                       "build-backend": null
                     }

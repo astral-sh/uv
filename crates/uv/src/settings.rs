@@ -42,7 +42,7 @@ use uv_configuration::{
     VersionControlSystem,
 };
 use uv_distribution_types::{
-    GlibcVersion,
+    MinimumLibcVersion,
     ConfigSettings, DependencyMetadata, ExtraBuildVariables, Index, IndexLocations, IndexUrl,
     NameRequirementSpecification, PackageConfigSettings, Requirement,
 };
@@ -3482,7 +3482,7 @@ pub(crate) struct PipCompileSettings {
     pub(crate) build_constraints_from_workspace: Vec<NameRequirementSpecification>,
     pub(crate) environments: SupportedEnvironments,
     pub(crate) required_environments: SupportedEnvironments,
-    pub(crate) minimum_glibc_version: Option<GlibcVersion>,
+    pub(crate) minimum_libc_version: Option<MinimumLibcVersion>,
     pub(crate) refresh: Refresh,
     pub(crate) settings: PipSettings,
 }
@@ -3608,9 +3608,9 @@ impl PipCompileSettings {
             SupportedEnvironments::default()
         };
 
-        let minimum_glibc_version = filesystem
+        let minimum_libc_version = filesystem
             .as_ref()
-            .and_then(|configuration| configuration.minimum_glibc_version);
+            .and_then(|configuration| configuration.minimum_libc_version);
 
         Ok(Self {
             format,
@@ -3637,7 +3637,7 @@ impl PipCompileSettings {
             build_constraints_from_workspace,
             environments,
             required_environments,
-            minimum_glibc_version,
+            minimum_libc_version,
             refresh: Refresh::try_from(refresh)?,
             settings: PipSettings::combine(
                 PipOptions {

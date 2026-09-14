@@ -134,7 +134,7 @@ mod tests {
         - `malware-check`: Allows `uv sync` and other commands to check for malware using [OSV](https://osv.dev) before
           installing packages.
         - `metadata-json`: Includes JSON metadata files in built wheels.
-        - `minimum-glibc-version`: Allows setting a minimum glibc version for artifacts in universal resolutions.
+        - `minimum-libc-version`: Allows setting minimum libc versions for universal resolutions.
         - `missing-exclude-newer-package-lock`: Exclude `exclude-newer-package` entries from the lockfile when not included in the
           project's resolved dependencies.
         - `native-auth`: Enables storage of credentials in a [system-native location](../concepts/authentication/http.md#the-uv-credentials-store).

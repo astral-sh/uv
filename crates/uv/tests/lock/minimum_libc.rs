@@ -29,7 +29,7 @@ fn wheel(context: &TestContext, name: &str, version: &str, tag: &str) -> Result<
 
 /// The glibc floor filters Linux artifacts without removing wheels for other platforms.
 #[test]
-fn minimum_glibc_filters_locked_wheels() -> Result<()> {
+fn minimum_libc_filters_locked_wheels() -> Result<()> {
     let context = uv_test::test_context!("3.12");
     for tag in [
         "cp312-cp312-manylinux_2_17_x86_64",
@@ -108,12 +108,12 @@ fn minimum_glibc_filters_locked_wheels() -> Result<()> {
         no-index = true
         find-links = ["links"]
         required-environments = ["sys_platform == 'linux' and platform_machine == 'x86_64'"]
-        minimum-glibc-version = "2.31"
+        minimum-libc-version = { glibc = "2.31" }
     "#})?;
     uv_snapshot!(context.filters(), context.lock().arg("--offline"), @"
     exit_code: 0 (success)
     ----- stderr -----
-    warning: Setting `minimum-glibc-version` is experimental and may change without warning. Pass `--preview-features minimum-glibc-version` to disable this warning.
+    warning: Setting `minimum-libc-version` is experimental and may change without warning. Pass `--preview-features minimum-libc-version` to disable this warning.
     Resolved 2 packages in [TIME]
     ");
     let lock = context.read("uv.lock");
@@ -127,7 +127,7 @@ fn minimum_glibc_filters_locked_wheels() -> Result<()> {
         ]
 
         [options]
-        minimum-glibc-version = "2.31"
+        minimum-libc-version = { glibc = "2.31" }
         exclude-newer = "2024-03-25T00:00:00Z"
 
         [[package]]
@@ -136,7 +136,6 @@ fn minimum_glibc_filters_locked_wheels() -> Result<()> {
         source = { registry = "links" }
         wheels = [
             { path = "demo-1.0.0-cp312-cp312-manylinux_2_17_x86_64.whl" },
-            { path = "demo-1.0.0-cp312-cp312-musllinux_1_2_x86_64.whl" },
             { path = "demo-1.0.0-cp312-cp312-macosx_11_0_arm64.whl" },
             { path = "demo-1.0.0-cp312-cp312-win_amd64.whl" },
         ]
@@ -154,13 +153,13 @@ fn minimum_glibc_filters_locked_wheels() -> Result<()> {
         "#);
     });
 
-    uv_snapshot!(context.filters(), context.lock().args(["--offline", "--locked", "--preview-features", "minimum-glibc-version"]), @r"
+    uv_snapshot!(context.filters(), context.lock().args(["--offline", "--locked", "--preview-features", "minimum-libc-version"]), @r"
         exit_code: 0 (success)
         ----- stderr -----
         Resolved 2 packages in [TIME]
     ");
 
-    uv_snapshot!(context.filters(), context.pip_compile().args(["pyproject.toml", "--universal", "--format", "pylock.toml", "--offline", "--no-header", "--preview-features", "minimum-glibc-version"]), @r#"
+    uv_snapshot!(context.filters(), context.pip_compile().args(["pyproject.toml", "--universal", "--format", "pylock.toml", "--offline", "--no-header", "--preview-features", "minimum-libc-version"]), @r#"
     exit_code: 0 (success)
     ----- stdout -----
     lock-version = "1.0"
@@ -172,7 +171,6 @@ fn minimum_glibc_filters_locked_wheels() -> Result<()> {
     version = "1.0.0"
     wheels = [
         { url = "file://[TEMP_DIR]/links/demo-1.0.0-cp312-cp312-manylinux_2_17_x86_64.whl", hashes = { sha256 = "eb2ff51027ef5001a478ca15a93fbd009fdda87e36238238a52f1d4019502428" } },
-        { url = "file://[TEMP_DIR]/links/demo-1.0.0-cp312-cp312-musllinux_1_2_x86_64.whl", hashes = { sha256 = "194d18836a1a5cc527c87a7f315f12cb4b69516977e26583a6d7ca72ef2ee6de" } },
         { url = "file://[TEMP_DIR]/links/demo-1.0.0-cp312-cp312-macosx_11_0_arm64.whl", hashes = { sha256 = "ed676c33c75c4e3d56b53b061173a4ec378e289013cef527ae68ce525f30be80" } },
         { url = "file://[TEMP_DIR]/links/demo-1.0.0-cp312-cp312-win_amd64.whl", hashes = { sha256 = "c0b5946665f8aebba3d880c4e5658f346e3971ec2cc0013780eab4dafbbfcad6" } },
     ]
@@ -187,15 +185,185 @@ fn minimum_glibc_filters_locked_wheels() -> Result<()> {
         --hash=sha256:eb2ff51027ef5001a478ca15a93fbd009fdda87e36238238a52f1d4019502428
 
     ----- stderr -----
-    warning: Setting `minimum-glibc-version` is experimental and may change without warning. Pass `--preview-features minimum-glibc-version` to disable this warning.
+    warning: Setting `minimum-libc-version` is experimental and may change without warning. Pass `--preview-features minimum-libc-version` to disable this warning.
     Resolved 1 package in [TIME]
+    ");
+    Ok(())
+}
+
+/// Each configured libc needs coverage, and selecting musl alone excludes GNU wheels.
+#[test]
+fn minimum_libc_both_families_and_musl_only() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let filters: Vec<_> = context
+        .filters()
+        .into_iter()
+        .chain([(
+            r"\nhint: The resolution failed for an environment that is not the current one[^\n]*",
+            "",
+        )])
+        .collect();
+    for (version, tag) in [
+        ("1.0.0", "cp312-cp312-manylinux_2_17_x86_64"),
+        ("1.0.0", "cp312-cp312-musllinux_1_2_x86_64"),
+        ("2.0.0", "cp312-cp312-manylinux_2_17_x86_64"),
+        ("2.0.0", "cp312-cp312-musllinux_1_3_x86_64"),
+    ] {
+        wheel(&context, "demo", version, tag)?;
+    }
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["demo"]
+
+        [tool.uv]
+        no-index = true
+        find-links = ["links"]
+        environments = ["sys_platform == 'linux' and platform_machine == 'x86_64'"]
+        required-environments = ["sys_platform == 'linux' and platform_machine == 'x86_64'"]
+        minimum-libc-version = { glibc = "2.31", musl = "1.2" }
+    "#})?;
+    uv_snapshot!(context.filters(), context.lock().arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    warning: Setting `minimum-libc-version` is experimental and may change without warning. Pass `--preview-features minimum-libc-version` to disable this warning.
+    Resolved 2 packages in [TIME]
+    ");
+    let lock = context.read("uv.lock");
+    insta::with_settings!({filters => context.filters()}, {
+        assert_snapshot!(lock, @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+        resolution-markers = [
+            "platform_machine == 'x86_64' and sys_platform == 'linux'",
+        ]
+        supported-markers = [
+            "platform_machine == 'x86_64' and sys_platform == 'linux'",
+        ]
+        required-markers = [
+            "platform_machine == 'x86_64' and sys_platform == 'linux'",
+        ]
+
+        [options]
+        minimum-libc-version = { glibc = "2.31", musl = "1.2" }
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[package]]
+        name = "demo"
+        version = "1.0.0"
+        source = { registry = "links" }
+        wheels = [
+            { path = "demo-1.0.0-cp312-cp312-manylinux_2_17_x86_64.whl" },
+            { path = "demo-1.0.0-cp312-cp312-musllinux_1_2_x86_64.whl" },
+        ]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "demo" },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "demo" }]
+        "#);
+    });
+
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["demo"]
+
+        [tool.uv]
+        no-index = true
+        find-links = ["links"]
+        environments = ["sys_platform == 'linux' and platform_machine == 'x86_64'"]
+        required-environments = ["sys_platform == 'linux' and platform_machine == 'x86_64'"]
+        minimum-libc-version = { musl = "1.2" }
+    "#})?;
+    uv_snapshot!(context.filters(), context.lock().args(["--offline", "--upgrade"]), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    warning: Setting `minimum-libc-version` is experimental and may change without warning. Pass `--preview-features minimum-libc-version` to disable this warning.
+    Resolved 2 packages in [TIME]
+    ");
+    let lock = context.read("uv.lock");
+    insta::with_settings!({filters => context.filters()}, {
+        assert_snapshot!(lock, @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+        resolution-markers = [
+            "platform_machine == 'x86_64' and sys_platform == 'linux'",
+        ]
+        supported-markers = [
+            "platform_machine == 'x86_64' and sys_platform == 'linux'",
+        ]
+        required-markers = [
+            "platform_machine == 'x86_64' and sys_platform == 'linux'",
+        ]
+
+        [options]
+        minimum-libc-version = { musl = "1.2" }
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[package]]
+        name = "demo"
+        version = "1.0.0"
+        source = { registry = "links" }
+        wheels = [
+            { path = "demo-1.0.0-cp312-cp312-musllinux_1_2_x86_64.whl" },
+        ]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "demo" },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "demo" }]
+        "#);
+    });
+
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["demo>=2"]
+
+        [tool.uv]
+        no-index = true
+        find-links = ["links"]
+        environments = ["sys_platform == 'linux' and platform_machine == 'x86_64'"]
+        required-environments = ["sys_platform == 'linux' and platform_machine == 'x86_64'"]
+        minimum-libc-version = { musl = "1.2" }
+    "#})?;
+    uv_snapshot!(filters, context.lock().arg("--offline"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    warning: Setting `minimum-libc-version` is experimental and may change without warning. Pass `--preview-features minimum-libc-version` to disable this warning.
+    error: No solution found when resolving dependencies for split (markers: python_full_version >= '3.12' and platform_machine == 'x86_64' and sys_platform == 'linux')
+      cause: Because demo==2.0.0 has no wheels compatible with musl 1.2 and only demo<=2.0.0 is available, we can conclude that demo>=2.0.0 cannot be used.
+             And because your project depends on demo>=2, we can conclude that your project's requirements are unsatisfiable.
     ");
     Ok(())
 }
 
 /// Local-version fallback considers only wheels permitted by the artifact policy.
 #[test]
-fn minimum_glibc_local_version_fallback() -> Result<()> {
+fn minimum_libc_local_version_fallback() -> Result<()> {
     let context = uv_test::test_context!("3.12");
     for (version, tag) in [
         ("1.0.0", "cp312-cp312-manylinux_2_17_x86_64"),
@@ -217,13 +385,13 @@ fn minimum_glibc_local_version_fallback() -> Result<()> {
         no-index = true
         find-links = ["links"]
         required-environments = []
-        minimum-glibc-version = "2.31"
+        minimum-libc-version = { glibc = "2.31" }
     "#})?;
 
     uv_snapshot!(context.filters(), context.lock().arg("--offline"), @"
     exit_code: 0 (success)
     ----- stderr -----
-    warning: Setting `minimum-glibc-version` is experimental and may change without warning. Pass `--preview-features minimum-glibc-version` to disable this warning.
+    warning: Setting `minimum-libc-version` is experimental and may change without warning. Pass `--preview-features minimum-libc-version` to disable this warning.
     Resolved 3 packages in [TIME]
     ");
     uv_snapshot!(context.filters(), context.export().args(["--frozen", "--no-hashes", "--no-header", "--no-annotate"]), @r"
@@ -245,7 +413,7 @@ fn minimum_glibc_local_version_fallback() -> Result<()> {
         ]
 
         [options]
-        minimum-glibc-version = "2.31"
+        minimum-libc-version = { glibc = "2.31" }
         exclude-newer = "2024-03-25T00:00:00Z"
 
         [[package]]
@@ -288,7 +456,7 @@ fn minimum_glibc_local_version_fallback() -> Result<()> {
 
 /// Tightening the deployment floor changes the selected version and is recorded in the lock.
 #[test]
-fn minimum_glibc_backtracks_and_invalidates_lock() -> Result<()> {
+fn minimum_libc_backtracks_and_invalidates_lock() -> Result<()> {
     let context = uv_test::test_context!("3.12");
     for (version, tag) in [
         ("1.0.0", "cp312-cp312-manylinux_2_17_x86_64"),
@@ -328,12 +496,12 @@ fn minimum_glibc_backtracks_and_invalidates_lock() -> Result<()> {
         no-index = true
         find-links = ["links"]
         required-environments = ["sys_platform == 'linux' and platform_machine == 'x86_64'"]
-        minimum-glibc-version = "2.31"
+        minimum-libc-version = { glibc = "2.31" }
     "#})?;
     uv_snapshot!(context.filters(), context.lock().args(["--offline", "--locked"]), @"
     exit_code: 1 (failure)
     ----- stderr -----
-    warning: Setting `minimum-glibc-version` is experimental and may change without warning. Pass `--preview-features minimum-glibc-version` to disable this warning.
+    warning: Setting `minimum-libc-version` is experimental and may change without warning. Pass `--preview-features minimum-libc-version` to disable this warning.
     Resolved 2 packages in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
 
@@ -343,7 +511,7 @@ fn minimum_glibc_backtracks_and_invalidates_lock() -> Result<()> {
     uv_snapshot!(context.filters(), context.lock().arg("--offline"), @"
     exit_code: 0 (success)
     ----- stderr -----
-    warning: Setting `minimum-glibc-version` is experimental and may change without warning. Pass `--preview-features minimum-glibc-version` to disable this warning.
+    warning: Setting `minimum-libc-version` is experimental and may change without warning. Pass `--preview-features minimum-libc-version` to disable this warning.
     Resolved 2 packages in [TIME]
     Updated demo v2.0.0 -> v1.0.0
     ");
@@ -358,7 +526,7 @@ fn minimum_glibc_backtracks_and_invalidates_lock() -> Result<()> {
     demo==1.0.0
 
     ----- stderr -----
-    warning: Setting `minimum-glibc-version` is experimental and may change without warning. Pass `--preview-features minimum-glibc-version` to disable this warning.
+    warning: Setting `minimum-libc-version` is experimental and may change without warning. Pass `--preview-features minimum-libc-version` to disable this warning.
     Resolved 1 package in [TIME]
     ");
     let lock = context.read("uv.lock");
@@ -372,7 +540,7 @@ fn minimum_glibc_backtracks_and_invalidates_lock() -> Result<()> {
         ]
 
         [options]
-        minimum-glibc-version = "2.31"
+        minimum-libc-version = { glibc = "2.31" }
         exclude-newer = "2024-03-25T00:00:00Z"
 
         [[package]]
@@ -398,7 +566,7 @@ fn minimum_glibc_backtracks_and_invalidates_lock() -> Result<()> {
     uv_snapshot!(context.filters(), context.lock().args(["--offline", "--locked"]), @"
     exit_code: 0 (success)
     ----- stderr -----
-    warning: Setting `minimum-glibc-version` is experimental and may change without warning. Pass `--preview-features minimum-glibc-version` to disable this warning.
+    warning: Setting `minimum-libc-version` is experimental and may change without warning. Pass `--preview-features minimum-libc-version` to disable this warning.
     Resolved 2 packages in [TIME]
     ");
 
@@ -415,12 +583,12 @@ fn minimum_glibc_backtracks_and_invalidates_lock() -> Result<()> {
         no-index = true
         find-links = ["links"]
         required-environments = ["sys_platform == 'linux' and platform_machine == 'x86_64'"]
-        minimum-glibc-version = "2.17"
+        minimum-libc-version = { glibc = "2.17" }
     "#})?;
     uv_snapshot!(context.filters(), context.lock().args(["--offline", "--locked"]), @"
     exit_code: 1 (failure)
     ----- stderr -----
-    warning: Setting `minimum-glibc-version` is experimental and may change without warning. Pass `--preview-features minimum-glibc-version` to disable this warning.
+    warning: Setting `minimum-libc-version` is experimental and may change without warning. Pass `--preview-features minimum-libc-version` to disable this warning.
     Resolved 2 packages in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
 
@@ -461,7 +629,7 @@ fn minimum_glibc_backtracks_and_invalidates_lock() -> Result<()> {
 }
 
 #[test]
-fn minimum_glibc_no_compatible_version() -> Result<()> {
+fn minimum_libc_no_compatible_version() -> Result<()> {
     let context = uv_test::test_context!("3.12");
     let filters: Vec<_> = context
         .filters()
@@ -490,17 +658,16 @@ fn minimum_glibc_no_compatible_version() -> Result<()> {
         no-index = true
         find-links = ["links"]
         required-environments = ["sys_platform == 'linux' and platform_machine == 'x86_64'"]
-        minimum-glibc-version = "2.31"
+        minimum-libc-version = { glibc = "2.31" }
     "#})?;
 
     uv_snapshot!(filters, context.lock().arg("--offline"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-    warning: Setting `minimum-glibc-version` is experimental and may change without warning. Pass `--preview-features minimum-glibc-version` to disable this warning.
-    error: No solution found when resolving dependencies for split (markers: platform_machine == 'x86_64' and sys_platform == 'linux')
-      cause: Because demo==2.0.0 has no `platform_machine == 'x86_64' and sys_platform == 'linux'`-compatible wheels and only demo==2.0.0 is available, we can conclude that all versions of demo cannot be used.
+    warning: Setting `minimum-libc-version` is experimental and may change without warning. Pass `--preview-features minimum-libc-version` to disable this warning.
+    error: No solution found when resolving dependencies
+      cause: Because demo==2.0.0 has no wheels compatible with glibc 2.31 and only demo==2.0.0 is available, we can conclude that all versions of demo cannot be used.
              And because your project depends on demo, we can conclude that your project's requirements are unsatisfiable.
-
     ");
     assert!(!context.temp_dir.child("uv.lock").exists());
     Ok(())
@@ -508,7 +675,7 @@ fn minimum_glibc_no_compatible_version() -> Result<()> {
 
 /// A source distribution remains usable when its wheel requires a newer glibc.
 #[test]
-fn minimum_glibc_allows_sdist_fallback() -> Result<()> {
+fn minimum_libc_allows_sdist_fallback() -> Result<()> {
     let context = uv_test::test_context!("3.12");
     wheel(
         &context,
@@ -552,13 +719,13 @@ fn minimum_glibc_allows_sdist_fallback() -> Result<()> {
         no-index = true
         find-links = ["links"]
         required-environments = ["sys_platform == 'linux' and platform_machine == 'x86_64'"]
-        minimum-glibc-version = "2.31"
+        minimum-libc-version = { glibc = "2.31", musl = "1.2" }
     "#})?;
 
     uv_snapshot!(context.filters(), context.lock().arg("--offline"), @"
     exit_code: 0 (success)
     ----- stderr -----
-    warning: Setting `minimum-glibc-version` is experimental and may change without warning. Pass `--preview-features minimum-glibc-version` to disable this warning.
+    warning: Setting `minimum-libc-version` is experimental and may change without warning. Pass `--preview-features minimum-libc-version` to disable this warning.
     Resolved 2 packages in [TIME]
     ");
     let lock = context.read("uv.lock");
@@ -572,7 +739,7 @@ fn minimum_glibc_allows_sdist_fallback() -> Result<()> {
         ]
 
         [options]
-        minimum-glibc-version = "2.31"
+        minimum-libc-version = { glibc = "2.31", musl = "1.2" }
         exclude-newer = "2024-03-25T00:00:00Z"
 
         [[package]]
@@ -598,7 +765,7 @@ fn minimum_glibc_allows_sdist_fallback() -> Result<()> {
     uv_snapshot!(context.filters(), context.lock().args(["--offline", "--no-build", "--upgrade"]), @"
     exit_code: 1 (failure)
     ----- stderr -----
-    warning: Setting `minimum-glibc-version` is experimental and may change without warning. Pass `--preview-features minimum-glibc-version` to disable this warning.
+    warning: Setting `minimum-libc-version` is experimental and may change without warning. Pass `--preview-features minimum-libc-version` to disable this warning.
     error: No solution found when resolving dependencies
       cause: Because demo==2.0.0 has no usable wheels and only demo==2.0.0 is available, we can conclude that all versions of demo cannot be used.
              And because your project depends on demo, we can conclude that your project's requirements are unsatisfiable.
@@ -609,7 +776,7 @@ fn minimum_glibc_allows_sdist_fallback() -> Result<()> {
 }
 
 #[test]
-fn minimum_glibc_direct_url() -> Result<()> {
+fn minimum_libc_direct_url() -> Result<()> {
     let context = uv_test::test_context!("3.12");
     let wheel = wheel(
         &context,
@@ -635,30 +802,55 @@ fn minimum_glibc_direct_url() -> Result<()> {
         no-index = true
         find-links = ["links"]
         required-environments = []
-        minimum-glibc-version = "2.31"
+        minimum-libc-version = {{ glibc = "2.31" }}
     "#})?;
 
     uv_snapshot!(context.filters(), context.lock(), @"
     exit_code: 1 (failure)
     ----- stderr -----
-    warning: Setting `minimum-glibc-version` is experimental and may change without warning. Pass `--preview-features minimum-glibc-version` to disable this warning.
+    warning: Setting `minimum-libc-version` is experimental and may change without warning. Pass `--preview-features minimum-libc-version` to disable this warning.
     error: No solution found when resolving dependencies
       cause: Because only demo==2.0.0 is available and demo==2.0.0 has no wheels compatible with glibc 2.31, we can conclude that all versions of demo cannot be used.
              And because your project depends on demo, we can conclude that your project's requirements are unsatisfiable.
     ");
     assert!(!context.temp_dir.child("uv.lock").exists());
+
+    // A GNU wheel admitted by the policy still cannot satisfy required musl coverage.
+    pyproject_toml.write_str(&formatdoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["{dependency}"]
+
+        [tool.uv]
+        no-index = true
+        required-environments = ["sys_platform == 'linux' and platform_machine == 'x86_64'"]
+        minimum-libc-version = {{ glibc = "2.34", musl = "1.2" }}
+    "#})?;
+    uv_snapshot!(context.filters(), context.lock(), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    warning: Setting `minimum-libc-version` is experimental and may change without warning. Pass `--preview-features minimum-libc-version` to disable this warning.
+    error: No solution found when resolving dependencies
+      cause: Because only demo==2.0.0 is available and demo==2.0.0 has no `platform_machine == 'x86_64' and sys_platform == 'linux'`-compatible wheels, we can conclude that all versions of demo cannot be used.
+             And because your project depends on demo, we can conclude that your project's requirements are unsatisfiable.
+    ");
     Ok(())
 }
 
 /// Every required architecture needs coverage, while unrelated marker branches remain independent.
 #[test]
-fn minimum_glibc_architectures_and_markers() -> Result<()> {
+fn minimum_libc_architectures_and_markers() -> Result<()> {
     let context = uv_test::test_context!("3.12");
     for (version, tag) in [
         ("1.0.0", "cp312-cp312-manylinux2014_x86_64"),
         ("1.0.0", "cp312-cp312-manylinux_2_31_aarch64"),
+        ("1.0.0", "cp312-cp312-musllinux_1_2_x86_64"),
+        ("1.0.0", "cp312-cp312-musllinux_1_2_aarch64"),
         ("2.0.0", "cp312-cp312-manylinux_2_17_x86_64"),
         ("2.0.0", "cp312-cp312-manylinux_2_34_aarch64"),
+        ("2.0.0", "cp312-cp312-musllinux_1_2_aarch64"),
         ("2.0.0", "cp312-cp312-macosx_11_0_arm64"),
     ] {
         wheel(&context, "demo", version, tag)?;
@@ -683,25 +875,103 @@ fn minimum_glibc_architectures_and_markers() -> Result<()> {
             "sys_platform == 'linux' and platform_machine == 'x86_64'",
             "sys_platform == 'linux' and platform_machine == 'aarch64'",
         ]
-        minimum-glibc-version = "2.31"
+        minimum-libc-version = { glibc = "2.31", musl = "1.2" }
     "#})?;
 
     uv_snapshot!(context.filters(), context.lock().arg("--offline"), @"
     exit_code: 0 (success)
     ----- stderr -----
-    warning: Setting `minimum-glibc-version` is experimental and may change without warning. Pass `--preview-features minimum-glibc-version` to disable this warning.
+    warning: Setting `minimum-libc-version` is experimental and may change without warning. Pass `--preview-features minimum-libc-version` to disable this warning.
     Resolved 4 packages in [TIME]
     ");
-    // The required aarch64 branch needs the older version; x86_64 and macOS retain the newer one.
-    uv_snapshot!(context.filters(), context.export().args(["--frozen", "--no-hashes", "--no-header", "--no-annotate"]), @r"
-        exit_code: 0 (success)
-        ----- stdout -----
-        demo==1.0.0 ; platform_machine == 'aarch64' and sys_platform == 'linux'
-        demo==2.0.0 ; (platform_machine != 'aarch64' and sys_platform == 'linux') or sys_platform == 'darwin'
-        windows-only==1.0.0 ; sys_platform == 'win32'
+    // GNU/x86_64 and musl/aarch64 cannot jointly cover either architecture for both libc families.
+    // Linux needs the older version, while the disjoint macOS branch retains the newer one.
+    uv_snapshot!(context.filters(), context.export().args(["--frozen", "--no-hashes", "--no-header", "--no-annotate"]), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    demo==1.0.0 ; (platform_machine == 'aarch64' and sys_platform == 'linux') or (platform_machine == 'x86_64' and sys_platform == 'linux')
+    demo==2.0.0 ; (platform_machine != 'aarch64' and platform_machine != 'x86_64' and sys_platform == 'linux') or sys_platform == 'darwin'
+    windows-only==1.0.0 ; sys_platform == 'win32'
     ");
+    let lock = context.read("uv.lock");
+    insta::with_settings!({filters => context.filters()}, {
+        assert_snapshot!(lock, @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+        resolution-markers = [
+            "platform_machine != 'aarch64' and platform_machine != 'x86_64' and sys_platform == 'linux'",
+            "platform_machine == 'aarch64' and sys_platform == 'linux'",
+            "platform_machine == 'x86_64' and sys_platform == 'linux'",
+            "sys_platform == 'darwin'",
+            "sys_platform != 'darwin' and sys_platform != 'linux'",
+        ]
+        required-markers = [
+            "platform_machine == 'x86_64' and sys_platform == 'linux'",
+            "platform_machine == 'aarch64' and sys_platform == 'linux'",
+        ]
 
-    // The newer version is valid when only its compatible x86_64 wheel is required.
+        [options]
+        minimum-libc-version = { glibc = "2.31", musl = "1.2" }
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[package]]
+        name = "demo"
+        version = "1.0.0"
+        source = { registry = "links" }
+        resolution-markers = [
+            "platform_machine == 'aarch64' and sys_platform == 'linux'",
+            "platform_machine == 'x86_64' and sys_platform == 'linux'",
+        ]
+        wheels = [
+            { path = "demo-1.0.0-cp312-cp312-manylinux_2_31_aarch64.whl" },
+            { path = "demo-1.0.0-cp312-cp312-manylinux2014_x86_64.whl" },
+            { path = "demo-1.0.0-cp312-cp312-musllinux_1_2_aarch64.whl" },
+            { path = "demo-1.0.0-cp312-cp312-musllinux_1_2_x86_64.whl" },
+        ]
+
+        [[package]]
+        name = "demo"
+        version = "2.0.0"
+        source = { registry = "links" }
+        resolution-markers = [
+            "platform_machine != 'aarch64' and platform_machine != 'x86_64' and sys_platform == 'linux'",
+            "sys_platform == 'darwin'",
+        ]
+        wheels = [
+            { path = "demo-2.0.0-cp312-cp312-manylinux_2_17_x86_64.whl" },
+            { path = "demo-2.0.0-cp312-cp312-musllinux_1_2_aarch64.whl" },
+            { path = "demo-2.0.0-cp312-cp312-macosx_11_0_arm64.whl" },
+        ]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "demo", version = "1.0.0", source = { registry = "links" }, marker = "(platform_machine == 'aarch64' and sys_platform == 'linux') or (platform_machine == 'x86_64' and sys_platform == 'linux')" },
+            { name = "demo", version = "2.0.0", source = { registry = "links" }, marker = "(platform_machine != 'aarch64' and platform_machine != 'x86_64' and sys_platform == 'linux') or sys_platform == 'darwin'" },
+            { name = "windows-only", marker = "sys_platform == 'win32'" },
+        ]
+
+        [package.metadata]
+        requires-dist = [
+            { name = "demo", marker = "sys_platform == 'darwin'", specifier = ">=2" },
+            { name = "demo", marker = "sys_platform == 'linux'" },
+            { name = "windows-only", marker = "sys_platform == 'win32'" },
+        ]
+
+        [[package]]
+        name = "windows-only"
+        version = "1.0.0"
+        source = { registry = "links" }
+        wheels = [
+            { path = "windows_only-1.0.0-cp312-cp312-win_amd64.whl" },
+        ]
+        "#);
+    });
+
+    // The newer version is valid when only its GNU/x86_64 wheel is required.
     pyproject_toml.write_str(indoc! {r#"
         [project]
         name = "project"
@@ -717,12 +987,12 @@ fn minimum_glibc_architectures_and_markers() -> Result<()> {
         no-index = true
         find-links = ["links"]
         required-environments = ["sys_platform == 'linux' and platform_machine == 'x86_64'"]
-        minimum-glibc-version = "2.31"
+        minimum-libc-version = { glibc = "2.31" }
     "#})?;
     uv_snapshot!(context.filters(), context.lock().args(["--offline", "--upgrade"]), @"
     exit_code: 0 (success)
     ----- stderr -----
-    warning: Setting `minimum-glibc-version` is experimental and may change without warning. Pass `--preview-features minimum-glibc-version` to disable this warning.
+    warning: Setting `minimum-libc-version` is experimental and may change without warning. Pass `--preview-features minimum-libc-version` to disable this warning.
     Resolved 3 packages in [TIME]
     Updated demo v1.0.0, v2.0.0 -> v2.0.0
     ");
@@ -730,7 +1000,7 @@ fn minimum_glibc_architectures_and_markers() -> Result<()> {
 }
 
 #[test]
-fn minimum_glibc_invalid_configuration() -> Result<()> {
+fn minimum_libc_invalid_configuration() -> Result<()> {
     let context = uv_test::test_context!("3.12");
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {r#"
@@ -744,27 +1014,83 @@ fn minimum_glibc_invalid_configuration() -> Result<()> {
         no-index = true
         find-links = ["links"]
         required-environments = ["sys_platform == 'linux' and platform_machine == 'x86_64'"]
-        minimum-glibc-version = "2.31.1"
+        minimum-libc-version = { glibc = "2.31.1" }
     "#})?;
     uv_snapshot!(context.filters(), context.lock().arg("--offline"), @r#"
-        exit_code: 2 (failure)
-        ----- stderr -----
-        warning: Failed to parse `pyproject.toml` during settings discovery:
-          TOML parse error at line 11, column 25
-             |
-          11 | minimum-glibc-version = "2.31.1"
-             |                         ^^^^^^^^
-          expected a glibc version in the form `<major>.<minor>` (e.g., `2.31`)
+    exit_code: 2 (failure)
+    ----- stderr -----
+    warning: Failed to parse `pyproject.toml` during settings discovery:
+      TOML parse error at line 11, column 34
+         |
+      11 | minimum-libc-version = { glibc = "2.31.1" }
+         |                                  ^^^^^^^^
+      expected a libc version in the form `<major>.<minor>` (e.g., `2.31` or `1.2`)
 
-        error: Failed to parse: `pyproject.toml`
-          cause: TOML parse error at line 11, column 25
-                    |
-                 11 | minimum-glibc-version = "2.31.1"
-                    |                         ^^^^^^^^
-                 expected a glibc version in the form `<major>.<minor>` (e.g., `2.31`)
+    error: Failed to parse: `pyproject.toml`
+      cause: TOML parse error at line 11, column 34
+                |
+             11 | minimum-libc-version = { glibc = "2.31.1" }
+                |                                  ^^^^^^^^
+             expected a libc version in the form `<major>.<minor>` (e.g., `2.31` or `1.2`)
     "#);
 
-    // Like required-environments, the minimum glibc version is a project-only setting.
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [tool.uv]
+        minimum-libc-version = {}
+    "#})?;
+    uv_snapshot!(context.filters(), context.lock().arg("--offline"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    warning: Failed to parse `pyproject.toml` during settings discovery:
+      TOML parse error at line 8, column 24
+        |
+      8 | minimum-libc-version = {}
+        |                        ^^
+      at least one of `glibc` or `musl` must be specified
+
+    error: Failed to parse: `pyproject.toml`
+      cause: TOML parse error at line 8, column 24
+               |
+             8 | minimum-libc-version = {}
+               |                        ^^
+             at least one of `glibc` or `musl` must be specified
+    ");
+
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [tool.uv]
+        minimum-libc-version = { glibc = "2.31", unknown = "1.2" }
+    "#})?;
+    uv_snapshot!(context.filters(), context.lock().arg("--offline"), @r#"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    warning: Failed to parse `pyproject.toml` during settings discovery:
+      TOML parse error at line 8, column 42
+        |
+      8 | minimum-libc-version = { glibc = "2.31", unknown = "1.2" }
+        |                                          ^^^^^^^
+      unknown field `unknown`, expected `glibc` or `musl`
+
+    error: Failed to parse: `pyproject.toml`
+      cause: TOML parse error at line 8, column 42
+               |
+             8 | minimum-libc-version = { glibc = "2.31", unknown = "1.2" }
+               |                                          ^^^^^^^
+             unknown field `unknown`, expected `glibc` or `musl`
+    "#);
+
+    // Like required-environments, the minimum libc version is a project-only setting.
     pyproject_toml.write_str(indoc! {r#"
         [project]
         name = "project"
@@ -778,7 +1104,7 @@ fn minimum_glibc_invalid_configuration() -> Result<()> {
         required-environments = ["sys_platform == 'linux' and platform_machine == 'x86_64'"]
     "#})?;
     context.temp_dir.child("uv.toml").write_str(indoc! {r#"
-        minimum-glibc-version = "2.31"
+        minimum-libc-version = { glibc = "2.31" }
     "#})?;
     uv_snapshot!(context.filters(), context.lock().arg("--offline"), @r"
         exit_code: 2 (failure)
@@ -786,7 +1112,7 @@ fn minimum_glibc_invalid_configuration() -> Result<()> {
         warning: Found both a `uv.toml` file and a `[tool.uv]` section in an adjacent `pyproject.toml`. The following fields from `[tool.uv]` will be ignored in favor of the `uv.toml` file:
         - no-index
         - find-links
-        error: Failed to parse: `uv.toml`. The `minimum-glibc-version` field is not allowed in a `uv.toml` file. `minimum-glibc-version` is only applicable in the context of a project, and should be placed in a `pyproject.toml` file instead.
+        error: Failed to parse: `uv.toml`. The `minimum-libc-version` field is not allowed in a `uv.toml` file. `minimum-libc-version` is only applicable in the context of a project, and should be placed in a `pyproject.toml` file instead.
     ");
     Ok(())
 }

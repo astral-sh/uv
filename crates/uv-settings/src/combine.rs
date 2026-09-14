@@ -9,7 +9,7 @@ use uv_configuration::{
     Reinstall, RequiredVersion, ResolutionMode, TargetTriple, TrustedPublishing, Upgrade,
 };
 use uv_distribution_types::{
-    GlibcVersion,
+    MinimumLibcVersion,
     ConfigSettings, ExcludeNewerOverride, ExcludeNewerValue, ExtraBuildVariables, Index, IndexUrl,
     PackageConfigSettings, PipExtraIndex, PipFindLinks, PipIndex,
 };
@@ -96,7 +96,7 @@ impl_combine_or!(ExcludeNewerOverride);
 impl_combine_or!(ExcludeNewerValue);
 impl_combine_or!(ExportFormat);
 impl_combine_or!(ForkStrategy);
-impl_combine_or!(GlibcVersion);
+impl_combine_or!(MinimumLibcVersion);
 impl_combine_or!(Index);
 impl_combine_or!(IndexStrategy);
 impl_combine_or!(IndexUrl);
