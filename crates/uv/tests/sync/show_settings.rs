@@ -3792,6 +3792,7 @@ fn preview_features() {
     +            ArtifactHashFiltering,
     +            ContentAddressedCache,
     +            MissingExcludeNewerPackageLock,
+    +            MinimumGlibcVersion,
     +        ],
          },
          python_preference: Managed,

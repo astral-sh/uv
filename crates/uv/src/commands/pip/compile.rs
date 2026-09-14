@@ -49,7 +49,7 @@ use uv_settings::PythonInstallMirrors;
 use uv_static::EnvVars;
 use uv_torch::{AmdGpuArchitecture, TorchMode, TorchStrategy};
 use uv_types::{EmptyInstalledPackages, HashStrategy, SourceTreeEditablePolicy};
-use uv_warnings::warn_user;
+use uv_warnings::{warn_user, warn_user_once};
 use uv_workspace::WorkspaceCache;
 use uv_workspace::pyproject::ExtraBuildDependencies;
 
@@ -546,6 +546,16 @@ pub(crate) async fn pip_compile(
         concurrency.clone(),
         preview,
     );
+
+    if universal
+        && minimum_glibc_version.is_some()
+        && !preview.is_enabled(PreviewFeature::MinimumGlibcVersion)
+    {
+        warn_user_once!(
+            "Setting `minimum-glibc-version` is experimental and may change without warning. Pass `--preview-features {}` to disable this warning.",
+            PreviewFeature::MinimumGlibcVersion
+        );
+    }
 
     let options = OptionsBuilder::new()
         .resolution_mode(resolution_mode)

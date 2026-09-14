@@ -726,6 +726,14 @@ async fn do_lock(
         None
     };
 
+    let minimum_glibc_version = target.minimum_glibc_version();
+    if minimum_glibc_version.is_some() && !preview.is_enabled(PreviewFeature::MinimumGlibcVersion) {
+        warn_user_once!(
+            "Setting `minimum-glibc-version` is experimental and may change without warning. Pass `--preview-features {}` to disable this warning.",
+            PreviewFeature::MinimumGlibcVersion
+        );
+    }
+
     // Determine the supported Python range. If no range is defined, and warn and default to the
     // current minor version.
     let requires_python = target.requires_python()?;
@@ -827,7 +835,7 @@ async fn do_lock(
         .index_strategy(*index_strategy)
         .build_options(build_options.clone())
         .artifact_environments(artifact_environments.clone())
-        .minimum_glibc_version(target.minimum_glibc_version())
+        .minimum_glibc_version(minimum_glibc_version)
         .build();
     // Checking an existing lockfile may build metadata and install build dependencies. Verify any
     // artifacts recorded in that lockfile, including for an ordinary unlocked command.
