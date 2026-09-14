@@ -7,8 +7,12 @@ set -eu
 script_root="$(realpath "$(dirname "$0")")"
 project_root="$(dirname "$script_root")"
 
-echo "Updating metadata with rooster..."
 cd "$project_root"
+
+echo "Installing formatting tools..."
+npm ci --ignore-scripts
+
+echo "Updating metadata with rooster..."
 
 # Update the changelog
 uv run --locked --python 3.12 --only-group release rooster release "$@"

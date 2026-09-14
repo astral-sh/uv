@@ -7,7 +7,7 @@
   ],
   labels: ["internal", "build:skip-docker", "build:skip-release"],
   schedule: ["* 0-3 * * 1"],
-  enabledManagers: ["github-actions", "cargo", "custom.regex"],
+  enabledManagers: ["github-actions", "cargo", "npm", "custom.regex"],
   cargo: {
     managerFilePatterns: ["/^Cargo\\.toml$/", "/^crates/.*Cargo\\.toml$/"],
   },
@@ -76,6 +76,17 @@
       matchFileNames: [".github/workflows/test-system.yml"],
       extends: ["schedule:monthly"],
       description: "Monthly update of test-system.yml dependencies",
+    },
+    {
+      matchManagers: ["npm"],
+      enabled: false,
+    },
+    {
+      groupName: "JavaScript formatting tools",
+      matchManagers: ["npm"],
+      matchFileNames: ["package.json"],
+      enabled: true,
+      description: "Weekly update of JavaScript formatting tools",
     },
     {
       groupName: "Rust dev-dependencies",
