@@ -636,22 +636,32 @@ async fn perform_install(
         (satisfied, unsatisfied)
     };
 
-    // For all satisfied installs, bytecode compile them now before any future
-    // early return.
+    let downloads_allowed = match python_downloads {
+        PythonDownloads::Automatic | PythonDownloads::Manual => true,
+        PythonDownloads::Never => false,
+    };
+    let mut deferred_compilation = FxHashSet::default();
+
+    // Compile satisfied installations before any early return, except when another request will
+    // replace the same directory. Those installations must wait for the replacement to finish.
     if let Some(ref sender) = bytecode_compilation_sender {
-        satisfied
+        for installation in satisfied
             .iter()
             .copied()
-            .cloned()
-            .try_for_each(|installation| {
+            .unique_by(|installation| installation.key())
+        {
+            if downloads_allowed && changelog.existing.contains(installation.key()) {
+                deferred_compilation.insert(installation.key().clone());
+            } else {
                 sender
-                    .send(installation)
-                    .map_err(|err| anyhow::anyhow!(err))
-            })?;
+                    .send(installation.clone())
+                    .map_err(|err| anyhow::anyhow!(err))?;
+            }
+        }
     }
 
     // Check if Python downloads are banned
-    if matches!(python_downloads, PythonDownloads::Never) && !unsatisfied.is_empty() {
+    if !downloads_allowed && !unsatisfied.is_empty() {
         writeln!(
             printer.stderr(),
             "Python downloads are not allowed (`python-downloads = \"never\"`). Change to `python-downloads = \"manual\"` to allow explicit installs.",
@@ -714,6 +724,7 @@ async fn perform_install(
                     sender
                         .send(installation.clone())
                         .map_err(|err| anyhow::anyhow!(err))?;
+                    deferred_compilation.remove(installation.key());
                 }
                 changelog.installed.insert(installation.key().clone());
                 for request in &requests {
@@ -763,6 +774,15 @@ async fn perform_install(
         installation.ensure_build_file()?;
         if let Err(e) = installation.ensure_dylib_patched() {
             e.warn_user(installation);
+        }
+
+        // After a failed replacement, finalize the retained installation before compiling it.
+        if let Some(ref sender) = bytecode_compilation_sender
+            && deferred_compilation.remove(installation.key())
+        {
+            sender
+                .send((**installation).clone())
+                .map_err(|err| anyhow::anyhow!(err))?;
         }
     }
 

@@ -5391,6 +5391,23 @@ fn python_build_variant_revision_context() -> anyhow::Result<(TestContext, Child
     Ok((context, installation))
 }
 
+fn track_python_build_compilation(installation: &ChildPath) -> anyhow::Result<()> {
+    let stdlib = if cfg!(windows) {
+        installation.child("Lib")
+    } else {
+        installation.child("lib/python3.13")
+    };
+    // Record compiler starts outside the installation so the marker survives a replacement.
+    stdlib.child("sitecustomize.py").write_str(indoc! {r#"
+        import sys
+        from pathlib import Path
+
+        if Path(sys.argv[0]).name == "pip_compileall.py":
+            (Path(sys.prefix).parent.parent / "compiled-old-build").touch()
+    "#})?;
+    Ok(())
+}
+
 #[test]
 fn python_install_build_variant_revision() -> anyhow::Result<()> {
     let (context, installation) = python_build_variant_revision_context()?;
@@ -5487,6 +5504,68 @@ fn python_install_build_variant_revision_overlapping_requests() -> anyhow::Resul
 }
 
 #[test]
+fn python_install_build_variant_revision_compile_bytecode() -> anyhow::Result<()> {
+    let (context, installation) = python_build_variant_revision_context()?;
+    let context = context
+        .with_concurrent_installs("1")
+        .with_filtered_compiled_file_count();
+    track_python_build_compilation(&installation)?;
+
+    uv_snapshot!(context.filters(), context.python_install()
+        .args(["3.13", "3.13+custom", "--compile-bytecode"])
+        .env(EnvVars::UV_PYTHON_BUILD, "20260901"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Installed Python 3.13.7 in [TIME]
+     ~ cpython-3.13.7+custom-[PLATFORM]
+    Bytecode compiled [COUNT] files in [TIME]
+    ");
+    context
+        .temp_dir
+        .child("compiled-old-build")
+        .assert(predicate::path::missing());
+    installation
+        .child("marker")
+        .assert(predicate::path::missing());
+    insta::assert_snapshot!(fs_err::read_to_string(installation.child("BUILD"))?, @"20260901");
+    context
+        .python_find()
+        .arg("3.13+custom")
+        .env(EnvVars::UV_PYTHON_BUILD, "20260901")
+        .assert()
+        .success();
+    Ok(())
+}
+
+#[test]
+fn python_install_build_variant_revision_compile_bytecode_downloads_disabled() -> anyhow::Result<()>
+{
+    let (context, installation) = python_build_variant_revision_context()?;
+    let context = context.with_filtered_compiled_file_count();
+    track_python_build_compilation(&installation)?;
+
+    // No replacement can occur, so the satisfied installation should still be compiled.
+    uv_snapshot!(context.filters(), context.python_install()
+        .args(["3.13", "3.13+custom", "--compile-bytecode"])
+        .env(EnvVars::UV_PYTHON_BUILD, "20260901")
+        .env(EnvVars::UV_PYTHON_DOWNLOADS, "never"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Python downloads are not allowed (`python-downloads = \"never\"`). Change to `python-downloads = \"manual\"` to allow explicit installs.
+    Bytecode compiled [COUNT] files in [TIME]
+    ");
+    context
+        .temp_dir
+        .child("compiled-old-build")
+        .assert(predicate::path::exists());
+    installation
+        .child("marker")
+        .assert(predicate::path::exists());
+    insta::assert_snapshot!(fs_err::read_to_string(installation.child("BUILD"))?, @"20260825");
+    Ok(())
+}
+
+#[test]
 fn python_run_build_variant_revision() -> anyhow::Result<()> {
     let (context, installation) = python_build_variant_revision_context()?;
     let marker = installation.child("marker");
@@ -5535,6 +5614,7 @@ fn python_run_build_variant_revision() -> anyhow::Result<()> {
 async fn python_build_variant_revision_download_failure() -> anyhow::Result<()> {
     for automatic in [false, true] {
         let (context, installation) = python_build_variant_revision_context()?;
+        track_python_build_compilation(&installation)?;
         let context = context.with_http_retries("0");
         let server = MockServer::start().await;
         let mut metadata: serde_json::Value =
@@ -5567,7 +5647,7 @@ async fn python_build_variant_revision_download_failure() -> anyhow::Result<()> 
         } else {
             let mut command = context.python_install();
             // Keep the satisfied record when replacing the same installation fails.
-            command.args(["3.13", "3.13+custom"]);
+            command.args(["3.13", "3.13+custom", "--compile-bytecode"]);
             command
         };
         command
@@ -5575,6 +5655,12 @@ async fn python_build_variant_revision_download_failure() -> anyhow::Result<()> 
             .env(EnvVars::UV_PYTHON_CACHE_DIR, "")
             .assert()
             .failure();
+        if !automatic {
+            context
+                .temp_dir
+                .child("compiled-old-build")
+                .assert(predicate::path::exists());
+        }
         installation
             .child("marker")
             .assert(predicate::path::exists());
