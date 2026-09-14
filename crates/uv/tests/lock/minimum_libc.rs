@@ -191,6 +191,92 @@ fn minimum_libc_filters_locked_wheels() -> Result<()> {
     Ok(())
 }
 
+/// Recompiling filters prior hashes after tightening libc, including when none remain eligible.
+#[test]
+fn minimum_libc_filters_existing_hashes() -> Result<()> {
+    let scenario = toml::from_str::<Scenario>(indoc! {r#"
+        name = "minimum-libc-filters-existing-hashes"
+
+        [root]
+
+        [expected]
+        satisfiable = true
+
+        [packages.demo.versions."1.0.0"]
+        sdist = false
+        wheel_tags = ["cp312-cp312-manylinux_2_17_x86_64", "cp312-cp312-manylinux_2_34_x86_64"]
+    "#})?;
+    let server = PackseServer::from_scenario(&scenario);
+    let context = uv_test::test_context!("3.12").with_filters(
+        server
+            .files()
+            .map(|(filename, hash)| (hash.to_owned(), format!("[SHA256:{filename}]"))),
+    );
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["demo"]
+
+        [tool.uv]
+        required-environments = "sys_platform == 'linux' and platform_machine == 'x86_64'"
+    "#})?;
+    uv_snapshot!(context.filters(), context.pip_compile().arg("--index-url").arg(server.index_url()).args(["pyproject.toml", "--universal", "--generate-hashes", "--no-header", "--no-annotate", "--output-file", "requirements.txt"]), @r"
+    exit_code: 0 (success)
+    ----- stdout -----
+    demo==1.0.0 \
+        --hash=sha256:[SHA256:demo-1.0.0-cp312-cp312-manylinux_2_17_x86_64.whl] \
+        --hash=sha256:[SHA256:demo-1.0.0-cp312-cp312-manylinux_2_34_x86_64.whl]
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["demo"]
+
+        [tool.uv]
+        required-environments = [
+            { marker = "sys_platform == 'linux' and platform_machine == 'x86_64'", libc = { glibc = "2.31" } },
+        ]
+    "#})?;
+    uv_snapshot!(context.filters(), context.pip_compile().arg("--index-url").arg(server.index_url()).args(["pyproject.toml", "--universal", "--generate-hashes", "--no-header", "--no-annotate", "--output-file", "requirements.txt", "--preview-features", "minimum-libc-version"]), @r"
+    exit_code: 0 (success)
+    ----- stdout -----
+    demo==1.0.0 \
+        --hash=sha256:[SHA256:demo-1.0.0-cp312-cp312-manylinux_2_17_x86_64.whl]
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+
+    // If every prior hash is excluded, replace them with hashes for eligible artifacts.
+    let (_, hash) = server
+        .files()
+        .find(|(filename, _)| *filename == "demo-1.0.0-cp312-cp312-manylinux_2_34_x86_64.whl")
+        .context("missing glibc 2.34 wheel")?;
+    context
+        .temp_dir
+        .child("requirements.txt")
+        .write_str(&format!("demo==1.0.0 --hash=sha256:{hash}\n"))?;
+    uv_snapshot!(context.filters(), context.pip_compile().arg("--index-url").arg(server.index_url()).args(["pyproject.toml", "--universal", "--generate-hashes", "--no-header", "--no-annotate", "--output-file", "requirements.txt", "--preview-features", "minimum-libc-version"]), @r"
+    exit_code: 0 (success)
+    ----- stdout -----
+    demo==1.0.0 \
+        --hash=sha256:[SHA256:demo-1.0.0-cp312-cp312-manylinux_2_17_x86_64.whl]
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+    Ok(())
+}
+
 /// Each configured libc needs coverage, and selecting musl alone excludes GNU wheels.
 #[test]
 fn minimum_libc_both_families_and_musl_only() -> Result<()> {
