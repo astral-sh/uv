@@ -1885,7 +1885,8 @@
             "missing-exclude-newer-package-lock",
             "batch-export",
             "minimum-libc-version",
-            "build-dependency-check"
+            "build-dependency-check",
+            "build-lazy-imports"
           ]
         },
         {
