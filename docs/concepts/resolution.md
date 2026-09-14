@@ -231,6 +231,35 @@ Use `==` to require coverage at the baseline. A range like `>= '24.0.0'` can be 
 that only supports a newer release. Wheels targeting newer releases are still retained in the
 lockfile.
 
+### Minimum glibc version
+
+Linux environment markers describe the operating system and architecture, but not the glibc version.
+Use `minimum-glibc-version` alongside `required-environments` to constrain wheel coverage for your
+oldest glibc-based Linux hosts:
+
+```toml title="pyproject.toml"
+[tool.uv]
+required-environments = [
+    "sys_platform == 'linux' and platform_machine == 'x86_64'",
+    "sys_platform == 'linux' and platform_machine == 'aarch64'",
+]
+minimum-glibc-version = "2.31"
+```
+
+During resolution, a `manylinux_2_17` wheel can satisfy this requirement, but a `manylinux_2_34`
+wheel cannot. If a package has no compatible wheel or usable source distribution, uv tries another
+package version or fails resolution. The setting applies to wheel coverage for both `environments`
+and `required-environments`; it does not require Linux support unless those settings request it.
+
+Musllinux wheels do not satisfy a glibc requirement. Platform-independent wheels, native `linux`
+wheels (which do not declare a glibc baseline), and wheels for other operating systems retain their
+usual compatibility rules. Source distributions remain eligible when builds are allowed; resolving a
+lock does not prove that those distributions build on the target host.
+
+The setting is also respected by `uv pip compile --universal`. Target-specific operations continue
+to use the current platform or `--python-platform` instead. Changing the setting invalidates the
+existing lock, including when using `uv lock --check`.
+
 ## Common marker values
 
 The `environments` and `required-environments` settings accept

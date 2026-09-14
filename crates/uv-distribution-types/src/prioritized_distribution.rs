@@ -8,7 +8,8 @@ use uv_distribution_filename::{BuildTag, WheelFilename};
 use uv_pep440::{Version, VersionSpecifier, VersionSpecifiers};
 use uv_pep508::{MarkerExpression, MarkerOperator, MarkerTree, MarkerValueString};
 use uv_platform_tags::{
-    AbiTag, BinaryFormat, IncompatibleTag, LanguageTag, PlatformTag, TagPriority, Tags,
+    AbiTag, BinaryFormat, GlibcVersion, IncompatibleTag, LanguageTag, PlatformTag, TagPriority,
+    Tags,
 };
 use uv_pypi_types::{HashDigest, Yanked};
 
@@ -109,6 +110,38 @@ impl CompatibleDist<'_> {
             Some(prioritized) => prioritized.0.markers,
             None => MarkerTree::TRUE,
         }
+    }
+
+    /// Return artifact coverage with Linux wheels restricted to the given glibc baseline.
+    ///
+    /// A compatible source distribution provides coverage for all environments. Otherwise, only
+    /// compatible wheels contribute, with each platform tag checked independently.
+    pub fn implied_markers_with_glibc_version(
+        &self,
+        minimum_glibc_version: GlibcVersion,
+    ) -> MarkerTree {
+        let Some(prioritized) = self.prioritized() else {
+            return MarkerTree::TRUE;
+        };
+        if prioritized
+            .0
+            .source
+            .as_ref()
+            .is_some_and(|(_, compatibility)| compatibility.is_compatible())
+        {
+            return MarkerTree::TRUE;
+        }
+        prioritized
+            .0
+            .wheels
+            .iter()
+            .filter(|(_, compatibility)| compatibility.is_compatible())
+            .fold(MarkerTree::FALSE, |markers, (wheel, _)| {
+                markers.or(implied_markers_with_glibc_version(
+                    &wheel.filename,
+                    minimum_glibc_version,
+                ))
+            })
     }
 }
 
@@ -802,13 +835,35 @@ pub fn implied_markers(filename: &WheelFilename) -> MarkerTree {
     implied_platform_markers(filename).and(implied_python_markers(filename))
 }
 
+/// Infer artifact coverage, excluding Linux platform tags that cannot run on the glibc baseline.
+pub fn implied_markers_with_glibc_version(
+    filename: &WheelFilename,
+    minimum_glibc_version: GlibcVersion,
+) -> MarkerTree {
+    implied_platform_markers_with_glibc_version(filename, Some(minimum_glibc_version))
+        .and(implied_python_markers(filename))
+}
+
 /// Given a wheel filename, determine the set of supported platforms, in terms of their markers.
 ///
 /// This is roughly the inverse of platform tag generation: given a tag, we want to infer the
 /// supported platforms (rather than generating the supported tags from a given platform).
 fn implied_platform_markers(filename: &WheelFilename) -> MarkerTree {
+    implied_platform_markers_with_glibc_version(filename, None)
+}
+
+/// Infer supported platforms from tags that satisfy the optional glibc baseline.
+fn implied_platform_markers_with_glibc_version(
+    filename: &WheelFilename,
+    minimum_glibc_version: Option<GlibcVersion>,
+) -> MarkerTree {
     let mut marker = MarkerTree::FALSE;
     for platform_tag in filename.platform_tags() {
+        if let Some(minimum_glibc_version) = minimum_glibc_version
+            && !supports_glibc_version(platform_tag, minimum_glibc_version)
+        {
+            continue;
+        }
         match platform_tag {
             PlatformTag::Any => {
                 return MarkerTree::TRUE;
@@ -942,6 +997,38 @@ fn macos_darwin_release(major: u16, minor: u16) -> Option<Version> {
         _ => return None,
     };
     Some(Version::new(release))
+}
+
+/// Check a platform tag's glibc requirement, leaving non-Linux tags unconstrained.
+fn supports_glibc_version(platform_tag: &PlatformTag, minimum_glibc_version: GlibcVersion) -> bool {
+    match platform_tag {
+        PlatformTag::Manylinux { major, minor, .. } => {
+            GlibcVersion::new(*major, *minor) <= minimum_glibc_version
+        }
+        PlatformTag::Manylinux1 { .. } => GlibcVersion::new(2, 5) <= minimum_glibc_version,
+        PlatformTag::Manylinux2010 { .. } => GlibcVersion::new(2, 12) <= minimum_glibc_version,
+        PlatformTag::Manylinux2014 { .. } => GlibcVersion::new(2, 17) <= minimum_glibc_version,
+        PlatformTag::Musllinux { .. } => false,
+        // Native Linux tags do not declare a libc requirement, just as when generating target tags.
+        PlatformTag::Linux { .. }
+        | PlatformTag::Any
+        | PlatformTag::Macos { .. }
+        | PlatformTag::Win32
+        | PlatformTag::WinAmd64
+        | PlatformTag::WinArm64
+        | PlatformTag::WinIa64
+        | PlatformTag::Android { .. }
+        | PlatformTag::FreeBsd { .. }
+        | PlatformTag::NetBsd { .. }
+        | PlatformTag::OpenBsd { .. }
+        | PlatformTag::Dragonfly { .. }
+        | PlatformTag::Haiku { .. }
+        | PlatformTag::Illumos { .. }
+        | PlatformTag::Solaris { .. }
+        | PlatformTag::Pyodide { .. }
+        | PlatformTag::PyEmscripten { .. }
+        | PlatformTag::Ios { .. } => true,
+    }
 }
 
 /// Given a wheel filename, determine the set of supported Python versions, in terms of their markers.
@@ -1088,6 +1175,73 @@ mod tests {
             implied_markers(&filename),
             expected.parse::<MarkerTree>().unwrap()
         );
+    }
+
+    #[test]
+    fn test_implied_markers_glibc_version() -> Result<(), Box<dyn std::error::Error>> {
+        let minimum_glibc_version = GlibcVersion::new(2, 31);
+        for platform in [
+            "any",
+            "manylinux_2_31_x86_64",
+            "manylinux_2_17_aarch64",
+            "manylinux1_x86_64",
+            "manylinux2010_x86_64",
+            "manylinux2014_x86_64",
+            "linux_x86_64",
+            "win_amd64",
+            "macosx_11_0_arm64",
+        ] {
+            let filename =
+                WheelFilename::from_str(&format!("example-1.0-py3-none-{platform}.whl"))?;
+            assert_eq!(
+                implied_markers_with_glibc_version(&filename, minimum_glibc_version),
+                implied_markers(&filename),
+                "{platform}",
+            );
+        }
+
+        for platform in ["manylinux_2_34_x86_64", "musllinux_1_2_x86_64"] {
+            let filename =
+                WheelFilename::from_str(&format!("example-1.0-py3-none-{platform}.whl"))?;
+            assert_eq!(
+                implied_markers_with_glibc_version(&filename, minimum_glibc_version),
+                MarkerTree::FALSE,
+                "{platform}",
+            );
+            assert!(!implied_markers(&filename).is_false());
+        }
+
+        let filename = WheelFilename::from_str(
+            "example-1.0-py3-none-manylinux_2_17_x86_64.manylinux_2_34_aarch64.win_amd64.whl",
+        )?;
+        let compatible =
+            WheelFilename::from_str("example-1.0-py3-none-manylinux_2_17_x86_64.win_amd64.whl")?;
+        assert_eq!(
+            implied_markers_with_glibc_version(&filename, minimum_glibc_version),
+            implied_markers(&compatible),
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn test_implied_markers_legacy_glibc_version() -> Result<(), Box<dyn std::error::Error>> {
+        for (platform, minor) in [
+            ("manylinux1_x86_64", 5),
+            ("manylinux2010_x86_64", 12),
+            ("manylinux2014_x86_64", 17),
+        ] {
+            let filename =
+                WheelFilename::from_str(&format!("example-1.0-py3-none-{platform}.whl"))?;
+            assert_eq!(
+                implied_markers_with_glibc_version(&filename, GlibcVersion::new(2, minor)),
+                implied_markers(&filename),
+            );
+            assert_eq!(
+                implied_markers_with_glibc_version(&filename, GlibcVersion::new(2, minor - 1)),
+                MarkerTree::FALSE,
+            );
+        }
+        Ok(())
     }
 
     #[test]

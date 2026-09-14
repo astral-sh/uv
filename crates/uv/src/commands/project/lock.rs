@@ -808,6 +808,7 @@ async fn do_lock(
         .index_strategy(*index_strategy)
         .build_options(build_options.clone())
         .artifact_environments(artifact_environments.clone())
+        .minimum_glibc_version(target.minimum_glibc_version())
         .build();
     // Checking an existing lockfile may build metadata and install build dependencies. Verify any
     // artifacts recorded in that lockfile, including for an ordinary unlocked command.
@@ -1310,6 +1311,16 @@ impl ValidatedLock {
             debug!(
                 "Resolving despite existing lockfile due to change in supported environments: `{:?}` vs. `{:?}`",
                 expected, actual
+            );
+            return Ok(Self::Versions(lock));
+        }
+
+        // A different glibc baseline can change which versions cover the required platforms.
+        if lock.minimum_glibc_version() != options.minimum_glibc_version {
+            debug!(
+                "Resolving despite existing lockfile due to change in minimum glibc version: {:?} vs. {:?}",
+                lock.minimum_glibc_version(),
+                options.minimum_glibc_version,
             );
             return Ok(Self::Versions(lock));
         }

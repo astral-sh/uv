@@ -21,7 +21,7 @@ use thiserror::Error;
 use tracing::instrument;
 use uv_build_backend::BuildBackendSettings;
 use uv_configuration::{ExcludeDependency, GitLfsSetting, Override};
-use uv_distribution_types::{Index, IndexName, NameRequirementSpecification, RequirementSource};
+use uv_distribution_types::{GlibcVersion, Index, IndexName, NameRequirementSpecification, RequirementSource};
 use uv_fs::{PortablePathBuf, try_relative_to_if};
 use uv_git_types::GitReference;
 use uv_macros::OptionsMetadata;
@@ -705,6 +705,33 @@ pub struct ToolUv {
         "#
     )]
     pub(crate) required_environments: Option<SupportedEnvironments>,
+
+    /// The oldest glibc version supported by the required Linux environments.
+    ///
+    /// When checking wheel coverage for `environments` and `required-environments`, manylinux
+    /// tags requiring a newer glibc version do not count as supporting Linux. For example,
+    /// `"2.31"` permits `manylinux_2_17` wheels, but not `manylinux_2_34` wheels. Musllinux
+    /// wheels do not provide glibc compatibility. Platform-independent wheels, native Linux
+    /// wheels without a declared glibc baseline, and other platforms are unaffected.
+    ///
+    /// This setting does not require Linux support by itself; declare the Linux architectures
+    /// to support in `required-environments`. Packages with a usable source distribution can
+    /// still be selected, without guaranteeing that the source distribution will build.
+    ///
+    /// This setting is respected by `uv lock` and `uv pip compile --universal`.
+    #[cfg_attr(feature = "schemars", schemars(with = "Option<String>"))]
+    #[option(
+        default = "None",
+        value_type = "str",
+        example = r#"
+            required-environments = [
+                "sys_platform == 'linux' and platform_machine == 'x86_64'",
+                "sys_platform == 'linux' and platform_machine == 'aarch64'",
+            ]
+            minimum-glibc-version = "2.31"
+        "#
+    )]
+    pub(crate) minimum_glibc_version: Option<GlibcVersion>,
 
     /// Declare collections of extras or dependency groups that are conflicting
     /// (i.e., mutually exclusive).
