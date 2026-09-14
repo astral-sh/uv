@@ -9,7 +9,6 @@ pub struct GlibcVersion {
 }
 
 impl GlibcVersion {
-    /// Create a glibc version from its major and minor release numbers.
     pub const fn new(major: u16, minor: u16) -> Self {
         Self { major, minor }
     }
@@ -18,6 +17,10 @@ impl GlibcVersion {
 impl FromStr for GlibcVersion {
     type Err = ParseGlibcVersionError;
 
+    /// Parse exactly two unsigned decimal components that fit in [`u16`].
+    ///
+    /// Signs, whitespace, and additional release components are rejected. Leading zeroes are
+    /// accepted and normalized by [`Display`].
     fn from_str(value: &str) -> Result<Self, Self::Err> {
         let (major, minor) = value.split_once('.').ok_or(ParseGlibcVersionError)?;
         if !major.bytes().all(|byte| byte.is_ascii_digit())
