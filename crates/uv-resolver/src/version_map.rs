@@ -777,17 +777,10 @@ impl VersionMapLazy {
                 let hash_policy = self
                     .hasher
                     .archive_policy_for_package(&filename.name, &filename.version);
-                let required_hashes = hash_policy.digests();
-                if required_hashes.is_empty() {
+                if hash_policy.digests().is_empty() {
                     HashComparison::Matched
                 } else {
-                    if hashes.is_empty() {
-                        HashComparison::Missing
-                    } else if hash_policy.matches(hashes) {
-                        HashComparison::Matched
-                    } else {
-                        HashComparison::Mismatched
-                    }
+                    hash_policy.compare(hashes)
                 }
             });
 
@@ -857,17 +850,10 @@ impl VersionMapLazy {
                 let hash_policy = self
                     .hasher
                     .archive_policy_for_package(&filename.name, &filename.version);
-                let required_hashes = hash_policy.digests();
-                if required_hashes.is_empty() {
+                if hash_policy.digests().is_empty() {
                     HashComparison::Matched
                 } else {
-                    if hashes.is_empty() {
-                        HashComparison::Missing
-                    } else if hash_policy.matches(hashes) {
-                        HashComparison::Matched
-                    } else {
-                        HashComparison::Mismatched
-                    }
+                    hash_policy.compare(hashes)
                 }
             });
 

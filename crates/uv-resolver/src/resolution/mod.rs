@@ -2,8 +2,8 @@ use std::fmt::Display;
 
 use uv_distribution::Metadata;
 use uv_distribution_types::{
-    BuiltDist, Dist, DistributionMetadata, IndexUrl, Name, RegistryHashTarget, ResolvedDist,
-    SourceDist, VersionOrUrlRef,
+    BuiltDist, Dist, DistributionMetadata, File, IndexUrl, Name, ResolvedDist, SourceDist,
+    VersionOrUrlRef,
 };
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::Version;
@@ -81,8 +81,8 @@ impl DistributionMetadata for AnnotatedDist {
         self.dist.version_or_url()
     }
 
-    fn registry_hash_target(&self) -> Option<RegistryHashTarget<'_>> {
-        self.dist.registry_hash_target()
+    fn registry_file(&self) -> Option<(&IndexUrl, &File)> {
+        self.dist.registry_file()
     }
 }
 

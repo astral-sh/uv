@@ -1,8 +1,8 @@
 use std::fmt::{Display, Formatter};
 
 use crate::{
-    Dist, DistributionId, DistributionMetadata, Identifier, InstalledDist, Name,
-    RegistryHashTarget, ResourceId, VersionId, VersionOrUrlRef,
+    Dist, DistributionId, DistributionMetadata, File, Identifier, IndexUrl, InstalledDist, Name,
+    ResourceId, VersionId, VersionOrUrlRef,
 };
 use uv_normalize::PackageName;
 use uv_pep440::Version;
@@ -51,10 +51,10 @@ impl DistributionMetadata for RequestedDist {
         }
     }
 
-    fn registry_hash_target(&self) -> Option<RegistryHashTarget<'_>> {
+    fn registry_file(&self) -> Option<(&IndexUrl, &File)> {
         match self {
             Self::Installed(_) => None,
-            Self::Installable(dist) => dist.registry_hash_target(),
+            Self::Installable(dist) => dist.registry_file(),
         }
     }
 }

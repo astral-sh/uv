@@ -7,8 +7,8 @@ use uv_pep440::Version;
 use uv_pypi_types::Yanked;
 
 use crate::{
-    BuiltDist, Dist, DistributionId, DistributionMetadata, Identifier, IndexUrl, InstalledDist,
-    Name, PrioritizedDist, RegistryBuiltWheel, RegistryHashTarget, RegistrySourceDist, ResourceId,
+    BuiltDist, Dist, DistributionId, DistributionMetadata, File, Identifier, IndexUrl,
+    InstalledDist, Name, PrioritizedDist, RegistryBuiltWheel, RegistrySourceDist, ResourceId,
     SourceDist, VersionId, VersionOrUrlRef,
 };
 
@@ -180,11 +180,11 @@ impl DistributionMetadata for ResolvedDistRef<'_> {
         }
     }
 
-    fn registry_hash_target(&self) -> Option<RegistryHashTarget<'_>> {
+    fn registry_file(&self) -> Option<(&IndexUrl, &File)> {
         match self {
             Self::Installed { .. } => None,
-            Self::InstallableRegistrySourceDist { sdist, .. } => sdist.registry_hash_target(),
-            Self::InstallableRegistryBuiltDist { wheel, .. } => wheel.registry_hash_target(),
+            Self::InstallableRegistrySourceDist { sdist, .. } => sdist.registry_file(),
+            Self::InstallableRegistryBuiltDist { wheel, .. } => wheel.registry_file(),
         }
     }
 }
@@ -231,10 +231,10 @@ impl DistributionMetadata for ResolvedDist {
         }
     }
 
-    fn registry_hash_target(&self) -> Option<RegistryHashTarget<'_>> {
+    fn registry_file(&self) -> Option<(&IndexUrl, &File)> {
         match self {
             Self::Installed { .. } => None,
-            Self::Installable { dist, .. } => dist.registry_hash_target(),
+            Self::Installable { dist, .. } => dist.registry_file(),
         }
     }
 }

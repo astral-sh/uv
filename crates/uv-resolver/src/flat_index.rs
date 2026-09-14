@@ -8,8 +8,8 @@ use uv_client::{FlatIndexEntries, FlatIndexEntry};
 use uv_configuration::BuildOptions;
 use uv_distribution_filename::{DistFilename, SourceDistFilename, WheelFilename};
 use uv_distribution_types::{
-    File, HashComparison, IncompatibleSource, IncompatibleWheel, IndexUrl, PrioritizedDist,
-    RegistryBuiltWheel, RegistrySourceDist, SourceDistCompatibility, WheelCompatibility,
+    File, IncompatibleSource, IncompatibleWheel, IndexUrl, PrioritizedDist, RegistryBuiltWheel,
+    RegistrySourceDist, SourceDistCompatibility, WheelCompatibility,
 };
 use uv_normalize::PackageName;
 use uv_pep440::Version;
@@ -183,17 +183,7 @@ impl FlatDistributions {
             .unwrap_or_else(|| {
                 let hash_policy =
                     hasher.archive_policy_for_package(&filename.name, &filename.version);
-                if hash_policy.requires_validation() {
-                    if hashes.is_empty() {
-                        HashComparison::Missing
-                    } else if hash_policy.matches(hashes) {
-                        HashComparison::Matched
-                    } else {
-                        HashComparison::Mismatched
-                    }
-                } else {
-                    HashComparison::Matched
-                }
+                hash_policy.compare(hashes)
             });
 
         SourceDistCompatibility::Compatible(hash)
@@ -236,17 +226,7 @@ impl FlatDistributions {
             .unwrap_or_else(|| {
                 let hash_policy =
                     hasher.archive_policy_for_package(&filename.name, &filename.version);
-                if hash_policy.requires_validation() {
-                    if hashes.is_empty() {
-                        HashComparison::Missing
-                    } else if hash_policy.matches(hashes) {
-                        HashComparison::Matched
-                    } else {
-                        HashComparison::Mismatched
-                    }
-                } else {
-                    HashComparison::Matched
-                }
+                hash_policy.compare(hashes)
             });
 
         // Break ties with the build tag.

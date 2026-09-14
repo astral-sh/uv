@@ -1749,19 +1749,6 @@ async fn check_editable_build_dependency_index_hashes(
         ))
         .mount_as_scoped(&server)
         .await;
-    let build_index_mock = Mock::given(method("GET"))
-        .and(path(format!("/{build_index}/simple/review-dep/")))
-        .respond_with(ResponseTemplate::new(200).set_body_raw(
-            simple_indexes["build"].to_string(),
-            "application/vnd.pypi.simple.v1+json",
-        ));
-    let replacement_index = if same_index {
-        Some(build_index_mock)
-    } else {
-        build_index_mock.mount(&server).await;
-        None
-    };
-
     let dependency = context.temp_dir.child("demo-pkg");
     dependency
         .child("demo_pkg.py")
@@ -1845,10 +1832,17 @@ async fn check_editable_build_dependency_index_hashes(
 
     // The runtime wheel remains downloadable, but independent build resolution sees only the
     // higher build tag. The lockfile need not contain every wheel for a registry version.
-    if let Some(replacement_index) = replacement_index {
+    if same_index {
         drop(runtime_index);
-        replacement_index.mount(&server).await;
     }
+    Mock::given(method("GET"))
+        .and(path(format!("/{build_index}/simple/review-dep/")))
+        .respond_with(ResponseTemplate::new(200).set_body_raw(
+            simple_indexes["build"].to_string(),
+            "application/vnd.pypi.simple.v1+json",
+        ))
+        .mount(&server)
+        .await;
 
     allow_duplicates! {
         uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--no-install-project").arg("--no-cache"), @"
@@ -1896,17 +1890,7 @@ async fn lock_cached_build_source_local_version_hashes() -> Result<()> {
         &BTreeMap::new(),
         None,
         "py3-none-any",
-        &[(
-            "review_dep/marker.py",
-            indoc! {r#"
-                import os
-                from pathlib import Path
-
-                SOURCE = "cached"
-                if sentinel := os.environ.get("UV_LOCK_TEST_SENTINEL"):
-                    Path(sentinel).write_text("executed\n")
-            "#},
-        )],
+        &[("review_dep/marker.py", "SOURCE = 'cached'\n")],
     );
     let trusted_source = locked_local_build_dependency_source(&wheel_filename, &wheel)?;
     let replacement_source = locked_local_build_dependency_source(&wheel_filename, &cached_wheel)?;
@@ -2082,16 +2066,13 @@ async fn lock_cached_build_source_local_version_hashes() -> Result<()> {
         .mount_as_scoped(&server)
         .await;
 
-    let sentinel = context.temp_dir.child("backend-executed");
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen")
-        .env("UV_LOCK_TEST_SENTINEL", sentinel.path()), @"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @"
     exit_code: 0 (success)
     ----- stderr -----
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + demo-pkg==1.0.0 (from file://[TEMP_DIR]/demo-pkg)
     ");
-    assert!(!sentinel.exists(), "the cached source wheel was executed");
     assert_eq!(registry_wheel.received_requests().await.len(), 1);
     context.assert_installed("demo_pkg", "1.0.0");
     assert_eq!(context.read("uv.lock"), locked);

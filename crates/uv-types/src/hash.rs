@@ -5,12 +5,13 @@ use std::sync::Arc;
 
 use rustc_hash::FxHashMap;
 
+use uv_cache_key::CanonicalUrl;
 use uv_configuration::HashCheckingMode;
 use uv_distribution_filename::{DistExtension, WheelFilename};
 use uv_distribution_types::{
     ArchiveHashPolicy, DistributionMetadata, HashCollection, HashComparison, HashValidation,
-    IndexUrl, MetadataHashPolicy, Name, RegistryVersionId, Requirement, RequirementSource,
-    Resolution, UnresolvedRequirement, VersionId,
+    IndexUrl, MetadataHashPolicy, Name, Requirement, RequirementSource, Resolution,
+    UnresolvedRequirement, VersionId, VersionOrUrlRef,
 };
 use uv_normalize::PackageName;
 use uv_pep440::{Operator, Version};
@@ -49,30 +50,18 @@ pub enum HashVerification {
 /// The registry artifacts recorded in a lockfile for isolated build verification.
 #[derive(Debug, Default, Clone)]
 pub struct LockedRegistryHashes {
-    packages: FxHashMap<RegistryVersionId, LockedRegistryPackageHashes>,
-}
-
-#[derive(Debug, Default, Clone)]
-struct LockedRegistryPackageHashes {
     /// A lockfile can omit wheels unreachable under its runtime markers.
-    wheels: FxHashMap<WheelFilename, Vec<HashDigest>>,
+    wheels: FxHashMap<(CanonicalUrl, WheelFilename), Vec<HashDigest>>,
     /// Source archives for a known source and version must match a recorded source hash.
-    sources: Vec<HashDigest>,
+    sources: FxHashMap<(CanonicalUrl, PackageName, Version), Vec<HashDigest>>,
 }
 
 impl LockedRegistryHashes {
     /// Record a wheel's trusted hash under its source and complete filename.
     pub fn insert_wheel(&mut self, index: &IndexUrl, filename: &WheelFilename, hash: HashDigest) {
         let hashes = self
-            .packages
-            .entry(RegistryVersionId::new(
-                &filename.name,
-                &filename.version,
-                index,
-            ))
-            .or_default()
             .wheels
-            .entry(filename.clone())
+            .entry((CanonicalUrl::new(index.url().clone()), filename.clone()))
             .or_default();
         if !hashes.contains(&hash) {
             hashes.push(hash);
@@ -87,11 +76,14 @@ impl LockedRegistryHashes {
         version: &Version,
         hash: HashDigest,
     ) {
-        let hashes = &mut self
-            .packages
-            .entry(RegistryVersionId::new(name, version, index))
-            .or_default()
-            .sources;
+        let hashes = self
+            .sources
+            .entry((
+                CanonicalUrl::new(index.url().clone()),
+                name.clone(),
+                version.clone(),
+            ))
+            .or_default();
         if !hashes.contains(&hash) {
             hashes.push(hash);
         }
@@ -104,17 +96,11 @@ impl LockedRegistryHashes {
         index: &IndexUrl,
         filename: &str,
     ) -> Option<&[HashDigest]> {
-        let package = self
-            .packages
-            .get(&RegistryVersionId::new(name, version, index))?;
         match DistExtension::from_path(filename) {
             Ok(DistExtension::Wheel) => WheelFilename::from_str(filename)
                 .ok()
-                .and_then(|filename| package.wheels.get(&filename))
-                .map(Vec::as_slice),
-            Ok(DistExtension::Source(_)) => {
-                (!package.sources.is_empty()).then_some(package.sources.as_slice())
-            }
+                .and_then(|filename| self.wheel_hashes(index, &filename)),
+            Ok(DistExtension::Source(_)) => self.source_hashes(name, version, index),
             Err(_) => None,
         }
     }
@@ -125,21 +111,18 @@ impl LockedRegistryHashes {
         version: &Version,
         index: &IndexUrl,
     ) -> Option<&[HashDigest]> {
-        let package = self
-            .packages
-            .get(&RegistryVersionId::new(name, version, index))?;
-        (!package.sources.is_empty()).then_some(package.sources.as_slice())
+        self.sources
+            .get(&(
+                CanonicalUrl::new(index.url().clone()),
+                name.clone(),
+                version.clone(),
+            ))
+            .map(Vec::as_slice)
     }
 
     fn wheel_hashes(&self, index: &IndexUrl, filename: &WheelFilename) -> Option<&[HashDigest]> {
-        self.packages
-            .get(&RegistryVersionId::new(
-                &filename.name,
-                &filename.version,
-                index,
-            ))?
-            .wheels
-            .get(filename)
+        self.wheels
+            .get(&(CanonicalUrl::new(index.url().clone()), filename.clone()))
             .map(Vec::as_slice)
     }
 }
@@ -292,7 +275,7 @@ impl HashStrategy {
             return None;
         };
         if let Some(expected) = registry.artifact_hashes(name, version, index, filename) {
-            return Some(compare_hashes(ArchiveHashPolicy::Any(expected), advertised));
+            return Some(ArchiveHashPolicy::Any(expected).compare(advertised));
         }
         if let Some(expected) = hashes.get(&VersionId::from_registry(name.clone(), version.clone()))
         {
@@ -343,14 +326,15 @@ impl HashStrategy {
         distribution: &T,
     ) -> HashValidation<'_> {
         if let HashVerification::LockedBuild { .. } = &self.verification
-            && let Some(target) = distribution.registry_hash_target()
+            && let Some((index, file)) = distribution.registry_file()
+            && let VersionOrUrlRef::Version(version) = distribution.version_or_url()
         {
             return self.validation_for_registry(
-                target.name,
-                target.version,
-                target.index,
-                target.file.filename.as_ref(),
-                target.file.hashes.as_slice(),
+                distribution.name(),
+                version,
+                index,
+                file.filename.as_ref(),
+                file.hashes.as_slice(),
             );
         }
         self.validation_for_id(|| distribution.version_id())
@@ -777,18 +761,6 @@ fn relocated_registry_validation<'a>(
     }
 }
 
-fn compare_hashes(policy: ArchiveHashPolicy<'_>, advertised: &[HashDigest]) -> HashComparison {
-    if !policy.requires_validation() {
-        HashComparison::Matched
-    } else if advertised.is_empty() {
-        HashComparison::Missing
-    } else if policy.matches(advertised) {
-        HashComparison::Matched
-    } else {
-        HashComparison::Mismatched
-    }
-}
-
 fn hash_validation<'a>(id: &VersionId, digests: &'a [HashDigest]) -> HashValidation<'a> {
     match id {
         VersionId::NameVersion { .. } => HashValidation::Any(digests),
@@ -1085,6 +1057,11 @@ mod tests {
                 ArchiveHashPolicy::Any(slice::from_ref(&wheel_hash)),
             );
         }
+        let equivalent_index = IndexUrl::parse("https://user:password@example.com/simple/", None)?;
+        assert_eq!(
+            strategy.archive_policy_for_registry_wheel(&equivalent_index, &wheel, &[]),
+            ArchiveHashPolicy::Any(slice::from_ref(&wheel_hash)),
+        );
         assert_eq!(
             strategy.archive_policy_for_registry_wheel(&index, &other_wheel, &[]),
             ArchiveHashPolicy::None,
@@ -1101,46 +1078,33 @@ mod tests {
             ),
             ArchiveHashPolicy::Any(&expected),
         );
-        assert_eq!(
-            strategy.locked_registry_hash_comparison(
-                &wheel.name,
-                &wheel.version,
+        for (index, wheel, advertised, comparison) in [
+            (
                 &index,
-                &wheel.to_string(),
+                &wheel,
                 slice::from_ref(&source_hash),
+                HashComparison::Mismatched,
             ),
-            Some(HashComparison::Mismatched),
-        );
-        assert_eq!(
-            strategy.locked_registry_hash_comparison(
-                &wheel.name,
-                &wheel.version,
-                &index,
-                &wheel.to_string(),
-                &[],
-            ),
-            Some(HashComparison::Missing),
-        );
-        assert_eq!(
-            strategy.locked_registry_hash_comparison(
-                &other_wheel.name,
-                &other_wheel.version,
-                &index,
-                &other_wheel.to_string(),
-                &[],
-            ),
-            Some(HashComparison::Unrecorded),
-        );
-        assert_eq!(
-            strategy.locked_registry_hash_comparison(
-                &other_wheel.name,
-                &other_wheel.version,
+            (&index, &wheel, &[][..], HashComparison::Missing),
+            (&index, &other_wheel, &[][..], HashComparison::Unrecorded),
+            (
                 &other_index,
-                &other_wheel.to_string(),
+                &other_wheel,
                 slice::from_ref(&wheel_hash),
+                HashComparison::Matched,
             ),
-            Some(HashComparison::Matched),
-        );
+        ] {
+            assert_eq!(
+                strategy.locked_registry_hash_comparison(
+                    &wheel.name,
+                    &wheel.version,
+                    index,
+                    &wheel.to_string(),
+                    advertised,
+                ),
+                Some(comparison),
+            );
+        }
 
         // A renamed source archive and a cached source revision keep the source-scoped policy.
         assert_eq!(

@@ -5,8 +5,8 @@ use std::path::Path;
 use itertools::Itertools;
 
 use uv_distribution_types::{
-    DistributionMetadata, Name, RegistryHashTarget, RequiresPython, ResolvedDist,
-    SimplifiedMarkerTree, Verbatim, VersionOrUrlRef,
+    DistributionMetadata, File, IndexUrl, Name, RequiresPython, ResolvedDist, SimplifiedMarkerTree,
+    Verbatim, VersionOrUrlRef,
 };
 use uv_normalize::{ExtraName, PackageName};
 use uv_pep440::Version;
@@ -217,8 +217,8 @@ impl DistributionMetadata for RequirementsTxtDist<'_> {
         self.dist.version_or_url()
     }
 
-    fn registry_hash_target(&self) -> Option<RegistryHashTarget<'_>> {
-        self.dist.registry_hash_target()
+    fn registry_file(&self) -> Option<(&IndexUrl, &File)> {
+        self.dist.registry_file()
     }
 }
 

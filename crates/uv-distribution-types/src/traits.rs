@@ -1,7 +1,6 @@
 use std::borrow::Cow;
 
 use uv_normalize::PackageName;
-use uv_pep440::Version;
 use uv_pep508::VerbatimUrl;
 
 use crate::error::Error;
@@ -19,15 +18,6 @@ pub trait Name {
     fn name(&self) -> &PackageName;
 }
 
-/// The registry provenance of a concrete distribution whose hashes can be checked.
-#[derive(Debug, Clone, Copy)]
-pub struct RegistryHashTarget<'a> {
-    pub name: &'a PackageName,
-    pub version: &'a Version,
-    pub index: &'a IndexUrl,
-    pub file: &'a File,
-}
-
 /// Metadata that can be resolved from a requirements specification alone (i.e., prior to building
 /// or installing the distribution).
 pub trait DistributionMetadata: Name {
@@ -36,7 +26,7 @@ pub trait DistributionMetadata: Name {
     fn version_or_url(&self) -> VersionOrUrlRef<'_>;
 
     /// Return the concrete registry artifact, when its provenance is available.
-    fn registry_hash_target(&self) -> Option<RegistryHashTarget<'_>> {
+    fn registry_file(&self) -> Option<(&IndexUrl, &File)> {
         None
     }
 
