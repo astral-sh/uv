@@ -342,12 +342,6 @@ impl SourceBuild {
             .or(fallback_package_version)
             .cloned();
 
-        if build_context.require_build_hashes()
-            && !build_isolation.is_isolated(package_name.as_ref())
-        {
-            return Err(Error::HashesRequireBuildIsolation);
-        }
-
         let extra_build_dependencies = package_name
             .as_ref()
             .and_then(|name| extra_build_requires.get(name).cloned())

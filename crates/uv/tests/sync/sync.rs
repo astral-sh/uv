@@ -17420,18 +17420,8 @@ fn project_build_hashes_isolation() -> Result<()> {
         vec!["--no-build-isolation"],
         vec!["--no-build-isolation-package", "project"],
     ] {
-        let (context, hash) = build_hash_project()?;
-        let content = context.read("pyproject.toml");
-        context
-            .temp_dir
-            .child("pyproject.toml")
-            .write_str(&formatdoc! {r#"
-        {content}
-        build-constraint-dependencies = [
-            {{ requirement = "build-dependency==1.0.0", hashes = ["sha256:{hash}"] }},
-        ]
-    "#})?;
-        // Install the dependency so the build can run without isolation.
+        let (context, _) = build_hash_project()?;
+        // Without isolation, preinstalled build dependencies do not need hashes.
         context
             .pip_install()
             .arg("--no-index")
@@ -17442,16 +17432,9 @@ fn project_build_hashes_isolation() -> Result<()> {
             .success();
         allow_duplicates! {
             uv_snapshot!(context.filters(), context.sync().arg("--no-editable").args(&isolation).arg("--no-cache").arg("--require-build-hashes"), @"
-            exit_code: 1 (failure)
-            ----- stderr -----
-            warning: The `--require-build-hashes` option is experimental and may change without warning. Pass `--preview-features build-dependency-hashes` to disable this warning.
-            Resolved 1 package in [TIME]
-              × Failed to build `project @ file://[TEMP_DIR]/`
-              ╰─▶ Hash verification for build dependencies requires build isolation, but build isolation is disabled
-            ");
-            uv_snapshot!(context.filters(), context.sync().arg("--no-editable").args(&isolation).arg("--no-cache"), @"
             exit_code: 0 (success)
             ----- stderr -----
+            warning: The `--require-build-hashes` option is experimental and may change without warning. Pass `--preview-features build-dependency-hashes` to disable this warning.
             Resolved 1 package in [TIME]
             Prepared 1 package in [TIME]
             Uninstalled 1 package in [TIME]

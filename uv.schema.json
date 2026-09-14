@@ -515,7 +515,7 @@
       }
     },
     "require-build-hashes": {
-      "description": "Require hashes for all build dependencies.\n\nHashes in `build-constraint-dependencies` are checked when downloading build dependencies.\nEnable this option to reject build dependencies without hashes. Hashes in URL fragments in\n`build-system.requires` also count, but hashes returned by a build backend do not.\n\nNo hash is required when uv uses its bundled `uv_build` backend, since it is part of the uv\nexecutable. Other source builds require build isolation.\nAlready-installed packages and previously built wheels are not checked.\n\nThis setting also applies to `uv pip` commands, where it can be overridden in `[tool.uv.pip]`.",
+      "description": "Require hashes for all build dependencies.\n\nHashes in `build-constraint-dependencies` are checked when downloading build dependencies.\nEnable this option to reject build dependencies without hashes. Hashes in URL fragments in\n`build-system.requires` also count, but hashes returned by a build backend do not.\n\nNo hash is required when uv uses its bundled `uv_build` backend, since it is part of the uv\nexecutable. When build isolation is disabled, build dependencies must already be installed\nand their hashes are not checked. Already-installed packages and previously built wheels\nare not checked.\n\nThis setting also applies to `uv pip` commands, where it can be overridden in `[tool.uv.pip]`.",
       "type": ["boolean", "null"]
     },
     "required-environments": {

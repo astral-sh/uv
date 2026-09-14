@@ -3314,7 +3314,7 @@ fn build_workspace_constraint_hashes() -> Result<()> {
         .child("backend-executed")
         .assert(predicate::path::exists());
 
-    // `--require-hashes` checks supplied build constraints without requiring build isolation.
+    // Without isolation, neither hash-checking mode installs or verifies build dependencies.
     context.temp_dir.child("backend.py").write_str(
         &context
             .read("backend.py")
@@ -3338,11 +3338,10 @@ fn build_workspace_constraint_hashes() -> Result<()> {
         .args(["--build-constraint", "constraints.txt"])
         .arg("--preview-features=build-dependency-hashes")
         .arg("--require-build-hashes"), @"
-    exit_code: 2 (failure)
+    exit_code: 0 (success)
     ----- stderr -----
     Building wheel...
-    error: Failed to build `[TEMP_DIR]/`
-      Caused by: Hash verification for build dependencies requires build isolation, but build isolation is disabled
+    Successfully built dist/project-0.1.0-py3-none-any.whl
     ");
 
     let dynamic_wheel = context

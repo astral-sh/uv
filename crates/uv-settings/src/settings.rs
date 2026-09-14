@@ -1085,8 +1085,9 @@ pub struct ResolverInstallerSchema {
     /// `build-system.requires` also count, but hashes returned by a build backend do not.
     ///
     /// No hash is required when uv uses its bundled `uv_build` backend, since it is part of the uv
-    /// executable. Other source builds require build isolation.
-    /// Already-installed packages and previously built wheels are not checked.
+    /// executable. When build isolation is disabled, build dependencies must already be installed
+    /// and their hashes are not checked. Already-installed packages and previously built wheels
+    /// are not checked.
     ///
     /// This setting also applies to `uv pip` commands, where it can be overridden in `[tool.uv.pip]`.
     #[option(
