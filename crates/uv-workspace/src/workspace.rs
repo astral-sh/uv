@@ -17,7 +17,7 @@ use tracing::{debug, trace, warn};
 
 use uv_cache::Cache;
 use uv_configuration::{ActiveEnvironment, DependencyGroupsWithDefaults, ExcludeDependency};
-use uv_distribution_types::{Index, Requirement, RequirementSource};
+use uv_distribution_types::{Index, RequiredEnvironments, Requirement, RequirementSource};
 use uv_fs::{CWD, Simplified, normalize_path};
 use uv_normalize::{DEV_DEPENDENCIES, DefaultGroups, GroupName, PackageName};
 use uv_once_map::OnceMap;
@@ -736,7 +736,7 @@ impl Workspace {
     }
 
     /// Returns the set of required platforms for the workspace.
-    pub fn required_environments(&self) -> Option<&SupportedEnvironments> {
+    pub fn required_environments(&self) -> Option<&RequiredEnvironments> {
         self.pyproject_toml
             .tool
             .as_ref()

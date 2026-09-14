@@ -21,7 +21,9 @@ use thiserror::Error;
 use tracing::instrument;
 use uv_build_backend::BuildBackendSettings;
 use uv_configuration::{ExcludeDependency, GitLfsSetting, Override};
-use uv_distribution_types::{Index, IndexName, NameRequirementSpecification, RequirementSource};
+use uv_distribution_types::{
+    Index, IndexName, NameRequirementSpecification, RequiredEnvironments, RequirementSource,
+};
 use uv_fs::{PortablePathBuf, try_relative_to_if};
 use uv_git_types::GitReference;
 use uv_macros::OptionsMetadata;
@@ -682,16 +684,18 @@ pub struct ToolUv {
     /// macOS (and ignoring Linux and Windows). On the other hand, `required-environments = ["sys_platform == 'darwin'"]`
     /// would _require_ that any package without a source distribution include a wheel for macOS in
     /// order to be installable.
-    #[cfg_attr(
-        feature = "schemars",
-        schemars(
-            with = "Option<Vec<String>>",
-            description = "A list of environment markers, e.g., `sys_platform == 'darwin'."
-        )
-    )]
+    ///
+    /// Entries can also be tables with a `marker` and `minimum-libc-version`, for example,
+    /// `{ marker = "sys_platform == 'linux'", minimum-libc-version = { glibc = "2.31" } }`.
+    /// Within that marker range, uv excludes wheels for omitted libc implementations and wheels
+    /// that require a newer version. Every libc implementation in the table must have compatible
+    /// artifacts. String entries do not constrain libc compatibility.
+    ///
+    /// `minimum-libc-version` is in preview. Use `--preview-features minimum-libc-version` to
+    /// disable the warning.
     #[option(
         default = "[]",
-        value_type = "str | list[str]",
+        value_type = "str | list[str | dict]",
         example = r#"
             # Require that the package is available on the following platforms:
             required-environments = [
@@ -704,7 +708,7 @@ pub struct ToolUv {
             ]
         "#
     )]
-    pub(crate) required_environments: Option<SupportedEnvironments>,
+    pub(crate) required_environments: Option<RequiredEnvironments>,
 
     /// Declare collections of extras or dependency groups that are conflicting
     /// (i.e., mutually exclusive).

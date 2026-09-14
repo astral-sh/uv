@@ -10,9 +10,9 @@ use uv_client::{
 use uv_configuration::BuildOptions;
 use uv_distribution_filename::{DistFilename, SourceDistFilename, WheelFilename};
 use uv_distribution_types::{
-    File, HashComparison, IncompatibleSource, IncompatibleWheel, Index, IndexLocations, IndexUrl,
-    PrioritizedDist, RegistryBuiltWheel, RegistrySourceDist, SourceDistCompatibility,
-    WheelCompatibility,
+    ArtifactPolicy, File, HashComparison, IncompatibleSource, IncompatibleWheel, Index,
+    IndexLocations, IndexUrl, PrioritizedDist, RegistryBuiltWheel, RegistrySourceDist,
+    SourceDistCompatibility, WheelCompatibility,
 };
 use uv_normalize::PackageName;
 use uv_pep440::Version;
@@ -85,11 +85,20 @@ impl FlatDistributions {
         tags: Option<&Tags>,
         hasher: &HashStrategy,
         build_options: &BuildOptions,
+        artifact_policy: &ArtifactPolicy,
     ) -> Self {
         let mut distributions = Self::default();
         for entry in entries {
             let (filename, file, index) = entry.into_parts();
-            distributions.add_file(file, filename, tags, hasher, build_options, index);
+            distributions.add_file(
+                file,
+                filename,
+                tags,
+                hasher,
+                build_options,
+                index,
+                artifact_policy,
+            );
         }
         distributions
     }
@@ -108,6 +117,7 @@ impl FlatDistributions {
         hasher: &HashStrategy,
         build_options: &BuildOptions,
         index: IndexUrl,
+        artifact_policy: &ArtifactPolicy,
     ) {
         // No `requires-python` here: for source distributions, we don't have that information;
         // for wheels, we read it lazily only when selected.
@@ -130,7 +140,7 @@ impl FlatDistributions {
                 };
                 self.0
                     .entry(version)
-                    .or_default()
+                    .or_insert_with(|| PrioritizedDist::new(artifact_policy.clone()))
                     .insert_built(dist, vec![], compatibility);
             }
             DistFilename::SourceDistFilename(filename) => {
@@ -149,11 +159,10 @@ impl FlatDistributions {
                     wheels: vec![],
                     size_is_authoritative: false,
                 };
-                self.0.entry(filename.version).or_default().insert_source(
-                    dist,
-                    vec![],
-                    compatibility,
-                );
+                self.0
+                    .entry(filename.version)
+                    .or_insert_with(|| PrioritizedDist::new(artifact_policy.clone()))
+                    .insert_source(dist, vec![], compatibility);
             }
         }
     }

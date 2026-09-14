@@ -216,6 +216,46 @@ required-environments = [
 ]
 ```
 
+### Minimum libc version
+
+!!! note
+
+    `minimum-libc-version` is in preview. Use `--preview-features minimum-libc-version` or
+    `preview-features = ["minimum-libc-version"]` to disable the warning.
+
+Environment markers do not include the libc implementation or version. A `required-environments`
+entry can include `minimum-libc-version` to select the libc implementations and minimum versions to
+support for that environment.
+
+For example, to require glibc 2.31 on ARM64 Linux and glibc 2.29 on x86-64 Linux:
+
+```toml title="pyproject.toml"
+[tool.uv]
+preview-features = ["minimum-libc-version"]
+
+[[tool.uv.required-environments]]
+marker = "sys_platform == 'linux' and platform_machine == 'aarch64'"
+minimum-libc-version = { glibc = "2.31" }
+
+[[tool.uv.required-environments]]
+marker = "sys_platform == 'linux' and platform_machine == 'x86_64'"
+minimum-libc-version = { glibc = "2.29" }
+```
+
+Within each entry's marker range, uv excludes wheels for omitted libc implementations and wheels
+that require a newer version. Wheels remain eligible outside those ranges. String entries, or
+entries without `minimum-libc-version`, do not constrain libc compatibility.
+
+To require support for musl as well, include it in the entry's table:
+
+```toml
+minimum-libc-version = { glibc = "2.31", musl = "1.2" }
+```
+
+That environment must then have compatible artifacts for both libc implementations. If a package has
+no compatible wheel or usable source distribution, uv will try another version of the package, or
+fail resolution if no such version exists.
+
 ## Common marker values
 
 The `environments` and `required-environments` settings accept

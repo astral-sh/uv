@@ -5,7 +5,7 @@ use rustc_hash::FxHashMap;
 use serde::Serialize;
 use toml_edit::Value;
 use toml_writer::{TomlWrite, WriteTomlValue};
-use uv_distribution_types::{RequiresPython, SimplifiedMarkerTree};
+use uv_distribution_types::{RequiredEnvironment, RequiresPython, SimplifiedMarkerTree};
 use uv_fs::PortablePath;
 use uv_normalize::PackageName;
 use uv_pep508::MarkerTree;
@@ -67,14 +67,20 @@ fn write_lock(writer: &mut LockWriter, lock: &Lock) -> Result<(), WriteError> {
     }
 
     if !lock.required_environments.is_empty() {
-        let markers = lock
+        let environments = lock
             .required_environments
             .iter()
             .copied()
-            .map(|marker| SimplifiedMarkerTree::new(&lock.requires_python, marker))
-            .filter_map(SimplifiedMarkerTree::try_to_string);
-        writer.key_multiline_array("required-markers", markers, |writer, marker| {
-            writer.value(&marker)
+            .map(|environment| RequiredEnvironment {
+                marker: lock.simplify_environment(environment.marker),
+                ..environment
+            })
+            .filter(|environment| {
+                environment.minimum_libc_version.is_some()
+                    || environment.marker.contents().is_some()
+            });
+        writer.key_multiline_array("required-markers", environments, |writer, environment| {
+            writer.value(serialize_value(&environment)?)
         })?;
     }
 
@@ -155,7 +161,6 @@ fn write_options(writer: &mut LockWriter, options: &ResolverOptions) -> Result<(
     if options.fork_strategy != ForkStrategy::default() {
         writer.key_value("fork-strategy", options.fork_strategy.to_string())?;
     }
-
     let exclude_newer = &options.exclude_newer;
     if let Some(global) = &exclude_newer.global {
         if let Some(span) = global.span() {

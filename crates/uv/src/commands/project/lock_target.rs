@@ -14,7 +14,8 @@ use uv_configuration::{
 };
 use uv_distribution::LoweredRequirement;
 use uv_distribution_types::{
-    Index, IndexLocations, NameRequirementSpecification, Requirement, RequiresPython,
+    Index, IndexLocations, NameRequirementSpecification, RequiredEnvironments, Requirement,
+    RequiresPython,
 };
 use uv_lock::Lock;
 use uv_normalize::{GroupName, PackageName};
@@ -249,7 +250,7 @@ impl<'lock> LockTarget<'lock> {
     }
 
     /// Returns the set of required platforms for the [`LockTarget`].
-    pub(crate) fn required_environments(self) -> Option<&'lock SupportedEnvironments> {
+    pub(crate) fn required_environments(self) -> Option<&'lock RequiredEnvironments> {
         match self {
             Self::Workspace(workspace) => workspace.required_environments(),
             Self::Script(_) => {

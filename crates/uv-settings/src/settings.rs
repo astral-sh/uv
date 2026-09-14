@@ -12,6 +12,7 @@ use uv_configuration::{
     TrustedPublishing, Upgrade, serialize_exclude_newer_package_with_spans,
 };
 use uv_distribution_types::{
+    RequiredEnvironments,
     ConfigSettings, ExcludeNewerOverride, ExcludeNewerSpan, ExcludeNewerValue, ExtraBuildVariables,
     Index, IndexLocations, IndexUrl, IndexUrlError, Origin, PackageConfigSettings, PipExtraIndex,
     PipFindLinks, PipIndex, StaticMetadata,
@@ -163,7 +164,7 @@ pub struct Options {
     pub environments: Option<SupportedEnvironments>,
 
     #[cfg_attr(feature = "schemars", schemars(skip))]
-    pub required_environments: Option<SupportedEnvironments>,
+    pub required_environments: Option<RequiredEnvironments>,
 
     // NOTE(charlie): These fields should be kept in-sync with `ToolUv` in
     // `crates/uv-workspace/src/pyproject.rs`. The documentation lives on that struct.
@@ -2637,7 +2638,7 @@ struct OptionsWire {
     constraint_dependencies: Option<Vec<Requirement<VerbatimParsedUrl>>>,
     build_constraint_dependencies: Option<Vec<BuildConstraintDependency>>,
     environments: Option<SupportedEnvironments>,
-    required_environments: Option<SupportedEnvironments>,
+    required_environments: Option<RequiredEnvironments>,
 
     // NOTE(charlie): These fields should be kept in-sync with `ToolUv` in
     // `crates/uv-workspace/src/pyproject.rs`. The documentation lives on that struct.

@@ -7,8 +7,8 @@ use uv_client::MetadataFormat;
 use uv_configuration::BuildOptions;
 use uv_distribution::{DistributionDatabase, Reporter};
 use uv_distribution_types::{
-    Dist, IndexCapabilities, IndexLocations, IndexMetadata, IndexMetadataRef, InstalledDist,
-    RequestedDist, RequiresPython,
+    ArtifactPolicy, Dist, IndexCapabilities, IndexLocations, IndexMetadata, IndexMetadataRef,
+    InstalledDist, RequestedDist, RequiresPython,
 };
 use uv_normalize::PackageName;
 use uv_platform_tags::Tags;
@@ -81,6 +81,7 @@ pub struct DefaultResolverProvider<'a, Context: BuildContext> {
     index_locations: &'a IndexLocations,
     build_options: &'a BuildOptions,
     capabilities: &'a IndexCapabilities,
+    artifact_policy: ArtifactPolicy,
 }
 
 impl<'a, Context: BuildContext> DefaultResolverProvider<'a, Context> {
@@ -96,6 +97,7 @@ impl<'a, Context: BuildContext> DefaultResolverProvider<'a, Context> {
         index_locations: &'a IndexLocations,
         build_options: &'a BuildOptions,
         capabilities: &'a IndexCapabilities,
+        artifact_policy: ArtifactPolicy,
     ) -> Self {
         Self {
             fetcher,
@@ -111,6 +113,7 @@ impl<'a, Context: BuildContext> DefaultResolverProvider<'a, Context> {
             index_locations,
             build_options,
             capabilities,
+            artifact_policy,
         }
     }
 
@@ -156,6 +159,7 @@ impl<Context: BuildContext> ResolverProvider for DefaultResolverProvider<'_, Con
                     self.tags.as_ref(),
                     self.hasher,
                     self.build_options,
+                    &self.artifact_policy,
                 )
             });
 
@@ -184,12 +188,14 @@ impl<Context: BuildContext> ResolverProvider for DefaultResolverProvider<'_, Con
                                 available_version_cutoff,
                                 flat_distributions.clone(),
                                 self.build_options,
+                                self.artifact_policy.clone(),
                             ),
                             MetadataFormat::Flat(metadata) => VersionMap::from_flat_metadata(
                                 metadata,
                                 self.tags.as_ref(),
                                 self.hasher,
                                 self.build_options,
+                                &self.artifact_policy,
                             ),
                         }
                     })

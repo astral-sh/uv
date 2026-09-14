@@ -18,8 +18,9 @@ use uv_configuration::{
 use uv_dispatch::BuildDispatch;
 use uv_distribution::{DistributionDatabase, LoweredExtraBuildDependencies};
 use uv_distribution_types::{
-    DependencyMetadata, HashCollection, IndexLocations, NameRequirementSpecification, Requirement,
-    RequiresPython, UnresolvedRequirementSpecification,
+    DependencyMetadata, HashCollection, IndexLocations, NameRequirementSpecification,
+    RequiredEnvironment, RequiredEnvironments, Requirement, RequiresPython,
+    UnresolvedRequirementSpecification,
 };
 use uv_git::ResolvedRepositoryReference;
 use uv_git_types::GitOid;
@@ -681,24 +682,21 @@ async fn do_lock(
     let required_environments = if let Some(required_environments) = target.required_environments()
     {
         // Ensure that the environments are disjoint.
-        for [lhs, rhs] in required_environments.as_markers().array_windows() {
-            if !lhs.is_disjoint(*rhs) {
-                let hint = lhs.negate().and(*rhs);
-
-                let lhs = lhs
-                    .contents()
-                    .map(|contents| contents.to_string())
-                    .unwrap_or_else(|| "true".to_string());
-                let rhs = rhs
-                    .contents()
-                    .map(|contents| contents.to_string())
-                    .unwrap_or_else(|| "true".to_string());
-                let hint = hint
-                    .contents()
-                    .map(|contents| contents.to_string())
-                    .unwrap_or_else(|| "true".to_string());
-
-                return Err(ProjectError::OverlappingMarkers(lhs, rhs, hint));
+        for (index, lhs) in required_environments.iter().enumerate() {
+            for rhs in &required_environments.as_slice()[index + 1..] {
+                if !lhs.marker.is_disjoint(rhs.marker) {
+                    let lhs = lhs
+                        .marker
+                        .contents()
+                        .map(|contents| contents.to_string())
+                        .unwrap_or_else(|| "true".to_string());
+                    let rhs = rhs
+                        .marker
+                        .contents()
+                        .map(|contents| contents.to_string())
+                        .unwrap_or_else(|| "true".to_string());
+                    return Err(ProjectError::OverlappingRequiredEnvironments(lhs, rhs));
+                }
             }
         }
 
@@ -706,6 +704,15 @@ async fn do_lock(
     } else {
         None
     };
+
+    if required_environments.is_some_and(RequiredEnvironments::has_libc_constraints)
+        && !preview.is_enabled(PreviewFeature::MinimumLibcVersion)
+    {
+        warn_user_once!(
+            "Setting `minimum-libc-version` in `required-environments` is experimental and may change without warning. Pass `--preview-features {}` to disable this warning.",
+            PreviewFeature::MinimumLibcVersion
+        );
+    }
 
     // Determine the supported Python range. If no range is defined, and warn and default to the
     // current minor version.
@@ -791,11 +798,17 @@ async fn do_lock(
     };
 
     let lock_supported_environments = environments.cloned().unwrap_or_default();
-    let lock_required_environments = required_environments.cloned().unwrap_or_default();
-    let artifact_environments = SupportedEnvironments::from_markers(
+    let lock_required_environments = required_environments
+        .map(RequiredEnvironments::as_slice)
+        .unwrap_or_default();
+    let artifact_environments = RequiredEnvironments::from_environments(
         lock_supported_environments
             .iter()
             .copied()
+            .map(|marker| RequiredEnvironment {
+                marker,
+                minimum_libc_version: None,
+            })
             .chain(lock_required_environments.iter().copied())
             .collect(),
     );
@@ -807,7 +820,7 @@ async fn do_lock(
         .exclude_newer(exclude_newer.clone())
         .index_strategy(*index_strategy)
         .build_options(build_options.clone())
-        .artifact_environments(artifact_environments.clone())
+        .artifact_environments(artifact_environments)
         .build();
     // Checking an existing lockfile may build metadata and install build dependencies. Verify any
     // artifacts recorded in that lockfile, including for an ordinary unlocked command.
@@ -1124,7 +1137,7 @@ async fn do_lock(
                 preview.is_enabled(PreviewFeature::LockWithoutMetadata),
             )?
             .with_conflicts(conflicts)
-            .with_required_environments(lock_required_environments.into_markers());
+            .with_required_environments(lock_required_environments.to_vec());
 
             let lock = if preview.is_enabled(PreviewFeature::MissingExcludeNewerPackageLock) {
                 lock.without_unused_exclude_newer_packages()
@@ -1177,7 +1190,7 @@ impl ValidatedLock {
         build_constraints: &Constraints,
         conflicts: &Conflicts,
         environments: Option<&SupportedEnvironments>,
-        required_environments: Option<&SupportedEnvironments>,
+        required_environments: Option<&RequiredEnvironments>,
         dependency_metadata: &DependencyMetadata,
         interpreter: &Interpreter,
         requires_python: &RequiresPython,
@@ -1300,11 +1313,18 @@ impl ValidatedLock {
         // If the set of required platforms has changed, we have to perform a clean resolution.
         let expected = lock.simplified_required_environments();
         let actual = required_environments
-            .map(SupportedEnvironments::as_markers)
+            .map(RequiredEnvironments::as_slice)
             .unwrap_or_default()
             .iter()
             .copied()
-            .map(|marker| lock.simplify_environment(marker))
+            .map(|environment| RequiredEnvironment {
+                marker: lock.simplify_environment(environment.marker),
+                ..environment
+            })
+            .filter(|environment| {
+                environment.minimum_libc_version.is_some()
+                    || environment.marker.contents().is_some()
+            })
             .collect::<Vec<_>>();
         if expected != actual {
             debug!(
