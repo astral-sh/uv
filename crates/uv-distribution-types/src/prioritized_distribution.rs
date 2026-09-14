@@ -12,6 +12,7 @@ use uv_platform_tags::{
 };
 use uv_pypi_types::{HashDigest, Yanked};
 
+use crate::artifact_policy::ArtifactCoverage;
 use crate::{
     ArtifactPolicy, ArtifactPolicyError, File, InstalledDist, KnownPlatform, RegistryBuiltDist,
     RegistryBuiltWheel, RegistrySourceDist, ResolvedDistRef,
@@ -36,7 +37,7 @@ struct PrioritizedDistInner {
     /// Constraints shared by candidate selection, environment coverage, and output artifacts.
     artifact_policy: ArtifactPolicy,
     /// Cached environment coverage of compatible artifacts under the resolution's policy.
-    artifact_coverage: MarkerTree,
+    artifact_coverage: ArtifactCoverage,
 }
 
 impl Default for PrioritizedDistInner {
@@ -47,7 +48,7 @@ impl Default for PrioritizedDistInner {
             wheels: Vec::new(),
             hashes: Vec::new(),
             artifact_policy: ArtifactPolicy::default(),
-            artifact_coverage: MarkerTree::FALSE,
+            artifact_coverage: ArtifactCoverage::EMPTY,
         }
     }
 }
@@ -109,7 +110,10 @@ impl CompatibleDist<'_> {
     /// Return the environments covered by artifacts allowed by the resolution's policy.
     pub fn artifact_coverage(&self) -> MarkerTree {
         match self.prioritized() {
-            Some(prioritized) => prioritized.0.artifact_coverage,
+            Some(prioritized) => prioritized
+                .0
+                .artifact_coverage
+                .markers(prioritized.0.artifact_policy),
             None => MarkerTree::TRUE,
         }
     }
@@ -379,11 +383,10 @@ impl PrioritizedDist {
                 WheelCompatibility::Incompatible(IncompatibleWheel::ArtifactPolicy(error))
             }
         };
-        if compatibility.is_compatible() && !self.0.artifact_coverage.is_true() {
-            self.0.artifact_coverage = self
-                .0
+        if compatibility.is_compatible() {
+            self.0
                 .artifact_coverage
-                .or(self.0.artifact_policy.wheel_coverage(&dist.filename));
+                .insert_wheel(self.0.artifact_policy, &dist.filename);
         }
         // Track the hashes.
         if !compatibility.is_excluded() {
@@ -409,7 +412,7 @@ impl PrioritizedDist {
     ) {
         // A usable source distribution provides coverage for all environments.
         if compatibility.is_compatible() {
-            self.0.artifact_coverage = MarkerTree::TRUE;
+            self.0.artifact_coverage = ArtifactCoverage::UNIVERSAL;
         }
         // Track the hashes.
         if !compatibility.is_excluded() {
@@ -1161,13 +1164,16 @@ mod tests {
 
         let expected = implied_markers(&compatible_wheel.filename);
         for mut prioritized in [inserted_source, inserted_wheel] {
-            assert_eq!(prioritized.0.artifact_coverage, MarkerTree::FALSE);
+            assert_eq!(
+                prioritized.0.artifact_coverage.markers(policy),
+                MarkerTree::FALSE
+            );
             prioritized.insert_built(
                 compatible_wheel.clone(),
                 Vec::new(),
                 WheelCompatibility::Compatible(HashComparison::Matched, None, None),
             );
-            assert_eq!(prioritized.0.artifact_coverage, expected);
+            assert_eq!(prioritized.0.artifact_coverage.markers(policy), expected);
         }
         Ok(())
     }

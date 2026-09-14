@@ -331,9 +331,16 @@
       "description": "Whether the project is managed by uv. If `false`, uv will ignore the project when\n`uv run` is invoked.",
       "type": ["boolean", "null"]
     },
-    "minimum-glibc-version": {
-      "description": "The minimum glibc version to support when resolving for Linux.\n\nDuring universal resolution, uv will exclude wheels that require a newer glibc version.\nFor example, `\"2.31\"` allows `manylinux_2_17` wheels, but not `manylinux_2_34` wheels.\n\nUse `required-environments` to specify the Linux architectures to support. Packages with\na usable source distribution can still be selected even if no compatible wheel is available.\n\nThis setting is respected by `uv lock` and `uv pip compile --universal`.\n\nThis option is in preview and may change in any future release. Use\n`--preview-features minimum-glibc-version` or configure\n`preview-features = [\"minimum-glibc-version\"]` to disable the warning.",
-      "type": ["string", "null"]
+    "minimum-libc-version": {
+      "description": "The libc implementations and minimum versions to support when resolving for Linux.\n\nDuring universal resolution, uv will exclude wheels for omitted libc implementations and\nwheels that require a newer version. For example, `{ glibc = \"2.31\" }` allows\n`manylinux_2_17` wheels, but not `manylinux_2_34` or `musllinux` wheels. If unset, both\nglibc and musl wheels remain eligible.\n\nUse `required-environments` to specify the Linux architectures to support. Each required\nenvironment must have compatible artifacts for every libc implementation in the table.\nPackages with a usable source distribution can still be selected even if no compatible\nwheel is available.\n\nThis setting is respected by `uv lock` and `uv pip compile --universal`.\n\nThis option is in preview and may change in any future release. Use\n`--preview-features minimum-libc-version` or configure\n`preview-features = [\"minimum-libc-version\"]` to disable the warning.",
+      "anyOf": [
+        {
+          "$ref": "#/definitions/MinimumLibcVersion"
+        },
+        {
+          "type": "null"
+        }
+      ]
     },
     "native-tls": {
       "description": "Whether to load TLS certificates from the platform's native certificate store.\n\nBy default, uv uses bundled Mozilla root certificates. When enabled, this loads\ncertificates from the platform's native certificate store instead.\n\n(Deprecated: use `system-certs` instead.)",
@@ -1243,6 +1250,20 @@
       "description": "A PEP 508-compliant marker expression, e.g., `sys_platform == 'Darwin'`",
       "type": "string"
     },
+    "MinimumLibcVersion": {
+      "description": "The selected Linux libc families and their oldest supported releases.\n\nAt least one family must be specified. An omitted family is excluded, not unconstrained.",
+      "type": "object",
+      "properties": {
+        "glibc": {
+          "type": ["string", "null"]
+        },
+        "musl": {
+          "type": ["string", "null"]
+        }
+      },
+      "additionalProperties": false,
+      "minProperties": 1
+    },
     "ModuleName": {
       "description": "Whether to include a single module or multiple modules.",
       "anyOf": [
@@ -1863,7 +1884,8 @@
             "artifact-hash-filtering",
             "content-addressed-cache",
             "missing-exclude-newer-package-lock",
-            "batch-export"
+            "batch-export",
+            "minimum-libc-version"
           ]
         },
         {

@@ -633,5 +633,5 @@ set of pre-built binary distributions (wheels) published by that package.
 
 See the [resolution documentation](../resolution.md#required-environments) for more.
 
-For Linux, use [`minimum-glibc-version`](../resolution.md#minimum-glibc-version) alongside
-`required-environments` to require support for a specific glibc version.
+For Linux, use [`minimum-libc-version`](../resolution.md#minimum-libc-version) alongside
+`required-environments` to select the libc implementations and minimum versions to support.

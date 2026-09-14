@@ -22,8 +22,8 @@ use uv_configuration::{KeyringProviderType, TargetTriple};
 use uv_dispatch::{BuildDispatch, SharedState};
 use uv_distribution::LoweredExtraBuildDependencies;
 use uv_distribution_types::{
-    ConfigSettings, DependencyMetadata, ExtraBuildVariables, GlibcVersion, HashCollection, Index,
-    IndexLocations, NameRequirementSpecification, Origin, PackageConfigSettings, Requirement,
+    ConfigSettings, DependencyMetadata, ExtraBuildVariables, HashCollection, Index, IndexLocations,
+    MinimumLibcVersion, NameRequirementSpecification, Origin, PackageConfigSettings, Requirement,
     RequiresPython, Verbatim,
 };
 use uv_fs::{CWD, Simplified};
@@ -77,7 +77,7 @@ pub(crate) async fn pip_compile(
     build_constraints_from_workspace: Vec<NameRequirementSpecification>,
     environments: SupportedEnvironments,
     required_environments: SupportedEnvironments,
-    minimum_glibc_version: Option<GlibcVersion>,
+    minimum_libc_version: Option<MinimumLibcVersion>,
     extras: ExtrasSpecification,
     groups: GroupsSpecification,
     output_file: Option<&Path>,
@@ -540,12 +540,12 @@ pub(crate) async fn pip_compile(
     );
 
     if universal
-        && minimum_glibc_version.is_some()
-        && !preview.is_enabled(PreviewFeature::MinimumGlibcVersion)
+        && minimum_libc_version.is_some()
+        && !preview.is_enabled(PreviewFeature::MinimumLibcVersion)
     {
         warn_user_once!(
-            "Setting `minimum-glibc-version` is experimental and may change without warning. Pass `--preview-features {}` to disable this warning.",
-            PreviewFeature::MinimumGlibcVersion
+            "Setting `minimum-libc-version` is experimental and may change without warning. Pass `--preview-features {}` to disable this warning.",
+            PreviewFeature::MinimumLibcVersion
         );
     }
 
@@ -559,7 +559,7 @@ pub(crate) async fn pip_compile(
         .torch_backend(torch_backend)
         .build_options(build_options.clone())
         .artifact_environments(artifact_environments)
-        .minimum_glibc_version(minimum_glibc_version)
+        .minimum_libc_version(minimum_libc_version)
         .build();
 
     // Resolve the requirements.
