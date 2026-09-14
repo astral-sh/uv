@@ -310,7 +310,7 @@ jobs:
       - finalize-dist-manifest
       - release-gate
       - build-docker
-    uses: ./.github/workflows/publish-docker.yml
+    uses: $/.github/workflows/publish-docker.yml
     with:
       manifest: ${{ needs.build-docker.outputs.manifest }}
     secrets: inherit
