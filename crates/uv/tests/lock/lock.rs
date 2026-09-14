@@ -40934,6 +40934,169 @@ fn lock_unsupported_wheel_url_required_platform() -> Result<()> {
     Ok(())
 }
 
+/// A Linux wheel for Python 3.12 cannot satisfy a required environment in the Python 3.13 fork.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_required_environment_python_fork() -> Result<()> {
+    let scenario = toml::from_str::<Scenario>(indoc! {r#"
+        name = "required-environment-python-fork"
+
+        [root]
+
+        [expected]
+        satisfiable = true
+
+        [packages.a.versions."1.0.0"]
+        sdist = false
+        wheel_tags = ["cp312-abi3-manylinux_2_17_x86_64"]
+
+        [packages.a.versions."2.0.0"]
+        sdist = false
+        wheel_tags = ["cp312-cp312-manylinux_2_17_x86_64", "cp313-cp313-win_amd64"]
+    "#})?;
+    let server = PackseServer::from_scenario(&scenario);
+    let context = uv_test::test_context!("3.12").with_filters(
+        server
+            .files()
+            .map(|(filename, hash)| (hash.to_owned(), format!("[SHA256:{filename}]"))),
+    );
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12,<3.14"
+        dependencies = ["a"]
+
+        [tool.uv]
+        environments = ["python_version < '3.13'", "python_version >= '3.13'"]
+        required-environments = ["sys_platform == 'linux' and platform_machine == 'x86_64'"]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--index-url").arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+
+    insta::with_settings!({ filters => context.filters() }, {
+        assert_snapshot!(context.read("uv.lock"), @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12, <3.14"
+        resolution-markers = [
+            "(python_full_version >= '3.13' and platform_machine != 'x86_64') or (python_full_version >= '3.13' and sys_platform != 'linux')",
+            "python_full_version >= '3.13' and platform_machine == 'x86_64' and sys_platform == 'linux'",
+            "python_full_version < '3.13'",
+        ]
+        supported-markers = [
+            "python_full_version < '3.13'",
+            "python_full_version >= '3.13'",
+        ]
+        required-markers = [
+            "platform_machine == 'x86_64' and sys_platform == 'linux'",
+        ]
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[package]]
+        name = "a"
+        version = "1.0.0"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        resolution-markers = [
+            "python_full_version >= '3.13' and platform_machine == 'x86_64' and sys_platform == 'linux'",
+        ]
+        wheels = [
+            { url = "http://[LOCALHOST]/files/a-1.0.0-cp312-abi3-manylinux_2_17_x86_64.whl", hash = "sha256:[SHA256:a-1.0.0-cp312-abi3-manylinux_2_17_x86_64.whl]", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "a"
+        version = "2.0.0"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        resolution-markers = [
+            "(python_full_version >= '3.13' and platform_machine != 'x86_64') or (python_full_version >= '3.13' and sys_platform != 'linux')",
+            "python_full_version < '3.13'",
+        ]
+        wheels = [
+            { url = "http://[LOCALHOST]/files/a-2.0.0-cp312-cp312-manylinux_2_17_x86_64.whl", hash = "sha256:[SHA256:a-2.0.0-cp312-cp312-manylinux_2_17_x86_64.whl]", upload-time = "2024-03-24T00:00:00Z" },
+            { url = "http://[LOCALHOST]/files/a-2.0.0-cp313-cp313-win_amd64.whl", hash = "sha256:[SHA256:a-2.0.0-cp313-cp313-win_amd64.whl]", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "a", version = "1.0.0", source = { registry = "http://[LOCALHOST]/simple/" }, marker = "python_full_version >= '3.13' and platform_machine == 'x86_64' and sys_platform == 'linux'" },
+            { name = "a", version = "2.0.0", source = { registry = "http://[LOCALHOST]/simple/" }, marker = "python_full_version < '3.13' or platform_machine != 'x86_64' or sys_platform != 'linux'" },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "a" }]
+        "#);
+    });
+
+    Ok(())
+}
+
+/// A direct wheel must support the required platform within the current architecture fork.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_required_environment_wheel_url_fork() -> Result<()> {
+    let scenario = toml::from_str::<Scenario>(indoc! {r#"
+        name = "required-environment-wheel-url-fork"
+
+        [root]
+
+        [expected]
+        satisfiable = false
+
+        [packages.a.versions."1.0.0"]
+        sdist = false
+        wheel_tags = ["py3-none-manylinux_2_17_aarch64.macosx_11_0_x86_64"]
+    "#})?;
+    let server = PackseServer::from_scenario(&scenario);
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&formatdoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["a @ {}"]
+
+        [tool.uv]
+        environments = ["platform_machine == 'x86_64'"]
+        required-environments = ["sys_platform == 'linux'"]
+    "#, server.file_url("a-1.0.0-py3-none-manylinux_2_17_aarch64.macosx_11_0_x86_64.whl")})?;
+
+    let filters: Vec<_> = context
+        .filters()
+        .into_iter()
+        .chain([(
+            // This hint is only shown when the current platform doesn't match the target.
+            r"\nhint: The resolution failed for an environment that is not the current one[^\n]*",
+            "",
+        )])
+        .collect();
+
+    uv_snapshot!(filters, context.lock(), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: No solution found when resolving dependencies for split (markers: platform_machine == 'x86_64')
+      cause: Because only a==1.0.0 is available and a==1.0.0 has no Linux-compatible wheels, we can conclude that all versions of a cannot be used.
+             And because your project depends on a, we can conclude that your project's requirements are unsatisfiable.
+    ");
+
+    Ok(())
+}
+
 #[cfg(feature = "test-universal")]
 #[test]
 fn lock_required_environment_cycle_reports_resolution_error() -> Result<()> {

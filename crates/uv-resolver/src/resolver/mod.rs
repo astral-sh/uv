@@ -1246,10 +1246,12 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 for environment_marker in self.options.artifact_environments.iter().copied() {
                     // If the platform is part of the current environment...
                     if env.included_by_marker(environment_marker)
-                        && !find_environments(id, pubgrub).is_disjoint(environment_marker)
+                        && env.included_by_marker(
+                            find_environments(id, pubgrub).and(environment_marker),
+                        )
                     {
-                        // ...but the wheel doesn't support it, it's incompatible.
-                        if wheel_marker.is_disjoint(environment_marker) {
+                        // ...but the wheel doesn't support it in this fork, it's incompatible.
+                        if !env.included_by_marker(wheel_marker.and(environment_marker)) {
                             return Ok(Some(ResolverVersion::Unavailable(
                                 version.clone(),
                                 UnavailableVersion::IncompatibleDist(IncompatibleDist::Wheel(
@@ -1508,9 +1510,9 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         for marker in self.options.artifact_environments.iter().copied() {
             // If the platform is part of the current environment...
             if env.included_by_marker(marker) {
-                // But isn't supported by the distribution...
-                if dist.implied_markers().is_disjoint(marker)
-                    && !find_environments(id, pubgrub).is_disjoint(marker)
+                // But isn't supported by the distribution in this fork...
+                if !env.included_by_marker(dist.implied_markers().and(marker))
+                    && env.included_by_marker(find_environments(id, pubgrub).and(marker))
                 {
                     // Then we need to fork.
                     let Some((left, right)) = fork_version_by_marker(env, marker) else {
