@@ -106,8 +106,8 @@ not match the current environment are ignored.
 When uv uses its bundled `uv_build` backend, no hash is required for it: the backend is part of the
 uv executable, not a separately downloaded package.
 
-Other source builds require build isolation when build hashes are required. They fail if isolation
-is disabled with `--no-build-isolation` or `--no-build-isolation-package`. Already-installed
+When build isolation is disabled with `--no-build-isolation` or `--no-build-isolation-package`,
+build dependencies must already be installed and their hashes are not checked. Already-installed
 packages and previously built wheels are not checked.
 
 ## Preventing publish to PyPI

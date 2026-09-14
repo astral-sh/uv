@@ -1633,7 +1633,8 @@ pub struct PipCompileArgs {
     /// require hashes for runtime dependencies.
     ///
     /// No hash is required when uv uses its bundled `uv_build` backend, since it is part of the uv
-    /// executable. Other source builds fail if build isolation is disabled.
+    /// executable. When build isolation is disabled, build dependencies must already be installed
+    /// and their hashes are not checked.
     #[arg(long, overrides_with("no_require_build_hashes"))]
     pub require_build_hashes: bool,
 
@@ -2034,7 +2035,8 @@ pub struct PipSyncArgs {
     /// require hashes for runtime dependencies; use `--require-hashes` for those.
     ///
     /// No hash is required when uv uses its bundled `uv_build` backend, since it is part of the uv
-    /// executable. Other source builds fail if build isolation is disabled.
+    /// executable. When build isolation is disabled, build dependencies must already be installed
+    /// and their hashes are not checked.
     #[arg(long, overrides_with("no_require_build_hashes"))]
     pub require_build_hashes: bool,
 
@@ -2401,7 +2403,8 @@ pub struct PipInstallArgs {
     /// require hashes for runtime dependencies; use `--require-hashes` for those.
     ///
     /// No hash is required when uv uses its bundled `uv_build` backend, since it is part of the uv
-    /// executable. Other source builds fail if build isolation is disabled.
+    /// executable. When build isolation is disabled, build dependencies must already be installed
+    /// and their hashes are not checked.
     #[arg(long, overrides_with("no_require_build_hashes"))]
     pub require_build_hashes: bool,
 
@@ -7377,7 +7380,8 @@ pub struct BuildOptionsArgs {
     /// runtime requirements; for `uv build`, it applies to command-line build constraints.
     ///
     /// No hash is required when uv uses its bundled `uv_build` backend, since it is part of the uv
-    /// executable. Other source builds fail if build isolation is disabled.
+    /// executable. When build isolation is disabled, build dependencies must already be installed
+    /// and their hashes are not checked.
     #[arg(
         long,
         overrides_with("no_require_build_hashes"),

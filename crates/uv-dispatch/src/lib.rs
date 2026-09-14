@@ -245,12 +245,17 @@ impl<'a> BuildDispatch<'a> {
         self
     }
 
-    /// Distinguish `uv build --require-hashes` from `--require-build-hashes`: both can require
-    /// hashes in the strategy, but only the latter requires build isolation.
+    /// Set the hash-checking mode for build dependencies.
+    ///
+    /// When hashes are required, hashes from backend-generated requirements are not trusted.
     #[must_use]
     pub fn with_build_hash_checking(mut self, mode: HashCheckingMode) -> Self {
         self.build_hash_checking = mode;
         self
+    }
+
+    fn require_build_hashes(&self) -> bool {
+        self.build_hash_checking.is_require()
     }
 }
 
@@ -288,10 +293,6 @@ impl BuildContext for BuildDispatch<'_> {
 
     fn build_isolation(&self) -> BuildIsolation<'_> {
         self.build_isolation
-    }
-
-    fn require_build_hashes(&self) -> bool {
-        self.build_hash_checking.is_require()
     }
 
     fn config_settings(&self) -> &ConfigSettings {

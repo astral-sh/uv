@@ -119,9 +119,6 @@ pub trait BuildContext {
     /// The isolation mode used for building source distributions.
     fn build_isolation(&self) -> BuildIsolation<'_>;
 
-    /// Whether the required build-hash policy is enabled for build dependencies.
-    fn require_build_hashes(&self) -> bool;
-
     /// The [`ConfigSettings`] used to build distributions.
     fn config_settings(&self) -> &ConfigSettings;
 

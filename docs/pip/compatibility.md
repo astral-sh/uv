@@ -431,9 +431,10 @@ $ uv pip install -r requirements.txt --build-constraint build-constraints.txt --
 
 This option is experimental. Enable `--preview-features build-dependency-hashes` to suppress the
 warning. No hash is required when uv uses its bundled `uv_build` backend, since it is part of the uv
-executable. Other source builds fail if build isolation is disabled with
-`--no-build-isolation` or `--no-build-isolation-package`. This option does not require hashes for
-runtime dependencies; use `--require-hashes` for those.
+executable. When build isolation is disabled with `--no-build-isolation` or
+`--no-build-isolation-package`, build dependencies must already be installed and their hashes are
+not checked. This option does not require hashes for runtime dependencies; use `--require-hashes`
+for those.
 
 Set `UV_REQUIRE_BUILD_HASHES=true` to require build hashes across project, build, tool, and pip
 commands, including `uv pip compile`. Set it to `false` to disable the requirement, or pass
