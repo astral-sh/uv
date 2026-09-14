@@ -1,4 +1,5 @@
 use uv_configuration::{BuildOptions, IndexStrategy};
+use uv_distribution_types::ArtifactPolicy;
 use uv_platform_tags::GlibcVersion;
 use uv_pypi_types::SupportedEnvironments;
 use uv_torch::TorchStrategy;
@@ -20,6 +21,13 @@ pub struct Options {
     pub flexibility: Flexibility,
     pub build_options: BuildOptions,
     pub torch_backend: Option<TorchStrategy>,
+}
+
+impl Options {
+    /// Return the artifact constraints for a universal resolution.
+    pub fn artifact_policy(&self) -> ArtifactPolicy {
+        ArtifactPolicy::new(self.minimum_glibc_version)
+    }
 }
 
 /// Builder for [`Options`].
