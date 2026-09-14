@@ -58,7 +58,6 @@ use uv_workspace::dependency_groups::DependencyGroupError;
 use uv_workspace::pyproject::{ExtraBuildDependency, PyProjectToml};
 use uv_workspace::{ProjectEnvironmentSelection, RequiresPythonSources, Workspace, WorkspaceCache};
 
-use crate::commands::flat_index::resolve_flat_index;
 use crate::commands::pip::loggers::{InstallLogger, ResolveLogger};
 use crate::commands::pip::operations::{Changelog, Modifications};
 use crate::commands::project::install_target::InstallTarget;
@@ -2650,7 +2649,7 @@ pub(crate) async fn resolve_environment(
     };
 
     // Resolve the flat indexes from `--find-links`.
-    let flat_index = resolve_flat_index(&client, cache, index_locations).await?;
+    let flat_index = FlatIndex::load(&client, cache, index_locations).await?;
 
     // Lower the extra build dependencies, if any.
     let extra_build_requires =
@@ -2786,7 +2785,7 @@ pub(crate) async fn sync_environment(
     let workspace_cache = WorkspaceCache::default();
 
     // Resolve the flat indexes from `--find-links`.
-    let flat_index = resolve_flat_index(&client, cache, index_locations).await?;
+    let flat_index = FlatIndex::load(&client, cache, index_locations).await?;
 
     // Lower the extra build dependencies, if any.
     let extra_build_requires =
@@ -3043,7 +3042,7 @@ pub(crate) async fn update_environment(
     let python_requirement = PythonRequirement::from_interpreter(interpreter);
 
     // Resolve the flat indexes from `--find-links`.
-    let flat_index = resolve_flat_index(&client, cache, index_locations).await?;
+    let flat_index = FlatIndex::load(&client, cache, index_locations).await?;
 
     // Create a build dispatch.
     let build_dispatch = BuildDispatch::new(

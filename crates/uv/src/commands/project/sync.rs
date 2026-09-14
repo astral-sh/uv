@@ -33,7 +33,9 @@ use uv_python::{
     ConfigDiscovery, PythonDownloads, PythonEnvironment, PythonPreference, PythonRequest,
 };
 use uv_redacted::DisplaySafeUrl;
-use uv_resolver::{ForkStrategy, Installable, Lock, Prerelease, PythonReport, ResolutionMode};
+use uv_resolver::{
+    FlatIndex, ForkStrategy, Installable, Lock, Prerelease, PythonReport, ResolutionMode,
+};
 use uv_scripts::Pep723Script;
 use uv_settings::{MalwareCheckSettings, PythonInstallMirrors};
 use uv_types::{BuildIsolation, HashStrategy, SourceTreeEditablePolicy};
@@ -42,7 +44,6 @@ use uv_workspace::pyproject::Source;
 use uv_workspace::{DiscoveryOptions, MemberDiscovery, VirtualProject, Workspace, WorkspaceCache};
 
 use crate::commands::editable::apply_editable_mode;
-use crate::commands::flat_index::resolve_flat_index;
 use crate::commands::pip::loggers::{DefaultInstallLogger, DefaultResolveLogger, InstallLogger};
 use crate::commands::pip::operations::{ChangedDist, Changelog, Modifications};
 use crate::commands::pip::resolution_markers;
@@ -877,7 +878,7 @@ pub(crate) async fn do_sync<'a>(
     let build_hasher = target.lock().hash_strategy(target.install_path())?;
 
     // Resolve the flat indexes from `--find-links`.
-    let flat_index = resolve_flat_index(&client, cache, index_locations).await?;
+    let flat_index = FlatIndex::load(&client, cache, index_locations).await?;
 
     // Create a build dispatch.
     let build_dispatch = BuildDispatch::new(

@@ -7349,6 +7349,7 @@ dependencies = [
  "toml_writer",
  "tracing",
  "url",
+ "uv-cache",
  "uv-cache-key",
  "uv-client",
  "uv-configuration",

@@ -42,7 +42,7 @@ use uv_python::{
 };
 use uv_requirements::RequirementsSpecification;
 use uv_resolver::{
-    Installable, Lock, OptionsBuilder, Preference, ResolverManifest, ResolverOutput,
+    FlatIndex, Installable, Lock, OptionsBuilder, Preference, ResolverManifest, ResolverOutput,
 };
 use uv_settings::{PythonInstallMirrors, ToolOptions};
 use uv_shell::Shell;
@@ -51,7 +51,6 @@ use uv_types::{BuildIsolation, HashStrategy, SourceTreeEditablePolicy};
 use uv_warnings::warn_user_once;
 use uv_workspace::WorkspaceCache;
 
-use crate::commands::flat_index::resolve_flat_index;
 use crate::commands::pip;
 
 /// An error raised when a tool package provides no executables.
@@ -467,7 +466,7 @@ impl ToolLock {
         let hasher = HashStrategy::collect(HashCollection::Url);
         let build_hasher = HashStrategy::default();
 
-        let flat_index = resolve_flat_index(&client, cache, index_locations).await?;
+        let flat_index = FlatIndex::load(&client, cache, index_locations).await?;
 
         let extra_build_requires =
             LoweredExtraBuildDependencies::from_non_lowered(extra_build_dependencies.clone())

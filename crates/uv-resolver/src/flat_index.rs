@@ -4,12 +4,16 @@ use std::collections::btree_map::Entry;
 use rustc_hash::FxHashMap;
 use tracing::instrument;
 
-use uv_client::{FlatIndexEntries, FlatIndexEntry};
+use uv_cache::Cache;
+use uv_client::{
+    FlatIndexClient, FlatIndexEntries, FlatIndexEntry, FlatIndexError, RegistryClient,
+};
 use uv_configuration::BuildOptions;
 use uv_distribution_filename::{DistFilename, SourceDistFilename, WheelFilename};
 use uv_distribution_types::{
-    File, HashComparison, IncompatibleSource, IncompatibleWheel, IndexUrl, PrioritizedDist,
-    RegistryBuiltWheel, RegistrySourceDist, SourceDistCompatibility, WheelCompatibility,
+    File, HashComparison, IncompatibleSource, IncompatibleWheel, Index, IndexLocations, IndexUrl,
+    PrioritizedDist, RegistryBuiltWheel, RegistrySourceDist, SourceDistCompatibility,
+    WheelCompatibility,
 };
 use uv_normalize::PackageName;
 use uv_pep440::Version;
@@ -28,6 +32,19 @@ pub struct FlatIndex {
 }
 
 impl FlatIndex {
+    /// Load the `--find-links` entries from the configured indexes.
+    pub async fn load(
+        client: &RegistryClient,
+        cache: &Cache,
+        index_locations: &IndexLocations,
+    ) -> Result<Self, FlatIndexError> {
+        let client = FlatIndexClient::new(client.cached_client(), client.connectivity(), cache);
+        let entries = client
+            .fetch_all(index_locations.flat_indexes().map(Index::url))
+            .await?;
+        Ok(Self::from_entries(entries))
+    }
+
     /// Collect all files from a `--find-links` target into a [`FlatIndex`].
     #[instrument(skip_all)]
     pub fn from_entries(entries: FlatIndexEntries) -> Self {

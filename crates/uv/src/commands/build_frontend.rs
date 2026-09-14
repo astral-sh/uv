@@ -37,7 +37,7 @@ use uv_python::{
     PythonPreference, PythonRequest, PythonVersionFile, VersionFileDiscoveryOptions,
 };
 use uv_requirements::RequirementsSource;
-use uv_resolver::ExcludeNewer;
+use uv_resolver::{ExcludeNewer, FlatIndex};
 use uv_settings::PythonInstallMirrors;
 use uv_types::{AnyErrorBuild, BuildContext, BuildStack, HashStrategy, SourceTreeEditablePolicy};
 use uv_warnings::warn_user;
@@ -45,7 +45,6 @@ use uv_workspace::pyproject::ExtraBuildDependencies;
 use uv_workspace::{DiscoveryOptions, Workspace, WorkspaceCache, WorkspaceError};
 
 use crate::commands::ExitStatus;
-use crate::commands::flat_index::resolve_flat_index;
 use crate::commands::pip::operations;
 use crate::commands::project::{ProjectError, find_requires_python};
 use crate::commands::reporters::PythonDownloadReporter;
@@ -684,7 +683,7 @@ async fn build_package(
     };
 
     // Resolve the flat indexes from `--find-links`.
-    let flat_index = resolve_flat_index(&client, cache, index_locations).await?;
+    let flat_index = FlatIndex::load(&client, cache, index_locations).await?;
 
     // Initialize any shared state.
     let state = SharedState::default();

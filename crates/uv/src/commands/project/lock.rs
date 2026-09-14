@@ -33,8 +33,8 @@ use uv_python::{
 };
 use uv_requirements::{ExtrasResolver, LockedRequirements, read_lock_requirements};
 use uv_resolver::{
-    InMemoryIndex, Lock, Options, OptionsBuilder, Package, PythonRequirement, ResolverEnvironment,
-    ResolverManifest, SatisfiesResult, UniversalMarker,
+    FlatIndex, InMemoryIndex, Lock, Options, OptionsBuilder, Package, PythonRequirement,
+    ResolverEnvironment, ResolverManifest, SatisfiesResult, UniversalMarker,
 };
 use uv_scripts::Pep723Script;
 use uv_settings::PythonInstallMirrors;
@@ -46,7 +46,6 @@ use uv_workspace::{
     DiscoveryOptions, Editability, VirtualProject, WorkspaceCache, WorkspaceMember,
 };
 
-use crate::commands::flat_index::resolve_flat_index;
 use crate::commands::pip::loggers::{DefaultResolveLogger, ResolveLogger, SummaryResolveLogger};
 use crate::commands::project::lock_target::{LockTarget, find_lock_format_error};
 use crate::commands::project::{
@@ -855,7 +854,7 @@ async fn do_lock(
     let groups = BTreeMap::new();
 
     // Resolve the flat indexes from `--find-links`.
-    let flat_index = resolve_flat_index(&client, cache, index_locations).await?;
+    let flat_index = FlatIndex::load(&client, cache, index_locations).await?;
 
     // Lower the extra build dependencies.
     let extra_build_requires = match &target {

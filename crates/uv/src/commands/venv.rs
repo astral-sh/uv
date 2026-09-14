@@ -27,7 +27,7 @@ use uv_python::{
     ConfigDiscovery, EnvironmentPreference, PythonDownloads, PythonInstallation, PythonPreference,
     PythonRequest,
 };
-use uv_resolver::ExcludeNewer;
+use uv_resolver::{ExcludeNewer, FlatIndex};
 use uv_settings::PythonInstallMirrors;
 use uv_shell::{Shell, shlex_posix, shlex_windows};
 use uv_types::{
@@ -38,7 +38,6 @@ use uv_warnings::warn_user;
 use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceCache, WorkspaceErrorKind};
 
 use crate::commands::ExitStatus;
-use crate::commands::flat_index::resolve_flat_index;
 use crate::commands::pip::loggers::{DefaultInstallLogger, InstallLogger};
 use crate::commands::pip::operations::{Changelog, report_interpreter};
 use crate::commands::project::{
@@ -301,7 +300,7 @@ pub(crate) async fn venv(
             .build()?;
 
         // Resolve the flat indexes from `--find-links`.
-        let flat_index = resolve_flat_index(&client, cache, index_locations)
+        let flat_index = FlatIndex::load(&client, cache, index_locations)
             .await
             .map_err(VenvError::FlatIndex)?;
 

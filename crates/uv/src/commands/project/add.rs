@@ -37,6 +37,7 @@ use uv_python::{
 };
 use uv_redacted::DisplaySafeUrl;
 use uv_requirements::{NamedRequirementsResolver, RequirementsSource, RequirementsSpecification};
+use uv_resolver::FlatIndex;
 use uv_scripts::{Pep723Metadata, Pep723Script};
 use uv_settings::{MalwareCheckSettings, PythonInstallMirrors};
 use uv_static::is_known_standard_library_package;
@@ -48,7 +49,6 @@ use uv_workspace::pyproject::{
 use uv_workspace::pyproject_mut::{AddBoundsKind, ArrayEdit, DependencyTarget, PyProjectTomlMut};
 use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceCache};
 
-use crate::commands::flat_index::resolve_flat_index;
 use crate::commands::pip::loggers::{
     DefaultInstallLogger, DefaultResolveLogger, SummaryResolveLogger,
 };
@@ -417,7 +417,7 @@ pub(crate) async fn add(
 
             // Resolve the flat indexes from `--find-links`.
             let flat_index =
-                resolve_flat_index(&client, cache, &settings.resolver.index_locations).await?;
+                FlatIndex::load(&client, cache, &settings.resolver.index_locations).await?;
 
             // Lower the extra build dependencies, if any.
             let extra_build_requires = if let AddTarget::Project(project, _) = &target {
