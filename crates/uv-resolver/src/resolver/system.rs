@@ -83,6 +83,30 @@ mod tests {
     }
 
     #[test]
+    fn pytorch_rocm_7_2() {
+        let url = DisplaySafeUrl::parse("https://download.pytorch.org/whl/rocm7.2").unwrap();
+        assert_eq!(
+            SystemDependency::from_index(&url),
+            Some(SystemDependency {
+                name: PackageName::from_str("rocm").unwrap(),
+                version: Version::new([7, 2]),
+            })
+        );
+    }
+
+    #[test]
+    fn amd_rocm_10_0() {
+        let url = DisplaySafeUrl::parse("https://stable.repo.amd.com/rocm/whl-next/").unwrap();
+        assert_eq!(
+            SystemDependency::from_index(&url),
+            Some(SystemDependency {
+                name: PackageName::from_str("rocm").unwrap(),
+                version: Version::new([10, 0]),
+            })
+        );
+    }
+
+    #[test]
     fn pytorch_cpu() {
         let url = DisplaySafeUrl::parse("https://download.pytorch.org/whl/cpu").unwrap();
         assert_eq!(SystemDependency::from_index(&url), None);

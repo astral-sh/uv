@@ -43,7 +43,7 @@ use either::Either;
 use url::Url;
 
 use uv_distribution_types::IndexUrl;
-use uv_normalize::PackageName;
+use uv_normalize::{ExtraName, PackageName};
 use uv_pep440::Version;
 use uv_platform_tags::Os;
 
@@ -113,6 +113,14 @@ pub enum TorchMode {
     Cu90,
     /// Use the PyTorch index for CUDA 8.0.
     Cu80,
+    /// Use the AMD index for ROCm 10.0.
+    ///
+    /// Unlike the ROCm 7.x and earlier indexes, this index is architecture-neutral: the GPU
+    /// kernels are selected by an architecture-specific extra, which requires a detected (or
+    /// explicitly configured) AMD GPU architecture.
+    #[serde(rename = "rocm10.0")]
+    #[cfg_attr(feature = "clap", clap(name = "rocm10.0"))]
+    Rocm100,
     /// Use the PyTorch index for ROCm 7.2.
     #[serde(rename = "rocm7.2")]
     #[cfg_attr(feature = "clap", clap(name = "rocm7.2"))]
@@ -209,6 +217,15 @@ pub enum TorchStrategy {
     },
     /// Select the appropriate PyTorch index based on the operating system and Intel GPU presence.
     Xpu { os: Os },
+    /// Use the specified ROCm index, with GPU kernels selected by an architecture-specific extra.
+    ///
+    /// ROCm 10.0 and later ship a single architecture-neutral index, so the architecture selects
+    /// an extra (e.g., `device-gfx942`) rather than an index.
+    AmdDevice {
+        os: Os,
+        backend: TorchBackend,
+        gpu_architecture: AmdGpuArchitecture,
+    },
     /// Use the specified PyTorch index.
     Backend { backend: TorchBackend },
 }
@@ -274,6 +291,26 @@ impl TorchStrategy {
             TorchMode::Cu91 => TorchBackend::Cu91,
             TorchMode::Cu90 => TorchBackend::Cu90,
             TorchMode::Cu80 => TorchBackend::Cu80,
+            TorchMode::Rocm100 => {
+                // ROCm 10.0 selects its GPU kernels with an architecture-specific extra, so an
+                // architecture is required even though the index itself is architecture-neutral.
+                // Fall back to the same detection `auto` performs, so an explicitly requested
+                // ROCm 10.0 backend doesn't also require `UV_AMD_GPU_ARCHITECTURE`.
+                let gpu_architecture = match amd_gpu_architecture {
+                    Some(gpu_architecture) => gpu_architecture,
+                    None => match Accelerator::detect(None, None)? {
+                        Some(Accelerator::Amd { gpu_architecture }) => gpu_architecture,
+                        Some(Accelerator::Cuda { .. } | Accelerator::Xpu) | None => {
+                            return Err(AcceleratorError::MissingAmdGpuArchitecture);
+                        }
+                    },
+                };
+                return Ok(Self::AmdDevice {
+                    os: os.clone(),
+                    backend: TorchBackend::Rocm100,
+                    gpu_architecture,
+                });
+            }
             TorchMode::Rocm72 => TorchBackend::Rocm72,
             TorchMode::Rocm71 => TorchBackend::Rocm71,
             TorchMode::Rocm70 => TorchBackend::Rocm70,
@@ -325,7 +362,13 @@ impl TorchStrategy {
                 | "triton-rocm"
                 | "triton-xpu"
                 | "xformers"
-        )
+        ) || match self {
+            // The ROCm SDK and GPU kernel packages are only published on the AMD index, so they're
+            // routed there alongside the PyTorch ecosystem. They're scoped to the ROCm 10.0
+            // strategy, since the other indexes don't host them at all.
+            Self::AmdDevice { .. } => is_rocm_sdk_package(package_name),
+            Self::Cuda { .. } | Self::Amd { .. } | Self::Xpu { .. } | Self::Backend { .. } => false,
+        }
     }
 
     /// Returns `true` if the given [`PackageName`] has a system dependency (e.g., CUDA or ROCm).
@@ -356,7 +399,55 @@ impl TorchStrategy {
                 | "torchtune"
                 | "torchvision"
                 | "vllm"
-        )
+        ) || match self {
+            Self::AmdDevice { .. } => is_rocm_sdk_package(package_name),
+            Self::Cuda { .. } | Self::Amd { .. } | Self::Xpu { .. } | Self::Backend { .. } => false,
+        }
+    }
+
+    /// Return the architecture-specific extra to apply to the given [`PackageName`], if any.
+    ///
+    /// ROCm 10.0 ships its GPU kernels in separate `amd-*-device-gfx*` packages, which are pulled
+    /// in by a `device-gfx*` extra (e.g., `torch[device-gfx942]`). Without the extra, the resolved
+    /// distribution contains no kernels for any GPU. Such an installation still reports the GPU as
+    /// available and enumerates the device, so the failure only surfaces when a kernel is launched,
+    /// as `hipErrorInvalidImage`.
+    pub fn device_extra(&self, package_name: &PackageName) -> Option<ExtraName> {
+        let Self::AmdDevice {
+            os,
+            backend: _,
+            gpu_architecture,
+        } = self
+        else {
+            return None;
+        };
+
+        // The `amd-*-device-gfx*` packages are only published for Linux, even though `torch`
+        // itself also ships Windows wheels.
+        match os {
+            Os::Manylinux { .. } | Os::Musllinux { .. } => {}
+            Os::Windows
+            | Os::Macos { .. }
+            | Os::FreeBsd { .. }
+            | Os::NetBsd { .. }
+            | Os::OpenBsd { .. }
+            | Os::Dragonfly { .. }
+            | Os::Illumos { .. }
+            | Os::Haiku { .. }
+            | Os::Android { .. }
+            | Os::Pyodide { .. }
+            | Os::PyEmscripten { .. }
+            | Os::Ios { .. } => return None,
+        }
+
+        // Only `torch` and `torchvision` provide `device-gfx*` extras; `torchaudio` and `triton`
+        // are architecture-neutral.
+        match package_name.as_str() {
+            "torch" | "torchvision" => {}
+            _ => return None,
+        }
+
+        ExtraName::from_owned(format!("device-{gpu_architecture}")).ok()
     }
 
     /// Return the appropriate index URLs for the given [`TorchStrategy`].
@@ -440,6 +531,32 @@ impl TorchStrategy {
                     Either::Right(Either::Left(std::iter::once(TorchBackend::Cpu.index_url())))
                 }
             },
+            Self::AmdDevice {
+                os,
+                backend,
+                gpu_architecture: _,
+            } => match os {
+                // A single architecture-neutral index serves every GPU, so there's no
+                // architecture-based selection to perform here, and no CPU fallback: the
+                // backend was requested explicitly.
+                Os::Manylinux { .. } | Os::Musllinux { .. } => Either::Right(Either::Right(
+                    Either::Left(std::iter::once(backend.index_url())),
+                )),
+                Os::Windows
+                | Os::Macos { .. }
+                | Os::FreeBsd { .. }
+                | Os::NetBsd { .. }
+                | Os::OpenBsd { .. }
+                | Os::Dragonfly { .. }
+                | Os::Illumos { .. }
+                | Os::Haiku { .. }
+                | Os::Android { .. }
+                | Os::Pyodide { .. }
+                | Os::PyEmscripten { .. }
+                | Os::Ios { .. } => {
+                    Either::Right(Either::Left(std::iter::once(TorchBackend::Cpu.index_url())))
+                }
+            },
             Self::Xpu { os } => match os {
                 Os::Manylinux { .. } | Os::Windows => Either::Right(Either::Right(Either::Left(
                     std::iter::once(TorchBackend::Xpu.index_url()),
@@ -464,6 +581,20 @@ impl TorchStrategy {
             ))),
         }
     }
+}
+
+/// Returns `true` if the given [`PackageName`] is part of the ROCm SDK distributed on the AMD
+/// index.
+///
+/// These are the runtime (`rocm`, `rocm-sdk-*`) and GPU kernel (`amd-*-device-gfx*`) packages that
+/// ROCm 10.0 splits out of the `torch` wheel. They're published on the AMD index; PyPI only holds
+/// placeholder releases at unrelated versions.
+fn is_rocm_sdk_package(package_name: &PackageName) -> bool {
+    let package_name = package_name.as_str();
+    matches!(package_name, "rocm" | "rocm-bootstrap" | "rocm-profiler")
+        || package_name.starts_with("rocm-sdk-")
+        || package_name.starts_with("amd-torch-device-")
+        || package_name.starts_with("amd-torchvision-device-")
 }
 
 /// The available backends for PyTorch.
@@ -497,6 +628,7 @@ pub enum TorchBackend {
     Cu91,
     Cu90,
     Cu80,
+    Rocm100,
     Rocm72,
     Rocm71,
     Rocm70,
@@ -552,6 +684,7 @@ impl TorchBackend {
             Self::Cu91 => &PYTORCH_CU91_INDEX_URL,
             Self::Cu90 => &PYTORCH_CU90_INDEX_URL,
             Self::Cu80 => &PYTORCH_CU80_INDEX_URL,
+            Self::Rocm100 => &AMD_ROCM100_INDEX_URL,
             Self::Rocm72 => &PYTORCH_ROCM72_INDEX_URL,
             Self::Rocm71 => &PYTORCH_ROCM71_INDEX_URL,
             Self::Rocm70 => &PYTORCH_ROCM70_INDEX_URL,
@@ -585,6 +718,18 @@ impl TorchBackend {
                 return None;
             }
             path_segments.next()?
+        } else if index.host_str() == Some("stable.repo.amd.com") {
+            // E.g., `https://stable.repo.amd.com/rocm/whl-next/`. The ROCm version isn't encoded
+            // in the URL, since the index is architecture-neutral and serves a single ROCm
+            // release.
+            let mut path_segments = index.path_segments()?;
+            if path_segments.next() != Some("rocm") {
+                return None;
+            }
+            if path_segments.next() != Some("whl-next") {
+                return None;
+            }
+            return Some(Self::Rocm100);
         } else {
             return None;
         };
@@ -622,6 +767,7 @@ impl TorchBackend {
             Self::Cu91 => Some(Version::new([9, 1])),
             Self::Cu90 => Some(Version::new([9, 0])),
             Self::Cu80 => Some(Version::new([8, 0])),
+            Self::Rocm100 => None,
             Self::Rocm72 => None,
             Self::Rocm71 => None,
             Self::Rocm70 => None,
@@ -677,6 +823,7 @@ impl TorchBackend {
             Self::Cu91 => None,
             Self::Cu90 => None,
             Self::Cu80 => None,
+            Self::Rocm100 => Some(Version::new([10, 0])),
             Self::Rocm72 => Some(Version::new([7, 2])),
             Self::Rocm71 => Some(Version::new([7, 1])),
             Self::Rocm70 => Some(Version::new([7, 0])),
@@ -735,6 +882,7 @@ impl FromStr for TorchBackend {
             "cu91" => Ok(Self::Cu91),
             "cu90" => Ok(Self::Cu90),
             "cu80" => Ok(Self::Cu80),
+            "rocm10.0" => Ok(Self::Rocm100),
             "rocm7.2" => Ok(Self::Rocm72),
             "rocm7.1" => Ok(Self::Rocm71),
             "rocm7.0" => Ok(Self::Rocm70),
@@ -855,6 +1003,11 @@ static WINDOWS_CUDA_VERSIONS: LazyLock<[(TorchBackend, Version); 27]> = LazyLock
 ///
 /// AMD also provides a compatibility matrix: <https://rocm.docs.amd.com/en/latest/compatibility/compatibility-matrix.html>;
 /// however, this list includes a broader array of GPUs than those in the matrix.
+///
+/// ROCm 10.0 is absent from this table. Its index is architecture-neutral, so there's no
+/// architecture-to-index mapping to record: a single index serves every GPU, and the kernels are
+/// selected by an architecture-specific extra instead. As a result, `--torch-backend=auto` selects
+/// from the ROCm 7.x and earlier indexes, and ROCm 10.0 must be requested explicitly.
 static LINUX_AMD_GPU_DRIVERS: LazyLock<[(TorchBackend, AmdGpuArchitecture); 93]> =
     LazyLock::new(|| {
         [
@@ -1019,6 +1172,10 @@ static PYTORCH_CU90_INDEX_URL: LazyLock<IndexUrl> =
     LazyLock::new(|| IndexUrl::from_str("https://download.pytorch.org/whl/cu90").unwrap());
 static PYTORCH_CU80_INDEX_URL: LazyLock<IndexUrl> =
     LazyLock::new(|| IndexUrl::from_str("https://download.pytorch.org/whl/cu80").unwrap());
+/// ROCm 10.0 and later are distributed by AMD rather than by PyTorch, from a single
+/// architecture-neutral index.
+static AMD_ROCM100_INDEX_URL: LazyLock<IndexUrl> =
+    LazyLock::new(|| IndexUrl::from_str("https://stable.repo.amd.com/rocm/whl-next/").unwrap());
 static PYTORCH_ROCM72_INDEX_URL: LazyLock<IndexUrl> =
     LazyLock::new(|| IndexUrl::from_str("https://download.pytorch.org/whl/rocm7.2").unwrap());
 static PYTORCH_ROCM71_INDEX_URL: LazyLock<IndexUrl> =
@@ -1061,3 +1218,158 @@ static PYTORCH_ROCM401_INDEX_URL: LazyLock<IndexUrl> =
     LazyLock::new(|| IndexUrl::from_str("https://download.pytorch.org/whl/rocm4.0.1").unwrap());
 static PYTORCH_XPU_INDEX_URL: LazyLock<IndexUrl> =
     LazyLock::new(|| IndexUrl::from_str("https://download.pytorch.org/whl/xpu").unwrap());
+
+#[cfg(test)]
+mod tests {
+    use std::str::FromStr;
+
+    use url::Url;
+    use uv_distribution_types::IndexUrl;
+    use uv_normalize::{ExtraName, PackageName};
+    use uv_pep440::Version;
+    use uv_platform_tags::Os;
+
+    use crate::accelerator::AmdGpuArchitecture;
+    use crate::backend::{TorchBackend, TorchStrategy};
+
+    /// Return a [`TorchStrategy`] for ROCm 10.0 on Linux, targeting the given architecture.
+    fn rocm100(gpu_architecture: AmdGpuArchitecture) -> TorchStrategy {
+        TorchStrategy::AmdDevice {
+            os: Os::Manylinux {
+                major: 2,
+                minor: 28,
+            },
+            backend: TorchBackend::Rocm100,
+            gpu_architecture,
+        }
+    }
+
+    #[test]
+    fn rocm100_from_str() {
+        assert_eq!(
+            TorchBackend::from_str("rocm10.0"),
+            Ok(TorchBackend::Rocm100)
+        );
+    }
+
+    #[test]
+    fn rocm100_versions() {
+        assert_eq!(TorchBackend::Rocm100.cuda_version(), None);
+        assert_eq!(
+            TorchBackend::Rocm100.rocm_version(),
+            Some(Version::new([10, 0]))
+        );
+    }
+
+    #[test]
+    fn rocm100_from_index() {
+        let url = Url::parse("https://stable.repo.amd.com/rocm/whl-next/").unwrap();
+        assert_eq!(TorchBackend::from_index(&url), Some(TorchBackend::Rocm100));
+    }
+
+    #[test]
+    fn rocm100_from_unknown_index() {
+        let url = Url::parse("https://stable.repo.amd.com/rocm/whl/").unwrap();
+        assert_eq!(TorchBackend::from_index(&url), None);
+    }
+
+    #[test]
+    fn rocm100_index_url() {
+        let strategy = rocm100(AmdGpuArchitecture::Gfx942);
+        let indexes = strategy.index_urls().collect::<Vec<_>>();
+        assert_eq!(
+            indexes,
+            vec![&IndexUrl::from_str("https://stable.repo.amd.com/rocm/whl-next/").unwrap()]
+        );
+    }
+
+    #[test]
+    fn rocm100_applies_to_sdk_packages() {
+        let strategy = rocm100(AmdGpuArchitecture::Gfx942);
+        for package_name in [
+            "torch",
+            "rocm",
+            "rocm-bootstrap",
+            "rocm-sdk-core",
+            "rocm-sdk-device-gfx942",
+            "amd-torch-device-gfx942",
+            "amd-torchvision-device-gfx1151",
+        ] {
+            let package_name = PackageName::from_str(package_name).unwrap();
+            assert!(strategy.applies_to(&package_name), "{package_name}");
+        }
+
+        for package_name in ["anyio", "rocm-unrelated", "amd-something"] {
+            let package_name = PackageName::from_str(package_name).unwrap();
+            assert!(!strategy.applies_to(&package_name), "{package_name}");
+        }
+    }
+
+    /// The ROCm SDK packages are only published on the AMD index, so other backends must not
+    /// route them.
+    #[test]
+    fn rocm_sdk_packages_scoped_to_rocm100() {
+        let strategy = TorchStrategy::Backend {
+            backend: TorchBackend::Cpu,
+        };
+        let package_name = PackageName::from_str("rocm").unwrap();
+        assert!(!strategy.applies_to(&package_name));
+    }
+
+    #[test]
+    fn rocm100_device_extra() {
+        let strategy = rocm100(AmdGpuArchitecture::Gfx942);
+        let expected = ExtraName::from_str("device-gfx942").unwrap();
+
+        for package_name in ["torch", "torchvision"] {
+            let package_name = PackageName::from_str(package_name).unwrap();
+            assert_eq!(
+                strategy.device_extra(&package_name),
+                Some(expected.clone()),
+                "{package_name}"
+            );
+        }
+
+        // `torchaudio` and `triton` are architecture-neutral.
+        for package_name in ["torchaudio", "triton"] {
+            let package_name = PackageName::from_str(package_name).unwrap();
+            assert_eq!(strategy.device_extra(&package_name), None, "{package_name}");
+        }
+    }
+
+    /// The `amd-*-device-gfx*` packages are only published for Linux.
+    #[test]
+    fn rocm100_device_extra_windows() {
+        let strategy = TorchStrategy::AmdDevice {
+            os: Os::Windows,
+            backend: TorchBackend::Rocm100,
+            gpu_architecture: AmdGpuArchitecture::Gfx942,
+        };
+        let package_name = PackageName::from_str("torch").unwrap();
+        assert_eq!(strategy.device_extra(&package_name), None);
+    }
+
+    /// PyPI's `torch` declares no `device-gfx*` extras, and an unknown extra is silently dropped,
+    /// so the extra must never leak to a non-ROCm-10.0 strategy.
+    #[test]
+    fn device_extra_scoped_to_rocm100() {
+        let package_name = PackageName::from_str("torch").unwrap();
+        for strategy in [
+            TorchStrategy::Backend {
+                backend: TorchBackend::Rocm72,
+            },
+            TorchStrategy::Backend {
+                backend: TorchBackend::Cpu,
+            },
+            TorchStrategy::Amd {
+                os: Os::Manylinux {
+                    major: 2,
+                    minor: 28,
+                },
+                gpu_architecture: AmdGpuArchitecture::Gfx942,
+            },
+        ] {
+            assert_eq!(strategy.device_extra(&package_name), None, "{strategy:?}");
+        }
+    }
+}

@@ -32,6 +32,10 @@ pub enum AcceleratorError {
     ParseInt(#[from] std::num::ParseIntError),
     #[error("Unknown AMD GPU architecture: {0}")]
     UnknownAmdGpuArchitecture(String),
+    #[error(
+        "Failed to detect an AMD GPU architecture, which is required by the ROCm 10.0 backend. Set `UV_AMD_GPU_ARCHITECTURE` to the target architecture (e.g., `gfx942`)."
+    )]
+    MissingAmdGpuArchitecture,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]
@@ -157,6 +161,12 @@ impl Accelerator {
         }
 
         // Query `rocm_agent_enumerator` to detect the AMD GPU architecture.
+        //
+        // When multiple agents are present, the lowest architecture is chosen, since the ROCm
+        // 7.x and earlier wheels bundle kernels for every architecture their index advertises,
+        // so the lowest is the one whose index supports all of the installed GPUs. ROCm 10.0
+        // instead installs kernels for a single architecture, so a machine with mixed GPUs needs
+        // `UV_AMD_GPU_ARCHITECTURE` to target one explicitly.
         //
         // See: https://rocm.docs.amd.com/projects/rocminfo/en/latest/how-to/use-rocm-agent-enumerator.html
         if let Ok(output) = std::process::Command::new("rocm_agent_enumerator").output() {
