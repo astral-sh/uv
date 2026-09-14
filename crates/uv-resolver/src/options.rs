@@ -25,7 +25,7 @@ pub struct Options {
 
 impl Options {
     /// Return the artifact constraints for a universal resolution.
-    pub fn artifact_policy(&self) -> ArtifactPolicy {
+    pub(crate) fn artifact_policy(&self) -> ArtifactPolicy {
         self.minimum_glibc_version
             .map(ArtifactPolicy::new)
             .unwrap_or_default()

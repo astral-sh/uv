@@ -118,23 +118,8 @@ impl VersionMap {
         build_options: &BuildOptions,
         artifact_policy: ArtifactPolicy,
     ) -> Self {
-        let mut local = false;
-        let mut map = BTreeMap::new();
-
-        for (version, prioritized_dist) in FlatDistributions::from_entries(
-            flat_metadata,
-            tags,
-            hasher,
-            build_options,
-            artifact_policy,
-        ) {
-            local |= version.is_local();
-            map.insert(version, prioritized_dist);
-        }
-
-        Self {
-            inner: VersionMapInner::Eager(VersionMapEager { map, local }),
-        }
+        FlatDistributions::from_entries(flat_metadata, tags, hasher, build_options, artifact_policy)
+            .into()
     }
 
     /// Return the [`ResolutionMetadata`] for the given version, if any.
