@@ -224,8 +224,8 @@ required-environments = [
     `preview-features = ["minimum-libc-version"]` to disable the warning.
 
 Environment markers do not include the libc implementation or version. A `required-environments`
-entry can include `libc` to select the libc implementations and minimum versions to support for that
-environment.
+entry can include a `libc` field to select the libc implementations and minimum versions to support
+for that environment.
 
 For example, to require glibc 2.31 on ARM64 Linux and glibc 2.29 on x86-64 Linux:
 
@@ -242,11 +242,10 @@ marker = "sys_platform == 'linux' and platform_machine == 'x86_64'"
 libc = { glibc = "2.29" }
 ```
 
-Within each entry's marker range, uv excludes wheels for omitted libc implementations and wheels
-that require a newer version. Wheels remain eligible outside those ranges. String entries, or
-entries without `libc`, do not constrain libc compatibility.
+Within each entry's marker range, uv excludes wheels that require a newer version, or use an omitted
+libc implementation (e.g., musl when `{ glibc = "2.29" }` is provided).
 
-To require support for musl as well, include it in the entry's table:
+To require support for both musl and glibc, include both implementations in the entry's table:
 
 ```toml
 libc = { glibc = "2.31", musl = "1.2" }
