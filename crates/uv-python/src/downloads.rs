@@ -606,6 +606,15 @@ impl PythonDownloadRequest {
         true
     }
 
+    /// Whether this request is satisfied by an installation, including its build revision.
+    pub fn satisfied_by_installation(&self, installation: &ManagedPythonInstallation) -> bool {
+        self.satisfied_by_key(installation.key())
+            && self
+                .build
+                .as_deref()
+                .is_none_or(|build| installation.build() == Some(build))
+    }
+
     /// Whether this request names a complete managed installation identity.
     pub fn is_exact_installation_key(&self) -> bool {
         self.implementation.is_some()
@@ -1088,23 +1097,11 @@ impl ManagedPythonDownloadList {
             .filter(move |download| request.satisfied_by_download(download))
     }
 
-    /// Whether an installed build satisfies the request and the catalog's selection policy.
+    /// Apply build selection to an installation whose version, runtime and platform already match.
     ///
     /// Installations absent from the catalog can still be requested explicitly. Legacy untagged
     /// installations remain usable when the catalog has no entries for their version and platform.
-    pub fn matches_installation(
-        &self,
-        request: &PythonDownloadRequest,
-        key: &PythonInstallationKey,
-    ) -> bool {
-        if !request.satisfied_by_key(key) {
-            return false;
-        }
-        self.allows_installed_build(request, key)
-    }
-
-    /// Apply build selection to an installation whose version, runtime and platform already match.
-    pub(crate) fn allows_installed_build(
+    pub fn allows_installed_build(
         &self,
         request: &PythonDownloadRequest,
         key: &PythonInstallationKey,
@@ -1539,9 +1536,20 @@ impl ManagedPythonDownload {
     ) -> Result<DownloadResult, Error> {
         let path = installation_dir.join(self.key().to_string());
 
-        // If it is not a reinstall and the dir already exists, return it.
+        // Reuse an existing directory only if it contains the selected build revision.
         if !reinstall && path.is_dir() {
-            return Ok(DownloadResult::AlreadyAvailable(path));
+            let matches_build = if let Some(build) = self.build {
+                match fs_err::tokio::read_to_string(path.join("BUILD")).await {
+                    Ok(installed_build) => installed_build.trim() == build,
+                    Err(err) if err.kind() == io::ErrorKind::NotFound => false,
+                    Err(err) => return Err(err.into()),
+                }
+            } else {
+                true
+            };
+            if matches_build {
+                return Ok(DownloadResult::AlreadyAvailable(path));
+            }
         }
 
         // We improve filesystem compatibility by using neither the URL-encoded `%2B` nor the `+` it

@@ -5,9 +5,9 @@ use std::{env, path::Path, process::Command};
 
 use anyhow::Context;
 use assert_cmd::assert::OutputAssertExt;
+use assert_fs::fixture::ChildPath;
 use assert_fs::{
     assert::PathAssert,
-    fixture::ChildPath,
     prelude::{FileTouch, FileWriteStr, PathChild, PathCreateDir},
 };
 use indoc::indoc;
@@ -5334,6 +5334,266 @@ fn python_install_pyodide() {
     ----- stdout -----
     [TEMP_DIR]/managed/pyodide-3.13.2-emscripten-wasm32-musl/python
     ");
+}
+
+fn python_build_variant_revision_context() -> anyhow::Result<(TestContext, ChildPath)> {
+    let context = uv_test::test_context_with_versions!(&[])
+        .with_filtered_python_keys()
+        .with_filtered_exe_suffix()
+        .with_managed_python_dirs();
+    let platform = platform_key_from_env()?;
+    let stock_key = format!("cpython-3.13.7-{platform}");
+    context.python_install().arg(&stock_key).assert().success();
+
+    // Use a real Python archive for the replacement, with custom revision metadata.
+    let metadata: serde_json::Value = serde_json::from_str(&fs_err::read_to_string(
+        context
+            .workspace_root
+            .join("crates/uv-python/download-metadata.json"),
+    )?)?;
+    let mut stock_entry = metadata
+        .get(stock_key.replace("-macos-", "-darwin-"))
+        .context("The stock download is in the bundled catalog")?
+        .clone();
+    // Make the custom build the default so unqualified and custom requests can overlap.
+    stock_entry["default"] = serde_json::json!(false);
+    let mut entry = stock_entry.clone();
+    entry["build_variant"] = serde_json::json!("custom");
+    entry["default"] = serde_json::json!(true);
+    entry["build"] = serde_json::json!("20260901");
+
+    let custom_key = format!("cpython-3.13.7+custom-{platform}");
+    let installation = context.temp_dir.child("managed").child(&custom_key);
+    fs_err::rename(
+        context.temp_dir.child("managed").child(&stock_key),
+        installation.path(),
+    )?;
+    installation.child("BUILD").write_str("20260825")?;
+    installation.child("marker").touch()?;
+
+    let metadata = serde_json::json!({
+        "version": 1,
+        "downloads": {
+            (stock_key): stock_entry,
+            (custom_key): entry
+        }
+    });
+    let catalog = context.temp_dir.child("python-downloads.json");
+    catalog.write_str(&serde_json::to_string(&metadata)?)?;
+    let context = context.with_env(EnvVars::UV_PYTHON_DOWNLOADS_JSON_URL, catalog.path());
+    // Update the executable links after moving the stock installation to its custom key.
+    context
+        .python_install()
+        .arg("3.13.7+custom")
+        .arg("--force")
+        .assert()
+        .success();
+    Ok((context, installation))
+}
+
+#[test]
+fn python_install_build_variant_revision() -> anyhow::Result<()> {
+    let (context, installation) = python_build_variant_revision_context()?;
+    let marker = installation.child("marker");
+    let build = installation.child("BUILD");
+
+    // Without a revision request, keep the installed revision even if the catalog has a new one.
+    uv_snapshot!(context.filters(), context.python_install().arg("3.13.7+custom"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Python 3.13.7+custom is already installed
+    ");
+    marker.assert(predicate::path::exists());
+    insta::assert_snapshot!(fs_err::read_to_string(&build)?, @"20260825");
+
+    // Requesting another revision must replace the files, as well as the BUILD marker.
+    uv_snapshot!(context.filters(), context.python_install().arg("3.13.7+custom")
+        .env(EnvVars::UV_PYTHON_BUILD, "20260901"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Installed Python 3.13.7 in [TIME]
+     ~ cpython-3.13.7+custom-[PLATFORM]
+    ");
+    marker.assert(predicate::path::missing());
+    insta::assert_snapshot!(fs_err::read_to_string(&build)?, @"20260901");
+
+    // Requesting the installed revision should reuse it.
+    marker.touch()?;
+    uv_snapshot!(context.filters(), context.python_install().arg("3.13.7+custom")
+        .env(EnvVars::UV_PYTHON_BUILD, "20260901"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Python 3.13.7+custom is already installed
+    ");
+    marker.assert(predicate::path::exists());
+
+    // An installation without a recorded revision cannot satisfy a revision request.
+    fs_err::remove_file(&build)?;
+    context
+        .python_install()
+        .arg("3.13.7+custom")
+        .env(EnvVars::UV_PYTHON_BUILD, "20260901")
+        .assert()
+        .success();
+    marker.assert(predicate::path::missing());
+    insta::assert_snapshot!(fs_err::read_to_string(&build)?, @"20260901");
+
+    // An explicit reinstall must also replace matching keys with a different revision.
+    marker.touch()?;
+    build.write_str("20260825")?;
+    context
+        .python_install()
+        .arg("3.13.7+custom")
+        .arg("--reinstall")
+        .env(EnvVars::UV_PYTHON_BUILD, "20260901")
+        .assert()
+        .success();
+    marker.assert(predicate::path::missing());
+    insta::assert_snapshot!(fs_err::read_to_string(&build)?, @"20260901");
+    Ok(())
+}
+
+#[test]
+fn python_install_build_variant_revision_overlapping_requests() -> anyhow::Result<()> {
+    for requests in [["3.13", "3.13+custom"], ["3.13+custom", "3.13"]] {
+        let (context, installation) = python_build_variant_revision_context()?;
+
+        // The unqualified request reuses revision A while the custom request replaces it with B.
+        allow_duplicates! {
+            uv_snapshot!(context.filters(), context.python_install().args(requests)
+                .env(EnvVars::UV_PYTHON_BUILD, "20260901"), @"
+            exit_code: 0 (success)
+            ----- stderr -----
+            Installed Python 3.13.7 in [TIME]
+             ~ cpython-3.13.7+custom-[PLATFORM]
+            ");
+        }
+        installation
+            .child("marker")
+            .assert(predicate::path::missing());
+        let build = fs_err::read_to_string(installation.child("BUILD"))?;
+        allow_duplicates! {
+            insta::assert_snapshot!(build, @"20260901");
+        }
+        context
+            .python_find()
+            .arg("3.13+custom")
+            .arg("--managed-python")
+            .env(EnvVars::UV_PYTHON_BUILD, "20260901")
+            .assert()
+            .success();
+    }
+    Ok(())
+}
+
+#[test]
+fn python_run_build_variant_revision() -> anyhow::Result<()> {
+    let (context, installation) = python_build_variant_revision_context()?;
+    let marker = installation.child("marker");
+    let build = installation.child("BUILD");
+
+    uv_snapshot!(context.filters(), context.run()
+        .arg("--python").arg("3.13.7+custom")
+        .arg("python").arg("-c").arg("print('hello world')")
+        .env(EnvVars::UV_PYTHON_BUILD, "20260901"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    hello world
+    ");
+    marker.assert(predicate::path::missing());
+    insta::assert_snapshot!(fs_err::read_to_string(&build)?, @"20260901");
+
+    // Subsequent runs should discover and reuse the requested revision.
+    marker.touch()?;
+    uv_snapshot!(context.filters(), context.run()
+        .arg("--python").arg("3.13.7+custom")
+        .arg("python").arg("-c").arg("print('hello world')")
+        .env(EnvVars::UV_PYTHON_BUILD, "20260901"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    hello world
+    ");
+    marker.assert(predicate::path::exists());
+
+    fs_err::remove_file(&build)?;
+    context
+        .run()
+        .arg("--python")
+        .arg("3.13.7+custom")
+        .arg("python")
+        .arg("-c")
+        .arg("print('hello world')")
+        .env(EnvVars::UV_PYTHON_BUILD, "20260901")
+        .assert()
+        .success();
+    marker.assert(predicate::path::missing());
+    insta::assert_snapshot!(fs_err::read_to_string(&build)?, @"20260901");
+    Ok(())
+}
+
+#[tokio::test]
+async fn python_build_variant_revision_download_failure() -> anyhow::Result<()> {
+    for automatic in [false, true] {
+        let (context, installation) = python_build_variant_revision_context()?;
+        let context = context.with_http_retries("0");
+        let server = MockServer::start().await;
+        let mut metadata: serde_json::Value =
+            serde_json::from_str(&context.read("python-downloads.json"))?;
+        let entry = metadata["downloads"]
+            .as_object_mut()
+            .and_then(|downloads| {
+                downloads
+                    .values_mut()
+                    .find(|download| download["build_variant"] == "custom")
+            })
+            .context("The catalog contains a custom download")?;
+        entry["url"] = serde_json::json!(format!("{}/missing-build.tar.gz", server.uri()));
+        context
+            .temp_dir
+            .child("python-downloads.json")
+            .write_str(&serde_json::to_string(&metadata)?)?;
+
+        // The server returns 404. Neither installation path may relabel the old files as revision B.
+        let mut command = if automatic {
+            let mut command = context.run();
+            command.args([
+                "--python",
+                "3.13.7+custom",
+                "python",
+                "-c",
+                "print('hello world')",
+            ]);
+            command
+        } else {
+            let mut command = context.python_install();
+            // Keep the satisfied record when replacing the same installation fails.
+            command.args(["3.13", "3.13+custom"]);
+            command
+        };
+        command
+            .env(EnvVars::UV_PYTHON_BUILD, "20260901")
+            .env(EnvVars::UV_PYTHON_CACHE_DIR, "")
+            .assert()
+            .failure();
+        installation
+            .child("marker")
+            .assert(predicate::path::exists());
+        let build = fs_err::read_to_string(installation.child("BUILD"))?;
+        let requests = server
+            .received_requests()
+            .await
+            .expect("Request recording is enabled");
+        allow_duplicates! {
+            insta::assert_snapshot!(build, @"20260825");
+            insta::assert_debug_snapshot!(
+                requests.iter().map(|request| request.url.path()).collect::<Vec<_>>(), @r#"
+            [
+                "/missing-build.tar.gz",
+            ]
+            "#);
+        }
+    }
+    Ok(())
 }
 
 #[test]
