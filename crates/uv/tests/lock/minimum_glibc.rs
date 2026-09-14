@@ -219,18 +219,12 @@ fn minimum_glibc_local_version_fallback() -> Result<()> {
 #[test]
 fn minimum_glibc_backtracks_and_invalidates_lock() -> Result<()> {
     let context = uv_test::test_context!("3.12");
-    wheel(
-        &context,
-        "demo",
-        "1.0.0",
-        "cp312-cp312-manylinux_2_17_x86_64",
-    )?;
-    wheel(
-        &context,
-        "demo",
-        "2.0.0",
-        "cp312-cp312-manylinux_2_34_x86_64",
-    )?;
+    for (version, tag) in [
+        ("1.0.0", "cp312-cp312-manylinux_2_17_x86_64"),
+        ("2.0.0", "cp312-cp312-manylinux_2_34_x86_64"),
+    ] {
+        wheel(&context, "demo", version, tag)?;
+    }
 
     project(&context, &["demo"], &[LINUX_X86_64], None)?;
     uv_snapshot!(context.filters(), context.lock().arg("--offline"), @r"
@@ -264,6 +258,14 @@ fn minimum_glibc_backtracks_and_invalidates_lock() -> Result<()> {
         exit_code: 0 (success)
         ----- stdout -----
         demo==1.0.0
+    ");
+    uv_snapshot!(context.filters(), context.pip_compile().args(["pyproject.toml", "--universal", "--offline", "--no-header", "--no-annotate"]), @r"
+        exit_code: 0 (success)
+        ----- stdout -----
+        demo==1.0.0
+
+        ----- stderr -----
+        Resolved 1 package in [TIME]
     ");
     let lock: toml::Value = toml::from_str(&context.read("uv.lock"))?;
     assert_eq!(
@@ -299,6 +301,14 @@ fn minimum_glibc_backtracks_and_invalidates_lock() -> Result<()> {
         hint: To update the lockfile, run `uv lock`.
     ");
     assert_eq!(context.read("uv.lock"), original);
+    uv_snapshot!(context.filters(), context.pip_compile().args(["pyproject.toml", "--universal", "--offline", "--no-header", "--no-annotate"]), @r"
+        exit_code: 0 (success)
+        ----- stdout -----
+        demo==2.0.0
+
+        ----- stderr -----
+        Resolved 1 package in [TIME]
+    ");
     Ok(())
 }
 
@@ -313,14 +323,13 @@ fn minimum_glibc_no_compatible_version() -> Result<()> {
     )?;
     project(&context, &["demo"], &[LINUX_X86_64], Some("2.31"))?;
 
-    let output = uv_snapshot!(context.filters(), context.lock().arg("--offline"), @r"
+    uv_snapshot!(context.filters(), context.lock().arg("--offline"), @r"
         exit_code: 1 (failure)
         ----- stderr -----
         error: No solution found when resolving dependencies
           cause: Because demo==2.0.0 has no wheels compatible with glibc 2.31 and only demo==2.0.0 is available, we can conclude that all versions of demo cannot be used.
                  And because your project depends on demo, we can conclude that your project's requirements are unsatisfiable.
     ");
-    assert!(!output.status.success());
     assert!(!context.temp_dir.child("uv.lock").exists());
     Ok(())
 }
@@ -361,18 +370,17 @@ fn minimum_glibc_allows_sdist_fallback() -> Result<()> {
     )?;
     project(&context, &["demo"], &[LINUX_X86_64], Some("2.31"))?;
 
-    let output = uv_snapshot!(context.filters(), context.lock().arg("--offline"), @r"
+    uv_snapshot!(context.filters(), context.lock().arg("--offline"), @r"
         exit_code: 0 (success)
         ----- stderr -----
         Resolved 2 packages in [TIME]
     ");
-    assert!(output.status.success());
     let package = locked_package(&context, "demo")?;
     assert_eq!(package["version"].as_str(), Some("2.0.0"));
     assert!(package.get("sdist").is_some());
 
     // Reconsider the cached flat-index entry when its source distribution cannot be built.
-    let output = uv_snapshot!(context.filters(), context.lock().args(["--offline", "--no-build", "--upgrade"]), @r"
+    uv_snapshot!(context.filters(), context.lock().args(["--offline", "--no-build", "--upgrade"]), @r"
         exit_code: 1 (failure)
         ----- stderr -----
         error: No solution found when resolving dependencies
@@ -381,7 +389,6 @@ fn minimum_glibc_allows_sdist_fallback() -> Result<()> {
 
         hint: Wheels are required for `demo` because building from source is disabled for all packages (i.e., with `--no-build`)
     ");
-    assert!(!output.status.success());
     Ok(())
 }
 
@@ -402,14 +409,13 @@ fn minimum_glibc_direct_url() -> Result<()> {
     let dependency = format!("demo @ {}/{filename}", server.url());
     project(&context, &[&dependency], &[], Some("2.31"))?;
 
-    let output = uv_snapshot!(context.filters(), context.lock(), @r"
+    uv_snapshot!(context.filters(), context.lock(), @r"
         exit_code: 1 (failure)
         ----- stderr -----
         error: No solution found when resolving dependencies
           cause: Because only demo==2.0.0 is available and demo==2.0.0 has no wheels compatible with glibc 2.31, we can conclude that all versions of demo cannot be used.
                  And because your project depends on demo, we can conclude that your project's requirements are unsatisfiable.
     ");
-    assert!(!output.status.success());
     assert!(!context.temp_dir.child("uv.lock").exists());
     Ok(())
 }
@@ -418,31 +424,15 @@ fn minimum_glibc_direct_url() -> Result<()> {
 #[test]
 fn minimum_glibc_architectures_and_markers() -> Result<()> {
     let context = uv_test::test_context!("3.12");
-    wheel(
-        &context,
-        "demo",
-        "1.0.0",
-        "cp312-cp312-manylinux2014_x86_64",
-    )?;
-    wheel(
-        &context,
-        "demo",
-        "1.0.0",
-        "cp312-cp312-manylinux_2_31_aarch64",
-    )?;
-    wheel(
-        &context,
-        "demo",
-        "2.0.0",
-        "cp312-cp312-manylinux_2_17_x86_64",
-    )?;
-    wheel(
-        &context,
-        "demo",
-        "2.0.0",
-        "cp312-cp312-manylinux_2_34_aarch64",
-    )?;
-    wheel(&context, "demo", "2.0.0", "cp312-cp312-macosx_11_0_arm64")?;
+    for (version, tag) in [
+        ("1.0.0", "cp312-cp312-manylinux2014_x86_64"),
+        ("1.0.0", "cp312-cp312-manylinux_2_31_aarch64"),
+        ("2.0.0", "cp312-cp312-manylinux_2_17_x86_64"),
+        ("2.0.0", "cp312-cp312-manylinux_2_34_aarch64"),
+        ("2.0.0", "cp312-cp312-macosx_11_0_arm64"),
+    ] {
+        wheel(&context, "demo", version, tag)?;
+    }
     wheel(&context, "windows-only", "1.0.0", "cp312-cp312-win_amd64")?;
     let dependencies = [
         "demo; sys_platform == 'linux'",
@@ -456,12 +446,11 @@ fn minimum_glibc_architectures_and_markers() -> Result<()> {
         Some("2.31"),
     )?;
 
-    let output = uv_snapshot!(context.filters(), context.lock().arg("--offline"), @r"
+    uv_snapshot!(context.filters(), context.lock().arg("--offline"), @r"
         exit_code: 0 (success)
         ----- stderr -----
         Resolved 4 packages in [TIME]
     ");
-    assert!(output.status.success());
     // The required aarch64 branch needs the older version; x86_64 and macOS retain the newer one.
     uv_snapshot!(context.filters(), context.export().args(["--frozen", "--no-hashes", "--no-header", "--no-annotate"]), @r"
         exit_code: 0 (success)
@@ -470,62 +459,19 @@ fn minimum_glibc_architectures_and_markers() -> Result<()> {
         demo==2.0.0 ; (platform_machine != 'aarch64' and sys_platform == 'linux') or sys_platform == 'darwin'
         windows-only==1.0.0 ; sys_platform == 'win32'
     ");
-    assert_eq!(
-        locked_package(&context, "windows-only")?["version"].as_str(),
-        Some("1.0.0")
-    );
 
     // The newer version is valid when only its compatible x86_64 wheel is required.
     project(&context, &dependencies, &[LINUX_X86_64], Some("2.31"))?;
-    let output = uv_snapshot!(context.filters(), context.lock().args(["--offline", "--upgrade"]), @r"
+    uv_snapshot!(context.filters(), context.lock().args(["--offline", "--upgrade"]), @r"
             exit_code: 0 (success)
             ----- stderr -----
             Resolved 3 packages in [TIME]
             Updated demo v1.0.0, v2.0.0 -> v2.0.0
         ");
-    assert!(output.status.success());
     assert_eq!(
         locked_package(&context, "demo")?["version"].as_str(),
         Some("2.0.0")
     );
-    Ok(())
-}
-
-#[test]
-fn minimum_glibc_pip_compile_universal() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
-    wheel(
-        &context,
-        "demo",
-        "1.0.0",
-        "cp312-cp312-manylinux_2_17_x86_64",
-    )?;
-    wheel(
-        &context,
-        "demo",
-        "2.0.0",
-        "cp312-cp312-manylinux_2_34_x86_64",
-    )?;
-    project(&context, &["demo"], &[LINUX_X86_64], Some("2.31"))?;
-
-    uv_snapshot!(context.filters(), context.pip_compile().args(["pyproject.toml", "--universal", "--offline", "--no-header", "--no-annotate"]), @r"
-        exit_code: 0 (success)
-        ----- stdout -----
-        demo==1.0.0
-
-        ----- stderr -----
-        Resolved 1 package in [TIME]
-    ");
-
-    project(&context, &["demo"], &[LINUX_X86_64], None)?;
-    uv_snapshot!(context.filters(), context.pip_compile().args(["pyproject.toml", "--universal", "--offline", "--no-header", "--no-annotate"]), @r"
-        exit_code: 0 (success)
-        ----- stdout -----
-        demo==2.0.0
-
-        ----- stderr -----
-        Resolved 1 package in [TIME]
-    ");
     Ok(())
 }
 
