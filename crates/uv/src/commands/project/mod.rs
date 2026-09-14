@@ -229,6 +229,11 @@ pub(crate) enum ProjectError {
     )]
     OverlappingMarkers(String, String, String),
 
+    #[error(
+        "Required environments must be disjoint, but the following markers overlap: `{0}` and `{1}`"
+    )]
+    OverlappingRequiredEnvironments(String, String),
+
     #[error("Environment markers `{0}` don't overlap with Python requirement `{1}`")]
     DisjointEnvironment(MarkerTreeContents, VersionSpecifiers),
 

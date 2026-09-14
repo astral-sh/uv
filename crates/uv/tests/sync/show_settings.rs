@@ -96,7 +96,7 @@ fn pip_compile_baseline() {
         environments: SupportedEnvironments(
             [],
         ),
-        required_environments: SupportedEnvironments(
+        required_environments: RequiredEnvironments(
             [],
         ),
         refresh: None(
@@ -3807,6 +3807,7 @@ fn preview_features() {
     +            ContentAddressedCache,
     +            MissingExcludeNewerPackageLock,
     +            BatchExport,
+    +            MinimumLibcVersion,
     +        ],
          },
          python_preference: Managed,

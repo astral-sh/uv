@@ -37,8 +37,8 @@ use uv_distribution_types::{
     GitPathSourceDist, HashValidation, Identifier, IndexLocations, IndexMetadata, IndexUrl,
     MetadataHashPolicy, Name, NameRequirementSpecification, PYPI_URL, PathBuiltDist,
     PathSourceDist, RegistryBuiltDist, RegistryBuiltWheel, RegistrySourceDist, RemoteSource,
-    Requirement, RequirementSource, RequiresPython, ResolvedDist, SimplifiedMarkerTree,
-    StaticMetadata, ToUrlError, UrlString, VersionId,
+    RequiredEnvironment, RequiredEnvironments, Requirement, RequirementSource, RequiresPython,
+    ResolvedDist, SimplifiedMarkerTree, StaticMetadata, ToUrlError, UrlString, VersionId,
 };
 use uv_fs::{PortablePath, PortablePathBuf, Simplified, normalize_path, try_relative_to_if};
 use uv_git::{RepositoryReference, ResolvedRepositoryReference};
@@ -315,7 +315,7 @@ pub struct Lock {
     /// The list of supported environments specified by the user.
     supported_environments: Vec<MarkerTree>,
     /// The list of required platforms specified by the user.
-    required_environments: Vec<MarkerTree>,
+    required_environments: Vec<RequiredEnvironment>,
     /// The range of supported Python versions.
     requires_python: RequiresPython,
     /// We discard the lockfile if these options don't match.
@@ -2620,7 +2620,7 @@ impl Lock {
         manifest: ResolverManifest,
         conflicts: Conflicts,
         supported_environments: Vec<MarkerTree>,
-        required_environments: Vec<MarkerTree>,
+        required_environments: Vec<RequiredEnvironment>,
         fork_markers: Vec<UniversalMarker>,
     ) -> Result<Self, LockError> {
         // Put all dependencies for each package in a canonical order and
@@ -2768,10 +2768,16 @@ impl Lock {
 
     /// Record the required platforms that were used to generate this lock.
     #[must_use]
-    pub fn with_required_environments(mut self, required_environments: Vec<MarkerTree>) -> Self {
+    pub fn with_required_environments(
+        mut self,
+        required_environments: Vec<RequiredEnvironment>,
+    ) -> Self {
         self.required_environments = required_environments
             .into_iter()
-            .map(|marker| self.requires_python.complexify_markers(marker))
+            .map(|environment| RequiredEnvironment {
+                marker: self.requires_python.complexify_markers(environment.marker),
+                ..environment
+            })
             .collect();
         self
     }
@@ -2985,7 +2991,7 @@ impl Lock {
     }
 
     /// Returns the required platforms that were used to generate this lock.
-    fn required_environments(&self) -> &[MarkerTree] {
+    fn required_environments(&self) -> &[RequiredEnvironment] {
         &self.required_environments
     }
 
@@ -3461,13 +3467,20 @@ impl Lock {
             .collect()
     }
 
-    /// Returns the required platforms that were used to generate this
-    /// lock.
-    pub fn simplified_required_environments(&self) -> Vec<MarkerTree> {
+    /// Return required environments with markers simplified to match their serialized form.
+    /// Bare true markers are omitted; libc constraints remain even when their marker is true.
+    pub fn simplified_required_environments(&self) -> Vec<RequiredEnvironment> {
         self.required_environments()
             .iter()
             .copied()
-            .map(|marker| self.simplify_environment(marker))
+            .map(|environment| RequiredEnvironment {
+                marker: self.simplify_environment(environment.marker),
+                ..environment
+            })
+            .filter(|environment| {
+                environment.minimum_libc_version.is_some()
+                    || environment.marker.contents().is_some()
+            })
             .collect()
     }
 
@@ -6170,7 +6183,7 @@ struct LockWire {
     #[serde(rename = "supported-markers", default)]
     supported_environments: Vec<SimplifiedMarkerTree>,
     #[serde(rename = "required-markers", default)]
-    required_environments: Vec<SimplifiedMarkerTree>,
+    required_environments: RequiredEnvironments,
     #[serde(rename = "conflicts", default)]
     conflicts: Option<Conflicts>,
     /// We discard the lockfile if these options match.
@@ -6236,8 +6249,12 @@ impl TryFrom<LockWire> for Lock {
             .collect();
         let required_environments = wire
             .required_environments
-            .into_iter()
-            .map(|simplified_marker| simplified_marker.into_marker(&wire.requires_python))
+            .iter()
+            .copied()
+            .map(|environment| RequiredEnvironment {
+                marker: wire.requires_python.complexify_markers(environment.marker),
+                ..environment
+            })
             .collect();
         let mut options_wire = wire.options;
         if options_wire.exclude_newer.exclude_newer_span.is_some() {

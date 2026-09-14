@@ -11,7 +11,8 @@ use uv_configuration::{
 };
 use uv_distribution_types::{
     ConfigSettings, ExtraBuildVariables, Index, IndexLocations, IndexUrl, IndexUrlError, Origin,
-    PackageConfigSettings, PipExtraIndex, PipFindLinks, PipIndex, StaticMetadata,
+    PackageConfigSettings, PipExtraIndex, PipFindLinks, PipIndex, RequiredEnvironments,
+    StaticMetadata,
 };
 use uv_install_wheel::LinkMode;
 use uv_macros::{CombineOptions, OptionsMetadata};
@@ -165,7 +166,7 @@ pub struct Options {
     pub environments: Option<SupportedEnvironments>,
 
     #[cfg_attr(feature = "schemars", schemars(skip))]
-    pub required_environments: Option<SupportedEnvironments>,
+    pub required_environments: Option<RequiredEnvironments>,
 
     // NOTE(charlie): These fields should be kept in-sync with `ToolUv` in
     // `crates/uv-workspace/src/pyproject.rs`. The documentation lives on that struct.
@@ -2639,7 +2640,7 @@ struct OptionsWire {
     constraint_dependencies: Option<Vec<Requirement<VerbatimParsedUrl>>>,
     build_constraint_dependencies: Option<Vec<BuildConstraintDependency>>,
     environments: Option<SupportedEnvironments>,
-    required_environments: Option<SupportedEnvironments>,
+    required_environments: Option<RequiredEnvironments>,
 
     // NOTE(charlie): These fields should be kept in-sync with `ToolUv` in
     // `crates/uv-workspace/src/pyproject.rs`. The documentation lives on that struct.

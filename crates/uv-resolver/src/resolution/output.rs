@@ -230,7 +230,11 @@ impl ResolverOutput {
             report_missing_lower_bounds(&graph, &mut diagnostics, &constraints, &overrides);
         }
 
-        let output = Self {
+        let filter_artifact_hashes = options.artifact_environments.has_libc_constraints()
+            && resolutions
+                .iter()
+                .all(|resolution| resolution.env.marker_environment().is_none());
+        let mut output = Self {
             graph,
             requires_python,
             fork_markers,
@@ -240,6 +244,9 @@ impl ResolverOutput {
             overrides,
             options,
         };
+        if filter_artifact_hashes {
+            output.enforce_artifact_hashes(index);
+        }
 
         // We only do conflicting distribution detection when no
         // conflicting groups have been specified. The reason here
@@ -689,6 +696,57 @@ impl ResolverOutput {
             if !hashes.is_empty() {
                 distribution.hashes = HashDigests::from(hashes);
             }
+        }
+    }
+
+    /// Restrict registry hashes to artifacts retained by the universal artifact policy and build
+    /// options. If no existing hashes survive, replace them with known allowed hashes, which may be
+    /// empty: hashes reused from a lockfile must not reintroduce excluded artifacts.
+    fn enforce_artifact_hashes(&mut self, in_memory: &InMemoryIndex) {
+        let build_options = &self.options.build_options;
+        for node in self.graph.node_weights_mut() {
+            let ResolutionGraphNode::Dist(distribution) = node else {
+                continue;
+            };
+            let ResolvedDist::Installable { dist, .. } = &distribution.dist else {
+                continue;
+            };
+            let (wheels, sdist) = match dist.as_ref() {
+                Dist::Built(BuiltDist::Registry(dist)) => (&dist.wheels, dist.sdist.as_ref()),
+                Dist::Source(SourceDist::Registry(dist)) => (&dist.wheels, Some(dist)),
+                _ => continue,
+            };
+            let mut allowed_hashes = wheels
+                .iter()
+                .filter(|_| !build_options.no_binary_package(&distribution.name))
+                .flat_map(|wheel| wheel.file.hashes.iter())
+                .chain(
+                    sdist
+                        .filter(|_| !build_options.no_build_package(&distribution.name))
+                        .into_iter()
+                        .flat_map(|source| source.file.hashes.iter()),
+                )
+                .collect::<FxHashSet<_>>();
+
+            // Flat indexes need not advertise hashes. A hash computed for this exact retained
+            // artifact is still eligible; hashes from another wheel used only for metadata are not.
+            let metadata_response = in_memory.distributions().get(&dist.distribution_id());
+            if let Some(response) = &metadata_response
+                && let MetadataResponse::Found(archive) = &**response
+            {
+                allowed_hashes.extend(archive.hashes.iter());
+            }
+            let mut hashes = distribution
+                .hashes
+                .iter()
+                .filter(|hash| allowed_hashes.contains(hash))
+                .cloned()
+                .collect::<Vec<_>>();
+            if hashes.is_empty() {
+                hashes.extend(allowed_hashes.into_iter().cloned());
+                hashes.sort_unstable();
+            }
+            distribution.hashes = HashDigests::from(hashes);
         }
     }
 

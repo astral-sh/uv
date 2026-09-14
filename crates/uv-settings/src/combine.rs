@@ -9,7 +9,7 @@ use uv_configuration::{
 };
 use uv_distribution_types::{
     ConfigSettings, ExtraBuildVariables, Index, IndexUrl, PackageConfigSettings, PipExtraIndex,
-    PipFindLinks, PipIndex,
+    PipFindLinks, PipIndex, RequiredEnvironments,
 };
 use uv_install_wheel::LinkMode;
 use uv_pypi_types::{SchemaConflicts, SupportedEnvironments};
@@ -98,6 +98,7 @@ impl_combine_or!(ExcludeNewerOverride);
 impl_combine_or!(ExcludeNewerValue);
 impl_combine_or!(ExportFormat);
 impl_combine_or!(ForkStrategy);
+impl_combine_or!(RequiredEnvironments);
 impl_combine_or!(Index);
 impl_combine_or!(IndexStrategy);
 impl_combine_or!(IndexUrl);

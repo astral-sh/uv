@@ -1,5 +1,5 @@
 use uv_configuration::{BuildOptions, IndexStrategy};
-use uv_pypi_types::SupportedEnvironments;
+use uv_distribution_types::{ArtifactPolicy, RequiredEnvironments};
 use uv_torch::TorchStrategy;
 
 use crate::fork_strategy::ForkStrategy;
@@ -14,10 +14,17 @@ pub struct Options {
     pub fork_strategy: ForkStrategy,
     pub exclude_newer: ExcludeNewer,
     pub index_strategy: IndexStrategy,
-    pub artifact_environments: SupportedEnvironments,
+    pub artifact_environments: RequiredEnvironments,
     pub flexibility: Flexibility,
     pub build_options: BuildOptions,
     pub torch_backend: Option<TorchStrategy>,
+}
+
+impl Options {
+    /// Return the artifact constraints for a universal resolution.
+    pub(crate) fn artifact_policy(&self) -> ArtifactPolicy {
+        ArtifactPolicy::new(&self.artifact_environments)
+    }
 }
 
 /// Builder for [`Options`].
@@ -29,7 +36,7 @@ pub struct OptionsBuilder {
     fork_strategy: ForkStrategy,
     exclude_newer: ExcludeNewer,
     index_strategy: IndexStrategy,
-    artifact_environments: SupportedEnvironments,
+    artifact_environments: RequiredEnvironments,
     flexibility: Flexibility,
     build_options: BuildOptions,
     torch_backend: Option<TorchStrategy>,
@@ -85,7 +92,7 @@ impl OptionsBuilder {
 
     /// Sets the environments that require artifact coverage.
     #[must_use]
-    pub fn artifact_environments(mut self, artifact_environments: SupportedEnvironments) -> Self {
+    pub fn artifact_environments(mut self, artifact_environments: RequiredEnvironments) -> Self {
         self.artifact_environments = artifact_environments;
         self
     }

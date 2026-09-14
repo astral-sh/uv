@@ -5,7 +5,7 @@ use std::io::Write;
 use std::path::Path;
 use std::str::FromStr;
 
-use anyhow::{Result, anyhow};
+use anyhow::{Result, anyhow, bail};
 use itertools::Itertools;
 use owo_colors::OwoColorize;
 use rustc_hash::FxHashSet;
@@ -23,8 +23,8 @@ use uv_dispatch::{BuildDispatch, SharedState};
 use uv_distribution::LoweredExtraBuildDependencies;
 use uv_distribution_types::{
     ConfigSettings, DependencyMetadata, ExtraBuildVariables, HashCollection, Index, IndexLocations,
-    NameRequirementSpecification, Origin, PackageConfigSettings, Requirement, RequiresPython,
-    Verbatim,
+    NameRequirementSpecification, Origin, PackageConfigSettings, RequiredEnvironment,
+    RequiredEnvironments, Requirement, RequiresPython, Verbatim,
 };
 use uv_fs::{CWD, Simplified};
 use uv_git::ResolvedRepositoryReference;
@@ -50,7 +50,7 @@ use uv_settings::PythonInstallMirrors;
 use uv_static::EnvVars;
 use uv_torch::{AmdGpuArchitecture, TorchMode, TorchStrategy};
 use uv_types::{EmptyInstalledPackages, HashStrategy, SourceTreeEditablePolicy};
-use uv_warnings::warn_user;
+use uv_warnings::{warn_user, warn_user_once};
 use uv_workspace::WorkspaceCache;
 use uv_workspace::pyproject::ExtraBuildDependencies;
 
@@ -73,7 +73,7 @@ pub(crate) async fn pip_compile(
     excludes_from_workspace: Vec<ExcludeDependency>,
     build_constraints_from_workspace: Vec<NameRequirementSpecification>,
     environments: SupportedEnvironments,
-    required_environments: SupportedEnvironments,
+    required_environments: RequiredEnvironments,
     extras: ExtrasSpecification,
     groups: GroupsSpecification,
     output_file: Option<&Path>,
@@ -352,10 +352,9 @@ pub(crate) async fn pip_compile(
     // Create the shared state.
     let state = SharedState::default();
 
-    // If we're resolving against a different Python version, use a separate index. Source
-    // distributions will be built against the installed version, and so the index may contain
-    // different package priorities than in the top-level resolution.
-    let top_level_index = if python_version.is_some() {
+    // Universal or cross-version resolution ranks artifacts differently from build dependencies,
+    // which use the installed interpreter. Keep their policy-dependent version maps separate.
+    let top_level_index = if universal || python_version.is_some() {
         InMemoryIndex::default()
     } else {
         state.index().clone()
@@ -377,15 +376,37 @@ pub(crate) async fn pip_compile(
     };
 
     let artifact_environments = if universal {
-        SupportedEnvironments::from_markers(
+        for (index, lhs) in required_environments.iter().enumerate() {
+            for rhs in &required_environments.as_slice()[index + 1..] {
+                if lhs.minimum_libc_version.is_some()
+                    && rhs.minimum_libc_version.is_some()
+                    && !lhs.marker.is_disjoint(rhs.marker)
+                {
+                    bail!(
+                        "Required environments `{}` and `{}` overlap. Required environments must be disjoint.",
+                        lhs.marker
+                            .try_to_string()
+                            .unwrap_or_else(|| "true".to_string()),
+                        rhs.marker
+                            .try_to_string()
+                            .unwrap_or_else(|| "true".to_string()),
+                    );
+                }
+            }
+        }
+        RequiredEnvironments::from_environments(
             environments
                 .iter()
-                .chain(required_environments.iter())
                 .copied()
+                .map(|marker| RequiredEnvironment {
+                    marker,
+                    minimum_libc_version: None,
+                })
+                .chain(required_environments.iter().copied())
                 .collect(),
         )
     } else {
-        SupportedEnvironments::default()
+        RequiredEnvironments::default()
     };
 
     // Determine the environment for the resolution.
@@ -535,6 +556,16 @@ pub(crate) async fn pip_compile(
         concurrency.clone(),
         preview,
     );
+
+    if universal
+        && required_environments.has_libc_constraints()
+        && !preview.is_enabled(PreviewFeature::MinimumLibcVersion)
+    {
+        warn_user_once!(
+            "Setting `minimum-libc-version` in `required-environments` is experimental and may change without warning. Pass `--preview-features {}` to disable this warning.",
+            PreviewFeature::MinimumLibcVersion
+        );
+    }
 
     let options = OptionsBuilder::new()
         .resolution_mode(resolution_mode)
