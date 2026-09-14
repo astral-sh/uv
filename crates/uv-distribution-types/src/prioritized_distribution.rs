@@ -422,7 +422,18 @@ impl PrioritizedDist {
         }
         // Track the highest-priority source.
         if let Some((.., existing_compatibility)) = &self.0.source {
-            if compatibility.is_more_compatible(existing_compatibility) {
+            // Prefer a source that can be retained in the lockfile, even if builds are disabled.
+            let is_preferred = match (
+                compatibility.is_excluded(),
+                existing_compatibility.is_excluded(),
+            ) {
+                (false, true) => true,
+                (true, false) => false,
+                (false, false) | (true, true) => {
+                    compatibility.is_more_compatible(existing_compatibility)
+                }
+            };
+            if is_preferred {
                 self.0.source = Some((dist, compatibility));
             }
         } else {
@@ -687,7 +698,18 @@ impl WheelCompatibility {
 
     /// Return `true` if the distribution is excluded.
     fn is_excluded(&self) -> bool {
-        matches!(self, Self::Incompatible(IncompatibleWheel::ExcludeNewer(_)))
+        match self {
+            Self::Incompatible(
+                IncompatibleWheel::ExcludeNewer(_) | IncompatibleWheel::Yanked(_),
+            ) => true,
+            Self::Incompatible(
+                IncompatibleWheel::Tag(_)
+                | IncompatibleWheel::RequiresPython(..)
+                | IncompatibleWheel::NoBinary
+                | IncompatibleWheel::MissingPlatform(_),
+            )
+            | Self::Compatible(..) => false,
+        }
     }
 
     /// Return `true` if the current compatibility is more compatible than another.
@@ -719,10 +741,17 @@ impl SourceDistCompatibility {
 
     /// Return `true` if the distribution is excluded.
     fn is_excluded(&self) -> bool {
-        matches!(
-            self,
-            Self::Incompatible(IncompatibleSource::ExcludeNewer(_))
-        )
+        match self {
+            Self::Incompatible(
+                IncompatibleSource::ExcludeNewer(_) | IncompatibleSource::Yanked(_),
+            ) => true,
+            Self::Incompatible(
+                IncompatibleSource::RequiresPython(..)
+                | IncompatibleSource::NoBuild
+                | IncompatibleSource::NotPep625Filename,
+            )
+            | Self::Compatible(_) => false,
+        }
     }
 
     /// Return the higher priority compatibility.

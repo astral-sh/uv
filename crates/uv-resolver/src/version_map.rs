@@ -754,6 +754,11 @@ impl VersionMapLazy {
             }
         }
 
+        // Check file exclusions before build settings so excluded files are omitted from the lock.
+        if self.no_build {
+            return SourceDistCompatibility::Incompatible(IncompatibleSource::NoBuild);
+        }
+
         // Check if the filename is PEP 625-compliant.
         // TODO: Strengthen this check more; right now we allow `.zip`
         // (which is not compliant) and we don't strictly
@@ -807,6 +812,11 @@ impl VersionMapLazy {
             if yanked.is_yanked() && !self.allowed_yanks.contains(name, version) {
                 return WheelCompatibility::Incompatible(IncompatibleWheel::Yanked(yanked.clone()));
             }
+        }
+
+        // Check file exclusions before build settings so excluded files are omitted from the lock.
+        if self.no_binary {
+            return WheelCompatibility::Incompatible(IncompatibleWheel::NoBinary);
         }
 
         // Determine a compatibility for the wheel based on tags.
