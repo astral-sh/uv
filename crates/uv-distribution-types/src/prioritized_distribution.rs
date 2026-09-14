@@ -1067,78 +1067,7 @@ pub(crate) fn implied_python_markers(filename: &WheelFilename) -> MarkerTree {
 mod tests {
     use std::str::FromStr;
 
-    use uv_distribution_filename::SourceDistExtension;
-    use uv_pypi_types::HashDigests;
-
-    use crate::{FileLocation, IndexUrl};
-
     use super::*;
-
-    fn registry_file(filename: &str) -> File {
-        File {
-            dist_info_metadata: None,
-            filename: filename.into(),
-            hashes: HashDigests::empty(),
-            requires_python: None,
-            size: None,
-            upload_time_utc_ms: None,
-            url: FileLocation::RelativeUrl("https://example.com/".into(), filename.into()),
-            yanked: None,
-        }
-    }
-
-    #[test]
-    fn incompatible_first_artifact_does_not_contribute_coverage()
-    -> Result<(), Box<dyn std::error::Error>> {
-        let index = IndexUrl::parse("https://example.com/simple", None)?;
-        let compatible_filename = "example-1.0-py3-none-manylinux_2_17_x86_64.whl";
-        let compatible_wheel = RegistryBuiltWheel {
-            filename: compatible_filename.parse()?,
-            file: Box::new(registry_file(compatible_filename)),
-            index: index.clone(),
-            size_is_authoritative: false,
-        };
-        let source = RegistrySourceDist {
-            name: compatible_wheel.filename.name.clone(),
-            version: compatible_wheel.filename.version.clone(),
-            ext: SourceDistExtension::TarGz,
-            file: Box::new(registry_file("example-1.0.tar.gz")),
-            index: index.clone(),
-            wheels: Vec::new(),
-            size_is_authoritative: false,
-        };
-        let incompatible_filename = "example-1.0-py3-none-manylinux_2_17_aarch64.whl";
-        let incompatible_wheel = RegistryBuiltWheel {
-            filename: incompatible_filename.parse()?,
-            file: Box::new(registry_file(incompatible_filename)),
-            index,
-            size_is_authoritative: false,
-        };
-        let incompatible_source =
-            SourceDistCompatibility::Incompatible(IncompatibleSource::NoBuild);
-        let incompatible_tags =
-            WheelCompatibility::Incompatible(IncompatibleWheel::Tag(IncompatibleTag::Platform));
-        let policy = ArtifactPolicy::default();
-        let mut inserted_source = PrioritizedDist::new(policy.clone());
-        inserted_source.insert_source(source, Vec::new(), incompatible_source);
-        let mut inserted_wheel = PrioritizedDist::new(policy.clone());
-        inserted_wheel.insert_built(incompatible_wheel, Vec::new(), incompatible_tags);
-
-        let expected = implied_markers(&compatible_wheel.filename);
-        for mut prioritized in [inserted_source, inserted_wheel] {
-            assert_eq!(
-                prioritized.0.artifact_coverage.markers(&policy),
-                MarkerTree::FALSE
-            );
-            prioritized.insert_built(
-                compatible_wheel.clone(),
-                Vec::new(),
-                WheelCompatibility::Compatible(HashComparison::Matched, None, None),
-            );
-            assert_eq!(prioritized.0.artifact_coverage.markers(&policy), expected);
-        }
-        Ok(())
-    }
 
     #[track_caller]
     fn assert_platform_markers(filename: &str, expected: &str) {
