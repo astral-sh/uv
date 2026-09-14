@@ -3473,14 +3473,22 @@ impl Lock {
         self.required_environments()
             .iter()
             .copied()
-            .map(|environment| RequiredEnvironment {
-                marker: self.simplify_environment(environment.marker),
-                ..environment
-            })
-            .filter(|environment| {
-                environment.libc.is_some() || environment.marker.contents().is_some()
-            })
+            .filter_map(|environment| self.simplify_required_environment(environment))
             .collect()
+    }
+
+    /// Simplify a required environment to its serialized form, omitting bare true markers.
+    /// Libc constraints remain even when the marker simplifies to true.
+    pub fn simplify_required_environment(
+        &self,
+        environment: RequiredEnvironment,
+    ) -> Option<RequiredEnvironment> {
+        let environment = RequiredEnvironment {
+            marker: self.simplify_environment(environment.marker),
+            ..environment
+        };
+        (environment.libc.is_some() || environment.marker.contents().is_some())
+            .then_some(environment)
     }
 
     /// Simplify the given marker environment with respect to the lockfile's
