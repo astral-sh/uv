@@ -18,6 +18,15 @@ pub struct RequiredEnvironment {
     pub minimum_libc_version: Option<MinimumLibcVersion>,
 }
 
+impl From<MarkerTree> for RequiredEnvironment {
+    fn from(marker: MarkerTree) -> Self {
+        Self {
+            marker,
+            minimum_libc_version: None,
+        }
+    }
+}
+
 impl Serialize for RequiredEnvironment {
     /// Keep unconstrained entries as strings; tables retain libc constraints even for a true marker.
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
@@ -45,10 +54,7 @@ impl<'de> Deserialize<'de> for RequiredEnvironment {
             }
 
             fn visit_str<E: serde::de::Error>(self, value: &str) -> Result<Self::Value, E> {
-                Ok(RequiredEnvironment {
-                    marker: MarkerTree::from_str(value).map_err(E::custom)?,
-                    minimum_libc_version: None,
-                })
+                Ok(MarkerTree::from_str(value).map_err(E::custom)?.into())
             }
 
             fn visit_map<M: MapAccess<'de>>(self, map: M) -> Result<Self::Value, M::Error> {
@@ -141,10 +147,9 @@ impl<'de> Deserialize<'de> for RequiredEnvironments {
             }
 
             fn visit_str<E: serde::de::Error>(self, value: &str) -> Result<Self::Value, E> {
-                Ok(RequiredEnvironments(vec![RequiredEnvironment {
-                    marker: MarkerTree::from_str(value).map_err(E::custom)?,
-                    minimum_libc_version: None,
-                }]))
+                Ok(RequiredEnvironments(vec![
+                    MarkerTree::from_str(value).map_err(E::custom)?.into(),
+                ]))
             }
 
             fn visit_seq<A: SeqAccess<'de>>(self, mut seq: A) -> Result<Self::Value, A::Error> {

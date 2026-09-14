@@ -398,10 +398,7 @@ pub(crate) async fn pip_compile(
             environments
                 .iter()
                 .copied()
-                .map(|marker| RequiredEnvironment {
-                    marker,
-                    minimum_libc_version: None,
-                })
+                .map(RequiredEnvironment::from)
                 .chain(required_environments.iter().copied())
                 .collect(),
         )

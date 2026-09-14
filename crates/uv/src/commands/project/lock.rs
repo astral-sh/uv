@@ -803,10 +803,7 @@ async fn do_lock(
         lock_supported_environments
             .iter()
             .copied()
-            .map(|marker| RequiredEnvironment {
-                marker,
-                minimum_libc_version: None,
-            })
+            .map(RequiredEnvironment::from)
             .chain(lock_required_environments.iter().copied())
             .collect(),
     );
