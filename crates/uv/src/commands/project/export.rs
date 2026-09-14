@@ -232,18 +232,6 @@ pub(crate) async fn export(
         ExportTarget::Project(project)
     };
 
-    // Batch exports prepare a universal lock, so interpreter discovery ignores group-specific
-    // Python requirements, as in `uv lock`. Each entry applies its own groups when rendering.
-    let groups = if batch.is_some() {
-        DependencyGroupsWithDefaults::none()
-    } else {
-        let default_groups = match &target {
-            ExportTarget::Project(project) => default_dependency_groups(project.pyproject_toml())?,
-            ExportTarget::Script(_) => DefaultGroups::default(),
-        };
-        groups.with_defaults(default_groups)
-    };
-
     // Find an interpreter for the project, unless `--frozen` is set.
     let interpreter = if frozen.is_some() {
         None
@@ -265,17 +253,26 @@ pub(crate) async fn export(
             .await?
             .into_interpreter(),
             ExportTarget::Project(project) => {
+                // Selected groups can impose additional Python requirements on a single export.
+                // Batch entries may have incompatible group requirements, so choose the interpreter
+                // for locking using only workspace requirements, as `uv lock` does. Each output's
+                // groups and project defaults are applied separately when rendering below.
+                let interpreter_groups = if batch.is_some() {
+                    DependencyGroupsWithDefaults::none()
+                } else {
+                    groups.with_defaults(default_dependency_groups(project.pyproject_toml())?)
+                };
                 let workspace_python = WorkspacePython::from_request(
                     python.as_deref().map(PythonRequest::parse),
                     Some(project.workspace()),
-                    &groups,
+                    &interpreter_groups,
                     project_dir,
                     config_discovery,
                 )
                 .await?;
                 ProjectInterpreter::discover(
                     project.workspace(),
-                    &groups,
+                    &interpreter_groups,
                     workspace_python,
                     &client_builder,
                     python_preference,
@@ -405,6 +402,11 @@ pub(crate) async fn export(
         return Ok(ExitStatus::Success);
     }
 
+    let default_groups = match &target {
+        ExportTarget::Project(project) => default_dependency_groups(project.pyproject_toml())?,
+        ExportTarget::Script(_) => DefaultGroups::default(),
+    };
+    let groups = groups.with_defaults(default_groups);
     let extras = extras.with_defaults(DefaultExtras::default());
 
     render_export(
