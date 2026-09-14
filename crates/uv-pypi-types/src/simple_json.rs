@@ -3,6 +3,7 @@ use std::str::FromStr;
 use std::sync::Arc;
 
 use jiff::Timestamp;
+use rkyv::rancor::{Fallible, Source};
 use rustc_hash::FxHashMap;
 use serde::de::{DeserializeSeed, MapAccess, SeqAccess, Visitor};
 use serde::{Deserialize, Deserializer, Serialize};
@@ -444,6 +445,7 @@ pub enum HashAlgorithm {
     Sha256,
     Sha384,
     Sha512,
+    #[serde(rename = "Blake2b")]
     Blake2b256,
 }
 
@@ -494,35 +496,15 @@ impl std::fmt::Display for HashAlgorithm {
 }
 
 /// A validated, lowercase hexadecimal digest containing exactly `BYTES` bytes.
-#[derive(
-    Clone,
-    Ord,
-    PartialOrd,
-    Eq,
-    PartialEq,
-    Hash,
-    Serialize,
-    rkyv::Archive,
-    rkyv::Deserialize,
-    rkyv::Serialize,
-)]
+#[derive(Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Serialize)]
 #[serde(transparent)]
-#[rkyv(derive(Debug))]
 pub struct Digest<const BYTES: usize>(SmallString);
 
 impl<const BYTES: usize> Digest<BYTES> {
     /// Validate a hexadecimal digest and normalize it to lowercase.
     fn from_hex(digest: impl Into<SmallString>) -> Result<Self, HashError> {
         let digest = digest.into();
-        if digest.len() != BYTES * 2 {
-            return Err(HashError::InvalidDigestLength {
-                expected: BYTES * 2,
-                actual: digest.len(),
-            });
-        }
-        if !digest.as_bytes().iter().all(u8::is_ascii_hexdigit) {
-            return Err(HashError::InvalidDigestCharacters(digest.to_string()));
-        }
+        validate_hex(&digest, BYTES)?;
 
         if digest.as_bytes().iter().any(u8::is_ascii_uppercase) {
             Ok(Self(SmallString::from(digest.to_ascii_lowercase())))
@@ -584,21 +566,8 @@ impl<'de, const BYTES: usize> Deserialize<'de> for Digest<BYTES> {
 }
 
 /// A hash name and hex encoded digest of the file.
-#[derive(
-    Debug,
-    Clone,
-    Ord,
-    PartialOrd,
-    Eq,
-    PartialEq,
-    Hash,
-    Serialize,
-    Deserialize,
-    rkyv::Archive,
-    rkyv::Deserialize,
-    rkyv::Serialize,
-)]
-#[rkyv(derive(Debug))]
+#[derive(Debug, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Serialize, Deserialize)]
+#[serde(try_from = "HashDigestWire", into = "HashDigestWire")]
 pub enum HashDigest {
     Md5(Digest<16>),
     Sha256(Digest<32>),
@@ -636,11 +605,15 @@ impl HashDigest {
 
     /// Return the hex-encoded digest.
     pub fn digest(&self) -> &str {
+        self.digest_string()
+    }
+
+    fn digest_string(&self) -> &SmallString {
         match self {
-            Self::Md5(digest) => digest.as_str(),
-            Self::Sha256(digest) | Self::Blake2b256(digest) => digest.as_str(),
-            Self::Sha384(digest) => digest.as_str(),
-            Self::Sha512(digest) => digest.as_str(),
+            Self::Md5(digest) => &digest.0,
+            Self::Sha256(digest) | Self::Blake2b256(digest) => &digest.0,
+            Self::Sha384(digest) => &digest.0,
+            Self::Sha512(digest) => &digest.0,
         }
     }
 }
@@ -667,6 +640,110 @@ impl FromStr for HashDigest {
             Err(HashError::InvalidStructure(s.to_string()))
         }
     }
+}
+
+/// The hash record used by the shared Serde and rkyv cache formats.
+///
+/// This representation can be removed when all cache buckets containing [`HashDigest`] are bumped.
+#[doc(hidden)]
+#[derive(Serialize, Deserialize, rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)]
+#[serde(rename = "HashDigest")]
+#[rkyv(derive(Debug), bytecheck(verify))]
+pub struct HashDigestWire {
+    algorithm: HashAlgorithm,
+    digest: SmallString,
+}
+
+impl From<&HashDigest> for HashDigestWire {
+    fn from(hash: &HashDigest) -> Self {
+        Self {
+            algorithm: hash.algorithm(),
+            digest: hash.digest_string().clone(),
+        }
+    }
+}
+
+impl From<HashDigest> for HashDigestWire {
+    fn from(hash: HashDigest) -> Self {
+        let algorithm = hash.algorithm();
+        let digest = match hash {
+            HashDigest::Md5(digest) => digest.0,
+            HashDigest::Sha256(digest) | HashDigest::Blake2b256(digest) => digest.0,
+            HashDigest::Sha384(digest) => digest.0,
+            HashDigest::Sha512(digest) => digest.0,
+        };
+        Self { algorithm, digest }
+    }
+}
+
+impl TryFrom<HashDigestWire> for HashDigest {
+    type Error = HashError;
+
+    fn try_from(hash: HashDigestWire) -> Result<Self, Self::Error> {
+        Self::new(hash.algorithm, hash.digest)
+    }
+}
+
+impl rkyv::Archive for HashDigest {
+    type Archived = ArchivedHashDigestWire;
+    type Resolver = HashDigestWireResolver;
+
+    fn resolve(&self, resolver: Self::Resolver, out: rkyv::Place<Self::Archived>) {
+        HashDigestWire::from(self).resolve(resolver, out);
+    }
+}
+
+impl<S> rkyv::Serialize<S> for HashDigest
+where
+    S: Fallible + ?Sized,
+    HashDigestWire: rkyv::Serialize<S>,
+{
+    fn serialize(&self, serializer: &mut S) -> Result<Self::Resolver, S::Error> {
+        rkyv::Serialize::serialize(&HashDigestWire::from(self), serializer)
+    }
+}
+
+impl<D> rkyv::Deserialize<HashDigest, D> for ArchivedHashDigestWire
+where
+    D: Fallible + ?Sized,
+    D::Error: Source,
+{
+    fn deserialize(&self, deserializer: &mut D) -> Result<HashDigest, D::Error> {
+        let hash: HashDigestWire = rkyv::Deserialize::deserialize(self, deserializer)?;
+        HashDigest::try_from(hash).map_err(D::Error::new)
+    }
+}
+
+// SAFETY: The derived byte check validates both fields before calling `verify`. Checking the
+// digest's length and hexadecimal characters guarantees it can become a validated `HashDigest`.
+#[expect(unsafe_code)]
+unsafe impl<C> rkyv::bytecheck::Verify<C> for ArchivedHashDigestWire
+where
+    C: Fallible + ?Sized,
+    C::Error: Source,
+{
+    fn verify(&self, _context: &mut C) -> Result<(), C::Error> {
+        let bytes = match self.algorithm {
+            ArchivedHashAlgorithm::Md5 => 16,
+            ArchivedHashAlgorithm::Sha256 | ArchivedHashAlgorithm::Blake2b256 => 32,
+            ArchivedHashAlgorithm::Sha384 => 48,
+            ArchivedHashAlgorithm::Sha512 => 64,
+        };
+        validate_hex(self.digest.as_str(), bytes).map_err(C::Error::new)
+    }
+}
+
+fn validate_hex(digest: &str, bytes: usize) -> Result<(), HashError> {
+    if digest.len() != bytes * 2 {
+        return Err(HashError::InvalidDigestLength {
+            expected: bytes * 2,
+            actual: digest.len(),
+        });
+    }
+    if !digest.as_bytes().iter().all(u8::is_ascii_hexdigit) {
+        return Err(HashError::InvalidDigestCharacters(digest.to_string()));
+    }
+    Ok(())
 }
 
 /// A collection of [`HashDigest`] entities.
@@ -881,7 +958,7 @@ mod tests {
             (HashAlgorithm::Sha256, "sha256", "Sha256", 32),
             (HashAlgorithm::Sha384, "sha384", "Sha384", 48),
             (HashAlgorithm::Sha512, "sha512", "Sha512", 64),
-            (HashAlgorithm::Blake2b256, "blake2b", "Blake2b256", 32),
+            (HashAlgorithm::Blake2b256, "blake2b", "Blake2b", 32),
         ];
 
         for (algorithm, name, variant, bytes) in variants {
@@ -894,14 +971,17 @@ mod tests {
             assert_eq!(parsed.digest(), digest);
             assert_eq!(parsed.to_string(), format!("{name}:{digest}"));
             let serialized = serde_json::to_string(&parsed).expect("serialize hash digest");
-            assert_eq!(serialized, format!(r#"{{"{variant}":"{digest}"}}"#));
+            assert_eq!(
+                serialized,
+                format!(r#"{{"algorithm":"{variant}","digest":"{digest}"}}"#)
+            );
             assert_eq!(
                 serde_json::from_str::<HashDigest>(&serialized).expect("deserialize hash digest"),
                 parsed
             );
 
             let uppercase = serde_json::from_str::<HashDigest>(&format!(
-                r#"{{"{variant}":"{}"}}"#,
+                r#"{{"algorithm":"{variant}","digest":"{}"}}"#,
                 digest.to_ascii_uppercase()
             ))
             .expect("deserialize uppercase hash digest");
@@ -952,7 +1032,10 @@ mod tests {
             Err(HashError::UnsupportedHashAlgorithm(_))
         ));
 
-        assert!(serde_json::from_str::<HashDigest>(r#"{"Sha256":"short"}"#).is_err());
+        assert!(
+            serde_json::from_str::<HashDigest>(r#"{"algorithm":"Sha256","digest":"short"}"#)
+                .is_err()
+        );
         assert!(serde_json::from_str::<Hashes>(r#"{"sha256":"short"}"#).is_err());
         assert!(serde_json::from_str::<Digest<32>>(&format!(r#""{}""#, "g".repeat(64))).is_err());
     }
