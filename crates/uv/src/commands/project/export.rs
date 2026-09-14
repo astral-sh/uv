@@ -58,7 +58,7 @@ impl<'lock> From<&'lock ExportTarget> for LockTarget<'lock> {
     }
 }
 
-/// Independent selections and destinations for a frozen batch export.
+/// Independent selections and destinations for a batch export.
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct ExportBatch {
@@ -169,10 +169,7 @@ pub(crate) async fn export(
                 PreviewFeature::BatchExport
             );
         }
-        let Some(frozen_source) = frozen else {
-            bail!("`--batch` requires `--frozen`");
-        };
-        Some((ExportBatch::read(&path).await?, frozen_source))
+        Some(ExportBatch::read(&path).await?)
     } else {
         None
     };
@@ -184,7 +181,7 @@ pub(crate) async fn export(
         let project = if frozen.is_some() {
             let options = DiscoveryOptions {
                 members: if package.is_empty()
-                    && batch.as_ref().is_none_or(|(batch, _)| {
+                    && batch.as_ref().is_none_or(|batch| {
                         batch.export.iter().all(|entry| entry.package.is_empty())
                     }) {
                     MemberDiscovery::None
@@ -235,98 +232,17 @@ pub(crate) async fn export(
         ExportTarget::Project(project)
     };
 
-    if let Some((batch, frozen_source)) = &batch {
-        let ExportTarget::Project(project) = &target else {
-            bail!("`--batch` does not support scripts");
+    // Batch exports prepare a universal lock, so interpreter discovery ignores group-specific
+    // Python requirements, as in `uv lock`. Each entry applies its own groups when rendering.
+    let groups = if batch.is_some() {
+        DependencyGroupsWithDefaults::none()
+    } else {
+        let default_groups = match &target {
+            ExportTarget::Project(project) => default_dependency_groups(project.pyproject_toml())?,
+            ExportTarget::Script(_) => DefaultGroups::default(),
         };
-        let lock = LockTarget::from(&target)
-            .read_frozen((*frozen_source).into())
-            .await
-            .map_err(UvError::from)?;
-        let mut writers = Vec::with_capacity(batch.export.len());
-        for entry in &batch.export {
-            let pyproject = if let [name] = entry.package.as_slice() {
-                project
-                    .workspace()
-                    .packages()
-                    .get(name)
-                    .ok_or_else(|| anyhow!("Package `{name}` not found in workspace"))?
-                    .pyproject_toml()
-            } else {
-                for name in &entry.package {
-                    if !project.workspace().packages().contains_key(name) {
-                        bail!("Package `{name}` not found in workspace");
-                    }
-                }
-                project.pyproject_toml()
-            };
-            let groups = DependencyGroups::from_args(
-                None,
-                entry.group.clone(),
-                entry.no_group.clone(),
-                entry.no_default_groups,
-                entry.only_group.clone(),
-                entry.all_groups,
-            )
-            .with_defaults(default_dependency_groups(pyproject)?);
-            let extras = ExtrasSpecification::from_args(
-                entry.extra.clone(),
-                entry.no_extra.clone(),
-                false,
-                vec![],
-                entry.all_extras,
-            )
-            .with_defaults(DefaultExtras::default());
-            writers.push(
-                render_export(
-                    &target,
-                    &lock,
-                    format,
-                    entry.all_packages,
-                    &entry.package,
-                    &prune,
-                    hashes,
-                    &install_options,
-                    Some(&entry.output_file),
-                    &extras,
-                    &groups,
-                    editable.clone(),
-                    include_annotations,
-                    include_header,
-                    include_index_url,
-                    include_find_links,
-                    &settings,
-                    &client_builder,
-                    &concurrency,
-                    true,
-                    cache,
-                    preview,
-                )
-                .await
-                .with_context(|| format!("Failed to export `{}`", entry.output_file.display()))?,
-            );
-        }
-        // Render every selection before replacing any output, so invalid selections leave files intact.
-        for writer in writers {
-            writer.commit().await?;
-        }
-        return Ok(ExitStatus::Success);
-    }
-
-    // Determine the default groups to include.
-    let default_groups = match &target {
-        ExportTarget::Project(project) => default_dependency_groups(project.pyproject_toml())?,
-        ExportTarget::Script(_) => DefaultGroups::default(),
+        groups.with_defaults(default_groups)
     };
-
-    // Determine the default extras to include.
-    let default_extras = match &target {
-        ExportTarget::Project(_project) => DefaultExtras::default(),
-        ExportTarget::Script(_) => DefaultExtras::default(),
-    };
-
-    let groups = groups.with_defaults(default_groups);
-    let extras = extras.with_defaults(default_extras);
 
     // Find an interpreter for the project, unless `--frozen` is set.
     let interpreter = if frozen.is_some() {
@@ -414,6 +330,82 @@ pub(crate) async fn export(
         Ok(result) => result.into_lock(),
         Err(err) => return Err(UvError::from(err).into()),
     };
+
+    if let Some(batch) = &batch {
+        let ExportTarget::Project(project) = &target else {
+            bail!("`--batch` does not support scripts");
+        };
+        let mut writers = Vec::with_capacity(batch.export.len());
+        for entry in &batch.export {
+            let pyproject = if let [name] = entry.package.as_slice() {
+                project
+                    .workspace()
+                    .packages()
+                    .get(name)
+                    .ok_or_else(|| anyhow!("Package `{name}` not found in workspace"))?
+                    .pyproject_toml()
+            } else {
+                for name in &entry.package {
+                    if !project.workspace().packages().contains_key(name) {
+                        bail!("Package `{name}` not found in workspace");
+                    }
+                }
+                project.pyproject_toml()
+            };
+            let groups = DependencyGroups::from_args(
+                None,
+                entry.group.clone(),
+                entry.no_group.clone(),
+                entry.no_default_groups,
+                entry.only_group.clone(),
+                entry.all_groups,
+            )
+            .with_defaults(default_dependency_groups(pyproject)?);
+            let extras = ExtrasSpecification::from_args(
+                entry.extra.clone(),
+                entry.no_extra.clone(),
+                false,
+                vec![],
+                entry.all_extras,
+            )
+            .with_defaults(DefaultExtras::default());
+            writers.push(
+                render_export(
+                    &target,
+                    &lock,
+                    format,
+                    entry.all_packages,
+                    &entry.package,
+                    &prune,
+                    hashes,
+                    &install_options,
+                    Some(&entry.output_file),
+                    &extras,
+                    &groups,
+                    editable.clone(),
+                    include_annotations,
+                    include_header,
+                    include_index_url,
+                    include_find_links,
+                    &settings,
+                    &client_builder,
+                    &concurrency,
+                    true,
+                    cache,
+                    preview,
+                )
+                .await
+                .with_context(|| format!("Failed to export `{}`", entry.output_file.display()))?,
+            );
+        }
+        // Render every selection before replacing any output, so invalid selections leave files intact.
+        for writer in writers {
+            writer.commit().await?;
+        }
+        return Ok(ExitStatus::Success);
+    }
+
+    let extras = extras.with_defaults(DefaultExtras::default());
 
     render_export(
         &target,

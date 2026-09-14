@@ -10258,7 +10258,7 @@ fn requirements_txt_emit_indexes() -> Result<()> {
     Ok(())
 }
 
-/// Each batch entry has the same dependency selection as an independent frozen export.
+/// Each batch entry has the same dependency selection as an independent export.
 #[cfg(feature = "test-universal")]
 #[test]
 fn export_batch_selections() -> Result<()> {
@@ -10376,12 +10376,25 @@ fn export_batch_selections() -> Result<()> {
     ----- stderr -----
     warning: `uv export --batch` is experimental and may change without warning. Pass `--preview-features batch-export` to disable this warning.
     ");
-    for index in 0..selections.len() {
-        assert_eq!(
-            fs_err::read(context.temp_dir.child(format!("exports/{index}.txt")))?,
-            fs_err::read(context.temp_dir.child(format!("single-{index}.txt")))?,
-            "batch entry {index}",
-        );
+    for mode in [None, Some("--locked"), Some("--frozen")] {
+        context
+            .export()
+            .args(mode)
+            .arg("--no-header")
+            .arg("--batch")
+            .arg("exports/batch.toml")
+            .arg("--preview-features")
+            .arg("batch-export")
+            .assert()
+            .success();
+        for index in 0..selections.len() {
+            assert_eq!(
+                fs_err::read(context.temp_dir.child(format!("exports/{index}.txt")))?,
+                fs_err::read(context.temp_dir.child(format!("single-{index}.txt")))?,
+                "batch entry {index}",
+            );
+        }
+        assert_eq!(fs_err::read(context.temp_dir.child("uv.lock"))?, lock);
     }
 
     // Explicitly enabling the preview feature suppresses the warning.
@@ -10390,6 +10403,101 @@ fn export_batch_selections() -> Result<()> {
         .arg("--batch").arg("exports/batch.toml")
         .arg("--preview-features").arg("batch-export"), @"exit_code: 0 (success)");
     assert_eq!(fs_err::read(context.temp_dir.child("uv.lock"))?, lock);
+    Ok(())
+}
+
+/// Batch exports create or check the lock once, independently of per-entry Python requirements.
+#[test]
+fn export_batch_lock_modes() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let pyproject = indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [dependency-groups]
+        dev = []
+        legacy = []
+
+        [tool.uv.dependency-groups]
+        dev = { requires-python = ">=3.13" }
+        legacy = { requires-python = "<3.13" }
+    "#};
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(pyproject)?;
+    context.temp_dir.child("batch.toml").write_str(indoc! {r#"
+        [[export]]
+        output-file = "dev.txt"
+
+        [[export]]
+        output-file = "legacy.txt"
+        only-group = ["legacy"]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.export()
+        .arg("--batch").arg("batch.toml").arg("--no-header")
+        .arg("--preview-features").arg("batch-export"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+    let lock = fs_err::read(context.temp_dir.child("uv.lock"))?;
+    assert_eq!(
+        fs_err::read_to_string(context.temp_dir.child("dev.txt"))?,
+        ""
+    );
+    assert_eq!(
+        fs_err::read_to_string(context.temp_dir.child("legacy.txt"))?,
+        ""
+    );
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&pyproject.replace("0.1.0", "0.2.0"))?;
+    context.temp_dir.child("dev.txt").write_str("original\n")?;
+    uv_snapshot!(context.filters(), context.export()
+        .arg("--locked").arg("--batch").arg("batch.toml")
+        .arg("--preview-features").arg("batch-export"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+
+    hint: To update the lockfile, run `uv lock`.
+    ");
+    assert_eq!(fs_err::read(context.temp_dir.child("uv.lock"))?, lock);
+    assert_eq!(
+        fs_err::read_to_string(context.temp_dir.child("dev.txt"))?,
+        "original\n"
+    );
+
+    uv_snapshot!(context.filters(), context.export()
+        .arg("--frozen").arg("--batch").arg("batch.toml").arg("--no-header")
+        .arg("--preview-features").arg("batch-export"), @"exit_code: 0 (success)");
+    assert_eq!(fs_err::read(context.temp_dir.child("uv.lock"))?, lock);
+    assert_eq!(
+        fs_err::read_to_string(context.temp_dir.child("dev.txt"))?,
+        ""
+    );
+
+    uv_snapshot!(context.filters(), context.export()
+        .arg("--batch").arg("batch.toml")
+        .arg("--preview-features").arg("batch-export"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+    uv_snapshot!(context.filters(), context.export()
+        .arg("--locked").arg("--batch").arg("batch.toml")
+        .arg("--preview-features").arg("batch-export"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
     Ok(())
 }
 
@@ -10442,13 +10550,6 @@ fn export_batch_manifest_validation() -> Result<()> {
     manifest.write_str("export = []")?;
     uv_snapshot!(context.filters(), context.export()
         .arg("--batch").arg("batch.toml"), @"
-    exit_code: 2 (failure)
-    ----- stderr -----
-    warning: `uv export --batch` is experimental and may change without warning. Pass `--preview-features batch-export` to disable this warning.
-    error: `--batch` requires `--frozen`
-    ");
-    uv_snapshot!(context.filters(), context.export()
-        .arg("--frozen").arg("--batch").arg("batch.toml"), @"
     exit_code: 2 (failure)
     ----- stderr -----
     warning: `uv export --batch` is experimental and may change without warning. Pass `--preview-features batch-export` to disable this warning.
