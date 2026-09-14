@@ -663,7 +663,7 @@ pub struct ToolUv {
     /// `{ marker = "sys_platform == 'linux'", libc = { glibc = "2.31" } }`.
     /// Within that marker range, uv excludes wheels for omitted libc implementations and wheels
     /// that require a newer version. Every libc implementation in the table must have compatible
-    /// artifacts. String entries do not constrain libc compatibility.
+    /// artifacts.
     ///
     /// `libc` is in preview. Use `--preview-features minimum-libc-version` to
     /// disable the warning.
