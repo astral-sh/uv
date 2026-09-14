@@ -11,7 +11,7 @@ use uv_auth::CredentialsCache;
 use uv_cache::Cache;
 use uv_configuration::{DependencyGroupsWithDefaults, ExcludeDependency, NoSources, Upgrade};
 use uv_distribution::LoweredRequirement;
-use uv_distribution_types::{Index, IndexLocations, Requirement, RequiresPython};
+use uv_distribution_types::{GlibcVersion, Index, IndexLocations, Requirement, RequiresPython};
 use uv_normalize::{GroupName, PackageName};
 use uv_pep508::RequirementOrigin;
 use uv_pypi_types::{Conflicts, SupportedEnvironments, VerbatimParsedUrl};
@@ -252,6 +252,14 @@ impl<'lock> LockTarget<'lock> {
                 // TODO(charlie): Add support for environments in scripts.
                 None
             }
+        }
+    }
+
+    /// Returns the oldest glibc version supported by the required Linux environments.
+    pub(crate) fn minimum_glibc_version(self) -> Option<GlibcVersion> {
+        match self {
+            Self::Workspace(workspace) => workspace.minimum_glibc_version(),
+            Self::Script(_) => None,
         }
     }
 
