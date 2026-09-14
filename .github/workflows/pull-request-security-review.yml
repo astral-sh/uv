@@ -33,6 +33,8 @@ jobs:
           printf 'REVIEW_CONFIG=%s\n' "$REVIEW_CONFIG" >> "$GITHUB_ENV"
           mkdir -p "$REVIEW_CONFIG"
           cp -R agents/. "$REVIEW_CONFIG/"
+          mkdir -p "$REVIEW_CONFIG/toolchain"
+          cp pyproject.toml uv.lock "$REVIEW_CONFIG/toolchain/"
           git checkout --detach "$HEAD_SHA"
 
       - name: "Checkout Codex Security plugin"
@@ -112,9 +114,9 @@ jobs:
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
 
       - name: "Install cargo nextest"
-        uses: taiki-e/install-action@6c6fd71fe4fb72c3697d269963d0e15df8adedad # v2.85.10
-        with:
-          tool: cargo-nextest
+        run: |
+          uv sync --project "$REVIEW_CONFIG/toolchain" --only-dev
+          echo "$REVIEW_CONFIG/toolchain/.venv/bin" >> "$GITHUB_PATH"
 
       # codex-action configures these only on GitHub-hosted runners.
       - name: "Enable Linux user namespaces for bubblewrap"
