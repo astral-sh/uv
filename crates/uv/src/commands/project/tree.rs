@@ -8,7 +8,9 @@ use uv_cache::{Cache, Refresh};
 use uv_cache_info::Timestamp;
 use uv_cli::TreeFormat;
 use uv_client::{BaseClientBuilder, RegistryClientBuilder};
-use uv_configuration::{ActiveEnvironment, Concurrency, DependencyGroups, TargetTriple};
+use uv_configuration::{
+    ActiveEnvironment, Concurrency, DependencyGroups, DependencyGroupsWithDefaults, TargetTriple,
+};
 use uv_distribution_types::IndexCapabilities;
 use uv_normalize::DefaultGroups;
 use uv_normalize::PackageName;
@@ -118,17 +120,24 @@ pub(crate) async fn tree(
             .await?
             .into_interpreter(),
             LockTarget::Workspace(workspace) => {
+                // Universal trees use the interpreter only for locking, as in `uv lock`.
+                // A tree for a specific interpreter must satisfy the selected groups' requirements.
+                let interpreter_groups = if universal {
+                    DependencyGroupsWithDefaults::none()
+                } else {
+                    groups.clone()
+                };
                 let workspace_python = WorkspacePython::from_request(
                     python.as_deref().map(PythonRequest::parse),
                     Some(workspace),
-                    &groups,
+                    &interpreter_groups,
                     project_dir,
                     config_discovery,
                 )
                 .await?;
                 ProjectInterpreter::discover(
                     workspace,
-                    &groups,
+                    &interpreter_groups,
                     workspace_python,
                     client_builder,
                     python_preference,

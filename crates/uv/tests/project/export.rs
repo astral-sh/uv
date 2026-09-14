@@ -2825,6 +2825,68 @@ fn requirements_txt_no_editable() -> Result<()> {
 
 #[cfg(feature = "test-universal")]
 #[test]
+fn requirements_txt_group_requires_python() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [dependency-groups]
+        docs = ["idna==3.6"]
+
+        [tool.uv]
+        default-groups = ["docs"]
+
+        [tool.uv.dependency-groups]
+        docs = { requires-python = ">=3.13" }
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.export()
+        .arg("--python").arg("3.12").arg("--no-hashes").arg("--no-header"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    idna==3.6 ; python_full_version >= '3.13'
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    uv_snapshot!(context.filters(), context.export()
+        .arg("--locked").arg("--python").arg("3.12")
+        .arg("--no-hashes").arg("--no-header"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    idna==3.6 ; python_full_version >= '3.13'
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    // The locking interpreter must still satisfy the project's Python requirement.
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&context.read("pyproject.toml").replace(
+            "requires-python = \">=3.12\"",
+            "requires-python = \">=3.13\"",
+        ))?;
+    uv_snapshot!(context.filters(), context.export().arg("--python").arg("3.12"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    error: The requested interpreter resolved to Python 3.12.[X], which is incompatible with the project's Python requirement: `>=3.13` (from `project.requires-python`)
+    ");
+
+    Ok(())
+}
+
+#[cfg(feature = "test-universal")]
+#[test]
 fn requirements_txt_export_group() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 

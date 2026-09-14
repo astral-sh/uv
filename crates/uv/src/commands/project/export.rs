@@ -12,8 +12,8 @@ use rustc_hash::FxHashSet;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, RegistryClientBuilder};
 use uv_configuration::{
-    ActiveEnvironment, Concurrency, DependencyGroups, EditableMode, ExportFormat,
-    ExtrasSpecification, InstallOptions,
+    ActiveEnvironment, Concurrency, DependencyGroups, DependencyGroupsWithDefaults, EditableMode,
+    ExportFormat, ExtrasSpecification, InstallOptions,
 };
 use uv_distribution_types::Verbatim;
 use uv_normalize::{DefaultExtras, DefaultGroups, PackageName};
@@ -183,17 +183,20 @@ pub(crate) async fn export(
             .await?
             .into_interpreter(),
             ExportTarget::Project(project) => {
+                // As in `uv lock`, select the interpreter without group Python requirements.
+                // The export retains each group's Python requirement as dependency markers.
+                let interpreter_groups = DependencyGroupsWithDefaults::none();
                 let workspace_python = WorkspacePython::from_request(
                     python.as_deref().map(PythonRequest::parse),
                     Some(project.workspace()),
-                    &groups,
+                    &interpreter_groups,
                     project_dir,
                     config_discovery,
                 )
                 .await?;
                 ProjectInterpreter::discover(
                     project.workspace(),
-                    &groups,
+                    &interpreter_groups,
                     workspace_python,
                     &client_builder,
                     python_preference,
