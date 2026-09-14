@@ -356,10 +356,9 @@ pub(crate) async fn pip_compile(
     // Create the shared state.
     let state = SharedState::default();
 
-    // If we're resolving against a different Python version, use a separate index. Source
-    // distributions will be built against the installed version, and so the index may contain
-    // different package priorities than in the top-level resolution.
-    let top_level_index = if python_version.is_some() {
+    // Universal or cross-version resolution ranks artifacts differently from build dependencies,
+    // which use the installed interpreter. Keep their policy-dependent version maps separate.
+    let top_level_index = if universal || python_version.is_some() {
         InMemoryIndex::default()
     } else {
         state.index().clone()

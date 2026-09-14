@@ -650,15 +650,19 @@ pub struct ToolUv {
 
     /// The oldest glibc version supported by the required Linux environments.
     ///
-    /// When checking wheel coverage for `environments` and `required-environments`, manylinux
-    /// tags requiring a newer glibc version do not count as supporting Linux. For example,
-    /// `"2.31"` permits `manylinux_2_17` wheels, but not `manylinux_2_34` wheels. Musllinux
-    /// wheels do not provide glibc compatibility. Platform-independent wheels, native Linux
-    /// wheels without a declared glibc baseline, and other platforms are unaffected.
+    /// Exclude wheels whose platform tags require a newer glibc version from universal
+    /// resolution and its output artifacts. For example, `"2.31"` permits `manylinux_2_17`
+    /// wheels, but not `manylinux_2_34` wheels. Musllinux wheels are also excluded.
+    /// Platform-independent wheels, native Linux wheels without a declared glibc baseline,
+    /// and other platforms are unaffected.
+    ///
+    /// A wheel with multiple platform tags remains eligible if any tag is allowed, but only
+    /// allowed tags contribute coverage for `environments` and `required-environments`.
     ///
     /// This setting does not require Linux support by itself; declare the Linux architectures
     /// to support in `required-environments`. Packages with a usable source distribution can
     /// still be selected, without guaranteeing that the source distribution will build.
+    /// Excluded wheels and their hashes are omitted from the resolution's lock and exports.
     ///
     /// This setting is respected by `uv lock` and `uv pip compile --universal`.
     #[cfg_attr(feature = "schemars", schemars(with = "Option<String>"))]

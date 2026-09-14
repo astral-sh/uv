@@ -72,6 +72,149 @@ fn locked_package(context: &TestContext, name: &str) -> Result<toml::Value> {
         .with_context(|| format!("lockfile has no package named {name}"))
 }
 
+/// The glibc floor filters Linux artifacts without removing wheels for other platforms.
+#[test]
+fn minimum_glibc_filters_locked_wheels() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    for tag in [
+        "cp312-cp312-manylinux_2_17_x86_64",
+        "cp312-cp312-manylinux_2_34_x86_64",
+        "cp312-cp312-macosx_11_0_arm64",
+        "cp312-cp312-win_amd64",
+    ] {
+        wheel(&context, "demo", "1.0.0", tag)?;
+    }
+
+    project(&context, &["demo"], &[LINUX_X86_64], None)?;
+    uv_snapshot!(context.filters(), context.lock().arg("--offline"), @r"
+        exit_code: 0 (success)
+        ----- stderr -----
+        Resolved 2 packages in [TIME]
+    ");
+    let package = locked_package(&context, "demo")?;
+    insta::with_settings!({filters => context.filters()}, {
+        insta::assert_json_snapshot!(package["wheels"], @r#"
+            [
+              {
+                "path": "demo-1.0.0-cp312-cp312-manylinux_2_17_x86_64.whl"
+              },
+              {
+                "path": "demo-1.0.0-cp312-cp312-manylinux_2_34_x86_64.whl"
+              },
+              {
+                "path": "demo-1.0.0-cp312-cp312-macosx_11_0_arm64.whl"
+              },
+              {
+                "path": "demo-1.0.0-cp312-cp312-win_amd64.whl"
+              }
+            ]
+        "#);
+    });
+
+    project(&context, &["demo"], &[LINUX_X86_64], Some("2.31"))?;
+    uv_snapshot!(context.filters(), context.lock().arg("--offline"), @r"
+        exit_code: 0 (success)
+        ----- stderr -----
+        Resolved 2 packages in [TIME]
+    ");
+    let package = locked_package(&context, "demo")?;
+    insta::with_settings!({filters => context.filters()}, {
+        insta::assert_json_snapshot!(package["wheels"], @r#"
+            [
+              {
+                "path": "demo-1.0.0-cp312-cp312-manylinux_2_17_x86_64.whl"
+              },
+              {
+                "path": "demo-1.0.0-cp312-cp312-macosx_11_0_arm64.whl"
+              },
+              {
+                "path": "demo-1.0.0-cp312-cp312-win_amd64.whl"
+              }
+            ]
+        "#);
+    });
+
+    uv_snapshot!(context.filters(), context.pip_compile().args(["pyproject.toml", "--universal", "--format", "pylock.toml", "--offline", "--no-header"]), @r#"
+        exit_code: 0 (success)
+        ----- stdout -----
+        lock-version = "1.0"
+        created-by = "uv"
+        requires-python = ">=3.12"
+
+        [[packages]]
+        name = "demo"
+        version = "1.0.0"
+        wheels = [
+            { url = "file://[TEMP_DIR]/links/demo-1.0.0-cp312-cp312-manylinux_2_17_x86_64.whl", hashes = { sha256 = "eb2ff51027ef5001a478ca15a93fbd009fdda87e36238238a52f1d4019502428" } },
+            { url = "file://[TEMP_DIR]/links/demo-1.0.0-cp312-cp312-macosx_11_0_arm64.whl", hashes = { sha256 = "ed676c33c75c4e3d56b53b061173a4ec378e289013cef527ae68ce525f30be80" } },
+            { url = "file://[TEMP_DIR]/links/demo-1.0.0-cp312-cp312-win_amd64.whl", hashes = { sha256 = "c0b5946665f8aebba3d880c4e5658f346e3971ec2cc0013780eab4dafbbfcad6" } },
+        ]
+
+        ----- stderr -----
+        Resolved 1 package in [TIME]
+    "#);
+    uv_snapshot!(context.filters(), context.pip_compile().args(["pyproject.toml", "--universal", "--generate-hashes", "--offline", "--no-header", "--no-annotate"]), @r"
+        exit_code: 0 (success)
+        ----- stdout -----
+        demo==1.0.0 \
+            --hash=sha256:eb2ff51027ef5001a478ca15a93fbd009fdda87e36238238a52f1d4019502428
+
+        ----- stderr -----
+        Resolved 1 package in [TIME]
+    ");
+    Ok(())
+}
+
+/// Local-version fallback considers only wheels permitted by the artifact policy.
+#[test]
+fn minimum_glibc_local_version_fallback() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    for (version, tag) in [
+        ("1.0.0", "cp312-cp312-manylinux_2_17_x86_64"),
+        ("1.0.0", "cp312-cp312-manylinux_2_17_aarch64"),
+        ("1.0.0+cpu", "cp312-cp312-manylinux_2_17_x86_64"),
+        ("1.0.0+cpu", "cp312-cp312-manylinux_2_34_aarch64"),
+    ] {
+        wheel(&context, "demo", version, tag)?;
+    }
+    project(
+        &context,
+        &["demo; sys_platform == 'linux'"],
+        &[],
+        Some("2.31"),
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--offline"), @r"
+        exit_code: 0 (success)
+        ----- stderr -----
+        Resolved 3 packages in [TIME]
+    ");
+    uv_snapshot!(context.filters(), context.export().args(["--frozen", "--no-hashes", "--no-header", "--no-annotate"]), @r"
+        exit_code: 0 (success)
+        ----- stdout -----
+        demo==1.0.0 ; python_full_version < '3.13' and platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'linux'
+        demo==1.0.0+cpu ; (python_full_version >= '3.13' and sys_platform == 'linux') or (platform_machine != 'aarch64' and sys_platform == 'linux') or (platform_python_implementation != 'CPython' and sys_platform == 'linux')
+    ");
+
+    let lock: toml::Value = toml::from_str(&context.read("uv.lock"))?;
+    let local_package = lock["package"]
+        .as_array()
+        .context("lockfile has no packages")?
+        .iter()
+        .find(|package| package["version"].as_str() == Some("1.0.0+cpu"))
+        .context("lockfile has no local-version package")?;
+    insta::with_settings!({filters => context.filters()}, {
+        insta::assert_json_snapshot!(local_package["wheels"], @r#"
+            [
+              {
+                "path": "demo-1.0.0+cpu-cp312-cp312-manylinux_2_17_x86_64.whl"
+              }
+            ]
+        "#);
+    });
+    Ok(())
+}
+
 /// Tightening the deployment floor changes the selected version and is recorded in the lock.
 #[test]
 fn minimum_glibc_backtracks_and_invalidates_lock() -> Result<()> {
@@ -105,7 +248,7 @@ fn minimum_glibc_backtracks_and_invalidates_lock() -> Result<()> {
     uv_snapshot!(context.filters(), context.lock().args(["--offline", "--locked"]), @r"
         exit_code: 1 (failure)
         ----- stderr -----
-        Resolved 3 packages in [TIME]
+        Resolved 2 packages in [TIME]
         error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
 
         hint: To update the lockfile, run `uv lock`.
@@ -114,14 +257,13 @@ fn minimum_glibc_backtracks_and_invalidates_lock() -> Result<()> {
     uv_snapshot!(context.filters(), context.lock().arg("--offline"), @r"
         exit_code: 0 (success)
         ----- stderr -----
-        Resolved 3 packages in [TIME]
-        Updated demo v2.0.0 -> v1.0.0, v2.0.0
+        Resolved 2 packages in [TIME]
+        Updated demo v2.0.0 -> v1.0.0
     ");
     uv_snapshot!(context.filters(), context.export().args(["--frozen", "--no-hashes", "--no-header", "--no-annotate"]), @r"
         exit_code: 0 (success)
         ----- stdout -----
-        demo==1.0.0 ; platform_machine == 'x86_64' and sys_platform == 'linux'
-        demo==2.0.0 ; platform_machine != 'x86_64' or sys_platform != 'linux'
+        demo==1.0.0
     ");
     let lock: toml::Value = toml::from_str(&context.read("uv.lock"))?;
     assert_eq!(
@@ -140,7 +282,7 @@ fn minimum_glibc_backtracks_and_invalidates_lock() -> Result<()> {
     uv_snapshot!(context.filters(), context.lock().args(["--offline", "--locked"]), @r"
         exit_code: 1 (failure)
         ----- stderr -----
-        Resolved 3 packages in [TIME]
+        Resolved 2 packages in [TIME]
         error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
 
         hint: To update the lockfile, run `uv lock`.
@@ -163,11 +305,6 @@ fn minimum_glibc_backtracks_and_invalidates_lock() -> Result<()> {
 #[test]
 fn minimum_glibc_no_compatible_version() -> Result<()> {
     let context = uv_test::test_context!("3.12");
-    let mut filters = context.filters();
-    filters.push((
-        r"\nhint: The resolution failed for an environment that is not the current one[^\n]*",
-        "",
-    ));
     wheel(
         &context,
         "demo",
@@ -176,11 +313,11 @@ fn minimum_glibc_no_compatible_version() -> Result<()> {
     )?;
     project(&context, &["demo"], &[LINUX_X86_64], Some("2.31"))?;
 
-    let output = uv_snapshot!(filters, context.lock().arg("--offline"), @r"
+    let output = uv_snapshot!(context.filters(), context.lock().arg("--offline"), @r"
         exit_code: 1 (failure)
         ----- stderr -----
-        error: No solution found when resolving dependencies for split (markers: platform_machine == 'x86_64' and sys_platform == 'linux')
-          cause: Because demo==2.0.0 has no `platform_machine == 'x86_64' and sys_platform == 'linux'`-compatible wheels and only demo==2.0.0 is available, we can conclude that all versions of demo cannot be used.
+        error: No solution found when resolving dependencies
+          cause: Because demo==2.0.0 has no wheels compatible with glibc 2.31 and only demo==2.0.0 is available, we can conclude that all versions of demo cannot be used.
                  And because your project depends on demo, we can conclude that your project's requirements are unsatisfiable.
     ");
     assert!(!output.status.success());
@@ -192,11 +329,6 @@ fn minimum_glibc_no_compatible_version() -> Result<()> {
 #[test]
 fn minimum_glibc_allows_sdist_fallback() -> Result<()> {
     let context = uv_test::test_context!("3.12");
-    let mut filters = context.filters();
-    filters.push((
-        r"\nhint: The resolution failed for an environment that is not the current one[^\n]*",
-        "",
-    ));
     wheel(
         &context,
         "demo",
@@ -240,12 +372,14 @@ fn minimum_glibc_allows_sdist_fallback() -> Result<()> {
     assert!(package.get("sdist").is_some());
 
     // Reconsider the cached flat-index entry when its source distribution cannot be built.
-    let output = uv_snapshot!(filters, context.lock().args(["--offline", "--no-build", "--upgrade"]), @r"
+    let output = uv_snapshot!(context.filters(), context.lock().args(["--offline", "--no-build", "--upgrade"]), @r"
         exit_code: 1 (failure)
         ----- stderr -----
-        error: No solution found when resolving dependencies for split (markers: platform_machine == 'x86_64' and sys_platform == 'linux')
-          cause: Because demo==2.0.0 has no `platform_machine == 'x86_64' and sys_platform == 'linux'`-compatible wheels and only demo==2.0.0 is available, we can conclude that all versions of demo cannot be used.
+        error: No solution found when resolving dependencies
+          cause: Because demo==2.0.0 has no usable wheels and only demo==2.0.0 is available, we can conclude that all versions of demo cannot be used.
                  And because your project depends on demo, we can conclude that your project's requirements are unsatisfiable.
+
+        hint: Wheels are required for `demo` because building from source is disabled for all packages (i.e., with `--no-build`)
     ");
     assert!(!output.status.success());
     Ok(())
@@ -266,13 +400,13 @@ fn minimum_glibc_direct_url() -> Result<()> {
         .context("wheel has no file name")?
         .to_string_lossy();
     let dependency = format!("demo @ {}/{filename}", server.url());
-    project(&context, &[&dependency], &[LINUX_X86_64], Some("2.31"))?;
+    project(&context, &[&dependency], &[], Some("2.31"))?;
 
     let output = uv_snapshot!(context.filters(), context.lock(), @r"
         exit_code: 1 (failure)
         ----- stderr -----
         error: No solution found when resolving dependencies
-          cause: Because only demo==2.0.0 is available and demo==2.0.0 has no `platform_machine == 'x86_64' and sys_platform == 'linux'`-compatible wheels, we can conclude that all versions of demo cannot be used.
+          cause: Because only demo==2.0.0 is available and demo==2.0.0 has no wheels compatible with glibc 2.31, we can conclude that all versions of demo cannot be used.
                  And because your project depends on demo, we can conclude that your project's requirements are unsatisfiable.
     ");
     assert!(!output.status.success());
@@ -377,11 +511,10 @@ fn minimum_glibc_pip_compile_universal() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_compile().args(["pyproject.toml", "--universal", "--offline", "--no-header", "--no-annotate"]), @r"
         exit_code: 0 (success)
         ----- stdout -----
-        demo==1.0.0 ; platform_machine == 'x86_64' and sys_platform == 'linux'
-        demo==2.0.0 ; platform_machine != 'x86_64' or sys_platform != 'linux'
+        demo==1.0.0
 
         ----- stderr -----
-        Resolved 2 packages in [TIME]
+        Resolved 1 package in [TIME]
     ");
 
     project(&context, &["demo"], &[LINUX_X86_64], None)?;

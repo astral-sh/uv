@@ -20,7 +20,9 @@ use uv_git::GitResolver;
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::{Version, VersionSpecifier};
 use uv_pep508::{MarkerEnvironment, MarkerTree, MarkerTreeKind};
-use uv_pypi_types::{Conflicts, HashDigests, ParsedUrl, ParsedUrlError, VerbatimParsedUrl, Yanked};
+use uv_pypi_types::{
+    Conflicts, HashDigest, HashDigests, ParsedUrl, ParsedUrlError, VerbatimParsedUrl, Yanked,
+};
 use uv_types::HashStrategy;
 
 use crate::graph_ops::{marker_reachability, simplify_conflict_markers};
@@ -227,7 +229,11 @@ impl ResolverOutput {
             report_missing_lower_bounds(&graph, &mut diagnostics, &constraints, &overrides);
         }
 
-        let output = Self {
+        let filter_artifact_hashes = !options.artifact_policy().is_empty()
+            && resolutions
+                .iter()
+                .all(|resolution| resolution.env.marker_environment().is_none());
+        let mut output = Self {
             graph,
             requires_python,
             fork_markers,
@@ -237,6 +243,10 @@ impl ResolverOutput {
             overrides,
             options,
         };
+        if filter_artifact_hashes {
+            let build_options = output.options.build_options.clone();
+            output.retain_registry_artifact_hashes(&build_options, Some(index));
+        }
 
         // We only do conflicting distribution detection when no
         // conflicting groups have been specified. The reason here
@@ -639,6 +649,17 @@ impl ResolverOutput {
     /// All available wheel hashes remain eligible when source builds are disabled so the
     /// resulting requirements can still be installed on other supported platforms.
     pub fn retain_allowed_distribution_hashes(&mut self, build_options: &BuildOptions) {
+        self.retain_registry_artifact_hashes(build_options, None);
+    }
+
+    /// Restrict hashes to retained registry artifacts, including hashes computed for the selected
+    /// artifact when enforcing a universal artifact policy.
+    fn retain_registry_artifact_hashes(
+        &mut self,
+        build_options: &BuildOptions,
+        in_memory: Option<&InMemoryIndex>,
+    ) {
+        let strict = in_memory.is_some();
         for node in self.graph.node_weights_mut() {
             let ResolutionGraphNode::Dist(distribution) = node else {
                 continue;
@@ -646,35 +667,52 @@ impl ResolverOutput {
             let ResolvedDist::Installable { dist, .. } = &distribution.dist else {
                 continue;
             };
-            let allowed_hashes = match dist.as_ref() {
+            let mut allowed_hashes = match dist.as_ref() {
                 Dist::Built(BuiltDist::Registry(dist))
-                    if build_options.no_build_package(&distribution.name) =>
+                    if strict || build_options.no_build_package(&distribution.name) =>
                 {
                     dist.wheels
                         .iter()
+                        .filter(|_| !build_options.no_binary_package(&distribution.name))
                         .flat_map(|wheel| wheel.file.hashes.iter())
+                        .chain(
+                            dist.sdist
+                                .iter()
+                                .filter(|_| !build_options.no_build_package(&distribution.name))
+                                .flat_map(|source| source.file.hashes.iter()),
+                        )
                         .collect::<FxHashSet<_>>()
                 }
                 Dist::Source(SourceDist::Registry(source))
-                    if build_options.no_binary_package(&distribution.name) =>
+                    if strict || build_options.no_binary_package(&distribution.name) =>
                 {
-                    source.file.hashes.iter().collect::<FxHashSet<_>>()
+                    source
+                        .file
+                        .hashes
+                        .iter()
+                        .filter(|_| !build_options.no_build_package(&distribution.name))
+                        .chain(
+                            source
+                                .wheels
+                                .iter()
+                                .filter(|_| !build_options.no_binary_package(&distribution.name))
+                                .flat_map(|wheel| wheel.file.hashes.iter()),
+                        )
+                        .collect::<FxHashSet<_>>()
                 }
                 _ => continue,
             };
-            if allowed_hashes.is_empty() {
-                continue;
-            }
 
-            let hashes = distribution
-                .hashes
-                .iter()
-                .filter(|hash| allowed_hashes.contains(hash))
-                .cloned()
-                .collect::<Vec<_>>();
-            if !hashes.is_empty() {
-                distribution.hashes = HashDigests::from(hashes);
+            // Flat indexes need not advertise hashes. A hash computed for this exact retained
+            // artifact is still eligible; hashes from another wheel used only for metadata are not.
+            let metadata_response =
+                in_memory.and_then(|index| index.distributions().get(&dist.distribution_id()));
+            if let Some(response) = &metadata_response
+                && let MetadataResponse::Found(archive) = &**response
+            {
+                allowed_hashes.extend(archive.hashes.iter());
             }
+            retain_artifact_hashes(&mut distribution.hashes, &allowed_hashes, strict);
         }
     }
 
@@ -1068,4 +1106,63 @@ fn has_lower_bound(
         }
     }
     false
+}
+
+/// Intersect output hashes with retained artifacts, falling back to known allowed hashes when a
+/// strict artifact policy invalidates every existing hash.
+fn retain_artifact_hashes(
+    hashes: &mut HashDigests,
+    allowed_hashes: &FxHashSet<&HashDigest>,
+    strict: bool,
+) {
+    let mut retained = hashes
+        .iter()
+        .filter(|hash| allowed_hashes.contains(hash))
+        .cloned()
+        .collect::<Vec<_>>();
+    if strict && retained.is_empty() {
+        retained.extend(allowed_hashes.iter().copied().cloned());
+        retained.sort_unstable();
+    }
+    if strict || !retained.is_empty() {
+        *hashes = HashDigests::from(retained);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use rustc_hash::FxHashSet;
+    use uv_pypi_types::{HashDigest, HashDigests};
+
+    use super::retain_artifact_hashes;
+
+    #[test]
+    fn artifact_policy_hashes_have_no_unfiltered_fallback() -> Result<(), Box<dyn std::error::Error>>
+    {
+        let allowed: HashDigest = "sha256:allowed".parse()?;
+        let another_allowed: HashDigest = "sha256:another-allowed".parse()?;
+        let denied: HashDigest = "sha256:denied".parse()?;
+        let allowed_hashes = FxHashSet::from_iter([&another_allowed, &allowed]);
+
+        let mut hashes = HashDigests::from(vec![allowed.clone(), denied.clone()]);
+        retain_artifact_hashes(&mut hashes, &allowed_hashes, true);
+        assert_eq!(hashes.as_slice(), std::slice::from_ref(&allowed));
+
+        let mut hashes = HashDigests::from(vec![denied.clone()]);
+        retain_artifact_hashes(&mut hashes, &allowed_hashes, true);
+        let mut expected = vec![allowed.clone(), another_allowed.clone()];
+        expected.sort_unstable();
+        assert_eq!(hashes.as_slice(), expected.as_slice());
+
+        let mut hashes = HashDigests::from(vec![denied.clone()]);
+        retain_artifact_hashes(&mut hashes, &FxHashSet::default(), true);
+        assert!(hashes.is_empty());
+
+        // Preserve the existing best-effort behavior when no artifact policy is active.
+        let mut hashes = HashDigests::from(vec![denied.clone()]);
+        retain_artifact_hashes(&mut hashes, &allowed_hashes, false);
+        retain_artifact_hashes(&mut hashes, &FxHashSet::default(), false);
+        assert_eq!(hashes.as_slice(), &[denied]);
+        Ok(())
+    }
 }
