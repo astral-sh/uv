@@ -35,10 +35,10 @@ use uv_distribution_types::{
     ArchiveHashPolicy, BuiltDist, DependencyMetadata, DirectUrlBuiltDist, DirectUrlSourceDist,
     DirectorySourceDist, Dist, FileLocation, FirstParty, GitDirectorySourceDist, GitPathBuiltDist,
     GitPathSourceDist, HashValidation, Identifier, IndexLocations, IndexMetadata, IndexUrl,
-    MetadataHashPolicy, Name, PYPI_URL, PathBuiltDist, PathSourceDist, RegistryBuiltDist,
-    RegistryBuiltWheel, RegistrySourceDist, RemoteSource, Requirement, RequirementSource,
-    RequiresPython, ResolvedDist, SimplifiedMarkerTree, StaticMetadata, ToUrlError, UrlString,
-    VersionId,
+    MetadataHashPolicy, MinimumLibcVersion, Name, PYPI_URL, PathBuiltDist, PathSourceDist,
+    RegistryBuiltDist, RegistryBuiltWheel, RegistrySourceDist, RemoteSource, Requirement,
+    RequirementSource, RequiresPython, ResolvedDist, SimplifiedMarkerTree, StaticMetadata,
+    ToUrlError, UrlString, VersionId,
 };
 use uv_fs::{PortablePath, PortablePathBuf, Simplified, normalize_path, try_relative_to_if};
 use uv_git::{RepositoryReference, ResolvedRepositoryReference};
@@ -49,8 +49,7 @@ use uv_pep508::{
     MarkerEnvironment, MarkerTree, Scheme, VerbatimUrl, VerbatimUrlError, split_scheme,
 };
 use uv_platform_tags::{
-    AbiTag, GlibcVersion, IncompatibleTag, LanguageTag, PlatformTag, TagCompatibility, TagPriority,
-    Tags,
+    AbiTag, IncompatibleTag, LanguageTag, PlatformTag, TagCompatibility, TagPriority, Tags,
 };
 use uv_preview::PreviewFeature;
 use uv_pypi_types::{
@@ -1118,7 +1117,7 @@ impl Lock {
             resolution_mode: resolution.options.resolution_mode,
             prerelease: resolution.options.prerelease.clone(),
             fork_strategy: resolution.options.fork_strategy,
-            minimum_glibc_version: resolution.options.minimum_glibc_version,
+            minimum_libc_version: resolution.options.minimum_libc_version,
             exclude_newer: resolution.options.exclude_newer.clone(),
         };
         // Canonicalize the top-level fork markers to match what is persisted in
@@ -1480,9 +1479,9 @@ impl Lock {
         self.options.fork_strategy
     }
 
-    /// Return the oldest glibc version required during resolution.
-    pub fn minimum_glibc_version(&self) -> Option<GlibcVersion> {
-        self.options.minimum_glibc_version
+    /// Return the supported libc implementations and their minimum versions.
+    pub fn minimum_libc_version(&self) -> Option<MinimumLibcVersion> {
+        self.options.minimum_libc_version
     }
 
     /// Returns the exclude newer setting used to generate this lock.
@@ -3554,8 +3553,8 @@ struct ResolverOptions {
     prerelease: Prerelease,
     /// The [`ForkStrategy`] used to generate this lock.
     fork_strategy: ForkStrategy,
-    /// The oldest glibc version supported by the required Linux environments.
-    minimum_glibc_version: Option<GlibcVersion>,
+    /// The supported libc implementations and their minimum versions.
+    minimum_libc_version: Option<MinimumLibcVersion>,
     /// The [`ExcludeNewer`] setting used to generate this lock.
     exclude_newer: ExcludeNewer,
 }
@@ -3573,8 +3572,8 @@ struct ResolverOptionsWire {
     /// The [`ForkStrategy`] used to generate this lock.
     #[serde(default)]
     fork_strategy: ForkStrategy,
-    /// The oldest glibc version supported by the required Linux environments.
-    minimum_glibc_version: Option<GlibcVersion>,
+    /// The supported libc implementations and their minimum versions.
+    minimum_libc_version: Option<MinimumLibcVersion>,
     /// The [`ExcludeNewer`] setting used to generate this lock.
     #[serde(flatten)]
     exclude_newer: ExcludeNewerWire,
@@ -3853,7 +3852,7 @@ impl TryFrom<LockWire> for Lock {
             resolution_mode: options_wire.resolution_mode,
             prerelease: options_wire.prerelease.into(),
             fork_strategy: options_wire.fork_strategy,
-            minimum_glibc_version: options_wire.minimum_glibc_version,
+            minimum_libc_version: options_wire.minimum_libc_version,
             exclude_newer: options_wire.exclude_newer.into(),
         };
         let lock = Self::new(
