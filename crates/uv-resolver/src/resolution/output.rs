@@ -589,3 +589,62 @@ fn has_lower_bound(
     }
     false
 }
+
+/// Intersect output hashes with retained artifacts, falling back to known allowed hashes when a
+/// strict artifact policy invalidates every existing hash.
+fn retain_artifact_hashes(
+    hashes: &mut HashDigests,
+    allowed_hashes: &FxHashSet<&HashDigest>,
+    strict: bool,
+) {
+    let mut retained = hashes
+        .iter()
+        .filter(|hash| allowed_hashes.contains(hash))
+        .cloned()
+        .collect::<Vec<_>>();
+    if strict && retained.is_empty() {
+        retained.extend(allowed_hashes.iter().copied().cloned());
+        retained.sort_unstable();
+    }
+    if strict || !retained.is_empty() {
+        *hashes = HashDigests::from(retained);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use rustc_hash::FxHashSet;
+    use uv_pypi_types::{HashDigest, HashDigests};
+
+    use super::retain_artifact_hashes;
+
+    #[test]
+    fn artifact_policy_hashes_have_no_unfiltered_fallback() -> Result<(), Box<dyn std::error::Error>>
+    {
+        let allowed: HashDigest = "sha256:allowed".parse()?;
+        let another_allowed: HashDigest = "sha256:another-allowed".parse()?;
+        let denied: HashDigest = "sha256:denied".parse()?;
+        let allowed_hashes = FxHashSet::from_iter([&another_allowed, &allowed]);
+
+        let mut hashes = HashDigests::from(vec![allowed.clone(), denied.clone()]);
+        retain_artifact_hashes(&mut hashes, &allowed_hashes, true);
+        assert_eq!(hashes.as_slice(), std::slice::from_ref(&allowed));
+
+        let mut hashes = HashDigests::from(vec![denied.clone()]);
+        retain_artifact_hashes(&mut hashes, &allowed_hashes, true);
+        let mut expected = vec![allowed.clone(), another_allowed.clone()];
+        expected.sort_unstable();
+        assert_eq!(hashes.as_slice(), expected.as_slice());
+
+        let mut hashes = HashDigests::from(vec![denied.clone()]);
+        retain_artifact_hashes(&mut hashes, &FxHashSet::default(), true);
+        assert!(hashes.is_empty());
+
+        // Preserve the existing best-effort behavior when no artifact policy is active.
+        let mut hashes = HashDigests::from(vec![denied.clone()]);
+        retain_artifact_hashes(&mut hashes, &allowed_hashes, false);
+        retain_artifact_hashes(&mut hashes, &FxHashSet::default(), false);
+        assert_eq!(hashes.as_slice(), &[denied]);
+        Ok(())
+    }
+}

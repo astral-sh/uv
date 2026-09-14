@@ -634,5 +634,5 @@ set of pre-built binary distributions (wheels) published by that package.
 See the [resolution documentation](../resolution.md#required-environments) for more.
 
 For glibc-based Linux targets, pair `required-environments` with
-[`minimum-glibc-version`](../resolution.md#minimum-glibc-version) to require wheels compatible with
-a specific glibc baseline during resolution.
+[`minimum-glibc-version`](../resolution.md#minimum-glibc-version) to constrain resolution and locked
+wheel artifacts to a specific glibc baseline.

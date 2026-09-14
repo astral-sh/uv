@@ -234,8 +234,8 @@ lockfile.
 ### Minimum glibc version
 
 Linux environment markers describe the operating system and architecture, but not the glibc version.
-Use `minimum-glibc-version` alongside `required-environments` to constrain wheel coverage for your
-oldest glibc-based Linux hosts:
+Use `minimum-glibc-version` to exclude artifacts that require a newer glibc release, and
+`required-environments` to require coverage for your Linux architectures:
 
 ```toml title="pyproject.toml"
 [tool.uv]
@@ -246,15 +246,21 @@ required-environments = [
 minimum-glibc-version = "2.31"
 ```
 
-During resolution, a `manylinux_2_17` wheel can satisfy this requirement, but a `manylinux_2_34`
-wheel cannot. If a package has no compatible wheel or usable source distribution, uv tries another
-package version or fails resolution. The setting applies to wheel coverage for both `environments`
-and `required-environments`; it does not require Linux support unless those settings request it.
+During resolution, a `manylinux_2_17` wheel remains eligible, but a `manylinux_2_34` wheel does not.
+If a package has no allowed wheel or usable source distribution, uv tries another package version or
+fails resolution. Excluded wheel records are omitted from `uv.lock` and `pylock.toml`, and their
+hashes are omitted from generated requirements files. Requirements files without hashes constrain
+package versions, not the wheel artifacts an installer may select.
 
-Musllinux wheels do not satisfy a glibc requirement. Platform-independent wheels, native `linux`
-wheels (which do not declare a glibc baseline), and wheels for other operating systems retain their
-usual compatibility rules. Source distributions remain eligible when builds are allowed; resolving a
-lock does not prove that those distributions build on the target host.
+The same policy governs wheel coverage for both `environments` and `required-environments`. A wheel
+with multiple platform tags is retained if any tag is allowed, but only allowed tags contribute
+environment coverage. The setting does not require Linux support unless those environment settings
+request it.
+
+Musllinux wheels are also excluded. Platform-independent wheels, native `linux` wheels (which do not
+declare a glibc baseline), and wheels for other operating systems retain their usual compatibility
+rules. Source distributions remain eligible when builds are allowed; resolving a lock does not prove
+that those distributions build on the target host.
 
 The setting is also respected by `uv pip compile --universal`. Target-specific operations continue
 to use the current platform or `--python-platform` instead. Changing the setting invalidates the
