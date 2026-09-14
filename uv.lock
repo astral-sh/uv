@@ -13,8 +13,8 @@ exclude-newer = "0001-01-01T00:00:00Z" # This has no effect and is included for 
 exclude-newer-span = "P7D"
 
 [options.exclude-newer-package]
-astral-dev-toolchain-cargo-dist = "2026-08-28T04:00:00Z"
 astral-dev-toolchain-cargo-shear = "2026-08-27T04:00:00Z"
+astral-dev-toolchain-cargo-dist = "2026-08-28T04:00:00Z"
 
 [[package]]
 name = "annotated-doc"
@@ -57,6 +57,19 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/0f/4b/cd5d66b9f87e773bc71344a368b9472987e33514e6627e28342b9c3e7c43/anysqlite-0.0.5.tar.gz", hash = "sha256:9dfcf87baf6b93426ad1d9118088c41dbf24ef01b445eea4a5d486bac2755cce", size = 3432, upload-time = "2023-10-02T13:49:25.135Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/0b/31/349eae2bc9d9331dd8951684cf94528d91efaa71129dc30822ac111dfc66/anysqlite-0.0.5-py3-none-any.whl", hash = "sha256:cb345dc4f76f6b37f768d7a0b3e9cf5c700dfcb7a6356af8ab46a11f666edbe7", size = 3907, upload-time = "2023-10-02T13:49:26.943Z" },
+]
+
+[[package]]
+name = "astral-dev-toolchain-cargo-codspeed"
+version = "5.0.1"
+source = { registry = "https://pypi.org/simple" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/69/0e/a7d82d3b80efb376676ad9e08b8d5b397fd2993fe436a012d116480edfe0/astral_dev_toolchain_cargo_codspeed-5.0.1-py3-none-macosx_10_12_x86_64.whl", hash = "sha256:dd304fbc053073e6e8e1b68283d36731788908ce49599e7680582cd87864f11b", size = 962023, upload-time = "2026-08-25T22:20:29.839Z" },
+    { url = "https://files.pythonhosted.org/packages/18/1c/a972d08a06e2646a3642a398a607608510a1ca8e3fae8c609806d783dbd7/astral_dev_toolchain_cargo_codspeed-5.0.1-py3-none-macosx_11_0_arm64.whl", hash = "sha256:4e04158926ee6c6ff6cdaaa6df46c05d7855e00b5b0c1550a747772cdcdc60c2", size = 941050, upload-time = "2026-08-25T22:20:31.607Z" },
+    { url = "https://files.pythonhosted.org/packages/d8/86/e803608dbe08ba83a2361dc21fa4f97c7c6b5e84a478637ddd9269aacb2d/astral_dev_toolchain_cargo_codspeed-5.0.1-py3-none-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:6e7196c632bb0103ebbf60a75ab076677ad03038fe92a88cbe27b1eb56e63d2b", size = 871539, upload-time = "2026-08-25T22:20:33.397Z" },
+    { url = "https://files.pythonhosted.org/packages/23/11/fb3246e194a1699f2a4493ba9501da8d65d3f49074330cce4244e3ded8c7/astral_dev_toolchain_cargo_codspeed-5.0.1-py3-none-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:15e1005b0a7e4eb750172f2d3d7c6ccb3e78e9b55fa4bcd62f54350181dca6a1", size = 922701, upload-time = "2026-08-25T22:20:34.902Z" },
+    { url = "https://files.pythonhosted.org/packages/c1/d9/bfb2f45e36c1525f0c9810405f605f39d7c8b4dcf250629b141b89eb89e6/astral_dev_toolchain_cargo_codspeed-5.0.1-py3-none-win_amd64.whl", hash = "sha256:ac995814067402b6604c6d8d9ab76700288f015494c53c4e75da09d5bc2ee5f7", size = 824114, upload-time = "2026-08-25T22:20:36.338Z" },
+    { url = "https://files.pythonhosted.org/packages/ce/34/cc139216c71c1bcb67c1623420843646a36748b7ab13d3ae502b5fdbb84d/astral_dev_toolchain_cargo_codspeed-5.0.1-py3-none-win_arm64.whl", hash = "sha256:4bb1b696762454f924a85e0949ab8da1e788124683b644d3b997115d61455700", size = 783231, upload-time = "2026-08-25T22:20:37.889Z" },
 ]
 
 [[package]]
@@ -1761,6 +1774,7 @@ check = [
     { name = "validate-pyproject", extra = ["all", "store"] },
 ]
 dev = [
+    { name = "astral-dev-toolchain-cargo-codspeed" },
     { name = "astral-dev-toolchain-cargo-dist" },
 ]
 docker = [
@@ -1791,7 +1805,10 @@ check = [
     { name = "typos", specifier = ">=1.49.0" },
     { name = "validate-pyproject", extras = ["all", "store"], specifier = ">=0.25" },
 ]
-dev = [{ name = "astral-dev-toolchain-cargo-dist", specifier = ">=0.32.0" }]
+dev = [
+    { name = "astral-dev-toolchain-cargo-codspeed", specifier = ">=5.0.1" },
+    { name = "astral-dev-toolchain-cargo-dist", specifier = ">=0.32.0" },
+]
 docker = [{ name = "cargo-zigbuild", marker = "python_full_version >= '3.12'", specifier = ">=0.23.0" }]
 docs = [
     { name = "black", marker = "python_full_version >= '3.12'", specifier = ">=23.10.0" },
