@@ -6422,6 +6422,7 @@ dependencies = [
  "uv-pypi-types",
  "uv-redacted",
  "uv-static",
+ "uv-unix",
 ]
 
 [[package]]
@@ -7518,6 +7519,7 @@ dependencies = [
  "uv-preview",
  "uv-python",
  "uv-static",
+ "uv-unix",
  "uv-version",
  "walkdir",
  "wiremock",

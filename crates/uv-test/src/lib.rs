@@ -117,6 +117,11 @@ pub const INSTA_FILTERS: &[(&str, &str)] = &[
         r"(?ms)^([ \t]*custom_certificates: )(?:None|Some\(\n.*?^[ \t]*\),\n[ \t]*\)),",
         "${1}[CERTIFICATES],",
     ),
+    // The concurrency limits that uv derives from the open file limit depend on
+    // the environment.
+    (r"downloads: \d+", "downloads: [CONCURRENCY]"),
+    (r"builds: \d+", "builds: [CONCURRENCY]"),
+    (r"installs: \d+", "installs: [CONCURRENCY]"),
     // Filter SSL certificate loading debug messages (environment-dependent)
     (r"DEBUG Loaded \d+ certificate\(s\) from [^\n]+\n", ""),
 ];
@@ -929,6 +934,9 @@ impl TestContext {
     ///
     /// This is called by the `test_context_with_versions!` macro.
     pub fn new_with_versions_and_bin(python_versions: &[&str], uv_bin: PathBuf) -> Self {
+        #[cfg(unix)]
+        raise_open_file_limit();
+
         let bucket = Self::test_bucket_dir();
         fs_err::create_dir_all(&bucket).expect("Failed to create test bucket");
 
@@ -2620,6 +2628,21 @@ impl Drop for ReadOnlyDirectoryGuard {
             &self.path,
             std::fs::Permissions::from_mode(self.original_mode),
         );
+    }
+}
+
+/// Raise the open file limit for the test process.
+///
+/// Tests run uv with the limits of the test runner, and uv's behavior, e.g., its concurrency
+/// limits, depends on the open file limit. Raising the limit keeps test results independent of
+/// the host running the tests. Tests that exercise a low open file limit set it explicitly in
+/// the commands they run.
+#[cfg(unix)]
+#[expect(clippy::print_stderr)]
+fn raise_open_file_limit() {
+    match uv_unix::adjust_open_file_limit() {
+        Ok(_) | Err(uv_unix::OpenFileLimitError::AlreadySufficient { .. }) => {}
+        Err(err) => eprintln!("Failed to raise the open file limit for the test: {err}"),
     }
 }
 

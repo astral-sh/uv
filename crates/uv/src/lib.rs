@@ -498,6 +498,18 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
         _ => None,
     };
 
+    // Adjust open file limits on Unix.
+    //
+    // This happens before resolving the global settings, which derive their concurrency limits
+    // from the soft open file limit.
+    #[cfg(unix)]
+    if global_initialization.needs_initialization() {
+        match uv_unix::adjust_open_file_limit() {
+            Ok(_) | Err(uv_unix::OpenFileLimitError::AlreadySufficient { .. }) => {}
+            Err(err) => debug!("{err}"),
+        }
+    }
+
     // Resolve the global settings.
     let globals = GlobalSettings::resolve(
         &cli.top_level.global_args,
@@ -523,15 +535,6 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
             "The following preview features are enabled: {}",
             globals.preview
         );
-    }
-
-    // Adjust open file limits on Unix.
-    #[cfg(unix)]
-    if global_initialization.needs_initialization() {
-        match uv_unix::adjust_open_file_limit() {
-            Ok(_) | Err(uv_unix::OpenFileLimitError::AlreadySufficient { .. }) => {}
-            Err(err) => debug!("{err}"),
-        }
     }
 
     // Resolve the cache settings.
