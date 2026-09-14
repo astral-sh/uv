@@ -1300,18 +1300,20 @@ impl CacheBucket {
         match self {
             // Note that when bumping this, you'll also need to bump it
             // in `crates/uv/tests/build/cache_prune.rs`.
-            Self::SourceDistributions => "sdists-v10",
+            // TODO(ww): Remove `uv_pypi_types::HashDigestWire` on the next cache bump
+            // or breaking release.
+            Self::SourceDistributions => "sdists-v9",
             // Note that when bumping this, you'll also need to bump it
             // in `crates/uv/tests/lock/lock.rs`.
-            Self::FlatIndex => "flat-index-v6",
+            Self::FlatIndex => "flat-index-v5",
             Self::Git => "git-v0",
             Self::Interpreter => "interpreter-v4",
             // Note that when bumping this, you'll also need to bump it
             // in `crates/uv/tests/build/cache_clean.rs`.
-            Self::Simple => "simple-v26",
+            Self::Simple => "simple-v25",
             // Note that when bumping this, you'll also need to bump it
             // in `crates/uv/tests/build/cache_prune.rs`.
-            Self::Wheels => "wheels-v7",
+            Self::Wheels => "wheels-v6",
             // Note that when bumping this, you'll also need to bump
             // `ARCHIVE_VERSION` in `crates/uv-cache/src/lib.rs`.
             Self::Archive => "archive-v0",

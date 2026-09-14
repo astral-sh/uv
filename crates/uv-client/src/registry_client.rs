@@ -1516,7 +1516,7 @@ impl From<CachedFile> for File {
 enum CachedHashDigests {
     Sha256([u8; 32]),
     Md5([u8; 16]),
-    Blake2b256([u8; 32]),
+    Blake2b([u8; 32]),
     Sha384(Box<[u8; 48]>),
     Sha512(Box<[u8; 64]>),
     Other(HashDigests),
@@ -1527,7 +1527,7 @@ impl Debug for CachedHashDigests {
         let (name, digest) = match self {
             Self::Md5(digest) => ("Md5", digest.as_slice()),
             Self::Sha256(digest) => ("Sha256", digest.as_slice()),
-            Self::Blake2b256(digest) => ("Blake2b256", digest.as_slice()),
+            Self::Blake2b(digest) => ("Blake2b", digest.as_slice()),
             Self::Sha384(digest) => ("Sha384", digest.as_slice()),
             Self::Sha512(digest) => ("Sha512", digest.as_slice()),
             Self::Other(hashes) => return f.debug_tuple("Other").field(hashes).finish(),
@@ -1544,7 +1544,7 @@ impl From<HashDigests> for CachedHashDigests {
         match hash {
             HashDigest::Md5(digest) => Self::Md5(digest.decode()),
             HashDigest::Sha256(digest) => Self::Sha256(digest.decode()),
-            HashDigest::Blake2b256(digest) => Self::Blake2b256(digest.decode()),
+            HashDigest::Blake2b256(digest) => Self::Blake2b(digest.decode()),
             HashDigest::Sha384(digest) => Self::Sha384(Box::new(digest.decode())),
             HashDigest::Sha512(digest) => Self::Sha512(Box::new(digest.decode())),
         }
@@ -1569,7 +1569,7 @@ impl From<&CachedHashDigests> for HashDigests {
             CachedHashDigests::Sha256(digest) => {
                 Self::from(HashDigest::Sha256(Digest::from_bytes(*digest)))
             }
-            CachedHashDigests::Blake2b256(digest) => {
+            CachedHashDigests::Blake2b(digest) => {
                 Self::from(HashDigest::Blake2b256(Digest::from_bytes(*digest)))
             }
             CachedHashDigests::Sha384(digest) => {
@@ -1821,7 +1821,7 @@ mod tests {
     use tokio::sync::Semaphore;
     use url::Url;
     use uv_normalize::PackageName;
-    use uv_pypi_types::{Digest, HashAlgorithm, HashDigest, HashDigests, PypiSimpleDetail};
+    use uv_pypi_types::{HashDigest, HashDigests, PypiSimpleDetail};
     use uv_redacted::DisplaySafeUrl;
     use uv_torch::{TorchBackend, TorchStrategy};
 
@@ -1838,49 +1838,7 @@ mod tests {
     use wiremock::matchers::{basic_auth, method, path_regex};
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
-    use super::CachedHashDigests;
-
     type Error = Box<dyn std::error::Error>;
-
-    #[test]
-    fn cached_hash_digests_round_trip() {
-        let hashes = [
-            HashDigest::Md5(Digest::from_bytes([0xab; 16])),
-            HashDigest::new(HashAlgorithm::Sha256, "AB".repeat(32))
-                .expect("validate uppercase digest"),
-            HashDigest::Sha384(Digest::from_bytes([0xab; 48])),
-            HashDigest::Sha512(Digest::from_bytes([0xab; 64])),
-            HashDigest::Blake2b256(Digest::from_bytes([0xab; 32])),
-        ];
-
-        for hash in hashes {
-            let expected = HashDigests::from(hash.clone());
-            let cached = CachedHashDigests::from(expected.clone());
-
-            assert!(matches!(
-                (&cached, hash.algorithm()),
-                (CachedHashDigests::Md5(_), HashAlgorithm::Md5)
-                    | (CachedHashDigests::Sha256(_), HashAlgorithm::Sha256)
-                    | (CachedHashDigests::Sha384(_), HashAlgorithm::Sha384)
-                    | (CachedHashDigests::Sha512(_), HashAlgorithm::Sha512)
-                    | (CachedHashDigests::Blake2b256(_), HashAlgorithm::Blake2b256)
-            ));
-            assert_eq!(HashDigests::from(&cached), expected);
-            assert_eq!(HashDigests::from(cached), expected);
-        }
-
-        for expected in [
-            HashDigests::empty(),
-            HashDigests::from(vec![
-                HashDigest::Sha256(Digest::from_bytes([0xab; 32])),
-                HashDigest::Md5(Digest::from_bytes([0xab; 16])),
-            ]),
-        ] {
-            let cached = CachedHashDigests::from(expected.clone());
-            assert!(matches!(cached, CachedHashDigests::Other(_)));
-            assert_eq!(HashDigests::from(cached), expected);
-        }
-    }
 
     async fn start_test_server(username: &'static str, password: &'static str) -> MockServer {
         let server = MockServer::start().await;
