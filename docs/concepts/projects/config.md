@@ -627,12 +627,17 @@ required-environments = [
 ]
 ```
 
+Or, to require that a project supports Linux, with a target minimum glibc version:
+
+```toml title="pyproject.toml"
+[tool.uv]
+required-environments = [
+    { marker = "sys_platform == 'linux'", libc = { glibc = "2.31" } }
+]
+```
+
 The `required-environments` setting is only relevant for packages that do not publish a source
 distribution (like PyTorch), as such packages can _only_ be installed on environments covered by the
 set of pre-built binary distributions (wheels) published by that package.
 
 See the [resolution documentation](../resolution.md#required-environments) for more.
-
-For Linux, a `required-environments` entry can include
-[`libc`](../resolution.md#minimum-libc-version) to select the libc implementations and minimum
-versions to support.
