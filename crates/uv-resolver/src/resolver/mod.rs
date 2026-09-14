@@ -26,6 +26,7 @@ use uv_distribution_types::{
     IncompatibleSource, IncompatibleWheel, IndexCapabilities, IndexLocations, IndexMetadata,
     IndexUrl, InstalledDist, Name, PythonRequirementKind, RemoteSource, Requirement, ResolvedDist,
     ResolvedDistRef, SourceDist, VersionOrUrlRef, implied_markers,
+    implied_markers_with_glibc_version,
 };
 use uv_git::GitResolver;
 use uv_normalize::PackageName;
@@ -1220,7 +1221,12 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             // incompatible.
             if env.marker_environment().is_none() && !self.options.artifact_environments.is_empty()
             {
-                let wheel_marker = implied_markers(filename);
+                let wheel_marker =
+                    if let Some(minimum_glibc_version) = self.options.minimum_glibc_version {
+                        implied_markers_with_glibc_version(filename, minimum_glibc_version)
+                    } else {
+                        implied_markers(filename)
+                    };
                 // If the caller marked an environment as requiring artifact coverage, ensure it
                 // has coverage.
                 for environment_marker in self.options.artifact_environments.iter().copied() {
@@ -1469,9 +1475,13 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             return Ok(None);
         }
 
-        // If the package is already compatible with all environments (as is the case for
-        // packages that include a source distribution), we don't need to fork.
-        if dist.implied_markers().is_true() {
+        let artifact_markers =
+            if let Some(minimum_glibc_version) = self.options.minimum_glibc_version {
+                dist.implied_markers_with_glibc_version(minimum_glibc_version)
+            } else {
+                dist.implied_markers()
+            };
+        if artifact_markers.is_true() {
             return Ok(None);
         }
 
@@ -1481,7 +1491,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             // If the platform is part of the current environment...
             if env.included_by_marker(marker) {
                 // But isn't supported by the distribution in this fork...
-                if !env.included_by_marker(dist.implied_markers().and(marker))
+                if !env.included_by_marker(artifact_markers.and(marker))
                     && env.included_by_marker(find_environments(id, pubgrub).and(marker))
                 {
                     // Then we need to fork.
@@ -1520,6 +1530,12 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     return Ok(Some(ResolverVersion::Forked(forks)));
                 }
             }
+        }
+
+        // If the package is already compatible with all environments (as is the case for
+        // packages that include a source distribution), we don't need to fork.
+        if dist.implied_markers().is_true() {
+            return Ok(None);
         }
 
         // For now, we only apply this to local versions.

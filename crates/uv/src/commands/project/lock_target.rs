@@ -13,7 +13,7 @@ use uv_configuration::{
     Constraints, DependencyGroupsWithDefaults, ExcludeDependency, NoSources, Upgrade,
 };
 use uv_distribution::LoweredRequirement;
-use uv_distribution_types::{
+use uv_distribution_types::{GlibcVersion, 
     Index, IndexLocations, NameRequirementSpecification, Requirement, RequiresPython,
 };
 use uv_lock::Lock;
@@ -256,6 +256,14 @@ impl<'lock> LockTarget<'lock> {
                 // TODO(charlie): Add support for environments in scripts.
                 None
             }
+        }
+    }
+
+    /// Returns the oldest glibc version supported by the required Linux environments.
+    pub(crate) fn minimum_glibc_version(self) -> Option<GlibcVersion> {
+        match self {
+            Self::Workspace(workspace) => workspace.minimum_glibc_version(),
+            Self::Script(_) => None,
         }
     }
 

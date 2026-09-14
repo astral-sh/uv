@@ -760,6 +760,7 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
                 args.build_constraints_from_workspace,
                 args.environments,
                 args.required_environments,
+                args.minimum_glibc_version,
                 args.settings.extras,
                 groups,
                 args.settings.output_file.as_deref(),

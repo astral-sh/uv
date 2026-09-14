@@ -22,9 +22,9 @@ use uv_configuration::{KeyringProviderType, TargetTriple};
 use uv_dispatch::{BuildDispatch, SharedState};
 use uv_distribution::LoweredExtraBuildDependencies;
 use uv_distribution_types::{
-    ConfigSettings, DependencyMetadata, ExtraBuildVariables, HashCollection, Index, IndexLocations,
-    NameRequirementSpecification, Origin, PackageConfigSettings, Requirement, RequiresPython,
-    Verbatim,
+    ConfigSettings, DependencyMetadata, ExtraBuildVariables, GlibcVersion, HashCollection, Index,
+    IndexLocations, NameRequirementSpecification, Origin, PackageConfigSettings, Requirement,
+    RequiresPython, Verbatim,
 };
 use uv_fs::{CWD, Simplified};
 use uv_git::ResolvedRepositoryReference;
@@ -77,6 +77,7 @@ pub(crate) async fn pip_compile(
     build_constraints_from_workspace: Vec<NameRequirementSpecification>,
     environments: SupportedEnvironments,
     required_environments: SupportedEnvironments,
+    minimum_glibc_version: Option<GlibcVersion>,
     extras: ExtrasSpecification,
     groups: GroupsSpecification,
     output_file: Option<&Path>,
@@ -549,6 +550,7 @@ pub(crate) async fn pip_compile(
         .torch_backend(torch_backend)
         .build_options(build_options.clone())
         .artifact_environments(artifact_environments)
+        .minimum_glibc_version(minimum_glibc_version)
         .build();
 
     // Resolve the requirements.

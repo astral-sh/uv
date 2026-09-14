@@ -57,6 +57,7 @@ use uv_git_types::GitUrl;
 use uv_normalize::PackageName;
 use uv_pep440::Version;
 use uv_pep508::{Pep508Url, VerbatimUrl};
+pub use uv_platform_tags::GlibcVersion;
 use uv_pypi_types::{
     ParsedArchiveUrl, ParsedDirectoryUrl, ParsedGitDirectoryUrl, ParsedGitPathUrl, ParsedPathUrl,
     ParsedUrl, VerbatimParsedUrl,

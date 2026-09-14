@@ -874,6 +874,8 @@ mod tests {
 
     use serde::Deserialize;
 
+    use uv_platform_tags::GlibcVersion;
+
     use super::super::{LockParseError, VERSION};
     use super::{Cursor, Error, Lock, ValueDeserializer, from_str};
 
@@ -1239,6 +1241,23 @@ dev = [{ name = "dependency", specifier = ">=1" }]
             from_str(&input).expect("canonical relative exclude-newer lock uses the direct parser");
 
         assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn minimum_glibc_version_roundtrip() {
+        let input = CANONICAL_LOCK.replace(
+            "requires-python = \">=3.12\"\n",
+            "requires-python = \">=3.12\"\n\n[options]\nminimum-glibc-version = \"2.31\"\n",
+        );
+        let expected: Lock = toml::from_str(&input).expect("valid glibc version");
+        let actual = from_str(&input).expect("glibc version uses the direct parser");
+        assert_eq!(actual, expected);
+        assert_eq!(
+            actual.minimum_glibc_version(),
+            Some(GlibcVersion::new(2, 31))
+        );
+        let serialized = actual.to_toml().expect("serialize the lock");
+        assert_eq!(from_str(&serialized).expect("deserialize the lock"), actual);
     }
 
     #[test]
