@@ -88,10 +88,11 @@ jobs:
           rustup target add ${{ matrix.target-arch }}-pc-windows-msvc
           rustup component add rust-src --target ${{ matrix.target-arch }}-pc-windows-msvc
 
-      - name: "Install cargo-bloat"
-        uses: taiki-e/install-action@6c6fd71fe4fb72c3697d269963d0e15df8adedad # v2.85.10
+      - name: "Install uv"
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
         with:
-          tool: cargo-bloat
+          version: "0.12.10"
+          checksum: "f65744f94072152b1f86ba2aace4d01f1124d9a8ecb235805039e3718c36cac2"
 
       - name: "rustfmt"
         working-directory: ${{ env.UV_WORKSPACE }}/crates/uv-trampoline
@@ -104,7 +105,7 @@ jobs:
       - name: "Bloat Check"
         working-directory: ${{ env.UV_WORKSPACE }}/crates/uv-trampoline
         run: |
-          $output = cargo bloat --release --target x86_64-pc-windows-msvc
+          $output = uv run --only-dev cargo bloat --release --target x86_64-pc-windows-msvc
           $filteredOutput = $output | Select-String -Pattern 'core::fmt::write|core::fmt::getcount' -NotMatch
           $containsPatterns = $filteredOutput | Select-String -Pattern 'core::fmt|std::panicking|std::backtrace_rs'
 

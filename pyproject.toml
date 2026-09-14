@@ -126,6 +126,7 @@ check = [
     "validate-pyproject[all,store]>=0.25",
 ]
 dev = [
+    "astral-dev-toolchain-cargo-bloat>=0.12.1",
     "astral-dev-toolchain-cargo-codspeed>=5.0.1",
     "astral-dev-toolchain-cargo-dist>=0.32.0",
     "astral-dev-toolchain-cargo-nextest>=0.9.143",
@@ -144,6 +145,7 @@ cache-keys = [
 exclude-newer = "P7D"
 
 [tool.uv.exclude-newer-package]
+astral-dev-toolchain-cargo-bloat = "2026-09-14T19:10:00Z"
 astral-dev-toolchain-cargo-shear = "2026-08-27T04:00:00Z"
 astral-dev-toolchain-cargo-dist = "2026-08-28T04:00:00Z"
 
