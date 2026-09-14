@@ -1,18 +1,15 @@
 use std::collections::BTreeMap;
 
 use anyhow::{Context, Result};
-use assert_cmd::assert::OutputAssertExt;
 use assert_fs::fixture::ChildPath;
 use assert_fs::prelude::*;
 use indoc::{formatdoc, indoc};
+use insta::assert_snapshot;
 
 use uv_test::archive::write_tar_gz;
 use uv_test::find_links::FindLinksServer;
 use uv_test::packse::generate_wheel;
 use uv_test::{TestContext, uv_snapshot};
-
-const LINUX_X86_64: &str = "sys_platform == 'linux' and platform_machine == 'x86_64'";
-const LINUX_AARCH64: &str = "sys_platform == 'linux' and platform_machine == 'aarch64'";
 
 fn wheel(context: &TestContext, name: &str, version: &str, tag: &str) -> Result<ChildPath> {
     let links = context.temp_dir.child("links");
@@ -30,48 +27,6 @@ fn wheel(context: &TestContext, name: &str, version: &str, tag: &str) -> Result<
     Ok(wheel)
 }
 
-fn project(
-    context: &TestContext,
-    dependencies: &[&str],
-    required_environments: &[&str],
-    minimum_glibc: Option<&str>,
-) -> Result<()> {
-    let minimum_glibc = minimum_glibc
-        .map(|version| format!("minimum-glibc-version = \"{version}\""))
-        .unwrap_or_default();
-    context
-        .temp_dir
-        .child("pyproject.toml")
-        .write_str(&formatdoc! {r#"
-        [project]
-        name = "project"
-        version = "0.1.0"
-        requires-python = ">=3.12"
-        dependencies = {dependencies}
-
-        [tool.uv]
-        no-index = true
-        find-links = ["links"]
-        required-environments = {required_environments}
-        {minimum_glibc}
-    "#,
-            dependencies = serde_json::to_string(dependencies)?,
-            required_environments = serde_json::to_string(required_environments)?,
-        })?;
-    Ok(())
-}
-
-fn locked_package(context: &TestContext, name: &str) -> Result<toml::Value> {
-    let lock: toml::Value = toml::from_str(&context.read("uv.lock"))?;
-    lock.get("package")
-        .and_then(toml::Value::as_array)
-        .context("lockfile has no packages")?
-        .iter()
-        .find(|package| package.get("name").and_then(toml::Value::as_str) == Some(name))
-        .cloned()
-        .with_context(|| format!("lockfile has no package named {name}"))
-}
-
 /// The glibc floor filters Linux artifacts without removing wheels for other platforms.
 #[test]
 fn minimum_glibc_filters_locked_wheels() -> Result<()> {
@@ -85,52 +40,113 @@ fn minimum_glibc_filters_locked_wheels() -> Result<()> {
         wheel(&context, "demo", "1.0.0", tag)?;
     }
 
-    project(&context, &["demo"], &[LINUX_X86_64], None)?;
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["demo"]
+
+        [tool.uv]
+        no-index = true
+        find-links = ["links"]
+        required-environments = ["sys_platform == 'linux' and platform_machine == 'x86_64'"]
+    "#})?;
     uv_snapshot!(context.filters(), context.lock().arg("--offline"), @r"
         exit_code: 0 (success)
         ----- stderr -----
         Resolved 2 packages in [TIME]
     ");
-    let package = locked_package(&context, "demo")?;
+    let lock = context.read("uv.lock");
     insta::with_settings!({filters => context.filters()}, {
-        insta::assert_json_snapshot!(package["wheels"], @r#"
-            [
-              {
-                "path": "demo-1.0.0-cp312-cp312-manylinux_2_17_x86_64.whl"
-              },
-              {
-                "path": "demo-1.0.0-cp312-cp312-manylinux_2_34_x86_64.whl"
-              },
-              {
-                "path": "demo-1.0.0-cp312-cp312-macosx_11_0_arm64.whl"
-              },
-              {
-                "path": "demo-1.0.0-cp312-cp312-win_amd64.whl"
-              }
-            ]
+        assert_snapshot!(lock, @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+        required-markers = [
+            "platform_machine == 'x86_64' and sys_platform == 'linux'",
+        ]
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[package]]
+        name = "demo"
+        version = "1.0.0"
+        source = { registry = "links" }
+        wheels = [
+            { path = "demo-1.0.0-cp312-cp312-manylinux_2_17_x86_64.whl" },
+            { path = "demo-1.0.0-cp312-cp312-manylinux_2_34_x86_64.whl" },
+            { path = "demo-1.0.0-cp312-cp312-macosx_11_0_arm64.whl" },
+            { path = "demo-1.0.0-cp312-cp312-win_amd64.whl" },
+        ]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "demo" },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "demo" }]
         "#);
     });
 
-    project(&context, &["demo"], &[LINUX_X86_64], Some("2.31"))?;
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["demo"]
+
+        [tool.uv]
+        no-index = true
+        find-links = ["links"]
+        required-environments = ["sys_platform == 'linux' and platform_machine == 'x86_64'"]
+        minimum-glibc-version = "2.31"
+    "#})?;
     uv_snapshot!(context.filters(), context.lock().arg("--offline"), @r"
         exit_code: 0 (success)
         ----- stderr -----
         Resolved 2 packages in [TIME]
     ");
-    let package = locked_package(&context, "demo")?;
+    let lock = context.read("uv.lock");
     insta::with_settings!({filters => context.filters()}, {
-        insta::assert_json_snapshot!(package["wheels"], @r#"
-            [
-              {
-                "path": "demo-1.0.0-cp312-cp312-manylinux_2_17_x86_64.whl"
-              },
-              {
-                "path": "demo-1.0.0-cp312-cp312-macosx_11_0_arm64.whl"
-              },
-              {
-                "path": "demo-1.0.0-cp312-cp312-win_amd64.whl"
-              }
-            ]
+        assert_snapshot!(lock, @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+        required-markers = [
+            "platform_machine == 'x86_64' and sys_platform == 'linux'",
+        ]
+
+        [options]
+        minimum-glibc-version = "2.31"
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[package]]
+        name = "demo"
+        version = "1.0.0"
+        source = { registry = "links" }
+        wheels = [
+            { path = "demo-1.0.0-cp312-cp312-manylinux_2_17_x86_64.whl" },
+            { path = "demo-1.0.0-cp312-cp312-macosx_11_0_arm64.whl" },
+            { path = "demo-1.0.0-cp312-cp312-win_amd64.whl" },
+        ]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "demo" },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "demo" }]
         "#);
     });
 
@@ -177,12 +193,20 @@ fn minimum_glibc_local_version_fallback() -> Result<()> {
     ] {
         wheel(&context, "demo", version, tag)?;
     }
-    project(
-        &context,
-        &["demo; sys_platform == 'linux'"],
-        &[],
-        Some("2.31"),
-    )?;
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["demo; sys_platform == 'linux'"]
+
+        [tool.uv]
+        no-index = true
+        find-links = ["links"]
+        required-environments = []
+        minimum-glibc-version = "2.31"
+    "#})?;
 
     uv_snapshot!(context.filters(), context.lock().arg("--offline"), @r"
         exit_code: 0 (success)
@@ -196,20 +220,54 @@ fn minimum_glibc_local_version_fallback() -> Result<()> {
         demo==1.0.0+cpu ; (python_full_version >= '3.13' and sys_platform == 'linux') or (platform_machine != 'aarch64' and sys_platform == 'linux') or (platform_python_implementation != 'CPython' and sys_platform == 'linux')
     ");
 
-    let lock: toml::Value = toml::from_str(&context.read("uv.lock"))?;
-    let local_package = lock["package"]
-        .as_array()
-        .context("lockfile has no packages")?
-        .iter()
-        .find(|package| package["version"].as_str() == Some("1.0.0+cpu"))
-        .context("lockfile has no local-version package")?;
+    let lock = context.read("uv.lock");
     insta::with_settings!({filters => context.filters()}, {
-        insta::assert_json_snapshot!(local_package["wheels"], @r#"
-            [
-              {
-                "path": "demo-1.0.0+cpu-cp312-cp312-manylinux_2_17_x86_64.whl"
-              }
-            ]
+        assert_snapshot!(lock, @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+        resolution-markers = [
+            "python_full_version >= '3.13' or platform_machine != 'aarch64' or platform_python_implementation != 'CPython' or sys_platform != 'linux'",
+            "python_full_version < '3.13' and platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'linux'",
+        ]
+
+        [options]
+        minimum-glibc-version = "2.31"
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[package]]
+        name = "demo"
+        version = "1.0.0"
+        source = { registry = "links" }
+        resolution-markers = [
+            "python_full_version < '3.13' and platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'linux'",
+        ]
+        wheels = [
+            { path = "demo-1.0.0-cp312-cp312-manylinux_2_17_aarch64.whl" },
+        ]
+
+        [[package]]
+        name = "demo"
+        version = "1.0.0+cpu"
+        source = { registry = "links" }
+        resolution-markers = [
+            "python_full_version >= '3.13' or platform_machine != 'aarch64' or platform_python_implementation != 'CPython' or sys_platform != 'linux'",
+        ]
+        wheels = [
+            { path = "demo-1.0.0+cpu-cp312-cp312-manylinux_2_17_x86_64.whl" },
+        ]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "demo", version = "1.0.0", source = { registry = "links" }, marker = "python_full_version < '3.13' and platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'linux'" },
+            { name = "demo", version = "1.0.0+cpu", source = { registry = "links" }, marker = "(python_full_version >= '3.13' and sys_platform == 'linux') or (platform_machine != 'aarch64' and sys_platform == 'linux') or (platform_python_implementation != 'CPython' and sys_platform == 'linux')" },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "demo", marker = "sys_platform == 'linux'" }]
         "#);
     });
     Ok(())
@@ -226,19 +284,39 @@ fn minimum_glibc_backtracks_and_invalidates_lock() -> Result<()> {
         wheel(&context, "demo", version, tag)?;
     }
 
-    project(&context, &["demo"], &[LINUX_X86_64], None)?;
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["demo"]
+
+        [tool.uv]
+        no-index = true
+        find-links = ["links"]
+        required-environments = ["sys_platform == 'linux' and platform_machine == 'x86_64'"]
+    "#})?;
     uv_snapshot!(context.filters(), context.lock().arg("--offline"), @r"
         exit_code: 0 (success)
         ----- stderr -----
         Resolved 2 packages in [TIME]
     ");
-    assert_eq!(
-        locked_package(&context, "demo")?["version"].as_str(),
-        Some("2.0.0")
-    );
     let original = context.read("uv.lock");
 
-    project(&context, &["demo"], &[LINUX_X86_64], Some("2.31"))?;
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["demo"]
+
+        [tool.uv]
+        no-index = true
+        find-links = ["links"]
+        required-environments = ["sys_platform == 'linux' and platform_machine == 'x86_64'"]
+        minimum-glibc-version = "2.31"
+    "#})?;
     uv_snapshot!(context.filters(), context.lock().args(["--offline", "--locked"]), @r"
         exit_code: 1 (failure)
         ----- stderr -----
@@ -267,20 +345,61 @@ fn minimum_glibc_backtracks_and_invalidates_lock() -> Result<()> {
         ----- stderr -----
         Resolved 1 package in [TIME]
     ");
-    let lock: toml::Value = toml::from_str(&context.read("uv.lock"))?;
-    assert_eq!(
-        lock["options"]["minimum-glibc-version"].as_str(),
-        Some("2.31")
-    );
-    context
-        .lock()
-        .args(["--offline", "--locked"])
-        .assert()
-        .success();
+    let lock = context.read("uv.lock");
+    insta::with_settings!({filters => context.filters()}, {
+        assert_snapshot!(lock, @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+        required-markers = [
+            "platform_machine == 'x86_64' and sys_platform == 'linux'",
+        ]
+
+        [options]
+        minimum-glibc-version = "2.31"
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[package]]
+        name = "demo"
+        version = "1.0.0"
+        source = { registry = "links" }
+        wheels = [
+            { path = "demo-1.0.0-cp312-cp312-manylinux_2_17_x86_64.whl" },
+        ]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "demo" },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "demo" }]
+        "#);
+    });
+    uv_snapshot!(context.filters(), context.lock().args(["--offline", "--locked"]), @r"
+        exit_code: 0 (success)
+        ----- stderr -----
+        Resolved 2 packages in [TIME]
+    ");
 
     // Changing the floor invalidates the lock even when the selected wheel remains compatible.
     let original = context.read("uv.lock");
-    project(&context, &["demo"], &[LINUX_X86_64], Some("2.17"))?;
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["demo"]
+
+        [tool.uv]
+        no-index = true
+        find-links = ["links"]
+        required-environments = ["sys_platform == 'linux' and platform_machine == 'x86_64'"]
+        minimum-glibc-version = "2.17"
+    "#})?;
     uv_snapshot!(context.filters(), context.lock().args(["--offline", "--locked"]), @r"
         exit_code: 1 (failure)
         ----- stderr -----
@@ -291,7 +410,18 @@ fn minimum_glibc_backtracks_and_invalidates_lock() -> Result<()> {
     ");
     assert_eq!(context.read("uv.lock"), original);
 
-    project(&context, &["demo"], &[LINUX_X86_64], None)?;
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["demo"]
+
+        [tool.uv]
+        no-index = true
+        find-links = ["links"]
+        required-environments = ["sys_platform == 'linux' and platform_machine == 'x86_64'"]
+    "#})?;
     uv_snapshot!(context.filters(), context.lock().args(["--offline", "--locked"]), @r"
         exit_code: 1 (failure)
         ----- stderr -----
@@ -321,7 +451,20 @@ fn minimum_glibc_no_compatible_version() -> Result<()> {
         "2.0.0",
         "cp312-cp312-manylinux_2_34_x86_64",
     )?;
-    project(&context, &["demo"], &[LINUX_X86_64], Some("2.31"))?;
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["demo"]
+
+        [tool.uv]
+        no-index = true
+        find-links = ["links"]
+        required-environments = ["sys_platform == 'linux' and platform_machine == 'x86_64'"]
+        minimum-glibc-version = "2.31"
+    "#})?;
 
     uv_snapshot!(context.filters(), context.lock().arg("--offline"), @r"
         exit_code: 1 (failure)
@@ -368,16 +511,58 @@ fn minimum_glibc_allows_sdist_fallback() -> Result<()> {
             ),
         ],
     )?;
-    project(&context, &["demo"], &[LINUX_X86_64], Some("2.31"))?;
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["demo"]
+
+        [tool.uv]
+        no-index = true
+        find-links = ["links"]
+        required-environments = ["sys_platform == 'linux' and platform_machine == 'x86_64'"]
+        minimum-glibc-version = "2.31"
+    "#})?;
 
     uv_snapshot!(context.filters(), context.lock().arg("--offline"), @r"
         exit_code: 0 (success)
         ----- stderr -----
         Resolved 2 packages in [TIME]
     ");
-    let package = locked_package(&context, "demo")?;
-    assert_eq!(package["version"].as_str(), Some("2.0.0"));
-    assert!(package.get("sdist").is_some());
+    let lock = context.read("uv.lock");
+    insta::with_settings!({filters => context.filters()}, {
+        assert_snapshot!(lock, @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+        required-markers = [
+            "platform_machine == 'x86_64' and sys_platform == 'linux'",
+        ]
+
+        [options]
+        minimum-glibc-version = "2.31"
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[package]]
+        name = "demo"
+        version = "2.0.0"
+        source = { registry = "links" }
+        sdist = { path = "demo-2.0.0.tar.gz" }
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "demo" },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "demo" }]
+        "#);
+    });
 
     // Reconsider the cached flat-index entry when its source distribution cannot be built.
     uv_snapshot!(context.filters(), context.lock().args(["--offline", "--no-build", "--upgrade"]), @r"
@@ -407,7 +592,20 @@ fn minimum_glibc_direct_url() -> Result<()> {
         .context("wheel has no file name")?
         .to_string_lossy();
     let dependency = format!("demo @ {}/{filename}", server.url());
-    project(&context, &[&dependency], &[], Some("2.31"))?;
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(&formatdoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["{dependency}"]
+
+        [tool.uv]
+        no-index = true
+        find-links = ["links"]
+        required-environments = []
+        minimum-glibc-version = "2.31"
+    "#})?;
 
     uv_snapshot!(context.filters(), context.lock(), @r"
         exit_code: 1 (failure)
@@ -434,17 +632,27 @@ fn minimum_glibc_architectures_and_markers() -> Result<()> {
         wheel(&context, "demo", version, tag)?;
     }
     wheel(&context, "windows-only", "1.0.0", "cp312-cp312-win_amd64")?;
-    let dependencies = [
-        "demo; sys_platform == 'linux'",
-        "demo>=2; sys_platform == 'darwin'",
-        "windows-only; sys_platform == 'win32'",
-    ];
-    project(
-        &context,
-        &dependencies,
-        &[LINUX_X86_64, LINUX_AARCH64],
-        Some("2.31"),
-    )?;
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "demo; sys_platform == 'linux'",
+            "demo>=2; sys_platform == 'darwin'",
+            "windows-only; sys_platform == 'win32'",
+        ]
+
+        [tool.uv]
+        no-index = true
+        find-links = ["links"]
+        required-environments = [
+            "sys_platform == 'linux' and platform_machine == 'x86_64'",
+            "sys_platform == 'linux' and platform_machine == 'aarch64'",
+        ]
+        minimum-glibc-version = "2.31"
+    "#})?;
 
     uv_snapshot!(context.filters(), context.lock().arg("--offline"), @r"
         exit_code: 0 (success)
@@ -461,24 +669,49 @@ fn minimum_glibc_architectures_and_markers() -> Result<()> {
     ");
 
     // The newer version is valid when only its compatible x86_64 wheel is required.
-    project(&context, &dependencies, &[LINUX_X86_64], Some("2.31"))?;
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "demo; sys_platform == 'linux'",
+            "demo>=2; sys_platform == 'darwin'",
+            "windows-only; sys_platform == 'win32'",
+        ]
+
+        [tool.uv]
+        no-index = true
+        find-links = ["links"]
+        required-environments = ["sys_platform == 'linux' and platform_machine == 'x86_64'"]
+        minimum-glibc-version = "2.31"
+    "#})?;
     uv_snapshot!(context.filters(), context.lock().args(["--offline", "--upgrade"]), @r"
             exit_code: 0 (success)
             ----- stderr -----
             Resolved 3 packages in [TIME]
             Updated demo v1.0.0, v2.0.0 -> v2.0.0
         ");
-    assert_eq!(
-        locked_package(&context, "demo")?["version"].as_str(),
-        Some("2.0.0")
-    );
     Ok(())
 }
 
 #[test]
 fn minimum_glibc_invalid_configuration() -> Result<()> {
     let context = uv_test::test_context!("3.12");
-    project(&context, &[], &[LINUX_X86_64], Some("2.31.1"))?;
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [tool.uv]
+        no-index = true
+        find-links = ["links"]
+        required-environments = ["sys_platform == 'linux' and platform_machine == 'x86_64'"]
+        minimum-glibc-version = "2.31.1"
+    "#})?;
     uv_snapshot!(context.filters(), context.lock().arg("--offline"), @r#"
         exit_code: 2 (failure)
         ----- stderr -----
@@ -498,7 +731,18 @@ fn minimum_glibc_invalid_configuration() -> Result<()> {
     "#);
 
     // Like required-environments, the minimum glibc version is a project-only setting.
-    project(&context, &[], &[LINUX_X86_64], None)?;
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [tool.uv]
+        no-index = true
+        find-links = ["links"]
+        required-environments = ["sys_platform == 'linux' and platform_machine == 'x86_64'"]
+    "#})?;
     context.temp_dir.child("uv.toml").write_str(indoc! {r#"
         minimum-glibc-version = "2.31"
     "#})?;

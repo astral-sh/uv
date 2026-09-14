@@ -366,29 +366,6 @@ impl PrioritizedDist {
         }))
     }
 
-    /// Create a new [`PrioritizedDist`] from the given wheel distribution.
-    pub fn from_built(
-        dist: RegistryBuiltWheel,
-        hashes: Vec<HashDigest>,
-        compatibility: WheelCompatibility,
-        artifact_policy: ArtifactPolicy,
-    ) -> Self {
-        let mut prioritized = Self::new(artifact_policy);
-        prioritized.insert_built(dist, hashes, compatibility);
-        prioritized
-    }
-
-    /// Create a new [`PrioritizedDist`] from the given source distribution.
-    pub fn from_source(
-        dist: RegistrySourceDist,
-        hashes: Vec<HashDigest>,
-        compatibility: SourceDistCompatibility,
-        artifact_policy: ArtifactPolicy,
-    ) -> Self {
-        let mut prioritized = Self::new(artifact_policy);
-        prioritized.insert_source(dist, hashes, compatibility);
-        prioritized
-    }
     /// Insert the given built distribution into the [`PrioritizedDist`].
     pub fn insert_built(
         &mut self,
@@ -862,7 +839,8 @@ impl IncompatibleWheel {
 }
 
 /// Given a wheel filename, determine the set of supported markers.
-pub fn implied_markers(filename: &WheelFilename) -> MarkerTree {
+#[cfg(test)]
+pub(crate) fn implied_markers(filename: &WheelFilename) -> MarkerTree {
     implied_platform_markers(filename.platform_tags()).and(implied_python_markers(filename))
 }
 
@@ -1176,25 +1154,13 @@ mod tests {
         let incompatible_tags =
             WheelCompatibility::Incompatible(IncompatibleWheel::Tag(IncompatibleTag::Platform));
         let policy = ArtifactPolicy::default();
-        let from_source = PrioritizedDist::from_source(
-            source.clone(),
-            Vec::new(),
-            incompatible_source.clone(),
-            policy,
-        );
         let mut inserted_source = PrioritizedDist::new(policy);
         inserted_source.insert_source(source, Vec::new(), incompatible_source);
-        let from_wheel = PrioritizedDist::from_built(
-            incompatible_wheel.clone(),
-            Vec::new(),
-            incompatible_tags.clone(),
-            policy,
-        );
         let mut inserted_wheel = PrioritizedDist::new(policy);
         inserted_wheel.insert_built(incompatible_wheel, Vec::new(), incompatible_tags);
 
         let expected = implied_markers(&compatible_wheel.filename);
-        for mut prioritized in [from_source, inserted_source, from_wheel, inserted_wheel] {
+        for mut prioritized in [inserted_source, inserted_wheel] {
             assert_eq!(prioritized.0.artifact_coverage, MarkerTree::FALSE);
             prioritized.insert_built(
                 compatible_wheel.clone(),

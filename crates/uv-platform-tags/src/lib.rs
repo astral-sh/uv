@@ -1,5 +1,5 @@
 pub use abi_tag::{AbiTag, CPythonAbiVariants, ParseAbiTagError};
-pub use glibc_version::{GlibcVersion, ParseGlibcVersionError};
+pub use glibc_version::GlibcVersion;
 pub use language_tag::{LanguageTag, ParseLanguageTagError};
 pub use platform::{Arch, Os, Platform, PlatformError};
 pub use platform_tag::{ParsePlatformTagError, ParseReleaseArchError, PlatformTag, ReleaseArch};
