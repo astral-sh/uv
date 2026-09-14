@@ -158,6 +158,15 @@ pub(crate) async fn list(
             // have expanded it above.
             installations
                 .retain(|installation| python_preference.allows_installation(installation));
+            if let Some(request) = request
+                .as_ref()
+                .and_then(PythonDownloadRequest::from_request)
+            {
+                installations.retain(|installation| {
+                    !installation.is_managed()
+                        || download_list.allows_listed_build(&request, installation.key())
+                });
+            }
             Some(installations)
         }
         PythonListKinds::Downloads => None,

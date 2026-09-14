@@ -245,6 +245,21 @@ impl VariantRequest {
         })
     }
 
+    /// Require provider-defined tags unless the catalog selects this build by default.
+    pub(crate) fn allows_build_variant(&self, key: &PythonInstallationKey, default: bool) -> bool {
+        default
+            || key.build_variant().is_none_or(|available| {
+                available.provider_tags().all(|tag| {
+                    self.build.as_ref().is_some_and(|requested| {
+                        requested
+                            .as_str()
+                            .split('+')
+                            .any(|requested_tag| requested_tag == tag)
+                    })
+                })
+            })
+    }
+
     pub(crate) fn matches_download_key(&self, key: &PythonInstallationKey) -> bool {
         self.python == *key.variant() && self.matches_build_variant(key)
     }
@@ -482,6 +497,7 @@ fn python_executables_from_installed<'a>(
     implementation: Option<&'a ImplementationName>,
     platform: PlatformRequest,
     preference: PythonPreference,
+    download_list: Option<&'a ManagedPythonDownloadList>,
 ) -> Box<dyn Iterator<Item = Result<PythonExecutableGroup, Error>> + 'a> {
     let from_managed_installations = iter::once_with(move || {
         ManagedPythonInstallations::from_settings(None)
@@ -491,7 +507,10 @@ fn python_executables_from_installed<'a>(
                     "Searching for managed installations at `{}`",
                     installed_installations.root().user_display()
                 );
-                let installations = ManagedPythonInstallations::find_matching_current_platform()?;
+                let mut installations = ManagedPythonInstallations::find_matching_current_platform()?.collect::<Vec<_>>();
+                if let Some(download_list) = download_list {
+                    installations.sort_by(|left, right| download_list.compare_installations(left.key(), right.key()));
+                }
 
                 let build_versions = python_build_versions_from_env()?;
 
@@ -660,6 +679,7 @@ fn python_executables<'a>(
     platform: PlatformRequest,
     environments: EnvironmentPreference,
     preference: PythonPreference,
+    download_list: Option<&'a ManagedPythonDownloadList>,
 ) -> Box<dyn Iterator<Item = Result<PythonExecutableGroup, Error>> + 'a> {
     // Always read from `UV_INTERNAL__PARENT_INTERPRETER` — it could be a system interpreter
     let from_parent_interpreter = iter::once_with(|| {
@@ -690,8 +710,13 @@ fn python_executables<'a>(
 
     let from_virtual_environments = python_executables_from_virtual_environments()
         .map_ok(|executable| PythonExecutableGroup(vec![executable]));
-    let from_installed =
-        python_executables_from_installed(version, implementation, platform, preference);
+    let from_installed = python_executables_from_installed(
+        version,
+        implementation,
+        platform,
+        preference,
+        download_list,
+    );
 
     // Limit the search to the relevant environment preference; this avoids unnecessary work like
     // traversal of the file system. Subsequent filtering should be done by the caller with
@@ -930,21 +955,29 @@ fn python_installations<'a>(
     preference: PythonPreference,
     cache: &'a Cache,
     strategy: QueryStrategy,
+    download_list: Option<&'a ManagedPythonDownloadList>,
 ) -> Box<dyn Iterator<Item = Result<PythonInstallation, Error>> + 'a> {
     Box::new(
         python_installations_from_executables(
             // Perform filtering on the discovered executables based on their source. This avoids
             // unnecessary interpreter queries, which are generally expensive. We'll filter again
             // with `PythonInstallation::satisfies_preferences` after querying.
-            python_executables(version, implementation, platform, environments, preference)
-                .filter_map(move |result| match result {
-                    Ok(group) => group
-                        .filter(|source, path| {
-                            source_satisfies_environment_preference(source, path, environments)
-                        })
-                        .map(Ok),
-                    Err(error) => Some(Err(error)),
-                }),
+            python_executables(
+                version,
+                implementation,
+                platform,
+                environments,
+                preference,
+                download_list,
+            )
+            .filter_map(move |result| match result {
+                Ok(group) => group
+                    .filter(|source, path| {
+                        source_satisfies_environment_preference(source, path, environments)
+                    })
+                    .map(Ok),
+                Err(error) => Some(Err(error)),
+            }),
             cache,
             strategy,
         )
@@ -1248,6 +1281,7 @@ fn python_installations_with_name<'a>(
 }
 
 /// Iterate over all Python installations that satisfy the given request.
+#[cfg(all(test, unix))]
 pub(crate) fn find_python_installations<'a>(
     request: &'a PythonRequest,
     environments: EnvironmentPreference,
@@ -1260,6 +1294,7 @@ pub(crate) fn find_python_installations<'a>(
         preference,
         cache,
         QueryStrategy::Sequential,
+        None,
     )
 }
 
@@ -1271,6 +1306,7 @@ fn find_python_installations_with_strategy<'a>(
     preference: PythonPreference,
     cache: &'a Cache,
     strategy: QueryStrategy,
+    download_list: Option<&'a ManagedPythonDownloadList>,
 ) -> Box<dyn Iterator<Item = Result<FindPythonResult, Error>> + 'a> {
     let sources = DiscoveryPreferences {
         python_preference: preference,
@@ -1362,6 +1398,7 @@ fn find_python_installations_with_strategy<'a>(
                 preference,
                 cache,
                 strategy,
+                download_list,
             )
             .map_ok(Ok)
         }),
@@ -1375,6 +1412,7 @@ fn find_python_installations_with_strategy<'a>(
                 preference,
                 cache,
                 strategy,
+                download_list,
             )
             .map_ok(Ok)
         }),
@@ -1392,6 +1430,7 @@ fn find_python_installations_with_strategy<'a>(
                     preference,
                     cache,
                     strategy,
+                    download_list,
                 )
                 .map_ok(Ok)
             })
@@ -1406,6 +1445,7 @@ fn find_python_installations_with_strategy<'a>(
                 preference,
                 cache,
                 strategy,
+                download_list,
             )
             .filter_ok(|installation| implementation.matches_interpreter(&installation.interpreter))
             .map_ok(Ok)
@@ -1424,6 +1464,7 @@ fn find_python_installations_with_strategy<'a>(
                     preference,
                     cache,
                     strategy,
+                    download_list,
                 )
                 .filter_ok(|installation| {
                     implementation.matches_interpreter(&installation.interpreter)
@@ -1448,6 +1489,7 @@ fn find_python_installations_with_strategy<'a>(
                     preference,
                     cache,
                     strategy,
+                    download_list,
                 )
                 .filter_ok(move |installation| {
                     request.satisfied_by_interpreter(&installation.interpreter)
@@ -1461,9 +1503,9 @@ fn find_python_installations_with_strategy<'a>(
 /// Find all Python installations that satisfy the given request, querying interpreters
 /// concurrently.
 ///
-/// Unlike [`find_python_installations`], this eagerly collects matching installations instead of
-/// returning a lazy iterator. Interpreter query failures produce warnings and are skipped. Other
-/// non-critical discovery errors are dropped, while critical errors are propagated in discovery order.
+/// This eagerly collects matching installations instead of returning a lazy iterator. Interpreter
+/// query failures produce warnings and are skipped. Other non-critical discovery errors are dropped,
+/// while critical errors are propagated in discovery order.
 pub fn find_all_python_installations(
     request: &PythonRequest,
     environments: EnvironmentPreference,
@@ -1476,6 +1518,7 @@ pub fn find_all_python_installations(
         preference,
         cache,
         QueryStrategy::Parallel,
+        None,
     );
     let mut installations = Vec::new();
     for result in results {
@@ -1502,7 +1545,25 @@ pub(crate) fn find_python_installation(
     preference: PythonPreference,
     cache: &Cache,
 ) -> Result<FindPythonResult, Error> {
-    let installations = find_python_installations(request, environments, preference, cache);
+    find_python_installation_with_catalog(request, environments, preference, cache, None)
+}
+
+pub(crate) fn find_python_installation_with_catalog(
+    request: &PythonRequest,
+    environments: EnvironmentPreference,
+    preference: PythonPreference,
+    cache: &Cache,
+    download_list: Option<&ManagedPythonDownloadList>,
+) -> Result<FindPythonResult, Error> {
+    let installations = find_python_installations_with_strategy(
+        request,
+        environments,
+        preference,
+        cache,
+        QueryStrategy::Sequential,
+        download_list,
+    );
+    let download_request = PythonDownloadRequest::from_request(request);
     let mut first_prerelease = None;
     let mut first_debug = None;
     let mut first_managed = None;
@@ -1523,6 +1584,18 @@ pub(crate) fn find_python_installation(
         let Ok(Ok(ref installation)) = result else {
             return result;
         };
+
+        if let Some(download_request) = &download_request
+            && let Some(download_list) = download_list
+            && installation.is_managed()
+            && !download_list.allows_installed_build(download_request, installation.key())
+        {
+            debug!(
+                "Skipping managed installation {}: build does not satisfy catalog selection",
+                installation.key()
+            );
+            continue;
+        }
 
         // Check if we need to skip the interpreter because it is "not allowed", e.g., if it is a
         // pre-release version or an alternative implementation, using it requires opt-in.
@@ -1663,6 +1736,19 @@ pub(crate) async fn find_best_python_installation(
 ) -> Result<PythonInstallation, crate::Error> {
     debug!("Starting Python discovery for {request}");
     let original_request = request;
+    match find_python_installation(request, environments, preference, cache) {
+        Ok(Ok(installation))
+            if !installation.is_managed()
+                || PythonDownloadRequest::from_request(request).is_none() =>
+        {
+            warn_on_unsupported_python(installation.interpreter());
+            return Ok(installation);
+        }
+        Err(error) if error.is_critical() => return Err(error.into()),
+        Ok(_) | Err(_) => {}
+    }
+    let download_list =
+        ManagedPythonDownloadList::new(client_builder, cache, python_downloads_json_url).await?;
 
     let mut previous_fetch_failed = false;
     let mut download_state = None;
@@ -1694,7 +1780,13 @@ pub(crate) async fn find_best_python_installation(
                 String::new()
             }
         );
-        let result = find_python_installation(request, environments, preference, cache);
+        let result = find_python_installation_with_catalog(
+            request,
+            environments,
+            preference,
+            cache,
+            Some(&download_list),
+        );
         let error = match result {
             Ok(Ok(installation)) => {
                 warn_on_unsupported_python(installation.interpreter());
@@ -1715,18 +1807,12 @@ pub(crate) async fn find_best_python_installation(
                 if let Some(download_state) = &mut download_state {
                     download_state
                 } else {
-                    let download_list = ManagedPythonDownloadList::new(
-                        client_builder,
-                        cache,
-                        python_downloads_json_url,
-                    )
-                    .await?;
                     let retry_policy = client_builder.retry_policy();
 
                     // Python downloads are performing their own retries to catch stream errors, disable
                     // the default retries to avoid the middleware performing uncontrolled retries.
                     let client = client_builder.clone().retries(0).build()?;
-                    download_state.insert((client, retry_policy, download_list))
+                    download_state.insert((client, retry_policy, &download_list))
                 };
 
             let download = download_request
@@ -3766,6 +3852,12 @@ impl PythonBuildVariant {
 }
 
 impl LenientPythonBuildVariant {
+    fn provider_tags(&self) -> impl Iterator<Item = &str> {
+        self.as_str()
+            .split('+')
+            .filter(|tag| PythonBuildVariant::from_str(tag).is_err())
+    }
+
     fn as_str(&self) -> &str {
         match self {
             Self::Unknown(variant) => variant,

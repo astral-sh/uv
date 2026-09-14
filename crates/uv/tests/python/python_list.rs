@@ -756,6 +756,18 @@ async fn python_list_remote_python_downloads_json_url() -> Result<()> {
     exit_code: 0 (success)
     ");
 
+    // Optimization tags alone must not expose a non-default provider build.
+    uv_snapshot!(context
+        .python_list()
+        .env_remove(EnvVars::UV_PYTHON_DOWNLOADS)
+        .arg("3.12+pgo+lto")
+        .arg("--only-downloads")
+        .arg("--all-platforms")
+        .arg("--all-arches")
+        .arg("--python-downloads-json-url").arg(format!("{}/build-variants", server.uri())), @"
+    exit_code: 0 (success)
+    ");
+
     // Every requested tag must be present.
     uv_snapshot!(context
         .python_list()
