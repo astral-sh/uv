@@ -40,7 +40,7 @@ jobs:
       - name: "Install uv"
         uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
         with:
-          version: "0.12.10"
+          version: "0.12.13"
           checksum: "9ff6b9d4665edcdd3a88dcc73cd1eb641754deb927f14e8c62ebfde6bf4f5f5e"
 
       - name: "Install requirements and prime cache"
@@ -82,7 +82,7 @@ jobs:
       - name: "Install uv"
         uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
         with:
-          version: "0.12.10"
+          version: "0.12.13"
           checksum: "9ff6b9d4665edcdd3a88dcc73cd1eb641754deb927f14e8c62ebfde6bf4f5f5e"
 
       - name: "Download benchmark artifacts"
@@ -150,7 +150,7 @@ jobs:
       - name: "Install uv"
         uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
         with:
-          version: "0.12.10"
+          version: "0.12.13"
           checksum: "173d95a0c32d18c896c46ba6fafbf3cf9c14ab74b033f81b76c883ef492a976b"
 
       - name: "Install requirements and prime cache"
