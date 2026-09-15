@@ -3,6 +3,21 @@
 <!-- prettier-ignore-start -->
 
 
+## 0.12.15
+
+Released on 2026-09-15.
+
+This release fixes a regression in 0.12.14 that lead to rejecting valid installation commands such as using
+`uv pip install --system` in `python:*` docker images or when using `uv pip install --target .`. ([#21699](https://github.com/astral-sh/uv/pull/21699))
+
+### Performance
+
+- Speed up cold-cache resolution and HTTP cache revalidation by batching cache writes ([#21675](https://github.com/astral-sh/uv/pull/21675))
+
+### Bug fixes
+
+- Revert "Reject symlinked wheel installation destinations" ([#21699](https://github.com/astral-sh/uv/pull/21699))
+
 ## 0.12.14
 
 Released on 2026-09-15.
