@@ -23,6 +23,19 @@ jobs:
   check-fmt:
     uses: $/.github/workflows/check-fmt.yml
 
+  check-vet:
+    name: "Cargo Vet"
+    timeout-minutes: 10
+    runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-4' || 'ubuntu-latest' }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: "Install Cargo Vet"
+        run: cargo install --locked --profile dev --version 0.10.2 cargo-vet
+      - name: "Vet dependencies"
+        run: cargo vet
+
   review:
     needs: plan
     if: ${{ github.event_name == 'pull_request' && github.repository == 'astral-sh/uv' && github.event.pull_request.head.repo.full_name == github.repository && needs.plan.outputs.review-security == 'true' }}
