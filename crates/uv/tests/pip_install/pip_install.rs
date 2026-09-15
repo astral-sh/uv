@@ -14300,7 +14300,10 @@ fn reject_symlinked_wheel_package_directory() -> Result<()> {
     external.child("sentinel.txt").write_str("keep me")?;
     fs_err::os::unix::fs::symlink(external.path(), context.site_packages().join("foo"))?;
 
-    uv_snapshot!(context.filters(), context.pip_install().arg(&wheel), @"
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--link-mode")
+        .arg("copy")
+        .arg(&wheel), @"
     exit_code: 2 (failure)
     ----- stderr -----
     Resolved 1 package in [TIME]
