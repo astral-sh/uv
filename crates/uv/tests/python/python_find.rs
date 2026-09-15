@@ -34,6 +34,7 @@ fn install_python_fixture(context: &TestContext, version: &str, options: &[&str]
         .python_install()
         .arg(version)
         .args(options)
+        .output()?
         .assert()
         .success();
     Ok(())
