@@ -54,6 +54,7 @@ jobs:
       - name: "Install uv"
         uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
         with:
+          # renovate: datasource=github-release-attachments depName=astral-sh/uv
           version: "0.12.13"
           checksum: "745765a3b6e360ad76743599ae5c42e9278c7edf8bbff9fc76d05bf2623a04dd"
           enable-cache: false
@@ -156,6 +157,7 @@ jobs:
       - name: "Install uv"
         uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
         with:
+          # renovate: datasource=github-release-attachments depName=astral-sh/uv
           version: "0.12.13"
           checksum: "745765a3b6e360ad76743599ae5c42e9278c7edf8bbff9fc76d05bf2623a04dd"
           enable-cache: false
@@ -317,6 +319,7 @@ jobs:
       - name: "Install uv"
         uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
         with:
+          # renovate: datasource=github-release-attachments depName=astral-sh/uv
           version: "0.12.13"
           checksum: "745765a3b6e360ad76743599ae5c42e9278c7edf8bbff9fc76d05bf2623a04dd"
           enable-cache: false
@@ -475,6 +478,7 @@ jobs:
       - name: "Install uv"
         uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
         with:
+          # renovate: datasource=github-release-attachments depName=astral-sh/uv
           version: "0.12.13"
           checksum: "7e6ddb9316acc00f2296c82ff4d99977870ee34b2f0ddcae9444d714db9364ed"
           enable-cache: false
@@ -537,6 +541,7 @@ jobs:
         if: ${{ runner.arch == 'X64' }}
         uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
         with:
+          # renovate: datasource=github-release-attachments depName=astral-sh/uv
           version: "0.12.13"
           checksum: "a86c9dc7bad9b03f388583b7187c05fe9951c2e0d392217e8fd43d97787f6ec2"
           enable-cache: false
@@ -545,6 +550,7 @@ jobs:
         if: ${{ runner.arch == 'ARM64' }}
         uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
         with:
+          # renovate: datasource=github-release-attachments depName=astral-sh/uv
           version: "0.12.13"
           checksum: "1efb2654b06e7063d4ac1fc9d49a9bda9a6704d82f035b589a2751a592f14151"
           enable-cache: false
