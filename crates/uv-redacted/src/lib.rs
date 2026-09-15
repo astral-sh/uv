@@ -141,26 +141,25 @@ impl DisplaySafeUrl {
         }
 
         // Check for the suspicious pattern.
-        if !has_credential_like_pattern(url.path())
-            && !url.fragment().is_some_and(has_credential_like_pattern)
-        {
+        let suspicious_path = has_credential_like_pattern(url.path());
+        if !suspicious_path && !url.fragment().is_some_and(has_credential_like_pattern) {
             return Ok(());
         }
 
-        // If the previous check passed, we should always expect to find these in the given URL.
-        let (Some(col_pos), Some(at_pos)) = (input.find(':'), input.rfind('@')) else {
-            if cfg!(debug_assertions) {
-                unreachable!(
-                    "`:` or `@` sign missing in URL that was confirmed to contain them: {input}"
-                );
-            }
-            return Ok(());
+        // Omit the query and fragment from the diagnostic. If either contains an `@`,
+        // the apparent destination before it may be part of a password, so omit it too.
+        let input = if suspicious_path {
+            input
+        } else {
+            input.split_once('#').map_or("", |(_, fragment)| fragment)
         };
-
-        // Our ambiguous URL probably has credentials in it, so we don't want to blast it out in
-        // the error message. We somewhat aggressively replace everything between the scheme's
-        // ':' and the lastmost `@` with `***`.
-        let redacted_path = format!("{}***{}", &input[0..=col_pos], &input[at_pos..]);
+        let (input, trailing) = input.split_once(['?', '#']).unwrap_or((input, ""));
+        let suffix = if trailing.contains('@') {
+            ""
+        } else {
+            input.rfind('@').map_or("", |at_pos| &input[at_pos..])
+        };
+        let redacted_path = format!("{scheme}:***{suffix}");
         Err(DisplaySafeUrlError::AmbiguousAuthority(redacted_path))
     }
 
@@ -711,6 +710,34 @@ mod tests {
                 }
                 DisplaySafeUrlError::Url(_) => panic!("expected AmbiguousAuthority error"),
             }
+        }
+    }
+
+    #[test]
+    fn parse_url_ambiguous_omits_query_and_fragment() {
+        for input in [
+            "https://user/name:password@domain/a/b/c?sig=signature",
+            "https://user#name:password@domain/a/b/c?sig=signature",
+            "https://user/name:password@domain/a/b/c#fragment",
+        ] {
+            assert_eq!(
+                DisplaySafeUrl::parse(input).expect_err("ambiguous URL"),
+                DisplaySafeUrlError::AmbiguousAuthority("https:***@domain/a/b/c".to_owned()),
+            );
+        }
+        for input in [
+            "https://user/name:password@domain/a/b/c?sig=sign@ature",
+            "https://user/name:password@domain/a/b/c#token=x@y",
+            "https://user#name:password@domain/a/b/c?sig=sign@ature",
+            "https://user#name:password@domain/a/b/c#token=x@y",
+            "https://host/#name:password?sig=sign@ature",
+            "https://user/name:pa@ss?word@domain",
+            "https://user#name:pa@ss#word@domain",
+        ] {
+            assert_eq!(
+                DisplaySafeUrl::parse(input).expect_err("ambiguous URL"),
+                DisplaySafeUrlError::AmbiguousAuthority("https:***".to_owned()),
+            );
         }
     }
 
