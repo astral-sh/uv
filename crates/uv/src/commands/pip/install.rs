@@ -155,6 +155,7 @@ pub(crate) async fn pip_install(
         find_links,
         no_binary,
         no_build,
+        config_settings_package: requirements_config_settings_package,
         extras: _,
     } = operations::read_requirements(
         requirements,
@@ -305,6 +306,9 @@ pub(crate) async fn pip_install(
         python_platform.as_ref(),
         interpreter,
     )?;
+    let config_settings_package = config_settings_package
+        .clone()
+        .merge(requirements_config_settings_package.evaluate(Some(&marker_env)));
 
     // With sufficient modifications, installation only needs installed distributions selected by
     // the resolution. A `pylock.toml` resolution never consults the environment, while reinstalling
@@ -342,7 +346,7 @@ pub(crate) async fn pip_install(
             &marker_env,
             &tags,
             config_settings,
-            config_settings_package,
+            &config_settings_package,
             &extra_build_requires,
             extra_build_variables,
         )? {
@@ -487,7 +491,7 @@ pub(crate) async fn pip_install(
         state.clone(),
         index_strategy,
         config_settings,
-        config_settings_package,
+        &config_settings_package,
         types_build_isolation,
         &extra_build_requires,
         extra_build_variables,
@@ -616,7 +620,7 @@ pub(crate) async fn pip_install(
         state.clone(),
         index_strategy,
         config_settings,
-        config_settings_package,
+        &config_settings_package,
         types_build_isolation,
         &extra_build_requires,
         extra_build_variables,
