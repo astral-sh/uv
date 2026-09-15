@@ -34,30 +34,23 @@ pub fn generate_wheel(
     tag: &str,
     entry_points: &[String],
 ) -> (String, Vec<u8>) {
-    if entry_points.is_empty() {
-        return generate_wheel_with_files(
-            name,
-            version,
-            requires,
-            extras,
-            requires_python,
-            tag,
-            &[],
-        );
+    let mut files = Vec::new();
+    if !entry_points.is_empty() {
+        let normalized = name.as_dist_info_name();
+        let mut entry_points_metadata = String::from("[console_scripts]\n");
+        for entry_point in entry_points {
+            entry_points_metadata.push_str(entry_point);
+            entry_points_metadata.push_str(" = ");
+            entry_points_metadata.push_str(&normalized);
+            entry_points_metadata.push_str(".cli:main\n");
+        }
+        files.push((
+            format!("{normalized}-{version}.dist-info/entry_points.txt"),
+            entry_points_metadata,
+        ));
+        files.push((format!("{normalized}/cli.py"), build_cli_module(name)));
     }
 
-    let normalized = name.as_dist_info_name();
-    let entry_points_path = format!("{normalized}-{version}.dist-info/entry_points.txt");
-    let mut entry_points_metadata = String::from("[console_scripts]\n");
-    for entry_point in entry_points {
-        writeln!(
-            entry_points_metadata,
-            "{entry_point} = {normalized}.cli:main"
-        )
-        .expect("writing entry point metadata into a string should succeed");
-    }
-    let module_path = format!("{normalized}/cli.py");
-    let module = build_cli_module(name);
     generate_wheel_with_files(
         name,
         version,
@@ -65,10 +58,10 @@ pub fn generate_wheel(
         extras,
         requires_python,
         tag,
-        &[
-            (&entry_points_path, &entry_points_metadata),
-            (&module_path, &module),
-        ],
+        &files
+            .iter()
+            .map(|(path, contents)| (path.as_str(), contents.as_str()))
+            .collect::<Vec<_>>(),
     )
 }
 
