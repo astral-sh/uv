@@ -17,8 +17,9 @@ use rcgen::{
 };
 use rustls::pki_types::{CertificateDer, PrivateKeyDer};
 use rustls::server::WebPkiClientVerifier;
-use rustls::{RootCertStore, ServerConfig};
+use rustls::{NamedGroup, RootCertStore, ServerConfig};
 use tokio::net::TcpListener;
+use tokio::sync::oneshot;
 use tokio::task::JoinHandle;
 use tokio_rustls::TlsAcceptor;
 
@@ -184,6 +185,8 @@ pub(crate) struct TestServerBuilder<'a> {
     server_cert: Option<&'a SelfSigned>,
     // Enable mTLS Verification
     mutual_tls: bool,
+    // Reports the negotiated key exchange group
+    kx_group_tx: Option<oneshot::Sender<NamedGroup>>,
 }
 
 impl<'a> TestServerBuilder<'a> {
@@ -192,6 +195,7 @@ impl<'a> TestServerBuilder<'a> {
             server_cert: None,
             ca_cert: None,
             mutual_tls: false,
+            kx_group_tx: None,
         }
     }
 
@@ -212,6 +216,13 @@ impl<'a> TestServerBuilder<'a> {
     /// Requires `with_server_cert` and `with_ca_cert`.
     fn with_mutual_tls(mut self, mutual: bool) -> Self {
         self.mutual_tls = mutual;
+        self
+    }
+
+    /// Report the negotiated key exchange group over `tx` once the handshake
+    /// completes. Requires `with_server_cert`.
+    fn with_kx_group_capture(mut self, tx: oneshot::Sender<NamedGroup>) -> Self {
+        self.kx_group_tx = Some(tx);
         self
     }
 
@@ -285,6 +296,8 @@ impl<'a> TestServerBuilder<'a> {
             future::ok::<_, hyper::Error>(Response::new(response_content))
         };
 
+        let kx_group_tx = self.kx_group_tx;
+
         // Spawn the server loop in a background task
         let server_task = tokio::spawn(async move {
             let svc = service_fn(move |req: Request<Incoming>| svc_fn(req));
@@ -303,6 +316,11 @@ impl<'a> TestServerBuilder<'a> {
                     .accept(tcp_stream)
                     .await
                     .context("Failed to accept TLS connection")?;
+                if let Some(kx_group_tx) = kx_group_tx
+                    && let Some(kx_group) = tls_stream.get_ref().1.negotiated_key_exchange_group()
+                {
+                    let _ = kx_group_tx.send(kx_group.name());
+                }
                 let socket = TokioIo::new(tls_stream);
                 tokio::task::spawn(async move {
                     Builder::new(TokioExecutor::new())
@@ -353,4 +371,21 @@ pub(crate) async fn start_https_mtls_user_agent_server(
         .with_mutual_tls(true)
         .start()
         .await
+}
+
+/// Single Request HTTPS server that reports the negotiated key exchange group.
+pub(crate) async fn start_https_negotiated_kx_group_server(
+    server_cert: &SelfSigned,
+) -> Result<(
+    JoinHandle<Result<()>>,
+    SocketAddr,
+    oneshot::Receiver<NamedGroup>,
+)> {
+    let (kx_group_tx, kx_group_rx) = oneshot::channel();
+    let (server_task, addr) = TestServerBuilder::new()
+        .with_server_cert(server_cert)
+        .with_kx_group_capture(kx_group_tx)
+        .start()
+        .await?;
+    Ok((server_task, addr, kx_group_rx))
 }
