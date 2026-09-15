@@ -9,6 +9,7 @@ use flate2::write::GzEncoder;
 use fs_err::File;
 use futures_lite::future::block_on;
 use globset::{Glob, GlobSet};
+use indexmap::IndexSet;
 use rustc_hash::FxHashSet;
 use std::io;
 use std::io::{BufReader, Cursor, Read, Write};
@@ -183,16 +184,12 @@ fn source_dist_matcher(
             source: err,
         })?;
 
-    let mut excludes: Vec<String> = Vec::new();
+    let mut excludes = IndexSet::new();
     if settings.default_excludes {
         excludes.extend(DEFAULT_EXCLUDES.iter().map(ToString::to_string));
     }
-    for exclude in settings.source_exclude {
-        // Avoid duplicate entries.
-        if !excludes.contains(&exclude) {
-            excludes.push(exclude);
-        }
-    }
+    excludes.extend(settings.source_exclude);
+    let excludes: Vec<_> = excludes.into_iter().collect();
     debug!("Source dist excludes: {:?}", excludes);
     let exclude_matcher = build_exclude_matcher(excludes)?;
     if exclude_matcher.is_match("pyproject.toml") {
