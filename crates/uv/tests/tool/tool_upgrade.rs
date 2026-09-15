@@ -1145,8 +1145,7 @@ fn tool_upgrade_constraint() {
     ");
 }
 
-/// Upgrade a tool, but only by upgrading one of it's `--with` dependencies, and not the tool
-/// itself.
+/// Upgrade an explicitly installed `--with` dependency while the tool remains pinned.
 #[test]
 fn tool_upgrade_with() {
     let old_index = old_tool_index();
@@ -1158,9 +1157,11 @@ fn tool_upgrade_with() {
         .with_tool_dirs();
     let bin_dir = context.temp_dir.child("bin");
 
-    // Install `babel` from the old index.
+    // `python-dotenv` has no dependencies; `pytz` is added solely through `--with`.
     uv_snapshot!(context.filters(), context.tool_install()
-        .arg("babel==2.6.0")
+        .arg("python-dotenv==0.10.2.post2")
+        .arg("--with")
+        .arg("pytz")
         .arg("--index-url")
         .arg(old_index.index_url())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
@@ -1169,24 +1170,24 @@ fn tool_upgrade_with() {
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
-     + babel==2.6.0
+     + python-dotenv==0.10.2.post2
      + pytz==2018.5
-    Installed 1 executable: pybabel
+    Installed 1 executable: dotenv
     ");
 
-    // Upgrade `babel` from the new index. It shouldn't be updated, but `pytz` should be.
+    // The receipt should retain `pytz` and allow it to upgrade independently of the tool.
     uv_snapshot!(context.filters(), context.tool_upgrade()
-        .arg("babel")
+        .arg("python-dotenv")
         .arg("--index-url")
         .arg(new_index.index_url())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Modified babel environment
+    Modified python-dotenv environment
      - pytz==2018.5
      + pytz==2024.1
 
-    hint: `babel` is pinned to `2.6.0` (installed with an exact version pin); reinstall with `uv tool install babel@latest` to upgrade to a new version.
+    hint: `python-dotenv` is pinned to `0.10.2.post2` (installed with an exact version pin); reinstall with `uv tool install python-dotenv@latest` to upgrade to a new version.
     ");
 }
 
@@ -1940,6 +1941,11 @@ fn new_tool_index() -> PackseServer {
         [packages.setuptools.versions."69.2.0"]
         requires_python = ">=3.11"
         sdist = false
+
+        [packages.python-dotenv.versions."0.10.2.post2"]
+        requires_python = ">=3.11"
+        sdist = false
+        entry_points = ["dotenv"]
 
         [packages.python-dotenv.versions."1.0.1"]
         requires_python = ">=3.11"
