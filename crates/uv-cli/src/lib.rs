@@ -7384,7 +7384,7 @@ pub struct BuildOptionsArgs {
         overrides_with("no_require_build_hashes"),
         help_heading = "Build options"
     )]
-    pub(crate) require_build_hashes: bool,
+    require_build_hashes: bool,
 
     /// Do not require hashes for every build dependency.
     #[arg(
@@ -7392,7 +7392,7 @@ pub struct BuildOptionsArgs {
         overrides_with("require_build_hashes"),
         help_heading = "Build options"
     )]
-    pub(crate) no_require_build_hashes: bool,
+    no_require_build_hashes: bool,
 }
 
 /// Arguments that configure build isolation for source distributions.
