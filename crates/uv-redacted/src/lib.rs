@@ -5,7 +5,7 @@ use std::fmt::{Debug, Display};
 use std::ops::{Deref, DerefMut};
 use std::str::FromStr;
 use thiserror::Error;
-use url::Url;
+use url::{Url, form_urlencoded};
 
 pub use persistence::{CredentialPersistingUrl, PersistSafeUrl};
 
@@ -148,20 +148,24 @@ impl DisplaySafeUrl {
             return Ok(());
         }
 
-        // If the previous check passed, we should always expect to find these in the given URL.
-        let (Some(col_pos), Some(at_pos)) = (input.find(':'), input.rfind('@')) else {
-            if cfg!(debug_assertions) {
-                unreachable!(
-                    "`:` or `@` sign missing in URL that was confirmed to contain them: {input}"
-                );
+        let (input, query) = input.split_once('?').unwrap_or((input, ""));
+        let redacted_path = if query.contains('@') {
+            // An unescaped `?` in a password can make the rest look like a query.
+            // If it contains `@`, the apparent destination before it may also be
+            // part of the password, so omit both from the diagnostic.
+            format!("{scheme}:***")
+        } else {
+            let suffix = input.rfind('@').map_or("", |at_pos| &input[at_pos..]);
+            let mut redacted_path = format!("{scheme}:***{suffix}");
+            if !query.is_empty() {
+                let (query, fragment) = query.split_at(query.find('#').unwrap_or(query.len()));
+                let query = redacted_query(query, form_urlencoded::parse(query.as_bytes()));
+                redacted_path.push('?');
+                redacted_path.push_str(&query);
+                redacted_path.push_str(fragment);
             }
-            return Ok(());
+            redacted_path
         };
-
-        // Our ambiguous URL probably has credentials in it, so we don't want to blast it out in
-        // the error message. We somewhat aggressively replace everything between the scheme's
-        // ':' and the lastmost `@` with `***`.
-        let redacted_path = format!("{}***{}", &input[0..=col_pos], &input[at_pos..]);
         Err(DisplaySafeUrlError::AmbiguousAuthority(redacted_path))
     }
 
@@ -712,6 +716,44 @@ mod tests {
                 }
                 DisplaySafeUrlError::Url(_) => panic!("expected AmbiguousAuthority error"),
             }
+        }
+    }
+
+    #[test]
+    fn parse_url_ambiguous_redacts_query() {
+        for (input, expected) in [
+            (
+                "https://user/name:password@domain/a/b/c?sig=signature&safe=value",
+                "https:***@domain/a/b/c?sig=****&safe=value",
+            ),
+            (
+                "https://user#name:password@domain/a/b/c?sig=signature&safe=value",
+                "https:***@domain/a/b/c?sig=****&safe=value",
+            ),
+            (
+                "https://user/name:password@domain/a/b/c?safe=a%2Bb%3D",
+                "https:***@domain/a/b/c?safe=a%2Bb%3D",
+            ),
+            (
+                "https://user/name:password@domain/a/b/c?sig=signature#subdirectory=src",
+                "https:***@domain/a/b/c?sig=****#subdirectory=src",
+            ),
+        ] {
+            assert_eq!(
+                DisplaySafeUrl::parse(input).expect_err("ambiguous URL"),
+                DisplaySafeUrlError::AmbiguousAuthority(expected.to_owned()),
+            );
+        }
+        for input in [
+            "https://user/name:password@domain/a/b/c?sig=sign@ature",
+            "https://user#name:password@domain/a/b/c?sig=sign@ature",
+            "https://host/#name:password?sig=sign@ature",
+            "https://user/name:pa@ss?word@domain",
+        ] {
+            assert_eq!(
+                DisplaySafeUrl::parse(input).expect_err("ambiguous URL"),
+                DisplaySafeUrlError::AmbiguousAuthority("https:***".to_owned()),
+            );
         }
     }
 
