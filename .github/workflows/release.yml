@@ -86,7 +86,7 @@ jobs:
           persist-credentials: false
           submodules: recursive
       - name: "Install uv"
-        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
         with:
           version: "0.12.14"
           checksum: "18ef5c3888ae59828cb13f38d57e9389b8173ecc719eff163bfafc74b38f5936"
@@ -162,7 +162,7 @@ jobs:
           persist-credentials: false
           submodules: recursive
       - name: "Install uv"
-        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
         with:
           version: "0.12.14"
           checksum: "18ef5c3888ae59828cb13f38d57e9389b8173ecc719eff163bfafc74b38f5936"
@@ -212,7 +212,7 @@ jobs:
           persist-credentials: false
           submodules: recursive
       - name: "Install uv"
-        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
         with:
           version: "0.12.14" # Get all the local artifacts for the global tasks to use (for e.g. checksums)
           checksum: "18ef5c3888ae59828cb13f38d57e9389b8173ecc719eff163bfafc74b38f5936"
@@ -281,7 +281,7 @@ jobs:
           persist-credentials: false
           submodules: recursive
       - name: "Install uv"
-        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
         with:
           version: "0.12.14" # Fetch artifacts from scratch-storage
           checksum: "18ef5c3888ae59828cb13f38d57e9389b8173ecc719eff163bfafc74b38f5936"
