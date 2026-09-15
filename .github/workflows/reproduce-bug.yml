@@ -428,7 +428,7 @@ jobs:
       - name: "Open draft pull request"
         id: open-pr
         run: |
-          branch="zb/reproduce-bug/$ISSUE_NUMBER"
+          branch="automations/reproduce-bug/$ISSUE_NUMBER"
           git -c core.hooksPath=/dev/null push \
             "https://x-access-token:${GH_TOKEN}@github.com/astral-sh/uv-dev.git" \
             "$REGRESSION_HEAD_SHA:refs/heads/$branch"
