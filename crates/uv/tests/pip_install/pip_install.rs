@@ -14443,6 +14443,63 @@ fn reject_symlinked_wheel_data_package_directory() -> Result<()> {
     Ok(())
 }
 
+/// Wheel data installation currently rejects a symlink that remains within the scheme root.
+#[cfg(unix)]
+#[test]
+fn reject_in_prefix_symlinked_wheel_data_directory() -> Result<()> {
+    let context = uv_test::test_context!("3.11");
+    let wheel = context.temp_dir.join("foo-0.1.0-py3-none-any.whl");
+    let data_path = "foo-0.1.0.data/data/man/man1/foo.1";
+    let record = formatdoc! {"
+        foo-0.1.0.dist-info/METADATA,,
+        foo-0.1.0.dist-info/WHEEL,,
+        foo-0.1.0.dist-info/RECORD,,
+        {data_path},,
+    "};
+
+    let mut writer = ZipFileWriter::new(Vec::new());
+    for (name, contents) in [
+        (
+            "foo-0.1.0.dist-info/METADATA",
+            "Metadata-Version: 2.1\nName: foo\nVersion: 0.1.0\n",
+        ),
+        (
+            "foo-0.1.0.dist-info/WHEEL",
+            "Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
+        ),
+        ("foo-0.1.0.dist-info/RECORD", record.as_str()),
+        (data_path, "foo manual\n"),
+    ] {
+        let entry = ZipEntryBuilder::new(name.into(), Compression::Stored);
+        block_on(writer.write_entry_whole(entry, contents.as_bytes()))?;
+    }
+    fs_err::write(&wheel, block_on(writer.close())?)?;
+
+    fs_err::create_dir_all(context.venv.join("share/man"))?;
+    symlink("share/man", context.venv.join("man"))?;
+
+    // This link remains within the installation prefix, so rejecting the wheel is undesirable.
+    // See astral-sh/uv#21692.
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--link-mode")
+        .arg("copy")
+        .arg(&wheel), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    error: Failed to install: foo-0.1.0-py3-none-any.whl (foo==0.1.0 (from file://[TEMP_DIR]/foo-0.1.0-py3-none-any.whl))
+      cause: The wheel is invalid: Cannot install into symlinked directory: [VENV]/man
+    ");
+
+    context
+        .venv
+        .child("share/man/man1/foo.1")
+        .assert(predicate::path::missing());
+
+    Ok(())
+}
+
 /// Wheel headers must not be installed through a symlinked package destination.
 #[cfg(unix)]
 #[test]
