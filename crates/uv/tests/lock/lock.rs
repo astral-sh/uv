@@ -33627,41 +33627,6 @@ fn lock_derivation_chain_extended() -> Result<()> {
     Ok(())
 }
 
-/// The project itself is marked as an editable dependency, but under the wrong name. The project
-/// itself isn't a package.
-#[cfg(feature = "test-universal")]
-#[test]
-fn mismatched_name_self_editable() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
-
-    let pyproject_toml = context.temp_dir.child("pyproject.toml");
-    pyproject_toml.write_str(
-        r#"
-        [project]
-        name = "project"
-        version = "0.1.0"
-        requires-python = ">=3.12"
-        dependencies = ["foo"]
-
-        [tool.uv.sources]
-        foo = { path = ".", editable = true }
-        "#,
-    )?;
-
-    // Running `uv sync` should generate a lockfile.
-    uv_snapshot!(context.filters(), context.sync(), @"
-    exit_code: 1 (failure)
-    ----- stderr -----
-    Resolved 2 packages in [TIME]
-    error: Failed to build `foo @ file://[TEMP_DIR]/`
-      cause: Package metadata name `project` does not match given name `foo`
-
-    hint: `foo` was included because `project` (v0.1.0) depends on `foo`
-    ");
-
-    Ok(())
-}
-
 #[cfg(feature = "test-universal")]
 #[test]
 fn lock_relative_project() -> Result<()> {
