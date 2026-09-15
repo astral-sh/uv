@@ -1530,8 +1530,38 @@ impl<'lock> PackageMarkers<'lock> {
 #[derive(Default)]
 struct DependencySourceReachability<'lock> {
     package_markers: PackageMarkers<'lock>,
+    /// Contexts waiting for a current declaration to authorize their exact direct source.
     deferred_package_markers: PackageMarkers<'lock>,
     package_queue: VecDeque<(&'lock Package, Option<&'lock ExtraName>, MarkerTree)>,
+}
+
+impl<'lock> DependencySourceReachability<'lock> {
+    /// Retain current requests without inspecting their unauthorized direct source.
+    /// Returns whether any package or extra context grew.
+    fn defer_requirement(
+        &mut self,
+        package: &'lock Package,
+        requirement: &Requirement,
+        marker: MarkerTree,
+        conflicts: &Conflicts,
+    ) -> bool {
+        let mut changed = self
+            .deferred_package_markers
+            .merge(&package.id, None, marker)
+            .is_some();
+        for extra in &requirement.extras {
+            let Some((extra, _)) = package.optional_dependencies.get_key_value(extra) else {
+                continue;
+            };
+            let marker = marker
+                .and(DependencyContext::Extra(extra).conflict_marker(&package.id.name, conflicts));
+            changed |= self
+                .deferred_package_markers
+                .merge(&package.id, Some(extra), marker)
+                .is_some();
+        }
+        changed
+    }
 }
 
 /// Contexts that grew during a guarded reachability traversal.
@@ -5085,6 +5115,14 @@ impl Lock {
                                     source_requirements,
                                     root,
                                 )? {
+                                    if reachability.defer_requirement(
+                                        dependency,
+                                        &requirement,
+                                        source_marker,
+                                        &self.conflicts,
+                                    ) {
+                                        changes.deferred.insert(&dependency.id);
+                                    }
                                     continue;
                                 }
                             }
@@ -5297,6 +5335,7 @@ impl Lock {
                 {
                     // A bare root name cannot revive an old direct source. Current workspace
                     // declarations, active constraints, and global overrides authorize it.
+                    reachability.defer_requirement(package, requirement, marker, &self.conflicts);
                     continue;
                 }
                 reachability

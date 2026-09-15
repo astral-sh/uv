@@ -22661,7 +22661,13 @@ fn lock_metadata_free_shared_conditional_provider_sources() -> Result<()> {
         name = "project"
         version = "0.1.0"
         requires-python = ">=3.12"
-        dependencies = ["provider[direct] ; sys_platform == 'darwin'", "leaf", "extra-leaf"]
+        dependencies = [
+            "provider[direct] ; sys_platform == 'darwin'",
+            "leaf",
+            "twig",
+            "extra-leaf[nested]",
+            "extra-twig",
+        ]
 
         [tool.uv.sources]
         provider = { path = "provider" }
@@ -22677,7 +22683,7 @@ fn lock_metadata_free_shared_conditional_provider_sources() -> Result<()> {
         dependencies = ["leaf ; sys_platform != 'darwin'"]
 
         [project.optional-dependencies]
-        direct = ["extra-leaf ; sys_platform != 'darwin'"]
+        direct = ["extra-leaf[nested] ; sys_platform != 'darwin'"]
 
         [tool.uv.sources]
         leaf = { path = "../leaf" }
@@ -22691,6 +22697,10 @@ fn lock_metadata_free_shared_conditional_provider_sources() -> Result<()> {
         name = "leaf"
         version = "0.1.0"
         requires-python = ">=3.12"
+        dependencies = ["twig"]
+
+        [tool.uv.sources]
+        twig = { path = "../twig" }
         "#})?;
     context
         .temp_dir
@@ -22698,6 +22708,32 @@ fn lock_metadata_free_shared_conditional_provider_sources() -> Result<()> {
         .write_str(indoc! {r#"
         [project]
         name = "extra-leaf"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [project.optional-dependencies]
+        nested = ["extra-twig"]
+
+        [tool.uv.sources]
+        extra-twig = { path = "../extra-twig" }
+        "#})?;
+
+    context
+        .temp_dir
+        .child("twig/pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "twig"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        "#})?;
+
+    context
+        .temp_dir
+        .child("extra-twig/pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "extra-twig"
         version = "0.1.0"
         requires-python = ">=3.12"
         "#})?;
@@ -22709,7 +22745,7 @@ fn lock_metadata_free_shared_conditional_provider_sources() -> Result<()> {
         .arg("--no-index"), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Resolved 4 packages in [TIME]
+    Resolved 6 packages in [TIME]
     ");
 
     uv_snapshot!(context.filters(), context.lock()
@@ -22721,7 +22757,74 @@ fn lock_metadata_free_shared_conditional_provider_sources() -> Result<()> {
         .arg("--no-index"), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Resolved 4 packages in [TIME]
+    Resolved 6 packages in [TIME]
+    ");
+
+    // Script requirements enter source discovery without a workspace package.
+    context.temp_dir.child("script.py").write_str(indoc! {r#"
+        # /// script
+        # requires-python = ">=3.12"
+        # dependencies = [
+        #     "provider[direct] ; sys_platform == 'darwin'",
+        #     "leaf",
+        #     "twig",
+        #     "extra-leaf[nested]",
+        #     "extra-twig",
+        # ]
+        #
+        # [tool.uv.sources]
+        # provider = { path = "provider" }
+        # ///
+        "#})?;
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--script")
+        .arg("script.py")
+        .arg("--preview-features")
+        .arg("lock-without-metadata")
+        .arg("--offline")
+        .arg("--no-index"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    ");
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--script")
+        .arg("script.py")
+        .arg("--preview-features")
+        .arg("lock-without-metadata")
+        .arg("--check")
+        .arg("--offline")
+        .arg("--no-cache")
+        .arg("--no-index"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    ");
+
+    // A bare extra request cannot authorize sources omitted by the direct source provider.
+    context
+        .temp_dir
+        .child("provider/pyproject.toml")
+        .write_str(
+            &context
+                .read("provider/pyproject.toml")
+                .replace("extra-leaf[nested] ;", "extra-leaf ;"),
+        )?;
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("lock-without-metadata")
+        .arg("--check")
+        .arg("--offline")
+        .arg("--no-cache")
+        .arg("--no-index"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: Failed to resolve dependencies for package `extra-leaf==0.1.0`
+      cause: Package `extra-twig` was included as a URL dependency. URL dependencies must be expressed as direct requirements or constraints. Consider adding `extra-twig @ file://[TEMP_DIR]/extra-twig` to your dependencies or constraints file.
+
+    hint: `extra-leaf` (v0.1.0) was included because `project` (v0.1.0) depends on `extra-leaf`
     ");
 
     Ok(())
