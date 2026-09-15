@@ -2162,6 +2162,64 @@ fn build_fast_path() -> Result<()> {
     Ok(())
 }
 
+#[test]
+fn build_fast_path_require_hashes() -> Result<()> {
+    let context = uv_test::test_context!("3.12").with_filter(("/crates/uv/../../", "/"));
+    let built_by_uv = current_dir()?.join("../../test/packages/built-by-uv");
+    let (filename, wheel) = generate_wheel(
+        &"uv-build".parse()?,
+        &uv_version::version().parse()?,
+        &[],
+        &BTreeMap::new(),
+        None,
+        "py3-none-any",
+        &[],
+    );
+    context
+        .temp_dir
+        .child("wheels")
+        .child(filename)
+        .write_binary(&wheel)?;
+
+    let build = || {
+        let mut command = context.build();
+        command
+            .arg(&built_by_uv)
+            .arg("--out-dir")
+            .arg(context.temp_dir.join("dist"))
+            .args([
+                "--no-index",
+                "--find-links=wheels",
+                "--no-cache",
+                "--preview-features=build-dependency-hashes",
+                "--require-build-hashes",
+            ]);
+        command
+    };
+
+    uv_snapshot!(context.filters(), build(), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Building source distribution...
+    Building wheel from source distribution...
+    Successfully built dist/built_by_uv-0.1.0.tar.gz
+    Successfully built dist/built_by_uv-0.1.0-py3-none-any.whl
+    ");
+
+    // Installing the backend instead of using the bundled version still requires hashes.
+    uv_snapshot!(context.filters(), build().arg("--force-pep517"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    Building source distribution...
+    error: Failed to build `[WORKSPACE]/test/packages/built-by-uv`
+      cause: Failed to resolve requirements from `build-system.requires`
+      cause: No solution found when resolving: `uv-build>=0.8.0, <0.13`
+      cause: In `--require-hashes` mode, all requirements must be pinned upfront with `==`, but found: `uv-build`
+    ");
+
+    Ok(())
+}
+
 /// Warn about an unbounded build backend only when producing a source distribution.
 #[test]
 fn build_fast_path_unbounded_backend() -> Result<()> {
@@ -3082,7 +3140,11 @@ fn build_no_gitignore() -> Result<()> {
 fn build_workspace_constraint_hashes() -> Result<()> {
     let context = uv_test::test_context!("3.12");
     let mut build_hash = String::new();
-    for (name, version) in [("build-dependency", "1.0.0"), ("project", "0.1.0")] {
+    for (name, version) in [
+        ("build-dependency", "1.0.0"),
+        ("dynamic-dependency", "1.0.0"),
+        ("project", "0.1.0"),
+    ] {
         let (filename, wheel) = generate_wheel(
             &name.parse()?,
             &version.parse()?,
@@ -3252,5 +3314,80 @@ fn build_workspace_constraint_hashes() -> Result<()> {
         .temp_dir
         .child("backend-executed")
         .assert(predicate::path::exists());
+
+    // Without isolation, neither hash-checking mode installs or verifies build dependencies.
+    context.temp_dir.child("backend.py").write_str(
+        &context
+            .read("backend.py")
+            .replace("import build_dependency", ""),
+    )?;
+    uv_snapshot!(context.filters(), context.build()
+        .arg("--wheel")
+        .arg("--no-cache")
+        .args(["--no-build-isolation", "--require-hashes"])
+        .args(["--build-constraint", "constraints.txt"]), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Building wheel...
+    Successfully built dist/project-0.1.0-py3-none-any.whl
+    ");
+
+    uv_snapshot!(context.filters(), context.build()
+        .arg("--wheel")
+        .arg("--no-cache")
+        .arg("--no-build-isolation")
+        .args(["--build-constraint", "constraints.txt"])
+        .arg("--preview-features=build-dependency-hashes")
+        .arg("--require-build-hashes"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Building wheel...
+    Successfully built dist/project-0.1.0-py3-none-any.whl
+    ");
+
+    let dynamic_wheel = context
+        .temp_dir
+        .child("wheels/dynamic_dependency-1.0.0-py3-none-any.whl");
+    let dynamic_hash = hex::encode(Sha256::digest(fs_err::read(dynamic_wheel.path())?));
+    let context = context.with_filter((dynamic_hash.clone(), "[DYNAMIC_HASH]"));
+    let dynamic_url =
+        Url::from_file_path(dynamic_wheel.path()).map_err(|()| anyhow!("invalid wheel path"))?;
+    let backend = context.read("backend.py").replace(
+        "shutil.copyfile(source,",
+        "import dynamic_dependency\n    shutil.copyfile(source,",
+    );
+    context
+        .temp_dir
+        .child("backend.py")
+        .write_str(&formatdoc! {r#"
+        {backend}
+
+        def get_requires_for_build_wheel(config_settings=None):
+            return ["dynamic-dependency @ {dynamic_url}#sha256={dynamic_hash}"]
+    "#})?;
+    uv_snapshot!(context.filters(), context.build()
+        .arg("--wheel")
+        .arg("--no-cache")
+        .args(["--require-hashes", "--build-constraint", "constraints.txt"]), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Building wheel...
+    Successfully built dist/project-0.1.0-py3-none-any.whl
+    ");
+
+    uv_snapshot!(context.filters(), context.build()
+        .arg("--wheel")
+        .arg("--no-cache")
+        .args(["--build-constraint", "constraints.txt"])
+        .env(EnvVars::UV_REQUIRE_BUILD_HASHES, "true")
+        .arg("--preview-features=build-dependency-hashes"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    Building wheel...
+    error: Failed to build `[TEMP_DIR]/`
+      cause: Failed to resolve requirements from `build-system.requires`
+      cause: No solution found when resolving: `build-dependency==1.0.0`, `dynamic-dependency @ file://[TEMP_DIR]/wheels/dynamic_dependency-1.0.0-py3-none-any.whl#sha256=[DYNAMIC_HASH]`
+      cause: In `--require-hashes` mode, all requirements must be pinned upfront with `==`, but found: `dynamic-dependency`
+    ");
     Ok(())
 }
