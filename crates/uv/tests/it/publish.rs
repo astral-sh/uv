@@ -4,22 +4,23 @@ use fs_err::OpenOptions;
 use indoc::{formatdoc, indoc};
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
-use std::env::current_dir;
+use std::env::{current_dir, var_os};
 use std::io::Write;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use uv_static::EnvVars;
 use uv_test::{uv_snapshot, venv_bin_path};
 use wiremock::matchers::{basic_auth, body_json, method, path};
 use wiremock::{Mock, MockServer, Request, ResponseTemplate};
 
 fn test_link(filename: &str) -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR"))
-        .parent()
-        .unwrap()
-        .parent()
-        .unwrap()
-        .join("test/links")
-        .join(filename)
+    PathBuf::from(
+        var_os(EnvVars::CARGO_MANIFEST_DIR).expect("Cargo should provide the manifest path"),
+    )
+    .parent()
+    .and_then(|path| path.parent())
+    .expect("CARGO_MANIFEST_DIR should be nested under workspace root")
+    .join("test/links")
+    .join(filename)
 }
 
 fn dummy_wheel() -> PathBuf {

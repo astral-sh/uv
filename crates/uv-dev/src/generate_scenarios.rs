@@ -1,7 +1,8 @@
 //! Generate the Packse scenario integration tests.
 
+use std::env;
 use std::fmt::Write as _;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
 use anstream::println;
@@ -14,6 +15,7 @@ use walkdir::WalkDir;
 use uv_normalize::PackageName;
 use uv_pep440::Version;
 use uv_pep508::{Requirement, VersionOrUrl};
+use uv_static::EnvVars;
 use uv_test::packse::scenario::{Package, PackageMetadata, Scenario, ScenarioTest};
 
 use crate::ROOT_DIR;
@@ -111,7 +113,10 @@ pub(crate) fn main(args: &Args) -> Result<()> {
 }
 
 fn load_scenarios() -> Result<Vec<ScenarioCase>> {
-    let scenarios_dir = Path::new(ROOT_DIR).join(GENERATED_FROM);
+    let workspace_root = env::var_os(EnvVars::CARGO_MANIFEST_DIR)
+        .map(|manifest_dir| PathBuf::from(manifest_dir).join("../.."))
+        .unwrap_or_else(|| PathBuf::from(ROOT_DIR));
+    let scenarios_dir = workspace_root.join(GENERATED_FROM);
     load_scenarios_from(&scenarios_dir)
 }
 

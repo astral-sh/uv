@@ -1,4 +1,5 @@
-use std::path::Path;
+use std::env;
+use std::path::PathBuf;
 use std::str::FromStr;
 
 use anyhow::{Context, Result};
@@ -21,9 +22,7 @@ use uv_redacted::DisplaySafeUrl;
 #[tokio::test]
 async fn remote_metadata_with_and_without_cache() -> Result<()> {
     let server = MockServer::start().await;
-    let wheel = fs_err::read(
-        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../test/links/ok-1.0.0-py3-none-any.whl"),
-    )?;
+    let wheel = wheel()?;
     Mock::given(method("GET"))
         .and(path("/ok-1.0.0-py3-none-any.whl"))
         .respond_with(ResponseTemplate::new(200).set_body_raw(wheel, "application/octet-stream"))
@@ -58,9 +57,7 @@ async fn remote_metadata_with_and_without_cache() -> Result<()> {
 #[tokio::test]
 async fn remote_metadata_requires_range_requests() -> Result<()> {
     let server = MockServer::start().await;
-    let wheel = fs_err::read(
-        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../test/links/ok-1.0.0-py3-none-any.whl"),
-    )?;
+    let wheel = wheel()?;
     Mock::given(method("GET"))
         .and(path("/ok-1.0.0-py3-none-any.whl"))
         .respond_with(ResponseTemplate::new(200).set_body_raw(wheel, "application/octet-stream"))
@@ -521,10 +518,11 @@ fn header_missing(header: HeaderName) -> HeaderMissing {
     HeaderMissing(header)
 }
 
-/// Loads the wheel fixture served by each redirect target.
+/// Loads the wheel fixture served by the mock registry.
 fn wheel() -> Result<Vec<u8>> {
     Ok(fs_err::read(
-        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../test/links/ok-1.0.0-py3-none-any.whl"),
+        PathBuf::from(env::var("CARGO_MANIFEST_DIR")?)
+            .join("../../test/links/ok-1.0.0-py3-none-any.whl"),
     )?)
 }
 

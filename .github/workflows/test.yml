@@ -244,7 +244,78 @@ jobs:
           if-no-files-found: ignore
           retention-days: 14
 
+  cargo-build-tests-windows:
+    timeout-minutes: 15
+    runs-on: namespace-profile-windows-2022-x86-64-16x32
+    name: "cargo build tests on windows"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Setup Dev Drive
+        run: ${{ github.workspace }}/.github/workflows/setup-dev-drive.ps1
+
+      # actions/checkout does not let us clone into anywhere outside ${{ github.workspace }}, so we have to copy the clone...
+      - name: Copy Git Repo to Dev Drive
+        run: |
+          Copy-Item -Path "${{ github.workspace }}" -Destination "$Env:UV_WORKSPACE" -Recurse
+
+      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          version: "0.12.13"
+          checksum: "a86c9dc7bad9b03f388583b7187c05fe9951c2e0d392217e8fd43d97787f6ec2"
+
+      - name: "Install Rust toolchain"
+        working-directory: ${{ env.UV_WORKSPACE }}
+        run: rustup toolchain install --profile minimal
+
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        id: rust-cache
+        with:
+          prefix-key: v1-rust-workspace
+          key: ${{ hashFiles('Cargo.toml') }}
+          workspaces: ${{ env.UV_WORKSPACE }}
+          cache-workspace-crates: "true"
+          add-job-id-key: false
+          save-if: ${{ inputs.save-rust-cache == 'true' }}
+
+      - name: "Record Cargo cache freshness"
+        if: ${{ inputs.save-rust-cache == 'true' && steps.rust-cache.outputs.cache-hit != 'true' }}
+        run: New-Item -ItemType File -Path "$env:RUNNER_TEMP/uv-cargo-cache-marker"
+
+      - name: "Build and archive Cargo tests"
+        working-directory: ${{ env.UV_WORKSPACE }}
+        env:
+          CARGO_UNSTABLE_MTIME_ON_USE: ${{ inputs.save-rust-cache == 'true' && steps.rust-cache.outputs.cache-hit != 'true' }}
+        shell: bash
+        run: |
+          uv run --only-dev cargo nextest archive \
+            --cargo-profile fast-build-nightly \
+            -Z panic-abort-tests \
+            -Z checksum-freshness \
+            --no-default-features \
+            --features test-python,test-pypi,test-python-managed,test-windows-registry,native-auth,windows-native \
+            --workspace \
+            --profile ci-windows \
+            --archive-file windows-tests.tar.zst
+
+      - name: "Upload Cargo test archive"
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: cargo-tests-windows
+          path: ${{ env.UV_WORKSPACE }}/windows-tests.tar.zst
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 1
+
+      - name: "Prune superseded workspace artifacts"
+        if: ${{ inputs.save-rust-cache == 'true' && steps.rust-cache.outputs.cache-hit != 'true' }}
+        working-directory: ${{ env.UV_WORKSPACE }}
+        run: uv run --only-dev python scripts/prune_cargo_workspace_cache.py target/fast-build-nightly "$env:RUNNER_TEMP/uv-cargo-cache-marker"
+
   cargo-test-windows:
+    needs: cargo-build-tests-windows
     timeout-minutes: 15
     runs-on: namespace-profile-windows-2022-x86-64-16x32
     name: "cargo test on windows ${{ matrix.partition }} of 3"
@@ -265,6 +336,12 @@ jobs:
         run: |
           Copy-Item -Path "${{ github.workspace }}" -Destination "$Env:UV_WORKSPACE" -Recurse
 
+      - name: "Download Cargo test archive"
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: cargo-tests-windows
+          path: ${{ env.UV_WORKSPACE }}
+
       - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
         with:
           version: "0.12.13"
@@ -273,24 +350,10 @@ jobs:
       - name: "Install required Python versions"
         run: uv python install
 
+      # Some integration tests compile Rust-based Python packages.
       - name: "Install Rust toolchain"
         working-directory: ${{ env.UV_WORKSPACE }}
         run: rustup toolchain install --profile minimal
-
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
-        id: rust-cache
-        with:
-          prefix-key: v1-rust-workspace
-          key: ${{ hashFiles('Cargo.toml') }}
-          workspaces: ${{ env.UV_WORKSPACE }}
-          cache-workspace-crates: "true"
-          # Use the same cache entry across the partitions
-          add-job-id-key: false
-          save-if: ${{ inputs.save-rust-cache == 'true' }}
-
-      - name: "Record Cargo cache freshness"
-        if: ${{ inputs.save-rust-cache == 'true' && steps.rust-cache.outputs.cache-hit != 'true' }}
-        run: New-Item -ItemType File -Path "$env:RUNNER_TEMP/uv-cargo-cache-marker"
 
       - name: "Create NTFS test directory (low hardlink limit)"
         run: New-Item -Path "C:\uv" -ItemType Directory -Force
@@ -309,7 +372,6 @@ jobs:
           # See https://github.com/astral-sh/uv/issues/6940
           UV_LINK_MODE: copy
           RUST_BACKTRACE: 1
-          CARGO_UNSTABLE_MTIME_ON_USE: ${{ inputs.save-rust-cache == 'true' && steps.rust-cache.outputs.cache-hit != 'true' }}
           UV_INTERNAL__TEST_ALT_FS: "\\\\localhost\\uv-alt-fs"
           UV_INTERNAL__TEST_SMB_FS: "\\\\localhost\\uv-alt-fs"
           UV_INTERNAL__TEST_LOWLINKS_FS: "C:\\uv"
@@ -319,19 +381,11 @@ jobs:
         shell: bash
         run: |
           uv run --only-dev cargo nextest run \
-            --cargo-profile fast-build-nightly \
-            -Z panic-abort-tests \
-            -Z checksum-freshness \
-            --no-default-features \
-            --features test-python,test-pypi,test-python-managed,test-windows-registry,native-auth,windows-native \
-            --workspace \
+            --archive-file windows-tests.tar.zst \
+            --extract-to . \
+            --workspace-remap . \
             --profile ci-windows \
             --partition hash:${{ matrix.partition }}/3
-
-      - name: "Prune superseded workspace artifacts"
-        if: ${{ inputs.save-rust-cache == 'true' && steps.rust-cache.outputs.cache-hit != 'true' }}
-        working-directory: ${{ env.UV_WORKSPACE }}
-        run: python scripts/prune_cargo_workspace_cache.py target/fast-build-nightly "$env:RUNNER_TEMP/uv-cargo-cache-marker"
 
       - name: "Upload pending snapshots"
         if: ${{ failure() }}

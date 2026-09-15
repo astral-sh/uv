@@ -154,6 +154,8 @@ impl ValidatedSourceArchive {
 #[cfg(test)]
 mod tests {
     use std::cell::Cell;
+    use std::env;
+    use std::path::PathBuf;
     use std::slice;
 
     use anyhow::Result;
@@ -214,7 +216,7 @@ mod tests {
     async fn reader_is_exhausted_only_for_hashes_or_size() -> Result<()> {
         let _preview = uv_preview::test::with_features(&[]);
         let bytes = fs_err::read(
-            Path::new(env!("CARGO_MANIFEST_DIR"))
+            PathBuf::from(env::var("CARGO_MANIFEST_DIR")?)
                 .join("../../test/links/basic_package-0.1.0.tar.gz"),
         )?;
         let cache = cache()?;
@@ -276,7 +278,7 @@ mod tests {
     async fn staging_directory_is_removed_on_drop_or_failure() -> Result<()> {
         let _preview = uv_preview::test::with_features(&[]);
         let bytes = fs_err::read(
-            Path::new(env!("CARGO_MANIFEST_DIR"))
+            PathBuf::from(env::var("CARGO_MANIFEST_DIR")?)
                 .join("../../test/links/basic_package-0.1.0.tar.gz"),
         )?;
         let cache = cache()?;

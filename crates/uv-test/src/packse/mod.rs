@@ -8,17 +8,20 @@ pub mod scenario;
 mod server;
 mod wheel;
 
+use std::env;
 use std::path::{Path, PathBuf};
 
 pub use server::{PackseServer, mount_mismatched_distribution};
 pub use wheel::{generate_wheel, generate_wheel_with_files};
 
 fn workspace_root() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR"))
-        .parent()
-        .and_then(Path::parent)
-        .map(Path::to_path_buf)
-        .expect("CARGO_MANIFEST_DIR should be nested under workspace root")
+    PathBuf::from(
+        env::var_os("CARGO_MANIFEST_DIR").expect("Cargo should provide the manifest path"),
+    )
+    .parent()
+    .and_then(Path::parent)
+    .map(Path::to_path_buf)
+    .expect("CARGO_MANIFEST_DIR should be nested under workspace root")
 }
 
 /// Base directory containing the vendored packse scenario TOML files.
