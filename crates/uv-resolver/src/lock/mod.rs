@@ -2079,7 +2079,7 @@ impl<'lock> ExpectedPackageDependencies<'lock> {
 
             let mut marker = dependency.complexified_marker;
             marker.and(activation);
-            let target = self.lock.package(dependency.index);
+            let target = self.lock.package(self.lock.by_id[&dependency.package_id]);
             for alternative in self
                 .lock
                 .conflicts

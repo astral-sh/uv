@@ -21343,6 +21343,83 @@ fn lock_regenerates_dependencies_without_metadata() -> Result<()> {
     Ok(())
 }
 
+/// Root extras do not select a workspace extra that conflicts with its own project node.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_metadata_free_root_extra_project_conflicting_workspace_extra() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+
+        [project.optional-dependencies]
+        feature = ["provider[one]"]
+
+        [tool.uv]
+        conflicts = [[
+            { package = "provider" },
+            { package = "provider", extra = "one" },
+        ]]
+
+        [tool.uv.workspace]
+        members = ["provider", "leaf"]
+
+        [tool.uv.sources]
+        provider = { workspace = true }
+        leaf = { workspace = true }
+        "#})?;
+    context
+        .temp_dir
+        .child("provider/pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "provider"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+
+        [project.optional-dependencies]
+        one = ["leaf"]
+        "#})?;
+    context
+        .temp_dir
+        .child("leaf/pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "leaf"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+        "#})?;
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("package-conflicts,lock-without-metadata")
+        .arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("package-conflicts,lock-without-metadata")
+        .arg("--locked")
+        .arg("--offline")
+        .arg("--no-cache")
+        .env("RUST_LOG", "uv::commands::project::lock=debug"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    DEBUG Existing `uv.lock` satisfies workspace requirements
+    Resolved 3 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
 /// Keep independently selected dependency extras in their matching Python resolution fork.
 #[cfg(feature = "test-universal")]
 #[test]
