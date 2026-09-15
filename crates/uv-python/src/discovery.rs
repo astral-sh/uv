@@ -1000,6 +1000,13 @@ fn python_installations<'a>(
         .filter_ok(move |installation| {
             installation.satisfies_preferences(version, environments, preference)
         })
+        .map(move |result| {
+            let installation = result?;
+            Ok(version
+                .matches_build_revision(installation.managed_path())?
+                .then_some(installation))
+        })
+        .flatten_ok()
         .map_ok(PythonInstallation::maybe_with_test_source),
     )
 }
@@ -2464,7 +2471,7 @@ impl PythonRequest {
         }
     }
 
-    /// Check if an interpreter satisfies the request and the catalog's build selection policy.
+    /// Check if an interpreter satisfies the request, build revision, and catalog selection policy.
     pub async fn satisfied_with_catalog(
         &self,
         interpreter: &Interpreter,
@@ -2478,18 +2485,25 @@ impl PythonRequest {
         let Some(request) = PythonDownloadRequest::from_request(self) else {
             return Ok(true);
         };
-        let managed_key = ManagedPythonInstallation::key_from_interpreter(interpreter);
+        let managed_identity =
+            ManagedPythonInstallation::path_and_key_from_interpreter(interpreter);
         if let Some(version) = request.version() {
-            let key = managed_key
-                .as_ref()
-                .map_or_else(|| Cow::Owned(interpreter.key()), Cow::Borrowed);
+            let key = managed_identity.as_ref().map_or_else(
+                || Cow::Owned(interpreter.key()),
+                |(_, key)| Cow::Borrowed(key),
+            );
             if !version.matches_installation_key(&key) {
                 return Ok(false);
             }
         }
-        let Some(key) = managed_key else {
+        let Some((path, key)) = managed_identity else {
             return Ok(true);
         };
+        if let Some(version) = request.version()
+            && !version.matches_build_revision(Some(&path))?
+        {
+            return Ok(false);
+        }
         let download_list = ManagedPythonDownloadList::cached_or_new(
             client_builder,
             cache,
@@ -3458,6 +3472,28 @@ impl VersionRequest {
     fn matches_build_variant(&self, key: &PythonInstallationKey) -> bool {
         self.variants()
             .is_none_or(|variants| variants.matches_build_variant(key))
+    }
+
+    /// Check an explicitly requested build revision against a managed interpreter, regardless of
+    /// which discovery source provided its executable.
+    fn matches_build_revision(&self, managed_path: Option<&Path>) -> Result<bool, Error> {
+        if self
+            .variants()
+            .is_some_and(|variants| variants.build().is_some())
+            && let Some(build) = python_build_variant_version_from_env()?
+            && let Some(path) = managed_path
+            && ManagedPythonInstallation::read_build_revision(path)
+                .ok()
+                .flatten()
+                .as_deref()
+                != Some(build.as_str())
+        {
+            debug!(
+                "The managed interpreter does not satisfy the requested build revision `{build}`"
+            );
+            return Ok(false);
+        }
+        Ok(true)
     }
 
     /// Check the interpreter's reported version and runtime variant.

@@ -409,38 +409,6 @@ async fn python_install_build_variant() -> anyhow::Result<()> {
     [TEMP_DIR]/managed/cpython-3.13+custom-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
     ");
 
-    fs_err::write(custom_path.join("BUILD"), "custom-build")?;
-    let find_dir = context.home_dir.child("find");
-    find_dir.create_dir_all()?;
-    context
-        .python_find()
-        .current_dir(find_dir.path())
-        .arg("3.13+custom")
-        .env(EnvVars::UV_PYTHON_BUILD, "custom-build")
-        .assert()
-        .success();
-    context
-        .python_find()
-        .current_dir(find_dir.path())
-        .arg("3.13+custom")
-        .env(EnvVars::UV_PYTHON_BUILD, "missing-build")
-        .assert()
-        .failure();
-    context
-        .python_find()
-        .current_dir(find_dir.path())
-        .arg("3.13")
-        .env(EnvVars::UV_PYTHON_BUILD, "missing-build")
-        .assert()
-        .success();
-    context
-        .python_find()
-        .current_dir(find_dir.path())
-        .arg("3.13+custom")
-        .env(EnvVars::UV_PYTHON_CPYTHON_BUILD, "missing-build")
-        .assert()
-        .success();
-
     Ok(())
 }
 
@@ -5336,16 +5304,19 @@ fn python_install_pyodide() {
     ");
 }
 
-fn python_build_variant_revision_context() -> anyhow::Result<(TestContext, ChildPath)> {
+fn python_build_variant_revision_context(
+    build_variant: &str,
+) -> anyhow::Result<(TestContext, ChildPath)> {
     let context = uv_test::test_context_with_versions!(&[])
         .with_filtered_python_keys()
+        .with_filtered_python_names()
         .with_filtered_exe_suffix()
         .with_managed_python_dirs();
     let platform = platform_key_from_env()?;
     let stock_key = format!("cpython-3.13.7-{platform}");
     context.python_install().arg(&stock_key).assert().success();
 
-    // Use a real Python archive for the replacement, with custom revision metadata.
+    // Use a real Python archive for the replacement, with test revision metadata.
     let metadata: serde_json::Value = serde_json::from_str(&fs_err::read_to_string(
         context
             .workspace_root
@@ -5355,15 +5326,15 @@ fn python_build_variant_revision_context() -> anyhow::Result<(TestContext, Child
         .get(stock_key.replace("-macos-", "-darwin-"))
         .context("The stock download is in the bundled catalog")?
         .clone();
-    // Make the custom build the default so unqualified and custom requests can overlap.
+    // Make the variant the default so unqualified and explicit variant requests can overlap.
     stock_entry["default"] = serde_json::json!(false);
     let mut entry = stock_entry.clone();
-    entry["build_variant"] = serde_json::json!("custom");
+    entry["build_variant"] = serde_json::json!(build_variant);
     entry["default"] = serde_json::json!(true);
     entry["build"] = serde_json::json!("20260901");
 
-    let custom_key = format!("cpython-3.13.7+custom-{platform}");
-    let installation = context.temp_dir.child("managed").child(&custom_key);
+    let variant_key = format!("cpython-3.13.7+{build_variant}-{platform}");
+    let installation = context.temp_dir.child("managed").child(&variant_key);
     fs_err::rename(
         context.temp_dir.child("managed").child(&stock_key),
         installation.path(),
@@ -5375,16 +5346,16 @@ fn python_build_variant_revision_context() -> anyhow::Result<(TestContext, Child
         "version": 1,
         "downloads": {
             (stock_key): stock_entry,
-            (custom_key): entry
+            (variant_key): entry
         }
     });
     let catalog = context.temp_dir.child("python-downloads.json");
     catalog.write_str(&serde_json::to_string(&metadata)?)?;
     let context = context.with_env(EnvVars::UV_PYTHON_DOWNLOADS_JSON_URL, catalog.path());
-    // Update the executable links after moving the stock installation to its custom key.
+    // Update the executable links after moving the stock installation to its variant key.
     context
         .python_install()
-        .arg("3.13.7+custom")
+        .arg(format!("3.13.7+{build_variant}"))
         .arg("--force")
         .assert()
         .success();
@@ -5409,8 +5380,175 @@ fn track_python_build_compilation(installation: &ChildPath) -> anyhow::Result<()
 }
 
 #[test]
+fn python_find_build_variant_revision_variables() -> anyhow::Result<()> {
+    let (context, _stock, custom_path) = python_custom_build_variant_context()?;
+    fs_err::write(custom_path.join("BUILD"), "custom-build")?;
+    let find_dir = context.home_dir.child("find");
+    find_dir.create_dir_all()?;
+    context
+        .python_find()
+        .current_dir(find_dir.path())
+        .arg("3.13+custom")
+        .env(EnvVars::UV_PYTHON_BUILD, "custom-build")
+        .assert()
+        .success();
+    context
+        .python_find()
+        .current_dir(find_dir.path())
+        .arg("3.13+custom")
+        .env(EnvVars::UV_PYTHON_BUILD, "missing-build")
+        .assert()
+        .failure();
+    context
+        .python_find()
+        .current_dir(find_dir.path())
+        .arg("3.13")
+        .env(EnvVars::UV_PYTHON_BUILD, "missing-build")
+        .assert()
+        .success();
+    context
+        .python_find()
+        .current_dir(find_dir.path())
+        .arg("3.13+custom")
+        .env(EnvVars::UV_PYTHON_CPYTHON_BUILD, "missing-build")
+        .assert()
+        .success();
+
+    Ok(())
+}
+
+#[test]
+fn python_find_build_variant_revision_reordered_tags() -> anyhow::Result<()> {
+    let (context, _installation) = python_build_variant_revision_context("custom+pgo+lto")?;
+    let context = context.with_filtered_python_sources();
+
+    uv_snapshot!(context.filters(), context.python_find()
+        .args(["3.13+lto+pgo+custom", "--show-version"])
+        .env(EnvVars::UV_PYTHON_BUILD, "20260825"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    3.13.7
+    ");
+    uv_snapshot!(context.filters(), context.python_find()
+        .args(["3.13+lto+pgo+custom", "--show-version"])
+        .env(EnvVars::UV_PYTHON_BUILD, "20260901"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: No interpreter found for Python 3.13+lto+pgo+custom in [PYTHON SOURCES]
+    ");
+
+    Ok(())
+}
+
+#[test]
+fn python_find_build_variant_revision_on_path() -> anyhow::Result<()> {
+    let (context, installation) = python_build_variant_revision_context("custom")?;
+    let context = context.with_filtered_python_sources();
+    let build = installation.child("BUILD");
+    let executable = if cfg!(windows) {
+        installation.child("python.exe")
+    } else {
+        installation.child("bin/python3.13")
+    };
+
+    // Both installed executable aliases and the installation itself can be found on PATH.
+    for search_path in [
+        context.bin_dir.path(),
+        executable
+            .parent()
+            .context("Missing executable directory")?,
+    ] {
+        build.write_str("20260825")?;
+        allow_duplicates! {
+            uv_snapshot!(context.filters(), context.python_find()
+                .args(["3.13+custom", "--system", "--show-version"])
+                .env(EnvVars::UV_PYTHON_SEARCH_PATH, search_path)
+                .env(EnvVars::UV_PYTHON_BUILD, "20260825"), @"
+            exit_code: 0 (success)
+            ----- stdout -----
+            3.13.7
+            ");
+        }
+
+        // PATH must not reintroduce a managed installation rejected by its recorded revision.
+        for missing_build in [false, true] {
+            if missing_build {
+                fs_err::remove_file(&build)?;
+            }
+            allow_duplicates! {
+                uv_snapshot!(context.filters(), context.python_find()
+                    .args(["3.13+custom", "--system", "--show-version"])
+                    .env(EnvVars::UV_PYTHON_SEARCH_PATH, search_path)
+                    .env(EnvVars::UV_PYTHON_BUILD, "20260901"), @"
+                exit_code: 2 (failure)
+                ----- stderr -----
+                error: No interpreter found for Python 3.13+custom in [PYTHON SOURCES]
+                ");
+            }
+        }
+    }
+
+    // Unqualified and explicit-path requests do not select a build variant revision.
+    for request in [
+        "3.13".as_ref(),
+        executable.as_os_str(),
+        installation.as_os_str(),
+    ] {
+        allow_duplicates! {
+            uv_snapshot!(context.filters(), context.python_find()
+                .arg(request)
+                .args(["--system", "--show-version"])
+                .env(EnvVars::UV_PYTHON_SEARCH_PATH, context.bin_dir.path())
+                .env(EnvVars::UV_PYTHON_BUILD, "20260901"), @"
+            exit_code: 0 (success)
+            ----- stdout -----
+            3.13.7
+            ");
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn python_find_build_variant_revision_in_active_environment() -> anyhow::Result<()> {
+    let (context, installation) = python_build_variant_revision_context("custom")?;
+    let context = context
+        .with_filtered_virtualenv_bin()
+        .with_filtered_python_sources();
+    context
+        .venv()
+        .args(["--python", "3.13.7+custom"])
+        .assert()
+        .success();
+
+    uv_snapshot!(context.filters(), context.python_find().arg("3.13+custom")
+        .env(EnvVars::VIRTUAL_ENV, context.venv.path())
+        .env(EnvVars::UV_PYTHON_BUILD, "20260825"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    [VENV]/[BIN]/[PYTHON]
+    ");
+
+    for missing_build in [false, true] {
+        if missing_build {
+            fs_err::remove_file(installation.child("BUILD"))?;
+        }
+        allow_duplicates! {
+            uv_snapshot!(context.filters(), context.python_find().arg("3.13+custom")
+                .env(EnvVars::VIRTUAL_ENV, context.venv.path())
+                .env(EnvVars::UV_PYTHON_BUILD, "20260901"), @"
+            exit_code: 2 (failure)
+            ----- stderr -----
+            error: No interpreter found for Python 3.13+custom in [PYTHON SOURCES]
+            ");
+        }
+    }
+    Ok(())
+}
+
+#[test]
 fn python_install_build_variant_revision() -> anyhow::Result<()> {
-    let (context, installation) = python_build_variant_revision_context()?;
+    let (context, installation) = python_build_variant_revision_context("custom")?;
     let marker = installation.child("marker");
     let build = installation.child("BUILD");
 
@@ -5473,7 +5611,7 @@ fn python_install_build_variant_revision() -> anyhow::Result<()> {
 #[test]
 fn python_install_build_variant_revision_overlapping_requests() -> anyhow::Result<()> {
     for requests in [["3.13", "3.13+custom"], ["3.13+custom", "3.13"]] {
-        let (context, installation) = python_build_variant_revision_context()?;
+        let (context, installation) = python_build_variant_revision_context("custom")?;
 
         // The unqualified request reuses revision A while the custom request replaces it with B.
         allow_duplicates! {
@@ -5505,7 +5643,7 @@ fn python_install_build_variant_revision_overlapping_requests() -> anyhow::Resul
 
 #[test]
 fn python_install_build_variant_revision_compile_bytecode() -> anyhow::Result<()> {
-    let (context, installation) = python_build_variant_revision_context()?;
+    let (context, installation) = python_build_variant_revision_context("custom")?;
     let context = context
         .with_concurrent_installs("1")
         .with_filtered_compiled_file_count();
@@ -5540,7 +5678,7 @@ fn python_install_build_variant_revision_compile_bytecode() -> anyhow::Result<()
 #[test]
 fn python_install_build_variant_revision_compile_bytecode_downloads_disabled() -> anyhow::Result<()>
 {
-    let (context, installation) = python_build_variant_revision_context()?;
+    let (context, installation) = python_build_variant_revision_context("custom")?;
     let context = context.with_filtered_compiled_file_count();
     track_python_build_compilation(&installation)?;
 
@@ -5567,7 +5705,7 @@ fn python_install_build_variant_revision_compile_bytecode_downloads_disabled() -
 
 #[test]
 fn python_run_build_variant_revision() -> anyhow::Result<()> {
-    let (context, installation) = python_build_variant_revision_context()?;
+    let (context, installation) = python_build_variant_revision_context("custom")?;
     let marker = installation.child("marker");
     let build = installation.child("BUILD");
 
@@ -5610,10 +5748,220 @@ fn python_run_build_variant_revision() -> anyhow::Result<()> {
     Ok(())
 }
 
+#[test]
+fn python_project_build_variant_revision() -> anyhow::Result<()> {
+    let (context, installation) = python_build_variant_revision_context("custom")?;
+    let search_path = context.bin_dir.to_path_buf();
+    let context = context
+        .with_filtered_python_sources()
+        .with_filtered_python_install_bin()
+        .with_env(EnvVars::UV_PYTHON_SEARCH_PATH, search_path);
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.13"
+        dependencies = []
+    "#})?;
+    context
+        .sync()
+        .args(["--python", "3.13.7+custom"])
+        .assert()
+        .success();
+    let marker = installation.child("marker");
+    let build = installation.child("BUILD");
+    let environment_marker = context.venv.child("marker");
+    environment_marker.touch()?;
+
+    // Reuse the installed revision when it is requested, even if the catalog only offers a newer one.
+    uv_snapshot!(context.filters(), context.sync().args(["--python", "3.13.7+custom"])
+        .env(EnvVars::UV_PYTHON_BUILD, "20260825"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Checked in [TIME]
+    ");
+    marker.assert(predicate::path::exists());
+    environment_marker.assert(predicate::path::exists());
+
+    // An unqualified request and an explicit executable do not opt into build revision selection.
+    for request in ["3.13.7".as_ref(), context.interpreter().as_os_str()] {
+        context
+            .sync()
+            .arg("--python")
+            .arg(request)
+            .env(EnvVars::UV_PYTHON_BUILD, "missing-build")
+            .assert()
+            .success();
+    }
+    marker.assert(predicate::path::exists());
+    environment_marker.assert(predicate::path::exists());
+
+    // Failure to find the requested revision must leave the healthy environment available.
+    uv_snapshot!(context.filters(), context.sync().args(["--python", "3.13.7+custom"])
+        .env(EnvVars::UV_PYTHON_BUILD, "missing-build")
+        .env(EnvVars::UV_PYTHON_DOWNLOADS, "never"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: No interpreter found for Python 3.13.7+custom in [PYTHON SOURCES]
+    ");
+    marker.assert(predicate::path::exists());
+    environment_marker.assert(predicate::path::exists());
+    insta::assert_snapshot!(fs_err::read_to_string(&build)?, @"20260825");
+
+    // A revision mismatch must reach discovery, even when a healthy project environment exists.
+    uv_snapshot!(context.filters(), context.run().args(["--python", "3.13.7+custom", "python", "-c",
+        "import sys; from pathlib import Path; print((Path(sys.base_prefix) / 'BUILD').read_text().strip())"])
+        .env(EnvVars::UV_PYTHON_BUILD, "20260901"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    20260901
+
+    ----- stderr -----
+    Using CPython 3.13.7
+    Removed virtual environment at: .venv
+    Creating virtual environment at: .venv
+    Resolved 1 package in [TIME]
+    Checked in [TIME]
+    ");
+    marker.assert(predicate::path::missing());
+    insta::assert_snapshot!(fs_err::read_to_string(&build)?, @"20260901");
+
+    // Matching revisions still reuse the installation and environment.
+    marker.touch()?;
+    environment_marker.touch()?;
+    context
+        .sync()
+        .args(["--python", "3.13.7+custom"])
+        .env(EnvVars::UV_PYTHON_BUILD, "20260901")
+        .assert()
+        .success();
+    marker.assert(predicate::path::exists());
+    environment_marker.assert(predicate::path::exists());
+
+    // A missing revision cannot satisfy an explicit build request through environment reuse.
+    fs_err::remove_file(&build)?;
+    context
+        .sync()
+        .args(["--python", "3.13.7+custom"])
+        .env(EnvVars::UV_PYTHON_BUILD, "20260901")
+        .assert()
+        .success();
+    marker.assert(predicate::path::missing());
+    insta::assert_snapshot!(fs_err::read_to_string(&build)?, @"20260901");
+    Ok(())
+}
+
+#[test]
+fn python_project_optimization_build_revision() -> anyhow::Result<()> {
+    for build_variant in ["pgo", "lto", "pgo+lto", "lto+pgo", "noopt"] {
+        let (context, installation) = python_build_variant_revision_context(build_variant)?;
+        // Explicit build variants use UV_PYTHON_BUILD for revision selection.
+        let context = context.with_env(EnvVars::UV_PYTHON_CPYTHON_BUILD, "missing-build");
+        context
+            .temp_dir
+            .child("pyproject.toml")
+            .write_str(indoc! {r#"
+            [project]
+            name = "project"
+            version = "0.1.0"
+            requires-python = ">=3.13"
+            dependencies = []
+        "#})?;
+        let request = format!("3.13.7+{build_variant}");
+        context
+            .sync()
+            .arg("--python")
+            .arg(&request)
+            .assert()
+            .success();
+
+        let marker = installation.child("marker");
+        marker.assert(predicate::path::exists());
+        allow_duplicates! {
+            uv_snapshot!(context.filters(), context.run().arg("--python").arg(&request)
+                .args(["python", "-c",
+                    "import sys; from pathlib import Path; print((Path(sys.base_prefix) / 'BUILD').read_text().strip())"])
+                .env(EnvVars::UV_PYTHON_BUILD, "20260901"), @"
+            exit_code: 0 (success)
+            ----- stdout -----
+            20260901
+
+            ----- stderr -----
+            Using CPython 3.13.7
+            Removed virtual environment at: .venv
+            Creating virtual environment at: .venv
+            Resolved 1 package in [TIME]
+            Checked in [TIME]
+            ");
+        }
+        marker.assert(predicate::path::missing());
+
+        // Once the requested revision is installed, reuse the environment.
+        marker.touch()?;
+        let environment_marker = context.venv.child("marker");
+        environment_marker.touch()?;
+        context
+            .sync()
+            .arg("--python")
+            .arg(&request)
+            .env(EnvVars::UV_PYTHON_BUILD, "20260901")
+            .assert()
+            .success();
+        marker.assert(predicate::path::exists());
+        environment_marker.assert(predicate::path::exists());
+    }
+    Ok(())
+}
+
+#[test]
+fn python_script_build_variant_revision() -> anyhow::Result<()> {
+    let (context, installation) = python_build_variant_revision_context("custom")?;
+    context.temp_dir.child("script.py").write_str(indoc! {r#"
+        # /// script
+        # requires-python = ">=3.13"
+        # dependencies = []
+        # ///
+        import sys
+        from pathlib import Path
+
+        print((Path(sys.base_prefix) / "BUILD").read_text().strip())
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.run().args(["--python", "3.13.7+custom", "script.py"]), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    20260825
+    ");
+    let marker = installation.child("marker");
+    marker.assert(predicate::path::exists());
+
+    uv_snapshot!(context.filters(), context.run().args(["--python", "3.13.7+custom", "script.py"])
+        .env(EnvVars::UV_PYTHON_BUILD, "20260901"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    20260901
+    ");
+    marker.assert(predicate::path::missing());
+
+    marker.touch()?;
+    uv_snapshot!(context.filters(), context.run().args(["--python", "3.13.7+custom", "script.py"])
+        .env(EnvVars::UV_PYTHON_BUILD, "20260901"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    20260901
+    ");
+    marker.assert(predicate::path::exists());
+    Ok(())
+}
+
 #[tokio::test]
 async fn python_build_variant_revision_download_failure() -> anyhow::Result<()> {
     for automatic in [false, true] {
-        let (context, installation) = python_build_variant_revision_context()?;
+        let (context, installation) = python_build_variant_revision_context("custom")?;
         track_python_build_compilation(&installation)?;
         let context = context.with_http_retries("0");
         let server = MockServer::start().await;

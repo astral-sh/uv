@@ -343,12 +343,7 @@ impl ManagedPythonInstallation {
         let path = std::path::absolute(path)
             .map_err(|err| Error::AbsolutePath(path.to_path_buf(), err))?;
 
-        // Try to read the BUILD file if it exists
-        let build = match fs::read_to_string(path.join("BUILD")) {
-            Ok(content) => Some(Cow::Owned(content.trim().to_string())),
-            Err(err) if err.kind() == io::ErrorKind::NotFound => None,
-            Err(err) => return Err(err.into()),
-        };
+        let build = Self::read_build_revision(&path)?.map(Cow::Owned);
 
         Ok(Self {
             path,
@@ -357,6 +352,15 @@ impl ManagedPythonInstallation {
             sha256: None,
             build,
         })
+    }
+
+    /// Read the build revision recorded in a managed installation's `BUILD` file, if present.
+    pub(crate) fn read_build_revision(path: &Path) -> io::Result<Option<String>> {
+        match fs::read_to_string(path.join("BUILD")) {
+            Ok(content) => Ok(Some(content.trim().to_owned())),
+            Err(err) if err.kind() == io::ErrorKind::NotFound => Ok(None),
+            Err(err) => Err(err),
+        }
     }
 
     /// Try to create a [`ManagedPythonInstallation`] from an [`Interpreter`].
@@ -377,7 +381,7 @@ impl ManagedPythonInstallation {
 
     /// Return the managed installation path and [`PythonInstallationKey`] for an interpreter,
     /// without reading its build revision.
-    fn path_and_key_from_interpreter(
+    pub(crate) fn path_and_key_from_interpreter(
         interpreter: &Interpreter,
     ) -> Option<(PathBuf, PythonInstallationKey)> {
         let managed_root = ManagedPythonInstallations::from_settings(None).ok()?;
