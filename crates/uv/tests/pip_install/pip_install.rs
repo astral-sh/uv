@@ -14592,7 +14592,9 @@ fn install_in_prefix_symlinked_wheel_data_directory() -> Result<()> {
     fs_err::write(&wheel, block_on(writer.close())?)?;
 
     fs_err::create_dir_all(context.venv.join("share/man"))?;
+    fs_err::create_dir_all(context.venv.join("share/man1"))?;
     symlink("share/man", context.venv.join("man"))?;
+    symlink("../man1", context.venv.join("share/man/man1"))?;
 
     // Official Python images use an in-prefix symlink for man pages. See astral-sh/uv#21692.
     uv_snapshot!(context.filters(), context.pip_install()
@@ -14609,7 +14611,7 @@ fn install_in_prefix_symlinked_wheel_data_directory() -> Result<()> {
 
     context
         .venv
-        .child("share/man/man1/foo.1")
+        .child("share/man1/foo.1")
         .assert("foo manual\n");
 
     Ok(())

@@ -225,6 +225,8 @@ impl ValidatedWheelDestination {
         if source.is_dir() {
             // The installation root is trusted. Directory symlinks beneath it must resolve
             // within that root, including layouts such as `man -> share/man`.
+            // Resolve the root lazily, since a new installation root may not exist yet.
+            let mut resolved_root = None;
             let mut entries = WalkDir::new(source).min_depth(min_depth).into_iter();
             while let Some(entry) = entries.next() {
                 let entry = entry?;
@@ -242,8 +244,12 @@ impl ValidatedWheelDestination {
                 match fs::symlink_metadata(&target) {
                     Ok(metadata) if metadata.file_type().is_symlink() => {
                         let resolved = fs::canonicalize(&target)?;
-                        let resolved_root = fs::canonicalize(root)?;
-                        if normalize_path_under(&resolved, &resolved_root).is_none() {
+                        let resolved_root = if let Some(resolved_root) = &resolved_root {
+                            resolved_root
+                        } else {
+                            resolved_root.insert(fs::canonicalize(root)?)
+                        };
+                        if normalize_path_under(&resolved, resolved_root).is_none() {
                             return Err(Error::InvalidWheel(format!(
                                 "Cannot install into symlinked directory: {}",
                                 target.simplified_display()
