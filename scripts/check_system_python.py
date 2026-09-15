@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-"""Install `pylint` and packages with native extensions into the system Python.
+"""Check package installation into the system Python.
 
 To run locally, create a venv with seed packages.
 """
@@ -71,6 +71,15 @@ def install_native_extension(*, uv: str):
             "assert extension.answer() == 42"
         ),
     )
+
+
+def install_man_pages(*, uv: str):
+    """Install wheel data through the system's man-page directory."""
+
+    fixture = Path(__file__).resolve().parents[1] / "test/packages/man_pages"
+    path = Path(temp_dir) / "man_pages"
+    shutil.copytree(fixture, path)
+    install_package(uv=uv, package="uv_test_man_pages", path=path)
 
 
 if __name__ == "__main__":
@@ -303,6 +312,11 @@ if __name__ == "__main__":
         # Build and import a native extension on interpreters with build tools in CI.
         if sys.version_info < (3, 13) and sys.implementation.name != "graalpy":
             install_native_extension(uv=uv)
+
+        # Install data files through the system's man-page directory, which may
+        # be a symlink (e.g., `/usr/local/man` on Debian).
+        if sys.version_info >= (3, 8):
+            install_man_pages(uv=uv)
 
         # Attempt to install `pydantic_core`.
         # This ensures that we can successfully install and recognize a package that may
