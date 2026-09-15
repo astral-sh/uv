@@ -315,6 +315,8 @@ if __name__ == "__main__":
 
         # Linux system installations may have symlinked man-page directories,
         # such as `/usr/local/man` on Debian.
+        # On macOS, Homebrew may map these data files to `/usr/local/man`, which
+        # the CI runner cannot create.
         if sys.platform == "linux" and sys.version_info >= (3, 8):
             install_man_pages(uv=uv)
 
