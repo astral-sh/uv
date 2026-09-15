@@ -27,7 +27,8 @@ inherits = "ci"
 
 [test-groups]
 serial = { max-threads = 1 }
-io-bound = { max-threads = 1 }
+python-install-windows = { max-threads = 2 }
+python-install-macos = { max-threads = 4 }
 
 [[profile.default.overrides]]
 filter = 'test(native_auth)'
@@ -39,8 +40,21 @@ test-group = 'serial'
 
 [[profile.ci-windows.overrides]]
 platform = 'cfg(target_os = "windows")'
-filter = 'test(/^python_install::/) + test(/^python_update::/) + test(/^python_find::/)'
-test-group = 'io-bound'
+# These tests write shared Python registry entries.
+filter = 'test(=python_install::python_install_freethreaded_and_gil_list) + test(=python_install::python_install_registry_takes_precedence_over_no_registry)'
+test-group = 'serial'
+priority = 1
+
+[[profile.ci-windows.overrides]]
+platform = 'cfg(target_os = "windows")'
+filter = 'test(/^python_install::/) + test(/^python_find::/)'
+test-group = 'python-install-windows'
+priority = 1 # Start earlier so these can complete before the end
+
+[[profile.ci-macos.overrides]]
+platform = 'cfg(target_os = "macos")'
+filter = 'test(/^python_install::/) + test(/^python_upgrade::/) + test(/^python_find::/)'
+test-group = 'python-install-macos'
 priority = 1 # Start earlier so these can complete before the end
 
 [scripts.setup.setup-hook-unix]
