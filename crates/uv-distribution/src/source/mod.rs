@@ -1010,13 +1010,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 CachedClientError::Client(err) => Error::Client(err),
             })?;
 
-        let expected_size = match source {
-            BuildableSource::Dist(SourceDist::Registry(dist)) if dist.size_is_authoritative => {
-                dist.size()
-            }
-            BuildableSource::Dist(SourceDist::DirectUrl(dist)) => dist.size(),
-            _ => None,
-        };
+        let expected_size = Self::expected_archive_size(source);
         if let (Some(expected), Some(actual)) = (expected_size, revision.size())
             && expected != actual
         {
@@ -1333,14 +1327,26 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
 
         // Read the existing metadata from the cache.
         let revision_entry = cache_shard.entry(LOCAL_REVISION);
+        let expected_size = Self::expected_archive_size(source);
 
         // If the revision already exists, return it. There's no need to check for freshness, since
         // we use an exact timestamp.
-        if let Some(pointer) = LocalRevisionPointer::read_from(&revision_entry)? {
-            if *pointer.cache_info() == cache_info {
-                if pointer.revision().has_digests(hashes) {
-                    return Ok(pointer);
-                }
+        if let Some(pointer) = LocalRevisionPointer::read_from(&revision_entry)?
+            && *pointer.cache_info() == cache_info
+        {
+            if let (Some(expected), Some(actual)) = (expected_size, pointer.revision().size())
+                && expected != actual
+            {
+                return Err(Error::MismatchedSize {
+                    distribution: source.to_string(),
+                    expected,
+                    actual,
+                });
+            }
+            if pointer.revision().has_digests(hashes)
+                && (expected_size.is_none() || pointer.revision().size().is_some())
+            {
+                return Ok(pointer);
             }
         }
 
@@ -1350,7 +1356,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         // Unzip the archive to a temporary directory.
         debug!("Unpacking source distribution: {source}");
         let entry = cache_shard.shard(revision.id()).entry(SOURCE);
-        let hashes = self
+        let (hashes, size) = self
             .persist_archive(
                 source,
                 &resource.path,
@@ -1361,8 +1367,10 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             )
             .await?;
 
-        // Include the hashes and cache info in the revision.
-        let revision = revision.with_hashes(HashDigests::from(hashes));
+        // Include the hashes and archive size in the revision.
+        let revision = revision
+            .with_hashes(HashDigests::from(hashes))
+            .with_size(size);
 
         // Persist the revision.
         let pointer = LocalRevisionPointer {
@@ -1835,7 +1843,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         // Otherwise, we need to unzip the archive, or at least compute the hashes.
         debug!("Unpacking source distribution: {source}");
         let entry = cache_shard.entry(SOURCE);
-        let hashes = self
+        let (hashes, _) = self
             .persist_archive(
                 source,
                 &install_path,
@@ -2720,7 +2728,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
     ) -> Result<Revision, Error> {
         warn!("Re-extracting missing source distribution: {source}");
 
-        let hashes = self
+        let (hashes, size) = self
             .persist_archive(
                 source,
                 &resource.path,
@@ -2730,7 +2738,9 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 revision.hashes(),
             )
             .await?;
-        Ok(revision.with_hashes(HashDigests::from(hashes)))
+        Ok(revision
+            .with_hashes(HashDigests::from(hashes))
+            .with_size(size))
     }
 
     /// Heal a [`Revision`] for a remote archive.
@@ -2821,13 +2831,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .bytes_stream()
             .map_err(std::io::Error::other)
             .into_async_read();
-        let expected_size = match source {
-            BuildableSource::Dist(SourceDist::Registry(dist)) if dist.size_is_authoritative => {
-                dist.size()
-            }
-            BuildableSource::Dist(SourceDist::DirectUrl(dist)) => dist.size(),
-            _ => None,
-        };
+        let expected_size = Self::expected_archive_size(source);
 
         let archive = ValidatedSourceArchive::extract(
             reader.compat(),
@@ -2848,6 +2852,8 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
     }
 
     /// Extract, validate, and persist a local source archive into the cache.
+    ///
+    /// Returns the archive hashes and the size of the source archive file in bytes.
     async fn persist_archive(
         &self,
         source: &BuildableSource<'_>,
@@ -2856,11 +2862,13 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         target: &Path,
         hash_policy: ArchiveHashPolicy<'_>,
         existing_hashes: &[HashDigest],
-    ) -> Result<Vec<HashDigest>, Error> {
+    ) -> Result<(Vec<HashDigest>, u64), Error> {
         debug!("Unpacking for build: {}", path.display());
         let reader = fs_err::tokio::File::open(path)
             .await
             .map_err(Error::CacheRead)?;
+        // Unsized local archives without hashes need not be read to the end during extraction.
+        let size = reader.metadata().await.map_err(Error::CacheRead)?.len();
         let archive = ValidatedSourceArchive::extract(
             reader,
             source,
@@ -2870,11 +2878,28 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 extra_algorithms: &[],
                 hash_policy,
                 existing_hashes,
-                expected_size: None,
+                expected_size: Self::expected_archive_size(source),
             },
         )
         .await?;
-        Ok(archive.persist(target).await?.hashes)
+        Ok((archive.persist(target).await?.hashes, size))
+    }
+
+    /// Return the archive size that must be validated, excluding advisory index metadata.
+    fn expected_archive_size(source: &BuildableSource<'_>) -> Option<u64> {
+        match source {
+            BuildableSource::Dist(SourceDist::Registry(dist)) => {
+                dist.size_is_authoritative.then(|| dist.size()).flatten()
+            }
+            BuildableSource::Dist(SourceDist::DirectUrl(dist)) => dist.size(),
+            BuildableSource::Dist(
+                SourceDist::Path(_)
+                | SourceDist::Directory(_)
+                | SourceDist::GitPath(_)
+                | SourceDist::GitDirectory(_),
+            )
+            | BuildableSource::Url(_) => None,
+        }
     }
 
     /// For Git directories, we check them out into the cache, so we need to avoid workspace

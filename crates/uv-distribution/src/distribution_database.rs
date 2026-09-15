@@ -1325,6 +1325,28 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         // Acquire an advisory lock, to guard against concurrent writes.
         let _lock = Self::lock_wheel(&wheel_entry, filename).await?;
 
+        let expected_size = match dist {
+            BuiltDist::Registry(dist) => {
+                let wheel = dist.best_wheel();
+                wheel
+                    .size_is_authoritative
+                    .then_some(wheel.file.size)
+                    .flatten()
+            }
+            BuiltDist::DirectUrl(dist) => dist.size,
+            BuiltDist::Path(_) | BuiltDist::GitPath(_) => None,
+        };
+        let size = fs_err::metadata(path).map_err(Error::CacheRead)?.len();
+        if let Some(expected) = expected_size
+            && size != expected
+        {
+            return Err(Error::MismatchedSize {
+                distribution: dist.to_string(),
+                expected,
+                actual: size,
+            });
+        }
+
         // Determine the last-modified time of the wheel.
         let modified = Timestamp::from_path(path).map_err(Error::CacheRead)?;
 
@@ -1336,7 +1358,8 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         let archive = pointer
             .filter(|pointer| pointer.is_up_to_date(modified))
             .map(PathArchivePointer::into_archive)
-            .filter(|archive| archive.has_digests(hashes));
+            .filter(|archive| archive.has_digests(hashes))
+            .filter(|archive| expected_size.is_none_or(|expected| archive.size == Some(expected)));
 
         // If the file is already unzipped, and the cache is up-to-date, return it.
         if let Some(archive) = archive {
@@ -1359,7 +1382,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                     .await?,
                 HashDigests::empty(),
                 filename.clone(),
-                None,
+                Some(size),
             );
 
             // Write the archive pointer to the cache.
@@ -1406,6 +1429,17 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             // Exhaust the reader to compute the hash.
             hasher.finish().await.map_err(Error::HashExhaustion)?;
 
+            let size = hasher.bytes_read();
+            if let Some(expected) = expected_size
+                && size != expected
+            {
+                return Err(Error::MismatchedSize {
+                    distribution: dist.to_string(),
+                    expected,
+                    actual: size,
+                });
+            }
+
             let hashes = hashers.into_iter().map(HashDigest::from).collect();
 
             // Before we make the wheel accessible by persisting it, ensure that the RECORD is
@@ -1418,7 +1452,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 .await?;
 
             // Create an archive.
-            let archive = Archive::new(id, hashes, filename.clone(), None);
+            let archive = Archive::new(id, hashes, filename.clone(), Some(size));
 
             // Write the archive pointer to the cache.
             let pointer = PathArchivePointer {
