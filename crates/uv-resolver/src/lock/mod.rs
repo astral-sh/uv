@@ -2423,8 +2423,8 @@ impl Lock {
     /// Initialize a [`Lock`] from a [`ResolverOutput`] and [`ResolverManifest`], applying any
     /// index-specific hash requirements to registry artifacts.
     ///
-    /// Set `metadata_free` when omitting package metadata, so selected registry extras
-    /// retain their incoming edges even if they resolve to no dependencies and Git packages
+    /// Set `metadata_free` to return the metadata-free lock format. Selected registry extras
+    /// retain their incoming edges even if they resolve to no dependencies, and Git packages
     /// retain their declaration metadata for offline source discovery.
     ///
     /// Returns an error if an artifact does not advertise its index's required algorithm.
@@ -2603,7 +2603,11 @@ impl Lock {
             vec![],
             fork_markers,
         )?;
-        Ok(lock)
+        Ok(if metadata_free {
+            lock.without_package_metadata()
+        } else {
+            lock
+        })
     }
 
     /// Initialize a [`Lock`] from a list of [`Package`] entries.
@@ -2777,7 +2781,7 @@ impl Lock {
     /// Local declarations can be reread from disk. Remote URL and Git declarations remain in the
     /// lockfile so freshness checks can determine offline whether a source is requested or stale.
     #[must_use]
-    pub fn without_package_metadata(mut self) -> Self {
+    fn without_package_metadata(mut self) -> Self {
         self.revision = METADATA_FREE_REVISION;
         let workspace_root = self.root().map(|package| package.id.clone());
         for package in &mut self.packages {
