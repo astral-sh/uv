@@ -8,7 +8,7 @@
 Released on 2026-09-15.
 
 This release fixes a regression in 0.12.14 that lead to rejecting valid installation commands such as using
-`uv pip install --system` in `python:*` docker images or when using `uv pip install --target=.`. ([#21699](https://github.com/astral-sh/uv/pull/21699))
+`uv pip install --system` in `python:*` docker images or when using `uv pip install --target .`. ([#21699](https://github.com/astral-sh/uv/pull/21699))
 
 ### Performance
 
