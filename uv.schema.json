@@ -2899,6 +2899,11 @@
           "const": "cu80"
         },
         {
+          "description": "Use the AMD index for ROCm 10.0.\n\nUnlike the ROCm 7.x and earlier indexes, this index is architecture-neutral: the GPU\nkernels are selected by an architecture-specific extra, which requires a detected (or\nexplicitly configured) AMD GPU architecture.",
+          "type": "string",
+          "const": "rocm10.0"
+        },
+        {
           "description": "Use the PyTorch index for ROCm 7.2.",
           "type": "string",
           "const": "rocm7.2"

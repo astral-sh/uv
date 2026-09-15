@@ -17183,3 +17183,20 @@ fn compile_bytecode_excludes_stdlib() -> Result<()> {
 
     Ok(())
 }
+
+/// ROCm 10.0 selects its GPU kernels with an architecture-specific extra, so it requires an AMD
+/// GPU architecture, either detected or set via `UV_AMD_GPU_ARCHITECTURE`.
+#[test]
+fn torch_backend_rocm_without_amd_gpu_architecture() {
+    let context = uv_test::test_context!("3.12");
+
+    uv_snapshot!(context.pip_install()
+        .arg("torch")
+        .arg("--torch-backend")
+        .arg("rocm10.0")
+        .env_remove(EnvVars::UV_AMD_GPU_ARCHITECTURE), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Failed to detect an AMD GPU architecture, which is required by the ROCm 10.0 backend. Set `UV_AMD_GPU_ARCHITECTURE` to the target architecture (e.g., `gfx942`).
+    ");
+}

@@ -1925,7 +1925,12 @@ pub struct PipCompileArgs {
     /// uv will use the PyTorch index for CUDA 12.6.
     ///
     /// The `auto` mode will attempt to detect the appropriate PyTorch index based on the currently
-    /// installed CUDA drivers.
+    /// installed CUDA drivers, AMD GPU architecture, or Intel GPU presence.
+    ///
+    /// ROCm 10.0 (`rocm10.0`) is distributed by AMD from a single architecture-neutral index, and
+    /// selects its GPU kernels with an architecture-specific extra. The architecture is detected
+    /// automatically, or can be set with `UV_AMD_GPU_ARCHITECTURE`. It's never selected by `auto`,
+    /// which uses the ROCm 7.x and earlier indexes for AMD GPUs.
     ///
     /// This option is in preview and may change in any future release.
     #[arg(long, value_enum, env = EnvVars::UV_TORCH_BACKEND)]
@@ -2202,7 +2207,12 @@ pub struct PipSyncArgs {
     /// uv will use the PyTorch index for CUDA 12.6.
     ///
     /// The `auto` mode will attempt to detect the appropriate PyTorch index based on the currently
-    /// installed CUDA drivers.
+    /// installed CUDA drivers, AMD GPU architecture, or Intel GPU presence.
+    ///
+    /// ROCm 10.0 (`rocm10.0`) is distributed by AMD from a single architecture-neutral index, and
+    /// selects its GPU kernels with an architecture-specific extra. The architecture is detected
+    /// automatically, or can be set with `UV_AMD_GPU_ARCHITECTURE`. It's never selected by `auto`,
+    /// which uses the ROCm 7.x and earlier indexes for AMD GPUs.
     ///
     /// This option is in preview and may change in any future release.
     #[arg(long, value_enum, env = EnvVars::UV_TORCH_BACKEND)]
@@ -2554,7 +2564,12 @@ pub struct PipInstallArgs {
     /// uv will use the PyTorch index for CUDA 12.6.
     ///
     /// The `auto` mode will attempt to detect the appropriate PyTorch index based on the currently
-    /// installed CUDA drivers.
+    /// installed CUDA drivers, AMD GPU architecture, or Intel GPU presence.
+    ///
+    /// ROCm 10.0 (`rocm10.0`) is distributed by AMD from a single architecture-neutral index, and
+    /// selects its GPU kernels with an architecture-specific extra. The architecture is detected
+    /// automatically, or can be set with `UV_AMD_GPU_ARCHITECTURE`. It's never selected by `auto`,
+    /// which uses the ROCm 7.x and earlier indexes for AMD GPUs.
     ///
     /// This option is in preview and may change in any future release.
     #[arg(long, value_enum, env = EnvVars::UV_TORCH_BACKEND)]
@@ -5713,7 +5728,12 @@ pub struct ToolRunArgs {
     /// uv will use the PyTorch index for CUDA 12.6.
     ///
     /// The `auto` mode will attempt to detect the appropriate PyTorch index based on the currently
-    /// installed CUDA drivers.
+    /// installed CUDA drivers, AMD GPU architecture, or Intel GPU presence.
+    ///
+    /// ROCm 10.0 (`rocm10.0`) is distributed by AMD from a single architecture-neutral index, and
+    /// selects its GPU kernels with an architecture-specific extra. The architecture is detected
+    /// automatically, or can be set with `UV_AMD_GPU_ARCHITECTURE`. It's never selected by `auto`,
+    /// which uses the ROCm 7.x and earlier indexes for AMD GPUs.
     ///
     /// This option is in preview and may change in any future release.
     #[arg(long, value_enum, env = EnvVars::UV_TORCH_BACKEND)]
@@ -5906,7 +5926,12 @@ pub struct ToolInstallArgs {
     /// uv will use the PyTorch index for CUDA 12.6.
     ///
     /// The `auto` mode will attempt to detect the appropriate PyTorch index based on the currently
-    /// installed CUDA drivers.
+    /// installed CUDA drivers, AMD GPU architecture, or Intel GPU presence.
+    ///
+    /// ROCm 10.0 (`rocm10.0`) is distributed by AMD from a single architecture-neutral index, and
+    /// selects its GPU kernels with an architecture-specific extra. The architecture is detected
+    /// automatically, or can be set with `UV_AMD_GPU_ARCHITECTURE`. It's never selected by `auto`,
+    /// which uses the ROCm 7.x and earlier indexes for AMD GPUs.
     ///
     /// This option is in preview and may change in any future release.
     #[arg(long, value_enum, env = EnvVars::UV_TORCH_BACKEND)]
